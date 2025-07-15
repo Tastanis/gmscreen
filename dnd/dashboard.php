@@ -539,9 +539,6 @@ $defaultInventoryTab = $is_gm ? 'frunk' : $user;
             </div>
             <button class="nav-btn" onclick="openCombatTracker()">Combat Tracker</button>
             <button class="nav-btn" onclick="openSchedule()">Schedule</button>
-            <?php if ($is_gm): ?>
-                <button class="nav-btn" onclick="window.location.href='strixhaven/character-import.php'">Import Character</button>
-            <?php endif; ?>
             <button class="nav-btn logout-btn" onclick="window.location.href='logout.php'">Logout</button>
         </div>
         <h1 class="nav-title"><?php echo $is_gm ? 'GM Dashboard' : ucfirst($user) . '\'s Character Sheet'; ?></h1>

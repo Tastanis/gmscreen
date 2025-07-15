@@ -116,6 +116,25 @@
     box-shadow: 0 4px 12px rgba(39, 174, 96, 0.3);
 }
 
+.btn-import {
+    background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+    color: white;
+    border: none;
+    padding: 10px 20px;
+    border-radius: 6px;
+    cursor: pointer;
+    font-size: 14px;
+    font-weight: 600;
+    transition: all 0.3s ease;
+    margin-left: 10px;
+}
+
+.btn-import:hover {
+    background: linear-gradient(135deg, #5a67d8 0%, #6b4794 100%);
+    transform: translateY(-1px);
+    box-shadow: 0 4px 12px rgba(102, 126, 234, 0.4);
+}
+
 /* Students Grid */
 .students-container {
     background: white;

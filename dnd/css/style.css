@@ -993,3 +993,38 @@ body:not(.gm-mode) .club-navigation button:hover:not(:disabled) {
     background: #f8f9fa;
     border-color: #667eea;
 }
+
+/* Import Character Button Styles */
+.import-button-container {
+    display: flex;
+    justify-content: flex-end;
+    margin: 15px 0;
+    padding: 0 15px;
+}
+
+.import-character-btn {
+    background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+    color: white;
+    border: none;
+    padding: 12px 24px;
+    border-radius: 8px;
+    font-size: 14px;
+    font-weight: 600;
+    cursor: pointer;
+    transition: all 0.3s ease;
+    box-shadow: 0 4px 15px rgba(102, 126, 234, 0.4);
+    display: flex;
+    align-items: center;
+    gap: 8px;
+}
+
+.import-character-btn:hover {
+    background: linear-gradient(135deg, #5a67d8 0%, #6b4794 100%);
+    transform: translateY(-2px);
+    box-shadow: 0 6px 20px rgba(102, 126, 234, 0.6);
+}
+
+.import-character-btn:active {
+    transform: translateY(0);
+    box-shadow: 0 4px 15px rgba(102, 126, 234, 0.4);
+}

@@ -711,6 +711,7 @@ $studentData = loadStudentData();
                 <?php if ($is_gm): ?>
                 <div class="admin-controls">
                     <button class="btn-add" id="add-student-btn">+ Add Student</button>
+                    <button class="btn-import" onclick="window.location.href='../character-import.php'">📥 Import Character</button>
                 </div>
                 <?php endif; ?>
             </div>
