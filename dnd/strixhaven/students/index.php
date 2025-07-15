@@ -12,7 +12,7 @@ $is_gm = ($user === 'GM');
 
 // Include version system
 define('VERSION_SYSTEM_INTERNAL', true);
-require_once '../version.php';
+require_once '../../version.php';
 
 // Include character integration for character details functionality
 require_once '../gm/includes/character-integration.php';
@@ -382,7 +382,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['action'])) {
         $search_name = isset($_POST['name']) ? trim($_POST['name']) : '';
         
         if ($search_name) {
-            $data = loadStudentsData();
+            $data = loadStudentData();
             $matches = array();
             
             foreach ($data['students'] as $student) {
@@ -406,7 +406,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['action'])) {
         }
         
     } elseif ($_POST['action'] === 'get_all_character_names') {
-        $data = loadStudentsData();
+        $data = loadStudentData();
         $names = array();
         
         foreach ($data['students'] as $student) {
@@ -482,7 +482,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['action'])) {
         $character_id = isset($_POST['character_id']) ? $_POST['character_id'] : '';
         
         if ($character_id) {
-            $data = loadStudentsData();
+            $data = loadStudentData();
             
             foreach ($data['students'] as $student) {
                 if ($student['student_id'] === $character_id) {

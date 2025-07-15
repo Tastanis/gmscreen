@@ -15,6 +15,10 @@ if (!$is_gm) {
     exit;
 }
 
+// Include version system
+define('VERSION_SYSTEM_INTERNAL', true);
+require_once '../../version.php';
+
 // Include character integration
 require_once 'includes/character-integration.php';
 
@@ -490,6 +494,12 @@ $panelTitles = loadPanelTitles($panelTitlesFile);
     </div>
 
     <!-- Dice Roller will be created dynamically by JavaScript -->
+
+    <!-- Version Display -->
+    <div class="version-footer" style="position: fixed; bottom: 10px; right: 10px; font-size: 0.8em; color: #666; background: rgba(255,255,255,0.9); padding: 5px 10px; border-radius: 5px; box-shadow: 0 2px 5px rgba(0,0,0,0.1);">
+        <span class="version-info"><?php echo Version::displayVersion(); ?></span>
+        <span class="version-updated" style="margin-left: 10px;">Updated: <?php echo Version::getLastUpdated(); ?></span>
+    </div>
 
     <!-- Scripts -->
     <script src="js/rich-text-editor.js"></script>
