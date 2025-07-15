@@ -1,0 +1,179 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Breakthrough - D&D Rules</title>
+    <style>
+        body {
+            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+            line-height: 1.6;
+            margin: 20px;
+            background-color: #f5f5f5;
+            color: #333;
+        }
+        .container {
+            max-width: 1200px;
+            margin: 0 auto;
+            background: white;
+            padding: 30px;
+            border-radius: 10px;
+            box-shadow: 0 2px 10px rgba(0,0,0,0.1);
+        }
+        h1 {
+            color: #fd7e14;
+            border-bottom: 3px solid #fd7e14;
+            padding-bottom: 10px;
+            margin-bottom: 30px;
+        }
+        .breakthrough-section {
+            margin-bottom: 30px;
+            padding: 20px;
+            background-color: #fff8f0;
+            border-left: 5px solid #fd7e14;
+            border-radius: 5px;
+        }
+        .material-item {
+            margin-bottom: 20px;
+            padding: 20px;
+            background-color: white;
+            border-radius: 8px;
+            box-shadow: 0 2px 5px rgba(0,0,0,0.1);
+            border-left: 6px solid #fd7e14;
+        }
+        .material-name {
+            font-size: 1.3em;
+            font-weight: bold;
+            margin-bottom: 10px;
+            color: #fd7e14;
+        }
+        .cost-damage {
+            display: grid;
+            grid-template-columns: 1fr 1fr;
+            gap: 15px;
+            margin-top: 10px;
+        }
+        .cost {
+            background-color: #e9ecef;
+            padding: 12px;
+            border-radius: 5px;
+            text-align: center;
+        }
+        .damage {
+            background-color: #f8d7da;
+            color: #721c24;
+            padding: 12px;
+            border-radius: 5px;
+            text-align: center;
+            font-weight: bold;
+        }
+        .cost-label {
+            font-size: 0.9em;
+            color: #6c757d;
+            margin-bottom: 5px;
+        }
+        .cost-value {
+            font-weight: bold;
+            color: #495057;
+            font-size: 1.1em;
+        }
+        .damage-value {
+            font-size: 1.2em;
+        }
+        .glass { border-left-color: #17a2b8; }
+        .wood { border-left-color: #8B4513; }
+        .stone { border-left-color: #6c757d; }
+        .metal { border-left-color: #343a40; }
+        .intro {
+            background-color: #d1ecf1;
+            color: #0c5460;
+            padding: 20px;
+            border-radius: 8px;
+            margin-bottom: 30px;
+            border-left: 4px solid #17a2b8;
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <h1>💥 Breakthrough Rules</h1>
+        
+        <div class="intro">
+            <h3>🚀 Breaking Through Materials</h3>
+            <p>When force movement would push a creature through solid materials, they may breakthrough. The cost depends on the material type, and the creature takes damage in the process.</p>
+            
+            <h4>📝 Important Notes:</h4>
+            <ul>
+                <li>You must have enough <strong>remaining forced movement</strong> to pay the cost</li>
+                <li>If you don't have enough movement remaining, you <strong>cannot breakthrough</strong></li>
+                <li>Damage is taken <strong>after</strong> the breakthrough attempt</li>
+                <li>Successfully breaking through destroys <strong>1 square</strong> of the material</li>
+            </ul>
+        </div>
+        
+        <div class="breakthrough-section">
+            <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 20px;">
+                <div>
+                    <div class="material-item glass">
+                        <div class="material-name">🔷 Glass</div>
+                        <div class="cost-damage">
+                            <div class="cost">
+                                <div class="cost-label">Movement Cost</div>
+                                <div class="cost-value">1 Square</div>
+                            </div>
+                            <div class="damage">
+                                <div class="cost-label">Damage Taken</div>
+                                <div class="damage-value">3 Damage</div>
+                            </div>
+                        </div>
+                    </div>
+
+                    <div class="material-item wood">
+                        <div class="material-name">🪵 Wood</div>
+                        <div class="cost-damage">
+                            <div class="cost">
+                                <div class="cost-label">Movement Cost</div>
+                                <div class="cost-value">3 Squares</div>
+                            </div>
+                            <div class="damage">
+                                <div class="cost-label">Damage Taken</div>
+                                <div class="damage-value">5 Damage</div>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+                
+                <div>
+                    <div class="material-item stone">
+                        <div class="material-name">🪨 Stone</div>
+                        <div class="cost-damage">
+                            <div class="cost">
+                                <div class="cost-label">Movement Cost</div>
+                                <div class="cost-value">6 Squares</div>
+                            </div>
+                            <div class="damage">
+                                <div class="cost-label">Damage Taken</div>
+                                <div class="damage-value">8 Damage</div>
+                            </div>
+                        </div>
+                    </div>
+
+                    <div class="material-item metal">
+                        <div class="material-name">⚙️ Metal</div>
+                        <div class="cost-damage">
+                            <div class="cost">
+                                <div class="cost-label">Movement Cost</div>
+                                <div class="cost-value">9 Squares</div>
+                            </div>
+                            <div class="damage">
+                                <div class="cost-label">Damage Taken</div>
+                                <div class="damage-value">10 Damage</div>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+</body>
+</html>

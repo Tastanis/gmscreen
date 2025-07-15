@@ -1,0 +1,169 @@
+{
+    "frunk": {
+        "items": [
+            {
+                "id": "item_1752009045316_twdb5ju02",
+                "name": "New Item",
+                "description": "",
+                "keywords": "",
+                "effect": "",
+                "image": "",
+                "grid_x": 0,
+                "grid_y": 0,
+                "visible": true
+            }
+        ]
+    },
+    "sharon": {
+        "items": [
+            {
+                "id": "item_1751336845_i54vepg38",
+                "name": "Liquid Obsidian Teardrop ",
+                "description": "Liquid Obsidian teardrop ",
+                "keywords": "elemental",
+                "effect": "Project resource for charisma snake",
+                "image": "images\/item_1751336845_i54vepg38_1751336845.png",
+                "grid_x": 0,
+                "grid_y": 0,
+                "visible": true
+            }
+        ]
+    },
+    "indigo": {
+        "items": [
+            {
+                "id": "item_1751335082_fnlrpzvk7",
+                "name": "Mirror Coin ",
+                "description": "protective one-use (maneuver) \nTake half damage and reflect it back ",
+                "keywords": "",
+                "effect": "",
+                "image": "images\/item_1751335082_fnlrpzvk7_1752088098.png",
+                "grid_x": 0,
+                "grid_y": 0,
+                "visible": true
+            },
+            {
+                "id": "item_1751335097_96pn0oyfi",
+                "name": "Pocket Homunculus ",
+                "description": "A densely interlocking sphere of clockwork gears features facets that show the countenance of the item's wielder.\n\n\nWhen activated as a maneuver, this item erupts in a bright flash, you can shift 1 square without your enemies noticing your movement, and a homunculus perfectly resembling you appears in a space adjacent to you. The homunculus is a creature with Stamina 15, a 0 in all their characteristics, and a speed and stability equal to yours.\n\nThey appear indistinguishable from you, but can't use any abilities.\n\nWhile you have line of effect to your homunculus, you can use a maneuver to issue them a telepathic command. The homunculus performs the command to the best of their ability. If not commanded, the homunculus mimics your movements and speech. When you move, the homunculus moves with you, matching your pace. The homunculus crumbles to dust after 1 hour or if reduced to Stamina 0.",
+                "keywords": "Psionic, magic, maneuver",
+                "effect": "",
+                "image": "images\/item_1751335097_96pn0oyfi_1752089139.png",
+                "grid_x": 0,
+                "grid_y": 0,
+                "visible": true
+            }
+        ]
+    },
+    "zepha": {
+        "items": [
+            {
+                "id": "item_1751334037204_ywlr0k6pn",
+                "name": "Adult lightning creature",
+                "description": "Small lightning component from the spine of a lightning eel",
+                "keywords": "",
+                "effect": "",
+                "image": "images\/item_1751334037204_ywlr0k6pn_1752089376.png",
+                "grid_x": 0,
+                "grid_y": 0,
+                "visible": true
+            },
+            {
+                "id": "item_1751334144929_i00cmrbk1",
+                "name": "Molten Component",
+                "description": "",
+                "keywords": "",
+                "effect": "",
+                "image": "",
+                "grid_x": 0,
+                "grid_y": 0,
+                "visible": true
+            }
+        ]
+    },
+    "shared": {
+        "items": [
+            {
+                "id": "item_1751334976_n7bg3ji8z",
+                "name": "Scroll of Shocking Grasp ",
+                "description": "**Scroll of shocking grasp**\nAction\nMelee, Strike, Weapon \u2726 Action\nRanged 1 \u2726 1 creature\nPower Roll + Reason:\n\n- 11 or lower: 6 lightning damage\n\n- 12-16: 12 lightning damage, Weakened (EoT)\n\n- 17+: 15 lightning damage, Push 5 Bleeding, Dazed (save ends)",
+                "keywords": "scroll, lightning, magic",
+                "effect": "",
+                "image": "images\/item_1751334976_n7bg3ji8z_1752087698.png",
+                "grid_x": 0,
+                "grid_y": 0,
+                "visible": true
+            },
+            {
+                "id": "item_1751335023_hfd09nxz4",
+                "name": "Potion of Water Breathing ",
+                "description": "breathe water for 1 hour ",
+                "keywords": "",
+                "effect": "",
+                "image": "images\/item_1751335023_hfd09nxz4_1752087910.png",
+                "grid_x": 0,
+                "grid_y": 0,
+                "visible": true
+            },
+            {
+                "id": "item_1751336854_kozb9pegw",
+                "name": "Warren Keeper",
+                "description": "Made from a lightning Roc's feather and Voltic quartz, this rod arcs lightning to its allies to imbue them with power. The placement of the rod requires extreme strength.",
+                "keywords": "magic, thunder, electric, Maneuver",
+                "effect": "As a Maneuver, the rod can be driven into the ground. Allies determined by you during the rod's placement can be affected. \nRange: Burst 1\nDuration: 1 hour or until moved.\nAttacks against affected creatures take a bane.\n",
+                "image": "images\/item_1751336854_kozb9pegw_1751336854.png",
+                "grid_x": 0,
+                "grid_y": 0,
+                "visible": true
+            }
+        ]
+    },
+    "gm": {
+        "items": [
+            {
+                "id": "item_1751320828327_3pjlo747o",
+                "name": "Crystalized Thought Echo",
+                "description": "Collected thoughts crystallized through mathematical matrices.",
+                "keywords": "magic, psionic ",
+                "effect": "Resource for light psionic projects",
+                "image": "images\/item_1751320828327_3pjlo747o_1751321003.png",
+                "grid_x": 0,
+                "grid_y": 0,
+                "visible": false
+            },
+            {
+                "id": "item_1751333055552_kstfks0if",
+                "name": "Catapult Dust",
+                "description": "",
+                "keywords": "",
+                "effect": "Catapult Dust can be used as a free action to give any strike a knockback effect of 2. If the strike already has a knockback effect, +2 to knockback ",
+                "image": "images\/item_1751333055552_kstfks0if_1751333361.png",
+                "grid_x": 0,
+                "grid_y": 0,
+                "visible": true
+            },
+            {
+                "id": "item_1751333866030_j9bsrcyca",
+                "name": "Healing Potion",
+                "description": "Thick and red, this liquid tastes of sour beer.",
+                "keywords": "magic, Potion",
+                "effect": "When you drink this potion as a maneuver, you regain Stamina equal to your recovery value without spending a Recovery.",
+                "image": "images\/item_1751333866030_j9bsrcyca_1751334017.png",
+                "grid_x": 0,
+                "grid_y": 0,
+                "visible": true
+            },
+            {
+                "id": "item_1751342340480_z81vu86u5",
+                "name": "Lightning Hammer",
+                "description": "",
+                "keywords": "",
+                "effect": "",
+                "image": "images\/item_1751342340480_z81vu86u5_1751342354.png",
+                "grid_x": 0,
+                "grid_y": 0,
+                "visible": true
+            }
+        ]
+    }
+}

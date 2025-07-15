@@ -1,0 +1,1021 @@
+// =============================================================================
+// GM Screen JavaScript with Popup Tabs and Dice Roller - Updated
+// =============================================================================
+
+class GMScreen {
+    constructor() {
+        this.currentTab = null;
+        this.autoSaveInterval = null;
+        this.tabs = {
+            'left-1': [],
+            'left-2': [],
+            'right-1': [],
+            'right-2': []
+        };
+        this.panelTitles = {
+            'left-panel-1': 'Notes',
+            'left-panel-2': 'References', 
+            'right-panel-1': 'Rules',
+            'right-panel-2': 'Campaign'
+        };
+        this.unsavedChanges = false;
+        this.richTextEditor = null;
+        this.diceRoller = null;
+        this.currentPopup = null;
+    }
+
+    // Initialize the GM Screen
+    async init() {
+        console.log('Initializing GM Screen with Popup Tabs and Dice Roller...');
+        
+        try {
+            // Wait for DOM to be fully loaded
+            if (document.readyState === 'loading') {
+                await new Promise(resolve => {
+                    document.addEventListener('DOMContentLoaded', resolve);
+                });
+            }
+            
+            // Initialize character lookup first
+            if (window.characterLookup) {
+                try {
+                    await window.characterLookup.init();
+                } catch (error) {
+                    console.warn('Character lookup initialization failed:', error);
+                }
+            }
+            
+            await this.loadTabs();
+            await this.loadPanelTitles();
+            this.setupEventListeners();
+            this.updateSessionInfo();
+            this.setupAutoSave();
+            this.initializeDiceRoller();
+            
+            console.log('GM Screen initialized successfully');
+        } catch (error) {
+            console.error('Error initializing GM Screen:', error);
+        }
+    }
+
+    // Load tabs configuration from server
+    async loadTabs() {
+        try {
+            console.log('Loading tabs from server...');
+            
+            const formData = new FormData();
+            formData.append('action', 'load_tabs');
+            
+            const response = await fetch('index.php', {
+                method: 'POST',
+                body: formData
+            });
+            
+            if (!response.ok) {
+                throw new Error(`HTTP error! status: ${response.status}`);
+            }
+            
+            const data = await response.json();
+            
+            if (data.success && data.tabs) {
+                this.tabs = data.tabs;
+                console.log('Loaded tabs successfully:', this.tabs);
+            } else {
+                console.error('Failed to load tabs:', data.error || 'Unknown error');
+                this.tabs = this.getDefaultTabs();
+            }
+        } catch (error) {
+            console.error('Error loading tabs:', error);
+            this.tabs = this.getDefaultTabs();
+        }
+        
+        this.renderTabs();
+    }
+
+    // Load panel titles from server
+    async loadPanelTitles() {
+        try {
+            const formData = new FormData();
+            formData.append('action', 'load_panel_titles');
+            
+            const response = await fetch('index.php', {
+                method: 'POST',
+                body: formData
+            });
+            
+            if (!response.ok) {
+                throw new Error(`HTTP error! status: ${response.status}`);
+            }
+            
+            const data = await response.json();
+            
+            if (data.success && data.panelTitles) {
+                this.panelTitles = { ...this.panelTitles, ...data.panelTitles };
+                this.updatePanelTitlesUI();
+            }
+        } catch (error) {
+            console.error('Error loading panel titles:', error);
+        }
+    }
+
+    // Update panel titles in the UI
+    updatePanelTitlesUI() {
+        Object.entries(this.panelTitles).forEach(([panelId, title]) => {
+            const titleElement = document.querySelector(`#${panelId} .panel-title`);
+            if (titleElement) {
+                titleElement.textContent = title;
+            }
+            
+            // Also update the h3 in panel header
+            const headerElement = document.querySelector(`#${panelId} .panel-header h3`);
+            if (headerElement) {
+                headerElement.textContent = title;
+            }
+        });
+    }
+
+    // Get default tab configuration
+    getDefaultTabs() {
+        const panels = ['left-1', 'left-2', 'right-1', 'right-2'];
+        const panelNames = ['Note', 'Reference', 'Rule', 'Campaign'];
+        const result = {};
+        
+        panels.forEach((panel, panelIndex) => {
+            result[panel] = [];
+            for (let i = 1; i <= 20; i++) {
+                result[panel].push({
+                    id: `${panel}-${i}`,
+                    name: `${panelNames[panelIndex]} ${i}`,
+                    content: '',
+                    lastModified: new Date().toISOString(),
+                    created: new Date().toISOString()
+                });
+            }
+        });
+        
+        return result;
+    }
+
+    // Render tabs in the UI
+    renderTabs() {
+        console.log('Rendering all tabs...');
+        const panels = ['left-1', 'left-2', 'right-1', 'right-2'];
+        
+        panels.forEach(panel => {
+            if (this.tabs[panel] && Array.isArray(this.tabs[panel])) {
+                this.renderTabSet(panel, this.tabs[panel]);
+            } else {
+                console.warn(`No valid tabs data for panel: ${panel}`);
+                // Create empty tabs for this panel
+                this.tabs[panel] = [];
+                this.renderTabSet(panel, []);
+            }
+        });
+    }
+
+    renderTabSet(panel, tabs) {
+        console.log(`Rendering tabs for panel: ${panel}`, tabs);
+        const container = document.getElementById(`${panel}-tabs`);
+        if (!container) {
+            console.error(`Container not found: ${panel}-tabs`);
+            return;
+        }
+        
+        container.innerHTML = '';
+        
+        if (!tabs || !Array.isArray(tabs)) {
+            console.error(`Invalid tabs data for panel ${panel}:`, tabs);
+            return;
+        }
+        
+        // Sort tabs by ID to ensure consistent order
+        const sortedTabs = tabs.sort((a, b) => {
+            const aNum = parseInt(a.id.split('-').pop());
+            const bNum = parseInt(b.id.split('-').pop());
+            return aNum - bNum;
+        });
+        
+        sortedTabs.forEach((tab, index) => {
+            if (tab && tab.id && tab.name) {
+                const tabElement = this.createTabElement(tab, panel, index);
+                container.appendChild(tabElement);
+            } else {
+                console.warn(`Invalid tab data:`, tab);
+            }
+        });
+        
+        console.log(`Successfully rendered ${sortedTabs.length} tabs for panel ${panel}`);
+    }
+
+    createTabElement(tab, panel, index) {
+        const div = document.createElement('div');
+        div.className = 'tab-item';
+        div.dataset.tabId = tab.id;
+        div.dataset.panel = panel;
+        div.dataset.index = index;
+        
+        // Add content indicator
+        const hasContent = tab.content && tab.content.trim() !== '';
+        const contentIndicator = hasContent ? ' ✓' : '';
+        
+        div.innerHTML = `
+            <span class="tab-name">${this.escapeHtml(tab.name)}${contentIndicator}</span>
+            <div class="tab-actions">
+                <button class="tab-action-btn" title="Open in Popup">📝</button>
+            </div>
+        `;
+        
+        // Add click handler for the tab - OPEN IN POPUP
+        div.addEventListener('click', (e) => {
+            // Don't open if clicking on action button
+            if (!e.target.classList.contains('tab-action-btn')) {
+                this.openTabInPopup(tab.id);
+            }
+        });
+        
+        // Add action button click handler
+        const actionBtn = div.querySelector('.tab-action-btn');
+        if (actionBtn) {
+            actionBtn.addEventListener('click', (e) => {
+                e.stopPropagation();
+                this.openTabInPopup(tab.id);
+            });
+        }
+        
+        return div;
+    }
+
+    // Open tab in popup instead of new window
+    openTabInPopup(tabId) {
+        console.log('Opening tab in popup:', tabId);
+        
+        const tab = this.findTabById(tabId);
+        if (!tab) {
+            console.error('Tab not found:', tabId);
+            return;
+        }
+        
+        // Close existing popup if any
+        this.closeTabPopup();
+        
+        // Create popup
+        this.createTabPopup(tab);
+    }
+
+    // Create tab popup
+    createTabPopup(tab) {
+        // Create overlay
+        const overlay = document.createElement('div');
+        overlay.className = 'tab-popup-overlay';
+        overlay.addEventListener('click', () => this.closeTabPopup());
+        
+        // Create popup
+        const popup = document.createElement('div');
+        popup.className = 'tab-popup';
+        
+        // Determine panel name for the tab
+        let panelName = 'Note';
+        if (tab.id.includes('left-1')) panelName = this.panelTitles['left-panel-1'] || 'Notes';
+        else if (tab.id.includes('left-2')) panelName = this.panelTitles['left-panel-2'] || 'References';
+        else if (tab.id.includes('right-1')) panelName = this.panelTitles['right-panel-1'] || 'Rules';
+        else if (tab.id.includes('right-2')) panelName = this.panelTitles['right-panel-2'] || 'Campaign';
+        
+        popup.innerHTML = `
+            <div class="tab-popup-header">
+                <input type="text" class="tab-popup-title" value="${this.escapeHtml(tab.name)}" placeholder="Tab Name">
+                <div class="tab-popup-controls">
+                    <button class="popup-to-tab-btn" title="Open in New Tab">Open in Tab</button>
+                    <button class="tab-popup-close">&times;</button>
+                </div>
+            </div>
+            <div class="tab-popup-body">
+                <div id="popup-rich-text-container" class="rich-text-container">
+                    <!-- Rich text editor will be initialized here -->
+                </div>
+            </div>
+        `;
+        
+        // Add character autocomplete container to the popup
+        const autocompleteContainer = document.createElement('div');
+        autocompleteContainer.id = 'popup-character-autocomplete';
+        autocompleteContainer.className = 'character-autocomplete';
+        autocompleteContainer.style.display = 'none';
+        popup.appendChild(autocompleteContainer);
+        
+        // Add to DOM
+        document.body.appendChild(overlay);
+        document.body.appendChild(popup);
+        
+        // Setup event listeners
+        const closeBtn = popup.querySelector('.tab-popup-close');
+        closeBtn.addEventListener('click', () => this.closeTabPopup());
+        
+        const toTabBtn = popup.querySelector('.popup-to-tab-btn');
+        toTabBtn.addEventListener('click', () => this.convertPopupToTab(tab, panelName));
+        
+        // Initialize rich text editor
+        this.initializePopupEditor(tab, popup);
+        
+        // Store current popup reference
+        this.currentPopup = { popup, overlay, tab };
+        
+        // Handle escape key
+        const handleEscape = (e) => {
+            if (e.key === 'Escape') {
+                this.closeTabPopup();
+                document.removeEventListener('keydown', handleEscape);
+            }
+        };
+        document.addEventListener('keydown', handleEscape);
+    }
+
+    // Initialize rich text editor in popup - FIXED VERSION
+    async initializePopupEditor(tab, popup) {
+        try {
+            console.log('Initializing popup editor for tab:', tab.id);
+            
+            const container = popup.querySelector('#popup-rich-text-container');
+            if (!container) {
+                throw new Error('Rich text container not found in popup');
+            }
+            
+            // Make sure RichTextEditor is available
+            if (typeof RichTextEditor === 'undefined') {
+                throw new Error('RichTextEditor not loaded');
+            }
+            
+            // Wait a bit for popup to be fully rendered
+            await new Promise(resolve => setTimeout(resolve, 100));
+            
+            const richTextEditor = new RichTextEditor(container, {
+                placeholder: 'Enter your notes here... Type [[character name]] to link to characters'
+            });
+            
+            richTextEditor.init();
+            richTextEditor.setContent(tab.content || '');
+            
+            // FIXED: Store editor reference properly
+            if (!this.currentPopup) {
+                this.currentPopup = { tab, popup };
+            }
+            this.currentPopup.richTextEditor = richTextEditor;
+            
+            // Setup change detection with debounce
+            let saveTimeout;
+            richTextEditor.onChange(() => {
+                this.unsavedChanges = true;
+                clearTimeout(saveTimeout);
+                saveTimeout = setTimeout(() => {
+                    this.saveTabFromPopup(tab, popup, richTextEditor);
+                }, 1000);
+            });
+            
+            // Setup character lookup if available
+            if (window.characterLookup && window.characterLookup.isReady()) {
+                const editor = richTextEditor.getEditor();
+                if (editor) {
+                    console.log('Setting up character lookup for popup editor...');
+                    window.characterLookup.setupEditorListeners(editor);
+                    console.log('Character lookup connected to popup editor');
+                } else {
+                    console.warn('Could not get editor element for character lookup');
+                }
+            } else {
+                console.warn('Character lookup not ready for popup editor');
+                
+                // Try to initialize character lookup if it hasn't been done
+                if (window.characterLookup && !window.characterLookup.isReady()) {
+                    try {
+                        await window.characterLookup.init();
+                        const editor = richTextEditor.getEditor();
+                        if (editor && window.characterLookup.isReady()) {
+                            window.characterLookup.setupEditorListeners(editor);
+                            console.log('Character lookup initialized and connected to popup editor');
+                        }
+                    } catch (error) {
+                        console.warn('Failed to initialize character lookup:', error);
+                    }
+                }
+            }
+            
+            // Setup title change detection
+            const titleInput = popup.querySelector('.tab-popup-title');
+            if (titleInput) {
+                titleInput.addEventListener('input', () => {
+                    this.unsavedChanges = true;
+                    clearTimeout(saveTimeout);
+                    saveTimeout = setTimeout(() => {
+                        this.saveTabFromPopup(tab, popup, richTextEditor);
+                    }, 1000);
+                });
+            }
+            
+            console.log('Popup editor initialized successfully');
+            
+        } catch (error) {
+            console.error('Error initializing popup editor:', error);
+            
+            // FIXED: Fallback to simple textarea if rich editor fails
+            const container = popup.querySelector('#popup-rich-text-container');
+            if (container) {
+                container.innerHTML = `
+                    <div style="padding: 10px; background: #f8f9fa; border: 1px solid #ddd; border-radius: 6px; margin-bottom: 10px;">
+                        <strong>Rich text editor failed to load.</strong> Using fallback editor.
+                    </div>
+                    <textarea style="width: 100%; height: 400px; padding: 15px; border: 1px solid #ddd; border-radius: 6px; font-family: inherit; font-size: 14px; resize: vertical;" placeholder="Enter your notes here...">${tab.content || ''}</textarea>
+                `;
+                
+                // Setup basic save functionality
+                const textarea = container.querySelector('textarea');
+                if (textarea) {
+                    textarea.addEventListener('input', () => {
+                        this.unsavedChanges = true;
+                    });
+                    
+                    // Store a simple editor interface
+                    this.currentPopup.richTextEditor = {
+                        getContent: () => textarea.value,
+                        destroy: () => {}
+                    };
+                }
+            }
+        }
+    }
+
+    // Save tab from popup
+    async saveTabFromPopup(tab, popup, richTextEditor) {
+        try {
+            const titleInput = popup.querySelector('.tab-popup-title');
+            
+            const updatedTabData = {
+                ...tab,
+                name: titleInput.value || tab.name,
+                content: richTextEditor.getContent(),
+                lastModified: new Date().toISOString()
+            };
+            
+            const formData = new FormData();
+            formData.append('action', 'save_tab');
+            formData.append('tab_data', JSON.stringify(updatedTabData));
+            
+            const response = await fetch('index.php', {
+                method: 'POST',
+                body: formData
+            });
+            
+            const result = await response.json();
+            
+            if (result.success) {
+                // Update local tab data
+                Object.assign(tab, updatedTabData);
+                
+                // Update tab display in sidebar
+                this.refreshTabDisplay(tab.id);
+                
+                this.unsavedChanges = false;
+                console.log('Tab saved from popup successfully');
+            } else {
+                console.error('Save failed:', result.error);
+            }
+            
+        } catch (error) {
+            console.error('Error saving tab from popup:', error);
+        }
+    }
+
+    // Convert popup to new tab
+    convertPopupToTab(tab, panelName) {
+        const url = `note-editor.php?tab=${encodeURIComponent(tab.id)}&panel=${encodeURIComponent(panelName)}`;
+        const windowFeatures = 'width=1200,height=800,scrollbars=yes,resizable=yes,status=yes,location=yes,menubar=yes,toolbar=yes';
+        
+        try {
+            window.open(url, `note_${tab.id}`, windowFeatures);
+            this.closeTabPopup();
+        } catch (error) {
+            console.error('Error opening new tab:', error);
+            // Fallback: open in same tab
+            window.location.href = url;
+        }
+    }
+
+    // Close tab popup
+    closeTabPopup() {
+        if (this.currentPopup) {
+            // Clean up rich text editor
+            if (this.currentPopup.richTextEditor) {
+                this.currentPopup.richTextEditor.destroy();
+            }
+            
+            // Remove from DOM
+            if (this.currentPopup.overlay && this.currentPopup.overlay.parentNode) {
+                this.currentPopup.overlay.parentNode.removeChild(this.currentPopup.overlay);
+            }
+            if (this.currentPopup.popup && this.currentPopup.popup.parentNode) {
+                this.currentPopup.popup.parentNode.removeChild(this.currentPopup.popup);
+            }
+            
+            this.currentPopup = null;
+        }
+    }
+
+    // Refresh tab display in sidebar
+    refreshTabDisplay(tabId) {
+        const tab = this.findTabById(tabId);
+        if (!tab) return;
+        
+        const tabElement = document.querySelector(`[data-tab-id="${tabId}"]`);
+        if (tabElement) {
+            const hasContent = tab.content && tab.content.trim() !== '';
+            const contentIndicator = hasContent ? ' ✓' : '';
+            const nameElement = tabElement.querySelector('.tab-name');
+            if (nameElement) {
+                nameElement.textContent = tab.name + contentIndicator;
+            }
+        }
+    }
+
+    // Initialize dice roller
+    initializeDiceRoller() {
+        this.diceRoller = new DiceRoller();
+        console.log('Dice roller initialized');
+    }
+
+    findTabById(tabId) {
+        const panels = ['left-1', 'left-2', 'right-1', 'right-2'];
+        for (const panel of panels) {
+            if (this.tabs[panel] && Array.isArray(this.tabs[panel])) {
+                for (const tab of this.tabs[panel]) {
+                    if (tab && tab.id === tabId) return tab;
+                }
+            }
+        }
+        return null;
+    }
+
+    // Make panel title editable
+    makePanelTitleEditable(panelId) {
+        const titleElement = document.querySelector(`#${panelId} .panel-title`);
+        if (!titleElement) return;
+        
+        const currentTitle = titleElement.textContent;
+        const input = document.createElement('input');
+        input.type = 'text';
+        input.value = currentTitle;
+        input.className = 'panel-title-edit';
+        input.style.cssText = `
+            background: rgba(255, 255, 255, 0.9);
+            border: 1px solid #007bff;
+            border-radius: 3px;
+            padding: 2px 6px;
+            font-size: 12px;
+            font-weight: 600;
+            text-transform: uppercase;
+            letter-spacing: 1px;
+            color: #2c3e50;
+            text-align: center;
+            width: 100px;
+            max-width: 100px;
+        `;
+        
+        // Replace title with input
+        titleElement.style.display = 'none';
+        titleElement.parentNode.insertBefore(input, titleElement);
+        input.focus();
+        input.select();
+        
+        // Handle save/cancel
+        const saveTitle = async () => {
+            const newTitle = input.value.trim() || currentTitle;
+            
+            try {
+                // Update in memory
+                this.panelTitles[panelId] = newTitle;
+                
+                // Save to server
+                await this.savePanelTitle(panelId, newTitle);
+                
+                // Update UI
+                titleElement.textContent = newTitle;
+                titleElement.style.display = '';
+                input.remove();
+                
+                // Also update the h3 in panel header
+                const headerElement = document.querySelector(`#${panelId} .panel-header h3`);
+                if (headerElement) {
+                    headerElement.textContent = newTitle;
+                }
+                
+            } catch (error) {
+                console.error('Error saving panel title:', error);
+                // Restore original title on error
+                titleElement.style.display = '';
+                input.remove();
+            }
+        };
+        
+        const cancelEdit = () => {
+            titleElement.style.display = '';
+            input.remove();
+        };
+        
+        input.addEventListener('blur', saveTitle);
+        input.addEventListener('keydown', (e) => {
+            if (e.key === 'Enter') {
+                e.preventDefault();
+                saveTitle();
+            } else if (e.key === 'Escape') {
+                e.preventDefault();
+                cancelEdit();
+            }
+        });
+    }
+
+    // Save panel title to server
+    async savePanelTitle(panelId, title) {
+        try {
+            const formData = new FormData();
+            formData.append('action', 'save_panel_title');
+            formData.append('panel_id', panelId);
+            formData.append('title', title);
+            
+            const response = await fetch('index.php', {
+                method: 'POST',
+                body: formData
+            });
+            
+            if (!response.ok) {
+                throw new Error(`HTTP error! status: ${response.status}`);
+            }
+            
+            const result = await response.json();
+            
+            if (result.success) {
+                console.log('Panel title saved successfully:', panelId, title);
+            } else {
+                throw new Error(result.error || 'Unknown error');
+            }
+        } catch (error) {
+            console.error('Error saving panel title:', error);
+            throw error;
+        }
+    }
+
+    // Setup event listeners
+    setupEventListeners() {
+        // Panel hover effects for all 4 panels
+        const panels = ['left-panel-1', 'left-panel-2', 'right-panel-1', 'right-panel-2'];
+        
+        panels.forEach(panelId => {
+            const panel = document.getElementById(panelId);
+            if (panel) {
+                panel.addEventListener('mouseenter', () => panel.classList.add('expanded'));
+                panel.addEventListener('mouseleave', () => panel.classList.remove('expanded'));
+                
+                // Make panel titles editable on click
+                const titleElement = panel.querySelector('.panel-title');
+                if (titleElement) {
+                    titleElement.style.cursor = 'pointer';
+                    titleElement.title = 'Click to edit panel name';
+                    titleElement.addEventListener('click', (e) => {
+                        e.stopPropagation();
+                        this.makePanelTitleEditable(panelId);
+                    });
+                }
+            }
+        });
+
+        // Keyboard shortcuts
+        document.addEventListener('keydown', (e) => {
+            if (e.ctrlKey || e.metaKey) {
+                if (e.key === 'Escape') {
+                    this.closeTabPopup();
+                }
+            }
+        });
+
+        // Refresh tabs when window regains focus (in case tabs were edited in other windows)
+        window.addEventListener('focus', () => {
+            console.log('Window focused, refreshing tabs...');
+            this.loadTabs();
+        });
+    }
+
+    // Auto-save functionality
+    setupAutoSave() {
+        this.autoSaveInterval = setInterval(() => {
+            console.log('Auto-save check...');
+        }, 30000); // Check every 30 seconds
+        
+        console.log('Auto-save enabled');
+    }
+
+    // Update session info
+    updateSessionInfo() {
+        const dateElement = document.getElementById('session-date');
+        if (dateElement) {
+            dateElement.textContent = new Date().toLocaleDateString();
+        }
+    }
+
+    // Utility function to escape HTML
+    escapeHtml(text) {
+        if (!text) return '';
+        const map = {
+            '&': '&amp;',
+            '<': '&lt;',
+            '>': '&gt;',
+            '"': '&quot;',
+            "'": '&#039;'
+        };
+        return text.toString().replace(/[&<>"']/g, function(m) { return map[m]; });
+    }
+
+    // Refresh tabs data
+    async refreshTabs() {
+        console.log('Refreshing tabs...');
+        await this.loadTabs();
+    }
+
+    // Static method for global access
+    static init() {
+        if (!window.gmScreen) {
+            window.gmScreen = new GMScreen();
+        }
+        return window.gmScreen.init();
+    }
+}
+
+// =============================================================================
+// Dice Roller Class - Converted from Python tkinter to JavaScript
+// =============================================================================
+
+class DiceRoller {
+    constructor() {
+        this.currentRollQueue = [];
+        this.isExpanded = false;
+        this.hoverDisabled = false;
+        
+        this.createDiceUI();
+    }
+    
+    createDiceUI() {
+        // Create main dice roller container
+        this.diceFrame = document.createElement('div');
+        this.diceFrame.className = 'dice-roller collapsed';
+        
+        // Create header with toggle
+        const header = document.createElement('div');
+        header.className = 'dice-roller-header';
+        
+        const title = document.createElement('div');
+        title.className = 'dice-roller-title';
+        title.textContent = 'Dice Roller';
+        title.style.cursor = 'pointer';
+        title.addEventListener('click', () => this.toggleCollapse());
+        
+        const toggleBtn = document.createElement('button');
+        toggleBtn.className = 'dice-toggle-btn';
+        toggleBtn.innerHTML = '🎲';
+        toggleBtn.addEventListener('click', () => this.toggleCollapse());
+        
+        header.appendChild(title);
+        header.appendChild(toggleBtn);
+        this.diceFrame.appendChild(header);
+        
+        // Create expanded content
+        this.createExpandedContent();
+        
+        // Add to page
+        document.body.appendChild(this.diceFrame);
+        
+        // Setup hover events
+        this.diceFrame.addEventListener('mouseenter', () => this.onEnter());
+    }
+    
+    createExpandedContent() {
+        this.expandedFrame = document.createElement('div');
+        this.expandedFrame.className = 'dice-content';
+        
+        // First row of dice buttons
+        const firstRow = document.createElement('div');
+        firstRow.className = 'dice-buttons-row';
+        
+        const diceRow1 = [
+            { text: 'D2', dice: '1d2' },
+            { text: 'D4', dice: '1d4' },
+            { text: 'D8', dice: '1d8' },
+            { text: 'D10', dice: '1d10' },
+            { text: 'D20', dice: '1d20' }
+        ];
+        
+        diceRow1.forEach(({ text, dice }) => {
+            const btn = document.createElement('button');
+            btn.className = 'dice-btn';
+            btn.textContent = text;
+            btn.addEventListener('click', () => this.addToQueue(dice));
+            firstRow.appendChild(btn);
+        });
+        
+        // Second row - special buttons
+        const secondRow = document.createElement('div');
+        secondRow.className = 'dice-buttons-row';
+        
+        const specialButtons = [
+            { text: 'Power Roll', value: '2d10' },
+            { text: 'Edge', value: '+2' },
+            { text: 'Bane', value: '-2' },
+            { text: '+1', value: '+1' }
+        ];
+        
+        specialButtons.forEach(({ text, value }) => {
+            const btn = document.createElement('button');
+            btn.className = 'dice-btn special';
+            btn.textContent = text;
+            btn.addEventListener('click', () => this.addToQueue(value));
+            secondRow.appendChild(btn);
+        });
+        
+        // Queue display
+        const queueLabel = document.createElement('div');
+        queueLabel.textContent = 'Current Roll:';
+        queueLabel.style.marginBottom = '5px';
+        queueLabel.style.fontSize = '14px';
+        queueLabel.style.fontWeight = 'bold';
+        
+        this.queueDisplay = document.createElement('div');
+        this.queueDisplay.className = 'dice-queue empty';
+        this.queueDisplay.textContent = '(nothing queued)';
+        
+        // Action buttons
+        const actionsDiv = document.createElement('div');
+        actionsDiv.className = 'dice-actions';
+        
+        const rollBtn = document.createElement('button');
+        rollBtn.className = 'dice-roll-btn';
+        rollBtn.textContent = 'ROLL';
+        rollBtn.addEventListener('click', () => this.calculateRoll());
+        
+        const clearBtn = document.createElement('button');
+        clearBtn.className = 'dice-clear-btn';
+        clearBtn.textContent = 'Clear';
+        clearBtn.addEventListener('click', () => this.clearQueue());
+        
+        this.resultLabel = document.createElement('div');
+        this.resultLabel.className = 'dice-result';
+        this.resultLabel.textContent = 'Result: -';
+        
+        actionsDiv.appendChild(rollBtn);
+        actionsDiv.appendChild(clearBtn);
+        actionsDiv.appendChild(this.resultLabel);
+        
+        // Assemble expanded content
+        this.expandedFrame.appendChild(firstRow);
+        this.expandedFrame.appendChild(secondRow);
+        this.expandedFrame.appendChild(queueLabel);
+        this.expandedFrame.appendChild(this.queueDisplay);
+        this.expandedFrame.appendChild(actionsDiv);
+        
+        this.diceFrame.appendChild(this.expandedFrame);
+    }
+    
+    onEnter() {
+        if (!this.isExpanded && !this.hoverDisabled) {
+            this.isExpanded = true;
+            this.diceFrame.classList.remove('collapsed');
+            this.expandedFrame.classList.add('expanded');
+        }
+    }
+    
+    toggleCollapse() {
+        if (this.isExpanded) {
+            // Collapse
+            this.isExpanded = false;
+            this.diceFrame.classList.add('collapsed');
+            this.expandedFrame.classList.remove('expanded');
+            
+            // Disable hover for 0.5 seconds
+            this.hoverDisabled = true;
+            setTimeout(() => { this.hoverDisabled = false; }, 500);
+        } else {
+            // Expand
+            this.isExpanded = true;
+            this.diceFrame.classList.remove('collapsed');
+            this.expandedFrame.classList.add('expanded');
+        }
+    }
+    
+    addToQueue(item) {
+        this.currentRollQueue.push(item);
+        this.updateQueueDisplay();
+    }
+    
+    updateQueueDisplay() {
+        if (this.currentRollQueue.length === 0) {
+            this.queueDisplay.textContent = '(nothing queued)';
+            this.queueDisplay.classList.add('empty');
+        } else {
+            this.queueDisplay.textContent = this.currentRollQueue.join(' ');
+            this.queueDisplay.classList.remove('empty');
+        }
+    }
+    
+    clearQueue() {
+        this.currentRollQueue = [];
+        this.updateQueueDisplay();
+        this.resultLabel.textContent = 'Result: -';
+    }
+    
+    calculateRoll() {
+        if (this.currentRollQueue.length === 0) {
+            this.resultLabel.textContent = 'Nothing to roll!';
+            return;
+        }
+        
+        try {
+            let totalResult = 0;
+            let rollDetails = [];
+            
+            for (const item of this.currentRollQueue) {
+                if (item.startsWith('+')) {
+                    const modifier = parseInt(item.substring(1));
+                    totalResult += modifier;
+                    rollDetails.push(`+${modifier}`);
+                } else if (item.startsWith('-')) {
+                    const modifier = parseInt(item.substring(1));
+                    totalResult -= modifier;
+                    rollDetails.push(`-${modifier}`);
+                } else {
+                    const { result, detail } = this.parseAndRollDice(item);
+                    totalResult += result;
+                    rollDetails.push(detail);
+                }
+            }
+            
+            this.resultLabel.textContent = `Result: ${totalResult}`;
+            
+            // Clear queue
+            this.currentRollQueue = [];
+            this.updateQueueDisplay();
+            
+        } catch (error) {
+            this.resultLabel.textContent = `Error: ${error.message}`;
+        }
+    }
+    
+    parseAndRollDice(diceNotation) {
+        const pattern = /^(\d+)d(\d+)$/;
+        const match = diceNotation.match(pattern);
+        
+        if (!match) {
+            throw new Error(`Invalid dice notation: ${diceNotation}`);
+        }
+        
+        const numDice = parseInt(match[1]);
+        const dieSize = parseInt(match[2]);
+        
+        // Roll the dice
+        const rolls = [];
+        for (let i = 0; i < numDice; i++) {
+            rolls.push(Math.floor(Math.random() * dieSize) + 1);
+        }
+        
+        const total = rolls.reduce((sum, roll) => sum + roll, 0);
+        
+        // Create detail string
+        let detail;
+        if (numDice === 1) {
+            detail = `${total}`;
+        } else {
+            const rollsStr = rolls.join('+');
+            detail = `[${rollsStr}]=${total}`;
+        }
+        
+        return { result: total, detail };
+    }
+}
+
+// Global functions for HTML onclick handlers
+function togglePanel(panelId) {
+    const panel = document.getElementById(panelId);
+    if (panel) {
+        panel.classList.toggle('expanded');
+    }
+}
+
+function exportNotes() {
+    alert('Export notes coming soon!');
+}
+
+// Initialize when DOM is ready
+if (document.readyState === 'loading') {
+    document.addEventListener('DOMContentLoaded', () => {
+        console.log('DOM loaded, initializing GM Screen...');
+        GMScreen.init();
+    });
+} else {
+    console.log('DOM already loaded, initializing GM Screen...');
+    GMScreen.init();
+}
+
+// Export for module usage
+window.GMScreen = GMScreen;

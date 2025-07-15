@@ -1,0 +1,536 @@
+/* =============================================================================
+   Character Reference Styles for GM Screen
+   ============================================================================= */
+
+/* Character Modal Styles */
+.character-details-grid {
+    display: grid;
+    grid-template-columns: 200px 1fr;
+    gap: 30px;
+    align-items: start;
+}
+
+.character-portrait-section {
+    text-align: center;
+}
+
+.character-portrait {
+    width: 150px;
+    height: 150px;
+    border-radius: 12px;
+    object-fit: cover;
+    border: 3px solid #e1e8ed;
+    margin-bottom: 15px;
+}
+
+.character-portrait-placeholder {
+    width: 150px;
+    height: 150px;
+    border-radius: 12px;
+    background: #e1e8ed;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    color: #777;
+    font-size: 16px;
+    border: 3px solid #e1e8ed;
+    margin-bottom: 15px;
+}
+
+.character-info-section {
+    display: flex;
+    flex-direction: column;
+    gap: 20px;
+}
+
+.character-basic-info,
+.character-description,
+.character-general-info,
+.character-backstory,
+.character-skills,
+.character-clubs {
+    background: #f8f9fa;
+    padding: 15px;
+    border-radius: 8px;
+    border: 1px solid #e1e8ed;
+}
+
+.character-basic-info h3,
+.character-description h3,
+.character-general-info h3,
+.character-backstory h3,
+.character-skills h3,
+.character-clubs h3 {
+    margin: 0 0 10px 0;
+    color: #2c3e50;
+    font-size: 16px;
+    border-bottom: 2px solid #667eea;
+    padding-bottom: 5px;
+}
+
+.character-basic-info p {
+    margin: 5px 0;
+    color: #555;
+}
+
+.skills-list,
+.clubs-list {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 8px;
+    margin-top: 10px;
+}
+
+.skill-tag {
+    background: #27ae60;
+    color: white;
+    padding: 4px 8px;
+    border-radius: 12px;
+    font-size: 12px;
+    font-weight: 500;
+}
+
+.club-tag {
+    background: #667eea;
+    color: white;
+    padding: 4px 8px;
+    border-radius: 12px;
+    font-size: 12px;
+    font-weight: 500;
+}
+
+/* Autocomplete Dropdown Styles */
+.character-autocomplete {
+    position: absolute;
+    background: white;
+    border: 2px solid #667eea;
+    border-radius: 8px;
+    max-height: 300px;
+    overflow-y: auto;
+    z-index: 1001;
+    box-shadow: 0 8px 25px rgba(0, 0, 0, 0.15);
+    min-width: 300px;
+    display: none;
+}
+
+.autocomplete-item {
+    padding: 12px 15px;
+    cursor: pointer;
+    border-bottom: 1px solid #f0f0f0;
+    transition: background 0.2s ease;
+    display: flex;
+    align-items: center;
+    gap: 12px;
+}
+
+.autocomplete-item:hover,
+.autocomplete-item.selected {
+    background: #f8f9fa;
+    border-color: #667eea;
+}
+
+.autocomplete-item:last-child {
+    border-bottom: none;
+}
+
+.autocomplete-item img {
+    width: 32px;
+    height: 32px;
+    border-radius: 50%;
+    object-fit: cover;
+    border: 2px solid #e1e8ed;
+}
+
+.autocomplete-placeholder {
+    width: 32px;
+    height: 32px;
+    border-radius: 50%;
+    background: #e1e8ed;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    font-size: 16px;
+    color: #777;
+}
+
+.autocomplete-item-info {
+    flex: 1;
+}
+
+.autocomplete-item-name {
+    font-weight: 600;
+    color: #2c3e50;
+    font-size: 14px;
+}
+
+.autocomplete-item-details {
+    font-size: 12px;
+    color: #666;
+    margin-top: 2px;
+}
+
+/* Character Links (created by character lookup) */
+.character-link {
+    display: inline;
+    color: #007bff;
+    background-color: rgba(0, 123, 255, 0.1);
+    padding: 2px 4px;
+    border-radius: 3px;
+    cursor: pointer;
+    font-weight: 500;
+    text-decoration: none;
+    transition: all 0.2s ease;
+}
+
+.character-link:hover {
+    background-color: rgba(0, 123, 255, 0.2);
+    text-decoration: underline;
+}
+
+.character-link.student {
+    border-left: 3px solid #28a745;
+}
+
+.character-link.staff {
+    border-left: 3px solid #dc3545;
+}
+
+.character-link.location {
+    border-left: 3px solid #6610f2;
+}
+
+/* Inline Character References (in text editor content) */
+.inline-char-ref {
+    display: inline-flex;
+    align-items: center;
+    gap: 4px;
+    background: rgba(255, 255, 255, 0.95);
+    border: 2px solid #ddd;
+    border-radius: 6px;
+    padding: 3px 8px;
+    margin: 0 2px;
+    font-size: 0.9em;
+    transition: all 0.2s ease;
+    cursor: pointer;
+    vertical-align: middle;
+    text-decoration: none;
+    box-shadow: 0 2px 4px rgba(0, 0, 0, 0.1);
+}
+
+.inline-char-ref:hover {
+    transform: translateY(-1px);
+    box-shadow: 0 4px 12px rgba(0, 0, 0, 0.2);
+    border-color: #667eea;
+    text-decoration: none;
+}
+
+.inline-char-image {
+    width: 20px;
+    height: 20px;
+    border-radius: 50%;
+    object-fit: cover;
+    border: 1px solid #ddd;
+}
+
+.inline-char-name {
+    font-weight: 600;
+    color: #2c3e50;
+}
+
+.inline-char-type {
+    font-size: 0.8em;
+    color: #666;
+    font-style: italic;
+    margin-left: 4px;
+}
+
+.student-reference.inline-char-ref {
+    border-left: 4px solid #27ae60;
+}
+
+.staff-reference.inline-char-ref {
+    border-left: 4px solid #e74c3c;
+}
+
+.location-reference.inline-char-ref {
+    border-left: 4px solid #6610f2;
+}
+
+/* Block Character References (for rich display areas) */
+.character-reference {
+    display: inline-block;
+    background: white;
+    border: 2px solid #e1e8ed;
+    border-radius: 8px;
+    padding: 12px;
+    margin: 4px;
+    max-width: 300px;
+    cursor: pointer;
+    transition: all 0.3s ease;
+    box-shadow: 0 2px 4px rgba(0, 0, 0, 0.1);
+}
+
+.character-reference:hover {
+    border-color: #667eea;
+    transform: translateY(-2px);
+    box-shadow: 0 4px 12px rgba(0, 0, 0, 0.15);
+}
+
+.student-reference {
+    border-left: 4px solid #27ae60;
+}
+
+.staff-reference {
+    border-left: 4px solid #e74c3c;
+}
+
+.location-reference {
+    border-left: 4px solid #6610f2;
+}
+
+.char-ref-header {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    margin-bottom: 8px;
+}
+
+.char-ref-image {
+    width: 40px;
+    height: 40px;
+    border-radius: 50%;
+    object-fit: cover;
+    border: 2px solid #e1e8ed;
+}
+
+.char-ref-info {
+    flex: 1;
+}
+
+.char-ref-name {
+    font-weight: 600;
+    color: #2c3e50;
+    font-size: 14px;
+    display: block;
+}
+
+.char-ref-details {
+    font-size: 12px;
+    color: #666;
+    margin-top: 2px;
+}
+
+.char-ref-grade,
+.char-ref-college {
+    margin-right: 8px;
+}
+
+.char-ref-preview {
+    font-size: 12px;
+    color: #666;
+    line-height: 1.3;
+}
+
+.char-ref-skills,
+.char-ref-job,
+.char-ref-description {
+    margin-bottom: 4px;
+}
+
+/* Error States */
+.char-error {
+    background: #ffe6e6;
+    color: #d32f2f;
+    padding: 2px 6px;
+    border-radius: 4px;
+    border: 1px solid #ffcdd2;
+    font-size: 0.9em;
+    cursor: help;
+    display: inline-block;
+    margin: 0 2px;
+}
+
+.char-error:hover {
+    background: #ffcdd2;
+}
+
+/* Character Lookup Results */
+.character-lookup-results {
+    margin-top: 10px;
+    max-height: 300px;
+    overflow-y: auto;
+}
+
+.character-match {
+    padding: 10px;
+    border: 1px solid #e1e8ed;
+    border-radius: 6px;
+    margin-bottom: 5px;
+    cursor: pointer;
+    transition: background 0.2s ease;
+}
+
+.character-match:hover {
+    background: #f8f9fa;
+    border-color: #667eea;
+}
+
+.no-results {
+    text-align: center;
+    color: #666;
+    font-style: italic;
+    padding: 20px;
+}
+
+.error {
+    color: #dc3545;
+    background: #f8d7da;
+    border: 1px solid #f5c6cb;
+    border-radius: 4px;
+    padding: 10px;
+    margin: 10px 0;
+}
+
+/* Popout Indicator */
+.popout-indicator {
+    position: absolute;
+    top: 5px;
+    right: 5px;
+    background: rgba(0, 123, 255, 0.9);
+    color: white;
+    border-radius: 50%;
+    width: 20px;
+    height: 20px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    font-size: 10px;
+    animation: fadeOut 3s ease-out forwards;
+}
+
+@keyframes fadeOut {
+    0% { opacity: 1; transform: scale(1); }
+    70% { opacity: 1; transform: scale(1); }
+    100% { opacity: 0; transform: scale(0.8); }
+}
+
+/* Character Search Panel */
+.character-search-panel {
+    margin-top: 15px;
+    padding: 15px;
+    background: #f8f9fa;
+    border-radius: 6px;
+    border: 1px solid #e9ecef;
+}
+
+.character-search-panel input {
+    width: 100%;
+    padding: 10px;
+    border: 1px solid #ddd;
+    border-radius: 4px;
+    font-size: 14px;
+}
+
+.character-results {
+    margin-top: 10px;
+    max-height: 200px;
+    overflow-y: auto;
+}
+
+/* Modal Action Button Styles */
+.modal-action-btn {
+    background: #3498db;
+    color: white;
+    border: none;
+    padding: 8px 12px;
+    border-radius: 6px;
+    cursor: pointer;
+    font-size: 16px;
+    transition: all 0.3s ease;
+}
+
+.modal-action-btn:hover {
+    background: #2980b9;
+    transform: scale(1.05);
+}
+
+/* Responsive Design */
+@media (max-width: 768px) {
+    .character-details-grid {
+        grid-template-columns: 1fr;
+        text-align: center;
+    }
+    
+    .character-autocomplete {
+        min-width: 250px;
+        max-height: 200px;
+    }
+    
+    .autocomplete-item {
+        padding: 10px 12px;
+    }
+    
+    .character-reference {
+        max-width: 100%;
+        margin: 2px;
+    }
+}
+
+@media (max-width: 480px) {
+    .character-portrait,
+    .character-portrait-placeholder {
+        width: 120px;
+        height: 120px;
+    }
+    
+    .character-autocomplete {
+        min-width: 200px;
+        left: 10px !important;
+        right: 10px !important;
+        width: auto !important;
+    }
+    
+    .autocomplete-item {
+        gap: 8px;
+    }
+    
+    .autocomplete-item img,
+    .autocomplete-placeholder {
+        width: 24px;
+        height: 24px;
+    }
+}
+
+/* Text Editor Enhancement */
+.editor-container {
+    position: relative;
+}
+
+.tab-editor {
+    position: relative;
+    z-index: 1;
+}
+
+/* Highlight character references in the text editor */
+.tab-editor.highlight-refs {
+    background: linear-gradient(transparent, transparent);
+}
+
+/* Custom scrollbar for autocomplete */
+.character-autocomplete::-webkit-scrollbar {
+    width: 6px;
+}
+
+.character-autocomplete::-webkit-scrollbar-track {
+    background: #f1f1f1;
+    border-radius: 3px;
+}
+
+.character-autocomplete::-webkit-scrollbar-thumb {
+    background: #c1c1c1;
+    border-radius: 3px;
+}
+
+.character-autocomplete::-webkit-scrollbar-thumb:hover {
+    background: #a8a8a8;
+}

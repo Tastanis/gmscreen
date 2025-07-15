@@ -1,0 +1,1349 @@
+{
+    "students": [
+        {
+            "student_id": "student_1751834894_686ae10e235ae",
+            "name": "Aurora Luna Wynterstarr",
+            "image_path": "portraits\/student_1751834894_686ae10e235ae_portrait_1751844784.webp",
+            "grade_level": "1st Year",
+            "college": "Prismari",
+            "clubs": [
+                "Elemental Dance Troupe"
+            ],
+            "job": "Barista",
+            "race": "Dhampir",
+            "age": "24",
+            "skills": [
+                "Perform",
+                "Music",
+                "Persuade",
+                "Magic",
+                "Culture"
+            ],
+            "edge": "bonus to performance checks",
+            "bane": "bane to performance checks or public performances",
+            "favorites": [],
+            "relationships": {
+                "frunk_points": "",
+                "frunk_notes": "",
+                "zepha_points": "",
+                "zepha_notes": "",
+                "sharon_points": "",
+                "sharon_notes": "",
+                "indigo_points": "",
+                "indigo_notes": ""
+            },
+            "details": {
+                "backstory": "",
+                "core_want": "Aurora craves the unyielding purity of art\u2014a form of expression that channels the raw, unfiltered magic of the cosmos. This passion was ignited one clandestine midnight when she witnessed an outlawed performance that defied commercial norms, forever imprinting on her the belief that true creativity must remain untamed. _(Inspiration)_",
+                "core_fear": "She dreads the commodification of artistic expression, fearing that the soulful language of creativity will be reduced to a sterile product devoid of magic. This terror was born from the bitter memory of her family\u2019s once-revered artistic legacy being exploited by a powerful patron, a betrayal that shattered her trust in conformity. _(Desperation)_",
+                "other": "Born into a lineage touched by both mortal and supernatural realms, Aurora Luna Wynterstarr discovered early on that her creative spirit was as much a part of her dhampir heritage as her otherworldly grace. Raised amidst whispered legends and the haunting melodies of the night, she rebelled against a life of conventional expectations by seeking out the untamed realms of art and magic. Her journey to Strixhaven was paved with starlit nights spent scribbling celestial poetry and practicing secretive spells under the moon\u2019s gentle gaze.  \r\n\r\n**Quirk:** Aurora has an irresistible compulsion to re-arrange her hair into intricate braids that mimic the phases of the moon\u2014a ritual she believes channels cosmic energies into her performances and fortifies her creative spirit."
+            }
+        },
+        {
+            "student_id": "student_1751844790_686b07b6042a4",
+            "name": "Bhedum 'Rampart' Sooviij",
+            "image_path": "portraits\/student_1751844790_686b07b6042a4_portrait_1751845165.png",
+            "grade_level": "1st Year",
+            "college": "Lorehold",
+            "clubs": [
+                "rune decoders"
+            ],
+            "job": "biblioplex book cleric",
+            "race": "Loxodon",
+            "age": "adult",
+            "skills": [
+                "History",
+                "Strategy",
+                "Endurance",
+                "Magic",
+                "Read Person"
+            ],
+            "edge": "tacticians insight",
+            "bane": "historical text and research dissapear",
+            "favorites": [],
+            "relationships": {
+                "frunk_points": "",
+                "frunk_notes": "",
+                "zepha_points": "",
+                "zepha_notes": "",
+                "sharon_points": "",
+                "sharon_notes": "",
+                "indigo_points": "",
+                "indigo_notes": ""
+            },
+            "details": {
+                "backstory": "Bhedum Rampart was raised in a community that revered the legacy of ancient battles, where every scar and relic told a story of honor and sacrifice. Immersed in tales of valor from an early age, he embraced the belief that history is not merely a record of the past but a guide for future greatness. His path led him to Strixhaven, where his disciplined nature and steadfast commitment to historical accuracy found a natural home among fellow scholars. A distinctive quirk of his is his habit of meticulously arranging miniature replicas of legendary battle formations during his free time\u2014each tiny formation a living testament to the enduring lessons of warfare, often leaving his peers both bemused and inspired.",
+                "core_want": "Bhedum\u2019s unwavering drive to safeguard the unblemished legacy of ancient battles was forged during a tumultuous siege in his youth, when marauders nearly annihilated his community\u2019s sacred relics and battle records. That devastating loss instilled in him a relentless commitment to preserve every lesson of honor and sacrifice, for without history\u2019s guidance, he fears the future would be irrevocably lost.",
+                "core_fear": "Haunted by the manipulation of revered historical narratives, Bhedum dreads the day when influential figures might twist the truth of his ancestors\u2019 valor for selfish gain. This terror was cemented when a trusted mentor\u2019s willful reinterpretation of a legendary battle not only shattered his idealized view of honor but also left him with a deep-seated sense of betrayal.",
+                "other": ""
+            }
+        },
+        {
+            "student_id": "student_1751845168_686b09302e765",
+            "name": "Bramble Flux Thistlewick",
+            "image_path": "portraits\/student_1751845168_686b09302e765_portrait_1751845366.png",
+            "grade_level": "1st Year",
+            "college": "Prismari",
+            "clubs": [
+                "pranksters guild"
+            ],
+            "job": "Cleanup crew",
+            "race": "Goblin",
+            "age": "18",
+            "skills": [
+                "Pick Pocket",
+                "Sabotage",
+                "Hide",
+                "Escape Artist",
+                "Lie",
+                "Magic"
+            ],
+            "edge": "Flux fix - wild magic surge on an item",
+            "bane": "paint bomb prank",
+            "favorites": [],
+            "relationships": {
+                "frunk_points": "",
+                "frunk_notes": "",
+                "zepha_points": "",
+                "zepha_notes": "",
+                "sharon_points": "",
+                "sharon_notes": "",
+                "indigo_points": "",
+                "indigo_notes": ""
+            },
+            "details": {
+                "backstory": "Flux drifted to Strixhaven atop a wayward carnival wagon, dazzled by talk of \u201cthe greatest stage for magic.\u201d Entrance exams went\u2026 explosively. Prismari accepted him on provisional status, hoping structure might tame the talent. So far, structure is losing.\r\n\r\n**Quirk:** Carries a battered sketchbook labelled \u201cMasterpieces in Progress\u201d\u2014each page shows half\u2011finished diagrams of pranks that merge art installation with mayhem. He absent\u2011mindedly doodles new schematics in mid\u2011air with cantrips, leaving glowing blueprints that fade in seconds.",
+                "core_want": "Recognition (emotion when thwarted: _pouty frustration_)**  \r\n    Flux longs for someone\u2014anyone\u2014to call his chaotic spellcraft \u201cgenius.\u201d As a goblin orphan raised by traveling carnival illusionists, applause was his bedtime lullaby; academic grades feel painfully silent by comparison.",
+                "core_fear": " Confinement (emotion when triggered: _panicked frenzy_)**  \r\n    When a childhood prank ignited a village storehouse, Flux spent three nights locked in a stockade cage. The memory of immobility under gawking eyes drives his compulsive sneaking and flight from authority.",
+                "other": ""
+            }
+        },
+        {
+            "student_id": "student_1751845370_686b09fa0b6b4",
+            "name": "Cadoras Damellawar",
+            "image_path": "portraits\/student_1751845370_686b09fa0b6b4_portrait_1751845388.png",
+            "grade_level": "1st Year",
+            "college": "Prismari",
+            "clubs": [],
+            "job": "informational assistant",
+            "race": "Human",
+            "age": "18",
+            "skills": [
+                "Perform",
+                "Magic",
+                "Navigate",
+                "Empathize",
+                "Gymnastics"
+            ],
+            "edge": "meet the parents",
+            "bane": "spread a rumour ",
+            "favorites": [],
+            "relationships": {
+                "frunk_points": "",
+                "frunk_notes": "",
+                "zepha_points": "",
+                "zepha_notes": "",
+                "sharon_points": "",
+                "sharon_notes": "",
+                "indigo_points": "",
+                "indigo_notes": ""
+            },
+            "details": {
+                "backstory": "Cadoras\u2019s earliest memories are of mopping shimmering spell residue beside his father after gala events, wide-eyed at professors weaving art from raw elements. Too poor for formal tutors, he memorised overheard lectures and pieced together discarded hand-outs, turning maintenance corridors into his secret classroom. When a sympathetic Art-History professor noticed the janitor\u2019s son reciting flawless tour facts at eight years old, she snuck him into open-lecture nights\u2014fuel for a lifelong obsession with sharing Strixhaven\u2019s wonders.\r\nQuirk: When excited, he unconsciously doodles miniature campus floor-plans in the air with light-trails from his crystal pointer.",
+                "core_want": " Belonging through Recognition\r\nCadoras longs to be known as the authority on Strixhaven trivia; growing up as \u201cthe janitor\u2019s kid\u201d made him feel invisible, so public praise now feels like proof he belongs. (emotion when thwarted: quiet recoil)",
+                "core_fear": "Being Overlooked or Forgotten\r\nAs a child he spent evenings alone in empty corridors while his father worked, hearing echoes but no applause. The idea that he might pass through life unheard fills him with quiet dread. (emotion when fearful: anxious)",
+                "other": "Basic Trajectory\r\nCadoras excels socially but neglects rigorous spell-theory homework\u2014he\u2019d rather perfect a tour anecdote than solve elemental equations. His showmanship lands him a coveted role narrating Mage Tower halftime shows, yet persistent insecurity drives him to overcommit and spread himself thin. By third year he faces burnout: a public on-stage spell misfire forces him to confront the gap between performance and scholarship. With mentoring, he ultimately reinvents himself as a respected campus historian\u2014though he never relinquishes the mic."
+            }
+        },
+        {
+            "student_id": "student_1751845540_686b0aa4225e4",
+            "name": "Drazhomir Yarnask",
+            "image_path": "portraits\/student_1751845540_686b0aa4225e4_portrait_1751845556.webp",
+            "grade_level": "1st Year",
+            "college": "Lorehold",
+            "clubs": [
+                "rune decoders"
+            ],
+            "job": "biblioplex cleric",
+            "race": "minotaur",
+            "age": "26",
+            "skills": [
+                "History",
+                "Magic",
+                "Culture",
+                "Empathize",
+                "Read Person"
+            ],
+            "edge": "well of historical knowledge",
+            "bane": "subtle curse",
+            "favorites": [],
+            "relationships": {
+                "frunk_points": "",
+                "frunk_notes": "",
+                "zepha_points": "",
+                "zepha_notes": "",
+                "sharon_points": "",
+                "sharon_notes": "",
+                "indigo_points": "",
+                "indigo_notes": ""
+            },
+            "details": {
+                "backstory": "Drazhomir Yarnask defied the conventional expectations for a minotaur by choosing a path of introspection and scholarship over sheer brute strength. Raised in a society that celebrated physical might, he found refuge in ancient manuscripts and arcane lore, dedicating himself to mastering the secrets of magic and history. His gentle demeanor and quiet passion for learning have earned him admiration among peers, even as he sometimes grapples with skepticism from those who expect a minotaur to be all brawn and no brain.  \r\n**Quirk:** Drazhomir always carries a small, worn leather bookmark\u2014an heirloom from his late mentor\u2014which he tenderly touches before every significant academic endeavor, believing it channels clarity and luck.",
+                "core_want": "To be recognized as a scholar whose strength lies in wisdom as much as in might. _(Inspired)_  \r\n    _Reasoning:_ Growing up in a community that prized physical prowess above intellect, Drazhomir dedicated himself to mastering arcane lore to demonstrate that true power is found in knowledge and understanding.",
+                "core_fear": "Being dismissed as nothing more than a brute, thereby facing isolation and ridicule. _(Insecure)_  \r\n    _Reasoning:_ His journey is haunted by the fear that embracing his scholarly nature might alienate him from both his kin and the academic community he cherishes.",
+                "other": ""
+            }
+        },
+        {
+            "student_id": "student_1751845745_686b0b71dd71f",
+            "name": "Grayson Wildemere",
+            "image_path": "portraits\/student_1751845745_686b0b71dd71f_portrait_1751845762.webp",
+            "grade_level": "1st Year",
+            "college": "Silverquill",
+            "clubs": [
+                "strixhaven star"
+            ],
+            "job": "",
+            "race": "Human",
+            "age": "22",
+            "skills": [
+                "Persuade",
+                "Flirt",
+                "Read Person",
+                "Eavesdrop",
+                "Conceal Object"
+            ],
+            "edge": "whispered deal (campus purchase cost reduction)",
+            "bane": "Gossip column",
+            "favorites": [],
+            "relationships": {
+                "frunk_points": "",
+                "frunk_notes": "",
+                "zepha_points": "",
+                "zepha_notes": "",
+                "sharon_points": "",
+                "sharon_notes": "",
+                "indigo_points": "",
+                "indigo_notes": ""
+            },
+            "details": {
+                "backstory": "Born into a once-respected family whose reputation crumbled under scandal, Grayson learned early that information is both power and protection. Determined never to be a victim of unchecked rumors, he honed his skills as a suave information broker. Now at Strixhaven, his charm and razor-sharp wit have made him the campus go-to for both juicy gossip and vital secrets. An intriguing quirk of his is the antique pocket watch he carries everywhere\u2014wound meticulously before every conversation\u2014as if its steady tick reminds him that, like time, secrets wait for no one.",
+                "core_want": "Grayson is driven to control the flow of information, believing that managing secrets is the key to maintaining order and protecting those who rely on discretion. His early exposure to the ruinous effects of unchecked gossip shaped this resolve.",
+                "core_fear": "He dreads the possibility of his own secrets being unearthed, a fear that stems from witnessing how a single scandal can shatter reputations and leave one vulnerable.",
+                "other": ""
+            }
+        },
+        {
+            "student_id": "student_1751845928_686b0c287a1ae",
+            "name": "Greta Gorunn",
+            "image_path": "portraits\/student_1751845928_686b0c287a1ae_portrait_1751845945.webp",
+            "grade_level": "1st Year",
+            "college": "Prismari",
+            "clubs": [
+                "arcane athletics"
+            ],
+            "job": "equipment assistant",
+            "race": "human",
+            "age": "20",
+            "skills": [
+                "Gymnastics",
+                "Endurance",
+                "Climb",
+                "Lead",
+                "Jump"
+            ],
+            "edge": "Atheltic check boost",
+            "bane": "Heavy objects appear blocking your way",
+            "favorites": [],
+            "relationships": {
+                "frunk_points": "",
+                "frunk_notes": "",
+                "zepha_points": "",
+                "zepha_notes": "",
+                "sharon_points": "",
+                "sharon_notes": "",
+                "indigo_points": "",
+                "indigo_notes": ""
+            },
+            "details": {
+                "backstory": "Greta grew up in a small town where overcoming physical challenges was a way of life, and her natural athletic talent quickly set her apart. Her journey to Strixhaven was fueled by a burning desire to test and expand her limits, making her a standout in the Arcane Athletics club. An endearing quirk that accompanies her intense drive is her habit of wearing mismatched socks\u2014believed to bring her extra luck\u2014which has become a lighthearted trademark that sparks both humor and admiration among her peers.",
+                "core_want": "Greta is driven by a desire to continuously push her physical and mental boundaries, believing that every obstacle is a chance to grow stronger. _(Determined)_\r\n    \r\n    - _Reasoning:_ Her early life was filled with challenges that taught her the value of perseverance and self-improvement.",
+                "core_fear": "She deeply fears being perceived as weak or failing to meet her own high standards, a vulnerability honed by past setbacks and critical moments. _(Insecure)_\r\n    \r\n    - _Reasoning:_ Experiences of being underestimated have left her with a persistent drive to prove her worth at every turn.",
+                "other": ""
+            }
+        },
+        {
+            "student_id": "student_1751846106_686b0cda907d7",
+            "name": "Javenesh Stoutclaw",
+            "image_path": "portraits\/student_1751846106_686b0cda907d7_portrait_1751846127.webp",
+            "grade_level": "1st Year",
+            "college": "Lorehold",
+            "clubs": [
+                "daring duels society"
+            ],
+            "job": "",
+            "race": "owlin",
+            "age": "33",
+            "skills": [
+                "Intimidate",
+                "Endurance",
+                "Gymnastics",
+                "Read Person",
+                "Magic",
+                "History"
+            ],
+            "edge": "tavern ally",
+            "bane": "scowling dismissal",
+            "favorites": [],
+            "relationships": {
+                "frunk_points": "",
+                "frunk_notes": "",
+                "zepha_points": "",
+                "zepha_notes": "",
+                "sharon_points": "",
+                "sharon_notes": "",
+                "indigo_points": "",
+                "indigo_notes": ""
+            },
+            "details": {
+                "backstory": "Raised amidst the clamor of rough taverns and the grit of street life, I learned early that survival depended on a blend of raw strength and cunning. Each scar etched on my body tells a tale of a brawl fought and a lesson hard won. Determined to rise above being merely a brute, I enrolled at Strixhaven to master the arcane alongside my enforcer instincts. Now, I walk the fine line between brawn and brains, driven by a desire to command respect while warding off the ever-looming fear of inadequacy. An odd quirk of mine? I meticulously adjust my wild, juvenile feathers before every confrontation, convinced that a well-groomed appearance is the first step to a clear mind and a decisive victory.",
+                "core_want": "Respect**  \r\n    I strive to earn recognition for both my physical prowess and academic pursuits\u2014a drive forged from years of fighting to prove my worth in rough taverns and on the streets. _(Determined)_",
+                "core_fear": "Inadequacy**  \r\n    I am haunted by the fear of being dismissed as nothing more than a brute, a vulnerability that gnaws at me whenever my intellect is overshadowed by my force. _(Vulnerable)_",
+                "other": ""
+            }
+        },
+        {
+            "student_id": "student_1751846246_686b0d66c2380",
+            "name": "Larine Arneza",
+            "image_path": "portraits\/student_1751846246_686b0d66c2380_portrait_1751846262.webp",
+            "grade_level": "1st Year",
+            "college": "Prismari",
+            "clubs": [
+                "elemental dance troupe"
+            ],
+            "job": "stagehand",
+            "race": "human",
+            "age": "19",
+            "skills": [
+                "Perform",
+                "Magic",
+                "Music",
+                "Empathize",
+                "Nature"
+            ],
+            "edge": "Soothing presence ",
+            "bane": "distracting whispers",
+            "favorites": [],
+            "relationships": {
+                "frunk_points": "",
+                "frunk_notes": "",
+                "zepha_points": "",
+                "zepha_notes": "",
+                "sharon_points": "",
+                "sharon_notes": "",
+                "indigo_points": "",
+                "indigo_notes": ""
+            },
+            "details": {
+                "backstory": "Larine grew up in a coastal town where the sea was her constant companion. She would spend hours staring into the ocean, fascinated by the rolling waves and the life teeming beneath them. When her innate magical abilities surfaced\u2014expressed through little bursts of water illusions\u2014she knew she belonged somewhere she could merge art and magic. At Strixhaven, she found her home in Prismari, dancing her way through classes and sprinkling dreamy inspiration wherever she goes.\r\n\r\n**Quirk:**  \r\nShe collects small vials of water from different fountains, ponds, and even magical waterfalls on campus, labeling each with a cryptic, poetic note about the day she gathered it. Sometimes she swears the water inside still \u201cremembers\u201d its source.",
+                "core_want": "To find and share fleeting moments of wonder.\r\n    \r\n    - She believes the world is full of hidden beauty\u2014like a water ripple that appears and vanishes in an instant\u2014and she wants to capture these moments through performance.",
+                "core_fear": "Being trapped in mundane reality (anxiety).\r\n    \r\n    - She worries that life will become repetitive and colorless, losing the magic she treasures if she\u2019s forced into routines or strict obligations.",
+                "other": ""
+            }
+        },
+        {
+            "student_id": "student_1751846390_686b0df65c994",
+            "name": "Melwythorne",
+            "image_path": "portraits\/student_1751846390_686b0df65c994_portrait_1751846403.webp",
+            "grade_level": "1st Year",
+            "college": "Witherbloom",
+            "clubs": [
+                "cryptid club"
+            ],
+            "job": "dormitory assistant",
+            "race": "treefolk",
+            "age": "45",
+            "skills": [
+                "Nature",
+                "Magic",
+                "Heal",
+                "Empathize",
+                "Religion"
+            ],
+            "edge": "verdant blessing",
+            "bane": "nature's rebuke",
+            "favorites": [],
+            "relationships": {
+                "frunk_points": "",
+                "frunk_notes": "",
+                "zepha_points": "",
+                "zepha_notes": "",
+                "sharon_points": "",
+                "sharon_notes": "",
+                "indigo_points": "",
+                "indigo_notes": ""
+            },
+            "details": {
+                "backstory": "Raised on the fringes of a verdant, enchanted grove, Melwythorne was surrounded from an early age by tales of nature\u2019s resilience and the ancient wisdom of his elders. Despite being among the younger of his kind, he carries the bittersweet memory of a beloved grove lost to reckless magical experiments\u2014a trauma that kindled his resolve to protect nature\u2019s fragile balance. Eager to merge old traditions with modern spellcraft, he enrolled at Strixhaven, determined to learn how to channel his innate connection to the natural world.  \r\n**Quirk:** Melwythorne has an endearing habit of pausing mid-conversation to softly converse with any nearby plant or tree, as if expecting it to respond\u2014a practice that often leaves onlookers both amused and charmed.",
+                "core_want": "Seeks to preserve the delicate balance between nature and civilization.  \r\n    _Reasoning:_ Witnessing the loss of vibrant groves to reckless magical experiments during his formative years, Melwythorne developed a deep respect for nature\u2019s wisdom and a burning desire to blend ancient traditions with modern magical practices.",
+                "core_fear": "Fears the exploitation of nature\u2019s gifts for profit and power. (Melancholy)  \r\n    _Reasoning:_ After experiencing firsthand the devastation wrought by irresponsible spellcasting\u2014seeing a cherished grove wither into barren land\u2014he remains haunted by the thought that unchecked ambition might destroy all that is sacred in nature.",
+                "other": ""
+            }
+        },
+        {
+            "student_id": "student_1751846518_686b0e768b2dc",
+            "name": "Mina Lee",
+            "image_path": "portraits\/student_1751846518_686b0e768b2dc_portrait_1751846535.webp",
+            "grade_level": "1st Year",
+            "college": "Silverquill",
+            "clubs": [
+                "Strixhaven star"
+            ],
+            "job": "resident assistant",
+            "race": "Human",
+            "age": "20",
+            "skills": [
+                "Magic",
+                "History",
+                "Persuade",
+                "Read Person",
+                "Search",
+                "Alertness"
+            ],
+            "edge": "eloquent hymn",
+            "bane": "miscommunication mishap",
+            "favorites": [],
+            "relationships": {
+                "frunk_points": "",
+                "frunk_notes": "",
+                "zepha_points": "",
+                "zepha_notes": "",
+                "sharon_points": "",
+                "sharon_notes": "",
+                "indigo_points": "",
+                "indigo_notes": ""
+            },
+            "details": {
+                "backstory": "Mina Lee was raised in a small town where every word carried weight\u2014a reality that both isolated her and kindled her love for language. Determined to transform her early struggles with being misunderstood into a strength, she set her sights on Strixhaven. Here, her meticulous nature and passion for magical lore quickly set her apart. An endearingly quirky trait is her habit of reciting arcane phrases at the most unexpected moments, a nervous tic that both charms and mystifies her peers.",
+                "core_want": "To become the voice of truth and precise magical expression by joining the Strixhaven Star.  \r\n    _Reasoning:_ Growing up where every misunderstood word had consequences, Mina learned early that language could be a powerful tool for change\u2014fueling her drive to master and harness its magic. _(Determined)_",
+                "core_fear": "To be overlooked and misunderstood, allowing her carefully crafted insights to vanish into obscurity.  \r\n    _Reasoning:_ Early academic dismissal in her small-town school instilled a fear of being ignored, making her anxious about her future impact if her voice isn\u2019t recognized. _(Anxious)_",
+                "other": ""
+            }
+        },
+        {
+            "student_id": "student_1751846656_686b0f007b540",
+            "name": "Myrion Swarmsong",
+            "image_path": "portraits\/student_1751846656_686b0f007b540_portrait_1751846676.png",
+            "grade_level": "1st Year",
+            "college": "Witherbloom",
+            "clubs": [
+                "cryptid club"
+            ],
+            "job": "campus grounds\/lawn manacure",
+            "race": "hivebownd swarmfolk",
+            "age": "6",
+            "skills": [
+                "Nature",
+                "Magic",
+                "Monsters",
+                "Handle Animals",
+                "Hide",
+                "Navigate"
+            ],
+            "edge": "swarm's counsel-vision",
+            "bane": "unsettling chitter",
+            "favorites": [],
+            "relationships": {
+                "frunk_points": "",
+                "frunk_notes": "",
+                "zepha_points": "",
+                "zepha_notes": "",
+                "sharon_points": "",
+                "sharon_notes": "",
+                "indigo_points": "",
+                "indigo_notes": ""
+            },
+            "details": {
+                "backstory": "The Swarmsong colony began as lab specimens in a secret Witherbloom experiment to create communal spell components. When a storm destroyed their terrarium, the beetles fled into the Rootgardens, feeding on alchemical runoff that awakened group sentience. A kindly professor offered enrollment if they could pass entrance exams\u2014which they did by shaping themselves into letters that answered every question.\r\n\r\n**Quirk:** When thinking hard, beetles rearrange across the cloak into spiraling Mandelbrot patterns\u2014an accidental reveal of complex math they barely understand.",
+                "core_want": "**Belonging** \u2013 Myrion longs to be regarded as a single student, not an infestation. Raised in an abandoned greenhouse, the swarm first tasted fellowship when a Witherbloom botanist addressed them as one being. (Emotion when thwarted: **Loneliness**)",
+                "core_fear": "Fear:** **Fragmentation** \u2013 If scattered too thin the shared mind fractures into instinct-ruled colonies. Decades ago a lightning storm tore their natal hive apart, leaving thousands mindless; the memory hums like static inside every shell. (Emotion when triggered: **Panic**)",
+                "other": ""
+            }
+        },
+        {
+            "student_id": "student_1751846811_686b0f9b40aaf",
+            "name": "Nora Ann Wu",
+            "image_path": "portraits\/student_1751846811_686b0f9b40aaf_portrait_1751846835.png",
+            "grade_level": "1st Year",
+            "college": "Witherbloom",
+            "clubs": [
+                "arcane sculpting"
+            ],
+            "job": "resident assstant",
+            "race": "Half-Elf",
+            "age": "23",
+            "skills": [
+                "Jewelry",
+                "Empathize",
+                "Read Person",
+                "Persuade",
+                "Cooking"
+            ],
+            "edge": "+1 bonus to collaborative project rolls",
+            "bane": "social dismissal",
+            "favorites": [],
+            "relationships": {
+                "frunk_points": "",
+                "frunk_notes": "",
+                "zepha_points": "",
+                "zepha_notes": "",
+                "sharon_points": "",
+                "sharon_notes": "",
+                "indigo_points": "",
+                "indigo_notes": ""
+            },
+            "details": {
+                "backstory": "Raised in a riverside trading town, Nora apprenticed to an elderly potter who taught her to \u201clisten\u201d to clay. When the mentor passed, the kiln fire guttered cold\u2014until Nora revived it with a sap-infused glaze that bloomed moss inside the kiln itself, earning her Witherbloom\u2019s attention.\r\nQuirk: She absent-mindedly \u201ccenters\u201d anything cylindrical\u2014mugs, ink-pots, even apples\u2014spinning them on her palm as if they were mini potter\u2019s wheels during conversation.",
+                "core_want": "To shape living beauty that connects people \u2013 Nora craves the moment a viewer\u2019s eyes light up at her animated ceramic pieces. After winning a regional craft fair with a figurine that made a lonely child smile, she vowed to keep creating art that sparks human connection. (Emotion when thwarted: wistful yearning)",
+                "core_fear": "Being quietly dismissed or forgotten \u2013 As a half-elf adopted into a large human family, Nora often faded into the background at gatherings. The one time her prized teapot was pushed aside as \u201cjust student work,\u201d the sting lingered. Now the thought of her efforts going unnoticed makes her stomach knot. (Emotion when triggered: nervous self-doubt)",
+                "other": "Basic Trajectory\r\nNora excels in hands-on courses but neglects pure theory, scraping by in arcana exams. Her inclusive pottery circles make her a beloved RA, yet her fear of invisibility may push her toward ever-grander living sculptures\u2014projects that flirt with dangerous life-magic. By third year she\u2019s likely to unveil a campus-scale clay golem garden; success would cement her legacy, but a misfired enchantment could leave her scrambling to rebuild trust\u2026 and maybe leaning on Zepha for a daring fix."
+            }
+        },
+        {
+            "student_id": "student_1751846984_686b10484bf41",
+            "name": "Quentillius Antiphiun Melentor III",
+            "image_path": "portraits\/student_1751846984_686b10484bf41_portrait_1751847014.webp",
+            "grade_level": "1st Year",
+            "college": "Silverquill",
+            "clubs": [],
+            "job": "",
+            "race": "human",
+            "age": "35",
+            "skills": [
+                "Music",
+                "Perform",
+                "Persuade",
+                "Flirt",
+                "Read Person"
+            ],
+            "edge": "Encore",
+            "bane": "Curtain call",
+            "favorites": [],
+            "relationships": {
+                "frunk_points": "",
+                "frunk_notes": "",
+                "zepha_points": "",
+                "zepha_notes": "",
+                "sharon_points": "",
+                "sharon_notes": "",
+                "indigo_points": "",
+                "indigo_notes": ""
+            },
+            "details": {
+                "backstory": "Born into the vibrant world of traveling performers, Quentillius learned early that the stage was both his sanctuary and battleground. Despite his mature age of 35, his yearning for artistic perfection drove him to enroll as a first-year student at Strixhaven, where he seeks to refine his dramatic prowess under the tutelage of renowned mentors. An idiosyncratic habit defines him: before every performance, he consults a small enchanted mirror\u2014a talisman he believes reflects his true inner spirit and foretells the success of his next grand act.",
+                "core_want": "To be celebrated as an extraordinary performer (Pride).  \r\n    _Origin:_ Growing up in modest traveling theater troupes, Quentillius discovered that even a single cheer could light up the darkest stage, igniting his relentless ambition for recognition.",
+                "core_fear": "The dread of being forgotten or dismissed as mediocre (Insecurity).  \r\n    _Origin:_ A painful memory of being overshadowed by a more popular peer during his early performances instilled in him a constant drive to reinvent his persona, ensuring he never fades into obscurity.",
+                "other": ""
+            }
+        },
+        {
+            "student_id": "student_1751847125_686b10d5106ed",
+            "name": "Rosimyffenbip 'Rosie' Wuzfeddlims",
+            "image_path": "portraits\/student_1751847125_686b10d5106ed_portrait_1751847147.webp",
+            "grade_level": "1st Year",
+            "college": "Prismari",
+            "clubs": [
+                "mage tower"
+            ],
+            "job": "mage tower referee in training",
+            "race": "Gnome",
+            "age": "23",
+            "skills": [
+                "Perform",
+                "Gymnastics",
+                "Magic",
+                "Persuade",
+                "Read Person"
+            ],
+            "edge": "cheerful boost",
+            "bane": "distracting prank",
+            "favorites": [],
+            "relationships": {
+                "frunk_points": "",
+                "frunk_notes": "",
+                "zepha_points": "",
+                "zepha_notes": "",
+                "sharon_points": "",
+                "sharon_notes": "",
+                "indigo_points": "",
+                "indigo_notes": ""
+            },
+            "details": {
+                "backstory": "Rosie grew up in a tiny gnome settlement that prided itself on practical inventions rather than flamboyant displays of magic. She was the odd one out\u2014always building elaborate cardboard castles and staging miniature \u201cepic battles\u201d with her homemade puppets. When she heard about Strixhaven\u2019s grand halls and magical creativity, she packed up her illusions and dashed off without a second thought.\r\n\r\n**Quirk:** Rosie habitually breaks into spontaneous \u201croleplay narrations\u201d of everyday tasks\u2014like describing her morning toast-making as a \u201cheroic quest to vanquish the dreaded Jam Jar!\u201d Her unbridled enthusiasm can be both infectious and hilariously baffling to those around her.",
+                "core_want": "She wants everyone around her to experience the same giddy joy she feels in imaginative play.\r\n    \r\n    - _Origin:_ Growing up in a quiet gnome hamlet, Rosie found solace in elaborate daydreams and homegrown puppet shows, determined to spark wonder in others just as she did for herself.\r\n        _(Emotion when thwarted: \u201cDisheartened\u201d)_",
+                "core_fear": " She fears being overlooked or dismissed as \u201cjust a silly kid,\u201d losing the chance to share her exuberant ideas.\r\n    \r\n    - _Origin:_ After being teased by older gnomes in her village for her outlandish stories, she resolved to prove that laughter and fantasy are powerful tools for connection.\r\n        \r\n    - _(Emotion when manifested: \u201cAnxious\u201d)_",
+                "other": ""
+            }
+        },
+        {
+            "student_id": "student_1751847278_686b116ee4a03",
+            "name": "Rubina Larkingdale",
+            "image_path": "portraits\/student_1751847278_686b116ee4a03_portrait_1751847318.webp",
+            "grade_level": "1st Year",
+            "college": "Silverquill",
+            "clubs": [
+                "Mythical beast tamers"
+            ],
+            "job": "supports elemental dance troupe",
+            "race": "Elf",
+            "age": "102",
+            "skills": [
+                "Music",
+                "Perform",
+                "Persuade",
+                "Read Person",
+                "Handle Animals"
+            ],
+            "edge": "Trubute song",
+            "bane": "breakup balad",
+            "favorites": [],
+            "relationships": {
+                "frunk_points": "",
+                "frunk_notes": "",
+                "zepha_points": "",
+                "zepha_notes": "",
+                "sharon_points": "",
+                "sharon_notes": "",
+                "indigo_points": "",
+                "indigo_notes": ""
+            },
+            "details": {
+                "backstory": "Rubina Larkingdale was born into a modest family of traveling performers, where every city and festival became a stage for self-discovery. Her early exposure to the magic of live performance ignited an irrepressible passion for the dramatic arts. A life-changing open mic night at Strixhaven unveiled to her the profound impact of a well-spun tale and a heartfelt melody. Yet, amidst the applause, a harsh critique from a once-revered mentor nearly broke her spirit\u2014an event that would later fuel her determination to never be confined by mediocrity. Ever since, Rubina has cultivated a signature quirk: a single, piercing eyebrow raised just before she speaks, paired with a dramatic pause that punctuates every declaration. This idiosyncrasy not only sets her apart on stage but also serves as a personal talisman, a reminder of both her triumphs and the trials that have sculpted her into the mesmerizing performer she is today.",
+                "core_want": "Rubina yearns to redefine performance art by infusing every show with raw emotion and innovation. This burning desire was sparked by a serendipitous moment during a local festival in her youth when an unplanned performance left her audience spellbound, affirming her belief in the transformative power of art. _(inspiration)_",
+                "core_fear": "Rubina dreads the notion of fading into obscurity\u2014a fear that her unique creative spark might be stifled by conformity. This anxiety took root after a particularly scathing critique from a revered mentor early in her training, leaving her with a persistent worry of mediocrity. _(despair)_",
+                "other": ""
+            }
+        },
+        {
+            "student_id": "student_1751847482_686b123aad735",
+            "name": "Shuvadri Glintmantle",
+            "image_path": "portraits\/student_1751847482_686b123aad735_portrait_1751847502.webp",
+            "grade_level": "1st Year",
+            "college": "Silverquill",
+            "clubs": [
+                "rune decoders"
+            ],
+            "job": "dorm assistant",
+            "race": "owlin",
+            "age": "21",
+            "skills": [
+                "Heal",
+                "Religion",
+                "Empathize",
+                "Magic",
+                "History"
+            ],
+            "edge": "divine inspiration",
+            "bane": "binding word",
+            "favorites": [],
+            "relationships": {
+                "frunk_points": "",
+                "frunk_notes": "",
+                "zepha_points": "",
+                "zepha_notes": "",
+                "sharon_points": "",
+                "sharon_notes": "",
+                "indigo_points": "",
+                "indigo_notes": ""
+            },
+            "details": {
+                "backstory": "Shuvadri grew up amid hardship, where moments of overwhelming loss were tempered by unexpected kindness from a wandering acolyte. That early brush with despair ignited a burning resolve within her\u2014to become a sanctuary for the weary and a source of healing in a chaotic world. Embracing a portfolio of healing, spiritual guidance, and protection, she left her past behind and journeyed to Strixhaven, determined to bridge academic ambition with divine service. On campus, she is known not only for her quiet counsel and restorative magic but also for her endearing quirk: she collects and presses small, luminescent flowers from the campus gardens, each serving as a living reminder of life\u2019s fragile beauty and the perpetual cycle of renewal.",
+                "core_want": "To be a healing beacon for those in need.  \r\n    _Reasoning:_ Witnessing the suffering in her early community and experiencing a personal loss, Shuvadri vowed to channel her pain into a nurturing light, ensuring no soul feels abandoned in darkness. _(Bereft)_",
+                "core_fear": "Fear:** To be forsaken by those she trusts and the divine.  \r\n    _Reasoning:_ A formative moment of abandonment during a crisis, when a cherished mentor vanished in her hour of need, instilled in her a lingering dread of spiritual isolation and the collapse of her support system. _(Forsaken)_",
+                "other": ""
+            }
+        },
+        {
+            "student_id": "student_1751847631_686b12cff0501",
+            "name": "Theo Gearsprocket Finch",
+            "image_path": "portraits\/student_1751847631_686b12cff0501_portrait_1751847655.png",
+            "grade_level": "1st Year",
+            "college": "Prismari",
+            "clubs": [],
+            "job": "",
+            "race": "Construct",
+            "age": "1",
+            "skills": [
+                "Mechanics",
+                "Architecture",
+                "Lift",
+                "Perform",
+                "Strategy",
+                "Magic",
+                "Culture"
+            ],
+            "edge": "1 time tool\/weapon augmentation",
+            "bane": "equpment malfunction",
+            "favorites": [],
+            "relationships": {
+                "frunk_points": "",
+                "frunk_notes": "",
+                "zepha_points": "",
+                "zepha_notes": "",
+                "sharon_points": "",
+                "sharon_notes": "",
+                "indigo_points": "",
+                "indigo_notes": ""
+            },
+            "details": {
+                "backstory": "known for fusing artistry with invention. Theo was a triumph\u2014sort of. His body is a patchwork of the studnt\u2019s previous ideas, assembled into a thinking, creating entity. But Theo\u2019s existence is marred by instability; he constantly feels the potential for breakdown in his moving parts. This drives him to innovate designs that **balance beauty and dependability**\u2014a feat Prismari rarely aims for.\r\n\r\nHis first solo invention is a \"self-oscillating brush arm\" intended for the Prismari Festival of Artistic Motion. He's desperately seeking volunteer painters to help test it, but his literal-mindedness and technical jargon sometimes make it hard to find willing participants.\r\n\r\n**Quirk:**  \r\nTheo often \"self-diagnoses\" loudly when encountering problems, mumbling things like _\"Emotional core temperature rising\u2014installing cooling protocols.\"_",
+                "core_want": "To perfect the art of functional creativity \u2014 inventions that are beautiful and _work flawlessly._\r\nTheo was designed by an eccentric Prismari professor who loved messy improvisation, but the instability of those creations caused Theo great existential discomfort (literal malfunctions), fueling his drive to merge art and reliability.  \r\n    _(Frustration)_",
+                "core_fear": "To become obsolete \u2014 a discarded prototype forgotten in a dusty storeroom.\r\n    \r\n- **Why:** Theo discovered, during a hidden trip into the storage vaults, dozens of broken prototypes like himself abandoned and rusting, instilling a dread of failure and irrelevance.  \r\n    _(Desperation)_",
+                "other": ""
+            }
+        },
+        {
+            "student_id": "student_1751848081_686b149164a73",
+            "name": "Thessa Quendris",
+            "image_path": "portraits\/student_1751848081_686b149164a73_portrait_1751848108.png",
+            "grade_level": "1st Year",
+            "college": "Quandrix",
+            "clubs": [
+                "Planar pathfinders"
+            ],
+            "job": "volunteer lab partner",
+            "race": "Vedalken",
+            "age": "18",
+            "skills": [
+                "Magic",
+                "Navigate",
+                "Timescape",
+                "Monsters",
+                "Culture"
+            ],
+            "edge": "Teleportation ride",
+            "bane": "spatial jitter",
+            "favorites": [],
+            "relationships": {
+                "frunk_points": "",
+                "frunk_notes": "",
+                "zepha_points": "",
+                "zepha_notes": "",
+                "sharon_points": "",
+                "sharon_notes": "",
+                "indigo_points": "",
+                "indigo_notes": ""
+            },
+            "details": {
+                "backstory": "Born to cartographers charting magical ley lines, Thessa toddled too close to an unstable rift and \u201cblinked.\u201d Found three days later in the same spot, aged mere minutes, she\u2019s been slipping ever since. Her parents sent her to Strixhaven hoping Quandrix mentors can stabilize her talent.  ",
+                "core_want": "Want \u2013 Mastery of her own position in space-time**     | As a child on the remote fractal isles of Medrix, she slipped through a nascent mana rift and was missing for three days. The terror of vanishing without control forged an iron resolve to bend dimensions to her will. _(Emotion when thwarted: frustrated)",
+                "core_fear": "Fear \u2013 Being stranded in an unknown plane, forgotten** | During one uncontrolled blink last winter, she glimpsed a silent crystal desert and felt time crawl; no one noticed she was gone for hours. The memory claws at her dreams. _(Emotion when triggered: panicked)",
+                "other": ""
+            }
+        },
+        {
+            "student_id": "student_1751848272_686b15503516d",
+            "name": "Tilana Kapule",
+            "image_path": "portraits\/student_1751848272_686b15503516d_portrait_1751848300.webp",
+            "grade_level": "1st Year",
+            "college": "Quandrix",
+            "clubs": [
+                "dragonchess club"
+            ],
+            "job": "",
+            "race": "human",
+            "age": "24",
+            "skills": [
+                "Strategy",
+                "Magic",
+                "History",
+                "Culture"
+            ],
+            "edge": "tactical consel",
+            "bane": "Strategic loss",
+            "favorites": [],
+            "relationships": {
+                "frunk_points": "",
+                "frunk_notes": "",
+                "zepha_points": "",
+                "zepha_notes": "",
+                "sharon_points": "",
+                "sharon_notes": "",
+                "indigo_points": "",
+                "indigo_notes": ""
+            },
+            "details": {
+                "backstory": "Tilana Kapule entered Strixhaven as a first-year student at the age of 24 with a fierce determination to rewrite her narrative. Born into modest circumstances, she was often overlooked in her earlier education, fueling her commitment to academic excellence. Her passion for dragon chess emerged as both a challenge and a metaphor for life\u2014each move on the board reflecting a strategic decision in her personal journey. Beyond the classroom, Tilana\u2019s quirk is her habit of arranging her meals and daily routines like chess boards, a ritual that mirrors her belief in the power of thoughtful planning and precise execution.",
+                "core_want": "Achieve unparalleled academic excellence and recognition _(crestfallen)_  \r\n    _Growing up in a modest household where her potential was often overlooked, every dismissive remark in her early education ignited an unwavering drive to be acknowledged as a brilliant scholar and future professor._",
+                "core_fear": " Being forgotten and dismissed as mediocre _(anxious)_  \r\n    _Having witnessed more illustrious peers overshadow her efforts, Tilana harbors a deep-seated fear of fading into obscurity, constantly battling the insecurity of not being extraordinary enough._",
+                "other": ""
+            }
+        },
+        {
+            "student_id": "student_1751848486_686b162676182",
+            "name": "Urzmaktok Grojsh",
+            "image_path": "portraits\/student_1751848486_686b162676182_portrait_1751848498.png",
+            "grade_level": "1st Year",
+            "college": "Witherbloom",
+            "clubs": [],
+            "job": "fantastical horticulture club",
+            "race": "urlikan (lizardlike)",
+            "age": "47",
+            "skills": [
+                "Alchemy",
+                "Endurance",
+                "Nature",
+                "Cooking"
+            ],
+            "edge": "alchemical concoctions",
+            "bane": "bane to all nature based projects and checks",
+            "favorites": [],
+            "relationships": {
+                "frunk_points": "",
+                "frunk_notes": "",
+                "zepha_points": "",
+                "zepha_notes": "",
+                "sharon_points": "",
+                "sharon_notes": "",
+                "indigo_points": "",
+                "indigo_notes": ""
+            },
+            "details": {
+                "backstory": "Born in the murky marshlands bordering Strixhaven, Urzmaktok Grojsh emerged from a lineage of amphibious warriors and herbalists. Early in his life, a disastrous experiment\u2014sparked by a minor miscalculation\u2014almost derailed his future, instilling in him a lifelong commitment to precision. Transitioning from his aquatic origins, he evolved into a terrestrial scholar whose reptilian features and orcish heritage set him apart. His rigorous approach to research and unwavering standards have earned him a reputation as both a formidable teacher and a guardian of ancient botanical lore.  \r\n**Interesting Quirk:** He never parts from his ancestral, intricately crafted measuring scale tucked securely in his robe, and he fiercely rejects any nickname, correcting even the slightest misstep with a brisk reminder of the sanctity of precise language.",
+                "core_want": "Unwavering Precision in Research  \r\n    An early catastrophic experiment\u2014marred by a minute miscalculation\u2014nearly ended his burgeoning career in magical botany. This trauma has forged a relentless pursuit of exactitude, leaving no room for error in his scholarly work (exasperation).",
+                "core_fear": "The Trivialization of Scholarly Rigor  \r\n    Once mocked and belittled for his meticulous ways, he now dreads any casual or imprecise treatment of his craft, especially the use of diminutive nicknames. This fear is rooted in bitter past experiences that threatened his reputation and identity (mortification).",
+                "other": ""
+            }
+        },
+        {
+            "student_id": "student_1751848689_686b16f1c8f42",
+            "name": "Varnex Nullgrave",
+            "image_path": "portraits\/student_1751848689_686b16f1c8f42_portrait_1751848713.png",
+            "grade_level": "1st Year",
+            "college": "Witherbloom",
+            "clubs": [
+                "Rune Decoders"
+            ],
+            "job": "specimen perparer",
+            "race": "Reborn",
+            "age": "unknown",
+            "skills": [
+                "Alchemy",
+                "Mechanics",
+                "Magic",
+                "Psionics",
+                "History",
+                "Timescape",
+                "Religion",
+                "Monsters",
+                "Nature",
+                "Strategy",
+                "Society"
+            ],
+            "edge": "tonic",
+            "bane": "Cerebral Siphon",
+            "favorites": [],
+            "relationships": {
+                "frunk_points": "",
+                "frunk_notes": "",
+                "zepha_points": "",
+                "zepha_notes": "",
+                "sharon_points": "",
+                "sharon_notes": "",
+                "indigo_points": "",
+                "indigo_notes": ""
+            },
+            "details": {
+                "backstory": "Once an orphaned prodigy from the dank fenlands beyond Strixhaven, Varnex attempted to bottle his own dreams to escape recurring night terrors. The ritual backfired, erasing much of his past and fusing arcane brasswork into his flesh. Professors saw grim promise and admitted him on a Witherbloom research grant.\r\n\r\n**Quirk:** When deep in thought he absent-mindedly swaps a jar into his cranial port, speaking in that jar\u2019s original owner\u2019s accent for a few sentences before noticing.",
+                "core_want": "",
+                "core_fear": "",
+                "other": ""
+            }
+        },
+        {
+            "student_id": "student_1751848946_686b17f2e0174",
+            "name": "Whimsi Fletchwink",
+            "image_path": "portraits\/student_1751848946_686b17f2e0174_portrait_1751848962.png",
+            "grade_level": "1st Year",
+            "college": "Silverquill",
+            "clubs": [
+                "pranksters guild"
+            ],
+            "job": "",
+            "race": "owlin",
+            "age": "16",
+            "skills": [
+                "Disguise",
+                "Pick Pocket",
+                "Pick Lock",
+                "Escape Artist",
+                "Lie",
+                "Alertness"
+            ],
+            "edge": "featherlight infilraion",
+            "bane": "inksplatter curse",
+            "favorites": [],
+            "relationships": {
+                "frunk_points": "",
+                "frunk_notes": "",
+                "zepha_points": "",
+                "zepha_notes": "",
+                "sharon_points": "",
+                "sharon_notes": "",
+                "indigo_points": "",
+                "indigo_notes": ""
+            },
+            "details": {
+                "backstory": "Whimsi hatched in a raucous sky-roost caravan that doubled as a travelling puppet theatre. Each night her family\u2019s show dazzled crowds; each dawn, the younger owlins were drilled on silent flight and sleight of talon to reset stage mechanisms without being seen. One ill-fated performance in Akoros saw Whimsi\u2019s improvised smoke-bomb gag misfire, ruining the troupe\u2019s finale but accidentally bringing the house down with laughter. The chaos earned her uproarious applause\u2014yet her elders scolded her for derailing the script. That clash between censure and acclaim birthed her twin drives: craft original stunts _and_ prove they are clever enough to merit admiration.\r\n\r\n### Quirk\r\n\r\nWhimsi keeps a running \u201cprank ledger\u201d in a palm-sized flip-book: every successful gag is sketched in frenetic ink, rated with tiny owl-face emojis, and punctuated by a dramatic **STAMP** reading _TA-DA!_ She insists on showing new friends their \u201cprofile page\u201d before offering alliance\u2014or mischief.",
+                "core_want": "Recognition for ingenuity.** Whimsi dreams of becoming a campus legend whose pranks are quoted for years; growing up in a vast owlin brood where siblings blurred together made her crave a spotlight. _(emotion when thwarted: indignant)_",
+                "core_fear": "Losing her creative spark.** As a child she once copied another student\u2019s gag and was shamed for it; ever since, the idea of becoming predictable terrifies her. _(emotion when triggered: anxious fidgeting, incessant feather preening)_",
+                "other": ""
+            }
+        },
+        {
+            "student_id": "student_1751849081_686b187992ad3",
+            "name": "Zanther Bowen",
+            "image_path": "portraits\/student_1751849081_686b187992ad3_portrait_1751849104.webp",
+            "grade_level": "1st Year",
+            "college": "Prismari",
+            "clubs": [
+                "mage tower cheer suad"
+            ],
+            "job": "",
+            "race": "human",
+            "age": "19",
+            "skills": [
+                "Perform",
+                "Lead",
+                "Music",
+                "Gymnastics",
+                "Lift",
+                "Jump"
+            ],
+            "edge": "cheer squad support",
+            "bane": "outcast",
+            "favorites": [],
+            "relationships": {
+                "frunk_points": "",
+                "frunk_notes": "",
+                "zepha_points": "",
+                "zepha_notes": "",
+                "sharon_points": "",
+                "sharon_notes": "",
+                "indigo_points": "",
+                "indigo_notes": ""
+            },
+            "details": {
+                "backstory": "Zanther\u2019s journey began in a small town where he was often an unnoticed background figure until a local community center discovered his hidden flair for performance. After a breakthrough moment winning a local talent show with his blend of magical acrobatics and cheer, he earned a scholarship to Strixhaven. Since then, Zanther has devoted himself to using his dynamic routines to bridge gaps between diverse student groups and boost campus morale.  \r\n**Quirk:** He has an odd habit of counting the beats of his footsteps as if choreographing an invisible routine, sometimes causing him to slip into rhythmic phrases even during casual conversation.",
+                "core_want": "Zanther yearns to be recognized as a beacon of energy and leadership among his peers, a drive ignited by years of feeling overlooked until he discovered the transformative power of performance. _(frustrated)_",
+                "core_fear": "He harbors a deep-seated fear of losing his spark\u2014of being reduced to anonymity and having his vibrant spirit misunderstood or dismissed, a fear rooted in a painful memory of harsh ridicule during a pivotal moment in his youth. _(despondent)_",
+                "other": ""
+            }
+        },
+        {
+            "student_id": "student_1751849216_686b19001820c",
+            "name": "Maria Stitch",
+            "image_path": "portraits\/student_1751849216_686b19001820c_portrait_1751849240.png",
+            "grade_level": "1st Year",
+            "college": "Witherbloom",
+            "clubs": [
+                "criptid club"
+            ],
+            "job": "cmpus magic labs",
+            "race": "undead",
+            "age": "39",
+            "skills": [
+                "Endurance",
+                "Heal",
+                "Nature",
+                "Magic",
+                "Monsters"
+            ],
+            "edge": "funderal bloom onic",
+            "bane": "Grave reek",
+            "favorites": [],
+            "relationships": {
+                "frunk_points": "",
+                "frunk_notes": "",
+                "zepha_points": "",
+                "zepha_notes": "",
+                "sharon_points": "",
+                "sharon_notes": "",
+                "indigo_points": "",
+                "indigo_notes": ""
+            },
+            "details": {
+                "backstory": "Mara Gristle was a promising Witherbloom herbalist whose curiosity outpaced lab safety. A volatile mixture of phoenix ash and corpse-flower spores exploded, ending her life\u2014but Professor Lisette Vonn saw potential in an \u201calert cadaver.\u201d Through experimental vitae-threads and symbiotic moss cultures, Mara was re-stitched with most memories intact. Now halfway between student and specimen, she battles prejudice with relentless study and an oddly sunny disposition. She stuffs sprigs of lavender into her seams before lectures \u201cso nobody minds sitting beside me.\u201d\r\n\r\n**Quirk:** When pondering, Mara idly replaces loose stitches with coloured thread that matches the season\u2014scarlet in autumn, fresh green in spring",
+                "core_want": "To prove that undeath can still contribute to living scholarship (emotion when thwarted: _desperation_).  \r\n    _Mara\u2019s final essay draft was praised moments before the lab accident that killed her. Reanimation gave her a second chance\u2014she\u2019s determined that death won\u2019t erase her academic worth._",
+                "core_fear": "Embodied Memory**  \r\n_Belief:_ Physical relics anchor identity. She weaves pressed flowers, torn lecture notes, even broken glass shards into her robes, each stitch a promise that she won\u2019t fade.  \r\n_Emotion when triggered:_ A frantic heartbeat\u2014like losing a piece of herself\u2014when one of her keepsakes unthreads.",
+                "other": ""
+            }
+        },
+        {
+            "student_id": "student_1751916484_686c1fc462e37",
+            "name": "Clairentine Slatier",
+            "image_path": "portraits\/student_1751916484_686c1fc462e37_portrait_1751916548.png",
+            "grade_level": "2nd Year",
+            "college": "Silverquill",
+            "clubs": [
+                "strixhaven star"
+            ],
+            "job": "",
+            "race": "Human",
+            "age": "19",
+            "skills": [
+                "Brag",
+                "Persuade",
+                "Read Person",
+                "Eavesdrop",
+                "Society"
+            ],
+            "edge": "insider access",
+            "bane": "social sabotage",
+            "favorites": [],
+            "relationships": {
+                "frunk_points": "",
+                "frunk_notes": "",
+                "zepha_points": "",
+                "zepha_notes": "",
+                "sharon_points": "",
+                "sharon_notes": "",
+                "indigo_points": "",
+                "indigo_notes": ""
+            },
+            "details": {
+                "backstory": "Clairentine Slatier\u2019s journey to Strixhaven was paved with hardship and the sting of early rejection. Raised in a modest household where her opinions were often ignored, she learned to mask her insecurities with a veneer of superiority. Her first year at Strixhaven nearly ended in disgrace when a scandal threatened to expose her vulnerabilities; instead of succumbing, she adopted a caustic, cutting attitude to protect herself. Now, every swipe of her lipstick\u2014often done compulsively when nerves take over\u2014is a reminder of a past filled with humiliation and the relentless need to prove her worth. Her life is a careful performance where each snide remark and every meticulously chosen word is a calculated move in the high-stakes game of campus social politics.",
+                "core_want": " _Admiration_ (pride)  \r\n    Clairentine craves admiration and validation from her peers\u2014a longing that began when she felt invisible and disregarded in her early school years. Every snide remark and calculated compliment is a bid for the recognition she never had.",
+                "core_fear": "_Rejection_ (anxiety)  \r\n    A public humiliation during her freshman year left an indelible mark, instilling in her a paralyzing fear of losing her newfound status. This fear drives her to preemptively put others down, ensuring that any potential rival is quickly neutralized before they can threaten her position.",
+                "other": ""
+            }
+        },
+        {
+            "student_id": "student_1751916674_686c2082a3b23",
+            "name": "Tibs Fenhopper",
+            "image_path": "portraits\/student_1751916674_686c2082a3b23_portrait_1751916702.png",
+            "grade_level": "2nd Year",
+            "college": "Witherbloom",
+            "clubs": [
+                "pranksters guild"
+            ],
+            "job": "magic labs",
+            "race": "Bullywug",
+            "age": "20",
+            "skills": [
+                "Alchemy",
+                "Nature",
+                "Heal",
+                "Alertness",
+                "Search",
+                "Culture",
+                "Endurance"
+            ],
+            "edge": "analytical insight",
+            "bane": "Clinical dismissal",
+            "favorites": [],
+            "relationships": {
+                "frunk_points": "",
+                "frunk_notes": "",
+                "zepha_points": "",
+                "zepha_notes": "",
+                "sharon_points": "",
+                "sharon_notes": "",
+                "indigo_points": "",
+                "indigo_notes": ""
+            },
+            "details": {
+                "backstory": "Tiberius Fenhopper hails from the Soggy Bottom Bog, a Bullywug community known for its unique philosophical traditions centered around the acceptance and study of decay as a vital, beautiful part of existence. Unlike Croaky's background, Tibs' community didn't necessarily push him away; rather, his intensity and singular focus on the biological minutiae set him apart even there. He wasn't just accepting decay; he was dissecting it, analyzing it, finding mathematical elegance in decomposition rates. He came to Strixhaven not just to learn magic, but to access resources and minds capable of understanding and furthering his specific, intense research into the fundamental biological and necrotic processes underpinning life itself. He views much of student life\u2014parties, rivalries, casual friendships\u2014as trivial distractions from the profound truths hidden in tissue samples and bubbling concoctions. He can be surprisingly helpful if approached with genuine intellectual curiosity but has little patience for small talk or social maneuvering.\r\n\r\n**Quirk:**\u00a0Tibs has a habit of staring intently at people while they talk, not at their eyes, but often at their neck, hands, or mouth, as if observing physiological responses or anatomical structures. It can be quite unnerving. He also keeps meticulously detailed (and slightly morbid) anatomical sketches of various creatures (and sometimes classmates, discreetly) in his waterproof notebooks.",
+                "core_want": "**Unveiling Underlying Truths.**\r\n    \r\n    - **Reasoning:**\u00a0Tibs grew up fascinated by the cycles of life and decay in his home swamp, seeing profound beauty and truth in processes others found morbid. He witnessed elders make poor decisions based on superstition rather than observation, solidifying his belief that understanding the fundamental, often unseen, mechanisms of nature (and society) is paramount. He seeks knowledge not for grades, but for genuine understanding of how things\u00a0really\u00a0work beneath the surface. (Emotion when unmet:\u00a0**Dismissiveness\/Frustration**)",
+                "core_fear": "**Superficiality\/Willful Ignorance.**\r\n    \r\n    - **Reasoning:**\u00a0Tibs was often misunderstood or ostracized in his youth for his intense focus on decay and what others considered \"gross.\" He developed a deep disdain for those who judge based on appearances or refuse to look deeper, seeing it as a dangerous weakness. He fears being lumped in with the shallow or having his own complex observations dismissed as merely eccentric or primitive. (Emotion when unmet:\u00a0**Contempt\/Withdrawal**)",
+                "other": ""
+            }
+        },
+        {
+            "student_id": "student_1751916874_686c214a90920",
+            "name": "Durgun Mossmantle",
+            "image_path": "portraits\/student_1751916874_686c214a90920_portrait_1751916903.png",
+            "grade_level": "2nd Year",
+            "college": "Witherbloom",
+            "clubs": [
+                "Fantastical Horticulture Club"
+            ],
+            "job": "",
+            "race": "Ogre",
+            "age": "20",
+            "skills": [
+                "Nature",
+                "Heal",
+                "Empathize",
+                "Lift",
+                "Perform",
+                "Cooking"
+            ],
+            "edge": "Alchemical support",
+            "bane": "Healer's bane",
+            "favorites": [],
+            "relationships": {
+                "frunk_points": "",
+                "frunk_notes": "",
+                "zepha_points": "",
+                "zepha_notes": "",
+                "sharon_points": "",
+                "sharon_notes": "",
+                "indigo_points": "",
+                "indigo_notes": ""
+            },
+            "details": {
+                "backstory": "Born into the war-tribes of the Ironhide Range, Durgun was trained to crush, maim, and obey. But after a battlefield refusal that shamed his warband, he wandered alone until Strixhaven admitted him under a rehabilitation scholarship (an experimental initiative by Witherbloom\u2019s ethics board). What they found was a shockingly curious mind. Durgun asked why things grew instead of just how to destroy them.\r\n\r\nHis first semester was rough\u2014he broke four desks and cried during a group project on necrotic fungus ethics. But with time, Durgun bloomed like the plants he so dearly loves. His gentle soul is now wrapped in a massive body, a contradiction that has made him an unlikely favorite in the greenhouses, where he speaks to wilting herbs and bullies alike with slow, patient warmth.\r\n\r\nQuirk\r\n\r\nHe talks to every plant he passes\u2014sometimes using full voices for them and pretending they talk back. In fact, he has a \"best friend\" named Wilfred, a carnivorous shrub who has \u201cstrong opinions on student fashion\u201d and sometimes snaps at people who lie.",
+                "core_want": "To cultivate beauty in unexpected places.  \r\nHe once stumbled into the Witherbloom greenhouses after a mage tower game injury and found solace among the glowing mushrooms and whispering fronds. Since then, he\u2019s believed beauty can take root in anyone, even an ogre.  \r\n_(Emotion: Hopeful yearning)_",
+                "core_fear": "To be seen only as a brute.  \r\nGrowing up, he was pushed into fights and treated like a weapon in his war-hardened ogre clan. The moment he refused to crush a rival clan\u2019s healer, he was exiled.  \r\n_(Emotion: Shame)_",
+                "other": ""
+            }
+        },
+        {
+            "student_id": "student_1751917119_686c223f2bd2a",
+            "name": "Elliora Vellorin",
+            "image_path": "portraits\/student_1751917119_686c223f2bd2a_portrait_1751918044.png",
+            "grade_level": "4th Year",
+            "college": "Silverquill",
+            "clubs": [],
+            "job": "",
+            "race": "Spectral ghost (Elf)",
+            "age": "19 (10 years dead)",
+            "skills": [
+                "History",
+                "Magic",
+                "Rumors",
+                "Empathize",
+                "Eavesdrop",
+                "Hide",
+                "Navigate",
+                "Perform"
+            ],
+            "edge": "Echo Whispers",
+            "bane": "Chill of Isolation",
+            "favorites": [],
+            "relationships": {
+                "frunk_points": "",
+                "frunk_notes": "",
+                "zepha_points": "",
+                "zepha_notes": "",
+                "sharon_points": "",
+                "sharon_notes": "",
+                "indigo_points": "",
+                "indigo_notes": ""
+            },
+            "details": {
+                "backstory": "Elliora was a rising Silverquill prodigy who experimented with resonance-ink\u2014arcane pigment that traps emotion in calligraphy. On the eve of her poetry debut, an ink spill and an errant silence glyph overloaded, stopping her heart but binding her essence to the half-written stanza. Now she drifts between lecture halls, drifting parchment trailing in her wake, seeking a sympathetic scribe to finish the work that will finally let her voice resolve into the campus chorus.\r\n\r\n**Quirk:** Snippets of verse appear in mid-air when she\u2019s excited or upset, then crumble into glowing motes that flutter away like fireflies.",
+                "core_want": "| **Want \u2014 Recognition**: Echo yearns for her final poem to be completed, published, and spoken aloud so her voice can \u201crest.\u201d (emotion: _yearning_) | She collapsed during an all-night writing session; the unfinished manuscript soaked in potent echo-ink that tethered her soul to its pages. ",
+                "core_fear": "| **Fear \u2014 Oblivion**: Dreads fading into true silence before her words are heard. (emotion: _panic_)                                                | In death she feels the slow unraveling of memory; each forgotten classmate dims her form a little more.                                    ",
+                "other": ""
+            }
+        },
+        {
+            "student_id": "student_1751917453_686c238d2b866",
+            "name": "Verity Blackwood",
+            "image_path": "portraits\/student_1751917453_686c238d2b866_portrait_1751917656.webp",
+            "grade_level": "1st Year",
+            "college": "Silverquill",
+            "clubs": [
+                "Strixhaven star"
+            ],
+            "job": "",
+            "race": "Human",
+            "age": "29",
+            "skills": [
+                "Forgery",
+                "Flirt",
+                "Interrogate",
+                "Lead",
+                "Lie",
+                "Persuade",
+                "Read Person",
+                "Rumors"
+            ],
+            "edge": "revelatory Edge",
+            "bane": "Skeptics Bane",
+            "favorites": [],
+            "relationships": {
+                "frunk_points": "",
+                "frunk_notes": "",
+                "zepha_points": "",
+                "zepha_notes": "",
+                "sharon_points": "",
+                "sharon_notes": "",
+                "indigo_points": "",
+                "indigo_notes": ""
+            },
+            "details": {
+                "backstory": "Born into a family renowned for its legacy of investigative journalism, Verity was raised amidst endless discussions of truth and subterfuge. Her childhood was steeped in the scent of old libraries and the rustle of newspaper pages, nurturing a passion for uncovering hidden stories. At Strixhaven, her relentless drive and keen intellect propelled her to the helm of the school newspaper. A peculiar quirk she developed\u2014a habit of doodling intricate, arcane symbols on every scrap of paper\u2014hints at an inexplicable connection to the magical lore that she so fervently studies.",
+                "core_want": "- Individuals who display genuine curiosity and articulate their ideas with clarity.\r\n    - Thought-provoking debates and nuanced storytelling that digs beneath superficial appearances.",
+                "core_fear": "- Insincerity and shallow rhetoric that mask hidden agendas.\r\n    - Pompous or overly self-important attitudes that undermine honest inquiry.",
+                "other": ""
+            }
+        },
+        {
+            "student_id": "student_1751917755_686c24bbdad9f",
+            "name": "Caspian Stoneheart",
+            "image_path": "portraits\/student_1751917755_686c24bbdad9f_portrait_1751917784.png",
+            "grade_level": "4th Year",
+            "college": "Prismari",
+            "clubs": [
+                "Arcane Sculpting Club"
+            ],
+            "job": "",
+            "race": "human",
+            "age": "22",
+            "skills": [
+                "Architecture",
+                "Magic",
+                "History",
+                "Culture",
+                "Carpentry"
+            ],
+            "edge": "Mentorship",
+            "bane": "Unlikeable construct",
+            "favorites": [],
+            "relationships": {
+                "frunk_points": "",
+                "frunk_notes": "",
+                "zepha_points": "",
+                "zepha_notes": "",
+                "sharon_points": "",
+                "sharon_notes": "",
+                "indigo_points": "",
+                "indigo_notes": ""
+            },
+            "details": {
+                "backstory": "Growing up in a town steeped in the lore of ancient ruins and mystical legends, Caspian was captivated by tales of sculptures that seemed to capture the very soul of history. An early encounter with a weathered monument\u2014said to resonate with the heartbeat of its people\u2014set him on a path of pursuing art that blends magic with memory. At Strixhaven, his innate talent flourished, and he soon became the heart of the Arcane Sculpting Club, where he melds rigorous craftsmanship with wild, imaginative spells.\r\n\r\nA notable quirk of Caspian is his habit of conversing with his creations as though they were trusted friends. Whether critiquing a rough-hewn block of stone or celebrating a perfectly chiseled curve, he treats each piece as a living testament to his vision. His workshop, an expansive studio filled with levitating chisels, gently glowing stone fragments, and intricate blueprints pinned to every surface, stands as a vibrant gallery. This impressive space not only reflects his relentless dedication to his craft but also inspires all who enter to believe in the transformative power of art and magic",
+                "core_want": "Caspian is driven by the desire to create art that transcends the mundane\u2014a belief forged in his youth when he witnessed a legendary sculpture that seemingly breathed life into the past. This encounter instilled in him a relentless ambition to capture that same magic in his own work. _(Inspired)_",
+                "core_fear": "He fears that the soul of his art might be diluted by commercial pressures or a loss of personal vision. Witnessing gifted creations reduced to mere decorative objects by indifferent mentors has left him wary of compromising his ideals, a dread that sometimes paralyzes his creativity. _(Disillusioned)_",
+                "other": ""
+            }
+        },
+        {
+            "student_id": "student_1751918059_686c25ebd7074",
+            "name": "Aeloria Stormweaver",
+            "image_path": "portraits\/student_1751918059_686c25ebd7074_portrait_1751918095.png",
+            "grade_level": "4th Year",
+            "college": "Prismari",
+            "clubs": [
+                "Elemental dance troupe"
+            ],
+            "job": "",
+            "race": "Genasi Elemental conflux",
+            "age": "22",
+            "skills": [
+                "Perform",
+                "Magic",
+                "Music",
+                "Gymnastics",
+                "Jump",
+                "Lead",
+                "Endurance"
+            ],
+            "edge": "elemental insparation",
+            "bane": "flare up",
+            "favorites": [],
+            "relationships": {
+                "frunk_points": "",
+                "frunk_notes": "",
+                "zepha_points": "",
+                "zepha_notes": "",
+                "sharon_points": "",
+                "sharon_notes": "",
+                "indigo_points": "",
+                "indigo_notes": ""
+            },
+            "details": {
+                "backstory": "Aeloria was born at the moment four elemental leylines converged\u2014and she embodies their union. Raised on the storm-battered island of Zephyrit, she learned early that unchecked emotion could shatter both land and heart. Her parents, each devoted to a single element, fractured their family\u2019s harmony until Aeloria crafted her first dance at age eight, weaving all elements into one elegant flow. Invited to Strixhaven for her unique gift, she now leads the Elemental Dance Troupe, teaching others that true beauty lies in balance. Once a month, she slips off campus to the hidden Furygale just beyond the Whispering Cliffs, where the elements grow unruly; there, she performs a private ritual dance to realign the converging leylines that gave her life.\r\n\r\n**Quirk:** Even in casual conversation, Aeloria taps out four-beat elemental rhythms on nearby surfaces\u2014sometimes accidentally summoning tiny sparks, droplets, gusts, or pebbles as she speaks.",
+                "core_want": "_Harmonize disparate forces_\r\n    \r\n    - _Reasoning:_ As a child, Aeloria watched her four genasi parents argue over whose element was supreme. She once mediated their feud by dancing all four elements into a single performance, forging a moment of unity (joy).",
+                "core_fear": "_Uncontrolled elemental outburst_\r\n    \r\n    - _Reasoning:_ At age ten, an emotional tantrum caused her power to erupt into a small quake, toppling her family\u2019s garden. The guilt haunts her\u2014she fears losing control and hurting those she cares about (anxiety).",
+                "other": ""
+            }
+        },
+        {
+            "student_id": "student_1752169463_686ffbf7c3bbb",
+            "name": "Caelum Arcline",
+            "image_path": "portraits\/student_1752169463_686ffbf7c3bbb_portrait_1752169478.png",
+            "grade_level": "3rd Year",
+            "college": "Quandrix",
+            "clubs": [
+                "Planar pathfinders"
+            ],
+            "job": "Quantum field archivist",
+            "race": "Vedalken",
+            "age": "20",
+            "skills": [
+                "Magic",
+                "Strategy",
+                "Mechanics",
+                "Timescape",
+                "Navigate",
+                "Alertness"
+            ],
+            "edge": "Fractal Insight ",
+            "bane": "Recursive Detour",
+            "favorites": [],
+            "relationships": {
+                "frunk_points": "",
+                "frunk_notes": "",
+                "zepha_points": "",
+                "zepha_notes": "",
+                "sharon_points": "",
+                "sharon_notes": "",
+                "indigo_points": "",
+                "indigo_notes": ""
+            },
+            "details": {
+                "backstory": "Caelum grew up in the remote Arcline Convergence, a research commune studying planar fractals. A demonstration intended to impress visiting scholars spiralled out of control, collapsing into a razor-thin paradox that erased his ten-year-old sister, Lysera. Authorities ruled it an \u201cunpreventable anomaly,\u201d but Caelum\u2019s last glimpse\u2014her outline dissolving into golden polygons\u2014haunts him nightly. Determined to rewrite \u201cunpreventable,\u201d he enrolled at Strixhaven\u2019s Quandrix College, believing its Sequence prophets hold the key to deterministic safety.\r\n\r\nQuirk: When problem-solving, he unconsciously taps a quill against his teeth, causing translucent numbers to ripple across his cheeks like reflections on water.\r\n\r\n",
+                "core_want": "Want: Mastery over chaotic systems\r\nA childhood experiment gone awry ripped his sister into a splinter-plane. Ever since, Caelum has craved mathematical control over chance itself, convinced that perfect equations can safeguard what he loves.",
+                "core_fear": "Sudden, unquantifiable loss (anxiety)\r\nWatching that planar tear swallow his sister without warning etched a terror of helplessness into him; any variable he cannot chart triggers silent panic he masks with frenetic calculation.",
+                "other": "Basic Trajectory\r\nCaelum maintains top grades yet obsesses over extra-credit experiments, pushing boundaries until faculty intervention is inevitable. In Year 3 he drafts an illicit thesis on \u201cretro-causal lattice knots,\u201d risking expulsion\u2014or planar implosion\u2014during midnight trials. If unchecked, he may open a micro-gate seeking Lysera, forcing fellow students to choose between saving Caelum from himself or following him into the unknown."
+            }
+        },
+        {
+            "student_id": "student_1752170883_68700183deea1",
+            "name": "Asti Kydonos",
+            "image_path": "portraits\/student_1752170883_68700183deea1_portrait_1752171084.png",
+            "grade_level": "1st Year",
+            "college": "Quandrix",
+            "clubs": [
+                "Dragonchess"
+            ],
+            "job": "Campus chronomantic gnomon keeper (calabrates he great sun dial)",
+            "race": "Minataur",
+            "age": "18",
+            "skills": [
+                "Magic",
+                "Strategy",
+                "Navigate",
+                "Endurance",
+                "Culture",
+                "Gymnastics"
+            ],
+            "edge": "Projected Trajectory",
+            "bane": "Analysis Paralysis",
+            "favorites": [],
+            "relationships": {
+                "frunk_points": "",
+                "frunk_notes": "",
+                "zepha_points": "",
+                "zepha_notes": "",
+                "sharon_points": "",
+                "sharon_notes": "",
+                "indigo_points": "",
+                "indigo_notes": ""
+            },
+            "details": {
+                "backstory": "Asti grew up on the arid island of Skopelos, where his artisan family cultivated rare \u201csungrapes\u201d that ripen by reflected light. The vineyard clung to a precarious escarpment; when an unseasonal storm collapsed the terrace, viticulturists and beasts alike were swept away. Asti survived by clinging to a dangling irrigation pipe, helplessly counting heartbeats while debris roared past. In the catastrophe\u2019s aftermath he discovered solace in measurement\u2014first timing his own breathing, then charting tides, and finally deriving esoteric proofs that let him believe he could predict anything. Invitations from Strixhaven arrived after he published a treatise on rhythmic fault-lines in planar mana flows.\r\nQuirk: Whenever lost in thought, he taps prime-number sequences on tabletops with his caliper\u2019s point\u2014clink-clink\u2026 pause\u2026 clink-clink-clink\u2026",
+                "core_want": "Control through predictable structure\r\nAfter a flash flood obliterated his family\u2019s cliffside vineyard when he was 12, Asti became obsessed with patterns and early-warning metrics, convinced that perfect models could prevent future catastrophes. (Emotion when thwarted: frustration)",
+                "core_fear": "Unexpected disorder that endangers others\r\nDuring the same disaster, Asti\u2019s younger sister was injured while he hesitated, unable to decide which evacuation path was safest. The guilt forged a deep dread of real-time unpredictability. (Emotion when triggered: panic)",
+                "other": "Basic trajectory\r\nYear 1: Brilliant but anxious; he aces theory yet freezes in live spell-duels.\r\nYear 2: Joins a high-risk Planar Pathfinders expedition, where he rescues teammates by calculating a collapsing portal\u2019s decay curve\u2014his first taste of decisive action.\r\nYear 3: Obsessive overcorrection; he experiments with \u201cerror-absorbing fractals\u201d and accidentally ruptures a lecture hall ceiling, earning disciplinary probation and forcing him to confront perfectionism.\r\nYear 4: Relaxes into calculated spontaneity; becomes captain of Dragonchess Club, mentors younger students, and defends a thesis on probabilistic empathy that dazzles faculty. Rumor has it he\u2019ll stay on as Quandrix\u2019s official Risk Arbiter\u2014finally channeling both horns and heart toward guiding others through chaos."
+            }
+        }
+    ],
+    "metadata": {
+        "last_updated": "2025-07-10 18:11:24",
+        "total_students": 34
+    }
+}

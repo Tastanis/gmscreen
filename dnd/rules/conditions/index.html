@@ -1,0 +1,139 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Conditions - D&D Rules</title>
+    <style>
+        body {
+            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+            line-height: 1.6;
+            margin: 20px;
+            background-color: #f5f5f5;
+            color: #333;
+        }
+        .container {
+            max-width: 1200px;
+            margin: 0 auto;
+            background: white;
+            padding: 30px;
+            border-radius: 10px;
+            box-shadow: 0 2px 10px rgba(0,0,0,0.1);
+        }
+        h1 {
+            color: #8B4513;
+            border-bottom: 3px solid #8B4513;
+            padding-bottom: 10px;
+            margin-bottom: 30px;
+        }
+        .condition {
+            margin-bottom: 25px;
+            padding: 20px;
+            background-color: #faf9f7;
+            border-left: 5px solid #8B4513;
+            border-radius: 5px;
+        }
+        .condition-name {
+            font-size: 1.3em;
+            font-weight: bold;
+            color: #8B4513;
+            text-decoration: underline;
+            margin-bottom: 10px;
+        }
+        .condition-text {
+            font-size: 1em;
+            line-height: 1.7;
+        }
+        .highlight {
+            background-color: #fff3cd;
+            padding: 2px 4px;
+            border-radius: 3px;
+            font-weight: bold;
+        }
+        .mechanic {
+            color: #dc3545;
+            font-weight: bold;
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <h1>🛡️ Conditions Reference</h1>
+        
+        <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 30px; margin-top: 30px;">
+            <div>
+                <div class="condition">
+                    <div class="condition-name">BLEEDING</div>
+                    <div class="condition-text">
+                        While bleeding, whenever you make a <span class="mechanic">test</span> using <span class="mechanic">Might</span> or <span class="mechanic">Agility</span>, make a <span class="mechanic">strike</span>, or use an <span class="mechanic">action</span>, <span class="mechanic">maneuver</span>, or a <span class="mechanic">triggered action</span>, you <span class="highlight">lose 1d6 Stamina</span> after the test, action, maneuver, or triggered action is resolved. This Stamina loss can't be prevented in any way.
+                    </div>
+                </div>
+
+                <div class="condition">
+                    <div class="condition-name">DAZED</div>
+                    <div class="condition-text">
+                        While you are dazed, you can do only <span class="highlight">one thing on your turn</span>: use a maneuver, use an action, or take a move action. You also <span class="mechanic">can't</span> use <span class="mechanic">triggered actions</span>, <span class="mechanic">free triggered actions</span>, or <span class="mechanic">free maneuvers</span>.
+                    </div>
+                </div>
+
+                <div class="condition">
+                    <div class="condition-name">FRIGHTENED</div>
+                    <div class="condition-text">
+                        If you are frightened, <span class="mechanic">ability power rolls</span> you make against the <span class="mechanic">source</span> of your fear take a <span class="highlight">bane</span>. If that source is a creature, <span class="mechanic">their ability power rolls against you</span> gain an <span class="highlight">edge</span>. You <span class="mechanic">can't</span> willingly <span class="mechanic">move closer</span> to the source of your fear if you know the location of that source. If you gain the frightened condition from one source while already frightened by a different source, the new condition replaces the old one.
+                    </div>
+                </div>
+
+                <div class="condition">
+                    <div class="condition-name">GRABBED</div>
+                    <div class="condition-text">
+                        While you are grabbed, your <span class="mechanic">speed</span> is <span class="highlight">0</span>, you can't <span class="mechanic">be force moved</span>, you <span class="mechanic">can't use the Knockback maneuver</span>, and you take a <span class="highlight">bane</span> on <span class="mechanic">abilities</span> that don't target the creature grabbing you. If the creature grabbing you moves, they bring you with them. If the creature's size is equal to or less than yours, their speed is halved while they have you grabbed.
+                        <br><br>
+                        The creature grabbing you can use a maneuver to move you into an unoccupied space adjacent to them. The creature grabbing you can end the grab at any time (no action required). You can also attempt to escape being grabbed using the Escape Grab maneuver (see Maneuvers in Combat). If you teleport or if the creature grabbing you is force moved to a space that isn't adjacent to you, you are no longer grabbed.
+                    </div>
+                </div>
+
+                <div class="condition">
+                    <div class="condition-name">PRONE</div>
+                    <div class="condition-text">
+                        While you are prone, you are flat on the ground, strikes you make take a <span class="highlight">bane</span>, and <span class="mechanic">melee</span> abilities made against you gain an <span class="highlight">edge</span>. You must crawl to move along the ground, which costs you <span class="highlight">1 additional</span> square of <span class="mechanic">movement</span> for every square you crawl. You can't climb, jump, swim, or fly while prone. If you are climbing, flying, or jumping while you are knocked prone, you fall.
+                        <br><br>
+                        While prone, you can stand up as a maneuver (see Maneuvers in Combat), unless the ability or effect that imposed the condition says otherwise. You can use a maneuver to make an adjacent prone creature stand up.
+                    </div>
+                </div>
+            </div>
+            
+            <div>
+                <div class="condition">
+                    <div class="condition-name">RESTRAINED</div>
+                    <div class="condition-text">
+                        While you are restrained, your <span class="mechanic">speed is 0</span>, you <span class="mechanic">can't</span> use the <span class="mechanic">Stand Up</span> maneuver, and you <span class="mechanic">can't be force moved</span>. Your <span class="mechanic">ability power</span> rolls take a <span class="highlight">bane</span>, abilities against you gain an <span class="highlight">edge</span>, and you have a <span class="highlight">bane</span> on <span class="mechanic">Might</span> and <span class="mechanic">Agility</span> tests.
+                        <br><br>
+                        If you teleport while restrained, the condition ends.
+                    </div>
+                </div>
+
+                <div class="condition">
+                    <div class="condition-name">SLOWED</div>
+                    <div class="condition-text">
+                        While you are slowed, your <span class="mechanic">speed</span> is <span class="highlight">2</span> unless it is already lower, and you <span class="mechanic">can't shift</span>.
+                    </div>
+                </div>
+
+                <div class="condition">
+                    <div class="condition-name">TAUNTED</div>
+                    <div class="condition-text">
+                        If you are taunted, you have a <span class="highlight">double bane</span> on ability power rolls that <span class="mechanic">don't target</span> the <span class="mechanic">creature</span> who <span class="mechanic">taunted</span> you while you have line of effect to that creature. If you gain the taunted condition from one creature while already taunted by a different creature, the new condition replaces the old one.
+                    </div>
+                </div>
+
+                <div class="condition">
+                    <div class="condition-name">WEAKENED</div>
+                    <div class="condition-text">
+                        While you are weakened, <span class="highlight">all</span> your <span class="mechanic">power rolls</span> take a <span class="highlight">bane</span>.
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+</body>
+</html>

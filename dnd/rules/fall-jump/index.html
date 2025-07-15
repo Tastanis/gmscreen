@@ -1,0 +1,193 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Fall/Jump - D&D Rules</title>
+    <style>
+        body {
+            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+            line-height: 1.6;
+            margin: 20px;
+            background-color: #f5f5f5;
+            color: #333;
+        }
+        .container {
+            max-width: 1200px;
+            margin: 0 auto;
+            background: white;
+            padding: 30px;
+            border-radius: 10px;
+            box-shadow: 0 2px 10px rgba(0,0,0,0.1);
+        }
+        h1 {
+            color: #dc3545;
+            border-bottom: 3px solid #dc3545;
+            padding-bottom: 10px;
+            margin-bottom: 30px;
+        }
+        h2 {
+            color: #dc3545;
+            margin-top: 30px;
+            margin-bottom: 15px;
+        }
+        .rules-section {
+            margin-bottom: 30px;
+            padding: 20px;
+            background-color: #fff5f5;
+            border-left: 5px solid #dc3545;
+            border-radius: 5px;
+        }
+        .jump-section {
+            margin-bottom: 30px;
+            padding: 20px;
+            background-color: #f0f8ff;
+            border-left: 5px solid #007bff;
+            border-radius: 5px;
+        }
+        table {
+            width: 100%;
+            border-collapse: collapse;
+            margin: 15px 0;
+            background-color: white;
+            box-shadow: 0 1px 3px rgba(0,0,0,0.2);
+        }
+        th, td {
+            border: 1px solid #ddd;
+            padding: 12px;
+            text-align: left;
+        }
+        th {
+            background-color: #007bff;
+            color: white;
+            font-weight: bold;
+        }
+        tr:nth-child(even) {
+            background-color: #f9f9f9;
+        }
+        .rule-item {
+            margin-bottom: 15px;
+            padding: 15px;
+            background-color: white;
+            border-radius: 5px;
+            box-shadow: 0 1px 3px rgba(0,0,0,0.1);
+        }
+        .rule-title {
+            font-weight: bold;
+            color: #dc3545;
+            margin-bottom: 8px;
+        }
+        .jump-title {
+            font-weight: bold;
+            color: #007bff;
+            margin-bottom: 8px;
+        }
+        .highlight {
+            background-color: #fff3cd;
+            padding: 2px 4px;
+            border-radius: 3px;
+            font-weight: bold;
+        }
+        .damage {
+            background-color: #f8d7da;
+            color: #721c24;
+            padding: 2px 4px;
+            border-radius: 3px;
+            font-weight: bold;
+        }
+        .bonus {
+            background-color: #d4edda;
+            color: #155724;
+            padding: 2px 4px;
+            border-radius: 3px;
+            font-weight: bold;
+        }
+        .formula {
+            background-color: #e2e3e5;
+            padding: 10px;
+            border-radius: 5px;
+            font-family: 'Courier New', monospace;
+            font-weight: bold;
+            text-align: center;
+            margin: 10px 0;
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <h1>⬇️ Fall and Jump Rules</h1>
+        
+        <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 30px;">
+            <div class="rules-section">
+                <h2>💥 Fall Rules</h2>
+                
+                <div class="rule-item">
+                    <div class="rule-title">Basic Fall Damage</div>
+                    <div class="formula">
+                        Damage = 2 × Number of Squares Fallen (Max 50)
+                    </div>
+                    <p>Falls of <span class="highlight">3 or more squares</span> cause damage and leave you <span class="damage">Prone</span></p>
+                </div>
+                
+                <div class="rule-item">
+                    <div class="rule-title">Agility Reduction</div>
+                    <p>Subtract your <span class="bonus">Agility score</span> from fall distance before calculating damage</p>
+                </div>
+                
+                <div class="rule-item">
+                    <div class="rule-title">Water Landing</div>
+                    <p>Water <span class="highlight">1 square deep</span> reduces fall distance by <span class="bonus">4 squares</span></p>
+                </div>
+                
+                <div class="rule-item">
+                    <div class="rule-title">Fall Speed</div>
+                    <p>Creatures fall <span class="highlight">100 squares per turn</span></p>
+                </div>
+            </div>
+
+            <div class="jump-section">
+                <h2>🦘 Jump Rules</h2>
+                
+                <div class="rule-item">
+                    <div class="jump-title">Base Jump Distance</div>
+                    <p>Base jump distance equals your <span class="bonus">Might</span> or <span class="bonus">Agility</span> score (your choice)</p>
+                </div>
+                
+                <div class="rule-item">
+                    <div class="jump-title">Running Start Bonus</div>
+                    <p>A <span class="highlight">2 square run-up</span> gives you a <span class="bonus">+1 bonus</span> to jump distance</p>
+                </div>
+                
+                <div class="rule-item">
+                    <div class="jump-title">Extended Jump Test</div>
+                    <p>Make a test to jump farther than your baseline allows:</p>
+                    
+                    <table>
+                        <tr>
+                            <th>Test Result</th>
+                            <th>Additional Distance</th>
+                        </tr>
+                        <tr>
+                            <td><strong>11 or lower</strong></td>
+                            <td>No additional distance</td>
+                        </tr>
+                        <tr>
+                            <td><strong>12–16</strong></td>
+                            <td><span class="bonus">+1 square</span> longer and higher</td>
+                        </tr>
+                        <tr>
+                            <td><strong>17+</strong></td>
+                            <td><span class="bonus">+2 squares</span> longer or higher</td>
+                        </tr>
+                    </table>
+                </div>
+                
+                <div class="rule-item">
+                    <div class="jump-title">Terrain Restrictions</div>
+                    <p><span class="damage">Cannot jump out of</span> damaging or difficult terrain</p>
+                </div>
+            </div>
+        </div>
+    </div>
+</body>
+</html>

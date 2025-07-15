@@ -1,0 +1,22 @@
+# Deny all direct access to files in the data directory
+Order deny,allow
+Deny from all
+
+# Prevent directory browsing
+Options -Indexes
+
+# Disable script execution
+<Files *.php>
+    Order deny,allow
+    Deny from all
+</Files>
+
+<Files *.py>
+    Order deny,allow
+    Deny from all
+</Files>
+
+<Files *.cgi>
+    Order deny,allow
+    Deny from all
+</Files>

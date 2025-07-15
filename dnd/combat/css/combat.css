@@ -1,0 +1,934 @@
+/* Combat Tracker - Full Implementation Styles */
+* {
+    box-sizing: border-box;
+}
+
+body {
+    margin: 0;
+    padding: 0;
+    font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+    background: linear-gradient(135deg, #1e3c72, #2a5298);
+    color: white;
+    min-height: 100vh;
+    overflow-x: hidden;
+}
+
+/* Header Styles */
+.header {
+    background: rgba(0, 0, 0, 0.3);
+    padding: 1rem;
+    display: flex;
+    justify-content: space-between;
+    align-items: flex-start;
+    border-bottom: 2px solid rgba(255, 255, 255, 0.2);
+    flex-wrap: wrap;
+    gap: 1rem;
+}
+
+.header-left h1 {
+    margin: 0 0 0.5rem 0;
+    font-size: 1.8rem;
+}
+
+.controls {
+    display: flex;
+    gap: 0.5rem;
+    flex-wrap: wrap;
+    align-items: center;
+}
+
+.header-right {
+    display: flex;
+    flex-direction: column;
+    align-items: flex-end;
+    gap: 0.5rem;
+}
+
+.combat-info {
+    display: flex;
+    gap: 1rem;
+    flex-wrap: wrap;
+}
+
+.info-display {
+    background: rgba(255, 255, 255, 0.1);
+    padding: 0.5rem 1rem;
+    border-radius: 20px;
+    font-weight: bold;
+    font-size: 0.9rem;
+    white-space: nowrap;
+}
+
+.user-info {
+    display: flex;
+    align-items: center;
+    gap: 1rem;
+    font-size: 0.9rem;
+    flex-wrap: wrap;
+}
+
+.readonly-notice {
+    background: rgba(74, 144, 226, 0.3);
+    padding: 0.5rem 1rem;
+    border-radius: 8px;
+    margin: 0;
+    font-size: 0.9rem;
+}
+
+/* Button Styles */
+.btn {
+    padding: 0.5rem 1rem;
+    border: none;
+    border-radius: 6px;
+    cursor: pointer;
+    font-weight: bold;
+    font-size: 0.9rem;
+    transition: all 0.3s;
+    white-space: nowrap;
+}
+
+.btn:hover {
+    transform: translateY(-2px);
+    box-shadow: 0 4px 12px rgba(0, 0, 0, 0.3);
+}
+
+.btn-enemy {
+    background: #dc3545;
+    color: white;
+}
+
+.btn-hero {
+    background: #28a745;
+    color: white;
+}
+
+.btn-pc {
+    background: #17a2b8;
+    color: white;
+}
+
+.btn-initiative {
+    background: #ffc107;
+    color: #212529;
+}
+
+.btn-danger {
+    background: #6c757d;
+    color: white;
+}
+
+.btn-small {
+    padding: 0.3rem 0.6rem;
+    font-size: 0.8rem;
+}
+
+.gm-badge {
+    background: #ff6b35;
+    color: white;
+    padding: 0.3rem 0.8rem;
+    border-radius: 20px;
+    font-weight: bold;
+    font-size: 0.8rem;
+}
+
+.player-badge {
+    background: #4a90e2;
+    color: white;
+    padding: 0.3rem 0.8rem;
+    border-radius: 20px;
+    font-weight: bold;
+    font-size: 0.8rem;
+}
+
+.logout-btn {
+    color: #ffcccb;
+    text-decoration: none;
+    padding: 0.5rem 1rem;
+    border: 1px solid #ffcccb;
+    border-radius: 5px;
+    transition: all 0.3s;
+}
+
+.logout-btn:hover {
+    background: #ffcccb;
+    color: #1e3c72;
+}
+
+/* Combat Container with Scrolling */
+.combat-container {
+    flex: 1;
+    overflow: hidden;
+    position: relative;
+    height: calc(100vh - 161px); /* Reduced from 140px to 240px to make scrolling appear sooner */
+}
+
+.combat-area {
+    position: relative;
+    height: 100%; /* Back to original height: 100% for proper scrolling */
+    background: rgba(255, 255, 255, 0.05);
+    margin: 1rem;
+    border-radius: 10px;
+    border: 2px solid rgba(255, 255, 255, 0.2);
+    overflow: auto;
+    padding: 50px 10px 800px; /* Reasonable bottom padding for extra scroll space */
+    scroll-behavior: smooth;
+}
+
+/* Center Line for 4-Column Layout */
+.center-line {
+    position: absolute;
+    left: 50%;
+    top: 0;
+    bottom: 0;
+    width: 2px;
+    background: repeating-linear-gradient(
+        to bottom,
+        rgba(255, 255, 255, 0.3) 0px,
+        rgba(255, 255, 255, 0.3) 10px,
+        transparent 10px,
+        transparent 20px
+    );
+    z-index: 1;
+}
+
+/* Quarter Lines for 4 Columns */
+.combat-area::before,
+.combat-area::after {
+    content: '';
+    position: absolute;
+    top: 0;
+    bottom: 0;
+    width: 1px;
+    background: repeating-linear-gradient(
+        to bottom,
+        rgba(255, 255, 255, 0.15) 0px,
+        rgba(255, 255, 255, 0.15) 8px,
+        transparent 8px,
+        transparent 16px
+    );
+    z-index: 1;
+}
+
+.combat-area::before {
+    left: 25%;
+}
+
+.combat-area::after {
+    right: 25%;
+}
+
+/* Updated Column Headers for 4 Columns - Reduced Height */
+.column-headers {
+    position: absolute;
+    top: 0;
+    left: 0;
+    right: 0;
+    height: 50px; /* Already properly sized */
+    display: grid;
+    grid-template-columns: 1fr 1fr 1fr 1fr;
+    z-index: 5;
+    background: rgba(0, 0, 0, 0.3);
+    border-bottom: 2px solid rgba(255, 255, 255, 0.2);
+}
+
+.column-header {
+    text-align: center;
+    padding: 0.5rem;
+    border-right: 1px solid rgba(255, 255, 255, 0.1);
+    font-size: 0.8rem;
+}
+
+.column-header:last-child {
+    border-right: none;
+}
+
+.column-header h3 {
+    margin: 0 0 0.125rem 0;
+    font-size: 0.9rem;
+}
+
+.column-header p {
+    margin: 0;
+    font-size: 0.7rem;
+    opacity: 0.7;
+}
+
+/* Compact Creature Card Styles - Increased Height for Better Fit */
+.creature-card {
+    position: absolute;
+    width: 240px;
+    background: linear-gradient(135deg, #667eea, #764ba2);
+    border: 2px solid #fff;
+    border-radius: 8px;
+    box-shadow: 0 4px 15px rgba(0, 0, 0, 0.3);
+    transition: all 0.3s ease;
+    z-index: 10;
+    display: flex;
+    flex-direction: column;
+    height: 155px; /* Increased from 138px to 155px to give more room */
+    overflow: hidden; /* Prevent content from spilling out */
+}
+
+.creature-card.enemy {
+    border-color: #dc3545;
+    background: linear-gradient(135deg, #e74c3c, #c0392b);
+}
+
+.creature-card.hero {
+    border-color: #28a745;
+    background: linear-gradient(135deg, #2ecc71, #27ae60);
+}
+
+/* Visibility System */
+.creature-card.hidden-from-players {
+    opacity: 0.6;
+    border-style: dashed;
+}
+
+.creature-card.hidden-from-players::before {
+    content: 'HIDDEN';
+    position: absolute;
+    top: -2px;
+    right: -2px;
+    background: #ff6b35;
+    color: white;
+    padding: 2px 6px;
+    border-radius: 0 6px 0 6px;
+    font-size: 0.6rem;
+    font-weight: bold;
+    z-index: 1001;
+}
+
+/* Enhanced Drag Areas - Only Drag Zone */
+.creature-card.draggable {
+    user-select: none;
+}
+
+.creature-card.draggable .drag-zone {
+    cursor: grab;
+}
+
+.creature-card.draggable:hover {
+    transform: scale(1.02);
+    box-shadow: 0 8px 25px rgba(0, 0, 0, 0.4);
+}
+
+.creature-card.dragging {
+    cursor: grabbing;
+    transform: rotate(1deg) scale(1.03);
+    box-shadow: 0 15px 40px rgba(0, 0, 0, 0.6);
+    z-index: 1000;
+}
+
+/* Player Mode - Read Only */
+.creature-card.readonly {
+    cursor: default;
+    opacity: 0.95;
+}
+
+/* Compact Card Layout - Header proportioned for new height */
+.creature-header {
+    display: flex;
+    padding: 0.4rem 0.3rem;
+    gap: 0.4rem;
+    background: rgba(0, 0, 0, 0.2);
+    border-radius: 6px 6px 0 0;
+    flex-shrink: 0;
+    min-height: 42px; /* Slightly increased for better proportions */
+    cursor: default; /* Not draggable */
+}
+
+.creature-portrait {
+    width: 32px;
+    height: 32px;
+    border-radius: 6px;
+    background: #666;
+    border: 1px solid rgba(255, 255, 255, 0.3);
+    position: relative;
+    overflow: hidden;
+    flex-shrink: 0;
+    cursor: default; /* Not draggable */
+}
+
+.creature-portrait img {
+    width: 100%;
+    height: 100%;
+    object-fit: cover;
+}
+
+.creature-portrait.placeholder {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    font-size: 0.6rem;
+    color: #ccc;
+}
+
+.portrait-upload-btn {
+    position: absolute;
+    top: 1px;
+    right: 1px;
+    width: 10px;
+    height: 10px;
+    background: rgba(255, 255, 255, 0.8);
+    border: none;
+    border-radius: 2px;
+    cursor: pointer; /* Clickable */
+    font-size: 6px;
+    color: #333;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+}
+
+.creature-info {
+    flex: 1;
+    display: flex;
+    flex-direction: column;
+    gap: 0.2rem;
+    min-width: 0;
+}
+
+.creature-name {
+    background: rgba(255, 255, 255, 0.1);
+    border: 1px solid rgba(255, 255, 255, 0.3);
+    border-radius: 3px;
+    padding: 0.2rem 0.4rem;
+    color: white;
+    font-size: 0.8rem;
+    font-weight: bold;
+    text-align: center;
+    width: 100%;
+    cursor: text; /* Text input cursor */
+}
+
+.creature-name.readonly {
+    background: transparent;
+    border: none;
+    color: white;
+    cursor: default;
+    padding: 0.2rem 0;
+}
+
+.header-controls {
+    display: flex;
+    gap: 0.3rem;
+    align-items: center;
+    flex-wrap: wrap;
+}
+
+.trigger-section {
+    display: flex;
+    align-items: center;
+    gap: 0.3rem; /* Increased gap for better spacing */
+    flex-direction: row; /* Changed from column to row */
+    text-align: left; /* Changed from center to left */
+}
+
+.trigger-status {
+    width: 14px;
+    height: 14px;
+    border-radius: 50%;
+    cursor: pointer;
+    border: 1px solid rgba(255, 255, 255, 0.3);
+    transition: all 0.3s;
+    flex-shrink: 0;
+}
+
+.trigger-status.ready {
+    background: #28a745;
+}
+
+.trigger-status.used {
+    background: #dc3545;
+}
+
+.trigger-status.readonly {
+    cursor: default;
+}
+
+.trigger-label {
+    font-size: 0.55rem;
+    color: rgba(255, 255, 255, 0.9);
+    line-height: 1;
+    white-space: nowrap;
+}
+
+.visibility-btn {
+    background: rgba(255, 255, 255, 0.2);
+    border: none;
+    border-radius: 3px;
+    padding: 0.1rem 0.3rem;
+    color: white;
+    font-size: 0.6rem;
+    cursor: pointer;
+    transition: background 0.3s;
+    flex-shrink: 0;
+}
+
+.visibility-btn:hover {
+    background: rgba(255, 255, 255, 0.3);
+}
+
+.visibility-btn.hidden {
+    background: #ff6b35;
+}
+
+.visibility-btn.visible {
+    background: #28a745;
+}
+
+/* Compact Creature Body - Side by Side Layout with Better Spacing */
+.creature-body {
+    padding: 0.4rem 0.3rem 0.5rem 0.4rem; /* Increased padding for better spacing */
+    flex: 1;
+    display: flex;
+    gap: 0.3rem;
+    min-height: 0;
+    overflow: hidden;
+}
+
+.conditions-section {
+    flex: 1;
+    min-width: 0;
+    display: flex;
+    flex-direction: column;
+    /* Removed height: 100% to allow natural sizing */
+}
+
+.conditions-title {
+    font-size: 0.7rem;
+    font-weight: bold;
+    margin-bottom: 0.3rem; /* Increased margin for better spacing */
+    color: rgba(255, 255, 255, 0.9);
+    line-height: 1;
+    flex-shrink: 0;
+}
+
+.condition-slots {
+    display: flex;
+    flex-direction: column;
+    gap: 0.2rem; /* Increased gap for better spacing */
+    flex: 0 1 auto; /* Changed from flex: 1 to allow natural sizing */
+    min-height: 0;
+}
+
+.condition-slot {
+    display: flex;
+    align-items: center;
+    gap: 0.25rem;
+    background: rgba(255, 255, 255, 0.1);
+    border-radius: 3px;
+    padding: 0.15rem 0.2rem;
+    min-height: 16px;
+    font-size: 0.7rem;
+}
+
+.condition-number {
+    width: 12px;
+    text-align: center;
+    font-size: 0.65rem;
+    font-weight: bold;
+    color: rgba(255, 255, 255, 0.7);
+    flex-shrink: 0;
+}
+
+.condition-display {
+    flex: 1;
+    font-size: 0.7rem;
+    color: white;
+    cursor: pointer;
+    padding: 0.05rem 0.15rem;
+    border-radius: 2px;
+    transition: background 0.3s;
+    min-height: 12px;
+    display: flex;
+    align-items: center;
+    min-width: 0;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+    line-height: 1.2;
+}
+
+.condition-display:hover:not(.readonly) {
+    background: rgba(255, 255, 255, 0.1);
+}
+
+.condition-display.empty {
+    color: rgba(255, 255, 255, 0.5);
+    font-style: italic;
+}
+
+.condition-display.readonly {
+    cursor: default;
+}
+
+.other-condition {
+    display: flex;
+    align-items: center;
+    gap: 0.25rem;
+    margin-top: 0.5rem; /* Reset to a reasonable value now that flex is fixed */
+    font-size: 0.7rem;
+    flex-shrink: 0;
+    min-height: 18px; /* Ensure minimum height */
+}
+
+.other-condition-label {
+    font-size: 0.65rem;
+    color: rgba(255, 255, 255, 0.9);
+    width: 30px;
+    flex-shrink: 0;
+    line-height: 1;
+}
+
+.other-condition-input {
+    flex: 1;
+    background: rgba(255, 255, 255, 0.1);
+    border: 1px solid rgba(255, 255, 255, 0.3);
+    border-radius: 3px;
+    padding: 0.2rem 0.25rem; /* Increased padding */
+    color: white;
+    font-size: 0.65rem;
+    min-width: 0;
+    height: 18px; /* Increased height */
+    line-height: 1;
+}
+
+.other-condition-display {
+    flex: 1;
+    background: rgba(255, 255, 255, 0.1);
+    border-radius: 3px;
+    padding: 0.2rem 0.25rem; /* Increased padding */
+    color: white;
+    font-size: 0.65rem;
+    min-height: 16px; /* Increased height */
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+    line-height: 1.2;
+}
+
+/* Drag Zone - Right Side of Card - Properly Sized for New Height */
+.drag-zone {
+    width: 16px;
+    background: rgba(255, 255, 255, 0.1);
+    border-radius: 0 6px 6px 0;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    color: rgba(255, 255, 255, 0.5);
+    font-size: 0.9rem;
+    user-select: none;
+    flex-shrink: 0;
+    cursor: grab;
+    transition: background 0.3s;
+    align-self: stretch; /* Full height of the body */
+    writing-mode: vertical-rl; /* Vertical text orientation */
+    text-orientation: mixed;
+}
+
+.drag-zone:hover {
+    background: rgba(255, 255, 255, 0.2);
+    color: rgba(255, 255, 255, 0.8);
+}
+
+.drag-zone.readonly {
+    cursor: default;
+    opacity: 0.3;
+}
+
+.drag-zone:active {
+    cursor: grabbing;
+}
+
+/* Remove the old creature-controls section */
+.creature-controls {
+    display: none;
+}
+
+/* Modal Styles */
+.modal {
+    display: none;
+    position: fixed;
+    z-index: 2000;
+    left: 0;
+    top: 0;
+    width: 100%;
+    height: 100%;
+    background-color: rgba(0, 0, 0, 0.8);
+}
+
+.modal-content {
+    background: linear-gradient(135deg, #667eea, #764ba2);
+    margin: 5% auto;
+    padding: 0;
+    border-radius: 12px;
+    width: 90%;
+    max-width: 600px;
+    box-shadow: 0 20px 60px rgba(0, 0, 0, 0.5);
+}
+
+.modal-header {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    padding: 1rem;
+    border-bottom: 1px solid rgba(255, 255, 255, 0.2);
+}
+
+.modal-header h3 {
+    margin: 0;
+    color: white;
+}
+
+.close {
+    color: rgba(255, 255, 255, 0.7);
+    font-size: 2rem;
+    font-weight: bold;
+    cursor: pointer;
+    line-height: 1;
+}
+
+.close:hover {
+    color: white;
+}
+
+.modal-body {
+    padding: 1rem;
+}
+
+.condition-grid {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(250px, 1fr));
+    gap: 0.5rem;
+    max-height: 400px;
+    overflow-y: auto;
+}
+
+.condition-option {
+    background: rgba(255, 255, 255, 0.1);
+    border: 1px solid rgba(255, 255, 255, 0.2);
+    border-radius: 8px;
+    padding: 0.75rem;
+    cursor: pointer;
+    transition: all 0.3s;
+}
+
+.condition-option:hover {
+    background: rgba(255, 255, 255, 0.2);
+    transform: translateY(-2px);
+}
+
+.condition-name {
+    font-weight: bold;
+    font-size: 0.9rem;
+    margin-bottom: 0.25rem;
+    color: white;
+}
+
+.condition-preview {
+    font-size: 0.8rem;
+    color: rgba(255, 255, 255, 0.8);
+    line-height: 1.3;
+}
+
+/* Remove Button in Header */
+.remove-btn {
+    background: #dc3545;
+    color: white;
+    border: none;
+    padding: 0.1rem 0.3rem;
+    border-radius: 3px;
+    cursor: pointer;
+    font-size: 0.6rem;
+    transition: background 0.3s;
+    flex-shrink: 0;
+}
+
+.remove-btn:hover {
+    background: #c82333;
+}
+
+/* Enhanced Tooltip for Other Condition */
+.other-condition-input:hover,
+.other-condition-display:hover {
+    position: relative;
+}
+
+.tooltip-helper {
+    position: absolute;
+    background: #2c3e50;
+    border: 1px solid #34495e;
+    border-radius: 6px;
+    padding: 0.5rem;
+    font-size: 0.7rem;
+    color: #ecf0f1;
+    max-width: 250px;
+    z-index: 1500;
+    box-shadow: 0 4px 15px rgba(0, 0, 0, 0.4);
+    line-height: 1.3;
+}
+
+.tooltip-helper .tooltip-title {
+    font-weight: bold;
+    margin-bottom: 0.3rem;
+    color: #3498db;
+}
+
+.tooltip-helper .tooltip-commands {
+    margin: 0.3rem 0;
+}
+
+.tooltip-helper .tooltip-command {
+    margin: 0.2rem 0;
+    padding-left: 0.5rem;
+}
+
+/* Tooltip Styles */
+.tooltip {
+    position: absolute;
+    z-index: 1500;
+    background: #2c3e50;
+    border: 1px solid #34495e;
+    border-radius: 6px;
+    box-shadow: 0 6px 20px rgba(0, 0, 0, 0.4);
+    max-width: 300px;
+    pointer-events: none;
+}
+
+.tooltip-content {
+    padding: 0.6rem;
+}
+
+.tooltip-title {
+    font-weight: bold;
+    font-size: 0.8rem;
+    color: #ecf0f1;
+    margin-bottom: 0.4rem;
+    border-bottom: 1px solid #34495e;
+    padding-bottom: 0.2rem;
+}
+
+.tooltip-text {
+    font-size: 0.7rem;
+    color: #bdc3c7;
+    line-height: 1.4;
+}
+
+/* Status Bar */
+.status-bar {
+    position: fixed;
+    bottom: 0;
+    left: 0;
+    right: 0;
+    background: rgba(0, 0, 0, 0.8);
+    padding: 0.8rem;
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    font-size: 0.9rem;
+    border-top: 1px solid rgba(255, 255, 255, 0.2);
+    z-index: 100;
+}
+
+#save-status {
+    font-weight: bold;
+}
+
+#save-status.saving {
+    color: #ffeb3b;
+}
+
+#save-status.saved {
+    color: #4caf50;
+}
+
+#save-status.error {
+    color: #f44336;
+}
+
+#last-update, #creature-count {
+    color: rgba(255, 255, 255, 0.7);
+    font-size: 0.8rem;
+}
+
+/* Animations */
+@keyframes cardUpdate {
+    0% { transform: scale(1); }
+    50% { transform: scale(1.02); box-shadow: 0 12px 40px rgba(76, 175, 80, 0.6); }
+    100% { transform: scale(1); }
+}
+
+.creature-card.updating {
+    animation: cardUpdate 0.6s ease-in-out;
+}
+
+.creature-card.updating::after {
+    content: "Updated";
+    position: absolute;
+    top: -10px;
+    right: -10px;
+    background: #4caf50;
+    color: white;
+    padding: 2px 8px;
+    border-radius: 12px;
+    font-size: 0.7rem;
+    font-weight: bold;
+    z-index: 1001;
+}
+
+/* Responsive Design */
+@media (max-width: 768px) {
+    .header {
+        flex-direction: column;
+        align-items: flex-start;
+    }
+    
+    .header-right {
+        align-items: flex-start;
+        width: 100%;
+    }
+    
+    .controls {
+        flex-wrap: wrap;
+    }
+    
+    .combat-info {
+        flex-wrap: wrap;
+    }
+    
+    .creature-card {
+        width: 250px;
+    }
+    
+    .condition-grid {
+        grid-template-columns: 1fr;
+    }
+    
+    .modal-content {
+        width: 95%;
+        margin: 10% auto;
+    }
+    
+    .status-bar {
+        flex-direction: column;
+        gap: 0.5rem;
+        text-align: center;
+    }
+}
+
+@media (max-width: 480px) {
+    .creature-card {
+        width: 220px;
+    }
+    
+    .header {
+        padding: 0.5rem;
+    }
+    
+    .btn {
+        padding: 0.4rem 0.8rem;
+        font-size: 0.8rem;
+    }
+}

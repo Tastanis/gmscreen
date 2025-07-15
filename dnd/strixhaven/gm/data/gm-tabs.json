@@ -1,0 +1,574 @@
+{
+    "left-1": [
+        {
+            "id": "left-1-1",
+            "name": "Hexcrawl",
+            "content": "",
+            "lastModified": "2025-07-08T02:30:42+00:00",
+            "created": "2025-07-04T21:57:52+00:00"
+        },
+        {
+            "id": "left-1-2",
+            "name": "Note 2",
+            "content": "<br>",
+            "lastModified": "2025-07-09T06:51:45+00:00",
+            "created": "2025-07-05T19:16:04+00:00"
+        },
+        {
+            "id": "left-1-3",
+            "name": "Note 3",
+            "content": "",
+            "lastModified": "2025-07-06T18:30:39+00:00",
+            "created": "2025-07-06T18:30:39+00:00"
+        },
+        {
+            "id": "left-1-4",
+            "name": "Note 4",
+            "content": "<br>",
+            "lastModified": "2025-07-09T06:52:07+00:00",
+            "created": "2025-07-06T18:30:39+00:00"
+        },
+        {
+            "id": "left-1-5",
+            "name": "Note 5",
+            "content": "",
+            "lastModified": "2025-07-06T18:30:39+00:00",
+            "created": "2025-07-06T18:30:39+00:00"
+        },
+        {
+            "id": "left-1-6",
+            "name": "Note 6",
+            "content": "",
+            "lastModified": "2025-07-06T18:30:39+00:00",
+            "created": "2025-07-06T18:30:39+00:00"
+        },
+        {
+            "id": "left-1-7",
+            "name": "Note 7",
+            "content": "",
+            "lastModified": "2025-07-06T18:30:39+00:00",
+            "created": "2025-07-06T18:30:39+00:00"
+        },
+        {
+            "id": "left-1-8",
+            "name": "Note 8",
+            "content": "",
+            "lastModified": "2025-07-06T18:30:39+00:00",
+            "created": "2025-07-06T18:30:39+00:00"
+        },
+        {
+            "id": "left-1-9",
+            "name": "Note 9",
+            "content": "",
+            "lastModified": "2025-07-06T18:30:39+00:00",
+            "created": "2025-07-06T18:30:39+00:00"
+        },
+        {
+            "id": "left-1-10",
+            "name": "Note 10",
+            "content": "",
+            "lastModified": "2025-07-06T18:30:39+00:00",
+            "created": "2025-07-06T18:30:39+00:00"
+        },
+        {
+            "id": "left-1-11",
+            "name": "Note 11",
+            "content": "",
+            "lastModified": "2025-07-06T18:30:39+00:00",
+            "created": "2025-07-06T18:30:39+00:00"
+        },
+        {
+            "id": "left-1-12",
+            "name": "Note 12",
+            "content": "",
+            "lastModified": "2025-07-06T18:30:39+00:00",
+            "created": "2025-07-06T18:30:39+00:00"
+        },
+        {
+            "id": "left-1-13",
+            "name": "Note 13",
+            "content": "",
+            "lastModified": "2025-07-06T18:30:39+00:00",
+            "created": "2025-07-06T18:30:39+00:00"
+        },
+        {
+            "id": "left-1-14",
+            "name": "Note 14",
+            "content": "",
+            "lastModified": "2025-07-06T18:30:39+00:00",
+            "created": "2025-07-06T18:30:39+00:00"
+        },
+        {
+            "id": "left-1-15",
+            "name": "Note 15",
+            "content": "",
+            "lastModified": "2025-07-06T18:30:39+00:00",
+            "created": "2025-07-06T18:30:39+00:00"
+        },
+        {
+            "id": "left-1-16",
+            "name": "Note 16",
+            "content": "",
+            "lastModified": "2025-07-06T18:30:39+00:00",
+            "created": "2025-07-06T18:30:39+00:00"
+        },
+        {
+            "id": "left-1-17",
+            "name": "Note 17",
+            "content": "",
+            "lastModified": "2025-07-06T18:30:39+00:00",
+            "created": "2025-07-06T18:30:39+00:00"
+        },
+        {
+            "id": "left-1-18",
+            "name": "Note 18",
+            "content": "",
+            "lastModified": "2025-07-06T18:30:39+00:00",
+            "created": "2025-07-06T18:30:39+00:00"
+        },
+        {
+            "id": "left-1-19",
+            "name": "Note 19",
+            "content": "",
+            "lastModified": "2025-07-06T18:30:39+00:00",
+            "created": "2025-07-06T18:30:39+00:00"
+        },
+        {
+            "id": "left-1-20",
+            "name": "Note 20",
+            "content": "",
+            "lastModified": "2025-07-06T18:30:39+00:00",
+            "created": "2025-07-06T18:30:39+00:00"
+        }
+    ],
+    "left-2": [
+        {
+            "id": "left-2-1",
+            "name": "Crystalized thought echo",
+            "content": "<p><span class=\"image-link\" data-image-url=\"uploads\/images\/ChatGPT Image Jun 23, 2025, 06_29_19 PM_1752164640_13de7bffc579ee7c.png\" data-image-title=\"ChatGPT Image Jun 23, 2025, 06_29_19 PM.png\" contenteditable=\"false\" title=\"Click to open image in new tab: ChatGPT Image Jun 23, 2025, 06_29_19 PM.png (Hover to preview)\" style=\"color: rgb(255, 107, 53); background-color: rgba(255, 107, 53, 0.1); padding: 2px 4px; border-radius: 3px; cursor: pointer; font-weight: 500; border-left: 3px solid rgb(255, 107, 53); display: inline;\">Crystalized thought echo<\/span> <\/p><p>-What is the dramatic question? Will the party collect the thought echo without any psychic damage, slowing their production process<\/p><p>-How might the world, player, understanding, NPC, change? Find something, learn about Quandrix, connection with Thessa. <\/p><p>-Thessa helps in some way or can give some advice because she studies quandrix<\/p><p>-Psyonic interactions, something for indigo to learn<\/p><p>-backstory of someone like a professor at the college<\/p><p>-many inconsequential backstories<\/p><p>-a hint at frunks backstory<\/p><p>----<\/p><p><b>Pre phase- <\/b>Meet a struggling student <span class=\"character-link student\" data-character-id=\"student_1752169463_686ffbf7c3bbb\" data-character-type=\"student\" contenteditable=\"false\" title=\"Click to open Caelum Arcline in new tab\" style=\"color: #007bff; background-color: rgba(0, 123, 255, 0.1); padding: 2px 4px; border-radius: 3px; cursor: pointer; font-weight: 500; border-left: 3px solid #28a745; display: inline;\">Caelum Arcline<\/span> Who is offloading a thought<\/p><p><b>Phase one<\/b>- Collects and shifts the nature of one's thoughts back at them. While attached, it has a desire to collect more thoughts. Once released it stops. Multiple projects of thoughts and scenarios are shown to the party. \nA <span class=\"image-link\" data-image-url=\"uploads\/images\/ChatGPT Image Jun 23, 2025, 05_18_55 PM_1752168362_cc383aea8b59a32e.png\" data-image-title=\"ChatGPT Image Jun 23, 2025, 05_18_55 PM.png\" contenteditable=\"false\" title=\"Click to open image in new tab: ChatGPT Image Jun 23, 2025, 05_18_55 PM.png (Hover to preview)\" style=\"color: rgb(255, 107, 53); background-color: rgba(255, 107, 53, 0.1); padding: 2px 4px; border-radius: 3px; cursor: pointer; font-weight: 500; border-left: 3px solid rgb(255, 107, 53); display: inline;\">coalition of thoughts<\/span>  manifests into reality, asking to be set free. Warning of the danger. A negotiation can be used to convince it to help fight. If so, it will stifle some of the attacks to come.<\/p><p><b>Phase two-<\/b> <span class=\"image-link\" data-image-url=\"uploads\/images\/ChatGPT Image Jun 23, 2025, 06_12_26 PM_1752168462_4a9027e605398d6e.png\" data-image-title=\"ChatGPT Image Jun 23, 2025, 06_12_26 PM.png\" contenteditable=\"false\" title=\"Click to open image in new tab: ChatGPT Image Jun 23, 2025, 06_12_26 PM.png (Hover to preview)\" style=\"color: rgb(255, 107, 53); background-color: rgba(255, 107, 53, 0.1); padding: 2px 4px; border-radius: 3px; cursor: pointer; font-weight: 500; border-left: 3px solid rgb(255, 107, 53); display: inline;\">Thoughts<\/span> attacking to protect the thought echo. They try to keep the party away from it. Rolls are required to pull it out.<\/p><p><b>Phase three- <\/b>Psychic Reality adjustments. The thoughts of a thousand people rush over the party, stunning them and forcing them to view images of their own terrifying past or the struggles of others from within the school who have wandered by here. \nstudents sometimes use this place to \"unload\" unwanted memories <span class=\"image-link\" data-image-url=\"uploads\/images\/ChatGPT Image Jul 10, 2025, 10_44_30 AM_1752169872_e2fd6c3582bdbe08.png\" data-image-title=\"ChatGPT Image Jul 10, 2025, 10_44_30 AM.png\" contenteditable=\"false\" title=\"Click to open image in new tab: ChatGPT Image Jul 10, 2025, 10_44_30 AM.png (Hover to preview)\" style=\"color: rgb(255, 107, 53); background-color: rgba(255, 107, 53, 0.1); padding: 2px 4px; border-radius: 3px; cursor: pointer; font-weight: 500; border-left: 3px solid rgb(255, 107, 53); display: inline;\">Caelum's thought.<\/span> <\/p><p><br><\/p><p><br><\/p><p><br><\/p><p><br><\/p>",
+            "lastModified": "2025-07-10T17:51:13+00:00",
+            "created": "2025-07-04T21:51:58+00:00"
+        },
+        {
+            "id": "left-2-2",
+            "name": "Reference 2",
+            "content": "",
+            "lastModified": "2025-07-09T06:51:24+00:00",
+            "created": "2025-07-05T19:17:11+00:00"
+        },
+        {
+            "id": "left-2-3",
+            "name": "Reference 3",
+            "content": "",
+            "lastModified": "2025-07-09T06:51:32+00:00",
+            "created": "2025-07-05T19:30:29+00:00"
+        },
+        {
+            "id": "left-2-4",
+            "name": "Reference 4",
+            "content": "",
+            "lastModified": "2025-07-06T18:30:39+00:00",
+            "created": "2025-07-05T19:18:02+00:00"
+        },
+        {
+            "id": "left-2-5",
+            "name": "Reference 5",
+            "content": "",
+            "lastModified": "2025-07-06T18:30:39+00:00",
+            "created": "2025-07-06T18:30:39+00:00"
+        },
+        {
+            "id": "left-2-6",
+            "name": "Reference 6",
+            "content": "",
+            "lastModified": "2025-07-06T18:30:39+00:00",
+            "created": "2025-07-06T18:30:39+00:00"
+        },
+        {
+            "id": "left-2-7",
+            "name": "Reference 7",
+            "content": "",
+            "lastModified": "2025-07-06T18:30:39+00:00",
+            "created": "2025-07-06T18:30:39+00:00"
+        },
+        {
+            "id": "left-2-8",
+            "name": "Reference 8",
+            "content": "",
+            "lastModified": "2025-07-06T18:30:39+00:00",
+            "created": "2025-07-06T18:30:39+00:00"
+        },
+        {
+            "id": "left-2-9",
+            "name": "Reference 9",
+            "content": "",
+            "lastModified": "2025-07-06T18:30:39+00:00",
+            "created": "2025-07-06T18:30:39+00:00"
+        },
+        {
+            "id": "left-2-10",
+            "name": "Reference 10",
+            "content": "",
+            "lastModified": "2025-07-06T18:30:39+00:00",
+            "created": "2025-07-06T18:30:39+00:00"
+        },
+        {
+            "id": "left-2-11",
+            "name": "Reference 11",
+            "content": "",
+            "lastModified": "2025-07-06T18:30:39+00:00",
+            "created": "2025-07-06T18:30:39+00:00"
+        },
+        {
+            "id": "left-2-12",
+            "name": "Reference 12",
+            "content": "",
+            "lastModified": "2025-07-06T18:30:39+00:00",
+            "created": "2025-07-06T18:30:39+00:00"
+        },
+        {
+            "id": "left-2-13",
+            "name": "Reference 13",
+            "content": "",
+            "lastModified": "2025-07-06T18:30:39+00:00",
+            "created": "2025-07-06T18:30:39+00:00"
+        },
+        {
+            "id": "left-2-14",
+            "name": "Reference 14",
+            "content": "",
+            "lastModified": "2025-07-06T18:30:39+00:00",
+            "created": "2025-07-06T18:30:39+00:00"
+        },
+        {
+            "id": "left-2-15",
+            "name": "Reference 15",
+            "content": "",
+            "lastModified": "2025-07-06T18:30:39+00:00",
+            "created": "2025-07-06T18:30:39+00:00"
+        },
+        {
+            "id": "left-2-16",
+            "name": "Reference 16",
+            "content": "",
+            "lastModified": "2025-07-06T18:30:39+00:00",
+            "created": "2025-07-06T18:30:39+00:00"
+        },
+        {
+            "id": "left-2-17",
+            "name": "Reference 17",
+            "content": "",
+            "lastModified": "2025-07-06T18:30:39+00:00",
+            "created": "2025-07-06T18:30:39+00:00"
+        },
+        {
+            "id": "left-2-18",
+            "name": "Reference 18",
+            "content": "",
+            "lastModified": "2025-07-06T18:30:39+00:00",
+            "created": "2025-07-06T18:30:39+00:00"
+        },
+        {
+            "id": "left-2-19",
+            "name": "Reference 19",
+            "content": "",
+            "lastModified": "2025-07-06T18:30:39+00:00",
+            "created": "2025-07-06T18:30:39+00:00"
+        },
+        {
+            "id": "left-2-20",
+            "name": "Reference 20",
+            "content": "",
+            "lastModified": "2025-07-06T18:30:39+00:00",
+            "created": "2025-07-06T18:30:39+00:00"
+        }
+    ],
+    "right-1": [
+        {
+            "id": "right-1-1",
+            "name": "Frunk",
+            "content": "<p><b>Frunk<\/b><\/p><p>-Beast taming points to taming points for the <span class=\"image-link\" data-image-url=\"uploads\/images\/ChatGPT Image Jun 16, 2025, 05_08_45 PM_1752085610_b19a8d3a9d97791b.png\" data-image-title=\"ChatGPT Image Jun 16, 2025, 05_08_45 PM.png\" contenteditable=\"false\" title=\"Click to open image in new tab: ChatGPT Image Jun 16, 2025, 05_08_45 PM.png (Hover to preview)\" style=\"color: rgb(255, 107, 53); background-color: rgba(255, 107, 53, 0.1); padding: 2px 4px; border-radius: 3px; cursor: pointer; font-weight: 500; border-left: 3px solid rgb(255, 107, 53); display: inline;\">mirror lynx<\/span> <\/p><p>-Wants the staff to take a chaos magic route, wants to find a way to get magic power back. He could transform and now he's just wanting to break it and go for chaos magic or darker nature ideas. find someone who works with people like him. (broken transformer people)<\/p><p>-Frunk's bigger goal is to become an abomination of nature. he can just get so big and be able to punch a dragon. Scale druid, manipulating the size of plants and animals -Substanceor augmentor<\/p><p><br><\/p><p>-Pranksters guild stuff, plan whats next<\/p><p><br><\/p><p>-<span class=\"character-link staff\" data-character-id=\"staff_1752088435_686ebf73e5045\" data-character-type=\"staff\" contenteditable=\"false\" title=\"Click to open Old Nam in new tab\" style=\"color: #007bff; background-color: rgba(0, 123, 255, 0.1); padding: 2px 4px; border-radius: 3px; cursor: pointer; font-weight: 500; border-left: 3px solid #dc3545; display: inline;\">Old Nam<\/span>  Frunk's old caretaker is coming to the college to take care of him. Create her character<\/p><p><br><\/p><p>-Dad is a diplomat.<\/p><p><br><\/p><p>-Backstory- repressed memory. His dad killed his wife. He and his <span class=\"image-link\" data-image-url=\"uploads\/images\/ChatGPT Image Jul 9, 2025, 11_35_49 AM_1752086460_d28e380dcd1b7195.png\" data-image-title=\"ChatGPT Image Jul 9, 2025, 11_35_49 AM.png\" contenteditable=\"false\" title=\"Click to open image in new tab: ChatGPT Image Jul 9, 2025, 11_35_49 AM.png (Hover to preview)\" style=\"color: rgb(255, 107, 53); background-color: rgba(255, 107, 53, 0.1); padding: 2px 4px; border-radius: 3px; cursor: pointer; font-weight: 500; border-left: 3px solid rgb(255, 107, 53); display: inline;\">wife<\/span> were spending years in the backyard just hopping around as bunnies. His dad is a diplomat who thought that was ridiculous and, with dad energy, <span class=\"image-link\" data-image-url=\"uploads\/images\/ChatGPT Image Jul 9, 2025, 11_49_43 AM_1752163962_cfecb1918d4e57bc.png\" data-image-title=\"ChatGPT Image Jul 9, 2025, 11_49_43 AM.png\" contenteditable=\"false\" title=\"Click to open image in new tab: ChatGPT Image Jul 9, 2025, 11_49_43 AM.png (Hover to preview)\" style=\"color: rgb(255, 107, 53); background-color: rgba(255, 107, 53, 0.1); padding: 2px 4px; border-radius: 3px; cursor: pointer; font-weight: 500; border-left: 3px solid rgb(255, 107, 53); display: inline;\">shot her as a bunny<\/span> .&nbsp; She is actually just a bunny. His mom is like the ultimate trophy wife, but literally. He caught her. She is a shape changer as well.&nbsp;<\/p><p>-<\/p><p>-backup characters. Wants to play a villain. serial killer. Pick the plot now and make it feel relevant.<\/p>",
+            "lastModified": "2025-07-10T17:22:00+00:00",
+            "created": "2025-07-04T23:51:05+00:00"
+        },
+        {
+            "id": "right-1-2",
+            "name": "Zepha",
+            "content": "<b>Zepha<\/b><div><br><\/div><div>- wants him and <span class=\"character-link student\" data-character-id=\"student_1751846811_686b0f9b40aaf\" data-character-type=\"student\" contenteditable=\"false\" title=\"Click to open Nora Ann Wu in new tab\" style=\"color: #007bff; background-color: rgba(0, 123, 255, 0.1); padding: 2px 4px; border-radius: 3px; cursor: pointer; font-weight: 500; border-left: 3px solid #28a745; display: inline;\">Nora Ann Wu<\/span> to start a business combining magic and business. (like battle golems)<br><\/div><div><br><\/div><div>- <span class=\"character-link student\" data-character-id=\"student_1751846811_686b0f9b40aaf\" data-character-type=\"student\" contenteditable=\"false\" title=\"Click to open Nora Ann Wu in new tab\" style=\"color: #007bff; background-color: rgba(0, 123, 255, 0.1); padding: 2px 4px; border-radius: 3px; cursor: pointer; font-weight: 500; border-left: 3px solid #28a745; display: inline;\">Nora Ann Wu<\/span> Personality is to make people wonder at her amazing sculptures. She always spins and centers cylindrical things. <\/div><div>Want: \"shape living beauty that connects people\" Wistful yearning<\/div><div>Fear: \"quietly dismissed\" nervous self-doubt\n\n<\/div><div><br><\/div><div>- his parents were traveling craftsmen in multiple tribes<\/div><div>- His tribe are nomadic, they are contracted by kingdoms to build infrastructure and stuff. They are super good at architecture.&nbsp;<\/div><div>-lightning hammer (specifics) what exactly does it do<\/div><div>-Complete the projects chart for Zepha<\/div><div>-write ideas for forge (and the 6 parts of a forge) (heat, space, energy, knowledge, magic, materials)<\/div>",
+            "lastModified": "2025-07-09T19:58:43+00:00",
+            "created": "2025-07-06T18:30:39+00:00"
+        },
+        {
+            "id": "right-1-3",
+            "name": "Sharon",
+            "content": "<p><b>Sharon<\/b><\/p><p><b>-<\/b>Her own newspaper.&nbsp;<\/p><p>-How her snake behaves and some things it says<\/p><p>-Each article's stories in the future events<\/p><p>-Figure out the artifact that doesn't work and what it will do. (from her perk. It eventually needs to get activated.<\/p><p>-<span class=\"character-link student\" data-character-id=\"student_1751845370_686b09fa0b6b4\" data-character-type=\"student\" contenteditable=\"false\" title=\"Click to open Cadoras Damellawar in new tab\" style=\"color: #007bff; background-color: rgba(0, 123, 255, 0.1); padding: 2px 4px; border-radius: 3px; cursor: pointer; font-weight: 500; border-left: 3px solid #28a745; display: inline;\">Cadoras Damellawar<\/span> interactions. He wants to show something interesting around the area. He has some <b>knowledge<\/b>.<\/p>",
+            "lastModified": "2025-07-09T20:24:39+00:00",
+            "created": "2025-07-06T18:30:39+00:00"
+        },
+        {
+            "id": "right-1-4",
+            "name": "Indigo",
+            "content": "<b>Indigo<\/b><div><b>-<\/b>Who her mom and dad actually are needs to be decided<\/div><div><br><\/div><div>-Arcane dance group plans. how will this actually affect her? give her renoun?<\/div><div><br><\/div><div>-Create plans for the Crucible Dragon <span class=\"image-link\" data-image-url=\"uploads\/images\/Valthrax Ironmantle_1752086361_93d22d4d4b5afe1f.jpg\" data-image-title=\"Valthrax Ironmantle.jpg\" contenteditable=\"false\" title=\"Click to open image in new tab: Valthrax Ironmantle.jpg (Hover to preview)\" style=\"color: rgb(255, 107, 53); background-color: rgba(255, 107, 53, 0.1); padding: 2px 4px; border-radius: 3px; cursor: pointer; font-weight: 500; border-left: 3px solid rgb(255, 107, 53); display: inline;\">Valthrax Ironmantle<\/span> Why is he here. what is his goal<\/div><div><br><\/div><div>-<\/div>",
+            "lastModified": "2025-07-09T18:40:16+00:00",
+            "created": "2025-07-05T19:19:44+00:00"
+        },
+        {
+            "id": "right-1-5",
+            "name": "Rule 5",
+            "content": "",
+            "lastModified": "2025-07-06T18:30:39+00:00",
+            "created": "2025-07-06T18:30:39+00:00"
+        },
+        {
+            "id": "right-1-6",
+            "name": "Rule 6",
+            "content": "",
+            "lastModified": "2025-07-06T18:30:39+00:00",
+            "created": "2025-07-06T18:30:39+00:00"
+        },
+        {
+            "id": "right-1-7",
+            "name": "Rule 7",
+            "content": "",
+            "lastModified": "2025-07-06T18:30:39+00:00",
+            "created": "2025-07-06T18:30:39+00:00"
+        },
+        {
+            "id": "right-1-8",
+            "name": "Rule 8",
+            "content": "",
+            "lastModified": "2025-07-06T18:30:39+00:00",
+            "created": "2025-07-06T18:30:39+00:00"
+        },
+        {
+            "id": "right-1-9",
+            "name": "Rule 9",
+            "content": "",
+            "lastModified": "2025-07-06T18:30:39+00:00",
+            "created": "2025-07-06T18:30:39+00:00"
+        },
+        {
+            "id": "right-1-10",
+            "name": "Rule 10",
+            "content": "",
+            "lastModified": "2025-07-06T18:30:39+00:00",
+            "created": "2025-07-06T18:30:39+00:00"
+        },
+        {
+            "id": "right-1-11",
+            "name": "Rule 11",
+            "content": "",
+            "lastModified": "2025-07-06T18:30:39+00:00",
+            "created": "2025-07-06T18:30:39+00:00"
+        },
+        {
+            "id": "right-1-12",
+            "name": "Rule 12",
+            "content": "",
+            "lastModified": "2025-07-06T18:30:39+00:00",
+            "created": "2025-07-06T18:30:39+00:00"
+        },
+        {
+            "id": "right-1-13",
+            "name": "Rule 13",
+            "content": "",
+            "lastModified": "2025-07-06T18:30:39+00:00",
+            "created": "2025-07-06T18:30:39+00:00"
+        },
+        {
+            "id": "right-1-14",
+            "name": "Rule 14",
+            "content": "",
+            "lastModified": "2025-07-06T18:30:39+00:00",
+            "created": "2025-07-06T18:30:39+00:00"
+        },
+        {
+            "id": "right-1-15",
+            "name": "Rule 15",
+            "content": "",
+            "lastModified": "2025-07-06T18:30:39+00:00",
+            "created": "2025-07-06T18:30:39+00:00"
+        },
+        {
+            "id": "right-1-16",
+            "name": "Rule 16",
+            "content": "",
+            "lastModified": "2025-07-06T18:30:39+00:00",
+            "created": "2025-07-06T18:30:39+00:00"
+        },
+        {
+            "id": "right-1-17",
+            "name": "Rule 17",
+            "content": "",
+            "lastModified": "2025-07-06T18:30:39+00:00",
+            "created": "2025-07-06T18:30:39+00:00"
+        },
+        {
+            "id": "right-1-18",
+            "name": "Rule 18",
+            "content": "",
+            "lastModified": "2025-07-06T18:30:39+00:00",
+            "created": "2025-07-06T18:30:39+00:00"
+        },
+        {
+            "id": "right-1-19",
+            "name": "Rule 19",
+            "content": "",
+            "lastModified": "2025-07-06T18:30:39+00:00",
+            "created": "2025-07-06T18:30:39+00:00"
+        },
+        {
+            "id": "right-1-20",
+            "name": "Rule 20",
+            "content": "",
+            "lastModified": "2025-07-06T18:30:39+00:00",
+            "created": "2025-07-06T18:30:39+00:00"
+        }
+    ],
+    "right-2": [
+        {
+            "id": "right-2-1",
+            "name": "Long term events",
+            "content": "<b>Low-Voltage: campus-wide spell drain<\/b><div>1) wand lightning and continual flames start going out in the arithmodrome labs.&nbsp;<\/div><div>2) Maintenance logs show growing demand for replacement sigil batteries in dorm waypoints. Dorm lighting goes out for a night. Quartermasters complaining&nbsp;<\/div><div>3)Lorehold reports ancient wards and scrolls fading decades ahead of schedule (clue) access request; ink spectral analysis<\/div><div>4) clue: referee interview, defensive duel halted when both shields collapse simultaneously<\/div><div>5) clue:&nbsp;&nbsp;hushed faculty meetings about spell rationing on campus. Minutes are sealed but a junior TA finds them on a teacher's desk<\/div><div>6) Clue:&nbsp;animal behavior, mana-eels become lethargic and undercharged despite ample feed in labs. a lab assistance shares this<\/div><div>7) Patterns can be mapped of locations where this is occurring. It maps to an old scryptorium ruin sealed over a decade ago (create locations that map to that location)<\/div><div>8) Old procurement slips for Experimental mana-reactors set up in a different location. They were canceled and scheduled to move but the location was never set up and the teacher disappeared. Original procurement slips were signed by <span class=\"character-link staff\" data-character-id=\"staff_1751918949_686c2965cf6c8\" data-character-type=\"staff\" contenteditable=\"false\" title=\"Click to open Dean Augusta Tullus in new tab\" style=\"color: #007bff; background-color: rgba(0, 123, 255, 0.1); padding: 2px 4px; border-radius: 3px; cursor: pointer; font-weight: 500; border-left: 3px solid #dc3545; display: inline;\">Dean Augusta Tullus<\/span> <\/div><div>9) The scriptorium area is sealed off and inaccessible. but there is a note about hidden in arcana message near the door asking for help from whoever the person's partner is<\/div><div>10) confrontation <b>create staff member here <\/b>the party can meet up with them after following the hidden message. Inteded to harvest excess campus mana bu calibration failed flipping it to uncontrolled intake. they sealed it and it sayed dormant for years but it is exponentially increasing in power absorption&nbsp;<\/div><div>11) The item requries 2 <b>keys<\/b>&nbsp;to be put in correctly in an epic montage<\/div><div>12) campus either goes dark, shutting down all sorts of projects and stuff, or they are saviors.&nbsp;<\/div><div><br><\/div><div><b>Skyfall: skyreach island project<\/b><\/div><div>1) Announcement and press release available early from <b>student <\/b>who over heard<\/div><div>2) budget committee minutes available through <b>intern student <\/b>who took notes at the meeting. Budget shows that they are massively over budget after only having just begun the project<\/div><div>3) Delivery logs show sub grade arcanite arriving instead of certified loadstones<\/div><div>4) Student worker injured from low quality materials<\/div><div>5) oversite budget and staffing is slashed 10% <b>student&nbsp;<\/b>&nbsp;informant can tell Sharon<\/div><div>6) Whistleblower <b>student<\/b>&nbsp;seeks out someone to tell that the load bearing ley-web is missing redundancies<\/div><div>7) Mid year presentation showing a demo of the project, a small modelling crystal shutters during he Q&amp;A<\/div><div>8) Campus <b>creatures<\/b>&nbsp;begin roosting in the half finished island and causing problems<\/div><div>9) An appeal to shut it down is put in by several teachers but rejected by the school board<\/div><div>10) Whistleblower&nbsp;<strong>student&nbsp;<\/strong>Levitation-core stress test postponed twice and then \"passed\" provisional<\/div><div>11) Party learns that the thing cant stay stable for more than a few hours<\/div><div>12) <b>Climax: <\/b>island ascends for initial flight. The crew has to get inside to bring it down or it will crash land in the campus.<\/div><div><br><\/div><div><b>Mascot Uprising: Sentience &amp; Civil Rights<\/b><\/div><div>1) Quandrix's fractal mascots are upgraded with experimental matrix. patent filed in campus office<\/div><div>2) This particular <b>Mascot<\/b>&nbsp;becomes well known around campus<\/div><div>3) <b>Groundskeeper<\/b>&nbsp;reports mascot refuses storage crate, quoting philosophy texts<\/div><div>4) Interviews with <b>Mascot<\/b>&nbsp;it asks why it exists \"only for school spirit\"<\/div><div>5) Quandrix Matrix of the Weave department quietly tries to roll back cognition matrix. mascot disappears that night.<\/div><div>6) Cheer squad's banner spell hijacked casting \"FREE THE MASCOTS\"&nbsp;over the stadium<\/div><div>7)Campus security puts out a listing as the mascot being dangerous<\/div><div>8) <b>Climax: <\/b>decide if it should be stopped or made free. The mascot appears mid field in a game and duplicates into hundreds of fractal copies, demanding microphone time. Crowd control spells backfire into kaleidoscopic illusions and there is a serious damage done to <b>something (permanent effect)<\/b><\/div><div><b><br><\/b><\/div><div><b>Blood Lines: Hemomancy Cover-up<\/b><\/div><div>1) Bright first year prodigy <b>Ilyra<\/b>&nbsp;wins potion making contest by a mile despite struggling in alchemy classes<\/div><div>2) Biology <b>TA&nbsp;<\/b>&nbsp;catches Ilyra killing rabbits after hours. Professors wave off as authorized research<\/div><div>3) Ilyra caught collecting viles of her own blood<\/div><div>4) Book goes missing from&nbsp;<\/div><div><b><br><\/b><\/div><div><b><br><\/b><\/div><div><b><br><\/b><\/div><div><b><br><\/b><\/div><div><b><br><\/b><\/div><div><b><br><\/b><\/div><div><b><br><\/b><\/div>",
+            "lastModified": "2025-07-09T07:20:30+00:00",
+            "created": "2025-07-05T19:14:11+00:00"
+        },
+        {
+            "id": "right-2-2",
+            "name": "Dualities",
+            "content": "<p><b><u>Lorehold<\/u><\/b><\/p><p>Lorehold College is devoted to the study of history, broadly understood to include the various aspects of culture, behavior, and social relationships that shape historical events. Its studies include various subdivisions of history (military history, social history, cultural history), archaeology, anthropology, psychology, sociology, religion, and economics. It overlaps with Prismari College in the field of art history, with some students splitting their studies between the two colleges. Lorehold mages use their magic to unearth secrets and share illumination.<\/p><p>-<b>Order:<\/b> Structure pulls people together--Law, religion, economics, education, social class... -- and each of these structures drive historical events. A focus on the systemic changes and the actions of people collectively <\/p><p>-<b>Chaos:<\/b> Individual actions, personal bonds of families and friends, the disruptive force of lone passionate individuals through history. Scholars of chaos gravitate toward reckless discovery and the spirit of adventure in their research of the past-- the essence and emotion of history over precision and procedure<\/p><p><b>-Scholars of Lorehold<\/b><\/p><p>\n<\/p><p><i>Archaeoscribe<\/i>, chronicling historical truths for posterity-Order<\/p><p><i>Battle medium<\/i>, strengthening summoned spirits for use in battles -Order<\/p><p><i>Chaos scholar<\/i>, chasing down historical anecdotes as a litany of happenstance -Chaos<\/p><p><i>Conservator<\/i>, preserving ancient spell knowledge and other relics of the past-Order<\/p><p><i>Dustspeaker<\/i>, conversing with spirits of the past to learn their stories-Chaos<\/p><p><i>Pastraiser<\/i>, binding spirits into the monuments that bear their likeness to learn about their inspiring deeds -Order<\/p><p><i>Relic reader<\/i>, divining wisdom from the past from the context of ruin sites -Order<\/p><p><i>Ruin shaman<\/i>, wielding magic that helps delve into ancient sites -Chaos<\/p><p><i>Tomewielder<\/i>, summoning fiery magic from the words in old writings -Chaos<\/p><p><i>Warsinger<\/i>, studying the magic used in ancient wars -Chaos<\/p><p><br><\/p><p><b><u>Silverquill<\/u><\/b><\/p><p>The curriculum of Silverquill College revolves around words, encompassing literature (including fiction, essays, drama, and poetry), languages, linguistics, oratory, rhetoric, and dramatic performance. Students from other colleges often take Silverquill courses to improve their communication skills, learning to speak and write more effectively about their primary field of study. Silverquill and Prismari see overlap in the area of performing arts, with Silverquill emphasizing verbal performance and Prismari focusing more on dance and other forms of movement.<\/p><p>-<b>Radiance:<\/b> language is used as a light to illuminate others and make the world a brighter place, to uplift others, to shine a light on the evils of society and to inspire the best in those around them<\/p><p><b>-Shadow: <\/b>uses language to steb, expose stinging truths and to obfuscate secrets. The magic of shadow mages manifests as bolts or blads of darkness and effects sting or shame to an assault on the targets life energy<\/p><p><b>-Scholars of Silverquill<\/b><\/p><p>\n<\/p><p>Bantermage, using incisive observation to pierce rivals’ confidence -Shadow<\/p><p>Duskmage, conjuring inky voids of shadow magic -Shadow<\/p><p>Inkcaster, summoning living inklings to service -Shadow<\/p><p>Lumimancer, bringing light to bear on shameful situations and holding corrupt institutions to account -Radiance<\/p><p>Shadewing, forming weapons from darkness to slice and stab at foes -Shadow<\/p><p>Silvertongue, bathing others in the light of inspiring words-Radiance<\/p><p>Vainglory, wielding the power of a perfectly crafted compliment to enhance a person’s best qualities-Radiance<\/p><p>Warsinger, stirring hearts through poetic performance and song -Radiance<\/p><p><br><\/p><p><b><u>Prismari<\/u><\/b><\/p><p>Prismari College is dedicated to the arts. Its scholars view art as the fundamental form of self-expression and magic as a tool, a medium, and an inspiration. Prismari studies focus on visual arts (including architecture, painting, and sculpture) and performing arts (such as dance, music, and theater). The curriculum overlaps with Lorehold in the field of art history and with Silverquill in the literary arts, and some students divide their time between Prismari and one of those other schools to pursue these interdisciplinary fields. Prismari mages use magic to weave the elements into their creations; they might juxtapose fire alongside paint, ceramics, or fabric, or they might choreograph elaborate works that unite a dancer’s movements with gusts and eddies of air.<\/p><p><b>Perfection: <\/b>focus on technique, analysis, theory, aesthetics, and universal principals. Focus on intellect over emotion, strives to be thought-provoking and reflective, and aspires to mastery. Mages tend to use cold, water, wind.<\/p><p><b>Expression: <\/b>emphasizes portrayal of personal emotional truths. Values improvisation, innovation, and rule-breaking, and favor fire, lightning, and earth<\/p><p><b>Scholars of Prismari:<\/b><\/p><p>Aesthemancer, studying abstract principles of beauty for insight into the workings of the multiverse -Perfection<\/p><p>Electrovisionary, wielding the forms of lightning as a paintbrush-Expression<\/p><p>Flamesinger, combining fire and music -Expression<\/p><p>Geosculptor, using earth and lava in volatile emotional displays -Expression<\/p><p>Heartrager, turning inner creative fire into personal strength-Expression<\/p><p>Ice sculptor, crafting ice and cold into immersive experiences -Perfection<\/p><p>Mistmage, shaping cloud, fog, and mist into lasting sculptures-Perfection<\/p><p>Muse channeler, projecting blasts of inspiration toward others-Expression<\/p><p>Opusmancer, creating magical effects on a monumental scale-Perfection<\/p><p>Spectacle mage, hurling stormy displays into the sky-Expression<\/p><p>Waterbinder, shaping water into animated elemental forms -Perfection<\/p><p>Zephyrist, weaving wind with dance -Perfection<\/p><p><br><\/p><p><b><u>Witherbloom<\/u><\/b><\/p><p><b>Growth:<\/b> life drives to thrive. Celebrate diversity and adaptivility of life and the most complex networks of all living things. Urge to survive and reproduce. Positive energy and healing magic.<\/p><p><b>Decay (the vein): <\/b>Inevitability of death and decay. Name comes from the prominence of vampires within the college, whose conceptions of draining life through the vein have proven an important counterweight to the growth of philosophy of Witherbloom. Sees life energy as a resource to be consumed and used rather than a good to be nourished for its own sake. Negative energy and necromancy practice.<\/p><p><b>Scholars of Witherbloom:<\/b><\/p><p>Banelock, using concoctions of noxious ingredients for withering magic-Decay<\/p><p>Hemomancer, drain the essence of living creatures to fuel sinister spells-Decay<\/p><p>Boon witch, brewing drafts to empower the living-Growth<\/p><p>Boughcaller, summoning creatures from bogs-Growth<\/p><p>Dreadbones, infusing dead tissue with magic to create Undead servants-Decay<\/p><p>Earthcroucher, connecting directly with the land to power nature magic-Growth<\/p><p>Leafbinder, using medicinal herbs to soothe wounds-Growth<\/p><p>Pestcatcher, harvesting life energy from the pests of the bayou-Decay<\/p><p><b><u>Quandrix<\/u><\/b><\/p><p><b>Substance: <\/b>emphasizes physical reality. Math is embodied in the natural forces of the multiverse waiting to be discovered by those with the intellect to delve into those secrets. Uses numerical concepts to create altered physical realities out of mathematical possibility.<\/p><p><b>Theory: <\/b>focuses on abstract realms of conjecture and possibility. View math as a lens to understand the cosmos; the math itself is not something that exists (tool). Embrace this perspective to weave illusions and manipulate the fabric of magic itself.<\/p><p><b>Scholars of Quandrix:<\/b><\/p><p>Abstractor, using magic to stretch the possibilities of space -Theory<\/p><p>Augmenter, making creatures and things larger -Substance<\/p><p>Fractalologist, creating beautiful illusory patterns-Theory<\/p><p>Mana scholar, studying snarls, leylines, and star arches-Substance<\/p><p>Metamancer, studying metaphysics to alter reality -Theory<\/p><p>Scale druid, manipulating the size of plants and animals-Substance<\/p><p>Sequence prophet, studying repeating patterns that bend the mind-Theory<\/p><p>Vivifier, conjuring fractal creatures based on biological life-Substance<\/p>",
+            "lastModified": "2025-07-10T17:41:37+00:00",
+            "created": "2025-07-04T22:03:55+00:00"
+        },
+        {
+            "id": "right-2-3",
+            "name": "Campaign 3",
+            "content": "<p><br><\/p>",
+            "lastModified": "2025-07-08T22:25:50+00:00",
+            "created": "2025-07-06T18:30:39+00:00"
+        },
+        {
+            "id": "right-2-4",
+            "name": "Campaign 4",
+            "content": "",
+            "lastModified": "2025-07-06T18:30:39+00:00",
+            "created": "2025-07-06T18:30:39+00:00"
+        },
+        {
+            "id": "right-2-5",
+            "name": "Campaign 5",
+            "content": "",
+            "lastModified": "2025-07-06T18:30:39+00:00",
+            "created": "2025-07-06T18:30:39+00:00"
+        },
+        {
+            "id": "right-2-6",
+            "name": "Campaign 6",
+            "content": "",
+            "lastModified": "2025-07-06T18:30:39+00:00",
+            "created": "2025-07-06T18:30:39+00:00"
+        },
+        {
+            "id": "right-2-7",
+            "name": "Campaign 7",
+            "content": "",
+            "lastModified": "2025-07-06T18:30:39+00:00",
+            "created": "2025-07-06T18:30:39+00:00"
+        },
+        {
+            "id": "right-2-8",
+            "name": "Campaign 8",
+            "content": "",
+            "lastModified": "2025-07-06T18:30:39+00:00",
+            "created": "2025-07-06T18:30:39+00:00"
+        },
+        {
+            "id": "right-2-9",
+            "name": "Campaign 9",
+            "content": "",
+            "lastModified": "2025-07-06T18:30:39+00:00",
+            "created": "2025-07-06T18:30:39+00:00"
+        },
+        {
+            "id": "right-2-10",
+            "name": "Campaign 10",
+            "content": "",
+            "lastModified": "2025-07-06T18:30:39+00:00",
+            "created": "2025-07-06T18:30:39+00:00"
+        },
+        {
+            "id": "right-2-11",
+            "name": "Campaign 11",
+            "content": "",
+            "lastModified": "2025-07-06T18:30:39+00:00",
+            "created": "2025-07-06T18:30:39+00:00"
+        },
+        {
+            "id": "right-2-12",
+            "name": "Campaign 12",
+            "content": "",
+            "lastModified": "2025-07-06T18:30:39+00:00",
+            "created": "2025-07-06T18:30:39+00:00"
+        },
+        {
+            "id": "right-2-13",
+            "name": "Campaign 13",
+            "content": "",
+            "lastModified": "2025-07-06T18:30:39+00:00",
+            "created": "2025-07-06T18:30:39+00:00"
+        },
+        {
+            "id": "right-2-14",
+            "name": "Campaign 14",
+            "content": "",
+            "lastModified": "2025-07-06T18:30:39+00:00",
+            "created": "2025-07-06T18:30:39+00:00"
+        },
+        {
+            "id": "right-2-15",
+            "name": "Campaign 15",
+            "content": "",
+            "lastModified": "2025-07-06T18:30:39+00:00",
+            "created": "2025-07-06T18:30:39+00:00"
+        },
+        {
+            "id": "right-2-16",
+            "name": "Campaign 16",
+            "content": "",
+            "lastModified": "2025-07-06T18:30:39+00:00",
+            "created": "2025-07-06T18:30:39+00:00"
+        },
+        {
+            "id": "right-2-17",
+            "name": "Campaign 17",
+            "content": "",
+            "lastModified": "2025-07-06T18:30:39+00:00",
+            "created": "2025-07-06T18:30:39+00:00"
+        },
+        {
+            "id": "right-2-18",
+            "name": "Campaign 18",
+            "content": "",
+            "lastModified": "2025-07-06T18:30:39+00:00",
+            "created": "2025-07-06T18:30:39+00:00"
+        },
+        {
+            "id": "right-2-19",
+            "name": "Campaign 19",
+            "content": "",
+            "lastModified": "2025-07-06T18:30:39+00:00",
+            "created": "2025-07-06T18:30:39+00:00"
+        },
+        {
+            "id": "right-2-20",
+            "name": "Campaign 20",
+            "content": "",
+            "lastModified": "2025-07-06T18:30:39+00:00",
+            "created": "2025-07-06T18:30:39+00:00"
+        }
+    ],
+    "metadata": {
+        "lastUpdated": "2025-07-10T17:51:13+00:00",
+        "version": "1.0"
+    }
+}

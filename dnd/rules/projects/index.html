@@ -1,0 +1,250 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Projects - D&D Rules</title>
+    <style>
+        body {
+            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+            line-height: 1.6;
+            margin: 20px;
+            background-color: #f5f5f5;
+            color: #333;
+        }
+        .container {
+            max-width: 1400px;
+            margin: 0 auto;
+            background: white;
+            padding: 30px;
+            border-radius: 10px;
+            box-shadow: 0 2px 10px rgba(0,0,0,0.1);
+        }
+        h1 {
+            color: #28a745;
+            border-bottom: 3px solid #28a745;
+            padding-bottom: 10px;
+            margin-bottom: 30px;
+        }
+        h2 {
+            color: #28a745;
+            margin-top: 30px;
+            margin-bottom: 15px;
+        }
+        h3 {
+            color: #5a8f5a;
+            margin-top: 25px;
+            margin-bottom: 10px;
+        }
+        .project-section {
+            margin-bottom: 30px;
+            padding: 20px;
+            background-color: #f8fff8;
+            border-left: 5px solid #28a745;
+            border-radius: 5px;
+        }
+        .dice-box {
+            background-color: #e8f5e8;
+            padding: 15px;
+            border-radius: 8px;
+            margin: 15px 0;
+            text-align: center;
+            font-weight: bold;
+            font-size: 1.2em;
+            color: #155724;
+            border: 2px solid #c3e6cb;
+        }
+        table {
+            width: 100%;
+            border-collapse: collapse;
+            margin: 15px 0;
+            background-color: white;
+            box-shadow: 0 1px 3px rgba(0,0,0,0.2);
+        }
+        th, td {
+            border: 1px solid #ddd;
+            padding: 12px;
+            text-align: left;
+        }
+        th {
+            background-color: #28a745;
+            color: white;
+            font-weight: bold;
+        }
+        tr:nth-child(even) {
+            background-color: #f9f9f9;
+        }
+        .highlight {
+            background-color: #fff3cd;
+            padding: 2px 4px;
+            border-radius: 3px;
+            font-weight: bold;
+        }
+        .performance-rule {
+            background-color: #d1ecf1;
+            color: #0c5460;
+            padding: 15px;
+            border-radius: 5px;
+            margin: 15px 0;
+            border-left: 4px solid #17a2b8;
+        }
+        .point-threshold {
+            background-color: #f8f9fa;
+            padding: 10px;
+            border-radius: 5px;
+            margin: 10px 0;
+            border-left: 4px solid #6c757d;
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+    <div class="container">
+        <h1>📋 School Projects Rules</h1>
+        
+        <div class="project-section">
+            <h2>🎲 Project Types</h2>
+            
+            <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 30px; margin-top: 20px;">
+                <div class="dice-box">
+                    🎯 Normal Projects: <strong>2d10 + 4</strong>
+                </div>
+                
+                <div class="dice-box">
+                    🏫 School Projects: <strong>2d10 + 2</strong>
+                </div>
+            </div>
+        </div>
+
+        <div class="project-section">
+            <h2>👥 School Project Performance</h2>
+            
+            <div class="performance-rule">
+                <strong>Performance Rules:</strong>
+                <ul>
+                    <li>Roll 2d10 for each project participant</li>
+                    <li>Average grade of all participants</li>
+                </ul>
+            </div>
+            
+            <h3>📊 Point Thresholds</h3>
+            <div class="point-threshold">
+                <table>
+                    <tr>
+                        <th>Point Total</th>
+                        <th>Test Difficulty</th>
+                    </tr>
+                    <tr>
+                        <td><strong>Points &lt; 100%</strong></td>
+                        <td style="background-color: #f8d7da; color: #721c24;"><strong>Hard Test</strong></td>
+                    </tr>
+                    <tr>
+                        <td><strong>Points &gt; 100%</strong></td>
+                        <td style="background-color: #fff3cd; color: #856404;"><strong>Medium Test</strong></td>
+                    </tr>
+                    <tr>
+                        <td><strong>Points &gt; 125%</strong></td>
+                        <td style="background-color: #d4edda; color: #155724;"><strong>Easy Test</strong></td>
+                    </tr>
+                </table>
+            </div>
+        </div>
+        
+        <div class="project-section">
+            <h2>📝 Grade Outcomes</h2>
+            
+            <div style="display: grid; grid-template-columns: 1fr 1fr 1fr; gap: 30px; margin-top: 20px;">
+                <div>
+                    <h3>🟢 Easy Test</h3>
+                    <table>
+                        <tr>
+                            <th>Roll Outcome</th>
+                            <th>Grade</th>
+                        </tr>
+                        <tr>
+                            <td><strong>2 or 3</strong></td>
+                            <td style="background-color: #f8d7da; color: #721c24;"><strong>F</strong></td>
+                        </tr>
+                        <tr>
+                            <td><strong>11 or lower</strong></td>
+                            <td style="background-color: #fff3cd; color: #856404;"><strong>C</strong></td>
+                        </tr>
+                        <tr>
+                            <td><strong>12-16</strong></td>
+                            <td style="background-color: #d4edda; color: #155724;"><strong>A</strong></td>
+                        </tr>
+                        <tr>
+                            <td><strong>17+</strong></td>
+                            <td style="background-color: #d4edda; color: #155724;"><strong>A</strong> <span class="highlight">(+1 bonus on next test or project in this class)</span></td>
+                        </tr>
+                        <tr>
+                            <td><strong>Critical</strong></td>
+                            <td style="background-color: #d4edda; color: #155724;"><strong>A Gain one VP</strong></td>
+                        </tr>
+                    </table>
+                </div>
+                
+                <div>
+                    <h3>🟡 Medium Test</h3>
+                    <table>
+                        <tr>
+                            <th>Roll Outcome</th>
+                            <th>Grade</th>
+                        </tr>
+                        <tr>
+                            <td><strong>2 or 3</strong></td>
+                            <td style="background-color: #f8d7da; color: #721c24;"><strong>F</strong></td>
+                        </tr>
+                        <tr>
+                            <td><strong>11 or lower</strong></td>
+                            <td style="background-color: #ffeaa7; color: #856404;"><strong>D</strong></td>
+                        </tr>
+                        <tr>
+                            <td><strong>12-16</strong></td>
+                            <td style="background-color: #cce5ff; color: #004085;"><strong>B</strong></td>
+                        </tr>
+                        <tr>
+                            <td><strong>17+</strong></td>
+                            <td style="background-color: #d4edda; color: #155724;"><strong>A</strong></td>
+                        </tr>
+                        <tr>
+                            <td><strong>Critical</strong></td>
+                            <td style="background-color: #d4edda; color: #155724;"><strong>A</strong></td>
+                        </tr>
+                    </table>
+                </div>
+                
+                <div>
+                    <h3>🔴 Hard Test</h3>
+                    <table>
+                        <tr>
+                            <th>Roll Outcome</th>
+                            <th>Grade</th>
+                        </tr>
+                        <tr>
+                            <td><strong>2 or 3</strong></td>
+                            <td style="background-color: #f8d7da; color: #721c24;"><strong>F</strong></td>
+                        </tr>
+                        <tr>
+                            <td><strong>11 or lower</strong></td>
+                            <td style="background-color: #f8d7da; color: #721c24;"><strong>F</strong></td>
+                        </tr>
+                        <tr>
+                            <td><strong>12-16</strong></td>
+                            <td style="background-color: #fff3cd; color: #856404;"><strong>C</strong></td>
+                        </tr>
+                        <tr>
+                            <td><strong>17+</strong></td>
+                            <td style="background-color: #cce5ff; color: #004085;"><strong>B</strong></td>
+                        </tr>
+                        <tr>
+                            <td><strong>Critical</strong></td>
+                            <td style="background-color: #d4edda; color: #155724;"><strong>A</strong></td>
+                        </tr>
+                    </table>
+                </div>
+            </div>
+        </div>
+    </div>
+</body>
+</html>

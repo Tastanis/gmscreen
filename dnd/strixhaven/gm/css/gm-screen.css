@@ -1,0 +1,2036 @@
+/* =============================================================================
+   FIX SAVE BUTTON AND SCROLLING ISSUES - Add this to the TOP of gm-screen.css
+   ============================================================================= */
+
+/* SAVE BUTTON FIXES */
+.note-controls,
+.tab-popup-controls,
+.popup-controls,
+.modal-controls {
+    display: flex !important;
+    gap: 15px !important;
+    align-items: center !important;
+    position: relative !important;
+    z-index: 1000 !important;
+    visibility: visible !important;
+    opacity: 1 !important;
+}
+
+.control-btn,
+.popup-to-tab-btn,
+.tab-popup-close,
+.save-btn,
+button.save {
+    display: inline-flex !important;
+    align-items: center !important;
+    justify-content: center !important;
+    background: #28a745 !important;
+    color: white !important;
+    border: none !important;
+    padding: 10px 20px !important;
+    border-radius: 6px !important;
+    cursor: pointer !important;
+    font-weight: 500 !important;
+    transition: all 0.3s ease !important;
+    font-size: 14px !important;
+    min-width: 80px !important;
+    height: 40px !important;
+    position: relative !important;
+    z-index: 1000 !important;
+    visibility: visible !important;
+    opacity: 1 !important;
+}
+
+.control-btn.save,
+button.save,
+.save-btn {
+    background: #28a745 !important;
+}
+
+.control-btn.save:hover,
+button.save:hover,
+.save-btn:hover {
+    background: #1e7e34 !important;
+    transform: translateY(-1px) !important;
+    box-shadow: 0 4px 8px rgba(0,0,0,0.2) !important;
+}
+
+/* Close/Cancel buttons */
+.control-btn:not(.save),
+.tab-popup-close {
+    background: #6c757d !important;
+}
+
+.control-btn:not(.save):hover,
+.tab-popup-close:hover {
+    background: #545b62 !important;
+}
+
+/* Open in Tab button */
+.popup-to-tab-btn {
+    background: #667eea !important;
+}
+
+.popup-to-tab-btn:hover {
+    background: #5a67d8 !important;
+}
+
+/* Save status indicator */
+.save-status {
+    font-size: 14px !important;
+    font-weight: 500 !important;
+    transition: color 0.3s ease !important;
+    display: inline-block !important;
+    position: relative !important;
+    z-index: 1000 !important;
+    visibility: visible !important;
+    opacity: 1 !important;
+}
+
+.save-status.saved {
+    color: #28a745 !important;
+}
+
+.save-status.saving {
+    color: #ffc107 !important;
+}
+
+.save-status.error {
+    color: #dc3545 !important;
+}
+
+/* SCROLLING FIXES */
+
+/* Fix rich text editor scrolling */
+.rich-text-editor {
+    flex: 1 !important;
+    padding: 15px !important;
+    min-height: 300px !important;
+    max-height: none !important; /* Remove max-height limit */
+    overflow-y: auto !important; /* Enable vertical scrolling */
+    overflow-x: hidden !important; /* Hide horizontal scrollbar */
+    background: white !important;
+    font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif !important;
+    font-size: 14px !important;
+    line-height: 1.6 !important;
+    color: #495057 !important;
+    outline: none !important;
+    border: none !important;
+    position: relative !important;
+    
+    /* Ensure scrolling works properly */
+    word-wrap: break-word !important;
+    white-space: pre-wrap !important;
+}
+
+/* Fix container scrolling */
+.rich-text-container {
+    display: flex !important;
+    flex-direction: column !important;
+    height: 100% !important;
+    border: 1px solid #ddd !important;
+    border-radius: 6px !important;
+    overflow: hidden !important; /* Container shouldn't scroll, only editor */
+    background: white !important;
+    position: relative !important;
+}
+
+/* Popup editor specific fixes */
+.tab-popup-body {
+    flex: 1 !important;
+    padding: 0 !important;
+    overflow: hidden !important; /* Container manages overflow */
+    display: flex !important;
+    flex-direction: column !important;
+    background: rgba(255, 255, 255, 0.95) !important;
+    min-height: 400px !important;
+}
+
+#popup-rich-text-container {
+    flex: 1 !important;
+    height: 100% !important;
+    min-height: 400px !important;
+    display: flex !important;
+    flex-direction: column !important;
+}
+
+#popup-rich-text-container .rich-text-editor {
+    height: 100% !important;
+    min-height: 350px !important;
+    max-height: 600px !important; /* Set reasonable max height for popup */
+    overflow-y: auto !important;
+}
+
+/* Standalone note editor fixes */
+.note-editor-wrapper {
+    background: white !important;
+    flex: 1 !important;
+    border-radius: 0 0 12px 12px !important;
+    box-shadow: 0 10px 30px rgba(0, 0, 0, 0.1) !important;
+    display: flex !important;
+    flex-direction: column !important;
+    min-height: 70vh !important;
+    overflow: hidden !important; /* Container manages overflow */
+}
+
+.editor-container {
+    flex: 1 !important;
+    display: flex !important;
+    flex-direction: column !important;
+    padding: 20px !important;
+    overflow: hidden !important; /* Container manages overflow */
+}
+
+.editor-container .rich-text-container {
+    flex: 1 !important;
+    min-height: 500px !important;
+}
+
+.editor-container .rich-text-editor {
+    min-height: 450px !important;
+    max-height: 80vh !important; /* Reasonable max height for standalone */
+    overflow-y: auto !important;
+}
+
+/* Header fixes to ensure buttons are visible */
+.note-header,
+.tab-popup-header {
+    background: rgba(255, 255, 255, 0.95) !important;
+    padding: 20px 30px !important;
+    border-radius: 12px 12px 0 0 !important;
+    box-shadow: 0 2px 10px rgba(0, 0, 0, 0.1) !important;
+    display: flex !important;
+    justify-content: space-between !important;
+    align-items: center !important;
+    backdrop-filter: blur(10px) !important;
+    position: relative !important;
+    z-index: 100 !important;
+    flex-shrink: 0 !important; /* Don't shrink header */
+}
+
+.note-title-input,
+.tab-popup-title {
+    font-size: 20px !important;
+    font-weight: 600 !important;
+    border: none !important;
+    background: transparent !important;
+    color: #2c3e50 !important;
+    padding: 8px 12px !important;
+    border-radius: 8px !important;
+    transition: background 0.3s ease !important;
+    flex: 1 !important;
+    max-width: 400px !important;
+    border: 2px solid transparent !important;
+}
+
+.note-title-input:focus,
+.tab-popup-title:focus {
+    outline: none !important;
+    background: rgba(0, 123, 255, 0.1) !important;
+    border-color: rgba(0, 123, 255, 0.3) !important;
+}
+
+/* Custom scrollbar styling */
+.rich-text-editor::-webkit-scrollbar {
+    width: 8px !important;
+}
+
+.rich-text-editor::-webkit-scrollbar-track {
+    background: #f1f1f1 !important;
+    border-radius: 4px !important;
+}
+
+.rich-text-editor::-webkit-scrollbar-thumb {
+    background: #c1c1c1 !important;
+    border-radius: 4px !important;
+}
+
+.rich-text-editor::-webkit-scrollbar-thumb:hover {
+    background: #a8a8a8 !important;
+}
+
+/* Firefox scrollbar */
+.rich-text-editor {
+    scrollbar-width: thin !important;
+    scrollbar-color: #c1c1c1 #f1f1f1 !important;
+}
+
+/* Ensure buttons don't get clipped on mobile */
+@media (max-width: 768px) {
+    .note-header,
+    .tab-popup-header {
+        flex-direction: column !important;
+        gap: 15px !important;
+        padding: 15px 20px !important;
+    }
+    
+    .note-title-input,
+    .tab-popup-title {
+        max-width: 100% !important;
+        text-align: center !important;
+    }
+    
+    .note-controls,
+    .tab-popup-controls {
+        width: 100% !important;
+        justify-content: center !important;
+        flex-wrap: wrap !important;
+    }
+    
+    .control-btn,
+    .popup-to-tab-btn,
+    .tab-popup-close {
+        padding: 8px 16px !important;
+        font-size: 12px !important;
+        min-width: 70px !important;
+        height: 36px !important;
+    }
+}
+
+/* =============================================================================
+   SIMPLE AUTOCOMPLETE FIX - Add this to the TOP of your gm-screen.css
+   ============================================================================= */
+
+/* Force autocomplete to be visible - Nuclear option */
+.character-autocomplete,
+#character-autocomplete,
+#popup-character-autocomplete {
+    position: fixed !important;
+    z-index: 99999 !important;
+    background: white !important;
+    border: 2px solid #667eea !important;
+    border-radius: 8px !important;
+    box-shadow: 0 8px 25px rgba(0, 0, 0, 0.3) !important;
+    min-width: 300px !important;
+    max-height: 300px !important;
+    overflow-y: auto !important;
+    opacity: 1 !important;
+    visibility: visible !important;
+    display: block !important;
+    
+    /* Default position - will be overridden by JavaScript */
+    left: 100px !important;
+    top: 200px !important;
+}
+
+/* When autocomplete should be hidden */
+.character-autocomplete[style*="display: none"],
+#character-autocomplete[style*="display: none"],
+#popup-character-autocomplete[style*="display: none"] {
+    display: none !important;
+}
+
+/* Autocomplete items styling */
+.character-autocomplete .autocomplete-item,
+#character-autocomplete .autocomplete-item,
+#popup-character-autocomplete .autocomplete-item {
+    padding: 12px 15px !important;
+    cursor: pointer !important;
+    border-bottom: 1px solid #f0f0f0 !important;
+    transition: background 0.2s ease !important;
+    display: flex !important;
+    align-items: center !important;
+    gap: 12px !important;
+    background: white !important;
+    color: #333 !important;
+}
+
+.character-autocomplete .autocomplete-item:hover,
+.character-autocomplete .autocomplete-item.selected,
+#character-autocomplete .autocomplete-item:hover,
+#character-autocomplete .autocomplete-item.selected,
+#popup-character-autocomplete .autocomplete-item:hover,
+#popup-character-autocomplete .autocomplete-item.selected {
+    background: #e3f2fd !important;
+    color: #000 !important;
+}
+
+.character-autocomplete .autocomplete-item:last-child,
+#character-autocomplete .autocomplete-item:last-child,
+#popup-character-autocomplete .autocomplete-item:last-child {
+    border-bottom: none !important;
+}
+
+/* Character info styling */
+.autocomplete-item-name {
+    font-weight: 600 !important;
+    color: #2c3e50 !important;
+    font-size: 14px !important;
+}
+
+.autocomplete-item-details {
+    font-size: 12px !important;
+    color: #666 !important;
+    margin-top: 2px !important;
+}
+
+.autocomplete-placeholder {
+    width: 32px !important;
+    height: 32px !important;
+    border-radius: 50% !important;
+    background: #e1e8ed !important;
+    display: flex !important;
+    align-items: center !important;
+    justify-content: center !important;
+    font-size: 16px !important;
+    color: #777 !important;
+    flex-shrink: 0 !important;
+}
+
+.autocomplete-item img {
+    width: 32px !important;
+    height: 32px !important;
+    border-radius: 50% !important;
+    object-fit: cover !important;
+    border: 2px solid #e1e8ed !important;
+    flex-shrink: 0 !important;
+}
+
+.autocomplete-item-info {
+    flex: 1 !important;
+}
+
+/* Ensure containers don't clip the autocomplete */
+.tab-popup,
+.tab-popup-body,
+.rich-text-container,
+.rich-text-editor {
+    overflow: visible !important;
+}
+
+/* Debug border - remove this line once it's working */
+.character-autocomplete[style*="display: block"],
+#character-autocomplete[style*="display: block"],
+#popup-character-autocomplete[style*="display: block"] {
+    border: 3px solid lime !important; /* Green border when visible */
+}
+
+// =============================================================================
+// FIXED POSITIONING FUNCTION for character-lookup.js
+// Replace the positionAutocompleteAtCursor function with this one
+// =============================================================================
+
+positionAutocompleteAtCursor() {
+    // Try popup version first, then regular version
+    let autocomplete = document.getElementById('popup-character-autocomplete');
+    if (!autocomplete || autocomplete.style.display === 'none') {
+        autocomplete = document.getElementById('character-autocomplete');
+    }
+    
+    if (!autocomplete) {
+        console.error('No autocomplete container found for positioning');
+        return;
+    }
+    
+    console.log('Positioning autocomplete container:', autocomplete.id);
+    
+    try {
+        let rect;
+        
+        if (this.currentRange) {
+            rect = this.currentRange.getBoundingClientRect();
+            console.log('Using range rect:', rect);
+        } else {
+            // Fallback: position near the editor
+            const editor = this.currentEditor;
+            if (editor) {
+                rect = editor.getBoundingClientRect();
+                console.log('Using editor rect as fallback:', rect);
+            } else {
+                // Last resort: center of screen
+                rect = {
+                    left: window.innerWidth / 2 - 150,
+                    top: window.innerHeight / 2 - 150,
+                    bottom: window.innerHeight / 2 - 100
+                };
+                console.log('Using center screen fallback');
+            }
+        }
+        
+        // Calculate position
+        let left = Math.max(10, rect.left);
+        let top = rect.bottom + 5;
+        
+        // Keep on screen
+        const maxLeft = window.innerWidth - 320; // 300px width + 20px margin
+        const maxTop = window.innerHeight - 320; // 300px height + 20px margin
+        
+        if (left > maxLeft) {
+            left = maxLeft;
+        }
+        
+        if (top > maxTop) {
+            top = rect.top - 310; // Position above instead
+        }
+        
+        // Apply positioning with !important
+        autocomplete.style.cssText = `
+            position: fixed !important;
+            left: ${left}px !important;
+            top: ${top}px !important;
+            z-index: 99999 !important;
+            display: block !important;
+            visibility: visible !important;
+            opacity: 1 !important;
+            background: white !important;
+            border: 3px solid #667eea !important;
+            border-radius: 8px !important;
+            box-shadow: 0 8px 25px rgba(0, 0, 0, 0.3) !important;
+            min-width: 300px !important;
+            max-height: 300px !important;
+            overflow-y: auto !important;
+        `;
+        
+        console.log(`Autocomplete positioned at: left=${left}px, top=${top}px`);
+        
+        // Debug: log the final computed styles
+        const computed = getComputedStyle(autocomplete);
+        console.log('Final autocomplete styles:', {
+            display: computed.display,
+            visibility: computed.visibility,
+            opacity: computed.opacity,
+            zIndex: computed.zIndex,
+            position: computed.position,
+            left: computed.left,
+            top: computed.top
+        });
+        
+    } catch (error) {
+        console.error('Error positioning autocomplete:', error);
+        
+        // Emergency fallback: fixed position
+        autocomplete.style.cssText = `
+            position: fixed !important;
+            left: 100px !important;
+            top: 100px !important;
+            z-index: 99999 !important;
+            display: block !important;
+            visibility: visible !important;
+            opacity: 1 !important;
+            background: white !important;
+            border: 3px solid red !important;
+            border-radius: 8px !important;
+            box-shadow: 0 8px 25px rgba(0, 0, 0, 0.5) !important;
+            min-width: 300px !important;
+            max-height: 300px !important;
+            overflow-y: auto !important;
+        `;
+        
+        console.log('Applied emergency fallback positioning');
+    }
+}
+
+/* =============================================================================
+   Rich Text Editor Toolbar - FIXED VERSION WITH BETTER VISIBILITY
+   ============================================================================= */
+
+.rich-text-container {
+    display: flex !important;
+    flex-direction: column !important;
+    height: 100% !important;
+    border: 1px solid #ddd !important;
+    border-radius: 6px !important;
+    overflow: hidden !important;
+    background: white !important;
+}
+
+.rich-text-toolbar {
+    display: flex !important;
+    align-items: center !important;
+    padding: 8px 12px !important;
+    background: #f8f9fa !important;
+    border-bottom: 1px solid #e9ecef !important;
+    gap: 5px !important;
+    flex-wrap: wrap !important;
+    min-height: 48px !important;
+    flex-shrink: 0 !important;
+}
+
+.toolbar-btn {
+    background: white !important;
+    border: 1px solid #ddd !important;
+    border-radius: 4px !important;
+    padding: 6px 10px !important;
+    cursor: pointer !important;
+    font-size: 14px !important;
+    font-weight: bold !important;
+    color: #495057 !important;
+    transition: all 0.2s ease !important;
+    min-width: 32px !important;
+    height: 32px !important;
+    display: flex !important;
+    align-items: center !important;
+    justify-content: center !important;
+    line-height: 1 !important;
+    position: relative !important;
+    z-index: 1 !important;
+}
+
+.toolbar-btn:hover {
+    background: #e9ecef !important;
+    border-color: #adb5bd !important;
+    transform: translateY(-1px) !important;
+    box-shadow: 0 2px 4px rgba(0,0,0,0.1) !important;
+}
+
+.toolbar-btn.active {
+    background: #007bff !important;
+    color: white !important;
+    border-color: #007bff !important;
+    box-shadow: 0 2px 4px rgba(0,123,255,0.3) !important;
+}
+
+.toolbar-btn:focus {
+    outline: none !important;
+    box-shadow: 0 0 0 2px rgba(0, 123, 255, 0.25) !important;
+}
+
+.toolbar-separator {
+    width: 1px !important;
+    height: 24px !important;
+    background: #dee2e6 !important;
+    margin: 0 5px !important;
+    flex-shrink: 0 !important;
+}
+
+.rich-text-editor {
+    flex: 1 !important;
+    padding: 15px !important;
+    min-height: 300px !important;
+    max-height: none !important;
+    overflow-y: auto !important;
+    background: white !important;
+    font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif !important;
+    font-size: 14px !important;
+    line-height: 1.6 !important;
+    color: #495057 !important;
+    outline: none !important;
+    border: none !important;
+}
+
+.rich-text-editor:focus {
+    outline: none !important;
+    background: white !important;
+}
+
+.rich-text-editor p {
+    margin: 0 0 10px 0 !important;
+}
+
+.rich-text-editor p:last-child {
+    margin-bottom: 0 !important;
+}
+
+.rich-text-editor:empty::before,
+.rich-text-editor p:only-child:empty::before {
+    content: attr(data-placeholder) !important;
+    color: #adb5bd !important;
+    font-style: italic !important;
+    pointer-events: none !important;
+}
+
+.rich-text-editor.focused:empty::before,
+.rich-text-editor.focused p:only-child:empty::before {
+    display: none !important;
+}
+
+/* Character link styles */
+.rich-text-editor .character-link {
+    color: #007bff !important;
+    text-decoration: none !important;
+    background: rgba(0, 123, 255, 0.1) !important;
+    padding: 2px 4px !important;
+    border-radius: 3px !important;
+    cursor: pointer !important;
+    transition: all 0.2s ease !important;
+    display: inline !important;
+    font-weight: 500 !important;
+}
+
+.rich-text-editor .character-link:hover {
+    background: rgba(0, 123, 255, 0.2) !important;
+    text-decoration: none !important;
+    transform: translateY(-1px) !important;
+}
+
+.rich-text-editor .character-link.student {
+    border-left: 3px solid #28a745 !important;
+}
+
+.rich-text-editor .character-link.staff {
+    border-left: 3px solid #dc3545 !important;
+}
+
+/* Image link styles */
+.rich-text-editor .image-link {
+    color: #ff6b35 !important;
+    text-decoration: none !important;
+    background: rgba(255, 107, 53, 0.1) !important;
+    padding: 2px 4px !important;
+    border-radius: 3px !important;
+    cursor: pointer !important;
+    transition: all 0.2s ease !important;
+    display: inline !important;
+    font-weight: 500 !important;
+    border-left: 3px solid #ff6b35 !important;
+    position: relative !important;
+}
+
+.rich-text-editor .image-link:hover {
+    background: rgba(255, 107, 53, 0.2) !important;
+    text-decoration: none !important;
+    transform: translateY(-1px) !important;
+}
+
+.rich-text-editor .image-link:before {
+    content: "🖼️" !important;
+    font-size: 12px !important;
+    margin-right: 4px !important;
+    opacity: 0.7 !important;
+}
+
+/* Bullet list styling */
+.rich-text-editor ul {
+    margin: 10px 0 !important;
+    padding-left: 30px !important;
+}
+
+.rich-text-editor li {
+    margin: 5px 0 !important;
+}
+
+/* Character Autocomplete */
+.character-autocomplete {
+    position: fixed !important;
+    background: white !important;
+    border: 2px solid #667eea !important;
+    border-radius: 8px !important;
+    max-height: 300px !important;
+    overflow-y: auto !important;
+    z-index: 1001 !important;
+    box-shadow: 0 8px 25px rgba(0, 0, 0, 0.15) !important;
+    min-width: 300px !important;
+    display: none !important;
+}
+
+.autocomplete-item {
+    padding: 12px 15px !important;
+    cursor: pointer !important;
+    border-bottom: 1px solid #f0f0f0 !important;
+    transition: background 0.2s ease !important;
+    display: flex !important;
+    align-items: center !important;
+    gap: 12px !important;
+}
+
+.autocomplete-item:hover,
+.autocomplete-item.selected {
+    background: #f8f9fa !important;
+    border-color: #667eea !important;
+}
+
+.autocomplete-item:last-child {
+    border-bottom: none !important;
+}
+
+.autocomplete-item img {
+    width: 32px !important;
+    height: 32px !important;
+    border-radius: 50% !important;
+    object-fit: cover !important;
+    border: 2px solid #e1e8ed !important;
+}
+
+.autocomplete-placeholder {
+    width: 32px !important;
+    height: 32px !important;
+    border-radius: 50% !important;
+    background: #e1e8ed !important;
+    display: flex !important;
+    align-items: center !important;
+    justify-content: center !important;
+    font-size: 16px !important;
+    color: #777 !important;
+}
+
+.autocomplete-item-info {
+    flex: 1 !important;
+}
+
+.autocomplete-item-name {
+    font-weight: 600 !important;
+    color: #2c3e50 !important;
+    font-size: 14px !important;
+}
+
+.autocomplete-item-details {
+    font-size: 12px !important;
+    color: #666 !important;
+    margin-top: 2px !important;
+}
+
+/* Responsive Design */
+@media (max-width: 768px) {
+    .rich-text-toolbar {
+        padding: 6px 8px !important;
+        gap: 3px !important;
+    }
+    
+    .toolbar-btn {
+        padding: 4px 6px !important;
+        font-size: 12px !important;
+        min-width: 28px !important;
+        height: 28px !important;
+    }
+    
+    .rich-text-editor {
+        padding: 10px !important;
+        font-size: 13px !important;
+        min-height: 250px !important;
+    }
+    
+    .character-autocomplete {
+        min-width: 250px !important;
+        max-height: 200px !important;
+    }
+    
+    .autocomplete-item {
+        padding: 10px 12px !important;
+    }
+}
+
+/* Responsive design for rich text editor */
+@media (max-width: 768px) {
+    .rich-text-toolbar {
+        padding: 6px 8px;
+        gap: 3px;
+    }
+    
+    .toolbar-btn {
+        padding: 4px 6px;
+        font-size: 12px;
+        min-width: 28px;
+        height: 28px;
+    }
+    
+    .rich-text-editor {
+        padding: 10px;
+        font-size: 13px;
+        min-height: 250px;
+    }
+    
+    .character-autocomplete {
+        min-width: 250px;
+        max-height: 200px;
+    }
+    
+    .autocomplete-item {
+        padding: 10px 12px;
+    }
+}/* =============================================================================
+   GM Screen Main Styles - Updated with Wider Panels
+   ============================================================================= */
+
+* {
+    margin: 0;
+    padding: 0;
+    box-sizing: border-box;
+}
+
+body {
+    font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+    height: 100vh;
+    overflow: hidden;
+    position: relative;
+}
+
+/* Background Layer */
+.background-layer {
+    position: fixed;
+    top: 0;
+    left: 0;
+    width: 100%;
+    height: 100%;
+    background-image: url('../images/background.jpg');
+    background-size: cover;
+    background-position: center;
+    background-repeat: no-repeat;
+    background-color: #1a1a2e; /* Fallback color */
+    filter: brightness(0.6) blur(0.5px); /* Increased brightness, reduced blur */
+    z-index: -1;
+}
+
+/* Main Container */
+.gm-screen-container {
+    display: flex;
+    height: 100vh;
+    position: relative;
+    z-index: 1;
+}
+
+/* =============================================================================
+   Side Panels Layout - FIXED WITH D&D THEME STYLING
+   ============================================================================= */
+
+.side-panel {
+    position: fixed;
+    background: rgba(255, 255, 255, 0.95);
+    backdrop-filter: blur(10px);
+    color: #2c3e50;
+    transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+    border-radius: 0 15px 15px 0;
+    box-shadow: 0 4px 20px rgba(0, 0, 0, 0.1);
+    z-index: 150;
+    overflow: hidden;
+    top: 0;
+    height: 100vh;
+}
+
+/* Left panels - positioned at start - WIDER RESTING STATE */
+.left-panel {
+    width: 80px;
+    left: 0;
+}
+
+#left-panel-1 {
+    z-index: 151;
+}
+
+#left-panel-2 {
+    left: 70px;
+    z-index: 152;
+}
+
+/* FIXED: When panel 1 is hovered, it should be on top */
+#left-panel-1:hover,
+#left-panel-1.expanded {
+    z-index: 155; /* Higher than panel 2 */
+}
+
+/* When panel 2 is hovered, it should be on top */
+#left-panel-2:hover,
+#left-panel-2.expanded {
+    z-index: 156; /* Higher than panel 1 when hovered */
+}
+
+/* Right panels - positioned at end - WIDER RESTING STATE */  
+.right-panel {
+    width: 80px;
+    right: 0;
+    border-radius: 15px 0 0 15px;
+}
+
+#right-panel-1 {
+    z-index: 151;
+}
+
+#right-panel-2 {
+    right: 70px;
+    z-index: 152;
+}
+
+/* FIXED: When panel 1 is hovered, it should be on top */
+#right-panel-1:hover,
+#right-panel-1.expanded {
+    z-index: 155; /* Higher than panel 2 */
+}
+
+/* When panel 2 is hovered, it should be on top */
+#right-panel-2:hover,
+#right-panel-2.expanded {
+    z-index: 156; /* Higher than panel 1 when hovered */
+}
+
+/* Panel Expansion - FIXED SO SECOND PANELS EXPAND OUTWARD ONLY */
+.side-panel:hover,
+.side-panel.expanded {
+    width: 350px;
+    box-shadow: 0 10px 30px rgba(0, 0, 0, 0.2);
+}
+
+/* Left panel 2 should NOT move back over panel 1 */
+#left-panel-2:hover,
+#left-panel-2.expanded {
+    left: 70px; /* Stay at same position, don't move to 0 */
+}
+
+/* Right panel 2 should NOT move back over panel 1 */
+#right-panel-2:hover,
+#right-panel-2.expanded {
+    right: 70px; /* Stay at same position, don't move to 0 */
+}
+
+.side-panel.expanded {
+    box-shadow: 0 0 30px rgba(0, 0, 0, 0.5);
+}
+
+/* Panel Handle (Always Visible) - WIDER RESTING STATE */
+.panel-handle {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    height: 100px;
+    width: 100%;
+    background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+    cursor: pointer;
+    border-bottom: 1px solid rgba(255, 255, 255, 0.2);
+    transition: all 0.3s ease;
+    position: relative;
+    z-index: 160;
+    color: white;
+    box-shadow: inset 0 2px 5px rgba(255, 255, 255, 0.2);
+}
+
+.panel-handle:hover {
+    background: linear-gradient(135deg, #5a67d8 0%, #6a4190 100%);
+    box-shadow: inset 0 2px 5px rgba(255, 255, 255, 0.3), 0 2px 10px rgba(0, 0, 0, 0.2);
+}
+
+.panel-title {
+    font-size: 12px;
+    font-weight: 600;
+    text-transform: uppercase;
+    letter-spacing: 1px;
+    margin-bottom: 8px;
+    opacity: 0.9;
+    text-shadow: 1px 1px 2px rgba(0, 0, 0, 0.3);
+    text-align: center;
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    max-width: 70px;
+}
+
+.handle-icon {
+    font-size: 18px;
+    opacity: 0.8;
+    text-shadow: 1px 1px 2px rgba(0, 0, 0, 0.3);
+}
+
+/* Panel Content (Hidden by Default) - D&D THEME */
+.panel-content {
+    opacity: 0;
+    visibility: hidden;
+    transition: opacity 0.3s ease, visibility 0.3s ease;
+    height: calc(100vh - 100px);
+    overflow: hidden;
+    display: flex;
+    flex-direction: column;
+    background: rgba(255, 255, 255, 0.98);
+}
+
+.side-panel:hover .panel-content,
+.side-panel.expanded .panel-content {
+    opacity: 1;
+    visibility: visible;
+}
+
+/* Panel Header - D&D THEME */
+.panel-header {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    padding: 20px 25px;
+    background: linear-gradient(135deg, rgba(103, 126, 234, 0.1) 0%, rgba(118, 75, 162, 0.1) 100%);
+    border-bottom: 2px solid rgba(103, 126, 234, 0.2);
+}
+
+.panel-header h3 {
+    font-size: 20px;
+    font-weight: 600;
+    color: #2c3e50;
+}
+
+.panel-close {
+    background: #e74c3c;
+    border: none;
+    color: white;
+    font-size: 18px;
+    cursor: pointer;
+    width: 30px;
+    height: 30px;
+    border-radius: 50%;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    transition: all 0.3s ease;
+    box-shadow: 0 2px 5px rgba(0, 0, 0, 0.1);
+}
+
+.panel-close:hover {
+    background: #c0392b;
+    transform: scale(1.1);
+}
+
+/* Tabs Container - D&D THEME */
+.tabs-container {
+    flex: 1;
+    overflow-y: auto;
+    padding: 15px 20px;
+    background: rgba(255, 255, 255, 0.95);
+}
+
+.tabs-list {
+    display: flex;
+    flex-direction: column;
+    gap: 8px;
+}
+
+/* Individual Tab - D&D THEME STYLING */
+.tab-item {
+    background: rgba(255, 255, 255, 0.9);
+    border: 2px solid rgba(103, 126, 234, 0.2);
+    border-radius: 10px;
+    padding: 15px 18px;
+    cursor: pointer;
+    transition: all 0.3s ease;
+    position: relative;
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    box-shadow: 0 2px 5px rgba(0, 0, 0, 0.1);
+}
+
+.tab-item:hover {
+    background: rgba(103, 126, 234, 0.1);
+    border-color: rgba(103, 126, 234, 0.4);
+    transform: translateX(8px);
+    box-shadow: 0 4px 12px rgba(0, 0, 0, 0.15);
+}
+
+.tab-item.active {
+    background: linear-gradient(135deg, rgba(103, 126, 234, 0.2) 0%, rgba(118, 75, 162, 0.2) 100%);
+    border-color: #667eea;
+    box-shadow: 0 0 15px rgba(102, 126, 234, 0.3);
+}
+
+.tab-name {
+    font-weight: 600;
+    font-size: 14px;
+    color: #2c3e50;
+}
+
+.tab-actions {
+    display: flex;
+    gap: 8px;
+    opacity: 0;
+    transition: opacity 0.3s ease;
+}
+
+.tab-item:hover .tab-actions {
+    opacity: 1;
+}
+
+.tab-action-btn {
+    background: #667eea;
+    border: none;
+    color: white;
+    font-size: 14px;
+    cursor: pointer;
+    padding: 6px 10px;
+    border-radius: 6px;
+    transition: all 0.3s ease;
+    box-shadow: 0 2px 5px rgba(0, 0, 0, 0.1);
+}
+
+.tab-action-btn:hover {
+    background: #5a67d8;
+    transform: translateY(-1px);
+    box-shadow: 0 4px 8px rgba(0, 0, 0, 0.2);
+}
+
+/* =============================================================================
+   Central Content Area - UPDATED FOR RESPONSIVE LAYOUT
+   ============================================================================= */
+
+.central-content {
+    flex: 1;
+    display: flex;
+    flex-direction: column;
+    padding: 20px;
+    background: rgba(255, 255, 255, 0.02); /* Much more transparent */
+    backdrop-filter: blur(2px); /* Reduced blur */
+    position: relative;
+    min-width: 200px; /* Ensure minimum width */
+}
+
+/* Quick Actions positioned at top */
+.quick-actions {
+    position: absolute;
+    top: 20px;
+    left: 50%;
+    transform: translateX(-50%);
+    display: flex;
+    gap: 15px;
+    flex-wrap: wrap;
+    z-index: 10;
+}
+
+.gm-header {
+    position: absolute;
+    top: 50%;
+    left: 50%;
+    transform: translate(-50%, -50%);
+    text-align: center;
+    color: white;
+    z-index: 5;
+}
+
+.gm-header h1 {
+    font-size: 48px;
+    font-weight: 300;
+    margin-bottom: 10px;
+    text-shadow: 2px 2px 8px rgba(0, 0, 0, 0.8); /* Stronger text shadow */
+}
+
+.session-info {
+    display: flex;
+    justify-content: center;
+    gap: 20px;
+    font-size: 14px;
+    opacity: 0.9;
+    text-shadow: 1px 1px 4px rgba(0, 0, 0, 0.8);
+}
+
+.quick-actions button {
+    background: rgba(0, 0, 0, 0.7); /* Darker background for better visibility */
+    border: 1px solid rgba(255, 255, 255, 0.4);
+    color: white;
+    padding: 10px 20px; /* Slightly smaller */
+    border-radius: 8px;
+    cursor: pointer;
+    transition: all 0.3s ease;
+    font-weight: 500;
+    backdrop-filter: blur(10px);
+    font-size: 14px;
+}
+
+.quick-actions button:hover {
+    background: rgba(0, 0, 0, 0.8);
+    border-color: rgba(255, 255, 255, 0.6);
+    transform: translateY(-2px);
+    box-shadow: 0 4px 12px rgba(0, 0, 0, 0.4);
+}
+
+/* =============================================================================
+   Dice Roller Styles - D&D THEME STYLING
+   ============================================================================= */
+
+.dice-roller {
+    position: fixed;
+    bottom: 20px;
+    left: 50%;
+    transform: translateX(-50%);
+    background: rgba(255, 255, 255, 0.95);
+    border: 2px solid rgba(103, 126, 234, 0.3);
+    border-radius: 15px;
+    padding: 15px;
+    color: #2c3e50;
+    backdrop-filter: blur(10px);
+    z-index: 100;
+    min-width: 320px;
+    box-shadow: 0 8px 25px rgba(0, 0, 0, 0.2);
+    transition: all 0.3s ease;
+}
+
+.dice-roller.collapsed {
+    padding: 10px 20px;
+    min-width: auto;
+}
+
+.dice-roller-header {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    margin-bottom: 10px;
+}
+
+.dice-roller-title {
+    font-size: 16px;
+    font-weight: 600;
+    color: #2c3e50;
+    text-shadow: none;
+}
+
+.dice-toggle-btn {
+    background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+    border: none;
+    color: white;
+    font-size: 16px;
+    cursor: pointer;
+    width: 32px;
+    height: 32px;
+    border-radius: 50%;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    transition: all 0.3s ease;
+    box-shadow: 0 2px 5px rgba(0, 0, 0, 0.1);
+}
+
+.dice-toggle-btn:hover {
+    background: linear-gradient(135deg, #5a67d8 0%, #6a4190 100%);
+    transform: scale(1.1);
+}
+
+.dice-content {
+    display: none;
+}
+
+.dice-content.expanded {
+    display: block;
+}
+
+.dice-buttons-row {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 8px;
+    margin-bottom: 12px;
+}
+
+.dice-btn {
+    background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+    color: white;
+    border: none;
+    padding: 8px 14px;
+    border-radius: 8px;
+    cursor: pointer;
+    font-size: 12px;
+    font-weight: 600;
+    transition: all 0.3s ease;
+    min-width: 50px;
+    box-shadow: 0 2px 5px rgba(0, 0, 0, 0.1);
+}
+
+.dice-btn:hover {
+    background: linear-gradient(135deg, #5a67d8 0%, #6a4190 100%);
+    transform: translateY(-2px);
+    box-shadow: 0 4px 12px rgba(0, 0, 0, 0.15);
+}
+
+.dice-btn.special {
+    background: linear-gradient(135deg, #28a745 0%, #20c997 100%);
+}
+
+.dice-btn.special:hover {
+    background: linear-gradient(135deg, #218838 0%, #17a085 100%);
+}
+
+.dice-queue {
+    background: rgba(240, 240, 240, 0.8);
+    border: 2px solid rgba(103, 126, 234, 0.2);
+    border-radius: 8px;
+    padding: 10px;
+    margin-bottom: 12px;
+    min-height: 35px;
+    font-family: 'Segoe UI', sans-serif;
+    font-size: 14px;
+    color: #2c3e50;
+}
+
+.dice-queue.empty {
+    color: #999;
+    font-style: italic;
+}
+
+.dice-actions {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    gap: 10px;
+}
+
+.dice-roll-btn {
+    background: linear-gradient(135deg, #28a745 0%, #20c997 100%);
+    color: white;
+    border: none;
+    padding: 10px 20px;
+    border-radius: 8px;
+    cursor: pointer;
+    font-weight: bold;
+    transition: all 0.3s ease;
+    box-shadow: 0 2px 5px rgba(0, 0, 0, 0.1);
+}
+
+.dice-roll-btn:hover {
+    background: linear-gradient(135deg, #218838 0%, #17a085 100%);
+    transform: translateY(-1px);
+    box-shadow: 0 4px 12px rgba(0, 0, 0, 0.15);
+}
+
+.dice-clear-btn {
+    background: #e74c3c;
+    color: white;
+    border: none;
+    padding: 8px 16px;
+    border-radius: 8px;
+    cursor: pointer;
+    font-size: 12px;
+    transition: all 0.3s ease;
+    box-shadow: 0 2px 5px rgba(0, 0, 0, 0.1);
+}
+
+.dice-clear-btn:hover {
+    background: #c0392b;
+    transform: translateY(-1px);
+}
+
+.dice-result {
+    font-weight: bold;
+    color: #2c3e50;
+    font-size: 16px;
+}
+
+/* =============================================================================
+   Popup Styles - D&D THEME STYLING
+   ============================================================================= */
+
+.tab-popup {
+    position: fixed;
+    top: 50%;
+    left: 50%;
+    transform: translate(-50%, -50%);
+    background: rgba(255, 255, 255, 0.98);
+    border-radius: 15px;
+    box-shadow: 0 20px 60px rgba(0, 0, 0, 0.3);
+    z-index: 500;
+    width: 90%;
+    max-width: 900px;
+    height: 80%;
+    max-height: 700px;
+    display: flex;
+    flex-direction: column;
+    overflow: hidden;
+    backdrop-filter: blur(10px);
+    border: 2px solid rgba(103, 126, 234, 0.2);
+}
+
+.tab-popup-overlay {
+    position: fixed;
+    top: 0;
+    left: 0;
+    width: 100%;
+    height: 100%;
+    background: rgba(0, 0, 0, 0.6);
+    backdrop-filter: blur(5px);
+    z-index: 499;
+}
+
+.tab-popup-header {
+    background: linear-gradient(135deg, rgba(103, 126, 234, 0.1) 0%, rgba(118, 75, 162, 0.1) 100%);
+    padding: 20px 25px;
+    border-bottom: 2px solid rgba(103, 126, 234, 0.2);
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+}
+
+.tab-popup-title {
+    font-size: 20px;
+    font-weight: 600;
+    color: #2c3e50;
+    border: none;
+    background: transparent;
+    padding: 8px 12px;
+    border-radius: 8px;
+    transition: background 0.3s ease;
+    flex: 1;
+    max-width: 400px;
+    border: 2px solid transparent;
+}
+
+.tab-popup-title:focus {
+    outline: none;
+    background: rgba(103, 126, 234, 0.1);
+    border-color: rgba(103, 126, 234, 0.3);
+}
+
+.tab-popup-controls {
+    display: flex;
+    gap: 12px;
+    align-items: center;
+}
+
+.popup-to-tab-btn {
+    background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+    color: white;
+    border: none;
+    padding: 10px 18px;
+    border-radius: 8px;
+    cursor: pointer;
+    font-weight: 600;
+    transition: all 0.3s ease;
+    box-shadow: 0 2px 5px rgba(0, 0, 0, 0.1);
+}
+
+.popup-to-tab-btn:hover {
+    background: linear-gradient(135deg, #5a67d8 0%, #6a4190 100%);
+    transform: translateY(-1px);
+    box-shadow: 0 4px 12px rgba(0, 0, 0, 0.15);
+}
+
+.tab-popup-close {
+    background: #e74c3c;
+    border: none;
+    color: white;
+    font-size: 20px;
+    cursor: pointer;
+    width: 35px;
+    height: 35px;
+    border-radius: 50%;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    transition: all 0.3s ease;
+    box-shadow: 0 2px 5px rgba(0, 0, 0, 0.1);
+}
+
+.tab-popup-close:hover {
+    background: #c0392b;
+    transform: scale(1.1);
+}
+
+.tab-popup-body {
+    flex: 1;
+    padding: 0;
+    overflow: hidden;
+    display: flex;
+    flex-direction: column;
+    background: rgba(255, 255, 255, 0.95);
+}
+
+#popup-rich-text-container {
+    flex: 1;
+    height: 100%;
+    min-height: 400px;
+}
+
+#popup-character-autocomplete {
+    position: absolute;
+    z-index: 1002;
+}
+
+/* =============================================================================
+   Responsive Design - UPDATED FOR FIXED PANELS
+   ============================================================================= */
+
+@media (max-width: 1200px) {
+    .side-panel:hover,
+    .side-panel.expanded {
+        width: 450px;
+    }
+    
+    .gm-header h1 {
+        font-size: 36px;
+    }
+    
+    .dice-roller {
+        min-width: 280px;
+    }
+}
+
+@media (max-width: 768px) {
+    .side-panel {
+        width: 25px;
+    }
+    
+    .side-panel:hover,
+    .side-panel.expanded {
+        width: 320px;
+    }
+    
+    .central-content {
+        padding: 15px;
+    }
+    
+    .gm-header h1 {
+        font-size: 28px;
+    }
+    
+    .quick-actions {
+        gap: 10px;
+        flex-wrap: wrap;
+    }
+    
+    .quick-actions button {
+        padding: 8px 12px;
+        font-size: 12px;
+    }
+    
+    .dice-roller {
+        bottom: 15px;
+        min-width: 260px;
+    }
+    
+    .tab-popup {
+        width: 95%;
+        height: 90%;
+    }
+    
+    .panel-handle {
+        height: 80px;
+    }
+    
+    .panel-title {
+        font-size: 10px;
+        padding: 2px 6px;
+        max-width: 50px;
+    }
+    
+    .panel-title-edit {
+        width: 50px !important;
+        font-size: 9px !important;
+        padding: 2px 4px !important;
+    }
+    
+    .handle-icon {
+        font-size: 16px;
+    }
+    
+    .tab-action-btn {
+        font-size: 12px;
+        padding: 4px 8px;
+    }
+
+@media (max-width: 480px) {
+    .side-panel:hover,
+    .side-panel.expanded {
+        width: 280px;
+    }
+    
+    .dice-roller {
+        left: 10px;
+        right: 10px;
+        transform: none;
+        min-width: auto;
+    }
+    
+    .tab-popup {
+        width: 98%;
+        height: 95%;
+    }
+    
+    .tab-popup-header {
+        padding: 15px;
+        flex-direction: column;
+        gap: 10px;
+    }
+    
+    .tab-popup-controls {
+        width: 100%;
+        justify-content: center;
+    }
+}
+
+/* Rest of existing styles remain the same... */
+
+/* =============================================================================
+   Modal Styles (existing)
+   ============================================================================= */
+
+.modal {
+    display: none;
+    position: fixed;
+    z-index: 1000;
+    left: 0;
+    top: 0;
+    width: 100%;
+    height: 100%;
+    background-color: rgba(0, 0, 0, 0.7);
+    backdrop-filter: blur(5px);
+}
+
+.modal-content {
+    background: white;
+    margin: 2% auto;
+    border-radius: 12px;
+    width: 90%;
+    max-width: 1200px;
+    height: 90%;
+    display: flex;
+    flex-direction: column;
+    box-shadow: 0 20px 60px rgba(0, 0, 0, 0.5);
+    overflow: hidden;
+}
+
+/* ... (rest of existing styles) ... */
+
+/* =============================================================================
+   Rich Text Editor Styles (existing)
+   ============================================================================= */
+
+.rich-text-container {
+    display: flex;
+    flex-direction: column;
+    height: 100%;
+    border: 1px solid #ddd;
+    border-radius: 6px;
+    overflow: hidden;
+}
+
+.rich-text-toolbar {
+    display: flex;
+    align-items: center;
+    padding: 8px 12px;
+    background: #f8f9fa;
+    border-bottom: 1px solid #e9ecef;
+    gap: 5px;
+    flex-wrap: wrap;
+}
+
+.toolbar-btn {
+    background: white;
+    border: 1px solid #ddd;
+    border-radius: 4px;
+    padding: 6px 10px;
+    cursor: pointer;
+    font-size: 14px;
+    font-weight: bold;
+    color: #495057;
+    transition: all 0.2s ease;
+    min-width: 32px;
+    height: 32px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+}
+
+.toolbar-btn:hover {
+    background: #e9ecef;
+    border-color: #adb5bd;
+}
+
+.toolbar-btn.active {
+    background: #007bff;
+    color: white;
+    border-color: #007bff;
+}
+
+.toolbar-btn:focus {
+    outline: none;
+    box-shadow: 0 0 0 2px rgba(0, 123, 255, 0.25);
+}
+
+.toolbar-separator {
+    width: 1px;
+    height: 24px;
+    background: #dee2e6;
+    margin: 0 5px;
+}
+
+.rich-text-editor {
+    flex: 1;
+    padding: 15px;
+    min-height: 300px;
+    max-height: none;
+    overflow-y: auto;
+    background: white;
+    font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+    font-size: 14px;
+    line-height: 1.6;
+    color: #495057;
+    outline: none;
+}
+
+.rich-text-editor:focus {
+    outline: none;
+}
+
+.rich-text-editor p {
+    margin: 0 0 10px 0;
+}
+
+.rich-text-editor p:last-child {
+    margin-bottom: 0;
+}
+
+.rich-text-editor:empty::before,
+.rich-text-editor p:only-child:empty::before {
+    content: attr(data-placeholder);
+    color: #adb5bd;
+    font-style: italic;
+    pointer-events: none;
+}
+
+.rich-text-editor.focused:empty::before,
+.rich-text-editor.focused p:only-child:empty::before {
+    display: none;
+}
+
+/* =============================================================================
+   Rich Text Editor Styles - RESTORED ORIGINAL FUNCTIONALITY
+   ============================================================================= */
+
+.rich-text-container {
+    display: flex;
+    flex-direction: column;
+    height: 100%;
+    border: 1px solid #ddd;
+    border-radius: 6px;
+    overflow: hidden;
+    background: white;
+}
+
+.rich-text-toolbar {
+    display: flex;
+    align-items: center;
+    padding: 8px 12px;
+    background: #f8f9fa;
+    border-bottom: 1px solid #e9ecef;
+    gap: 5px;
+    flex-wrap: wrap;
+}
+
+.toolbar-btn {
+    background: white;
+    border: 1px solid #ddd;
+    border-radius: 4px;
+    padding: 6px 10px;
+    cursor: pointer;
+    font-size: 14px;
+    font-weight: bold;
+    color: #495057;
+    transition: all 0.2s ease;
+    min-width: 32px;
+    height: 32px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+}
+
+.toolbar-btn:hover {
+    background: #e9ecef;
+    border-color: #adb5bd;
+}
+
+.toolbar-btn.active {
+    background: #007bff;
+    color: white;
+    border-color: #007bff;
+}
+
+.toolbar-btn:focus {
+    outline: none;
+    box-shadow: 0 0 0 2px rgba(0, 123, 255, 0.25);
+}
+
+.toolbar-separator {
+    width: 1px;
+    height: 24px;
+    background: #dee2e6;
+    margin: 0 5px;
+}
+
+.rich-text-editor {
+    flex: 1;
+    padding: 15px;
+    min-height: 300px;
+    max-height: none;
+    overflow-y: auto;
+    background: white;
+    font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+    font-size: 14px;
+    line-height: 1.6;
+    color: #495057;
+    outline: none;
+}
+
+.rich-text-editor:focus {
+    outline: none;
+}
+
+.rich-text-editor p {
+    margin: 0 0 10px 0;
+}
+
+.rich-text-editor p:last-child {
+    margin-bottom: 0;
+}
+
+.rich-text-editor:empty::before,
+.rich-text-editor p:only-child:empty::before {
+    content: attr(data-placeholder);
+    color: #adb5bd;
+    font-style: italic;
+    pointer-events: none;
+}
+
+.rich-text-editor.focused:empty::before,
+.rich-text-editor.focused p:only-child:empty::before {
+    display: none;
+}
+
+/* Character link styles - RESTORED ORIGINAL */
+.rich-text-editor .character-link {
+    color: #007bff;
+    text-decoration: none;
+    background: rgba(0, 123, 255, 0.1);
+    padding: 2px 4px;
+    border-radius: 3px;
+    cursor: pointer;
+    transition: all 0.2s ease;
+    display: inline;
+    font-weight: 500;
+}
+
+.rich-text-editor .character-link:hover {
+    background: rgba(0, 123, 255, 0.2);
+    text-decoration: none;
+}
+
+.rich-text-editor .character-link.student {
+    border-left: 3px solid #28a745;
+}
+
+.rich-text-editor .character-link.staff {
+    border-left: 3px solid #dc3545;
+}
+
+/* Image link styles - RESTORED ORIGINAL */
+.rich-text-editor .image-link {
+    color: #ff6b35;
+    text-decoration: none;
+    background: rgba(255, 107, 53, 0.1);
+    padding: 2px 4px;
+    border-radius: 3px;
+    cursor: pointer;
+    transition: all 0.2s ease;
+    display: inline;
+    font-weight: 500;
+    border-left: 3px solid #ff6b35;
+    position: relative;
+}
+
+.rich-text-editor .image-link:hover {
+    background: rgba(255, 107, 53, 0.2);
+    text-decoration: none;
+    transform: translateY(-1px);
+}
+
+.rich-text-editor .image-link:before {
+    content: "🖼️";
+    font-size: 12px;
+    margin-right: 4px;
+    opacity: 0.7;
+}
+
+/* Character Autocomplete - RESTORED ORIGINAL POSITIONING */
+.character-autocomplete {
+    position: absolute;
+    background: white;
+    border: 2px solid #667eea;
+    border-radius: 8px;
+    max-height: 300px;
+    overflow-y: auto;
+    z-index: 1001;
+    box-shadow: 0 8px 25px rgba(0, 0, 0, 0.15);
+    min-width: 300px;
+    display: none;
+}
+
+.autocomplete-item {
+    padding: 12px 15px;
+    cursor: pointer;
+    border-bottom: 1px solid #f0f0f0;
+    transition: background 0.2s ease;
+    display: flex;
+    align-items: center;
+    gap: 12px;
+}
+
+.autocomplete-item:hover,
+.autocomplete-item.selected {
+    background: #f8f9fa;
+    border-color: #667eea;
+}
+
+.autocomplete-item:last-child {
+    border-bottom: none;
+}
+
+.autocomplete-item img {
+    width: 32px;
+    height: 32px;
+    border-radius: 50%;
+    object-fit: cover;
+    border: 2px solid #e1e8ed;
+}
+
+.autocomplete-placeholder {
+    width: 32px;
+    height: 32px;
+    border-radius: 50%;
+    background: #e1e8ed;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    font-size: 16px;
+    color: #777;
+}
+
+.autocomplete-item-info {
+    flex: 1;
+}
+
+.autocomplete-item-name {
+    font-weight: 600;
+    color: #2c3e50;
+    font-size: 14px;
+}
+
+.autocomplete-item-details {
+    font-size: 12px;
+    color: #666;
+    margin-top: 2px;
+}
+
+/* =============================================================================
+   Utility Classes
+   ============================================================================= */
+
+.hidden {
+    display: none !important;
+}
+
+.fade-in {
+    animation: fadeIn 0.3s ease-in;
+}
+
+@keyframes fadeIn {
+    from { opacity: 0; }
+    to { opacity: 1; }
+}
+
+/* =============================================================================
+   Loading Indicator
+   ============================================================================= */
+
+.loading-indicator {
+    position: fixed;
+    top: 20px;
+    right: 20px;
+    background: rgba(0, 0, 0, 0.8);
+    color: white;
+    padding: 15px 20px;
+    border-radius: 8px;
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    z-index: 1001;
+    backdrop-filter: blur(10px);
+}
+
+.spinner {
+    width: 20px;
+    height: 20px;
+    border: 2px solid #ffffff3a;
+    border-top: 2px solid #fff;
+    border-radius: 50%;
+    animation: spin 1s linear infinite;
+}
+
+@keyframes spin {
+    0% { transform: rotate(0deg); }
+    100% { transform: rotate(360deg); }
+}
