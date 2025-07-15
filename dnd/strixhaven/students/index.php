@@ -10,6 +10,10 @@ if (!isset($_SESSION['logged_in']) || $_SESSION['logged_in'] !== true) {
 $user = $_SESSION['user'];
 $is_gm = ($user === 'GM');
 
+// Include version system
+define('VERSION_SYSTEM_INTERNAL', true);
+require_once '../version.php';
+
 // Include character integration for character details functionality
 require_once '../gm/includes/character-integration.php';
 
@@ -709,10 +713,18 @@ $studentData = loadStudentData();
                 </div>
                 
                 <?php if ($is_gm): ?>
-                <div class="admin-controls" style="background:yellow; border:2px solid red; padding:10px;">
+                <div class="admin-controls">
                     <button class="btn-add" id="add-student-btn">+ Add Student</button>
-                    <span style="background:blue; color:white; padding:5px; margin:0 10px;">SPACE</span>
-                    <button class="btn-import" style="background:red !important; color:white !important; padding:20px !important; display:inline-block !important; border:3px solid blue !important; font-size:18px !important; margin:10px !important; position:relative !important; z-index:9999 !important;" onclick="alert('Button works!'); window.location.href='../character-import.php'">📥 Import Character</button>
+                    <button class="btn-import" id="import-character-btn" onclick="console.log('Import button clicked!'); window.location.href='../character-import.php'">📥 Import Character</button>
+                </div>
+                
+                <!-- DEBUG: GM Status Check -->
+                <div class="debug-info" style="background: #fff3cd; border: 1px solid #ffeaa7; padding: 10px; margin: 10px 0; border-radius: 5px;">
+                    <strong>Debug Info:</strong><br>
+                    User: <?php echo htmlspecialchars($user); ?><br>
+                    Is GM: <?php echo $is_gm ? 'YES' : 'NO'; ?><br>
+                    Session User: <?php echo htmlspecialchars($_SESSION['user'] ?? 'NOT SET'); ?><br>
+                    Import Button Should Show: <?php echo ($is_gm) ? 'YES' : 'NO'; ?>
                 </div>
                 <?php endif; ?>
             </div>
@@ -807,6 +819,12 @@ $studentData = loadStudentData();
     </script>
     <!-- Character Autocomplete Container -->
     <div id="character-autocomplete" class="character-autocomplete" style="display: none;"></div>
+
+    <!-- Version Footer -->
+    <div class="version-footer">
+        <span class="version-info"><?php echo Version::displayVersion(); ?></span>
+        <span class="version-updated">Updated: <?php echo Version::getLastUpdated(); ?></span>
+    </div>
 
     <script src="../gm/js/rich-text-editor.js"></script>
     <script src="../gm/js/character-lookup.js"></script>
