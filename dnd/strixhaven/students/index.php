@@ -715,17 +715,8 @@ $studentData = loadStudentData();
                 <?php if ($is_gm): ?>
                 <div class="admin-controls">
                     <button class="btn-add" id="add-student-btn">+ Add Student</button>
-                    <button class="btn-import" id="import-character-btn" onclick="console.log('Import button clicked!'); window.location.href='../character-import.php'">📥 Import Character</button>
                 </div>
                 
-                <!-- DEBUG: GM Status Check -->
-                <div class="debug-info" style="background: #fff3cd; border: 1px solid #ffeaa7; padding: 10px; margin: 10px 0; border-radius: 5px;">
-                    <strong>Debug Info:</strong><br>
-                    User: <?php echo htmlspecialchars($user); ?><br>
-                    Is GM: <?php echo $is_gm ? 'YES' : 'NO'; ?><br>
-                    Session User: <?php echo htmlspecialchars($_SESSION['user'] ?? 'NOT SET'); ?><br>
-                    Import Button Should Show: <?php echo ($is_gm) ? 'YES' : 'NO'; ?>
-                </div>
                 <?php endif; ?>
             </div>
         </div>

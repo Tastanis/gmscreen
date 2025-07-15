@@ -2,7 +2,8 @@
   "permissions": {
     "allow": [
       "Bash(mkdir:*)",
-      "Bash(php -l:*)"
+      "Bash(php -l:*)",
+      "Bash(rm:*)"
     ],
     "deny": []
   }
