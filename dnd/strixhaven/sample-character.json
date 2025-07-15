@@ -1,0 +1,21 @@
+{
+  "name": "Aria Spellweaver",
+  "race": "Human",
+  "age": "19",
+  "job": "Library Assistant",
+  "year": "2nd",
+  "college": "Quandrix",
+  "clubs": ["Debate Society", "Spell Theory Club"],
+  "edge": "Quick learner with exceptional memory",
+  "bane": "Overconfident and sometimes reckless",
+  "character_information": {
+    "origin": "Small town scholar from a family of farmers",
+    "desire": "Master all forms of magic and become a renowned professor",
+    "fear": "Being forgotten and having accomplished nothing meaningful",
+    "connection": "Childhood friend studying at rival Silverquill college",
+    "impact": "Wants to revolutionize magical education and make it accessible to all",
+    "change": "Learning to work with others instead of trying to do everything alone"
+  },
+  "skills": ["Arcana", "Investigation", "Persuasion", "History", "Insight"],
+  "other_notes": "Has a pet familiar owl named Wisdom. Speaks three languages fluently. Carries a journal filled with spell research notes."
+}
