@@ -709,9 +709,10 @@ $studentData = loadStudentData();
                 </div>
                 
                 <?php if ($is_gm): ?>
-                <div class="admin-controls">
+                <div class="admin-controls" style="background:yellow; border:2px solid red; padding:10px;">
                     <button class="btn-add" id="add-student-btn">+ Add Student</button>
-                    <button class="btn-import" onclick="window.location.href='../character-import.php'">📥 Import Character</button>
+                    <span style="background:blue; color:white; padding:5px; margin:0 10px;">SPACE</span>
+                    <button class="btn-import" style="background:red !important; color:white !important; padding:20px !important; display:inline-block !important; border:3px solid blue !important; font-size:18px !important; margin:10px !important; position:relative !important; z-index:9999 !important;" onclick="alert('Button works!'); window.location.href='../character-import.php'">📥 Import Character</button>
                 </div>
                 <?php endif; ?>
             </div>
