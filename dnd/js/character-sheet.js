@@ -7,7 +7,10 @@ function setupAutoSave() {
     // Auto-save every 30 seconds
     autoSaveInterval = setInterval(function() {
         try {
-            saveAllData(true); // true = silent save
+            // Don't auto-save if we're switching characters
+            if (!isSwitchingCharacter) {
+                saveAllData(true); // true = silent save
+            }
         } catch (error) {
             console.error('Error in auto-save:', error);
             // If auto-save keeps failing, stop it to prevent spam
@@ -26,12 +29,12 @@ function setupAutoSave() {
     });
 }
 
+// Track pending saves to avoid multiple saves of the same field
+const pendingSaves = new Map();
+
 // Setup event listeners for form inputs (GM only)
 function setupEventListeners() {
     if (!isGM) return; // Only GM gets event listeners
-    
-    // Track pending saves to avoid multiple saves of the same field
-    const pendingSaves = new Map();
     
     // Use event delegation with immediate value capture and batched saving
     document.addEventListener('input', function(event) {
@@ -48,8 +51,8 @@ function setupEventListeners() {
                 const value = target.value;
                 const character = currentCharacter;
                 
-                // Only proceed if we have valid data
-                if (field && section && value !== undefined && value !== null) {
+                // Only proceed if we have valid data and not switching characters
+                if (field && section && value !== undefined && value !== null && !isSwitchingCharacter) {
                     // Create a unique key for this field
                     const fieldKey = `${character}-${section}-${field}`;
                     
@@ -61,9 +64,15 @@ function setupEventListeners() {
                     // Set a new timeout for this field
                     const timeoutId = setTimeout(() => {
                         try {
+                            // Don't save if we're now switching characters
+                            if (isSwitchingCharacter) {
+                                pendingSaves.delete(fieldKey);
+                                return;
+                            }
+                            
                             // Use updateClubField for clubs to maintain local data consistency
                             if (section === 'clubs') {
-                                updateClubField(currentClubIndex, field, value);
+                                updateClubField(currentClubIndex, field, value, character);
                             } else {
                                 saveFieldData(character, section, field, value);
                             }
@@ -89,10 +98,19 @@ function setupEventListeners() {
 function switchCharacter(character) {
     if (!isGM) return;
     
+    // Set flag to prevent new saves during switch
+    isSwitchingCharacter = true;
+    
+    // Cancel all pending saves
+    pendingSaves.forEach((timeoutId, key) => {
+        clearTimeout(timeoutId);
+    });
+    pendingSaves.clear();
+    
     // Save current character data before switching
     saveAllData(true);
     
-    // Wait a moment for save to complete, then switch
+    // Wait longer for saves to complete, then switch
     setTimeout(function() {
         // Update current character
         currentCharacter = character;
@@ -105,13 +123,18 @@ function switchCharacter(character) {
         
         // Load new character data
         loadCharacterData(character);
-    }, 200);
+        
+        // Re-enable saves after character data is loaded
+        setTimeout(function() {
+            isSwitchingCharacter = false;
+        }, 500);
+    }, 500); // Increased from 200ms to 500ms
 }
 
 // Switch between sections - WITH AUTO-SAVE for GM only
 function switchSection(section) {
     // Save current data before switching (GM only)
-    if (isGM) {
+    if (isGM && !isSwitchingCharacter) {
         saveAllData(true);
     }
     
@@ -1075,8 +1098,11 @@ function deleteProject(index) {
 }
 
 // Update club field (GM only) - maintains local data consistency
-function updateClubField(index, field, value) {
+function updateClubField(index, field, value, character) {
     if (!isGM) return;
+    
+    // Use the passed character parameter, fallback to currentCharacter if not provided
+    const targetCharacter = character || currentCharacter;
     
     // Ensure clubs array exists
     if (!characterData.clubs) {
@@ -1091,8 +1117,8 @@ function updateClubField(index, field, value) {
     // 1. Update local data immediately
     characterData.clubs[index][field] = value;
     
-    // 2. Save to server
-    saveFieldData(currentCharacter, 'clubs', field, value, index);
+    // 2. Save to server using the correct character
+    saveFieldData(targetCharacter, 'clubs', field, value, index);
 }
 
 // Load clubs - UPDATED FOR READ-ONLY MODE
@@ -1145,7 +1171,7 @@ function loadCurrentClub() {
 // Navigate between clubs - WITH AUTO-SAVE for GM only
 function navigateClub(direction) {
     // Save current club data before navigating (GM only)
-    if (isGM) {
+    if (isGM && !isSwitchingCharacter) {
         saveAllData(true);
     }
     

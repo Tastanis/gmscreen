@@ -976,6 +976,7 @@ $defaultInventoryTab = $is_gm ? 'frunk' : $user;
         let currentClubIndex = 0;
         let currentPastClassIndex = -1;
         let autoSaveInterval;
+        let isSwitchingCharacter = false;
         
         // Inventory variables
         const visibleInventoryTabs = <?php echo json_encode($visibleInventoryTabs); ?>;
