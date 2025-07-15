@@ -178,6 +178,29 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['action'])) {
                     if (!isset($data[$character][$section])) {
                         $data[$character][$section] = array();
                     }
+                    
+                    // CRITICAL DATA VALIDATION: Prevent character name corruption
+                    if ($section === 'character' && $field === 'character_name') {
+                        // Check if trying to set all characters to the same name
+                        $newName = trim($value);
+                        if (!empty($newName)) {
+                            $nameCount = 0;
+                            foreach ($data as $charKey => $charData) {
+                                if (isset($charData['character']['character_name']) && 
+                                    $charData['character']['character_name'] === $newName) {
+                                    $nameCount++;
+                                }
+                            }
+                            
+                            // If this name already exists on another character, reject the save
+                            if ($nameCount > 0 && !isset($data[$character]['character']['character_name']) || 
+                                $data[$character]['character']['character_name'] !== $newName) {
+                                echo json_encode(array('success' => false, 'error' => "Character name '$newName' is already in use by another character"));
+                                exit;
+                            }
+                        }
+                    }
+                    
                     $data[$character][$section][$field] = $value;
                     break;
                     

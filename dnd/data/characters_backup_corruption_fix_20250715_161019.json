@@ -1,10 +1,10 @@
 {
     "frunk": {
         "character": {
-            "character_name": "Frunk",
-            "player_name": "",
-            "class": "",
-            "race": "",
+            "character_name": "Indigo",
+            "player_name": "Peter",
+            "class": "Fury",
+            "race": "Polder",
             "level": "1",
             "college": "NA",
             "minor": "NA",
@@ -173,10 +173,10 @@
     },
     "sharon": {
         "character": {
-            "character_name": "Sharon",
-            "player_name": "",
-            "class": "",
-            "race": "",
+            "character_name": "Indigo",
+            "player_name": "Peter",
+            "class": "Fury",
+            "race": "Polder",
             "level": "1",
             "college": "NA",
             "minor": "NA",
@@ -532,10 +532,10 @@
     },
     "zepha": {
         "character": {
-            "character_name": "Zepha",
-            "player_name": "",
-            "class": "",
-            "race": "",
+            "character_name": "Indigo",
+            "player_name": "Peter",
+            "class": "Fury",
+            "race": "Polder",
             "level": "1",
             "college": "NA",
             "minor": "NA",

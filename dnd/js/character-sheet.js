@@ -94,7 +94,7 @@ function setupEventListeners() {
 
 // Remove the separate debouncedSave function since we're handling it inline now
 
-// Switch between characters (GM only) - WITH AUTO-SAVE
+// Switch between characters (GM only) - WITH SAFE CHARACTER ISOLATION
 function switchCharacter(character) {
     if (!isGM) return;
     
@@ -107,12 +107,15 @@ function switchCharacter(character) {
     });
     pendingSaves.clear();
     
-    // Save current character data before switching
-    saveAllData(true);
+    // CRITICAL FIX: Store the character we're saving FROM before switching
+    const characterToSaveFrom = currentCharacter;
+    
+    // Save current character data before switching (using specific character)
+    saveAllDataForCharacter(characterToSaveFrom, true);
     
     // Wait longer for saves to complete, then switch
     setTimeout(function() {
-        // Update current character
+        // Update current character AFTER saving the previous one
         currentCharacter = character;
         
         // Update tab appearance
@@ -121,6 +124,9 @@ function switchCharacter(character) {
         });
         document.querySelector(`[data-character="${character}"]`).classList.add('active');
         
+        // Clear all form data before loading new character
+        clearAllFormData();
+        
         // Load new character data
         loadCharacterData(character);
         
@@ -128,7 +134,7 @@ function switchCharacter(character) {
         setTimeout(function() {
             isSwitchingCharacter = false;
         }, 500);
-    }, 500); // Increased from 200ms to 500ms
+    }, 500);
 }
 
 // Switch between sections - WITH AUTO-SAVE for GM only
@@ -1312,15 +1318,21 @@ function saveFieldData(character, section, field, value, index = null) {
     });
 }
 
-// Save all data (GM only)
-function saveAllData(silent = false) {
+// Save all data for a specific character (GM only) - FIXED VERSION
+function saveAllDataForCharacter(targetCharacter, silent = false) {
     if (!isGM) return; // Only GM can save
+    
+    // Validate character parameter
+    if (!targetCharacter || !['frunk', 'sharon', 'indigo', 'zepha'].includes(targetCharacter)) {
+        console.error('Invalid character specified for save:', targetCharacter);
+        return;
+    }
     
     if (!silent) {
         showSaveStatus('Saving...', 'loading');
     }
     
-    // Helper function to safely save from an element
+    // Helper function to safely save from an element to specific character
     function safelySaveFromElement(element, section, index = null) {
         if (!element) return;
         
@@ -1332,9 +1344,9 @@ function saveAllData(silent = false) {
             element.value !== undefined && element.value !== null) {
             
             if (index !== null) {
-                saveFieldData(currentCharacter, section, field, element.value, index);
+                saveFieldData(targetCharacter, section, field, element.value, index);
             } else {
-                saveFieldData(currentCharacter, section, field, element.value);
+                saveFieldData(targetCharacter, section, field, element.value);
             }
         }
     }
@@ -1356,7 +1368,31 @@ function saveAllData(silent = false) {
     clubInputs.forEach(input => safelySaveFromElement(input, 'clubs', currentClubIndex));
     
     if (!silent) {
-        showSaveStatus('All data saved', 'success');
+        showSaveStatus(`Data saved for ${targetCharacter}`, 'success');
+    }
+}
+
+// Save all data (GM only) - WRAPPER FOR BACKWARD COMPATIBILITY
+function saveAllData(silent = false) {
+    saveAllDataForCharacter(currentCharacter, silent);
+}
+
+// Clear all form data to prevent contamination
+function clearAllFormData() {
+    if (!isGM) return;
+    
+    // Clear all input and textarea elements
+    const allInputs = document.querySelectorAll('input[data-section], textarea[data-section]');
+    allInputs.forEach(input => {
+        if (input.tagName === 'INPUT' || input.tagName === 'TEXTAREA') {
+            input.value = '';
+        }
+    });
+    
+    // Clear any dynamically populated elements
+    const portraitImg = document.getElementById('character-portrait');
+    if (portraitImg) {
+        portraitImg.src = 'portraits/default.png';
     }
 }
 
