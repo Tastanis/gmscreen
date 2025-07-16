@@ -181,12 +181,13 @@ class RelationshipAutocomplete {
         
         let imagePath = student.image_path;
         if (imagePath && !imagePath.startsWith('http')) {
-            imagePath = `strixhaven/students/${imagePath}`;
+            imagePath = `strixhaven/students/${imagePath}?t=${Date.now()}`;
         }
         
         item.innerHTML = `
             ${imagePath ? 
-                `<img src="${imagePath}" alt="${this.escapeHtml(student.name)}" onerror="this.style.display='none'">` : 
+                `<img src="${imagePath}" alt="${this.escapeHtml(student.name)}" onerror="this.style.display='none'; this.nextElementSibling.style.display='block';">
+                 <div class="autocomplete-placeholder" style="display:none;">👤</div>` : 
                 '<div class="autocomplete-placeholder">👤</div>'
             }
             <div class="autocomplete-item-info">

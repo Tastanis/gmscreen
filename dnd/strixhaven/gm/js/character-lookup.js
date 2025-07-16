@@ -602,7 +602,7 @@ class CharacterLookup {
     }
 
     createStudentDetailContent(student) {
-        const imagePath = student.image_path ? `../students/${student.image_path}` : '';
+        const imagePath = student.image_path ? `../students/${student.image_path}?t=${Date.now()}` : '';
         return `
             <div class="character-portrait-section">
                 ${imagePath ? 
@@ -700,7 +700,7 @@ class CharacterLookup {
     }
 
     createStaffDetailContent(staff) {
-        const imagePath = staff.image_path ? `../staff/${staff.image_path}` : '';
+        const imagePath = staff.image_path ? `../staff/${staff.image_path}?t=${Date.now()}` : '';
         return `
             <div class="character-portrait-section">
                 ${imagePath ? 
@@ -961,18 +961,20 @@ class CharacterLookup {
         
         let imagePath = character.image_path;
         if (imagePath) {
+            const timestamp = Date.now();
             if (character.type === 'student') {
-                imagePath = `../students/${imagePath}`;
+                imagePath = `../students/${imagePath}?t=${timestamp}`;
             } else if (character.type === 'staff') {
-                imagePath = `../staff/${imagePath}`;
+                imagePath = `../staff/${imagePath}?t=${timestamp}`;
             } else if (character.type === 'location') {
-                imagePath = `../locations/${imagePath}`;
+                imagePath = `../locations/${imagePath}?t=${timestamp}`;
             }
         }
         
         item.innerHTML = `
             ${imagePath ? 
-                `<img src="${imagePath}" alt="${this.escapeHtml(character.name)}" onerror="this.style.display='none'">` : 
+                `<img src="${imagePath}" alt="${this.escapeHtml(character.name)}" onerror="this.style.display='none'; this.nextElementSibling.style.display='block';">
+                 <div class="autocomplete-placeholder" style="display:none;">${placeholder}</div>` : 
                 `<div class="autocomplete-placeholder">${placeholder}</div>`
             }
             <div class="autocomplete-item-info">
