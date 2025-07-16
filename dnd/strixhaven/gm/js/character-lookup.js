@@ -973,7 +973,14 @@ class CharacterLookup {
             placeholder = '📍';
         }
         
-        let imagePath = character.image_path;
+        // Handle both old image_path and new images array formats
+        let imagePath = '';
+        if (character.images && character.images.length > 0) {
+            imagePath = character.images[0];
+        } else if (character.image_path) {
+            imagePath = character.image_path;
+        }
+        
         if (imagePath) {
             const timestamp = Date.now();
             if (character.type === 'student') {
