@@ -284,6 +284,7 @@ class GMScreen {
             <div class="tab-popup-header">
                 <input type="text" class="tab-popup-title" value="${this.escapeHtml(tab.name)}" placeholder="Tab Name">
                 <div class="tab-popup-controls">
+                    <div id="popup-save-status" class="save-status" style="margin-right: 10px;"></div>
                     <button class="popup-to-tab-btn" title="Open in New Tab">Open in Tab</button>
                     <button class="tab-popup-close">&times;</button>
                 </div>
@@ -445,6 +446,8 @@ class GMScreen {
     // Save tab from popup
     async saveTabFromPopup(tab, popup, richTextEditor) {
         try {
+            this.updatePopupSaveStatus('Saving...', 'saving');
+            
             const titleInput = popup.querySelector('.tab-popup-title');
             
             const updatedTabData = {
@@ -473,13 +476,21 @@ class GMScreen {
                 this.refreshTabDisplay(tab.id);
                 
                 this.unsavedChanges = false;
+                this.updatePopupSaveStatus('Saved!', 'success');
                 console.log('Tab saved from popup successfully');
+                
+                // Clear status after 2 seconds
+                setTimeout(() => {
+                    this.updatePopupSaveStatus('', '');
+                }, 2000);
             } else {
                 console.error('Save failed:', result.error);
+                this.updatePopupSaveStatus('Save failed!', 'error');
             }
             
         } catch (error) {
             console.error('Error saving tab from popup:', error);
+            this.updatePopupSaveStatus('Save error!', 'error');
         }
     }
 
@@ -499,8 +510,20 @@ class GMScreen {
     }
 
     // Close tab popup
-    closeTabPopup() {
+    async closeTabPopup() {
         if (this.currentPopup) {
+            // Check for unsaved changes before closing
+            if (this.unsavedChanges) {
+                const result = await this.showUnsavedChangesDialog();
+                if (result === 'cancel') {
+                    return; // Don't close if user cancels
+                } else if (result === 'save') {
+                    // Save changes before closing
+                    await this.saveTabFromPopup(this.currentPopup.tab, this.currentPopup.popup, this.currentPopup.richTextEditor);
+                }
+                // If result is 'discard', continue with closing
+            }
+            
             // Clean up rich text editor
             if (this.currentPopup.richTextEditor) {
                 this.currentPopup.richTextEditor.destroy();
@@ -515,6 +538,65 @@ class GMScreen {
             }
             
             this.currentPopup = null;
+            this.unsavedChanges = false; // Reset unsaved changes flag
+        }
+    }
+
+    // Show unsaved changes dialog with save/discard/cancel options
+    showUnsavedChangesDialog() {
+        return new Promise((resolve) => {
+            const dialog = document.createElement('div');
+            dialog.className = 'unsaved-changes-dialog';
+            dialog.innerHTML = `
+                <div class="dialog-overlay"></div>
+                <div class="dialog-content">
+                    <h3>Unsaved Changes</h3>
+                    <p>You have unsaved changes. What would you like to do?</p>
+                    <div class="dialog-buttons">
+                        <button class="dialog-btn dialog-btn-save">Save</button>
+                        <button class="dialog-btn dialog-btn-discard">Discard</button>
+                        <button class="dialog-btn dialog-btn-cancel">Cancel</button>
+                    </div>
+                </div>
+            `;
+            
+            document.body.appendChild(dialog);
+            
+            const cleanup = () => {
+                if (dialog.parentNode) {
+                    dialog.parentNode.removeChild(dialog);
+                }
+            };
+            
+            dialog.querySelector('.dialog-btn-save').addEventListener('click', () => {
+                cleanup();
+                resolve('save');
+            });
+            
+            dialog.querySelector('.dialog-btn-discard').addEventListener('click', () => {
+                cleanup();
+                resolve('discard');
+            });
+            
+            dialog.querySelector('.dialog-btn-cancel').addEventListener('click', () => {
+                cleanup();
+                resolve('cancel');
+            });
+            
+            // Close on overlay click
+            dialog.querySelector('.dialog-overlay').addEventListener('click', () => {
+                cleanup();
+                resolve('cancel');
+            });
+        });
+    }
+
+    // Update save status display in popup
+    updatePopupSaveStatus(message, type = 'info') {
+        const statusElement = document.getElementById('popup-save-status');
+        if (statusElement) {
+            statusElement.textContent = message;
+            statusElement.className = `save-status ${type}`;
         }
     }
 
