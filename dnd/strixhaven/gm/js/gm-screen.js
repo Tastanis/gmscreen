@@ -320,6 +320,9 @@ class GMScreen {
         // Store current popup reference
         this.currentPopup = { popup, overlay, tab };
         
+        // Reset unsaved changes flag when popup opens
+        this.unsavedChanges = false;
+        
         // Handle escape key
         const handleEscape = (e) => {
             if (e.key === 'Escape') {
@@ -372,7 +375,7 @@ class GMScreen {
             });
             
             // Setup character lookup if available
-            if (window.characterLookup && window.characterLookup.isReady()) {
+            if (window.characterLookup && window.characterLookup.isInitialized) {
                 const editor = richTextEditor.getEditor();
                 if (editor) {
                     console.log('Setting up character lookup for popup editor...');
@@ -385,11 +388,11 @@ class GMScreen {
                 console.warn('Character lookup not ready for popup editor');
                 
                 // Try to initialize character lookup if it hasn't been done
-                if (window.characterLookup && !window.characterLookup.isReady()) {
+                if (window.characterLookup && !window.characterLookup.isInitialized) {
                     try {
                         await window.characterLookup.init();
                         const editor = richTextEditor.getEditor();
-                        if (editor && window.characterLookup.isReady()) {
+                        if (editor && window.characterLookup.isInitialized) {
                             window.characterLookup.setupEditorListeners(editor);
                             console.log('Character lookup initialized and connected to popup editor');
                         }
