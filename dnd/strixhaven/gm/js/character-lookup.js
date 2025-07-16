@@ -467,8 +467,8 @@ class CharacterLookup {
                 <meta charset="UTF-8">
                 <meta name="viewport" content="width=device-width, initial-scale=1.0">
                 <title>${this.escapeHtml(student.name)} - Student Details</title>
-                <link rel="stylesheet" href="../../../css/style.css">
-                <link rel="stylesheet" href="../students/css/students.css">
+                <link rel="stylesheet" href="/dnd/css/style.css">
+                <link rel="stylesheet" href="/dnd/strixhaven/students/css/students.css">
                 <style>
                     body { margin: 20px; background: #f8f9fa; }
                     .standalone-header { 
@@ -515,8 +515,8 @@ class CharacterLookup {
                 <meta charset="UTF-8">
                 <meta name="viewport" content="width=device-width, initial-scale=1.0">
                 <title>${this.escapeHtml(staff.name)} - Staff Details</title>
-                <link rel="stylesheet" href="../../../css/style.css">
-                <link rel="stylesheet" href="../staff/css/staff.css">
+                <link rel="stylesheet" href="/dnd/css/style.css">
+                <link rel="stylesheet" href="/dnd/strixhaven/staff/css/staff.css">
                 <style>
                     body { margin: 20px; background: #f8f9fa; }
                     .standalone-header { 
@@ -563,8 +563,8 @@ class CharacterLookup {
                 <meta charset="UTF-8">
                 <meta name="viewport" content="width=device-width, initial-scale=1.0">
                 <title>${this.escapeHtml(location.name)} - Location Details</title>
-                <link rel="stylesheet" href="../../../css/style.css">
-                <link rel="stylesheet" href="../locations/css/locations.css">
+                <link rel="stylesheet" href="/dnd/css/style.css">
+                <link rel="stylesheet" href="/dnd/strixhaven/locations/css/locations.css">
                 <style>
                     body { margin: 20px; background: #f8f9fa; }
                     .standalone-header { 

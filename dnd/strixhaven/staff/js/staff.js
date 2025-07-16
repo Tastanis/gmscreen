@@ -309,7 +309,7 @@ function createStaffCard(member) {
     }
     
     const imageHtml = thumbnailImage ? 
-        `<img src="${escapeHtml(thumbnailImage)}" alt="${escapeHtml(member.name)}" class="staff-thumbnail">` :
+        `<img src="${escapeHtml(thumbnailImage)}?t=${Date.now()}" alt="${escapeHtml(member.name)}" class="staff-thumbnail">` :
         `<div class="staff-placeholder">No Photo</div>`;
     
     return `
@@ -1024,7 +1024,7 @@ function updatePortraitInModal(portraitPath) {
     const portraitSection = document.querySelector('.staff-portrait-section');
     if (portraitSection && selectedStaff) {
         const imageHtml = portraitPath ? 
-            `<img src="${escapeHtml(portraitPath)}" alt="${escapeHtml(selectedStaff.name)}" class="staff-portrait">` :
+            `<img src="${escapeHtml(portraitPath)}?t=${Date.now()}" alt="${escapeHtml(selectedStaff.name)}" class="staff-portrait">` :
             `<div class="staff-portrait-placeholder">No Photo</div>`;
         
         const uploadButton = isGM ? 
@@ -1162,7 +1162,7 @@ function createImageGallery(images, itemId, itemType) {
     return `
         <div class="image-gallery" data-item-id="${itemId}" data-item-type="${itemType}">
             <div class="image-container">
-                <img src="${escapeHtml(images[currentImageIndex])}" 
+                <img src="${escapeHtml(images[currentImageIndex])}?t=${Date.now()}" 
                      alt="${itemType} image" 
                      class="${itemType}-portrait gallery-image"
                      onclick="openImageModal('${escapeHtml(images[currentImageIndex])}')"
@@ -1225,7 +1225,7 @@ function openImageModal(imagePath) {
     }
     const modalImage = document.getElementById('modal-image');
     
-    modalImage.src = imagePath;
+    modalImage.src = imagePath + '?t=' + Date.now();
     modal.style.display = 'block';
 }
 
