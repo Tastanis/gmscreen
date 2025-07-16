@@ -4,7 +4,8 @@
       "Bash(mkdir:*)",
       "Bash(php -l:*)",
       "Bash(rm:*)",
-      "Bash(cp:*)"
+      "Bash(cp:*)",
+      "Bash(true)"
     ],
     "deny": []
   }
