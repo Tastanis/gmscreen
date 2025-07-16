@@ -179,7 +179,7 @@ class RelationshipAutocomplete {
         
         const typeLabel = `Student${student.grade ? ' - ' + student.grade : ''}`;
         
-        let imagePath = student.image_path;
+        let imagePath = student.image_path || (student.images && student.images.length > 0 ? student.images[0] : '');
         if (imagePath && !imagePath.startsWith('http')) {
             imagePath = `strixhaven/students/${imagePath}?t=${Date.now()}`;
         }
