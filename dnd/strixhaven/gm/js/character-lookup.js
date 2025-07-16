@@ -20,6 +20,9 @@ class CharacterLookup {
         this.editorReferences = new Set(); // Track all rich text editors
         this.documentClickListenerSetup = false; // Prevent duplicate document listeners
         this.isProcessingCharacter = false; // Track character processing state
+        this.processingTimeout = null; // Track processing timeout
+        this.processingStartTime = null; // Track when processing started
+        this.maxProcessingTime = 5000; // Maximum processing time (5 seconds)
     }
 
     async init() {
@@ -29,6 +32,10 @@ class CharacterLookup {
             await this.loadAllCharacters();
             this.isInitialized = true;
             console.log('Character Lookup v4.0 initialized successfully with', this.allCharacters.length, 'characters');
+            
+            // Set up periodic state validation
+            this.startStateValidation();
+            
         } catch (error) {
             console.error('Error initializing Character Lookup:', error);
             // Set minimal initialization state to prevent total failure
@@ -1010,25 +1017,34 @@ class CharacterLookup {
         
         console.log('Selecting character:', character.name);
         
-        // Set character processing flag to prevent save conflicts
-        this.isProcessingCharacter = true;
-        
-        if (this.editorType === 'rich') {
-            this.replaceTextWithCharacterLink(character);
-        } else {
-            this.replaceTextWithPlainCharacterReference(character);
+        // Set character processing state with timeout protection
+        if (!this.setProcessingState(true, `selecting character: ${character.name}`)) {
+            console.warn('Could not start character processing, already in progress');
+            return;
         }
         
-        this.hideAutocomplete();
-        
-        // Delay unsaved changes flag to allow character processing to complete
-        setTimeout(() => {
-            this.isProcessingCharacter = false;
+        try {
+            if (this.editorType === 'rich') {
+                this.replaceTextWithCharacterLink(character);
+            } else {
+                this.replaceTextWithPlainCharacterReference(character);
+            }
+            
+            this.hideAutocomplete();
+            
+            // Clear processing state immediately after successful completion
+            this.clearProcessingState();
+            
+            // Mark as unsaved after processing is complete
             if (window.gmScreen) {
                 window.gmScreen.unsavedChanges = true;
-                console.log('Character processing complete, marked as unsaved');
+                console.log('Character selection complete, marked as unsaved');
             }
-        }, 500);
+            
+        } catch (error) {
+            console.error('Error during character selection:', error);
+            this.clearProcessingState();
+        }
     }
 
     replaceTextWithPlainCharacterReference(character) {
@@ -1038,9 +1054,6 @@ class CharacterLookup {
         }
         
         try {
-            // Set processing flag
-            this.isProcessingCharacter = true;
-            
             const textarea = this.currentTextArea;
             const cursorPos = this.currentCursorPosition;
             const text = textarea.value;
@@ -1051,7 +1064,6 @@ class CharacterLookup {
             
             if (lastBrackets === -1) {
                 console.warn('No [[ pattern found before cursor in textarea');
-                this.isProcessingCharacter = false;
                 return;
             }
             
@@ -1072,26 +1084,17 @@ class CharacterLookup {
             
             console.log('Replaced plain text with character reference:', characterReference);
             
-            // Clear processing flag after a delay
-            setTimeout(() => {
-                this.isProcessingCharacter = false;
-            }, 100);
-            
         } catch (error) {
             console.error('Error replacing text with character reference:', error);
-            this.isProcessingCharacter = false;
+            throw error; // Re-throw to be handled by selectCharacter
         }
     }
 
     replaceTextWithCharacterLink(character) {
         try {
-            // Set processing flag
-            this.isProcessingCharacter = true;
-            
             const selection = window.getSelection();
             if (!selection.rangeCount) {
                 console.warn('No selection available for character link replacement');
-                this.isProcessingCharacter = false;
                 return;
             }
             
@@ -1101,7 +1104,6 @@ class CharacterLookup {
             
             if (lastBrackets === -1) {
                 console.warn('No [[ pattern found before cursor');
-                this.isProcessingCharacter = false;
                 return;
             }
             
@@ -1113,14 +1115,9 @@ class CharacterLookup {
             
             console.log('Replaced text with character link for:', character.name);
             
-            // Clear processing flag after a delay
-            setTimeout(() => {
-                this.isProcessingCharacter = false;
-            }, 100);
-            
         } catch (error) {
             console.error('Error replacing text with character link:', error);
-            this.isProcessingCharacter = false;
+            throw error; // Re-throw to be handled by selectCharacter
         }
     }
 
@@ -1209,9 +1206,6 @@ class CharacterLookup {
         if (!this.currentEditor || !this.isInitialized) return;
         
         try {
-            // Set processing flag to prevent save conflicts
-            this.isProcessingCharacter = true;
-            
             // Look for [[character]] patterns that aren't already links
             const regex = /\[\[([^\]]+)\]\]/g;
             
@@ -1279,15 +1273,10 @@ class CharacterLookup {
                 }
             });
             
-            // Clear processing flag after a delay
-            setTimeout(() => {
-                this.isProcessingCharacter = false;
-                console.log('Character link conversion completed');
-            }, 100);
+            console.log('Character link conversion completed');
             
         } catch (error) {
             console.error('Error converting plain text references to links:', error);
-            this.isProcessingCharacter = false;
         }
     }
 
@@ -1332,7 +1321,141 @@ class CharacterLookup {
 
     // Public method to check if character processing is in progress
     isProcessing() {
+        // Check if processing has timed out
+        if (this.isProcessingCharacter && this.processingStartTime) {
+            const elapsed = Date.now() - this.processingStartTime;
+            if (elapsed > this.maxProcessingTime) {
+                console.warn('Character processing timed out, auto-clearing state');
+                this.clearProcessingState();
+                return false;
+            }
+        }
         return this.isProcessingCharacter;
+    }
+
+    // Set character processing state with timeout protection
+    setProcessingState(isProcessing, reason = '') {
+        if (isProcessing) {
+            if (this.isProcessingCharacter) {
+                console.warn('Character processing already in progress, ignoring new request');
+                return false;
+            }
+            
+            console.log(`Starting character processing: ${reason}`);
+            this.isProcessingCharacter = true;
+            this.processingStartTime = Date.now();
+            
+            // Set maximum timeout
+            this.processingTimeout = setTimeout(() => {
+                console.warn('Character processing timeout reached, auto-clearing state');
+                this.clearProcessingState();
+            }, this.maxProcessingTime);
+            
+            return true;
+        } else {
+            this.clearProcessingState();
+            return true;
+        }
+    }
+
+    // Clear character processing state
+    clearProcessingState() {
+        if (this.processingTimeout) {
+            clearTimeout(this.processingTimeout);
+            this.processingTimeout = null;
+        }
+        
+        if (this.isProcessingCharacter) {
+            const elapsed = this.processingStartTime ? Date.now() - this.processingStartTime : 0;
+            console.log(`Clearing character processing state (elapsed: ${elapsed}ms)`);
+        }
+        
+        this.isProcessingCharacter = false;
+        this.processingStartTime = null;
+    }
+
+    // Force reset state (for debugging/recovery)
+    forceResetState() {
+        console.log('Force resetting character lookup state');
+        this.clearProcessingState();
+        this.hideAutocomplete();
+        this.autocompleteVisible = false;
+        this.selectedCharacter = null;
+        this.searchTerm = '';
+        this.currentRange = null;
+        this.currentCursorPosition = null;
+    }
+
+    // Start periodic state validation
+    startStateValidation() {
+        // Validate state every 10 seconds
+        setInterval(() => {
+            this.validateState();
+        }, 10000);
+        
+        console.log('Character lookup state validation started');
+    }
+
+    // Validate current state and auto-correct if needed
+    validateState() {
+        // Check for stuck processing state
+        if (this.isProcessingCharacter && this.processingStartTime) {
+            const elapsed = Date.now() - this.processingStartTime;
+            if (elapsed > this.maxProcessingTime) {
+                console.warn('State validation: Processing state stuck, auto-clearing');
+                this.clearProcessingState();
+            }
+        }
+        
+        // Check for orphaned timeouts
+        if (this.processingTimeout && !this.isProcessingCharacter) {
+            console.warn('State validation: Orphaned timeout detected, clearing');
+            clearTimeout(this.processingTimeout);
+            this.processingTimeout = null;
+        }
+        
+        // Check for stuck autocomplete
+        if (this.autocompleteVisible) {
+            const autocompleteElements = document.querySelectorAll('.character-autocomplete');
+            let visibleCount = 0;
+            autocompleteElements.forEach(el => {
+                if (el.style.display !== 'none') {
+                    visibleCount++;
+                }
+            });
+            
+            if (visibleCount === 0) {
+                console.warn('State validation: Autocomplete state inconsistent, correcting');
+                this.autocompleteVisible = false;
+            }
+        }
+    }
+
+    // Add global recovery function
+    static addGlobalRecovery() {
+        // Add to window for debugging
+        window.characterLookupRecovery = {
+            reset: () => {
+                if (window.characterLookup) {
+                    window.characterLookup.forceResetState();
+                    console.log('Character lookup state reset via global recovery');
+                }
+            },
+            status: () => {
+                if (window.characterLookup) {
+                    return {
+                        isProcessing: window.characterLookup.isProcessing(),
+                        processingStartTime: window.characterLookup.processingStartTime,
+                        autocompleteVisible: window.characterLookup.autocompleteVisible,
+                        isInitialized: window.characterLookup.isInitialized,
+                        characterCount: window.characterLookup.allCharacters.length
+                    };
+                }
+                return { error: 'Character lookup not available' };
+            }
+        };
+        
+        console.log('Global character lookup recovery functions added to window.characterLookupRecovery');
     }
 
     // Public method to get character count
@@ -1625,6 +1748,9 @@ function openCharacterInNewTab() {
 // Initialize
 window.characterLookup = new CharacterLookup();
 window.CharacterLookup = CharacterLookup;
+
+// Add global recovery functions
+CharacterLookup.addGlobalRecovery();
 
 // Helper function to quickly set up autocomplete for elements
 window.setupCharacterAutocomplete = function(elements) {

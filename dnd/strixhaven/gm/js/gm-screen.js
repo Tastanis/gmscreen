@@ -370,17 +370,11 @@ class GMScreen {
                 this.unsavedChanges = true;
                 clearTimeout(saveTimeout);
                 saveTimeout = setTimeout(() => {
-                    // Check if character lookup is processing before saving
-                    if (window.characterLookup && window.characterLookup.isProcessing()) {
-                        console.log('Delaying save due to character processing');
-                        // Retry save after character processing completes
-                        setTimeout(() => {
-                            this.saveTabFromPopup(tab, popup, richTextEditor);
-                        }, 750);
-                    } else {
+                    // Simple delay to allow any quick operations to complete
+                    setTimeout(() => {
                         this.saveTabFromPopup(tab, popup, richTextEditor);
-                    }
-                }, 1500); // Increased from 1000ms to 1500ms
+                    }, 100);
+                }, 1000); // Reduced back to 1000ms
             });
             
             // Setup character lookup if available
@@ -418,17 +412,11 @@ class GMScreen {
                     this.unsavedChanges = true;
                     clearTimeout(saveTimeout);
                     saveTimeout = setTimeout(() => {
-                        // Check if character lookup is processing before saving
-                        if (window.characterLookup && window.characterLookup.isProcessing()) {
-                            console.log('Delaying title save due to character processing');
-                            // Retry save after character processing completes
-                            setTimeout(() => {
-                                this.saveTabFromPopup(tab, popup, richTextEditor);
-                            }, 750);
-                        } else {
+                        // Simple delay to allow any quick operations to complete
+                        setTimeout(() => {
                             this.saveTabFromPopup(tab, popup, richTextEditor);
-                        }
-                    }, 1500); // Increased from 1000ms to 1500ms
+                        }, 100);
+                    }, 1000); // Reduced back to 1000ms
                 });
             }
             
@@ -469,12 +457,6 @@ class GMScreen {
         const maxRetries = 3;
         
         try {
-            // Check if character lookup is processing and wait if needed
-            if (window.characterLookup && window.characterLookup.isProcessing()) {
-                console.log('Character processing detected, waiting before save...');
-                await new Promise(resolve => setTimeout(resolve, 500));
-            }
-            
             console.log(`Saving tab ${tab.id} (attempt ${retryCount + 1})`);
             this.updatePopupSaveStatus('Saving...', 'saving');
             
@@ -492,7 +474,7 @@ class GMScreen {
             formData.append('tab_data', JSON.stringify(updatedTabData));
             
             const controller = new AbortController();
-            const timeoutId = setTimeout(() => controller.abort(), 10000); // 10 second timeout
+            const timeoutId = setTimeout(() => controller.abort(), 15000); // 15 second timeout
             
             const response = await fetch('index.php', {
                 method: 'POST',
@@ -527,7 +509,7 @@ class GMScreen {
         } catch (error) {
             console.error(`Error saving tab ${tab.id} from popup:`, error);
             
-            if (retryCount < maxRetries && !error.name === 'AbortError') {
+            if (retryCount < maxRetries && error.name !== 'AbortError') {
                 console.log(`Retrying save for tab ${tab.id}... attempt ${retryCount + 1} of ${maxRetries}`);
                 this.updatePopupSaveStatus(`Retrying save... (${retryCount + 1}/${maxRetries})`, 'saving');
                 
@@ -563,25 +545,10 @@ class GMScreen {
             try {
                 console.log('Closing tab popup...');
                 
-                // Wait for character processing to complete before closing
-                if (window.characterLookup && window.characterLookup.isProcessing()) {
-                    console.log('Waiting for character processing to complete before closing...');
-                    this.updatePopupSaveStatus('Waiting for character processing...', 'info');
-                    
-                    // Wait up to 2 seconds for character processing to complete
-                    let waitTime = 0;
-                    const maxWait = 2000;
-                    const checkInterval = 100;
-                    
-                    while (window.characterLookup.isProcessing() && waitTime < maxWait) {
-                        await new Promise(resolve => setTimeout(resolve, checkInterval));
-                        waitTime += checkInterval;
-                    }
-                    
-                    if (waitTime >= maxWait) {
-                        console.warn('Character processing timeout, forcing close');
-                        this.updatePopupSaveStatus('Character processing timeout', 'error');
-                    }
+                // Force reset character lookup state before closing
+                if (window.characterLookup) {
+                    console.log('Clearing character lookup state before close');
+                    window.characterLookup.clearProcessingState();
                 }
                 
                 // Check for unsaved changes before closing
@@ -598,7 +565,7 @@ class GMScreen {
                         try {
                             await Promise.race([
                                 this.saveTabFromPopup(this.currentPopup.tab, this.currentPopup.popup, this.currentPopup.richTextEditor),
-                                new Promise((_, reject) => setTimeout(() => reject(new Error('Save timeout')), 15000))
+                                new Promise((_, reject) => setTimeout(() => reject(new Error('Save timeout')), 10000))
                             ]);
                             this.updatePopupSaveStatus('Saved successfully', 'success');
                         } catch (error) {
@@ -751,6 +718,11 @@ class GMScreen {
         console.log('Force closing popup...');
         
         try {
+            // Force reset character lookup state
+            if (window.characterLookup) {
+                window.characterLookup.forceResetState();
+            }
+            
             // Clean up rich text editor
             if (this.currentPopup && this.currentPopup.richTextEditor) {
                 try {
@@ -781,6 +753,38 @@ class GMScreen {
                 window.location.reload();
             }
         }
+    }
+
+    // Add global recovery function for GM screen
+    static addGlobalRecovery() {
+        window.gmScreenRecovery = {
+            forceClosePopup: () => {
+                if (window.gmScreen) {
+                    window.gmScreen.forceClosePopup();
+                    console.log('GM screen popup force closed via global recovery');
+                }
+            },
+            resetState: () => {
+                if (window.gmScreen) {
+                    window.gmScreen.currentPopup = null;
+                    window.gmScreen.unsavedChanges = false;
+                    console.log('GM screen state reset via global recovery');
+                }
+                if (window.characterLookup) {
+                    window.characterLookup.forceResetState();
+                    console.log('Character lookup state reset via global recovery');
+                }
+            },
+            status: () => {
+                return {
+                    hasCurrentPopup: window.gmScreen ? !!window.gmScreen.currentPopup : false,
+                    hasUnsavedChanges: window.gmScreen ? window.gmScreen.unsavedChanges : false,
+                    characterLookupStatus: window.characterLookupRecovery ? window.characterLookupRecovery.status() : null
+                };
+            }
+        };
+        
+        console.log('Global GM screen recovery functions added to window.gmScreenRecovery');
     }
 
     // Update save status display in popup
@@ -1303,3 +1307,6 @@ if (document.readyState === 'loading') {
 
 // Export for module usage
 window.GMScreen = GMScreen;
+
+// Add global recovery functions
+GMScreen.addGlobalRecovery();
