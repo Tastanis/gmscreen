@@ -451,7 +451,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['action'])) {
                             'type' => 'student',
                             'grade' => isset($student['grade']) ? $student['grade'] : '',
                             'college' => isset($student['college']) ? $student['college'] : '',
-                            'image_path' => isset($student['image_path']) ? $student['image_path'] : (isset($student['images']) && !empty($student['images']) ? $student['images'][0] : '')
+                            'image_path' => isset($student['image_path']) ? $student['image_path'] : ''
                         );
                     }
                 }
@@ -469,7 +469,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['action'])) {
                             'type' => 'staff',
                             'college' => isset($staff['college']) ? $staff['college'] : '',
                             'role' => isset($staff['role']) ? $staff['role'] : '',
-                            'image_path' => isset($staff['image_path']) ? $staff['image_path'] : (isset($staff['images']) && !empty($staff['images']) ? $staff['images'][0] : '')
+                            'image_path' => isset($staff['image_path']) ? $staff['image_path'] : ''
                         );
                     }
                 }

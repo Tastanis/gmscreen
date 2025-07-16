@@ -38,12 +38,19 @@
     background-color: #f5f5f5;
 }
 
-.autocomplete-item img {
+.autocomplete-image-container {
+    width: 40px;
+    height: 40px;
+    margin-right: 12px;
+    flex-shrink: 0;
+}
+
+.autocomplete-image {
     width: 40px;
     height: 40px;
     border-radius: 50%;
     object-fit: cover;
-    margin-right: 12px;
+    display: block;
 }
 
 .autocomplete-placeholder {
@@ -54,9 +61,17 @@
     display: flex;
     align-items: center;
     justify-content: center;
-    margin-right: 12px;
     font-size: 20px;
     color: #999;
+}
+
+/* Legacy support for existing img tags */
+.autocomplete-item img {
+    width: 40px;
+    height: 40px;
+    border-radius: 50%;
+    object-fit: cover;
+    margin-right: 12px;
 }
 
 .autocomplete-item-info {
