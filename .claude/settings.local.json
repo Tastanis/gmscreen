@@ -5,7 +5,8 @@
       "Bash(php -l:*)",
       "Bash(rm:*)",
       "Bash(cp:*)",
-      "Bash(true)"
+      "Bash(true)",
+      "Bash(grep:*)"
     ],
     "deny": []
   }

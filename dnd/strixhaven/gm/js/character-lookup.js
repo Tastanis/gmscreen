@@ -602,7 +602,14 @@ class CharacterLookup {
     }
 
     createStudentDetailContent(student) {
-        const imagePath = student.image_path ? `../students/${student.image_path}?t=${Date.now()}` : '';
+        // Handle both old image_path and new images array formats
+        let imagePath = '';
+        if (student.images && student.images.length > 0) {
+            imagePath = `../students/${student.images[0]}?t=${Date.now()}`;
+        } else if (student.image_path) {
+            imagePath = `../students/${student.image_path}?t=${Date.now()}`;
+        }
+        
         return `
             <div class="character-portrait-section">
                 ${imagePath ? 
@@ -700,7 +707,14 @@ class CharacterLookup {
     }
 
     createStaffDetailContent(staff) {
-        const imagePath = staff.image_path ? `../staff/${staff.image_path}?t=${Date.now()}` : '';
+        // Handle both old image_path and new images array formats
+        let imagePath = '';
+        if (staff.images && staff.images.length > 0) {
+            imagePath = `../staff/${staff.images[0]}?t=${Date.now()}`;
+        } else if (staff.image_path) {
+            imagePath = `../staff/${staff.image_path}?t=${Date.now()}`;
+        }
+        
         return `
             <div class="character-portrait-section">
                 ${imagePath ? 

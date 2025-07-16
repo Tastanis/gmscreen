@@ -10,12 +10,20 @@ function searchCharactersByName($searchTerm) {
     if ($staffData && isset($staffData['staff'])) {
         foreach ($staffData['staff'] as $member) {
             if (stripos($member['name'], $searchTerm) !== false) {
+                // Handle both old image_path and new images array formats
+                $imagePath = '';
+                if (isset($member['images']) && !empty($member['images'])) {
+                    $imagePath = $member['images'][0];
+                } elseif (isset($member['image_path'])) {
+                    $imagePath = $member['image_path'];
+                }
+                
                 $results[] = array(
                     'id' => $member['staff_id'],
                     'name' => $member['name'],
                     'type' => 'staff',
                     'college' => isset($member['college']) ? $member['college'] : '',
-                    'image_path' => isset($member['image_path']) ? $member['image_path'] : '',
+                    'image_path' => $imagePath,
                     'description' => isset($member['character_description']) ? substr($member['character_description'], 0, 100) : ''
                 );
             }
@@ -27,13 +35,21 @@ function searchCharactersByName($searchTerm) {
     if ($studentsData && isset($studentsData['students'])) {
         foreach ($studentsData['students'] as $student) {
             if (stripos($student['name'], $searchTerm) !== false) {
+                // Handle both old image_path and new images array formats
+                $imagePath = '';
+                if (isset($student['images']) && !empty($student['images'])) {
+                    $imagePath = $student['images'][0];
+                } elseif (isset($student['image_path'])) {
+                    $imagePath = $student['image_path'];
+                }
+                
                 $results[] = array(
                     'id' => $student['student_id'],
                     'name' => $student['name'],
                     'type' => 'student',
                     'grade' => isset($student['grade_level']) ? $student['grade_level'] : '',
                     'college' => isset($student['college']) ? $student['college'] : '',
-                    'image_path' => isset($student['image_path']) ? $student['image_path'] : '',
+                    'image_path' => $imagePath,
                     'description' => isset($student['details']['backstory']) ? substr($student['details']['backstory'], 0, 100) : ''
                 );
             }
@@ -56,12 +72,20 @@ function getAllCharacterNames() {
     $staffData = loadStaffDataDirect();
     if ($staffData && isset($staffData['staff'])) {
         foreach ($staffData['staff'] as $member) {
+            // Handle both old image_path and new images array formats
+            $imagePath = '';
+            if (isset($member['images']) && !empty($member['images'])) {
+                $imagePath = $member['images'][0];
+            } elseif (isset($member['image_path'])) {
+                $imagePath = $member['image_path'];
+            }
+            
             $results[] = array(
                 'id' => $member['staff_id'],
                 'name' => $member['name'],
                 'type' => 'staff',
                 'college' => isset($member['college']) ? $member['college'] : '',
-                'image_path' => isset($member['image_path']) ? $member['image_path'] : ''
+                'image_path' => $imagePath
             );
         }
     }
@@ -70,13 +94,21 @@ function getAllCharacterNames() {
     $studentsData = loadStudentsDataDirect();
     if ($studentsData && isset($studentsData['students'])) {
         foreach ($studentsData['students'] as $student) {
+            // Handle both old image_path and new images array formats
+            $imagePath = '';
+            if (isset($student['images']) && !empty($student['images'])) {
+                $imagePath = $student['images'][0];
+            } elseif (isset($student['image_path'])) {
+                $imagePath = $student['image_path'];
+            }
+            
             $results[] = array(
                 'id' => $student['student_id'],
                 'name' => $student['name'],
                 'type' => 'student',
                 'grade' => isset($student['grade_level']) ? $student['grade_level'] : '',
                 'college' => isset($student['college']) ? $student['college'] : '',
-                'image_path' => isset($student['image_path']) ? $student['image_path'] : ''
+                'image_path' => $imagePath
             );
         }
     }
