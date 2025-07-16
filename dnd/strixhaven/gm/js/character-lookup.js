@@ -19,6 +19,7 @@ class CharacterLookup {
         this.observerMap = new Map(); // Track mutation observers for each textarea
         this.editorReferences = new Set(); // Track all rich text editors
         this.documentClickListenerSetup = false; // Prevent duplicate document listeners
+        this.isProcessingCharacter = false; // Track character processing state
     }
 
     async init() {
@@ -1009,6 +1010,9 @@ class CharacterLookup {
         
         console.log('Selecting character:', character.name);
         
+        // Set character processing flag to prevent save conflicts
+        this.isProcessingCharacter = true;
+        
         if (this.editorType === 'rich') {
             this.replaceTextWithCharacterLink(character);
         } else {
@@ -1017,52 +1021,89 @@ class CharacterLookup {
         
         this.hideAutocomplete();
         
-        if (window.gmScreen) {
-            window.gmScreen.unsavedChanges = true;
-        }
+        // Delay unsaved changes flag to allow character processing to complete
+        setTimeout(() => {
+            this.isProcessingCharacter = false;
+            if (window.gmScreen) {
+                window.gmScreen.unsavedChanges = true;
+                console.log('Character processing complete, marked as unsaved');
+            }
+        }, 500);
     }
 
     replaceTextWithPlainCharacterReference(character) {
-        if (!this.currentTextArea) return;
+        if (!this.currentTextArea) {
+            console.warn('No current textarea available for character reference replacement');
+            return;
+        }
         
-        const textarea = this.currentTextArea;
-        const cursorPos = this.currentCursorPosition;
-        const text = textarea.value;
-        
-        // Find the [[ pattern before cursor
-        const textBefore = text.substring(0, cursorPos);
-        const lastBrackets = textBefore.lastIndexOf('[[');
-        
-        if (lastBrackets === -1) return;
-        
-        // Replace [[searchTerm with [Character Name]
-        const beforePattern = text.substring(0, lastBrackets);
-        const afterCursor = text.substring(cursorPos);
-        const characterReference = `[${character.name}]`;
-        
-        const newText = beforePattern + characterReference + ' ' + afterCursor;
-        const newCursorPos = beforePattern.length + characterReference.length + 1;
-        
-        textarea.value = newText;
-        textarea.setSelectionRange(newCursorPos, newCursorPos);
-        
-        // Trigger change event for auto-save
-        const event = new Event('input', { bubbles: true });
-        textarea.dispatchEvent(event);
-        
-        console.log('Replaced plain text with character reference:', characterReference);
+        try {
+            // Set processing flag
+            this.isProcessingCharacter = true;
+            
+            const textarea = this.currentTextArea;
+            const cursorPos = this.currentCursorPosition;
+            const text = textarea.value;
+            
+            // Find the [[ pattern before cursor
+            const textBefore = text.substring(0, cursorPos);
+            const lastBrackets = textBefore.lastIndexOf('[[');
+            
+            if (lastBrackets === -1) {
+                console.warn('No [[ pattern found before cursor in textarea');
+                this.isProcessingCharacter = false;
+                return;
+            }
+            
+            // Replace [[searchTerm with [Character Name]
+            const beforePattern = text.substring(0, lastBrackets);
+            const afterCursor = text.substring(cursorPos);
+            const characterReference = `[${character.name}]`;
+            
+            const newText = beforePattern + characterReference + ' ' + afterCursor;
+            const newCursorPos = beforePattern.length + characterReference.length + 1;
+            
+            textarea.value = newText;
+            textarea.setSelectionRange(newCursorPos, newCursorPos);
+            
+            // Trigger change event for auto-save
+            const event = new Event('input', { bubbles: true });
+            textarea.dispatchEvent(event);
+            
+            console.log('Replaced plain text with character reference:', characterReference);
+            
+            // Clear processing flag after a delay
+            setTimeout(() => {
+                this.isProcessingCharacter = false;
+            }, 100);
+            
+        } catch (error) {
+            console.error('Error replacing text with character reference:', error);
+            this.isProcessingCharacter = false;
+        }
     }
 
     replaceTextWithCharacterLink(character) {
         try {
+            // Set processing flag
+            this.isProcessingCharacter = true;
+            
             const selection = window.getSelection();
-            if (!selection.rangeCount) return;
+            if (!selection.rangeCount) {
+                console.warn('No selection available for character link replacement');
+                this.isProcessingCharacter = false;
+                return;
+            }
             
             const range = selection.getRangeAt(0);
             const textBefore = this.getTextBeforeCursor(range);
             const lastBrackets = textBefore.lastIndexOf('[[');
             
-            if (lastBrackets === -1) return;
+            if (lastBrackets === -1) {
+                console.warn('No [[ pattern found before cursor');
+                this.isProcessingCharacter = false;
+                return;
+            }
             
             // Use the improved replacement method
             const searchPattern = '[[' + this.searchTerm;
@@ -1072,8 +1113,14 @@ class CharacterLookup {
             
             console.log('Replaced text with character link for:', character.name);
             
+            // Clear processing flag after a delay
+            setTimeout(() => {
+                this.isProcessingCharacter = false;
+            }, 100);
+            
         } catch (error) {
             console.error('Error replacing text with character link:', error);
+            this.isProcessingCharacter = false;
         }
     }
 
@@ -1161,62 +1208,87 @@ class CharacterLookup {
     convertPlainTextReferencesToLinks() {
         if (!this.currentEditor || !this.isInitialized) return;
         
-        // Look for [[character]] patterns that aren't already links
-        const regex = /\[\[([^\]]+)\]\]/g;
-        
-        // First, find all text nodes and check for patterns
-        const walker = document.createTreeWalker(
-            this.currentEditor,
-            NodeFilter.SHOW_TEXT,
-            null,
-            false
-        );
-        
-        const textNodes = [];
-        let node;
-        while (node = walker.nextNode()) {
-            if (regex.test(node.textContent)) {
-                textNodes.push(node);
-            }
-        }
-        
-        // Process each text node that contains patterns
-        textNodes.forEach(textNode => {
-            const text = textNode.textContent;
-            const matches = [];
+        try {
+            // Set processing flag to prevent save conflicts
+            this.isProcessingCharacter = true;
             
-            // Reset regex
-            regex.lastIndex = 0;
-            let match;
-            while ((match = regex.exec(text)) !== null) {
-                const characterName = match[1];
-                const character = this.findCharacterByName(characterName);
-                
-                if (character) {
-                    matches.push({
-                        index: match.index,
-                        length: match[0].length,
-                        text: match[0],
-                        character: character
-                    });
+            // Look for [[character]] patterns that aren't already links
+            const regex = /\[\[([^\]]+)\]\]/g;
+            
+            // First, find all text nodes and check for patterns
+            const walker = document.createTreeWalker(
+                this.currentEditor,
+                NodeFilter.SHOW_TEXT,
+                null,
+                false
+            );
+            
+            const textNodes = [];
+            let node;
+            while (node = walker.nextNode()) {
+                if (regex.test(node.textContent)) {
+                    textNodes.push(node);
                 }
             }
             
-            // Replace matches from right to left to preserve indices
-            matches.reverse().forEach(match => {
-                const range = document.createRange();
-                range.setStart(textNode, match.index);
-                range.setEnd(textNode, match.index + match.length);
-                
-                range.deleteContents();
-                
-                const tempDiv = document.createElement('div');
-                tempDiv.innerHTML = this.createCharacterLinkHtml(match.character);
-                const linkElement = tempDiv.firstChild;
-                
-                range.insertNode(linkElement);
+            // Process each text node that contains patterns
+            textNodes.forEach(textNode => {
+                try {
+                    const text = textNode.textContent;
+                    const matches = [];
+                    
+                    // Reset regex
+                    regex.lastIndex = 0;
+                    let match;
+                    while ((match = regex.exec(text)) !== null) {
+                        const characterName = match[1];
+                        const character = this.findCharacterByName(characterName);
+                        
+                        if (character) {
+                            matches.push({
+                                index: match.index,
+                                length: match[0].length,
+                                text: match[0],
+                                character: character
+                            });
+                        } else {
+                            console.warn(`Character not found for conversion: ${characterName}`);
+                        }
+                    }
+                    
+                    // Replace matches from right to left to preserve indices
+                    matches.reverse().forEach(match => {
+                        try {
+                            const range = document.createRange();
+                            range.setStart(textNode, match.index);
+                            range.setEnd(textNode, match.index + match.length);
+                            
+                            range.deleteContents();
+                            
+                            const tempDiv = document.createElement('div');
+                            tempDiv.innerHTML = this.createCharacterLinkHtml(match.character);
+                            const linkElement = tempDiv.firstChild;
+                            
+                            range.insertNode(linkElement);
+                        } catch (error) {
+                            console.error('Error replacing character link:', error);
+                        }
+                    });
+                } catch (error) {
+                    console.error('Error processing text node for character links:', error);
+                }
             });
-        });
+            
+            // Clear processing flag after a delay
+            setTimeout(() => {
+                this.isProcessingCharacter = false;
+                console.log('Character link conversion completed');
+            }, 100);
+            
+        } catch (error) {
+            console.error('Error converting plain text references to links:', error);
+            this.isProcessingCharacter = false;
+        }
     }
 
     findCharacterByName(name) {
@@ -1256,6 +1328,11 @@ class CharacterLookup {
     // Public method to check if system is ready
     isReady() {
         return this.isInitialized && this.allCharacters.length > 0;
+    }
+
+    // Public method to check if character processing is in progress
+    isProcessing() {
+        return this.isProcessingCharacter;
     }
 
     // Public method to get character count

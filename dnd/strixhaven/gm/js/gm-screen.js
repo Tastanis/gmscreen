@@ -370,8 +370,17 @@ class GMScreen {
                 this.unsavedChanges = true;
                 clearTimeout(saveTimeout);
                 saveTimeout = setTimeout(() => {
-                    this.saveTabFromPopup(tab, popup, richTextEditor);
-                }, 1000);
+                    // Check if character lookup is processing before saving
+                    if (window.characterLookup && window.characterLookup.isProcessing()) {
+                        console.log('Delaying save due to character processing');
+                        // Retry save after character processing completes
+                        setTimeout(() => {
+                            this.saveTabFromPopup(tab, popup, richTextEditor);
+                        }, 750);
+                    } else {
+                        this.saveTabFromPopup(tab, popup, richTextEditor);
+                    }
+                }, 1500); // Increased from 1000ms to 1500ms
             });
             
             // Setup character lookup if available
@@ -409,8 +418,17 @@ class GMScreen {
                     this.unsavedChanges = true;
                     clearTimeout(saveTimeout);
                     saveTimeout = setTimeout(() => {
-                        this.saveTabFromPopup(tab, popup, richTextEditor);
-                    }, 1000);
+                        // Check if character lookup is processing before saving
+                        if (window.characterLookup && window.characterLookup.isProcessing()) {
+                            console.log('Delaying title save due to character processing');
+                            // Retry save after character processing completes
+                            setTimeout(() => {
+                                this.saveTabFromPopup(tab, popup, richTextEditor);
+                            }, 750);
+                        } else {
+                            this.saveTabFromPopup(tab, popup, richTextEditor);
+                        }
+                    }, 1500); // Increased from 1000ms to 1500ms
                 });
             }
             
@@ -446,9 +464,18 @@ class GMScreen {
         }
     }
 
-    // Save tab from popup
-    async saveTabFromPopup(tab, popup, richTextEditor) {
+    // Save tab from popup with retry logic
+    async saveTabFromPopup(tab, popup, richTextEditor, retryCount = 0) {
+        const maxRetries = 3;
+        
         try {
+            // Check if character lookup is processing and wait if needed
+            if (window.characterLookup && window.characterLookup.isProcessing()) {
+                console.log('Character processing detected, waiting before save...');
+                await new Promise(resolve => setTimeout(resolve, 500));
+            }
+            
+            console.log(`Saving tab ${tab.id} (attempt ${retryCount + 1})`);
             this.updatePopupSaveStatus('Saving...', 'saving');
             
             const titleInput = popup.querySelector('.tab-popup-title');
@@ -464,10 +491,20 @@ class GMScreen {
             formData.append('action', 'save_tab');
             formData.append('tab_data', JSON.stringify(updatedTabData));
             
+            const controller = new AbortController();
+            const timeoutId = setTimeout(() => controller.abort(), 10000); // 10 second timeout
+            
             const response = await fetch('index.php', {
                 method: 'POST',
-                body: formData
+                body: formData,
+                signal: controller.signal
             });
+            
+            clearTimeout(timeoutId);
+            
+            if (!response.ok) {
+                throw new Error(`HTTP error! status: ${response.status}`);
+            }
             
             const result = await response.json();
             
@@ -480,20 +517,28 @@ class GMScreen {
                 
                 this.unsavedChanges = false;
                 this.updatePopupSaveStatus('Saved!', 'success');
-                console.log('Tab saved from popup successfully');
+                console.log(`Tab ${tab.id} saved from popup successfully`);
                 
-                // Clear status after 2 seconds
-                setTimeout(() => {
-                    this.updatePopupSaveStatus('', '');
-                }, 2000);
+                return true; // Success
             } else {
-                console.error('Save failed:', result.error);
-                this.updatePopupSaveStatus('Save failed!', 'error');
+                throw new Error(result.error || 'Save failed');
             }
             
         } catch (error) {
-            console.error('Error saving tab from popup:', error);
-            this.updatePopupSaveStatus('Save error!', 'error');
+            console.error(`Error saving tab ${tab.id} from popup:`, error);
+            
+            if (retryCount < maxRetries && !error.name === 'AbortError') {
+                console.log(`Retrying save for tab ${tab.id}... attempt ${retryCount + 1} of ${maxRetries}`);
+                this.updatePopupSaveStatus(`Retrying save... (${retryCount + 1}/${maxRetries})`, 'saving');
+                
+                // Wait before retry
+                await new Promise(resolve => setTimeout(resolve, 1000));
+                
+                return this.saveTabFromPopup(tab, popup, richTextEditor, retryCount + 1);
+            } else {
+                this.updatePopupSaveStatus('Save failed!', 'error');
+                throw error; // Re-throw to be handled by caller
+            }
         }
     }
 
@@ -512,36 +557,90 @@ class GMScreen {
         }
     }
 
-    // Close tab popup
+    // Close tab popup with improved error handling
     async closeTabPopup() {
         if (this.currentPopup) {
-            // Check for unsaved changes before closing
-            if (this.unsavedChanges) {
-                const result = await this.showUnsavedChangesDialog();
-                if (result === 'cancel') {
-                    return; // Don't close if user cancels
-                } else if (result === 'save') {
-                    // Save changes before closing
-                    await this.saveTabFromPopup(this.currentPopup.tab, this.currentPopup.popup, this.currentPopup.richTextEditor);
+            try {
+                console.log('Closing tab popup...');
+                
+                // Wait for character processing to complete before closing
+                if (window.characterLookup && window.characterLookup.isProcessing()) {
+                    console.log('Waiting for character processing to complete before closing...');
+                    this.updatePopupSaveStatus('Waiting for character processing...', 'info');
+                    
+                    // Wait up to 2 seconds for character processing to complete
+                    let waitTime = 0;
+                    const maxWait = 2000;
+                    const checkInterval = 100;
+                    
+                    while (window.characterLookup.isProcessing() && waitTime < maxWait) {
+                        await new Promise(resolve => setTimeout(resolve, checkInterval));
+                        waitTime += checkInterval;
+                    }
+                    
+                    if (waitTime >= maxWait) {
+                        console.warn('Character processing timeout, forcing close');
+                        this.updatePopupSaveStatus('Character processing timeout', 'error');
+                    }
                 }
-                // If result is 'discard', continue with closing
+                
+                // Check for unsaved changes before closing
+                if (this.unsavedChanges) {
+                    this.updatePopupSaveStatus('Checking for unsaved changes...', 'info');
+                    const result = await this.showUnsavedChangesDialog();
+                    
+                    if (result === 'cancel') {
+                        this.updatePopupSaveStatus('', '');
+                        return; // Don't close if user cancels
+                    } else if (result === 'save') {
+                        // Save changes before closing with timeout
+                        this.updatePopupSaveStatus('Saving before close...', 'saving');
+                        try {
+                            await Promise.race([
+                                this.saveTabFromPopup(this.currentPopup.tab, this.currentPopup.popup, this.currentPopup.richTextEditor),
+                                new Promise((_, reject) => setTimeout(() => reject(new Error('Save timeout')), 15000))
+                            ]);
+                            this.updatePopupSaveStatus('Saved successfully', 'success');
+                        } catch (error) {
+                            console.error('Error saving before close:', error);
+                            this.updatePopupSaveStatus('Save failed - changes may be lost', 'error');
+                            // Ask user if they want to try again or continue closing
+                            const continueClose = await this.showSaveErrorDialog();
+                            if (!continueClose) {
+                                return; // Don't close if user wants to retry
+                            }
+                        }
+                    }
+                    // If result is 'discard', continue with closing
+                }
+                
+                // Clean up rich text editor
+                if (this.currentPopup.richTextEditor) {
+                    try {
+                        this.currentPopup.richTextEditor.destroy();
+                    } catch (error) {
+                        console.warn('Error destroying rich text editor:', error);
+                    }
+                }
+                
+                // Remove from DOM
+                if (this.currentPopup.overlay && this.currentPopup.overlay.parentNode) {
+                    this.currentPopup.overlay.parentNode.removeChild(this.currentPopup.overlay);
+                }
+                if (this.currentPopup.popup && this.currentPopup.popup.parentNode) {
+                    this.currentPopup.popup.parentNode.removeChild(this.currentPopup.popup);
+                }
+                
+                this.currentPopup = null;
+                this.unsavedChanges = false; // Reset unsaved changes flag
+                
+                console.log('Tab popup closed successfully');
+                
+            } catch (error) {
+                console.error('Error closing tab popup:', error);
+                // Force close even if there's an error
+                this.forceClosePopup();
             }
-            
-            // Clean up rich text editor
-            if (this.currentPopup.richTextEditor) {
-                this.currentPopup.richTextEditor.destroy();
-            }
-            
-            // Remove from DOM
-            if (this.currentPopup.overlay && this.currentPopup.overlay.parentNode) {
-                this.currentPopup.overlay.parentNode.removeChild(this.currentPopup.overlay);
-            }
-            if (this.currentPopup.popup && this.currentPopup.popup.parentNode) {
-                this.currentPopup.popup.parentNode.removeChild(this.currentPopup.popup);
-            }
-            
-            this.currentPopup = null;
-            this.unsavedChanges = false; // Reset unsaved changes flag
         }
     }
 
@@ -556,9 +655,9 @@ class GMScreen {
                     <h3>Unsaved Changes</h3>
                     <p>You have unsaved changes. What would you like to do?</p>
                     <div class="dialog-buttons">
-                        <button class="dialog-btn dialog-btn-save">Save</button>
-                        <button class="dialog-btn dialog-btn-discard">Discard</button>
-                        <button class="dialog-btn dialog-btn-cancel">Cancel</button>
+                        <button class="dialog-btn dialog-btn-save">Save & Close</button>
+                        <button class="dialog-btn dialog-btn-discard">Discard Changes</button>
+                        <button class="dialog-btn dialog-btn-cancel">Keep Editing</button>
                     </div>
                 </div>
             `;
@@ -586,12 +685,102 @@ class GMScreen {
                 resolve('cancel');
             });
             
-            // Close on overlay click
+            // Close on overlay click defaults to cancel
             dialog.querySelector('.dialog-overlay').addEventListener('click', () => {
                 cleanup();
                 resolve('cancel');
             });
+            
+            // Handle ESC key
+            const handleEsc = (e) => {
+                if (e.key === 'Escape') {
+                    cleanup();
+                    resolve('cancel');
+                    document.removeEventListener('keydown', handleEsc);
+                }
+            };
+            document.addEventListener('keydown', handleEsc);
         });
+    }
+
+    // Show save error dialog
+    showSaveErrorDialog() {
+        return new Promise((resolve) => {
+            const dialog = document.createElement('div');
+            dialog.className = 'save-error-dialog';
+            dialog.innerHTML = `
+                <div class="dialog-overlay"></div>
+                <div class="dialog-content">
+                    <h3>Save Error</h3>
+                    <p>Failed to save changes. Would you like to try again or close anyway?</p>
+                    <div class="dialog-buttons">
+                        <button class="dialog-btn dialog-btn-retry">Try Again</button>
+                        <button class="dialog-btn dialog-btn-force-close">Close Anyway</button>
+                    </div>
+                </div>
+            `;
+            
+            document.body.appendChild(dialog);
+            
+            const cleanup = () => {
+                if (dialog.parentNode) {
+                    dialog.parentNode.removeChild(dialog);
+                }
+            };
+            
+            dialog.querySelector('.dialog-btn-retry').addEventListener('click', () => {
+                cleanup();
+                resolve(false); // Don't continue closing
+            });
+            
+            dialog.querySelector('.dialog-btn-force-close').addEventListener('click', () => {
+                cleanup();
+                resolve(true); // Continue closing
+            });
+            
+            // Close on overlay click defaults to retry
+            dialog.querySelector('.dialog-overlay').addEventListener('click', () => {
+                cleanup();
+                resolve(false);
+            });
+        });
+    }
+
+    // Force close popup - used when normal close fails
+    forceClosePopup() {
+        console.log('Force closing popup...');
+        
+        try {
+            // Clean up rich text editor
+            if (this.currentPopup && this.currentPopup.richTextEditor) {
+                try {
+                    this.currentPopup.richTextEditor.destroy();
+                } catch (error) {
+                    console.warn('Error destroying rich text editor during force close:', error);
+                }
+            }
+            
+            // Remove all popup elements from DOM
+            const popupElements = document.querySelectorAll('.tab-popup, .tab-popup-overlay, .save-error-dialog, .unsaved-changes-dialog');
+            popupElements.forEach(el => {
+                if (el.parentNode) {
+                    el.parentNode.removeChild(el);
+                }
+            });
+            
+            // Reset state
+            this.currentPopup = null;
+            this.unsavedChanges = false;
+            
+            console.log('Popup force closed');
+            
+        } catch (error) {
+            console.error('Error during force close:', error);
+            // Last resort - reload page
+            if (confirm('Error closing popup. Reload page? (Unsaved changes will be lost)')) {
+                window.location.reload();
+            }
+        }
     }
 
     // Update save status display in popup
@@ -600,6 +789,16 @@ class GMScreen {
         if (statusElement) {
             statusElement.textContent = message;
             statusElement.className = `save-status ${type}`;
+            
+            // Auto-clear success/error messages after 3 seconds
+            if (type === 'success' || type === 'error') {
+                setTimeout(() => {
+                    if (statusElement.className.includes(type)) {
+                        statusElement.textContent = '';
+                        statusElement.className = 'save-status';
+                    }
+                }, 3000);
+            }
         }
     }
 
