@@ -963,8 +963,10 @@ class CharacterLookup {
         if (imagePath) {
             const timestamp = Date.now();
             if (character.type === 'student') {
+                // Student image_path already includes 'portraits/' subdirectory
                 imagePath = `../students/${imagePath}?t=${timestamp}`;
             } else if (character.type === 'staff') {
+                // Staff image_path already includes 'portraits/' subdirectory  
                 imagePath = `../staff/${imagePath}?t=${timestamp}`;
             } else if (character.type === 'location') {
                 imagePath = `../locations/${imagePath}?t=${timestamp}`;
