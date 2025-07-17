@@ -13,8 +13,14 @@ let recentlyAddedCreatures = new Set(); // Track recently added creatures
 // Grid system for card placement - Updated for increased height and spacing
 const CARD_WIDTH = 240;
 const CARD_HEIGHT = 155; // Updated to match new CSS height
-const CARD_MARGIN = 17; // Increased from 10 to 17 for more spacing between rows
+const CARD_MARGIN = 10; // Space between cards
+const GRID_CELL_HEIGHT = CARD_HEIGHT + CARD_MARGIN; // Total height of a grid cell
+const GRID_CELL_WIDTH = CARD_WIDTH + CARD_MARGIN; // Total width of a grid cell
 const GRID_ROWS_PER_COLUMN = 12; // Maximum cards per column before scrolling
+
+// Track mouse position during drag
+let currentMouseX = 0;
+let currentMouseY = 0;
 
 // DOM elements
 const saveStatus = document.getElementById('save-status');
@@ -111,8 +117,7 @@ function getColumnBounds(column) {
 // Enhanced grid positioning - finds actual empty spots and prevents overlaps  
 function getNextGridPosition(column, status) {
     const columnBounds = getColumnBounds(column);
-    const startY = 10; // Below column headers (reduced from 70 to account for smaller header)
-    const gridHeight = CARD_HEIGHT + CARD_MARGIN;
+    const startY = 60; // Below column headers
     
     // Get all creatures in this column with their Y positions
     const columnCreatures = Object.values(creatures).filter(c => 
@@ -131,7 +136,7 @@ function getNextGridPosition(column, status) {
     
     // Create array of occupied Y positions (normalized to grid positions)
     const occupiedGridRows = columnCreatures.map(c => {
-        return Math.round((c.y_pos - startY) / gridHeight);
+        return Math.round((c.y_pos - startY) / GRID_CELL_HEIGHT);
     }).filter(row => row >= 0).sort((a, b) => a - b); // Filter out negative rows and sort
     
     // Find first empty grid row
@@ -143,7 +148,7 @@ function getNextGridPosition(column, status) {
         targetRow++; // This row is occupied, try next
     }
     
-    const gridY = startY + (targetRow * gridHeight);
+    const gridY = startY + (targetRow * GRID_CELL_HEIGHT);
     
     return {
         x: columnBounds.left,
@@ -154,18 +159,17 @@ function getNextGridPosition(column, status) {
 }
 
 // Find the best available position when dropping - improved
-function findBestDropPosition(x, y, status) {
-    const targetColumn = determineColumnFromPosition(x, status);
+function findBestDropPosition(mouseX, mouseY, status) {
+    const targetColumn = determineColumnFromPosition(mouseX, status);
     const columnBounds = getColumnBounds(targetColumn);
     const startY = 60; // Same as getNextGridPosition
-    const gridHeight = CARD_HEIGHT + CARD_MARGIN;
     
-    // Calculate which row they're trying to drop into
-    const targetRow = Math.max(0, Math.round((y - startY) / gridHeight));
+    // Calculate which row the mouse is over
+    const targetRow = Math.max(0, Math.round((mouseY - startY) / GRID_CELL_HEIGHT));
     
     // Check if this exact spot is available
-    const exactPosition = startY + (targetRow * gridHeight);
-    const tolerance = gridHeight / 3; // Allow some tolerance for "close enough"
+    const exactPosition = startY + (targetRow * GRID_CELL_HEIGHT);
+    const tolerance = GRID_CELL_HEIGHT / 3; // Allow some tolerance for "close enough"
     
     const isOccupied = Object.values(creatures).some(c => 
         c.column === targetColumn && 
@@ -353,6 +357,10 @@ function startDrag(e) {
     const rect = dragElement.getBoundingClientRect();
     const areaRect = combatArea.getBoundingClientRect();
     
+    // Initialize mouse position
+    currentMouseX = clientX - areaRect.left;
+    currentMouseY = clientY - areaRect.top;
+    
     dragOffset.x = clientX - rect.left;
     dragOffset.y = clientY - rect.top;
     
@@ -375,6 +383,10 @@ function drag(e) {
     const clientY = e.type === 'touchmove' ? e.touches[0].clientY : e.clientY;
     
     const areaRect = combatArea.getBoundingClientRect();
+    
+    // Track current mouse position relative to combat area
+    currentMouseX = clientX - areaRect.left;
+    currentMouseY = clientY - areaRect.top;
     
     let newX = clientX - areaRect.left - dragOffset.x;
     let newY = clientY - areaRect.top - dragOffset.y;
@@ -399,12 +411,10 @@ function stopDrag(e) {
     document.removeEventListener('touchend', stopDrag);
     
     const creatureId = dragElement.id.replace('creature-', '');
-    const currentX = parseInt(dragElement.style.left);
-    const currentY = parseInt(dragElement.style.top);
     
-    // Determine new status based on position
+    // Use the last known mouse position for determining drop location
     const areaWidth = combatArea.clientWidth;
-    const newStatus = currentX > areaWidth / 2 ? 'complete' : 'waiting';
+    const newStatus = currentMouseX > areaWidth / 2 ? 'complete' : 'waiting';
     
     // Get current creature and temporarily remove from creatures object for clean positioning
     const currentCreature = creatures[creatureId];
@@ -418,8 +428,8 @@ function stopDrag(e) {
     // Temporarily remove creature from creatures object to avoid self-conflict in positioning
     delete creatures[creatureId];
     
-    // Find the best available position for this drop
-    const bestPosition = findBestDropPosition(currentX, currentY, newStatus);
+    // Find the best available position for this drop using mouse position
+    const bestPosition = findBestDropPosition(currentMouseX, currentMouseY, newStatus);
     
     // Update creature data
     currentCreature.x_pos = bestPosition.x;
