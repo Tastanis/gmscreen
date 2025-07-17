@@ -115,30 +115,38 @@ $condition_rules = array(
     <!-- Main Combat Area -->
     <div class="combat-container">
         <div class="combat-area" id="combat-area">
-            <!-- Center divider line -->
-            <div class="center-line"></div>
-            
-            <!-- Column headers for 4-column layout -->
-            <div class="column-headers">
-                <div class="column-header">
-                    <h3>Heroes Waiting</h3>
-                    <p>Column 1</p>
+            <div class="combat-area-inner">
+                <!-- Column dividers -->
+                <div class="column-dividers">
+                    <div class="column-divider"></div>
+                    <div class="column-divider"></div>
+                    <div class="column-divider"></div>
                 </div>
-                <div class="column-header">
-                    <h3>Enemies Waiting</h3>
-                    <p>Column 2</p>
+                
+                <!-- Column headers for 4-column layout -->
+                <div class="column-headers">
+                    <div class="column-headers-inner">
+                        <div class="column-header">
+                            <h3>Heroes Waiting</h3>
+                            <p>Column 1</p>
+                        </div>
+                        <div class="column-header">
+                            <h3>Enemies Waiting</h3>
+                            <p>Column 2</p>
+                        </div>
+                        <div class="column-header">
+                            <h3>Heroes Complete</h3>
+                            <p>Column 3</p>
+                        </div>
+                        <div class="column-header">
+                            <h3>Enemies Complete</h3>
+                            <p>Column 4</p>
+                        </div>
+                    </div>
                 </div>
-                <div class="column-header">
-                    <h3>Heroes Complete</h3>
-                    <p>Column 3</p>
-                </div>
-                <div class="column-header">
-                    <h3>Enemies Complete</h3>
-                    <p>Column 4</p>
-                </div>
+                
+                <!-- Creatures will be dynamically added here -->
             </div>
-            
-            <!-- Creatures will be dynamically added here -->
         </div>
     </div>
 

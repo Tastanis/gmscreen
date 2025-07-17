@@ -105,12 +105,18 @@ function setupEventListeners() {
 function getColumnBounds(column) {
     const areaRect = combatArea.getBoundingClientRect();
     const areaWidth = combatArea.clientWidth;
-    const columnWidth = areaWidth / 4;
+    
+    // Fixed column width based on card width
+    const columnWidth = CARD_WIDTH + (CARD_MARGIN * 2);
+    const totalGridWidth = columnWidth * 4;
+    
+    // Center the grid if screen is wider than needed
+    const gridOffset = Math.max(0, (areaWidth - totalGridWidth) / 2);
     
     return {
-        left: column * columnWidth + CARD_MARGIN,
-        right: (column + 1) * columnWidth - CARD_MARGIN,
-        width: columnWidth - (CARD_MARGIN * 2)
+        left: gridOffset + (column * columnWidth) + CARD_MARGIN,
+        right: gridOffset + ((column + 1) * columnWidth) - CARD_MARGIN,
+        width: CARD_WIDTH
     };
 }
 
@@ -193,10 +199,15 @@ function findBestDropPosition(mouseX, mouseY, status) {
 
 function determineColumnFromPosition(x, status) {
     const areaWidth = combatArea.clientWidth;
-    const quarterWidth = areaWidth / 4;
+    const columnWidth = CARD_WIDTH + (CARD_MARGIN * 2);
+    const totalGridWidth = columnWidth * 4;
+    const gridOffset = Math.max(0, (areaWidth - totalGridWidth) / 2);
     
-    // Determine which quarter the x position is in
-    let column = Math.floor(x / quarterWidth);
+    // Adjust x position relative to grid start
+    const relativeX = x - gridOffset;
+    
+    // Determine which column based on fixed column width
+    let column = Math.floor(relativeX / columnWidth);
     
     // Constrain to valid columns
     if (status === 'waiting') {
@@ -222,7 +233,8 @@ function updateFromCombatData(data) {
 }
 
 function renderAllCreatures() {
-    const existingCards = combatArea.querySelectorAll('.creature-card');
+    const combatAreaInner = combatArea.querySelector('.combat-area-inner') || combatArea;
+    const existingCards = combatAreaInner.querySelectorAll('.creature-card');
     existingCards.forEach(card => card.remove());
     
     // Filter creatures based on player visibility
@@ -306,7 +318,8 @@ function renderCreature(creature) {
         </div>
     `;
     
-    combatArea.appendChild(card);
+    const combatAreaInner = combatArea.querySelector('.combat-area-inner') || combatArea;
+    combatAreaInner.appendChild(card);
     
     if (isGM) {
         setupDragging(card);
@@ -414,7 +427,13 @@ function stopDrag(e) {
     
     // Use the last known mouse position for determining drop location
     const areaWidth = combatArea.clientWidth;
-    const newStatus = currentMouseX > areaWidth / 2 ? 'complete' : 'waiting';
+    const columnWidth = CARD_WIDTH + (CARD_MARGIN * 2);
+    const totalGridWidth = columnWidth * 4;
+    const gridOffset = Math.max(0, (areaWidth - totalGridWidth) / 2);
+    
+    // Check if mouse is in the right half of the grid (columns 2-3)
+    const gridMidpoint = gridOffset + (totalGridWidth / 2);
+    const newStatus = currentMouseX > gridMidpoint ? 'complete' : 'waiting';
     
     // Get current creature and temporarily remove from creatures object for clean positioning
     const currentCreature = creatures[creatureId];

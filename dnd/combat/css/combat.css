@@ -169,32 +169,32 @@ body {
     margin: 1rem;
     border-radius: 10px;
     border: 2px solid rgba(255, 255, 255, 0.2);
-    overflow: auto;
-    padding: 50px 10px 800px; /* Reasonable bottom padding for extra scroll space */
+    overflow-y: auto;
+    overflow-x: hidden;
     scroll-behavior: smooth;
 }
 
-/* Center Line for 4-Column Layout */
-.center-line {
+/* Inner scrollable container - Create minimum scrollable height */
+.combat-area-inner {
+    position: relative;
+    min-height: calc(100% + 400px); /* Always allow scrolling */
+}
+
+/* Center Line removed - using column dividers instead */
+
+/* Additional column dividers */
+.column-dividers {
     position: absolute;
+    top: 50px;
     left: 50%;
-    top: 0;
-    bottom: 0;
-    width: 2px;
-    background: repeating-linear-gradient(
-        to bottom,
-        rgba(255, 255, 255, 0.3) 0px,
-        rgba(255, 255, 255, 0.3) 10px,
-        transparent 10px,
-        transparent 20px
-    );
+    transform: translateX(-50%);
+    width: 1040px;
+    height: 100%;
+    pointer-events: none;
     z-index: 1;
 }
 
-/* Quarter Lines for 4 Columns */
-.combat-area::before,
-.combat-area::after {
-    content: '';
+.column-divider {
     position: absolute;
     top: 0;
     bottom: 0;
@@ -206,29 +206,33 @@ body {
         transparent 8px,
         transparent 16px
     );
-    z-index: 1;
 }
 
-.combat-area::before {
-    left: 25%;
-}
+.column-divider:nth-child(1) { left: 260px; }
+.column-divider:nth-child(2) { left: 520px; }
+.column-divider:nth-child(3) { left: 780px; }
 
-.combat-area::after {
-    right: 25%;
-}
+/* Column divider lines - removed, will use different approach */
 
 /* Updated Column Headers for 4 Columns - Reduced Height */
 .column-headers {
-    position: absolute;
+    position: sticky;
     top: 0;
     left: 0;
     right: 0;
     height: 50px; /* Already properly sized */
-    display: grid;
-    grid-template-columns: 1fr 1fr 1fr 1fr;
-    z-index: 5;
+    display: flex;
+    justify-content: center;
+    z-index: 100;
     background: rgba(0, 0, 0, 0.3);
     border-bottom: 2px solid rgba(255, 255, 255, 0.2);
+}
+
+/* Inner container for fixed-width columns */
+.column-headers-inner {
+    display: grid;
+    grid-template-columns: repeat(4, 260px); /* CARD_WIDTH + margins */
+    width: 1040px; /* Total width of 4 columns */
 }
 
 .column-header {
