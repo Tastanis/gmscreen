@@ -106,16 +106,19 @@ function getColumnBounds(column) {
     const areaRect = combatArea.getBoundingClientRect();
     const areaWidth = combatArea.clientWidth;
     
-    // Fixed column width based on card width
+    // Fixed column width - card plus gaps on both sides
     const columnWidth = CARD_WIDTH + (CARD_MARGIN * 2);
     const totalGridWidth = columnWidth * 4;
     
     // Center the grid if screen is wider than needed
     const gridOffset = Math.max(0, (areaWidth - totalGridWidth) / 2);
     
+    // Position cards with consistent spacing
+    const cardLeft = gridOffset + (column * columnWidth) + CARD_MARGIN;
+    
     return {
-        left: gridOffset + (column * columnWidth) + CARD_MARGIN,
-        right: gridOffset + ((column + 1) * columnWidth) - CARD_MARGIN,
+        left: cardLeft,
+        right: cardLeft + CARD_WIDTH,
         width: CARD_WIDTH
     };
 }

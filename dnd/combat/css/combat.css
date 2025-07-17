@@ -208,6 +208,7 @@ body {
     );
 }
 
+/* Position dividers between columns */
 .column-divider:nth-child(1) { left: 260px; }
 .column-divider:nth-child(2) { left: 520px; }
 .column-divider:nth-child(3) { left: 780px; }
