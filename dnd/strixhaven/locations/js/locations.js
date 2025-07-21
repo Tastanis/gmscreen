@@ -149,7 +149,6 @@ function setupEventListeners() {
     if (searchInput) {
         searchInput.addEventListener('input', debounce(function() {
             currentFilters.search = this.value.trim();
-            currentPage = 1;
             loadLocations();
         }, 300));
     }
@@ -164,7 +163,6 @@ function setupEventListeners() {
             this.classList.add('active');
             
             currentSort = sortType;
-            currentPage = 1;
             loadLocations();
         });
     });
@@ -174,7 +172,6 @@ function setupEventListeners() {
     if (collegeFilter) {
         collegeFilter.addEventListener('change', function() {
             currentFilters.college = this.value;
-            currentPage = 1;
             loadLocations();
         });
     }
@@ -183,7 +180,6 @@ function setupEventListeners() {
     if (hexColorFilter) {
         hexColorFilter.addEventListener('change', function() {
             currentFilters.hex_color = this.value;
-            currentPage = 1;
             loadLocations();
         });
     }
@@ -194,7 +190,6 @@ function setupEventListeners() {
         favoritesToggle.addEventListener('click', function() {
             currentFilters.favorites = !currentFilters.favorites;
             this.classList.toggle('active', currentFilters.favorites);
-            currentPage = 1;
             loadLocations();
         });
     }
@@ -252,8 +247,6 @@ function loadLocations() {
     
     const formData = new FormData();
     formData.append('action', 'load_locations');
-    formData.append('page', currentPage);
-    formData.append('per_page', 20);
     formData.append('sort_by', currentSort);
     formData.append('filter_college', currentFilters.college);
     formData.append('filter_hex_color', currentFilters.hex_color);
@@ -269,7 +262,6 @@ function loadLocations() {
         showLoading(false);
         if (data.success) {
             displayLocations(data.locations);
-            updatePagination(data.pagination);
             // Store locations globally for auto-open functionality
             window.allLocations = data.locations;
             window.locationsLoaded = true;
@@ -367,62 +359,6 @@ function getHexColorCode(colorName) {
     return colorMap[colorName] || '#cccccc';
 }
 
-// Update pagination controls
-function updatePagination(pagination) {
-    const paginationDiv = document.getElementById('pagination');
-    
-    if (pagination.total_pages <= 1) {
-        paginationDiv.innerHTML = '';
-        return;
-    }
-    
-    let html = '';
-    
-    // Previous button
-    html += `<button class="pagination-btn" ${pagination.current_page === 1 ? 'disabled' : ''} 
-             onclick="goToPage(${pagination.current_page - 1})">‹ Prev</button>`;
-    
-    // Page numbers
-    const startPage = Math.max(1, pagination.current_page - 2);
-    const endPage = Math.min(pagination.total_pages, pagination.current_page + 2);
-    
-    if (startPage > 1) {
-        html += `<button class="pagination-btn" onclick="goToPage(1)">1</button>`;
-        if (startPage > 2) {
-            html += `<span class="pagination-ellipsis">...</span>`;
-        }
-    }
-    
-    for (let i = startPage; i <= endPage; i++) {
-        html += `<button class="pagination-btn ${i === pagination.current_page ? 'active' : ''}" 
-                 onclick="goToPage(${i})">${i}</button>`;
-    }
-    
-    if (endPage < pagination.total_pages) {
-        if (endPage < pagination.total_pages - 1) {
-            html += `<span class="pagination-ellipsis">...</span>`;
-        }
-        html += `<button class="pagination-btn" onclick="goToPage(${pagination.total_pages})">${pagination.total_pages}</button>`;
-    }
-    
-    // Next button
-    html += `<button class="pagination-btn" ${pagination.current_page === pagination.total_pages ? 'disabled' : ''} 
-             onclick="goToPage(${pagination.current_page + 1})">Next ›</button>`;
-    
-    // Info text
-    html += `<div class="pagination-info">
-                Showing ${(pagination.current_page - 1) * pagination.per_page + 1}-${Math.min(pagination.current_page * pagination.per_page, pagination.total_locations)} 
-                of ${pagination.total_locations} locations
-             </div>`;
-    
-    paginationDiv.innerHTML = html;
-}
-
-// Go to specific page
-function goToPage(page) {
-    currentPage = page;
-    loadLocations();
-}
 
 // Open location detail modal
 function openLocationModal(location) {

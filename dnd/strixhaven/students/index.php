@@ -115,8 +115,6 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['action'])) {
     
     if ($_POST['action'] === 'load_students') {
         $data = loadStudentData();
-        $page = isset($_POST['page']) ? max(1, intval($_POST['page'])) : 1;
-        $per_page = isset($_POST['per_page']) ? max(10, min(100, intval($_POST['per_page']))) : 20;
         $sort_by = isset($_POST['sort_by']) ? $_POST['sort_by'] : 'name';
         $filter_grade = isset($_POST['filter_grade']) ? $_POST['filter_grade'] : '';
         $filter_college = isset($_POST['filter_college']) ? $_POST['filter_college'] : '';
@@ -181,21 +179,10 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['action'])) {
             }
         });
         
-        // Pagination
-        $total_students = count($students);
-        $total_pages = ceil($total_students / $per_page);
-        $offset = ($page - 1) * $per_page;
-        $students_page = array_slice($students, $offset, $per_page);
-        
+        // Return all students, no pagination
         echo json_encode(array(
             'success' => true,
-            'students' => $students_page,
-            'pagination' => array(
-                'current_page' => $page,
-                'total_pages' => $total_pages,
-                'total_students' => $total_students,
-                'per_page' => $per_page
-            )
+            'students' => array_values($students)
         ));
         
     } elseif ($_POST['action'] === 'save_student') {
@@ -728,10 +715,6 @@ $studentData = loadStudentData();
                 <!-- Students will be loaded here via JavaScript -->
             </div>
             
-            <!-- Pagination -->
-            <div id="pagination" class="pagination">
-                <!-- Pagination controls will be loaded here -->
-            </div>
         </div>
 
         <!-- Loading indicator -->

@@ -58,8 +58,6 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['action'])) {
     
     if ($_POST['action'] === 'load_staff') {
         $data = loadStaffData();
-        $page = isset($_POST['page']) ? max(1, intval($_POST['page'])) : 1;
-        $per_page = isset($_POST['per_page']) ? max(10, min(100, intval($_POST['per_page']))) : 20;
         $sort_by = isset($_POST['sort_by']) ? $_POST['sort_by'] : 'name';
         $filter_college = isset($_POST['filter_college']) ? $_POST['filter_college'] : '';
         $show_favorites = isset($_POST['show_favorites']) ? $_POST['show_favorites'] === 'true' : false;
@@ -101,21 +99,10 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['action'])) {
             }
         });
         
-        // Pagination
-        $total_staff = count($staff);
-        $total_pages = ceil($total_staff / $per_page);
-        $offset = ($page - 1) * $per_page;
-        $staff_page = array_slice($staff, $offset, $per_page);
-        
+        // Return all staff, no pagination
         echo json_encode(array(
             'success' => true,
-            'staff' => $staff_page,
-            'pagination' => array(
-                'current_page' => $page,
-                'total_pages' => $total_pages,
-                'total_staff' => $total_staff,
-                'per_page' => $per_page
-            )
+            'staff' => array_values($staff)
         ));
         
     } elseif ($_POST['action'] === 'save_staff') {
@@ -609,10 +596,6 @@ $staffData = loadStaffData();
                 <!-- Staff will be loaded here via JavaScript -->
             </div>
             
-            <!-- Pagination -->
-            <div id="pagination" class="pagination">
-                <!-- Pagination controls will be loaded here -->
-            </div>
         </div>
 
         <!-- Loading indicator -->

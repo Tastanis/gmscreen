@@ -58,8 +58,6 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['action'])) {
     
     if ($_POST['action'] === 'load_locations') {
         $data = loadLocationData();
-        $page = isset($_POST['page']) ? max(1, intval($_POST['page'])) : 1;
-        $per_page = isset($_POST['per_page']) ? max(10, min(100, intval($_POST['per_page']))) : 20;
         $sort_by = isset($_POST['sort_by']) ? $_POST['sort_by'] : 'name';
         $filter_college = isset($_POST['filter_college']) ? $_POST['filter_college'] : '';
         $filter_hex_color = isset($_POST['filter_hex_color']) ? $_POST['filter_hex_color'] : '';
@@ -124,21 +122,10 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['action'])) {
             }
         });
         
-        // Pagination
-        $total_locations = count($locations);
-        $total_pages = ceil($total_locations / $per_page);
-        $offset = ($page - 1) * $per_page;
-        $locations_page = array_slice($locations, $offset, $per_page);
-        
+        // Return all locations, no pagination
         echo json_encode(array(
             'success' => true,
-            'locations' => $locations_page,
-            'pagination' => array(
-                'current_page' => $page,
-                'total_pages' => $total_pages,
-                'total_locations' => $total_locations,
-                'per_page' => $per_page
-            )
+            'locations' => array_values($locations)
         ));
         
     } elseif ($_POST['action'] === 'save_location') {
@@ -565,10 +552,6 @@ $locationData = loadLocationData();
                 <!-- Locations will be loaded here via JavaScript -->
             </div>
             
-            <!-- Pagination -->
-            <div id="pagination" class="pagination">
-                <!-- Pagination controls will be loaded here -->
-            </div>
         </div>
 
         <!-- Loading indicator -->
