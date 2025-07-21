@@ -235,7 +235,7 @@ function setupEventListeners() {
     if (imageModal) {
         imageModal.addEventListener('click', function(e) {
             if (e.target === imageModal) {
-                closeImageModal();
+                closeImagePopup();
             }
         });
     }
@@ -566,7 +566,7 @@ function createImageGallery(images, itemId, itemType) {
                 <img src="${escapeHtml(images[currentImageIndex])}" 
                      alt="${itemType} image" 
                      class="${itemType}-portrait gallery-image"
-                     onclick="openImageModal('${escapeHtml(images[currentImageIndex])}')"
+                     onclick="openImagePopup('${escapeHtml(images[currentImageIndex])}')"
                      data-current-index="${currentImageIndex}">
                 
                 ${hasMultipleImages ? `
@@ -605,7 +605,7 @@ function navigateGallery(itemId, direction) {
     // Update image
     gallery.src = images[newIndex];
     gallery.setAttribute('data-current-index', newIndex);
-    gallery.setAttribute('onclick', `openImageModal('${escapeHtml(images[newIndex])}')`);
+    gallery.setAttribute('onclick', `openImagePopup('${escapeHtml(images[newIndex])}')`);
     
     // Update indicator
     const indicator = gallery.parentElement.querySelector('.gallery-indicator');
@@ -620,20 +620,85 @@ function navigateGallery(itemId, direction) {
     }
 }
 
-// Open image modal for full-size viewing
-function openImageModal(imagePath) {
-    const modal = document.getElementById('image-modal');
-    const modalImage = document.getElementById('modal-image');
+// Open image popup for full-size viewing
+function openImagePopup(imagePath) {
+    let popup = document.getElementById('image-popup');
+    if (!popup) {
+        popup = createImagePopup();
+    }
+    const popupImage = popup.querySelector('.image-popup-content img');
     
-    modalImage.src = imagePath;
-    modal.style.display = 'block';
+    popupImage.src = imagePath + '?t=' + Date.now();
+    popup.style.display = 'block';
 }
 
-// Close image modal
-function closeImageModal() {
-    const modal = document.getElementById('image-modal');
-    if (modal) {
-        modal.style.display = 'none';
+// Close image popup
+function closeImagePopup() {
+    const popup = document.getElementById('image-popup');
+    if (popup) {
+        popup.style.display = 'none';
+    }
+}
+
+function createImagePopup() {
+    const popup = document.createElement('div');
+    popup.id = 'image-popup';
+    popup.className = 'image-popup';
+    popup.innerHTML = `
+        <div class="image-popup-header">
+            <div class="image-popup-title">Location Image</div>
+            <button class="image-popup-close" onclick="closeImagePopup()">×</button>
+        </div>
+        <div class="image-popup-content">
+            <img src="" alt="Location image">
+        </div>
+    `;
+    document.body.appendChild(popup);
+    
+    // Make popup draggable
+    makeDraggable(popup);
+    
+    return popup;
+}
+
+function makeDraggable(popup) {
+    const header = popup.querySelector('.image-popup-header');
+    let isDragging = false;
+    let currentX, currentY, initialX, initialY;
+    let xOffset = 0, yOffset = 0;
+
+    header.addEventListener('mousedown', dragStart);
+    document.addEventListener('mouseup', dragEnd);
+    document.addEventListener('mousemove', drag);
+
+    function dragStart(e) {
+        if (e.target.classList.contains('image-popup-close')) return;
+        
+        initialX = e.clientX - xOffset;
+        initialY = e.clientY - yOffset;
+
+        if (e.target === header || header.contains(e.target)) {
+            isDragging = true;
+        }
+    }
+
+    function drag(e) {
+        if (isDragging) {
+            e.preventDefault();
+            currentX = e.clientX - initialX;
+            currentY = e.clientY - initialY;
+
+            xOffset = currentX;
+            yOffset = currentY;
+
+            popup.style.transform = `translate(${currentX}px, ${currentY}px)`;
+        }
+    }
+
+    function dragEnd(e) {
+        initialX = currentX;
+        initialY = currentY;
+        isDragging = false;
     }
 }
 

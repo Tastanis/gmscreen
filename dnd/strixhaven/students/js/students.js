@@ -1500,7 +1500,7 @@ function createImageGallery(images, itemId, itemType) {
                 <img src="${escapeHtml(images[currentImageIndex])}?t=${Date.now()}" 
                      alt="${itemType} image" 
                      class="${itemType}-portrait gallery-image"
-                     onclick="openImageModal('${escapeHtml(images[currentImageIndex])}')"
+                     onclick="openImagePopup('${escapeHtml(images[currentImageIndex])}')"
                      data-current-index="${currentImageIndex}">
                 
                 ${hasMultipleImages ? `
@@ -1538,7 +1538,7 @@ function navigateGallery(itemId, direction) {
     // Update image
     gallery.src = images[newIndex];
     gallery.setAttribute('data-current-index', newIndex);
-    gallery.setAttribute('onclick', `openImageModal('${escapeHtml(images[newIndex])}')`);
+    gallery.setAttribute('onclick', `openImagePopup('${escapeHtml(images[newIndex])}')`);
     
     // Update indicator
     const indicator = gallery.parentElement.querySelector('.gallery-indicator');
@@ -1553,44 +1553,84 @@ function navigateGallery(itemId, direction) {
     }
 }
 
-function openImageModal(imagePath) {
-    let modal = document.getElementById('image-modal');
-    if (!modal) {
-        modal = createImageModal();
+function openImagePopup(imagePath) {
+    let popup = document.getElementById('image-popup');
+    if (!popup) {
+        popup = createImagePopup();
     }
-    const modalImage = document.getElementById('modal-image');
+    const popupImage = popup.querySelector('.image-popup-content img');
     
-    modalImage.src = imagePath + '?t=' + Date.now();
-    modal.style.display = 'block';
+    popupImage.src = imagePath + '?t=' + Date.now();
+    popup.style.display = 'block';
 }
 
-function closeImageModal() {
-    const modal = document.getElementById('image-modal');
-    if (modal) {
-        modal.style.display = 'none';
+function closeImagePopup() {
+    const popup = document.getElementById('image-popup');
+    if (popup) {
+        popup.style.display = 'none';
     }
 }
 
-function createImageModal() {
-    const modal = document.createElement('div');
-    modal.id = 'image-modal';
-    modal.className = 'modal image-modal';
-    modal.innerHTML = `
-        <div class="modal-content image-modal-content">
-            <span class="close" onclick="closeImageModal()">&times;</span>
-            <img id="modal-image" src="" alt="Full size image">
+function createImagePopup() {
+    const popup = document.createElement('div');
+    popup.id = 'image-popup';
+    popup.className = 'image-popup';
+    popup.innerHTML = `
+        <div class="image-popup-header">
+            <div class="image-popup-title">Student Image</div>
+            <button class="image-popup-close" onclick="closeImagePopup()">×</button>
+        </div>
+        <div class="image-popup-content">
+            <img src="" alt="Student image">
         </div>
     `;
-    document.body.appendChild(modal);
+    document.body.appendChild(popup);
     
-    // Close modal when clicking outside
-    modal.addEventListener('click', function(e) {
-        if (e.target === modal) {
-            closeImageModal();
+    // Make popup draggable
+    makeDraggable(popup);
+    
+    return popup;
+}
+
+function makeDraggable(popup) {
+    const header = popup.querySelector('.image-popup-header');
+    let isDragging = false;
+    let currentX, currentY, initialX, initialY;
+    let xOffset = 0, yOffset = 0;
+
+    header.addEventListener('mousedown', dragStart);
+    document.addEventListener('mouseup', dragEnd);
+    document.addEventListener('mousemove', drag);
+
+    function dragStart(e) {
+        if (e.target.classList.contains('image-popup-close')) return;
+        
+        initialX = e.clientX - xOffset;
+        initialY = e.clientY - yOffset;
+
+        if (e.target === header || header.contains(e.target)) {
+            isDragging = true;
         }
-    });
-    
-    return modal;
+    }
+
+    function drag(e) {
+        if (isDragging) {
+            e.preventDefault();
+            currentX = e.clientX - initialX;
+            currentY = e.clientY - initialY;
+
+            xOffset = currentX;
+            yOffset = currentY;
+
+            popup.style.transform = `translate(${currentX}px, ${currentY}px)`;
+        }
+    }
+
+    function dragEnd(e) {
+        initialX = currentX;
+        initialY = currentY;
+        isDragging = false;
+    }
 }
 
 function deleteImage(itemId, imagePath, itemType) {
