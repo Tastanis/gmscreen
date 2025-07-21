@@ -414,10 +414,16 @@ class CharacterLookup {
             e.preventDefault();
             const characterId = charLink.getAttribute('data-character-id');
             const characterType = charLink.getAttribute('data-character-type');
+            const characterName = charLink.textContent || charLink.getAttribute('data-character-name') || 'Unknown Character';
             
             if (characterId && characterType) {
-                // Open character details in new tab
-                this.openCharacterInNewTab(characterId, characterType);
+                // Use existing character page navigation method
+                const character = {
+                    id: characterId,
+                    type: characterType,
+                    name: characterName
+                };
+                this.handleCharacterLinkClick(character);
             }
         }
     }
