@@ -651,12 +651,12 @@
 
 .image-modal-content {
     background: transparent;
-    border-radius: 0;
+    border-radius: 8px;
     width: auto;
-    max-width: 95vw;
-    max-height: 95vh;
-    margin: 2.5vh auto;
-    padding: 0;
+    max-width: 80vw;
+    max-height: 80vh;
+    margin: 10vh auto;
+    padding: 20px;
     position: relative;
     display: flex;
     align-items: center;
@@ -665,9 +665,9 @@
 
 .image-modal-content .close {
     position: absolute;
-    top: -40px;
-    right: 0;
-    background: rgba(0, 0, 0, 0.7);
+    top: 10px;
+    right: 10px;
+    background: rgba(0, 0, 0, 0.8);
     color: white;
     width: 40px;
     height: 40px;
@@ -675,15 +675,40 @@
     display: flex;
     align-items: center;
     justify-content: center;
-    font-size: 20px;
+    font-size: 24px;
     z-index: 2001;
+    cursor: pointer;
+    border: 2px solid rgba(255, 255, 255, 0.3);
+    transition: all 0.2s ease;
+}
+
+.image-modal-content .close:hover {
+    background: rgba(255, 0, 0, 0.8);
+    border-color: rgba(255, 255, 255, 0.6);
+    transform: scale(1.1);
 }
 
 .image-modal-content img {
-    max-width: 100%;
-    max-height: 100%;
+    max-width: calc(100% - 40px);
+    max-height: calc(100% - 40px);
     border-radius: 8px;
     object-fit: contain;
+    box-shadow: 0 4px 20px rgba(0, 0, 0, 0.3);
+}
+
+/* Responsive adjustments */
+@media (max-width: 768px) {
+    .image-modal-content {
+        max-width: 90vw;
+        max-height: 90vh;
+        margin: 5vh auto;
+        padding: 15px;
+    }
+    
+    .image-modal-content img {
+        max-width: calc(100% - 30px);
+        max-height: calc(100% - 30px);
+    }
 }
 
 /* Form Sections */
