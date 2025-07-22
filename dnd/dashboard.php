@@ -197,18 +197,24 @@ function saveCharacterData($data) {
     
     // If current file has real data but new data is all empty, reject the save
     if (!$hasRealData && file_exists($dataFile)) {
-        $currentData = loadCharacterData();
-        $currentHasRealData = false;
-        foreach ($currentData as $char => $charData) {
-            if (isset($charData['character']['character_name']) && !empty($charData['character']['character_name'])) {
-                $currentHasRealData = true;
-                break;
+        // Read current file directly to avoid recursion
+        $currentContent = file_get_contents($dataFile);
+        if ($currentContent) {
+            $currentData = json_decode($currentContent, true);
+            if ($currentData && json_last_error() === JSON_ERROR_NONE) {
+                $currentHasRealData = false;
+                foreach ($currentData as $char => $charData) {
+                    if (isset($charData['character']['character_name']) && !empty($charData['character']['character_name'])) {
+                        $currentHasRealData = true;
+                        break;
+                    }
+                }
+                
+                if ($currentHasRealData) {
+                    error_log("ERROR: Rejected save - would overwrite real data with empty defaults");
+                    return false;
+                }
             }
-        }
-        
-        if ($currentHasRealData) {
-            error_log("ERROR: Rejected save - would overwrite real data with empty defaults");
-            return false;
         }
     }
     
