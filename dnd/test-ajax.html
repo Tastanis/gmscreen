@@ -17,6 +17,11 @@
         formData.append('action', 'load');
         formData.append('character', 'frunk');
         
+        // Also test other characters
+        setTimeout(() => testChar('sharon'), 2000);
+        setTimeout(() => testChar('indigo'), 4000);
+        setTimeout(() => testChar('zepha'), 6000);
+        
         fetch('dashboard.php', {
             method: 'POST',
             body: formData
@@ -39,6 +44,33 @@
         })
         .catch(error => {
             output.textContent += '\n\nFetch Error: ' + error;
+        });
+    }
+    
+    function testChar(charName) {
+        const output = document.getElementById('output');
+        output.textContent += '\n\n=== Testing ' + charName + ' ===';
+        
+        const formData = new FormData();
+        formData.append('action', 'load');
+        formData.append('character', charName);
+        
+        fetch('dashboard.php', {
+            method: 'POST',
+            body: formData
+        })
+        .then(response => response.json())
+        .then(data => {
+            if (data.success) {
+                const charData = data.data;
+                output.textContent += '\n' + charName + ' returned: ' + (charData.character.character_name || 'EMPTY');
+                output.textContent += ' (player: ' + (charData.character.player_name || 'EMPTY') + ')';
+            } else {
+                output.textContent += '\n' + charName + ' failed: ' + data.error;
+            }
+        })
+        .catch(error => {
+            output.textContent += '\n' + charName + ' error: ' + error;
         });
     }
     </script>
