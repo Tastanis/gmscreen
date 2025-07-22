@@ -1,0 +1,46 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <title>Test Character Loading</title>
+</head>
+<body>
+    <h1>Testing Character Data Loading</h1>
+    <button onclick="testLoad()">Test Load Frunk</button>
+    <pre id="output"></pre>
+    
+    <script>
+    function testLoad() {
+        const output = document.getElementById('output');
+        output.textContent = 'Loading...';
+        
+        const formData = new FormData();
+        formData.append('action', 'load');
+        formData.append('character', 'frunk');
+        
+        fetch('dashboard.php', {
+            method: 'POST',
+            body: formData
+        })
+        .then(response => {
+            output.textContent += '\nStatus: ' + response.status + ' ' + response.statusText;
+            output.textContent += '\nContent-Type: ' + response.headers.get('content-type');
+            return response.text(); // Get text instead of JSON to see what's returned
+        })
+        .then(text => {
+            output.textContent += '\n\nResponse Body:\n' + text;
+            
+            // Try to parse as JSON
+            try {
+                const data = JSON.parse(text);
+                output.textContent += '\n\nParsed JSON:\n' + JSON.stringify(data, null, 2);
+            } catch (e) {
+                output.textContent += '\n\nJSON Parse Error: ' + e.message;
+            }
+        })
+        .catch(error => {
+            output.textContent += '\n\nFetch Error: ' + error;
+        });
+    }
+    </script>
+</body>
+</html>
