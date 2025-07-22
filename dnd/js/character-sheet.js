@@ -1,30 +1,29 @@
 // Enhanced Character Sheet JavaScript - Strixhaven Functionality with Read-Only Player Mode
 
-// Setup auto-save functionality (GM only)
+// Setup save on navigation functionality (GM only)
 function setupAutoSave() {
-    if (!isGM) return; // Only GM gets auto-save
+    if (!isGM) return; // Only GM gets navigation saves
     
-    // Auto-save every 30 seconds
-    autoSaveInterval = setInterval(function() {
-        try {
-            // Don't auto-save if we're switching characters
-            if (!isSwitchingCharacter) {
-                saveAllData(true); // true = silent save
-            }
-        } catch (error) {
-            console.error('Error in auto-save:', error);
-            // If auto-save keeps failing, stop it to prevent spam
-            clearInterval(autoSaveInterval);
-            console.log('Auto-save disabled due to persistent errors');
+    // NO MORE AUTO-SAVE INTERVAL - Removed to prevent 503 errors
+    
+    // Save before window/tab close
+    window.addEventListener('beforeunload', function(e) {
+        if (hasPendingChanges()) {
+            saveAllData(true); // Silent save
+            // Most browsers will show their own message, but we set one just in case
+            e.preventDefault();
+            e.returnValue = 'You have unsaved changes. Are you sure you want to leave?';
         }
-    }, 30000);
+    });
     
-    // Save on window close
-    window.addEventListener('beforeunload', function() {
-        try {
-            saveAllData(true);
-        } catch (error) {
-            console.error('Error in beforeunload save:', error);
+    // Save before navigating away from the page
+    document.addEventListener('click', function(e) {
+        // Check if clicking a link that will navigate away
+        const link = e.target.closest('a');
+        if (link && link.href && !link.href.startsWith('#') && link.href !== window.location.href) {
+            if (hasPendingChanges()) {
+                saveAllData(true);
+            }
         }
     });
 }
@@ -32,11 +31,11 @@ function setupAutoSave() {
 // Track pending saves to avoid multiple saves of the same field
 const pendingSaves = new Map();
 
-// Setup event listeners for form inputs (GM only)
+// Track changes for manual save (GM only)
 function setupEventListeners() {
-    if (!isGM) return; // Only GM gets event listeners
+    if (!isGM) return; // Only GM tracks changes
     
-    // Use event delegation with immediate value capture and batched saving
+    // Track when fields are modified but not saved
     document.addEventListener('input', function(event) {
         try {
             const target = event.target;
@@ -45,49 +44,40 @@ function setupEventListeners() {
             if ((target.tagName === 'INPUT' || target.tagName === 'TEXTAREA') && 
                 target.hasAttribute && target.hasAttribute('data-field')) {
                 
-                // Capture values immediately
+                // Mark that we have unsaved changes
+                markAsModified();
+                
+                // Update local data immediately for UI consistency
                 const field = target.getAttribute('data-field');
                 const section = target.getAttribute('data-section');
                 const value = target.value;
-                const character = currentCharacter;
                 
-                // Only proceed if we have valid data and not switching characters
                 if (field && section && value !== undefined && value !== null && !isSwitchingCharacter) {
-                    // Create a unique key for this field
-                    const fieldKey = `${character}-${section}-${field}`;
-                    
-                    // Clear any existing timeout for this field
-                    if (pendingSaves.has(fieldKey)) {
-                        clearTimeout(pendingSaves.get(fieldKey));
+                    // Update local characterData object
+                    if (section === 'character' || section === 'current_classes' || section === 'job') {
+                        if (!characterData[section]) characterData[section] = {};
+                        characterData[section][field] = value;
                     }
                     
-                    // Set a new timeout for this field
-                    const timeoutId = setTimeout(() => {
-                        try {
-                            // Don't save if we're now switching characters
-                            if (isSwitchingCharacter) {
-                                pendingSaves.delete(fieldKey);
-                                return;
-                            }
-                            
-                            // Use updateClubField for clubs to maintain local data consistency
-                            if (section === 'clubs') {
-                                updateClubField(currentClubIndex, field, value, character);
-                            } else {
-                                saveFieldData(character, section, field, value);
-                            }
-                            pendingSaves.delete(fieldKey);
-                        } catch (error) {
-                            console.error('Error saving field:', error);
-                            pendingSaves.delete(fieldKey);
-                        }
-                    }, 1000);
+                    // Special handling for relationships/projects
+                    const index = target.getAttribute('data-index');
+                    if (index !== null && (section === 'relationships' || section === 'projects')) {
+                        const idx = parseInt(index);
+                        if (!characterData[section]) characterData[section] = [];
+                        if (!characterData[section][idx]) characterData[section][idx] = {};
+                        characterData[section][idx][field] = value;
+                    }
                     
-                    pendingSaves.set(fieldKey, timeoutId);
+                    // Special handling for clubs
+                    if (section === 'clubs') {
+                        if (!characterData.clubs) characterData.clubs = [];
+                        if (!characterData.clubs[currentClubIndex]) characterData.clubs[currentClubIndex] = {};
+                        characterData.clubs[currentClubIndex][field] = value;
+                    }
                 }
             }
         } catch (error) {
-            console.error('Error in input event listener:', error);
+            console.error('Error in change tracking:', error);
         }
     });
 }
@@ -110,8 +100,11 @@ function switchCharacter(character) {
     // CRITICAL FIX: Store the character we're saving FROM before switching
     const characterToSaveFrom = currentCharacter;
     
-    // Save current character data before switching (using specific character)
-    saveAllDataForCharacter(characterToSaveFrom, true);
+    // Check if there are unsaved changes and save them
+    if (hasPendingChanges()) {
+        saveAllDataForCharacter(characterToSaveFrom, true);
+        clearModifiedFlag();
+    }
     
     // Wait longer for saves to complete, then switch
     setTimeout(function() {
@@ -661,8 +654,8 @@ function updateRelationshipField(index, field, value) {
     
     characterData.relationships[index][field] = value;
     
-    // Save to server
-    saveFieldData(currentCharacter, 'relationships', field, value, index);
+    // Mark as modified instead of auto-saving
+    markAsModified();
     
     // If we have a student_id and are updating points or extra, sync with student card
     if (characterData.relationships[index].student_id && 
@@ -971,7 +964,7 @@ function saveProjectData(index) {
             value = JSON.stringify(value);
         }
         
-        saveFieldData(currentCharacter, 'projects', field, value, index);
+        markAsModified();
     });
 }
 
@@ -1001,8 +994,8 @@ function updateProjectField(index, field, value) {
     
     characterData.projects[index][field] = value;
     
-    // Save to server
-    saveFieldData(currentCharacter, 'projects', field, value, index);
+    // Mark as modified instead of auto-saving
+    markAsModified();
     
     // Only update progress bar if total points changed
     if (field === 'total_points') {
@@ -1123,8 +1116,8 @@ function updateClubField(index, field, value, character) {
     // 1. Update local data immediately
     characterData.clubs[index][field] = value;
     
-    // 2. Save to server using the correct character
-    saveFieldData(targetCharacter, 'clubs', field, value, index);
+    // 2. Mark as modified instead of auto-saving
+    markAsModified();
 }
 
 // Load clubs - UPDATED FOR READ-ONLY MODE
@@ -1375,6 +1368,8 @@ function saveAllDataForCharacter(targetCharacter, silent = false) {
 // Save all data (GM only) - WRAPPER FOR BACKWARD COMPATIBILITY
 function saveAllData(silent = false) {
     saveAllDataForCharacter(currentCharacter, silent);
+    // Clear the modified flag after successful save
+    clearModifiedFlag();
 }
 
 // Clear all form data to prevent contamination
@@ -1515,15 +1510,11 @@ function showSaveStatus(message, type) {
     }
 }
 
-// Function to restart auto-save if it gets disabled
+// Function to manually trigger save (for backward compatibility)
 function restartAutoSave() {
-    if (!isGM) return;
-    
-    if (autoSaveInterval) {
-        clearInterval(autoSaveInterval);
-    }
-    setupAutoSave();
-    console.log('Auto-save restarted');
+    // This function is kept for backward compatibility but does nothing
+    // since we no longer have auto-save intervals
+    console.log('Auto-save intervals have been removed. Use manual save button.');
 }
 
 // Navigation functions for external sections
@@ -1595,6 +1586,30 @@ async function initRelationshipAutocomplete() {
             hideNameAutocomplete();
         }
     });
+}
+
+// Check if there are pending changes
+function hasPendingChanges() {
+    const saveBtn = document.getElementById('save-all-btn');
+    return saveBtn && saveBtn.classList.contains('has-changes');
+}
+
+// Mark that we have unsaved changes
+function markAsModified() {
+    const saveBtn = document.getElementById('save-all-btn');
+    if (saveBtn && !saveBtn.classList.contains('has-changes')) {
+        saveBtn.classList.add('has-changes');
+        saveBtn.textContent = 'Save All Data *';
+    }
+}
+
+// Clear the modified flag after saving
+function clearModifiedFlag() {
+    const saveBtn = document.getElementById('save-all-btn');
+    if (saveBtn) {
+        saveBtn.classList.remove('has-changes');
+        saveBtn.textContent = 'Save All Data';
+    }
 }
 
 function attachNameAutocomplete(input, index) {

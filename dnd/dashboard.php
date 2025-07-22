@@ -55,70 +55,220 @@ function updateStudentRelationshipPoints($npcName, $pcName, $points) {
 // Function to load character data
 function loadCharacterData() {
     $dataFile = 'data/characters.json';
+    
+    // If file exists, try to load it
     if (file_exists($dataFile)) {
         $content = file_get_contents($dataFile);
+        
+        // Check if file is not empty
+        if (empty($content)) {
+            error_log("ERROR: characters.json exists but is empty!");
+            // Try to load from backup
+            $backupFile = 'data/characters_backup_latest.json';
+            if (file_exists($backupFile)) {
+                $content = file_get_contents($backupFile);
+                error_log("Attempting to recover from backup file");
+            } else {
+                die("CRITICAL ERROR: Character data file is empty and no backup found. Please restore from a manual backup.");
+            }
+        }
+        
+        // Try to decode JSON
         $data = json_decode($content, true);
-        if ($data) {
-            return $data;
+        
+        // Check for JSON errors
+        if (json_last_error() !== JSON_ERROR_NONE) {
+            error_log("ERROR: JSON decode failed - " . json_last_error_msg());
+            error_log("File content length: " . strlen($content));
+            
+            // Try to load from backup
+            $backupFile = 'data/characters_backup_latest.json';
+            if (file_exists($backupFile)) {
+                $backupContent = file_get_contents($backupFile);
+                $data = json_decode($backupContent, true);
+                if (json_last_error() === JSON_ERROR_NONE && $data) {
+                    error_log("Successfully recovered from backup file");
+                    // Restore the backup as main file
+                    file_put_contents($dataFile, $backupContent, LOCK_EX);
+                    return $data;
+                }
+            }
+            
+            die("CRITICAL ERROR: Character data file is corrupted. JSON Error: " . json_last_error_msg() . ". Please restore from a manual backup.");
+        }
+        
+        // Validate that we have actual character data
+        if ($data && is_array($data) && !empty($data)) {
+            // Check if at least one character has a name (indicates real data vs empty defaults)
+            $hasRealData = false;
+            foreach ($data as $char => $charData) {
+                if (isset($charData['character']['character_name']) && !empty($charData['character']['character_name'])) {
+                    $hasRealData = true;
+                    break;
+                }
+            }
+            
+            if ($hasRealData) {
+                return $data;
+            } else {
+                error_log("WARNING: Character data exists but appears to be all defaults. This might indicate data loss.");
+                // Still return it but log the warning
+                return $data;
+            }
         }
     }
     
-    // Return default data structure if file doesn't exist
-    $default_data = array();
-    foreach (array('frunk', 'sharon', 'indigo', 'zepha') as $char) {
-        $default_data[$char] = array(
-            'character' => array(
-                'character_name' => '',
-                'player_name' => '',
-                'class' => '',
-                'race' => '',
-                'level' => '',
-                'college' => '',
-                'minor' => '',
-                'extra_curricular' => '',
-                'boon' => '',
-                'wealth' => '',
-                'renown' => '',
-                'other' => '',
-                'portrait' => ''
-            ),
-            'current_classes' => array(
-                'class_name' => '',
-                'test_1_grade' => '',
-                'test_2_grade' => '',
-                'project_1_grade' => '',
-                'project_2_grade' => '',
-                'overall_grade' => '',
-                'test_buffs' => ''
-            ),
-            'past_classes' => array(),
-            'relationships' => array(),
-            'projects' => array(),
-            'clubs' => array(
-                array('name' => '', 'people' => '', 'bonuses' => '', 'other' => '')
-            ),
-            'job' => array(
-                'job_title' => '',
-                'job_satisfaction' => '',
-                'wages' => '',
-                'coworkers' => ''
-            )
-        );
+    // Only create default data if file doesn't exist at all (fresh install)
+    if (!file_exists($dataFile)) {
+        error_log("Creating new character data file (first time setup)");
+        $default_data = array();
+        foreach (array('frunk', 'sharon', 'indigo', 'zepha') as $char) {
+            $default_data[$char] = array(
+                'character' => array(
+                    'character_name' => '',
+                    'player_name' => '',
+                    'class' => '',
+                    'race' => '',
+                    'level' => '',
+                    'college' => '',
+                    'minor' => '',
+                    'extra_curricular' => '',
+                    'boon' => '',
+                    'wealth' => '',
+                    'renown' => '',
+                    'other' => '',
+                    'portrait' => ''
+                ),
+                'current_classes' => array(
+                    'class_name' => '',
+                    'test_1_grade' => '',
+                    'test_2_grade' => '',
+                    'project_1_grade' => '',
+                    'project_2_grade' => '',
+                    'overall_grade' => '',
+                    'test_buffs' => ''
+                ),
+                'past_classes' => array(),
+                'relationships' => array(),
+                'projects' => array(),
+                'clubs' => array(
+                    array('name' => '', 'people' => '', 'bonuses' => '', 'other' => '')
+                ),
+                'job' => array(
+                    'job_title' => '',
+                    'job_satisfaction' => '',
+                    'wages' => '',
+                    'coworkers' => ''
+                )
+            );
+        }
+        return $default_data;
     }
-    return $default_data;
+    
+    // This should never be reached
+    die("CRITICAL ERROR: Unexpected state in loadCharacterData()");
 }
 
 // Function to save character data
 function saveCharacterData($data) {
     $dataFile = 'data/characters.json';
+    $tempFile = 'data/characters_temp.json';
+    $backupFile = 'data/characters_backup_latest.json';
     
     // Ensure data directory exists
     if (!is_dir('data')) {
         mkdir('data', 0755, true);
     }
     
+    // Validate data before saving
+    if (!is_array($data) || empty($data)) {
+        error_log("ERROR: Attempted to save invalid character data");
+        return false;
+    }
+    
+    // Check if we're about to save empty character data
+    $hasRealData = false;
+    foreach ($data as $char => $charData) {
+        if (isset($charData['character']['character_name']) && !empty($charData['character']['character_name'])) {
+            $hasRealData = true;
+            break;
+        }
+    }
+    
+    // If current file has real data but new data is all empty, reject the save
+    if (!$hasRealData && file_exists($dataFile)) {
+        $currentData = loadCharacterData();
+        $currentHasRealData = false;
+        foreach ($currentData as $char => $charData) {
+            if (isset($charData['character']['character_name']) && !empty($charData['character']['character_name'])) {
+                $currentHasRealData = true;
+                break;
+            }
+        }
+        
+        if ($currentHasRealData) {
+            error_log("ERROR: Rejected save - would overwrite real data with empty defaults");
+            return false;
+        }
+    }
+    
+    // Create backup of current file before saving
+    if (file_exists($dataFile)) {
+        $backupContent = file_get_contents($dataFile);
+        if (!empty($backupContent)) {
+            file_put_contents($backupFile, $backupContent, LOCK_EX);
+            
+            // Also create timestamped backup (keep last 5)
+            $timestampedBackup = 'data/characters_backup_' . date('Ymd_His') . '.json';
+            file_put_contents($timestampedBackup, $backupContent, LOCK_EX);
+            
+            // Clean up old backups (keep only last 5 timestamped ones)
+            $backups = glob('data/characters_backup_*.json');
+            if (count($backups) > 5) {
+                // Sort by filename (which includes timestamp)
+                sort($backups);
+                // Remove oldest ones
+                $toDelete = array_slice($backups, 0, count($backups) - 5);
+                foreach ($toDelete as $oldBackup) {
+                    if ($oldBackup !== $backupFile) { // Don't delete the _latest backup
+                        unlink($oldBackup);
+                    }
+                }
+            }
+        }
+    }
+    
+    // Encode data with validation
     $jsonData = json_encode($data, JSON_PRETTY_PRINT);
-    return file_put_contents($dataFile, $jsonData);
+    if ($jsonData === false) {
+        error_log("ERROR: Failed to encode character data to JSON");
+        return false;
+    }
+    
+    // Use atomic write: write to temp file first, then rename
+    $result = file_put_contents($tempFile, $jsonData, LOCK_EX);
+    if ($result === false) {
+        error_log("ERROR: Failed to write character data to temp file");
+        return false;
+    }
+    
+    // Verify the temp file is valid JSON
+    $verifyContent = file_get_contents($tempFile);
+    $verifyData = json_decode($verifyContent, true);
+    if (json_last_error() !== JSON_ERROR_NONE) {
+        error_log("ERROR: Temp file contains invalid JSON, aborting save");
+        unlink($tempFile);
+        return false;
+    }
+    
+    // Atomic rename (this is atomic on most filesystems)
+    if (!rename($tempFile, $dataFile)) {
+        error_log("ERROR: Failed to rename temp file to main file");
+        unlink($tempFile);
+        return false;
+    }
+    
+    return true;
 }
 
 // Function to load inventory data

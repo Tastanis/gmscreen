@@ -702,6 +702,27 @@ body {
     box-shadow: 0 6px 20px rgba(40, 167, 69, 0.4);
 }
 
+.btn-save.has-changes {
+    background: #dc3545;
+    animation: pulse 1s infinite;
+}
+
+.btn-save.has-changes:hover {
+    background: #c82333;
+}
+
+@keyframes pulse {
+    0% {
+        box-shadow: 0 0 0 0 rgba(220, 53, 69, 0.7);
+    }
+    70% {
+        box-shadow: 0 0 0 10px rgba(220, 53, 69, 0);
+    }
+    100% {
+        box-shadow: 0 0 0 0 rgba(220, 53, 69, 0);
+    }
+}
+
 .save-status {
     padding: 8px 16px;
     border-radius: 6px;
