@@ -9,7 +9,10 @@
       "Bash(grep:*)",
       "Bash(ls:*)",
       "Bash(php:*)",
-      "Bash(find:*)"
+      "Bash(find:*)",
+      "Bash(git rm:*)",
+      "Bash(git add:*)",
+      "Bash(git commit:*)"
     ],
     "deny": []
   }
