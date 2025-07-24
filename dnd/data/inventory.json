@@ -2,12 +2,12 @@
     "frunk": {
         "items": [
             {
-                "id": "item_1752009045316_twdb5ju02",
-                "name": "New Item",
-                "description": "",
-                "keywords": "",
-                "effect": "",
-                "image": "",
+                "id": "item_1752718386_x5migwq64",
+                "name": "Warren Keeper",
+                "description": "Made from a lightning Roc's feather and Voltic quartz, this rod arcs lightning to its allies to imbue them with power. The placement of the rod requires extreme strength.",
+                "keywords": "magic, thunder, electric, Maneuver",
+                "effect": "As a Maneuver, the rod can be driven into the ground. Allies determined by you during the rod's placement can be affected. \nRange: Burst 1\nDuration: 1 hour or until moved.\nAttacks against affected creatures take a bane.\n",
+                "image": "images\/item_1752718386_x5migwq64_1752718386.png",
                 "grid_x": 0,
                 "grid_y": 0,
                 "visible": true
@@ -23,6 +23,39 @@
                 "keywords": "elemental",
                 "effect": "Project resource for charisma snake",
                 "image": "images\/item_1751336845_i54vepg38_1751336845.png",
+                "grid_x": 0,
+                "grid_y": 0,
+                "visible": true
+            },
+            {
+                "id": "item_1752729133_icyrm604b",
+                "name": "Catapult Dust",
+                "description": "",
+                "keywords": "",
+                "effect": "Catapult Dust can be used as a free action to give any strike a knockback effect of 2. If the strike already has a knockback effect, +2 to knockback ",
+                "image": "images\/item_1752729133_icyrm604b_1752729133.png",
+                "grid_x": 0,
+                "grid_y": 0,
+                "visible": true
+            },
+            {
+                "id": "item_1752729147_wfkx6mjpa",
+                "name": "Healing Potion",
+                "description": "Thick and red, this liquid tastes of sour beer.",
+                "keywords": "magic, Potion",
+                "effect": "When you drink this potion as a maneuver, you regain Stamina equal to your recovery value without spending a Recovery.",
+                "image": "images\/item_1752729147_wfkx6mjpa_1752729147.png",
+                "grid_x": 0,
+                "grid_y": 0,
+                "visible": true
+            },
+            {
+                "id": "item_1753150599_rvm9lt6fa",
+                "name": "Fractal Prisim Lens",
+                "description": "A component for the quandix prism scope",
+                "keywords": "quandrix",
+                "effect": "When pointed at a quandrix equation or fractal, it reveals its true form. Edge on many quandrix checks.",
+                "image": "images\/item_1753150599_rvm9lt6fa_1753150599.png",
                 "grid_x": 0,
                 "grid_y": 0,
                 "visible": true
@@ -49,6 +82,17 @@
                 "keywords": "Psionic, magic, maneuver",
                 "effect": "",
                 "image": "images\/item_1751335097_96pn0oyfi_1752089139.png",
+                "grid_x": 0,
+                "grid_y": 0,
+                "visible": true
+            },
+            {
+                "id": "item_1753149477_eyt3vzx4j",
+                "name": "Crystalized Thought Echo",
+                "description": "Collected thoughts crystallized through mathematical matrices.",
+                "keywords": "magic, psionic ",
+                "effect": "Resource for light psionic projects",
+                "image": "images\/item_1753149477_eyt3vzx4j_1753149477.png",
                 "grid_x": 0,
                 "grid_y": 0,
                 "visible": true
@@ -104,55 +148,11 @@
                 "grid_x": 0,
                 "grid_y": 0,
                 "visible": true
-            },
-            {
-                "id": "item_1751336854_kozb9pegw",
-                "name": "Warren Keeper",
-                "description": "Made from a lightning Roc's feather and Voltic quartz, this rod arcs lightning to its allies to imbue them with power. The placement of the rod requires extreme strength.",
-                "keywords": "magic, thunder, electric, Maneuver",
-                "effect": "As a Maneuver, the rod can be driven into the ground. Allies determined by you during the rod's placement can be affected. \nRange: Burst 1\nDuration: 1 hour or until moved.\nAttacks against affected creatures take a bane.\n",
-                "image": "images\/item_1751336854_kozb9pegw_1751336854.png",
-                "grid_x": 0,
-                "grid_y": 0,
-                "visible": true
             }
         ]
     },
     "gm": {
         "items": [
-            {
-                "id": "item_1751320828327_3pjlo747o",
-                "name": "Crystalized Thought Echo",
-                "description": "Collected thoughts crystallized through mathematical matrices.",
-                "keywords": "magic, psionic ",
-                "effect": "Resource for light psionic projects",
-                "image": "images\/item_1751320828327_3pjlo747o_1751321003.png",
-                "grid_x": 0,
-                "grid_y": 0,
-                "visible": false
-            },
-            {
-                "id": "item_1751333055552_kstfks0if",
-                "name": "Catapult Dust",
-                "description": "",
-                "keywords": "",
-                "effect": "Catapult Dust can be used as a free action to give any strike a knockback effect of 2. If the strike already has a knockback effect, +2 to knockback ",
-                "image": "images\/item_1751333055552_kstfks0if_1751333361.png",
-                "grid_x": 0,
-                "grid_y": 0,
-                "visible": true
-            },
-            {
-                "id": "item_1751333866030_j9bsrcyca",
-                "name": "Healing Potion",
-                "description": "Thick and red, this liquid tastes of sour beer.",
-                "keywords": "magic, Potion",
-                "effect": "When you drink this potion as a maneuver, you regain Stamina equal to your recovery value without spending a Recovery.",
-                "image": "images\/item_1751333866030_j9bsrcyca_1751334017.png",
-                "grid_x": 0,
-                "grid_y": 0,
-                "visible": true
-            },
             {
                 "id": "item_1751342340480_z81vu86u5",
                 "name": "Lightning Hammer",

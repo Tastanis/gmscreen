@@ -2,6 +2,75 @@
     "round_count": 1,
     "player_turn_first": null,
     "initiative_rolled": false,
-    "creatures": [],
+    "creatures": {
+        "creature_1752865676580_3s27q3lyg": {
+            "id": "creature_1752865676580_3s27q3lyg",
+            "creature_type": "hero",
+            "name": "Frunk",
+            "x_pos": 10,
+            "y_pos": 60,
+            "status": "waiting",
+            "column": 0,
+            "conditions": [
+                "",
+                ""
+            ],
+            "other_condition": "",
+            "triggered_used": false,
+            "image_path": "creature_1750265534781_l0y3ow4p7_1750265542.png",
+            "hidden_from_players": false
+        },
+        "creature_1752865676582_vbtv44umd": {
+            "id": "creature_1752865676582_vbtv44umd",
+            "creature_type": "hero",
+            "name": "Indigo",
+            "x_pos": 10,
+            "y_pos": 225,
+            "status": "waiting",
+            "column": 0,
+            "conditions": [
+                "",
+                ""
+            ],
+            "other_condition": "",
+            "triggered_used": false,
+            "image_path": "creature_1750283926057_o3v8yirfn_1750283948.jpeg",
+            "hidden_from_players": false
+        },
+        "creature_1752865676584_9vm1f45ss": {
+            "id": "creature_1752865676584_9vm1f45ss",
+            "creature_type": "hero",
+            "name": "Sharon",
+            "x_pos": 10,
+            "y_pos": 390,
+            "status": "waiting",
+            "column": 0,
+            "conditions": [
+                "",
+                ""
+            ],
+            "other_condition": "",
+            "triggered_used": false,
+            "image_path": "creature_1750283882981_jrywya8j8_1750283891.png",
+            "hidden_from_players": false
+        },
+        "creature_1752865676585_kpk8srkt6": {
+            "id": "creature_1752865676585_kpk8srkt6",
+            "creature_type": "hero",
+            "name": "Zepha",
+            "x_pos": 10,
+            "y_pos": 555,
+            "status": "waiting",
+            "column": 0,
+            "conditions": [
+                "",
+                ""
+            ],
+            "other_condition": "",
+            "triggered_used": false,
+            "image_path": "creature_1750283901301_zhwxawl3b_1750283915.png",
+            "hidden_from_players": false
+        }
+    },
     "pcs": []
 }
