@@ -1,0 +1,174 @@
+{
+    "frunk": {
+        "character": {
+            "character_name": "",
+            "player_name": "",
+            "class": "",
+            "race": "",
+            "level": "",
+            "college": "",
+            "minor": "",
+            "extra_curricular": "",
+            "boon": "",
+            "wealth": "",
+            "renown": "",
+            "other": "",
+            "portrait": ""
+        },
+        "current_classes": {
+            "class_name": "",
+            "test_1_grade": "",
+            "test_2_grade": "",
+            "project_1_grade": "",
+            "project_2_grade": "",
+            "overall_grade": "",
+            "test_buffs": ""
+        },
+        "past_classes": [],
+        "relationships": [],
+        "projects": [],
+        "clubs": [
+            {
+                "name": "",
+                "people": "",
+                "bonuses": "",
+                "other": ""
+            }
+        ],
+        "job": {
+            "job_title": "",
+            "job_satisfaction": "",
+            "wages": "",
+            "coworkers": ""
+        }
+    },
+    "sharon": {
+        "character": {
+            "character_name": "",
+            "player_name": "",
+            "class": "",
+            "race": "",
+            "level": "",
+            "college": "",
+            "minor": "",
+            "extra_curricular": "",
+            "boon": "",
+            "wealth": "",
+            "renown": "",
+            "other": "",
+            "portrait": ""
+        },
+        "current_classes": {
+            "class_name": "",
+            "test_1_grade": "",
+            "test_2_grade": "",
+            "project_1_grade": "",
+            "project_2_grade": "",
+            "overall_grade": "",
+            "test_buffs": ""
+        },
+        "past_classes": [],
+        "relationships": [],
+        "projects": [],
+        "clubs": [
+            {
+                "name": "",
+                "people": "",
+                "bonuses": "",
+                "other": ""
+            }
+        ],
+        "job": {
+            "job_title": "",
+            "job_satisfaction": "",
+            "wages": "",
+            "coworkers": ""
+        }
+    },
+    "indigo": {
+        "character": {
+            "character_name": "",
+            "player_name": "",
+            "class": "",
+            "race": "",
+            "level": "",
+            "college": "",
+            "minor": "",
+            "extra_curricular": "",
+            "boon": "",
+            "wealth": "",
+            "renown": "",
+            "other": "",
+            "portrait": ""
+        },
+        "current_classes": {
+            "class_name": "",
+            "test_1_grade": "",
+            "test_2_grade": "",
+            "project_1_grade": "",
+            "project_2_grade": "",
+            "overall_grade": "",
+            "test_buffs": ""
+        },
+        "past_classes": [],
+        "relationships": [],
+        "projects": [],
+        "clubs": [
+            {
+                "name": "",
+                "people": "",
+                "bonuses": "",
+                "other": ""
+            }
+        ],
+        "job": {
+            "job_title": "",
+            "job_satisfaction": "",
+            "wages": "",
+            "coworkers": ""
+        }
+    },
+    "zepha": {
+        "character": {
+            "character_name": "",
+            "player_name": "",
+            "class": "",
+            "race": "",
+            "level": "",
+            "college": "",
+            "minor": "",
+            "extra_curricular": "",
+            "boon": "",
+            "wealth": "",
+            "renown": "",
+            "other": "",
+            "portrait": ""
+        },
+        "current_classes": {
+            "class_name": "",
+            "test_1_grade": "",
+            "test_2_grade": "",
+            "project_1_grade": "",
+            "project_2_grade": "",
+            "overall_grade": "",
+            "test_buffs": ""
+        },
+        "past_classes": [],
+        "relationships": [],
+        "projects": [],
+        "clubs": [
+            {
+                "name": "",
+                "people": "",
+                "bonuses": "",
+                "other": ""
+            }
+        ],
+        "job": {
+            "job_title": "",
+            "job_satisfaction": "",
+            "wages": "",
+            "coworkers": ""
+        }
+    }
+}

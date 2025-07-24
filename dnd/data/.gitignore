@@ -1,0 +1,16 @@
+# Ignore actual data files (keep only .example files)
+characters.json
+combat.json
+inventory.json
+version.json
+
+# Ignore all backup files
+characters_backup_*.json
+characters_temp.json
+*_backup_*.json
+
+# Ignore PHP session files
+sess_*
+
+# Don't ignore example files
+!*.example
