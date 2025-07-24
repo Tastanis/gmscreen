@@ -2,9 +2,9 @@
     "frunk": {
         "character": {
             "character_name": "Frunk",
-            "player_name": "",
-            "class": "",
-            "race": "",
+            "player_name": "Peter",
+            "class": "Fury",
+            "race": "Polder",
             "level": "1",
             "college": "NA",
             "minor": "NA",
@@ -100,6 +100,14 @@
                 "boon": "",
                 "bane": "",
                 "extra": "Expedition"
+            },
+            {
+                "npc_name": "",
+                "student_id": "",
+                "points": "",
+                "boon": "",
+                "bane": "",
+                "extra": ""
             }
         ],
         "projects": [
@@ -113,16 +121,6 @@
                     36,
                     46,
                     51
-                ]
-            },
-            {
-                "project_name": "Finding a beast",
-                "source": "",
-                "points_earned": "22",
-                "total_points": "50",
-                "extra": "",
-                "points_history": [
-                    22
                 ]
             },
             {
@@ -148,6 +146,14 @@
                     9,
                     22
                 ]
+            },
+            {
+                "project_name": "",
+                "source": "",
+                "points_earned": "",
+                "total_points": "",
+                "extra": "",
+                "points_history": []
             }
         ],
         "clubs": [
@@ -174,15 +180,15 @@
     "sharon": {
         "character": {
             "character_name": "Sharon",
-            "player_name": "",
-            "class": "",
-            "race": "",
+            "player_name": "Charlie",
+            "class": "Elf",
+            "race": "Human",
             "level": "1",
             "college": "NA",
             "minor": "NA",
-            "extra_curricular": "Mythical beast tamers club, Pranksters guild",
+            "extra_curricular": "Mythical beast tamers club, Strixhaven Star",
             "boon": "",
-            "wealth": "2",
+            "wealth": "0",
             "renown": "0",
             "other": "",
             "portrait": "portraits\/sharon_portrait_1750262899.png"
@@ -265,6 +271,14 @@
                 "boon": "",
                 "bane": "",
                 "extra": ""
+            },
+            {
+                "npc_name": "",
+                "student_id": "",
+                "points": "",
+                "boon": "",
+                "bane": "",
+                "extra": ""
             }
         ],
         "projects": [
@@ -320,6 +334,14 @@
                     22,
                     30
                 ]
+            },
+            {
+                "project_name": "",
+                "source": "",
+                "points_earned": "",
+                "total_points": "",
+                "extra": "",
+                "points_history": []
             }
         ],
         "clubs": [
@@ -346,13 +368,13 @@
     "indigo": {
         "character": {
             "character_name": "Indigo",
-            "player_name": "Peter",
-            "class": "Fury",
-            "race": "Polder",
+            "player_name": "Alie",
+            "class": "Talent",
+            "race": "Human",
             "level": "1",
             "college": "NA",
             "minor": "NA",
-            "extra_curricular": "Mythical beast tamers club, Pranksters guild",
+            "extra_curricular": "Mythical beast tamers club, Elemental dance troupe",
             "boon": "",
             "wealth": "2",
             "renown": "0",
@@ -507,6 +529,14 @@
                 "points_history": [
                     19
                 ]
+            },
+            {
+                "project_name": "",
+                "source": "",
+                "points_earned": "",
+                "total_points": "",
+                "extra": "",
+                "points_history": []
             }
         ],
         "clubs": [
@@ -517,8 +547,8 @@
                 "other": ""
             },
             {
-                "name": "Prankster's Guild",
-                "people": "Bramble Flux",
+                "name": "Elemental dance troupe",
+                "people": "",
                 "bonuses": "",
                 "other": ""
             }
@@ -533,15 +563,15 @@
     "zepha": {
         "character": {
             "character_name": "Zepha",
-            "player_name": "",
-            "class": "",
-            "race": "",
+            "player_name": "Christopher",
+            "class": "Elmentalist",
+            "race": "Elf",
             "level": "1",
             "college": "NA",
             "minor": "NA",
-            "extra_curricular": "Mythical beast tamers club, Pranksters guild",
+            "extra_curricular": "Arcane sculpting club",
             "boon": "",
-            "wealth": "2",
+            "wealth": "0",
             "renown": "0",
             "other": "",
             "portrait": "portraits\/zepha_portrait_1750214726.png"
@@ -674,6 +704,14 @@
                     0,
                     13
                 ]
+            },
+            {
+                "project_name": "",
+                "source": "",
+                "points_earned": "",
+                "total_points": "",
+                "extra": "",
+                "points_history": []
             }
         ],
         "clubs": [
@@ -682,12 +720,6 @@
                 "people": "frunk, sharon, indigo",
                 "bonuses": "",
                 "other": ""
-            },
-            {
-                "people": "Aurora Wynterstarr, Larine Arneza\r\n4th year: Aeloria Stormweaver",
-                "name": "Elemental Dance troupe",
-                "other": "med roll on medium test for rehersal.",
-                "bonuses": ""
             }
         ],
         "job": {
