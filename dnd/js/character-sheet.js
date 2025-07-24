@@ -9,7 +9,17 @@ function setupAutoSave() {
     // Save before window/tab close
     window.addEventListener('beforeunload', function(e) {
         if (hasPendingChanges()) {
-            saveAllData(true); // Silent save
+            // Use synchronous XMLHttpRequest for beforeunload (async doesn't work reliably)
+            const updates = collectAllFormData();
+            if (updates.length > 0) {
+                const xhr = new XMLHttpRequest();
+                xhr.open('POST', 'dashboard.php', false); // false = synchronous
+                xhr.setRequestHeader('Content-Type', 'application/x-www-form-urlencoded');
+                const params = 'action=batch_save&character=' + encodeURIComponent(currentCharacter) + 
+                              '&updates=' + encodeURIComponent(JSON.stringify(updates));
+                xhr.send(params);
+            }
+            
             // Most browsers will show their own message, but we set one just in case
             e.preventDefault();
             e.returnValue = 'You have unsaved changes. Are you sure you want to leave?';
@@ -22,7 +32,7 @@ function setupAutoSave() {
         const link = e.target.closest('a');
         if (link && link.href && !link.href.startsWith('#') && link.href !== window.location.href) {
             if (hasPendingChanges()) {
-                saveAllData(true);
+                batchSaveAllData(); // Use batch save
             }
         }
     });
@@ -30,6 +40,71 @@ function setupAutoSave() {
 
 // Track pending saves to avoid multiple saves of the same field
 const pendingSaves = new Map();
+
+// Save queue to prevent server overload
+const saveQueue = [];
+let isProcessingQueue = false;
+
+// Debounce timers for different operations
+const debounceTimers = new Map();
+
+// Process save queue sequentially
+async function processSaveQueue() {
+    if (isProcessingQueue || saveQueue.length === 0) {
+        return;
+    }
+    
+    isProcessingQueue = true;
+    
+    while (saveQueue.length > 0) {
+        const saveRequest = saveQueue.shift();
+        
+        try {
+            await performSave(saveRequest);
+            // Small delay between saves to prevent server overload
+            await new Promise(resolve => setTimeout(resolve, 100));
+        } catch (error) {
+            console.error('Error processing save:', error);
+            // Continue processing queue even if one save fails
+        }
+    }
+    
+    isProcessingQueue = false;
+}
+
+// Perform individual save
+async function performSave(saveRequest) {
+    const { character, section, field, value, index } = saveRequest;
+    
+    const formData = new FormData();
+    formData.append('action', 'save');
+    formData.append('character', character);
+    formData.append('section', section);
+    formData.append('field', field);
+    formData.append('value', value);
+    
+    if (index !== null) {
+        formData.append('index', index);
+    }
+    
+    const response = await fetch('dashboard.php', {
+        method: 'POST',
+        body: formData
+    });
+    
+    if (!response.ok) {
+        console.error('HTTP Error saving field:', field, 'Status:', response.status, response.statusText);
+        throw new Error(`HTTP ${response.status}`);
+    }
+    
+    const data = await response.json();
+    if (!data.success) {
+        console.error('Failed to save field:', field, 'Error:', data.error);
+        throw new Error(data.error || 'Save failed');
+    }
+    
+    return data;
+}
 
 // Track changes for manual save (GM only)
 function setupEventListeners() {
@@ -130,51 +205,46 @@ function switchCharacter(character) {
     }, 500);
 }
 
-// Switch between sections - WITH AUTO-SAVE for GM only
+// Switch between sections
 function switchSection(section) {
-    // Save current data before switching (GM only)
-    if (isGM && !isSwitchingCharacter) {
-        saveAllData(true);
+    // No automatic save on section switch to prevent server overload
+    // Users should use the manual save button or rely on save-on-close
+    
+    // Hide all sections
+    document.querySelectorAll('.section').forEach(sec => {
+        sec.classList.remove('active');
+    });
+    
+    // Show selected section
+    document.getElementById(section + '-section').classList.add('active');
+    
+    // Update tab appearance
+    document.querySelectorAll('.section-tab').forEach(tab => {
+        tab.classList.remove('active');
+    });
+    document.querySelector(`[data-section="${section}"]`).classList.add('active');
+    
+    // Special handling for inventory section
+    if (section === 'inventory') {
+        // Make sure inventory data is loaded
+        if (typeof inventoryData !== 'undefined' && Object.keys(inventoryData).length === 0) {
+            loadInventoryData();
+        }
+        // Collapse any expanded inventory card when switching to inventory
+        if (typeof expandedInventoryCard !== 'undefined' && expandedInventoryCard) {
+            expandedInventoryCard.classList.remove('expanded');
+            expandedInventoryCard = null;
+        }
+    } else {
+        // Collapse any expanded inventory card when switching away from inventory
+        if (typeof expandedInventoryCard !== 'undefined' && expandedInventoryCard) {
+            expandedInventoryCard.classList.remove('expanded');
+            expandedInventoryCard = null;
+        }
     }
     
-    // Wait a moment for save to complete, then switch
-    setTimeout(function() {
-        // Hide all sections
-        document.querySelectorAll('.section').forEach(sec => {
-            sec.classList.remove('active');
-        });
-        
-        // Show selected section
-        document.getElementById(section + '-section').classList.add('active');
-        
-        // Update tab appearance
-        document.querySelectorAll('.section-tab').forEach(tab => {
-            tab.classList.remove('active');
-        });
-        document.querySelector(`[data-section="${section}"]`).classList.add('active');
-        
-        // Special handling for inventory section
-        if (section === 'inventory') {
-            // Make sure inventory data is loaded
-            if (typeof inventoryData !== 'undefined' && Object.keys(inventoryData).length === 0) {
-                loadInventoryData();
-            }
-            // Collapse any expanded inventory card when switching to inventory
-            if (typeof expandedInventoryCard !== 'undefined' && expandedInventoryCard) {
-                expandedInventoryCard.classList.remove('expanded');
-                expandedInventoryCard = null;
-            }
-        } else {
-            // Collapse any expanded inventory card when switching away from inventory
-            if (typeof expandedInventoryCard !== 'undefined' && expandedInventoryCard) {
-                expandedInventoryCard.classList.remove('expanded');
-                expandedInventoryCard = null;
-            }
-        }
-        
-        // Load section-specific data
-        loadSectionData(section);
-    }, isGM ? 200 : 0);
+    // Load section-specific data
+    loadSectionData(section);
 }
 
 // Auto-calculate overall grade (GM only)
@@ -218,11 +288,11 @@ function calculateOverallGrade() {
             const displayGrade = `${letterGrade} (${roundedGPA})`;
             overallElement.value = displayGrade;
             
-            // Save the calculated grade
-            saveFieldData(currentCharacter, 'current_classes', 'overall_grade', displayGrade);
+            // Save the calculated grade with shorter debounce
+            saveFieldData(currentCharacter, 'current_classes', 'overall_grade', displayGrade, null, 500);
         } else {
             overallElement.value = '';
-            saveFieldData(currentCharacter, 'current_classes', 'overall_grade', '');
+            saveFieldData(currentCharacter, 'current_classes', 'overall_grade', '', null, 500);
         }
     } else {
         overallElement.value = '';
@@ -1266,8 +1336,8 @@ function deleteClub() {
     }
 }
 
-// Save individual field data (GM only)
-function saveFieldData(character, section, field, value, index = null) {
+// Save individual field data (GM only) - Now uses queue with debouncing
+function saveFieldData(character, section, field, value, index = null, debounceDelay = 1000) {
     if (!isGM) return; // Only GM can save
     
     // Don't save empty or undefined values
@@ -1275,40 +1345,33 @@ function saveFieldData(character, section, field, value, index = null) {
         return;
     }
     
-    const formData = new FormData();
-    formData.append('action', 'save');
-    formData.append('character', character);
-    formData.append('section', section);
-    formData.append('field', field);
-    formData.append('value', value);
+    // Create a unique key for this field
+    const fieldKey = `${character}-${section}-${field}-${index || 'none'}`;
     
-    if (index !== null) {
-        formData.append('index', index);
+    // Clear any existing timer for this field
+    if (debounceTimers.has(fieldKey)) {
+        clearTimeout(debounceTimers.get(fieldKey));
     }
     
-    fetch('dashboard.php', {
-        method: 'POST',
-        body: formData
-    })
-    .then(response => {
-        // Log response status for debugging 508 errors
-        if (!response.ok) {
-            console.error('HTTP Error saving field:', field, 'Status:', response.status, response.statusText);
-        }
-        return response.json();
-    })
-    .then(data => {
-        if (!data.success) {
-            console.error('Failed to save field:', field, 'Error:', data.error);
-        }
-    })
-    .catch(error => {
-        console.error('Error saving field:', field, error);
-        // Log additional details for network errors
-        if (error.name === 'TypeError' && error.message.includes('Failed to fetch')) {
-            console.error('Network error - server may be overloaded or dropping connections');
-        }
-    });
+    // Set a new timer to save after delay
+    const timerId = setTimeout(() => {
+        // Add to queue
+        saveQueue.push({
+            character,
+            section,
+            field,
+            value,
+            index
+        });
+        
+        // Process queue
+        processSaveQueue();
+        
+        // Remove timer from map
+        debounceTimers.delete(fieldKey);
+    }, debounceDelay);
+    
+    debounceTimers.set(fieldKey, timerId);
 }
 
 // Save all data for a specific character (GM only) - FIXED VERSION
@@ -1370,6 +1433,101 @@ function saveAllData(silent = false) {
     saveAllDataForCharacter(currentCharacter, silent);
     // Clear the modified flag after successful save
     clearModifiedFlag();
+}
+
+// Collect all form data for saving
+function collectAllFormData() {
+    const updates = [];
+    
+    // Character data
+    document.querySelectorAll('input[data-section="character"], textarea[data-section="character"]').forEach(input => {
+        if (input.value !== undefined && input.value !== null && input.value !== '') {
+            updates.push({
+                section: 'character',
+                field: input.getAttribute('data-field'),
+                value: input.value
+            });
+        }
+    });
+    
+    // Current classes data
+    document.querySelectorAll('input[data-section="current_classes"], textarea[data-section="current_classes"]').forEach(input => {
+        if (input.value !== undefined && input.value !== null) {
+            updates.push({
+                section: 'current_classes',
+                field: input.getAttribute('data-field'),
+                value: input.value
+            });
+        }
+    });
+    
+    // Job data
+    document.querySelectorAll('input[data-section="job"], textarea[data-section="job"]').forEach(input => {
+        if (input.value !== undefined && input.value !== null) {
+            updates.push({
+                section: 'job',
+                field: input.getAttribute('data-field'),
+                value: input.value
+            });
+        }
+    });
+    
+    // Clubs data
+    document.querySelectorAll('input[data-section="clubs"], textarea[data-section="clubs"]').forEach(input => {
+        if (input.value !== undefined && input.value !== null) {
+            updates.push({
+                section: 'clubs',
+                field: input.getAttribute('data-field'),
+                value: input.value,
+                index: currentClubIndex
+            });
+        }
+    });
+    
+    return updates;
+}
+
+// Batch save all pending changes
+async function batchSaveAllData() {
+    if (!isGM) return;
+    
+    showSaveStatus('Saving all data...', 'loading');
+    
+    // Collect all current form data
+    const updates = collectAllFormData();
+    
+    if (updates.length === 0) {
+        showSaveStatus('No changes to save', 'info');
+        return;
+    }
+    
+    try {
+        const formData = new FormData();
+        formData.append('action', 'batch_save');
+        formData.append('character', currentCharacter);
+        formData.append('updates', JSON.stringify(updates));
+        
+        const response = await fetch('dashboard.php', {
+            method: 'POST',
+            body: formData
+        });
+        
+        if (!response.ok) {
+            throw new Error(`HTTP ${response.status}`);
+        }
+        
+        const data = await response.json();
+        
+        if (data.success) {
+            showSaveStatus(`Saved ${data.saved} fields successfully`, 'success');
+            clearModifiedFlag();
+        } else {
+            showSaveStatus('Failed to save data', 'error');
+        }
+    } catch (error) {
+        console.error('Error saving data:', error);
+        showSaveStatus('Error saving data', 'error');
+    }
 }
 
 // Clear all form data to prevent contamination

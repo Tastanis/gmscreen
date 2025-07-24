@@ -312,7 +312,95 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['action'])) {
         exit;
     }
     
-    if ($_POST['action'] === 'save') {
+    if ($_POST['action'] === 'batch_save') {
+        // Handle batch save to reduce server load
+        $updates = isset($_POST['updates']) ? json_decode($_POST['updates'], true) : array();
+        $character = isset($_POST['character']) ? $_POST['character'] : '';
+        
+        if (!in_array($character, $characters) || !is_array($updates)) {
+            echo json_encode(array('success' => false, 'error' => 'Invalid batch save request'));
+            exit;
+        }
+        
+        $data = loadCharacterData();
+        if (!isset($data[$character])) {
+            $data[$character] = array();
+        }
+        
+        $successCount = 0;
+        $errorCount = 0;
+        
+        foreach ($updates as $update) {
+            $section = isset($update['section']) ? $update['section'] : '';
+            $field = isset($update['field']) ? $update['field'] : '';
+            $value = isset($update['value']) ? $update['value'] : '';
+            $index = isset($update['index']) ? intval($update['index']) : null;
+            
+            try {
+                // Handle different sections
+                switch ($section) {
+                    case 'character':
+                    case 'current_classes':
+                    case 'job':
+                        if (!isset($data[$character][$section])) {
+                            $data[$character][$section] = array();
+                        }
+                        $data[$character][$section][$field] = $value;
+                        $successCount++;
+                        break;
+                        
+                    case 'relationships':
+                    case 'projects':
+                        if (!isset($data[$character][$section])) {
+                            $data[$character][$section] = array();
+                        }
+                        if ($index !== null) {
+                            if (!isset($data[$character][$section][$index])) {
+                                $data[$character][$section][$index] = array();
+                            }
+                            
+                            // Handle special case for points_history array
+                            if ($field === 'points_history' && is_string($value)) {
+                                $data[$character][$section][$index][$field] = json_decode($value, true);
+                            } else {
+                                $data[$character][$section][$index][$field] = $value;
+                            }
+                            $successCount++;
+                        }
+                        break;
+                        
+                    case 'clubs':
+                        if (!isset($data[$character][$section])) {
+                            $data[$character][$section] = array();
+                        }
+                        if ($index !== null) {
+                            if (!isset($data[$character][$section][$index])) {
+                                $data[$character][$section][$index] = array();
+                            }
+                            $data[$character][$section][$index][$field] = $value;
+                            $successCount++;
+                        }
+                        break;
+                        
+                    default:
+                        $errorCount++;
+                        break;
+                }
+            } catch (Exception $e) {
+                $errorCount++;
+            }
+        }
+        
+        if ($successCount > 0 && saveCharacterData($data)) {
+            echo json_encode(array(
+                'success' => true, 
+                'saved' => $successCount,
+                'errors' => $errorCount
+            ));
+        } else {
+            echo json_encode(array('success' => false, 'error' => 'Failed to save batch data'));
+        }
+    } elseif ($_POST['action'] === 'save') {
         $character = isset($_POST['character']) ? $_POST['character'] : '';
         $section = isset($_POST['section']) ? $_POST['section'] : '';
         $field = isset($_POST['field']) ? $_POST['field'] : '';
@@ -1115,7 +1203,7 @@ $defaultInventoryTab = $is_gm ? 'frunk' : $user;
         <!-- Save Button (GM Only) -->
         <?php if ($is_gm): ?>
             <div class="save-container">
-                <button id="save-all-btn" class="btn-save" onclick="saveAllData()">Save All Data</button>
+                <button id="save-all-btn" class="btn-save" onclick="batchSaveAllData()">Save All Data</button>
                 <div id="save-status" class="save-status"></div>
             </div>
         <?php endif; ?>
