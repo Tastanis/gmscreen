@@ -169,20 +169,80 @@ function loadCharacterData() {
     die("CRITICAL ERROR: Unexpected state in loadCharacterData()");
 }
 
+// Function to validate field data
+function validateFieldData($section, $field, $value) {
+    // Basic validation - prevent obviously bad data
+    if ($value === null || $value === 'undefined' || $value === 'null') {
+        return '';
+    }
+    
+    // Strip any HTML tags for security
+    $value = strip_tags($value);
+    
+    // Field-specific validation
+    switch ($section) {
+        case 'character':
+            if ($field === 'character_name' && strlen($value) > 100) {
+                return substr($value, 0, 100);
+            }
+            break;
+        case 'relationships':
+            if ($field === 'points' && !is_numeric($value) && !empty($value)) {
+                return '0';
+            }
+            break;
+        case 'projects':
+            if (($field === 'points_earned' || $field === 'total_points') && !is_numeric($value) && !empty($value)) {
+                return '0';
+            }
+            break;
+    }
+    
+    return $value;
+}
+
 // Function to save character data
 function saveCharacterData($data) {
     $dataFile = 'data/characters.json';
     $tempFile = 'data/characters_temp.json';
     $backupFile = 'data/characters_backup_latest.json';
+    $lockFile = 'data/characters.lock';
     
     // Ensure data directory exists
     if (!is_dir('data')) {
         mkdir('data', 0755, true);
     }
     
+    // Implement request-level locking to prevent concurrent saves
+    $lockHandle = fopen($lockFile, 'c+');
+    if (!$lockHandle) {
+        error_log("ERROR: Failed to create lock file");
+        return false;
+    }
+    
+    // Try to acquire exclusive lock with timeout
+    $lockAcquired = false;
+    $attempts = 0;
+    while ($attempts < 50) { // 5 second timeout (50 * 100ms)
+        if (flock($lockHandle, LOCK_EX | LOCK_NB)) {
+            $lockAcquired = true;
+            break;
+        }
+        usleep(100000); // Wait 100ms
+        $attempts++;
+    }
+    
+    if (!$lockAcquired) {
+        fclose($lockHandle);
+        error_log("ERROR: Failed to acquire lock for character save after 5 seconds");
+        return false;
+    }
+    
     // Validate data before saving
     if (!is_array($data) || empty($data)) {
         error_log("ERROR: Attempted to save invalid character data");
+        flock($lockHandle, LOCK_UN);
+        fclose($lockHandle);
         return false;
     }
     
@@ -212,6 +272,8 @@ function saveCharacterData($data) {
                 
                 if ($currentHasRealData) {
                     error_log("ERROR: Rejected save - would overwrite real data with empty defaults");
+                    flock($lockHandle, LOCK_UN);
+                    fclose($lockHandle);
                     return false;
                 }
             }
@@ -248,6 +310,8 @@ function saveCharacterData($data) {
     $jsonData = json_encode($data, JSON_PRETTY_PRINT);
     if ($jsonData === false) {
         error_log("ERROR: Failed to encode character data to JSON");
+        flock($lockHandle, LOCK_UN);
+        fclose($lockHandle);
         return false;
     }
     
@@ -255,6 +319,8 @@ function saveCharacterData($data) {
     $result = file_put_contents($tempFile, $jsonData, LOCK_EX);
     if ($result === false) {
         error_log("ERROR: Failed to write character data to temp file");
+        flock($lockHandle, LOCK_UN);
+        fclose($lockHandle);
         return false;
     }
     
@@ -264,6 +330,8 @@ function saveCharacterData($data) {
     if (json_last_error() !== JSON_ERROR_NONE) {
         error_log("ERROR: Temp file contains invalid JSON, aborting save");
         unlink($tempFile);
+        flock($lockHandle, LOCK_UN);
+        fclose($lockHandle);
         return false;
     }
     
@@ -271,8 +339,14 @@ function saveCharacterData($data) {
     if (!rename($tempFile, $dataFile)) {
         error_log("ERROR: Failed to rename temp file to main file");
         unlink($tempFile);
+        flock($lockHandle, LOCK_UN);
+        fclose($lockHandle);
         return false;
     }
+    
+    // Release lock
+    flock($lockHandle, LOCK_UN);
+    fclose($lockHandle);
     
     return true;
 }
@@ -301,8 +375,10 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['action'])) {
     header('Content-Type: application/json');
     
     // Handle inventory requests (separate from character data)
-    if (strpos($_POST['action'], 'inventory_') === 0) {
-        include 'inventory_handler.php';
+    // Use exact action matching to prevent false matches
+    $inventory_actions = ['inventory_load', 'inventory_save', 'inventory_update', 'inventory_delete', 'inventory_add'];
+    if (isset($_POST['action']) && in_array($_POST['action'], $inventory_actions)) {
+        include_once 'inventory_handler.php';
         exit;
     }
     
@@ -345,7 +421,9 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['action'])) {
                         if (!isset($data[$character][$section])) {
                             $data[$character][$section] = array();
                         }
-                        $data[$character][$section][$field] = $value;
+                        // Validate the value before saving
+                        $validatedValue = validateFieldData($section, $field, $value);
+                        $data[$character][$section][$field] = $validatedValue;
                         $successCount++;
                         break;
                         
@@ -363,7 +441,9 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['action'])) {
                             if ($field === 'points_history' && is_string($value)) {
                                 $data[$character][$section][$index][$field] = json_decode($value, true);
                             } else {
-                                $data[$character][$section][$index][$field] = $value;
+                                // Validate the value before saving
+                                $validatedValue = validateFieldData($section, $field, $value);
+                                $data[$character][$section][$index][$field] = $validatedValue;
                             }
                             $successCount++;
                         }
@@ -377,7 +457,9 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['action'])) {
                             if (!isset($data[$character][$section][$index])) {
                                 $data[$character][$section][$index] = array();
                             }
-                            $data[$character][$section][$index][$field] = $value;
+                            // Validate the value before saving
+                            $validatedValue = validateFieldData($section, $field, $value);
+                            $data[$character][$section][$index][$field] = $validatedValue;
                             $successCount++;
                         }
                         break;
@@ -445,7 +527,9 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['action'])) {
                         }
                     }
                     
-                    $data[$character][$section][$field] = $value;
+                    // Validate the value before saving
+                    $validatedValue = validateFieldData($section, $field, $value);
+                    $data[$character][$section][$field] = $validatedValue;
                     break;
                     
                 case 'relationships':
@@ -818,7 +902,7 @@ $defaultInventoryTab = $is_gm ? 'frunk' : $user;
                 <?php foreach ($characters as $index => $character): ?>
                     <button class="character-tab <?php echo $index === 0 ? 'active' : ''; ?>" 
                             data-character="<?php echo $character; ?>"
-                            onclick="switchCharacter('<?php echo $character; ?>')">
+                            onclick="switchCharacter('<?php echo $character; ?>').catch(err => console.error('Error switching character:', err))">
                         <?php echo ucfirst($character); ?>
                     </button>
                 <?php endforeach; ?>

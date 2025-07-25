@@ -48,33 +48,58 @@ let isProcessingQueue = false;
 // Debounce timers for different operations
 const debounceTimers = new Map();
 
+// Global save mutex to prevent concurrent saves
+let activeSavePromise = null;
+let pendingSaveCount = 0;
+
 // Process save queue sequentially
 async function processSaveQueue() {
     if (isProcessingQueue || saveQueue.length === 0) {
         return;
     }
     
-    isProcessingQueue = true;
-    
-    while (saveQueue.length > 0) {
-        const saveRequest = saveQueue.shift();
-        
-        try {
-            await performSave(saveRequest);
-            // Small delay between saves to prevent server overload
-            await new Promise(resolve => setTimeout(resolve, 100));
-        } catch (error) {
-            console.error('Error processing save:', error);
-            // Continue processing queue even if one save fails
-        }
+    // Wait for any active save to complete
+    if (activeSavePromise) {
+        await activeSavePromise;
     }
     
-    isProcessingQueue = false;
+    isProcessingQueue = true;
+    
+    // Create a new promise for this batch of saves
+    activeSavePromise = (async () => {
+        while (saveQueue.length > 0 && !isSwitchingCharacter) {
+            const saveRequest = saveQueue.shift();
+            pendingSaveCount++;
+            
+            try {
+                await performSave(saveRequest);
+                // Small delay between saves to prevent server overload
+                await new Promise(resolve => setTimeout(resolve, 100));
+            } catch (error) {
+                console.error('Error processing save:', error);
+                // Continue processing queue even if one save fails
+            } finally {
+                pendingSaveCount--;
+            }
+        }
+    })();
+    
+    try {
+        await activeSavePromise;
+    } finally {
+        isProcessingQueue = false;
+        activeSavePromise = null;
+    }
 }
 
-// Perform individual save
-async function performSave(saveRequest) {
-    const { character, section, field, value, index } = saveRequest;
+// Generate unique request ID
+function generateRequestId() {
+    return `save_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`;
+}
+
+// Perform individual save with retry logic
+async function performSave(saveRequest, retryCount = 0) {
+    const { character, section, field, value, index, requestId = generateRequestId() } = saveRequest;
     
     const formData = new FormData();
     formData.append('action', 'save');
@@ -82,28 +107,60 @@ async function performSave(saveRequest) {
     formData.append('section', section);
     formData.append('field', field);
     formData.append('value', value);
+    formData.append('request_id', requestId);
     
     if (index !== null) {
         formData.append('index', index);
     }
     
-    const response = await fetch('dashboard.php', {
-        method: 'POST',
-        body: formData
-    });
-    
-    if (!response.ok) {
-        console.error('HTTP Error saving field:', field, 'Status:', response.status, response.statusText);
-        throw new Error(`HTTP ${response.status}`);
+    try {
+        const response = await fetch('dashboard.php', {
+            method: 'POST',
+            body: formData
+        });
+        
+        if (!response.ok) {
+            // Don't retry on 4xx errors (client errors)
+            if (response.status >= 400 && response.status < 500) {
+                console.error('Client error saving field:', field, 'Status:', response.status);
+                throw new Error(`HTTP ${response.status} - Client Error`);
+            }
+            
+            // Retry on 5xx errors (server errors)
+            if (response.status >= 500 && retryCount < 3) {
+                console.warn(`Server error ${response.status}, retrying... (attempt ${retryCount + 1}/3)`);
+                await new Promise(resolve => setTimeout(resolve, 1000 * Math.pow(2, retryCount))); // Exponential backoff
+                return performSave(saveRequest, retryCount + 1);
+            }
+            
+            throw new Error(`HTTP ${response.status}`);
+        }
+        
+        const text = await response.text();
+        let data;
+        try {
+            data = JSON.parse(text);
+        } catch (e) {
+            console.error('Invalid JSON response:', text);
+            throw new Error('Server returned invalid JSON');
+        }
+        
+        if (!data.success) {
+            console.error('Failed to save field:', field, 'Error:', data.error);
+            throw new Error(data.error || 'Save failed');
+        }
+        
+        console.log(`Successfully saved ${field} (${requestId})`);
+        return data;
+        
+    } catch (error) {
+        if (retryCount < 3 && !error.message.includes('Client Error')) {
+            console.warn(`Error saving field ${field}, retrying... (attempt ${retryCount + 1}/3)`, error);
+            await new Promise(resolve => setTimeout(resolve, 1000 * Math.pow(2, retryCount))); // Exponential backoff
+            return performSave(saveRequest, retryCount + 1);
+        }
+        throw error;
     }
-    
-    const data = await response.json();
-    if (!data.success) {
-        console.error('Failed to save field:', field, 'Error:', data.error);
-        throw new Error(data.error || 'Save failed');
-    }
-    
-    return data;
 }
 
 // Track changes for manual save (GM only)
@@ -160,49 +217,61 @@ function setupEventListeners() {
 // Remove the separate debouncedSave function since we're handling it inline now
 
 // Switch between characters (GM only) - WITH SAFE CHARACTER ISOLATION
-function switchCharacter(character) {
+async function switchCharacter(character) {
     if (!isGM) return;
     
     // Set flag to prevent new saves during switch
     isSwitchingCharacter = true;
     
-    // Cancel all pending saves
-    pendingSaves.forEach((timeoutId, key) => {
-        clearTimeout(timeoutId);
+    // Cancel all pending debounced saves
+    debounceTimers.forEach((timerId, key) => {
+        clearTimeout(timerId);
     });
-    pendingSaves.clear();
+    debounceTimers.clear();
+    
+    // Clear the save queue
+    saveQueue.length = 0;
     
     // CRITICAL FIX: Store the character we're saving FROM before switching
     const characterToSaveFrom = currentCharacter;
+    
+    // Wait for any active saves to complete
+    if (activeSavePromise) {
+        try {
+            await activeSavePromise;
+        } catch (error) {
+            console.error('Error waiting for saves to complete:', error);
+        }
+    }
     
     // Check if there are unsaved changes and save them
     if (hasPendingChanges()) {
         saveAllDataForCharacter(characterToSaveFrom, true);
         clearModifiedFlag();
+        
+        // Wait a bit for the save to process
+        await new Promise(resolve => setTimeout(resolve, 300));
     }
     
-    // Wait longer for saves to complete, then switch
+    // Update current character AFTER saving the previous one
+    currentCharacter = character;
+    
+    // Update tab appearance
+    document.querySelectorAll('.character-tab').forEach(tab => {
+        tab.classList.remove('active');
+    });
+    document.querySelector(`[data-character="${character}"]`).classList.add('active');
+    
+    // Clear all form data before loading new character
+    clearAllFormData();
+    
+    // Load new character data
+    await loadCharacterData(character);
+    
+    // Re-enable saves after character data is loaded
     setTimeout(function() {
-        // Update current character AFTER saving the previous one
-        currentCharacter = character;
-        
-        // Update tab appearance
-        document.querySelectorAll('.character-tab').forEach(tab => {
-            tab.classList.remove('active');
-        });
-        document.querySelector(`[data-character="${character}"]`).classList.add('active');
-        
-        // Clear all form data before loading new character
-        clearAllFormData();
-        
-        // Load new character data
-        loadCharacterData(character);
-        
-        // Re-enable saves after character data is loaded
-        setTimeout(function() {
-            isSwitchingCharacter = false;
-        }, 500);
-    }, 500);
+        isSwitchingCharacter = false;
+    }, 200);
 }
 
 // Switch between sections
@@ -1355,13 +1424,14 @@ function saveFieldData(character, section, field, value, index = null, debounceD
     
     // Set a new timer to save after delay
     const timerId = setTimeout(() => {
-        // Add to queue
+        // Add to queue with unique request ID
         saveQueue.push({
             character,
             section,
             field,
             value,
-            index
+            index,
+            requestId: generateRequestId()
         });
         
         // Process queue
