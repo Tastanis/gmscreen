@@ -372,15 +372,34 @@ function loadInventoryData() {
 
 // Handle AJAX requests - ONLY ALLOW GM TO SAVE CHARACTER DATA
 if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['action'])) {
+    // Clear any previous output and set JSON header
+    ob_clean();
     header('Content-Type: application/json');
+    
+    // Set up error handling to ensure we always return JSON
+    set_error_handler(function($severity, $message, $file, $line) {
+        error_log("PHP Error in AJAX handler: $message in $file:$line");
+        echo json_encode(array('success' => false, 'error' => 'Server error occurred'));
+        exit;
+    });
+    
+    // Debug logging
+    error_log("DEBUG: Received action: " . $_POST['action']);
     
     // Handle inventory requests (separate from character data)
     // Use exact action matching to prevent false matches
-    $inventory_actions = ['inventory_load', 'inventory_save', 'inventory_update', 'inventory_delete', 'inventory_add'];
-    if (isset($_POST['action']) && in_array($_POST['action'], $inventory_actions)) {
+    if (isset($_POST['action']) && 
+        ($_POST['action'] === 'inventory_load' || 
+         $_POST['action'] === 'inventory_save' || 
+         $_POST['action'] === 'inventory_update' || 
+         $_POST['action'] === 'inventory_delete' || 
+         $_POST['action'] === 'inventory_add')) {
+        error_log("DEBUG: Routing to inventory handler for action: " . $_POST['action']);
         include_once 'inventory_handler.php';
         exit;
     }
+    
+    error_log("DEBUG: Processing character data action: " . $_POST['action']);
     
     // BLOCK ALL SAVE OPERATIONS FOR NON-GM USERS (character data only)
     if (!$is_gm && ($_POST['action'] === 'save' || $_POST['action'] === 'add_item' || $_POST['action'] === 'delete_item')) {
@@ -826,6 +845,10 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['action'])) {
             error_log('Error loading all characters: ' . $e->getMessage());
             echo json_encode(array('success' => false, 'error' => 'Failed to load character data'));
         }
+    } else {
+        // Unknown action
+        error_log("ERROR: Unknown action received: " . $_POST['action']);
+        echo json_encode(array('success' => false, 'error' => 'Unknown action: ' . $_POST['action']));
     }
     exit;
 }
