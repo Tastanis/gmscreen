@@ -938,14 +938,14 @@ $defaultInventoryTab = $is_gm ? 'frunk' : $user;
         <div class="content-wrapper">
             <!-- Section Tabs -->
             <div class="section-tabs">
-                <button class="section-tab active" data-section="character" onclick="switchSection('character')">Character Info</button>
-                <button class="section-tab" data-section="classes" onclick="switchSection('classes')">Current Classes</button>
-                <button class="section-tab" data-section="past-classes" onclick="switchSection('past-classes')">Past Classes</button>
-                <button class="section-tab" data-section="relationships" onclick="switchSection('relationships')">Relationships</button>
-                <button class="section-tab" data-section="projects" onclick="switchSection('projects')">Projects</button>
-                <button class="section-tab" data-section="clubs" onclick="switchSection('clubs')">Clubs</button>
-                <button class="section-tab" data-section="job" onclick="switchSection('job')">Job</button>
-                <button class="section-tab" data-section="inventory" onclick="switchSection('inventory')">Inventory</button>
+                <button class="section-tab active" data-section="character" onclick="switchSection('character').catch(err => console.error('Error switching section:', err))">Character Info</button>
+                <button class="section-tab" data-section="classes" onclick="switchSection('classes').catch(err => console.error('Error switching section:', err))">Current Classes</button>
+                <button class="section-tab" data-section="past-classes" onclick="switchSection('past-classes').catch(err => console.error('Error switching section:', err))">Past Classes</button>
+                <button class="section-tab" data-section="relationships" onclick="switchSection('relationships').catch(err => console.error('Error switching section:', err))">Relationships</button>
+                <button class="section-tab" data-section="projects" onclick="switchSection('projects').catch(err => console.error('Error switching section:', err))">Projects</button>
+                <button class="section-tab" data-section="clubs" onclick="switchSection('clubs').catch(err => console.error('Error switching section:', err))">Clubs</button>
+                <button class="section-tab" data-section="job" onclick="switchSection('job').catch(err => console.error('Error switching section:', err))">Job</button>
+                <button class="section-tab" data-section="inventory" onclick="switchSection('inventory').catch(err => console.error('Error switching section:', err))">Inventory</button>
             </div>
 
             <!-- Section Content -->
@@ -1175,16 +1175,16 @@ $defaultInventoryTab = $is_gm ? 'frunk' : $user;
                         <h2>Clubs</h2>
                         <?php if ($is_gm): ?>
                             <div class="club-navigation">
-                                <button id="prev-club" onclick="navigateClub(-1)">◀ Previous</button>
+                                <button id="prev-club" onclick="navigateClub(-1).catch(err => console.error('Error navigating club:', err))">◀ Previous</button>
                                 <span id="club-indicator">Club 1/1</span>
-                                <button id="next-club" onclick="navigateClub(1)">Next ▶</button>
+                                <button id="next-club" onclick="navigateClub(1).catch(err => console.error('Error navigating club:', err))">Next ▶</button>
                                 <button class="btn-add" onclick="addClub()">Add Club</button>
                             </div>
                         <?php else: ?>
                             <div class="club-navigation">
-                                <button id="prev-club" onclick="navigateClub(-1)">◀ Previous</button>
+                                <button id="prev-club" onclick="navigateClub(-1).catch(err => console.error('Error navigating club:', err))">◀ Previous</button>
                                 <span id="club-indicator">Club 1/1</span>
-                                <button id="next-club" onclick="navigateClub(1)">Next ▶</button>
+                                <button id="next-club" onclick="navigateClub(1).catch(err => console.error('Error navigating club:', err))">Next ▶</button>
                             </div>
                         <?php endif; ?>
                     </div>

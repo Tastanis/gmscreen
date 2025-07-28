@@ -52,6 +52,78 @@ const debounceTimers = new Map();
 let activeSavePromise = null;
 let pendingSaveCount = 0;
 
+// Wait for all pending saves to complete before navigation
+async function waitForPendingSaves() {
+    // Wait for any active save promise to complete
+    if (activeSavePromise) {
+        try {
+            await activeSavePromise;
+        } catch (error) {
+            console.error('Error waiting for active save:', error);
+        }
+    }
+    
+    // Force completion of all pending debounce timers
+    if (debounceTimers.size > 0) {
+        // Create promises for each pending timer
+        const timerPromises = [];
+        debounceTimers.forEach((timerId, fieldKey) => {
+            if (timerId) {
+                timerPromises.push(new Promise(resolve => {
+                    // Clear the existing timer and trigger the save immediately
+                    clearTimeout(timerId);
+                    
+                    // Get the pending save info
+                    const pendingValue = pendingSaves.get(fieldKey);
+                    if (pendingValue !== undefined) {
+                        // Parse the field key to get save parameters
+                        const parts = fieldKey.split('-');
+                        const character = parts[0];
+                        const section = parts[1];  
+                        const field = parts[2];
+                        const index = parts[3] === 'none' ? null : parseInt(parts[3]);
+                        
+                        // Add to save queue immediately
+                        saveQueue.push({
+                            character,
+                            section,
+                            field,
+                            value: pendingValue,
+                            index,
+                            requestId: generateRequestId()
+                        });
+                        
+                        // Clear the pending save and timer
+                        pendingSaves.delete(fieldKey);
+                    }
+                    
+                    resolve();
+                }));
+            }
+        });
+        
+        // Clear all timers
+        debounceTimers.clear();
+        
+        // Wait for all timer cleanup to complete
+        await Promise.all(timerPromises);
+        
+        // Process the save queue
+        processSaveQueue();
+    }
+    
+    // Wait for save queue to be empty
+    let attempts = 0;
+    while ((saveQueue.length > 0 || pendingSaveCount > 0 || isProcessingQueue) && attempts < 50) {
+        await new Promise(resolve => setTimeout(resolve, 100));
+        attempts++;
+    }
+    
+    if (attempts >= 50) {
+        console.warn('Timeout waiting for saves to complete');
+    }
+}
+
 // Process save queue sequentially
 async function processSaveQueue() {
     if (isProcessingQueue || saveQueue.length === 0) {
@@ -227,100 +299,144 @@ function setupEventListeners() {
 async function switchCharacter(character) {
     if (!isGM) return;
     
+    // Find the clicked tab to show loading state
+    const clickedTab = document.querySelector(`[data-character="${character}"]`);
+    const originalText = clickedTab ? clickedTab.textContent : '';
+    
     // Set flag to prevent new saves during switch
     isSwitchingCharacter = true;
     
-    // Cancel all pending debounced saves
-    debounceTimers.forEach((timerId, key) => {
-        clearTimeout(timerId);
-    });
-    debounceTimers.clear();
-    
-    // Clear the save queue
-    saveQueue.length = 0;
-    
-    // CRITICAL FIX: Store the character we're saving FROM before switching
-    const characterToSaveFrom = currentCharacter;
-    
-    // Wait for any active saves to complete
-    if (activeSavePromise) {
-        try {
-            await activeSavePromise;
-        } catch (error) {
-            console.error('Error waiting for saves to complete:', error);
+    try {
+        // Show loading state
+        if (clickedTab) {
+            clickedTab.textContent = 'Saving...';
+            clickedTab.disabled = true;
         }
-    }
-    
-    // Check if there are unsaved changes and save them
-    if (hasPendingChanges()) {
-        saveAllDataForCharacter(characterToSaveFrom, true);
-        clearModifiedFlag();
         
-        // Wait a bit for the save to process
-        await new Promise(resolve => setTimeout(resolve, 300));
+        // Wait for all pending saves to complete (including debounced ones)
+        await waitForPendingSaves();
+        
+        // CRITICAL FIX: Store the character we're saving FROM before switching
+        const characterToSaveFrom = currentCharacter;
+        
+        // Check if there are unsaved changes and save them
+        if (hasPendingChanges()) {
+            saveAllDataForCharacter(characterToSaveFrom, true);
+            clearModifiedFlag();
+            
+            // Wait a bit for the save to process
+            await new Promise(resolve => setTimeout(resolve, 300));
+        }
+        
+        // Update current character AFTER saving the previous one
+        currentCharacter = character;
+        
+        // Update tab appearance
+        document.querySelectorAll('.character-tab').forEach(tab => {
+            tab.classList.remove('active');
+            tab.disabled = false;
+            // Restore original text for all tabs
+            const tabCharacter = tab.getAttribute('data-character');
+            if (tabCharacter) {
+                tab.textContent = tabCharacter.charAt(0).toUpperCase() + tabCharacter.slice(1);
+            }
+        });
+        document.querySelector(`[data-character="${character}"]`).classList.add('active');
+        
+        // Clear all form data before loading new character
+        clearAllFormData();
+        
+        // Load new character data
+        await loadCharacterData(character);
+        
+    } catch (error) {
+        console.error('Error switching character:', error);
+        showSaveStatus('Error switching character', 'error');
+        
+        // Restore tab state on error
+        if (clickedTab) {
+            clickedTab.textContent = originalText;
+            clickedTab.disabled = false;
+        }
+    } finally {
+        // Re-enable saves after character data is loaded
+        setTimeout(function() {
+            isSwitchingCharacter = false;
+        }, 200);
     }
-    
-    // Update current character AFTER saving the previous one
-    currentCharacter = character;
-    
-    // Update tab appearance
-    document.querySelectorAll('.character-tab').forEach(tab => {
-        tab.classList.remove('active');
-    });
-    document.querySelector(`[data-character="${character}"]`).classList.add('active');
-    
-    // Clear all form data before loading new character
-    clearAllFormData();
-    
-    // Load new character data
-    await loadCharacterData(character);
-    
-    // Re-enable saves after character data is loaded
-    setTimeout(function() {
-        isSwitchingCharacter = false;
-    }, 200);
 }
 
 // Switch between sections
-function switchSection(section) {
-    // No automatic save on section switch to prevent server overload
-    // Users should use the manual save button or rely on save-on-close
+async function switchSection(section) {
+    // Find the clicked tab to show loading state
+    const clickedTab = document.querySelector(`[data-section="${section}"]`);
+    const originalText = clickedTab ? clickedTab.textContent : '';
     
-    // Hide all sections
-    document.querySelectorAll('.section').forEach(sec => {
-        sec.classList.remove('active');
-    });
-    
-    // Show selected section
-    document.getElementById(section + '-section').classList.add('active');
-    
-    // Update tab appearance
-    document.querySelectorAll('.section-tab').forEach(tab => {
-        tab.classList.remove('active');
-    });
-    document.querySelector(`[data-section="${section}"]`).classList.add('active');
-    
-    // Special handling for inventory section
-    if (section === 'inventory') {
-        // Make sure inventory data is loaded
-        if (typeof inventoryData !== 'undefined' && Object.keys(inventoryData).length === 0) {
-            loadInventoryData();
+    try {
+        // Show loading state and disable tab if there are pending saves
+        if (isGM) {
+            await waitForPendingSaves();
+            
+            // Show loading state during the wait
+            if (clickedTab && (saveQueue.length > 0 || pendingSaveCount > 0 || isProcessingQueue)) {
+                clickedTab.textContent = 'Saving...';
+                clickedTab.disabled = true;
+                
+                // Wait for saves to complete
+                await waitForPendingSaves();
+                
+                // Restore tab text
+                clickedTab.textContent = originalText;
+                clickedTab.disabled = false;
+            }
         }
-        // Collapse any expanded inventory card when switching to inventory
-        if (typeof expandedInventoryCard !== 'undefined' && expandedInventoryCard) {
-            expandedInventoryCard.classList.remove('expanded');
-            expandedInventoryCard = null;
+        
+        // Hide all sections
+        document.querySelectorAll('.section').forEach(sec => {
+            sec.classList.remove('active');
+        });
+        
+        // Show selected section
+        document.getElementById(section + '-section').classList.add('active');
+        
+        // Update tab appearance
+        document.querySelectorAll('.section-tab').forEach(tab => {
+            tab.classList.remove('active');
+        });
+        document.querySelector(`[data-section="${section}"]`).classList.add('active');
+        
+        // Special handling for inventory section
+        if (section === 'inventory') {
+            // Make sure inventory data is loaded
+            if (typeof inventoryData !== 'undefined' && Object.keys(inventoryData).length === 0) {
+                loadInventoryData();
+            }
+            // Collapse any expanded inventory card when switching to inventory
+            if (typeof expandedInventoryCard !== 'undefined' && expandedInventoryCard) {
+                expandedInventoryCard.classList.remove('expanded');
+                expandedInventoryCard = null;
+            }
+        } else {
+            // Collapse any expanded inventory card when switching away from inventory
+            if (typeof expandedInventoryCard !== 'undefined' && expandedInventoryCard) {
+                expandedInventoryCard.classList.remove('expanded');
+                expandedInventoryCard = null;
+            }
         }
-    } else {
-        // Collapse any expanded inventory card when switching away from inventory
-        if (typeof expandedInventoryCard !== 'undefined' && expandedInventoryCard) {
-            expandedInventoryCard.classList.remove('expanded');
-            expandedInventoryCard = null;
+        
+        // Load section-specific data
+        loadSectionData(section);
+        
+    } catch (error) {
+        console.error('Error switching section:', error);
+        showSaveStatus('Error switching section', 'error');
+        
+        // Restore tab state on error
+        if (clickedTab) {
+            clickedTab.textContent = originalText;
+            clickedTab.disabled = false;
         }
     }
-    
-    // Load section-specific data
-    loadSectionData(section);
 }
 
 // Auto-calculate overall grade (GM only)
@@ -1341,21 +1457,27 @@ function loadCurrentClub() {
 }
 
 // Navigate between clubs - WITH AUTO-SAVE for GM only
-function navigateClub(direction) {
+async function navigateClub(direction) {
     // Save current club data before navigating (GM only)
     if (isGM && !isSwitchingCharacter) {
-        saveAllData(true);
+        // Wait for any pending saves to complete
+        await waitForPendingSaves();
+        
+        // Save current data if there are changes
+        if (hasPendingChanges()) {
+            saveAllData(true);
+            // Small delay to let save process
+            await new Promise(resolve => setTimeout(resolve, 200));
+        }
     }
     
-    setTimeout(function() {
-        const newIndex = currentClubIndex + direction;
-        
-        if (newIndex >= 0 && newIndex < characterData.clubs.length) {
-            currentClubIndex = newIndex;
-            loadCurrentClub();
-            updateClubNavigation();
-        }
-    }, isGM ? 200 : 0);
+    const newIndex = currentClubIndex + direction;
+    
+    if (newIndex >= 0 && newIndex < characterData.clubs.length) {
+        currentClubIndex = newIndex;
+        loadCurrentClub();
+        updateClubNavigation();
+    }
 }
 
 // Update club navigation buttons
