@@ -565,7 +565,9 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['action'])) {
                         if ($field === 'points_history' && is_string($value)) {
                             $data[$character][$section][$index][$field] = json_decode($value, true);
                         } else {
-                            $data[$character][$section][$index][$field] = $value;
+                            // Validate the value before saving
+                            $validatedValue = validateFieldData($section, $field, $value);
+                            $data[$character][$section][$index][$field] = $validatedValue;
                         }
                     }
                     break;
@@ -648,9 +650,9 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['action'])) {
                     $data[$character]['relationships'] = array();
                 }
                 $data[$character]['relationships'][] = array(
-                    'npc_name' => '',
+                    'npc_name' => 'New Relationship',
                     'student_id' => '',
-                    'points' => '',
+                    'points' => '0',
                     'boon' => '',
                     'bane' => '',
                     'extra' => ''
@@ -660,10 +662,10 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['action'])) {
                     $data[$character]['projects'] = array();
                 }
                 $data[$character]['projects'][] = array(
-                    'project_name' => '',
+                    'project_name' => 'New Project',
                     'source' => '',
-                    'points_earned' => '',
-                    'total_points' => '',
+                    'points_earned' => '0',
+                    'total_points' => '10',
                     'extra' => '',
                     'points_history' => array()
                 );

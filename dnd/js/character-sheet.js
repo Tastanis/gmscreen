@@ -126,7 +126,14 @@ async function performSave(saveRequest, retryCount = 0) {
                 throw new Error(`HTTP ${response.status} - Client Error`);
             }
             
-            // Retry on 5xx errors (server errors)
+            // Special handling for 508 Loop Detected
+            if (response.status === 508) {
+                console.error('508 Loop Detected for field:', field, 'in section:', saveRequest.section);
+                // Don't retry 508 errors - they indicate a logic problem
+                throw new Error('Loop detected - possible recursive save');
+            }
+            
+            // Retry on other 5xx errors (server errors)
             if (response.status >= 500 && retryCount < 3) {
                 console.warn(`Server error ${response.status}, retrying... (attempt ${retryCount + 1}/3)`);
                 await new Promise(resolve => setTimeout(resolve, 1000 * Math.pow(2, retryCount))); // Exponential backoff
@@ -793,8 +800,11 @@ function updateRelationshipField(index, field, value) {
     
     characterData.relationships[index][field] = value;
     
-    // Mark as modified instead of auto-saving
+    // Mark as modified
     markAsModified();
+    
+    // Save this specific field to server with longer debounce
+    saveFieldData(currentCharacter, 'relationships', field, value, index, 2000);
     
     // If we have a student_id and are updating points or extra, sync with student card
     if (characterData.relationships[index].student_id && 
@@ -804,7 +814,10 @@ function updateRelationshipField(index, field, value) {
     
     // Update header if name or points changed
     if (field === 'npc_name' || field === 'points') {
-        loadRelationships();
+        // Delay the reload to allow save to process
+        setTimeout(() => {
+            loadRelationships();
+        }, 100);
     }
 }
 
@@ -854,16 +867,24 @@ function addRelationship() {
             if (!characterData.relationships) {
                 characterData.relationships = [];
             }
-            characterData.relationships.push({
-                npc_name: '',
-                points: '',
+            // Add new relationship with proper default values
+            const newRelationship = {
+                npc_name: 'New Relationship',
+                points: '0',
                 boon: '',
                 bane: '',
-                extra: ''
-            });
+                extra: '',
+                student_id: ''
+            };
+            characterData.relationships.push(newRelationship);
             loadRelationships();
             showSaveStatus('Relationship added', 'success');
+            markAsModified();
         }
+    })
+    .catch(error => {
+        console.error('Error adding relationship:', error);
+        showSaveStatus('Failed to add relationship', 'error');
     });
 }
 
@@ -1103,8 +1124,11 @@ function saveProjectData(index) {
             value = JSON.stringify(value);
         }
         
-        markAsModified();
+        // Save each field with debounce
+        saveFieldData(currentCharacter, 'projects', field, value, index, 2000);
     });
+    
+    markAsModified();
 }
 
 // Update project history display
@@ -1133,8 +1157,11 @@ function updateProjectField(index, field, value) {
     
     characterData.projects[index][field] = value;
     
-    // Mark as modified instead of auto-saving
+    // Mark as modified
     markAsModified();
+    
+    // Save this specific field to server with longer debounce
+    saveFieldData(currentCharacter, 'projects', field, value, index, 2000);
     
     // Only update progress bar if total points changed
     if (field === 'total_points') {
@@ -1195,17 +1222,24 @@ function addProject() {
             if (!characterData.projects) {
                 characterData.projects = [];
             }
-            characterData.projects.push({
-                project_name: '',
+            // Add new project with proper default values
+            const newProject = {
+                project_name: 'New Project',
                 source: '',
-                points_earned: '',
-                total_points: '',
+                points_earned: '0',
+                total_points: '10',
                 extra: '',
                 points_history: []
-            });
+            };
+            characterData.projects.push(newProject);
             loadProjects();
             showSaveStatus('Project added', 'success');
+            markAsModified();
         }
+    })
+    .catch(error => {
+        console.error('Error adding project:', error);
+        showSaveStatus('Failed to add project', 'error');
     });
 }
 
@@ -1414,8 +1448,24 @@ function saveFieldData(character, section, field, value, index = null, debounceD
         return;
     }
     
+    // Prevent saving if currently switching characters
+    if (isSwitchingCharacter) {
+        console.log('Skipping save during character switch');
+        return;
+    }
+    
     // Create a unique key for this field
     const fieldKey = `${character}-${section}-${field}-${index || 'none'}`;
+    
+    // Check if this exact save is already pending
+    const pendingSave = pendingSaves.get(fieldKey);
+    if (pendingSave && pendingSave === value) {
+        console.log('Skipping duplicate save for:', fieldKey);
+        return;
+    }
+    
+    // Mark this save as pending
+    pendingSaves.set(fieldKey, value);
     
     // Clear any existing timer for this field
     if (debounceTimers.has(fieldKey)) {
@@ -1439,6 +1489,8 @@ function saveFieldData(character, section, field, value, index = null, debounceD
         
         // Remove timer from map
         debounceTimers.delete(fieldKey);
+        // Clear pending save
+        pendingSaves.delete(fieldKey);
     }, debounceDelay);
     
     debounceTimers.set(fieldKey, timerId);
@@ -1492,6 +1544,9 @@ function saveAllDataForCharacter(targetCharacter, silent = false) {
     // Club data
     const clubInputs = document.querySelectorAll('input[data-section="clubs"], textarea[data-section="clubs"]');
     clubInputs.forEach(input => safelySaveFromElement(input, 'clubs', currentClubIndex));
+    
+    // NOTE: Relationships and Projects are NOT saved here because they use dynamic inputs
+    // They are saved through updateRelationshipField and updateProjectField functions
     
     if (!silent) {
         showSaveStatus(`Data saved for ${targetCharacter}`, 'success');
@@ -1566,6 +1621,42 @@ async function batchSaveAllData() {
     // Collect all current form data
     const updates = collectAllFormData();
     
+    // Also collect relationships and projects data
+    if (characterData.relationships && characterData.relationships.length > 0) {
+        characterData.relationships.forEach((rel, index) => {
+            Object.keys(rel).forEach(field => {
+                if (rel[field] !== undefined && rel[field] !== null) {
+                    updates.push({
+                        section: 'relationships',
+                        field: field,
+                        value: rel[field],
+                        index: index
+                    });
+                }
+            });
+        });
+    }
+    
+    if (characterData.projects && characterData.projects.length > 0) {
+        characterData.projects.forEach((proj, index) => {
+            Object.keys(proj).forEach(field => {
+                if (proj[field] !== undefined && proj[field] !== null) {
+                    let value = proj[field];
+                    // Convert arrays to JSON for transmission
+                    if (Array.isArray(value)) {
+                        value = JSON.stringify(value);
+                    }
+                    updates.push({
+                        section: 'projects',
+                        field: field,
+                        value: value,
+                        index: index
+                    });
+                }
+            });
+        });
+    }
+    
     if (updates.length === 0) {
         showSaveStatus('No changes to save', 'info');
         return;
@@ -1583,6 +1674,12 @@ async function batchSaveAllData() {
         });
         
         if (!response.ok) {
+            // Handle 508 error specifically
+            if (response.status === 508) {
+                console.error('508 Loop Detected - Possible recursive save issue');
+                showSaveStatus('Save failed - Loop detected', 'error');
+                return;
+            }
             throw new Error(`HTTP ${response.status}`);
         }
         
