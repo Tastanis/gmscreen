@@ -553,7 +553,10 @@ function setupCardEventListeners(card, monsterId) {
     // Track listeners for cleanup
     changeListeners.set(monsterId, Array.from(inputs));
     
-    console.log(`Set up ${inputs.length} event listeners for monster ${monsterId}`);
+    // Simplified logging - only show when setting up many listeners
+    if (inputs.length > 6) {
+        console.log(`Set up ${inputs.length} event listeners for ${monsterId}`);
+    }
 }
 
 // Delete monster function - Updated for new save system
@@ -607,7 +610,7 @@ function deleteMonster(monsterId) {
 }
 
 function saveCurrentWorkspace() {
-    console.log('Saving current workspace...');
+    // Removed verbose workspace saving log for cleaner console
     
     document.querySelectorAll('.monster-card').forEach(card => {
         const monsterId = card.getAttribute('data-monster-id');
@@ -654,7 +657,7 @@ function saveCurrentWorkspace() {
         }
     });
     
-    console.log('Workspace save complete. Current monster data:', monsterData.monsters);
+    // Workspace save complete - removed verbose logging for cleaner console
 }
 
 function saveMonsterField(monsterId, input) {
@@ -683,7 +686,10 @@ function saveMonsterField(monsterId, input) {
 function markMonsterDirty(monsterId) {
     if (!isInitialLoad) {
         dirtyMonsters.add(monsterId);
-        console.log(`Monster ${monsterId} marked as dirty`);
+        // Only log when first marking as dirty, not for every keystroke
+        if (dirtyMonsters.size === 1) {
+            console.log(`Started tracking changes...`);
+        }
         queueSave();
     }
 }
@@ -780,7 +786,10 @@ function handleFieldChange(event) {
     monster.lastModified = Date.now();
     markMonsterDirty(monsterId);
     
-    console.log(`Field changed: ${fieldPath} = ${value} for monster ${monsterId}`);
+    // Only log field changes occasionally to reduce console noise
+    if (Math.random() < 0.1) { // Log ~10% of field changes
+        console.log(`Field update: ${fieldPath} → ${value}`);
+    }
 }
 
 // Save System
@@ -823,8 +832,10 @@ async function saveChangedData() {
             saveReason.push('tab structure changes');
         }
         
-        console.log(`Saving: ${saveReason.join(' + ')}`);
-        console.log('Dirty monsters:', Array.from(dirtyMonsters));
+        console.log(`💾 Saving: ${saveReason.join(' + ')}`);
+        if (dirtyMonsters.size > 0) {
+            console.log(`📝 Changed monsters: ${dirtyMonsters.size}`);
+        }
         
         const response = await fetch('save-monster-data.php', {
             method: 'POST',
@@ -848,7 +859,7 @@ async function saveChangedData() {
             // Clear dirty flags after successful save
             dirtyMonsters.clear();
             needsTabSave = false;
-            console.log('Data saved successfully');
+            console.log('✅ Data saved successfully');
         } else {
             updateSaveStatus('error');
             console.error('Save failed:', result.error);
