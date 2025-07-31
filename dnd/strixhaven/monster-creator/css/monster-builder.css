@@ -110,9 +110,59 @@ body {
 /* Workspace */
 .workspace {
     flex: 1;
-    padding: 20px;
+    display: flex;
+    flex-direction: column;
     overflow-y: auto;
     background-color: #f8f9fa;
+}
+
+/* Workspace Header */
+.workspace-header {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    padding: 15px 20px;
+    background-color: white;
+    border-bottom: 1px solid #e0e0e0;
+    box-shadow: 0 2px 4px rgba(0, 0, 0, 0.05);
+    position: sticky;
+    top: 0;
+    z-index: 10;
+}
+
+.workspace-title h3 {
+    margin: 0;
+    color: #2c3e50;
+    font-size: 18px;
+    font-weight: 600;
+}
+
+.workspace-actions {
+    display: flex;
+    gap: 10px;
+}
+
+.add-monster-btn {
+    background-color: #27ae60;
+    color: white;
+    border: none;
+    padding: 10px 20px;
+    border-radius: 5px;
+    cursor: pointer;
+    font-size: 14px;
+    font-weight: 500;
+    transition: background-color 0.2s;
+}
+
+.add-monster-btn:hover {
+    background-color: #229954;
+}
+
+/* Workspace Content */
+.workspace-content {
+    flex: 1;
+    padding: 20px;
+    overflow-y: auto;
 }
 
 /* Monster Card */
@@ -346,6 +396,13 @@ body {
     text-align: center;
     padding: 50px 20px;
     color: #666;
+}
+
+.info-hint {
+    font-size: 14px;
+    color: #999;
+    margin-top: 10px;
+    font-style: italic;
 }
 
 .btn-primary {

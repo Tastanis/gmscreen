@@ -17,6 +17,7 @@ let currentSubTab = 'default-sub';
 let autoSaveTimer = null;
 let saveQueue = [];
 let isSaving = false;
+let isInitialLoad = true; // Flag to track initial page load vs user changes
 
 // Initialize on page load
 document.addEventListener('DOMContentLoaded', async function() {
@@ -39,6 +40,12 @@ document.addEventListener('DOMContentLoaded', async function() {
     
     // Start auto-save timer
     startAutoSave();
+    
+    // Mark initial load as complete after everything is set up
+    setTimeout(() => {
+        isInitialLoad = false;
+        console.log('Initial load complete - user changes will now be tracked');
+    }, 1000);
     
     // Set up window close handler
     window.addEventListener('beforeunload', function(e) {
@@ -367,7 +374,28 @@ function loadWorkspace() {
     console.log('  - monsterData.monsters content:', monsterData.monsters);
     
     const workspace = document.getElementById('workspace');
+    
+    // Create workspace header with Add New Monster button (always visible)
+    const workspaceHeader = document.createElement('div');
+    workspaceHeader.className = 'workspace-header';
+    workspaceHeader.innerHTML = `
+        <div class="workspace-title">
+            <h3>Monster Workspace</h3>
+        </div>
+        <div class="workspace-actions">
+            <button class="btn-primary add-monster-btn" onclick="addNewMonster()">+ Add New Monster</button>
+        </div>
+    `;
+    
+    // Create content area for monsters
+    const workspaceContent = document.createElement('div');
+    workspaceContent.className = 'workspace-content';
+    workspaceContent.id = 'workspaceContent';
+    
+    // Clear and rebuild workspace
     workspace.innerHTML = '';
+    workspace.appendChild(workspaceHeader);
+    workspace.appendChild(workspaceContent);
     
     let monstersToShow = [];
     
@@ -412,20 +440,20 @@ function loadWorkspace() {
         monstersToShow.forEach(monster => {
             console.log('Loading monster:', monster.id, monster.data);
             const monsterCard = createMonsterCard(monster.id, monster.data);
-            workspace.appendChild(monsterCard);
+            workspaceContent.appendChild(monsterCard);
         });
         
         console.log('Loaded workspace with monsters:', monstersToShow.length);
     } else {
-        // Show info message and add monster button
+        // Show info message in content area
         const contextMessage = currentSubTab ? 
             'No monsters in this sub-tab yet.' : 
             'No monsters in any sub-tab yet.';
             
-        workspace.innerHTML = `
+        workspaceContent.innerHTML = `
             <div class="workspace-info">
                 <p>${contextMessage}</p>
-                <button class="btn-primary" onclick="addNewMonster()">Add New Monster</button>
+                <p class="info-hint">Use the "Add New Monster" button above to create your first monster.</p>
             </div>
         `;
         console.log('Loaded empty workspace');
@@ -754,6 +782,11 @@ function startAutoSave() {
 }
 
 function hasUnsavedChanges() {
+    // Don't consider changes during initial load as "unsaved"
+    if (isInitialLoad) {
+        return false;
+    }
+    
     // Check if any monster has been modified recently
     const recentThreshold = Date.now() - 35000; // 35 seconds ago
     return Object.values(monsterData.monsters).some(monster => 
