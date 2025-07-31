@@ -19,6 +19,10 @@ let saveQueue = [];
 let isSaving = false;
 let isInitialLoad = true; // Flag to track initial page load vs user changes
 
+// New change tracking system
+let dirtyMonsters = new Set(); // Track which monsters have unsaved changes
+let changeListeners = new Map(); // Track active event listeners
+
 // Initialize on page load
 document.addEventListener('DOMContentLoaded', async function() {
     console.log('Monster Builder initialized');
@@ -465,6 +469,10 @@ function createMonsterCard(monsterId, monsterData) {
     card.className = 'monster-card';
     card.setAttribute('data-monster-id', monsterId);
     
+    // Initialize nested data structures if they don't exist
+    if (!monsterData.abilities) monsterData.abilities = [];
+    if (!monsterData.spells) monsterData.spells = [];
+    
     card.innerHTML = `
         <div class="card-header">
             <input type="text" class="monster-name" placeholder="Monster Name" value="${monsterData.name || ''}">
@@ -480,16 +488,68 @@ function createMonsterCard(monsterId, monsterData) {
             <div class="stat-row">
                 <label>Speed:</label>
                 <input type="text" class="stat-input" data-field="speed" value="${monsterData.speed || ''}">
+                <label>Level:</label>
+                <input type="number" class="stat-input" data-field="level" value="${monsterData.level || 1}">
+            </div>
+            
+            <!-- Example nested ability section -->
+            <div class="abilities-section">
+                <h4>Abilities <button class="btn-small" onclick="addAbility('${monsterId}')">+ Add</button></h4>
+                <div class="abilities-container" id="abilities-${monsterId}">
+                    ${renderAbilities(monsterData.abilities || [])}
+                </div>
             </div>
         </div>
     `;
     
-    // Add input listeners
-    card.querySelectorAll('input').forEach(input => {
-        input.addEventListener('input', debounce(() => saveMonsterField(monsterId, input), 500));
-    });
+    // Add event listeners using new system
+    setupCardEventListeners(card, monsterId);
     
     return card;
+}
+
+function renderAbilities(abilities) {
+    return abilities.map((ability, index) => `
+        <div class="ability-item" data-ability-index="${index}">
+            <div class="ability-header">
+                <input type="text" placeholder="Ability Name" 
+                       data-field-path="abilities.${index}.name" 
+                       value="${ability.name || ''}">
+                <button class="btn-small" onclick="removeAbility(this)">×</button>
+            </div>
+            <div class="ability-details">
+                <label>Dice:</label>
+                <input type="text" placeholder="2d10" 
+                       data-field-path="abilities.${index}.dice" 
+                       value="${ability.dice || ''}">
+                <label>Conditions:</label>
+                <textarea placeholder="Enter conditions..." 
+                          data-field-path="abilities.${index}.conditions">${ability.conditions || ''}</textarea>
+            </div>
+        </div>
+    `).join('');
+}
+
+function setupCardEventListeners(card, monsterId) {
+    // Remove old listeners if they exist
+    if (changeListeners.has(monsterId)) {
+        changeListeners.get(monsterId).forEach(element => {
+            element.removeEventListener('input', handleFieldChange);
+            element.removeEventListener('change', handleFieldChange);
+        });
+    }
+    
+    // Add new listeners
+    const inputs = card.querySelectorAll('input, textarea, select');
+    inputs.forEach(input => {
+        input.addEventListener('input', handleFieldChange);
+        input.addEventListener('change', handleFieldChange);
+    });
+    
+    // Track listeners for cleanup
+    changeListeners.set(monsterId, Array.from(inputs));
+    
+    console.log(`Set up ${inputs.length} event listeners for monster ${monsterId}`);
 }
 
 // Delete monster function
@@ -591,6 +651,102 @@ function saveMonsterField(monsterId, input) {
     console.log(`Saved ${field} for monster ${monsterId}:`, value);
 }
 
+// New Change Tracking Functions
+function markMonsterDirty(monsterId) {
+    if (!isInitialLoad) {
+        dirtyMonsters.add(monsterId);
+        console.log(`Monster ${monsterId} marked as dirty`);
+        queueSave();
+    }
+}
+
+function setNestedValue(obj, path, value) {
+    const keys = path.split('.');
+    let current = obj;
+    
+    // Navigate to the parent of the target property
+    for (let i = 0; i < keys.length - 1; i++) {
+        const key = keys[i];
+        
+        // Handle array indices
+        if (!isNaN(key)) {
+            const index = parseInt(key);
+            if (!Array.isArray(current)) {
+                current = [];
+            }
+            if (!current[index]) {
+                current[index] = {};
+            }
+            current = current[index];
+        } else {
+            if (!current[key]) {
+                current[key] = {};
+            }
+            current = current[key];
+        }
+    }
+    
+    // Set the final value
+    const finalKey = keys[keys.length - 1];
+    if (!isNaN(finalKey)) {
+        const index = parseInt(finalKey);
+        if (!Array.isArray(current)) {
+            current = [];
+        }
+        current[index] = value;
+    } else {
+        current[finalKey] = value;
+    }
+    
+    return obj;
+}
+
+function getNestedValue(obj, path) {
+    return path.split('.').reduce((current, key) => {
+        if (!isNaN(key)) {
+            return current?.[parseInt(key)];
+        }
+        return current?.[key];
+    }, obj);
+}
+
+function handleFieldChange(event) {
+    if (isInitialLoad) return;
+    
+    const element = event.target;
+    const monsterId = element.closest('.monster-card')?.getAttribute('data-monster-id');
+    
+    if (!monsterId) return;
+    
+    const monster = monsterData.monsters[monsterId];
+    if (!monster) return;
+    
+    // Get field path (supports nested fields like "abilities.0.name")
+    const fieldPath = element.getAttribute('data-field-path') || element.getAttribute('data-field') || 'name';
+    
+    // Get the new value
+    let value = element.value;
+    if (element.type === 'number') {
+        value = parseInt(value) || 0;
+    } else if (element.type === 'checkbox') {
+        value = element.checked;
+    }
+    
+    // Handle special cases
+    if (element.classList.contains('monster-name')) {
+        monster.name = value;
+    } else {
+        // Set nested value
+        setNestedValue(monster, fieldPath, value);
+    }
+    
+    // Mark monster as modified
+    monster.lastModified = Date.now();
+    markMonsterDirty(monsterId);
+    
+    console.log(`Field changed: ${fieldPath} = ${value} for monster ${monsterId}`);
+}
+
 // Save System
 function queueSave() {
     updateSaveStatus('saving');
@@ -602,13 +758,20 @@ function queueSave() {
     
     // Set new timer for batch save
     autoSaveTimer = setTimeout(() => {
-        saveAllData();
+        saveChangedData();
     }, 2000); // Wait 2 seconds before saving to batch changes
 }
 
-async function saveAllData() {
+// New selective save function - only saves changed monsters
+async function saveChangedData() {
     if (isSaving) {
         console.log('Save already in progress, queueing...');
+        return;
+    }
+    
+    if (dirtyMonsters.size === 0) {
+        console.log('No changes to save');
+        updateSaveStatus('saved');
         return;
     }
     
@@ -616,16 +779,7 @@ async function saveAllData() {
     updateSaveStatus('saving');
     
     try {
-        // Save current workspace state
-        saveCurrentWorkspace();
-        
-        console.log('About to save data to server:', monsterData);
-        console.log('Monster count:', Object.keys(monsterData.monsters).length);
-        console.log('Tab count:', Object.keys(monsterData.tabs).length);
-        console.log('Detailed monster data being saved:');
-        Object.entries(monsterData.monsters).forEach(([id, monster]) => {
-            console.log(`  - ${id}:`, monster);
-        });
+        console.log(`Saving ${dirtyMonsters.size} changed monsters:`, Array.from(dirtyMonsters));
         
         const response = await fetch('save-monster-data.php', {
             method: 'POST',
@@ -646,7 +800,9 @@ async function saveAllData() {
         
         if (result.success) {
             updateSaveStatus('saved');
-            console.log('Data saved successfully');
+            // Clear dirty flags after successful save
+            dirtyMonsters.clear();
+            console.log('Changed data saved successfully');
         } else {
             updateSaveStatus('error');
             console.error('Save failed:', result.error);
@@ -657,6 +813,13 @@ async function saveAllData() {
     } finally {
         isSaving = false;
     }
+}
+
+// Keep old function for compatibility but make it use new system
+async function saveAllData() {
+    // Mark all monsters as dirty and save
+    Object.keys(monsterData.monsters).forEach(id => dirtyMonsters.add(id));
+    return saveChangedData();
 }
 
 async function loadMonsterData() {
@@ -764,13 +927,16 @@ function addNewMonster() {
     const monsterName = prompt('Enter monster name:', 'New Monster');
     
     if (monsterName) {
-        // Create monster data
+        // Create monster data with nested structure
         monsterData.monsters[monsterId] = {
             name: monsterName,
             hp: 1,
             ac: 10,
             speed: '30 ft',
+            level: 1,
             abilities: [],
+            spells: [],
+            equipment: [],
             tabId: currentMainTab,
             subTabId: currentSubTab,
             lastModified: Date.now()
@@ -783,15 +949,57 @@ function addNewMonster() {
         }
         subTab.monsters.push(monsterId);
         
+        // Mark as dirty for saving
+        markMonsterDirty(monsterId);
+        
         // Refresh workspace and sidebar
         loadWorkspace();
         updateRightSidebar();
         
-        // Save changes
-        queueSave();
-        
         console.log('Added new monster:', monsterName, 'ID:', monsterId);
     }
+}
+
+// Functions for managing abilities
+function addAbility(monsterId) {
+    const monster = monsterData.monsters[monsterId];
+    if (!monster) return;
+    
+    if (!monster.abilities) monster.abilities = [];
+    
+    monster.abilities.push({
+        name: '',
+        dice: '',
+        conditions: ''
+    });
+    
+    // Refresh the monster card
+    refreshMonsterCard(monsterId);
+    markMonsterDirty(monsterId);
+}
+
+function removeAbility(button) {
+    const abilityItem = button.closest('.ability-item');
+    const card = button.closest('.monster-card');
+    const monsterId = card.getAttribute('data-monster-id');
+    const abilityIndex = parseInt(abilityItem.getAttribute('data-ability-index'));
+    
+    const monster = monsterData.monsters[monsterId];
+    if (monster && monster.abilities) {
+        monster.abilities.splice(abilityIndex, 1);
+        refreshMonsterCard(monsterId);
+        markMonsterDirty(monsterId);
+    }
+}
+
+function refreshMonsterCard(monsterId) {
+    const existingCard = document.querySelector(`[data-monster-id="${monsterId}"]`);
+    if (!existingCard) return;
+    
+    const monster = monsterData.monsters[monsterId];
+    const newCard = createMonsterCard(monsterId, monster);
+    
+    existingCard.parentNode.replaceChild(newCard, existingCard);
 }
 
 // Auto-save functionality
@@ -810,11 +1018,8 @@ function hasUnsavedChanges() {
         return false;
     }
     
-    // Check if any monster has been modified recently
-    const recentThreshold = Date.now() - 35000; // 35 seconds ago
-    return Object.values(monsterData.monsters).some(monster => 
-        monster.lastModified > recentThreshold
-    );
+    // Use the new dirty tracking system
+    return dirtyMonsters.size > 0;
 }
 
 // Right Sidebar Browser Functions
