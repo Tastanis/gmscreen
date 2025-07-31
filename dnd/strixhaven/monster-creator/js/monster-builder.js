@@ -56,6 +56,12 @@ function createDefaultStructure() {
     const defaultSubTabId = 'subtab_' + Date.now();
     const testMonsterId = 'monster_' + Date.now();
     
+    console.log('Creating default structure with IDs:', {
+        tabId: defaultTabId,
+        subTabId: defaultSubTabId,
+        monsterId: testMonsterId
+    });
+    
     monsterData.tabs[defaultTabId] = {
         name: 'Untitled',
         subTabs: {
@@ -79,6 +85,9 @@ function createDefaultStructure() {
     
     currentMainTab = defaultTabId;
     currentSubTab = defaultSubTabId;
+    
+    console.log('Default structure created:', monsterData);
+    console.log('Current tabs set to:', currentMainTab, currentSubTab);
 }
 
 // Tab Management Functions
@@ -344,21 +353,38 @@ function closeSubTab(subTabId) {
 
 // Workspace Management
 function loadWorkspace() {
+    console.log('Loading workspace...');
+    console.log('Current main tab:', currentMainTab);
+    console.log('Current sub tab:', currentSubTab);
+    
     const workspace = document.getElementById('workspace');
     workspace.innerHTML = '';
     
     const subTab = monsterData.tabs[currentMainTab]?.subTabs[currentSubTab];
-    if (subTab && subTab.monsters) {
+    console.log('Found sub-tab:', subTab);
+    
+    if (subTab && subTab.monsters && subTab.monsters.length > 0) {
+        console.log('Sub-tab has monsters:', subTab.monsters);
+        // Show monsters from current sub-tab
         subTab.monsters.forEach(monsterId => {
             const monster = monsterData.monsters[monsterId];
+            console.log('Loading monster:', monsterId, monster);
             if (monster) {
                 const monsterCard = createMonsterCard(monsterId, monster);
                 workspace.appendChild(monsterCard);
             }
         });
+        console.log('Loaded workspace with monsters:', subTab.monsters.length);
+    } else {
+        // Show info message and add monster button
+        workspace.innerHTML = `
+            <div class="workspace-info">
+                <p>No monsters in this tab yet.</p>
+                <button class="btn-primary" onclick="addNewMonster()">Add New Monster</button>
+            </div>
+        `;
+        console.log('Loaded empty workspace - subTab exists:', !!subTab, 'has monsters:', subTab?.monsters?.length || 0);
     }
-    
-    console.log('Loaded workspace for:', currentSubTab);
 }
 
 function createMonsterCard(monsterId, monsterData) {
