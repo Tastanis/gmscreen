@@ -31,18 +31,10 @@ require_once '../../version.php';
         <div class="top-tabs-container">
             <div class="main-tabs">
                 <div class="tab-list" id="mainTabList">
-                    <div class="tab active" data-tab-id="default">
-                        <span class="tab-name">Untitled</span>
-                        <button class="tab-close" onclick="closeMainTab('default')">×</button>
-                    </div>
                     <button class="add-tab-btn" onclick="addMainTab()">+</button>
                 </div>
                 <div class="sub-tabs" id="subTabsContainer">
                     <div class="sub-tab-list" id="subTabList">
-                        <div class="sub-tab active" data-subtab-id="default-sub">
-                            <span class="tab-name">General</span>
-                            <button class="tab-close" onclick="closeSubTab('default-sub')">×</button>
-                        </div>
                         <button class="add-sub-tab-btn" onclick="addSubTab()">+</button>
                     </div>
                 </div>

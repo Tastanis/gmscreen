@@ -19,34 +19,20 @@ let saveQueue = [];
 let isSaving = false;
 
 // Initialize on page load
-document.addEventListener('DOMContentLoaded', function() {
+document.addEventListener('DOMContentLoaded', async function() {
     console.log('Monster Builder initialized');
     
-    // Initialize default tab structure
-    monsterData.tabs.default = {
-        name: 'Untitled',
-        subTabs: {
-            'default-sub': {
-                name: 'General',
-                monsters: ['test-monster']
-            }
-        }
-    };
+    // Load saved data first, then create defaults if none exist
+    await loadMonsterData();
     
-    // Initialize test monster
-    monsterData.monsters['test-monster'] = {
-        name: 'Test Monster',
-        hp: 10,
-        ac: 12,
-        speed: '30 ft',
-        abilities: [],
-        tabId: 'default',
-        subTabId: 'default-sub',
-        lastModified: Date.now()
-    };
+    // If no tabs exist after loading, create default structure
+    if (Object.keys(monsterData.tabs).length === 0) {
+        console.log('No saved data found, creating default structure');
+        createDefaultStructure();
+    }
     
-    // Load saved data
-    loadMonsterData();
+    // Build the UI from loaded/default data
+    rebuildUI();
     
     // Set up event listeners
     setupEventListeners();
@@ -63,6 +49,37 @@ document.addEventListener('DOMContentLoaded', function() {
         }
     });
 });
+
+// Create default structure when no saved data exists
+function createDefaultStructure() {
+    const defaultTabId = 'tab_' + Date.now();
+    const defaultSubTabId = 'subtab_' + Date.now();
+    const testMonsterId = 'monster_' + Date.now();
+    
+    monsterData.tabs[defaultTabId] = {
+        name: 'Untitled',
+        subTabs: {
+            [defaultSubTabId]: {
+                name: 'General',
+                monsters: [testMonsterId]
+            }
+        }
+    };
+    
+    monsterData.monsters[testMonsterId] = {
+        name: 'Test Monster',
+        hp: 10,
+        ac: 12,
+        speed: '30 ft',
+        abilities: [],
+        tabId: defaultTabId,
+        subTabId: defaultSubTabId,
+        lastModified: Date.now()
+    };
+    
+    currentMainTab = defaultTabId;
+    currentSubTab = defaultSubTabId;
+}
 
 // Tab Management Functions
 function addMainTab() {
@@ -244,20 +261,39 @@ function renameTab(tabId, isSubTab) {
 }
 
 function closeMainTab(tabId) {
-    if (tabId === 'default') {
-        alert('Cannot close the default tab');
+    const tabCount = Object.keys(monsterData.tabs).length;
+    
+    if (tabCount <= 1) {
+        alert('Cannot close the last tab');
         return;
     }
     
     if (confirm('Are you sure you want to close this tab? All monsters in this tab will be lost.')) {
-        // Remove tab data
+        // Remove tab data and associated monsters
+        const tab = monsterData.tabs[tabId];
+        if (tab && tab.subTabs) {
+            Object.values(tab.subTabs).forEach(subTab => {
+                if (subTab.monsters) {
+                    subTab.monsters.forEach(monsterId => {
+                        delete monsterData.monsters[monsterId];
+                    });
+                }
+            });
+        }
         delete monsterData.tabs[tabId];
         
-        // Remove tab element
-        document.querySelector(`[data-tab-id="${tabId}"]`).remove();
+        // If we're closing the current tab, switch to the first available tab
+        if (currentMainTab === tabId) {
+            const remainingTabs = Object.keys(monsterData.tabs);
+            if (remainingTabs.length > 0) {
+                currentMainTab = remainingTabs[0];
+                const firstSubTab = Object.keys(monsterData.tabs[currentMainTab].subTabs)[0];
+                currentSubTab = firstSubTab;
+            }
+        }
         
-        // Switch to default tab
-        switchMainTab('default');
+        // Rebuild UI
+        rebuildUI();
         
         queueSave();
         console.log('Closed main tab:', tabId);
@@ -273,17 +309,27 @@ function closeSubTab(subTabId) {
     }
     
     if (confirm('Are you sure you want to close this sub-tab? All monsters in this sub-tab will be lost.')) {
+        // Remove monsters in this sub-tab
+        const subTab = subTabs[subTabId];
+        if (subTab && subTab.monsters) {
+            subTab.monsters.forEach(monsterId => {
+                delete monsterData.monsters[monsterId];
+            });
+        }
+        
         // Remove sub-tab data
         delete subTabs[subTabId];
         
-        // Remove sub-tab element
-        document.querySelector(`[data-subtab-id="${subTabId}"]`).remove();
-        
-        // Switch to first available sub-tab
-        const firstSubTab = document.querySelector('.sub-tab');
-        if (firstSubTab) {
-            switchSubTab(firstSubTab.getAttribute('data-subtab-id'));
+        // If we're closing the current sub-tab, switch to the first available
+        if (currentSubTab === subTabId) {
+            const remainingSubTabs = Object.keys(subTabs);
+            if (remainingSubTabs.length > 0) {
+                currentSubTab = remainingSubTabs[0];
+            }
         }
+        
+        // Rebuild sub-tabs UI
+        loadSubTabs(currentMainTab);
         
         queueSave();
         console.log('Closed sub-tab:', subTabId);
@@ -454,15 +500,50 @@ async function loadMonsterData() {
         
         if (result.success && result.data) {
             monsterData = result.data;
-            console.log('Data loaded successfully');
+            console.log('Data loaded successfully:', monsterData);
             
-            // Refresh UI
-            loadSubTabs(currentMainTab);
-            loadWorkspace();
+            // Set current tabs to first available tabs if they exist
+            const tabIds = Object.keys(monsterData.tabs);
+            if (tabIds.length > 0) {
+                currentMainTab = tabIds[0];
+                const subTabIds = Object.keys(monsterData.tabs[currentMainTab].subTabs || {});
+                if (subTabIds.length > 0) {
+                    currentSubTab = subTabIds[0];
+                }
+            }
+        } else {
+            console.log('No saved data found or load failed');
         }
     } catch (error) {
         console.error('Load error:', error);
     }
+}
+
+// Rebuild entire UI from current data
+function rebuildUI() {
+    console.log('Rebuilding UI...');
+    
+    // Rebuild main tabs
+    const mainTabList = document.getElementById('mainTabList');
+    // Keep only the + button
+    mainTabList.innerHTML = '<button class="add-tab-btn" onclick="addMainTab()">+</button>';
+    
+    // Add all main tabs
+    Object.entries(monsterData.tabs).forEach(([tabId, tab]) => {
+        const tabElement = createTabElement(tabId, tab.name, false);
+        if (tabId === currentMainTab) {
+            tabElement.classList.add('active');
+        }
+        mainTabList.insertBefore(tabElement, mainTabList.querySelector('.add-tab-btn'));
+    });
+    
+    // Rebuild sub-tabs for current main tab
+    loadSubTabs(currentMainTab);
+    
+    // Load workspace
+    loadWorkspace();
+    
+    console.log('UI rebuilt successfully');
 }
 
 // Auto-save functionality

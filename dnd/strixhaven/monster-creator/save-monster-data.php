@@ -128,19 +128,9 @@ function saveMonsterData($data, $dataFile, $lockFile) {
  */
 function loadMonsterData($dataFile) {
     if (!file_exists($dataFile)) {
-        // Return default structure if file doesn't exist
-        $defaultData = [
-            'tabs' => [
-                'default' => [
-                    'name' => 'Untitled',
-                    'subTabs' => [
-                        'default-sub' => [
-                            'name' => 'General',
-                            'monsters' => []
-                        ]
-                    ]
-                ]
-            ],
+        // Return empty structure if file doesn't exist - let JavaScript create defaults
+        $emptyData = [
+            'tabs' => new stdClass(), // Empty object
             'monsters' => new stdClass(), // Empty object
             'abilityTabs' => [
                 'common' => [
@@ -150,7 +140,7 @@ function loadMonsterData($dataFile) {
             ]
         ];
         
-        echo json_encode(['success' => true, 'data' => $defaultData]);
+        echo json_encode(['success' => true, 'data' => $emptyData]);
         return;
     }
     
