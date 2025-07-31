@@ -121,7 +121,7 @@ body {
     display: flex;
     justify-content: space-between;
     align-items: center;
-    padding: 15px 20px;
+    padding: 9px 20px;
     background-color: white;
     border-bottom: 1px solid #e0e0e0;
     box-shadow: 0 2px 4px rgba(0, 0, 0, 0.05);
@@ -133,7 +133,7 @@ body {
 .workspace-title h3 {
     margin: 0;
     color: #2c3e50;
-    font-size: 18px;
+    font-size: 16px;
     font-weight: 600;
 }
 
@@ -146,10 +146,10 @@ body {
     background-color: #27ae60;
     color: white;
     border: none;
-    padding: 10px 20px;
+    padding: 8px 16px;
     border-radius: 5px;
     cursor: pointer;
-    font-size: 14px;
+    font-size: 13px;
     font-weight: 500;
     transition: background-color 0.2s;
 }

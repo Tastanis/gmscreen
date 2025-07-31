@@ -534,11 +534,31 @@ function saveCurrentWorkspace() {
             const acField = card.querySelector('[data-field="ac"]');
             const speedField = card.querySelector('[data-field="speed"]');
             
-            if (nameField) monster.name = nameField.value;
-            if (hpField) monster.hp = parseInt(hpField.value) || 0;
-            if (acField) monster.ac = parseInt(acField.value) || 0;
-            if (speedField) monster.speed = speedField.value;
-            monster.lastModified = Date.now();
+            // Check if any values actually changed before updating lastModified
+            let hasChanges = false;
+            
+            if (nameField && monster.name !== nameField.value) {
+                monster.name = nameField.value;
+                hasChanges = true;
+            }
+            if (hpField && monster.hp !== (parseInt(hpField.value) || 0)) {
+                monster.hp = parseInt(hpField.value) || 0;
+                hasChanges = true;
+            }
+            if (acField && monster.ac !== (parseInt(acField.value) || 0)) {
+                monster.ac = parseInt(acField.value) || 0;
+                hasChanges = true;
+            }
+            if (speedField && monster.speed !== speedField.value) {
+                monster.speed = speedField.value;
+                hasChanges = true;
+            }
+            
+            // Only update lastModified if there were actual changes AND we're not in initial load
+            if (hasChanges && !isInitialLoad) {
+                monster.lastModified = Date.now();
+                console.log('Monster modified:', monsterId);
+            }
             
             console.log('Updated monster data:', monster);
         } else {
@@ -552,6 +572,9 @@ function saveCurrentWorkspace() {
 function saveMonsterField(monsterId, input) {
     const monster = monsterData.monsters[monsterId];
     if (!monster) return;
+    
+    // Don't save changes during initial load
+    if (isInitialLoad) return;
     
     const field = input.getAttribute('data-field') || 'name';
     const value = input.type === 'number' ? parseInt(input.value) || 0 : input.value;
