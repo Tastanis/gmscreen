@@ -22,6 +22,7 @@ let isInitialLoad = true; // Flag to track initial page load vs user changes
 // New change tracking system
 let dirtyMonsters = new Set(); // Track which monsters have unsaved changes
 let changeListeners = new Map(); // Track active event listeners
+let needsTabSave = false; // Track when tab structure needs saving
 
 // Initialize on page load
 document.addEventListener('DOMContentLoaded', async function() {
@@ -54,7 +55,10 @@ document.addEventListener('DOMContentLoaded', async function() {
     // Set up window close handler
     window.addEventListener('beforeunload', function(e) {
         if (hasUnsavedChanges()) {
-            saveAllData();
+            // Force immediate save before leaving
+            if (!isSaving) {
+                saveChangedData();
+            }
             e.preventDefault();
             e.returnValue = 'You have unsaved changes. Are you sure you want to leave?';
         }
@@ -552,29 +556,53 @@ function setupCardEventListeners(card, monsterId) {
     console.log(`Set up ${inputs.length} event listeners for monster ${monsterId}`);
 }
 
-// Delete monster function
+// Delete monster function - Updated for new save system
 function deleteMonster(monsterId) {
     if (confirm('Are you sure you want to delete this monster?')) {
+        console.log(`Deleting monster: ${monsterId}`);
+        
+        // Clean up event listeners first
+        if (changeListeners.has(monsterId)) {
+            changeListeners.get(monsterId).forEach(element => {
+                element.removeEventListener('input', handleFieldChange);
+                element.removeEventListener('change', handleFieldChange);
+            });
+            changeListeners.delete(monsterId);
+            console.log(`Cleaned up event listeners for ${monsterId}`);
+        }
+        
         // Remove from monsters data
         delete monsterData.monsters[monsterId];
         
-        // Remove from current sub-tab
-        const subTab = monsterData.tabs[currentMainTab]?.subTabs[currentSubTab];
-        if (subTab && subTab.monsters) {
-            const index = subTab.monsters.indexOf(monsterId);
-            if (index > -1) {
-                subTab.monsters.splice(index, 1);
+        // Remove from ALL subtabs that contain this monster (not just current)
+        let removedFromTabs = [];
+        Object.entries(monsterData.tabs).forEach(([tabId, tab]) => {
+            if (tab.subTabs) {
+                Object.entries(tab.subTabs).forEach(([subTabId, subTab]) => {
+                    if (subTab.monsters) {
+                        const index = subTab.monsters.indexOf(monsterId);
+                        if (index > -1) {
+                            subTab.monsters.splice(index, 1);
+                            removedFromTabs.push(`${tab.name} > ${subTab.name}`);
+                        }
+                    }
+                });
             }
-        }
+        });
         
-        // Refresh UI
+        console.log(`Removed monster from tabs: ${removedFromTabs.join(', ')}`);
+        
+        // Remove from dirty tracking (if it was dirty)
+        dirtyMonsters.delete(monsterId);
+        
+        // Mark tabs as needing save (since we modified subtab monster arrays)
+        markTabsDirty();
+        
+        // Refresh UI immediately
         loadWorkspace();
         updateRightSidebar();
         
-        // Save changes
-        queueSave();
-        
-        console.log('Deleted monster:', monsterId);
+        console.log(`Monster ${monsterId} deleted successfully`);
     }
 }
 
@@ -656,6 +684,14 @@ function markMonsterDirty(monsterId) {
     if (!isInitialLoad) {
         dirtyMonsters.add(monsterId);
         console.log(`Monster ${monsterId} marked as dirty`);
+        queueSave();
+    }
+}
+
+function markTabsDirty() {
+    if (!isInitialLoad) {
+        needsTabSave = true;
+        console.log('Tab structure marked as dirty');
         queueSave();
     }
 }
@@ -769,7 +805,7 @@ async function saveChangedData() {
         return;
     }
     
-    if (dirtyMonsters.size === 0) {
+    if (dirtyMonsters.size === 0 && !needsTabSave) {
         console.log('No changes to save');
         updateSaveStatus('saved');
         return;
@@ -779,7 +815,16 @@ async function saveChangedData() {
     updateSaveStatus('saving');
     
     try {
-        console.log(`Saving ${dirtyMonsters.size} changed monsters:`, Array.from(dirtyMonsters));
+        let saveReason = [];
+        if (dirtyMonsters.size > 0) {
+            saveReason.push(`${dirtyMonsters.size} modified monsters`);
+        }
+        if (needsTabSave) {
+            saveReason.push('tab structure changes');
+        }
+        
+        console.log(`Saving: ${saveReason.join(' + ')}`);
+        console.log('Dirty monsters:', Array.from(dirtyMonsters));
         
         const response = await fetch('save-monster-data.php', {
             method: 'POST',
@@ -802,7 +847,8 @@ async function saveChangedData() {
             updateSaveStatus('saved');
             // Clear dirty flags after successful save
             dirtyMonsters.clear();
-            console.log('Changed data saved successfully');
+            needsTabSave = false;
+            console.log('Data saved successfully');
         } else {
             updateSaveStatus('error');
             console.error('Save failed:', result.error);
@@ -1019,7 +1065,7 @@ function hasUnsavedChanges() {
     }
     
     // Use the new dirty tracking system
-    return dirtyMonsters.size > 0;
+    return dirtyMonsters.size > 0 || needsTabSave;
 }
 
 // Right Sidebar Browser Functions
