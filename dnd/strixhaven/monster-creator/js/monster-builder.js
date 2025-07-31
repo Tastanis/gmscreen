@@ -624,6 +624,29 @@ async function loadMonsterData() {
         
         if (result.success && result.data) {
             monsterData = result.data;
+            
+            // CRITICAL FIX: Ensure monsters is always an Object, never an Array
+            if (Array.isArray(monsterData.monsters)) {
+                console.log('Converting monsters from Array to Object');
+                const monstersObj = {};
+                monsterData.monsters.forEach((monster, index) => {
+                    if (monster && typeof monster === 'object') {
+                        // Try to use existing ID or create one
+                        const monsterId = monster.id || `monster_${Date.now()}_${index}`;
+                        monstersObj[monsterId] = monster;
+                    }
+                });
+                monsterData.monsters = monstersObj;
+            } else if (!monsterData.monsters || typeof monsterData.monsters !== 'object') {
+                console.log('Initializing empty monsters object');
+                monsterData.monsters = {};
+            }
+            
+            // Ensure tabs is also properly structured
+            if (!monsterData.tabs || typeof monsterData.tabs !== 'object') {
+                monsterData.tabs = {};
+            }
+            
             console.log('Data loaded successfully:', monsterData);
             console.log('Loaded monster count:', Object.keys(monsterData.monsters).length);
             console.log('Loaded tab count:', Object.keys(monsterData.tabs).length);

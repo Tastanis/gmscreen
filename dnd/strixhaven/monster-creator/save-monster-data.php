@@ -135,8 +135,8 @@ function loadMonsterData($dataFile) {
     if (!file_exists($dataFile)) {
         // Return empty structure if file doesn't exist - let JavaScript create defaults
         $emptyData = [
-            'tabs' => new stdClass(), // Empty object
-            'monsters' => new stdClass(), // Empty object
+            'tabs' => (object)[], // Ensure proper empty object
+            'monsters' => (object)[], // Ensure proper empty object
             'abilityTabs' => [
                 'common' => [
                     'name' => 'Common',
