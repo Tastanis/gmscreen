@@ -45,53 +45,50 @@ require_once '../../version.php';
         <div class="content-area">
             <!-- Workspace -->
             <div class="workspace" id="workspace">
-                <!-- Test Monster Card -->
-                <div class="monster-card" data-monster-id="test-monster">
-                    <div class="card-header">
-                        <input type="text" class="monster-name" placeholder="Monster Name" value="Test Monster">
-                        <button class="card-menu">⋮</button>
-                    </div>
-                    <div class="card-body">
-                        <div class="stat-row">
-                            <label>HP:</label>
-                            <input type="number" class="stat-input" data-field="hp" value="10">
-                            <label>AC:</label>
-                            <input type="number" class="stat-input" data-field="ac" value="12">
-                        </div>
-                        <div class="stat-row">
-                            <label>Speed:</label>
-                            <input type="text" class="stat-input" data-field="speed" value="30 ft">
-                        </div>
-                        <div class="abilities-section">
-                            <h4>Abilities</h4>
-                            <div class="ability-slots" id="abilitySlots">
-                                <!-- Ability cards will be dropped here -->
-                            </div>
-                        </div>
-                    </div>
+                <!-- Monsters will be populated here dynamically -->
+                <div class="workspace-info">
+                    <p>Select a tab to view monsters, or create a new monster.</p>
+                    <button class="btn-primary" onclick="addNewMonster()">Add New Monster</button>
                 </div>
             </div>
 
-            <!-- Right Sidebar - Abilities -->
-            <div class="abilities-sidebar">
-                <div class="abilities-tabs">
-                    <div class="tab-list" id="abilityTabList">
-                        <div class="tab active" data-ability-tab-id="common">
-                            <span class="tab-name">Common</span>
-                        </div>
-                        <button class="add-tab-btn" onclick="addAbilityTab()">+</button>
+            <!-- Right Sidebar - Monster/Ability Browser -->
+            <div class="browser-sidebar">
+                <div class="browser-header">
+                    <h3 id="browserTitle">All Monsters & Abilities</h3>
+                    <div class="browser-context" id="browserContext">
+                        <span class="context-info">Viewing: All tabs</span>
                     </div>
                 </div>
-                <div class="abilities-content" id="abilitiesContent">
-                    <!-- Sample ability cards -->
-                    <div class="ability-card" draggable="true" data-ability-id="multiattack">
-                        <h5>Multiattack</h5>
-                        <p>The creature makes two attacks.</p>
+                
+                <div class="browser-content">
+                    <!-- Monsters Section -->
+                    <div class="browser-section">
+                        <div class="section-header">
+                            <h4>Monsters</h4>
+                            <span class="count" id="monsterCount">0</span>
+                        </div>
+                        <div class="monster-list" id="monsterBrowserList">
+                            <!-- Monsters will be populated here -->
+                        </div>
                     </div>
-                    <div class="ability-card" draggable="true" data-ability-id="bite">
-                        <h5>Bite</h5>
-                        <p>Melee Weapon Attack: +5 to hit, reach 5 ft., one target.</p>
+                    
+                    <!-- Abilities Section -->
+                    <div class="browser-section">
+                        <div class="section-header">
+                            <h4>Abilities</h4>
+                            <span class="count" id="abilityCount">0</span>
+                        </div>
+                        <div class="ability-list" id="abilityBrowserList">
+                            <!-- Abilities will be populated here -->
+                        </div>
                     </div>
+                </div>
+                
+                <!-- Debug Info -->
+                <div class="debug-info" id="debugInfo" style="display: none;">
+                    <h5>Debug Info</h5>
+                    <div id="debugContent"></div>
                 </div>
             </div>
         </div>

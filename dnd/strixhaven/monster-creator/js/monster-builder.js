@@ -160,6 +160,9 @@ function switchMainTab(tabId) {
     // Load sub-tabs for this main tab
     loadSubTabs(tabId);
     
+    // Update right sidebar
+    updateRightSidebar();
+    
     console.log('Switched to main tab:', tabId);
 }
 
@@ -177,6 +180,9 @@ function switchSubTab(subTabId) {
     
     // Load monsters for this sub-tab
     loadWorkspace();
+    
+    // Update right sidebar
+    updateRightSidebar();
     
     console.log('Switched to sub-tab:', subTabId);
 }
@@ -363,7 +369,7 @@ function createMonsterCard(monsterId, monsterData) {
     card.innerHTML = `
         <div class="card-header">
             <input type="text" class="monster-name" placeholder="Monster Name" value="${monsterData.name || ''}">
-            <button class="card-menu">⋮</button>
+            <button class="card-menu" onclick="deleteMonster('${monsterId}')">×</button>
         </div>
         <div class="card-body">
             <div class="stat-row">
@@ -376,12 +382,6 @@ function createMonsterCard(monsterId, monsterData) {
                 <label>Speed:</label>
                 <input type="text" class="stat-input" data-field="speed" value="${monsterData.speed || ''}">
             </div>
-            <div class="abilities-section">
-                <h4>Abilities</h4>
-                <div class="ability-slots" id="abilitySlots_${monsterId}">
-                    <!-- Ability cards will be dropped here -->
-                </div>
-            </div>
         </div>
     `;
     
@@ -391,6 +391,32 @@ function createMonsterCard(monsterId, monsterData) {
     });
     
     return card;
+}
+
+// Delete monster function
+function deleteMonster(monsterId) {
+    if (confirm('Are you sure you want to delete this monster?')) {
+        // Remove from monsters data
+        delete monsterData.monsters[monsterId];
+        
+        // Remove from current sub-tab
+        const subTab = monsterData.tabs[currentMainTab]?.subTabs[currentSubTab];
+        if (subTab && subTab.monsters) {
+            const index = subTab.monsters.indexOf(monsterId);
+            if (index > -1) {
+                subTab.monsters.splice(index, 1);
+            }
+        }
+        
+        // Refresh UI
+        loadWorkspace();
+        updateRightSidebar();
+        
+        // Save changes
+        queueSave();
+        
+        console.log('Deleted monster:', monsterId);
+    }
 }
 
 function saveCurrentWorkspace() {
@@ -543,7 +569,51 @@ function rebuildUI() {
     // Load workspace
     loadWorkspace();
     
+    // Update right sidebar
+    updateRightSidebar();
+    
     console.log('UI rebuilt successfully');
+}
+
+// Add new monster function
+function addNewMonster() {
+    if (!currentMainTab || !currentSubTab) {
+        alert('Please select a tab first');
+        return;
+    }
+    
+    const monsterId = 'monster_' + Date.now();
+    const monsterName = prompt('Enter monster name:', 'New Monster');
+    
+    if (monsterName) {
+        // Create monster data
+        monsterData.monsters[monsterId] = {
+            name: monsterName,
+            hp: 1,
+            ac: 10,
+            speed: '30 ft',
+            abilities: [],
+            tabId: currentMainTab,
+            subTabId: currentSubTab,
+            lastModified: Date.now()
+        };
+        
+        // Add to current sub-tab
+        const subTab = monsterData.tabs[currentMainTab].subTabs[currentSubTab];
+        if (!subTab.monsters) {
+            subTab.monsters = [];
+        }
+        subTab.monsters.push(monsterId);
+        
+        // Refresh workspace and sidebar
+        loadWorkspace();
+        updateRightSidebar();
+        
+        // Save changes
+        queueSave();
+        
+        console.log('Added new monster:', monsterName, 'ID:', monsterId);
+    }
 }
 
 // Auto-save functionality
@@ -562,6 +632,178 @@ function hasUnsavedChanges() {
     return Object.values(monsterData.monsters).some(monster => 
         monster.lastModified > recentThreshold
     );
+}
+
+// Right Sidebar Browser Functions
+function updateRightSidebar() {
+    console.log('Updating right sidebar...');
+    console.log('Current main tab:', currentMainTab);
+    console.log('Current sub tab:', currentSubTab);
+    
+    const monsters = getMonstersForCurrentView();
+    const abilities = getAbilitiesForCurrentView();
+    
+    // Update browser title and context
+    updateBrowserContext();
+    
+    // Update monster list
+    updateMonsterBrowser(monsters);
+    
+    // Update ability list
+    updateAbilityBrowser(abilities);
+    
+    // Update debug info
+    updateDebugInfo(monsters, abilities);
+    
+    console.log(`Sidebar updated: ${monsters.length} monsters, ${abilities.length} abilities`);
+}
+
+function getMonstersForCurrentView() {
+    let monsters = [];
+    
+    if (currentSubTab && currentMainTab) {
+        // Sub-tab selected - show only monsters from this sub-tab
+        const subTab = monsterData.tabs[currentMainTab]?.subTabs[currentSubTab];
+        if (subTab && subTab.monsters) {
+            monsters = subTab.monsters.map(monsterId => ({
+                id: monsterId,
+                data: monsterData.monsters[monsterId],
+                location: `${monsterData.tabs[currentMainTab].name} > ${subTab.name}`
+            })).filter(m => m.data);
+        }
+    } else if (currentMainTab) {
+        // Main tab selected - show all monsters from all sub-tabs
+        const mainTab = monsterData.tabs[currentMainTab];
+        if (mainTab && mainTab.subTabs) {
+            Object.entries(mainTab.subTabs).forEach(([subTabId, subTab]) => {
+                if (subTab.monsters) {
+                    subTab.monsters.forEach(monsterId => {
+                        if (monsterData.monsters[monsterId]) {
+                            monsters.push({
+                                id: monsterId,
+                                data: monsterData.monsters[monsterId],
+                                location: `${mainTab.name} > ${subTab.name}`
+                            });
+                        }
+                    });
+                }
+            });
+        }
+    }
+    
+    // Sort alphabetically by name
+    monsters.sort((a, b) => (a.data.name || 'Unnamed').localeCompare(b.data.name || 'Unnamed'));
+    
+    return monsters;
+}
+
+function getAbilitiesForCurrentView() {
+    // For now, return empty array - we'll implement abilities later
+    return [];
+}
+
+function updateBrowserContext() {
+    const titleElement = document.getElementById('browserTitle');
+    const contextElement = document.getElementById('browserContext');
+    
+    if (currentSubTab && currentMainTab) {
+        const mainTab = monsterData.tabs[currentMainTab];
+        const subTab = mainTab?.subTabs[currentSubTab];
+        titleElement.textContent = `${subTab?.name || 'Unknown'} Contents`;
+        contextElement.innerHTML = `<span class="context-info">Sub-tab: ${mainTab?.name || 'Unknown'} > ${subTab?.name || 'Unknown'}</span>`;
+    } else if (currentMainTab) {
+        const mainTab = monsterData.tabs[currentMainTab];
+        titleElement.textContent = `${mainTab?.name || 'Unknown'} - All Contents`;
+        contextElement.innerHTML = `<span class="context-info">Main tab: ${mainTab?.name || 'Unknown'}</span>`;
+    } else {
+        titleElement.textContent = 'All Monsters & Abilities';
+        contextElement.innerHTML = '<span class="context-info">Viewing: All tabs</span>';
+    }
+}
+
+function updateMonsterBrowser(monsters) {
+    const monsterList = document.getElementById('monsterBrowserList');
+    const monsterCount = document.getElementById('monsterCount');
+    
+    monsterCount.textContent = monsters.length;
+    
+    if (monsters.length === 0) {
+        monsterList.innerHTML = '<div style="text-align: center; color: #999; padding: 20px; font-style: italic;">No monsters found</div>';
+        return;
+    }
+    
+    monsterList.innerHTML = '';
+    
+    monsters.forEach(monster => {
+        const card = document.createElement('div');
+        card.className = 'browser-monster-card';
+        card.setAttribute('data-monster-id', monster.id);
+        card.onclick = () => selectMonster(monster.id);
+        
+        card.innerHTML = `
+            <div class="browser-card-name">${monster.data.name || 'Unnamed Monster'}</div>
+            <div class="browser-card-info">HP: ${monster.data.hp || 0} | AC: ${monster.data.ac || 0}</div>
+            <div class="browser-card-location">${monster.location}</div>
+        `;
+        
+        monsterList.appendChild(card);
+    });
+}
+
+function updateAbilityBrowser(abilities) {
+    const abilityList = document.getElementById('abilityBrowserList');
+    const abilityCount = document.getElementById('abilityCount');
+    
+    abilityCount.textContent = abilities.length;
+    
+    if (abilities.length === 0) {
+        abilityList.innerHTML = '<div style="text-align: center; color: #999; padding: 20px; font-style: italic;">No abilities found</div>';
+        return;
+    }
+    
+    abilityList.innerHTML = '';
+    
+    abilities.forEach(ability => {
+        const card = document.createElement('div');
+        card.className = 'browser-ability-card';
+        card.setAttribute('data-ability-id', ability.id);
+        
+        card.innerHTML = `
+            <div class="browser-card-name">${ability.name}</div>
+            <div class="browser-card-info">${ability.description}</div>
+            <div class="browser-card-location">${ability.location}</div>
+        `;
+        
+        abilityList.appendChild(card);
+    });
+}
+
+function selectMonster(monsterId) {
+    console.log('Selected monster:', monsterId);
+    // For now, just log - we can implement editing later
+}
+
+function updateDebugInfo(monsters, abilities) {
+    const debugContent = document.getElementById('debugContent');
+    const debugInfo = [
+        `Current Main Tab: ${currentMainTab}`,
+        `Current Sub Tab: ${currentSubTab}`,
+        `Monsters Found: ${monsters.length}`,
+        `Abilities Found: ${abilities.length}`,
+        `Total Tabs: ${Object.keys(monsterData.tabs).length}`,
+        `Total Monsters: ${Object.keys(monsterData.monsters).length}`,
+        '',
+        'Monster IDs:',
+        ...monsters.map(m => `  - ${m.id}: ${m.data.name || 'Unnamed'}`)
+    ];
+    
+    debugContent.innerHTML = debugInfo.join('<br>');
+}
+
+// Toggle debug info visibility
+function toggleDebugInfo() {
+    const debugElement = document.getElementById('debugInfo');
+    debugElement.style.display = debugElement.style.display === 'none' ? 'block' : 'none';
 }
 
 // Utility Functions
@@ -596,39 +838,6 @@ function debounce(func, wait) {
     };
 }
 
-// Ability Tab Functions
-function addAbilityTab() {
-    const tabId = 'ability_tab_' + Date.now();
-    const tabName = prompt('Enter ability tab name:', 'New Category');
-    
-    if (tabName) {
-        // Create ability tab data
-        monsterData.abilityTabs[tabId] = {
-            name: tabName,
-            abilities: []
-        };
-        
-        // Create tab element
-        const tab = document.createElement('div');
-        tab.className = 'tab';
-        tab.setAttribute('data-ability-tab-id', tabId);
-        
-        const nameSpan = document.createElement('span');
-        nameSpan.className = 'tab-name';
-        nameSpan.textContent = tabName;
-        
-        tab.appendChild(nameSpan);
-        
-        document.getElementById('abilityTabList').insertBefore(
-            tab,
-            document.querySelector('#abilityTabList .add-tab-btn')
-        );
-        
-        queueSave();
-        console.log('Added ability tab:', tabName);
-    }
-}
-
 // Event Listeners Setup
 function setupEventListeners() {
     // Input change tracking
@@ -638,11 +847,16 @@ function setupEventListeners() {
         }
     });
     
-    // Drag and drop setup (basic structure for future implementation)
-    document.querySelectorAll('.ability-card').forEach(card => {
-        card.addEventListener('dragstart', handleDragStart);
-        card.addEventListener('dragend', handleDragEnd);
+    // Keyboard shortcuts
+    document.addEventListener('keydown', function(e) {
+        // Ctrl+D or Cmd+D to toggle debug info
+        if ((e.ctrlKey || e.metaKey) && e.key === 'd') {
+            e.preventDefault();
+            toggleDebugInfo();
+        }
     });
+    
+    console.log('Event listeners set up. Press Ctrl+D to toggle debug info.');
 }
 
 function handleDragStart(e) {

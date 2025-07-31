@@ -203,39 +203,164 @@ body {
     background-color: #f8f9fa;
 }
 
-/* Right Sidebar */
-.abilities-sidebar {
-    width: 300px;
+/* Right Sidebar - Browser */
+.browser-sidebar {
+    width: 320px;
     background-color: white;
     border-left: 1px solid #e0e0e0;
     display: flex;
     flex-direction: column;
 }
 
-.abilities-tabs {
+.browser-header {
     background-color: #ecf0f1;
+    padding: 15px;
     border-bottom: 1px solid #ddd;
 }
 
-.abilities-tabs .tab-list {
+.browser-header h3 {
+    margin: 0 0 5px 0;
+    color: #2c3e50;
+    font-size: 16px;
+}
+
+.browser-context {
+    font-size: 12px;
+    color: #666;
+}
+
+.context-info {
+    background-color: #3498db;
+    color: white;
+    padding: 2px 8px;
+    border-radius: 12px;
+    font-size: 11px;
+}
+
+.browser-content {
+    flex: 1;
+    overflow-y: auto;
     padding: 10px;
 }
 
-.abilities-tabs .tab {
-    background-color: white;
-    color: #2c3e50;
-    margin: 0 5px;
+.browser-section {
+    margin-bottom: 25px;
 }
 
-.abilities-tabs .tab.active {
+.section-header {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    margin-bottom: 10px;
+    padding-bottom: 5px;
+    border-bottom: 1px solid #eee;
+}
+
+.section-header h4 {
+    margin: 0;
+    color: #2c3e50;
+    font-size: 14px;
+    font-weight: bold;
+}
+
+.count {
+    background-color: #95a5a6;
+    color: white;
+    font-size: 11px;
+    padding: 2px 8px;
+    border-radius: 10px;
+    min-width: 20px;
+    text-align: center;
+}
+
+.monster-list, .ability-list {
+    display: flex;
+    flex-direction: column;
+    gap: 8px;
+}
+
+/* Browser Monster/Ability Cards */
+.browser-monster-card, .browser-ability-card {
+    background-color: #f8f9fa;
+    border: 1px solid #e0e0e0;
+    border-radius: 6px;
+    padding: 10px;
+    cursor: pointer;
+    transition: all 0.2s;
+    font-size: 13px;
+}
+
+.browser-monster-card:hover, .browser-ability-card:hover {
+    box-shadow: 0 2px 8px rgba(0, 0, 0, 0.1);
+    transform: translateY(-1px);
+    border-color: #3498db;
+}
+
+.browser-monster-card {
+    border-left: 4px solid #e74c3c;
+}
+
+.browser-ability-card {
+    border-left: 4px solid #9b59b6;
+}
+
+.browser-card-name {
+    font-weight: bold;
+    color: #2c3e50;
+    margin-bottom: 4px;
+}
+
+.browser-card-info {
+    color: #666;
+    font-size: 11px;
+}
+
+.browser-card-location {
+    font-style: italic;
+    color: #95a5a6;
+    font-size: 10px;
+    margin-top: 4px;
+}
+
+/* Debug Info */
+.debug-info {
+    background-color: #2c3e50;
+    color: white;
+    padding: 10px;
+    font-size: 11px;
+    border-top: 1px solid #34495e;
+}
+
+.debug-info h5 {
+    margin: 0 0 8px 0;
+    color: #ecf0f1;
+}
+
+#debugContent {
+    font-family: monospace;
+    line-height: 1.4;
+}
+
+/* Workspace Updates */
+.workspace-info {
+    text-align: center;
+    padding: 50px 20px;
+    color: #666;
+}
+
+.btn-primary {
     background-color: #3498db;
     color: white;
+    border: none;
+    padding: 12px 24px;
+    border-radius: 6px;
+    cursor: pointer;
+    font-size: 14px;
+    margin-top: 20px;
 }
 
-.abilities-content {
-    flex: 1;
-    padding: 15px;
-    overflow-y: auto;
+.btn-primary:hover {
+    background-color: #2980b9;
 }
 
 /* Ability Card */
