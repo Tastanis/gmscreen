@@ -50,6 +50,11 @@ switch ($input['action']) {
  * Save monster data with file locking to prevent race conditions
  */
 function saveMonsterData($data, $dataFile, $lockFile) {
+    // Debug: Log received data
+    error_log("Save received data: " . json_encode($data));
+    error_log("Monster count in received data: " . count((array)$data['monsters']));
+    error_log("Tab count in received data: " . count((array)$data['tabs']));
+    
     // Validate data
     if (!is_array($data) || !isset($data['tabs']) || !isset($data['monsters'])) {
         echo json_encode(['success' => false, 'error' => 'Invalid data format']);
@@ -154,6 +159,11 @@ function loadMonsterData($dataFile) {
         if (json_last_error() !== JSON_ERROR_NONE) {
             throw new Exception('Invalid JSON: ' . json_last_error_msg());
         }
+        
+        // Debug: Log loaded data
+        error_log("Load returning data: " . json_encode($data));
+        error_log("Monster count in loaded data: " . count((array)$data['monsters']));
+        error_log("Tab count in loaded data: " . count((array)$data['tabs']));
         
         echo json_encode(['success' => true, 'data' => $data]);
         

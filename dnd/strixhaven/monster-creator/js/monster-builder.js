@@ -165,14 +165,18 @@ function switchMainTab(tabId) {
     document.querySelector(`[data-tab-id="${tabId}"]`).classList.add('active');
     
     currentMainTab = tabId;
+    currentSubTab = null; // Clear subtab selection to show ALL subtabs
     
-    // Load sub-tabs for this main tab
+    // Load sub-tabs for this main tab (but don't auto-select one)
     loadSubTabs(tabId);
+    
+    // Load workspace (will show all monsters from all subtabs)
+    loadWorkspace();
     
     // Update right sidebar
     updateRightSidebar();
     
-    console.log('Switched to main tab:', tabId);
+    console.log('Switched to main tab (showing all subtabs):', tabId);
 }
 
 function switchSubTab(subTabId) {
@@ -204,6 +208,10 @@ function loadSubTabs(mainTabId) {
     if (mainTab && mainTab.subTabs) {
         Object.entries(mainTab.subTabs).forEach(([subTabId, subTab]) => {
             const tabElement = createTabElement(subTabId, subTab.name, true);
+            // Only mark as active if this is the currently selected subtab
+            if (subTabId === currentSubTab) {
+                tabElement.classList.add('active');
+            }
             subTabList.appendChild(tabElement);
         });
     }
@@ -215,11 +223,8 @@ function loadSubTabs(mainTabId) {
     addBtn.onclick = addSubTab;
     subTabList.appendChild(addBtn);
     
-    // Select first sub-tab if exists
-    const firstSubTab = subTabList.querySelector('.sub-tab');
-    if (firstSubTab) {
-        switchSubTab(firstSubTab.getAttribute('data-subtab-id'));
-    }
+    // DON'T auto-select first sub-tab - let main tab show all contents
+    console.log('Loaded subtabs for main tab:', mainTabId, 'Current subtab:', currentSubTab);
 }
 
 function addSubTab() {
@@ -356,34 +361,74 @@ function loadWorkspace() {
     console.log('Loading workspace...');
     console.log('Current main tab:', currentMainTab);
     console.log('Current sub tab:', currentSubTab);
+    console.log('monsterData structure check:');
+    console.log('  - monsterData.monsters type:', typeof monsterData.monsters);
+    console.log('  - monsterData.monsters keys:', Object.keys(monsterData.monsters || {}));
+    console.log('  - monsterData.monsters content:', monsterData.monsters);
     
     const workspace = document.getElementById('workspace');
     workspace.innerHTML = '';
     
-    const subTab = monsterData.tabs[currentMainTab]?.subTabs[currentSubTab];
-    console.log('Found sub-tab:', subTab);
+    let monstersToShow = [];
     
-    if (subTab && subTab.monsters && subTab.monsters.length > 0) {
-        console.log('Sub-tab has monsters:', subTab.monsters);
-        // Show monsters from current sub-tab
-        subTab.monsters.forEach(monsterId => {
-            const monster = monsterData.monsters[monsterId];
-            console.log('Loading monster:', monsterId, monster);
-            if (monster) {
-                const monsterCard = createMonsterCard(monsterId, monster);
-                workspace.appendChild(monsterCard);
-            }
+    if (currentSubTab) {
+        // Specific subtab selected - show only monsters from that subtab
+        const subTab = monsterData.tabs[currentMainTab]?.subTabs[currentSubTab];
+        console.log('Found specific sub-tab:', subTab);
+        
+        if (subTab && subTab.monsters) {
+            subTab.monsters.forEach(monsterId => {
+                const monster = monsterData.monsters[monsterId];
+                if (monster) {
+                    monstersToShow.push({ id: monsterId, data: monster });
+                }
+            });
+        }
+    } else if (currentMainTab) {
+        // Main tab selected (no subtab) - show ALL monsters from ALL subtabs
+        const mainTab = monsterData.tabs[currentMainTab];
+        console.log('Loading ALL monsters from main tab:', mainTab);
+        
+        if (mainTab && mainTab.subTabs) {
+            Object.entries(mainTab.subTabs).forEach(([subTabId, subTab]) => {
+                if (subTab.monsters) {
+                    subTab.monsters.forEach(monsterId => {
+                        const monster = monsterData.monsters[monsterId];
+                        if (monster) {
+                            monstersToShow.push({ id: monsterId, data: monster });
+                        }
+                    });
+                }
+            });
+        }
+    }
+    
+    console.log('Monsters to show:', monstersToShow.length);
+    
+    if (monstersToShow.length > 0) {
+        // Sort alphabetically and display monsters
+        monstersToShow.sort((a, b) => (a.data.name || 'Unnamed').localeCompare(b.data.name || 'Unnamed'));
+        
+        monstersToShow.forEach(monster => {
+            console.log('Loading monster:', monster.id, monster.data);
+            const monsterCard = createMonsterCard(monster.id, monster.data);
+            workspace.appendChild(monsterCard);
         });
-        console.log('Loaded workspace with monsters:', subTab.monsters.length);
+        
+        console.log('Loaded workspace with monsters:', monstersToShow.length);
     } else {
         // Show info message and add monster button
+        const contextMessage = currentSubTab ? 
+            'No monsters in this sub-tab yet.' : 
+            'No monsters in any sub-tab yet.';
+            
         workspace.innerHTML = `
             <div class="workspace-info">
-                <p>No monsters in this tab yet.</p>
+                <p>${contextMessage}</p>
                 <button class="btn-primary" onclick="addNewMonster()">Add New Monster</button>
             </div>
         `;
-        console.log('Loaded empty workspace - subTab exists:', !!subTab, 'has monsters:', subTab?.monsters?.length || 0);
+        console.log('Loaded empty workspace');
     }
 }
 
@@ -446,19 +491,34 @@ function deleteMonster(monsterId) {
 }
 
 function saveCurrentWorkspace() {
+    console.log('Saving current workspace...');
+    
     document.querySelectorAll('.monster-card').forEach(card => {
         const monsterId = card.getAttribute('data-monster-id');
         const monster = monsterData.monsters[monsterId];
         
+        console.log('Saving monster card:', monsterId, 'Current data:', monster);
+        
         if (monster) {
-            // Save all fields
-            monster.name = card.querySelector('.monster-name').value;
-            monster.hp = parseInt(card.querySelector('[data-field="hp"]').value) || 0;
-            monster.ac = parseInt(card.querySelector('[data-field="ac"]').value) || 0;
-            monster.speed = card.querySelector('[data-field="speed"]').value;
+            // Save all fields from the card
+            const nameField = card.querySelector('.monster-name');
+            const hpField = card.querySelector('[data-field="hp"]');
+            const acField = card.querySelector('[data-field="ac"]');
+            const speedField = card.querySelector('[data-field="speed"]');
+            
+            if (nameField) monster.name = nameField.value;
+            if (hpField) monster.hp = parseInt(hpField.value) || 0;
+            if (acField) monster.ac = parseInt(acField.value) || 0;
+            if (speedField) monster.speed = speedField.value;
             monster.lastModified = Date.now();
+            
+            console.log('Updated monster data:', monster);
+        } else {
+            console.warn('Monster data missing for ID:', monsterId);
         }
     });
+    
+    console.log('Workspace save complete. Current monster data:', monsterData.monsters);
 }
 
 function saveMonsterField(monsterId, input) {
@@ -508,6 +568,14 @@ async function saveAllData() {
         // Save current workspace state
         saveCurrentWorkspace();
         
+        console.log('About to save data to server:', monsterData);
+        console.log('Monster count:', Object.keys(monsterData.monsters).length);
+        console.log('Tab count:', Object.keys(monsterData.tabs).length);
+        console.log('Detailed monster data being saved:');
+        Object.entries(monsterData.monsters).forEach(([id, monster]) => {
+            console.log(`  - ${id}:`, monster);
+        });
+        
         const response = await fetch('save-monster-data.php', {
             method: 'POST',
             headers: {
@@ -518,6 +586,10 @@ async function saveAllData() {
                 data: monsterData
             })
         });
+        
+        if (!response.ok) {
+            throw new Error(`HTTP ${response.status}: ${response.statusText}`);
+        }
         
         const result = await response.json();
         
@@ -553,6 +625,12 @@ async function loadMonsterData() {
         if (result.success && result.data) {
             monsterData = result.data;
             console.log('Data loaded successfully:', monsterData);
+            console.log('Loaded monster count:', Object.keys(monsterData.monsters).length);
+            console.log('Loaded tab count:', Object.keys(monsterData.tabs).length);
+            console.log('Detailed monster data loaded:');
+            Object.entries(monsterData.monsters).forEach(([id, monster]) => {
+                console.log(`  - ${id}:`, monster);
+            });
             
             // Set current tabs to first available tabs if they exist
             const tabIds = Object.keys(monsterData.tabs);
@@ -688,26 +766,27 @@ function getMonstersForCurrentView() {
     let monsters = [];
     
     if (currentSubTab && currentMainTab) {
-        // Sub-tab selected - show only monsters from this sub-tab
+        // Specific sub-tab selected - show only monsters from this sub-tab
         const subTab = monsterData.tabs[currentMainTab]?.subTabs[currentSubTab];
         if (subTab && subTab.monsters) {
             monsters = subTab.monsters.map(monsterId => ({
                 id: monsterId,
                 data: monsterData.monsters[monsterId],
                 location: `${monsterData.tabs[currentMainTab].name} > ${subTab.name}`
-            })).filter(m => m.data);
+            })).filter(m => m.data); // Filter out undefined monsters
         }
     } else if (currentMainTab) {
-        // Main tab selected - show all monsters from all sub-tabs
+        // Main tab selected (no specific subtab) - show ALL monsters from ALL sub-tabs
         const mainTab = monsterData.tabs[currentMainTab];
         if (mainTab && mainTab.subTabs) {
             Object.entries(mainTab.subTabs).forEach(([subTabId, subTab]) => {
                 if (subTab.monsters) {
                     subTab.monsters.forEach(monsterId => {
-                        if (monsterData.monsters[monsterId]) {
+                        const monster = monsterData.monsters[monsterId];
+                        if (monster) { // Only add if monster data exists
                             monsters.push({
                                 id: monsterId,
-                                data: monsterData.monsters[monsterId],
+                                data: monster,
                                 location: `${mainTab.name} > ${subTab.name}`
                             });
                         }
@@ -720,6 +799,7 @@ function getMonstersForCurrentView() {
     // Sort alphabetically by name
     monsters.sort((a, b) => (a.data.name || 'Unnamed').localeCompare(b.data.name || 'Unnamed'));
     
+    console.log('getMonstersForCurrentView found:', monsters.length, 'monsters');
     return monsters;
 }
 
@@ -733,14 +813,17 @@ function updateBrowserContext() {
     const contextElement = document.getElementById('browserContext');
     
     if (currentSubTab && currentMainTab) {
+        // Specific subtab selected
         const mainTab = monsterData.tabs[currentMainTab];
         const subTab = mainTab?.subTabs[currentSubTab];
         titleElement.textContent = `${subTab?.name || 'Unknown'} Contents`;
         contextElement.innerHTML = `<span class="context-info">Sub-tab: ${mainTab?.name || 'Unknown'} > ${subTab?.name || 'Unknown'}</span>`;
     } else if (currentMainTab) {
+        // Main tab selected (showing all subtabs)
         const mainTab = monsterData.tabs[currentMainTab];
+        const subTabCount = Object.keys(mainTab?.subTabs || {}).length;
         titleElement.textContent = `${mainTab?.name || 'Unknown'} - All Contents`;
-        contextElement.innerHTML = `<span class="context-info">Main tab: ${mainTab?.name || 'Unknown'}</span>`;
+        contextElement.innerHTML = `<span class="context-info">All sub-tabs (${subTabCount} total) from: ${mainTab?.name || 'Unknown'}</span>`;
     } else {
         titleElement.textContent = 'All Monsters & Abilities';
         contextElement.innerHTML = '<span class="context-info">Viewing: All tabs</span>';
