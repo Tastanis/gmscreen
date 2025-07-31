@@ -499,8 +499,10 @@ function createMonsterCard(monsterId, monsterData) {
                                data-field="name" value="${monsterData.name || ''}">
                     </div>
                     <div class="level-roll-section">
-                        <input type="number" class="level-input" placeholder="Level" 
+                        <label class="field-label">Level:</label>
+                        <input type="number" class="level-input" placeholder="1" 
                                data-field="level" value="${monsterData.level || 1}" min="1" max="30">
+                        <label class="field-label">Roll:</label>
                         <select class="roll-select" data-field="roll">
                             ${rollDropdown}
                         </select>
@@ -508,11 +510,13 @@ function createMonsterCard(monsterId, monsterData) {
                 </div>
                 <div class="info-row-2">
                     <div class="types-section">
-                        <input type="text" class="types-input" placeholder="Types (e.g., Fire, Dragon)" 
+                        <label class="field-label">Type:</label>
+                        <input type="text" class="types-input" placeholder="Fire, Dragon, etc." 
                                data-field="types" value="${monsterData.types || ''}">
                     </div>
                     <div class="ev-section">
-                        <input type="number" class="ev-input" placeholder="EV" 
+                        <label class="field-label">EV:</label>
+                        <input type="number" class="ev-input" placeholder="0" 
                                data-field="ev" value="${monsterData.ev || 0}" min="0">
                     </div>
                 </div>

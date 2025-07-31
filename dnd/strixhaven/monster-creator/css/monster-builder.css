@@ -249,7 +249,7 @@ body {
 /* Level and Roll Section */
 .level-roll-section {
     display: flex;
-    gap: 10px;
+    gap: 8px;
     align-items: center;
 }
 
@@ -275,10 +275,13 @@ body {
 .types-section {
     flex: 1;
     margin-right: 15px;
+    display: flex;
+    align-items: center;
+    gap: 8px;
 }
 
 .types-input {
-    width: 100%;
+    flex: 1;
     padding: 8px 12px;
     border: 1px solid #dee2e6;
     border-radius: 4px;
@@ -289,6 +292,7 @@ body {
 .ev-section {
     display: flex;
     align-items: center;
+    gap: 8px;
 }
 
 .ev-input {
@@ -298,6 +302,14 @@ body {
     border-radius: 4px;
     text-align: center;
     font-weight: 500;
+}
+
+/* Field Labels */
+.field-label {
+    font-weight: bold;
+    font-size: 14px;
+    color: #495057;
+    white-space: nowrap;
 }
 
 /* Basic Stats Section */
