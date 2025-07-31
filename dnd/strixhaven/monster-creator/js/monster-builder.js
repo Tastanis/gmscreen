@@ -473,30 +473,66 @@ function createMonsterCard(monsterId, monsterData) {
     card.className = 'monster-card';
     card.setAttribute('data-monster-id', monsterId);
     
-    // Initialize nested data structures if they don't exist
+    // Initialize nested data structures and new fields if they don't exist
     if (!monsterData.abilities) monsterData.abilities = [];
     if (!monsterData.spells) monsterData.spells = [];
+    if (monsterData.roll === undefined) monsterData.roll = 'Tank';
+    if (monsterData.types === undefined) monsterData.types = '';
+    if (monsterData.ev === undefined) monsterData.ev = 0;
+    
+    // Predefined roll options
+    const rollOptions = ['Tank', 'DPS', 'Support', 'Healer', 'Controller', 'Scout', 'Boss', 'Minion', 'Elite'];
+    const rollDropdown = rollOptions.map(option => 
+        `<option value="${option}" ${monsterData.roll === option ? 'selected' : ''}>${option}</option>`
+    ).join('');
     
     card.innerHTML = `
         <div class="card-header">
-            <input type="text" class="monster-name" placeholder="Monster Name" value="${monsterData.name || ''}">
             <button class="card-menu" onclick="deleteMonster('${monsterId}')">×</button>
         </div>
         <div class="card-body">
-            <div class="stat-row">
-                <label>HP:</label>
-                <input type="number" class="stat-input" data-field="hp" value="${monsterData.hp || ''}">
-                <label>AC:</label>
-                <input type="number" class="stat-input" data-field="ac" value="${monsterData.ac || ''}">
-            </div>
-            <div class="stat-row">
-                <label>Speed:</label>
-                <input type="text" class="stat-input" data-field="speed" value="${monsterData.speed || ''}">
-                <label>Level:</label>
-                <input type="number" class="stat-input" data-field="level" value="${monsterData.level || 1}">
+            <!-- New Top Section with Enhanced Layout -->
+            <div class="monster-info-top">
+                <div class="info-row-1">
+                    <div class="name-section">
+                        <input type="text" class="monster-name" placeholder="Monster Name" 
+                               data-field="name" value="${monsterData.name || ''}">
+                    </div>
+                    <div class="level-roll-section">
+                        <input type="number" class="level-input" placeholder="Level" 
+                               data-field="level" value="${monsterData.level || 1}" min="1" max="30">
+                        <select class="roll-select" data-field="roll">
+                            ${rollDropdown}
+                        </select>
+                    </div>
+                </div>
+                <div class="info-row-2">
+                    <div class="types-section">
+                        <input type="text" class="types-input" placeholder="Types (e.g., Fire, Dragon)" 
+                               data-field="types" value="${monsterData.types || ''}">
+                    </div>
+                    <div class="ev-section">
+                        <input type="number" class="ev-input" placeholder="EV" 
+                               data-field="ev" value="${monsterData.ev || 0}" min="0">
+                    </div>
+                </div>
             </div>
             
-            <!-- Example nested ability section -->
+            <!-- Basic Stats Section -->
+            <div class="basic-stats">
+                <div class="stat-row">
+                    <label>HP:</label>
+                    <input type="number" class="stat-input" data-field="hp" value="${monsterData.hp || ''}">
+                    <label>AC:</label>
+                    <input type="number" class="stat-input" data-field="ac" value="${monsterData.ac || ''}">
+                </div>
+                <div class="stat-row">
+                    <label>Speed:</label>
+                    <input type="text" class="stat-input" data-field="speed" value="${monsterData.speed || ''}">
+                </div>
+            </div>
+            
+            <!-- Abilities Section -->
             <div class="abilities-section">
                 <h4>Abilities <button class="btn-small" onclick="addAbility('${monsterId}')">+ Add</button></h4>
                 <div class="abilities-container" id="abilities-${monsterId}">
@@ -984,13 +1020,16 @@ function addNewMonster() {
     const monsterName = prompt('Enter monster name:', 'New Monster');
     
     if (monsterName) {
-        // Create monster data with nested structure
+        // Create monster data with enhanced structure
         monsterData.monsters[monsterId] = {
             name: monsterName,
+            level: 1,
+            roll: 'Tank',
+            types: '',
+            ev: 0,
             hp: 1,
             ac: 10,
             speed: '30 ft',
-            level: 1,
             abilities: [],
             spells: [],
             equipment: [],
