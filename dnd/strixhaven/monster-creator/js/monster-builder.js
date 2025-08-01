@@ -19,6 +19,9 @@ let saveQueue = [];
 let isSaving = false;
 let isInitialLoad = true; // Flag to track initial page load vs user changes
 
+// Attribute formatting debounce
+let attributeFormatTimers = new Map(); // Store timers for each element
+
 // Mode management
 let currentMode = 'search'; // 'search' or 'editor'
 let editorMonsterId = null; // ID of monster being edited
@@ -1425,22 +1428,38 @@ function handleFieldChange(event) {
     } else if (element.type === 'checkbox') {
         value = element.checked;
     } else if (element.hasAttribute('data-attribute')) {
-        // Handle attribute fields - extract numeric value
-        let numValue = parseInt(value.replace(/[^-\d]/g, '')) || 0;
+        // Handle attribute fields with debounced formatting
+        
+        // Store raw value for processing
+        const rawValue = value;
+        
+        // Extract numeric value for saving
+        let numValue = parseInt(rawValue.replace(/[^-\d]/g, '')) || 0;
         // Clamp to range -5 to +5
         numValue = Math.max(-5, Math.min(5, numValue));
         value = numValue;
         
-        // Update the display with formatted value
-        const formattedValue = formatAttributeValue(numValue);
-        if (element.value !== formattedValue) {
-            const cursorPos = element.selectionStart;
-            element.value = formattedValue;
-            // Restore cursor position at end
-            setTimeout(() => {
-                element.setSelectionRange(formattedValue.length, formattedValue.length);
-            }, 0);
+        // Clear existing format timer for this element
+        const elementId = element.getAttribute('data-field') || 'unknown';
+        if (attributeFormatTimers.has(elementId)) {
+            clearTimeout(attributeFormatTimers.get(elementId));
         }
+        
+        // Set up delayed formatting (1 second after user stops typing)
+        const formatTimer = setTimeout(() => {
+            const formattedValue = formatAttributeValue(numValue);
+            if (element.value !== formattedValue) {
+                const cursorPos = element.selectionStart;
+                element.value = formattedValue;
+                // Restore cursor position at end
+                setTimeout(() => {
+                    element.setSelectionRange(formattedValue.length, formattedValue.length);
+                }, 0);
+            }
+            attributeFormatTimers.delete(elementId);
+        }, 1000);
+        
+        attributeFormatTimers.set(elementId, formatTimer);
     }
     
     // Handle special cases
@@ -2311,6 +2330,27 @@ function showTabAssignment() {
         return;
     }
     
+    // Check if we have a currently selected tab and subtab
+    if (currentMainTab && currentSubTab) {
+        // Verify the selected tab/subtab still exists
+        if (monsterData.tabs[currentMainTab]?.subTabs[currentSubTab]) {
+            const mainTabName = monsterData.tabs[currentMainTab].name;
+            const subTabName = monsterData.tabs[currentMainTab].subTabs[currentSubTab].name;
+            
+            // Auto-save to currently selected tab
+            console.log(`Auto-saving to selected tab: ${mainTabName} > ${subTabName}`);
+            saveMonsterToTab(currentMainTab, currentSubTab);
+            return;
+        }
+    }
+    
+    // If no tab is selected or selected tab doesn't exist, show error
+    if (!currentMainTab || !currentSubTab) {
+        alert('Please select a tab and subtab first before saving.');
+        return;
+    }
+    
+    // Fallback to manual selection if current tab is invalid
     // Create a modal or simple prompt for tab selection
     const availableTabs = [];
     
