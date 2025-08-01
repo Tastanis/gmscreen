@@ -871,9 +871,9 @@ function renderSingleAbility(ability, index, category, monsterId = '') {
                 ${ability.has_test ? `
                     <div class="test-header" onclick="toggleTestSection(event, '${monsterId}', '${category}', ${index})">
                         <span class="test-label">Test</span>
-                        <span class="test-toggle">▼</span>
+                        <span class="test-toggle">▶</span>
                     </div>
-                    <div class="test-content expanded">
+                    <div class="test-content collapsed">
                         ${renderTestTier('tier1', '≤ 11', ability.test.tier1, category, index)}
                         ${renderTestTier('tier2', '12-16', ability.test.tier2, category, index)}
                         ${renderTestTier('tier3', '17+', ability.test.tier3, category, index)}
@@ -936,24 +936,46 @@ function renderTestTier(tierKey, tierLabel, tierData, category, abilityIndex) {
     `;
 }
 
-// Toggle test section visibility
+// Toggle test section visibility with debouncing
+let toggleDebounceTimer = null;
 function toggleTestSection(event, monsterId, category, abilityIndex) {
     event.preventDefault();
     event.stopPropagation();
+    
+    // Debounce rapid clicks during animations
+    if (toggleDebounceTimer) {
+        clearTimeout(toggleDebounceTimer);
+    }
     
     const testContent = document.querySelector(`[data-monster-id="${monsterId}"] .ability-item[data-ability-index="${abilityIndex}"] .test-content`);
     const toggle = document.querySelector(`[data-monster-id="${monsterId}"] .ability-item[data-ability-index="${abilityIndex}"] .test-toggle`);
     
     if (testContent && toggle) {
+        // Check if already animating
+        if (testContent.style.pointerEvents === 'none') {
+            return; // Prevent clicks during animation
+        }
+        
+        // Disable pointer events during animation
+        testContent.style.pointerEvents = 'none';
+        
         if (testContent.classList.contains('collapsed')) {
+            // Expanding
             testContent.classList.remove('collapsed');
             testContent.classList.add('expanded');
             toggle.textContent = '▼';
         } else {
+            // Collapsing
             testContent.classList.remove('expanded');
             testContent.classList.add('collapsed');
             toggle.textContent = '▶';
         }
+        
+        // Re-enable pointer events after animation completes
+        toggleDebounceTimer = setTimeout(() => {
+            testContent.style.pointerEvents = '';
+            toggleDebounceTimer = null;
+        }, 250); // Match CSS transition duration
     }
 }
 
