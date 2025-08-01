@@ -481,7 +481,30 @@ function createMonsterCard(monsterId, monsterData) {
     card.setAttribute('data-monster-id', monsterId);
     
     // Initialize nested data structures and new fields if they don't exist
-    if (!monsterData.abilities) monsterData.abilities = [];
+    if (!monsterData.abilities) {
+        monsterData.abilities = {
+            passive: [
+                // Test ability for demonstration
+                { name: 'Test Passive', dice: '1d6', conditions: 'Always active example ability' }
+            ],
+            maneuver: [],
+            action: [],
+            triggered_action: [],
+            villain_action: [],
+            malice: []
+        };
+    } else if (Array.isArray(monsterData.abilities)) {
+        // Migrate old flat array structure to categorized
+        const oldAbilities = monsterData.abilities;
+        monsterData.abilities = {
+            passive: [],
+            maneuver: [],
+            action: oldAbilities, // Put existing abilities in 'action' category
+            triggered_action: [],
+            villain_action: [],
+            malice: []
+        };
+    }
     if (!monsterData.spells) monsterData.spells = [];
     if (monsterData.role === undefined) monsterData.role = 'Brute';
     if (monsterData.types === undefined) monsterData.types = '';
@@ -641,9 +664,9 @@ function createMonsterCard(monsterId, monsterData) {
             
             <!-- Abilities Section -->
             <div class="abilities-section">
-                <h4>Abilities <button class="btn-small" onclick="addAbility('${monsterId}')">+ Add</button></h4>
+                <h4>Abilities</h4>
                 <div class="abilities-container" id="abilities-${monsterId}">
-                    ${renderAbilities(monsterData.abilities || [])}
+                    ${renderCategorizedAbilities(monsterId, monsterData.abilities)}
                 </div>
             </div>
         </div>
@@ -655,26 +678,68 @@ function createMonsterCard(monsterId, monsterData) {
     return card;
 }
 
+// Legacy function for backward compatibility
 function renderAbilities(abilities) {
-    return abilities.map((ability, index) => `
-        <div class="ability-item" data-ability-index="${index}">
+    if (Array.isArray(abilities)) {
+        return abilities.map((ability, index) => renderSingleAbility(ability, index, 'action')).join('');
+    }
+    return '';
+}
+
+// New categorized abilities renderer
+function renderCategorizedAbilities(monsterId, abilities) {
+    const categories = [
+        { key: 'passive', name: 'Passive' },
+        { key: 'maneuver', name: 'Maneuver' },
+        { key: 'action', name: 'Action' },
+        { key: 'triggered_action', name: 'Triggered Action' },
+        { key: 'villain_action', name: 'Villain Action' },
+        { key: 'malice', name: 'Malice' }
+    ];
+
+    return categories.map(category => {
+        const categoryAbilities = abilities[category.key] || [];
+        const hasAbilities = categoryAbilities.length > 0;
+        const expandedClass = hasAbilities ? 'expanded' : 'collapsed';
+        
+        return `
+            <div class="ability-category ${expandedClass}" data-category="${category.key}">
+                <div class="category-header" onclick="toggleCategory('${monsterId}', '${category.key}')">
+                    <span class="category-name">${category.name}</span>
+                    <button class="btn-small add-category-btn" onclick="event.stopPropagation(); addAbility('${monsterId}', '${category.key}')">+ Add</button>
+                    <span class="expand-icon">${hasAbilities ? '▼' : '▶'}</span>
+                </div>
+                <div class="category-content">
+                    ${categoryAbilities.map((ability, index) => 
+                        renderSingleAbility(ability, index, category.key, monsterId)
+                    ).join('')}
+                </div>
+            </div>
+        `;
+    }).join('');
+}
+
+// Render individual ability
+function renderSingleAbility(ability, index, category, monsterId = '') {
+    return `
+        <div class="ability-item" data-ability-index="${index}" data-category="${category}">
             <div class="ability-header">
                 <input type="text" placeholder="Ability Name" 
-                       data-field-path="abilities.${index}.name" 
+                       data-field-path="abilities.${category}.${index}.name" 
                        value="${ability.name || ''}">
-                <button class="btn-small" onclick="removeAbility(this)">×</button>
+                <button class="btn-small" onclick="removeAbility(this, '${category}')">×</button>
             </div>
             <div class="ability-details">
                 <label>Dice:</label>
                 <input type="text" placeholder="2d10" 
-                       data-field-path="abilities.${index}.dice" 
+                       data-field-path="abilities.${category}.${index}.dice" 
                        value="${ability.dice || ''}">
                 <label>Conditions:</label>
                 <textarea placeholder="Enter conditions..." 
-                          data-field-path="abilities.${index}.conditions">${ability.conditions || ''}</textarea>
+                          data-field-path="abilities.${category}.${index}.conditions">${ability.conditions || ''}</textarea>
             </div>
         </div>
-    `).join('');
+    `;
 }
 
 function setupCardEventListeners(card, monsterId) {
@@ -1182,32 +1247,88 @@ function addNewMonster() {
 }
 
 // Functions for managing abilities
-function addAbility(monsterId) {
+function addAbility(monsterId, category = 'action') {
     const monster = monsterData.monsters[monsterId];
     if (!monster) return;
     
-    if (!monster.abilities) monster.abilities = [];
+    // Ensure abilities structure exists
+    if (!monster.abilities || Array.isArray(monster.abilities)) {
+        monster.abilities = {
+            passive: [],
+            maneuver: [],
+            action: [],
+            triggered_action: [],
+            villain_action: [],
+            malice: []
+        };
+    }
     
-    monster.abilities.push({
+    // Ensure category exists
+    if (!monster.abilities[category]) {
+        monster.abilities[category] = [];
+    }
+    
+    // Add new ability to category
+    monster.abilities[category].push({
         name: '',
         dice: '',
         conditions: ''
     });
     
-    // Refresh the monster card
+    // Refresh the monster card first
     refreshMonsterCard(monsterId);
     markMonsterDirty(monsterId);
+    
+    // Expand the category after adding (with delay to ensure DOM is updated)
+    setTimeout(() => {
+        const categoryElement = document.querySelector(`[data-monster-id="${monsterId}"] .ability-category[data-category="${category}"]`);
+        if (categoryElement) {
+            categoryElement.classList.remove('collapsed');
+            categoryElement.classList.add('expanded');
+            const icon = categoryElement.querySelector('.expand-icon');
+            if (icon) icon.textContent = '▼';
+        }
+    }, 100);
 }
 
-function removeAbility(button) {
+function toggleCategory(monsterId, category) {
+    const categoryElement = document.querySelector(`[data-monster-id="${monsterId}"] .ability-category[data-category="${category}"]`);
+    if (!categoryElement) return;
+    
+    const isCollapsed = categoryElement.classList.contains('collapsed');
+    const icon = categoryElement.querySelector('.expand-icon');
+    
+    if (isCollapsed) {
+        categoryElement.classList.remove('collapsed');
+        categoryElement.classList.add('expanded');
+        if (icon) icon.textContent = '▼';
+    } else {
+        categoryElement.classList.remove('expanded');
+        categoryElement.classList.add('collapsed');
+        if (icon) icon.textContent = '▶';
+    }
+}
+
+function removeAbility(button, category = null) {
     const abilityItem = button.closest('.ability-item');
     const card = button.closest('.monster-card');
     const monsterId = card.getAttribute('data-monster-id');
     const abilityIndex = parseInt(abilityItem.getAttribute('data-ability-index'));
     
+    // Get category from element if not provided
+    if (!category) {
+        category = abilityItem.getAttribute('data-category') || 'action';
+    }
+    
     const monster = monsterData.monsters[monsterId];
     if (monster && monster.abilities) {
-        monster.abilities.splice(abilityIndex, 1);
+        // Handle both old array format and new categorized format
+        if (Array.isArray(monster.abilities)) {
+            monster.abilities.splice(abilityIndex, 1);
+        } else if (monster.abilities[category]) {
+            monster.abilities[category].splice(abilityIndex, 1);
+        }
+        
         refreshMonsterCard(monsterId);
         markMonsterDirty(monsterId);
     }
