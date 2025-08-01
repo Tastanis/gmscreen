@@ -476,45 +476,57 @@ function createMonsterCard(monsterId, monsterData) {
     // Initialize nested data structures and new fields if they don't exist
     if (!monsterData.abilities) monsterData.abilities = [];
     if (!monsterData.spells) monsterData.spells = [];
-    if (monsterData.roll === undefined) monsterData.roll = 'Tank';
+    if (monsterData.roll === undefined) monsterData.roll = 'Brute';
     if (monsterData.types === undefined) monsterData.types = '';
     if (monsterData.ev === undefined) monsterData.ev = 0;
+    if (monsterData.image === undefined) monsterData.image = '';
     
-    // Predefined roll options
-    const rollOptions = ['Tank', 'DPS', 'Support', 'Healer', 'Controller', 'Scout', 'Boss', 'Minion', 'Elite'];
+    // Predefined roll options - D&D tactical roles
+    const rollOptions = ['Ambusher', 'Artillery', 'Brute', 'Controller', 'Defender', 'Harrier', 'Hexer', 'Mount', 'Support', 'Leader', 'Solo', 'Minion'];
     const rollDropdown = rollOptions.map(option => 
         `<option value="${option}" ${monsterData.roll === option ? 'selected' : ''}>${option}</option>`
     ).join('');
     
+    // Create image display HTML
+    const imageDisplay = monsterData.image ? 
+        `<div class="monster-image" onclick="showImageModal('${monsterId}')">
+            <img src="images/${monsterData.image}" alt="${monsterData.name || 'Monster'}">
+        </div>` :
+        `<div class="image-upload-area" onclick="document.getElementById('file-${monsterId}').click()">
+            <span class="upload-icon">📷</span>
+            <span class="upload-text">Upload Image</span>
+        </div>`;
+
     card.innerHTML = `
         <div class="card-header">
             <button class="card-menu" onclick="deleteMonster('${monsterId}')">×</button>
         </div>
         <div class="card-body">
-            <!-- New Top Section with Enhanced Layout -->
+            <!-- New Top Section with Image and Enhanced Layout -->
             <div class="monster-info-top">
-                <div class="info-row-1">
-                    <div class="name-section">
+                <div class="info-left">
+                    ${imageDisplay}
+                    <input type="file" id="file-${monsterId}" style="display: none;" 
+                           accept="image/*" onchange="handleImageUpload('${monsterId}', this)">
+                </div>
+                <div class="info-right">
+                    <div class="info-row-1">
                         <input type="text" class="monster-name" placeholder="Monster Name" 
                                data-field="name" value="${monsterData.name || ''}">
+                        <div class="level-roll-section">
+                            <label class="field-label">Level:</label>
+                            <input type="number" class="level-input" placeholder="1" 
+                                   data-field="level" value="${monsterData.level || 1}" min="1" max="30">
+                            <label class="field-label">Roll:</label>
+                            <select class="roll-select" data-field="roll">
+                                ${rollDropdown}
+                            </select>
+                        </div>
                     </div>
-                    <div class="level-roll-section">
-                        <label class="field-label">Level:</label>
-                        <input type="number" class="level-input" placeholder="1" 
-                               data-field="level" value="${monsterData.level || 1}" min="1" max="30">
-                        <label class="field-label">Roll:</label>
-                        <select class="roll-select" data-field="roll">
-                            ${rollDropdown}
-                        </select>
-                    </div>
-                </div>
-                <div class="info-row-2">
-                    <div class="types-section">
+                    <div class="info-row-2">
                         <label class="field-label">Type:</label>
                         <input type="text" class="types-input" placeholder="Fire, Dragon, etc." 
                                data-field="types" value="${monsterData.types || ''}">
-                    </div>
-                    <div class="ev-section">
                         <label class="field-label">EV:</label>
                         <input type="number" class="ev-input" placeholder="0" 
                                data-field="ev" value="${monsterData.ev || 0}" min="0">
@@ -1028,12 +1040,13 @@ function addNewMonster() {
         monsterData.monsters[monsterId] = {
             name: monsterName,
             level: 1,
-            roll: 'Tank',
+            roll: 'Brute',
             types: '',
             ev: 0,
             hp: 1,
             ac: 10,
             speed: '30 ft',
+            image: '',
             abilities: [],
             spells: [],
             equipment: [],
@@ -1350,6 +1363,146 @@ function setupEventListeners() {
     });
     
     console.log('Event listeners set up. Press Ctrl+D to toggle debug info.');
+}
+
+// Image handling functions
+async function handleImageUpload(monsterId, fileInput) {
+    const file = fileInput.files[0];
+    if (!file) return;
+    
+    // Validate file type
+    if (!file.type.startsWith('image/')) {
+        alert('Please select an image file');
+        return;
+    }
+    
+    // Validate file size (5MB max)
+    if (file.size > 5 * 1024 * 1024) {
+        alert('Image must be less than 5MB');
+        return;
+    }
+    
+    // Create FormData for upload
+    const formData = new FormData();
+    formData.append('image', file);
+    formData.append('monsterId', monsterId);
+    formData.append('action', 'upload');
+    
+    try {
+        const response = await fetch('upload-image.php', {
+            method: 'POST',
+            body: formData
+        });
+        
+        const result = await response.json();
+        
+        if (result.success) {
+            // Update monster data with new image
+            const monster = monsterData.monsters[monsterId];
+            if (monster) {
+                // Delete old image if exists
+                if (monster.image) {
+                    deleteOldImage(monster.image);
+                }
+                
+                monster.image = result.filename;
+                monster.lastModified = Date.now();
+                markMonsterDirty(monsterId);
+                
+                // Refresh the monster card
+                refreshMonsterCard(monsterId);
+                
+                console.log('Image uploaded successfully:', result.filename);
+            }
+        } else {
+            alert('Failed to upload image: ' + result.error);
+        }
+    } catch (error) {
+        console.error('Image upload error:', error);
+        alert('Failed to upload image');
+    }
+}
+
+function showImageModal(monsterId) {
+    const monster = monsterData.monsters[monsterId];
+    if (!monster || !monster.image) return;
+    
+    // Create modal
+    const modal = document.createElement('div');
+    modal.className = 'image-modal';
+    modal.innerHTML = `
+        <div class="image-modal-content">
+            <span class="image-modal-close" onclick="closeImageModal()">&times;</span>
+            <img src="images/${monster.image}" alt="${monster.name || 'Monster'}">
+            <button class="btn-danger" onclick="deleteMonsterImage('${monsterId}')">Delete Image</button>
+        </div>
+    `;
+    
+    document.body.appendChild(modal);
+    
+    // Close on outside click
+    modal.onclick = (e) => {
+        if (e.target === modal) {
+            closeImageModal();
+        }
+    };
+}
+
+function closeImageModal() {
+    const modal = document.querySelector('.image-modal');
+    if (modal) {
+        modal.remove();
+    }
+}
+
+async function deleteMonsterImage(monsterId) {
+    if (!confirm('Are you sure you want to delete this image?')) return;
+    
+    const monster = monsterData.monsters[monsterId];
+    if (!monster || !monster.image) return;
+    
+    try {
+        // Delete from server
+        await deleteOldImage(monster.image);
+        
+        // Update monster data
+        monster.image = '';
+        monster.lastModified = Date.now();
+        markMonsterDirty(monsterId);
+        
+        // Close modal and refresh card
+        closeImageModal();
+        refreshMonsterCard(monsterId);
+        
+        console.log('Image deleted successfully');
+    } catch (error) {
+        console.error('Failed to delete image:', error);
+        alert('Failed to delete image');
+    }
+}
+
+async function deleteOldImage(filename) {
+    if (!filename) return;
+    
+    try {
+        const response = await fetch('upload-image.php', {
+            method: 'POST',
+            headers: {
+                'Content-Type': 'application/json'
+            },
+            body: JSON.stringify({
+                action: 'delete',
+                filename: filename
+            })
+        });
+        
+        const result = await response.json();
+        if (!result.success) {
+            console.error('Failed to delete old image:', result.error);
+        }
+    } catch (error) {
+        console.error('Error deleting old image:', error);
+    }
 }
 
 function handleDragStart(e) {
