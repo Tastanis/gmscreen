@@ -31,6 +31,61 @@ function formatAttributeValue(value) {
     return numValue > 0 ? `+${numValue}` : `${numValue}`;
 }
 
+// Get display name for ability categories
+function getCategoryDisplayName(category) {
+    const categoryNames = {
+        'passive': 'Passive',
+        'maneuver': 'Maneuver', 
+        'action': 'Action',
+        'triggered_action': 'Triggered Action',
+        'villain_action': 'Villain Action',
+        'malice': 'Malice'
+    };
+    return categoryNames[category] || 'Action';
+}
+
+// Migrate simple ability to comprehensive format
+function migrateAbility(simpleAbility, category) {
+    return {
+        name: simpleAbility.name || '',
+        roll_dice: simpleAbility.dice || '2d10',
+        roll_bonus: 0,
+        action_type: getCategoryDisplayName(category),
+        resource_cost: '',
+        keywords: '',
+        range: '',
+        targets: '',
+        effect: simpleAbility.conditions || '',
+        test: {
+            tier1: {
+                damage_amount: '',
+                damage_type: '',
+                has_attribute_check: false,
+                attribute: 'might',
+                attribute_threshold: 0,
+                attribute_effect: ''
+            },
+            tier2: {
+                damage_amount: '',
+                damage_type: '',
+                has_attribute_check: false,
+                attribute: 'might',
+                attribute_threshold: 0,
+                attribute_effect: ''
+            },
+            tier3: {
+                damage_amount: '',
+                damage_type: '',
+                has_attribute_check: false,
+                attribute: 'might',
+                attribute_threshold: 0,
+                attribute_effect: ''
+            }
+        },
+        additional_effect: ''
+    };
+}
+
 // Initialize on page load
 document.addEventListener('DOMContentLoaded', async function() {
     console.log('Monster Builder initialized');
@@ -484,8 +539,24 @@ function createMonsterCard(monsterId, monsterData) {
     if (!monsterData.abilities) {
         monsterData.abilities = {
             passive: [
-                // Test ability for demonstration
-                { name: 'Test Passive', dice: '1d6', conditions: 'Always active example ability' }
+                // Test ability with new comprehensive format
+                {
+                    name: 'Aura of Fear',
+                    roll_dice: '2d10',
+                    roll_bonus: 2,
+                    action_type: 'Passive',
+                    resource_cost: '',
+                    keywords: 'Fear, Aura',
+                    range: '5 squares',
+                    targets: 'All enemies',
+                    effect: 'Enemies within range are frightened while in the aura.',
+                    test: {
+                        tier1: { damage_amount: '1d4', damage_type: 'psychic', has_attribute_check: true, attribute: 'intuition', attribute_threshold: 12, attribute_effect: 'stunned until end of turn' },
+                        tier2: { damage_amount: '2d4', damage_type: 'psychic', has_attribute_check: true, attribute: 'intuition', attribute_threshold: 15, attribute_effect: 'paralyzed until end of turn' },
+                        tier3: { damage_amount: '3d4', damage_type: 'psychic', has_attribute_check: false, attribute: 'intuition', attribute_threshold: 0, attribute_effect: '' }
+                    },
+                    additional_effect: 'This effect persists until the creature leaves the aura.'
+                }
             ],
             maneuver: [],
             action: [],
@@ -719,27 +790,202 @@ function renderCategorizedAbilities(monsterId, abilities) {
     }).join('');
 }
 
-// Render individual ability
+// Render individual ability with comprehensive format
 function renderSingleAbility(ability, index, category, monsterId = '') {
+    // Migrate simple ability format if needed
+    if (ability.dice && !ability.roll_dice) {
+        ability = migrateAbility(ability, category);
+    }
+    
+    // Ensure test structure exists
+    if (!ability.test) {
+        ability.test = {
+            tier1: { damage_amount: '', damage_type: '', has_attribute_check: false, attribute: 'might', attribute_threshold: 0, attribute_effect: '' },
+            tier2: { damage_amount: '', damage_type: '', has_attribute_check: false, attribute: 'might', attribute_threshold: 0, attribute_effect: '' },
+            tier3: { damage_amount: '', damage_type: '', has_attribute_check: false, attribute: 'might', attribute_threshold: 0, attribute_effect: '' }
+        };
+    }
+
     return `
         <div class="ability-item" data-ability-index="${index}" data-category="${category}">
-            <div class="ability-header">
-                <input type="text" placeholder="Ability Name" 
+            <!-- Row 1: Header Information -->
+            <div class="ability-row-1">
+                <input type="text" class="ability-name" placeholder="Ability Name" 
                        data-field-path="abilities.${category}.${index}.name" 
                        value="${ability.name || ''}">
-                <button class="btn-small" onclick="removeAbility(this, '${category}')">×</button>
+                
+                <div class="roll-section">
+                    <select class="roll-dice" data-field-path="abilities.${category}.${index}.roll_dice">
+                        <option value="1d4" ${ability.roll_dice === '1d4' ? 'selected' : ''}>1d4</option>
+                        <option value="1d6" ${ability.roll_dice === '1d6' ? 'selected' : ''}>1d6</option>
+                        <option value="1d8" ${ability.roll_dice === '1d8' ? 'selected' : ''}>1d8</option>
+                        <option value="1d10" ${ability.roll_dice === '1d10' ? 'selected' : ''}>1d10</option>
+                        <option value="1d12" ${ability.roll_dice === '1d12' ? 'selected' : ''}>1d12</option>
+                        <option value="1d20" ${ability.roll_dice === '1d20' ? 'selected' : ''}>1d20</option>
+                        <option value="2d4" ${ability.roll_dice === '2d4' ? 'selected' : ''}>2d4</option>
+                        <option value="2d6" ${ability.roll_dice === '2d6' ? 'selected' : ''}>2d6</option>
+                        <option value="2d8" ${ability.roll_dice === '2d8' ? 'selected' : ''}>2d8</option>
+                        <option value="2d10" ${ability.roll_dice === '2d10' ? 'selected' : ''}>2d10</option>
+                        <option value="2d12" ${ability.roll_dice === '2d12' ? 'selected' : ''}>2d12</option>
+                        <option value="3d6" ${ability.roll_dice === '3d6' ? 'selected' : ''}>3d6</option>
+                        <option value="3d8" ${ability.roll_dice === '3d8' ? 'selected' : ''}>3d8</option>
+                        <option value="4d6" ${ability.roll_dice === '4d6' ? 'selected' : ''}>4d6</option>
+                    </select>
+                    <span class="plus-sign">+</span>
+                    <input type="number" class="roll-bonus" min="0" max="20" 
+                           data-field-path="abilities.${category}.${index}.roll_bonus" 
+                           value="${ability.roll_bonus || 0}">
+                </div>
+                
+                <span class="action-type">${ability.action_type || getCategoryDisplayName(category)}</span>
+                
+                <div class="resource-cost">
+                    <span class="cost-symbol">#</span>
+                    <input type="text" class="cost-input" placeholder="3 points" 
+                           data-field-path="abilities.${category}.${index}.resource_cost" 
+                           value="${ability.resource_cost || ''}">
+                </div>
+                
+                <button class="btn-small remove-ability" onclick="removeAbility(this, '${category}')">×</button>
             </div>
-            <div class="ability-details">
-                <label>Dice:</label>
-                <input type="text" placeholder="2d10" 
-                       data-field-path="abilities.${category}.${index}.dice" 
-                       value="${ability.dice || ''}">
-                <label>Conditions:</label>
-                <textarea placeholder="Enter conditions..." 
-                          data-field-path="abilities.${category}.${index}.conditions">${ability.conditions || ''}</textarea>
+
+            <!-- Row 2: Combat Details -->
+            <div class="ability-row-2">
+                <div class="keywords-section">
+                    <label>Keywords:</label>
+                    <input type="text" class="keywords-input" placeholder="Fear, Aura, Fire" 
+                           data-field-path="abilities.${category}.${index}.keywords" 
+                           value="${ability.keywords || ''}">
+                </div>
+                
+                <div class="range-section">
+                    <span class="range-icon">📏</span>
+                    <label>Range:</label>
+                    <input type="text" class="range-input" placeholder="5 squares" 
+                           data-field-path="abilities.${category}.${index}.range" 
+                           value="${ability.range || ''}">
+                </div>
+                
+                <div class="targets-section">
+                    <span class="target-icon">🎯</span>
+                    <label>Targets:</label>
+                    <input type="text" class="targets-input" placeholder="1 creature" 
+                           data-field-path="abilities.${category}.${index}.targets" 
+                           value="${ability.targets || ''}">
+                </div>
+            </div>
+
+            <!-- Row 3: Effect -->
+            <div class="ability-row-3">
+                <label>Effect:</label>
+                <textarea class="effect-input" placeholder="Describe the main effect of this ability..." 
+                          data-field-path="abilities.${category}.${index}.effect">${ability.effect || ''}</textarea>
+            </div>
+
+            <!-- Row 4: Test System -->
+            <div class="ability-row-4">
+                <div class="test-header" onclick="toggleTestSection('${monsterId}', '${category}', ${index})">
+                    <span class="test-label">Test</span>
+                    <span class="test-toggle">▼</span>
+                </div>
+                <div class="test-content">
+                    ${renderTestTier('tier1', '≤ 11', ability.test.tier1, category, index)}
+                    ${renderTestTier('tier2', '12-16', ability.test.tier2, category, index)}
+                    ${renderTestTier('tier3', '17+', ability.test.tier3, category, index)}
+                </div>
+            </div>
+
+            <!-- Row 5: Additional Effect -->
+            <div class="ability-row-5">
+                <label>Additional Effect:</label>
+                <textarea class="additional-effect-input" placeholder="Any additional effects after the test..." 
+                          data-field-path="abilities.${category}.${index}.additional_effect">${ability.additional_effect || ''}</textarea>
             </div>
         </div>
     `;
+}
+
+// Render individual test tier
+function renderTestTier(tierKey, tierLabel, tierData, category, abilityIndex) {
+    return `
+        <div class="test-tier" data-tier="${tierKey}">
+            <div class="tier-header">
+                <span class="tier-label">(${tierLabel})</span>
+                <input type="text" class="damage-amount" placeholder="2d6" 
+                       data-field-path="abilities.${category}.${abilityIndex}.test.${tierKey}.damage_amount" 
+                       value="${tierData.damage_amount || ''}">
+                <input type="text" class="damage-type" placeholder="fire" 
+                       data-field-path="abilities.${category}.${abilityIndex}.test.${tierKey}.damage_type" 
+                       value="${tierData.damage_type || ''}">
+                <span class="damage-label">damage;</span>
+                
+                <button class="btn-small attribute-toggle ${tierData.has_attribute_check ? 'active' : ''}" 
+                        onclick="toggleAttributeCheck('${category}', ${abilityIndex}, '${tierKey}')">
+                    Attribute Check
+                </button>
+            </div>
+            
+            <div class="attribute-section ${tierData.has_attribute_check ? 'visible' : 'hidden'}">
+                <select class="attribute-select" data-field-path="abilities.${category}.${abilityIndex}.test.${tierKey}.attribute">
+                    <option value="might" ${tierData.attribute === 'might' ? 'selected' : ''}>Might</option>
+                    <option value="agility" ${tierData.attribute === 'agility' ? 'selected' : ''}>Agility</option>
+                    <option value="reason" ${tierData.attribute === 'reason' ? 'selected' : ''}>Reason</option>
+                    <option value="intuition" ${tierData.attribute === 'intuition' ? 'selected' : ''}>Intuition</option>
+                    <option value="presence" ${tierData.attribute === 'presence' ? 'selected' : ''}>Presence</option>
+                </select>
+                <span>≤</span>
+                <input type="number" class="attribute-threshold" min="0" max="30" 
+                       data-field-path="abilities.${category}.${abilityIndex}.test.${tierKey}.attribute_threshold" 
+                       value="${tierData.attribute_threshold || 0}">
+                <span>:</span>
+                <input type="text" class="attribute-effect" placeholder="stunned until end of turn" 
+                       data-field-path="abilities.${category}.${abilityIndex}.test.${tierKey}.attribute_effect" 
+                       value="${tierData.attribute_effect || ''}">
+            </div>
+        </div>
+    `;
+}
+
+// Toggle test section visibility
+function toggleTestSection(monsterId, category, abilityIndex) {
+    const testContent = document.querySelector(`[data-monster-id="${monsterId}"] .ability-item[data-ability-index="${abilityIndex}"] .test-content`);
+    const toggle = document.querySelector(`[data-monster-id="${monsterId}"] .ability-item[data-ability-index="${abilityIndex}"] .test-toggle`);
+    
+    if (testContent && toggle) {
+        if (testContent.style.display === 'none') {
+            testContent.style.display = 'block';
+            toggle.textContent = '▼';
+        } else {
+            testContent.style.display = 'none';
+            toggle.textContent = '▶';
+        }
+    }
+}
+
+// Toggle attribute check for a specific tier
+function toggleAttributeCheck(category, abilityIndex, tierKey) {
+    const button = event.currentTarget;
+    const attributeSection = button.closest('.test-tier').querySelector('.attribute-section');
+    const monsterId = button.closest('.monster-card').getAttribute('data-monster-id');
+    
+    const isActive = button.classList.contains('active');
+    
+    if (isActive) {
+        button.classList.remove('active');
+        attributeSection.classList.remove('visible');
+        attributeSection.classList.add('hidden');
+    } else {
+        button.classList.add('active');
+        attributeSection.classList.remove('hidden');
+        attributeSection.classList.add('visible');
+    }
+    
+    // Update the data
+    const monster = monsterData.monsters[monsterId];
+    if (monster && monster.abilities && monster.abilities[category] && monster.abilities[category][abilityIndex]) {
+        monster.abilities[category][abilityIndex].test[tierKey].has_attribute_check = !isActive;
+        markMonsterDirty(monsterId);
+    }
 }
 
 function setupCardEventListeners(card, monsterId) {
@@ -1268,11 +1514,44 @@ function addAbility(monsterId, category = 'action') {
         monster.abilities[category] = [];
     }
     
-    // Add new ability to category
+    // Add new ability to category with comprehensive structure
     monster.abilities[category].push({
         name: '',
-        dice: '',
-        conditions: ''
+        roll_dice: '2d10',
+        roll_bonus: 0,
+        action_type: getCategoryDisplayName(category),
+        resource_cost: '',
+        keywords: '',
+        range: '',
+        targets: '',
+        effect: '',
+        test: {
+            tier1: {
+                damage_amount: '',
+                damage_type: '',
+                has_attribute_check: false,
+                attribute: 'might',
+                attribute_threshold: 0,
+                attribute_effect: ''
+            },
+            tier2: {
+                damage_amount: '',
+                damage_type: '',
+                has_attribute_check: false,
+                attribute: 'might',
+                attribute_threshold: 0,
+                attribute_effect: ''
+            },
+            tier3: {
+                damage_amount: '',
+                damage_type: '',
+                has_attribute_check: false,
+                attribute: 'might',
+                attribute_threshold: 0,
+                attribute_effect: ''
+            }
+        },
+        additional_effect: ''
     });
     
     // Refresh the monster card first

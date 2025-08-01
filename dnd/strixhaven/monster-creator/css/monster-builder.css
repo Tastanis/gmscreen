@@ -620,6 +620,317 @@ body {
     padding: 0 15px;
 }
 
+/* Comprehensive Ability Item Styles */
+.ability-item {
+    background-color: white;
+    border: 1px solid #e0e0e0;
+    border-radius: 6px;
+    padding: 15px;
+    margin-bottom: 10px;
+}
+
+/* Row 1: Header Information */
+.ability-row-1 {
+    display: grid;
+    grid-template-columns: 1fr auto auto auto auto;
+    gap: 10px;
+    align-items: center;
+    margin-bottom: 12px;
+    padding-bottom: 10px;
+    border-bottom: 1px solid #f0f0f0;
+}
+
+.ability-name {
+    font-size: 16px;
+    font-weight: bold;
+    padding: 8px 12px;
+    border: 2px solid #dee2e6;
+    border-radius: 4px;
+    background: white;
+}
+
+.roll-section {
+    display: flex;
+    align-items: center;
+    gap: 3px;
+}
+
+.roll-dice {
+    padding: 6px 8px;
+    border: 1px solid #dee2e6;
+    border-radius: 4px;
+    font-size: 13px;
+    min-width: 60px;
+}
+
+.plus-sign {
+    font-weight: bold;
+    color: #666;
+}
+
+.roll-bonus {
+    width: 50px;
+    padding: 6px 8px;
+    border: 1px solid #dee2e6;
+    border-radius: 4px;
+    text-align: center;
+    font-size: 13px;
+}
+
+.action-type {
+    background-color: #3498db;
+    color: white;
+    padding: 6px 12px;
+    border-radius: 15px;
+    font-size: 12px;
+    font-weight: bold;
+    white-space: nowrap;
+}
+
+.resource-cost {
+    display: flex;
+    align-items: center;
+    gap: 5px;
+}
+
+.cost-symbol {
+    font-weight: bold;
+    font-size: 16px;
+    color: #e67e22;
+}
+
+.cost-input {
+    width: 80px;
+    padding: 6px 8px;
+    border: 1px solid #dee2e6;
+    border-radius: 4px;
+    font-size: 13px;
+}
+
+.remove-ability {
+    background-color: #e74c3c;
+    color: white;
+    border: none;
+    padding: 6px 10px;
+    border-radius: 4px;
+    cursor: pointer;
+    font-size: 14px;
+}
+
+/* Row 2: Combat Details */
+.ability-row-2 {
+    display: grid;
+    grid-template-columns: 1fr auto auto;
+    gap: 15px;
+    align-items: center;
+    margin-bottom: 12px;
+    padding-bottom: 10px;
+    border-bottom: 1px solid #f0f0f0;
+}
+
+.keywords-section, .range-section, .targets-section {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+}
+
+.keywords-section {
+    flex: 1;
+}
+
+.keywords-input {
+    flex: 1;
+    padding: 6px 10px;
+    border: 1px solid #dee2e6;
+    border-radius: 4px;
+    font-size: 13px;
+}
+
+.range-icon, .target-icon {
+    font-size: 16px;
+}
+
+.range-input, .targets-input {
+    width: 100px;
+    padding: 6px 8px;
+    border: 1px solid #dee2e6;
+    border-radius: 4px;
+    font-size: 13px;
+}
+
+/* Row 3: Effect */
+.ability-row-3 {
+    margin-bottom: 12px;
+}
+
+.ability-row-3 label {
+    display: block;
+    font-weight: bold;
+    margin-bottom: 5px;
+    color: #2c3e50;
+}
+
+.effect-input {
+    width: 100%;
+    min-height: 60px;
+    padding: 8px 12px;
+    border: 1px solid #dee2e6;
+    border-radius: 4px;
+    font-size: 13px;
+    resize: vertical;
+    font-family: inherit;
+}
+
+/* Row 4: Test System */
+.ability-row-4 {
+    margin-bottom: 12px;
+    border: 1px solid #d5dbdb;
+    border-radius: 6px;
+    overflow: hidden;
+}
+
+.test-header {
+    background-color: #ecf0f1;
+    padding: 10px 15px;
+    cursor: pointer;
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    font-weight: bold;
+    color: #2c3e50;
+}
+
+.test-header:hover {
+    background-color: #d5dbdb;
+}
+
+.test-content {
+    padding: 15px;
+    background-color: #fafbfc;
+}
+
+.test-tier {
+    margin-bottom: 10px;
+    padding: 10px;
+    background-color: white;
+    border-radius: 4px;
+    border: 1px solid #e9ecef;
+}
+
+.test-tier:last-child {
+    margin-bottom: 0;
+}
+
+.tier-header {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    margin-bottom: 8px;
+}
+
+.tier-label {
+    font-weight: bold;
+    min-width: 60px;
+    color: #2c3e50;
+}
+
+.damage-amount, .damage-type {
+    padding: 4px 8px;
+    border: 1px solid #dee2e6;
+    border-radius: 3px;
+    font-size: 12px;
+}
+
+.damage-amount {
+    width: 60px;
+}
+
+.damage-type {
+    width: 80px;
+}
+
+.damage-label {
+    font-size: 12px;
+    color: #666;
+}
+
+.attribute-toggle {
+    background-color: #95a5a6;
+    color: white;
+    padding: 4px 8px;
+    border-radius: 3px;
+    font-size: 11px;
+    cursor: pointer;
+    transition: background-color 0.2s;
+}
+
+.attribute-toggle.active {
+    background-color: #27ae60;
+}
+
+.attribute-section {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    margin-top: 8px;
+    padding: 8px;
+    background-color: #f8f9fa;
+    border-radius: 4px;
+    transition: all 0.3s ease;
+}
+
+.attribute-section.hidden {
+    display: none;
+}
+
+.attribute-section.visible {
+    display: flex;
+}
+
+.attribute-select {
+    padding: 4px 8px;
+    border: 1px solid #dee2e6;
+    border-radius: 3px;
+    font-size: 12px;
+    min-width: 80px;
+}
+
+.attribute-threshold {
+    width: 50px;
+    padding: 4px 6px;
+    border: 1px solid #dee2e6;
+    border-radius: 3px;
+    text-align: center;
+    font-size: 12px;
+}
+
+.attribute-effect {
+    flex: 1;
+    padding: 4px 8px;
+    border: 1px solid #dee2e6;
+    border-radius: 3px;
+    font-size: 12px;
+}
+
+/* Row 5: Additional Effect */
+.ability-row-5 label {
+    display: block;
+    font-weight: bold;
+    margin-bottom: 5px;
+    color: #2c3e50;
+}
+
+.additional-effect-input {
+    width: 100%;
+    min-height: 40px;
+    padding: 8px 12px;
+    border: 1px solid #dee2e6;
+    border-radius: 4px;
+    font-size: 13px;
+    resize: vertical;
+    font-family: inherit;
+}
+
 /* Right Sidebar - Browser */
 .browser-sidebar {
     width: 320px;
