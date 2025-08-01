@@ -19,6 +19,12 @@ let saveQueue = [];
 let isSaving = false;
 let isInitialLoad = true; // Flag to track initial page load vs user changes
 
+// Mode management
+let currentMode = 'search'; // 'search' or 'editor'
+let editorMonsterId = null; // ID of monster being edited
+let editorMonsterOriginalTab = null; // Track original tab location
+let editorMonsterOriginalSubTab = null; // Track original subtab location
+
 // New change tracking system
 let dirtyMonsters = new Set(); // Track which monsters have unsaved changes
 let changeListeners = new Map(); // Track active event listeners
@@ -242,8 +248,10 @@ function createTabElement(tabId, tabName, isSubTab = false) {
 }
 
 function switchMainTab(tabId) {
-    // Save current tab data before switching
-    saveCurrentWorkspace();
+    // Save current tab data before switching (but not if in editor mode)
+    if (currentMode === 'search') {
+        saveCurrentWorkspace();
+    }
     
     // Update active states
     document.querySelectorAll('.main-tabs .tab').forEach(tab => {
@@ -252,6 +260,16 @@ function switchMainTab(tabId) {
     document.querySelector(`[data-tab-id="${tabId}"]`).classList.add('active');
     
     currentMainTab = tabId;
+    
+    // In editor mode, don't change subtab or reload workspace
+    if (currentMode === 'editor') {
+        // Just update the subtabs display but don't change current content
+        loadSubTabs(tabId);
+        console.log('Main tab switched to:', tabId, '(editor mode - content preserved)');
+        return;
+    }
+    
+    // Search mode - normal behavior
     currentSubTab = null; // Clear subtab selection to show ALL subtabs
     
     // Load sub-tabs for this main tab (but don't auto-select one)
@@ -267,8 +285,10 @@ function switchMainTab(tabId) {
 }
 
 function switchSubTab(subTabId) {
-    // Save current workspace before switching
-    saveCurrentWorkspace();
+    // Save current workspace before switching (but not if in editor mode)
+    if (currentMode === 'search') {
+        saveCurrentWorkspace();
+    }
     
     // Update active states
     document.querySelectorAll('.sub-tab').forEach(tab => {
@@ -278,6 +298,13 @@ function switchSubTab(subTabId) {
     
     currentSubTab = subTabId;
     
+    // In editor mode, don't reload workspace
+    if (currentMode === 'editor') {
+        console.log('Sub-tab switched to:', subTabId, '(editor mode - content preserved)');
+        return;
+    }
+    
+    // Search mode - normal behavior
     // Load monsters for this sub-tab
     loadWorkspace();
     
@@ -460,10 +487,21 @@ function loadWorkspace() {
     workspaceHeader.className = 'workspace-header';
     workspaceHeader.innerHTML = `
         <div class="workspace-title">
-            <h3>Monster Workspace</h3>
+            <h3>Monster Workspace ${currentMode === 'editor' ? '- Editor Mode' : ''}</h3>
         </div>
         <div class="workspace-actions">
-            <button class="btn-primary add-monster-btn" onclick="addNewMonster()">+ Add New Monster</button>
+            <div class="mode-toggle">
+                <button class="mode-btn ${currentMode === 'search' ? 'active' : ''}" onclick="setMode('search')">
+                    <span class="mode-icon">🔍</span> Search
+                </button>
+                <button class="mode-btn ${currentMode === 'editor' ? 'active' : ''}" onclick="setMode('editor')">
+                    <span class="mode-icon">✏️</span> Editor
+                </button>
+            </div>
+            ${currentMode === 'search' ? 
+                '<button class="btn-primary add-monster-btn" onclick="addNewMonster()">+ Add New Monster</button>' :
+                '<button class="btn-primary save-to-tab-btn" onclick="showTabAssignment()">Save to Tab</button>'
+            }
         </div>
     `;
     
@@ -479,35 +517,45 @@ function loadWorkspace() {
     
     let monstersToShow = [];
     
-    if (currentSubTab) {
-        // Specific subtab selected - show only monsters from that subtab
-        const subTab = monsterData.tabs[currentMainTab]?.subTabs[currentSubTab];
-        console.log('Found specific sub-tab:', subTab);
-        
-        if (subTab && subTab.monsters) {
-            subTab.monsters.forEach(monsterId => {
-                const monster = monsterData.monsters[monsterId];
-                if (monster) {
-                    monstersToShow.push({ id: monsterId, data: monster });
-                }
-            });
+    // Check if we're in editor mode
+    if (currentMode === 'editor' && editorMonsterId) {
+        // In editor mode, only show the monster being edited
+        const monster = monsterData.monsters[editorMonsterId];
+        if (monster) {
+            monstersToShow.push({ id: editorMonsterId, data: monster });
         }
-    } else if (currentMainTab) {
-        // Main tab selected (no subtab) - show ALL monsters from ALL subtabs
-        const mainTab = monsterData.tabs[currentMainTab];
-        console.log('Loading ALL monsters from main tab:', mainTab);
-        
-        if (mainTab && mainTab.subTabs) {
-            Object.entries(mainTab.subTabs).forEach(([subTabId, subTab]) => {
-                if (subTab.monsters) {
-                    subTab.monsters.forEach(monsterId => {
-                        const monster = monsterData.monsters[monsterId];
-                        if (monster) {
-                            monstersToShow.push({ id: monsterId, data: monster });
-                        }
-                    });
-                }
-            });
+    } else {
+        // Search mode - show monsters based on tab selection
+        if (currentSubTab) {
+            // Specific subtab selected - show only monsters from that subtab
+            const subTab = monsterData.tabs[currentMainTab]?.subTabs[currentSubTab];
+            console.log('Found specific sub-tab:', subTab);
+            
+            if (subTab && subTab.monsters) {
+                subTab.monsters.forEach(monsterId => {
+                    const monster = monsterData.monsters[monsterId];
+                    if (monster) {
+                        monstersToShow.push({ id: monsterId, data: monster });
+                    }
+                });
+            }
+        } else if (currentMainTab) {
+            // Main tab selected (no subtab) - show ALL monsters from ALL subtabs
+            const mainTab = monsterData.tabs[currentMainTab];
+            console.log('Loading ALL monsters from main tab:', mainTab);
+            
+            if (mainTab && mainTab.subTabs) {
+                Object.entries(mainTab.subTabs).forEach(([subTabId, subTab]) => {
+                    if (subTab.monsters) {
+                        subTab.monsters.forEach(monsterId => {
+                            const monster = monsterData.monsters[monsterId];
+                            if (monster) {
+                                monstersToShow.push({ id: monsterId, data: monster });
+                            }
+                        });
+                    }
+                });
+            }
         }
     }
     
@@ -1138,6 +1186,21 @@ function setupCardEventListeners(card, monsterId) {
     // Track listeners for cleanup
     changeListeners.set(monsterId, Array.from(inputs));
     
+    // Add click handler to enter editor mode from search (only in search mode)
+    if (currentMode === 'search') {
+        const monsterHeader = card.querySelector('.monster-header');
+        if (monsterHeader) {
+            monsterHeader.style.cursor = 'pointer';
+            monsterHeader.title = 'Click to edit this monster';
+            monsterHeader.addEventListener('click', (e) => {
+                // Only if clicking the header directly, not buttons or inputs
+                if (e.target === monsterHeader || e.target.closest('.monster-name')) {
+                    enterEditorMode(monsterId);
+                }
+            });
+        }
+    }
+    
     // Simplified logging - only show when setting up many listeners
     if (inputs.length > 6) {
         console.log(`Set up ${inputs.length} event listeners for ${monsterId}`);
@@ -1575,52 +1638,10 @@ function rebuildUI() {
     console.log('UI rebuilt successfully');
 }
 
-// Add new monster function
+// Add new monster function - now uses editor mode
 function addNewMonster() {
-    if (!currentMainTab || !currentSubTab) {
-        alert('Please select a tab first');
-        return;
-    }
-    
-    const monsterId = 'monster_' + Date.now();
-    const monsterName = prompt('Enter monster name:', 'New Monster');
-    
-    if (monsterName) {
-        // Create monster data with enhanced structure
-        monsterData.monsters[monsterId] = {
-            name: monsterName,
-            level: 1,
-            roll: 'Brute',
-            types: '',
-            ev: 0,
-            hp: 1,
-            ac: 10,
-            speed: '30 ft',
-            image: '',
-            abilities: [],
-            spells: [],
-            equipment: [],
-            tabId: currentMainTab,
-            subTabId: currentSubTab,
-            lastModified: Date.now()
-        };
-        
-        // Add to current sub-tab
-        const subTab = monsterData.tabs[currentMainTab].subTabs[currentSubTab];
-        if (!subTab.monsters) {
-            subTab.monsters = [];
-        }
-        subTab.monsters.push(monsterId);
-        
-        // Mark as dirty for saving
-        markMonsterDirty(monsterId);
-        
-        // Refresh workspace and sidebar
-        loadWorkspace();
-        updateRightSidebar();
-        
-        console.log('Added new monster:', monsterName, 'ID:', monsterId);
-    }
+    // Create new monster and enter editor mode
+    createNewMonsterForEditor();
 }
 
 // Functions for managing abilities
@@ -2169,4 +2190,199 @@ function handleDragStart(e) {
 
 function handleDragEnd(e) {
     e.target.classList.remove('dragging');
+}
+
+// Mode Management Functions
+function setMode(mode) {
+    if (mode === currentMode) return; // Already in this mode
+    
+    if (mode === 'editor') {
+        // If switching to editor but no monster selected, create new one
+        if (!editorMonsterId) {
+            createNewMonsterForEditor();
+        } else {
+            enterEditorMode(editorMonsterId);
+        }
+    } else if (mode === 'search') {
+        exitEditorMode();
+    }
+}
+
+function enterEditorMode(monsterId) {
+    // Store original location if this monster is already in a tab
+    findMonsterLocation(monsterId);
+    
+    currentMode = 'editor';
+    editorMonsterId = monsterId;
+    
+    console.log(`Entered editor mode with monster: ${monsterId}`);
+    
+    // Refresh workspace to show only this monster
+    loadWorkspace();
+}
+
+function exitEditorMode() {
+    currentMode = 'search';
+    editorMonsterId = null;
+    editorMonsterOriginalTab = null;
+    editorMonsterOriginalSubTab = null;
+    
+    console.log('Exited editor mode');
+    
+    // Refresh workspace to show search results
+    loadWorkspace();
+}
+
+function createNewMonsterForEditor() {
+    const monsterId = 'monster_' + Date.now();
+    const monsterName = prompt('Enter monster name:', 'New Monster');
+    
+    if (monsterName) {
+        // Create monster data with enhanced structure
+        monsterData.monsters[monsterId] = {
+            name: monsterName,
+            level: 1,
+            roll: 'Brute',
+            types: '',
+            ev: 0,
+            hp: 1,
+            ac: 10,
+            speed: '30 ft',
+            image: '',
+            // Enhanced stats system
+            size: '1M',
+            movement: 'fly 8 squares',
+            stamina: 0,
+            stability: 0,
+            free_strike: 0,
+            immunity_text: '',
+            immunity_number: 0,
+            weakness_text: '',
+            weakness_number: 0,
+            might: 0,
+            agility: 0,
+            reason: 0,
+            intuition: 0,
+            presence: 0,
+            // Enhanced abilities system with categories
+            abilities: {
+                passive: [],
+                maneuver: [],
+                action: [],
+                triggered_action: [],
+                villain_action: [],
+                malice: []
+            },
+            created: Date.now(),
+            lastModified: Date.now()
+        };
+        
+        // Enter editor mode with this monster
+        enterEditorMode(monsterId);
+        markMonsterDirty(monsterId);
+    }
+}
+
+function findMonsterLocation(monsterId) {
+    // Find which tab/subtab contains this monster
+    editorMonsterOriginalTab = null;
+    editorMonsterOriginalSubTab = null;
+    
+    for (const [mainTabId, mainTab] of Object.entries(monsterData.tabs)) {
+        if (mainTab.subTabs) {
+            for (const [subTabId, subTab] of Object.entries(mainTab.subTabs)) {
+                if (subTab.monsters && subTab.monsters.includes(monsterId)) {
+                    editorMonsterOriginalTab = mainTabId;
+                    editorMonsterOriginalSubTab = subTabId;
+                    return;
+                }
+            }
+        }
+    }
+}
+
+function showTabAssignment() {
+    if (!editorMonsterId) {
+        alert('No monster in editor mode');
+        return;
+    }
+    
+    // Create a modal or simple prompt for tab selection
+    const availableTabs = [];
+    
+    Object.entries(monsterData.tabs).forEach(([mainTabId, mainTab]) => {
+        if (mainTab.subTabs) {
+            Object.entries(mainTab.subTabs).forEach(([subTabId, subTab]) => {
+                availableTabs.push({
+                    label: `${mainTab.name} > ${subTab.name}`,
+                    mainTabId: mainTabId,
+                    subTabId: subTabId
+                });
+            });
+        }
+    });
+    
+    // Simple selection for now - can be enhanced with a proper modal later
+    const tabLabels = availableTabs.map(tab => tab.label);
+    const selectedIndex = prompt(
+        `Select a tab to save the monster to:\n${tabLabels.map((label, i) => `${i + 1}. ${label}`).join('\n')}\n\nEnter the number:`
+    );
+    
+    const index = parseInt(selectedIndex) - 1;
+    if (index >= 0 && index < availableTabs.length) {
+        const selectedTab = availableTabs[index];
+        saveMonsterToTab(selectedTab.mainTabId, selectedTab.subTabId);
+    }
+}
+
+function saveMonsterToTab(mainTabId, subTabId) {
+    if (!editorMonsterId) return;
+    
+    // Remove from original location if it exists
+    if (editorMonsterOriginalTab && editorMonsterOriginalSubTab) {
+        const originalSubTab = monsterData.tabs[editorMonsterOriginalTab]?.subTabs[editorMonsterOriginalSubTab];
+        if (originalSubTab && originalSubTab.monsters) {
+            const index = originalSubTab.monsters.indexOf(editorMonsterId);
+            if (index > -1) {
+                originalSubTab.monsters.splice(index, 1);
+            }
+        }
+    }
+    
+    // Add to new location
+    const targetSubTab = monsterData.tabs[mainTabId]?.subTabs[subTabId];
+    if (targetSubTab) {
+        if (!targetSubTab.monsters) {
+            targetSubTab.monsters = [];
+        }
+        if (!targetSubTab.monsters.includes(editorMonsterId)) {
+            targetSubTab.monsters.push(editorMonsterId);
+        }
+        
+        // Update last modified
+        monsterData.monsters[editorMonsterId].lastModified = Date.now();
+        markMonsterDirty(editorMonsterId);
+        
+        console.log(`Saved monster ${editorMonsterId} to ${mainTabId}/${subTabId}`);
+        
+        // Exit editor mode and return to search
+        exitEditorMode();
+        
+        // Switch to the tab where we saved the monster
+        selectMainTab(mainTabId);
+        selectSubTab(subTabId);
+    }
+}
+
+// Helper functions for programmatic tab selection
+function selectMainTab(tabId) {
+    if (tabId && monsterData.tabs[tabId]) {
+        switchMainTab(tabId);
+    }
+}
+
+function selectSubTab(subTabId) {
+    if (subTabId && currentMainTab && monsterData.tabs[currentMainTab]?.subTabs[subTabId]) {
+        switchSubTab(subTabId);
+    }
 }
