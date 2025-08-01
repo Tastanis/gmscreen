@@ -477,19 +477,21 @@ body {
 /* Attributes Bar */
 .attributes-bar {
     display: flex;
-    gap: 15px;
+    gap: 10px;
     align-items: center;
-    padding: 12px 15px;
+    padding: 12px 20px;
     background: linear-gradient(135deg, #34495e 0%, #2c3e50 100%);
     border-radius: 6px;
     box-shadow: 0 2px 4px rgba(0, 0, 0, 0.1);
+    overflow: hidden;
 }
 
 .attribute {
     display: flex;
     align-items: center;
-    gap: 6px;
+    gap: 5px;
     color: white;
+    flex-shrink: 0;
 }
 
 .attribute-label {
@@ -507,11 +509,11 @@ body {
 }
 
 .attribute-input {
-    width: 50px;
-    padding: 4px 6px;
+    width: 35px;
+    padding: 4px 4px;
     border: 1px solid #34495e;
     border-radius: 4px;
-    font-size: 13px;
+    font-size: 12px;
     font-weight: bold;
     text-align: center;
     background: rgba(255, 255, 255, 0.9);
@@ -527,7 +529,8 @@ body {
     width: 1px;
     height: 20px;
     background: rgba(255, 255, 255, 0.3);
-    margin: 0 5px;
+    margin: 0 3px;
+    flex-shrink: 0;
 }
 
 /* Abilities Section */

@@ -24,6 +24,13 @@ let dirtyMonsters = new Set(); // Track which monsters have unsaved changes
 let changeListeners = new Map(); // Track active event listeners
 let needsTabSave = false; // Track when tab structure needs saving
 
+// Format attribute values with +/- signs
+function formatAttributeValue(value) {
+    const numValue = parseInt(value) || 0;
+    if (numValue === 0) return '0';
+    return numValue > 0 ? `+${numValue}` : `${numValue}`;
+}
+
 // Initialize on page load
 document.addEventListener('DOMContentLoaded', async function() {
     console.log('Monster Builder initialized');
@@ -482,7 +489,7 @@ function createMonsterCard(monsterId, monsterData) {
     if (monsterData.image === undefined) monsterData.image = '';
     
     // Initialize new stats system fields
-    if (monsterData.size === undefined) monsterData.size = 0;
+    if (monsterData.size === undefined) monsterData.size = '1M';
     if (monsterData.speed === undefined) monsterData.speed = 0;
     if (monsterData.stamina === undefined) monsterData.stamina = 0;
     if (monsterData.stability === undefined) monsterData.stability = 0;
@@ -502,6 +509,12 @@ function createMonsterCard(monsterId, monsterData) {
     const rollOptions = ['Ambusher', 'Artillery', 'Brute', 'Controller', 'Defender', 'Harrier', 'Hexer', 'Mount', 'Support', 'Leader', 'Solo', 'Minion'];
     const rollDropdown = rollOptions.map(option => 
         `<option value="${option}" ${monsterData.role === option ? 'selected' : ''}>${option}</option>`
+    ).join('');
+    
+    // Size options dropdown
+    const sizeOptions = ['1T', '1S', '1M', '1L', '2', '3', '4', '5'];
+    const sizeDropdown = sizeOptions.map(option => 
+        `<option value="${option}" ${monsterData.size === option ? 'selected' : ''}>${option}</option>`
     ).join('');
     
     // Create image display HTML
@@ -556,7 +569,9 @@ function createMonsterCard(monsterId, monsterData) {
                 <!-- Core Stats Row -->
                 <div class="core-stats-row">
                     <div class="core-stat">
-                        <input type="number" class="core-stat-input" data-field="size" value="${monsterData.size || 0}" min="0" max="20">
+                        <select class="core-stat-input" data-field="size">
+                            ${sizeDropdown}
+                        </select>
                         <div class="core-stat-label">Size</div>
                     </div>
                     <div class="core-stat">
@@ -591,7 +606,7 @@ function createMonsterCard(monsterId, monsterData) {
                     </div>
                     <div class="defensive-stat">
                         <span class="defensive-stat-label">Movement:</span>
-                        <input type="text" class="movement-input" data-field="movement" value="${monsterData.movement || ''}" placeholder="fly 30ft">
+                        <input type="text" class="movement-input" data-field="movement" value="${monsterData.movement || ''}" placeholder="fly 8 squares">
                     </div>
                 </div>
 
@@ -599,27 +614,27 @@ function createMonsterCard(monsterId, monsterData) {
                 <div class="attributes-bar">
                     <div class="attribute">
                         <span class="attribute-label"><span class="first-letter">M</span>ight</span>
-                        <input type="number" class="attribute-input" data-field="might" value="${monsterData.might || 0}" min="-5" max="5">
+                        <input type="text" class="attribute-input" data-field="might" data-attribute="true" value="${formatAttributeValue(monsterData.might || 0)}" data-raw-value="${monsterData.might || 0}">
                     </div>
                     <div class="attribute-separator"></div>
                     <div class="attribute">
                         <span class="attribute-label"><span class="first-letter">A</span>gility</span>
-                        <input type="number" class="attribute-input" data-field="agility" value="${monsterData.agility || 0}" min="-5" max="5">
+                        <input type="text" class="attribute-input" data-field="agility" data-attribute="true" value="${formatAttributeValue(monsterData.agility || 0)}" data-raw-value="${monsterData.agility || 0}">
                     </div>
                     <div class="attribute-separator"></div>
                     <div class="attribute">
                         <span class="attribute-label"><span class="first-letter">R</span>eason</span>
-                        <input type="number" class="attribute-input" data-field="reason" value="${monsterData.reason || 0}" min="-5" max="5">
+                        <input type="text" class="attribute-input" data-field="reason" data-attribute="true" value="${formatAttributeValue(monsterData.reason || 0)}" data-raw-value="${monsterData.reason || 0}">
                     </div>
                     <div class="attribute-separator"></div>
                     <div class="attribute">
                         <span class="attribute-label"><span class="first-letter">I</span>ntuition</span>
-                        <input type="number" class="attribute-input" data-field="intuition" value="${monsterData.intuition || 0}" min="-5" max="5">
+                        <input type="text" class="attribute-input" data-field="intuition" data-attribute="true" value="${formatAttributeValue(monsterData.intuition || 0)}" data-raw-value="${monsterData.intuition || 0}">
                     </div>
                     <div class="attribute-separator"></div>
                     <div class="attribute">
                         <span class="attribute-label"><span class="first-letter">P</span>resence</span>
-                        <input type="number" class="attribute-input" data-field="presence" value="${monsterData.presence || 0}" min="-5" max="5">
+                        <input type="text" class="attribute-input" data-field="presence" data-attribute="true" value="${formatAttributeValue(monsterData.presence || 0)}" data-raw-value="${monsterData.presence || 0}">
                     </div>
                 </div>
             </div>
@@ -900,6 +915,23 @@ function handleFieldChange(event) {
         value = parseInt(value) || 0;
     } else if (element.type === 'checkbox') {
         value = element.checked;
+    } else if (element.hasAttribute('data-attribute')) {
+        // Handle attribute fields - extract numeric value
+        let numValue = parseInt(value.replace(/[^-\d]/g, '')) || 0;
+        // Clamp to range -5 to +5
+        numValue = Math.max(-5, Math.min(5, numValue));
+        value = numValue;
+        
+        // Update the display with formatted value
+        const formattedValue = formatAttributeValue(numValue);
+        if (element.value !== formattedValue) {
+            const cursorPos = element.selectionStart;
+            element.value = formattedValue;
+            // Restore cursor position at end
+            setTimeout(() => {
+                element.setSelectionRange(formattedValue.length, formattedValue.length);
+            }, 0);
+        }
     }
     
     // Handle special cases
