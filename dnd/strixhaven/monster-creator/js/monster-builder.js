@@ -485,6 +485,13 @@ function loadWorkspace() {
     
     const workspace = document.getElementById('workspace');
     
+    // Apply search-mode class if in search mode
+    if (currentMode === 'search') {
+        workspace.classList.add('search-mode');
+    } else {
+        workspace.classList.remove('search-mode');
+    }
+    
     // Create workspace header with Add New Monster button (always visible)
     const workspaceHeader = document.createElement('div');
     workspaceHeader.className = 'workspace-header';
@@ -592,6 +599,233 @@ function loadWorkspace() {
 }
 
 function createMonsterCard(monsterId, monsterData) {
+    // Check current mode and render accordingly
+    if (currentMode === 'search') {
+        return createCompactMonsterCard(monsterId, monsterData);
+    } else {
+        return createFullMonsterCard(monsterId, monsterData);
+    }
+}
+
+function createCompactMonsterCard(monsterId, monsterData) {
+    const card = document.createElement('div');
+    card.className = 'monster-card';
+    card.setAttribute('data-monster-id', monsterId);
+    
+    // Add click handler for expansion
+    card.addEventListener('click', function(e) {
+        // Don't expand if clicking the edit button
+        if (e.target.classList.contains('edit-monster-btn')) return;
+        
+        toggleCardExpansion(monsterId);
+    });
+    
+    // Ensure all required fields have default values
+    const defaultData = {
+        name: monsterData.name || '',
+        level: monsterData.level || 1,
+        role: monsterData.role || 'Brute',
+        types: monsterData.types || '',
+        ev: monsterData.ev || 0,
+        size: monsterData.size || '1M',
+        speed: monsterData.speed || 6,
+        stamina: monsterData.stamina || 0,
+        stability: monsterData.stability || 0,
+        free_strike: monsterData.free_strike || 0,
+        immunity_type: monsterData.immunity_type || '',
+        immunity_value: monsterData.immunity_value || '',
+        weakness_type: monsterData.weakness_type || '',
+        weakness_value: monsterData.weakness_value || '',
+        movement: monsterData.movement || '',
+        might: monsterData.might || 0,
+        agility: monsterData.agility || 0,
+        reason: monsterData.reason || 0,
+        intuition: monsterData.intuition || 0,
+        presence: monsterData.presence || 0,
+        image: monsterData.image || null,
+        abilities: monsterData.abilities || {}
+    };
+    
+    // Create image display
+    const imageDisplay = defaultData.image ? 
+        `<div class="monster-image">
+            <img src="images/${defaultData.image}" alt="${defaultData.name}">
+        </div>` :
+        `<div class="image-upload-area">
+            <span class="upload-icon">📷</span>
+        </div>`;
+
+    card.innerHTML = `
+        <div class="card-body">
+            <div class="monster-info-top">
+                <div class="info-left">
+                    ${imageDisplay}
+                </div>
+                <div class="info-right">
+                    <div class="info-row-1">
+                        <span class="monster-name">${defaultData.name}</span>
+                        <div class="level-role-section">
+                            <span class="field-label">Level:</span>
+                            <span class="level-value">${defaultData.level}</span>
+                            <span class="field-label">Role:</span>
+                            <span class="role-value">${defaultData.role}</span>
+                        </div>
+                    </div>
+                    <div class="info-row-2">
+                        <span class="field-label">Type:</span>
+                        <span class="types-value">${defaultData.types}</span>
+                        <span class="field-label">EV:</span>
+                        <span class="ev-value">${defaultData.ev}</span>
+                        <button class="edit-monster-btn" onclick="event.stopPropagation(); enterEditorMode('${monsterId}')">✏️ Edit</button>
+                    </div>
+                </div>
+            </div>
+            
+            <!-- Compact Stats Grid -->
+            <div class="search-stats-grid">
+                <div class="search-stat-item">
+                    <span class="search-stat-label">Size:</span>
+                    <span class="search-stat-value">${defaultData.size}</span>
+                </div>
+                <div class="search-stat-item">
+                    <span class="search-stat-label">Speed:</span>
+                    <span class="search-stat-value">${defaultData.speed}</span>
+                </div>
+                <div class="search-stat-item">
+                    <span class="search-stat-label">Stamina:</span>
+                    <span class="search-stat-value">${defaultData.stamina}</span>
+                </div>
+                <div class="search-stat-item">
+                    <span class="search-stat-label">Stability:</span>
+                    <span class="search-stat-value">${defaultData.stability}</span>
+                </div>
+                <div class="search-stat-item">
+                    <span class="search-stat-label">Free Strike:</span>
+                    <span class="search-stat-value">${defaultData.free_strike}</span>
+                </div>
+                <div class="search-stat-item">
+                    <span class="search-stat-label">Movement:</span>
+                    <span class="search-stat-value">${defaultData.movement}</span>
+                </div>
+                <div class="search-stat-item">
+                    <span class="search-stat-label">Immunity:</span>
+                    <span class="search-stat-value">${defaultData.immunity_type} ${defaultData.immunity_value}</span>
+                </div>
+                <div class="search-stat-item">
+                    <span class="search-stat-label">Weakness:</span>
+                    <span class="search-stat-value">${defaultData.weakness_type} ${defaultData.weakness_value}</span>
+                </div>
+            </div>
+            
+            <!-- Compact Attributes -->
+            <div class="attributes-bar">
+                <div class="attribute">
+                    <span class="attribute-label"><span class="first-letter">M</span>ight</span>
+                    <span class="attribute-value">${formatAttributeValue(defaultData.might)}</span>
+                </div>
+                <div class="attribute-separator"></div>
+                <div class="attribute">
+                    <span class="attribute-label"><span class="first-letter">A</span>gility</span>
+                    <span class="attribute-value">${formatAttributeValue(defaultData.agility)}</span>
+                </div>
+                <div class="attribute-separator"></div>
+                <div class="attribute">
+                    <span class="attribute-label"><span class="first-letter">R</span>eason</span>
+                    <span class="attribute-value">${formatAttributeValue(defaultData.reason)}</span>
+                </div>
+                <div class="attribute-separator"></div>
+                <div class="attribute">
+                    <span class="attribute-label"><span class="first-letter">I</span>ntuition</span>
+                    <span class="attribute-value">${formatAttributeValue(defaultData.intuition)}</span>
+                </div>
+                <div class="attribute-separator"></div>
+                <div class="attribute">
+                    <span class="attribute-label"><span class="first-letter">P</span>resence</span>
+                    <span class="attribute-value">${formatAttributeValue(defaultData.presence)}</span>
+                </div>
+            </div>
+            
+            <!-- Expandable Abilities Section -->
+            <div class="search-abilities" id="abilities-${monsterId}">
+                ${renderCompactAbilities(defaultData.abilities)}
+            </div>
+        </div>
+    `;
+    
+    return card;
+}
+
+function renderCompactAbilities(abilities) {
+    if (!abilities || typeof abilities !== 'object') return '';
+    
+    const categories = [
+        { key: 'passive', name: 'Passive' },
+        { key: 'maneuver', name: 'Maneuver' },
+        { key: 'action', name: 'Action' },
+        { key: 'triggered_action', name: 'Triggered Action' },
+        { key: 'villain_action', name: 'Villain Action' },
+        { key: 'malice', name: 'Malice' }
+    ];
+    
+    let html = '';
+    
+    categories.forEach(category => {
+        const categoryAbilities = abilities[category.key] || [];
+        if (categoryAbilities.length > 0) {
+            html += `
+                <div class="search-ability-category category-${category.key}">
+                    <div class="category-header">
+                        <span class="category-name">${category.name}</span>
+                        <span class="ability-count">${categoryAbilities.length}</span>
+                    </div>
+                    <div class="category-content">
+                        ${categoryAbilities.map(ability => renderCompactAbility(ability)).join('')}
+                    </div>
+                </div>
+            `;
+        }
+    });
+    
+    return html || '<div class="no-abilities">No abilities</div>';
+}
+
+function renderCompactAbility(ability) {
+    if (!ability) return '';
+    
+    let details = [];
+    if (ability.keywords) details.push(`Keywords: ${ability.keywords}`);
+    if (ability.range) details.push(`Range: ${ability.range}`);
+    if (ability.targets) details.push(`Targets: ${ability.targets}`);
+    if (ability.resource_cost) details.push(`Cost: ${ability.resource_cost}`);
+    
+    return `
+        <div class="search-ability-item">
+            <div class="search-ability-name">${ability.name || 'Unnamed Ability'}</div>
+            ${details.length > 0 ? `<div class="search-ability-details">${details.join(' • ')}</div>` : ''}
+            ${ability.effect ? `<div class="search-ability-details">${ability.effect}</div>` : ''}
+            ${ability.additional_effect ? `<div class="search-ability-details"><em>${ability.additional_effect}</em></div>` : ''}
+        </div>
+    `;
+}
+
+function toggleCardExpansion(monsterId) {
+    const card = document.querySelector(`[data-monster-id="${monsterId}"]`);
+    const abilitiesSection = document.getElementById(`abilities-${monsterId}`);
+    
+    if (!card || !abilitiesSection) return;
+    
+    const isExpanded = card.classList.contains('expanded');
+    
+    if (isExpanded) {
+        card.classList.remove('expanded');
+        abilitiesSection.classList.remove('expanded');
+    } else {
+        card.classList.add('expanded');
+        abilitiesSection.classList.add('expanded');
+    }
+}
+
+function createFullMonsterCard(monsterId, monsterData) {
     const card = document.createElement('div');
     card.className = 'monster-card';
     card.setAttribute('data-monster-id', monsterId);
@@ -2218,6 +2452,16 @@ function handleDragEnd(e) {
 // Mode Management Functions
 function setMode(mode) {
     if (mode === currentMode) return; // Already in this mode
+    
+    // Update workspace CSS class
+    const workspace = document.getElementById('workspace');
+    if (workspace) {
+        if (mode === 'search') {
+            workspace.classList.add('search-mode');
+        } else {
+            workspace.classList.remove('search-mode');
+        }
+    }
     
     if (mode === 'editor') {
         // If switching to editor but no monster selected, create new one
