@@ -561,6 +561,37 @@ body {
     transition: all 0.3s ease;
 }
 
+/* Category-Specific Color Themes */
+.ability-category.category-passive {
+    background-color: #e3f2fd;
+    border-color: #bbdefb;
+}
+
+.ability-category.category-maneuver {
+    background-color: #e8f5e8;
+    border-color: #a5d6a7;
+}
+
+.ability-category.category-action {
+    background-color: #fff3e0;
+    border-color: #ffcc80;
+}
+
+.ability-category.category-triggered_action {
+    background-color: #f3e5f5;
+    border-color: #ce93d8;
+}
+
+.ability-category.category-villain_action {
+    background-color: #ffebee;
+    border-color: #ef9a9a;
+}
+
+.ability-category.category-malice {
+    background-color: #ede7f6;
+    border-color: #b39ddb;
+}
+
 .category-header {
     display: flex;
     align-items: center;
@@ -574,6 +605,55 @@ body {
 
 .category-header:hover {
     background-color: #d5dbdb;
+}
+
+/* Category-Specific Header Colors */
+.category-passive .category-header {
+    background-color: #bbdefb;
+}
+
+.category-passive .category-header:hover {
+    background-color: #90caf9;
+}
+
+.category-maneuver .category-header {
+    background-color: #a5d6a7;
+}
+
+.category-maneuver .category-header:hover {
+    background-color: #81c784;
+}
+
+.category-action .category-header {
+    background-color: #ffcc80;
+}
+
+.category-action .category-header:hover {
+    background-color: #ffb74d;
+}
+
+.category-triggered_action .category-header {
+    background-color: #ce93d8;
+}
+
+.category-triggered_action .category-header:hover {
+    background-color: #ba68c8;
+}
+
+.category-villain_action .category-header {
+    background-color: #ef9a9a;
+}
+
+.category-villain_action .category-header:hover {
+    background-color: #e57373;
+}
+
+.category-malice .category-header {
+    background-color: #b39ddb;
+}
+
+.category-malice .category-header:hover {
+    background-color: #9575cd;
 }
 
 .category-name {
@@ -627,6 +707,37 @@ body {
     border-radius: 6px;
     padding: 15px;
     margin-bottom: 10px;
+}
+
+/* Category-Specific Ability Item Colors */
+.category-passive .ability-item {
+    background-color: #f0f8ff;
+    border-color: #bbdefb;
+}
+
+.category-maneuver .ability-item {
+    background-color: #f0f8f0;
+    border-color: #a5d6a7;
+}
+
+.category-action .ability-item {
+    background-color: #fffaf0;
+    border-color: #ffcc80;
+}
+
+.category-triggered_action .ability-item {
+    background-color: #faf0fa;
+    border-color: #ce93d8;
+}
+
+.category-villain_action .ability-item {
+    background-color: #fff0f0;
+    border-color: #ef9a9a;
+}
+
+.category-malice .ability-item {
+    background-color: #f8f0f8;
+    border-color: #b39ddb;
 }
 
 /* Row 1: Header Information */
