@@ -484,7 +484,7 @@ function createMonsterCard(monsterId, monsterData) {
     // Predefined roll options - D&D tactical roles
     const rollOptions = ['Ambusher', 'Artillery', 'Brute', 'Controller', 'Defender', 'Harrier', 'Hexer', 'Mount', 'Support', 'Leader', 'Solo', 'Minion'];
     const rollDropdown = rollOptions.map(option => 
-        `<option value="${option}" ${monsterData.roll === option ? 'selected' : ''}>${option}</option>`
+        `<option value="${option}" ${monsterData.role === option ? 'selected' : ''}>${option}</option>`
     ).join('');
     
     // Create image display HTML
@@ -518,7 +518,7 @@ function createMonsterCard(monsterId, monsterData) {
                             <input type="number" class="level-input" placeholder="1" 
                                    data-field="level" value="${monsterData.level || 1}" min="1" max="30">
                             <label class="field-label">Roll:</label>
-                            <select class="roll-select" data-field="roll">
+                            <select class="roll-select" data-field="role">
                                 ${rollDropdown}
                             </select>
                         </div>
