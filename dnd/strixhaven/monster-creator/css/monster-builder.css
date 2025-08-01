@@ -592,6 +592,37 @@ body {
     border-color: #b39ddb;
 }
 
+/* Darker Colors for Categories with Abilities */
+.ability-category.category-passive.has-abilities {
+    background-color: #bbdefb;
+    border-color: #90caf9;
+}
+
+.ability-category.category-maneuver.has-abilities {
+    background-color: #c8e6c9;
+    border-color: #81c784;
+}
+
+.ability-category.category-action.has-abilities {
+    background-color: #ffe0b2;
+    border-color: #ffb74d;
+}
+
+.ability-category.category-triggered_action.has-abilities {
+    background-color: #e1bee7;
+    border-color: #ba68c8;
+}
+
+.ability-category.category-villain_action.has-abilities {
+    background-color: #ffcdd2;
+    border-color: #e57373;
+}
+
+.ability-category.category-malice.has-abilities {
+    background-color: #d1c4e9;
+    border-color: #9575cd;
+}
+
 .category-header {
     display: flex;
     align-items: center;
@@ -660,6 +691,53 @@ body {
     font-weight: bold;
     color: #2c3e50;
     font-size: 14px;
+}
+
+/* Ability Count Badge */
+.ability-count {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    min-width: 24px;
+    height: 24px;
+    padding: 0 6px;
+    margin-left: 8px;
+    border-radius: 12px;
+    background-color: rgba(0, 0, 0, 0.1);
+    color: #2c3e50;
+    font-size: 12px;
+    font-weight: bold;
+}
+
+/* Category-Specific Badge Colors */
+.category-passive .ability-count {
+    background-color: #90caf9;
+    color: #1565c0;
+}
+
+.category-maneuver .ability-count {
+    background-color: #81c784;
+    color: #2e7d32;
+}
+
+.category-action .ability-count {
+    background-color: #ffb74d;
+    color: #e65100;
+}
+
+.category-triggered_action .ability-count {
+    background-color: #ba68c8;
+    color: #6a1b9a;
+}
+
+.category-villain_action .ability-count {
+    background-color: #e57373;
+    color: #c62828;
+}
+
+.category-malice .ability-count {
+    background-color: #9575cd;
+    color: #4527a0;
 }
 
 .add-category-btn {

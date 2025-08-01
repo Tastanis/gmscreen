@@ -782,11 +782,14 @@ function renderCategorizedAbilities(monsterId, abilities) {
         const categoryAbilities = abilities[category.key] || [];
         const hasAbilities = categoryAbilities.length > 0;
         const expandedClass = hasAbilities ? 'expanded' : 'collapsed';
+        const hasAbilitiesClass = hasAbilities ? 'has-abilities' : '';
+        const abilityCount = categoryAbilities.length;
         
         return `
-            <div class="ability-category category-${category.key} ${expandedClass}" data-category="${category.key}">
+            <div class="ability-category category-${category.key} ${expandedClass} ${hasAbilitiesClass}" data-category="${category.key}">
                 <div class="category-header" onclick="toggleCategory('${monsterId}', '${category.key}')">
                     <span class="category-name">${category.name}</span>
+                    ${abilityCount > 0 ? `<span class="ability-count">${abilityCount}</span>` : ''}
                     <button class="btn-small add-category-btn" onclick="event.stopPropagation(); addAbility('${monsterId}', '${category.key}')">+ Add</button>
                     <span class="expand-icon">${hasAbilities ? '▼' : '▶'}</span>
                 </div>
