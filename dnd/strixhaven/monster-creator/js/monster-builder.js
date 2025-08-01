@@ -657,9 +657,9 @@ function createMonsterCard(monsterId, monsterData) {
     if (monsterData.intuition === undefined) monsterData.intuition = 0;
     if (monsterData.presence === undefined) monsterData.presence = 0;
     
-    // Predefined roll options - D&D tactical roles
-    const rollOptions = ['Ambusher', 'Artillery', 'Brute', 'Controller', 'Defender', 'Harrier', 'Hexer', 'Mount', 'Support', 'Leader', 'Solo', 'Minion'];
-    const rollDropdown = rollOptions.map(option => 
+    // Predefined role options - D&D tactical roles
+    const roleOptions = ['Ambusher', 'Artillery', 'Brute', 'Controller', 'Defender', 'Harrier', 'Hexer', 'Mount', 'Support', 'Leader', 'Solo', 'Minion'];
+    const roleDropdown = roleOptions.map(option => 
         `<option value="${option}" ${monsterData.role === option ? 'selected' : ''}>${option}</option>`
     ).join('');
     
@@ -695,13 +695,13 @@ function createMonsterCard(monsterId, monsterData) {
                     <div class="info-row-1">
                         <input type="text" class="monster-name" placeholder="Monster Name" 
                                data-field="name" value="${monsterData.name || ''}">
-                        <div class="level-roll-section">
+                        <div class="level-role-section">
                             <label class="field-label">Level:</label>
                             <input type="number" class="level-input" placeholder="1" 
                                    data-field="level" value="${monsterData.level || 1}" min="1" max="30">
-                            <label class="field-label">Roll:</label>
-                            <select class="roll-select" data-field="role">
-                                ${rollDropdown}
+                            <label class="field-label">Role:</label>
+                            <select class="role-select" data-field="role">
+                                ${roleDropdown}
                             </select>
                         </div>
                     </div>
@@ -712,6 +712,10 @@ function createMonsterCard(monsterId, monsterData) {
                         <label class="field-label">EV:</label>
                         <input type="number" class="ev-input" placeholder="0" 
                                data-field="ev" value="${monsterData.ev || 0}" min="0">
+                        ${currentMode === 'search' ? 
+                            `<button class="edit-monster-btn" onclick="enterEditorMode('${monsterId}')">✏️ Edit</button>` : 
+                            ''
+                        }
                     </div>
                 </div>
             </div>
@@ -2242,7 +2246,7 @@ function createNewMonsterForEditor() {
         monsterData.monsters[monsterId] = {
             name: monsterName,
             level: 1,
-            roll: 'Brute',
+            role: 'Brute',
             types: '',
             ev: 0,
             hp: 1,

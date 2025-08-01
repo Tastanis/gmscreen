@@ -369,8 +369,8 @@ body {
     border-color: #3498db;
 }
 
-/* Level and Roll Section */
-.level-roll-section {
+/* Level and Role Section */
+.level-role-section {
     display: flex;
     gap: 8px;
     align-items: center;
@@ -385,7 +385,7 @@ body {
     font-weight: 500;
 }
 
-.roll-select {
+.role-select {
     padding: 8px 12px;
     border: 1px solid #dee2e6;
     border-radius: 4px;
@@ -1283,6 +1283,27 @@ body {
     border-radius: 10px;
     min-width: 20px;
     text-align: center;
+}
+
+/* Edit Monster Button */
+.edit-monster-btn {
+    background-color: #4a90e2;
+    color: white;
+    border: none;
+    padding: 4px 8px;
+    border-radius: 4px;
+    font-size: 12px;
+    cursor: pointer;
+    margin-left: 8px;
+    transition: background-color 0.2s ease;
+}
+
+.edit-monster-btn:hover {
+    background-color: #357abd;
+}
+
+.edit-monster-btn:active {
+    background-color: #2968a3;
 }
 
 /* Monster List - Fixed height with scrolling */
