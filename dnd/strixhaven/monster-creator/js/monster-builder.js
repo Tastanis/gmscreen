@@ -595,8 +595,8 @@ function setupCardEventListeners(card, monsterId) {
         });
     }
     
-    // Add new listeners
-    const inputs = card.querySelectorAll('input, textarea, select');
+    // Add new listeners (exclude file inputs)
+    const inputs = card.querySelectorAll('input:not([type="file"]), textarea, select');
     inputs.forEach(input => {
         input.addEventListener('input', handleFieldChange);
         input.addEventListener('change', handleFieldChange);

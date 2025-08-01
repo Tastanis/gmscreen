@@ -8,11 +8,19 @@ if (!isset($_SESSION['logged_in']) || $_SESSION['logged_in'] !== true) {
     exit;
 }
 
-// Set JSON response header for non-upload actions
-$action = $_POST['action'] ?? $_SERVER['REQUEST_METHOD'];
-if ($action === 'delete') {
-    header('Content-Type: application/json');
+// Determine action and set appropriate headers
+$action = $_POST['action'] ?? null;
+
+// For delete action, get JSON input
+if ($_SERVER['REQUEST_METHOD'] === 'POST' && !isset($_POST['action'])) {
+    $input = json_decode(file_get_contents('php://input'), true);
+    if ($input && isset($input['action'])) {
+        $action = $input['action'];
+    }
 }
+
+// Set JSON response header
+header('Content-Type: application/json');
 
 // Handle different actions
 if ($action === 'upload') {
@@ -27,7 +35,7 @@ if ($action === 'upload') {
  * Handle image upload
  */
 function handleImageUpload() {
-    header('Content-Type: application/json');
+    // Header already set above
     
     // Check if file was uploaded
     if (!isset($_FILES['image'])) {
