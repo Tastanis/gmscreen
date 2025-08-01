@@ -476,10 +476,27 @@ function createMonsterCard(monsterId, monsterData) {
     // Initialize nested data structures and new fields if they don't exist
     if (!monsterData.abilities) monsterData.abilities = [];
     if (!monsterData.spells) monsterData.spells = [];
-    if (monsterData.roll === undefined) monsterData.roll = 'Brute';
+    if (monsterData.role === undefined) monsterData.role = 'Brute';
     if (monsterData.types === undefined) monsterData.types = '';
     if (monsterData.ev === undefined) monsterData.ev = 0;
     if (monsterData.image === undefined) monsterData.image = '';
+    
+    // Initialize new stats system fields
+    if (monsterData.size === undefined) monsterData.size = 0;
+    if (monsterData.speed === undefined) monsterData.speed = 0;
+    if (monsterData.stamina === undefined) monsterData.stamina = 0;
+    if (monsterData.stability === undefined) monsterData.stability = 0;
+    if (monsterData.free_strike === undefined) monsterData.free_strike = 0;
+    if (monsterData.immunity_type === undefined) monsterData.immunity_type = '';
+    if (monsterData.immunity_value === undefined) monsterData.immunity_value = '';
+    if (monsterData.weakness_type === undefined) monsterData.weakness_type = '';
+    if (monsterData.weakness_value === undefined) monsterData.weakness_value = '';
+    if (monsterData.movement === undefined) monsterData.movement = '';
+    if (monsterData.might === undefined) monsterData.might = 0;
+    if (monsterData.agility === undefined) monsterData.agility = 0;
+    if (monsterData.reason === undefined) monsterData.reason = 0;
+    if (monsterData.intuition === undefined) monsterData.intuition = 0;
+    if (monsterData.presence === undefined) monsterData.presence = 0;
     
     // Predefined roll options - D&D tactical roles
     const rollOptions = ['Ambusher', 'Artillery', 'Brute', 'Controller', 'Defender', 'Harrier', 'Hexer', 'Mount', 'Support', 'Leader', 'Solo', 'Minion'];
@@ -534,17 +551,76 @@ function createMonsterCard(monsterId, monsterData) {
                 </div>
             </div>
             
-            <!-- Basic Stats Section -->
-            <div class="basic-stats">
-                <div class="stat-row">
-                    <label>HP:</label>
-                    <input type="number" class="stat-input" data-field="hp" value="${monsterData.hp || ''}">
-                    <label>AC:</label>
-                    <input type="number" class="stat-input" data-field="ac" value="${monsterData.ac || ''}">
+            <!-- Monster Stats -->
+            <div class="monster-stats">
+                <!-- Core Stats Row -->
+                <div class="core-stats-row">
+                    <div class="core-stat">
+                        <input type="number" class="core-stat-input" data-field="size" value="${monsterData.size || 0}" min="0" max="20">
+                        <div class="core-stat-label">Size</div>
+                    </div>
+                    <div class="core-stat">
+                        <input type="number" class="core-stat-input" data-field="speed" value="${monsterData.speed || 0}" min="0" max="200">
+                        <div class="core-stat-label">Speed</div>
+                    </div>
+                    <div class="core-stat">
+                        <input type="number" class="core-stat-input" data-field="stamina" value="${monsterData.stamina || 0}" min="0" max="50">
+                        <div class="core-stat-label">Stamina</div>
+                    </div>
+                    <div class="core-stat">
+                        <input type="number" class="core-stat-input" data-field="stability" value="${monsterData.stability || 0}" min="0" max="30">
+                        <div class="core-stat-label">Stability</div>
+                    </div>
+                    <div class="core-stat">
+                        <input type="number" class="core-stat-input" data-field="free_strike" value="${monsterData.free_strike || 0}" min="0" max="10">
+                        <div class="core-stat-label">Free Strike</div>
+                    </div>
                 </div>
-                <div class="stat-row">
-                    <label>Speed:</label>
-                    <input type="text" class="stat-input" data-field="speed" value="${monsterData.speed || ''}">
+
+                <!-- Defensive Stats Row -->
+                <div class="defensive-stats-row">
+                    <div class="defensive-stat">
+                        <span class="defensive-stat-label">Immunity:</span>
+                        <input type="text" class="defensive-stat-text" data-field="immunity_type" value="${monsterData.immunity_type || ''}" placeholder="fire">
+                        <input type="number" class="defensive-stat-number" data-field="immunity_value" value="${monsterData.immunity_value || ''}" placeholder="3">
+                    </div>
+                    <div class="defensive-stat">
+                        <span class="defensive-stat-label">Weakness:</span>
+                        <input type="text" class="defensive-stat-text" data-field="weakness_type" value="${monsterData.weakness_type || ''}" placeholder="cold">
+                        <input type="number" class="defensive-stat-number" data-field="weakness_value" value="${monsterData.weakness_value || ''}" placeholder="2">
+                    </div>
+                    <div class="defensive-stat">
+                        <span class="defensive-stat-label">Movement:</span>
+                        <input type="text" class="movement-input" data-field="movement" value="${monsterData.movement || ''}" placeholder="fly 30ft">
+                    </div>
+                </div>
+
+                <!-- Attributes Bar -->
+                <div class="attributes-bar">
+                    <div class="attribute">
+                        <span class="attribute-label"><span class="first-letter">M</span>ight</span>
+                        <input type="number" class="attribute-input" data-field="might" value="${monsterData.might || 0}" min="-5" max="5">
+                    </div>
+                    <div class="attribute-separator"></div>
+                    <div class="attribute">
+                        <span class="attribute-label"><span class="first-letter">A</span>gility</span>
+                        <input type="number" class="attribute-input" data-field="agility" value="${monsterData.agility || 0}" min="-5" max="5">
+                    </div>
+                    <div class="attribute-separator"></div>
+                    <div class="attribute">
+                        <span class="attribute-label"><span class="first-letter">R</span>eason</span>
+                        <input type="number" class="attribute-input" data-field="reason" value="${monsterData.reason || 0}" min="-5" max="5">
+                    </div>
+                    <div class="attribute-separator"></div>
+                    <div class="attribute">
+                        <span class="attribute-label"><span class="first-letter">I</span>ntuition</span>
+                        <input type="number" class="attribute-input" data-field="intuition" value="${monsterData.intuition || 0}" min="-5" max="5">
+                    </div>
+                    <div class="attribute-separator"></div>
+                    <div class="attribute">
+                        <span class="attribute-label"><span class="first-letter">P</span>resence</span>
+                        <input type="number" class="attribute-input" data-field="presence" value="${monsterData.presence || 0}" min="-5" max="5">
+                    </div>
                 </div>
             </div>
             
