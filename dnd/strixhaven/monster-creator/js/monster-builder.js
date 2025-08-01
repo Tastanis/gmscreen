@@ -48,7 +48,6 @@ function getCategoryDisplayName(category) {
 function migrateAbility(simpleAbility, category) {
     return {
         name: simpleAbility.name || '',
-        roll_dice: simpleAbility.dice || '2d10',
         roll_bonus: 0,
         action_type: getCategoryDisplayName(category),
         resource_cost: '',
@@ -56,6 +55,7 @@ function migrateAbility(simpleAbility, category) {
         range: '',
         targets: '',
         effect: simpleAbility.conditions || '',
+        has_test: false,
         test: {
             tier1: {
                 damage_amount: '',
@@ -542,7 +542,6 @@ function createMonsterCard(monsterId, monsterData) {
                 // Test ability with new comprehensive format
                 {
                     name: 'Aura of Fear',
-                    roll_dice: '2d10',
                     roll_bonus: 2,
                     action_type: 'Passive',
                     resource_cost: '',
@@ -550,6 +549,7 @@ function createMonsterCard(monsterId, monsterData) {
                     range: '5 squares',
                     targets: 'All enemies',
                     effect: 'Enemies within range are frightened while in the aura.',
+                    has_test: true,
                     test: {
                         tier1: { damage_amount: '1d4', damage_type: 'psychic', has_attribute_check: true, attribute: 'intuition', attribute_threshold: 12, attribute_effect: 'stunned until end of turn' },
                         tier2: { damage_amount: '2d4', damage_type: 'psychic', has_attribute_check: true, attribute: 'intuition', attribute_threshold: 15, attribute_effect: 'paralyzed until end of turn' },
@@ -793,11 +793,14 @@ function renderCategorizedAbilities(monsterId, abilities) {
 // Render individual ability with comprehensive format
 function renderSingleAbility(ability, index, category, monsterId = '') {
     // Migrate simple ability format if needed
-    if (ability.dice && !ability.roll_dice) {
+    if (ability.dice && !ability.roll_bonus === undefined) {
         ability = migrateAbility(ability, category);
     }
     
-    // Ensure test structure exists
+    // Ensure test structure exists and has_test is defined
+    if (ability.has_test === undefined) {
+        ability.has_test = false;
+    }
     if (!ability.test) {
         ability.test = {
             tier1: { damage_amount: '', damage_type: '', has_attribute_check: false, attribute: 'might', attribute_threshold: 0, attribute_effect: '' },
@@ -815,23 +818,7 @@ function renderSingleAbility(ability, index, category, monsterId = '') {
                        value="${ability.name || ''}">
                 
                 <div class="roll-section">
-                    <select class="roll-dice" data-field-path="abilities.${category}.${index}.roll_dice">
-                        <option value="1d4" ${ability.roll_dice === '1d4' ? 'selected' : ''}>1d4</option>
-                        <option value="1d6" ${ability.roll_dice === '1d6' ? 'selected' : ''}>1d6</option>
-                        <option value="1d8" ${ability.roll_dice === '1d8' ? 'selected' : ''}>1d8</option>
-                        <option value="1d10" ${ability.roll_dice === '1d10' ? 'selected' : ''}>1d10</option>
-                        <option value="1d12" ${ability.roll_dice === '1d12' ? 'selected' : ''}>1d12</option>
-                        <option value="1d20" ${ability.roll_dice === '1d20' ? 'selected' : ''}>1d20</option>
-                        <option value="2d4" ${ability.roll_dice === '2d4' ? 'selected' : ''}>2d4</option>
-                        <option value="2d6" ${ability.roll_dice === '2d6' ? 'selected' : ''}>2d6</option>
-                        <option value="2d8" ${ability.roll_dice === '2d8' ? 'selected' : ''}>2d8</option>
-                        <option value="2d10" ${ability.roll_dice === '2d10' ? 'selected' : ''}>2d10</option>
-                        <option value="2d12" ${ability.roll_dice === '2d12' ? 'selected' : ''}>2d12</option>
-                        <option value="3d6" ${ability.roll_dice === '3d6' ? 'selected' : ''}>3d6</option>
-                        <option value="3d8" ${ability.roll_dice === '3d8' ? 'selected' : ''}>3d8</option>
-                        <option value="4d6" ${ability.roll_dice === '4d6' ? 'selected' : ''}>4d6</option>
-                    </select>
-                    <span class="plus-sign">+</span>
+                    <span class="roll-text">2d10+</span>
                     <input type="number" class="roll-bonus" min="0" max="20" 
                            data-field-path="abilities.${category}.${index}.roll_bonus" 
                            value="${ability.roll_bonus || 0}">
@@ -839,12 +826,9 @@ function renderSingleAbility(ability, index, category, monsterId = '') {
                 
                 <span class="action-type">${ability.action_type || getCategoryDisplayName(category)}</span>
                 
-                <div class="resource-cost">
-                    <span class="cost-symbol">#</span>
-                    <input type="text" class="cost-input" placeholder="3 points" 
-                           data-field-path="abilities.${category}.${index}.resource_cost" 
-                           value="${ability.resource_cost || ''}">
-                </div>
+                <input type="text" class="resource-cost-input" placeholder="3 points" 
+                       data-field-path="abilities.${category}.${index}.resource_cost" 
+                       value="${ability.resource_cost || ''}">
                 
                 <button class="btn-small remove-ability" onclick="removeAbility(this, '${category}')">×</button>
             </div>
@@ -884,22 +868,28 @@ function renderSingleAbility(ability, index, category, monsterId = '') {
 
             <!-- Row 4: Test System -->
             <div class="ability-row-4">
-                <div class="test-header" onclick="toggleTestSection('${monsterId}', '${category}', ${index})">
-                    <span class="test-label">Test</span>
-                    <span class="test-toggle">▼</span>
-                </div>
-                <div class="test-content">
-                    ${renderTestTier('tier1', '≤ 11', ability.test.tier1, category, index)}
-                    ${renderTestTier('tier2', '12-16', ability.test.tier2, category, index)}
-                    ${renderTestTier('tier3', '17+', ability.test.tier3, category, index)}
-                </div>
-            </div>
-
-            <!-- Row 5: Additional Effect -->
-            <div class="ability-row-5">
-                <label>Additional Effect:</label>
-                <textarea class="additional-effect-input" placeholder="Any additional effects after the test..." 
-                          data-field-path="abilities.${category}.${index}.additional_effect">${ability.additional_effect || ''}</textarea>
+                ${ability.has_test ? `
+                    <div class="test-header" onclick="toggleTestSection(event, '${monsterId}', '${category}', ${index})">
+                        <span class="test-label">Test</span>
+                        <span class="test-toggle">▼</span>
+                    </div>
+                    <div class="test-content expanded">
+                        ${renderTestTier('tier1', '≤ 11', ability.test.tier1, category, index)}
+                        ${renderTestTier('tier2', '12-16', ability.test.tier2, category, index)}
+                        ${renderTestTier('tier3', '17+', ability.test.tier3, category, index)}
+                        
+                        <!-- Additional Effect inside test -->
+                        <div class="additional-effect-section">
+                            <label>Additional Effect:</label>
+                            <textarea class="additional-effect-input" placeholder="Any additional effects after the test..." 
+                                      data-field-path="abilities.${category}.${index}.additional_effect">${ability.additional_effect || ''}</textarea>
+                        </div>
+                    </div>
+                ` : `
+                    <button class="btn-small add-test-btn" onclick="addTest('${monsterId}', '${category}', ${index})">
+                        + Add Test
+                    </button>
+                `}
             </div>
         </div>
     `;
@@ -947,18 +937,38 @@ function renderTestTier(tierKey, tierLabel, tierData, category, abilityIndex) {
 }
 
 // Toggle test section visibility
-function toggleTestSection(monsterId, category, abilityIndex) {
+function toggleTestSection(event, monsterId, category, abilityIndex) {
+    event.preventDefault();
+    event.stopPropagation();
+    
     const testContent = document.querySelector(`[data-monster-id="${monsterId}"] .ability-item[data-ability-index="${abilityIndex}"] .test-content`);
     const toggle = document.querySelector(`[data-monster-id="${monsterId}"] .ability-item[data-ability-index="${abilityIndex}"] .test-toggle`);
     
     if (testContent && toggle) {
-        if (testContent.style.display === 'none') {
-            testContent.style.display = 'block';
+        if (testContent.classList.contains('collapsed')) {
+            testContent.classList.remove('collapsed');
+            testContent.classList.add('expanded');
             toggle.textContent = '▼';
         } else {
-            testContent.style.display = 'none';
+            testContent.classList.remove('expanded');
+            testContent.classList.add('collapsed');
             toggle.textContent = '▶';
         }
+    }
+}
+
+// Add test to an ability
+function addTest(monsterId, category, abilityIndex) {
+    event.preventDefault();
+    event.stopPropagation();
+    
+    const monster = monsterData.monsters[monsterId];
+    if (monster && monster.abilities && monster.abilities[category] && monster.abilities[category][abilityIndex]) {
+        monster.abilities[category][abilityIndex].has_test = true;
+        
+        // Refresh the monster card to show the test section
+        refreshMonsterCard(monsterId);
+        markMonsterDirty(monsterId);
     }
 }
 
@@ -1517,7 +1527,6 @@ function addAbility(monsterId, category = 'action') {
     // Add new ability to category with comprehensive structure
     monster.abilities[category].push({
         name: '',
-        roll_dice: '2d10',
         roll_bonus: 0,
         action_type: getCategoryDisplayName(category),
         resource_cost: '',
@@ -1525,6 +1534,7 @@ function addAbility(monsterId, category = 'action') {
         range: '',
         targets: '',
         effect: '',
+        has_test: false,
         test: {
             tier1: {
                 damage_amount: '',

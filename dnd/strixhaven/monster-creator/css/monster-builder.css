@@ -655,17 +655,10 @@ body {
     gap: 3px;
 }
 
-.roll-dice {
-    padding: 6px 8px;
-    border: 1px solid #dee2e6;
-    border-radius: 4px;
-    font-size: 13px;
-    min-width: 60px;
-}
-
-.plus-sign {
+.roll-text {
     font-weight: bold;
-    color: #666;
+    color: #2c3e50;
+    font-size: 14px;
 }
 
 .roll-bonus {
@@ -687,20 +680,8 @@ body {
     white-space: nowrap;
 }
 
-.resource-cost {
-    display: flex;
-    align-items: center;
-    gap: 5px;
-}
-
-.cost-symbol {
-    font-weight: bold;
-    font-size: 16px;
-    color: #e67e22;
-}
-
-.cost-input {
-    width: 80px;
+.resource-cost-input {
+    width: 100px;
     padding: 6px 8px;
     border: 1px solid #dee2e6;
     border-radius: 4px;
@@ -807,6 +788,44 @@ body {
 .test-content {
     padding: 15px;
     background-color: #fafbfc;
+    transition: max-height 0.3s ease, padding 0.3s ease;
+    overflow: hidden;
+}
+
+.test-content.expanded {
+    max-height: 2000px;
+    padding: 15px;
+}
+
+.test-content.collapsed {
+    max-height: 0;
+    padding: 0 15px;
+}
+
+.add-test-btn {
+    background-color: #27ae60;
+    color: white;
+    padding: 8px 16px;
+    border-radius: 5px;
+    font-size: 13px;
+    margin: 10px 0;
+}
+
+.add-test-btn:hover {
+    background-color: #219a52;
+}
+
+.additional-effect-section {
+    margin-top: 15px;
+    padding-top: 15px;
+    border-top: 1px solid #d5dbdb;
+}
+
+.additional-effect-section label {
+    display: block;
+    font-weight: bold;
+    margin-bottom: 5px;
+    color: #2c3e50;
 }
 
 .test-tier {
