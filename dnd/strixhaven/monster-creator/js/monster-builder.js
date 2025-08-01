@@ -125,6 +125,16 @@ document.addEventListener('DOMContentLoaded', async function() {
             e.returnValue = 'You have unsaved changes. Are you sure you want to leave?';
         }
     });
+    
+    // Periodic cleanup of animation states every 30 seconds
+    setInterval(cleanupAnimationStates, 30000);
+    
+    // Make cleanup and debug functions globally available
+    window.cleanupAnimationStates = cleanupAnimationStates;
+    window.debugTestSections = debugTestSections;
+    
+    console.log('Animation cleanup system initialized');
+    console.log('Debug functions available: window.cleanupAnimationStates(), window.debugTestSections()');
 });
 
 // Create default structure when no saved data exists
@@ -936,47 +946,133 @@ function renderTestTier(tierKey, tierLabel, tierData, category, abilityIndex) {
     `;
 }
 
-// Toggle test section visibility with debouncing
+// Toggle test section visibility with enhanced targeting and debugging
 let toggleDebounceTimer = null;
+let animatingElements = new Set(); // Track elements currently animating
+
 function toggleTestSection(event, monsterId, category, abilityIndex) {
     event.preventDefault();
     event.stopPropagation();
     
-    // Debounce rapid clicks during animations
-    if (toggleDebounceTimer) {
-        clearTimeout(toggleDebounceTimer);
+    // Create unique element ID for tracking
+    const elementId = `${monsterId}-${category}-${abilityIndex}`;
+    
+    // Prevent multiple rapid clicks on the same element
+    if (animatingElements.has(elementId)) {
+        console.log(`Animation already in progress for ${elementId}`);
+        return;
     }
     
-    const testContent = document.querySelector(`[data-monster-id="${monsterId}"] .ability-item[data-ability-index="${abilityIndex}"] .test-content`);
-    const toggle = document.querySelector(`[data-monster-id="${monsterId}"] .ability-item[data-ability-index="${abilityIndex}"] .test-toggle`);
+    // Enhanced selector with category specificity
+    const categorySelector = `[data-monster-id="${monsterId}"] [data-category="${category}"] .ability-item[data-ability-index="${abilityIndex}"]`;
+    let testContent = document.querySelector(`${categorySelector} .test-content`);
+    let toggle = document.querySelector(`${categorySelector} .test-toggle`);
+    
+    // Fallback selector if category-specific fails
+    if (!testContent || !toggle) {
+        console.log(`Primary selector failed for ${elementId}, trying fallback`);
+        const fallbackSelector = `[data-monster-id="${monsterId}"] .ability-item[data-ability-index="${abilityIndex}"][data-category="${category}"]`;
+        testContent = document.querySelector(`${fallbackSelector} .test-content`);
+        toggle = document.querySelector(`${fallbackSelector} .test-toggle`);
+    }
+    
+    // Additional fallback using direct DOM traversal
+    if (!testContent || !toggle) {
+        console.log(`Fallback selector failed for ${elementId}, trying DOM traversal`);
+        const clickedElement = event.target.closest('.test-header');
+        if (clickedElement) {
+            testContent = clickedElement.nextElementSibling;
+            toggle = clickedElement.querySelector('.test-toggle');
+        }
+    }
     
     if (testContent && toggle) {
-        // Check if already animating
-        if (testContent.style.pointerEvents === 'none') {
-            return; // Prevent clicks during animation
-        }
+        console.log(`Successfully found elements for ${elementId}`);
         
-        // Disable pointer events during animation
-        testContent.style.pointerEvents = 'none';
+        // Add to animating set
+        animatingElements.add(elementId);
+        
+        // Clear any stuck pointer events from previous operations
+        testContent.style.pointerEvents = '';
         
         if (testContent.classList.contains('collapsed')) {
             // Expanding
+            console.log(`Expanding test section for ${elementId}`);
             testContent.classList.remove('collapsed');
             testContent.classList.add('expanded');
             toggle.textContent = '▼';
         } else {
             // Collapsing
+            console.log(`Collapsing test section for ${elementId}`);
             testContent.classList.remove('expanded');
             testContent.classList.add('collapsed');
             toggle.textContent = '▶';
         }
         
-        // Re-enable pointer events after animation completes
-        toggleDebounceTimer = setTimeout(() => {
-            testContent.style.pointerEvents = '';
-            toggleDebounceTimer = null;
-        }, 250); // Match CSS transition duration
+        // Remove from animating set after animation completes
+        setTimeout(() => {
+            animatingElements.delete(elementId);
+            console.log(`Animation completed for ${elementId}`);
+        }, 300); // Slightly longer than CSS transition for safety
+        
+    } else {
+        console.error(`Failed to find test elements for monster: ${monsterId}, category: ${category}, index: ${abilityIndex}`);
+        console.error('Available monster cards:', document.querySelectorAll(`[data-monster-id="${monsterId}"]`));
+        console.error('Available ability items:', document.querySelectorAll(`[data-monster-id="${monsterId}"] .ability-item`));
     }
+}
+
+// Cleanup function to reset any stuck animation states
+function cleanupAnimationStates() {
+    // Clear the animating elements set
+    const wasAnimating = animatingElements.size > 0;
+    animatingElements.clear();
+    
+    // Reset any stuck pointer-events
+    let stuckElements = 0;
+    const allTestContent = document.querySelectorAll('.test-content');
+    allTestContent.forEach(element => {
+        if (element.style.pointerEvents === 'none') {
+            element.style.pointerEvents = '';
+            stuckElements++;
+        }
+    });
+    
+    if (wasAnimating || stuckElements > 0) {
+        console.log(`Animation cleanup completed: ${stuckElements} stuck elements reset, ${wasAnimating ? 'cleared animating set' : 'no animations in progress'}`);
+    }
+}
+
+// Debug function to inspect current test section states
+function debugTestSections() {
+    console.group('Test Section Debug Info');
+    
+    const allMonsters = document.querySelectorAll('[data-monster-id]');
+    console.log(`Found ${allMonsters.length} monster cards`);
+    
+    allMonsters.forEach(monsterCard => {
+        const monsterId = monsterCard.getAttribute('data-monster-id');
+        const abilities = monsterCard.querySelectorAll('.ability-item');
+        console.log(`Monster ${monsterId}: ${abilities.length} abilities`);
+        
+        abilities.forEach(ability => {
+            const index = ability.getAttribute('data-ability-index');
+            const category = ability.getAttribute('data-category');
+            const testContent = ability.querySelector('.test-content');
+            const toggle = ability.querySelector('.test-toggle');
+            
+            if (testContent) {
+                const isCollapsed = testContent.classList.contains('collapsed');
+                const isExpanded = testContent.classList.contains('expanded');
+                const hasPointerEvents = testContent.style.pointerEvents === 'none';
+                
+                console.log(`  Ability ${category}[${index}]: ${isCollapsed ? 'collapsed' : isExpanded ? 'expanded' : 'unknown state'} ${hasPointerEvents ? '(pointer-events disabled)' : ''}`);
+            }
+        });
+    });
+    
+    console.log(`Currently animating elements: ${Array.from(animatingElements).join(', ') || 'none'}`);
+    console.groupEnd();
 }
 
 // Add test to an ability
