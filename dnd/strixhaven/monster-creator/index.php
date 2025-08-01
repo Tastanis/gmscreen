@@ -63,7 +63,7 @@ require_once '../../version.php';
                 
                 <div class="browser-content">
                     <!-- Monsters Section -->
-                    <div class="browser-section">
+                    <div class="browser-section monsters-section">
                         <div class="section-header">
                             <h4>Monsters</h4>
                             <span class="count" id="monsterCount">0</span>
@@ -74,7 +74,7 @@ require_once '../../version.php';
                     </div>
                     
                     <!-- Abilities Section -->
-                    <div class="browser-section">
+                    <div class="browser-section abilities-section">
                         <div class="section-header">
                             <h4>Abilities</h4>
                             <span class="count" id="abilityCount">0</span>

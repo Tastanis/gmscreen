@@ -424,6 +424,7 @@ body {
     border-left: 1px solid #e0e0e0;
     display: flex;
     flex-direction: column;
+    overflow: hidden;
 }
 
 .browser-header {
@@ -453,8 +454,24 @@ body {
 
 .browser-content {
     flex: 1;
-    overflow-y: auto;
+    display: flex;
+    flex-direction: column;
     padding: 10px;
+    overflow: hidden;
+}
+
+/* Monsters Section */
+.browser-section.monsters-section {
+    flex: 0 0 auto;
+    margin-bottom: 15px;
+}
+
+/* Abilities Section */
+.browser-section.abilities-section {
+    flex: 1;
+    display: flex;
+    flex-direction: column;
+    overflow: hidden;
 }
 
 .browser-section {
@@ -487,10 +504,24 @@ body {
     text-align: center;
 }
 
-.monster-list, .ability-list {
+/* Monster List - Fixed height with scrolling */
+.monster-list {
+    display: flex;
+    flex-direction: column;
+    gap: 6px;
+    max-height: 250px;
+    overflow-y: auto;
+    padding-right: 5px;
+}
+
+/* Abilities List - Takes remaining space */
+.ability-list {
+    flex: 1;
     display: flex;
     flex-direction: column;
     gap: 8px;
+    overflow-y: auto;
+    padding-right: 5px;
 }
 
 /* Browser Monster/Ability Cards */
@@ -498,10 +529,17 @@ body {
     background-color: #f8f9fa;
     border: 1px solid #e0e0e0;
     border-radius: 6px;
-    padding: 10px;
+    padding: 8px;
     cursor: pointer;
     transition: all 0.2s;
-    font-size: 13px;
+    font-size: 12px;
+}
+
+/* Monster Card Layout */
+.browser-monster-card {
+    display: flex;
+    align-items: center;
+    gap: 10px;
 }
 
 .browser-monster-card:hover, .browser-ability-card:hover {
@@ -518,15 +556,50 @@ body {
     border-left: 4px solid #9b59b6;
 }
 
+/* Monster Card Image */
+.browser-monster-image {
+    width: 40px;
+    height: 40px;
+    border-radius: 4px;
+    background-color: #e9ecef;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    flex-shrink: 0;
+    overflow: hidden;
+}
+
+.browser-monster-image img {
+    width: 100%;
+    height: 100%;
+    object-fit: cover;
+}
+
+.browser-monster-image .placeholder {
+    font-size: 18px;
+    color: #adb5bd;
+}
+
+/* Monster Card Content */
+.browser-monster-content {
+    flex: 1;
+    min-width: 0;
+}
+
 .browser-card-name {
     font-weight: bold;
     color: #2c3e50;
-    margin-bottom: 4px;
+    margin-bottom: 2px;
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
 }
 
 .browser-card-info {
     color: #666;
     font-size: 11px;
+    display: flex;
+    gap: 8px;
 }
 
 .browser-card-location {

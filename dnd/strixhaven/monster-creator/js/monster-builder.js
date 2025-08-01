@@ -1246,10 +1246,27 @@ function updateMonsterBrowser(monsters) {
         card.setAttribute('data-monster-id', monster.id);
         card.onclick = () => selectMonster(monster.id);
         
+        // Create image element
+        const imageHtml = monster.data.image 
+            ? `<img src="images/${monster.data.image}" alt="${monster.data.name || 'Monster'}">`
+            : `<div class="placeholder">🐉</div>`;
+        
+        // Get level and role info
+        const level = monster.data.level || '?';
+        const role = monster.data.role || 'Unknown';
+        
         card.innerHTML = `
-            <div class="browser-card-name">${monster.data.name || 'Unnamed Monster'}</div>
-            <div class="browser-card-info">HP: ${monster.data.hp || 0} | AC: ${monster.data.ac || 0}</div>
-            <div class="browser-card-location">${monster.location}</div>
+            <div class="browser-monster-image">
+                ${imageHtml}
+            </div>
+            <div class="browser-monster-content">
+                <div class="browser-card-name">${monster.data.name || 'Unnamed Monster'}</div>
+                <div class="browser-card-info">
+                    <span>Level ${level}</span>
+                    <span>${role}</span>
+                </div>
+                <div class="browser-card-location">${monster.location}</div>
+            </div>
         `;
         
         monsterList.appendChild(card);
