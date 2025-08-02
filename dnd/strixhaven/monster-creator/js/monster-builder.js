@@ -27,6 +27,7 @@ let currentMode = 'search'; // 'search' or 'editor'
 let editorMonsterId = null; // ID of monster being edited
 let editorMonsterOriginalTab = null; // Track original tab location
 let editorMonsterOriginalSubTab = null; // Track original subtab location
+let selectedMonsterId = null; // ID of monster selected for ability viewing
 
 // New change tracking system
 let dirtyMonsters = new Set(); // Track which monsters have unsaved changes
@@ -616,6 +617,9 @@ function createCompactMonsterCard(monsterId, monsterData) {
     card.addEventListener('click', function(e) {
         // Don't expand if clicking the edit button
         if (e.target.classList.contains('edit-monster-btn')) return;
+        
+        // Select the monster to show abilities
+        selectMonster(monsterId);
         
         toggleCardExpansion(monsterId);
     });
@@ -2175,13 +2179,60 @@ function getMonstersForCurrentView() {
 }
 
 function getAbilitiesForCurrentView() {
-    // For now, return empty array - we'll implement abilities later
-    return [];
+    let abilities = [];
+    
+    // If a monster is selected, show its abilities
+    if (selectedMonsterId && monsterData.monsters[selectedMonsterId]) {
+        const monster = monsterData.monsters[selectedMonsterId];
+        
+        if (monster.abilities && typeof monster.abilities === 'object') {
+            // Categories in order they should appear
+            const categories = [
+                { key: 'passive', name: 'Passive' },
+                { key: 'maneuver', name: 'Maneuver' },
+                { key: 'action', name: 'Action' },
+                { key: 'triggered_action', name: 'Triggered Action' },
+                { key: 'villain_action', name: 'Villain Action' },
+                { key: 'malice', name: 'Malice' }
+            ];
+            
+            categories.forEach(category => {
+                const categoryAbilities = monster.abilities[category.key];
+                if (Array.isArray(categoryAbilities)) {
+                    categoryAbilities.forEach((ability, index) => {
+                        if (ability && ability.name) {
+                            abilities.push({
+                                id: `${selectedMonsterId}_${category.key}_${index}`,
+                                name: ability.name,
+                                category: category.name,
+                                categoryKey: category.key,
+                                keywords: ability.keywords || '',
+                                effect: ability.effect || '',
+                                data: ability,
+                                monsterName: monster.name || 'Unnamed Monster'
+                            });
+                        }
+                    });
+                }
+            });
+        }
+    }
+    
+    return abilities;
 }
 
 function updateBrowserContext() {
     const titleElement = document.getElementById('browserTitle');
     const contextElement = document.getElementById('browserContext');
+    
+    // Don't update title if we're showing a monster's abilities
+    if (selectedMonsterId && monsterData.monsters[selectedMonsterId]) {
+        // Title will be updated by updateAbilityBrowser, just update context
+        const monster = monsterData.monsters[selectedMonsterId];
+        const monsterName = monster.name || 'Selected Monster';
+        contextElement.innerHTML = `<span class="context-info">Viewing abilities for: ${monsterName}</span>`;
+        return;
+    }
     
     if (currentSubTab && currentMainTab) {
         // Specific subtab selected
@@ -2254,21 +2305,55 @@ function updateAbilityBrowser(abilities) {
     abilityCount.textContent = abilities.length;
     
     if (abilities.length === 0) {
-        abilityList.innerHTML = '<div style="text-align: center; color: #999; padding: 20px; font-style: italic;">No abilities found</div>';
+        const message = selectedMonsterId ? 
+            'This monster has no abilities yet.' : 
+            'Click on a monster to view its abilities.';
+        abilityList.innerHTML = `<div style="text-align: center; color: #999; padding: 20px; font-style: italic;">${message}</div>`;
         return;
     }
     
     abilityList.innerHTML = '';
     
+    // Update browser title to show monster name
+    if (selectedMonsterId && abilities.length > 0) {
+        const titleElement = document.getElementById('browserTitle');
+        const monsterName = abilities[0].monsterName || 'Selected Monster';
+        titleElement.textContent = `Abilities for ${monsterName}`;
+    }
+    
+    // Group abilities by category
+    let currentCategory = '';
+    
     abilities.forEach(ability => {
+        // Add category header if new category
+        if (ability.category !== currentCategory) {
+            currentCategory = ability.category;
+            const categoryHeader = document.createElement('div');
+            categoryHeader.className = `browser-category-header category-${ability.categoryKey}`;
+            categoryHeader.textContent = currentCategory;
+            abilityList.appendChild(categoryHeader);
+        }
+        
         const card = document.createElement('div');
-        card.className = 'browser-ability-card';
+        card.className = `browser-ability-card category-${ability.categoryKey}`;
         card.setAttribute('data-ability-id', ability.id);
+        card.style.cursor = 'pointer';
+        
+        // Make it clickable (empty handler for now)
+        card.onclick = () => {
+            console.log('Clicked ability:', ability.name);
+        };
+        
+        // Build ability details
+        let details = [];
+        if (ability.keywords) details.push(`Keywords: ${ability.keywords}`);
+        if (ability.data.range) details.push(`Range: ${ability.data.range}`);
+        if (ability.data.targets) details.push(`Targets: ${ability.data.targets}`);
         
         card.innerHTML = `
-            <div class="browser-card-name">${ability.name}</div>
-            <div class="browser-card-info">${ability.description}</div>
-            <div class="browser-card-location">${ability.location}</div>
+            <div class="browser-ability-name">${ability.name}</div>
+            ${details.length > 0 ? `<div class="browser-ability-details">${details.join(' • ')}</div>` : ''}
+            ${ability.effect ? `<div class="browser-ability-effect">${ability.effect}</div>` : ''}
         `;
         
         abilityList.appendChild(card);
@@ -2277,7 +2362,29 @@ function updateAbilityBrowser(abilities) {
 
 function selectMonster(monsterId) {
     console.log('Selected monster:', monsterId);
-    // For now, just log - we can implement editing later
+    
+    // Update selected monster
+    selectedMonsterId = monsterId;
+    
+    // Remove previous selection highlight
+    document.querySelectorAll('.browser-monster-card.selected, .monster-card.selected').forEach(card => {
+        card.classList.remove('selected');
+    });
+    
+    // Add selection highlight to browser sidebar card
+    const browserCard = document.querySelector(`.browser-monster-card[data-monster-id="${monsterId}"]`);
+    if (browserCard) {
+        browserCard.classList.add('selected');
+    }
+    
+    // Add selection highlight to search view card if visible
+    const searchCard = document.querySelector(`.monster-card[data-monster-id="${monsterId}"]`);
+    if (searchCard) {
+        searchCard.classList.add('selected');
+    }
+    
+    // Update the abilities display
+    updateRightSidebar();
 }
 
 function updateDebugInfo(monsters, abilities) {
