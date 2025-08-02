@@ -2088,6 +2088,63 @@ function addAbility(monsterId, category = 'action') {
     }, 100);
 }
 
+// Copy ability from sidebar to currently editing monster
+function copyAbilityToCurrentMonster(abilityData, categoryKey) {
+    // Check if we're in editor mode with an active monster
+    if (currentMode !== 'editor' || !editorMonsterId) {
+        alert('Please enter editor mode and select a monster to edit before copying abilities.');
+        return;
+    }
+    
+    // Get the monster being edited
+    const monster = monsterData.monsters[editorMonsterId];
+    if (!monster) {
+        alert('Could not find the monster being edited.');
+        return;
+    }
+    
+    // Ensure abilities structure exists
+    if (!monster.abilities || Array.isArray(monster.abilities)) {
+        monster.abilities = {
+            passive: [],
+            maneuver: [],
+            action: [],
+            triggered_action: [],
+            villain_action: [],
+            malice: []
+        };
+    }
+    
+    // Ensure category exists
+    if (!monster.abilities[categoryKey]) {
+        monster.abilities[categoryKey] = [];
+    }
+    
+    // Deep clone the ability data to avoid reference issues
+    const copiedAbility = JSON.parse(JSON.stringify(abilityData));
+    
+    // Add the copied ability to the appropriate category
+    monster.abilities[categoryKey].push(copiedAbility);
+    
+    // Refresh the monster card to show the new ability
+    refreshMonsterCard(editorMonsterId);
+    markMonsterDirty(editorMonsterId);
+    
+    // Expand the category to show the newly added ability
+    setTimeout(() => {
+        const categoryElement = document.querySelector(`[data-monster-id="${editorMonsterId}"] .ability-category[data-category="${categoryKey}"]`);
+        if (categoryElement) {
+            categoryElement.classList.remove('collapsed');
+            categoryElement.classList.add('expanded');
+            const icon = categoryElement.querySelector('.expand-icon');
+            if (icon) icon.textContent = '▼';
+        }
+    }, 100);
+    
+    // Optional: Show a brief success message
+    console.log(`Copied ability "${copiedAbility.name}" to ${monster.name}`);
+}
+
 function toggleCategory(monsterId, category) {
     const categoryElement = document.querySelector(`[data-monster-id="${monsterId}"] .ability-category[data-category="${category}"]`);
     if (!categoryElement) return;
@@ -2385,11 +2442,12 @@ function updateAbilityBrowser(abilities) {
         const card = document.createElement('div');
         card.className = `browser-ability-card category-${ability.categoryKey}`;
         card.setAttribute('data-ability-id', ability.id);
-        card.style.cursor = 'pointer';
+        card.style.cursor = 'copy';
+        card.title = 'Click to copy this ability to the monster you are editing';
         
-        // Make it clickable (empty handler for now)
+        // Make it clickable - copy ability to current monster
         card.onclick = () => {
-            console.log('Clicked ability:', ability.name);
+            copyAbilityToCurrentMonster(ability.data, ability.categoryKey);
         };
         
         // Build comprehensive ability display
