@@ -2344,20 +2344,125 @@ function updateAbilityBrowser(abilities) {
             console.log('Clicked ability:', ability.name);
         };
         
-        // Build ability details
+        // Build comprehensive ability display
+        let headerHtml = '';
+        let detailsHtml = '';
+        let effectHtml = '';
+        let testHtml = '';
+        let additionalHtml = '';
+        
+        // Header: Name and Roll Info
+        let nameRollText = ability.name;
+        if (ability.data.roll_bonus && ability.data.roll_bonus > 0) {
+            nameRollText += ` (2d10+${ability.data.roll_bonus})`;
+        }
+        
+        // Meta info: Action type and cost
+        let metaInfo = [];
+        if (ability.data.action_type && ability.data.action_type !== ability.category) {
+            metaInfo.push(ability.data.action_type);
+        }
+        if (ability.data.resource_cost) {
+            metaInfo.push(`Cost: ${ability.data.resource_cost}`);
+        }
+        
+        headerHtml = `
+            <div class="ability-header">
+                <div class="ability-name-roll">${nameRollText}</div>
+                ${metaInfo.length > 0 ? `<div class="ability-meta">${metaInfo.join(' • ')}</div>` : ''}
+            </div>
+        `;
+        
+        // Details: Keywords, Range, Targets
         let details = [];
         if (ability.keywords) details.push(`Keywords: ${ability.keywords}`);
         if (ability.data.range) details.push(`Range: ${ability.data.range}`);
         if (ability.data.targets) details.push(`Targets: ${ability.data.targets}`);
         
-        card.innerHTML = `
-            <div class="browser-ability-name">${ability.name}</div>
-            ${details.length > 0 ? `<div class="browser-ability-details">${details.join(' • ')}</div>` : ''}
-            ${ability.effect ? `<div class="browser-ability-effect">${ability.effect}</div>` : ''}
-        `;
+        if (details.length > 0) {
+            detailsHtml = `<div class="ability-details">${details.join(' • ')}</div>`;
+        }
+        
+        // Main Effect
+        if (ability.effect) {
+            effectHtml = `<div class="ability-effect">${ability.effect}</div>`;
+        }
+        
+        // Test Results
+        if (ability.data.has_test && ability.data.test) {
+            const testResultsHtml = renderBrowserTestInfo(ability.data.test);
+            if (testResultsHtml) {
+                testHtml = `
+                    <div class="ability-test-results">
+                        <div class="test-header">Test Results:</div>
+                        ${testResultsHtml}
+                    </div>
+                `;
+            }
+        }
+        
+        // Additional Effect
+        if (ability.data.additional_effect) {
+            additionalHtml = `<div class="ability-additional"><em>${ability.data.additional_effect}</em></div>`;
+        }
+        
+        card.innerHTML = headerHtml + detailsHtml + effectHtml + testHtml + additionalHtml;
         
         abilityList.appendChild(card);
     });
+}
+
+function renderBrowserTestInfo(test) {
+    if (!test) return '';
+    
+    const tiers = [
+        { key: 'tier1', label: '≤11', class: 'tier-low' },
+        { key: 'tier2', label: '12-16', class: 'tier-mid' },
+        { key: 'tier3', label: '17+', class: 'tier-high' }
+    ];
+    
+    let testHtml = '';
+    
+    tiers.forEach(tier => {
+        const tierData = test[tier.key];
+        if (tierData && (tierData.damage_amount || tierData.damage_type || tierData.has_attribute_check)) {
+            let tierContent = [];
+            
+            // Add damage info
+            if (tierData.damage_amount || tierData.damage_type) {
+                const damage = tierData.damage_amount || '';
+                const type = tierData.damage_type || '';
+                if (damage && type) {
+                    tierContent.push(`${damage} ${type} damage`);
+                } else if (damage) {
+                    tierContent.push(`${damage} damage`);
+                } else if (type) {
+                    tierContent.push(`${type} damage`);
+                }
+            }
+            
+            // Add attribute check info
+            if (tierData.has_attribute_check && tierData.attribute && tierData.attribute_threshold) {
+                const attributeName = tierData.attribute.charAt(0).toUpperCase() + tierData.attribute.slice(1);
+                let attrText = `${attributeName} ≤${tierData.attribute_threshold}`;
+                if (tierData.attribute_effect) {
+                    attrText += `: ${tierData.attribute_effect}`;
+                }
+                tierContent.push(attrText);
+            }
+            
+            if (tierContent.length > 0) {
+                testHtml += `
+                    <div class="test-tier ${tier.class}">
+                        <span class="tier-label">(${tier.label})</span>
+                        <span class="tier-content">${tierContent.join('; ')}</span>
+                    </div>
+                `;
+            }
+        }
+    });
+    
+    return testHtml;
 }
 
 function selectMonster(monsterId) {
