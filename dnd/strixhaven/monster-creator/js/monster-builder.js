@@ -1758,13 +1758,8 @@ function handleFieldChange(event) {
         attributeFormatTimers.set(elementId, formatTimer);
     }
     
-    // Handle special cases
-    if (element.classList.contains('monster-name')) {
-        monster.name = value;
-    } else {
-        // Set nested value
-        setNestedValue(monster, fieldPath, value);
-    }
+    // Set nested value (works for all fields including name)
+    setNestedValue(monster, fieldPath, value);
     
     // Mark monster as modified
     monster.lastModified = Date.now();
