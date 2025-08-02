@@ -496,9 +496,37 @@ function loadWorkspace() {
     // Create workspace header with Add New Monster button (always visible)
     const workspaceHeader = document.createElement('div');
     workspaceHeader.className = 'workspace-header';
+    
+    // Build title based on mode and editing state
+    let title = 'Monster Workspace';
+    if (currentMode === 'editor') {
+        if (editorMonsterId && monsterData.monsters[editorMonsterId]) {
+            const monsterName = monsterData.monsters[editorMonsterId].name || 'Unnamed Monster';
+            title += ` - Editing: ${monsterName}`;
+        } else {
+            title += ' - Editor Mode';
+        }
+    }
+    
+    // Build action buttons based on mode and state
+    let actionButtons;
+    if (currentMode === 'search') {
+        actionButtons = '<button class="btn-primary add-monster-btn" onclick="addNewMonster()">+ Add New Monster</button>';
+    } else {
+        // Editor mode
+        if (editorMonsterId) {
+            actionButtons = `
+                <button class="btn-primary save-to-tab-btn" onclick="showTabAssignment()">Save to Tab</button>
+                <button class="btn-secondary" onclick="finishEditing()">Finish Editing</button>
+            `;
+        } else {
+            actionButtons = '<button class="btn-primary add-monster-btn" onclick="addNewMonster()">+ Add New Monster</button>';
+        }
+    }
+    
     workspaceHeader.innerHTML = `
         <div class="workspace-title">
-            <h3>Monster Workspace ${currentMode === 'editor' ? '- Editor Mode' : ''}</h3>
+            <h3>${title}</h3>
         </div>
         <div class="workspace-actions">
             <div class="mode-toggle">
@@ -509,10 +537,7 @@ function loadWorkspace() {
                     <span class="mode-icon">✏️</span> Editor
                 </button>
             </div>
-            ${currentMode === 'search' ? 
-                '<button class="btn-primary add-monster-btn" onclick="addNewMonster()">+ Add New Monster</button>' :
-                '<button class="btn-primary save-to-tab-btn" onclick="showTabAssignment()">Save to Tab</button>'
-            }
+            ${actionButtons}
         </div>
     `;
     
@@ -529,11 +554,24 @@ function loadWorkspace() {
     let monstersToShow = [];
     
     // Check if we're in editor mode
-    if (currentMode === 'editor' && editorMonsterId) {
-        // In editor mode, only show the monster being edited
-        const monster = monsterData.monsters[editorMonsterId];
-        if (monster) {
-            monstersToShow.push({ id: editorMonsterId, data: monster });
+    if (currentMode === 'editor') {
+        if (editorMonsterId) {
+            // In editor mode with active monster - show the monster being edited
+            const monster = monsterData.monsters[editorMonsterId];
+            if (monster) {
+                monstersToShow.push({ id: editorMonsterId, data: monster });
+            }
+        } else {
+            // In editor mode but no active monster - show empty editor message
+            workspaceContent.innerHTML = `
+                <div class="workspace-info">
+                    <h3>Monster Editor</h3>
+                    <p>Ready to create a new monster!</p>
+                    <p class="info-hint">Click "Add New Monster" above to start creating a monster, or switch to Search mode to edit an existing monster.</p>
+                </div>
+            `;
+            console.log('Loaded empty editor');
+            return; // Don't continue with normal monster loading
         }
     } else {
         // Search mode - show monsters based on tab selection
@@ -2733,12 +2771,15 @@ function setMode(mode) {
     }
     
     if (mode === 'editor') {
-        // If switching to editor but no monster selected, create new one
-        if (!editorMonsterId) {
-            createNewMonsterForEditor();
+        currentMode = 'editor';
+        if (editorMonsterId) {
+            // Resume existing editing session
+            console.log('Resuming editor mode with monster:', editorMonsterId);
         } else {
-            enterEditorMode(editorMonsterId);
+            // Show empty editor - don't auto-create monster
+            console.log('Entering empty editor mode');
         }
+        loadWorkspace();
     } else if (mode === 'search') {
         exitEditorMode();
     }
@@ -2759,13 +2800,24 @@ function enterEditorMode(monsterId) {
 
 function exitEditorMode() {
     currentMode = 'search';
+    // DON'T clear editorMonsterId - keep the editing session alive
+    // Keep: editorMonsterId, editorMonsterOriginalTab, editorMonsterOriginalSubTab
+    
+    console.log('Switched to search mode (editing session preserved)');
+    
+    // Refresh workspace to show search results
+    loadWorkspace();
+}
+
+function finishEditing() {
+    // Explicitly end the editing session
+    console.log('Finishing editing session for monster:', editorMonsterId);
+    
     editorMonsterId = null;
     editorMonsterOriginalTab = null;
     editorMonsterOriginalSubTab = null;
     
-    console.log('Exited editor mode');
-    
-    // Refresh workspace to show search results
+    // Refresh the workspace to show empty editor
     loadWorkspace();
 }
 
@@ -2922,10 +2974,11 @@ function saveMonsterToTab(mainTabId, subTabId) {
         
         console.log(`Saved monster ${editorMonsterId} to ${mainTabId}/${subTabId}`);
         
-        // Exit editor mode and return to search
-        exitEditorMode();
+        // Finish editing session since monster is now saved to a tab
+        finishEditing();
         
-        // Switch to the tab where we saved the monster
+        // Switch to search mode and the tab where we saved the monster
+        setMode('search');
         selectMainTab(mainTabId);
         selectSubTab(subTabId);
     }
