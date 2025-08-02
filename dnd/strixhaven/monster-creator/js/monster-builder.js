@@ -269,6 +269,10 @@ function switchMainTab(tabId) {
     if (currentMode === 'editor') {
         // Just update the subtabs display but don't change current content
         loadSubTabs(tabId);
+        
+        // Update right sidebar to show monsters from new tab selection
+        updateRightSidebar();
+        
         console.log('Main tab switched to:', tabId, '(editor mode - content preserved)');
         return;
     }
@@ -304,6 +308,9 @@ function switchSubTab(subTabId) {
     
     // In editor mode, don't reload workspace
     if (currentMode === 'editor') {
+        // Update right sidebar to show monsters from new subtab selection
+        updateRightSidebar();
+        
         console.log('Sub-tab switched to:', subTabId, '(editor mode - content preserved)');
         return;
     }
