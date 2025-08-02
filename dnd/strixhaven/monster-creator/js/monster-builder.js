@@ -1579,7 +1579,7 @@ function saveCurrentWorkspace() {
             // Check if any values actually changed before updating lastModified
             let hasChanges = false;
             
-            if (nameField && monster.name !== nameField.value) {
+            if (nameField && nameField.tagName === 'INPUT' && monster.name !== nameField.value) {
                 monster.name = nameField.value;
                 hasChanges = true;
             }
