@@ -267,6 +267,9 @@ function switchMainTab(tabId) {
     
     // In editor mode, don't change subtab or reload workspace
     if (currentMode === 'editor') {
+        // Clear subtab selection to show ALL monsters from main tab
+        currentSubTab = null;
+        
         // Just update the subtabs display but don't change current content
         loadSubTabs(tabId);
         
