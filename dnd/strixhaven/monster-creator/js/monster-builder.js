@@ -831,7 +831,7 @@ function renderCompactAbilities(abilities) {
                         <span class="ability-count">${categoryAbilities.length}</span>
                     </div>
                     <div class="category-content">
-                        ${categoryAbilities.map(ability => renderCompactAbility(ability)).join('')}
+                        ${categoryAbilities.map(ability => renderCompactAbility(ability, category.key)).join('')}
                     </div>
                 </div>
             `;
@@ -841,19 +841,23 @@ function renderCompactAbilities(abilities) {
     return html || '<div class="no-abilities">No abilities</div>';
 }
 
-function renderCompactAbility(ability) {
+function renderCompactAbility(ability, category) {
     if (!ability) return '';
     
     let details = [];
     if (ability.keywords) details.push(`Keywords: ${ability.keywords}`);
     if (ability.range) details.push(`Range: ${ability.range}`);
     if (ability.targets) details.push(`Targets: ${ability.targets}`);
-    if (ability.resource_cost) details.push(`Cost: ${ability.resource_cost}`);
+    // Only show cost for villain_action and malice
+    if ((category === 'villain_action' || category === 'malice') && ability.resource_cost) {
+        details.push(`Cost: ${ability.resource_cost}`);
+    }
     
     let html = `
         <div class="search-ability-item">
             <div class="search-ability-name">${ability.name || 'Unnamed Ability'}</div>
             ${details.length > 0 ? `<div class="search-ability-details">${details.join(' • ')}</div>` : ''}
+            ${ability.trigger && category === 'triggered_action' ? `<div class="search-ability-details"><strong>Trigger:</strong> ${ability.trigger}</div>` : ''}
             ${ability.effect ? `<div class="search-ability-details">${ability.effect}</div>` : ''}
     `;
     
@@ -897,12 +901,16 @@ function renderCompactTestInfo(test) {
             if (tierData.damage_amount || tierData.damage_type) {
                 const damage = tierData.damage_amount || '';
                 const type = tierData.damage_type || '';
-                if (damage && type) {
-                    tierText += `${damage} ${type} damage`;
-                } else if (damage) {
-                    tierText += `${damage} damage`;
+                if (damage) {
+                    tierText += damage;
+                    if (type) {
+                        tierText += ` ${type} damage`;
+                    } else {
+                        tierText += ' damage';
+                    }
                 } else if (type) {
-                    tierText += `${type} damage`;
+                    // If only type is specified, just show the type
+                    tierText += type;
                 }
             }
             
@@ -1233,21 +1241,25 @@ function renderSingleAbility(ability, index, category, monsterId = '') {
                        data-field-path="abilities.${category}.${index}.name" 
                        value="${ability.name || ''}">
                 
-                <div class="roll-section">
-                    <span class="roll-text">2d10+</span>
-                    <input type="number" class="roll-bonus" min="0" max="20" 
-                           data-field-path="abilities.${category}.${index}.roll_bonus" 
-                           value="${ability.roll_bonus || 0}">
-                </div>
-                
                 <span class="action-type">${ability.action_type || getCategoryDisplayName(category)}</span>
                 
-                <input type="text" class="resource-cost-input" placeholder="3 points" 
-                       data-field-path="abilities.${category}.${index}.resource_cost" 
-                       value="${ability.resource_cost || ''}">
+                ${(category === 'villain_action' || category === 'malice') ? `
+                    <input type="text" class="resource-cost-input" placeholder="3 points" 
+                           data-field-path="abilities.${category}.${index}.resource_cost" 
+                           value="${ability.resource_cost || ''}">
+                ` : ''}
                 
                 <button class="btn-small remove-ability" onclick="removeAbility(this, '${category}')">×</button>
             </div>
+            
+            ${category === 'triggered_action' ? `
+            <!-- Trigger Row for Triggered Actions -->
+            <div class="ability-row-trigger">
+                <label>Trigger:</label>
+                <textarea class="trigger-input" placeholder="Describe what triggers this action (e.g., 'When an enemy moves adjacent to this creature', 'At the start of each turn', etc.)" 
+                          data-field-path="abilities.${category}.${index}.trigger">${ability.trigger || ''}</textarea>
+            </div>
+            ` : ''}
 
             <!-- Row 2: Combat Details -->
             <div class="ability-row-2">
@@ -1290,6 +1302,14 @@ function renderSingleAbility(ability, index, category, monsterId = '') {
                         <span class="test-toggle">▶</span>
                     </div>
                     <div class="test-content collapsed">
+                        <!-- Roll section moved to top of test -->
+                        <div class="test-roll-section">
+                            <span class="roll-text">2d10+</span>
+                            <input type="number" class="roll-bonus" min="0" max="20" 
+                                   data-field-path="abilities.${category}.${index}.roll_bonus" 
+                                   value="${ability.roll_bonus || 0}">
+                        </div>
+                        
                         ${renderTestTier('tier1', '≤ 11', ability.test.tier1, category, index)}
                         ${renderTestTier('tier2', '12-16', ability.test.tier2, category, index)}
                         ${renderTestTier('tier3', '17+', ability.test.tier3, category, index)}
@@ -1319,11 +1339,12 @@ function renderTestTier(tierKey, tierLabel, tierData, category, abilityIndex) {
                 <span class="tier-label">(${tierLabel})</span>
                 <input type="text" class="damage-amount" placeholder="2d6" 
                        data-field-path="abilities.${category}.${abilityIndex}.test.${tierKey}.damage_amount" 
-                       value="${tierData.damage_amount || ''}">
-                <input type="text" class="damage-type" placeholder="fire" 
+                       value="${tierData.damage_amount || ''}"
+                       onchange="updateDamageLabel(this, '${category}', ${abilityIndex}, '${tierKey}')">
+                <input type="text" class="damage-type" placeholder="type of damage" 
                        data-field-path="abilities.${category}.${abilityIndex}.test.${tierKey}.damage_type" 
                        value="${tierData.damage_type || ''}">
-                <span class="damage-label">damage;</span>
+                <span class="damage-label" data-tier="${tierKey}">${tierData.damage_amount ? 'damage;' : ''}</span>
                 
                 <button class="btn-small attribute-toggle ${tierData.has_attribute_check ? 'active' : ''}" 
                         onclick="toggleAttributeCheck('${category}', ${abilityIndex}, '${tierKey}')">
@@ -1332,24 +1353,45 @@ function renderTestTier(tierKey, tierLabel, tierData, category, abilityIndex) {
             </div>
             
             <div class="attribute-section ${tierData.has_attribute_check ? 'visible' : 'hidden'}">
-                <select class="attribute-select" data-field-path="abilities.${category}.${abilityIndex}.test.${tierKey}.attribute">
-                    <option value="might" ${tierData.attribute === 'might' ? 'selected' : ''}>Might</option>
-                    <option value="agility" ${tierData.attribute === 'agility' ? 'selected' : ''}>Agility</option>
-                    <option value="reason" ${tierData.attribute === 'reason' ? 'selected' : ''}>Reason</option>
-                    <option value="intuition" ${tierData.attribute === 'intuition' ? 'selected' : ''}>Intuition</option>
-                    <option value="presence" ${tierData.attribute === 'presence' ? 'selected' : ''}>Presence</option>
-                </select>
-                <span>≤</span>
-                <input type="number" class="attribute-threshold" min="0" max="30" 
-                       data-field-path="abilities.${category}.${abilityIndex}.test.${tierKey}.attribute_threshold" 
-                       value="${tierData.attribute_threshold || 0}">
-                <span>:</span>
-                <input type="text" class="attribute-effect" placeholder="stunned until end of turn" 
-                       data-field-path="abilities.${category}.${abilityIndex}.test.${tierKey}.attribute_effect" 
-                       value="${tierData.attribute_effect || ''}">
+                <div class="attribute-check-row">
+                    <select class="attribute-select" data-field-path="abilities.${category}.${abilityIndex}.test.${tierKey}.attribute">
+                        <option value="might" ${tierData.attribute === 'might' ? 'selected' : ''}>Might</option>
+                        <option value="agility" ${tierData.attribute === 'agility' ? 'selected' : ''}>Agility</option>
+                        <option value="reason" ${tierData.attribute === 'reason' ? 'selected' : ''}>Reason</option>
+                        <option value="intuition" ${tierData.attribute === 'intuition' ? 'selected' : ''}>Intuition</option>
+                        <option value="presence" ${tierData.attribute === 'presence' ? 'selected' : ''}>Presence</option>
+                    </select>
+                    <span>≤</span>
+                    <input type="number" class="attribute-threshold" min="0" max="30" 
+                           data-field-path="abilities.${category}.${abilityIndex}.test.${tierKey}.attribute_threshold" 
+                           value="${tierData.attribute_threshold || 0}">
+                    <span>:</span>
+                </div>
+                <div class="attribute-effect-row">
+                    <input type="text" class="attribute-effect" placeholder="stunned until end of turn" 
+                           data-field-path="abilities.${category}.${abilityIndex}.test.${tierKey}.attribute_effect" 
+                           value="${tierData.attribute_effect || ''}">
+                </div>
             </div>
         </div>
     `;
+}
+
+// Function to update damage label visibility
+function updateDamageLabel(input, category, abilityIndex, tierKey) {
+    const damageLabel = input.closest('.tier-header').querySelector('.damage-label');
+    if (damageLabel) {
+        damageLabel.textContent = input.value.trim() ? 'damage;' : '';
+    }
+    
+    // Update the data
+    const monsterId = input.closest('.monster-card')?.getAttribute('data-monster-id');
+    if (monsterId) {
+        const monster = monsterData.monsters[monsterId];
+        if (monster && monster.abilities && monster.abilities[category] && monster.abilities[category][abilityIndex]) {
+            markMonsterDirty(monsterId);
+        }
+    }
 }
 
 // Toggle test section visibility with enhanced targeting and debugging
@@ -2033,7 +2075,7 @@ function addAbility(monsterId, category = 'action') {
     }
     
     // Add new ability to category with comprehensive structure
-    monster.abilities[category].push({
+    const newAbility = {
         name: '',
         roll_bonus: 0,
         action_type: getCategoryDisplayName(category),
@@ -2070,7 +2112,14 @@ function addAbility(monsterId, category = 'action') {
             }
         },
         additional_effect: ''
-    });
+    };
+    
+    // Add trigger field for triggered actions
+    if (category === 'triggered_action') {
+        newAbility.trigger = '';
+    }
+    
+    monster.abilities[category].push(newAbility);
     
     // Refresh the monster card first
     refreshMonsterCard(monsterId);
@@ -2459,7 +2508,8 @@ function updateAbilityBrowser(abilities) {
         
         // Header: Name and Roll Info
         let nameRollText = ability.name;
-        if (ability.data.roll_bonus && ability.data.roll_bonus > 0) {
+        // Only show roll bonus if the ability has a test
+        if (ability.data.has_test && ability.data.roll_bonus && ability.data.roll_bonus > 0) {
             nameRollText += ` (2d10+${ability.data.roll_bonus})`;
         }
         
@@ -2468,7 +2518,8 @@ function updateAbilityBrowser(abilities) {
         if (ability.data.action_type && ability.data.action_type !== ability.category) {
             metaInfo.push(ability.data.action_type);
         }
-        if (ability.data.resource_cost) {
+        // Only show cost for villain_action and malice
+        if ((ability.categoryKey === 'villain_action' || ability.categoryKey === 'malice') && ability.data.resource_cost) {
             metaInfo.push(`Cost: ${ability.data.resource_cost}`);
         }
         
@@ -2487,6 +2538,12 @@ function updateAbilityBrowser(abilities) {
         
         if (details.length > 0) {
             detailsHtml = `<div class="ability-details">${details.join(' • ')}</div>`;
+        }
+        
+        // Trigger for triggered actions
+        let triggerHtml = '';
+        if (ability.categoryKey === 'triggered_action' && ability.data.trigger) {
+            triggerHtml = `<div class="ability-effect"><strong>Trigger:</strong> ${ability.data.trigger}</div>`;
         }
         
         // Main Effect
@@ -2512,7 +2569,7 @@ function updateAbilityBrowser(abilities) {
             additionalHtml = `<div class="ability-additional"><em>${ability.data.additional_effect}</em></div>`;
         }
         
-        card.innerHTML = headerHtml + detailsHtml + effectHtml + testHtml + additionalHtml;
+        card.innerHTML = headerHtml + detailsHtml + triggerHtml + effectHtml + testHtml + additionalHtml;
         
         abilityList.appendChild(card);
     });
@@ -2538,12 +2595,17 @@ function renderBrowserTestInfo(test) {
             if (tierData.damage_amount || tierData.damage_type) {
                 const damage = tierData.damage_amount || '';
                 const type = tierData.damage_type || '';
-                if (damage && type) {
-                    tierContent.push(`${damage} ${type} damage`);
-                } else if (damage) {
-                    tierContent.push(`${damage} damage`);
+                if (damage) {
+                    let damageText = damage;
+                    if (type) {
+                        damageText += ` ${type} damage`;
+                    } else {
+                        damageText += ' damage';
+                    }
+                    tierContent.push(damageText);
                 } else if (type) {
-                    tierContent.push(`${type} damage`);
+                    // If only type is specified, just show the type
+                    tierContent.push(type);
                 }
             }
             

@@ -1104,12 +1104,45 @@ body {
 /* Row 1: Header Information */
 .ability-row-1 {
     display: grid;
-    grid-template-columns: 1fr auto auto auto auto;
+    grid-template-columns: 1fr auto auto auto;
     gap: 10px;
     align-items: center;
     margin-bottom: 12px;
     padding-bottom: 10px;
     border-bottom: 1px solid #f0f0f0;
+}
+
+/* Adjust grid when cost is shown */
+.ability-item[data-category="villain_action"] .ability-row-1,
+.ability-item[data-category="malice"] .ability-row-1 {
+    grid-template-columns: 1fr auto auto auto auto;
+}
+
+/* Trigger Row for Triggered Actions */
+.ability-row-trigger {
+    margin-bottom: 12px;
+    padding: 10px;
+    background-color: #f3e5f5;
+    border-radius: 4px;
+    border: 1px solid #ce93d8;
+}
+
+.ability-row-trigger label {
+    display: block;
+    font-weight: bold;
+    color: #7b1fa2;
+    margin-bottom: 6px;
+}
+
+.trigger-input {
+    width: 100%;
+    min-height: 60px;
+    padding: 8px;
+    border: 1px solid #ce93d8;
+    border-radius: 4px;
+    font-size: 13px;
+    resize: vertical;
+    font-family: inherit;
 }
 
 .ability-name {
@@ -1341,7 +1374,7 @@ body {
 }
 
 .damage-type {
-    width: 80px;
+    width: 120px;
 }
 
 .damage-label {
@@ -1365,7 +1398,7 @@ body {
 
 .attribute-section {
     display: flex;
-    align-items: center;
+    flex-direction: column;
     gap: 8px;
     margin-top: 8px;
     padding: 8px;
@@ -1380,6 +1413,20 @@ body {
 
 .attribute-section.visible {
     display: flex;
+}
+
+.attribute-check-row {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+}
+
+.attribute-effect-row {
+    width: 100%;
+}
+
+.attribute-effect-row .attribute-effect {
+    width: 100%;
 }
 
 .attribute-select {
@@ -2175,4 +2222,29 @@ body {
 
 .btn-secondary:active {
     transform: translateY(1px);
+}
+/* Test Roll Section (moved from main header) */
+.test-roll-section {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    margin-bottom: 15px;
+    padding: 10px;
+    background-color: #e8f5e9;
+    border-radius: 4px;
+    border: 1px solid #a5d6a7;
+}
+
+.test-roll-section .roll-text {
+    font-weight: bold;
+    color: #2e7d32;
+}
+
+.test-roll-section .roll-bonus {
+    width: 50px;
+    padding: 4px 6px;
+    border: 1px solid #81c784;
+    border-radius: 3px;
+    text-align: center;
+    font-weight: bold;
 }
