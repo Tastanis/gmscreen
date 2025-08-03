@@ -1103,7 +1103,7 @@ body.delete-mode-active .sub-tab:hover {
 }
 
 .ability-category.expanded .category-content {
-    max-height: 1000px;
+    max-height: none;
     padding: 10px 15px;
 }
 
