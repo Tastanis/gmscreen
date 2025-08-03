@@ -12,6 +12,9 @@ let monsterData = {
     }
 };
 
+// Delete mode state
+let isDeleteModeActive = false;
+
 let currentMainTab = 'default';
 let currentSubTab = 'default-sub';
 let autoSaveTimer = null;
@@ -133,6 +136,13 @@ document.addEventListener('DOMContentLoaded', async function() {
             }
             e.preventDefault();
             e.returnValue = 'You have unsaved changes. Are you sure you want to leave?';
+        }
+    });
+    
+    // Set up escape key handler to exit delete mode
+    document.addEventListener('keydown', function(e) {
+        if (e.key === 'Escape' && isDeleteModeActive) {
+            toggleDeleteMode();
         }
     });
     
@@ -408,6 +418,35 @@ function renameTab(tabId, isSubTab) {
     }
 }
 
+// Toggle delete mode for tabs
+function toggleDeleteMode() {
+    isDeleteModeActive = !isDeleteModeActive;
+    const toggleBtn = document.getElementById('deleteModeToggle');
+    const body = document.body;
+    
+    if (isDeleteModeActive) {
+        toggleBtn.classList.add('active');
+        body.classList.add('delete-mode-active');
+        toggleBtn.textContent = 'Cancel Delete';
+    } else {
+        toggleBtn.classList.remove('active');
+        body.classList.remove('delete-mode-active');
+        toggleBtn.textContent = 'Delete Tab';
+    }
+}
+
+// Auto-disable delete mode after successful deletion
+function disableDeleteMode() {
+    if (isDeleteModeActive) {
+        isDeleteModeActive = false;
+        const toggleBtn = document.getElementById('deleteModeToggle');
+        const body = document.body;
+        toggleBtn.classList.remove('active');
+        body.classList.remove('delete-mode-active');
+        toggleBtn.textContent = 'Delete Tab';
+    }
+}
+
 function closeMainTab(tabId) {
     const tabCount = Object.keys(monsterData.tabs).length;
     
@@ -445,6 +484,9 @@ function closeMainTab(tabId) {
         
         queueSave();
         console.log('Closed main tab:', tabId);
+        
+        // Auto-disable delete mode after successful deletion
+        disableDeleteMode();
     }
 }
 
@@ -481,6 +523,9 @@ function closeSubTab(subTabId) {
         
         queueSave();
         console.log('Closed sub-tab:', subTabId);
+        
+        // Auto-disable delete mode after successful deletion
+        disableDeleteMode();
     }
 }
 

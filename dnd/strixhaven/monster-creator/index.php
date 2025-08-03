@@ -39,6 +39,10 @@ require_once '../../version.php';
                     </div>
                 </div>
             </div>
+            <!-- Delete Mode Toggle -->
+            <button class="delete-mode-toggle" id="deleteModeToggle" onclick="toggleDeleteMode()">
+                Delete Tab
+            </button>
         </div>
 
         <!-- Main Content Area -->
