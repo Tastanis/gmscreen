@@ -22,6 +22,8 @@ class GMScreen {
         this.richTextEditor = null;
         this.diceRoller = null;
         this.currentPopup = null;
+        this.localStorageKey = 'gmscreen_unsaved_tabs';
+        this.recoveryCheckInterval = null;
     }
 
     // Initialize the GM Screen
@@ -51,6 +53,8 @@ class GMScreen {
             this.updateSessionInfo();
             this.setupAutoSave();
             this.initializeDiceRoller();
+            this.checkForRecoverableData();
+            this.setupRecoveryCheck();
             
             console.log('GM Screen initialized successfully');
         } catch (error) {
@@ -469,6 +473,9 @@ class GMScreen {
                 lastModified: new Date().toISOString()
             };
             
+            // Save to localStorage as backup
+            this.saveToLocalStorage(updatedTabData);
+            
             const formData = new FormData();
             formData.append('action', 'save_tab');
             formData.append('tab_data', JSON.stringify(updatedTabData));
@@ -497,6 +504,9 @@ class GMScreen {
                 // Update tab display in sidebar
                 this.refreshTabDisplay(tab.id);
                 
+                // Clear from localStorage since save was successful
+                this.removeFromLocalStorage(tab.id);
+                
                 this.unsavedChanges = false;
                 this.updatePopupSaveStatus('Saved!', 'success');
                 console.log(`Tab ${tab.id} saved from popup successfully`);
@@ -519,6 +529,8 @@ class GMScreen {
                 return this.saveTabFromPopup(tab, popup, richTextEditor, retryCount + 1);
             } else {
                 this.updatePopupSaveStatus('Save failed!', 'error');
+                // Keep in localStorage for recovery
+                console.log('Tab data saved to localStorage for recovery');
                 throw error; // Re-throw to be handled by caller
             }
         }
@@ -1024,6 +1036,154 @@ class GMScreen {
         await this.loadTabs();
     }
 
+    // Save tab data to localStorage
+    saveToLocalStorage(tabData) {
+        try {
+            const savedData = this.getLocalStorageData();
+            savedData[tabData.id] = {
+                ...tabData,
+                savedAt: new Date().toISOString()
+            };
+            localStorage.setItem(this.localStorageKey, JSON.stringify(savedData));
+            console.log(`Tab ${tabData.id} saved to localStorage`);
+        } catch (error) {
+            console.error('Failed to save to localStorage:', error);
+        }
+    }
+    
+    // Remove tab data from localStorage
+    removeFromLocalStorage(tabId) {
+        try {
+            const savedData = this.getLocalStorageData();
+            delete savedData[tabId];
+            localStorage.setItem(this.localStorageKey, JSON.stringify(savedData));
+            console.log(`Tab ${tabId} removed from localStorage`);
+        } catch (error) {
+            console.error('Failed to remove from localStorage:', error);
+        }
+    }
+    
+    // Get all saved data from localStorage
+    getLocalStorageData() {
+        try {
+            const data = localStorage.getItem(this.localStorageKey);
+            return data ? JSON.parse(data) : {};
+        } catch (error) {
+            console.error('Failed to read from localStorage:', error);
+            return {};
+        }
+    }
+    
+    // Check for recoverable data on startup
+    checkForRecoverableData() {
+        const savedData = this.getLocalStorageData();
+        const tabCount = Object.keys(savedData).length;
+        
+        if (tabCount > 0) {
+            console.log(`Found ${tabCount} unsaved tabs in localStorage`);
+            
+            // Show recovery notification
+            this.showRecoveryNotification(savedData);
+        }
+    }
+    
+    // Show recovery notification
+    showRecoveryNotification(savedData) {
+        const notification = document.createElement('div');
+        notification.className = 'recovery-notification';
+        notification.innerHTML = `
+            <div class="recovery-content">
+                <h4>Unsaved Data Found</h4>
+                <p>Found ${Object.keys(savedData).length} tabs with unsaved changes from a previous session.</p>
+                <div class="recovery-actions">
+                    <button class="btn-recover">Recover Data</button>
+                    <button class="btn-discard">Discard</button>
+                </div>
+            </div>
+        `;
+        
+        document.body.appendChild(notification);
+        
+        // Handle recovery
+        notification.querySelector('.btn-recover').addEventListener('click', async () => {
+            await this.recoverFromLocalStorage(savedData);
+            notification.remove();
+        });
+        
+        // Handle discard
+        notification.querySelector('.btn-discard').addEventListener('click', () => {
+            localStorage.removeItem(this.localStorageKey);
+            notification.remove();
+            console.log('Discarded recovery data');
+        });
+    }
+    
+    // Recover tabs from localStorage
+    async recoverFromLocalStorage(savedData) {
+        let recovered = 0;
+        let failed = 0;
+        
+        for (const [tabId, tabData] of Object.entries(savedData)) {
+            try {
+                console.log(`Recovering tab ${tabId}...`);
+                
+                const formData = new FormData();
+                formData.append('action', 'save_tab');
+                formData.append('tab_data', JSON.stringify(tabData));
+                
+                const response = await fetch('index.php', {
+                    method: 'POST',
+                    body: formData
+                });
+                
+                const result = await response.json();
+                
+                if (result.success) {
+                    recovered++;
+                    this.removeFromLocalStorage(tabId);
+                    console.log(`Tab ${tabId} recovered successfully`);
+                } else {
+                    failed++;
+                    console.error(`Failed to recover tab ${tabId}:`, result.error);
+                }
+            } catch (error) {
+                failed++;
+                console.error(`Error recovering tab ${tabId}:`, error);
+            }
+        }
+        
+        // Show result
+        const message = `Recovery complete: ${recovered} tabs recovered` + 
+                       (failed > 0 ? `, ${failed} failed` : '');
+        alert(message);
+        
+        // Reload tabs to show recovered data
+        await this.loadTabs();
+    }
+    
+    // Setup periodic check for unsaved data
+    setupRecoveryCheck() {
+        // Check every 5 minutes for tabs that might have failed to save
+        this.recoveryCheckInterval = setInterval(() => {
+            const savedData = this.getLocalStorageData();
+            const oldUnsavedTabs = [];
+            
+            for (const [tabId, tabData] of Object.entries(savedData)) {
+                const savedAt = new Date(tabData.savedAt);
+                const ageMinutes = (new Date() - savedAt) / 1000 / 60;
+                
+                if (ageMinutes > 10) { // More than 10 minutes old
+                    oldUnsavedTabs.push(tabId);
+                }
+            }
+            
+            if (oldUnsavedTabs.length > 0) {
+                console.warn(`Found ${oldUnsavedTabs.length} tabs with old unsaved data`);
+                // Could show a notification here
+            }
+        }, 300000); // 5 minutes
+    }
+    
     // Static method for global access
     static init() {
         if (!window.gmScreen) {

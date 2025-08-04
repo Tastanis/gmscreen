@@ -22,6 +22,12 @@ require_once '../../version.php';
 // Include character integration
 require_once 'includes/character-integration.php';
 
+// Include backup system
+require_once 'includes/backup-system.php';
+
+// Include file lock manager
+require_once 'includes/file-lock-manager.php';
+
 // Data file paths
 $dataDir = 'data';
 $tabsFile = $dataDir . '/gm-tabs.json';
@@ -159,13 +165,85 @@ function getDefaultTabsStructure() {
     return $result;
 }
 
-// Function to save tabs data
+// Function to save tabs data with atomic writes and backup
 function saveTabsData($data, $tabsFile) {
-    // Update metadata
-    $data['metadata']['lastUpdated'] = date('c');
+    global $dataDir;
     
-    $jsonData = json_encode($data, JSON_PRETTY_PRINT | JSON_UNESCAPED_UNICODE);
-    return file_put_contents($tabsFile, $jsonData, LOCK_EX);
+    try {
+        // Create backup before saving
+        $backupSystem = new BackupSystem($dataDir);
+        if (file_exists($tabsFile)) {
+            $backupResult = $backupSystem->createBackup($tabsFile, 'pre-save');
+            if (!$backupResult['success']) {
+                error_log('GM Screen: Failed to create backup: ' . $backupResult['error']);
+            }
+        }
+        
+        // Update metadata
+        $data['metadata']['lastUpdated'] = date('c');
+        
+        // Validate data structure before saving
+        if (!validateTabsData($data)) {
+            throw new Exception('Invalid tabs data structure');
+        }
+        
+        $jsonData = json_encode($data, JSON_PRETTY_PRINT | JSON_UNESCAPED_UNICODE);
+        if ($jsonData === false) {
+            throw new Exception('Failed to encode JSON: ' . json_last_error_msg());
+        }
+        
+        // Atomic write: write to temp file first
+        $tempFile = $tabsFile . '.tmp.' . uniqid();
+        
+        // Write to temp file
+        $bytesWritten = file_put_contents($tempFile, $jsonData, LOCK_EX);
+        if ($bytesWritten === false) {
+            throw new Exception('Failed to write to temporary file');
+        }
+        
+        // Verify the temp file is valid JSON
+        $verifyContent = file_get_contents($tempFile);
+        $verifyData = json_decode($verifyContent, true);
+        if (json_last_error() !== JSON_ERROR_NONE) {
+            unlink($tempFile);
+            throw new Exception('Written data is not valid JSON');
+        }
+        
+        // Atomic rename (this is atomic on most filesystems)
+        if (!rename($tempFile, $tabsFile)) {
+            unlink($tempFile);
+            throw new Exception('Failed to rename temporary file');
+        }
+        
+        return true;
+        
+    } catch (Exception $e) {
+        error_log('GM Screen: Save error - ' . $e->getMessage());
+        
+        // Try to restore from backup if save failed
+        if (isset($backupResult) && $backupResult['success']) {
+            error_log('GM Screen: Attempting to restore from backup after failed save');
+            $backupSystem->restoreBackup($backupResult['backup_path'], $tabsFile);
+        }
+        
+        return false;
+    }
+}
+
+// Function to validate tabs data structure
+function validateTabsData($data) {
+    if (!is_array($data)) {
+        return false;
+    }
+    
+    $requiredPanels = ['left-1', 'left-2', 'right-1', 'right-2'];
+    foreach ($requiredPanels as $panel) {
+        if (!isset($data[$panel]) || !is_array($data[$panel])) {
+            return false;
+        }
+    }
+    
+    return true;
 }
 
 // Handle AJAX requests
@@ -245,47 +323,58 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['action'])) {
                     throw new Exception('Invalid tab data');
                 }
                 
-                $tabsData = loadTabsData($tabsFile);
+                // Use file lock manager to prevent race conditions
+                $lockManager = new FileLockManager($dataDir);
                 
-                // Determine which panel this tab belongs to
-                $panel = null;
-                if (strpos($tabData['id'], 'left-1-') === 0) $panel = 'left-1';
-                elseif (strpos($tabData['id'], 'left-2-') === 0) $panel = 'left-2';
-                elseif (strpos($tabData['id'], 'right-1-') === 0) $panel = 'right-1';
-                elseif (strpos($tabData['id'], 'right-2-') === 0) $panel = 'right-2';
-                
-                if (!$panel) {
-                    throw new Exception('Invalid tab ID format');
-                }
-                
-                // Initialize panel if it doesn't exist
-                if (!isset($tabsData[$panel])) {
-                    $tabsData[$panel] = [];
-                }
-                
-                // Find and update the tab
-                $tabFound = false;
-                foreach ($tabsData[$panel] as &$tab) {
-                    if ($tab['id'] === $tabData['id']) {
-                        $tab['name'] = $tabData['name'];
-                        $tab['content'] = $tabData['content'];
-                        $tab['lastModified'] = date('c');
-                        $tabFound = true;
-                        break;
+                $result = $lockManager->withLock($tabsFile, function() use ($tabsFile, $tabData) {
+                    $tabsData = loadTabsData($tabsFile);
+                    
+                    // Determine which panel this tab belongs to
+                    $panel = null;
+                    if (strpos($tabData['id'], 'left-1-') === 0) $panel = 'left-1';
+                    elseif (strpos($tabData['id'], 'left-2-') === 0) $panel = 'left-2';
+                    elseif (strpos($tabData['id'], 'right-1-') === 0) $panel = 'right-1';
+                    elseif (strpos($tabData['id'], 'right-2-') === 0) $panel = 'right-2';
+                    
+                    if (!$panel) {
+                        throw new Exception('Invalid tab ID format');
                     }
-                }
+                    
+                    // Initialize panel if it doesn't exist
+                    if (!isset($tabsData[$panel])) {
+                        $tabsData[$panel] = [];
+                    }
+                    
+                    // Find and update the tab
+                    $tabFound = false;
+                    foreach ($tabsData[$panel] as &$tab) {
+                        if ($tab['id'] === $tabData['id']) {
+                            $tab['name'] = $tabData['name'];
+                            $tab['content'] = $tabData['content'];
+                            $tab['lastModified'] = date('c');
+                            $tabFound = true;
+                            break;
+                        }
+                    }
+                    
+                    // If tab not found, add it
+                    if (!$tabFound) {
+                        $tabData['created'] = date('c');
+                        $tabData['lastModified'] = date('c');
+                        $tabsData[$panel][] = $tabData;
+                    }
+                    
+                    if (!saveTabsData($tabsData, $tabsFile)) {
+                        throw new Exception('Failed to save tab data');
+                    }
+                    
+                    return true;
+                });
                 
-                // If tab not found, add it
-                if (!$tabFound) {
-                    $tabData['created'] = date('c');
-                    $tabData['lastModified'] = date('c');
-                    $tabsData[$panel][] = $tabData;
-                }
-                
-                if (saveTabsData($tabsData, $tabsFile)) {
+                if ($result['success']) {
                     echo json_encode(['success' => true]);
                 } else {
-                    throw new Exception('Failed to save tab data');
+                    throw new Exception($result['error'] ?? 'Failed to save tab');
                 }
                 
             } catch (Exception $e) {
@@ -421,6 +510,7 @@ $panelTitles = loadPanelTitles($panelTitlesFile);
             <!-- Quick Actions Bar -->
             <div class="quick-actions">
                 <button onclick="window.location.href='../../dashboard.php'">← Back to Dashboard</button>
+                <button onclick="window.location.href='data-recovery.php'">Data Recovery</button>
                 <button onclick="exportNotes()">Export Notes</button>
                 <button onclick="window.location.href='../../logout.php'">Logout</button>
             </div>
