@@ -33,6 +33,12 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                 exit;
             }
             
+            // Validate data structure
+            if (!isset($data['folders']) || !is_array($data['folders'])) {
+                echo json_encode(['success' => false, 'error' => 'Invalid data structure']);
+                exit;
+            }
+            
             // Create appropriate backup based on type
             if (file_exists($dataFile)) {
                 $backupHelper = new TemplateBackupHelper();
@@ -40,6 +46,41 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                 
                 if (!$backupResult['success']) {
                     error_log('Failed to create backup: ' . $backupResult['error']);
+                }
+            }
+            
+            // Validate nested structure
+            foreach ($data['folders'] as $folder) {
+                if (!isset($folder['id']) || !isset($folder['name'])) {
+                    echo json_encode(['success' => false, 'error' => 'Invalid folder structure']);
+                    exit;
+                }
+                
+                if (isset($folder['subfolders']) && is_array($folder['subfolders'])) {
+                    foreach ($folder['subfolders'] as $subfolder) {
+                        if (!isset($subfolder['id']) || !isset($subfolder['name'])) {
+                            echo json_encode(['success' => false, 'error' => 'Invalid subfolder structure']);
+                            exit;
+                        }
+                        
+                        if (isset($subfolder['templates']) && is_array($subfolder['templates'])) {
+                            foreach ($subfolder['templates'] as $template) {
+                                if (!isset($template['id'])) {
+                                    echo json_encode(['success' => false, 'error' => 'Invalid template structure']);
+                                    exit;
+                                }
+                                
+                                // Sanitize rich text content
+                                $richTextFields = ['origin', 'motive', 'fear', 'connections', 'change', 'impact_positive', 'impact_negative', 'story'];
+                                foreach ($richTextFields as $field) {
+                                    if (isset($template[$field])) {
+                                        // Basic XSS protection - allow safe HTML tags
+                                        $template[$field] = strip_tags($template[$field], '<p><br><strong><em><u><ul><li><span>');
+                                    }
+                                }
+                            }
+                        }
+                    }
                 }
             }
             
@@ -76,6 +117,35 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
             echo json_encode(['success' => true, 'backups' => $backups]);
             break;
             
+        case 'get_template_count':
+            // Helper action to get template counts for statistics
+            if (!file_exists($dataFile)) {
+                echo json_encode(['success' => true, 'count' => 0]);
+                exit;
+            }
+            
+            $content = file_get_contents($dataFile);
+            $data = json_decode($content, true);
+            
+            if (!$data || !isset($data['folders'])) {
+                echo json_encode(['success' => true, 'count' => 0]);
+                exit;
+            }
+            
+            $totalTemplates = 0;
+            foreach ($data['folders'] as $folder) {
+                if (isset($folder['subfolders']) && is_array($folder['subfolders'])) {
+                    foreach ($folder['subfolders'] as $subfolder) {
+                        if (isset($subfolder['templates']) && is_array($subfolder['templates'])) {
+                            $totalTemplates += count($subfolder['templates']);
+                        }
+                    }
+                }
+            }
+            
+            echo json_encode(['success' => true, 'count' => $totalTemplates]);
+            break;
+            
         default:
             echo json_encode(['success' => false, 'error' => 'Unknown action']);
     }
@@ -95,10 +165,10 @@ if ($_SERVER['REQUEST_METHOD'] === 'GET') {
     } else {
         // Return default structure
         $defaultData = [
-            'templates' => [],
+            'folders' => [],
             'metadata' => [
                 'last_updated' => date('Y-m-d H:i:s'),
-                'version' => '1.0.0'
+                'version' => '2.0.0'
             ]
         ];
         echo json_encode(['success' => true, 'data' => $defaultData]);

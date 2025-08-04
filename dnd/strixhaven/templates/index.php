@@ -27,17 +27,17 @@ function loadTemplatesData() {
     if (file_exists($dataFile)) {
         $content = file_get_contents($dataFile);
         $data = json_decode($content, true);
-        if ($data && isset($data['templates'])) {
+        if ($data && isset($data['folders'])) {
             return $data;
         }
     }
     
     // Return default structure
     return [
-        'templates' => [],
+        'folders' => [],
         'metadata' => [
             'last_updated' => date('Y-m-d H:i:s'),
-            'version' => '1.0.0'
+            'version' => '2.0.0'
         ]
     ];
 }
@@ -54,96 +54,142 @@ $templatesData = loadTemplatesData();
     <title>Organizational Templates - Strixhaven</title>
     <link rel="stylesheet" href="../../css/style.css">
     <link rel="stylesheet" href="css/templates.css">
+    <link rel="stylesheet" href="css/template-editor.css">
 </head>
 <body>
-    <div class="top-nav">
-        <button class="back-btn" onclick="window.close()">← Back to Dashboard</button>
-        <h1 class="page-title">Organizational Templates</h1>
-    </div>
-
-    <div class="main-container">
-        <!-- Template Tabs -->
-        <div class="template-tabs-container">
-            <div class="template-tabs" id="template-tabs">
-                <!-- Tabs will be dynamically generated -->
+    <div class="template-container">
+        <!-- Left Sidebar -->
+        <div class="template-sidebar">
+            <div class="sidebar-header">
+                <h2>Templates</h2>
+                <button class="back-btn" onclick="window.close()">← Back</button>
             </div>
-            <button class="add-template-btn" onclick="addNewTemplate()">+ Add New Template</button>
+            
+            <div class="folder-tree" id="folder-tree">
+                <!-- Folders will be dynamically generated -->
+            </div>
+            
+            <?php if ($is_gm): ?>
+                <div class="sidebar-footer">
+                    <button class="add-folder-btn" onclick="addNewFolder()">+ Add Folder</button>
+                </div>
+            <?php endif; ?>
         </div>
 
-        <!-- Template Content -->
-        <div class="template-content" id="template-content">
-            <div class="no-template-message" id="no-template-message">
-                <p>No templates yet. Click "Add New Template" to create your first template.</p>
+        <!-- Main Content Area -->
+        <div class="template-main">
+            <!-- Template Strip -->
+            <div class="template-strip-container" id="template-strip-container" style="display: none;">
+                <button class="strip-nav-btn strip-nav-left" onclick="scrollTemplateStrip('left')">◀</button>
+                <div class="template-strip" id="template-strip">
+                    <!-- Template thumbnails will be dynamically generated -->
+                </div>
+                <button class="strip-nav-btn strip-nav-right" onclick="scrollTemplateStrip('right')">▶</button>
+                <?php if ($is_gm): ?>
+                    <button class="add-template-btn" onclick="addNewTemplate()">+</button>
+                <?php endif; ?>
             </div>
 
-            <!-- Template Form (hidden by default) -->
-            <div class="template-form" id="template-form" style="display: none;">
-                <div class="template-header">
-                    <input type="text" id="template-title" class="template-title-input" placeholder="Template Title" <?php echo !$is_gm ? 'readonly' : ''; ?>>
-                    <?php if ($is_gm): ?>
-                        <button class="delete-template-btn" onclick="deleteCurrentTemplate()">Delete Template</button>
-                    <?php endif; ?>
+            <!-- Template Content -->
+            <div class="template-content" id="template-content">
+                <div class="no-template-message" id="no-template-message">
+                    <p>Select a folder and subfolder to view templates</p>
                 </div>
 
-                <div class="template-body">
-                    <!-- Image Upload Section -->
-                    <div class="image-section">
-                        <div class="image-container">
-                            <img id="template-image" src="" alt="Template Image" style="display: none;">
-                            <div id="image-placeholder" class="image-placeholder">
-                                <p>No Image</p>
-                                <?php if ($is_gm): ?>
-                                    <button class="upload-image-btn" onclick="uploadImage()">Upload Image</button>
-                                <?php endif; ?>
+                <!-- Template Form (hidden by default) -->
+                <div class="template-form" id="template-form" style="display: none;">
+                    <div class="template-page">
+                        <!-- Header Section -->
+                        <div class="template-header-section">
+                            <div class="header-left">
+                                <input type="text" id="template-title" class="template-title-input" placeholder="Template Title" <?php echo !$is_gm ? 'readonly' : ''; ?>>
+                            </div>
+                            <div class="header-right">
+                                <div class="image-and-circle">
+                                    <div class="image-container">
+                                        <img id="template-image" src="" alt="Template Image" style="display: none;">
+                                        <div id="image-placeholder" class="image-placeholder">
+                                            <p>No Image</p>
+                                            <?php if ($is_gm): ?>
+                                                <button class="upload-image-btn" onclick="uploadImage()">Upload</button>
+                                            <?php endif; ?>
+                                        </div>
+                                    </div>
+                                    <div class="color-circle-container">
+                                        <div id="color-circle" class="color-circle" <?php echo $is_gm ? 'onclick="changeColor()"' : ''; ?>></div>
+                                    </div>
+                                </div>
                             </div>
                         </div>
-                        <input type="file" id="image-upload" accept="image/*" style="display: none;" onchange="handleImageUpload(event)">
+
+                        <!-- Template Sections -->
+                        <div class="template-sections">
+                            <div class="template-section">
+                                <label>1. Origin (where from?)</label>
+                                <div class="rich-text-container" id="origin-container"></div>
+                            </div>
+
+                            <div class="template-section">
+                                <label>2. Motive (Want)</label>
+                                <div class="rich-text-container" id="motive-container"></div>
+                            </div>
+
+                            <div class="template-section">
+                                <label>3. Fear (what threatens it)</label>
+                                <div class="rich-text-container" id="fear-container"></div>
+                            </div>
+
+                            <div class="template-section">
+                                <label>4. Connections</label>
+                                <div class="rich-text-container" id="connections-container"></div>
+                            </div>
+
+                            <div class="template-section">
+                                <label>5. Change (how will the world impact it)</label>
+                                <div class="rich-text-container" id="change-container"></div>
+                            </div>
+
+                            <div class="template-section">
+                                <label>6. Impact (how will it impact the world)</label>
+                                <div class="impact-subsection">
+                                    <label class="sublabel">(if it gets what it wants)</label>
+                                    <div class="rich-text-container" id="impact-positive-container"></div>
+                                </div>
+                                <div class="impact-subsection">
+                                    <label class="sublabel">(if it doesn't get what it wants)</label>
+                                    <div class="rich-text-container" id="impact-negative-container"></div>
+                                </div>
+                            </div>
+
+                            <div class="template-divider"></div>
+
+                            <div class="template-section story-section">
+                                <label>The Story</label>
+                                <div class="rich-text-container" id="story-container"></div>
+                            </div>
+                        </div>
+
+                        <!-- Action Buttons -->
+                        <div class="action-buttons no-print">
+                            <button class="print-btn" onclick="printTemplate()">Print</button>
+                            <?php if ($is_gm): ?>
+                                <button class="save-btn" onclick="saveTemplateData()">Save</button>
+                                <button class="delete-btn" onclick="deleteCurrentTemplate()">Delete</button>
+                            <?php endif; ?>
+                        </div>
                     </div>
-
-                    <!-- Template Fields -->
-                    <div class="template-fields">
-                        <div class="field-section">
-                            <label>Section 1: Notes</label>
-                            <textarea id="section1" class="template-field" rows="4" placeholder="Enter notes here..." <?php echo !$is_gm ? 'readonly' : ''; ?>></textarea>
-                        </div>
-
-                        <div class="field-section">
-                            <label>Section 2: Details</label>
-                            <textarea id="section2" class="template-field" rows="4" placeholder="Enter details here..." <?php echo !$is_gm ? 'readonly' : ''; ?>></textarea>
-                        </div>
-
-                        <div class="field-section">
-                            <label>Section 3: Important Information</label>
-                            <textarea id="section3" class="template-field" rows="4" placeholder="Enter important information here..." <?php echo !$is_gm ? 'readonly' : ''; ?>></textarea>
-                        </div>
-
-                        <div class="field-section">
-                            <label>Section 4: Additional Notes</label>
-                            <textarea id="section4" class="template-field" rows="4" placeholder="Enter additional notes here..." <?php echo !$is_gm ? 'readonly' : ''; ?>></textarea>
-                        </div>
-
-                        <div class="field-section">
-                            <label>Section 5: References</label>
-                            <textarea id="section5" class="template-field" rows="4" placeholder="Enter references here..." <?php echo !$is_gm ? 'readonly' : ''; ?>></textarea>
-                        </div>
-
-                        <div class="field-section">
-                            <label>Section 6: Summary</label>
-                            <textarea id="section6" class="template-field" rows="4" placeholder="Enter summary here..." <?php echo !$is_gm ? 'readonly' : ''; ?>></textarea>
-                        </div>
-                    </div>
-                </div>
-
-                <!-- Action Buttons -->
-                <div class="action-buttons">
-                    <button class="print-btn" onclick="printTemplate()">Print Template</button>
-                    <?php if ($is_gm): ?>
-                        <button class="save-btn" onclick="saveTemplateData()">Save Changes</button>
-                        <button class="backup-btn" onclick="createManualBackup()">Create Backup</button>
-                    <?php endif; ?>
                 </div>
             </div>
         </div>
+    </div>
+
+    <!-- Hidden file input for image uploads -->
+    <input type="file" id="image-upload" accept="image/*" style="display: none;" onchange="handleImageUpload(event)">
+
+    <!-- Context Menu -->
+    <div id="context-menu" class="context-menu" style="display: none;">
+        <div class="context-menu-item" onclick="renameItem()">Rename</div>
+        <div class="context-menu-item" onclick="deleteItem()">Delete</div>
     </div>
 
     <!-- Save Status -->
@@ -153,7 +199,7 @@ $templatesData = loadTemplatesData();
     <div id="delete-modal" class="modal" style="display: none;">
         <div class="modal-content">
             <h3>Confirm Delete</h3>
-            <p>Are you sure you want to delete this template? This action cannot be undone.</p>
+            <p id="delete-message">Are you sure you want to delete this?</p>
             <div class="modal-buttons">
                 <button class="btn-danger" onclick="confirmDelete()">Delete</button>
                 <button class="btn-secondary" onclick="cancelDelete()">Cancel</button>
@@ -172,11 +218,25 @@ $templatesData = loadTemplatesData();
         const isGM = <?php echo $is_gm ? 'true' : 'false'; ?>;
         const currentUser = '<?php echo $user; ?>';
         let templatesData = <?php echo json_encode($templatesData); ?>;
+        let currentFolderId = null;
+        let currentSubfolderId = null;
         let currentTemplateId = null;
         let hasUnsavedChanges = false;
         let autoSaveTimer = null;
         let lastBackupTime = Date.now();
+        let richTextEditors = {};
+        let contextMenuTarget = null;
+        let contextMenuType = null;
+        
+        // Color settings
+        const colors = ['#4CAF50', '#F44336', '#FFEB3B', '#9C27B0', '#2196F3', '#FFFFFF'];
+        const colorNames = ['green', 'red', 'yellow', 'purple', 'blue', 'white'];
+        let currentColorIndex = 0;
     </script>
+    
+    <!-- Load scripts in correct order -->
+    <script src="js/template-rich-editor.js"></script>
+    <script src="js/template-character-lookup.js"></script>
     <script src="js/templates.js"></script>
 </body>
 </html>
