@@ -8,14 +8,14 @@ if (!isset($_SESSION['logged_in']) || $_SESSION['logged_in'] !== true || $_SESSI
 }
 
 // Include required files
-require_once 'includes/backup-system.php';
+require_once 'includes/gm-backup-helper.php';
 require_once 'includes/file-lock-manager.php';
 
 $dataDir = 'data';
 $tabsFile = $dataDir . '/gm-tabs.json';
 
 // Initialize backup system
-$backupSystem = new BackupSystem($dataDir);
+$backupHelper = new GMBackupHelper($dataDir);
 
 // Handle actions
 if ($_SERVER['REQUEST_METHOD'] === 'POST') {
@@ -23,7 +23,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
     
     switch ($_POST['action'] ?? '') {
         case 'create_backup':
-            $result = $backupSystem->createBackup($tabsFile, 'manual');
+            $result = $backupHelper->createBackup($tabsFile, 'manual');
             echo json_encode($result);
             exit;
             
@@ -34,7 +34,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                 exit;
             }
             
-            $result = $backupSystem->restoreBackup($backupPath, $tabsFile);
+            $result = $backupHelper->restoreBackup($backupPath, $tabsFile);
             echo json_encode($result);
             exit;
             
@@ -45,7 +45,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                 exit;
             }
             
-            $result = $backupSystem->verifyBackup($backupPath);
+            $result = $backupHelper->verifyBackup($backupPath);
             echo json_encode($result);
             exit;
             
@@ -64,8 +64,8 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
 }
 
 // Get backup list and stats
-$backups = $backupSystem->getBackups('gm-tabs.json');
-$stats = $backupSystem->getStats();
+$backups = $backupHelper->getBackups('gm-tabs.json');
+$stats = $backupHelper->getStats();
 
 // Include version system
 define('VERSION_SYSTEM_INTERNAL', true);
@@ -443,8 +443,7 @@ require_once '../../version.php';
                 
                 if (result.success) {
                     showStatus('Backup created successfully!', 'success');
-                    // Reload page to show new backup
-                    setTimeout(() => location.reload(), 1000);
+                    // Note: Page reload removed to preserve unsaved work
                 } else {
                     showStatus('Failed to create backup: ' + result.error, 'danger');
                 }

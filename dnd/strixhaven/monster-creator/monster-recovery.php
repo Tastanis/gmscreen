@@ -481,8 +481,7 @@ require_once '../../version.php';
                 
                 if (result.success) {
                     showStatus('Backup created successfully!', 'success');
-                    // Reload page to show new backup
-                    setTimeout(() => location.reload(), 1000);
+                    // Note: Page reload removed to preserve unsaved work
                 } else {
                     showStatus('Failed to create backup: ' + result.error, 'danger');
                 }
