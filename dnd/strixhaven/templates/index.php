@@ -72,6 +72,7 @@ $templatesData = loadTemplatesData();
             <?php if ($is_gm): ?>
                 <div class="sidebar-footer">
                     <button class="add-folder-btn" onclick="addNewFolder()">+ Add Folder</button>
+                    <button class="delete-mode-btn" id="delete-mode-btn" onclick="toggleDeleteMode()">Delete Mode</button>
                 </div>
             <?php endif; ?>
         </div>
@@ -232,6 +233,9 @@ $templatesData = loadTemplatesData();
         const colors = ['#4CAF50', '#F44336', '#FFEB3B', '#9C27B0', '#2196F3', '#FFFFFF'];
         const colorNames = ['green', 'red', 'yellow', 'purple', 'blue', 'white'];
         let currentColorIndex = 0;
+        
+        // Delete mode
+        let isDeleteMode = false;
     </script>
     
     <!-- Load scripts in correct order -->

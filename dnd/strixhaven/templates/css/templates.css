@@ -100,6 +100,38 @@
     content: "▶";
 }
 
+/* Delete X buttons */
+.delete-x {
+    position: absolute;
+    top: -5px;
+    right: -5px;
+    width: 20px;
+    height: 20px;
+    background: #e74c3c;
+    color: white;
+    border: none;
+    border-radius: 50%;
+    cursor: pointer;
+    font-size: 12px;
+    font-weight: bold;
+    display: none;
+    align-items: center;
+    justify-content: center;
+    z-index: 10;
+}
+
+.delete-x:hover {
+    background: #c0392b;
+}
+
+.delete-mode-active .delete-x {
+    display: flex;
+}
+
+.folder-header, .subfolder-header {
+    position: relative;
+}
+
 /* Subfolders */
 .subfolder-item {
     margin: 2px 0;
@@ -152,6 +184,30 @@
 
 .add-folder-btn:hover {
     background: #2980b9;
+}
+
+.delete-mode-btn {
+    width: 100%;
+    padding: 10px;
+    background: #e74c3c;
+    color: white;
+    border: none;
+    border-radius: 5px;
+    cursor: pointer;
+    font-size: 14px;
+    margin-top: 10px;
+}
+
+.delete-mode-btn:hover {
+    background: #c0392b;
+}
+
+.delete-mode-btn.active {
+    background: #27ae60;
+}
+
+.delete-mode-btn.active:hover {
+    background: #229954;
 }
 
 /* Main Content Area */
@@ -670,6 +726,9 @@
     .color-circle {
         width: 60px;
         height: 60px;
+        -webkit-print-color-adjust: exact !important;
+        color-adjust: exact !important;
+        print-color-adjust: exact !important;
     }
     
     /* Reduce spacing for print */
@@ -694,59 +753,49 @@
         font-size: 11px;
     }
     
-    /* Inline layout for template sections */
+    /* Block layout for template sections */
     .template-section {
-        display: flex;
-        align-items: baseline;
+        display: block;
         margin-bottom: 12px;
         position: relative;
     }
     
     .template-section label {
-        margin-right: 8px;
-        margin-bottom: 0;
-        white-space: nowrap;
+        display: block;
+        margin-bottom: 4px;
+        margin-right: 0;
     }
     
     .rich-text-container {
-        flex: 1;
+        display: block;
         position: relative;
     }
     
     .rich-text-editor {
-        padding: 0;
-        display: inline;
+        padding: 2px 0;
+        display: block;
     }
     
     /* Add underline after text content */
-    .template-section::after {
+    .rich-text-container::after {
         content: "";
-        position: absolute;
-        bottom: 0;
-        left: 0;
-        right: 0;
+        display: block;
+        width: 100%;
         height: 1px;
         background: #000;
-        margin-top: 2px;
+        margin-top: 3px;
     }
     
-    /* Handle impact subsections differently */
+    /* Handle impact subsections with block layout */
     .impact-subsection {
-        display: flex;
-        align-items: baseline;
-        margin-bottom: 8px;
+        display: block;
+        margin-bottom: 10px;
         position: relative;
     }
     
-    .impact-subsection::after {
-        content: "";
-        position: absolute;
-        bottom: 0;
-        left: 0;
-        right: 0;
-        height: 1px;
-        background: #000;
-        margin-top: 2px;
+    .impact-subsection .sublabel {
+        display: block;
+        margin-bottom: 4px;
     }
     
     /* Story section should remain block layout */

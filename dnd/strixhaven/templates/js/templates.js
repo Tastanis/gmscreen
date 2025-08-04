@@ -104,6 +104,18 @@ function createFolderElement(folder) {
     folderHeader.appendChild(folderIcon);
     folderHeader.appendChild(folderName);
     
+    // Add delete X button for GMs
+    if (isGM) {
+        const deleteBtn = document.createElement('button');
+        deleteBtn.className = 'delete-x';
+        deleteBtn.innerHTML = '×';
+        deleteBtn.onclick = (e) => {
+            e.stopPropagation();
+            deleteFolder(folder.id, false);
+        };
+        folderHeader.appendChild(deleteBtn);
+    }
+    
     // Folder content (subfolders)
     const folderContent = document.createElement('div');
     folderContent.className = 'folder-content';
@@ -160,6 +172,21 @@ function createSubfolderElement(subfolder) {
     
     subfolderHeader.appendChild(subfolderIcon);
     subfolderHeader.appendChild(subfolderName);
+    
+    // Add delete X button for GMs
+    if (isGM) {
+        const deleteBtn = document.createElement('button');
+        deleteBtn.className = 'delete-x';
+        deleteBtn.innerHTML = '×';
+        deleteBtn.onclick = (e) => {
+            e.stopPropagation();
+            // Find parent folder ID
+            const parentFolderId = findParentFolderId(subfolder.id);
+            deleteFolder(subfolder.id, true, parentFolderId);
+        };
+        subfolderHeader.appendChild(deleteBtn);
+    }
+    
     subfolderDiv.appendChild(subfolderHeader);
     
     // Click handlers
@@ -789,4 +816,115 @@ function showStatus(message, type) {
 // Generate unique ID
 function generateId() {
     return 'id_' + Date.now() + '_' + Math.random().toString(36).substr(2, 9);
+}
+
+// Find parent folder ID for a subfolder
+function findParentFolderId(subfolderId) {
+    for (const folder of templatesData.folders) {
+        if (folder.subfolders) {
+            for (const subfolder of folder.subfolders) {
+                if (subfolder.id === subfolderId) {
+                    return folder.id;
+                }
+            }
+        }
+    }
+    return null;
+}
+
+// Toggle delete mode
+function toggleDeleteMode() {
+    if (!isGM) return;
+    
+    isDeleteMode = !isDeleteMode;
+    const deleteBtn = document.getElementById('delete-mode-btn');
+    const folderTree = document.getElementById('folder-tree');
+    
+    if (isDeleteMode) {
+        deleteBtn.textContent = 'Exit Delete Mode';
+        deleteBtn.classList.add('active');
+        folderTree.classList.add('delete-mode-active');
+    } else {
+        deleteBtn.textContent = 'Delete Mode';
+        deleteBtn.classList.remove('active');
+        folderTree.classList.remove('delete-mode-active');
+    }
+}
+
+// Delete folder
+function deleteFolder(folderId, isSubfolder = false, parentFolderId = null) {
+    if (!isGM || !isDeleteMode) return;
+    
+    let folderName = '';
+    let folderToDelete = null;
+    
+    if (isSubfolder && parentFolderId) {
+        const parentFolder = templatesData.folders.find(f => f.id === parentFolderId);
+        if (parentFolder) {
+            folderToDelete = parentFolder.subfolders.find(sf => sf.id === folderId);
+            folderName = folderToDelete ? folderToDelete.name : 'Unknown';
+        }
+    } else {
+        folderToDelete = templatesData.folders.find(f => f.id === folderId);
+        folderName = folderToDelete ? folderToDelete.name : 'Unknown';
+    }
+    
+    if (!folderToDelete) return;
+    
+    // Show confirmation dialog
+    const modal = document.getElementById('delete-modal');
+    const message = document.getElementById('delete-message');
+    message.textContent = `Are you sure you want to delete "${folderName}" and all its contents? This action cannot be undone.`;
+    modal.style.display = 'block';
+    
+    // Store deletion info for confirmation
+    window.pendingDeletion = {
+        folderId: folderId,
+        isSubfolder: isSubfolder,
+        parentFolderId: parentFolderId
+    };
+}
+
+// Confirm deletion
+function confirmDelete() {
+    if (!window.pendingDeletion) return;
+    
+    const { folderId, isSubfolder, parentFolderId } = window.pendingDeletion;
+    
+    if (isSubfolder && parentFolderId) {
+        // Delete subfolder
+        const parentFolder = templatesData.folders.find(f => f.id === parentFolderId);
+        if (parentFolder) {
+            parentFolder.subfolders = parentFolder.subfolders.filter(sf => sf.id !== folderId);
+        }
+    } else {
+        // Delete main folder
+        templatesData.folders = templatesData.folders.filter(f => f.id !== folderId);
+    }
+    
+    // Clear current selection if we deleted the active folder
+    if (currentFolderId === folderId || currentSubfolderId === folderId) {
+        currentFolderId = null;
+        currentSubfolderId = null;
+        currentTemplateId = null;
+        hideTemplateForm();
+        hideTemplateStrip();
+    }
+    
+    // Save changes and refresh
+    hasUnsavedChanges = true;
+    saveTemplateData('manual');
+    loadFolderTree();
+    
+    // Hide modal
+    cancelDelete();
+    
+    showStatus('Folder deleted successfully', 'success');
+}
+
+// Cancel deletion
+function cancelDelete() {
+    const modal = document.getElementById('delete-modal');
+    modal.style.display = 'none';
+    window.pendingDeletion = null;
 }
