@@ -885,8 +885,8 @@ function deleteFolder(folderId, isSubfolder = false, parentFolderId = null) {
     };
 }
 
-// Confirm deletion
-function confirmDelete() {
+// Confirm folder deletion
+function confirmFolderDeletion() {
     if (!window.pendingDeletion) return;
     
     const { folderId, isSubfolder, parentFolderId } = window.pendingDeletion;
