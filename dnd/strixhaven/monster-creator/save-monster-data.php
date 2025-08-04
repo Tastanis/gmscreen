@@ -11,6 +11,17 @@ if (!isset($_SESSION['logged_in']) || $_SESSION['logged_in'] !== true) {
 $user = $_SESSION['user'];
 $is_gm = ($user === 'GM');
 
+// Check if user is GM - restrict access
+if (!$is_gm) {
+    http_response_code(403);
+    echo json_encode(['success' => false, 'error' => 'GM access required']);
+    exit;
+}
+
+// Include backup and lock systems
+require_once '../gm/includes/backup-system.php';
+require_once '../gm/includes/file-lock-manager.php';
+
 // Set JSON response header
 header('Content-Type: application/json');
 
@@ -22,10 +33,10 @@ if (!$input || !isset($input['action'])) {
     exit;
 }
 
-// Data file path - each user has their own file
+// Data file path - single GM file
 $dataDir = __DIR__ . '/data/';
-$dataFile = $dataDir . 'monsters_' . $user . '.json';
-$lockFile = $dataDir . 'monsters_' . $user . '.lock';
+$dataFile = $dataDir . 'gm-monsters.json';
+$lockFile = $dataDir . 'gm-monsters.lock';
 
 // Ensure data directory exists
 if (!is_dir($dataDir)) {
@@ -47,9 +58,11 @@ switch ($input['action']) {
 }
 
 /**
- * Save monster data with file locking to prevent race conditions
+ * Save monster data with file locking, backups, and atomic writes
  */
 function saveMonsterData($data, $dataFile, $lockFile) {
+    global $dataDir;
+    
     // Debug: Log received data
     error_log("Save received data: " . json_encode($data));
     error_log("Monster count in received data: " . count((array)$data['monsters']));
@@ -61,71 +74,106 @@ function saveMonsterData($data, $dataFile, $lockFile) {
         return;
     }
     
-    // Acquire lock
-    $lockHandle = fopen($lockFile, 'c+');
-    if (!$lockHandle) {
-        echo json_encode(['success' => false, 'error' => 'Failed to create lock file']);
-        return;
-    }
+    // Use file lock manager
+    $lockManager = new FileLockManager($dataDir);
     
-    $lockAcquired = false;
-    $attempts = 0;
+    $result = $lockManager->withLock($dataFile, function() use ($data, $dataFile, $dataDir) {
+        try {
+            // Create backup before saving
+            $backupSystem = new BackupSystem($dataDir);
+            if (file_exists($dataFile)) {
+                $backupResult = $backupSystem->createBackup($dataFile, 'pre-save');
+                if (!$backupResult['success']) {
+                    error_log('Monster Creator: Failed to create backup: ' . $backupResult['error']);
+                }
+            }
+            
+            // Add metadata
+            $data['metadata'] = [
+                'lastSaved' => date('Y-m-d H:i:s'),
+                'version' => '1.0',
+                'user' => $_SESSION['user'] ?? 'unknown'
+            ];
+            
+            // Validate data structure
+            if (!validateMonsterData($data)) {
+                throw new Exception('Invalid monster data structure');
+            }
+            
+            // Encode data
+            $jsonData = json_encode($data, JSON_PRETTY_PRINT);
+            if ($jsonData === false) {
+                throw new Exception('Failed to encode data: ' . json_last_error_msg());
+            }
+            
+            // Atomic write: write to temp file first
+            $tempFile = $dataFile . '.tmp.' . uniqid();
+            
+            // Write to temp file
+            $bytesWritten = file_put_contents($tempFile, $jsonData, LOCK_EX);
+            if ($bytesWritten === false) {
+                throw new Exception('Failed to write temporary file');
+            }
+            
+            // Verify the temp file is valid JSON
+            $verifyContent = file_get_contents($tempFile);
+            $verifyData = json_decode($verifyContent, true);
+            if (json_last_error() !== JSON_ERROR_NONE) {
+                unlink($tempFile);
+                throw new Exception('Written data is not valid JSON');
+            }
+            
+            // Atomic rename (this is atomic on most filesystems)
+            if (!rename($tempFile, $dataFile)) {
+                unlink($tempFile);
+                throw new Exception('Failed to rename temporary file');
+            }
+            
+            return true;
+            
+        } catch (Exception $e) {
+            error_log('Monster Creator: Save error - ' . $e->getMessage());
+            
+            // Try to restore from backup if save failed
+            if (isset($backupResult) && $backupResult['success']) {
+                error_log('Monster Creator: Attempting to restore from backup after failed save');
+                $backupSystem->restoreBackup($backupResult['backup_path'], $dataFile);
+            }
+            
+            throw $e; // Re-throw to be handled by lock manager
+        }
+    });
     
-    // Try to acquire exclusive lock with timeout
-    while ($attempts < 50) { // 5 second timeout (50 * 100ms)
-        if (flock($lockHandle, LOCK_EX | LOCK_NB)) {
-            $lockAcquired = true;
-            break;
-        }
-        usleep(100000); // Wait 100ms
-        $attempts++;
-    }
-    
-    if (!$lockAcquired) {
-        fclose($lockHandle);
-        echo json_encode(['success' => false, 'error' => 'Failed to acquire lock']);
-        return;
-    }
-    
-    try {
-        // Add metadata
-        $data['metadata'] = [
-            'lastSaved' => date('Y-m-d H:i:s'),
-            'version' => '1.0'
-        ];
-        
-        // Encode data
-        $jsonData = json_encode($data, JSON_PRETTY_PRINT);
-        if ($jsonData === false) {
-            throw new Exception('Failed to encode data');
-        }
-        
-        // Write to temporary file first
-        $tempFile = $dataFile . '.tmp';
-        if (file_put_contents($tempFile, $jsonData, LOCK_EX) === false) {
-            throw new Exception('Failed to write temporary file');
-        }
-        
-        // Atomic rename
-        if (!rename($tempFile, $dataFile)) {
-            throw new Exception('Failed to rename temporary file');
-        }
-        
+    if ($result['success']) {
         echo json_encode(['success' => true, 'message' => 'Data saved successfully']);
-        
-    } catch (Exception $e) {
-        echo json_encode(['success' => false, 'error' => $e->getMessage()]);
-        
-        // Clean up temp file if exists
-        if (file_exists($tempFile)) {
-            unlink($tempFile);
-        }
-        
-    } finally {
-        // Release lock
-        flock($lockHandle, LOCK_UN);
-        fclose($lockHandle);
+    } else {
+        echo json_encode(['success' => false, 'error' => $result['error'] ?? 'Failed to save data']);
     }
+}
+
+/**
+ * Validate monster data structure
+ */
+function validateMonsterData($data) {
+    if (!is_array($data)) {
+        return false;
+    }
+    
+    // Required fields
+    if (!isset($data['tabs']) || !isset($data['monsters'])) {
+        return false;
+    }
+    
+    // Tabs and monsters should be objects or arrays
+    if (!is_array($data['tabs']) && !is_object($data['tabs'])) {
+        return false;
+    }
+    
+    if (!is_array($data['monsters']) && !is_object($data['monsters'])) {
+        return false;
+    }
+    
+    return true;
 }
 
 /**

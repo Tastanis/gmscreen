@@ -22,6 +22,11 @@ let saveQueue = [];
 let isSaving = false;
 let isInitialLoad = true; // Flag to track initial page load vs user changes
 
+// LocalStorage keys and recovery
+const LOCALSTORAGE_KEY = 'monster_creator_unsaved_data';
+const RECOVERY_CHECK_INTERVAL = 300000; // 5 minutes
+let recoveryCheckInterval = null;
+
 // Attribute formatting debounce
 let attributeFormatTimers = new Map(); // Store timers for each element
 
@@ -120,6 +125,9 @@ document.addEventListener('DOMContentLoaded', async function() {
     
     // Start auto-save timer
     startAutoSave();
+    
+    // Initialize recovery system
+    initRecoverySystem();
     
     // Mark initial load as complete after everything is set up
     setTimeout(() => {
@@ -1955,6 +1963,9 @@ async function saveChangedData() {
             console.log(`📝 Changed monsters: ${dirtyMonsters.size}`);
         }
         
+        // Save to localStorage as backup
+        saveToLocalStorage();
+        
         const response = await fetch('save-monster-data.php', {
             method: 'POST',
             headers: {
@@ -1977,14 +1988,20 @@ async function saveChangedData() {
             // Clear dirty flags after successful save
             dirtyMonsters.clear();
             needsTabSave = false;
+            // Clear from localStorage since save was successful
+            clearLocalStorage();
             console.log('✅ Data saved successfully');
         } else {
             updateSaveStatus('error');
             console.error('Save failed:', result.error);
+            // Keep in localStorage for recovery
+            console.log('💾 Data saved to localStorage for recovery');
         }
     } catch (error) {
         updateSaveStatus('error');
         console.error('Save error:', error);
+        // Keep in localStorage for recovery
+        console.log('💾 Data saved to localStorage for recovery');
     } finally {
         isSaving = false;
     }
@@ -3170,4 +3187,203 @@ function selectSubTab(subTabId) {
     if (subTabId && currentMainTab && monsterData.tabs[currentMainTab]?.subTabs[subTabId]) {
         switchSubTab(subTabId);
     }
+}
+
+// ============================================================================
+// LocalStorage Recovery System
+// ============================================================================
+
+/**
+ * Save current monster data to localStorage
+ */
+function saveToLocalStorage() {
+    try {
+        const saveData = {
+            data: monsterData,
+            timestamp: new Date().toISOString(),
+            dirtyMonsters: Array.from(dirtyMonsters),
+            needsTabSave: needsTabSave
+        };
+        
+        localStorage.setItem(LOCALSTORAGE_KEY, JSON.stringify(saveData));
+        console.log('💾 Data saved to localStorage for recovery');
+    } catch (error) {
+        console.error('Failed to save to localStorage:', error);
+    }
+}
+
+/**
+ * Clear data from localStorage after successful save
+ */
+function clearLocalStorage() {
+    try {
+        localStorage.removeItem(LOCALSTORAGE_KEY);
+        console.log('🗑️ Cleared recovery data from localStorage');
+    } catch (error) {
+        console.error('Failed to clear localStorage:', error);
+    }
+}
+
+/**
+ * Get saved data from localStorage
+ */
+function getLocalStorageData() {
+    try {
+        const data = localStorage.getItem(LOCALSTORAGE_KEY);
+        return data ? JSON.parse(data) : null;
+    } catch (error) {
+        console.error('Failed to read from localStorage:', error);
+        return null;
+    }
+}
+
+/**
+ * Check for recoverable data on page load
+ */
+function checkForRecoverableData() {
+    const savedData = getLocalStorageData();
+    
+    if (savedData) {
+        const ageMinutes = (new Date() - new Date(savedData.timestamp)) / 1000 / 60;
+        console.log(`Found unsaved data from ${ageMinutes.toFixed(1)} minutes ago`);
+        
+        // Show recovery notification
+        showRecoveryNotification(savedData);
+    }
+}
+
+/**
+ * Show recovery notification to user
+ */
+function showRecoveryNotification(savedData) {
+    const notification = document.createElement('div');
+    notification.className = 'recovery-notification';
+    notification.innerHTML = `
+        <div class="recovery-content">
+            <h4>🔄 Unsaved Changes Found</h4>
+            <p>Found unsaved monster data from a previous session.</p>
+            <div class="recovery-details">
+                <span>Monsters: ${Object.keys(savedData.data.monsters || {}).length}</span>
+                <span>Tabs: ${Object.keys(savedData.data.tabs || {}).length}</span>
+                <span>Age: ${Math.round((new Date() - new Date(savedData.timestamp)) / 1000 / 60)} min ago</span>
+            </div>
+            <div class="recovery-actions">
+                <button class="btn-recover">Recover Data</button>
+                <button class="btn-discard">Discard</button>
+            </div>
+        </div>
+    `;
+    
+    document.body.appendChild(notification);
+    
+    // Handle recovery
+    notification.querySelector('.btn-recover').addEventListener('click', async () => {
+        await recoverFromLocalStorage(savedData);
+        notification.remove();
+    });
+    
+    // Handle discard
+    notification.querySelector('.btn-discard').addEventListener('click', () => {
+        clearLocalStorage();
+        notification.remove();
+        console.log('🗑️ Discarded recovery data');
+    });
+}
+
+/**
+ * Recover data from localStorage
+ */
+async function recoverFromLocalStorage(savedData) {
+    try {
+        console.log('🔄 Recovering data from localStorage...');
+        
+        // Update monster data
+        monsterData = savedData.data;
+        
+        // Restore dirty flags
+        if (savedData.dirtyMonsters) {
+            savedData.dirtyMonsters.forEach(id => dirtyMonsters.add(id));
+        }
+        needsTabSave = savedData.needsTabSave || false;
+        
+        // Refresh UI
+        renderMainTabs();
+        if (currentMainTab) {
+            renderSubTabs(currentMainTab);
+        }
+        updateMonsterBrowser();
+        
+        // Try to save to server
+        updateSaveStatus('saving');
+        console.log('💾 Attempting to save recovered data to server...');
+        
+        const response = await fetch('save-monster-data.php', {
+            method: 'POST',
+            headers: {
+                'Content-Type': 'application/json'
+            },
+            body: JSON.stringify({
+                action: 'save',
+                data: monsterData
+            })
+        });
+        
+        const result = await response.json();
+        
+        if (result.success) {
+            updateSaveStatus('saved');
+            clearLocalStorage();
+            dirtyMonsters.clear();
+            needsTabSave = false;
+            console.log('✅ Recovery data saved successfully to server');
+            alert('Data recovered and saved successfully!');
+        } else {
+            updateSaveStatus('error');
+            console.error('Failed to save recovered data:', result.error);
+            alert('Data recovered but failed to save to server. Please try saving manually.');
+        }
+        
+    } catch (error) {
+        console.error('Error during recovery:', error);
+        updateSaveStatus('error');
+        alert('Error during recovery: ' + error.message);
+    }
+}
+
+/**
+ * Setup periodic check for old unsaved data
+ */
+function setupRecoveryCheck() {
+    recoveryCheckInterval = setInterval(() => {
+        const savedData = getLocalStorageData();
+        
+        if (savedData) {
+            const ageMinutes = (new Date() - new Date(savedData.timestamp)) / 1000 / 60;
+            
+            if (ageMinutes > 10) { // More than 10 minutes old
+                console.warn(`Found old unsaved data (${ageMinutes.toFixed(1)} minutes old)`);
+                // Could show a notification here
+            }
+        }
+    }, RECOVERY_CHECK_INTERVAL);
+}
+
+/**
+ * Initialize recovery system
+ */
+function initRecoverySystem() {
+    console.log('🔄 Initializing recovery system...');
+    
+    // Check for existing recoverable data
+    checkForRecoverableData();
+    
+    // Setup periodic checks
+    setupRecoveryCheck();
+    
+    // Save to localStorage periodically during editing
+    setInterval(() => {
+        if (dirtyMonsters.size > 0 || needsTabSave) {
+            saveToLocalStorage();
+        }
+    }, 30000); // Every 30 seconds if there are changes
 }

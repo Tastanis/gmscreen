@@ -10,6 +10,12 @@ if (!isset($_SESSION['logged_in']) || $_SESSION['logged_in'] !== true) {
 $user = $_SESSION['user'];
 $is_gm = ($user === 'GM');
 
+// Check if user is GM - restrict access
+if (!$is_gm) {
+    header('Location: ../../dashboard.php');
+    exit;
+}
+
 // Include version system
 define('VERSION_SYSTEM_INTERNAL', true);
 require_once '../../version.php';
@@ -42,6 +48,11 @@ require_once '../../version.php';
             <!-- Delete Mode Toggle -->
             <button class="delete-mode-toggle" id="deleteModeToggle" onclick="toggleDeleteMode()">
                 Delete Tab
+            </button>
+            
+            <!-- Data Recovery Button -->
+            <button class="recovery-toggle" onclick="window.location.href='monster-recovery.php'" title="View backups and recover lost data">
+                Data Recovery
             </button>
         </div>
 

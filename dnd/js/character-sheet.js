@@ -1971,9 +1971,9 @@ function openRulesSection(section) {
 }
 
 function openStrixhavenSection(section) {
-    // Check if GM section and user is not GM
-    if (section === 'gm' && !isGM) {
-        // Do nothing - GM section is restricted
+    // Check if GM-only sections and user is not GM
+    if ((section === 'gm' || section === 'monster-creator') && !isGM) {
+        // Do nothing - GM-only sections are restricted
         return false;
     }
     
