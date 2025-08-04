@@ -627,30 +627,49 @@
     .template-title-input {
         border: none;
         padding: 0;
+        font-size: 18px;
     }
     
     /* Fix header layout for print */
     .template-header-section {
-        position: relative;
+        display: grid;
+        grid-template-columns: 1fr auto 1fr;
+        align-items: start;
         margin-bottom: 15px;
-    }
-    
-    .header-right {
-        position: absolute;
-        top: 0;
-        right: 0;
-        width: 250px;
+        gap: 20px;
     }
     
     .header-left {
-        margin-right: 270px;
+        grid-column: 1;
+        margin-right: 0;
         padding-right: 0;
     }
     
-    .image-and-circle {
-        flex-direction: column;
-        align-items: center;
-        gap: 10px;
+    .header-right {
+        grid-column: 2 / 4;
+        position: static;
+        width: auto;
+        display: grid;
+        grid-template-columns: 1fr auto;
+        gap: 20px;
+        justify-items: center;
+    }
+    
+    .image-container {
+        width: 120px;
+        height: 120px;
+        grid-column: 1;
+    }
+    
+    .color-circle-container {
+        grid-column: 2;
+        display: flex;
+        align-items: flex-start;
+    }
+    
+    .color-circle {
+        width: 60px;
+        height: 60px;
     }
     
     /* Reduce spacing for print */
@@ -664,6 +683,93 @@
     
     .template-divider {
         margin: 15px 0;
+    }
+    
+    /* Reduce font sizes for print */
+    .template-section label {
+        font-size: 12px;
+    }
+    
+    .sublabel {
+        font-size: 11px;
+    }
+    
+    /* Inline layout for template sections */
+    .template-section {
+        display: flex;
+        align-items: baseline;
+        margin-bottom: 12px;
+        position: relative;
+    }
+    
+    .template-section label {
+        margin-right: 8px;
+        margin-bottom: 0;
+        white-space: nowrap;
+    }
+    
+    .rich-text-container {
+        flex: 1;
+        position: relative;
+    }
+    
+    .rich-text-editor {
+        padding: 0;
+        display: inline;
+    }
+    
+    /* Add underline after text content */
+    .template-section::after {
+        content: "";
+        position: absolute;
+        bottom: 0;
+        left: 0;
+        right: 0;
+        height: 1px;
+        background: #000;
+        margin-top: 2px;
+    }
+    
+    /* Handle impact subsections differently */
+    .impact-subsection {
+        display: flex;
+        align-items: baseline;
+        margin-bottom: 8px;
+        position: relative;
+    }
+    
+    .impact-subsection::after {
+        content: "";
+        position: absolute;
+        bottom: 0;
+        left: 0;
+        right: 0;
+        height: 1px;
+        background: #000;
+        margin-top: 2px;
+    }
+    
+    /* Story section should remain block layout */
+    .story-section {
+        display: block !important;
+    }
+    
+    .story-section label {
+        display: block;
+        margin-bottom: 8px;
+    }
+    
+    .story-section .rich-text-container {
+        display: block;
+    }
+    
+    .story-section .rich-text-editor {
+        display: block;
+        padding: 6px 0;
+    }
+    
+    .story-section::after {
+        display: none;
     }
     
     @page {

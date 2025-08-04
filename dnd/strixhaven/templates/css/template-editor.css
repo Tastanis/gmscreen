@@ -282,8 +282,9 @@
     }
     
     .rich-text-container {
-        border: 1px solid #000 !important;
-        min-height: 40px;
+        border: none !important;
+        min-height: auto;
+        background: transparent !important;
     }
     
     .rich-text-editor {
@@ -292,6 +293,7 @@
         overflow: visible;
         padding: 6px;
         line-height: 1.4;
+        font-size: 12px;
     }
     
     .character-ref {
