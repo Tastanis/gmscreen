@@ -283,12 +283,15 @@
     
     .rich-text-container {
         border: 1px solid #000 !important;
+        min-height: 40px;
     }
     
     .rich-text-editor {
         min-height: auto;
         max-height: none;
         overflow: visible;
+        padding: 6px;
+        line-height: 1.4;
     }
     
     .character-ref {
