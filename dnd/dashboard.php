@@ -1316,6 +1316,20 @@ $defaultInventoryTab = $is_gm ? 'frunk' : $user;
                 <div id="save-status" class="save-status"></div>
             </div>
         <?php endif; ?>
+
+        <!-- Backup Button (GM Only) - Bottom Left -->
+        <?php if ($is_gm): ?>
+            <div class="backup-container">
+                <button id="backup-btn" class="btn-backup" onclick="window.location.href='dashboard-recovery.php'">
+                    <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                        <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"></path>
+                        <polyline points="17,8 12,3 7,8"></polyline>
+                        <line x1="12" y1="3" x2="12" y2="15"></line>
+                    </svg>
+                    Backup Data
+                </button>
+            </div>
+        <?php endif; ?>
     </div>
 
     <!-- Modal for Past Class Details -->
@@ -1352,6 +1366,8 @@ $defaultInventoryTab = $is_gm ? 'frunk' : $user;
         let currentClubIndex = 0;
         let currentPastClassIndex = -1;
         let autoSaveInterval;
+        let sessionBackupInterval;
+        let lastSessionBackupTime = 0;
         let isSwitchingCharacter = false;
         
         // Inventory variables
@@ -1369,6 +1385,7 @@ $defaultInventoryTab = $is_gm ? 'frunk' : $user;
             if (isGM) {
                 setupAutoSave();
                 setupEventListeners();
+                setupSessionBackup();
             }
 
             // Initialize inventory
@@ -1376,6 +1393,77 @@ $defaultInventoryTab = $is_gm ? 'frunk' : $user;
             setupInventoryAutoSave();
             updateInventoryPermissions();
         });
+
+        // Session backup functionality for Dashboard
+        function setupSessionBackup() {
+            if (!isGM) return;
+            
+            // Create initial session backup after page loads
+            setTimeout(() => {
+                createSessionBackup();
+            }, 5000); // Wait 5 seconds after page load
+            
+            // Session backup every 10 minutes (600,000 ms)
+            sessionBackupInterval = setInterval(() => {
+                const now = Date.now();
+                // Only create backup if enough time has passed and there are changes
+                if (now - lastSessionBackupTime > 600000 && hasPendingChanges()) {
+                    createSessionBackup();
+                    lastSessionBackupTime = now;
+                }
+            }, 60000); // Check every minute
+        }
+
+        // Create session backup
+        async function createSessionBackup() {
+            if (!isGM) return;
+            
+            try {
+                const response = await fetch('dashboard-backup-handler.php', {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/x-www-form-urlencoded',
+                    },
+                    body: 'action=create_session_backup'
+                });
+                
+                const result = await response.json();
+                
+                if (result.success) {
+                    lastSessionBackupTime = Date.now();
+                    console.log('Session backup created:', result.backup_name);
+                } else {
+                    console.warn('Session backup failed:', result.error);
+                }
+            } catch (error) {
+                console.warn('Session backup error:', error);
+            }
+        }
+
+        // Create pre-save backup before each save operation
+        async function createPreSaveBackup() {
+            if (!isGM) return;
+            
+            try {
+                const response = await fetch('dashboard-backup-handler.php', {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/x-www-form-urlencoded',
+                    },
+                    body: 'action=create_pre_save_backup'
+                });
+                
+                const result = await response.json();
+                
+                if (result.success) {
+                    console.log('Pre-save backup created:', result.backup_name);
+                } else {
+                    console.warn('Pre-save backup failed:', result.error);
+                }
+            } catch (error) {
+                console.warn('Pre-save backup error:', error);
+            }
+        }
     </script>
     <script src="strixhaven/gm/js/character-lookup.js"></script>
     <script src="js/character-sheet.js"></script>

@@ -1785,6 +1785,11 @@ async function batchSaveAllData() {
     }
     
     try {
+        // Create pre-save backup before saving (if createPreSaveBackup function exists)
+        if (typeof createPreSaveBackup === 'function') {
+            await createPreSaveBackup();
+        }
+        
         const formData = new FormData();
         formData.append('action', 'batch_save');
         formData.append('character', currentCharacter);

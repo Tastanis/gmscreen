@@ -1064,3 +1064,62 @@ body:not(.gm-mode) .club-navigation button:hover:not(:disabled) {
     transform: translateY(0);
     box-shadow: 0 4px 15px rgba(102, 126, 234, 0.4);
 }
+
+/* Backup Button Styles */
+.backup-container {
+    position: fixed;
+    bottom: 30px;
+    left: 30px;
+    z-index: 1000;
+}
+
+.btn-backup {
+    background: linear-gradient(135deg, #17a2b8 0%, #138496 100%);
+    color: white;
+    border: none;
+    padding: 12px 20px;
+    border-radius: 8px;
+    font-size: 14px;
+    font-weight: 600;
+    cursor: pointer;
+    transition: all 0.3s ease;
+    box-shadow: 0 4px 15px rgba(23, 162, 184, 0.3);
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    text-decoration: none;
+}
+
+.btn-backup:hover {
+    background: linear-gradient(135deg, #138496 0%, #117a8b 100%);
+    transform: translateY(-2px);
+    box-shadow: 0 6px 20px rgba(23, 162, 184, 0.4);
+    text-decoration: none;
+    color: white;
+}
+
+.btn-backup:active {
+    transform: translateY(0);
+    box-shadow: 0 4px 15px rgba(23, 162, 184, 0.3);
+}
+
+.btn-backup svg {
+    flex-shrink: 0;
+}
+
+/* Responsive adjustments for backup button */
+@media (max-width: 768px) {
+    .backup-container {
+        position: relative;
+        bottom: auto;
+        left: auto;
+        margin: 20px;
+        display: flex;
+        justify-content: center;
+    }
+    
+    .btn-backup {
+        width: 100%;
+        justify-content: center;
+    }
+}
