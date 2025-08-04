@@ -316,10 +316,20 @@ function createTemplateThumbnail(template) {
         thumbnail.appendChild(placeholder);
     }
     
-    // Title
+    // Title with color dot
     const title = document.createElement('div');
     title.className = 'template-thumb-title';
-    title.textContent = template.title || 'Untitled';
+    
+    const titleText = document.createElement('span');
+    titleText.className = 'title-text';
+    titleText.textContent = template.title || 'Untitled';
+    
+    const colorDot = document.createElement('div');
+    colorDot.className = 'template-color-dot';
+    colorDot.style.backgroundColor = template.color || colors[0];
+    
+    title.appendChild(titleText);
+    title.appendChild(colorDot);
     thumbnail.appendChild(title);
     
     // Click handler
