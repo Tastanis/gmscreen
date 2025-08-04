@@ -23,7 +23,7 @@ require_once '../../version.php';
 require_once 'includes/character-integration.php';
 
 // Include backup system
-require_once 'includes/backup-system.php';
+require_once 'includes/gm-backup-helper.php';
 
 // Include file lock manager
 require_once 'includes/file-lock-manager.php';
@@ -166,14 +166,14 @@ function getDefaultTabsStructure() {
 }
 
 // Function to save tabs data with atomic writes and backup
-function saveTabsData($data, $tabsFile) {
+function saveTabsData($data, $tabsFile, $backupType = 'pre-save') {
     global $dataDir;
     
     try {
         // Create backup before saving
-        $backupSystem = new BackupSystem($dataDir);
+        $backupHelper = new GMBackupHelper($dataDir);
         if (file_exists($tabsFile)) {
-            $backupResult = $backupSystem->createBackup($tabsFile, 'pre-save');
+            $backupResult = $backupHelper->createBackup($tabsFile, $backupType);
             if (!$backupResult['success']) {
                 error_log('GM Screen: Failed to create backup: ' . $backupResult['error']);
             }
@@ -223,7 +223,7 @@ function saveTabsData($data, $tabsFile) {
         // Try to restore from backup if save failed
         if (isset($backupResult) && $backupResult['success']) {
             error_log('GM Screen: Attempting to restore from backup after failed save');
-            $backupSystem->restoreBackup($backupResult['backup_path'], $tabsFile);
+            $backupHelper->restoreBackup($backupResult['backup_path'], $tabsFile);
         }
         
         return false;
@@ -422,6 +422,24 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['action'])) {
                 }
             } catch (Exception $e) {
                 echo json_encode(['success' => false, 'error' => 'Failed to get character details: ' . $e->getMessage()]);
+            }
+            break;
+
+        case 'session_backup':
+            try {
+                $tabsData = loadTabsData($tabsFile);
+                
+                if (saveTabsData($tabsData, $tabsFile, 'session')) {
+                    echo json_encode(['success' => true]);
+                } else {
+                    throw new Exception('Failed to create session backup');
+                }
+                
+            } catch (Exception $e) {
+                echo json_encode([
+                    'success' => false,
+                    'error' => 'Failed to create session backup: ' . $e->getMessage()
+                ]);
             }
             break;
             

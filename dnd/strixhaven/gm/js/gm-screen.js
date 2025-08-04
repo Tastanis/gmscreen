@@ -1002,11 +1002,45 @@ class GMScreen {
 
     // Auto-save functionality
     setupAutoSave() {
+        // Create initial session backup
+        this.createSessionBackup();
+        
         this.autoSaveInterval = setInterval(() => {
             console.log('Auto-save check...');
         }, 30000); // Check every 30 seconds
         
+        // Session backup every 10 minutes
+        this.sessionBackupInterval = setInterval(() => {
+            this.createSessionBackup();
+        }, 600000); // 10 minutes
+        
         console.log('Auto-save enabled');
+    }
+    
+    // Create session backup
+    async createSessionBackup() {
+        try {
+            const formData = new FormData();
+            formData.append('action', 'session_backup');
+            
+            const response = await fetch('index.php', {
+                method: 'POST',
+                body: formData
+            });
+            
+            if (response.ok) {
+                const result = await response.json();
+                if (result.success) {
+                    console.log('Session backup created successfully');
+                } else {
+                    console.warn('Session backup failed:', result.error);
+                }
+            } else {
+                console.warn('Session backup request failed:', response.status);
+            }
+        } catch (error) {
+            console.warn('Session backup error:', error);
+        }
     }
 
     // Update session info

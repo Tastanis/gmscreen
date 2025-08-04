@@ -26,6 +26,8 @@ let isInitialLoad = true; // Flag to track initial page load vs user changes
 const LOCALSTORAGE_KEY = 'monster_creator_unsaved_data';
 const RECOVERY_CHECK_INTERVAL = 300000; // 5 minutes
 let recoveryCheckInterval = null;
+let lastSessionBackupTime = Date.now();
+let sessionBackupInterval = null;
 
 // Attribute formatting debounce
 let attributeFormatTimers = new Map(); // Store timers for each element
@@ -125,6 +127,9 @@ document.addEventListener('DOMContentLoaded', async function() {
     
     // Start auto-save timer
     startAutoSave();
+    
+    // Initialize session backup system
+    initSessionBackup();
     
     // Initialize recovery system
     initRecoverySystem();
@@ -1934,7 +1939,7 @@ function queueSave() {
 }
 
 // New selective save function - only saves changed monsters
-async function saveChangedData() {
+async function saveChangedData(backupType = 'auto') {
     if (isSaving) {
         console.log('Save already in progress, queueing...');
         return;
@@ -1973,7 +1978,8 @@ async function saveChangedData() {
             },
             body: JSON.stringify({
                 action: 'save',
-                data: monsterData
+                data: monsterData,
+                backup_type: backupType
             })
         });
         
@@ -2317,6 +2323,31 @@ function startAutoSave() {
             saveAllData();
         }
     }, 30000); // Save every 30 seconds
+}
+
+// Session backup functionality
+function initSessionBackup() {
+    // Create initial session backup
+    createSessionBackup();
+    
+    // Session backup every 10 minutes
+    sessionBackupInterval = setInterval(() => {
+        const now = Date.now();
+        if (now - lastSessionBackupTime > 600000) { // 10 minutes
+            createSessionBackup();
+            lastSessionBackupTime = now;
+        }
+    }, 60000); // Check every minute
+}
+
+async function createSessionBackup() {
+    try {
+        console.log('Creating session backup...');
+        await saveChangedData('session');
+        console.log('Session backup created successfully');
+    } catch (error) {
+        console.warn('Session backup failed:', error);
+    }
 }
 
 function hasUnsavedChanges() {

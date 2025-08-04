@@ -19,7 +19,7 @@ if (!$is_gm) {
 }
 
 // Include backup and lock systems
-require_once '../gm/includes/backup-system.php';
+require_once 'includes/monster-backup-helper.php';
 require_once '../gm/includes/file-lock-manager.php';
 
 // Set JSON response header
@@ -46,7 +46,8 @@ if (!is_dir($dataDir)) {
 // Handle different actions
 switch ($input['action']) {
     case 'save':
-        saveMonsterData($input['data'], $dataFile, $lockFile);
+        $backupType = $input['backup_type'] ?? 'pre-save';
+        saveMonsterData($input['data'], $dataFile, $lockFile, $backupType);
         break;
         
     case 'load':
@@ -60,7 +61,7 @@ switch ($input['action']) {
 /**
  * Save monster data with file locking, backups, and atomic writes
  */
-function saveMonsterData($data, $dataFile, $lockFile) {
+function saveMonsterData($data, $dataFile, $lockFile, $backupType = 'pre-save') {
     global $dataDir;
     
     // Debug: Log received data
@@ -77,12 +78,12 @@ function saveMonsterData($data, $dataFile, $lockFile) {
     // Use file lock manager
     $lockManager = new FileLockManager($dataDir);
     
-    $result = $lockManager->withLock($dataFile, function() use ($data, $dataFile, $dataDir) {
+    $result = $lockManager->withLock($dataFile, function() use ($data, $dataFile, $dataDir, $backupType) {
         try {
             // Create backup before saving
-            $backupSystem = new BackupSystem($dataDir);
+            $backupHelper = new MonsterBackupHelper($dataDir);
             if (file_exists($dataFile)) {
-                $backupResult = $backupSystem->createBackup($dataFile, 'pre-save');
+                $backupResult = $backupHelper->createBackup($dataFile, $backupType);
                 if (!$backupResult['success']) {
                     error_log('Monster Creator: Failed to create backup: ' . $backupResult['error']);
                 }
@@ -137,7 +138,7 @@ function saveMonsterData($data, $dataFile, $lockFile) {
             // Try to restore from backup if save failed
             if (isset($backupResult) && $backupResult['success']) {
                 error_log('Monster Creator: Attempting to restore from backup after failed save');
-                $backupSystem->restoreBackup($backupResult['backup_path'], $dataFile);
+                $backupHelper->restoreBackup($backupResult['backup_path'], $dataFile);
             }
             
             throw $e; // Re-throw to be handled by lock manager

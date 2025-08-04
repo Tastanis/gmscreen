@@ -17,14 +17,14 @@ if (!$is_gm) {
 }
 
 // Include required files
-require_once '../gm/includes/backup-system.php';
+require_once 'includes/monster-backup-helper.php';
 require_once '../gm/includes/file-lock-manager.php';
 
 $dataDir = __DIR__ . '/data/';
 $dataFile = $dataDir . 'gm-monsters.json';
 
 // Initialize backup system
-$backupSystem = new BackupSystem($dataDir);
+$backupHelper = new MonsterBackupHelper($dataDir);
 
 // Handle actions
 if ($_SERVER['REQUEST_METHOD'] === 'POST') {
@@ -32,7 +32,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
     
     switch ($_POST['action'] ?? '') {
         case 'create_backup':
-            $result = $backupSystem->createBackup($dataFile, 'manual');
+            $result = $backupHelper->createBackup($dataFile, 'manual');
             echo json_encode($result);
             exit;
             
@@ -43,7 +43,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                 exit;
             }
             
-            $result = $backupSystem->restoreBackup($backupPath, $dataFile);
+            $result = $backupHelper->restoreBackup($backupPath, $dataFile);
             echo json_encode($result);
             exit;
             
@@ -54,7 +54,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                 exit;
             }
             
-            $result = $backupSystem->verifyBackup($backupPath);
+            $result = $backupHelper->verifyBackup($backupPath);
             echo json_encode($result);
             exit;
             
@@ -73,8 +73,8 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
 }
 
 // Get backup list and stats for GM monster file
-$backups = $backupSystem->getBackups('gm-monsters.json');
-$stats = $backupSystem->getStats();
+$backups = $backupHelper->getBackups('gm-monsters.json');
+$stats = $backupHelper->getStats();
 
 // Include version system
 define('VERSION_SYSTEM_INTERNAL', true);
