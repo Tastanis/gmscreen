@@ -906,7 +906,7 @@ $defaultInventoryTab = $is_gm ? 'frunk' : $user;
                     <a href="#" onclick="openStrixhavenSection('staff')">Staff</a>
                     <a href="#" onclick="openStrixhavenSection('locations')">Locations</a>
                     <a href="#" onclick="openStrixhavenSection('monster-creator')" class="<?php echo $is_gm ? 'gm-allowed' : 'gm-restricted'; ?>">Monster Creator</a>
-                    <a href="#" onclick="openStrixhavenSection('coming-soon-3')">Coming Soon</a>
+                    <a href="#" onclick="openStrixhavenSection('templates')">Templates</a>
                     <a href="#" onclick="openStrixhavenSection('coming-soon-4')">Coming Soon</a>
                     <a href="#" onclick="openStrixhavenSection('coming-soon-5')">Coming Soon</a>
                     <!-- GM tab - positioned at bottom with conditional styling -->
