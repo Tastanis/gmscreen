@@ -286,6 +286,129 @@ class TemplateBackupHelper {
     }
     
     /**
+     * Verify backup integrity
+     */
+    public function verifyBackup($backupPath) {
+        try {
+            if (!file_exists($backupPath)) {
+                return [
+                    'success' => false,
+                    'error' => 'Backup file does not exist'
+                ];
+            }
+            
+            // Check if it's a JSON file
+            if (pathinfo($backupPath, PATHINFO_EXTENSION) === 'json') {
+                $content = file_get_contents($backupPath);
+                $data = json_decode($content, true);
+                
+                if (json_last_error() === JSON_ERROR_NONE) {
+                    return [
+                        'success' => true,
+                        'valid_json' => true,
+                        'size' => filesize($backupPath),
+                        'records' => $this->countJsonRecords($data)
+                    ];
+                } else {
+                    return [
+                        'success' => false,
+                        'valid_json' => false,
+                        'error' => 'Invalid JSON: ' . json_last_error_msg()
+                    ];
+                }
+            }
+            
+            // For non-JSON files, just check if readable
+            return [
+                'success' => is_readable($backupPath),
+                'size' => filesize($backupPath)
+            ];
+            
+        } catch (Exception $e) {
+            return [
+                'success' => false,
+                'error' => 'Verification error: ' . $e->getMessage()
+            ];
+        }
+    }
+    
+    /**
+     * Get backup statistics
+     */
+    public function getStats() {
+        try {
+            $stats = [
+                'total_backups' => 0,
+                'total_size' => 0,
+                'by_type' => [
+                    'recent' => 0,
+                    'session' => 0,
+                    'daily' => 0
+                ],
+                'oldest_backup' => null,
+                'newest_backup' => null
+            ];
+            
+            $backups = glob($this->backupDir . '/templates_*.json');
+            if (!$backups) {
+                return $stats;
+            }
+            
+            $stats['total_backups'] = count($backups);
+            
+            $oldestTime = PHP_INT_MAX;
+            $newestTime = 0;
+            
+            foreach ($backups as $backup) {
+                $stats['total_size'] += filesize($backup);
+                $mtime = filemtime($backup);
+                
+                if ($mtime < $oldestTime) {
+                    $oldestTime = $mtime;
+                    $stats['oldest_backup'] = basename($backup);
+                }
+                
+                if ($mtime > $newestTime) {
+                    $newestTime = $mtime;
+                    $stats['newest_backup'] = basename($backup);
+                }
+                
+                // Count by type
+                if (preg_match('/_(recent|session|daily)_/', basename($backup), $matches)) {
+                    $stats['by_type'][$matches[1]]++;
+                }
+            }
+            
+            $stats['total_size_mb'] = round($stats['total_size'] / 1024 / 1024, 2);
+            
+            return $stats;
+            
+        } catch (Exception $e) {
+            return [
+                'error' => 'Failed to get backup statistics: ' . $e->getMessage()
+            ];
+        }
+    }
+    
+    /**
+     * Count records in JSON data
+     */
+    private function countJsonRecords($data) {
+        if (!is_array($data)) {
+            return 0;
+        }
+        
+        $count = 0;
+        foreach ($data as $key => $value) {
+            if ($key !== 'metadata' && is_array($value)) {
+                $count += count($value);
+            }
+        }
+        
+        return $count;
+    }
+    
+    /**
      * Clean up old backups based on retention policy
      */
     public function cleanupOldBackups() {
