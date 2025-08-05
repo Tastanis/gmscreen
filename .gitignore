@@ -1,0 +1,61 @@
+# User data files - DO NOT COMMIT
+# These files contain user-generated content and should never be in version control
+
+# Character and game data
+/dnd/data/characters.json
+/dnd/data/inventory.json
+/dnd/data/combat.json
+/dnd/data/pcs.json
+/dnd/data/characters_backup_*.json
+/dnd/data/characters_emergency_*.json
+
+# Schedule data
+/dnd/schedule/data/schedules.json
+/dnd/schedule/data/backups/
+/dnd/schedule/data/save_log.txt
+
+# GM Screen data
+/dnd/strixhaven/gm/data/*.json
+!dnd/strixhaven/gm/data/.gitkeep
+
+# Student and Staff data
+/dnd/strixhaven/students/students.json
+/dnd/strixhaven/staff/staff.json
+
+# Location data
+/dnd/strixhaven/locations/locations.json
+
+# Inventory data
+/dnd/strixhaven/data/inventory.json
+
+# Combat tracker data
+/dnd/combat/data/*.json
+!dnd/combat/data/.gitkeep
+
+# Monster creator data
+/dnd/strixhaven/monster-creator/data/
+
+# Templates data
+/dnd/strixhaven/templates/data/
+
+# Backup directories
+**/backups/
+**/backup/
+
+# Log files
+*.log
+save_log.txt
+
+# Local settings (already exists, keeping it)
+/.claude/settings.local.json
+
+# OS generated files
+.DS_Store
+Thumbs.db
+
+# Editor directories
+.vscode/
+.idea/
+
+# Keep the directories but not the data files
+!**/.gitkeep
