@@ -633,6 +633,18 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['action'])) {
         } catch (Exception $e) {
             echo json_encode(['success' => false, 'error' => 'Failed to get character details: ' . $e->getMessage()]);
         }
+    } elseif ($_POST['action'] === 'export_students') {
+        // Export all students data
+        if (!$is_gm) {
+            echo json_encode(array('success' => false, 'error' => 'Only GM can export data'));
+            exit;
+        }
+        
+        $data = loadStudentData();
+        echo json_encode(array(
+            'success' => true,
+            'data' => $data
+        ));
     }
     exit;
 }
@@ -703,6 +715,7 @@ $studentData = loadStudentData();
                 <div class="admin-controls">
                     <button class="btn-add" id="add-student-btn">+ Add Student</button>
                     <button class="btn-import" onclick="window.location.href='student-import.php'">📥 Import Student</button>
+                    <button class="btn-export" id="export-students-btn">📤 Export All Students</button>
                 </div>
                 
                 <?php endif; ?>
@@ -794,6 +807,23 @@ $studentData = loadStudentData();
     </script>
     <!-- Character Autocomplete Container -->
     <div id="character-autocomplete" class="character-autocomplete" style="display: none;"></div>
+
+    <!-- Export Modal -->
+    <div id="export-modal" class="modal" style="display: none;">
+        <div class="modal-content" style="max-width: 800px;">
+            <div class="modal-header">
+                <h2>Export Students Data</h2>
+                <span class="close" onclick="closeExportModal()">&times;</span>
+            </div>
+            <div class="modal-body">
+                <div style="margin-bottom: 10px;">
+                    <button class="btn-copy" onclick="copyExportData()">📋 Copy to Clipboard</button>
+                    <span id="copy-feedback" style="margin-left: 10px; color: #10b981; display: none;">✓ Copied!</span>
+                </div>
+                <textarea id="export-data" style="width: 100%; height: 400px; font-family: monospace; font-size: 12px;" readonly></textarea>
+            </div>
+        </div>
+    </div>
 
     <!-- Version Footer -->
     <div class="version-footer">

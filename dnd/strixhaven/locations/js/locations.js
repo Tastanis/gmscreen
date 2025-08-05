@@ -201,6 +201,12 @@ function setupEventListeners() {
             addLocationBtn.addEventListener('click', addLocation);
         }
         
+        // Export button (GM only)
+        const exportBtn = document.getElementById('export-locations-btn');
+        if (exportBtn) {
+            exportBtn.addEventListener('click', exportLocations);
+        }
+        
         // Delete button (GM only)
         const modalDeleteBtn = document.getElementById('modal-delete-btn');
         if (modalDeleteBtn) {
@@ -1363,4 +1369,69 @@ function debounce(func, wait) {
         clearTimeout(timeout);
         timeout = setTimeout(later, wait);
     };
+}
+
+// Export functionality
+function exportLocations() {
+    const formData = new FormData();
+    formData.append('action', 'export_locations');
+    
+    fetch('index.php', {
+        method: 'POST',
+        body: formData
+    })
+    .then(response => response.json())
+    .then(data => {
+        if (data.success) {
+            showExportModal(data.data);
+        } else {
+            alert('Failed to export data: ' + (data.error || 'Unknown error'));
+        }
+    })
+    .catch(error => {
+        console.error('Error exporting data:', error);
+        alert('Error exporting data');
+    });
+}
+
+function showExportModal(data) {
+    const modal = document.getElementById('export-modal');
+    const textarea = document.getElementById('export-data');
+    
+    // Format JSON with proper indentation
+    textarea.value = JSON.stringify(data, null, 2);
+    
+    modal.style.display = 'block';
+}
+
+function closeExportModal() {
+    const modal = document.getElementById('export-modal');
+    modal.style.display = 'none';
+    
+    // Reset copy feedback
+    const feedback = document.getElementById('copy-feedback');
+    if (feedback) {
+        feedback.style.display = 'none';
+    }
+}
+
+function copyExportData() {
+    const textarea = document.getElementById('export-data');
+    textarea.select();
+    
+    try {
+        document.execCommand('copy');
+        
+        // Show feedback
+        const feedback = document.getElementById('copy-feedback');
+        if (feedback) {
+            feedback.style.display = 'inline';
+            setTimeout(() => {
+                feedback.style.display = 'none';
+            }, 2000);
+        }
+    } catch (err) {
+        console.error('Failed to copy:', err);
+        alert('Failed to copy to clipboard');
+    }
 }
