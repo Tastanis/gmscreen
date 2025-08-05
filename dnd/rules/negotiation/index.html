@@ -1,0 +1,417 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Negotiation - D&D Rules</title>
+    <style>
+        body {
+            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+            line-height: 1.6;
+            margin: 20px;
+            background-color: #f5f5f5;
+            color: #333;
+        }
+        .container {
+            max-width: 900px;
+            margin: 0 auto;
+            background: white;
+            padding: 30px;
+            border-radius: 10px;
+            box-shadow: 0 2px 10px rgba(0,0,0,0.1);
+        }
+        h1 {
+            color: #6a5acd;
+            border-bottom: 3px solid #6a5acd;
+            padding-bottom: 10px;
+            margin-bottom: 30px;
+        }
+        h2 {
+            color: #6a5acd;
+            margin-top: 30px;
+            margin-bottom: 15px;
+        }
+        h3 {
+            color: #8b7dd8;
+            margin-top: 25px;
+            margin-bottom: 10px;
+        }
+        .negotiation-section {
+            margin-bottom: 30px;
+            padding: 20px;
+            background-color: #f8f6ff;
+            border-left: 5px solid #6a5acd;
+            border-radius: 5px;
+        }
+        table {
+            width: 100%;
+            border-collapse: collapse;
+            margin: 15px 0;
+            background-color: white;
+            box-shadow: 0 1px 3px rgba(0,0,0,0.2);
+        }
+        th, td {
+            border: 1px solid #ddd;
+            padding: 12px;
+            text-align: left;
+        }
+        th {
+            background-color: #6a5acd;
+            color: white;
+            font-weight: bold;
+        }
+        tr:nth-child(even) {
+            background-color: #f9f9f9;
+        }
+        .concept-grid {
+            display: grid;
+            grid-template-columns: 1fr 2fr;
+            gap: 15px;
+            margin: 20px 0;
+        }
+        .concept-label {
+            font-weight: bold;
+            color: #6a5acd;
+        }
+        .flow-section {
+            background-color: #f0f8ff;
+            padding: 20px;
+            border-radius: 8px;
+            margin: 20px 0;
+            border: 2px solid #4682b4;
+        }
+        .flow-section h3 {
+            color: #4682b4;
+            margin-top: 0;
+        }
+        .flow-step {
+            background-color: white;
+            padding: 15px;
+            margin: 15px 0;
+            border-radius: 5px;
+            border-left: 4px solid #4682b4;
+        }
+        .flow-step h4 {
+            color: #4682b4;
+            margin: 0 0 10px 0;
+        }
+        .highlight {
+            background-color: #fff3cd;
+            padding: 2px 4px;
+            border-radius: 3px;
+            font-weight: bold;
+        }
+        .warning {
+            background-color: #f8d7da;
+            color: #721c24;
+            padding: 10px;
+            border-radius: 5px;
+            margin: 10px 0;
+            border-left: 4px solid #dc3545;
+        }
+        .success {
+            background-color: #d4edda;
+            color: #155724;
+            padding: 10px;
+            border-radius: 5px;
+            margin: 10px 0;
+            border-left: 4px solid #28a745;
+        }
+        .interest-scale {
+            display: flex;
+            justify-content: space-between;
+            background-color: #f8f9fa;
+            padding: 15px;
+            border-radius: 8px;
+            margin: 15px 0;
+        }
+        .interest-level {
+            text-align: center;
+            padding: 10px;
+            border-radius: 5px;
+            flex: 1;
+            margin: 0 5px;
+        }
+        .interest-0 { background-color: #dc3545; color: white; }
+        .interest-1 { background-color: #fd7e14; color: white; }
+        .interest-2 { background-color: #ffc107; color: black; }
+        .interest-3 { background-color: #20c997; color: white; }
+        .interest-4 { background-color: #28a745; color: white; }
+        .interest-5 { background-color: #17a2b8; color: white; }
+        .motivation-type {
+            background-color: #e8f5e9;
+            padding: 15px;
+            margin: 10px 0;
+            border-radius: 8px;
+            border-left: 4px solid #4caf50;
+        }
+        .motivation-type h4 {
+            color: #2e7d32;
+            margin: 0 0 10px 0;
+        }
+        .motivation-type p {
+            margin: 5px 0;
+        }
+        .motivation-name {
+            font-weight: bold;
+            color: #2e7d32;
+        }
+        .pitfall {
+            font-style: italic;
+            color: #c62828;
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <h1>💬 Negotiation</h1>
+        
+        <div class="negotiation-section">
+            <h2>📊 Concept - Scale & Effect</h2>
+            <div class="concept-grid">
+                <div class="concept-label">Interest:</div>
+                <div>0 = no deal (negotiation ends) → 5 = eager to deal</div>
+                
+                <div class="concept-label">Patience:</div>
+                <div>0 = "final offer" → 5 = willing to talk at length</div>
+                
+                <div class="concept-label">Language Bonus:</div>
+                <div>
+                    • Speak in NPC's native tongue (not Caelian) +1 Patience<br>
+                    • ≥ 3 PCs shared languages +2 Patience
+                </div>
+                
+                <div class="concept-label">Motivations:</div>
+                <div>Each NPC has 2 or more persuasive themes; each can be used once</div>
+                
+                <div class="concept-label">Pitfalls:</div>
+                <div>Argument themes that annoy the NPC (-1 Interest & -1 Patience)</div>
+            </div>
+        </div>
+
+        <div class="negotiation-section">
+            <h2>⚔️ Negotiation in Combat</h2>
+            <div class="flow-step">
+                <h4>1 — Stop-Combat Start</h4>
+                <p>Spend a manoeuvre and make a <span class="highlight">Hard Presence test</span> to pause combat and begin talks.</p>
+            </div>
+        </div>
+
+        <div class="flow-section">
+            <h2>🔄 Negotiation Flow</h2>
+            
+            <div class="flow-step">
+                <h4>1 — Uncover Motivations (once per negotiation)</h4>
+                <table>
+                    <tr>
+                        <th>Test Result</th>
+                        <th>Outcome</th>
+                    </tr>
+                    <tr>
+                        <td><strong>≤ 11</strong></td>
+                        <td>Learn nothing; NPC notices → <span class="highlight">-1 Patience</span></td>
+                    </tr>
+                    <tr>
+                        <td><strong>12–16</strong></td>
+                        <td>Learn nothing</td>
+                    </tr>
+                    <tr>
+                        <td><strong>17+</strong></td>
+                        <td>Learn 1 Motivation or 1 Pitfall</td>
+                    </tr>
+                </table>
+                <p style="font-style: italic; margin-top: 10px;">(Outside negotiation you can gather this info freely through role-play or checks.)</p>
+            </div>
+
+            <div class="flow-step">
+                <h4>2 — Make an Argument</h4>
+                <p>State the argument & roll. Compare to tables below. Apply changes immediately.</p>
+                
+                <h5>2a — Argument matches a Motivation</h5>
+                <table>
+                    <tr>
+                        <th>Test Result</th>
+                        <th>Interest</th>
+                        <th>Patience</th>
+                    </tr>
+                    <tr>
+                        <td><strong>≤ 11</strong></td>
+                        <td>—</td>
+                        <td>-1</td>
+                    </tr>
+                    <tr>
+                        <td><strong>12–16</strong></td>
+                        <td>+1</td>
+                        <td>-1</td>
+                    </tr>
+                    <tr>
+                        <td><strong>17+</strong></td>
+                        <td>+1</td>
+                        <td>0</td>
+                    </tr>
+                </table>
+                <p class="success">Exceptional role-play may count as a 17+ automatically.</p>
+                <p class="warning">Using the same Motivation again: -1 Patience.</p>
+
+                <h5>2b — Argument matches no Motivation</h5>
+                <table>
+                    <tr>
+                        <th>Test Result</th>
+                        <th>Interest</th>
+                        <th>Patience</th>
+                    </tr>
+                    <tr>
+                        <td><strong>≤ 11</strong></td>
+                        <td>-1</td>
+                        <td>-1</td>
+                    </tr>
+                    <tr>
+                        <td><strong>12–16</strong></td>
+                        <td>0</td>
+                        <td>-1</td>
+                    </tr>
+                    <tr>
+                        <td><strong>17+</strong></td>
+                        <td>+1</td>
+                        <td>-1</td>
+                    </tr>
+                </table>
+
+                <h5>2c — Argument hits a Pitfall (any roll)</h5>
+                <p class="warning">-1 Interest, -1 Patience.</p>
+
+                <h5>Caught Lying</h5>
+                <p>Roll as appropriate; on failure → <span class="highlight">-1 Interest</span>.</p>
+            </div>
+
+            <div class="flow-step">
+                <h4>3 — NPC Response & Offer</h4>
+                <div class="interest-scale">
+                    <div class="interest-level interest-5">
+                        <strong>5</strong><br>
+                        "Yes, and…"<br>
+                        (adds a bonus)
+                    </div>
+                    <div class="interest-level interest-4">
+                        <strong>4</strong><br>
+                        "Yes."
+                    </div>
+                    <div class="interest-level interest-3">
+                        <strong>3</strong><br>
+                        "Yes, but…"<br>
+                        (sets a condition)
+                    </div>
+                    <div class="interest-level interest-2">
+                        <strong>2</strong><br>
+                        "No, but…"<br>
+                        (counter-offer)
+                    </div>
+                    <div class="interest-level interest-1">
+                        <strong>1</strong><br>
+                        "No."
+                    </div>
+                    <div class="interest-level interest-0">
+                        <strong>0</strong><br>
+                        "No, and…"<br>
+                        (negotiation ends, possibly hostile)
+                    </div>
+                </div>
+            </div>
+
+            <div class="flow-step">
+                <h4>4 — End the Negotiation</h4>
+                <p>Either side may walk away at any time.<br>
+                <span class="highlight">Interest 0 ends talks automatically.</span></p>
+            </div>
+        </div>
+
+        <div class="negotiation-section">
+            <h2>📋 Negotiation Types</h2>
+            
+            <div class="motivation-type">
+                <h4>Benevolence</h4>
+                <p><span class="motivation-name">Motivation:</span> They feel a duty to share resources, but can't give away everything. Many will help only certain people (e.g., their study group) or feel their limited supplies are better used elsewhere.</p>
+                <p><span class="pitfall">Pitfall:</span> They believe no one deserves help just for asking—generosity is naïve.</p>
+                <p><strong>Appeals:</strong> Emphasize how the deal helps others they care about. E.g. "If you loan us your enchanted textbook for the test, we'll tutor your friends next semester."</p>
+            </div>
+
+            <div class="motivation-type">
+                <h4>Discovery</h4>
+                <p><span class="motivation-name">Motivation:</span> They crave new knowledge—rare spells, hidden lore, or undiscovered parts of campus. Their curiosity may revolve around solving a specific mystery or simply exploring unknown magic.</p>
+                <p><span class="pitfall">Pitfall:</span> They shun the unknown; past experiments or discoveries went badly.</p>
+                <p><strong>Appeals:</strong> Highlight opportunities to learn or gain rare items. E.g. "Let us borrow your translation cipher for the Codex Mortis, and you can read our notes when we finish."</p>
+            </div>
+
+            <div class="motivation-type">
+                <h4>Freedom</h4>
+                <p><span class="motivation-name">Motivation:</span> They despise authority and value independence. They might want to free themselves or others from control.</p>
+                <p><span class="pitfall">Pitfall:</span> They think chaos would reign without authority; they might consider themselves best fit to lead.</p>
+                <p><strong>Appeals:</strong> Show how the agreement protects or grants liberty. E.g. "Help us expose the Headmaster's corruption, and we can work together to get those harsh rules rescinded."</p>
+            </div>
+
+            <div class="motivation-type">
+                <h4>Greed</h4>
+                <p><span class="motivation-name">Motivation:</span> They want wealth or coveted things—whether coin, relics, or exclusive privileges. They might share only with trusted friends.</p>
+                <p><span class="pitfall">Pitfall:</span> They reject material bribes and care more about ideals than resources.</p>
+                <p><strong>Appeals:</strong> Offer rewards or riches in return. E.g. "Help us battle the overmind; we'll split the dragon's hoard equally with you."</p>
+            </div>
+
+            <div class="motivation-type">
+                <h4>Higher Authority</h4>
+                <p><span class="motivation-name">Motivation:</span> They are loyal to a person, group, or deity. That authority—an archmage, mentor, or god—comes before personal desire.</p>
+                <p><span class="pitfall">Pitfall:</span> They scoff at serving anyone and refuse to obey orders from above.</p>
+                <p><strong>Appeals:</strong> Argue that the authority would approve of the agreement. E.g. "Your mentor would want this research to continue—lend me your formula, and we'll credit her in our thesis."</p>
+            </div>
+
+            <div class="motivation-type">
+                <h4>Justice</h4>
+                <p><span class="motivation-name">Motivation:</span> They want wrongdoers punished and the righteous protected, based on their sense of right and wrong.</p>
+                <p><span class="pitfall">Pitfall:</span> They see justice as a myth; everything is conflict, and no one truly gets what they deserve.</p>
+                <p><strong>Appeals:</strong> Align your request with their sense of fairness. E.g. "You hate cheaters; help us catch the students stealing exams, and we'll expose the professor who sells them."</p>
+            </div>
+
+            <div class="motivation-type">
+                <h4>Legacy</h4>
+                <p><span class="motivation-name">Motivation:</span> They want lasting fame and to be remembered. Some might even seek immortality or transformation to live on through legend.</p>
+                <p><span class="pitfall">Pitfall:</span> They consider glory-seeking a waste of time.</p>
+                <p><strong>Appeals:</strong> Promise renown or lasting credit. E.g. "Give us your research notes, and we'll make sure everyone knows you discovered the Binding Spell."</p>
+            </div>
+
+            <div class="motivation-type">
+                <h4>Peace</h4>
+                <p><span class="motivation-name">Motivation:</span> They crave calm and stability—whether running a quiet lab, a serene café, or a tranquil campus. They help if it protects their peaceful lifestyle.</p>
+                <p><span class="pitfall">Pitfall:</span> They find routine dull and instead seek excitement and danger.</p>
+                <p><strong>Appeals:</strong> Show how your plan keeps things quiet or restores calm. E.g. "If you sell us the charm, we can stop the goblin prank war before the dean cracks down on all clubs."</p>
+            </div>
+
+            <div class="motivation-type">
+                <h4>Power</h4>
+                <p><span class="motivation-name">Motivation:</span> They want more influence and control. This could be over groups, resources, or knowledge.</p>
+                <p><span class="pitfall">Pitfall:</span> They have no interest in ruling; they might respect power but refuse to seek it themselves.</p>
+                <p><strong>Appeals:</strong> Stress how helping you strengthens or secures their influence. E.g. "Get us into the restricted section, and we'll lobby for you to head the Student Council."</p>
+            </div>
+
+            <div class="motivation-type">
+                <h4>Protection</h4>
+                <p><span class="motivation-name">Motivation:</span> They prioritize safeguarding people, secrets, or places. They take duty seriously, even at great personal cost.</p>
+                <p><span class="pitfall">Pitfall:</span> They won't risk their life or belongings to protect others and expect everyone to fend for themselves.</p>
+                <p><strong>Appeals:</strong> Show how your request protects what they care about. E.g. "Lend us your griffons for a day to send a warning; in return, we'll provide armor that keeps your nephew safe during his fieldwork."</p>
+            </div>
+
+            <div class="motivation-type">
+                <h4>Revelry</h4>
+                <p><span class="motivation-name">Motivation:</span> They live for pleasure—parties, adventures, or indulgence. They want to finish work quickly so they can celebrate.</p>
+                <p><span class="pitfall">Pitfall:</span> They think social fun is a waste; they're focused on study or self-improvement.</p>
+                <p><strong>Appeals:</strong> Offer something that makes their party plans better or frees up their fun time. E.g. "Forge five Chronokinesis Crowns for us, and we'll reward you with vintage elven wine for your next festival."</p>
+            </div>
+
+            <div class="motivation-type">
+                <h4>Vengeance</h4>
+                <p><span class="motivation-name">Motivation:</span> They seek revenge on someone who wronged them—sometimes proportionate, sometimes excessive.</p>
+                <p><span class="pitfall">Pitfall:</span> They believe revenge is pointless or lack the drive to pursue it.</p>
+                <p><strong>Appeals:</strong> Promise a way to strike back. E.g. "Let us read your journals about Huckable's prank; we can plan a counter-prank that publicly humiliates him while securing safe passage for the refugee orcs."</p>
+            </div>
+        </div>
+    </div>
+</body>
+</html>
