@@ -702,6 +702,12 @@ function loadWorkspace() {
         });
         
         console.log('Loaded workspace with monsters:', monstersToShow.length);
+        
+        // Re-apply print mode handlers if print mode is active
+        if (isPrintMode) {
+            console.log('Re-applying print mode handlers after workspace load');
+            updateMonsterCardsForPrintMode();
+        }
     } else {
         // Show info message in content area
         const contextMessage = currentSubTab ? 
@@ -3047,6 +3053,14 @@ function exitEditorMode() {
     
     // Refresh workspace to show search results
     loadWorkspace();
+    
+    // Re-apply print mode handlers if print mode is active
+    if (isPrintMode) {
+        setTimeout(() => {
+            console.log('Re-applying print mode after editor exit');
+            updateMonsterCardsForPrintMode();
+        }, 100); // Small delay to ensure DOM is updated
+    }
 }
 
 function finishEditing() {
@@ -3611,6 +3625,13 @@ function renderMonsterForPrint(monsterId, monsterData) {
     if (!monsterData) return '<div class="print-monster">Monster not found</div>';
     
     let html = '<div class="print-monster">';
+    
+    // Add image if available
+    if (monsterData.image) {
+        html += `<div class="print-monster-image">
+            <img src="images/${monsterData.image}" alt="${monsterData.name || 'Monster'}">
+        </div>`;
+    }
     
     // Monster name and basic info
     if (monsterData.name) {
