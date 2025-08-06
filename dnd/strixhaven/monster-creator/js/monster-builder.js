@@ -3652,7 +3652,7 @@ function renderMonsterForPrint(monsterId, monsterData) {
     // Level, Role, Type, EV - only if they have values
     let basicInfo = [];
     if (monsterData.level && monsterData.level !== 1) basicInfo.push(`Level ${monsterData.level}`);
-    if (monsterData.role && monsterData.role !== 'Brute') basicInfo.push(monsterData.role);
+    if (monsterData.role) basicInfo.push(monsterData.role); // Always show role, including Brute
     if (monsterData.types) basicInfo.push(monsterData.types);
     if (monsterData.ev && monsterData.ev !== 0) basicInfo.push(`EV ${monsterData.ev}`);
     

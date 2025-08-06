@@ -2408,10 +2408,9 @@ body.delete-mode-active .sub-tab:hover {
         content: none !important;
     }
     
-    /* Remove container padding */
+    /* Hide the main container completely */
     .monster-builder-container {
-        padding-top: 0 !important;
-        background: white !important;
+        display: none !important;
     }
     
     /* Hide all UI elements and non-print content */
@@ -2425,14 +2424,19 @@ body.delete-mode-active .sub-tab:hover {
     .workspace,
     .monster-card,
     .action-buttons-group,
-    .print-controls {
+    .print-controls,
+    .print-preview-modal:not(.printing) {
         display: none !important;
     }
     
     .print-preview-modal.printing {
-        position: static;
-        background: none;
+        position: static !important;
+        background: none !important;
         display: block !important;
+        margin: 0 !important;
+        padding: 0 !important;
+        top: 0 !important;
+        left: 0 !important;
     }
     
     .print-preview-content {
@@ -2440,6 +2444,8 @@ body.delete-mode-active .sub-tab:hover {
         max-width: none;
         height: auto;
         border-radius: 0;
+        margin: 0 !important;
+        padding: 0 !important;
     }
     
     .print-preview-body {
@@ -2451,6 +2457,8 @@ body.delete-mode-active .sub-tab:hover {
         padding: 0;
         gap: 10px;
         display: flex;
+        page-break-before: avoid !important;
+        margin-top: 0 !important;
     }
     
     .print-column {
