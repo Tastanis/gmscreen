@@ -171,6 +171,14 @@ document.addEventListener('DOMContentLoaded', async function() {
     window.cleanupAnimationStates = cleanupAnimationStates;
     window.debugTestSections = debugTestSections;
     
+    // Make print functions globally available
+    window.togglePrintMode = togglePrintMode;
+    window.showPrintPreview = showPrintPreview;
+    window.printMonsters = printMonsters;
+    window.clearPrintSelection = clearPrintSelection;
+    window.closePrintPreview = closePrintPreview;
+    window.printFinal = printFinal;
+    
     console.log('Animation cleanup system initialized');
     console.log('Debug functions available: window.cleanupAnimationStates(), window.debugTestSections()');
 });

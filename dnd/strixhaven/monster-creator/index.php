@@ -45,27 +45,31 @@ require_once '../../version.php';
                     </div>
                 </div>
             </div>
-            <!-- Delete Mode Toggle -->
-            <button class="delete-mode-toggle" id="deleteModeToggle" onclick="toggleDeleteMode()">
-                Delete Tab
-            </button>
             
-            <!-- Data Recovery Button -->
-            <button class="recovery-toggle" onclick="window.location.href='monster-recovery.php'" title="View backups and recover lost data">
-                Data Recovery
-            </button>
-            
-            <!-- Print Mode Toggle -->
-            <button class="print-mode-toggle" id="printModeToggle" onclick="togglePrintMode()" title="Select monsters for printing">
-                🖨️ Print Mode
-            </button>
-            
-            <!-- Print Controls (shown only in print mode) -->
-            <div class="print-controls" id="printControls" style="display: none;">
-                <span class="selection-count" id="selectionCount">0/2 selected</span>
-                <button class="btn-print-preview" onclick="showPrintPreview()">Preview</button>
-                <button class="btn-print" onclick="printMonsters()">Print</button>
-                <button class="btn-clear-selection" onclick="clearPrintSelection()">Clear</button>
+            <!-- Action Buttons Group -->
+            <div class="action-buttons-group" style="display: flex; gap: 10px; align-items: center; margin-left: auto; padding-right: 15px;">
+                <!-- Delete Mode Toggle -->
+                <button class="delete-mode-toggle" id="deleteModeToggle" onclick="toggleDeleteMode()">
+                    Delete Tab
+                </button>
+                
+                <!-- Data Recovery Button -->
+                <button class="recovery-toggle" onclick="window.location.href='monster-recovery.php'" title="View backups and recover lost data">
+                    Data Recovery
+                </button>
+                
+                <!-- Print Mode Toggle -->
+                <button class="print-mode-toggle" id="printModeToggle" onclick="togglePrintMode()" title="Select monsters for printing">
+                    🖨️ Print Mode
+                </button>
+                
+                <!-- Print Controls (shown only in print mode) -->
+                <div class="print-controls" id="printControls" style="display: none;">
+                    <span class="selection-count" id="selectionCount">0/2 selected</span>
+                    <button class="btn-print-preview" onclick="showPrintPreview()">Preview</button>
+                    <button class="btn-print" onclick="printMonsters()">Print</button>
+                    <button class="btn-clear-selection" onclick="clearPrintSelection()">Clear</button>
+                </div>
             </div>
         </div>
 

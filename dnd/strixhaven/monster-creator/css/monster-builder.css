@@ -140,19 +140,18 @@ body::before {
 
 /* Recovery button - Keep green for safety */
 .recovery-toggle {
-    position: absolute;
-    top: 10px;
-    right: 120px; /* Position to the left of delete button */
     background: #28a745;
     color: white;
     border: none;
-    padding: 8px 16px;
-    border-radius: 6px;
+    padding: 10px 20px;
+    border-radius: 5px;
     cursor: pointer;
     font-size: 14px;
     font-weight: 500;
-    transition: all 0.2s ease;
-    z-index: 10;
+    transition: all 0.3s ease;
+    white-space: nowrap;
+    align-self: center;
+    margin-right: 15px;
     box-shadow: 0 2px 4px rgba(40, 167, 69, 0.2);
 }
 
@@ -2080,12 +2079,16 @@ body.delete-mode-active .sub-tab:hover {
 .print-mode-toggle {
     background-color: #4a5568;
     color: white;
-    padding: 8px 15px;
     border: none;
-    border-radius: 4px;
+    padding: 10px 20px;
     cursor: pointer;
-    margin: 5px;
-    transition: all 0.2s;
+    font-size: 14px;
+    font-weight: 500;
+    transition: all 0.3s ease;
+    white-space: nowrap;
+    align-self: center;
+    margin-right: 15px;
+    border-radius: 5px;
 }
 
 .print-mode-toggle:hover {
@@ -2094,6 +2097,7 @@ body.delete-mode-active .sub-tab:hover {
 
 .print-mode-toggle.active {
     background-color: #2563eb;
+    box-shadow: 0 0 10px rgba(37, 99, 235, 0.5);
 }
 
 .print-controls {
