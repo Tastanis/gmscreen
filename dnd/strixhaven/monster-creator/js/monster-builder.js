@@ -15,6 +15,11 @@ let monsterData = {
 // Delete mode state
 let isDeleteModeActive = false;
 
+// Print mode state
+let isPrintMode = false;
+let selectedForPrint = new Set();
+const MAX_PRINT_SELECTION = 2;
+
 let currentMainTab = 'default';
 let currentSubTab = 'default-sub';
 let autoSaveTimer = null;
@@ -719,15 +724,19 @@ function createCompactMonsterCard(monsterId, monsterData) {
     card.className = 'monster-card';
     card.setAttribute('data-monster-id', monsterId);
     
-    // Add click handler for expansion
+    // Add click handler for expansion or print selection
     card.addEventListener('click', function(e) {
         // Don't expand if clicking the edit button
         if (e.target.classList.contains('edit-monster-btn')) return;
         
-        // Select the monster to show abilities
-        selectMonster(monsterId);
-        
-        toggleCardExpansion(monsterId);
+        if (isPrintMode) {
+            // In print mode, toggle selection
+            toggleMonsterPrintSelection(monsterId);
+        } else {
+            // In normal mode, expand and show abilities
+            selectMonster(monsterId);
+            toggleCardExpansion(monsterId);
+        }
     });
     
     // Ensure all required fields have default values
@@ -3417,4 +3426,394 @@ function initRecoverySystem() {
             saveToLocalStorage();
         }
     }, 30000); // Every 30 seconds if there are changes
+}
+
+// ========================================
+// Print Mode Functions
+// ========================================
+
+function togglePrintMode() {
+    isPrintMode = !isPrintMode;
+    const toggleBtn = document.getElementById('printModeToggle');
+    const printControls = document.getElementById('printControls');
+    const workspace = document.querySelector('.workspace');
+    
+    if (isPrintMode) {
+        // Enter print mode
+        toggleBtn.classList.add('active');
+        toggleBtn.innerHTML = '🖨️ Exit Print Mode';
+        printControls.style.display = 'flex';
+        workspace.classList.add('print-mode-active');
+        
+        // Clear any previous selections
+        selectedForPrint.clear();
+        updateSelectionCount();
+        
+        // Update all monster cards to show selection state
+        updateMonsterCardsForPrintMode();
+    } else {
+        // Exit print mode
+        toggleBtn.classList.remove('active');
+        toggleBtn.innerHTML = '🖨️ Print Mode';
+        printControls.style.display = 'none';
+        workspace.classList.remove('print-mode-active');
+        
+        // Clear selections and remove indicators
+        selectedForPrint.clear();
+        removeAllPrintSelectionIndicators();
+    }
+}
+
+function updateMonsterCardsForPrintMode() {
+    const monsterCards = document.querySelectorAll('.monster-card');
+    monsterCards.forEach(card => {
+        const monsterId = card.getAttribute('data-monster-id');
+        
+        if (isPrintMode) {
+            // Add print mode click handler
+            card.style.cursor = 'pointer';
+            card.onclick = (e) => {
+                if (e.target.closest('.edit-monster-btn')) return;
+                toggleMonsterPrintSelection(monsterId);
+            };
+            
+            // Add selection checkbox
+            if (!card.querySelector('.print-selection-checkbox')) {
+                const checkbox = document.createElement('div');
+                checkbox.className = 'print-selection-checkbox';
+                checkbox.innerHTML = '<input type="checkbox">';
+                card.appendChild(checkbox);
+            }
+        } else {
+            // Restore normal click behavior
+            card.style.cursor = '';
+            card.onclick = null;
+            
+            // Remove checkbox
+            const checkbox = card.querySelector('.print-selection-checkbox');
+            if (checkbox) checkbox.remove();
+        }
+    });
+}
+
+function toggleMonsterPrintSelection(monsterId) {
+    if (!isPrintMode) return;
+    
+    if (selectedForPrint.has(monsterId)) {
+        // Deselect
+        selectedForPrint.delete(monsterId);
+    } else if (selectedForPrint.size < MAX_PRINT_SELECTION) {
+        // Select if under limit
+        selectedForPrint.add(monsterId);
+    } else {
+        // Show message that max selection reached
+        alert('You can select a maximum of 2 monsters for printing');
+        return;
+    }
+    
+    // Update visual state
+    updateMonsterSelectionVisual(monsterId);
+    updateSelectionCount();
+}
+
+function updateMonsterSelectionVisual(monsterId) {
+    const card = document.querySelector(`[data-monster-id="${monsterId}"]`);
+    if (!card) return;
+    
+    const checkbox = card.querySelector('.print-selection-checkbox input');
+    if (checkbox) {
+        checkbox.checked = selectedForPrint.has(monsterId);
+    }
+    
+    if (selectedForPrint.has(monsterId)) {
+        card.classList.add('selected-for-print');
+    } else {
+        card.classList.remove('selected-for-print');
+    }
+}
+
+function updateSelectionCount() {
+    const countElement = document.getElementById('selectionCount');
+    if (countElement) {
+        countElement.textContent = `${selectedForPrint.size}/${MAX_PRINT_SELECTION} selected`;
+    }
+}
+
+function clearPrintSelection() {
+    selectedForPrint.clear();
+    document.querySelectorAll('.selected-for-print').forEach(card => {
+        card.classList.remove('selected-for-print');
+        const checkbox = card.querySelector('.print-selection-checkbox input');
+        if (checkbox) checkbox.checked = false;
+    });
+    updateSelectionCount();
+}
+
+function removeAllPrintSelectionIndicators() {
+    document.querySelectorAll('.print-selection-checkbox').forEach(el => el.remove());
+    document.querySelectorAll('.selected-for-print').forEach(card => {
+        card.classList.remove('selected-for-print');
+    });
+}
+
+function showPrintPreview() {
+    if (selectedForPrint.size === 0) {
+        alert('Please select at least one monster to print');
+        return;
+    }
+    
+    const modal = document.getElementById('printPreviewModal');
+    const previewBody = document.getElementById('printPreviewBody');
+    
+    // Generate print preview content
+    let previewHtml = '<div class="print-preview-layout">';
+    
+    const selectedMonsters = Array.from(selectedForPrint);
+    
+    // Create two-column layout
+    if (selectedMonsters.length === 1) {
+        // Single monster - one column
+        const monsterId = selectedMonsters[0];
+        const monster = monsterData.monsters[monsterId];
+        previewHtml += '<div class="print-column print-column-single">';
+        previewHtml += renderMonsterForPrint(monsterId, monster);
+        previewHtml += '</div>';
+    } else {
+        // Two monsters - two columns
+        previewHtml += '<div class="print-column print-column-left">';
+        previewHtml += renderMonsterForPrint(selectedMonsters[0], monsterData.monsters[selectedMonsters[0]]);
+        previewHtml += '</div>';
+        
+        previewHtml += '<div class="print-column print-column-right">';
+        previewHtml += renderMonsterForPrint(selectedMonsters[1], monsterData.monsters[selectedMonsters[1]]);
+        previewHtml += '</div>';
+    }
+    
+    previewHtml += '</div>';
+    
+    previewBody.innerHTML = previewHtml;
+    modal.style.display = 'flex';
+}
+
+function closePrintPreview() {
+    document.getElementById('printPreviewModal').style.display = 'none';
+}
+
+function renderMonsterForPrint(monsterId, monsterData) {
+    if (!monsterData) return '<div class="print-monster">Monster not found</div>';
+    
+    let html = '<div class="print-monster">';
+    
+    // Monster name and basic info
+    if (monsterData.name) {
+        html += `<h2 class="print-monster-name">${monsterData.name}</h2>`;
+    }
+    
+    // Level, Role, Type, EV - only if they have values
+    let basicInfo = [];
+    if (monsterData.level && monsterData.level !== 1) basicInfo.push(`Level ${monsterData.level}`);
+    if (monsterData.role && monsterData.role !== 'Brute') basicInfo.push(monsterData.role);
+    if (monsterData.types) basicInfo.push(monsterData.types);
+    if (monsterData.ev && monsterData.ev !== 0) basicInfo.push(`EV ${monsterData.ev}`);
+    
+    if (basicInfo.length > 0) {
+        html += `<div class="print-basic-info">${basicInfo.join(' • ')}</div>`;
+    }
+    
+    // Combat stats - only show non-zero/non-default values
+    let combatStats = [];
+    if (monsterData.size && monsterData.size !== '1M') combatStats.push(`Size: ${monsterData.size}`);
+    if (monsterData.speed && monsterData.speed !== 0 && monsterData.speed !== 6) combatStats.push(`Speed: ${monsterData.speed}`);
+    if (monsterData.stamina && monsterData.stamina !== 0) combatStats.push(`Stamina: ${monsterData.stamina}`);
+    if (monsterData.stability && monsterData.stability !== 0) combatStats.push(`Stability: ${monsterData.stability}`);
+    if (monsterData.free_strike && monsterData.free_strike !== 0) combatStats.push(`Free Strike: ${monsterData.free_strike}`);
+    if (monsterData.movement) combatStats.push(`Movement: ${monsterData.movement}`);
+    
+    if (combatStats.length > 0) {
+        html += '<div class="print-combat-stats">';
+        html += combatStats.join(' • ');
+        html += '</div>';
+    }
+    
+    // Immunities and Weaknesses - only if present
+    let resistances = [];
+    if (monsterData.immunity_type && monsterData.immunity_value) {
+        resistances.push(`Immunity: ${monsterData.immunity_type} ${monsterData.immunity_value}`);
+    }
+    if (monsterData.weakness_type && monsterData.weakness_value) {
+        resistances.push(`Weakness: ${monsterData.weakness_type} ${monsterData.weakness_value}`);
+    }
+    
+    if (resistances.length > 0) {
+        html += `<div class="print-resistances">${resistances.join(' • ')}</div>`;
+    }
+    
+    // Attributes - only show non-zero values
+    let attributes = [];
+    if (monsterData.might && monsterData.might !== 0) attributes.push(`Might ${formatAttributeValue(monsterData.might)}`);
+    if (monsterData.agility && monsterData.agility !== 0) attributes.push(`Agility ${formatAttributeValue(monsterData.agility)}`);
+    if (monsterData.reason && monsterData.reason !== 0) attributes.push(`Reason ${formatAttributeValue(monsterData.reason)}`);
+    if (monsterData.intuition && monsterData.intuition !== 0) attributes.push(`Intuition ${formatAttributeValue(monsterData.intuition)}`);
+    if (monsterData.presence && monsterData.presence !== 0) attributes.push(`Presence ${formatAttributeValue(monsterData.presence)}`);
+    
+    if (attributes.length > 0) {
+        html += '<div class="print-attributes">';
+        html += '<strong>Attributes:</strong> ' + attributes.join(', ');
+        html += '</div>';
+    }
+    
+    // Abilities - only show categories with abilities
+    if (monsterData.abilities && typeof monsterData.abilities === 'object') {
+        const categories = [
+            { key: 'passive', name: 'Passive' },
+            { key: 'maneuver', name: 'Maneuver' },
+            { key: 'action', name: 'Action' },
+            { key: 'triggered_action', name: 'Triggered Action' },
+            { key: 'villain_action', name: 'Villain Action' },
+            { key: 'malice', name: 'Malice' }
+        ];
+        
+        let hasAnyAbilities = false;
+        
+        categories.forEach(category => {
+            const categoryAbilities = monsterData.abilities[category.key] || [];
+            if (categoryAbilities.length > 0) {
+                hasAnyAbilities = true;
+                html += `<div class="print-ability-category">`;
+                html += `<h3 class="print-category-name">${category.name}</h3>`;
+                
+                categoryAbilities.forEach(ability => {
+                    if (ability && ability.name) {
+                        html += renderAbilityForPrint(ability, category.key);
+                    }
+                });
+                
+                html += '</div>';
+            }
+        });
+    }
+    
+    html += '</div>';
+    return html;
+}
+
+function renderAbilityForPrint(ability, category) {
+    let html = '<div class="print-ability">';
+    
+    // Ability name
+    html += `<div class="print-ability-name"><strong>${ability.name}</strong></div>`;
+    
+    // Keywords, range, targets - only if present
+    let details = [];
+    if (ability.keywords) details.push(`Keywords: ${ability.keywords}`);
+    if (ability.range) details.push(`Range: ${ability.range}`);
+    if (ability.targets) details.push(`Targets: ${ability.targets}`);
+    if ((category === 'villain_action' || category === 'malice') && ability.resource_cost) {
+        details.push(`Cost: ${ability.resource_cost}`);
+    }
+    
+    if (details.length > 0) {
+        html += `<div class="print-ability-details">${details.join(' • ')}</div>`;
+    }
+    
+    // Trigger for triggered actions
+    if (category === 'triggered_action' && ability.trigger) {
+        html += `<div class="print-ability-trigger"><strong>Trigger:</strong> ${ability.trigger}</div>`;
+    }
+    
+    // Effect
+    if (ability.effect) {
+        html += `<div class="print-ability-effect">${ability.effect}</div>`;
+    }
+    
+    // Test results
+    if (ability.has_test && ability.test) {
+        html += renderTestForPrint(ability.test);
+    }
+    
+    // Additional effect
+    if (ability.additional_effect) {
+        html += `<div class="print-ability-additional"><em>${ability.additional_effect}</em></div>`;
+    }
+    
+    html += '</div>';
+    return html;
+}
+
+function renderTestForPrint(test) {
+    if (!test) return '';
+    
+    const tiers = [
+        { key: 'tier1', label: '≤11' },
+        { key: 'tier2', label: '12-16' },
+        { key: 'tier3', label: '17+' }
+    ];
+    
+    let hasAnyTest = false;
+    let testHtml = '<div class="print-test"><strong>Test:</strong><ul class="print-test-list">';
+    
+    tiers.forEach(tier => {
+        const tierData = test[tier.key];
+        if (tierData && (tierData.damage_amount || tierData.damage_type || tierData.has_attribute_check)) {
+            hasAnyTest = true;
+            let tierText = `<li>(${tier.label}): `;
+            
+            // Add damage info
+            if (tierData.damage_amount || tierData.damage_type) {
+                const damage = tierData.damage_amount || '';
+                const type = tierData.damage_type || '';
+                if (damage) {
+                    tierText += damage;
+                    if (type) {
+                        tierText += ` ${type} damage`;
+                    } else {
+                        tierText += ' damage';
+                    }
+                } else if (type) {
+                    tierText += type;
+                }
+            }
+            
+            // Add attribute check info
+            if (tierData.has_attribute_check && tierData.attribute && tierData.attribute_threshold) {
+                const attributeName = tierData.attribute.charAt(0).toUpperCase() + tierData.attribute.slice(1);
+                tierText += `; ${attributeName} ≤${tierData.attribute_threshold}`;
+                if (tierData.attribute_effect) {
+                    tierText += `: ${tierData.attribute_effect}`;
+                }
+            }
+            
+            tierText += '</li>';
+            testHtml += tierText;
+        }
+    });
+    
+    testHtml += '</ul></div>';
+    
+    return hasAnyTest ? testHtml : '';
+}
+
+function printMonsters() {
+    showPrintPreview();
+}
+
+function printFinal() {
+    // Hide modal UI elements for printing
+    const modal = document.getElementById('printPreviewModal');
+    const header = modal.querySelector('.print-preview-header');
+    const footer = modal.querySelector('.print-preview-footer');
+    
+    header.style.display = 'none';
+    footer.style.display = 'none';
+    modal.classList.add('printing');
+    
+    // Trigger browser print
+    window.print();
+    
+    // Restore UI after print
+    setTimeout(() => {
+        header.style.display = '';
+        footer.style.display = '';
+        modal.classList.remove('printing');
+    }, 100);
 }

@@ -54,6 +54,19 @@ require_once '../../version.php';
             <button class="recovery-toggle" onclick="window.location.href='monster-recovery.php'" title="View backups and recover lost data">
                 Data Recovery
             </button>
+            
+            <!-- Print Mode Toggle -->
+            <button class="print-mode-toggle" id="printModeToggle" onclick="togglePrintMode()" title="Select monsters for printing">
+                🖨️ Print Mode
+            </button>
+            
+            <!-- Print Controls (shown only in print mode) -->
+            <div class="print-controls" id="printControls" style="display: none;">
+                <span class="selection-count" id="selectionCount">0/2 selected</span>
+                <button class="btn-print-preview" onclick="showPrintPreview()">Preview</button>
+                <button class="btn-print" onclick="printMonsters()">Print</button>
+                <button class="btn-clear-selection" onclick="clearPrintSelection()">Clear</button>
+            </div>
         </div>
 
         <!-- Main Content Area -->
@@ -119,6 +132,23 @@ require_once '../../version.php';
     <div class="version-footer">
         <span class="version-info"><?php echo Version::displayVersion(); ?></span>
         <span class="version-updated">Updated: <?php echo Version::getLastUpdated(); ?></span>
+    </div>
+
+    <!-- Print Preview Modal -->
+    <div id="printPreviewModal" class="print-preview-modal" style="display: none;">
+        <div class="print-preview-content">
+            <div class="print-preview-header">
+                <h2>Print Preview</h2>
+                <button class="close-preview" onclick="closePrintPreview()">×</button>
+            </div>
+            <div class="print-preview-body" id="printPreviewBody">
+                <!-- Print preview content will be generated here -->
+            </div>
+            <div class="print-preview-footer">
+                <button class="btn-print-final" onclick="printFinal()">🖨️ Print</button>
+                <button class="btn-close-preview" onclick="closePrintPreview()">Close</button>
+            </div>
+        </div>
     </div>
 
     <!-- JavaScript -->
