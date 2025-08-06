@@ -3492,28 +3492,39 @@ function updateMonsterCardsForPrintMode() {
         const monsterId = card.getAttribute('data-monster-id');
         
         if (isPrintMode) {
-            // Add print mode click handler
+            // Just update visual cursor style
             card.style.cursor = 'pointer';
-            card.onclick = (e) => {
-                if (e.target.closest('.edit-monster-btn')) return;
-                toggleMonsterPrintSelection(monsterId);
-            };
             
-            // Add selection checkbox
+            // Add selection checkbox if not present
             if (!card.querySelector('.print-selection-checkbox')) {
                 const checkbox = document.createElement('div');
                 checkbox.className = 'print-selection-checkbox';
-                checkbox.innerHTML = '<input type="checkbox">';
+                checkbox.innerHTML = '<input type="checkbox" onclick="event.stopPropagation()" disabled>';
                 card.appendChild(checkbox);
             }
+            
+            // Update checkbox state if monster is selected
+            const checkbox = card.querySelector('.print-selection-checkbox input');
+            if (checkbox) {
+                checkbox.checked = selectedForPrint.has(monsterId);
+            }
+            
+            // Update selection visual
+            if (selectedForPrint.has(monsterId)) {
+                card.classList.add('selected-for-print');
+            } else {
+                card.classList.remove('selected-for-print');
+            }
         } else {
-            // Restore normal click behavior
+            // Restore normal cursor
             card.style.cursor = '';
-            card.onclick = null;
             
             // Remove checkbox
             const checkbox = card.querySelector('.print-selection-checkbox');
             if (checkbox) checkbox.remove();
+            
+            // Remove selection class
+            card.classList.remove('selected-for-print');
         }
     });
 }

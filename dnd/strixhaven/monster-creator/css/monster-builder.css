@@ -2157,12 +2157,14 @@ body.delete-mode-active .sub-tab:hover {
     top: 10px;
     right: 10px;
     z-index: 10;
+    pointer-events: none; /* Don't block clicks on the card */
 }
 
 .print-selection-checkbox input {
     width: 20px;
     height: 20px;
-    cursor: pointer;
+    cursor: default;
+    pointer-events: none; /* Checkbox is just visual indicator */
 }
 
 .monster-card.selected-for-print {
