@@ -2399,14 +2399,33 @@ body.delete-mode-active .sub-tab:hover {
     body {
         margin: 0;
         padding: 0;
+        background: white !important;
     }
     
+    /* Hide the GM Monster Creator header */
+    body::before {
+        display: none !important;
+        content: none !important;
+    }
+    
+    /* Remove container padding */
+    .monster-builder-container {
+        padding-top: 0 !important;
+        background: white !important;
+    }
+    
+    /* Hide all UI elements and non-print content */
     .top-tabs-container,
     .browser-sidebar,
     .save-status,
     .version-footer,
     .print-preview-header,
-    .print-preview-footer {
+    .print-preview-footer,
+    .content-area,
+    .workspace,
+    .monster-card,
+    .action-buttons-group,
+    .print-controls {
         display: none !important;
     }
     
