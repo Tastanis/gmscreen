@@ -393,7 +393,13 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['action'])) {
          $_POST['action'] === 'inventory_save' || 
          $_POST['action'] === 'inventory_update' || 
          $_POST['action'] === 'inventory_delete' || 
-         $_POST['action'] === 'inventory_add')) {
+         $_POST['action'] === 'inventory_add' ||
+         $_POST['action'] === 'inventory_save_item' ||
+         $_POST['action'] === 'inventory_delete_item' ||
+         $_POST['action'] === 'inventory_share_item' ||
+         $_POST['action'] === 'inventory_take_item' ||
+         $_POST['action'] === 'inventory_update_item_field' ||
+         $_POST['action'] === 'inventory_upload_image')) {
         error_log("DEBUG: Routing to inventory handler for action: " . $_POST['action']);
         include_once 'inventory_handler.php';
         exit;
