@@ -294,10 +294,17 @@ try {
                         <div id="create-session-form" style="display: none; margin-top: 20px; padding: 20px; background: rgba(247, 250, 252, 0.8); border-radius: 12px;">
                             <h3>Start New Game Session</h3>
                             <form id="new-session-form">
-                                <input type="hidden" name="wordlist_id" id="session-wordlist-id">
                                 <div class="form-group">
-                                    <label>Selected Word List</label>
-                                    <input type="text" id="session-wordlist-name" class="form-input" readonly style="background: #f7f7f7;">
+                                    <label>Select Word Lists</label>
+                                    <div id="session-wordlists" style="display: flex; flex-direction: column; gap: 4px;"></div>
+                                </div>
+                                <div class="form-group">
+                                    <label>Override Speed (0.5 - 2.0)</label>
+                                    <input type="number" name="speed" class="form-input" min="0.5" max="2.0" step="0.1" placeholder="Default">
+                                </div>
+                                <div class="form-group">
+                                    <label>Override Word Count (5 - 50)</label>
+                                    <input type="number" name="word_count" class="form-input" min="5" max="50" placeholder="Default">
                                 </div>
                                 <div class="form-group">
                                     <label>Custom Seed (Optional - leave empty for random)</label>
@@ -504,7 +511,84 @@ try {
                 submitButton.textContent = 'Add Skill';
             });
         }
-        
+
+        function loadWordlists() {
+            fetch('get_wordlists.php')
+                .then(response => response.json())
+                .then(data => {
+                    const listContainer = document.getElementById('wordlists-list');
+                    const sessionContainer = document.getElementById('session-wordlists');
+                    if (!listContainer || !sessionContainer) return;
+                    listContainer.innerHTML = '';
+                    sessionContainer.innerHTML = '';
+                    data.wordlists.forEach(list => {
+                        const listDiv = document.createElement('div');
+                        listDiv.textContent = list.wordlist_name;
+                        listContainer.appendChild(listDiv);
+
+                        const label = document.createElement('label');
+                        label.style.marginBottom = '4px';
+                        const checkbox = document.createElement('input');
+                        checkbox.type = 'checkbox';
+                        checkbox.name = 'wordlist_ids[]';
+                        checkbox.value = list.id;
+                        checkbox.dataset.name = list.wordlist_name;
+                        label.appendChild(checkbox);
+                        label.append(' ' + list.wordlist_name);
+                        sessionContainer.appendChild(label);
+                    });
+                })
+                .catch(error => {
+                    console.error('Error loading word lists:', error);
+                });
+        }
+
+        function showCreateSessionForm() {
+            document.getElementById('create-session-form').style.display = 'block';
+        }
+
+        function hideCreateSessionForm() {
+            document.getElementById('create-session-form').style.display = 'none';
+            document.getElementById('new-session-form').reset();
+        }
+
+        function submitNewSession() {
+            const form = document.getElementById('new-session-form');
+            const selected = Array.from(form.querySelectorAll('input[name="wordlist_ids[]"]:checked'));
+            if (selected.length === 0) {
+                showMessage('Please select at least one word list', 'error');
+                return;
+            }
+
+            const formData = new FormData();
+            selected.forEach(cb => formData.append('wordlist_ids[]', cb.value));
+            if (form.speed.value) formData.append('speed', form.speed.value);
+            if (form.word_count.value) formData.append('word_count', form.word_count.value);
+            if (form.custom_seed.value) formData.append('custom_seed', form.custom_seed.value);
+
+            fetch('create_session.php', { method: 'POST', body: formData })
+                .then(response => response.json())
+                .then(data => {
+                    if (data.success) {
+                        const info = document.getElementById('session-info-content');
+                        const names = selected.map(cb => cb.dataset.name).join(', ');
+                        info.innerHTML = `<p><strong>Word Lists:</strong> ${names}</p>` +
+                                         `<p><strong>Speed:</strong> ${data.speed ?? 'Default'}</p>` +
+                                         `<p><strong>Word Count:</strong> ${data.word_count ?? 'Default'}</p>` +
+                                         `<p><strong>Session Code:</strong> ${data.session_code}</p>`;
+                        document.getElementById('active-session-display').style.display = 'block';
+                        hideCreateSessionForm();
+                        showMessage('Session created successfully!', 'success');
+                    } else {
+                        showMessage(data.message || 'Error creating session', 'error');
+                    }
+                })
+                .catch(error => {
+                    console.error('Error creating session:', error);
+                    showMessage('Error creating session. Please try again.', 'error');
+                });
+        }
+
         function showMessage(message, type) {
             // Create and show a temporary message
             const messageDiv = document.createElement('div');
