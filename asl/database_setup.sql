@@ -68,3 +68,22 @@ INSERT INTO resources (skill_id, resource_name, resource_url, order_index) VALUE
 (2, 'Resource 1 for Skill Test 2', '#', 1),
 (2, 'Resource 2 for Skill Test 2', '#', 2);
 
+-- Create wordlists table
+CREATE TABLE IF NOT EXISTS wordlists (
+    id INT AUTO_INCREMENT PRIMARY KEY,
+    wordlist_name VARCHAR(255) NOT NULL,
+    default_speed FLOAT DEFAULT 1.0,
+    default_word_count INT DEFAULT 24,
+    is_active BOOLEAN DEFAULT FALSE,
+    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+);
+
+-- Create wordlist_words table
+CREATE TABLE IF NOT EXISTS wordlist_words (
+    id INT AUTO_INCREMENT PRIMARY KEY,
+    wordlist_id INT NOT NULL,
+    word VARCHAR(255) NOT NULL,
+    order_index INT DEFAULT 0,
+    FOREIGN KEY (wordlist_id) REFERENCES wordlists(id) ON DELETE CASCADE
+);
+
