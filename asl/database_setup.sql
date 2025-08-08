@@ -68,3 +68,27 @@ INSERT INTO resources (skill_id, resource_name, resource_url, order_index) VALUE
 (2, 'Resource 1 for Skill Test 2', '#', 1),
 (2, 'Resource 2 for Skill Test 2', '#', 2);
 
+-- Word lists for scroller game
+CREATE TABLE IF NOT EXISTS wordlists (
+    id INT AUTO_INCREMENT PRIMARY KEY,
+    teacher_id INT NOT NULL,
+    wordlist_name VARCHAR(255) NOT NULL,
+    words TEXT NOT NULL,
+    speed FLOAT DEFAULT 1.0,
+    word_count INT DEFAULT 24,
+    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+    FOREIGN KEY (teacher_id) REFERENCES users(id) ON DELETE CASCADE
+);
+
+-- Active scroller sessions
+CREATE TABLE IF NOT EXISTS scroller_sessions (
+    id INT AUTO_INCREMENT PRIMARY KEY,
+    teacher_id INT NOT NULL,
+    wordlist_ids TEXT NOT NULL,
+    speed_override FLOAT NULL,
+    word_count_override INT NULL,
+    seed INT NULL,
+    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+    FOREIGN KEY (teacher_id) REFERENCES users(id) ON DELETE CASCADE
+);
+
