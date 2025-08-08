@@ -1,10 +1,31 @@
-const WORDS = [
-  'apple','banana','cherry','dragon','eagle','forest','garden','harbor','island','jungle',
-  'kitten','lemon','mountain','nebula','ocean','puzzle','quantum','rocket','sunrise','turtle',
-  'unicorn','voyage','whisper','xylophone','yonder','zephyr','amber','breeze','crystal','dawn',
-  'ember','flame','goblin','horizon','illusion','jewel','kingdom','legend','meteor','nectar',
-  'oracle','phoenix','quiver','raven','saber','thunder','utopia','victory','wizard','yolk'
-];
+// Mulberry32 PRNG for deterministic shuffling
+function mulberry32(a) {
+  return function() {
+    let t = a += 0x6D2B79F5;
+    t = Math.imul(t ^ t >>> 15, t | 1);
+    t ^= t + Math.imul(t ^ t >>> 7, t | 61);
+    return ((t ^ t >>> 14) >>> 0) / 4294967296;
+  };
+}
+
+function shuffleWords(array, seed) {
+  const rand = mulberry32(seed);
+  for (let i = array.length - 1; i > 0; i--) {
+    const j = Math.floor(rand() * (i + 1));
+    [array[i], array[j]] = [array[j], array[i]];
+  }
+  return array;
+}
+
+function getQueryParam(name) {
+  const params = new URLSearchParams(window.location.search);
+  return params.get(name);
+}
+
+const FALLBACK_WORDS = ['alpha', 'beta', 'gamma', 'delta', 'epsilon'];
+let sessionCode = getQueryParam('session') || getQueryParam('session_code');
+let sessionWords = [];
+let sessionSeed = null;
 
 let currentWords = [];
 let lastWordElement = null;
@@ -13,13 +34,23 @@ function updateDisplay(id, value) {
   document.getElementById(id).textContent = value;
 }
 
-function getRandomWords(count) {
-  const shuffled = [...WORDS].sort(() => Math.random() - 0.5);
-  return shuffled.slice(0, count);
+async function fetchSessionWords() {
+  if (!sessionCode) return;
+  try {
+    const res = await fetch(`get_session_words.php?session_code=${sessionCode}`);
+    const data = await res.json();
+    sessionWords = Array.isArray(data.words) ? data.words : [];
+    sessionSeed = data.seed || null;
+  } catch (e) {
+    console.error('Error loading session words:', e);
+  }
 }
 
 function startGame(speed, count) {
-  currentWords = getRandomWords(count);
+  let words = sessionWords.length ? [...sessionWords] : [...FALLBACK_WORDS];
+  const seed = sessionSeed || Date.now();
+  words = shuffleWords(words, seed).slice(0, count);
+  currentWords = words;
   const scroller = document.getElementById('scroller');
   scroller.innerHTML = '';
 
@@ -76,11 +107,13 @@ function showSummary() {
   document.getElementById('summary').classList.remove('hidden');
 }
 
-function init() {
+async function init() {
   const speedInput = document.getElementById('speed');
   const countInput = document.getElementById('count');
   const speedInput2 = document.getElementById('speed2');
   const countInput2 = document.getElementById('count2');
+
+  await fetchSessionWords();
 
   speedInput.addEventListener('input', () => updateDisplay('speedVal', speedInput.value));
   countInput.addEventListener('input', () => updateDisplay('countVal', countInput.value));

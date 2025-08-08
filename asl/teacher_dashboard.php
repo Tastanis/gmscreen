@@ -523,7 +523,23 @@ try {
                     sessionContainer.innerHTML = '';
                     data.wordlists.forEach(list => {
                         const listDiv = document.createElement('div');
-                        listDiv.textContent = list.wordlist_name;
+                        listDiv.className = 'wordlist-item';
+                        const nameSpan = document.createElement('span');
+                        nameSpan.textContent = list.wordlist_name;
+                        listDiv.appendChild(nameSpan);
+
+                        const editBtn = document.createElement('button');
+                        editBtn.className = 'action-btn edit-btn';
+                        editBtn.textContent = 'Edit';
+                        editBtn.addEventListener('click', () => showEditWordlistModal(list));
+                        listDiv.appendChild(editBtn);
+
+                        const deleteBtn = document.createElement('button');
+                        deleteBtn.className = 'action-btn delete-btn';
+                        deleteBtn.textContent = 'Delete';
+                        deleteBtn.addEventListener('click', () => deleteWordlist(list.id));
+                        listDiv.appendChild(deleteBtn);
+
                         listContainer.appendChild(listDiv);
 
                         const label = document.createElement('label');
@@ -540,6 +556,92 @@ try {
                 })
                 .catch(error => {
                     console.error('Error loading word lists:', error);
+                });
+        }
+
+        function showAddWordlistForm() {
+            document.getElementById('add-wordlist-form').style.display = 'block';
+        }
+
+        function hideAddWordlistForm() {
+            document.getElementById('add-wordlist-form').style.display = 'none';
+            document.getElementById('new-wordlist-form').reset();
+        }
+
+        function refreshWordlists() {
+            loadWordlists();
+        }
+
+        function submitNewWordlist() {
+            const form = document.getElementById('new-wordlist-form');
+            const formData = new FormData(form);
+            fetch('add_wordlist.php', { method: 'POST', body: formData })
+                .then(response => response.json())
+                .then(data => {
+                    if (data.success) {
+                        showMessage('Word list created!', 'success');
+                        hideAddWordlistForm();
+                        loadWordlists();
+                    } else {
+                        showMessage(data.message || 'Error creating word list', 'error');
+                    }
+                })
+                .catch(error => {
+                    console.error('Error creating word list:', error);
+                    showMessage('Error creating word list. Please try again.', 'error');
+                });
+        }
+
+        function showEditWordlistModal(list) {
+            document.getElementById('edit-wordlist-id').value = list.id;
+            document.getElementById('edit-wordlist-name').value = list.wordlist_name;
+            document.getElementById('edit-words').value = (list.words || []).join('\n');
+            document.getElementById('edit-speed').value = list.speed;
+            document.getElementById('edit-word-count').value = list.word_count;
+            document.getElementById('edit-wordlist-modal').style.display = 'block';
+        }
+
+        function closeEditWordlistModal() {
+            document.getElementById('edit-wordlist-modal').style.display = 'none';
+        }
+
+        function submitEditWordlist() {
+            const form = document.getElementById('edit-wordlist-form');
+            const formData = new FormData(form);
+            fetch('edit_wordlist.php', { method: 'POST', body: formData })
+                .then(response => response.json())
+                .then(data => {
+                    if (data.success) {
+                        showMessage('Word list updated!', 'success');
+                        closeEditWordlistModal();
+                        loadWordlists();
+                    } else {
+                        showMessage(data.message || 'Error updating word list', 'error');
+                    }
+                })
+                .catch(error => {
+                    console.error('Error updating word list:', error);
+                    showMessage('Error updating word list. Please try again.', 'error');
+                });
+        }
+
+        function deleteWordlist(id) {
+            if (!confirm('Delete this word list?')) return;
+            const formData = new FormData();
+            formData.append('wordlist_id', id);
+            fetch('delete_wordlist.php', { method: 'POST', body: formData })
+                .then(response => response.json())
+                .then(data => {
+                    if (data.success) {
+                        showMessage('Word list deleted', 'success');
+                        loadWordlists();
+                    } else {
+                        showMessage(data.message || 'Error deleting word list', 'error');
+                    }
+                })
+                .catch(error => {
+                    console.error('Error deleting word list:', error);
+                    showMessage('Error deleting word list. Please try again.', 'error');
                 });
         }
 
