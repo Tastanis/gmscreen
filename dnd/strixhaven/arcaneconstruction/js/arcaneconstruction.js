@@ -1,26 +1,56 @@
 /**
  * Arcane Construction Grid System
- * Manages a 12x19 interactive grid for construction planning
+ * Full-screen zoomable 12x19 grid with role-based interactions
  */
 
-// Grid configuration
+// Configuration
 const GRID_CONFIG = {
     columns: 12,
     rows: 19,
-    totalTiles: 12 * 19
+    cellSize: 60, // Base cell size in pixels
+    minZoom: 0.3,
+    maxZoom: 3.0,
+    zoomStep: 0.1
 };
 
-// Grid state management
+// Global state
 let gridState = {
-    tiles: new Map(),
-    selectedTiles: new Set(),
-    activeTile: null
+    zoom: 1.0,
+    panX: 0,
+    panY: 0,
+    isDragging: false,
+    lastMouseX: 0,
+    lastMouseY: 0,
+    selectedCells: new Set(),
+    editableCells: new Map(), // Store GM-editable cell content
+    isGM: false, // Will be set from PHP
+    currentUser: '' // Will be set from PHP
 };
 
 /**
- * Initialize the construction grid
+ * Initialize the grid system
  */
 function initializeGrid() {
+    console.log('Initializing Arcane Construction Grid...');
+    
+    // Get user info from global scope (set by PHP)
+    if (typeof window.userRole !== 'undefined') {
+        gridState.isGM = window.userRole === 'GM';
+        gridState.currentUser = window.userName || '';
+    }
+    
+    createGridStructure();
+    setupZoomControls();
+    setupEventListeners();
+    loadGridData();
+    
+    console.log(`Grid initialized for user: ${gridState.currentUser} (GM: ${gridState.isGM})`);
+}
+
+/**
+ * Create the complete grid structure with all zones
+ */
+function createGridStructure() {
     const gridContainer = document.getElementById('construction-grid');
     if (!gridContainer) {
         console.error('Grid container not found');
@@ -30,288 +60,445 @@ function initializeGrid() {
     // Clear existing content
     gridContainer.innerHTML = '';
 
-    // Generate grid tiles
-    for (let row = 0; row < GRID_CONFIG.rows; row++) {
-        for (let col = 0; col < GRID_CONFIG.columns; col++) {
-            const tile = createGridTile(row, col);
-            gridContainer.appendChild(tile);
+    // Create all 228 cells (12x19)
+    for (let row = 1; row <= GRID_CONFIG.rows; row++) {
+        for (let col = 1; col <= GRID_CONFIG.columns; col++) {
+            const cell = createGridCell(row, col);
+            gridContainer.appendChild(cell);
         }
     }
 
-    console.log(`Initialized ${GRID_CONFIG.totalTiles} grid tiles (${GRID_CONFIG.columns}x${GRID_CONFIG.rows})`);
+    // Setup special zones
+    setupSpecialZones();
+    
+    console.log('Grid structure created with all zones');
 }
 
 /**
- * Create a single grid tile
- * @param {number} row - Row index (0-18)
- * @param {number} col - Column index (0-11)
- * @returns {HTMLElement} - The created tile element
+ * Create individual grid cell
  */
-function createGridTile(row, col) {
-    const tile = document.createElement('div');
-    const tileId = `tile-${row}-${col}`;
+function createGridCell(row, col) {
+    const cell = document.createElement('div');
+    const cellId = `cell-${row}-${col}`;
     
-    tile.className = 'grid-tile';
-    tile.id = tileId;
-    tile.dataset.row = row;
-    tile.dataset.col = col;
-    tile.dataset.coord = `${col + 1},${row + 1}`;
+    cell.className = 'grid-cell empty';
+    cell.id = cellId;
+    cell.dataset.row = row;
+    cell.dataset.col = col;
+    cell.style.gridColumn = col;
+    cell.style.gridRow = row;
     
-    // Add coordinate display for easier reference
-    tile.textContent = `${col + 1},${row + 1}`;
-    
-    // Add click event listener
-    tile.addEventListener('click', handleTileClick);
-    
-    // Add hover effects for better UX
-    tile.addEventListener('mouseenter', handleTileHover);
-    tile.addEventListener('mouseleave', handleTileLeave);
-    
-    // Initialize tile state
-    gridState.tiles.set(tileId, {
-        id: tileId,
-        row: row,
-        col: col,
-        state: 'empty',
-        data: {}
-    });
-    
-    return tile;
+    return cell;
 }
 
 /**
- * Handle tile click events
- * @param {Event} event - Click event
+ * Setup special zones according to specifications
  */
-function handleTileClick(event) {
-    const tile = event.currentTarget;
-    const tileId = tile.id;
-    const tileData = gridState.tiles.get(tileId);
-    
-    if (!tileData) return;
+function setupSpecialZones() {
+    // Enchanting zone (2-2 to 5-2)
+    const enchantingCell = document.getElementById('cell-2-2');
+    if (enchantingCell) {
+        enchantingCell.className = 'grid-cell label merged enchanting-zone';
+        enchantingCell.textContent = 'Enchanting';
+        // Hide overlapped cells
+        for (let col = 3; col <= 5; col++) {
+            const cell = document.getElementById(`cell-2-${col}`);
+            if (cell) cell.style.display = 'none';
+        }
+    }
 
-    // Toggle tile selection
-    if (gridState.selectedTiles.has(tileId)) {
-        // Deselect tile
-        gridState.selectedTiles.delete(tileId);
-        tile.classList.remove('selected');
-        tileData.state = 'empty';
+    // Constructs zone (8-2 to 11-2)
+    const constructsCell = document.getElementById('cell-2-8');
+    if (constructsCell) {
+        constructsCell.className = 'grid-cell label merged constructs-zone';
+        constructsCell.textContent = 'Constructs';
+        // Hide overlapped cells
+        for (let col = 9; col <= 11; col++) {
+            const cell = document.getElementById(`cell-2-${col}`);
+            if (cell) cell.style.display = 'none';
+        }
+    }
+
+    // Tier header and labels (2-3 to 2-9)
+    const tierHeader = document.getElementById('cell-3-2');
+    if (tierHeader) {
+        tierHeader.className = 'grid-cell label tier-header';
+        tierHeader.textContent = 'Tier';
+    }
+
+    // Tier 1-6 labels
+    for (let i = 1; i <= 6; i++) {
+        const tierCell = document.getElementById(`cell-${3 + i}-2`);
+        if (tierCell) {
+            tierCell.className = 'grid-cell label';
+            tierCell.textContent = `Tier ${i}`;
+        }
+    }
+
+    // Special labels
+    const runeCarving = document.getElementById('cell-3-3');
+    if (runeCarving) {
+        runeCarving.className = 'grid-cell label rune-carving';
+        runeCarving.textContent = 'Rune Carving';
+    }
+
+    const inlayLabel = document.getElementById('cell-4-3');
+    if (inlayLabel) {
+        inlayLabel.className = 'grid-cell label inlay-label';
+        inlayLabel.textContent = 'Inlay';
+    }
+
+    const focusedArcanum = document.getElementById('cell-5-3');
+    if (focusedArcanum) {
+        focusedArcanum.className = 'grid-cell label focused-arcanum';
+        focusedArcanum.textContent = 'Focused Arcanum';
+    }
+
+    // Interactive button grid (3-4 to 5-9, columns 4-9)
+    setupInteractiveGrid();
+}
+
+/**
+ * Setup the interactive button grid (3-4 to 5-9)
+ */
+function setupInteractiveGrid() {
+    for (let row = 4; row <= 9; row++) {
+        for (let col = 3; col <= 5; col++) {
+            const cell = document.getElementById(`cell-${row}-${col}`);
+            if (cell) {
+                if (gridState.isGM) {
+                    // GM can edit these cells
+                    cell.className = 'grid-cell editable';
+                    cell.addEventListener('click', handleGMEdit);
+                } else {
+                    // Zepha can click/highlight these cells
+                    cell.className = 'grid-cell clickable';
+                    cell.addEventListener('click', handleZephaClick);
+                }
+                
+                // Load saved content
+                const cellKey = `${row}-${col}`;
+                const savedContent = gridState.editableCells.get(cellKey);
+                if (savedContent) {
+                    cell.textContent = savedContent;
+                }
+            }
+        }
+    }
+}
+
+/**
+ * Handle GM editing functionality
+ */
+function handleGMEdit(event) {
+    const cell = event.currentTarget;
+    const row = cell.dataset.row;
+    const col = cell.dataset.col;
+    const currentText = cell.textContent;
+    
+    showEditModal(row, col, currentText);
+}
+
+/**
+ * Handle Zepha clicking functionality
+ */
+function handleZephaClick(event) {
+    const cell = event.currentTarget;
+    const cellId = cell.id;
+    
+    // Toggle selection
+    if (gridState.selectedCells.has(cellId)) {
+        gridState.selectedCells.delete(cellId);
+        cell.classList.remove('selected');
     } else {
-        // Select tile
-        gridState.selectedTiles.add(tileId);
-        tile.classList.add('selected');
-        tileData.state = 'selected';
+        gridState.selectedCells.add(cellId);
+        cell.classList.add('selected');
     }
-
-    // Update active tile
-    gridState.activeTile = tileId;
     
-    // Remove active class from all tiles
-    document.querySelectorAll('.grid-tile.active').forEach(t => {
-        t.classList.remove('active');
-    });
-    
-    // Add active class to clicked tile
-    tile.classList.add('active');
-    
-    // Log tile interaction for debugging
-    console.log(`Tile clicked: ${tileData.col + 1},${tileData.row + 1} (${tileId})`);
-    console.log(`Selected tiles: ${gridState.selectedTiles.size}`);
-    
-    // Update grid info display
-    updateGridInfo();
+    console.log(`Cell ${cell.dataset.row}-${cell.dataset.col} selected by Zepha`);
 }
 
 /**
- * Handle tile hover events
- * @param {Event} event - Mouseenter event
+ * Show edit modal for GM
  */
-function handleTileHover(event) {
-    const tile = event.currentTarget;
-    
-    // Add visual feedback on hover
-    if (!tile.classList.contains('selected')) {
-        tile.style.transform = 'scale(1.02)';
+function showEditModal(row, col, currentText) {
+    // Create modal if it doesn't exist
+    let modal = document.getElementById('edit-modal');
+    if (!modal) {
+        modal = createEditModal();
+        document.body.appendChild(modal);
     }
+    
+    const input = modal.querySelector('#edit-input');
+    const title = modal.querySelector('#edit-title');
+    
+    title.textContent = `Edit Cell ${row}-${col}`;
+    input.value = currentText;
+    modal.classList.add('show');
+    input.focus();
+    input.select();
+    
+    // Store current cell being edited
+    modal.dataset.row = row;
+    modal.dataset.col = col;
 }
 
 /**
- * Handle tile leave events
- * @param {Event} event - Mouseleave event
+ * Create edit modal
  */
-function handleTileLeave(event) {
-    const tile = event.currentTarget;
+function createEditModal() {
+    const modal = document.createElement('div');
+    modal.id = 'edit-modal';
+    modal.className = 'edit-modal';
     
-    // Reset transform if not selected
-    if (!tile.classList.contains('selected')) {
-        tile.style.transform = '';
-    }
-}
-
-/**
- * Update grid information display
- */
-function updateGridInfo() {
-    const gridInfo = document.querySelector('.grid-info');
-    if (!gridInfo) return;
-
-    const selectedCount = gridState.selectedTiles.size;
-    const activeTileData = gridState.activeTile ? gridState.tiles.get(gridState.activeTile) : null;
-    
-    // Update the info text
-    const infoHtml = `
-        <p>12 x 19 Construction Grid</p>
-        <p>Selected tiles: ${selectedCount}</p>
-        ${activeTileData ? `<p>Active tile: ${activeTileData.col + 1},${activeTileData.row + 1}</p>` : '<p>Click on tiles to interact</p>'}
+    modal.innerHTML = `
+        <div class="edit-modal-content">
+            <h3 id="edit-title">Edit Cell</h3>
+            <input type="text" id="edit-input" placeholder="Enter text...">
+            <div class="edit-modal-buttons">
+                <button class="save-btn" onclick="saveEdit()">Save</button>
+                <button class="cancel-btn" onclick="cancelEdit()">Cancel</button>
+            </div>
+        </div>
     `;
     
-    gridInfo.innerHTML = infoHtml;
+    return modal;
 }
 
 /**
- * Clear all selections
+ * Save GM edit
+ */
+function saveEdit() {
+    const modal = document.getElementById('edit-modal');
+    const input = document.getElementById('edit-input');
+    const row = modal.dataset.row;
+    const col = modal.dataset.col;
+    const newText = input.value.trim();
+    
+    const cell = document.getElementById(`cell-${row}-${col}`);
+    if (cell) {
+        cell.textContent = newText;
+        
+        // Save to state
+        const cellKey = `${row}-${col}`;
+        gridState.editableCells.set(cellKey, newText);
+        
+        // Save to server
+        saveGridData();
+    }
+    
+    modal.classList.remove('show');
+}
+
+/**
+ * Cancel GM edit
+ */
+function cancelEdit() {
+    const modal = document.getElementById('edit-modal');
+    modal.classList.remove('show');
+}
+
+/**
+ * Setup zoom and pan controls
+ */
+function setupZoomControls() {
+    const viewport = document.querySelector('.grid-viewport');
+    const container = document.querySelector('.grid-container');
+    
+    if (!viewport || !container) return;
+    
+    // Mouse wheel zoom
+    viewport.addEventListener('wheel', (e) => {
+        e.preventDefault();
+        
+        const delta = e.deltaY > 0 ? -GRID_CONFIG.zoomStep : GRID_CONFIG.zoomStep;
+        const newZoom = Math.max(GRID_CONFIG.minZoom, Math.min(GRID_CONFIG.maxZoom, gridState.zoom + delta));
+        
+        if (newZoom !== gridState.zoom) {
+            gridState.zoom = newZoom;
+            updateGridTransform();
+            updateZoomIndicator();
+        }
+    });
+    
+    // Mouse drag for panning
+    viewport.addEventListener('mousedown', (e) => {
+        gridState.isDragging = true;
+        gridState.lastMouseX = e.clientX;
+        gridState.lastMouseY = e.clientY;
+        viewport.style.cursor = 'grabbing';
+    });
+    
+    viewport.addEventListener('mousemove', (e) => {
+        if (!gridState.isDragging) return;
+        
+        const deltaX = e.clientX - gridState.lastMouseX;
+        const deltaY = e.clientY - gridState.lastMouseY;
+        
+        gridState.panX += deltaX;
+        gridState.panY += deltaY;
+        gridState.lastMouseX = e.clientX;
+        gridState.lastMouseY = e.clientY;
+        
+        updateGridTransform();
+    });
+    
+    viewport.addEventListener('mouseup', () => {
+        gridState.isDragging = false;
+        viewport.style.cursor = 'grab';
+    });
+    
+    viewport.addEventListener('mouseleave', () => {
+        gridState.isDragging = false;
+        viewport.style.cursor = 'grab';
+    });
+}
+
+/**
+ * Update grid transform for zoom and pan
+ */
+function updateGridTransform() {
+    const container = document.querySelector('.grid-container');
+    if (!container) return;
+    
+    container.style.transform = `translate(calc(-50% + ${gridState.panX}px), calc(-50% + ${gridState.panY}px)) scale(${gridState.zoom})`;
+}
+
+/**
+ * Update zoom indicator
+ */
+function updateZoomIndicator() {
+    let indicator = document.querySelector('.zoom-indicator');
+    if (!indicator) {
+        indicator = document.createElement('div');
+        indicator.className = 'zoom-indicator';
+        document.querySelector('.arcane-main').appendChild(indicator);
+    }
+    
+    indicator.textContent = `Zoom: ${Math.round(gridState.zoom * 100)}%`;
+}
+
+/**
+ * Setup event listeners
+ */
+function setupEventListeners() {
+    // Escape key to clear selections (Zepha only)
+    document.addEventListener('keydown', (e) => {
+        if (e.key === 'Escape' && !gridState.isGM) {
+            clearSelections();
+        }
+    });
+    
+    // Add instructions
+    addInstructions();
+}
+
+/**
+ * Add instructions overlay
+ */
+function addInstructions() {
+    const instructions = document.createElement('div');
+    instructions.className = 'grid-instructions';
+    
+    if (gridState.isGM) {
+        instructions.innerHTML = `
+            <strong>GM Controls:</strong><br>
+            • Mouse wheel: Zoom in/out<br>
+            • Click & drag: Pan view<br>
+            • Click blue cells: Edit text
+        `;
+    } else {
+        instructions.innerHTML = `
+            <strong>Controls:</strong><br>
+            • Mouse wheel: Zoom in/out<br>
+            • Click & drag: Pan view<br>
+            • Click purple cells: Select/deselect<br>
+            • ESC: Clear selections
+        `;
+    }
+    
+    document.querySelector('.arcane-main').appendChild(instructions);
+}
+
+/**
+ * Clear all selections (Zepha only)
  */
 function clearSelections() {
-    // Remove selected class from all tiles
-    document.querySelectorAll('.grid-tile.selected').forEach(tile => {
-        tile.classList.remove('selected');
-    });
-    
-    // Remove active class from all tiles
-    document.querySelectorAll('.grid-tile.active').forEach(tile => {
-        tile.classList.remove('active');
-    });
-    
-    // Clear state
-    gridState.selectedTiles.clear();
-    gridState.activeTile = null;
-    
-    // Reset all tile states
-    gridState.tiles.forEach(tileData => {
-        tileData.state = 'empty';
-    });
-    
-    // Update display
-    updateGridInfo();
-    
-    console.log('All selections cleared');
-}
-
-/**
- * Get selected tiles data
- * @returns {Array} Array of selected tile data
- */
-function getSelectedTiles() {
-    const selected = [];
-    gridState.selectedTiles.forEach(tileId => {
-        const tileData = gridState.tiles.get(tileId);
-        if (tileData) {
-            selected.push({
-                id: tileId,
-                row: tileData.row + 1, // 1-based indexing for display
-                col: tileData.col + 1, // 1-based indexing for display
-                coord: `${tileData.col + 1},${tileData.row + 1}`
-            });
+    gridState.selectedCells.forEach(cellId => {
+        const cell = document.getElementById(cellId);
+        if (cell) {
+            cell.classList.remove('selected');
         }
     });
-    return selected;
+    gridState.selectedCells.clear();
 }
 
 /**
- * Select tiles by coordinates
- * @param {Array} coordinates - Array of {row, col} objects (1-based)
+ * Save grid data to server
  */
-function selectTilesByCoordinates(coordinates) {
-    clearSelections();
-    
-    coordinates.forEach(coord => {
-        const row = coord.row - 1; // Convert to 0-based
-        const col = coord.col - 1; // Convert to 0-based
-        const tileId = `tile-${row}-${col}`;
-        const tile = document.getElementById(tileId);
-        const tileData = gridState.tiles.get(tileId);
-        
-        if (tile && tileData && row >= 0 && row < GRID_CONFIG.rows && col >= 0 && col < GRID_CONFIG.columns) {
-            gridState.selectedTiles.add(tileId);
-            tile.classList.add('selected');
-            tileData.state = 'selected';
-        }
-    });
-    
-    updateGridInfo();
-}
-
-/**
- * Export grid state as JSON
- * @returns {Object} Grid state object
- */
-function exportGridState() {
-    const selectedTiles = getSelectedTiles();
-    return {
-        gridConfig: GRID_CONFIG,
-        selectedTiles: selectedTiles,
-        activeTile: gridState.activeTile,
-        timestamp: new Date().toISOString(),
-        totalSelected: selectedTiles.length
+async function saveGridData() {
+    const data = {
+        editableCells: Object.fromEntries(gridState.editableCells),
+        timestamp: new Date().toISOString()
     };
-}
-
-/**
- * Import grid state from JSON
- * @param {Object} stateData - Grid state object
- */
-function importGridState(stateData) {
-    if (!stateData || !stateData.selectedTiles) {
-        console.error('Invalid grid state data');
-        return;
-    }
     
-    // Convert coordinates back to the expected format
-    const coordinates = stateData.selectedTiles.map(tile => ({
-        row: tile.row,
-        col: tile.col
-    }));
-    
-    selectTilesByCoordinates(coordinates);
-    
-    console.log(`Imported grid state with ${coordinates.length} selected tiles`);
-}
-
-// Utility functions for external access
-window.arcaneGrid = {
-    clearSelections,
-    getSelectedTiles,
-    selectTilesByCoordinates,
-    exportGridState,
-    importGridState,
-    
-    // Keyboard shortcuts
-    setupKeyboardShortcuts() {
-        document.addEventListener('keydown', (event) => {
-            // Escape key to clear selections
-            if (event.key === 'Escape') {
-                clearSelections();
-            }
-            
-            // Ctrl+A to select all (prevent default browser behavior)
-            if (event.ctrlKey && event.key === 'a') {
-                event.preventDefault();
-                // Select all tiles
-                const allCoords = [];
-                for (let row = 1; row <= GRID_CONFIG.rows; row++) {
-                    for (let col = 1; col <= GRID_CONFIG.columns; col++) {
-                        allCoords.push({row, col});
-                    }
-                }
-                selectTilesByCoordinates(allCoords);
-            }
+    try {
+        const response = await fetch('save_grid_data.php', {
+            method: 'POST',
+            headers: {
+                'Content-Type': 'application/json',
+            },
+            body: JSON.stringify(data)
         });
         
-        console.log('Keyboard shortcuts enabled: ESC (clear), Ctrl+A (select all)');
+        if (response.ok) {
+            console.log('Grid data saved successfully');
+        } else {
+            console.error('Failed to save grid data');
+        }
+    } catch (error) {
+        console.error('Error saving grid data:', error);
+        // Fallback to localStorage
+        localStorage.setItem('arcaneGridData', JSON.stringify(data));
     }
-};
+}
 
-// Initialize keyboard shortcuts when the script loads
+/**
+ * Load grid data from server
+ */
+async function loadGridData() {
+    try {
+        const response = await fetch('load_grid_data.php');
+        
+        if (response.ok) {
+            const data = await response.json();
+            if (data.editableCells) {
+                gridState.editableCells = new Map(Object.entries(data.editableCells));
+                console.log('Grid data loaded from server');
+                return;
+            }
+        }
+    } catch (error) {
+        console.error('Error loading grid data:', error);
+    }
+    
+    // Fallback to localStorage
+    const savedData = localStorage.getItem('arcaneGridData');
+    if (savedData) {
+        const data = JSON.parse(savedData);
+        if (data.editableCells) {
+            gridState.editableCells = new Map(Object.entries(data.editableCells));
+            console.log('Grid data loaded from localStorage');
+        }
+    }
+}
+
+// Global functions for modal
+window.saveEdit = saveEdit;
+window.cancelEdit = cancelEdit;
+
+// Initialize when DOM is ready
 document.addEventListener('DOMContentLoaded', () => {
-    window.arcaneGrid.setupKeyboardShortcuts();
+    // Add zoom indicator on load
+    updateZoomIndicator();
 });
