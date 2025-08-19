@@ -95,11 +95,13 @@ function createGridCell(row, col) {
  * Setup special zones according to specifications
  */
 function setupSpecialZones() {
-    // Enchanting zone (2-2 to 5-2)
+    // Enchanting zone (2-2 to 5-2) - merged across 4 cells
     const enchantingCell = document.getElementById('cell-2-2');
     if (enchantingCell) {
         enchantingCell.className = 'grid-cell label merged enchanting-zone';
         enchantingCell.textContent = 'Enchanting';
+        enchantingCell.style.gridColumn = '2 / 6'; // Span columns 2-5
+        enchantingCell.style.gridRow = '2 / 3';
         // Hide overlapped cells
         for (let col = 3; col <= 5; col++) {
             const cell = document.getElementById(`cell-2-${col}`);
@@ -107,11 +109,13 @@ function setupSpecialZones() {
         }
     }
 
-    // Constructs zone (8-2 to 11-2)
+    // Constructs zone (8-2 to 11-2) - merged across 4 cells
     const constructsCell = document.getElementById('cell-2-8');
     if (constructsCell) {
         constructsCell.className = 'grid-cell label merged constructs-zone';
         constructsCell.textContent = 'Constructs';
+        constructsCell.style.gridColumn = '8 / 12'; // Span columns 8-11
+        constructsCell.style.gridRow = '2 / 3';
         // Hide overlapped cells
         for (let col = 9; col <= 11; col++) {
             const cell = document.getElementById(`cell-2-${col}`);
@@ -119,14 +123,34 @@ function setupSpecialZones() {
         }
     }
 
-    // Tier header and labels (2-3 to 2-9)
-    const tierHeader = document.getElementById('cell-3-2');
-    if (tierHeader) {
-        tierHeader.className = 'grid-cell label tier-header';
-        tierHeader.textContent = 'Tier';
+    // ENCHANTING SECTION
+    // Enchanting tier header (2-3)
+    const enchantingTierHeader = document.getElementById('cell-3-2');
+    if (enchantingTierHeader) {
+        enchantingTierHeader.className = 'grid-cell label tier-header';
+        enchantingTierHeader.textContent = 'Tier';
     }
 
-    // Tier 1-6 labels
+    // Enchanting headers (row 3, horizontal)
+    const runeCarving = document.getElementById('cell-3-3');
+    if (runeCarving) {
+        runeCarving.className = 'grid-cell label rune-carving';
+        runeCarving.textContent = 'Rune Carving';
+    }
+
+    const inlayLabel = document.getElementById('cell-3-4');
+    if (inlayLabel) {
+        inlayLabel.className = 'grid-cell label inlay-label';
+        inlayLabel.textContent = 'Inlay';
+    }
+
+    const focusedArcanum = document.getElementById('cell-3-5');
+    if (focusedArcanum) {
+        focusedArcanum.className = 'grid-cell label focused-arcanum';
+        focusedArcanum.textContent = 'Focused Arcanum';
+    }
+
+    // Enchanting tier labels (2-4 to 2-9)
     for (let i = 1; i <= 6; i++) {
         const tierCell = document.getElementById(`cell-${3 + i}-2`);
         if (tierCell) {
@@ -135,55 +159,90 @@ function setupSpecialZones() {
         }
     }
 
-    // Special labels
-    const runeCarving = document.getElementById('cell-3-3');
-    if (runeCarving) {
-        runeCarving.className = 'grid-cell label rune-carving';
-        runeCarving.textContent = 'Rune Carving';
+    // CONSTRUCTS SECTION
+    // Constructs tier header (8-3)
+    const constructsTierHeader = document.getElementById('cell-3-8');
+    if (constructsTierHeader) {
+        constructsTierHeader.className = 'grid-cell label tier-header';
+        constructsTierHeader.textContent = 'Tier';
     }
 
-    const inlayLabel = document.getElementById('cell-4-3');
-    if (inlayLabel) {
-        inlayLabel.className = 'grid-cell label inlay-label';
-        inlayLabel.textContent = 'Inlay';
+    // Constructs headers (row 3, horizontal)
+    const animationLabel = document.getElementById('cell-3-9');
+    if (animationLabel) {
+        animationLabel.className = 'grid-cell label animation-label';
+        animationLabel.textContent = 'Animation';
     }
 
-    const focusedArcanum = document.getElementById('cell-5-3');
-    if (focusedArcanum) {
-        focusedArcanum.className = 'grid-cell label focused-arcanum';
-        focusedArcanum.textContent = 'Focused Arcanum';
+    const formLabel = document.getElementById('cell-3-10');
+    if (formLabel) {
+        formLabel.className = 'grid-cell label form-label';
+        formLabel.textContent = 'Form';
     }
 
-    // Interactive button grid (3-4 to 5-9, columns 4-9)
+    const sentienceLabel = document.getElementById('cell-3-11');
+    if (sentienceLabel) {
+        sentienceLabel.className = 'grid-cell label sentience-label';
+        sentienceLabel.textContent = 'Sentience';
+    }
+
+    // Constructs tier labels (8-4 to 8-9)
+    for (let i = 1; i <= 6; i++) {
+        const tierCell = document.getElementById(`cell-${3 + i}-8`);
+        if (tierCell) {
+            tierCell.className = 'grid-cell label';
+            tierCell.textContent = `Tier ${i}`;
+        }
+    }
+
+    // Setup interactive grids
     setupInteractiveGrid();
 }
 
 /**
- * Setup the interactive button grid (3-4 to 5-9)
+ * Setup the interactive button grids (Enchanting: 3-4 to 5-9, Constructs: 9-4 to 11-9)
  */
 function setupInteractiveGrid() {
+    // Enchanting section interactive grid (columns 3-5, rows 4-9)
     for (let row = 4; row <= 9; row++) {
         for (let col = 3; col <= 5; col++) {
             const cell = document.getElementById(`cell-${row}-${col}`);
             if (cell) {
-                if (gridState.isGM) {
-                    // GM can edit these cells
-                    cell.className = 'grid-cell editable';
-                    cell.addEventListener('click', handleGMEdit);
-                } else {
-                    // Zepha can click/highlight these cells
-                    cell.className = 'grid-cell clickable';
-                    cell.addEventListener('click', handleZephaClick);
-                }
-                
-                // Load saved content
-                const cellKey = `${row}-${col}`;
-                const savedContent = gridState.editableCells.get(cellKey);
-                if (savedContent) {
-                    cell.textContent = savedContent;
-                }
+                setupInteractiveCell(cell, row, col);
             }
         }
+    }
+    
+    // Constructs section interactive grid (columns 9-11, rows 4-9)
+    for (let row = 4; row <= 9; row++) {
+        for (let col = 9; col <= 11; col++) {
+            const cell = document.getElementById(`cell-${row}-${col}`);
+            if (cell) {
+                setupInteractiveCell(cell, row, col);
+            }
+        }
+    }
+}
+
+/**
+ * Setup individual interactive cell
+ */
+function setupInteractiveCell(cell, row, col) {
+    if (gridState.isGM) {
+        // GM can edit these cells
+        cell.className = 'grid-cell editable';
+        cell.addEventListener('click', handleGMEdit);
+    } else {
+        // Zepha can click/highlight these cells
+        cell.className = 'grid-cell clickable';
+        cell.addEventListener('click', handleZephaClick);
+    }
+    
+    // Load saved content
+    const cellKey = `${row}-${col}`;
+    const savedContent = gridState.editableCells.get(cellKey);
+    if (savedContent) {
+        cell.textContent = savedContent;
     }
 }
 
