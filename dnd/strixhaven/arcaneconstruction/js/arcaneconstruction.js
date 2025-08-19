@@ -6,8 +6,8 @@
 // Configuration
 const GRID_CONFIG = {
     columns: 12,
-    rows: 24, // Extended from 19 to 24 for new sections
-    cellSize: 60, // Base cell size in pixels
+    rows: 20, // Reduced from 24 to 20 rows
+    cellSize: 80, // Increased base cell size for better visibility
     minZoom: 0.3,
     maxZoom: 3.0,
     zoomStep: 0.1
@@ -60,7 +60,7 @@ function createGridStructure() {
     // Clear existing content
     gridContainer.innerHTML = '';
 
-    // Create all 288 cells (12x24)
+    // Create all 240 cells (12x20)
     for (let row = 1; row <= GRID_CONFIG.rows; row++) {
         for (let col = 1; col <= GRID_CONFIG.columns; col++) {
             const cell = createGridCell(row, col);
@@ -154,7 +154,7 @@ function setupSpecialZones() {
     for (let i = 1; i <= 6; i++) {
         const tierCell = document.getElementById(`cell-${3 + i}-2`);
         if (tierCell) {
-            tierCell.className = 'grid-cell label';
+            tierCell.className = 'grid-cell label tier-label';
             tierCell.textContent = `Tier ${i}`;
         }
     }
@@ -190,7 +190,7 @@ function setupSpecialZones() {
     for (let i = 1; i <= 6; i++) {
         const tierCell = document.getElementById(`cell-${3 + i}-8`);
         if (tierCell) {
-            tierCell.className = 'grid-cell label';
+            tierCell.className = 'grid-cell label tier-label';
             tierCell.textContent = `Tier ${i}`;
         }
     }
@@ -240,7 +240,7 @@ function setupSpecialZones() {
     for (let i = 1; i <= 6; i++) {
         const tierCell = document.getElementById(`cell-${13 + i}-2`);
         if (tierCell) {
-            tierCell.className = 'grid-cell label';
+            tierCell.className = 'grid-cell label tier-label';
             tierCell.textContent = `Tier ${i}`;
         }
     }
@@ -290,7 +290,7 @@ function setupSpecialZones() {
     for (let i = 1; i <= 6; i++) {
         const tierCell = document.getElementById(`cell-${13 + i}-8`);
         if (tierCell) {
-            tierCell.className = 'grid-cell label';
+            tierCell.className = 'grid-cell label tier-label';
             tierCell.textContent = `Tier ${i}`;
         }
     }

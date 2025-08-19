@@ -100,8 +100,8 @@ body {
 /* Main Construction Grid */
 .construction-grid {
     display: grid;
-    grid-template-columns: repeat(12, 60px);
-    grid-template-rows: repeat(24, 60px); /* Extended from 19 to 24 rows */
+    grid-template-columns: repeat(12, 80px); /* Wider cells: 80px */
+    grid-template-rows: repeat(20, 70px); /* Taller cells: 70px, reduced to 20 rows */
     gap: 0;
     border: 1px solid #4a5568;
     background: #1a1a2e;
@@ -190,96 +190,119 @@ body {
     font-weight: bold;
 }
 
-/* Enchanting section labels */
+/* UNIFIED TIER STYLING (ALL SECTIONS) - Dark Grey */
+.tier-header {
+    background: #374151 !important;
+    border: 2px solid #4b5563 !important;
+    color: #f9fafb !important;
+    font-weight: bold;
+}
+
+/* All tier labels (Tier 1-6) across all sections */
+.tier-label {
+    background: #374151 !important;
+    border: 1px solid #4b5563 !important;
+    color: #f9fafb !important;
+}
+
+/* ENCHANTING SECTION - Purple Theme */
 .enchanting-zone {
-    background: rgba(56, 178, 172, 0.2);
-    border: 2px solid #38b2ac;
+    background: rgba(139, 92, 246, 0.3);
+    border: 2px solid #8b5cf6;
+    color: #f3f4f6;
 }
 
 .rune-carving {
-    background: rgba(104, 211, 145, 0.2);
-    border: 1px solid #68d391;
+    background: rgba(167, 139, 250, 0.3);
+    border: 1px solid #a78bfa;
+    color: #f3f4f6;
 }
 
 .inlay-label {
-    background: rgba(104, 211, 145, 0.2);
-    border: 1px solid #68d391;
+    background: rgba(167, 139, 250, 0.3);
+    border: 1px solid #a78bfa;
+    color: #f3f4f6;
 }
 
 .focused-arcanum {
-    background: rgba(104, 211, 145, 0.2);
-    border: 1px solid #68d391;
+    background: rgba(167, 139, 250, 0.3);
+    border: 1px solid #a78bfa;
+    color: #f3f4f6;
 }
 
-/* Constructs section labels */
+/* CONSTRUCTS SECTION - Light Brown/Golem Theme */
 .constructs-zone {
-    background: rgba(56, 178, 172, 0.2);
-    border: 2px solid #38b2ac;
+    background: rgba(161, 98, 7, 0.3);
+    border: 2px solid #a16207;
+    color: #f3f4f6;
 }
 
 .animation-label {
-    background: rgba(147, 197, 253, 0.2);
-    border: 1px solid #93c5fd;
+    background: rgba(251, 191, 36, 0.3);
+    border: 1px solid #fbbf24;
+    color: #92400e;
 }
 
 .form-label {
-    background: rgba(147, 197, 253, 0.2);
-    border: 1px solid #93c5fd;
+    background: rgba(251, 191, 36, 0.3);
+    border: 1px solid #fbbf24;
+    color: #92400e;
 }
 
 .sentience-label {
-    background: rgba(147, 197, 253, 0.2);
-    border: 1px solid #93c5fd;
+    background: rgba(251, 191, 36, 0.3);
+    border: 1px solid #fbbf24;
+    color: #92400e;
 }
 
-/* Tier header styling */
-.tier-header {
-    background: rgba(74, 85, 104, 0.4);
-    border: 1px solid #4a5568;
-    font-weight: bold;
-    color: #f7fafc;
-}
-
-/* Colossal Construction section labels - Purple/Magenta theme */
+/* COLOSSAL CONSTRUCTION SECTION - Light Grey Theme */
 .colossal-zone {
-    background: rgba(139, 92, 246, 0.2);
-    border: 2px solid #8b5cf6;
+    background: rgba(107, 114, 128, 0.3);
+    border: 2px solid #6b7280;
+    color: #f3f4f6;
 }
 
 .planning-label {
-    background: rgba(196, 181, 253, 0.2);
-    border: 1px solid #c4b5fd;
+    background: rgba(209, 213, 219, 0.4);
+    border: 1px solid #d1d5db;
+    color: #374151;
 }
 
 .size-label {
-    background: rgba(196, 181, 253, 0.2);
-    border: 1px solid #c4b5fd;
+    background: rgba(209, 213, 219, 0.4);
+    border: 1px solid #d1d5db;
+    color: #374151;
 }
 
 .efficiency-label {
-    background: rgba(196, 181, 253, 0.2);
-    border: 1px solid #c4b5fd;
+    background: rgba(209, 213, 219, 0.4);
+    border: 1px solid #d1d5db;
+    color: #374151;
 }
 
-/* Arcane Mastery section labels - Orange/Amber theme */
+/* ARCANE MASTERY SECTION - Pink Theme */
 .arcane-zone {
-    background: rgba(245, 158, 11, 0.2);
-    border: 2px solid #f59e0b;
+    background: rgba(236, 72, 153, 0.3);
+    border: 2px solid #ec4899;
+    color: #f3f4f6;
 }
 
 .spells-label {
-    background: rgba(251, 191, 36, 0.2);
-    border: 1px solid #fbbf24;
+    background: rgba(249, 168, 212, 0.4);
+    border: 1px solid #f9a8d4;
+    color: #831843;
 }
 
 .elemental-label {
-    background: rgba(251, 191, 36, 0.2);
-    border: 1px solid #fbbf24;
+    background: rgba(249, 168, 212, 0.4);
+    border: 1px solid #f9a8d4;
+    color: #831843;
 }
 
 .raw-arcane-label {
-    background: rgba(251, 191, 36, 0.2);
-    border: 1px solid #fbbf24;
+    background: rgba(249, 168, 212, 0.4);
+    border: 1px solid #f9a8d4;
+    color: #831843;
 }
 
 /* Edit Modal */
@@ -395,8 +418,8 @@ body {
 /* Responsive adjustments */
 @media (max-width: 1200px) {
     .construction-grid {
-        grid-template-columns: repeat(12, 50px);
-        grid-template-rows: repeat(24, 50px);
+        grid-template-columns: repeat(12, 70px); /* Maintain wider than tall ratio */
+        grid-template-rows: repeat(20, 60px);
     }
     
     .grid-cell {
@@ -406,8 +429,8 @@ body {
 
 @media (max-width: 800px) {
     .construction-grid {
-        grid-template-columns: repeat(12, 40px);
-        grid-template-rows: repeat(24, 40px);
+        grid-template-columns: repeat(12, 60px); /* Maintain wider than tall ratio */
+        grid-template-rows: repeat(20, 50px);
     }
     
     .grid-cell {
