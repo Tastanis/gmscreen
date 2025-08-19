@@ -101,7 +101,7 @@ body {
 .construction-grid {
     display: grid;
     grid-template-columns: repeat(12, 60px);
-    grid-template-rows: repeat(19, 60px);
+    grid-template-rows: repeat(24, 60px); /* Extended from 19 to 24 rows */
     gap: 0;
     border: 1px solid #4a5568;
     background: #1a1a2e;
@@ -240,6 +240,48 @@ body {
     color: #f7fafc;
 }
 
+/* Colossal Construction section labels - Purple/Magenta theme */
+.colossal-zone {
+    background: rgba(139, 92, 246, 0.2);
+    border: 2px solid #8b5cf6;
+}
+
+.planning-label {
+    background: rgba(196, 181, 253, 0.2);
+    border: 1px solid #c4b5fd;
+}
+
+.size-label {
+    background: rgba(196, 181, 253, 0.2);
+    border: 1px solid #c4b5fd;
+}
+
+.efficiency-label {
+    background: rgba(196, 181, 253, 0.2);
+    border: 1px solid #c4b5fd;
+}
+
+/* Arcane Mastery section labels - Orange/Amber theme */
+.arcane-zone {
+    background: rgba(245, 158, 11, 0.2);
+    border: 2px solid #f59e0b;
+}
+
+.spells-label {
+    background: rgba(251, 191, 36, 0.2);
+    border: 1px solid #fbbf24;
+}
+
+.elemental-label {
+    background: rgba(251, 191, 36, 0.2);
+    border: 1px solid #fbbf24;
+}
+
+.raw-arcane-label {
+    background: rgba(251, 191, 36, 0.2);
+    border: 1px solid #fbbf24;
+}
+
 /* Edit Modal */
 .edit-modal {
     position: fixed;
@@ -354,7 +396,7 @@ body {
 @media (max-width: 1200px) {
     .construction-grid {
         grid-template-columns: repeat(12, 50px);
-        grid-template-rows: repeat(19, 50px);
+        grid-template-rows: repeat(24, 50px);
     }
     
     .grid-cell {
@@ -365,7 +407,7 @@ body {
 @media (max-width: 800px) {
     .construction-grid {
         grid-template-columns: repeat(12, 40px);
-        grid-template-rows: repeat(19, 40px);
+        grid-template-rows: repeat(24, 40px);
     }
     
     .grid-cell {

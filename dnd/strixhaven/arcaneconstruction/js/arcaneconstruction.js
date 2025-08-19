@@ -6,7 +6,7 @@
 // Configuration
 const GRID_CONFIG = {
     columns: 12,
-    rows: 19,
+    rows: 24, // Extended from 19 to 24 for new sections
     cellSize: 60, // Base cell size in pixels
     minZoom: 0.3,
     maxZoom: 3.0,
@@ -60,7 +60,7 @@ function createGridStructure() {
     // Clear existing content
     gridContainer.innerHTML = '';
 
-    // Create all 228 cells (12x19)
+    // Create all 288 cells (12x24)
     for (let row = 1; row <= GRID_CONFIG.rows; row++) {
         for (let col = 1; col <= GRID_CONFIG.columns; col++) {
             const cell = createGridCell(row, col);
@@ -195,12 +195,112 @@ function setupSpecialZones() {
         }
     }
 
+    // COLOSSAL CONSTRUCTION SECTION (rows 12-19)
+    // Colossal Construction zone (2-12 to 5-12) - merged across 4 cells
+    const colossalCell = document.getElementById('cell-12-2');
+    if (colossalCell) {
+        colossalCell.className = 'grid-cell label merged colossal-zone';
+        colossalCell.textContent = 'Colossal Construction';
+        colossalCell.style.gridColumn = '2 / 6'; // Span columns 2-5
+        colossalCell.style.gridRow = '12 / 13';
+        // Hide overlapped cells
+        for (let col = 3; col <= 5; col++) {
+            const cell = document.getElementById(`cell-12-${col}`);
+            if (cell) cell.style.display = 'none';
+        }
+    }
+
+    // Colossal Construction tier header (2-13)
+    const colossalTierHeader = document.getElementById('cell-13-2');
+    if (colossalTierHeader) {
+        colossalTierHeader.className = 'grid-cell label tier-header';
+        colossalTierHeader.textContent = 'Tier';
+    }
+
+    // Colossal Construction headers (row 13, horizontal)
+    const planningLabel = document.getElementById('cell-13-3');
+    if (planningLabel) {
+        planningLabel.className = 'grid-cell label planning-label';
+        planningLabel.textContent = 'Planning';
+    }
+
+    const sizeLabel = document.getElementById('cell-13-4');
+    if (sizeLabel) {
+        sizeLabel.className = 'grid-cell label size-label';
+        sizeLabel.textContent = 'Size';
+    }
+
+    const efficiencyLabel = document.getElementById('cell-13-5');
+    if (efficiencyLabel) {
+        efficiencyLabel.className = 'grid-cell label efficiency-label';
+        efficiencyLabel.textContent = 'Efficiency';
+    }
+
+    // Colossal Construction tier labels (2-14 to 2-19)
+    for (let i = 1; i <= 6; i++) {
+        const tierCell = document.getElementById(`cell-${13 + i}-2`);
+        if (tierCell) {
+            tierCell.className = 'grid-cell label';
+            tierCell.textContent = `Tier ${i}`;
+        }
+    }
+
+    // ARCANE MASTERY SECTION (rows 12-19)
+    // Arcane Mastery zone (8-12 to 11-12) - merged across 4 cells
+    const arcaneCell = document.getElementById('cell-12-8');
+    if (arcaneCell) {
+        arcaneCell.className = 'grid-cell label merged arcane-zone';
+        arcaneCell.textContent = 'Arcane Mastery';
+        arcaneCell.style.gridColumn = '8 / 12'; // Span columns 8-11
+        arcaneCell.style.gridRow = '12 / 13';
+        // Hide overlapped cells
+        for (let col = 9; col <= 11; col++) {
+            const cell = document.getElementById(`cell-12-${col}`);
+            if (cell) cell.style.display = 'none';
+        }
+    }
+
+    // Arcane Mastery tier header (8-13)
+    const arcaneTierHeader = document.getElementById('cell-13-8');
+    if (arcaneTierHeader) {
+        arcaneTierHeader.className = 'grid-cell label tier-header';
+        arcaneTierHeader.textContent = 'Tier';
+    }
+
+    // Arcane Mastery headers (row 13, horizontal)
+    const spellsLabel = document.getElementById('cell-13-9');
+    if (spellsLabel) {
+        spellsLabel.className = 'grid-cell label spells-label';
+        spellsLabel.textContent = 'Spells';
+    }
+
+    const elementalLabel = document.getElementById('cell-13-10');
+    if (elementalLabel) {
+        elementalLabel.className = 'grid-cell label elemental-label';
+        elementalLabel.textContent = 'Elemental Sculpting';
+    }
+
+    const rawArcaneLabel = document.getElementById('cell-13-11');
+    if (rawArcaneLabel) {
+        rawArcaneLabel.className = 'grid-cell label raw-arcane-label';
+        rawArcaneLabel.textContent = 'Raw Arcane';
+    }
+
+    // Arcane Mastery tier labels (8-14 to 8-19)
+    for (let i = 1; i <= 6; i++) {
+        const tierCell = document.getElementById(`cell-${13 + i}-8`);
+        if (tierCell) {
+            tierCell.className = 'grid-cell label';
+            tierCell.textContent = `Tier ${i}`;
+        }
+    }
+
     // Setup interactive grids
     setupInteractiveGrid();
 }
 
 /**
- * Setup the interactive button grids (Enchanting: 3-4 to 5-9, Constructs: 9-4 to 11-9)
+ * Setup the interactive button grids for all four sections
  */
 function setupInteractiveGrid() {
     // Enchanting section interactive grid (columns 3-5, rows 4-9)
@@ -215,6 +315,26 @@ function setupInteractiveGrid() {
     
     // Constructs section interactive grid (columns 9-11, rows 4-9)
     for (let row = 4; row <= 9; row++) {
+        for (let col = 9; col <= 11; col++) {
+            const cell = document.getElementById(`cell-${row}-${col}`);
+            if (cell) {
+                setupInteractiveCell(cell, row, col);
+            }
+        }
+    }
+    
+    // Colossal Construction section interactive grid (columns 3-5, rows 14-19)
+    for (let row = 14; row <= 19; row++) {
+        for (let col = 3; col <= 5; col++) {
+            const cell = document.getElementById(`cell-${row}-${col}`);
+            if (cell) {
+                setupInteractiveCell(cell, row, col);
+            }
+        }
+    }
+    
+    // Arcane Mastery section interactive grid (columns 9-11, rows 14-19)
+    for (let row = 14; row <= 19; row++) {
         for (let col = 9; col <= 11; col++) {
             const cell = document.getElementById(`cell-${row}-${col}`);
             if (cell) {
