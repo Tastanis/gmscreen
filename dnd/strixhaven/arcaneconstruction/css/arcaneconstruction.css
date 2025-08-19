@@ -1,0 +1,240 @@
+/* Arcane Construction Styles */
+body {
+    margin: 0;
+    padding: 0;
+    font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+    background: linear-gradient(135deg, #1a1a2e, #16213e, #0f3460);
+    color: #ffffff;
+    overflow: hidden;
+}
+
+.arcane-container {
+    height: 100vh;
+    display: flex;
+    flex-direction: column;
+}
+
+/* Header Styles */
+.arcane-header {
+    background: rgba(0, 0, 0, 0.3);
+    padding: 15px 25px;
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    border-bottom: 2px solid #4a5568;
+    backdrop-filter: blur(10px);
+}
+
+.arcane-header h1 {
+    margin: 0;
+    font-size: 24px;
+    font-weight: 600;
+    color: #90cdf4;
+    text-shadow: 0 0 10px rgba(144, 205, 244, 0.5);
+}
+
+.header-controls {
+    display: flex;
+    align-items: center;
+    gap: 20px;
+}
+
+.user-info {
+    font-size: 14px;
+    color: #a0aec0;
+}
+
+.close-btn {
+    background: #e53e3e;
+    color: white;
+    border: none;
+    padding: 8px 16px;
+    border-radius: 5px;
+    cursor: pointer;
+    font-size: 14px;
+    transition: background-color 0.2s;
+}
+
+.close-btn:hover {
+    background: #c53030;
+}
+
+/* Main Content */
+.arcane-main {
+    flex: 1;
+    display: flex;
+    flex-direction: column;
+    padding: 20px;
+    overflow: hidden;
+}
+
+.grid-container {
+    flex: 1;
+    display: flex;
+    justify-content: center;
+    align-items: center;
+    padding: 20px;
+    background: rgba(0, 0, 0, 0.2);
+    border-radius: 10px;
+    margin-bottom: 20px;
+    backdrop-filter: blur(5px);
+}
+
+/* Construction Grid */
+.construction-grid {
+    display: grid;
+    grid-template-columns: repeat(12, 1fr);
+    grid-template-rows: repeat(19, 1fr);
+    gap: 2px;
+    max-width: 80vw;
+    max-height: 70vh;
+    aspect-ratio: 12/19;
+    background: rgba(0, 0, 0, 0.3);
+    padding: 10px;
+    border-radius: 8px;
+    border: 2px solid #4a5568;
+}
+
+/* Grid Tiles */
+.grid-tile {
+    background: linear-gradient(135deg, #2d3748, #4a5568);
+    border: 1px solid #718096;
+    border-radius: 4px;
+    cursor: pointer;
+    transition: all 0.2s ease;
+    position: relative;
+    min-height: 25px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    font-size: 10px;
+    color: #a0aec0;
+}
+
+.grid-tile:hover {
+    background: linear-gradient(135deg, #4a5568, #68d391);
+    border-color: #90cdf4;
+    transform: scale(1.05);
+    box-shadow: 0 0 15px rgba(144, 205, 244, 0.3);
+}
+
+.grid-tile.active {
+    background: linear-gradient(135deg, #3182ce, #90cdf4);
+    border-color: #63b3ed;
+    color: #1a202c;
+    font-weight: bold;
+}
+
+.grid-tile.selected {
+    background: linear-gradient(135deg, #d69e2e, #f6e05e);
+    border-color: #ecc94b;
+    color: #1a202c;
+    font-weight: bold;
+    box-shadow: 0 0 20px rgba(246, 224, 94, 0.4);
+}
+
+/* Grid Info */
+.grid-info {
+    text-align: center;
+    background: rgba(0, 0, 0, 0.2);
+    padding: 15px;
+    border-radius: 8px;
+    backdrop-filter: blur(5px);
+}
+
+.grid-info p {
+    margin: 5px 0;
+    color: #a0aec0;
+    font-size: 14px;
+}
+
+.grid-info p:first-child {
+    font-weight: 600;
+    color: #90cdf4;
+    font-size: 16px;
+}
+
+/* Version Footer */
+.version-footer {
+    position: fixed;
+    bottom: 10px;
+    right: 10px;
+    font-size: 12px;
+    color: #718096;
+    background: rgba(0, 0, 0, 0.3);
+    padding: 5px 10px;
+    border-radius: 5px;
+    backdrop-filter: blur(5px);
+}
+
+.version-info {
+    margin-right: 10px;
+}
+
+/* Responsive Design */
+@media (max-width: 1200px) {
+    .construction-grid {
+        max-width: 90vw;
+        max-height: 60vh;
+    }
+    
+    .grid-tile {
+        min-height: 20px;
+        font-size: 8px;
+    }
+}
+
+@media (max-width: 800px) {
+    .arcane-header {
+        padding: 10px 15px;
+    }
+    
+    .arcane-header h1 {
+        font-size: 20px;
+    }
+    
+    .construction-grid {
+        max-width: 95vw;
+        max-height: 55vh;
+        gap: 1px;
+        padding: 5px;
+    }
+    
+    .grid-tile {
+        min-height: 15px;
+        font-size: 7px;
+    }
+    
+    .header-controls {
+        gap: 10px;
+    }
+    
+    .user-info {
+        font-size: 12px;
+    }
+}
+
+/* Animation for grid loading */
+.grid-tile {
+    animation: fadeIn 0.3s ease-in-out;
+}
+
+@keyframes fadeIn {
+    from {
+        opacity: 0;
+        transform: scale(0.8);
+    }
+    to {
+        opacity: 1;
+        transform: scale(1);
+    }
+}
+
+/* Stagger animation for tiles */
+.grid-tile:nth-child(odd) {
+    animation-delay: 0.05s;
+}
+
+.grid-tile:nth-child(even) {
+    animation-delay: 0.1s;
+}

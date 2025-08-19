@@ -1982,6 +1982,12 @@ function openStrixhavenSection(section) {
         return false;
     }
     
+    // Check if Arcane Construction section and user is not zepha or GM
+    if (section === 'arcaneconstruction' && currentUser !== 'zepha' && !isGM) {
+        alert('Access Restricted: Arcane Construction is only available to Zepha and the GM.');
+        return false;
+    }
+    
     const url = `strixhaven/${section}/index.php`;
     window.open(url, '_blank');
 }
