@@ -348,6 +348,18 @@ function setupInteractiveGrid() {
  * Setup individual interactive cell
  */
 function setupInteractiveCell(cell, row, col) {
+    // Determine which section this cell belongs to
+    let section = '';
+    if (row >= 4 && row <= 9 && col >= 3 && col <= 5) {
+        section = 'enchanting';
+    } else if (row >= 4 && row <= 9 && col >= 9 && col <= 11) {
+        section = 'constructs';
+    } else if (row >= 14 && row <= 19 && col >= 3 && col <= 5) {
+        section = 'colossal';
+    } else if (row >= 14 && row <= 19 && col >= 9 && col <= 11) {
+        section = 'arcane';
+    }
+    
     if (gridState.isGM) {
         // GM can edit these cells
         cell.className = 'grid-cell editable';
@@ -356,6 +368,11 @@ function setupInteractiveCell(cell, row, col) {
         // Zepha can click/highlight these cells
         cell.className = 'grid-cell clickable';
         cell.addEventListener('click', handleZephaClick);
+    }
+    
+    // Add section data attribute for styling
+    if (section) {
+        cell.setAttribute('data-section', section);
     }
     
     // Load saved content

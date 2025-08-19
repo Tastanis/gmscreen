@@ -180,6 +180,92 @@ body {
     box-shadow: 0 0 10px rgba(245, 158, 11, 0.4);
 }
 
+/* SECTION-SPECIFIC INTERACTIVE CELL THEMES */
+
+/* Enchanting Section Interactive Cells - Purple Theme */
+.grid-cell.editable[data-section="enchanting"] {
+    background: rgba(139, 92, 246, 0.1) !important;
+    border: 1px solid #8b5cf6 !important;
+}
+
+.grid-cell.editable[data-section="enchanting"]:hover {
+    background: rgba(139, 92, 246, 0.2) !important;
+    border-color: #a78bfa !important;
+}
+
+.grid-cell.clickable[data-section="enchanting"] {
+    background: rgba(139, 92, 246, 0.1) !important;
+    border: 1px solid #8b5cf6 !important;
+}
+
+.grid-cell.clickable[data-section="enchanting"]:hover {
+    background: rgba(139, 92, 246, 0.2) !important;
+    border-color: #a78bfa !important;
+}
+
+/* Constructs Section Interactive Cells - Brown Theme */
+.grid-cell.editable[data-section="constructs"] {
+    background: rgba(161, 98, 7, 0.1) !important;
+    border: 1px solid #a16207 !important;
+}
+
+.grid-cell.editable[data-section="constructs"]:hover {
+    background: rgba(161, 98, 7, 0.2) !important;
+    border-color: #ca8a04 !important;
+}
+
+.grid-cell.clickable[data-section="constructs"] {
+    background: rgba(161, 98, 7, 0.1) !important;
+    border: 1px solid #a16207 !important;
+}
+
+.grid-cell.clickable[data-section="constructs"]:hover {
+    background: rgba(161, 98, 7, 0.2) !important;
+    border-color: #ca8a04 !important;
+}
+
+/* Colossal Construction Section Interactive Cells - Grey Theme */
+.grid-cell.editable[data-section="colossal"] {
+    background: rgba(107, 114, 128, 0.1) !important;
+    border: 1px solid #6b7280 !important;
+}
+
+.grid-cell.editable[data-section="colossal"]:hover {
+    background: rgba(107, 114, 128, 0.2) !important;
+    border-color: #9ca3af !important;
+}
+
+.grid-cell.clickable[data-section="colossal"] {
+    background: rgba(107, 114, 128, 0.1) !important;
+    border: 1px solid #6b7280 !important;
+}
+
+.grid-cell.clickable[data-section="colossal"]:hover {
+    background: rgba(107, 114, 128, 0.2) !important;
+    border-color: #9ca3af !important;
+}
+
+/* Arcane Mastery Section Interactive Cells - Pink Theme */
+.grid-cell.editable[data-section="arcane"] {
+    background: rgba(236, 72, 153, 0.1) !important;
+    border: 1px solid #ec4899 !important;
+}
+
+.grid-cell.editable[data-section="arcane"]:hover {
+    background: rgba(236, 72, 153, 0.2) !important;
+    border-color: #f472b6 !important;
+}
+
+.grid-cell.clickable[data-section="arcane"] {
+    background: rgba(236, 72, 153, 0.1) !important;
+    border: 1px solid #ec4899 !important;
+}
+
+.grid-cell.clickable[data-section="arcane"]:hover {
+    background: rgba(236, 72, 153, 0.2) !important;
+    border-color: #f472b6 !important;
+}
+
 /* Merged zone styles - ensure text is centered across span */
 .grid-cell.merged {
     display: flex;
@@ -205,104 +291,104 @@ body {
     color: #f9fafb !important;
 }
 
-/* ENCHANTING SECTION - Purple Theme */
-.enchanting-zone {
-    background: rgba(139, 92, 246, 0.3);
-    border: 2px solid #8b5cf6;
-    color: #f3f4f6;
+/* ENCHANTING SECTION - Purple Theme (Higher Specificity) */
+.grid-cell.label.merged.enchanting-zone {
+    background: rgba(139, 92, 246, 0.4) !important;
+    border: 2px solid #8b5cf6 !important;
+    color: #f3f4f6 !important;
 }
 
-.rune-carving {
-    background: rgba(167, 139, 250, 0.3);
-    border: 1px solid #a78bfa;
-    color: #f3f4f6;
+.grid-cell.label.rune-carving {
+    background: rgba(167, 139, 250, 0.4) !important;
+    border: 1px solid #a78bfa !important;
+    color: #f3f4f6 !important;
 }
 
-.inlay-label {
-    background: rgba(167, 139, 250, 0.3);
-    border: 1px solid #a78bfa;
-    color: #f3f4f6;
+.grid-cell.label.inlay-label {
+    background: rgba(167, 139, 250, 0.4) !important;
+    border: 1px solid #a78bfa !important;
+    color: #f3f4f6 !important;
 }
 
-.focused-arcanum {
-    background: rgba(167, 139, 250, 0.3);
-    border: 1px solid #a78bfa;
-    color: #f3f4f6;
+.grid-cell.label.focused-arcanum {
+    background: rgba(167, 139, 250, 0.4) !important;
+    border: 1px solid #a78bfa !important;
+    color: #f3f4f6 !important;
 }
 
-/* CONSTRUCTS SECTION - Light Brown/Golem Theme */
-.constructs-zone {
-    background: rgba(161, 98, 7, 0.3);
-    border: 2px solid #a16207;
-    color: #f3f4f6;
+/* CONSTRUCTS SECTION - Light Brown/Golem Theme (Higher Specificity) */
+.grid-cell.label.merged.constructs-zone {
+    background: rgba(161, 98, 7, 0.4) !important;
+    border: 2px solid #a16207 !important;
+    color: #f3f4f6 !important;
 }
 
-.animation-label {
-    background: rgba(251, 191, 36, 0.3);
-    border: 1px solid #fbbf24;
-    color: #92400e;
+.grid-cell.label.animation-label {
+    background: rgba(251, 191, 36, 0.4) !important;
+    border: 1px solid #fbbf24 !important;
+    color: #92400e !important;
 }
 
-.form-label {
-    background: rgba(251, 191, 36, 0.3);
-    border: 1px solid #fbbf24;
-    color: #92400e;
+.grid-cell.label.form-label {
+    background: rgba(251, 191, 36, 0.4) !important;
+    border: 1px solid #fbbf24 !important;
+    color: #92400e !important;
 }
 
-.sentience-label {
-    background: rgba(251, 191, 36, 0.3);
-    border: 1px solid #fbbf24;
-    color: #92400e;
+.grid-cell.label.sentience-label {
+    background: rgba(251, 191, 36, 0.4) !important;
+    border: 1px solid #fbbf24 !important;
+    color: #92400e !important;
 }
 
-/* COLOSSAL CONSTRUCTION SECTION - Light Grey Theme */
-.colossal-zone {
-    background: rgba(107, 114, 128, 0.3);
-    border: 2px solid #6b7280;
-    color: #f3f4f6;
+/* COLOSSAL CONSTRUCTION SECTION - Light Grey Theme (Higher Specificity) */
+.grid-cell.label.merged.colossal-zone {
+    background: rgba(107, 114, 128, 0.4) !important;
+    border: 2px solid #6b7280 !important;
+    color: #f3f4f6 !important;
 }
 
-.planning-label {
-    background: rgba(209, 213, 219, 0.4);
-    border: 1px solid #d1d5db;
-    color: #374151;
+.grid-cell.label.planning-label {
+    background: rgba(209, 213, 219, 0.5) !important;
+    border: 1px solid #d1d5db !important;
+    color: #374151 !important;
 }
 
-.size-label {
-    background: rgba(209, 213, 219, 0.4);
-    border: 1px solid #d1d5db;
-    color: #374151;
+.grid-cell.label.size-label {
+    background: rgba(209, 213, 219, 0.5) !important;
+    border: 1px solid #d1d5db !important;
+    color: #374151 !important;
 }
 
-.efficiency-label {
-    background: rgba(209, 213, 219, 0.4);
-    border: 1px solid #d1d5db;
-    color: #374151;
+.grid-cell.label.efficiency-label {
+    background: rgba(209, 213, 219, 0.5) !important;
+    border: 1px solid #d1d5db !important;
+    color: #374151 !important;
 }
 
-/* ARCANE MASTERY SECTION - Pink Theme */
-.arcane-zone {
-    background: rgba(236, 72, 153, 0.3);
-    border: 2px solid #ec4899;
-    color: #f3f4f6;
+/* ARCANE MASTERY SECTION - Pink Theme (Higher Specificity) */
+.grid-cell.label.merged.arcane-zone {
+    background: rgba(236, 72, 153, 0.4) !important;
+    border: 2px solid #ec4899 !important;
+    color: #f3f4f6 !important;
 }
 
-.spells-label {
-    background: rgba(249, 168, 212, 0.4);
-    border: 1px solid #f9a8d4;
-    color: #831843;
+.grid-cell.label.spells-label {
+    background: rgba(249, 168, 212, 0.5) !important;
+    border: 1px solid #f9a8d4 !important;
+    color: #831843 !important;
 }
 
-.elemental-label {
-    background: rgba(249, 168, 212, 0.4);
-    border: 1px solid #f9a8d4;
-    color: #831843;
+.grid-cell.label.elemental-label {
+    background: rgba(249, 168, 212, 0.5) !important;
+    border: 1px solid #f9a8d4 !important;
+    color: #831843 !important;
 }
 
-.raw-arcane-label {
-    background: rgba(249, 168, 212, 0.4);
-    border: 1px solid #f9a8d4;
-    color: #831843;
+.grid-cell.label.raw-arcane-label {
+    background: rgba(249, 168, 212, 0.5) !important;
+    border: 1px solid #f9a8d4 !important;
+    color: #831843 !important;
 }
 
 /* Edit Modal */
