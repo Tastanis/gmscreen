@@ -411,22 +411,28 @@ function handleGMEdit(event) {
 }
 
 /**
- * Handle Zepha clicking functionality
+ * Handle Zepha clicking functionality with back-propagation
  */
 function handleZephaClick(event) {
     const cell = event.currentTarget;
     const cellId = cell.id;
     
-    // Toggle selection
-    if (gridState.selectedCells.has(cellId)) {
-        gridState.selectedCells.delete(cellId);
-        cell.classList.remove('selected');
-    } else {
-        gridState.selectedCells.add(cellId);
-        cell.classList.add('selected');
-    }
+    // Clear any existing chain highlighting
+    clearChainHighlighting();
     
-    console.log(`Cell ${cell.dataset.row}-${cell.dataset.col} selected by Zepha`);
+    // Highlight the clicked cell as target
+    cell.classList.add('chain-target');
+    
+    // Find and highlight all cells that lead to this cell
+    const sourceCells = findAllSourceCells(cellId);
+    sourceCells.forEach(sourceId => {
+        const sourceCell = document.getElementById(sourceId);
+        if (sourceCell && sourceCell !== cell) {
+            sourceCell.classList.add('chain-source');
+        }
+    });
+    
+    console.log(`Cell ${cell.dataset.row}-${cell.dataset.col} clicked by Zepha, found ${sourceCells.length} source cells`);
 }
 
 /**
@@ -566,6 +572,56 @@ function textToHtml(text) {
 }
 
 /**
+ * Find all cells that have arrows pointing to the target cell (recursive back-propagation)
+ */
+function findAllSourceCells(targetId, visited = new Set()) {
+    if (visited.has(targetId)) {
+        return []; // Prevent infinite loops
+    }
+    visited.add(targetId);
+    
+    const sources = new Set();
+    
+    // Check auto connections (tier connections)
+    gridState.autoConnections.forEach(connection => {
+        if (connection.target === targetId) {
+            sources.add(connection.source);
+            // Recursively find sources of this source
+            const nestedSources = findAllSourceCells(connection.source, visited);
+            nestedSources.forEach(id => sources.add(id));
+        }
+    });
+    
+    // Check custom connections
+    gridState.customConnections.forEach(connection => {
+        if (connection.target === targetId) {
+            sources.add(connection.source);
+            // Recursively find sources of this source
+            const nestedSources = findAllSourceCells(connection.source, visited);
+            nestedSources.forEach(id => sources.add(id));
+        }
+    });
+    
+    return Array.from(sources);
+}
+
+/**
+ * Clear all chain highlighting
+ */
+function clearChainHighlighting() {
+    const targetCells = document.querySelectorAll('.grid-cell.chain-target');
+    const sourceCells = document.querySelectorAll('.grid-cell.chain-source');
+    
+    targetCells.forEach(cell => {
+        cell.classList.remove('chain-target');
+    });
+    
+    sourceCells.forEach(cell => {
+        cell.classList.remove('chain-source');
+    });
+}
+
+/**
  * Setup connection system for GM
  */
 function setupConnectionSystem() {
@@ -629,17 +685,46 @@ function clearConnectionSource() {
 }
 
 /**
- * Create custom connection between two cells
+ * Create custom connection between two cells (or remove if duplicate)
  */
 function createCustomConnection(sourceId, targetId) {
     const connectionId = `${sourceId}-to-${targetId}`;
-    gridState.customConnections.set(connectionId, {
-        source: sourceId,
-        target: targetId,
-        type: 'custom'
-    });
     
-    drawArrow(sourceId, targetId, 'arrow-line');
+    // Check if connection already exists
+    if (gridState.customConnections.has(connectionId)) {
+        // Remove existing connection
+        removeCustomConnection(sourceId, targetId);
+    } else {
+        // Create new connection
+        gridState.customConnections.set(connectionId, {
+            source: sourceId,
+            target: targetId,
+            type: 'custom'
+        });
+        
+        drawArrow(sourceId, targetId, 'arrow-line');
+        saveGridData();
+    }
+}
+
+/**
+ * Remove custom connection between two cells
+ */
+function removeCustomConnection(sourceId, targetId) {
+    const connectionId = `${sourceId}-to-${targetId}`;
+    
+    // Remove from state
+    gridState.customConnections.delete(connectionId);
+    
+    // Remove visual arrow
+    const svg = document.getElementById('arrow-overlay');
+    if (svg) {
+        const line = svg.querySelector(`line[data-connection="${connectionId}"]`);
+        if (line) {
+            line.remove();
+        }
+    }
+    
     saveGridData();
 }
 
@@ -829,6 +914,13 @@ function setupEventListeners() {
         }
     });
     
+    // Click on empty areas to clear highlighting (Zepha only)
+    document.addEventListener('click', (e) => {
+        if (!gridState.isGM && !e.target.closest('.grid-cell.clickable')) {
+            clearChainHighlighting();
+        }
+    });
+    
     // Add instructions
     addInstructions();
 }
@@ -863,7 +955,7 @@ function addInstructions() {
 }
 
 /**
- * Clear all selections (Zepha only)
+ * Clear all selections and chain highlighting (Zepha only)
  */
 function clearSelections() {
     gridState.selectedCells.forEach(cellId => {
@@ -873,6 +965,7 @@ function clearSelections() {
         }
     });
     gridState.selectedCells.clear();
+    clearChainHighlighting();
 }
 
 /**

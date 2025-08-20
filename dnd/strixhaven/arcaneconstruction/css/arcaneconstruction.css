@@ -295,7 +295,7 @@ body {
     align-items: center;
     justify-content: center;
     text-align: center;
-    font-size: 18px;
+    font-size: 22px;
     font-weight: bold;
 }
 
@@ -305,7 +305,7 @@ body {
     border: 2px solid #4b5563 !important;
     color: #f9fafb !important;
     font-weight: bold;
-    font-size: 14px;
+    font-size: 16px;
 }
 
 /* All tier labels (Tier 1-6) across all sections */
@@ -313,7 +313,8 @@ body {
     background: #374151 !important;
     border: 1px solid #4b5563 !important;
     color: #f9fafb !important;
-    font-size: 14px;
+    font-size: 16px;
+    font-weight: bold;
 }
 
 /* ENCHANTING SECTION - Purple Theme (Higher Specificity) */
@@ -327,21 +328,24 @@ body {
     background: rgba(167, 139, 250, 0.4) !important;
     border: 1px solid #a78bfa !important;
     color: #f3f4f6 !important;
-    font-size: 12px;
+    font-size: 14px;
+    font-weight: bold;
 }
 
 .grid-cell.label.inlay-label {
     background: rgba(167, 139, 250, 0.4) !important;
     border: 1px solid #a78bfa !important;
     color: #f3f4f6 !important;
-    font-size: 12px;
+    font-size: 14px;
+    font-weight: bold;
 }
 
 .grid-cell.label.focused-arcanum {
     background: rgba(167, 139, 250, 0.4) !important;
     border: 1px solid #a78bfa !important;
     color: #f3f4f6 !important;
-    font-size: 12px;
+    font-size: 14px;
+    font-weight: bold;
 }
 
 /* CONSTRUCTS SECTION - Light Brown/Golem Theme (Higher Specificity) */
@@ -354,22 +358,25 @@ body {
 .grid-cell.label.animation-label {
     background: rgba(251, 191, 36, 0.4) !important;
     border: 1px solid #fbbf24 !important;
-    color: #92400e !important;
-    font-size: 12px;
+    color: #1f2937 !important;
+    font-size: 14px;
+    font-weight: bold;
 }
 
 .grid-cell.label.form-label {
     background: rgba(251, 191, 36, 0.4) !important;
     border: 1px solid #fbbf24 !important;
-    color: #92400e !important;
-    font-size: 12px;
+    color: #1f2937 !important;
+    font-size: 14px;
+    font-weight: bold;
 }
 
 .grid-cell.label.sentience-label {
     background: rgba(251, 191, 36, 0.4) !important;
     border: 1px solid #fbbf24 !important;
-    color: #92400e !important;
-    font-size: 12px;
+    color: #1f2937 !important;
+    font-size: 14px;
+    font-weight: bold;
 }
 
 /* COLOSSAL CONSTRUCTION SECTION - Light Grey Theme (Higher Specificity) */
@@ -383,21 +390,24 @@ body {
     background: rgba(209, 213, 219, 0.5) !important;
     border: 1px solid #d1d5db !important;
     color: #374151 !important;
-    font-size: 12px;
+    font-size: 14px;
+    font-weight: bold;
 }
 
 .grid-cell.label.size-label {
     background: rgba(209, 213, 219, 0.5) !important;
     border: 1px solid #d1d5db !important;
     color: #374151 !important;
-    font-size: 12px;
+    font-size: 14px;
+    font-weight: bold;
 }
 
 .grid-cell.label.efficiency-label {
     background: rgba(209, 213, 219, 0.5) !important;
     border: 1px solid #d1d5db !important;
     color: #374151 !important;
-    font-size: 12px;
+    font-size: 14px;
+    font-weight: bold;
 }
 
 /* ARCANE MASTERY SECTION - Pink Theme (Higher Specificity) */
@@ -411,21 +421,24 @@ body {
     background: rgba(249, 168, 212, 0.5) !important;
     border: 1px solid #f9a8d4 !important;
     color: #831843 !important;
-    font-size: 12px;
+    font-size: 14px;
+    font-weight: bold;
 }
 
 .grid-cell.label.elemental-label {
     background: rgba(249, 168, 212, 0.5) !important;
     border: 1px solid #f9a8d4 !important;
     color: #831843 !important;
-    font-size: 12px;
+    font-size: 14px;
+    font-weight: bold;
 }
 
 .grid-cell.label.raw-arcane-label {
     background: rgba(249, 168, 212, 0.5) !important;
     border: 1px solid #f9a8d4 !important;
     color: #831843 !important;
-    font-size: 12px;
+    font-size: 14px;
+    font-weight: bold;
 }
 
 /* Inline Editor */
@@ -504,6 +517,19 @@ body {
     background: rgba(220, 38, 38, 0.3) !important;
     border: 2px solid #dc2626 !important;
     box-shadow: 0 0 10px rgba(220, 38, 38, 0.4);
+}
+
+/* Back-propagation highlighting for Zepha */
+.grid-cell.chain-target {
+    background: rgba(245, 158, 11, 0.4) !important;
+    border: 2px solid #f59e0b !important;
+    box-shadow: 0 0 10px rgba(245, 158, 11, 0.5);
+}
+
+.grid-cell.chain-source {
+    background: rgba(16, 185, 129, 0.3) !important;
+    border: 2px solid #10b981 !important;
+    box-shadow: 0 0 8px rgba(16, 185, 129, 0.4);
 }
 
 /* Zoom Indicator */
