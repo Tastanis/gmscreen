@@ -505,10 +505,7 @@ function finishInlineEdit(cell, textarea, save) {
         const cellKey = `${row}-${col}`;
         gridState.editableCells.set(cellKey, formattedText);
         
-        // Auto-save GM data when text is edited
-        if (gridState.isGM) {
-            saveGMData();
-        }
+        // Text editing complete - use manual save button to persist
     } else {
         // Restore original content
         cell.innerHTML = textarea.dataset.originalContent;
@@ -829,7 +826,7 @@ function createCustomConnection(sourceId, targetId) {
         });
         
         drawArrow(sourceId, targetId, 'arrow-line');
-        // Auto-save when connections are made
+        // Connection created - use manual save button to persist
     }
 }
 
@@ -851,7 +848,7 @@ function removeCustomConnection(sourceId, targetId) {
         }
     }
     
-    // Auto-save when connections are removed
+    // Connection removed - use manual save button to persist
 }
 
 /**
