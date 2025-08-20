@@ -100,8 +100,8 @@ body {
 /* Main Construction Grid */
 .construction-grid {
     display: grid;
-    grid-template-columns: repeat(12, 80px); /* Wider cells: 80px */
-    grid-template-rows: repeat(20, 70px); /* Taller cells: 70px, reduced to 20 rows */
+    grid-template-columns: repeat(12, 120px); /* Wider cells: 120px */
+    grid-template-rows: repeat(20, 100px); /* Taller cells: 100px, reduced to 20 rows */
     gap: 0;
     border: 1px solid #4a5568;
     background: #1a1a2e;
@@ -391,70 +391,49 @@ body {
     color: #831843 !important;
 }
 
-/* Edit Modal */
-.edit-modal {
-    position: fixed;
-    top: 0;
-    left: 0;
+/* Inline Editor */
+.grid-cell.editing {
+    background: rgba(49, 130, 206, 0.3) !important;
+    border: 2px solid #90cdf4 !important;
+    box-shadow: 0 0 10px rgba(144, 205, 244, 0.4);
+}
+
+.inline-editor {
     width: 100%;
     height: 100%;
-    background: rgba(0, 0, 0, 0.8);
-    display: none;
-    align-items: center;
-    justify-content: center;
-    z-index: 1000;
-}
-
-.edit-modal.show {
-    display: flex;
-}
-
-.edit-modal-content {
-    background: #2d3748;
-    padding: 20px;
-    border-radius: 8px;
-    border: 2px solid #4a5568;
-    min-width: 300px;
-}
-
-.edit-modal h3 {
-    margin: 0 0 15px 0;
-    color: #90cdf4;
-}
-
-.edit-modal input {
-    width: 100%;
-    padding: 8px;
-    border: 1px solid #4a5568;
-    border-radius: 4px;
-    background: #1a202c;
-    color: #e2e8f0;
-    font-size: 14px;
-}
-
-.edit-modal-buttons {
-    margin-top: 15px;
-    display: flex;
-    gap: 10px;
-    justify-content: flex-end;
-}
-
-.edit-modal button {
-    padding: 8px 16px;
+    background: transparent;
     border: none;
-    border-radius: 4px;
-    cursor: pointer;
-    font-size: 14px;
+    color: inherit;
+    font-family: inherit;
+    font-size: inherit;
+    text-align: center;
+    padding: 2px;
+    outline: none;
+    resize: none;
+    overflow: hidden;
+    word-wrap: break-word;
+    white-space: pre-wrap;
 }
 
-.edit-modal .save-btn {
-    background: #38a169;
-    color: white;
+.inline-editor:focus {
+    background: rgba(255, 255, 255, 0.1);
 }
 
-.edit-modal .cancel-btn {
-    background: #718096;
-    color: white;
+/* Rich text formatting in cells */
+.grid-cell ul {
+    margin: 0;
+    padding-left: 12px;
+    text-align: left;
+}
+
+.grid-cell li {
+    margin: 0;
+    padding: 0;
+    list-style-type: disc;
+}
+
+.grid-cell br {
+    line-height: 1.2;
 }
 
 /* Zoom Indicator */
@@ -502,10 +481,10 @@ body {
 }
 
 /* Responsive adjustments */
-@media (max-width: 1200px) {
+@media (max-width: 1600px) {
     .construction-grid {
-        grid-template-columns: repeat(12, 70px); /* Maintain wider than tall ratio */
-        grid-template-rows: repeat(20, 60px);
+        grid-template-columns: repeat(12, 100px); /* Maintain wider than tall ratio */
+        grid-template-rows: repeat(20, 80px);
     }
     
     .grid-cell {
@@ -513,14 +492,25 @@ body {
     }
 }
 
-@media (max-width: 800px) {
+@media (max-width: 1200px) {
     .construction-grid {
-        grid-template-columns: repeat(12, 60px); /* Maintain wider than tall ratio */
-        grid-template-rows: repeat(20, 50px);
+        grid-template-columns: repeat(12, 80px); /* Maintain wider than tall ratio */
+        grid-template-rows: repeat(20, 64px);
     }
     
     .grid-cell {
         font-size: 10px;
+    }
+}
+
+@media (max-width: 800px) {
+    .construction-grid {
+        grid-template-columns: repeat(12, 60px); /* Maintain wider than tall ratio */
+        grid-template-rows: repeat(20, 48px);
+    }
+    
+    .grid-cell {
+        font-size: 9px;
         padding: 1px;
     }
     

@@ -7,7 +7,7 @@
 const GRID_CONFIG = {
     columns: 12,
     rows: 20, // Reduced from 24 to 20 rows
-    cellSize: 80, // Increased base cell size for better visibility
+    cellSize: 120, // Increased base cell size for better visibility
     minZoom: 0.3,
     maxZoom: 3.0,
     zoomStep: 0.1
@@ -379,7 +379,7 @@ function setupInteractiveCell(cell, row, col) {
     const cellKey = `${row}-${col}`;
     const savedContent = gridState.editableCells.get(cellKey);
     if (savedContent) {
-        cell.textContent = savedContent;
+        cell.innerHTML = savedContent;
     }
 }
 
@@ -387,12 +387,15 @@ function setupInteractiveCell(cell, row, col) {
  * Handle GM editing functionality
  */
 function handleGMEdit(event) {
+    event.stopPropagation();
     const cell = event.currentTarget;
-    const row = cell.dataset.row;
-    const col = cell.dataset.col;
-    const currentText = cell.textContent;
     
-    showEditModal(row, col, currentText);
+    // Don't start editing if already editing
+    if (cell.classList.contains('editing')) {
+        return;
+    }
+    
+    startInlineEdit(cell);
 }
 
 /**
@@ -415,83 +418,139 @@ function handleZephaClick(event) {
 }
 
 /**
- * Show edit modal for GM
+ * Start inline editing for a cell
  */
-function showEditModal(row, col, currentText) {
-    // Create modal if it doesn't exist
-    let modal = document.getElementById('edit-modal');
-    if (!modal) {
-        modal = createEditModal();
-        document.body.appendChild(modal);
-    }
+function startInlineEdit(cell) {
+    const row = cell.dataset.row;
+    const col = cell.dataset.col;
+    const currentText = cell.innerHTML; // Use innerHTML to preserve formatting
     
-    const input = modal.querySelector('#edit-input');
-    const title = modal.querySelector('#edit-title');
+    // Mark cell as editing
+    cell.classList.add('editing');
     
-    title.textContent = `Edit Cell ${row}-${col}`;
-    input.value = currentText;
-    modal.classList.add('show');
-    input.focus();
-    input.select();
+    // Create textarea for editing
+    const textarea = document.createElement('textarea');
+    textarea.className = 'inline-editor';
+    textarea.value = htmlToText(currentText); // Convert HTML to text with newlines
     
-    // Store current cell being edited
-    modal.dataset.row = row;
-    modal.dataset.col = col;
+    // Clear cell and add textarea
+    cell.innerHTML = '';
+    cell.appendChild(textarea);
+    
+    // Focus and select text
+    textarea.focus();
+    textarea.select();
+    
+    // Store original content for cancel
+    textarea.dataset.originalContent = currentText;
+    
+    // Add event listeners
+    textarea.addEventListener('blur', () => finishInlineEdit(cell, textarea, true));
+    textarea.addEventListener('keydown', (e) => {
+        if (e.key === 'Enter' && !e.shiftKey) {
+            e.preventDefault();
+            finishInlineEdit(cell, textarea, true);
+        } else if (e.key === 'Escape') {
+            e.preventDefault();
+            finishInlineEdit(cell, textarea, false);
+        }
+    });
 }
 
 /**
- * Create edit modal
+ * Finish inline editing
  */
-function createEditModal() {
-    const modal = document.createElement('div');
-    modal.id = 'edit-modal';
-    modal.className = 'edit-modal';
+function finishInlineEdit(cell, textarea, save) {
+    const row = cell.dataset.row;
+    const col = cell.dataset.col;
     
-    modal.innerHTML = `
-        <div class="edit-modal-content">
-            <h3 id="edit-title">Edit Cell</h3>
-            <input type="text" id="edit-input" placeholder="Enter text...">
-            <div class="edit-modal-buttons">
-                <button class="save-btn" onclick="saveEdit()">Save</button>
-                <button class="cancel-btn" onclick="cancelEdit()">Cancel</button>
-            </div>
-        </div>
-    `;
-    
-    return modal;
-}
-
-/**
- * Save GM edit
- */
-function saveEdit() {
-    const modal = document.getElementById('edit-modal');
-    const input = document.getElementById('edit-input');
-    const row = modal.dataset.row;
-    const col = modal.dataset.col;
-    const newText = input.value.trim();
-    
-    const cell = document.getElementById(`cell-${row}-${col}`);
-    if (cell) {
-        cell.textContent = newText;
+    if (save) {
+        const newText = textarea.value.trim();
+        const formattedText = textToHtml(newText); // Convert text to HTML with formatting
+        
+        // Update cell content
+        cell.innerHTML = formattedText;
         
         // Save to state
         const cellKey = `${row}-${col}`;
-        gridState.editableCells.set(cellKey, newText);
+        gridState.editableCells.set(cellKey, formattedText);
         
         // Save to server
         saveGridData();
+    } else {
+        // Restore original content
+        cell.innerHTML = textarea.dataset.originalContent;
     }
     
-    modal.classList.remove('show');
+    // Remove editing state
+    cell.classList.remove('editing');
 }
 
 /**
- * Cancel GM edit
+ * Convert HTML to plain text with newlines
  */
-function cancelEdit() {
-    const modal = document.getElementById('edit-modal');
-    modal.classList.remove('show');
+function htmlToText(html) {
+    const temp = document.createElement('div');
+    temp.innerHTML = html;
+    
+    // Convert <br> to newlines
+    temp.innerHTML = temp.innerHTML.replace(/<br\s*\/?>/gi, '\n');
+    
+    // Convert list items to bullet points
+    temp.innerHTML = temp.innerHTML.replace(/<li>/gi, '• ').replace(/<\/li>/gi, '\n');
+    temp.innerHTML = temp.innerHTML.replace(/<\/?ul>/gi, '');
+    
+    return temp.textContent || temp.innerText || '';
+}
+
+/**
+ * Convert plain text to HTML with formatting
+ */
+function textToHtml(text) {
+    if (!text) return '';
+    
+    // Split by lines
+    const lines = text.split('\n');
+    const processedLines = [];
+    
+    for (let line of lines) {
+        line = line.trim();
+        if (!line) continue;
+        
+        // Convert bullet points
+        if (line.startsWith('• ') || line.startsWith('* ')) {
+            line = '<li>' + line.substring(2) + '</li>';
+        }
+        
+        processedLines.push(line);
+    }
+    
+    // Group consecutive list items
+    let result = '';
+    let inList = false;
+    
+    for (let line of processedLines) {
+        if (line.startsWith('<li>')) {
+            if (!inList) {
+                result += '<ul>';
+                inList = true;
+            }
+            result += line;
+        } else {
+            if (inList) {
+                result += '</ul>';
+                inList = false;
+            }
+            if (result) result += '<br>';
+            result += line;
+        }
+    }
+    
+    if (inList) {
+        result += '</ul>';
+    }
+    
+    return result;
 }
 
 /**
@@ -601,7 +660,9 @@ function addInstructions() {
             <strong>GM Controls:</strong><br>
             • Mouse wheel: Zoom in/out<br>
             • Click & drag: Pan view<br>
-            • Click blue cells: Edit text
+            • Click blue cells: Edit inline<br>
+            • Enter: Save, Esc: Cancel<br>
+            • Use * or • for bullets, Enter for new lines
         `;
     } else {
         instructions.innerHTML = `
@@ -689,9 +750,7 @@ async function loadGridData() {
     }
 }
 
-// Global functions for modal
-window.saveEdit = saveEdit;
-window.cancelEdit = cancelEdit;
+// Global functions (none needed for inline editing)
 
 // Initialize when DOM is ready
 document.addEventListener('DOMContentLoaded', () => {
