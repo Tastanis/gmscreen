@@ -51,6 +51,29 @@ body {
     color: #a0aec0;
 }
 
+.connect-btn {
+    background: #2d3748;
+    color: white;
+    border: 1px solid #4a5568;
+    padding: 6px 12px;
+    border-radius: 4px;
+    cursor: pointer;
+    font-size: 12px;
+    transition: all 0.2s;
+    margin-right: 10px;
+}
+
+.connect-btn:hover {
+    background: #4a5568;
+    border-color: #718096;
+}
+
+.connect-btn.active {
+    background: #c53030;
+    border-color: #e53e3e;
+    color: white;
+}
+
 .close-btn {
     background: #e53e3e;
     color: white;
@@ -115,7 +138,7 @@ body {
     display: flex;
     align-items: center;
     justify-content: center;
-    font-size: 6px;
+    font-size: 11px;
     color: #e2e8f0;
     text-align: center;
     word-wrap: break-word;
@@ -272,7 +295,7 @@ body {
     align-items: center;
     justify-content: center;
     text-align: center;
-    font-size: 16px;
+    font-size: 18px;
     font-weight: bold;
 }
 
@@ -282,6 +305,7 @@ body {
     border: 2px solid #4b5563 !important;
     color: #f9fafb !important;
     font-weight: bold;
+    font-size: 14px;
 }
 
 /* All tier labels (Tier 1-6) across all sections */
@@ -289,6 +313,7 @@ body {
     background: #374151 !important;
     border: 1px solid #4b5563 !important;
     color: #f9fafb !important;
+    font-size: 14px;
 }
 
 /* ENCHANTING SECTION - Purple Theme (Higher Specificity) */
@@ -302,18 +327,21 @@ body {
     background: rgba(167, 139, 250, 0.4) !important;
     border: 1px solid #a78bfa !important;
     color: #f3f4f6 !important;
+    font-size: 12px;
 }
 
 .grid-cell.label.inlay-label {
     background: rgba(167, 139, 250, 0.4) !important;
     border: 1px solid #a78bfa !important;
     color: #f3f4f6 !important;
+    font-size: 12px;
 }
 
 .grid-cell.label.focused-arcanum {
     background: rgba(167, 139, 250, 0.4) !important;
     border: 1px solid #a78bfa !important;
     color: #f3f4f6 !important;
+    font-size: 12px;
 }
 
 /* CONSTRUCTS SECTION - Light Brown/Golem Theme (Higher Specificity) */
@@ -327,18 +355,21 @@ body {
     background: rgba(251, 191, 36, 0.4) !important;
     border: 1px solid #fbbf24 !important;
     color: #92400e !important;
+    font-size: 12px;
 }
 
 .grid-cell.label.form-label {
     background: rgba(251, 191, 36, 0.4) !important;
     border: 1px solid #fbbf24 !important;
     color: #92400e !important;
+    font-size: 12px;
 }
 
 .grid-cell.label.sentience-label {
     background: rgba(251, 191, 36, 0.4) !important;
     border: 1px solid #fbbf24 !important;
     color: #92400e !important;
+    font-size: 12px;
 }
 
 /* COLOSSAL CONSTRUCTION SECTION - Light Grey Theme (Higher Specificity) */
@@ -352,18 +383,21 @@ body {
     background: rgba(209, 213, 219, 0.5) !important;
     border: 1px solid #d1d5db !important;
     color: #374151 !important;
+    font-size: 12px;
 }
 
 .grid-cell.label.size-label {
     background: rgba(209, 213, 219, 0.5) !important;
     border: 1px solid #d1d5db !important;
     color: #374151 !important;
+    font-size: 12px;
 }
 
 .grid-cell.label.efficiency-label {
     background: rgba(209, 213, 219, 0.5) !important;
     border: 1px solid #d1d5db !important;
     color: #374151 !important;
+    font-size: 12px;
 }
 
 /* ARCANE MASTERY SECTION - Pink Theme (Higher Specificity) */
@@ -377,18 +411,21 @@ body {
     background: rgba(249, 168, 212, 0.5) !important;
     border: 1px solid #f9a8d4 !important;
     color: #831843 !important;
+    font-size: 12px;
 }
 
 .grid-cell.label.elemental-label {
     background: rgba(249, 168, 212, 0.5) !important;
     border: 1px solid #f9a8d4 !important;
     color: #831843 !important;
+    font-size: 12px;
 }
 
 .grid-cell.label.raw-arcane-label {
     background: rgba(249, 168, 212, 0.5) !important;
     border: 1px solid #f9a8d4 !important;
     color: #831843 !important;
+    font-size: 12px;
 }
 
 /* Inline Editor */
@@ -434,6 +471,39 @@ body {
 
 .grid-cell br {
     line-height: 1.2;
+}
+
+/* SVG Arrow Overlay */
+.arrow-overlay {
+    position: absolute;
+    top: 0;
+    left: 0;
+    width: 100%;
+    height: 100%;
+    pointer-events: none;
+    z-index: 10;
+}
+
+.arrow-line {
+    stroke: #dc2626;
+    stroke-width: 2;
+    fill: none;
+    marker-end: url(#arrowhead);
+}
+
+.auto-arrow-line {
+    stroke: #dc2626;
+    stroke-width: 1.5;
+    fill: none;
+    marker-end: url(#arrowhead);
+    opacity: 0.8;
+}
+
+/* Cell highlighting for connection mode */
+.grid-cell.connect-source {
+    background: rgba(220, 38, 38, 0.3) !important;
+    border: 2px solid #dc2626 !important;
+    box-shadow: 0 0 10px rgba(220, 38, 38, 0.4);
 }
 
 /* Zoom Indicator */
@@ -488,7 +558,7 @@ body {
     }
     
     .grid-cell {
-        font-size: 5px;
+        font-size: 10px;
     }
 }
 
@@ -499,7 +569,7 @@ body {
     }
     
     .grid-cell {
-        font-size: 5px;
+        font-size: 9px;
     }
 }
 
@@ -510,7 +580,7 @@ body {
     }
     
     .grid-cell {
-        font-size: 4px;
+        font-size: 8px;
         padding: 1px;
     }
     

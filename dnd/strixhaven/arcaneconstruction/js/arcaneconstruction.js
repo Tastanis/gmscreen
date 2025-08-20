@@ -24,7 +24,11 @@ let gridState = {
     selectedCells: new Set(),
     editableCells: new Map(), // Store GM-editable cell content
     isGM: false, // Will be set from PHP
-    currentUser: '' // Will be set from PHP
+    currentUser: '', // Will be set from PHP
+    connectionMode: false, // Whether GM is in connection mode
+    connectionSource: null, // Source cell for connection
+    customConnections: new Map(), // Store custom connections
+    autoConnections: new Map() // Store automatic tier connections
 };
 
 /**
@@ -42,7 +46,9 @@ function initializeGrid() {
     createGridStructure();
     setupZoomControls();
     setupEventListeners();
+    setupConnectionSystem();
     loadGridData();
+    createAutoConnections();
     
     console.log(`Grid initialized for user: ${gridState.currentUser} (GM: ${gridState.isGM})`);
 }
@@ -390,6 +396,12 @@ function handleGMEdit(event) {
     event.stopPropagation();
     const cell = event.currentTarget;
     
+    // If in connection mode, handle connection
+    if (gridState.connectionMode) {
+        handleConnectionClick(cell);
+        return;
+    }
+    
     // Don't start editing if already editing
     if (cell.classList.contains('editing')) {
         return;
@@ -554,6 +566,177 @@ function textToHtml(text) {
 }
 
 /**
+ * Setup connection system for GM
+ */
+function setupConnectionSystem() {
+    if (!gridState.isGM) return;
+    
+    const connectBtn = document.getElementById('connect-btn');
+    if (connectBtn) {
+        connectBtn.addEventListener('click', toggleConnectionMode);
+    }
+}
+
+/**
+ * Toggle connection mode
+ */
+function toggleConnectionMode() {
+    gridState.connectionMode = !gridState.connectionMode;
+    const connectBtn = document.getElementById('connect-btn');
+    
+    if (gridState.connectionMode) {
+        connectBtn.classList.add('active');
+        connectBtn.textContent = 'Exit Connect';
+        clearConnectionSource();
+    } else {
+        connectBtn.classList.remove('active');
+        connectBtn.textContent = 'Connect';
+        clearConnectionSource();
+    }
+}
+
+/**
+ * Handle connection click
+ */
+function handleConnectionClick(cell) {
+    const cellId = cell.id;
+    
+    if (!gridState.connectionSource) {
+        // First click - set source
+        gridState.connectionSource = cellId;
+        cell.classList.add('connect-source');
+    } else if (gridState.connectionSource === cellId) {
+        // Clicking same cell - cancel
+        clearConnectionSource();
+    } else {
+        // Second click - create connection
+        createCustomConnection(gridState.connectionSource, cellId);
+        clearConnectionSource();
+    }
+}
+
+/**
+ * Clear connection source
+ */
+function clearConnectionSource() {
+    if (gridState.connectionSource) {
+        const sourceCell = document.getElementById(gridState.connectionSource);
+        if (sourceCell) {
+            sourceCell.classList.remove('connect-source');
+        }
+        gridState.connectionSource = null;
+    }
+}
+
+/**
+ * Create custom connection between two cells
+ */
+function createCustomConnection(sourceId, targetId) {
+    const connectionId = `${sourceId}-to-${targetId}`;
+    gridState.customConnections.set(connectionId, {
+        source: sourceId,
+        target: targetId,
+        type: 'custom'
+    });
+    
+    drawArrow(sourceId, targetId, 'arrow-line');
+    saveGridData();
+}
+
+/**
+ * Create automatic tier connections
+ */
+function createAutoConnections() {
+    // Enchanting section (columns 3-5, rows 4-9)
+    createTierConnections(3, 5, 4, 9);
+    
+    // Constructs section (columns 9-11, rows 4-9)
+    createTierConnections(9, 11, 4, 9);
+    
+    // Colossal Construction section (columns 3-5, rows 14-19)
+    createTierConnections(3, 5, 14, 19);
+    
+    // Arcane Mastery section (columns 9-11, rows 14-19)
+    createTierConnections(9, 11, 14, 19);
+}
+
+/**
+ * Create tier connections for a section
+ */
+function createTierConnections(startCol, endCol, startRow, endRow) {
+    for (let col = startCol; col <= endCol; col++) {
+        for (let row = startRow; row < endRow; row++) {
+            const sourceId = `cell-${row}-${col}`;
+            const targetId = `cell-${row + 1}-${col}`;
+            
+            const connectionId = `${sourceId}-to-${targetId}`;
+            gridState.autoConnections.set(connectionId, {
+                source: sourceId,
+                target: targetId,
+                type: 'auto'
+            });
+            
+            drawArrow(sourceId, targetId, 'auto-arrow-line');
+        }
+    }
+}
+
+/**
+ * Draw arrow between two cells
+ */
+function drawArrow(sourceId, targetId, className) {
+    const sourceCell = document.getElementById(sourceId);
+    const targetCell = document.getElementById(targetId);
+    const svg = document.getElementById('arrow-overlay');
+    
+    if (!sourceCell || !targetCell || !svg) return;
+    
+    // Calculate positions
+    const sourceRect = sourceCell.getBoundingClientRect();
+    const targetRect = targetCell.getBoundingClientRect();
+    const containerRect = document.querySelector('.grid-container').getBoundingClientRect();
+    
+    // Calculate relative positions within the grid container
+    const sourceX = sourceRect.left + sourceRect.width / 2 - containerRect.left;
+    const sourceY = sourceRect.top + sourceRect.height / 2 - containerRect.top;
+    const targetX = targetRect.left + targetRect.width / 2 - containerRect.left;
+    const targetY = targetRect.top + targetRect.height / 2 - containerRect.top;
+    
+    // Create arrow line
+    const line = document.createElementNS('http://www.w3.org/2000/svg', 'line');
+    line.setAttribute('x1', sourceX);
+    line.setAttribute('y1', sourceY);
+    line.setAttribute('x2', targetX);
+    line.setAttribute('y2', targetY);
+    line.setAttribute('class', className);
+    line.setAttribute('data-connection', `${sourceId}-to-${targetId}`);
+    
+    svg.appendChild(line);
+}
+
+/**
+ * Redraw all arrows (for zoom/pan changes)
+ */
+function redrawAllArrows() {
+    const svg = document.getElementById('arrow-overlay');
+    if (!svg) return;
+    
+    // Clear existing arrows
+    const lines = svg.querySelectorAll('line');
+    lines.forEach(line => line.remove());
+    
+    // Redraw custom connections
+    gridState.customConnections.forEach(connection => {
+        drawArrow(connection.source, connection.target, 'arrow-line');
+    });
+    
+    // Redraw auto connections
+    gridState.autoConnections.forEach(connection => {
+        drawArrow(connection.source, connection.target, 'auto-arrow-line');
+    });
+}
+
+/**
  * Setup zoom and pan controls
  */
 function setupZoomControls() {
@@ -573,6 +756,7 @@ function setupZoomControls() {
             gridState.zoom = newZoom;
             updateGridTransform();
             updateZoomIndicator();
+            setTimeout(redrawAllArrows, 50); // Delay to allow transform to complete
         }
     });
     
@@ -596,6 +780,7 @@ function setupZoomControls() {
         gridState.lastMouseY = e.clientY;
         
         updateGridTransform();
+        redrawAllArrows();
     });
     
     viewport.addEventListener('mouseup', () => {
@@ -696,6 +881,7 @@ function clearSelections() {
 async function saveGridData() {
     const data = {
         editableCells: Object.fromEntries(gridState.editableCells),
+        customConnections: Object.fromEntries(gridState.customConnections),
         timestamp: new Date().toISOString()
     };
     
@@ -731,9 +917,16 @@ async function loadGridData() {
             const data = await response.json();
             if (data.editableCells) {
                 gridState.editableCells = new Map(Object.entries(data.editableCells));
-                console.log('Grid data loaded from server');
-                return;
             }
+            if (data.customConnections) {
+                gridState.customConnections = new Map(Object.entries(data.customConnections));
+                // Redraw custom connections
+                gridState.customConnections.forEach(connection => {
+                    drawArrow(connection.source, connection.target, 'arrow-line');
+                });
+            }
+            console.log('Grid data loaded from server');
+            return;
         }
     } catch (error) {
         console.error('Error loading grid data:', error);
@@ -745,8 +938,15 @@ async function loadGridData() {
         const data = JSON.parse(savedData);
         if (data.editableCells) {
             gridState.editableCells = new Map(Object.entries(data.editableCells));
-            console.log('Grid data loaded from localStorage');
         }
+        if (data.customConnections) {
+            gridState.customConnections = new Map(Object.entries(data.customConnections));
+            // Redraw custom connections
+            gridState.customConnections.forEach(connection => {
+                drawArrow(connection.source, connection.target, 'arrow-line');
+            });
+        }
+        console.log('Grid data loaded from localStorage');
     }
 }
 
