@@ -38,7 +38,7 @@ let gridState = {
 /**
  * Initialize the grid system
  */
-function initializeGrid() {
+async function initializeGrid() {
     console.log('Initializing Arcane Construction Grid...');
     
     // Get user info from global scope (set by PHP)
@@ -47,13 +47,15 @@ function initializeGrid() {
         gridState.currentUser = window.userName || '';
     }
     
+    // Load data first so it's available when creating cells
+    await loadGridData();
+    
     createGridStructure();
     setupZoomControls();
     setupEventListeners();
     setupConnectionSystem();
     setupLearningSystem();
     setupSaveSystem();
-    loadGridData();
     createAutoConnections();
     
     console.log(`Grid initialized for user: ${gridState.currentUser} (GM: ${gridState.isGM})`);
