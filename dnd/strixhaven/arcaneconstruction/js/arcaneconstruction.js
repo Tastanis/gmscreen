@@ -28,7 +28,11 @@ let gridState = {
     connectionMode: false, // Whether GM is in connection mode
     connectionSource: null, // Source cell for connection
     customConnections: new Map(), // Store custom connections
-    autoConnections: new Map() // Store automatic tier connections
+    autoConnections: new Map(), // Store automatic tier connections
+    learningMode: false, // Whether Zepha is in learning mode
+    learnedSkills: new Set(), // Zepha's learned skills
+    isSaving: false, // Save operation in progress
+    lastSaveTime: 0 // Timestamp of last save
 };
 
 /**
@@ -47,6 +51,8 @@ function initializeGrid() {
     setupZoomControls();
     setupEventListeners();
     setupConnectionSystem();
+    setupLearningSystem();
+    setupSaveSystem();
     loadGridData();
     createAutoConnections();
     
@@ -411,11 +417,17 @@ function handleGMEdit(event) {
 }
 
 /**
- * Handle Zepha clicking functionality with back-propagation
+ * Handle Zepha clicking functionality with back-propagation and learning
  */
 function handleZephaClick(event) {
     const cell = event.currentTarget;
     const cellId = cell.id;
+    
+    // If in learning mode, toggle learned skill
+    if (gridState.learningMode) {
+        toggleLearnedSkill(cell, cellId);
+        return;
+    }
     
     // Clear any existing chain highlighting
     clearChainHighlighting();
@@ -493,8 +505,10 @@ function finishInlineEdit(cell, textarea, save) {
         const cellKey = `${row}-${col}`;
         gridState.editableCells.set(cellKey, formattedText);
         
-        // Save to server
-        saveGridData();
+        // Auto-save GM data when text is edited
+        if (gridState.isGM) {
+            saveGMData();
+        }
     } else {
         // Restore original content
         cell.innerHTML = textarea.dataset.originalContent;
@@ -634,6 +648,118 @@ function setupConnectionSystem() {
 }
 
 /**
+ * Setup learning system for Zepha
+ */
+function setupLearningSystem() {
+    if (gridState.isGM) return;
+    
+    const learnBtn = document.getElementById('learn-skill-btn');
+    if (learnBtn) {
+        learnBtn.addEventListener('click', toggleLearningMode);
+    }
+}
+
+/**
+ * Setup save system for both users
+ */
+function setupSaveSystem() {
+    const saveBtn = document.getElementById('save-btn');
+    if (saveBtn) {
+        saveBtn.addEventListener('click', handleSave);
+    }
+    
+    // Auto-refresh to get updates from other user
+    setInterval(loadSharedData, 5000); // Check every 5 seconds
+}
+
+/**
+ * Toggle learning mode for Zepha
+ */
+function toggleLearningMode() {
+    gridState.learningMode = !gridState.learningMode;
+    const learnBtn = document.getElementById('learn-skill-btn');
+    
+    if (gridState.learningMode) {
+        learnBtn.classList.add('active');
+        learnBtn.textContent = 'Exit Learning';
+        
+        // Add learning mode indicator to all clickable cells
+        const clickableCells = document.querySelectorAll('.grid-cell.clickable');
+        clickableCells.forEach(cell => {
+            if (!cell.classList.contains('learned-skill')) {
+                cell.classList.add('learning-mode');
+            }
+        });
+    } else {
+        learnBtn.classList.remove('active');
+        learnBtn.textContent = 'Learn Skill';
+        
+        // Remove learning mode indicators
+        const learningCells = document.querySelectorAll('.grid-cell.learning-mode');
+        learningCells.forEach(cell => {
+            cell.classList.remove('learning-mode');
+        });
+    }
+}
+
+/**
+ * Toggle learned skill for Zepha
+ */
+function toggleLearnedSkill(cell, cellId) {
+    if (gridState.learnedSkills.has(cellId)) {
+        // Remove learned skill
+        gridState.learnedSkills.delete(cellId);
+        cell.classList.remove('learned-skill');
+        cell.classList.add('learning-mode');
+    } else {
+        // Add learned skill
+        gridState.learnedSkills.add(cellId);
+        cell.classList.add('learned-skill');
+        cell.classList.remove('learning-mode');
+    }
+    
+    console.log(`Skill ${cellId} toggled by Zepha`);
+}
+
+/**
+ * Handle save button click
+ */
+async function handleSave() {
+    if (gridState.isSaving) return; // Prevent double-clicking
+    
+    gridState.isSaving = true;
+    const saveBtn = document.getElementById('save-btn');
+    const saveStatus = document.getElementById('save-status');
+    
+    saveBtn.disabled = true;
+    saveStatus.textContent = 'Saving...';
+    
+    try {
+        if (gridState.isGM) {
+            await saveGMData();
+        } else {
+            await saveZephaData();
+        }
+        
+        saveStatus.textContent = 'Saved!';
+        setTimeout(() => {
+            saveStatus.textContent = '';
+        }, 2000);
+        
+    } catch (error) {
+        console.error('Save failed:', error);
+        saveStatus.textContent = 'Save failed!';
+        setTimeout(() => {
+            saveStatus.textContent = '';
+        }, 3000);
+    } finally {
+        gridState.isSaving = false;
+        saveBtn.disabled = false;
+        gridState.lastSaveTime = Date.now();
+    }
+}
+
+/**
  * Toggle connection mode
  */
 function toggleConnectionMode() {
@@ -703,7 +829,7 @@ function createCustomConnection(sourceId, targetId) {
         });
         
         drawArrow(sourceId, targetId, 'arrow-line');
-        saveGridData();
+        // Auto-save when connections are made
     }
 }
 
@@ -725,7 +851,7 @@ function removeCustomConnection(sourceId, targetId) {
         }
     }
     
-    saveGridData();
+    // Auto-save when connections are removed
 }
 
 /**
@@ -767,25 +893,31 @@ function createTierConnections(startCol, endCol, startRow, endRow) {
 }
 
 /**
- * Draw arrow between two cells
+ * Draw arrow between two cells using grid coordinates
  */
 function drawArrow(sourceId, targetId, className) {
-    const sourceCell = document.getElementById(sourceId);
-    const targetCell = document.getElementById(targetId);
     const svg = document.getElementById('arrow-overlay');
+    if (!svg) return;
     
-    if (!sourceCell || !targetCell || !svg) return;
+    // Extract row and column from cell IDs
+    const sourceMatch = sourceId.match(/cell-(\d+)-(\d+)/);
+    const targetMatch = targetId.match(/cell-(\d+)-(\d+)/);
     
-    // Calculate positions
-    const sourceRect = sourceCell.getBoundingClientRect();
-    const targetRect = targetCell.getBoundingClientRect();
-    const containerRect = document.querySelector('.grid-container').getBoundingClientRect();
+    if (!sourceMatch || !targetMatch) return;
     
-    // Calculate relative positions within the grid container
-    const sourceX = sourceRect.left + sourceRect.width / 2 - containerRect.left;
-    const sourceY = sourceRect.top + sourceRect.height / 2 - containerRect.top;
-    const targetX = targetRect.left + targetRect.width / 2 - containerRect.left;
-    const targetY = targetRect.top + targetRect.height / 2 - containerRect.top;
+    const sourceRow = parseInt(sourceMatch[1]);
+    const sourceCol = parseInt(sourceMatch[2]);
+    const targetRow = parseInt(targetMatch[1]);
+    const targetCol = parseInt(targetMatch[2]);
+    
+    // Calculate grid positions (center of cells)
+    const cellWidth = 120;
+    const cellHeight = 100;
+    
+    const sourceX = (sourceCol - 1) * cellWidth + cellWidth / 2;
+    const sourceY = (sourceRow - 1) * cellHeight + cellHeight / 2;
+    const targetX = (targetCol - 1) * cellWidth + cellWidth / 2;
+    const targetY = (targetRow - 1) * cellHeight + cellHeight / 2;
     
     // Create arrow line
     const line = document.createElementNS('http://www.w3.org/2000/svg', 'line');
@@ -841,7 +973,6 @@ function setupZoomControls() {
             gridState.zoom = newZoom;
             updateGridTransform();
             updateZoomIndicator();
-            setTimeout(redrawAllArrows, 50); // Delay to allow transform to complete
         }
     });
     
@@ -865,7 +996,6 @@ function setupZoomControls() {
         gridState.lastMouseY = e.clientY;
         
         updateGridTransform();
-        redrawAllArrows();
     });
     
     viewport.addEventListener('mouseup', () => {
@@ -884,9 +1014,16 @@ function setupZoomControls() {
  */
 function updateGridTransform() {
     const container = document.querySelector('.grid-container');
+    const svg = document.getElementById('arrow-overlay');
     if (!container) return;
     
-    container.style.transform = `translate(calc(-50% + ${gridState.panX}px), calc(-50% + ${gridState.panY}px)) scale(${gridState.zoom})`;
+    const transform = `translate(calc(-50% + ${gridState.panX}px), calc(-50% + ${gridState.panY}px)) scale(${gridState.zoom})`;
+    container.style.transform = transform;
+    
+    // Apply same transform to SVG overlay so arrows stay aligned
+    if (svg) {
+        svg.style.transform = transform;
+    }
 }
 
 /**
@@ -969,17 +1106,21 @@ function clearSelections() {
 }
 
 /**
- * Save grid data to server
+ * Save GM data (text and arrows)
  */
-async function saveGridData() {
+async function saveGMData() {
+    // Check if another user is saving
+    await waitForSaveLock();
+    
     const data = {
         editableCells: Object.fromEntries(gridState.editableCells),
         customConnections: Object.fromEntries(gridState.customConnections),
-        timestamp: new Date().toISOString()
+        timestamp: new Date().toISOString(),
+        user: 'GM'
     };
     
     try {
-        const response = await fetch('save_grid_data.php', {
+        const response = await fetch('save_gm_data.php', {
             method: 'POST',
             headers: {
                 'Content-Type': 'application/json',
@@ -988,59 +1129,168 @@ async function saveGridData() {
         });
         
         if (response.ok) {
-            console.log('Grid data saved successfully');
+            console.log('GM data saved successfully');
         } else {
-            console.error('Failed to save grid data');
+            console.error('Failed to save GM data');
         }
     } catch (error) {
-        console.error('Error saving grid data:', error);
+        console.error('Error saving GM data:', error);
         // Fallback to localStorage
-        localStorage.setItem('arcaneGridData', JSON.stringify(data));
+        localStorage.setItem('arcaneGMData', JSON.stringify(data));
     }
 }
 
 /**
- * Load grid data from server
+ * Save Zepha data (learned skills)
+ */
+async function saveZephaData() {
+    // Check if another user is saving
+    await waitForSaveLock();
+    
+    const data = {
+        learnedSkills: Array.from(gridState.learnedSkills),
+        timestamp: new Date().toISOString(),
+        user: 'zepha'
+    };
+    
+    try {
+        const response = await fetch('save_zepha_data.php', {
+            method: 'POST',
+            headers: {
+                'Content-Type': 'application/json',
+            },
+            body: JSON.stringify(data)
+        });
+        
+        if (response.ok) {
+            console.log('Zepha data saved successfully');
+        } else {
+            console.error('Failed to save Zepha data');
+        }
+    } catch (error) {
+        console.error('Error saving Zepha data:', error);
+        // Fallback to localStorage
+        localStorage.setItem('arcaneZephaData', JSON.stringify(data));
+    }
+}
+
+/**
+ * Wait for save lock to be released
+ */
+async function waitForSaveLock() {
+    let attempts = 0;
+    while (attempts < 10) { // Max 5 seconds wait
+        try {
+            const response = await fetch('check_save_lock.php');
+            const result = await response.json();
+            
+            if (!result.locked || (Date.now() - result.timestamp) > 10000) {
+                // No lock or expired lock
+                return;
+            }
+            
+            // Wait 500ms and try again
+            await new Promise(resolve => setTimeout(resolve, 500));
+            attempts++;
+        } catch (error) {
+            console.error('Error checking save lock:', error);
+            return; // Proceed anyway if check fails
+        }
+    }
+}
+
+/**
+ * Load shared data from server (both GM and Zepha data)
  */
 async function loadGridData() {
+    await loadSharedData();
+}
+
+/**
+ * Load shared data (called periodically and on init)
+ */
+async function loadSharedData() {
     try {
-        const response = await fetch('load_grid_data.php');
+        const response = await fetch('load_shared_data.php');
         
         if (response.ok) {
             const data = await response.json();
-            if (data.editableCells) {
-                gridState.editableCells = new Map(Object.entries(data.editableCells));
+            
+            // Load GM data (visible to both users)
+            if (data.gm_data) {
+                if (data.gm_data.editableCells) {
+                    gridState.editableCells = new Map(Object.entries(data.gm_data.editableCells));
+                }
+                if (data.gm_data.customConnections) {
+                    // Clear existing custom connections
+                    const svg = document.getElementById('arrow-overlay');
+                    if (svg) {
+                        const customLines = svg.querySelectorAll('.arrow-line');
+                        customLines.forEach(line => line.remove());
+                    }
+                    
+                    gridState.customConnections = new Map(Object.entries(data.gm_data.customConnections));
+                    // Redraw custom connections
+                    gridState.customConnections.forEach(connection => {
+                        drawArrow(connection.source, connection.target, 'arrow-line');
+                    });
+                }
             }
-            if (data.customConnections) {
-                gridState.customConnections = new Map(Object.entries(data.customConnections));
-                // Redraw custom connections
-                gridState.customConnections.forEach(connection => {
-                    drawArrow(connection.source, connection.target, 'arrow-line');
+            
+            // Load Zepha data (visible to both users)
+            if (data.zepha_data && data.zepha_data.learnedSkills) {
+                // Clear existing learned skill highlighting
+                const learnedCells = document.querySelectorAll('.grid-cell.learned-skill');
+                learnedCells.forEach(cell => cell.classList.remove('learned-skill'));
+                
+                gridState.learnedSkills = new Set(data.zepha_data.learnedSkills);
+                // Apply learned skill highlighting
+                gridState.learnedSkills.forEach(skillId => {
+                    const cell = document.getElementById(skillId);
+                    if (cell) {
+                        cell.classList.add('learned-skill');
+                    }
                 });
             }
-            console.log('Grid data loaded from server');
+            
+            console.log('Shared data loaded from server');
             return;
         }
     } catch (error) {
-        console.error('Error loading grid data:', error);
+        console.error('Error loading shared data:', error);
     }
     
     // Fallback to localStorage
-    const savedData = localStorage.getItem('arcaneGridData');
-    if (savedData) {
-        const data = JSON.parse(savedData);
+    const gmData = localStorage.getItem('arcaneGMData');
+    const zephaData = localStorage.getItem('arcaneZephaData');
+    
+    if (gmData) {
+        const data = JSON.parse(gmData);
         if (data.editableCells) {
             gridState.editableCells = new Map(Object.entries(data.editableCells));
         }
         if (data.customConnections) {
             gridState.customConnections = new Map(Object.entries(data.customConnections));
-            // Redraw custom connections
             gridState.customConnections.forEach(connection => {
                 drawArrow(connection.source, connection.target, 'arrow-line');
             });
         }
-        console.log('Grid data loaded from localStorage');
     }
+    
+    if (zephaData) {
+        const data = JSON.parse(zephaData);
+        if (data.learnedSkills) {
+            gridState.learnedSkills = new Set(data.learnedSkills);
+            gridState.learnedSkills.forEach(skillId => {
+                const cell = document.getElementById(skillId);
+                if (cell) {
+                    cell.classList.add('learned-skill');
+                }
+            });
+        }
+    }
+    
+    console.log('Shared data loaded from localStorage');
 }
 
 // Global functions (none needed for inline editing)

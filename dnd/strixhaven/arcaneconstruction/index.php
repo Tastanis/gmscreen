@@ -56,6 +56,8 @@ require_once '../../version.php';
                 <span class="user-info">Welcome, <?php echo htmlspecialchars($user === 'GM' ? 'Game Master' : ucfirst($user)); ?></span>
                 <?php if ($is_gm): ?>
                 <button id="connect-btn" class="connect-btn">Connect</button>
+                <?php else: ?>
+                <button id="learn-skill-btn" class="learn-skill-btn">Learn Skill</button>
                 <?php endif; ?>
                 <button onclick="window.close()" class="close-btn">Close</button>
             </div>
@@ -79,6 +81,14 @@ require_once '../../version.php';
                 </div>
             </div>
         </main>
+    </div>
+
+    <!-- Save Button -->
+    <div class="save-container">
+        <button id="save-btn" class="save-btn">
+            <?php echo $is_gm ? 'Save Grid' : 'Save Skills'; ?>
+        </button>
+        <div id="save-status" class="save-status"></div>
     </div>
 
     <!-- Version Display -->

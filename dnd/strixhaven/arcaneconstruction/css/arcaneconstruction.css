@@ -74,6 +74,29 @@ body {
     color: white;
 }
 
+.learn-skill-btn {
+    background: #2d3748;
+    color: white;
+    border: 1px solid #4a5568;
+    padding: 6px 12px;
+    border-radius: 4px;
+    cursor: pointer;
+    font-size: 12px;
+    transition: all 0.2s;
+    margin-right: 10px;
+}
+
+.learn-skill-btn:hover {
+    background: #4a5568;
+    border-color: #718096;
+}
+
+.learn-skill-btn.active {
+    background: #8b5cf6;
+    border-color: #a78bfa;
+    color: white;
+}
+
 .close-btn {
     background: #e53e3e;
     color: white;
@@ -491,10 +514,11 @@ body {
     position: absolute;
     top: 0;
     left: 0;
-    width: 100%;
-    height: 100%;
+    width: 1440px; /* 12 columns * 120px */
+    height: 2000px; /* 20 rows * 100px */
     pointer-events: none;
     z-index: 10;
+    transform-origin: top left;
 }
 
 .arrow-line {
@@ -521,15 +545,51 @@ body {
 
 /* Back-propagation highlighting for Zepha */
 .grid-cell.chain-target {
-    background: rgba(245, 158, 11, 0.4) !important;
-    border: 2px solid #f59e0b !important;
-    box-shadow: 0 0 10px rgba(245, 158, 11, 0.5);
+    background: rgba(245, 158, 11, 0.7) !important;
+    border: 3px solid #f59e0b !important;
+    box-shadow: 0 0 15px rgba(245, 158, 11, 0.8), inset 0 0 10px rgba(245, 158, 11, 0.3);
+    transform: scale(1.05);
+    z-index: 20;
 }
 
 .grid-cell.chain-source {
-    background: rgba(16, 185, 129, 0.3) !important;
-    border: 2px solid #10b981 !important;
-    box-shadow: 0 0 8px rgba(16, 185, 129, 0.4);
+    background: rgba(16, 185, 129, 0.6) !important;
+    border: 3px solid #10b981 !important;
+    box-shadow: 0 0 12px rgba(16, 185, 129, 0.7), inset 0 0 8px rgba(16, 185, 129, 0.3);
+    transform: scale(1.02);
+    z-index: 15;
+}
+
+/* Learned skills highlighting */
+.grid-cell.learned-skill {
+    background: rgba(139, 92, 246, 0.6) !important;
+    border: 3px solid #8b5cf6 !important;
+    box-shadow: 0 0 12px rgba(139, 92, 246, 0.7), inset 0 0 8px rgba(139, 92, 246, 0.3);
+    position: relative;
+}
+
+.grid-cell.learned-skill::after {
+    content: '✓';
+    position: absolute;
+    top: 2px;
+    right: 2px;
+    color: #8b5cf6;
+    font-weight: bold;
+    font-size: 14px;
+    text-shadow: 0 0 3px rgba(139, 92, 246, 0.8);
+}
+
+/* Learning mode highlighting */
+.grid-cell.learning-mode {
+    background: rgba(168, 85, 247, 0.4) !important;
+    border: 2px dashed #a855f7 !important;
+    box-shadow: 0 0 8px rgba(168, 85, 247, 0.5);
+    animation: pulse-learning 2s infinite;
+}
+
+@keyframes pulse-learning {
+    0%, 100% { opacity: 1; }
+    50% { opacity: 0.7; }
 }
 
 /* Zoom Indicator */
@@ -557,6 +617,55 @@ body {
     font-size: 11px;
     max-width: 250px;
     z-index: 50;
+}
+
+/* Save Container */
+.save-container {
+    position: absolute;
+    bottom: 50px;
+    right: 10px;
+    z-index: 50;
+}
+
+.save-btn {
+    background: #38a169;
+    color: white;
+    border: none;
+    padding: 10px 16px;
+    border-radius: 6px;
+    cursor: pointer;
+    font-size: 14px;
+    font-weight: bold;
+    transition: all 0.2s;
+    box-shadow: 0 2px 4px rgba(0, 0, 0, 0.3);
+}
+
+.save-btn:hover {
+    background: #2f855a;
+    transform: translateY(-1px);
+    box-shadow: 0 4px 8px rgba(0, 0, 0, 0.4);
+}
+
+.save-btn:active {
+    transform: translateY(0);
+    box-shadow: 0 2px 4px rgba(0, 0, 0, 0.3);
+}
+
+.save-btn:disabled {
+    background: #718096;
+    cursor: not-allowed;
+    transform: none;
+}
+
+.save-status {
+    margin-top: 5px;
+    font-size: 12px;
+    text-align: center;
+    color: #e2e8f0;
+    background: rgba(0, 0, 0, 0.7);
+    padding: 3px 6px;
+    border-radius: 3px;
+    min-height: 18px;
 }
 
 /* Version Footer */
