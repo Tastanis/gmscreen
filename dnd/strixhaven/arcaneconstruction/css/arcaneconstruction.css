@@ -518,7 +518,7 @@ body {
     height: 2000px; /* 20 rows * 100px */
     pointer-events: none;
     z-index: 10;
-    transform-origin: top left;
+    /* No transform needed - inherits from grid-container */
 }
 
 .arrow-line {

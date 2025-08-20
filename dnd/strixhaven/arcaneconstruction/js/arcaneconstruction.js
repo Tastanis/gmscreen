@@ -932,7 +932,7 @@ function drawArrow(sourceId, targetId, className) {
 }
 
 /**
- * Redraw all arrows (for zoom/pan changes)
+ * Redraw all arrows (used only when loading data, not for transforms)
  */
 function redrawAllArrows() {
     const svg = document.getElementById('arrow-overlay');
@@ -1014,16 +1014,12 @@ function setupZoomControls() {
  */
 function updateGridTransform() {
     const container = document.querySelector('.grid-container');
-    const svg = document.getElementById('arrow-overlay');
     if (!container) return;
     
     const transform = `translate(calc(-50% + ${gridState.panX}px), calc(-50% + ${gridState.panY}px)) scale(${gridState.zoom})`;
     container.style.transform = transform;
     
-    // Apply same transform to SVG overlay so arrows stay aligned
-    if (svg) {
-        svg.style.transform = transform;
-    }
+    // SVG now inherits transform from container automatically - no separate transform needed
 }
 
 /**
