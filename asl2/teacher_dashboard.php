@@ -568,25 +568,57 @@ try {
                     if (!listContainer || !sessionContainer) return;
                     listContainer.innerHTML = '';
                     sessionContainer.innerHTML = '';
+                    
+                    if (data.wordlists.length === 0) {
+                        listContainer.innerHTML = '<p style="color: #666; font-style: italic;">No word lists created yet. Create your first word list above!</p>';
+                        return;
+                    }
+                    
                     data.wordlists.forEach(list => {
                         const listDiv = document.createElement('div');
                         listDiv.className = 'wordlist-item';
+                        listDiv.style.cssText = 'display: flex; align-items: center; justify-content: space-between; padding: 15px; border: 1px solid #e2e8f0; border-radius: 8px; margin-bottom: 10px; background: white;';
+                        
+                        const leftSection = document.createElement('div');
+                        leftSection.style.cssText = 'display: flex; flex-direction: column; gap: 5px;';
+                        
                         const nameSpan = document.createElement('span');
                         nameSpan.textContent = list.wordlist_name;
-                        listDiv.appendChild(nameSpan);
+                        nameSpan.style.cssText = 'font-weight: 600; color: #2d3748; font-size: 1.1rem;';
+                        leftSection.appendChild(nameSpan);
+                        
+                        const detailsSpan = document.createElement('span');
+                        detailsSpan.textContent = `${list.words.length} words • Speed: ${list.speed}x • Default count: ${list.word_count}`;
+                        detailsSpan.style.cssText = 'color: #718096; font-size: 0.9rem;';
+                        leftSection.appendChild(detailsSpan);
+                        
+                        listDiv.appendChild(leftSection);
+
+                        const actionsDiv = document.createElement('div');
+                        actionsDiv.style.cssText = 'display: flex; gap: 8px; align-items: center;';
 
                         const editBtn = document.createElement('button');
                         editBtn.className = 'action-btn edit-btn';
                         editBtn.textContent = 'Edit';
+                        editBtn.style.cssText = 'padding: 6px 12px; border: none; border-radius: 4px; cursor: pointer; font-size: 0.85rem; background: #4299e1; color: white; font-weight: 500;';
                         editBtn.addEventListener('click', () => showEditWordlistModal(list));
-                        listDiv.appendChild(editBtn);
+                        actionsDiv.appendChild(editBtn);
+
+                        const activateBtn = document.createElement('button');
+                        activateBtn.className = 'action-btn activate-btn';
+                        activateBtn.textContent = 'Activate';
+                        activateBtn.style.cssText = 'padding: 6px 12px; border: none; border-radius: 4px; cursor: pointer; font-size: 0.85rem; background: #38a169; color: white; font-weight: 500;';
+                        activateBtn.addEventListener('click', () => activateWordlist(list));
+                        actionsDiv.appendChild(activateBtn);
 
                         const deleteBtn = document.createElement('button');
                         deleteBtn.className = 'action-btn delete-btn';
                         deleteBtn.textContent = 'Delete';
+                        deleteBtn.style.cssText = 'padding: 6px 12px; border: none; border-radius: 4px; cursor: pointer; font-size: 0.85rem; background: #e53e3e; color: white; font-weight: 500;';
                         deleteBtn.addEventListener('click', () => deleteWordlist(list.id));
-                        listDiv.appendChild(deleteBtn);
+                        actionsDiv.appendChild(deleteBtn);
 
+                        listDiv.appendChild(actionsDiv);
                         listContainer.appendChild(listDiv);
 
                         const label = document.createElement('label');
@@ -603,6 +635,10 @@ try {
                 })
                 .catch(error => {
                     console.error('Error loading word lists:', error);
+                    const listContainer = document.getElementById('wordlists-list');
+                    if (listContainer) {
+                        listContainer.innerHTML = '<p style="color: #e53e3e;">Error loading word lists. Please refresh and try again.</p>';
+                    }
                 });
         }
 
@@ -692,8 +728,129 @@ try {
                 });
         }
 
-        function showCreateSessionForm() {
+        function activateWordlist(list) {
+            // Clear any existing active session display
+            document.getElementById('active-session-display').style.display = 'none';
+            
+            // Show session creation form
+            showCreateSessionForm([list]);
+        }
+
+        function startSession(wordlistIds) {
+            const formData = new FormData();
+            wordlistIds.forEach(id => formData.append('wordlist_ids[]', id));
+            
+            // Get any override settings
+            const speedOverride = document.querySelector('input[name="speed"]').value;
+            const countOverride = document.querySelector('input[name="word_count"]').value;
+            const customSeed = document.querySelector('input[name="custom_seed"]').value;
+            
+            if (speedOverride) formData.append('speed', speedOverride);
+            if (countOverride) formData.append('word_count', countOverride);
+            if (customSeed) formData.append('custom_seed', customSeed);
+            
+            fetch('create_session.php', { method: 'POST', body: formData })
+                .then(response => response.json())
+                .then(data => {
+                    if (data.success) {
+                        showMessage('Session created successfully!', 'success');
+                        displayActiveSession(data.session_code, wordlistIds, data.speed, data.word_count);
+                        hideCreateSessionForm();
+                    } else {
+                        showMessage(data.message || 'Error creating session', 'error');
+                    }
+                })
+                .catch(error => {
+                    console.error('Error creating session:', error);
+                    showMessage('Error creating session. Please try again.', 'error');
+                });
+        }
+
+        function displayActiveSession(sessionCode, wordlistIds, speed, wordCount) {
+            const sessionDisplay = document.getElementById('active-session-display');
+            const sessionContent = document.getElementById('session-info-content');
+            
+            sessionContent.innerHTML = `
+                <div style="margin-bottom: 20px;">
+                    <h4 style="margin: 0 0 10px 0; color: #22543d;">Session Code: <span style="font-size: 1.5rem; font-weight: bold; color: #2f855a;">${sessionCode}</span></h4>
+                    <p style="margin: 0; color: #2d3748;">Share this code with your students so they can join the game.</p>
+                </div>
+                
+                <div style="display: grid; grid-template-columns: repeat(auto-fit, minmax(200px, 1fr)); gap: 15px; margin-bottom: 20px;">
+                    <div style="padding: 10px; background: rgba(255,255,255,0.8); border-radius: 6px;">
+                        <strong>Word Lists:</strong> ${wordlistIds.length}
+                    </div>
+                    <div style="padding: 10px; background: rgba(255,255,255,0.8); border-radius: 6px;">
+                        <strong>Speed:</strong> ${speed || 'Default'}
+                    </div>
+                    <div style="padding: 10px; background: rgba(255,255,255,0.8); border-radius: 6px;">
+                        <strong>Word Count:</strong> ${wordCount || 'Default'}
+                    </div>
+                </div>
+                
+                <div style="display: flex; gap: 10px; flex-wrap: wrap;">
+                    <button onclick="startScrollerDisplay(${sessionCode})" class="form-button" style="background: #2f855a;">
+                        🎮 Start Scrolling Display
+                    </button>
+                    <button onclick="copySessionCode(${sessionCode})" class="form-button" style="background: #4299e1;">
+                        📋 Copy Session Code
+                    </button>
+                    <button onclick="openStudentLink(${sessionCode})" class="form-button" style="background: #805ad5;">
+                        🔗 Open Student Link
+                    </button>
+                    <button onclick="endSession()" class="form-button" style="background: #e53e3e;">
+                        ❌ End Session
+                    </button>
+                </div>
+            `;
+            
+            sessionDisplay.style.display = 'block';
+        }
+
+        function startScrollerDisplay(sessionCode) {
+            const url = `scroller.html?session=${sessionCode}`;
+            window.open(url, '_blank', 'width=800,height=600,menubar=no,toolbar=no,status=no');
+            showMessage('Scroller display opened in new window', 'success');
+        }
+
+        function copySessionCode(sessionCode) {
+            navigator.clipboard.writeText(sessionCode.toString()).then(() => {
+                showMessage('Session code copied to clipboard!', 'success');
+            }).catch(() => {
+                // Fallback for older browsers
+                const textArea = document.createElement('textarea');
+                textArea.value = sessionCode;
+                document.body.appendChild(textArea);
+                textArea.select();
+                document.execCommand('copy');
+                document.body.removeChild(textArea);
+                showMessage('Session code copied to clipboard!', 'success');
+            });
+        }
+
+        function openStudentLink(sessionCode) {
+            const url = `${window.location.origin}${window.location.pathname.replace('teacher_dashboard.php', '')}scroller.html?session=${sessionCode}`;
+            window.open(url, '_blank');
+            showMessage('Student link opened in new tab', 'success');
+        }
+
+        function endSession() {
+            if (confirm('Are you sure you want to end this session?')) {
+                document.getElementById('active-session-display').style.display = 'none';
+                showMessage('Session ended', 'success');
+            }
+        }
+
+        function showCreateSessionForm(selectedWordlists = []) {
             document.getElementById('create-session-form').style.display = 'block';
+            
+            // Pre-select wordlists if provided
+            if (selectedWordlists.length > 0) {
+                const checkboxes = document.querySelectorAll('input[name="wordlist_ids[]"]');
+                checkboxes.forEach(checkbox => {
+                    checkbox.checked = selectedWordlists.some(list => list.id == checkbox.value);
+                });
+            }
         }
 
         function hideCreateSessionForm() {
@@ -709,33 +866,8 @@ try {
                 return;
             }
 
-            const formData = new FormData();
-            selected.forEach(cb => formData.append('wordlist_ids[]', cb.value));
-            if (form.speed.value) formData.append('speed', form.speed.value);
-            if (form.word_count.value) formData.append('word_count', form.word_count.value);
-            if (form.custom_seed.value) formData.append('custom_seed', form.custom_seed.value);
-
-            fetch('create_session.php', { method: 'POST', body: formData })
-                .then(response => response.json())
-                .then(data => {
-                    if (data.success) {
-                        const info = document.getElementById('session-info-content');
-                        const names = selected.map(cb => cb.dataset.name).join(', ');
-                        info.innerHTML = `<p><strong>Word Lists:</strong> ${names}</p>` +
-                                         `<p><strong>Speed:</strong> ${data.speed ?? 'Default'}</p>` +
-                                         `<p><strong>Word Count:</strong> ${data.word_count ?? 'Default'}</p>` +
-                                         `<p><strong>Session Code:</strong> ${data.session_code}</p>`;
-                        document.getElementById('active-session-display').style.display = 'block';
-                        hideCreateSessionForm();
-                        showMessage('Session created successfully!', 'success');
-                    } else {
-                        showMessage(data.message || 'Error creating session', 'error');
-                    }
-                })
-                .catch(error => {
-                    console.error('Error creating session:', error);
-                    showMessage('Error creating session. Please try again.', 'error');
-                });
+            const wordlistIds = selected.map(cb => cb.value);
+            startSession(wordlistIds);
         }
 
         function showMessage(message, type) {
