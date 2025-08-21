@@ -729,11 +729,23 @@ try {
         }
 
         function activateWordlist(list) {
-            // Clear any existing active session display
-            document.getElementById('active-session-display').style.display = 'none';
-            
-            // Show session creation form
-            showCreateSessionForm([list]);
+            try {
+                console.log('Activate button clicked for list:', list);
+                
+                // Clear any existing active session display
+                const activeDisplay = document.getElementById('active-session-display');
+                if (activeDisplay) {
+                    activeDisplay.style.display = 'none';
+                    console.log('Hidden active session display');
+                }
+                
+                // Show session creation form
+                console.log('Calling showCreateSessionForm with list:', [list]);
+                showCreateSessionForm([list]);
+            } catch (error) {
+                console.error('Error in activateWordlist:', error);
+                showMessage('Error activating word list: ' + error.message, 'error');
+            }
         }
 
         function startSession(wordlistIds) {
@@ -842,14 +854,44 @@ try {
         }
 
         function showCreateSessionForm(selectedWordlists = []) {
-            document.getElementById('create-session-form').style.display = 'block';
-            
-            // Pre-select wordlists if provided
-            if (selectedWordlists.length > 0) {
-                const checkboxes = document.querySelectorAll('input[name="wordlist_ids[]"]');
-                checkboxes.forEach(checkbox => {
-                    checkbox.checked = selectedWordlists.some(list => list.id == checkbox.value);
-                });
+            try {
+                console.log('showCreateSessionForm called with:', selectedWordlists);
+                
+                const formElement = document.getElementById('create-session-form');
+                if (!formElement) {
+                    console.error('create-session-form element not found!');
+                    showMessage('Session form not found. Please refresh the page.', 'error');
+                    return;
+                }
+                
+                console.log('Showing session form');
+                formElement.style.display = 'block';
+                
+                // Pre-select wordlists if provided
+                if (selectedWordlists.length > 0) {
+                    console.log('Pre-selecting wordlists...');
+                    
+                    // Use setTimeout to allow form to render first
+                    setTimeout(() => {
+                        const checkboxes = document.querySelectorAll('input[name="wordlist_ids[]"]');
+                        console.log('Found checkboxes:', checkboxes.length);
+                        
+                        if (checkboxes.length === 0) {
+                            console.warn('No checkboxes found - they may not be populated yet');
+                        }
+                        
+                        checkboxes.forEach(checkbox => {
+                            const shouldCheck = selectedWordlists.some(list => list.id == checkbox.value);
+                            if (shouldCheck) {
+                                checkbox.checked = true;
+                                console.log('Pre-selected checkbox for wordlist:', checkbox.value);
+                            }
+                        });
+                    }, 100);
+                }
+            } catch (error) {
+                console.error('Error in showCreateSessionForm:', error);
+                showMessage('Error showing session form: ' + error.message, 'error');
             }
         }
 
