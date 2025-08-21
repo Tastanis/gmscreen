@@ -8,16 +8,20 @@
       justify-content:center;align-items:center;background:#f0f4f8;
       font-family:Arial,sans-serif}
     h1{margin-bottom:1.5rem}
-    a{display:inline-block;padding:.9rem 2.4rem;margin:.4rem;
+    .button-container{display:flex;gap:1rem;flex-wrap:wrap;justify-content:center}
+    a{display:inline-block;padding:.9rem 2.4rem;
       font-size:1.1rem;font-weight:700;color:#fff;text-decoration:none;
-      border-radius:6px;transition:filter .2s}
-    .asl{background:#0072ce}.dnd{background:#c0392b}
-    a:hover{filter:brightness(1.15)}
+      border-radius:6px;transition:all .2s}
+    .asl1{background:#0072ce}.asl2{background:#005a9e}.dnd{background:#c0392b}
+    a:hover{filter:brightness(1.15);transform:translateY(-2px)}
   </style>
 </head>
 <body>
   <h1>Choose Your Portal</h1>
-  <a href="asl/" class="asl">ASL&nbsp;Login</a>
-  <a href="dnd/" class="dnd">D&amp;D</a>
+  <div class="button-container">
+    <a href="asl1/" class="asl1">ASL&nbsp;1</a>
+    <a href="asl2/" class="asl2">ASL&nbsp;2</a>
+    <a href="dnd/" class="dnd">D&amp;D</a>
+  </div>
 </body>
 </html>

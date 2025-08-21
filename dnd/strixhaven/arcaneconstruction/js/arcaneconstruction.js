@@ -102,6 +102,14 @@ function createGridCell(row, col) {
     cell.style.gridColumn = col;
     cell.style.gridRow = row;
     
+    // DEBUG: Log cell creation (only for interactive cells)
+    if ((row >= 4 && row <= 9 && col >= 3 && col <= 5) || 
+        (row >= 4 && row <= 9 && col >= 9 && col <= 11) ||
+        (row >= 14 && row <= 19 && col >= 3 && col <= 5) ||
+        (row >= 14 && row <= 19 && col >= 9 && col <= 11)) {
+        console.log(`[CREATE] Interactive cell created: ID=${cellId}, dataset.row=${row}, dataset.col=${col}`);
+    }
+    
     return cell;
 }
 
@@ -394,6 +402,10 @@ function setupInteractiveCell(cell, row, col) {
     const savedContent = gridState.editableCells.get(cellKey);
     if (savedContent) {
         cell.innerHTML = savedContent;
+        
+        // DEBUG: Log load operation
+        console.log(`[LOAD] Cell ${cellKey} (ID: ${cell.id}) loaded with text:`, savedContent);
+        console.log(`[LOAD] Cell dataset - row: ${cell.dataset.row}, col: ${cell.dataset.col}`);
     }
 }
 
@@ -506,6 +518,10 @@ function finishInlineEdit(cell, textarea, save) {
         // Save to state
         const cellKey = `${row}-${col}`;
         gridState.editableCells.set(cellKey, formattedText);
+        
+        // DEBUG: Log save operation
+        console.log(`[SAVE] Cell ${cellKey} (ID: ${cell.id}) saved with text:`, formattedText);
+        console.log(`[SAVE] Cell dataset - row: ${cell.dataset.row}, col: ${cell.dataset.col}`);
         
         // Text editing complete - use manual save button to persist
     } else {
@@ -1114,6 +1130,12 @@ async function saveGMData() {
         user: 'GM'
     };
     
+    // DEBUG: Log save data
+    console.log('[SAVE] GM data being saved to server:');
+    for (const [key, value] of gridState.editableCells) {
+        console.log(`  Cell ${key}: ${value}`);
+    }
+    
     try {
         const response = await fetch('save_gm_data.php', {
             method: 'POST',
@@ -1215,6 +1237,12 @@ async function loadSharedData() {
             if (data.gm_data) {
                 if (data.gm_data.editableCells) {
                     gridState.editableCells = new Map(Object.entries(data.gm_data.editableCells));
+                    
+                    // DEBUG: Log loaded data
+                    console.log('[LOAD] GM data loaded from server:');
+                    for (const [key, value] of gridState.editableCells) {
+                        console.log(`  Cell ${key}: ${value}`);
+                    }
                 }
                 if (data.gm_data.customConnections) {
                     // Clear existing custom connections
