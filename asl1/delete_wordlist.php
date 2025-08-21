@@ -16,7 +16,7 @@ if ($id <= 0) {
 }
 
 try {
-    $stmt = $pdo->prepare("DELETE FROM wordlists WHERE id = ? AND teacher_id = ?");
+    $stmt = $pdo->prepare("DELETE FROM scroller_wordlists WHERE id = ? AND teacher_id = ?");
     $stmt->execute([$id, $_SESSION['user_id']]);
     echo json_encode(['success' => true]);
 } catch (PDOException $e) {

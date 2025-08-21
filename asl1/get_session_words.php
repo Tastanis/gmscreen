@@ -24,7 +24,7 @@ try {
     }
 
     $placeholders = implode(',', array_fill(0, count($wordlist_ids), '?'));
-    $stmt = $pdo->prepare("SELECT words FROM wordlists WHERE id IN ($placeholders)");
+    $stmt = $pdo->prepare("SELECT words FROM scroller_wordlists WHERE id IN ($placeholders)");
     $stmt->execute($wordlist_ids);
     $rows = $stmt->fetchAll(PDO::FETCH_ASSOC);
     $all_words = [];
