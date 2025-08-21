@@ -236,7 +236,8 @@ try {
                     });
                     
                     // Activate the selected button
-                    const activeButton = skillItem.querySelector('.skill-button.' + status);
+                    const statusClass = status.replace('_', '-');
+                    const activeButton = skillItem.querySelector('.skill-button.' + statusClass);
                     if (activeButton) {
                         activeButton.classList.add('active');
                     }

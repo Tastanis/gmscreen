@@ -226,7 +226,10 @@ try {
                             </div>
                             <div class="form-group">
                                 <label>Resources (one per line)</label>
-                                <textarea name="resources" class="form-input" rows="5" placeholder="Resource Name 1&#10;Resource Name 2&#10;Resource Name 3"></textarea>
+                                <textarea name="resources" class="form-input" rows="5" placeholder="Resource Name 1|https://example.com&#10;https://docs.google.com/document/d/123&#10;Just a resource name&#10;Another Resource|https://link.com"></textarea>
+                                <small style="color: #6c757d; font-size: 0.85rem; margin-top: 5px; display: block;">
+                                    Format: "Name|URL" or just "URL" or just "Name". Use the Resources button after creation for advanced editing.
+                                </small>
                             </div>
                             <button type="submit" class="form-button">Add Skill</button>
                             <button type="button" class="form-button" onclick="hideAddSkillForm()" style="background: #6c757d;">Cancel</button>

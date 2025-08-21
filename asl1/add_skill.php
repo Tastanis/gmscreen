@@ -59,13 +59,29 @@ try {
         $order_index = 1;
         
         foreach ($resources_lines as $line) {
-            $resource_name = trim($line);
-            if (!empty($resource_name)) {
+            $line = trim($line);
+            if (!empty($line)) {
+                // Check if line contains a URL (format: "Name|URL" or just "URL" or just "Name")
+                $resource_name = $line;
+                $resource_url = '#';
+                
+                if (strpos($line, '|') !== false) {
+                    // Format: "Resource Name|https://example.com"
+                    $parts = explode('|', $line, 2);
+                    $resource_name = trim($parts[0]);
+                    $resource_url = trim($parts[1]);
+                } elseif (filter_var($line, FILTER_VALIDATE_URL)) {
+                    // Line is just a URL, use URL as both name and URL
+                    $resource_name = $line;
+                    $resource_url = $line;
+                }
+                // Otherwise, just use the line as the name with default '#' URL
+                
                 $stmt = $pdo->prepare("
                     INSERT INTO resources (skill_id, resource_name, resource_url, order_index) 
-                    VALUES (?, ?, '#', ?)
+                    VALUES (?, ?, ?, ?)
                 ");
-                $stmt->execute([$skill_id, $resource_name, $order_index]);
+                $stmt->execute([$skill_id, $resource_name, $resource_url, $order_index]);
                 $resources_added++;
                 $order_index++;
             }
