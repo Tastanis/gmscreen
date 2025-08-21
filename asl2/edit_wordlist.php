@@ -23,7 +23,7 @@ if ($id <= 0 || $name === '' || $words_raw === '') {
 $words = preg_split('/[\r\n,]+/', $words_raw, -1, PREG_SPLIT_NO_EMPTY);
 
 try {
-    $stmt = $pdo->prepare("UPDATE scroller_wordlists SET wordlist_name = ?, words = ?, speed = ?, word_count = ? WHERE id = ? AND teacher_id = ?");
+    $stmt = $pdo->prepare("UPDATE scroller_wordlists SET name = ?, words = ?, speed_setting = ?, word_count = ? WHERE id = ? AND teacher_id = ?");
     $stmt->execute([$name, json_encode($words), $speed, $count, $id, $_SESSION['user_id']]);
     echo json_encode(['success' => true]);
 } catch (PDOException $e) {

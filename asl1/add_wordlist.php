@@ -22,7 +22,7 @@ if ($name === '' || $words_raw === '') {
 $words = preg_split('/[\r\n,]+/', $words_raw, -1, PREG_SPLIT_NO_EMPTY);
 
 try {
-    $stmt = $pdo->prepare("INSERT INTO scroller_wordlists (teacher_id, wordlist_name, words, speed, word_count, created_at) VALUES (?, ?, ?, ?, ?, NOW())");
+    $stmt = $pdo->prepare("INSERT INTO scroller_wordlists (teacher_id, name, words, speed_setting, word_count, created_at) VALUES (?, ?, ?, ?, ?, NOW())");
     $stmt->execute([$_SESSION['user_id'], $name, json_encode($words), $speed, $count]);
     echo json_encode(['success' => true]);
 } catch (PDOException $e) {

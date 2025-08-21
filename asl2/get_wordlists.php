@@ -10,7 +10,7 @@ if (!isset($_SESSION['user_id']) || !isset($_SESSION['is_teacher']) || !$_SESSIO
 }
 
 try {
-    $stmt = $pdo->prepare("SELECT id, wordlist_name, words, speed, word_count FROM scroller_wordlists WHERE teacher_id = ? ORDER BY created_at DESC");
+    $stmt = $pdo->prepare("SELECT id, name as wordlist_name, words, speed_setting as speed, word_count FROM scroller_wordlists WHERE teacher_id = ? ORDER BY created_at DESC");
     $stmt->execute([$_SESSION['user_id']]);
     $lists = $stmt->fetchAll(PDO::FETCH_ASSOC);
     // Decode words column before returning
