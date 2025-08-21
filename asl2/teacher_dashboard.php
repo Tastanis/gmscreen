@@ -16,6 +16,7 @@ try {
             u.first_name,
             u.last_name,
             u.email,
+            u.class_period,
             COALESCE(
                 SUM(CASE 
                     WHEN us.status = 'not_started' THEN s.points_not_started
@@ -31,8 +32,8 @@ try {
         LEFT JOIN user_skills us ON u.id = us.user_id
         LEFT JOIN skills s ON us.skill_id = s.id
         WHERE u.is_teacher = FALSE AND u.level = 2
-        GROUP BY u.id, u.first_name, u.last_name, u.email
-        ORDER BY u.first_name, u.last_name
+        GROUP BY u.id, u.first_name, u.last_name, u.email, u.class_period
+        ORDER BY u.class_period, u.first_name, u.last_name
     ");
     $stmt->execute();
     $students = $stmt->fetchAll();
@@ -94,7 +95,19 @@ try {
                 <!-- Students Section -->
                 <div id="students-section">
                     <h2>Student Progress Overview</h2>
-                    <p>Total Students: <strong><?php echo count($students); ?></strong> | Total Skills: <strong><?php echo $total_skills; ?></strong></p>
+                    <p>Total Students: <strong><span id="student-count"><?php echo count($students); ?></span></strong> | Total Skills: <strong><?php echo $total_skills; ?></strong></p>
+                    
+                    <!-- Period Filter Controls -->
+                    <div class="filter-controls">
+                        <label for="period-filter">Filter by Period:</label>
+                        <select id="period-filter" onchange="filterStudentsByPeriod(this.value)">
+                            <option value="all">All Periods</option>
+                            <?php for ($i = 1; $i <= 6; $i++): ?>
+                                <option value="<?php echo $i; ?>">Period <?php echo $i; ?></option>
+                            <?php endfor; ?>
+                            <option value="none">No Period Selected</option>
+                        </select>
+                    </div>
                     
                     <div class="students-grid">
                         <?php foreach ($students as $student): ?>
@@ -102,9 +115,14 @@ try {
                             $progress_percentage = $student['total_possible_points'] > 0 ? 
                                 round(($student['earned_points'] / $student['total_possible_points']) * 100) : 0;
                             ?>
-                            <div class="student-card">
+                            <div class="student-card" data-class-period="<?php echo $student['class_period'] ?? 'none'; ?>">
                                 <div class="student-name">
                                     <?php echo htmlspecialchars($student['first_name'] . ' ' . $student['last_name']); ?>
+                                    <?php if ($student['class_period']): ?>
+                                        <span class="period-badge">Period <?php echo $student['class_period']; ?></span>
+                                    <?php else: ?>
+                                        <span class="period-badge no-period">No Period</span>
+                                    <?php endif; ?>
                                 </div>
                                 <div class="student-email">
                                     <?php echo htmlspecialchars($student['email']); ?>
@@ -405,6 +423,31 @@ try {
     </div>
     
     <script>
+        function filterStudentsByPeriod(period) {
+            const studentCards = document.querySelectorAll('.student-card');
+            let visibleCount = 0;
+            
+            studentCards.forEach(card => {
+                const cardPeriod = card.dataset.classPeriod;
+                
+                if (period === 'all') {
+                    card.style.display = 'block';
+                    visibleCount++;
+                } else if (period === 'none' && cardPeriod === 'none') {
+                    card.style.display = 'block';
+                    visibleCount++;
+                } else if (period === cardPeriod) {
+                    card.style.display = 'block';
+                    visibleCount++;
+                } else {
+                    card.style.display = 'none';
+                }
+            });
+            
+            // Update student count
+            document.getElementById('student-count').textContent = visibleCount;
+        }
+        
         function showSection(sectionName) {
             // Hide all sections
             document.getElementById('students-section').style.display = 'none';

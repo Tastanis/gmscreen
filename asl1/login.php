@@ -46,6 +46,7 @@ if ($_POST) {
             $_SESSION['user_last_name'] = $user['last_name'];
             $_SESSION['is_teacher'] = $user['is_teacher'];
             $_SESSION['user_level'] = $user['level'] ?? 1;
+            $_SESSION['class_period'] = $user['class_period'] ?? null;
             
             // Redirect based on user type
             if ($user['is_teacher']) {
