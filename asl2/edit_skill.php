@@ -20,6 +20,7 @@ if ($_SERVER['REQUEST_METHOD'] !== 'POST') {
 $skill_id = intval($_POST['skill_id'] ?? 0);
 $skill_name = trim($_POST['skill_name'] ?? '');
 $skill_description = trim($_POST['skill_description'] ?? '');
+$unit = trim($_POST['unit'] ?? '');
 
 // Validate required fields
 if ($skill_id <= 0) {
@@ -58,10 +59,11 @@ try {
     // Update the skill
     $stmt = $pdo->prepare("
         UPDATE skills 
-        SET skill_name = ?, skill_description = ?, updated_at = CURRENT_TIMESTAMP
+        SET skill_name = ?, skill_description = ?, unit = ?, updated_at = CURRENT_TIMESTAMP
         WHERE id = ?
     ");
-    $stmt->execute([$skill_name, $skill_description, $skill_id]);
+    $unit_value = empty($unit) ? null : $unit;
+    $stmt->execute([$skill_name, $skill_description, $unit_value, $skill_id]);
     
     // Success response
     echo json_encode([

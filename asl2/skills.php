@@ -21,6 +21,7 @@ try {
             s.id,
             s.skill_name,
             s.skill_description,
+            s.unit,
             s.points_not_started,
             s.points_progressing,
             s.points_proficient,
@@ -31,6 +32,11 @@ try {
     ");
     $stmt->execute([$_SESSION['user_id']]);
     $skills = $stmt->fetchAll();
+    
+    // Get unique units for filter dropdown
+    $stmt = $pdo->prepare("SELECT DISTINCT unit FROM skills WHERE unit IS NOT NULL ORDER BY unit");
+    $stmt->execute();
+    $units = $stmt->fetchAll(PDO::FETCH_COLUMN);
     
     // Get resources for each skill
     $resources = [];
@@ -119,19 +125,43 @@ try {
                     <h2>Your ASL Skills Progress</h2>
                     <p>Track your progress through each skill. Click the buttons to update your status and watch your progress bar grow!</p>
                     
-                    <!-- Search Bar -->
+                    <!-- Search and Filter Bar -->
                     <div class="search-container">
-                        <input type="text" id="skillSearch" class="search-input" placeholder="Search skills..." onkeyup="filterSkills()">
-                        <button class="search-clear" onclick="clearSearch()">Clear</button>
+                        <div class="search-row">
+                            <input type="text" id="skillSearch" class="search-input" placeholder="Search skills..." onkeyup="filterSkills()">
+                            <button class="search-clear" onclick="clearSearch()">Clear</button>
+                        </div>
+                        <div class="filter-row">
+                            <div class="status-filters">
+                                <button class="filter-btn active" data-status="not_started" onclick="toggleStatusFilter(this)">Not Started</button>
+                                <button class="filter-btn active" data-status="progressing" onclick="toggleStatusFilter(this)">Progressing</button>
+                                <button class="filter-btn active" data-status="proficient" onclick="toggleStatusFilter(this)">Proficient</button>
+                            </div>
+                            <div class="unit-filter">
+                                <select id="unitFilter" onchange="filterSkills()" class="unit-select">
+                                    <option value="">All Units</option>
+                                    <option value="no-unit">No Unit (Year-round)</option>
+                                    <?php foreach ($units as $unit): ?>
+                                        <option value="<?php echo htmlspecialchars($unit); ?>"><?php echo htmlspecialchars($unit); ?></option>
+                                    <?php endforeach; ?>
+                                </select>
+                            </div>
+                        </div>
                         <div class="search-results">
                             <span id="searchResults"><?php echo count($skills); ?> skills found</span>
                         </div>
                     </div>
                     
                     <?php foreach ($skills as $skill): ?>
-                        <div class="skill-item" id="skill-<?php echo $skill['id']; ?>">
+                        <div class="skill-item" 
+                             id="skill-<?php echo $skill['id']; ?>" 
+                             data-status="<?php echo $skill['user_status']; ?>"
+                             data-unit="<?php echo htmlspecialchars($skill['unit'] ?? 'no-unit'); ?>">
                             <div class="skill-header">
                                 <?php echo htmlspecialchars($skill['skill_name']); ?>
+                                <?php if (!empty($skill['unit'])): ?>
+                                    <span class="skill-unit-badge"><?php echo htmlspecialchars($skill['unit']); ?></span>
+                                <?php endif; ?>
                             </div>
                             
                             <div class="skill-buttons">
@@ -242,8 +272,14 @@ try {
                         activeButton.classList.add('active');
                     }
                     
+                    // Update the skill item's data-status attribute for filtering
+                    skillItem.dataset.status = status;
+                    
                     // Update progress bar
                     updateProgressBar(data.progress_percentage);
+                    
+                    // Reapply filters in case the item should now be hidden/shown
+                    filterSkills();
                     
                     // Show success message briefly
                     showMessage('Progress updated!', 'success');
@@ -314,18 +350,62 @@ try {
             window.location.href = 'dashboard.php';
         }
         
-        // Search functionality
+        // Get active status filters
+        function getActiveStatusFilters() {
+            const activeButtons = document.querySelectorAll('.filter-btn.active');
+            const activeStatuses = [];
+            activeButtons.forEach(btn => {
+                activeStatuses.push(btn.dataset.status);
+            });
+            return activeStatuses;
+        }
+        
+        // Toggle status filter button
+        function toggleStatusFilter(button) {
+            button.classList.toggle('active');
+            filterSkills();
+        }
+        
+        // Combined filter functionality
         function filterSkills() {
             const searchTerm = document.getElementById('skillSearch').value.toLowerCase();
+            const unitFilter = document.getElementById('unitFilter').value;
+            const activeStatuses = getActiveStatusFilters();
             const skillItems = document.querySelectorAll('.skill-item');
             let visibleCount = 0;
             
             skillItems.forEach(item => {
-                const skillName = item.querySelector('.skill-header').textContent.toLowerCase();
-                const skillDescription = item.querySelector('p');
-                const description = skillDescription ? skillDescription.textContent.toLowerCase() : '';
+                let shouldShow = true;
                 
-                if (skillName.includes(searchTerm) || description.includes(searchTerm)) {
+                // Check search term
+                if (searchTerm) {
+                    const skillName = item.querySelector('.skill-header').textContent.toLowerCase();
+                    const skillDescription = item.querySelector('p');
+                    const description = skillDescription ? skillDescription.textContent.toLowerCase() : '';
+                    
+                    if (!skillName.includes(searchTerm) && !description.includes(searchTerm)) {
+                        shouldShow = false;
+                    }
+                }
+                
+                // Check status filter
+                if (shouldShow) {
+                    const itemStatus = item.dataset.status;
+                    if (!activeStatuses.includes(itemStatus)) {
+                        shouldShow = false;
+                    }
+                }
+                
+                // Check unit filter
+                if (shouldShow && unitFilter) {
+                    const itemUnit = item.dataset.unit;
+                    if (unitFilter !== itemUnit) {
+                        shouldShow = false;
+                    }
+                }
+                
+                // Show or hide item
+                if (shouldShow) {
                     item.classList.remove('hidden');
                     visibleCount++;
                 } else {
@@ -338,11 +418,12 @@ try {
         
         function clearSearch() {
             document.getElementById('skillSearch').value = '';
-            const skillItems = document.querySelectorAll('.skill-item');
-            skillItems.forEach(item => {
-                item.classList.remove('hidden');
+            document.getElementById('unitFilter').value = '';
+            // Reset all status filters to active
+            document.querySelectorAll('.filter-btn').forEach(btn => {
+                btn.classList.add('active');
             });
-            document.getElementById('searchResults').textContent = skillItems.length + ' skills found';
+            filterSkills();
         }
     </script>
 </body>

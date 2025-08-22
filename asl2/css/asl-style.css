@@ -371,9 +371,8 @@ header h1 {
     margin-bottom: 30px;
     border: 2px solid #e2e8f0;
     display: flex;
-    align-items: center;
+    flex-direction: column;
     gap: 15px;
-    flex-wrap: wrap;
 }
 
 .search-input {
@@ -1453,95 +1452,6 @@ header h1 {
 .hidden { display: none; }
 .visible { display: block; }
 
-/* ===== CLASS PERIOD STYLES ===== */
-.class-period-section {
-    display: flex;
-    align-items: center;
-    gap: 10px;
-    margin-left: auto;
-}
-
-.class-period-section label {
-    color: #4a5568;
-    font-weight: 600;
-    font-size: 0.95rem;
-}
-
-.class-period-section select {
-    padding: 6px 12px;
-    border: 2px solid #e2e8f0;
-    border-radius: 8px;
-    background: white;
-    color: #2d3748;
-    font-size: 0.95rem;
-    cursor: pointer;
-    transition: all 0.3s ease;
-}
-
-.class-period-section select:hover {
-    border-color: #4299e1;
-}
-
-.class-period-section select:focus {
-    outline: none;
-    border-color: #4299e1;
-    box-shadow: 0 0 0 3px rgba(66, 153, 225, 0.1);
-}
-
-/* Period badge styles */
-.period-badge {
-    display: inline-block;
-    padding: 2px 8px;
-    margin-left: 10px;
-    background: #4299e1;
-    color: white;
-    border-radius: 12px;
-    font-size: 0.85rem;
-    font-weight: 600;
-}
-
-.period-badge.no-period {
-    background: #a0aec0;
-}
-
-/* Filter controls for teacher dashboard */
-.filter-controls {
-    margin: 20px 0;
-    padding: 15px;
-    background: rgba(255, 255, 255, 0.95);
-    border-radius: 12px;
-    display: flex;
-    align-items: center;
-    gap: 15px;
-}
-
-.filter-controls label {
-    color: #4a5568;
-    font-weight: 600;
-    font-size: 1rem;
-}
-
-.filter-controls select {
-    padding: 8px 15px;
-    border: 2px solid #e2e8f0;
-    border-radius: 8px;
-    background: white;
-    color: #2d3748;
-    font-size: 0.95rem;
-    cursor: pointer;
-    transition: all 0.3s ease;
-}
-
-.filter-controls select:hover {
-    border-color: #4299e1;
-}
-
-.filter-controls select:focus {
-    outline: none;
-    border-color: #4299e1;
-    box-shadow: 0 0 0 3px rgba(66, 153, 225, 0.1);
-}
-
 /* ===== ACCESSIBILITY ===== */
 @media (prefers-reduced-motion: reduce) {
     *, *::before, *::after {
@@ -1549,4 +1459,85 @@ header h1 {
         animation-iteration-count: 1 !important;
         transition-duration: 0.01ms !important;
     }
+}
+
+/* ===== FILTER AND UNIT STYLES ===== */
+.search-row {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    width: 100%;
+}
+
+.filter-row {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 20px;
+    flex-wrap: wrap;
+    width: 100%;
+}
+
+.status-filters {
+    display: flex;
+    gap: 10px;
+}
+
+.filter-btn {
+    padding: 8px 16px;
+    background: #e2e8f0;
+    color: #4a5568;
+    border: 2px solid #cbd5e0;
+    border-radius: 8px;
+    cursor: pointer;
+    font-weight: 600;
+    transition: all 0.3s ease;
+    font-size: 0.9rem;
+}
+
+.filter-btn:hover {
+    background: #cbd5e0;
+}
+
+.filter-btn.active {
+    background: #4299e1;
+    color: white;
+    border-color: #3182ce;
+}
+
+.filter-btn.active:hover {
+    background: #3182ce;
+}
+
+.unit-filter {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+}
+
+.unit-select {
+    padding: 8px 12px;
+    border: 2px solid #e2e8f0;
+    border-radius: 8px;
+    font-size: 0.9rem;
+    background: white;
+    cursor: pointer;
+    min-width: 150px;
+}
+
+.unit-select:focus {
+    outline: none;
+    border-color: #4299e1;
+    box-shadow: 0 0 0 3px rgba(66, 153, 225, 0.1);
+}
+
+.skill-unit-badge {
+    display: inline-block;
+    padding: 2px 8px;
+    background: #4299e1;
+    color: white;
+    border-radius: 4px;
+    font-size: 0.8rem;
+    margin-left: 10px;
+    font-weight: normal;
 }

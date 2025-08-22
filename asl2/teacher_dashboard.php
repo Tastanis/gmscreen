@@ -8,7 +8,7 @@ if (!isset($_SESSION['user_id']) || !isset($_SESSION['is_teacher']) || !$_SESSIO
     exit;
 }
 
-// Get all students and their progress (ASL 2 students only)
+// Get all students and their progress
 try {
     $stmt = $pdo->prepare("
         SELECT 
@@ -16,7 +16,6 @@ try {
             u.first_name,
             u.last_name,
             u.email,
-            u.class_period,
             COALESCE(
                 SUM(CASE 
                     WHEN us.status = 'not_started' THEN s.points_not_started
@@ -31,9 +30,9 @@ try {
         FROM users u
         LEFT JOIN user_skills us ON u.id = us.user_id
         LEFT JOIN skills s ON us.skill_id = s.id
-        WHERE u.is_teacher = FALSE AND u.level = 2
-        GROUP BY u.id, u.first_name, u.last_name, u.email, u.class_period
-        ORDER BY u.class_period, u.first_name, u.last_name
+        WHERE u.is_teacher = FALSE
+        GROUP BY u.id, u.first_name, u.last_name, u.email
+        ORDER BY u.first_name, u.last_name
     ");
     $stmt->execute();
     $students = $stmt->fetchAll();
@@ -75,10 +74,9 @@ try {
 <body>
     <div class="container">
         <header>
-            <h1>ASL 2 Hub - Teacher Dashboard</h1>
+            <h1>ASL Hub - Teacher Dashboard</h1>
             <div class="user-info">
                 <span>Welcome, <?php echo htmlspecialchars($_SESSION['user_first_name'] . ' ' . $_SESSION['user_last_name']); ?>!</span>
-                <a href="../asl1/teacher_dashboard.php" class="form-button" style="margin-right: 10px; background: linear-gradient(135deg, #4299e1 0%, #3182ce 100%);">Switch to ASL 1</a>
                 <a href="logout.php" class="logout-btn">Logout</a>
             </div>
         </header>
@@ -95,19 +93,7 @@ try {
                 <!-- Students Section -->
                 <div id="students-section">
                     <h2>Student Progress Overview</h2>
-                    <p>Total Students: <strong><span id="student-count"><?php echo count($students); ?></span></strong> | Total Skills: <strong><?php echo $total_skills; ?></strong></p>
-                    
-                    <!-- Period Filter Controls -->
-                    <div class="filter-controls">
-                        <label for="period-filter">Filter by Period:</label>
-                        <select id="period-filter" onchange="filterStudentsByPeriod(this.value)">
-                            <option value="all">All Periods</option>
-                            <?php for ($i = 1; $i <= 6; $i++): ?>
-                                <option value="<?php echo $i; ?>">Period <?php echo $i; ?></option>
-                            <?php endfor; ?>
-                            <option value="none">No Period Selected</option>
-                        </select>
-                    </div>
+                    <p>Total Students: <strong><?php echo count($students); ?></strong> | Total Skills: <strong><?php echo $total_skills; ?></strong></p>
                     
                     <div class="students-grid">
                         <?php foreach ($students as $student): ?>
@@ -115,14 +101,9 @@ try {
                             $progress_percentage = $student['total_possible_points'] > 0 ? 
                                 round(($student['earned_points'] / $student['total_possible_points']) * 100) : 0;
                             ?>
-                            <div class="student-card" data-class-period="<?php echo $student['class_period'] ?? 'none'; ?>">
+                            <div class="student-card">
                                 <div class="student-name">
                                     <?php echo htmlspecialchars($student['first_name'] . ' ' . $student['last_name']); ?>
-                                    <?php if ($student['class_period']): ?>
-                                        <span class="period-badge">Period <?php echo $student['class_period']; ?></span>
-                                    <?php else: ?>
-                                        <span class="period-badge no-period">No Period</span>
-                                    <?php endif; ?>
                                 </div>
                                 <div class="student-email">
                                     <?php echo htmlspecialchars($student['email']); ?>
@@ -166,10 +147,11 @@ try {
                     <div class="skills-summary">
                         <?php 
                         // Get all skills with their IDs for the action buttons
-                        $stmt = $pdo->prepare("SELECT id, skill_name, skill_description FROM skills ORDER BY order_index");
+                        $stmt = $pdo->prepare("SELECT id, skill_name, skill_description, unit, order_index FROM skills ORDER BY order_index");
                         $stmt->execute();
                         $all_skills = $stmt->fetchAll();
                         
+                        $position_number = 1;
                         foreach ($all_skills as $skill): 
                             // Find the corresponding skill summary
                             $skill_summary = null;
@@ -189,11 +171,26 @@ try {
                                 ];
                             }
                         ?>
-                            <div class="skill-summary-card">
+                            <div class="skill-summary-card" data-skill-id="<?php echo $skill['id']; ?>">
+                                <div class="skill-position-controls">
+                                    <span class="skill-position-number">#<?php echo $position_number; ?></span>
+                                    <div class="position-buttons">
+                                        <button class="position-btn" onclick="moveSkill(<?php echo $skill['id']; ?>, 'move_up')" <?php echo $position_number == 1 ? 'disabled' : ''; ?> title="Move Up">▲</button>
+                                        <button class="position-btn" onclick="moveSkill(<?php echo $skill['id']; ?>, 'move_down')" <?php echo $position_number == count($all_skills) ? 'disabled' : ''; ?> title="Move Down">▼</button>
+                                        <input type="number" class="position-input" id="position-<?php echo $skill['id']; ?>" min="1" max="<?php echo count($all_skills); ?>" value="<?php echo $position_number; ?>" onchange="moveToPosition(<?php echo $skill['id']; ?>, this.value)" title="Move to position">
+                                    </div>
+                                </div>
                                 <div class="skill-summary-header">
-                                    <h3><?php echo htmlspecialchars($skill_summary['skill_name']); ?></h3>
+                                    <div>
+                                        <h3><?php echo htmlspecialchars($skill_summary['skill_name']); ?></h3>
+                                        <?php if (!empty($skill['unit'])): ?>
+                                            <span class="skill-unit">Unit: <?php echo htmlspecialchars($skill['unit']); ?></span>
+                                        <?php else: ?>
+                                            <span class="skill-unit no-unit">No Unit</span>
+                                        <?php endif; ?>
+                                    </div>
                                     <div class="skill-actions">
-                                        <button class="action-btn edit-btn" onclick="editSkill(<?php echo $skill['id']; ?>, '<?php echo htmlspecialchars($skill['skill_name']); ?>', '<?php echo htmlspecialchars($skill['skill_description']); ?>')">Edit</button>
+                                        <button class="action-btn edit-btn" onclick="editSkill(<?php echo $skill['id']; ?>, '<?php echo htmlspecialchars($skill['skill_name']); ?>', '<?php echo htmlspecialchars($skill['skill_description']); ?>', '<?php echo htmlspecialchars($skill['unit'] ?? ''); ?>')">Edit</button>
                                         <button class="action-btn resources-btn" onclick="manageResources(<?php echo $skill['id']; ?>, '<?php echo htmlspecialchars($skill['skill_name']); ?>')">Resources</button>
                                         <button class="action-btn delete-btn" onclick="deleteSkill(<?php echo $skill['id']; ?>, '<?php echo htmlspecialchars($skill['skill_name']); ?>')">Delete</button>
                                     </div>
@@ -213,7 +210,9 @@ try {
                                     </div>
                                 </div>
                             </div>
-                        <?php endforeach; ?>
+                        <?php 
+                            $position_number++;
+                        endforeach; ?>
                     </div>
                 </div>
                 
@@ -241,6 +240,10 @@ try {
                             <div class="form-group">
                                 <label>Skill Description</label>
                                 <textarea name="skill_description" class="form-input" rows="3"></textarea>
+                            </div>
+                            <div class="form-group">
+                                <label>Unit (optional - leave blank for year-round skills)</label>
+                                <input type="text" name="unit" class="form-input" placeholder="e.g., Unit 1, Semester 1, etc.">
                             </div>
                             <div class="form-group">
                                 <label>Resources (one per line)</label>
@@ -423,31 +426,6 @@ try {
     </div>
     
     <script>
-        function filterStudentsByPeriod(period) {
-            const studentCards = document.querySelectorAll('.student-card');
-            let visibleCount = 0;
-            
-            studentCards.forEach(card => {
-                const cardPeriod = card.dataset.classPeriod;
-                
-                if (period === 'all') {
-                    card.style.display = 'block';
-                    visibleCount++;
-                } else if (period === 'none' && cardPeriod === 'none') {
-                    card.style.display = 'block';
-                    visibleCount++;
-                } else if (period === cardPeriod) {
-                    card.style.display = 'block';
-                    visibleCount++;
-                } else {
-                    card.style.display = 'none';
-                }
-            });
-            
-            // Update student count
-            document.getElementById('student-count').textContent = visibleCount;
-        }
-        
         function showSection(sectionName) {
             // Hide all sections
             document.getElementById('students-section').style.display = 'none';
@@ -568,57 +546,25 @@ try {
                     if (!listContainer || !sessionContainer) return;
                     listContainer.innerHTML = '';
                     sessionContainer.innerHTML = '';
-                    
-                    if (data.wordlists.length === 0) {
-                        listContainer.innerHTML = '<p style="color: #666; font-style: italic;">No word lists created yet. Create your first word list above!</p>';
-                        return;
-                    }
-                    
                     data.wordlists.forEach(list => {
                         const listDiv = document.createElement('div');
                         listDiv.className = 'wordlist-item';
-                        listDiv.style.cssText = 'display: flex; align-items: center; justify-content: space-between; padding: 15px; border: 1px solid #e2e8f0; border-radius: 8px; margin-bottom: 10px; background: white;';
-                        
-                        const leftSection = document.createElement('div');
-                        leftSection.style.cssText = 'display: flex; flex-direction: column; gap: 5px;';
-                        
                         const nameSpan = document.createElement('span');
                         nameSpan.textContent = list.wordlist_name;
-                        nameSpan.style.cssText = 'font-weight: 600; color: #2d3748; font-size: 1.1rem;';
-                        leftSection.appendChild(nameSpan);
-                        
-                        const detailsSpan = document.createElement('span');
-                        detailsSpan.textContent = `${list.words.length} words • Speed: ${list.speed}x • Default count: ${list.word_count}`;
-                        detailsSpan.style.cssText = 'color: #718096; font-size: 0.9rem;';
-                        leftSection.appendChild(detailsSpan);
-                        
-                        listDiv.appendChild(leftSection);
-
-                        const actionsDiv = document.createElement('div');
-                        actionsDiv.style.cssText = 'display: flex; gap: 8px; align-items: center;';
+                        listDiv.appendChild(nameSpan);
 
                         const editBtn = document.createElement('button');
                         editBtn.className = 'action-btn edit-btn';
                         editBtn.textContent = 'Edit';
-                        editBtn.style.cssText = 'padding: 6px 12px; border: none; border-radius: 4px; cursor: pointer; font-size: 0.85rem; background: #4299e1; color: white; font-weight: 500;';
                         editBtn.addEventListener('click', () => showEditWordlistModal(list));
-                        actionsDiv.appendChild(editBtn);
-
-                        const activateBtn = document.createElement('button');
-                        activateBtn.className = 'action-btn activate-btn';
-                        activateBtn.textContent = 'Activate';
-                        activateBtn.style.cssText = 'padding: 6px 12px; border: none; border-radius: 4px; cursor: pointer; font-size: 0.85rem; background: #38a169; color: white; font-weight: 500;';
-                        activateBtn.addEventListener('click', () => activateWordlist(list));
-                        actionsDiv.appendChild(activateBtn);
+                        listDiv.appendChild(editBtn);
 
                         const deleteBtn = document.createElement('button');
                         deleteBtn.className = 'action-btn delete-btn';
                         deleteBtn.textContent = 'Delete';
-                        deleteBtn.style.cssText = 'padding: 6px 12px; border: none; border-radius: 4px; cursor: pointer; font-size: 0.85rem; background: #e53e3e; color: white; font-weight: 500;';
                         deleteBtn.addEventListener('click', () => deleteWordlist(list.id));
-                        actionsDiv.appendChild(deleteBtn);
+                        listDiv.appendChild(deleteBtn);
 
-                        listDiv.appendChild(actionsDiv);
                         listContainer.appendChild(listDiv);
 
                         const label = document.createElement('label');
@@ -635,10 +581,6 @@ try {
                 })
                 .catch(error => {
                     console.error('Error loading word lists:', error);
-                    const listContainer = document.getElementById('wordlists-list');
-                    if (listContainer) {
-                        listContainer.innerHTML = '<p style="color: #e53e3e;">Error loading word lists. Please refresh and try again.</p>';
-                    }
                 });
         }
 
@@ -728,171 +670,8 @@ try {
                 });
         }
 
-        function activateWordlist(list) {
-            try {
-                console.log('Activate button clicked for list:', list);
-                
-                // Clear any existing active session display
-                const activeDisplay = document.getElementById('active-session-display');
-                if (activeDisplay) {
-                    activeDisplay.style.display = 'none';
-                    console.log('Hidden active session display');
-                }
-                
-                // Show session creation form
-                console.log('Calling showCreateSessionForm with list:', [list]);
-                showCreateSessionForm([list]);
-            } catch (error) {
-                console.error('Error in activateWordlist:', error);
-                showMessage('Error activating word list: ' + error.message, 'error');
-            }
-        }
-
-        function startSession(wordlistIds) {
-            const formData = new FormData();
-            wordlistIds.forEach(id => formData.append('wordlist_ids[]', id));
-            
-            // Get any override settings
-            const speedOverride = document.querySelector('input[name="speed"]').value;
-            const countOverride = document.querySelector('input[name="word_count"]').value;
-            const customSeed = document.querySelector('input[name="custom_seed"]').value;
-            
-            if (speedOverride) formData.append('speed', speedOverride);
-            if (countOverride) formData.append('word_count', countOverride);
-            if (customSeed) formData.append('custom_seed', customSeed);
-            
-            fetch('create_session.php', { method: 'POST', body: formData })
-                .then(response => response.json())
-                .then(data => {
-                    if (data.success) {
-                        showMessage('Session created successfully!', 'success');
-                        displayActiveSession(data.session_code, wordlistIds, data.speed, data.word_count);
-                        hideCreateSessionForm();
-                    } else {
-                        showMessage(data.message || 'Error creating session', 'error');
-                    }
-                })
-                .catch(error => {
-                    console.error('Error creating session:', error);
-                    showMessage('Error creating session. Please try again.', 'error');
-                });
-        }
-
-        function displayActiveSession(sessionCode, wordlistIds, speed, wordCount) {
-            const sessionDisplay = document.getElementById('active-session-display');
-            const sessionContent = document.getElementById('session-info-content');
-            
-            sessionContent.innerHTML = `
-                <div style="margin-bottom: 20px;">
-                    <h4 style="margin: 0 0 10px 0; color: #22543d;">Session Code: <span style="font-size: 1.5rem; font-weight: bold; color: #2f855a;">${sessionCode}</span></h4>
-                    <p style="margin: 0; color: #2d3748;">Share this code with your students so they can join the game.</p>
-                </div>
-                
-                <div style="display: grid; grid-template-columns: repeat(auto-fit, minmax(200px, 1fr)); gap: 15px; margin-bottom: 20px;">
-                    <div style="padding: 10px; background: rgba(255,255,255,0.8); border-radius: 6px;">
-                        <strong>Word Lists:</strong> ${wordlistIds.length}
-                    </div>
-                    <div style="padding: 10px; background: rgba(255,255,255,0.8); border-radius: 6px;">
-                        <strong>Speed:</strong> ${speed || 'Default'}
-                    </div>
-                    <div style="padding: 10px; background: rgba(255,255,255,0.8); border-radius: 6px;">
-                        <strong>Word Count:</strong> ${wordCount || 'Default'}
-                    </div>
-                </div>
-                
-                <div style="display: flex; gap: 10px; flex-wrap: wrap;">
-                    <button onclick="startScrollerDisplay(${sessionCode})" class="form-button" style="background: #2f855a;">
-                        🎮 Start Scrolling Display
-                    </button>
-                    <button onclick="copySessionCode(${sessionCode})" class="form-button" style="background: #4299e1;">
-                        📋 Copy Session Code
-                    </button>
-                    <button onclick="openStudentLink(${sessionCode})" class="form-button" style="background: #805ad5;">
-                        🔗 Open Student Link
-                    </button>
-                    <button onclick="endSession()" class="form-button" style="background: #e53e3e;">
-                        ❌ End Session
-                    </button>
-                </div>
-            `;
-            
-            sessionDisplay.style.display = 'block';
-        }
-
-        function startScrollerDisplay(sessionCode) {
-            const url = `scroller.html?session=${sessionCode}`;
-            window.open(url, '_blank', 'width=800,height=600,menubar=no,toolbar=no,status=no');
-            showMessage('Scroller display opened in new window', 'success');
-        }
-
-        function copySessionCode(sessionCode) {
-            navigator.clipboard.writeText(sessionCode.toString()).then(() => {
-                showMessage('Session code copied to clipboard!', 'success');
-            }).catch(() => {
-                // Fallback for older browsers
-                const textArea = document.createElement('textarea');
-                textArea.value = sessionCode;
-                document.body.appendChild(textArea);
-                textArea.select();
-                document.execCommand('copy');
-                document.body.removeChild(textArea);
-                showMessage('Session code copied to clipboard!', 'success');
-            });
-        }
-
-        function openStudentLink(sessionCode) {
-            const url = `${window.location.origin}${window.location.pathname.replace('teacher_dashboard.php', '')}scroller.html?session=${sessionCode}`;
-            window.open(url, '_blank');
-            showMessage('Student link opened in new tab', 'success');
-        }
-
-        function endSession() {
-            if (confirm('Are you sure you want to end this session?')) {
-                document.getElementById('active-session-display').style.display = 'none';
-                showMessage('Session ended', 'success');
-            }
-        }
-
-        function showCreateSessionForm(selectedWordlists = []) {
-            try {
-                console.log('showCreateSessionForm called with:', selectedWordlists);
-                
-                const formElement = document.getElementById('create-session-form');
-                if (!formElement) {
-                    console.error('create-session-form element not found!');
-                    showMessage('Session form not found. Please refresh the page.', 'error');
-                    return;
-                }
-                
-                console.log('Showing session form');
-                formElement.style.display = 'block';
-                
-                // Pre-select wordlists if provided
-                if (selectedWordlists.length > 0) {
-                    console.log('Pre-selecting wordlists...');
-                    
-                    // Use setTimeout to allow form to render first
-                    setTimeout(() => {
-                        const checkboxes = document.querySelectorAll('input[name="wordlist_ids[]"]');
-                        console.log('Found checkboxes:', checkboxes.length);
-                        
-                        if (checkboxes.length === 0) {
-                            console.warn('No checkboxes found - they may not be populated yet');
-                        }
-                        
-                        checkboxes.forEach(checkbox => {
-                            const shouldCheck = selectedWordlists.some(list => list.id == checkbox.value);
-                            if (shouldCheck) {
-                                checkbox.checked = true;
-                                console.log('Pre-selected checkbox for wordlist:', checkbox.value);
-                            }
-                        });
-                    }, 100);
-                }
-            } catch (error) {
-                console.error('Error in showCreateSessionForm:', error);
-                showMessage('Error showing session form: ' + error.message, 'error');
-            }
+        function showCreateSessionForm() {
+            document.getElementById('create-session-form').style.display = 'block';
         }
 
         function hideCreateSessionForm() {
@@ -908,10 +687,101 @@ try {
                 return;
             }
 
-            const wordlistIds = selected.map(cb => cb.value);
-            startSession(wordlistIds);
+            const formData = new FormData();
+            selected.forEach(cb => formData.append('wordlist_ids[]', cb.value));
+            if (form.speed.value) formData.append('speed', form.speed.value);
+            if (form.word_count.value) formData.append('word_count', form.word_count.value);
+            if (form.custom_seed.value) formData.append('custom_seed', form.custom_seed.value);
+
+            fetch('create_session.php', { method: 'POST', body: formData })
+                .then(response => response.json())
+                .then(data => {
+                    if (data.success) {
+                        const info = document.getElementById('session-info-content');
+                        const names = selected.map(cb => cb.dataset.name).join(', ');
+                        info.innerHTML = `<p><strong>Word Lists:</strong> ${names}</p>` +
+                                         `<p><strong>Speed:</strong> ${data.speed ?? 'Default'}</p>` +
+                                         `<p><strong>Word Count:</strong> ${data.word_count ?? 'Default'}</p>` +
+                                         `<p><strong>Session Code:</strong> ${data.session_code}</p>`;
+                        document.getElementById('active-session-display').style.display = 'block';
+                        hideCreateSessionForm();
+                        showMessage('Session created successfully!', 'success');
+                    } else {
+                        showMessage(data.message || 'Error creating session', 'error');
+                    }
+                })
+                .catch(error => {
+                    console.error('Error creating session:', error);
+                    showMessage('Error creating session. Please try again.', 'error');
+                });
         }
 
+        // Move skill functions
+        function moveSkill(skillId, action) {
+            const formData = new FormData();
+            formData.append('skill_id', skillId);
+            formData.append('action', action);
+            
+            fetch('reorder_skill.php', {
+                method: 'POST',
+                body: formData
+            })
+            .then(response => response.json())
+            .then(data => {
+                if (data.success) {
+                    showMessage(data.message, 'success');
+                    // Reload the skills section
+                    setTimeout(() => {
+                        location.reload();
+                    }, 500);
+                } else {
+                    showMessage(data.message, 'error');
+                }
+            })
+            .catch(error => {
+                console.error('Error:', error);
+                showMessage('Error moving skill. Please try again.', 'error');
+            });
+        }
+        
+        function moveToPosition(skillId, targetPosition) {
+            const currentPosition = document.getElementById('position-' + skillId).defaultValue;
+            
+            if (targetPosition === currentPosition) {
+                return; // No change
+            }
+            
+            const formData = new FormData();
+            formData.append('skill_id', skillId);
+            formData.append('action', 'move_to_position');
+            formData.append('target_position', targetPosition);
+            
+            fetch('reorder_skill.php', {
+                method: 'POST',
+                body: formData
+            })
+            .then(response => response.json())
+            .then(data => {
+                if (data.success) {
+                    showMessage(data.message, 'success');
+                    // Reload the skills section
+                    setTimeout(() => {
+                        location.reload();
+                    }, 500);
+                } else {
+                    showMessage(data.message, 'error');
+                    // Reset input value
+                    document.getElementById('position-' + skillId).value = currentPosition;
+                }
+            })
+            .catch(error => {
+                console.error('Error:', error);
+                showMessage('Error moving skill to position. Please try again.', 'error');
+                // Reset input value
+                document.getElementById('position-' + skillId).value = currentPosition;
+            });
+        }
+        
         function showMessage(message, type) {
             // Create and show a temporary message
             const messageDiv = document.createElement('div');
@@ -944,7 +814,7 @@ try {
         }
         
         // Edit skill function
-        function editSkill(skillId, skillName, skillDescription) {
+        function editSkill(skillId, skillName, skillDescription, skillUnit) {
             const newName = prompt('Edit skill name:', skillName);
             if (newName === null) return; // User cancelled
             
@@ -956,10 +826,14 @@ try {
             const newDescription = prompt('Edit skill description:', skillDescription);
             if (newDescription === null) return; // User cancelled
             
+            const newUnit = prompt('Edit unit (leave blank for year-round skills):', skillUnit || '');
+            if (newUnit === null) return; // User cancelled
+            
             const formData = new FormData();
             formData.append('skill_id', skillId);
             formData.append('skill_name', newName.trim());
             formData.append('skill_description', newDescription.trim());
+            formData.append('unit', newUnit.trim());
             
             fetch('edit_skill.php', {
                 method: 'POST',
@@ -1438,6 +1312,73 @@ try {
         
         .form-button.active {
             background: linear-gradient(135deg, #3182ce 0%, #2c5aa0 100%);
+        }
+        
+        .skill-position-controls {
+            display: flex;
+            align-items: center;
+            gap: 10px;
+            margin-bottom: 10px;
+            padding-bottom: 10px;
+            border-bottom: 1px solid #e2e8f0;
+        }
+        
+        .skill-position-number {
+            font-size: 1.2rem;
+            font-weight: bold;
+            color: #4299e1;
+            min-width: 40px;
+        }
+        
+        .position-buttons {
+            display: flex;
+            gap: 5px;
+            align-items: center;
+        }
+        
+        .position-btn {
+            width: 30px;
+            height: 30px;
+            border: 1px solid #cbd5e0;
+            background: white;
+            border-radius: 4px;
+            cursor: pointer;
+            font-size: 12px;
+            transition: all 0.2s;
+        }
+        
+        .position-btn:hover:not(:disabled) {
+            background: #4299e1;
+            color: white;
+            border-color: #4299e1;
+        }
+        
+        .position-btn:disabled {
+            opacity: 0.3;
+            cursor: not-allowed;
+        }
+        
+        .position-input {
+            width: 60px;
+            padding: 4px 8px;
+            border: 1px solid #cbd5e0;
+            border-radius: 4px;
+            font-size: 14px;
+        }
+        
+        .skill-unit {
+            display: inline-block;
+            padding: 2px 8px;
+            background: #4299e1;
+            color: white;
+            border-radius: 4px;
+            font-size: 0.85rem;
+            margin-left: 10px;
+        }
+        
+        .skill-unit.no-unit {
+            background: #cbd5e0;
+            color: #4a5568;
         }
     </style>
 </body>
