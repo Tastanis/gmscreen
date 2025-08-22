@@ -23,6 +23,7 @@ CREATE TABLE IF NOT EXISTS skills (
     id INT AUTO_INCREMENT PRIMARY KEY,
     skill_name VARCHAR(255) NOT NULL,
     skill_description TEXT,
+    unit VARCHAR(255) NULL,
     points_not_started INT DEFAULT 0,
     points_progressing INT DEFAULT 1,
     points_proficient INT DEFAULT 3,
@@ -67,6 +68,9 @@ INSERT INTO resources (skill_id, resource_name, resource_url, order_index) VALUE
 (1, 'Resource 3 for Skill Test 1', '#', 3),
 (2, 'Resource 1 for Skill Test 2', '#', 1),
 (2, 'Resource 2 for Skill Test 2', '#', 2);
+
+-- Add unit column to existing skills table (for existing databases)
+ALTER TABLE skills ADD COLUMN IF NOT EXISTS unit VARCHAR(255) NULL AFTER skill_description;
 
 -- Word lists for scroller game
 CREATE TABLE IF NOT EXISTS wordlists (

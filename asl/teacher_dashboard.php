@@ -147,10 +147,11 @@ try {
                     <div class="skills-summary">
                         <?php 
                         // Get all skills with their IDs for the action buttons
-                        $stmt = $pdo->prepare("SELECT id, skill_name, skill_description FROM skills ORDER BY order_index");
+                        $stmt = $pdo->prepare("SELECT id, skill_name, skill_description, unit, order_index FROM skills ORDER BY order_index");
                         $stmt->execute();
                         $all_skills = $stmt->fetchAll();
                         
+                        $position_number = 1;
                         foreach ($all_skills as $skill): 
                             // Find the corresponding skill summary
                             $skill_summary = null;
@@ -170,11 +171,26 @@ try {
                                 ];
                             }
                         ?>
-                            <div class="skill-summary-card">
+                            <div class="skill-summary-card" data-skill-id="<?php echo $skill['id']; ?>">
+                                <div class="skill-position-controls">
+                                    <span class="skill-position-number">#<?php echo $position_number; ?></span>
+                                    <div class="position-buttons">
+                                        <button class="position-btn" onclick="moveSkill(<?php echo $skill['id']; ?>, 'move_up')" <?php echo $position_number == 1 ? 'disabled' : ''; ?> title="Move Up">▲</button>
+                                        <button class="position-btn" onclick="moveSkill(<?php echo $skill['id']; ?>, 'move_down')" <?php echo $position_number == count($all_skills) ? 'disabled' : ''; ?> title="Move Down">▼</button>
+                                        <input type="number" class="position-input" id="position-<?php echo $skill['id']; ?>" min="1" max="<?php echo count($all_skills); ?>" value="<?php echo $position_number; ?>" onchange="moveToPosition(<?php echo $skill['id']; ?>, this.value)" title="Move to position">
+                                    </div>
+                                </div>
                                 <div class="skill-summary-header">
-                                    <h3><?php echo htmlspecialchars($skill_summary['skill_name']); ?></h3>
+                                    <div>
+                                        <h3><?php echo htmlspecialchars($skill_summary['skill_name']); ?></h3>
+                                        <?php if (!empty($skill['unit'])): ?>
+                                            <span class="skill-unit">Unit: <?php echo htmlspecialchars($skill['unit']); ?></span>
+                                        <?php else: ?>
+                                            <span class="skill-unit no-unit">No Unit</span>
+                                        <?php endif; ?>
+                                    </div>
                                     <div class="skill-actions">
-                                        <button class="action-btn edit-btn" onclick="editSkill(<?php echo $skill['id']; ?>, '<?php echo htmlspecialchars($skill['skill_name']); ?>', '<?php echo htmlspecialchars($skill['skill_description']); ?>')">Edit</button>
+                                        <button class="action-btn edit-btn" onclick="editSkill(<?php echo $skill['id']; ?>, '<?php echo htmlspecialchars($skill['skill_name']); ?>', '<?php echo htmlspecialchars($skill['skill_description']); ?>', '<?php echo htmlspecialchars($skill['unit'] ?? ''); ?>')">Edit</button>
                                         <button class="action-btn resources-btn" onclick="manageResources(<?php echo $skill['id']; ?>, '<?php echo htmlspecialchars($skill['skill_name']); ?>')">Resources</button>
                                         <button class="action-btn delete-btn" onclick="deleteSkill(<?php echo $skill['id']; ?>, '<?php echo htmlspecialchars($skill['skill_name']); ?>')">Delete</button>
                                     </div>
@@ -194,7 +210,9 @@ try {
                                     </div>
                                 </div>
                             </div>
-                        <?php endforeach; ?>
+                        <?php 
+                            $position_number++;
+                        endforeach; ?>
                     </div>
                 </div>
                 
@@ -222,6 +240,10 @@ try {
                             <div class="form-group">
                                 <label>Skill Description</label>
                                 <textarea name="skill_description" class="form-input" rows="3"></textarea>
+                            </div>
+                            <div class="form-group">
+                                <label>Unit (optional - leave blank for year-round skills)</label>
+                                <input type="text" name="unit" class="form-input" placeholder="e.g., Unit 1, Semester 1, etc.">
                             </div>
                             <div class="form-group">
                                 <label>Resources (one per line)</label>
@@ -694,6 +716,72 @@ try {
                 });
         }
 
+        // Move skill functions
+        function moveSkill(skillId, action) {
+            const formData = new FormData();
+            formData.append('skill_id', skillId);
+            formData.append('action', action);
+            
+            fetch('reorder_skill.php', {
+                method: 'POST',
+                body: formData
+            })
+            .then(response => response.json())
+            .then(data => {
+                if (data.success) {
+                    showMessage(data.message, 'success');
+                    // Reload the skills section
+                    setTimeout(() => {
+                        location.reload();
+                    }, 500);
+                } else {
+                    showMessage(data.message, 'error');
+                }
+            })
+            .catch(error => {
+                console.error('Error:', error);
+                showMessage('Error moving skill. Please try again.', 'error');
+            });
+        }
+        
+        function moveToPosition(skillId, targetPosition) {
+            const currentPosition = document.getElementById('position-' + skillId).defaultValue;
+            
+            if (targetPosition === currentPosition) {
+                return; // No change
+            }
+            
+            const formData = new FormData();
+            formData.append('skill_id', skillId);
+            formData.append('action', 'move_to_position');
+            formData.append('target_position', targetPosition);
+            
+            fetch('reorder_skill.php', {
+                method: 'POST',
+                body: formData
+            })
+            .then(response => response.json())
+            .then(data => {
+                if (data.success) {
+                    showMessage(data.message, 'success');
+                    // Reload the skills section
+                    setTimeout(() => {
+                        location.reload();
+                    }, 500);
+                } else {
+                    showMessage(data.message, 'error');
+                    // Reset input value
+                    document.getElementById('position-' + skillId).value = currentPosition;
+                }
+            })
+            .catch(error => {
+                console.error('Error:', error);
+                showMessage('Error moving skill to position. Please try again.', 'error');
+                // Reset input value
+                document.getElementById('position-' + skillId).value = currentPosition;
+            });
+        }
+        
         function showMessage(message, type) {
             // Create and show a temporary message
             const messageDiv = document.createElement('div');
@@ -726,7 +814,7 @@ try {
         }
         
         // Edit skill function
-        function editSkill(skillId, skillName, skillDescription) {
+        function editSkill(skillId, skillName, skillDescription, skillUnit) {
             const newName = prompt('Edit skill name:', skillName);
             if (newName === null) return; // User cancelled
             
@@ -738,10 +826,14 @@ try {
             const newDescription = prompt('Edit skill description:', skillDescription);
             if (newDescription === null) return; // User cancelled
             
+            const newUnit = prompt('Edit unit (leave blank for year-round skills):', skillUnit || '');
+            if (newUnit === null) return; // User cancelled
+            
             const formData = new FormData();
             formData.append('skill_id', skillId);
             formData.append('skill_name', newName.trim());
             formData.append('skill_description', newDescription.trim());
+            formData.append('unit', newUnit.trim());
             
             fetch('edit_skill.php', {
                 method: 'POST',
@@ -1220,6 +1312,73 @@ try {
         
         .form-button.active {
             background: linear-gradient(135deg, #3182ce 0%, #2c5aa0 100%);
+        }
+        
+        .skill-position-controls {
+            display: flex;
+            align-items: center;
+            gap: 10px;
+            margin-bottom: 10px;
+            padding-bottom: 10px;
+            border-bottom: 1px solid #e2e8f0;
+        }
+        
+        .skill-position-number {
+            font-size: 1.2rem;
+            font-weight: bold;
+            color: #4299e1;
+            min-width: 40px;
+        }
+        
+        .position-buttons {
+            display: flex;
+            gap: 5px;
+            align-items: center;
+        }
+        
+        .position-btn {
+            width: 30px;
+            height: 30px;
+            border: 1px solid #cbd5e0;
+            background: white;
+            border-radius: 4px;
+            cursor: pointer;
+            font-size: 12px;
+            transition: all 0.2s;
+        }
+        
+        .position-btn:hover:not(:disabled) {
+            background: #4299e1;
+            color: white;
+            border-color: #4299e1;
+        }
+        
+        .position-btn:disabled {
+            opacity: 0.3;
+            cursor: not-allowed;
+        }
+        
+        .position-input {
+            width: 60px;
+            padding: 4px 8px;
+            border: 1px solid #cbd5e0;
+            border-radius: 4px;
+            font-size: 14px;
+        }
+        
+        .skill-unit {
+            display: inline-block;
+            padding: 2px 8px;
+            background: #4299e1;
+            color: white;
+            border-radius: 4px;
+            font-size: 0.85rem;
+            margin-left: 10px;
+        }
+        
+        .skill-unit.no-unit {
+            background: #cbd5e0;
+            color: #4a5568;
         }
     </style>
 </body>
