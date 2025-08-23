@@ -866,7 +866,9 @@ async function handleSave() {
     const saveStatus = document.getElementById('save-status');
     
     saveBtn.disabled = true;
-    saveStatus.textContent = 'Saving...';
+    saveStatus.textContent = 'Saving... (DO NOT REFRESH PAGE)';
+    saveStatus.style.color = '#ff6b6b';
+    saveStatus.style.fontWeight = 'bold';
     
     // Update button immediately
     saveBtn.textContent = 'Saving...';
@@ -881,12 +883,18 @@ async function handleSave() {
         }
         
         if (success) {
-            saveStatus.textContent = 'Saved!';
+            saveStatus.textContent = 'Saved! Safe to refresh page.';
+            saveStatus.style.color = '#28a745';
+            saveStatus.style.fontWeight = 'bold';
             gridState.hasUnsavedChanges = false;
             updateSaveButtonState();
             setTimeout(() => {
-                if (saveStatus) saveStatus.textContent = '';
-            }, 2000);
+                if (saveStatus) {
+                    saveStatus.textContent = '';
+                    saveStatus.style.color = '';
+                    saveStatus.style.fontWeight = '';
+                }
+            }, 5000);
         } else {
             throw new Error('Save operation returned false');
         }
@@ -1724,10 +1732,36 @@ function diagnoseGridState() {
 // Make diagnosis function available globally for debugging
 window.diagnoseGridState = diagnoseGridState;
 
+/**
+ * Add page protection to prevent data loss during saves or with unsaved changes
+ */
+function addPageProtection() {
+    window.addEventListener('beforeunload', function(e) {
+        // Prevent page close/refresh during active save operations
+        if (gridState.isSaving) {
+            e.preventDefault();
+            e.returnValue = 'Save operation in progress. Leaving now may cause data loss. Really leave?';
+            return e.returnValue;
+        }
+        
+        // Warn about unsaved changes
+        if (gridState.hasUnsavedChanges) {
+            e.preventDefault();
+            e.returnValue = 'You have unsaved changes that will be lost. Really leave?';
+            return e.returnValue;
+        }
+    });
+    
+    console.log('[PROTECTION] Page protection enabled - will warn before leaving during saves or with unsaved changes');
+}
+
 // Global functions (none needed for inline editing)
 
 // Initialize when DOM is ready
 document.addEventListener('DOMContentLoaded', () => {
     // Add zoom indicator on load
     updateZoomIndicator();
+    
+    // Add page protection to prevent data loss
+    addPageProtection();
 });
