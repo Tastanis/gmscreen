@@ -49,9 +49,12 @@ async function initializeGrid() {
         gridState.currentUser = window.userName || '';
     }
     
-    // Load data first so it's available when creating cells
-    await loadGridData();
+    // PHASE 1: Load data into state WITHOUT applying to DOM (cells don't exist yet)
+    console.log('[INIT] Phase 1: Loading data into state');
+    await loadGridData(false); // Don't apply to DOM yet
     
+    // PHASE 2: Create grid structure
+    console.log('[INIT] Phase 2: Creating grid structure');
     createGridStructure();
     setupZoomControls();
     setupEventListeners();
@@ -59,6 +62,26 @@ async function initializeGrid() {
     setupLearningSystem();
     setupSaveSystem();
     createAutoConnections();
+    
+    // PHASE 3: Apply loaded data to the newly created DOM elements
+    console.log('[INIT] Phase 3: Applying loaded data to DOM');
+    if (gridState.editableCells.size > 0) {
+        console.log(`[INIT] Applying ${gridState.editableCells.size} cells to DOM`);
+        gridState.editableCells.forEach((content, cellKey) => {
+            const cellId = `cell-${cellKey}`;
+            const cell = document.getElementById(cellId);
+            if (cell && cell.classList.contains('editable')) {
+                try {
+                    cell.innerHTML = content;
+                    console.log(`[INIT] ✅ Applied content to cell ${cellKey}`);
+                } catch (error) {
+                    console.error(`[INIT] ❌ Failed to apply content to cell ${cellKey}:`, error);
+                }
+            } else if (!cell) {
+                console.warn(`[INIT] ⚠️  Cell ${cellKey} not found in DOM`);
+            }
+        });
+    }
     
     // Apply visual state for loaded learned skills after grid is created
     if (gridState.learnedSkills.size > 0) {
@@ -73,6 +96,15 @@ async function initializeGrid() {
     }
     
     console.log(`Grid initialized for user: ${gridState.currentUser} (GM: ${gridState.isGM})`);
+    
+    // PHASE 4: Run final diagnostic to confirm everything loaded correctly
+    console.log('[INIT] Phase 4: Running final diagnostic');
+    const diagnosis = diagnoseGridState();
+    if (diagnosis.mismatched > 0 || diagnosis.missing > 0) {
+        console.error('[INIT] ❌ Initialization completed with errors - see diagnosis above');
+    } else {
+        console.log('[INIT] ✅ Initialization completed successfully - all data loaded correctly');
+    }
 }
 
 /**
@@ -411,16 +443,8 @@ function setupInteractiveCell(cell, row, col) {
         cell.setAttribute('data-section', section);
     }
     
-    // Load saved content
-    const cellKey = `${row}-${col}`;
-    const savedContent = gridState.editableCells.get(cellKey);
-    if (savedContent) {
-        cell.innerHTML = savedContent;
-        
-        // DEBUG: Log load operation
-        console.log(`[LOAD] Cell ${cellKey} (ID: ${cell.id}) loaded with text:`, savedContent);
-        console.log(`[LOAD] Cell dataset - row: ${cell.dataset.row}, col: ${cell.dataset.col}`);
-    }
+    // NOTE: Content loading is now handled by the main initialization process
+    // to avoid race conditions. The content will be applied after all cells are created.
 }
 
 /**
@@ -521,34 +545,84 @@ function startInlineEdit(cell) {
 function finishInlineEdit(cell, textarea, save) {
     const row = cell.dataset.row;
     const col = cell.dataset.col;
+    const cellKey = `${row}-${col}`;
+    
+    console.log(`[EDIT-FINISH] Starting finish edit for cell ${cellKey} (save=${save})`);
     
     if (save) {
-        const newText = textarea.value.trim();
-        const formattedText = textToHtml(newText); // Convert text to HTML with formatting
-        
-        // Update cell content
-        cell.innerHTML = formattedText;
-        
-        // Save to state
-        const cellKey = `${row}-${col}`;
-        gridState.editableCells.set(cellKey, formattedText);
-        gridState.hasUnsavedChanges = true;
-        
-        // DEBUG: Log save operation
-        console.log(`[SAVE] Cell ${cellKey} (ID: ${cell.id}) saved with text:`, formattedText);
-        console.log(`[SAVE] Cell dataset - row: ${cell.dataset.row}, col: ${cell.dataset.col}`);
-        
-        // Update save button to indicate unsaved changes
-        updateSaveButtonState();
-        
-        // Text editing complete - use manual save button to persist
+        try {
+            const newText = textarea.value.trim();
+            const formattedText = textToHtml(newText); // Convert text to HTML with formatting
+            
+            console.log(`[EDIT-FINISH] Converting text to HTML for cell ${cellKey}`);
+            console.log(`[EDIT-FINISH] Original text: ${newText}`);
+            console.log(`[EDIT-FINISH] Formatted HTML: ${formattedText}`);
+            
+            // Verify cell still exists before updating
+            if (!cell || !cell.parentNode) {
+                console.error(`[EDIT-FINISH] ERROR: Cell ${cellKey} no longer exists in DOM`);
+                return;
+            }
+            
+            // Update cell content with error handling
+            try {
+                cell.innerHTML = formattedText;
+                console.log(`[EDIT-FINISH] Successfully updated cell ${cellKey} innerHTML`);
+            } catch (htmlError) {
+                console.error(`[EDIT-FINISH] ERROR updating innerHTML for cell ${cellKey}:`, htmlError);
+                // Fallback: try setting textContent
+                try {
+                    cell.textContent = newText;
+                    console.log(`[EDIT-FINISH] Fallback: Set textContent for cell ${cellKey}`);
+                } catch (textError) {
+                    console.error(`[EDIT-FINISH] CRITICAL: Failed to set any content for cell ${cellKey}:`, textError);
+                    return;
+                }
+            }
+            
+            // Save to state
+            gridState.editableCells.set(cellKey, formattedText);
+            gridState.hasUnsavedChanges = true;
+            
+            // DEBUG: Log save operation
+            console.log(`[SAVE] Cell ${cellKey} (ID: ${cell.id}) saved with text:`, formattedText);
+            console.log(`[SAVE] Cell dataset - row: ${cell.dataset.row}, col: ${cell.dataset.col}`);
+            console.log(`[SAVE] Total cells in state: ${gridState.editableCells.size}`);
+            
+            // Verify save was successful
+            const savedContent = gridState.editableCells.get(cellKey);
+            if (savedContent !== formattedText) {
+                console.error(`[SAVE] ERROR: Save verification failed for cell ${cellKey}`);
+                console.error(`[SAVE] Expected: ${formattedText}`);
+                console.error(`[SAVE] Got: ${savedContent}`);
+            } else {
+                console.log(`[SAVE] Save verification successful for cell ${cellKey}`);
+            }
+            
+            // Update save button to indicate unsaved changes
+            updateSaveButtonState();
+            
+        } catch (error) {
+            console.error(`[EDIT-FINISH] CRITICAL ERROR during save for cell ${cellKey}:`, error);
+            console.error(`[EDIT-FINISH] Error stack:`, error.stack);
+        }
     } else {
         // Restore original content
-        cell.innerHTML = textarea.dataset.originalContent;
+        try {
+            cell.innerHTML = textarea.dataset.originalContent;
+            console.log(`[EDIT-FINISH] Restored original content for cell ${cellKey}`);
+        } catch (error) {
+            console.error(`[EDIT-FINISH] ERROR restoring content for cell ${cellKey}:`, error);
+        }
     }
     
     // Remove editing state
-    cell.classList.remove('editing');
+    try {
+        cell.classList.remove('editing');
+        console.log(`[EDIT-FINISH] Removed editing state for cell ${cellKey}`);
+    } catch (error) {
+        console.error(`[EDIT-FINISH] ERROR removing editing state for cell ${cellKey}:`, error);
+    }
 }
 
 /**
@@ -1194,10 +1268,15 @@ async function saveGMData() {
  */
 async function saveGMDataReliably() {
     console.log('[SAVE] Starting GM data save operation');
+    console.log(`[SAVE] Current state - hasUnsavedChanges: ${gridState.hasUnsavedChanges}`);
+    console.log(`[SAVE] Current state - isSaving: ${gridState.isSaving}`);
+    console.log(`[SAVE] Current state - lastSaveTime: ${gridState.lastSaveTime}`);
     
     // Create a snapshot of data to save to prevent race conditions
     const cellsSnapshot = new Map(gridState.editableCells);
     const connectionsSnapshot = new Map(gridState.customConnections);
+    
+    console.log(`[SAVE] Created snapshots - cells: ${cellsSnapshot.size}, connections: ${connectionsSnapshot.size}`);
     
     const data = {
         editableCells: Object.fromEntries(cellsSnapshot),
@@ -1206,12 +1285,23 @@ async function saveGMDataReliably() {
         user: 'GM'
     };
     
-    // DEBUG: Log save data
+    // DEBUG: Log save data with more detail
     console.log('[SAVE] GM data snapshot being saved:');
     for (const [key, value] of cellsSnapshot) {
-        console.log(`  Cell ${key}: "${value}"`);
+        console.log(`  Cell ${key}: "${value.substring(0, 100)}${value.length > 100 ? '...' : ''}"`);
+        
+        // Verify the cell exists in DOM
+        const cellElement = document.getElementById(`cell-${key}`);
+        if (cellElement) {
+            console.log(`    DOM cell-${key} current content: "${cellElement.innerHTML.substring(0, 100)}${cellElement.innerHTML.length > 100 ? '...' : ''}"`);
+            console.log(`    DOM cell-${key} matches state: ${cellElement.innerHTML === value}`);
+        } else {
+            console.warn(`    WARNING: DOM cell-${key} not found`);
+        }
     }
     console.log(`[SAVE] Total cells: ${cellsSnapshot.size}, connections: ${connectionsSnapshot.size}`);
+    console.log(`[SAVE] Data object keys:`, Object.keys(data));
+    console.log(`[SAVE] editableCells keys:`, Object.keys(data.editableCells));
     
     try {
         const response = await fetch('save_gm_data.php', {
@@ -1345,9 +1435,10 @@ async function waitForSaveLock() {
 
 /**
  * Load shared data from server (both GM and Zepha data)
+ * @param {boolean} applyToDOM - Whether to apply data to DOM elements (only after grid is created)
  */
-async function loadGridData() {
-    await loadSharedData();
+async function loadGridData(applyToDOM = false) {
+    await loadSharedData(applyToDOM);
 }
 
 /**
@@ -1372,13 +1463,16 @@ function startSmartRefresh() {
 
 /**
  * Load shared data (called periodically and on init)
+ * @param {boolean} applyToDOM - Whether to apply data to DOM elements
  */
-async function loadSharedData() {
+async function loadSharedData(applyToDOM = true) {
     // Additional safety checks
     if (gridState.isSaving) {
         console.log('[LOAD] Skipping data reload - save operation in progress');
         return;
     }
+    
+    console.log(`[LOAD] Starting loadSharedData (applyToDOM: ${applyToDOM})`);
     
     try {
         const response = await fetch('load_shared_data.php');
@@ -1414,17 +1508,55 @@ async function loadSharedData() {
                             console.log(`  Cell ${key}: ${value}`);
                         }
                         
-                        // Apply loaded data to UI cells that exist
-                        gridState.editableCells.forEach((content, cellKey) => {
-                            const cellId = `cell-${cellKey}`;
-                            const cell = document.getElementById(cellId);
-                            if (cell && cell.classList.contains('editable')) {
-                                if (cell.innerHTML !== content) {
-                                    cell.innerHTML = content;
-                                    console.log(`[LOAD] Updated UI for cell ${cellKey} with: ${content}`);
+                        // Apply loaded data to UI cells that exist (only if DOM is ready)
+                        if (applyToDOM) {
+                            console.log(`[LOAD] Applying data to UI - processing ${gridState.editableCells.size} cells`);
+                            gridState.editableCells.forEach((content, cellKey) => {
+                                const cellId = `cell-${cellKey}`;
+                                const cell = document.getElementById(cellId);
+                                
+                                console.log(`[LOAD] Processing cell ${cellKey} (${cellId})`);
+                                console.log(`[LOAD]   Content length: ${content.length}`);
+                                console.log(`[LOAD]   Cell found: ${!!cell}`);
+                                
+                                if (cell) {
+                                    console.log(`[LOAD]   Cell classes: ${cell.className}`);
+                                    console.log(`[LOAD]   Cell editable: ${cell.classList.contains('editable')}`);
+                                    console.log(`[LOAD]   Current innerHTML length: ${cell.innerHTML.length}`);
+                                    console.log(`[LOAD]   Content matches: ${cell.innerHTML === content}`);
+                                    
+                                    if (cell.classList.contains('editable')) {
+                                        if (cell.innerHTML !== content) {
+                                            try {
+                                                cell.innerHTML = content;
+                                                console.log(`[LOAD] ✅ Successfully updated UI for cell ${cellKey}`);
+                                                console.log(`[LOAD]   Updated content: ${content.substring(0, 100)}${content.length > 100 ? '...' : ''}`);
+                                                
+                                                // Verify the update
+                                                if (cell.innerHTML === content) {
+                                                    console.log(`[LOAD] ✅ Update verification successful for cell ${cellKey}`);
+                                                } else {
+                                                    console.error(`[LOAD] ❌ Update verification failed for cell ${cellKey}`);
+                                                    console.error(`[LOAD]   Expected: ${content.substring(0, 100)}`);
+                                                    console.error(`[LOAD]   Got: ${cell.innerHTML.substring(0, 100)}`);
+                                                }
+                                            } catch (error) {
+                                                console.error(`[LOAD] ❌ ERROR updating UI for cell ${cellKey}:`, error);
+                                                console.error(`[LOAD] Error details:`, error.message);
+                                            }
+                                        } else {
+                                            console.log(`[LOAD] ℹ️  Cell ${cellKey} already has correct content`);
+                                        }
+                                    } else {
+                                        console.warn(`[LOAD] ⚠️  Cell ${cellKey} found but not editable`);
+                                    }
+                                } else {
+                                    console.error(`[LOAD] ❌ Cell ${cellKey} (${cellId}) not found in DOM`);
                                 }
-                            }
-                        });
+                            });
+                        } else {
+                            console.log(`[LOAD] Skipping DOM updates - grid not yet created (${gridState.editableCells.size} cells loaded into state)`);
+                        }
                     }
                 }
                 if (data.gm_data.customConnections) {
@@ -1539,6 +1671,58 @@ function setsEqual(set1, set2) {
     }
     return true;
 }
+
+/**
+ * Diagnostic function to analyze grid state and DOM consistency
+ */
+function diagnoseGridState() {
+    console.log('=== GRID STATE DIAGNOSIS ===');
+    console.log(`Total cells in state: ${gridState.editableCells.size}`);
+    console.log(`Has unsaved changes: ${gridState.hasUnsavedChanges}`);
+    console.log(`Is saving: ${gridState.isSaving}`);
+    console.log(`Last save time: ${gridState.lastSaveTime}`);
+    
+    let domCellsFound = 0;
+    let domCellsMatching = 0;
+    let domCellsMismatched = 0;
+    let domCellsMissing = 0;
+    
+    gridState.editableCells.forEach((stateContent, cellKey) => {
+        const cellElement = document.getElementById(`cell-${cellKey}`);
+        if (cellElement) {
+            domCellsFound++;
+            const domContent = cellElement.innerHTML;
+            if (domContent === stateContent) {
+                domCellsMatching++;
+            } else {
+                domCellsMismatched++;
+                console.warn(`MISMATCH cell-${cellKey}:`);
+                console.warn(`  State: ${stateContent.substring(0, 50)}...`);
+                console.warn(`  DOM:   ${domContent.substring(0, 50)}...`);
+            }
+        } else {
+            domCellsMissing++;
+            console.error(`MISSING cell-${cellKey} not found in DOM`);
+        }
+    });
+    
+    console.log(`DOM cells found: ${domCellsFound}`);
+    console.log(`DOM cells matching state: ${domCellsMatching}`);
+    console.log(`DOM cells mismatched: ${domCellsMismatched}`);
+    console.log(`DOM cells missing: ${domCellsMissing}`);
+    console.log('=== END DIAGNOSIS ===');
+    
+    return {
+        totalCells: gridState.editableCells.size,
+        domFound: domCellsFound,
+        matching: domCellsMatching,
+        mismatched: domCellsMismatched,
+        missing: domCellsMissing
+    };
+}
+
+// Make diagnosis function available globally for debugging
+window.diagnoseGridState = diagnoseGridState;
 
 // Global functions (none needed for inline editing)
 

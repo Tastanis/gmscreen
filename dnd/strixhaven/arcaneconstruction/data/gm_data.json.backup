@@ -6,7 +6,8 @@
         "6-4": "test",
         "6-3": "test",
         "5-3": "test",
-        "7-4": "Fireball<ul><li>Area damage<\/li><li>Fire elemental<\/li><\/ul>"
+        "7-4": "Fireball<ul><li>Area damage<\/li><li>Fire elemental<\/li><\/ul>",
+        "18-3": "Advanced Planning Techniques<ul><li>Large-scale blueprint development<\/li><li>Resource allocation optimization<\/li><li>Timeline management for complex projects<\/li><li>Environmental impact assessment<\/li><li>Structural integrity calculations<\/li><li>Multi-phase construction planning<\/li><\/ul><br>This cell represents the Colossal Construction Tier 5 Planning column and contains extensive user-typed content that should persist after save\/reload operations. This is a critical test to reproduce the GM save issue where typed content gets lost or appears in wrong locations."
     },
     "customConnections": {
         "cell-7-9-to-cell-8-5": {
@@ -18,9 +19,14 @@
             "source": "cell-9-11",
             "target": "cell-14-9",
             "type": "custom"
+        },
+        "cell-5-3-to-cell-6-3": {
+            "source": "cell-5-3",
+            "target": "cell-6-3",
+            "type": "custom"
         }
     },
-    "lastSaved": "2025-08-23 20:40:06",
+    "lastSaved": "2025-08-23 21:09:34",
     "savedBy": "GM",
-    "timestamp": "2025-08-23T20:40:06.097Z"
+    "timestamp": "2025-08-23T21:09:34.093Z"
 }
