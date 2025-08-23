@@ -8,7 +8,8 @@
         "5-3": "test",
         "7-4": "Fireball<ul><li>Area damage<\/li><li>Fire elemental<\/li><\/ul>",
         "18-3": "Advanced Planning Techniques<ul><li>Large-scale blueprint development<\/li><li>Resource allocation optimization<\/li><li>Timeline management for complex projects<\/li><li>Environmental impact assessment<\/li><li>Structural integrity calculations<\/li><li>Multi-phase construction planning<\/li><\/ul><br>This cell represents the Colossal Construction Tier 5 Planning column and contains extensive user-typed content that should persist after save\/reload operations. This is a critical test to reproduce the GM save issue where typed content gets lost or appears in wrong locations.",
-        "19-4": "Massive Scale Engineering<ul><li>Foundation systems for colossal structures<\/li><li>Load distribution across mega-frameworks<\/li><li>Weather resistance at enormous scales<\/li><li>Integration with landscape features<\/li><\/ul><br>This represents the ultimate achievement in Colossal Construction - Size mastery at Tier 6 level."
+        "19-4": "Massive Scale Engineering<ul><li>Foundation systems for colossal structures<\/li><li>Load distribution across mega-frameworks<\/li><li>Weather resistance at enormous scales<\/li><li>Integration with landscape features<\/li><\/ul><br>This represents the ultimate achievement in Colossal Construction - Size mastery at Tier 6 level.",
+        "4-3": "<strong>Bold text<\/strong> and <ul><li>First bullet point<\/li><li>Second bullet point<\/li><\/ul>Normal text"
     },
     "customConnections": {
         "cell-7-9-to-cell-8-5": {
@@ -27,7 +28,7 @@
             "type": "custom"
         }
     },
-    "lastSaved": "2025-08-23 21:14:43",
+    "lastSaved": "2025-08-23 21:49:59",
     "savedBy": "GM",
-    "timestamp": "2025-08-23T21:14:43.083Z"
+    "timestamp": "2025-08-23T21:49:59.815Z"
 }

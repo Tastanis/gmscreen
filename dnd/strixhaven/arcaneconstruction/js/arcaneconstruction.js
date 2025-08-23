@@ -500,7 +500,7 @@ function handleZephaClick(event) {
 }
 
 /**
- * Start inline editing for a cell
+ * Start inline editing for a cell with rich text editor
  */
 function startInlineEdit(cell) {
     const row = cell.dataset.row;
@@ -510,118 +510,132 @@ function startInlineEdit(cell) {
     // Mark cell as editing
     cell.classList.add('editing');
     
-    // Create textarea for editing
-    const textarea = document.createElement('textarea');
-    textarea.className = 'inline-editor';
-    textarea.value = htmlToText(currentText); // Convert HTML to text with newlines
-    
-    // Clear cell and add textarea
-    cell.innerHTML = '';
-    cell.appendChild(textarea);
-    
-    // Focus and select text
-    textarea.focus();
-    textarea.select();
+    // Create contenteditable div for rich text editing
+    const editor = document.createElement('div');
+    editor.className = 'rich-text-editor';
+    editor.contentEditable = true;
+    editor.innerHTML = currentText;
     
     // Store original content for cancel
-    textarea.dataset.originalContent = currentText;
+    editor.dataset.originalContent = currentText;
+    
+    // Clear cell and add editor
+    cell.innerHTML = '';
+    cell.appendChild(editor);
+    
+    // Create and show formatting toolbar
+    const toolbar = createFormattingToolbar(cell, editor);
+    cell.appendChild(toolbar);
+    
+    // Focus editor and select all content
+    editor.focus();
+    selectAllContent(editor);
     
     // Add event listeners
-    textarea.addEventListener('blur', () => finishInlineEdit(cell, textarea, true));
-    textarea.addEventListener('keydown', (e) => {
+    editor.addEventListener('blur', (e) => {
+        // Don't blur if clicking on toolbar
+        if (!e.relatedTarget || !e.relatedTarget.closest('.formatting-toolbar')) {
+            finishRichTextEdit(cell, editor, true);
+        }
+    });
+    
+    editor.addEventListener('keydown', (e) => {
         if (e.key === 'Enter' && !e.shiftKey) {
             e.preventDefault();
-            finishInlineEdit(cell, textarea, true);
+            finishRichTextEdit(cell, editor, true);
         } else if (e.key === 'Escape') {
             e.preventDefault();
-            finishInlineEdit(cell, textarea, false);
+            finishRichTextEdit(cell, editor, false);
+        } else if (e.key === 'b' && e.ctrlKey) {
+            e.preventDefault();
+            toggleBold(editor);
         }
+    });
+    
+    // Prevent default drag behavior on the editor
+    editor.addEventListener('dragstart', (e) => {
+        e.preventDefault();
     });
 }
 
 /**
- * Finish inline editing
+ * Finish rich text editing
  */
-function finishInlineEdit(cell, textarea, save) {
+function finishRichTextEdit(cell, editor, save) {
     const row = cell.dataset.row;
     const col = cell.dataset.col;
     const cellKey = `${row}-${col}`;
     
-    console.log(`[EDIT-FINISH] Starting finish edit for cell ${cellKey} (save=${save})`);
+    console.log(`[RICH-EDIT-FINISH] Starting finish edit for cell ${cellKey} (save=${save})`);
     
     if (save) {
         try {
-            const newText = textarea.value.trim();
-            const formattedText = textToHtml(newText); // Convert text to HTML with formatting
+            // Get HTML content from editor and clean it
+            let formattedText = editor.innerHTML.trim();
+            formattedText = cleanRichTextHtml(formattedText);
             
-            console.log(`[EDIT-FINISH] Converting text to HTML for cell ${cellKey}`);
-            console.log(`[EDIT-FINISH] Original text: ${newText}`);
-            console.log(`[EDIT-FINISH] Formatted HTML: ${formattedText}`);
+            console.log(`[RICH-EDIT-FINISH] Cleaned HTML for cell ${cellKey}: ${formattedText}`);
             
             // Verify cell still exists before updating
             if (!cell || !cell.parentNode) {
-                console.error(`[EDIT-FINISH] ERROR: Cell ${cellKey} no longer exists in DOM`);
+                console.error(`[RICH-EDIT-FINISH] ERROR: Cell ${cellKey} no longer exists in DOM`);
                 return;
             }
             
-            // Update cell content with error handling
-            try {
-                cell.innerHTML = formattedText;
-                console.log(`[EDIT-FINISH] Successfully updated cell ${cellKey} innerHTML`);
-            } catch (htmlError) {
-                console.error(`[EDIT-FINISH] ERROR updating innerHTML for cell ${cellKey}:`, htmlError);
-                // Fallback: try setting textContent
-                try {
-                    cell.textContent = newText;
-                    console.log(`[EDIT-FINISH] Fallback: Set textContent for cell ${cellKey}`);
-                } catch (textError) {
-                    console.error(`[EDIT-FINISH] CRITICAL: Failed to set any content for cell ${cellKey}:`, textError);
-                    return;
-                }
-            }
+            // Update cell content
+            cell.innerHTML = formattedText;
             
             // Save to state
             gridState.editableCells.set(cellKey, formattedText);
             gridState.hasUnsavedChanges = true;
             
-            // DEBUG: Log save operation
-            console.log(`[SAVE] Cell ${cellKey} (ID: ${cell.id}) saved with text:`, formattedText);
-            console.log(`[SAVE] Cell dataset - row: ${cell.dataset.row}, col: ${cell.dataset.col}`);
-            console.log(`[SAVE] Total cells in state: ${gridState.editableCells.size}`);
-            
-            // Verify save was successful
-            const savedContent = gridState.editableCells.get(cellKey);
-            if (savedContent !== formattedText) {
-                console.error(`[SAVE] ERROR: Save verification failed for cell ${cellKey}`);
-                console.error(`[SAVE] Expected: ${formattedText}`);
-                console.error(`[SAVE] Got: ${savedContent}`);
-            } else {
-                console.log(`[SAVE] Save verification successful for cell ${cellKey}`);
-            }
+            console.log(`[RICH-SAVE] Cell ${cellKey} saved with formatted content`);
             
             // Update save button to indicate unsaved changes
             updateSaveButtonState();
             
         } catch (error) {
-            console.error(`[EDIT-FINISH] CRITICAL ERROR during save for cell ${cellKey}:`, error);
-            console.error(`[EDIT-FINISH] Error stack:`, error.stack);
+            console.error(`[RICH-EDIT-FINISH] CRITICAL ERROR during save for cell ${cellKey}:`, error);
         }
     } else {
         // Restore original content
         try {
-            cell.innerHTML = textarea.dataset.originalContent;
-            console.log(`[EDIT-FINISH] Restored original content for cell ${cellKey}`);
+            cell.innerHTML = editor.dataset.originalContent;
+            console.log(`[RICH-EDIT-FINISH] Restored original content for cell ${cellKey}`);
         } catch (error) {
-            console.error(`[EDIT-FINISH] ERROR restoring content for cell ${cellKey}:`, error);
+            console.error(`[RICH-EDIT-FINISH] ERROR restoring content for cell ${cellKey}:`, error);
         }
     }
     
     // Remove editing state
-    try {
+    cell.classList.remove('editing');
+}
+
+/**
+ * Legacy function for compatibility - redirects to rich text version
+ */
+function finishInlineEdit(cell, editor, save) {
+    // Handle both old textarea and new rich text editor
+    if (editor.tagName === 'TEXTAREA') {
+        // Legacy textarea handling
+        const row = cell.dataset.row;
+        const col = cell.dataset.col;
+        const cellKey = `${row}-${col}`;
+        
+        if (save) {
+            const newText = editor.value.trim();
+            const formattedText = textToHtml(newText);
+            cell.innerHTML = formattedText;
+            gridState.editableCells.set(cellKey, formattedText);
+            gridState.hasUnsavedChanges = true;
+            updateSaveButtonState();
+        } else {
+            cell.innerHTML = editor.dataset.originalContent;
+        }
         cell.classList.remove('editing');
-        console.log(`[EDIT-FINISH] Removed editing state for cell ${cellKey}`);
-    } catch (error) {
-        console.error(`[EDIT-FINISH] ERROR removing editing state for cell ${cellKey}:`, error);
+    } else {
+        // Rich text editor
+        finishRichTextEdit(cell, editor, save);
     }
 }
 
@@ -690,6 +704,181 @@ function textToHtml(text) {
     }
     
     return result;
+}
+
+/**
+ * Create formatting toolbar for rich text editing
+ */
+function createFormattingToolbar(cell, editor) {
+    const toolbar = document.createElement('div');
+    toolbar.className = 'formatting-toolbar';
+    
+    // Bold button
+    const boldBtn = document.createElement('button');
+    boldBtn.className = 'toolbar-btn bold-btn';
+    boldBtn.innerHTML = '<strong>B</strong>';
+    boldBtn.title = 'Bold (Ctrl+B)';
+    boldBtn.addEventListener('mousedown', (e) => e.preventDefault()); // Prevent blur
+    boldBtn.addEventListener('click', () => toggleBold(editor));
+    
+    // Bullet list button
+    const bulletBtn = document.createElement('button');
+    bulletBtn.className = 'toolbar-btn bullet-btn';
+    bulletBtn.innerHTML = '•';
+    bulletBtn.title = 'Bullet List';
+    bulletBtn.addEventListener('mousedown', (e) => e.preventDefault());
+    bulletBtn.addEventListener('click', () => toggleBulletList(editor));
+    
+    // Font size increase button
+    const fontIncBtn = document.createElement('button');
+    fontIncBtn.className = 'toolbar-btn font-inc-btn';
+    fontIncBtn.innerHTML = 'A+';
+    fontIncBtn.title = 'Increase Font Size';
+    fontIncBtn.addEventListener('mousedown', (e) => e.preventDefault());
+    fontIncBtn.addEventListener('click', () => increaseFontSize(editor));
+    
+    // Font size decrease button
+    const fontDecBtn = document.createElement('button');
+    fontDecBtn.className = 'toolbar-btn font-dec-btn';
+    fontDecBtn.innerHTML = 'A-';
+    fontDecBtn.title = 'Decrease Font Size';
+    fontDecBtn.addEventListener('mousedown', (e) => e.preventDefault());
+    fontDecBtn.addEventListener('click', () => decreaseFontSize(editor));
+    
+    // Add buttons to toolbar
+    toolbar.appendChild(boldBtn);
+    toolbar.appendChild(bulletBtn);
+    toolbar.appendChild(fontIncBtn);
+    toolbar.appendChild(fontDecBtn);
+    
+    return toolbar;
+}
+
+/**
+ * Toggle bold formatting for selected text
+ */
+function toggleBold(editor) {
+    document.execCommand('bold', false, null);
+    editor.focus();
+}
+
+/**
+ * Toggle bullet list formatting
+ */
+function toggleBulletList(editor) {
+    const selection = window.getSelection();
+    if (selection.rangeCount === 0) {
+        // No selection, create a bullet list
+        const range = document.createRange();
+        range.selectNodeContents(editor);
+        selection.removeAllRanges();
+        selection.addRange(range);
+    }
+    
+    document.execCommand('insertUnorderedList', false, null);
+    editor.focus();
+}
+
+/**
+ * Increase font size
+ */
+function increaseFontSize(editor) {
+    const selection = window.getSelection();
+    if (selection.rangeCount > 0) {
+        document.execCommand('fontSize', false, '4'); // Larger size
+    } else {
+        // Apply to entire editor if no selection
+        editor.style.fontSize = 'larger';
+    }
+    editor.focus();
+}
+
+/**
+ * Decrease font size
+ */
+function decreaseFontSize(editor) {
+    const selection = window.getSelection();
+    if (selection.rangeCount > 0) {
+        document.execCommand('fontSize', false, '2'); // Smaller size
+    } else {
+        // Apply to entire editor if no selection
+        editor.style.fontSize = 'smaller';
+    }
+    editor.focus();
+}
+
+/**
+ * Select all content in contenteditable element
+ */
+function selectAllContent(element) {
+    const range = document.createRange();
+    range.selectNodeContents(element);
+    const selection = window.getSelection();
+    selection.removeAllRanges();
+    selection.addRange(range);
+}
+
+/**
+ * Clean and sanitize rich text HTML
+ */
+function cleanRichTextHtml(html) {
+    if (!html) return '';
+    
+    // Create a temporary div to manipulate the HTML
+    const temp = document.createElement('div');
+    temp.innerHTML = html;
+    
+    // Remove unwanted attributes and elements
+    const allowedTags = ['b', 'strong', 'i', 'em', 'u', 'ul', 'li', 'br', 'span', 'div'];
+    const allowedAttributes = ['style'];
+    
+    // Clean all elements recursively
+    function cleanElement(element) {
+        if (element.nodeType === Node.TEXT_NODE) {
+            return; // Text nodes are fine
+        }
+        
+        if (element.nodeType === Node.ELEMENT_NODE) {
+            const tagName = element.tagName.toLowerCase();
+            
+            // Remove disallowed tags
+            if (!allowedTags.includes(tagName)) {
+                // Replace with its contents
+                while (element.firstChild) {
+                    element.parentNode.insertBefore(element.firstChild, element);
+                }
+                element.parentNode.removeChild(element);
+                return;
+            }
+            
+            // Clean attributes
+            const attrs = Array.from(element.attributes);
+            attrs.forEach(attr => {
+                if (!allowedAttributes.includes(attr.name)) {
+                    element.removeAttribute(attr.name);
+                }
+            });
+            
+            // Clean children
+            const children = Array.from(element.children);
+            children.forEach(child => cleanElement(child));
+        }
+    }
+    
+    cleanElement(temp);
+    
+    // Convert div elements to br for line breaks
+    const divs = temp.querySelectorAll('div');
+    divs.forEach(div => {
+        const br = document.createElement('br');
+        div.parentNode.insertBefore(br, div);
+        while (div.firstChild) {
+            div.parentNode.insertBefore(div.firstChild, div);
+        }
+        div.parentNode.removeChild(div);
+    });
+    
+    return temp.innerHTML;
 }
 
 /**
