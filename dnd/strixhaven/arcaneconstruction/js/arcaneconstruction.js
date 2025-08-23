@@ -32,7 +32,9 @@ let gridState = {
     learningMode: false, // Whether Zepha is in learning mode
     learnedSkills: new Set(), // Zepha's learned skills
     isSaving: false, // Save operation in progress
-    lastSaveTime: 0 // Timestamp of last save
+    lastSaveTime: 0, // Timestamp of last save
+    refreshInterval: null, // Auto-refresh interval ID
+    hasUnsavedChanges: false // Track if user has made changes
 };
 
 /**
@@ -530,10 +532,14 @@ function finishInlineEdit(cell, textarea, save) {
         // Save to state
         const cellKey = `${row}-${col}`;
         gridState.editableCells.set(cellKey, formattedText);
+        gridState.hasUnsavedChanges = true;
         
         // DEBUG: Log save operation
         console.log(`[SAVE] Cell ${cellKey} (ID: ${cell.id}) saved with text:`, formattedText);
         console.log(`[SAVE] Cell dataset - row: ${cell.dataset.row}, col: ${cell.dataset.col}`);
+        
+        // Update save button to indicate unsaved changes
+        updateSaveButtonState();
         
         // Text editing complete - use manual save button to persist
     } else {
@@ -695,8 +701,8 @@ function setupSaveSystem() {
         saveBtn.addEventListener('click', handleSave);
     }
     
-    // Auto-refresh to get updates from other user
-    setInterval(loadSharedData, 5000); // Check every 5 seconds
+    // Auto-refresh to get updates from other user - more intelligent timing
+    startSmartRefresh();
 }
 
 /**
@@ -733,26 +739,52 @@ function toggleLearningMode() {
  * Toggle learned skill for Zepha
  */
 function toggleLearnedSkill(cell, cellId) {
-    if (gridState.learnedSkills.has(cellId)) {
+    const wasLearned = gridState.learnedSkills.has(cellId);
+    
+    if (wasLearned) {
         // Remove learned skill
         gridState.learnedSkills.delete(cellId);
         cell.classList.remove('learned-skill');
         cell.classList.add('learning-mode');
+        console.log(`[ZEPHA] Skill ${cellId} unlearned`);
     } else {
         // Add learned skill
         gridState.learnedSkills.add(cellId);
         cell.classList.add('learned-skill');
         cell.classList.remove('learning-mode');
+        console.log(`[ZEPHA] Skill ${cellId} learned`);
     }
     
-    console.log(`Skill ${cellId} toggled by Zepha`);
+    gridState.hasUnsavedChanges = true;
+    updateSaveButtonState();
+}
+
+/**
+ * Update save button state to show unsaved changes
+ */
+function updateSaveButtonState() {
+    const saveBtn = document.getElementById('save-btn');
+    if (saveBtn) {
+        if (gridState.hasUnsavedChanges && !gridState.isSaving) {
+            saveBtn.textContent = 'Save Changes*';
+            saveBtn.style.backgroundColor = '#ff6b6b';
+            saveBtn.style.color = 'white';
+        } else {
+            saveBtn.textContent = 'Save Grid';
+            saveBtn.style.backgroundColor = '';
+            saveBtn.style.color = '';
+        }
+    }
 }
 
 /**
  * Handle save button click
  */
 async function handleSave() {
-    if (gridState.isSaving) return; // Prevent double-clicking
+    if (gridState.isSaving) {
+        console.log('[SAVE] Save already in progress - ignoring click');
+        return; // Prevent double-clicking
+    }
     
     gridState.isSaving = true;
     const saveBtn = document.getElementById('save-btn');
@@ -761,28 +793,42 @@ async function handleSave() {
     saveBtn.disabled = true;
     saveStatus.textContent = 'Saving...';
     
+    // Update button immediately
+    saveBtn.textContent = 'Saving...';
+    saveBtn.style.backgroundColor = '#ffa726';
+    
     try {
+        let success = false;
         if (gridState.isGM) {
-            await saveGMData();
+            success = await saveGMDataReliably();
         } else {
-            await saveZephaData();
+            success = await saveZephaDataReliably();
         }
         
-        saveStatus.textContent = 'Saved!';
-        setTimeout(() => {
-            saveStatus.textContent = '';
-        }, 2000);
+        if (success) {
+            saveStatus.textContent = 'Saved!';
+            gridState.hasUnsavedChanges = false;
+            updateSaveButtonState();
+            setTimeout(() => {
+                if (saveStatus) saveStatus.textContent = '';
+            }, 2000);
+        } else {
+            throw new Error('Save operation returned false');
+        }
         
     } catch (error) {
         console.error('Save failed:', error);
-        saveStatus.textContent = 'Save failed!';
+        saveStatus.textContent = 'Save failed! Try again.';
         setTimeout(() => {
-            saveStatus.textContent = '';
-        }, 3000);
+            if (saveStatus) saveStatus.textContent = '';
+        }, 5000);
     } finally {
         gridState.isSaving = false;
-        saveBtn.disabled = false;
+        if (saveBtn) {
+            saveBtn.disabled = false;
+        }
         gridState.lastSaveTime = Date.now();
+        updateSaveButtonState();
     }
 }
 
@@ -1129,24 +1175,35 @@ function clearSelections() {
 }
 
 /**
- * Save GM data (text and arrows)
+ * Save GM data (text and arrows) - Legacy function kept for compatibility
  */
 async function saveGMData() {
-    // Check if another user is saving
-    await waitForSaveLock();
+    return await saveGMDataReliably();
+}
+
+/**
+ * Save GM data with enhanced reliability and error handling
+ */
+async function saveGMDataReliably() {
+    console.log('[SAVE] Starting GM data save operation');
+    
+    // Create a snapshot of data to save to prevent race conditions
+    const cellsSnapshot = new Map(gridState.editableCells);
+    const connectionsSnapshot = new Map(gridState.customConnections);
     
     const data = {
-        editableCells: Object.fromEntries(gridState.editableCells),
-        customConnections: Object.fromEntries(gridState.customConnections),
+        editableCells: Object.fromEntries(cellsSnapshot),
+        customConnections: Object.fromEntries(connectionsSnapshot),
         timestamp: new Date().toISOString(),
         user: 'GM'
     };
     
     // DEBUG: Log save data
-    console.log('[SAVE] GM data being saved to server:');
-    for (const [key, value] of gridState.editableCells) {
-        console.log(`  Cell ${key}: ${value}`);
+    console.log('[SAVE] GM data snapshot being saved:');
+    for (const [key, value] of cellsSnapshot) {
+        console.log(`  Cell ${key}: "${value}"`);
     }
+    console.log(`[SAVE] Total cells: ${cellsSnapshot.size}, connections: ${connectionsSnapshot.size}`);
     
     try {
         const response = await fetch('save_gm_data.php', {
@@ -1157,31 +1214,50 @@ async function saveGMData() {
             body: JSON.stringify(data)
         });
         
-        if (response.ok) {
-            console.log('GM data saved successfully');
+        const result = await response.json();
+        
+        if (response.ok && result.success) {
+            console.log('[SAVE] GM data saved successfully to server');
+            return true;
         } else {
-            console.error('Failed to save GM data');
+            console.error('[SAVE] Server rejected GM data save:', result.error || 'Unknown error');
+            throw new Error(result.error || 'Server rejected save');
         }
+        
     } catch (error) {
-        console.error('Error saving GM data:', error);
-        // Fallback to localStorage
-        localStorage.setItem('arcaneGMData', JSON.stringify(data));
+        console.error('[SAVE] Error saving GM data to server:', error);
+        
+        // Fallback to localStorage as backup
+        try {
+            localStorage.setItem('arcaneGMData_backup', JSON.stringify(data));
+            console.log('[SAVE] GM data backed up to localStorage');
+        } catch (storageError) {
+            console.error('[SAVE] Failed to backup to localStorage:', storageError);
+        }
+        
+        return false; // Save failed
     }
 }
 
 /**
- * Save Zepha data (learned skills)
+ * Save Zepha data (learned skills) - Legacy function kept for compatibility
  */
 async function saveZephaData() {
-    // Check if another user is saving
-    await waitForSaveLock();
+    return await saveZephaDataReliably();
+}
+
+/**
+ * Save Zepha data with enhanced reliability and error handling
+ */
+async function saveZephaDataReliably() {
+    console.log('[SAVE] Starting Zepha data save operation');
     
     // Capture the learned skills at save time to prevent race conditions
-    const learnedSkillsToSave = Array.from(gridState.learnedSkills);
-    console.log('[SAVE] Capturing learned skills for save:', learnedSkillsToSave);
+    const learnedSkillsSnapshot = Array.from(gridState.learnedSkills);
+    console.log('[SAVE] Zepha skills snapshot for save:', learnedSkillsSnapshot);
     
     const data = {
-        learnedSkills: learnedSkillsToSave,
+        learnedSkills: learnedSkillsSnapshot,
         timestamp: new Date().toISOString(),
         user: 'zepha'
     };
@@ -1197,15 +1273,40 @@ async function saveZephaData() {
             body: JSON.stringify(data)
         });
         
-        if (response.ok) {
-            console.log('Zepha data saved successfully');
+        const result = await response.json();
+        
+        if (response.ok && result.success) {
+            console.log('[SAVE] Zepha data saved successfully to server');
+            
+            // Verify that our local state matches what we just saved
+            const currentSkills = Array.from(gridState.learnedSkills).sort();
+            const savedSkills = learnedSkillsSnapshot.sort();
+            const skillsMatch = JSON.stringify(currentSkills) === JSON.stringify(savedSkills);
+            
+            if (!skillsMatch) {
+                console.warn('[SAVE] Warning: Local skills changed during save operation');
+                console.warn('[SAVE] Current:', currentSkills);
+                console.warn('[SAVE] Saved:', savedSkills);
+            }
+            
+            return true;
         } else {
-            console.error('Failed to save Zepha data');
+            console.error('[SAVE] Server rejected Zepha data save:', result.error || 'Unknown error');
+            throw new Error(result.error || 'Server rejected save');
         }
+        
     } catch (error) {
-        console.error('Error saving Zepha data:', error);
-        // Fallback to localStorage
-        localStorage.setItem('arcaneZephaData', JSON.stringify(data));
+        console.error('[SAVE] Error saving Zepha data to server:', error);
+        
+        // Fallback to localStorage as backup
+        try {
+            localStorage.setItem('arcaneZephaData_backup', JSON.stringify(data));
+            console.log('[SAVE] Zepha data backed up to localStorage');
+        } catch (storageError) {
+            console.error('[SAVE] Failed to backup to localStorage:', storageError);
+        }
+        
+        return false; // Save failed
     }
 }
 
@@ -1242,10 +1343,41 @@ async function loadGridData() {
 }
 
 /**
+ * Start smart refresh system that adapts to save operations
+ */
+function startSmartRefresh() {
+    // Clear any existing interval
+    if (gridState.refreshInterval) {
+        clearInterval(gridState.refreshInterval);
+    }
+    
+    // Start with 5-second intervals, but be smart about when to refresh
+    gridState.refreshInterval = setInterval(() => {
+        const timeSinceLastSave = Date.now() - gridState.lastSaveTime;
+        
+        // Skip refresh if:
+        // 1. Currently saving
+        // 2. Just saved (within 2 seconds)
+        // 3. Have unsaved changes and editing (within 10 seconds of last edit)
+        if (gridState.isSaving) {
+            console.log('[REFRESH] Skipping - save in progress');
+            return;
+        }
+        
+        if (timeSinceLastSave < 2000) {
+            console.log('[REFRESH] Skipping - just saved');
+            return;
+        }
+        
+        loadSharedData();
+    }, 5000);
+}
+
+/**
  * Load shared data (called periodically and on init)
  */
 async function loadSharedData() {
-    // Don't reload data while saving to prevent overwriting unsaved changes
+    // Additional safety checks
     if (gridState.isSaving) {
         console.log('[LOAD] Skipping data reload - save operation in progress');
         return;
@@ -1260,12 +1392,42 @@ async function loadSharedData() {
             // Load GM data (visible to both users)
             if (data.gm_data) {
                 if (data.gm_data.editableCells) {
-                    gridState.editableCells = new Map(Object.entries(data.gm_data.editableCells));
+                    // CRITICAL FIX: Don't overwrite local changes if user has unsaved changes
+                    const serverCells = new Map(Object.entries(data.gm_data.editableCells));
+                    const timeSinceLastSave = Date.now() - gridState.lastSaveTime;
                     
-                    // DEBUG: Log loaded data
-                    console.log('[LOAD] GM data loaded from server:');
-                    for (const [key, value] of gridState.editableCells) {
-                        console.log(`  Cell ${key}: ${value}`);
+                    if (gridState.hasUnsavedChanges && timeSinceLastSave > 3000) {
+                        console.log('[LOAD] Preserving unsaved GM cell changes - not overwriting local data');
+                        
+                        // Only update cells that don't have local changes
+                        // Keep local changes, merge in server changes for other cells
+                        for (const [key, value] of serverCells) {
+                            if (!gridState.editableCells.has(key)) {
+                                gridState.editableCells.set(key, value);
+                                console.log(`[LOAD] Added new server cell ${key}: ${value}`);
+                            }
+                        }
+                    } else {
+                        // Safe to update - no local changes or just saved
+                        gridState.editableCells = serverCells;
+                        
+                        // DEBUG: Log loaded data
+                        console.log('[LOAD] GM data loaded from server:');
+                        for (const [key, value] of gridState.editableCells) {
+                            console.log(`  Cell ${key}: ${value}`);
+                        }
+                        
+                        // Apply loaded data to UI cells that exist
+                        gridState.editableCells.forEach((content, cellKey) => {
+                            const cellId = `cell-${cellKey}`;
+                            const cell = document.getElementById(cellId);
+                            if (cell && cell.classList.contains('editable')) {
+                                if (cell.innerHTML !== content) {
+                                    cell.innerHTML = content;
+                                    console.log(`[LOAD] Updated UI for cell ${cellKey} with: ${content}`);
+                                }
+                            }
+                        });
                     }
                 }
                 if (data.gm_data.customConnections) {

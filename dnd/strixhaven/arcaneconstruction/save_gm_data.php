@@ -35,27 +35,57 @@ if (!is_dir($dataDir)) {
 }
 
 $dataFile = $dataDir . '/gm_data.json';
+$lockFile = $dataDir . '/save_lock.json';
 
-// Prepare save data
-$saveData = [
-    'editableCells' => $data['editableCells'] ?? [],
-    'customConnections' => $data['customConnections'] ?? [],
-    'lastSaved' => date('Y-m-d H:i:s'),
-    'savedBy' => $user,
-    'timestamp' => $data['timestamp'] ?? date('c')
+// Create save lock
+$lockData = [
+    'user' => $user,
+    'timestamp' => date('c'),
+    'action' => 'saving_gm_data'
 ];
 
-// Save with backup
-if (file_exists($dataFile)) {
-    copy($dataFile, $dataFile . '.backup');
+$lockResult = file_put_contents($lockFile, json_encode($lockData), LOCK_EX);
+if ($lockResult === false) {
+    http_response_code(500);
+    echo json_encode(['error' => 'Failed to acquire save lock']);
+    exit;
 }
 
-$result = file_put_contents($dataFile, json_encode($saveData, JSON_PRETTY_PRINT), LOCK_EX);
+try {
+    // Prepare save data
+    $saveData = [
+        'editableCells' => $data['editableCells'] ?? [],
+        'customConnections' => $data['customConnections'] ?? [],
+        'lastSaved' => date('Y-m-d H:i:s'),
+        'savedBy' => $user,
+        'timestamp' => $data['timestamp'] ?? date('c')
+    ];
 
-if ($result === false) {
-    http_response_code(500);
-    echo json_encode(['error' => 'Failed to save GM data']);
-} else {
+    // Save with backup
+    if (file_exists($dataFile)) {
+        copy($dataFile, $dataFile . '.backup');
+    }
+
+    $result = file_put_contents($dataFile, json_encode($saveData, JSON_PRETTY_PRINT), LOCK_EX);
+
+    if ($result === false) {
+        throw new Exception('Failed to write GM data to file');
+    }
+
+    // Success - remove lock
+    if (file_exists($lockFile)) {
+        unlink($lockFile);
+    }
+
     echo json_encode(['success' => true, 'message' => 'GM data saved successfully']);
+
+} catch (Exception $e) {
+    // Remove lock on failure
+    if (file_exists($lockFile)) {
+        unlink($lockFile);
+    }
+    
+    http_response_code(500);
+    echo json_encode(['error' => 'Failed to save GM data: ' . $e->getMessage()]);
 }
 ?>

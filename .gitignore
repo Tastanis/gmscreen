@@ -61,6 +61,9 @@ pnpm-lock.yaml
 # Templates data
 /dnd/strixhaven/templates/data/
 
+# Arcane Construction data
+/dnd/strixhaven/arcaneconstruction/data/
+
 # Backup directories
 **/backups/
 **/backup/
