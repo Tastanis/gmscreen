@@ -106,7 +106,7 @@ session_start();
         }
         
         .level-indicator {
-            background: linear-gradient(135deg, #805ad5 0%, #6b46c1 100%);
+            background: linear-gradient(135deg, #4299e1 0%, #3182ce 100%);
             color: white;
             padding: 5px 15px;
             border-radius: 20px;
@@ -157,10 +157,6 @@ session_start();
                         <input type="text" id="first_name" name="first_name" class="form-input" placeholder="Enter your first name" required>
                     </div>
                     <div class="form-group">
-                        <label for="last_name">Last Name</label>
-                        <input type="text" id="last_name" name="last_name" class="form-input" placeholder="Enter your last name" required>
-                    </div>
-                    <div class="form-group">
                         <label for="password">Password</label>
                         <input type="password" id="password" name="password" class="form-input" placeholder="Enter your password" required>
                     </div>
@@ -179,12 +175,12 @@ session_start();
     <div id="registrationModal" class="modal">
         <div class="modal-content">
             <div class="modal-header">
-                <h2>Create New ASL 2 Account</h2>
+                <h2>Create New ASL 1 Account</h2>
                 <button class="close-btn" onclick="closeModal()">&times;</button>
             </div>
             
             <form action="register.php" method="POST" id="registrationForm">
-                <input type="hidden" name="level" value="2">
+                <input type="hidden" name="level" value="1">
                 <div class="form-group">
                     <label for="preset_password">Class Password</label>
                     <input type="password" id="preset_password" name="preset_password" class="form-input" placeholder="Enter class password (MGHS)" required>

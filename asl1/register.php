@@ -75,6 +75,28 @@ if ($_POST) {
             exit;
         }
         
+        // Check if someone with the same first name already uses this password or 'MGHS'
+        $stmt = $pdo->prepare("SELECT id, password FROM users WHERE first_name = ? AND level = ? AND is_teacher = FALSE");
+        $stmt->execute([$first_name, $level]);
+        $same_name_users = $stmt->fetchAll();
+        
+        foreach ($same_name_users as $same_name_user) {
+            // Check if they're trying to use MGHS password when someone with same name already uses MGHS
+            if ($password === 'MGHS') {
+                $_SESSION['message'] = 'Another student named ' . $first_name . ' already uses the default password "MGHS". Please choose a unique password for your account.';
+                $_SESSION['message_type'] = 'error';
+                header('Location: index.php');
+                exit;
+            }
+            // Check if they're trying to use the same custom password as someone with the same name
+            if (password_verify($password, $same_name_user['password'])) {
+                $_SESSION['message'] = 'Another student named ' . $first_name . ' already uses that password. Please choose a different password for your account.';
+                $_SESSION['message_type'] = 'error';
+                header('Location: index.php');
+                exit;
+            }
+        }
+        
         // Create new user with custom password and level
         $hashed_password = password_hash($password, PASSWORD_DEFAULT);
         
