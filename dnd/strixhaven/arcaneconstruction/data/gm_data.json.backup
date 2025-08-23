@@ -5,7 +5,8 @@
         "5-4": "test",
         "6-4": "test",
         "6-3": "test",
-        "5-3": "test"
+        "5-3": "test",
+        "7-4": "Fireball<ul><li>Area damage<\/li><li>Fire elemental<\/li><\/ul>"
     },
     "customConnections": {
         "cell-7-9-to-cell-8-5": {
@@ -19,7 +20,7 @@
             "type": "custom"
         }
     },
-    "lastSaved": "2025-08-23 20:38:17",
+    "lastSaved": "2025-08-23 20:40:06",
     "savedBy": "GM",
-    "timestamp": "2025-08-23T20:38:17.896Z"
+    "timestamp": "2025-08-23T20:40:06.097Z"
 }

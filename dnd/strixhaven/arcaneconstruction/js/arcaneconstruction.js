@@ -701,8 +701,9 @@ function setupSaveSystem() {
         saveBtn.addEventListener('click', handleSave);
     }
     
-    // Auto-refresh to get updates from other user - more intelligent timing
-    startSmartRefresh();
+    // Auto-refresh disabled - page now behaves as static page
+    // User must manually refresh page to see other user's changes
+    console.log('[SETUP] Auto-refresh system disabled for static page behavior');
 }
 
 /**
@@ -893,6 +894,10 @@ function createCustomConnection(sourceId, targetId) {
     if (gridState.customConnections.has(connectionId)) {
         // Remove existing connection
         removeCustomConnection(sourceId, targetId);
+        // Immediately save after removing connection
+        gridState.hasUnsavedChanges = true;
+        updateSaveButtonState();
+        console.log(`[GM CONNECT] Connection removed: ${connectionId}`);
     } else {
         // Create new connection
         gridState.customConnections.set(connectionId, {
@@ -902,7 +907,10 @@ function createCustomConnection(sourceId, targetId) {
         });
         
         drawArrow(sourceId, targetId, 'arrow-line');
-        // Connection created - use manual save button to persist
+        // Immediately mark as unsaved changes and prompt to save
+        gridState.hasUnsavedChanges = true;
+        updateSaveButtonState();
+        console.log(`[GM CONNECT] Connection created: ${connectionId} - marked for save`);
     }
 }
 
@@ -924,7 +932,7 @@ function removeCustomConnection(sourceId, targetId) {
         }
     }
     
-    // Connection removed - use manual save button to persist
+    console.log(`[GM CONNECT] Arrow removed from UI: ${connectionId}`);
 }
 
 /**
@@ -1343,34 +1351,23 @@ async function loadGridData() {
 }
 
 /**
- * Start smart refresh system that adapts to save operations
+ * Auto-refresh system DISABLED
+ * Previously started smart refresh system that adapted to save operations.
+ * Now disabled to prevent interference with GM arrow drawing and provide static page behavior.
+ * Users can manually refresh the page to get updates from other users.
  */
 function startSmartRefresh() {
-    // Clear any existing interval
+    console.log('[REFRESH] Auto-refresh system permanently disabled');
+    console.log('[REFRESH] Page now behaves as static - manual refresh required for updates');
+    
+    // Clear any existing interval to ensure nothing runs
     if (gridState.refreshInterval) {
         clearInterval(gridState.refreshInterval);
+        gridState.refreshInterval = null;
     }
     
-    // Start with 5-second intervals, but be smart about when to refresh
-    gridState.refreshInterval = setInterval(() => {
-        const timeSinceLastSave = Date.now() - gridState.lastSaveTime;
-        
-        // Skip refresh if:
-        // 1. Currently saving
-        // 2. Just saved (within 2 seconds)
-        // 3. Have unsaved changes and editing (within 10 seconds of last edit)
-        if (gridState.isSaving) {
-            console.log('[REFRESH] Skipping - save in progress');
-            return;
-        }
-        
-        if (timeSinceLastSave < 2000) {
-            console.log('[REFRESH] Skipping - just saved');
-            return;
-        }
-        
-        loadSharedData();
-    }, 5000);
+    // DO NOT START ANY AUTO-REFRESH INTERVALS
+    // This function is now essentially a no-op to prevent arrows from disappearing
 }
 
 /**
