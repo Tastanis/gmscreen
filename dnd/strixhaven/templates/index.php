@@ -210,7 +210,7 @@ $templatesData = loadTemplatesData();
             <h3>Confirm Delete</h3>
             <p id="delete-message">Are you sure you want to delete this?</p>
             <div class="modal-buttons">
-                <button class="btn-danger" onclick="confirmFolderDeletion()">Delete</button>
+                <button class="btn-danger" onclick="confirmDelete()">Delete</button>
                 <button class="btn-secondary" onclick="cancelDelete()">Cancel</button>
             </div>
         </div>
