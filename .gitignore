@@ -1,6 +1,29 @@
 # User data files - DO NOT COMMIT
 # These files contain user-generated content and should never be in version control
 
+# Node.js dependencies and files
+node_modules/
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+pnpm-debug.log*
+lerna-debug.log*
+
+# Lock files (optional - you may want to keep package-lock.json)
+package-lock.json
+yarn.lock
+pnpm-lock.yaml
+
+# Playwright test results (if you add tests later)
+/test-results/
+/playwright-report/
+/playwright/.cache/
+
+# Environment variables
+.env
+.env.local
+.env.*.local
+
 # Character and game data
 /dnd/data/characters.json
 /dnd/data/inventory.json
@@ -48,6 +71,12 @@ save_log.txt
 
 # Local settings (already exists, keeping it)
 /.claude/settings.local.json
+
+# Local development files
+index.local.html
+
+# Playwright MCP testing files
+.playwright-mcp/
 
 # OS generated files
 .DS_Store

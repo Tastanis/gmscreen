@@ -1,0 +1,20 @@
+{
+    "editableCells": {
+        "9-5": "test",
+        "6-5": "test",
+        "5-4": "test",
+        "6-4": "test",
+        "6-3": "test",
+        "5-3": "test"
+    },
+    "customConnections": {
+        "cell-7-9-to-cell-8-5": {
+            "source": "cell-7-9",
+            "target": "cell-8-5",
+            "type": "custom"
+        }
+    },
+    "lastSaved": "2025-08-23 20:15:47",
+    "savedBy": "GM",
+    "timestamp": "2025-08-23T20:15:47.020Z"
+}

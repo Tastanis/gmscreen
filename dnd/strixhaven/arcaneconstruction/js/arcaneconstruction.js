@@ -58,6 +58,18 @@ async function initializeGrid() {
     setupSaveSystem();
     createAutoConnections();
     
+    // Apply visual state for loaded learned skills after grid is created
+    if (gridState.learnedSkills.size > 0) {
+        console.log('[INIT] Applying visual state for loaded learned skills:', Array.from(gridState.learnedSkills));
+        gridState.learnedSkills.forEach(skillId => {
+            const cell = document.getElementById(skillId);
+            if (cell) {
+                cell.classList.add('learned-skill');
+                console.log(`[INIT] Applied learned-skill class to ${skillId}`);
+            }
+        });
+    }
+    
     console.log(`Grid initialized for user: ${gridState.currentUser} (GM: ${gridState.isGM})`);
 }
 
@@ -1164,11 +1176,17 @@ async function saveZephaData() {
     // Check if another user is saving
     await waitForSaveLock();
     
+    // Capture the learned skills at save time to prevent race conditions
+    const learnedSkillsToSave = Array.from(gridState.learnedSkills);
+    console.log('[SAVE] Capturing learned skills for save:', learnedSkillsToSave);
+    
     const data = {
-        learnedSkills: Array.from(gridState.learnedSkills),
+        learnedSkills: learnedSkillsToSave,
         timestamp: new Date().toISOString(),
         user: 'zepha'
     };
+    
+    console.log('[SAVE] Zepha data being sent to server:', data);
     
     try {
         const response = await fetch('save_zepha_data.php', {
@@ -1227,6 +1245,12 @@ async function loadGridData() {
  * Load shared data (called periodically and on init)
  */
 async function loadSharedData() {
+    // Don't reload data while saving to prevent overwriting unsaved changes
+    if (gridState.isSaving) {
+        console.log('[LOAD] Skipping data reload - save operation in progress');
+        return;
+    }
+    
     try {
         const response = await fetch('load_shared_data.php');
         
@@ -1262,18 +1286,48 @@ async function loadSharedData() {
             
             // Load Zepha data (visible to both users)
             if (data.zepha_data && data.zepha_data.learnedSkills) {
-                // Clear existing learned skill highlighting
-                const learnedCells = document.querySelectorAll('.grid-cell.learned-skill');
-                learnedCells.forEach(cell => cell.classList.remove('learned-skill'));
+                const serverSkills = new Set(data.zepha_data.learnedSkills);
+                const timeSinceLastSave = Date.now() - gridState.lastSaveTime;
                 
-                gridState.learnedSkills = new Set(data.zepha_data.learnedSkills);
-                // Apply learned skill highlighting
-                gridState.learnedSkills.forEach(skillId => {
-                    const cell = document.getElementById(skillId);
-                    if (cell) {
-                        cell.classList.add('learned-skill');
-                    }
-                });
+                // Don't overwrite local changes if:
+                // 1. We have unsaved local skills AND haven't saved recently (more than 3 seconds ago)
+                // 2. OR we just saved recently (less than 30 seconds ago) and have local skills
+                const hasUnsavedChanges = gridState.learnedSkills.size > 0 && 
+                    (gridState.lastSaveTime === 0 || timeSinceLastSave > 3000);
+                const justSaved = gridState.lastSaveTime > 0 && timeSinceLastSave < 30000;
+                
+                if (hasUnsavedChanges && !justSaved) {
+                    console.log('[LOAD] Preserving unsaved learned skills changes');
+                } else if (justSaved && gridState.learnedSkills.size > 0) {
+                    console.log('[LOAD] Preserving recently saved skills - not overwriting with server data yet');
+                } else {
+                    // Safe to update from server
+                    // Clear existing learned skill highlighting
+                    const learnedCells = document.querySelectorAll('.grid-cell.learned-skill');
+                    learnedCells.forEach(cell => cell.classList.remove('learned-skill'));
+                    
+                    gridState.learnedSkills = serverSkills;
+                    // Apply learned skill highlighting
+                    gridState.learnedSkills.forEach(skillId => {
+                        const cell = document.getElementById(skillId);
+                        if (cell) {
+                            cell.classList.add('learned-skill');
+                        }
+                    });
+                    
+                    console.log('[LOAD] Zepha learned skills updated from server:', Array.from(gridState.learnedSkills));
+                }
+                
+                // Always ensure visual state matches internal state (for page refresh scenarios)
+                if (gridState.learnedSkills.size > 0) {
+                    gridState.learnedSkills.forEach(skillId => {
+                        const cell = document.getElementById(skillId);
+                        if (cell && !cell.classList.contains('learned-skill')) {
+                            cell.classList.add('learned-skill');
+                            console.log(`[VISUAL] Applied learned-skill class to ${skillId}`);
+                        }
+                    });
+                }
             }
             
             console.log('Shared data loaded from server');
@@ -1314,6 +1368,17 @@ async function loadSharedData() {
     }
     
     console.log('Shared data loaded from localStorage');
+}
+
+/**
+ * Helper function to compare two Sets for equality
+ */
+function setsEqual(set1, set2) {
+    if (set1.size !== set2.size) return false;
+    for (const item of set1) {
+        if (!set2.has(item)) return false;
+    }
+    return true;
 }
 
 // Global functions (none needed for inline editing)
