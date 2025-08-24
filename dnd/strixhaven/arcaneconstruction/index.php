@@ -72,7 +72,13 @@ require_once '../../version.php';
                     <!-- SVG overlay for arrows - positioned inside grid container -->
                     <svg id="arrow-overlay" class="arrow-overlay" viewBox="0 0 1440 2000" preserveAspectRatio="none">
                         <defs>
-                            <marker id="arrowhead" markerWidth="10" markerHeight="7" 
+                            <!-- GM Arrow Marker (Blue) -->
+                            <marker id="arrowhead-gm" markerWidth="12" markerHeight="8" 
+                                    refX="12" refY="4" orient="auto">
+                                <polygon points="0 0, 12 4, 0 8" fill="#2563eb" />
+                            </marker>
+                            <!-- Auto Arrow Marker (Red) -->
+                            <marker id="arrowhead-auto" markerWidth="10" markerHeight="7" 
                                     refX="10" refY="3.5" orient="auto">
                                 <polygon points="0 0, 10 3.5, 0 7" fill="#dc2626" />
                             </marker>

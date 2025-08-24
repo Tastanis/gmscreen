@@ -644,17 +644,19 @@ body {
 }
 
 .arrow-line {
-    stroke: #dc2626;
-    stroke-width: 2;
+    stroke: #2563eb;
+    stroke-width: 3;
+    stroke-dasharray: 8, 4;
     fill: none;
-    marker-end: url(#arrowhead);
+    marker-end: url(#arrowhead-gm);
+    opacity: 0.9;
 }
 
 .auto-arrow-line {
     stroke: #dc2626;
-    stroke-width: 1.5;
+    stroke-width: 2;
     fill: none;
-    marker-end: url(#arrowhead);
+    marker-end: url(#arrowhead-auto);
     opacity: 0.8;
 }
 
@@ -665,21 +667,23 @@ body {
     box-shadow: 0 2px 4px rgba(0, 0, 0, 0.1);
 }
 
-/* Back-propagation highlighting for Zepha */
+/* Back-propagation highlighting for Zepha - Much More Visible */
 .grid-cell.chain-target {
-    background: rgba(245, 158, 11, 0.2) !important;
+    background: rgba(245, 158, 11, 0.6) !important;
     border: 3px solid #f59e0b !important;
-    box-shadow: 0 4px 6px rgba(0, 0, 0, 0.15);
-    transform: scale(1.02);
+    box-shadow: 0 6px 12px rgba(245, 158, 11, 0.4);
+    transform: scale(1.05);
     z-index: 20;
+    animation: pulse-target 1.5s infinite;
 }
 
 .grid-cell.chain-source {
-    background: rgba(16, 185, 129, 0.2) !important;
+    background: rgba(16, 185, 129, 0.5) !important;
     border: 3px solid #10b981 !important;
-    box-shadow: 0 4px 6px rgba(0, 0, 0, 0.15);
-    transform: scale(1.02);
+    box-shadow: 0 4px 8px rgba(16, 185, 129, 0.3);
+    transform: scale(1.03);
     z-index: 15;
+    animation: pulse-source 2s infinite;
 }
 
 /* Learned skills highlighting */
@@ -712,6 +716,28 @@ body {
 @keyframes pulse-learning {
     0%, 100% { opacity: 1; }
     50% { opacity: 0.8; }
+}
+
+@keyframes pulse-target {
+    0%, 100% { 
+        box-shadow: 0 6px 12px rgba(245, 158, 11, 0.4);
+        transform: scale(1.05);
+    }
+    50% { 
+        box-shadow: 0 8px 16px rgba(245, 158, 11, 0.6);
+        transform: scale(1.06);
+    }
+}
+
+@keyframes pulse-source {
+    0%, 100% { 
+        box-shadow: 0 4px 8px rgba(16, 185, 129, 0.3);
+        opacity: 1;
+    }
+    50% { 
+        box-shadow: 0 6px 12px rgba(16, 185, 129, 0.5);
+        opacity: 0.9;
+    }
 }
 
 /* Zoom Indicator */
