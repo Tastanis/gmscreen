@@ -507,7 +507,54 @@ function handleZephaClick(event) {
         }
     });
     
+    // Highlight arrows in the back-propagation chain
+    highlightChainArrows(cellId, sourceCells);
+    
     console.log(`Cell ${cell.dataset.row}-${cell.dataset.col} clicked by Zepha, found ${sourceCells.length} source cells`);
+}
+
+/**
+ * Highlight arrows involved in the back-propagation chain
+ */
+function highlightChainArrows(targetId, sourceCells) {
+    const svg = document.getElementById('arrow-overlay');
+    if (!svg) return;
+    
+    // Collect all cell IDs involved in the chain (target + all sources)
+    const allChainCells = [targetId, ...sourceCells];
+    
+    // Find all arrows that connect any source to the target or to other sources in the chain
+    const arrowsToHighlight = [];
+    
+    // Check auto connections
+    gridState.autoConnections.forEach((connection, connectionId) => {
+        const sourceInChain = allChainCells.includes(connection.source);
+        const targetInChain = allChainCells.includes(connection.target);
+        
+        if (sourceInChain && targetInChain) {
+            arrowsToHighlight.push(connectionId);
+        }
+    });
+    
+    // Check custom connections
+    gridState.customConnections.forEach((connection, connectionId) => {
+        const sourceInChain = allChainCells.includes(connection.source);
+        const targetInChain = allChainCells.includes(connection.target);
+        
+        if (sourceInChain && targetInChain) {
+            arrowsToHighlight.push(connectionId);
+        }
+    });
+    
+    // Apply highlighting to the arrow elements
+    arrowsToHighlight.forEach(connectionId => {
+        const arrowElement = svg.querySelector(`line[data-connection="${connectionId}"]`);
+        if (arrowElement) {
+            arrowElement.classList.add('chain-arrow-highlighted');
+        }
+    });
+    
+    console.log(`Highlighted ${arrowsToHighlight.length} arrows in back-propagation chain`);
 }
 
 /**
@@ -927,7 +974,7 @@ function findAllSourceCells(targetId, visited = new Set()) {
 }
 
 /**
- * Clear all chain highlighting
+ * Clear all chain highlighting (cells and arrows)
  */
 function clearChainHighlighting() {
     const targetCells = document.querySelectorAll('.grid-cell.chain-target');
@@ -940,6 +987,15 @@ function clearChainHighlighting() {
     sourceCells.forEach(cell => {
         cell.classList.remove('chain-source');
     });
+    
+    // Clear arrow highlighting
+    const svg = document.getElementById('arrow-overlay');
+    if (svg) {
+        const highlightedArrows = svg.querySelectorAll('line.chain-arrow-highlighted');
+        highlightedArrows.forEach(arrow => {
+            arrow.classList.remove('chain-arrow-highlighted');
+        });
+    }
 }
 
 /**
@@ -1339,12 +1395,22 @@ function setupZoomControls() {
         }
     });
     
-    // Mouse drag for panning
+    // Right-click drag for panning (left-click reserved for cell interactions)
     viewport.addEventListener('mousedown', (e) => {
-        gridState.isDragging = true;
-        gridState.lastMouseX = e.clientX;
-        gridState.lastMouseY = e.clientY;
-        viewport.style.cursor = 'grabbing';
+        // Only start dragging on right-click (button 2)
+        if (e.button === 2) {
+            e.preventDefault(); // Prevent context menu
+            gridState.isDragging = true;
+            gridState.lastMouseX = e.clientX;
+            gridState.lastMouseY = e.clientY;
+            viewport.style.cursor = 'grabbing';
+        }
+    });
+    
+    // Prevent context menu on right-click
+    viewport.addEventListener('contextmenu', (e) => {
+        e.preventDefault();
+        return false;
     });
     
     viewport.addEventListener('mousemove', (e) => {
@@ -1410,9 +1476,9 @@ function setupEventListeners() {
         }
     });
     
-    // Click on empty areas to clear highlighting (Zepha only)
+    // Left-click on empty areas to clear highlighting (Zepha only) - ignore right-clicks
     document.addEventListener('click', (e) => {
-        if (!gridState.isGM && !e.target.closest('.grid-cell.clickable')) {
+        if (!gridState.isGM && e.button !== 2 && !e.target.closest('.grid-cell.clickable')) {
             clearChainHighlighting();
         }
     });
@@ -1432,8 +1498,8 @@ function addInstructions() {
         instructions.innerHTML = `
             <strong>GM Controls:</strong><br>
             • Mouse wheel: Zoom in/out<br>
-            • Click & drag: Pan view<br>
-            • Click blue cells: Edit inline<br>
+            • Right-click & drag: Pan view<br>
+            • Left-click blue cells: Edit inline<br>
             • Enter: Save, Esc: Cancel<br>
             • Use * or • for bullets, Enter for new lines
         `;
@@ -1441,8 +1507,8 @@ function addInstructions() {
         instructions.innerHTML = `
             <strong>Controls:</strong><br>
             • Mouse wheel: Zoom in/out<br>
-            • Click & drag: Pan view<br>
-            • Click purple cells: Select/deselect<br>
+            • Right-click & drag: Pan view<br>
+            • Left-click purple cells: Select/deselect<br>
             • ESC: Clear selections
         `;
     }
