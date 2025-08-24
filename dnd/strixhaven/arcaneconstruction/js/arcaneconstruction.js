@@ -70,15 +70,26 @@ async function initializeGrid() {
         gridState.editableCells.forEach((content, cellKey) => {
             const cellId = `cell-${cellKey}`;
             const cell = document.getElementById(cellId);
-            if (cell && (cell.classList.contains('editable') || cell.classList.contains('clickable'))) {
+            
+            // Check if this is an interactive cell by coordinates
+            const [row, col] = cellKey.split('-').map(Number);
+            const isInteractiveCell = 
+                (row >= 4 && row <= 9 && col >= 3 && col <= 5) ||   // Enchanting
+                (row >= 4 && row <= 9 && col >= 9 && col <= 11) ||  // Constructs
+                (row >= 14 && row <= 19 && col >= 3 && col <= 5) || // Colossal
+                (row >= 14 && row <= 19 && col >= 9 && col <= 11);  // Arcane
+            
+            if (cell && isInteractiveCell) {
                 try {
                     cell.innerHTML = content;
-                    console.log(`[INIT] ✅ Applied content to cell ${cellKey}`);
+                    console.log(`[INIT] ✅ Applied content to cell ${cellKey} (interactive cell)`);
                 } catch (error) {
                     console.error(`[INIT] ❌ Failed to apply content to cell ${cellKey}:`, error);
                 }
             } else if (!cell) {
                 console.warn(`[INIT] ⚠️  Cell ${cellKey} not found in DOM`);
+            } else if (!isInteractiveCell) {
+                console.warn(`[INIT] ⚠️  Cell ${cellKey} is not an interactive cell - skipping`);
             }
         });
     }
