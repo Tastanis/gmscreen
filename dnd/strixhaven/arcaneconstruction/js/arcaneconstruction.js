@@ -70,7 +70,7 @@ async function initializeGrid() {
         gridState.editableCells.forEach((content, cellKey) => {
             const cellId = `cell-${cellKey}`;
             const cell = document.getElementById(cellId);
-            if (cell && cell.classList.contains('editable')) {
+            if (cell && (cell.classList.contains('editable') || cell.classList.contains('clickable'))) {
                 try {
                     cell.innerHTML = content;
                     console.log(`[INIT] ✅ Applied content to cell ${cellKey}`);
@@ -1722,7 +1722,7 @@ async function loadSharedData(applyToDOM = true) {
                                     console.log(`[LOAD]   Current innerHTML length: ${cell.innerHTML.length}`);
                                     console.log(`[LOAD]   Content matches: ${cell.innerHTML === content}`);
                                     
-                                    if (cell.classList.contains('editable')) {
+                                    if (cell.classList.contains('editable') || cell.classList.contains('clickable')) {
                                         if (cell.innerHTML !== content) {
                                             try {
                                                 cell.innerHTML = content;
