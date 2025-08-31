@@ -183,7 +183,7 @@ session_start();
                 <input type="hidden" name="level" value="1">
                 <div class="form-group">
                     <label for="preset_password">Class Password</label>
-                    <input type="password" id="preset_password" name="preset_password" class="form-input" placeholder="Enter class password (MGHS)" required>
+                    <input type="password" id="preset_password" name="preset_password" class="form-input" placeholder="Enter class password" required>
                 </div>
                 <div class="form-group">
                     <label for="reg_first_name">First Name</label>

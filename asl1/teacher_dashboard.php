@@ -450,8 +450,8 @@ try {
         }
         
         function viewStudentDetails(studentId) {
-            // This would open a modal or redirect to detailed student view
-            alert('Student details functionality coming soon! Student ID: ' + studentId);
+            // Redirect to student details page
+            window.location.href = 'student_details.php?id=' + studentId;
         }
         
         function showAddSkillForm() {

@@ -175,15 +175,15 @@ session_start();
     <div id="registrationModal" class="modal">
         <div class="modal-content">
             <div class="modal-header">
-                <h2>Create New ASL 1 Account</h2>
+                <h2>Create New ASL 2 Account</h2>
                 <button class="close-btn" onclick="closeModal()">&times;</button>
             </div>
             
             <form action="register.php" method="POST" id="registrationForm">
-                <input type="hidden" name="level" value="1">
+                <input type="hidden" name="level" value="2">
                 <div class="form-group">
                     <label for="preset_password">Class Password</label>
-                    <input type="password" id="preset_password" name="preset_password" class="form-input" placeholder="Enter class password (MGHS)" required>
+                    <input type="password" id="preset_password" name="preset_password" class="form-input" placeholder="Enter class password" required>
                 </div>
                 <div class="form-group">
                     <label for="reg_first_name">First Name</label>
