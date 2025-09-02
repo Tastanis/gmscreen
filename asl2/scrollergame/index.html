@@ -1,0 +1,83 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>ASL Word Scroller Game</title>
+    <link rel="stylesheet" href="styles.css">
+</head>
+<body>
+    <!-- Main Menu Screen -->
+    <div id="menu-screen" class="screen active">
+        <div class="menu-container">
+            <h1>ASL Word Scroller</h1>
+            
+            <!-- Word List Selection -->
+            <div class="section">
+                <h2>Select Word Lists</h2>
+                <div id="wordlist-container" class="wordlist-container">
+                    <!-- Checkboxes will be dynamically loaded here -->
+                    <div class="loading">Loading word lists...</div>
+                </div>
+                
+                <div class="custom-words-section">
+                    <label>
+                        <input type="checkbox" id="use-custom-words">
+                        Use Custom Words
+                    </label>
+                    <textarea id="custom-words" placeholder="Enter words separated by commas (e.g., hello, world, sign)" disabled></textarea>
+                </div>
+            </div>
+            
+            <!-- Game Settings -->
+            <div class="section">
+                <h2>Game Settings</h2>
+                
+                <div class="setting-group">
+                    <label for="speed-select">Speed:</label>
+                    <select id="speed-select">
+                        <option value="0.5">Slow (0.5x)</option>
+                        <option value="1" selected>Normal (1x)</option>
+                        <option value="1.5">Fast (1.5x)</option>
+                        <option value="2">Very Fast (2x)</option>
+                    </select>
+                </div>
+                
+                <div class="setting-group">
+                    <label for="word-count">Number of Words:</label>
+                    <input type="range" id="word-count" min="5" max="50" value="10" step="1">
+                    <span id="word-count-display">10</span>
+                </div>
+            </div>
+            
+            <button id="start-btn" class="btn-primary">Start Game</button>
+        </div>
+    </div>
+    
+    <!-- Game Screen -->
+    <div id="game-screen" class="screen">
+        <canvas id="stars-canvas"></canvas>
+        <div id="countdown" class="countdown"></div>
+        <div id="game-area" class="game-area"></div>
+        <canvas id="particles-canvas"></canvas>
+    </div>
+    
+    <!-- Results Screen -->
+    <div id="results-screen" class="screen">
+        <div class="results-container">
+            <h1>Game Complete!</h1>
+            <h2>Words Displayed:</h2>
+            <div id="words-list" class="words-list"></div>
+            
+            <div class="button-group">
+                <button id="play-again-btn" class="btn-primary">Play Again</button>
+                <button id="adjust-settings-btn" class="btn-secondary">Adjust Settings</button>
+                <button id="main-menu-btn" class="btn-secondary">Main Menu</button>
+            </div>
+        </div>
+    </div>
+    
+    <script src="particles.js"></script>
+    <script src="game.js"></script>
+</body>
+</html>

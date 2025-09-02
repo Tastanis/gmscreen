@@ -343,6 +343,14 @@ try {
                         
                         <div id="wordlists-container" style="margin-top: 30px;">
                             <h3>Your Word Lists</h3>
+                            <div style="margin-bottom: 20px;">
+                                <a href="scrollergame/index.html" target="_blank" class="form-button" style="background: #17a2b8; display: inline-block; text-decoration: none; color: white;">
+                                    Launch Scroller Game
+                                </a>
+                                <span style="margin-left: 10px; color: #666; font-size: 0.9em;">
+                                    (Check "Enable for Scroller" to make word lists available in the game)
+                                </span>
+                            </div>
                             <div id="wordlists-list">
                                 <!-- Word lists will be loaded here -->
                             </div>
@@ -553,6 +561,18 @@ try {
                         nameSpan.textContent = list.wordlist_name;
                         listDiv.appendChild(nameSpan);
 
+                        // Add checkbox for scroller game
+                        const scrollerLabel = document.createElement('label');
+                        scrollerLabel.style.marginLeft = '10px';
+                        scrollerLabel.style.marginRight = '10px';
+                        const scrollerCheckbox = document.createElement('input');
+                        scrollerCheckbox.type = 'checkbox';
+                        scrollerCheckbox.checked = list.scroller_enabled == 1;
+                        scrollerCheckbox.addEventListener('change', () => toggleScrollerEnabled(list.id, scrollerCheckbox.checked));
+                        scrollerLabel.appendChild(scrollerCheckbox);
+                        scrollerLabel.append(' Enable for Scroller');
+                        listDiv.appendChild(scrollerLabel);
+
                         const editBtn = document.createElement('button');
                         editBtn.className = 'action-btn edit-btn';
                         editBtn.textContent = 'Edit';
@@ -595,6 +615,31 @@ try {
 
         function refreshWordlists() {
             loadWordlists();
+        }
+
+        function toggleScrollerEnabled(wordlistId, enabled) {
+            fetch('toggle_scroller_enabled.php', {
+                method: 'POST',
+                headers: {
+                    'Content-Type': 'application/json'
+                },
+                body: JSON.stringify({
+                    wordlist_id: wordlistId,
+                    enabled: enabled ? 1 : 0
+                })
+            })
+            .then(response => response.json())
+            .then(data => {
+                if (!data.success) {
+                    console.error('Failed to update scroller setting');
+                    // Reload to restore correct state
+                    loadWordlists();
+                }
+            })
+            .catch(error => {
+                console.error('Error updating scroller setting:', error);
+                loadWordlists();
+            });
         }
 
         function submitNewWordlist() {

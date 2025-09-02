@@ -10,7 +10,13 @@ if (!isset($_SESSION['user_id']) || !isset($_SESSION['is_teacher']) || !$_SESSIO
 }
 
 try {
-    $stmt = $pdo->prepare("SELECT id, name as wordlist_name, words, speed_setting as speed, word_count FROM scroller_wordlists WHERE teacher_id = ? ORDER BY created_at DESC");
+    // Check if scroller_enabled column exists and include it if it does
+    $checkColumn = $pdo->query("SHOW COLUMNS FROM scroller_wordlists LIKE 'scroller_enabled'");
+    if ($checkColumn->rowCount() > 0) {
+        $stmt = $pdo->prepare("SELECT id, name as wordlist_name, words, speed_setting as speed, word_count, scroller_enabled FROM scroller_wordlists WHERE teacher_id = ? ORDER BY created_at DESC");
+    } else {
+        $stmt = $pdo->prepare("SELECT id, name as wordlist_name, words, speed_setting as speed, word_count, 1 as scroller_enabled FROM scroller_wordlists WHERE teacher_id = ? ORDER BY created_at DESC");
+    }
     $stmt->execute([$_SESSION['user_id']]);
     $lists = $stmt->fetchAll(PDO::FETCH_ASSOC);
     // Decode words column before returning
