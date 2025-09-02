@@ -181,8 +181,8 @@ class ScrollerGame {
         const gameArea = document.getElementById('game-area');
         const screenHeight = window.innerHeight;
         
-        // Calculate timing based on speed
-        const baseDuration = 5000 / this.currentSettings.speed; // Base time for word to travel full screen
+        // Calculate timing based on speed (doubled base duration for slower default speed)
+        const baseDuration = 10000 / this.currentSettings.speed; // Base time for word to travel full screen
         const wordDelay = baseDuration / 3; // Start next word when previous is 1/3 up
         
         this.gameWords.forEach((word, index) => {
@@ -263,14 +263,14 @@ class ScrollerGame {
             this.particleSystem.clear();
         }
         
-        // Display words list
+        // Display words list with numbering
         const wordsList = document.getElementById('words-list');
         wordsList.innerHTML = '';
         
-        this.gameWords.forEach(word => {
+        this.gameWords.forEach((word, index) => {
             const wordItem = document.createElement('div');
             wordItem.className = 'word-item';
-            wordItem.textContent = word;
+            wordItem.textContent = `${index + 1}) ${word}`;
             wordsList.appendChild(wordItem);
         });
         

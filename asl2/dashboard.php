@@ -102,7 +102,7 @@ try {
             
             <div class="sidebar">
                 <button class="sidebar-button" onclick="showContent('skills')">Skills</button>
-                <button class="sidebar-button" onclick="showContent('coming-soon')">Coming Soon</button>
+                <button class="sidebar-button" onclick="window.open('scrollergame/index.html', '_blank')">Scroller Game</button>
                 <button class="sidebar-button" onclick="showContent('coming-soon')">Coming Soon</button>
                 <button class="sidebar-button" onclick="showContent('coming-soon')">Coming Soon</button>
                 <button class="sidebar-button" onclick="showContent('coming-soon')">Coming Soon</button>
@@ -115,6 +115,7 @@ try {
                     <p>Use the buttons on the right to navigate through different sections of your ASL learning experience.</p>
                     <ul>
                         <li><strong>Skills:</strong> Track your progress through various ASL skills and access learning resources</li>
+                        <li><strong>Scroller Game:</strong> Practice ASL vocabulary with an interactive word scrolling game</li>
                         <li><strong>Coming Soon:</strong> More exciting features are being developed!</li>
                     </ul>
                     <p>Your current progress: <strong><?php echo $progress_percentage; ?>%</strong> complete</p>
