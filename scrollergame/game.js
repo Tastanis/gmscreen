@@ -279,7 +279,8 @@ class ScrollerGame {
     }
 
     playAgain() {
-        // Use same settings and words
+        // Use same settings but re-randomize the words
+        this.gameWords = this.getRandomWords(this.currentSettings.wordCount);
         this.showScreen('game-screen');
         this.initGameScreen();
         this.startCountdown();

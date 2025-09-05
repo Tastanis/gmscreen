@@ -16,6 +16,8 @@ try {
             u.first_name,
             u.last_name,
             u.email,
+            u.class_period,
+            u.level,
             COALESCE(
                 SUM(CASE 
                     WHEN us.status = 'not_started' THEN s.points_not_started
@@ -31,7 +33,7 @@ try {
         LEFT JOIN user_skills us ON u.id = us.user_id
         LEFT JOIN skills s ON us.skill_id = s.id
         WHERE u.is_teacher = FALSE
-        GROUP BY u.id, u.first_name, u.last_name, u.email
+        GROUP BY u.id, u.first_name, u.last_name, u.email, u.class_period, u.level
         ORDER BY u.first_name, u.last_name
     ");
     $stmt->execute();
@@ -93,20 +95,75 @@ try {
                 <!-- Students Section -->
                 <div id="students-section">
                     <h2>Student Progress Overview</h2>
-                    <p>Total Students: <strong><?php echo count($students); ?></strong> | Total Skills: <strong><?php echo $total_skills; ?></strong></p>
+                    <p>Total Students: <strong><span id="filtered-count"><?php echo count($students); ?></span></strong> of <strong><?php echo count($students); ?></strong> | Total Skills: <strong><?php echo $total_skills; ?></strong></p>
                     
-                    <div class="students-grid">
+                    <!-- Filtering and Sorting Controls -->
+                    <div class="filter-controls" style="margin: 20px 0; padding: 20px; background: rgba(247, 250, 252, 0.8); border-radius: 12px; border: 2px solid #e2e8f0;">
+                        <div style="display: flex; gap: 15px; flex-wrap: wrap; align-items: center; margin-bottom: 15px;">
+                            <div style="flex: 1; min-width: 200px;">
+                                <label style="display: block; margin-bottom: 5px; color: #4a5568; font-weight: 500;">Search Student:</label>
+                                <input type="text" id="student-search" placeholder="Type student name..." 
+                                       style="width: 100%; padding: 8px 12px; border: 2px solid #e2e8f0; border-radius: 6px;">
+                            </div>
+                            <div>
+                                <label style="display: block; margin-bottom: 5px; color: #4a5568; font-weight: 500;">Period:</label>
+                                <select id="period-filter" style="padding: 8px 12px; border: 2px solid #e2e8f0; border-radius: 6px;">
+                                    <option value="all">All Periods</option>
+                                    <option value="1">Period 1</option>
+                                    <option value="2">Period 2</option>
+                                    <option value="3">Period 3</option>
+                                    <option value="4">Period 4</option>
+                                    <option value="5">Period 5</option>
+                                    <option value="6">Period 6</option>
+                                    <option value="unassigned">Unassigned</option>
+                                </select>
+                            </div>
+                            <div>
+                                <label style="display: block; margin-bottom: 5px; color: #4a5568; font-weight: 500;">ASL Level:</label>
+                                <select id="level-filter" style="padding: 8px 12px; border: 2px solid #e2e8f0; border-radius: 6px;">
+                                    <option value="all">All Levels</option>
+                                    <option value="1">ASL 1</option>
+                                    <option value="2">ASL 2</option>
+                                </select>
+                            </div>
+                            <div>
+                                <label style="display: block; margin-bottom: 5px; color: #4a5568; font-weight: 500;">Sort By:</label>
+                                <select id="sort-filter" style="padding: 8px 12px; border: 2px solid #e2e8f0; border-radius: 6px;">
+                                    <option value="first-asc">First Name (A-Z)</option>
+                                    <option value="first-desc">First Name (Z-A)</option>
+                                    <option value="last-asc">Last Name (A-Z)</option>
+                                    <option value="last-desc">Last Name (Z-A)</option>
+                                    <option value="progress-asc">Progress (Low to High)</option>
+                                    <option value="progress-desc">Progress (High to Low)</option>
+                                </select>
+                            </div>
+                            <div>
+                                <button onclick="resetFilters()" class="form-button" style="background: #6c757d; padding: 8px 16px; margin-top: 22px;">Reset Filters</button>
+                            </div>
+                        </div>
+                    </div>
+                    
+                    <div class="students-grid" id="students-grid">
                         <?php foreach ($students as $student): ?>
                             <?php
                             $progress_percentage = $student['total_possible_points'] > 0 ? 
                                 round(($student['earned_points'] / $student['total_possible_points']) * 100) : 0;
                             ?>
-                            <div class="student-card">
+                            <div class="student-card" 
+                                 data-first-name="<?php echo htmlspecialchars(strtolower($student['first_name'])); ?>"
+                                 data-last-name="<?php echo htmlspecialchars(strtolower($student['last_name'])); ?>"
+                                 data-period="<?php echo $student['class_period'] ?? 'unassigned'; ?>"
+                                 data-level="<?php echo $student['level'] ?? '1'; ?>"
+                                 data-progress="<?php echo $progress_percentage; ?>">
                                 <div class="student-name">
                                     <?php echo htmlspecialchars($student['first_name'] . ' ' . $student['last_name']); ?>
                                 </div>
                                 <div class="student-email">
                                     <?php echo htmlspecialchars($student['email']); ?>
+                                </div>
+                                <div style="display: flex; justify-content: space-between; margin-top: 5px; font-size: 0.85rem; color: #718096;">
+                                    <span>Period: <?php echo $student['class_period'] ?? 'N/A'; ?></span>
+                                    <span>Level: ASL <?php echo $student['level'] ?? '1'; ?></span>
                                 </div>
                                 <div class="student-progress">
                                     <div class="student-progress-bar">
@@ -310,6 +367,17 @@ try {
                                     <label>Default Word Count (5 - 50)</label>
                                     <input type="number" name="word_count" class="form-input" min="5" max="50" value="24" required>
                                 </div>
+                                <div class="form-group">
+                                    <label>ASL Level</label>
+                                    <select name="asl_level" class="form-input" required>
+                                        <option value="1">ASL 1 Only</option>
+                                        <option value="2" selected>ASL 2 Only</option>
+                                        <option value="3">Both ASL 1 & 2</option>
+                                    </select>
+                                    <small style="color: #6c757d; font-size: 0.85rem; margin-top: 5px; display: block;">
+                                        Choose which level(s) can access this word list in the scroller game.
+                                    </small>
+                                </div>
                                 <button type="submit" class="form-button">Create Word List</button>
                                 <button type="button" class="form-button" onclick="hideAddWordlistForm()" style="background: #6c757d;">Cancel</button>
                             </form>
@@ -387,6 +455,14 @@ try {
                     <div class="form-group">
                         <label for="edit-word-count">Default Word Count (5 - 50)</label>
                         <input type="number" id="edit-word-count" name="word_count" class="form-input" min="5" max="50" required>
+                    </div>
+                    <div class="form-group">
+                        <label for="edit-asl-level">ASL Level</label>
+                        <select id="edit-asl-level" name="asl_level" class="form-input" required>
+                            <option value="1">ASL 1 Only</option>
+                            <option value="2">ASL 2 Only</option>
+                            <option value="3">Both ASL 1 & 2</option>
+                        </select>
                     </div>
                     <div style="display: flex; gap: 10px; margin-top: 20px;">
                         <button type="submit" class="form-button">Update Word List</button>
@@ -480,6 +556,12 @@ try {
         // Set initial active state
         document.addEventListener('DOMContentLoaded', function() {
             document.getElementById('students-btn').classList.add('active');
+            
+            // Add event listeners for filters
+            document.getElementById('student-search').addEventListener('input', filterAndSortStudents);
+            document.getElementById('period-filter').addEventListener('change', filterAndSortStudents);
+            document.getElementById('level-filter').addEventListener('change', filterAndSortStudents);
+            document.getElementById('sort-filter').addEventListener('change', filterAndSortStudents);
             
             // Add form submission handler
             document.getElementById('new-skill-form').addEventListener('submit', function(e) {
@@ -668,6 +750,7 @@ try {
             document.getElementById('edit-words').value = (list.words || []).join('\n');
             document.getElementById('edit-speed').value = list.speed;
             document.getElementById('edit-word-count').value = list.word_count;
+            document.getElementById('edit-asl-level').value = list.asl_level || 2;
             document.getElementById('edit-wordlist-modal').style.display = 'block';
         }
 
@@ -1199,6 +1282,86 @@ try {
             const div = document.createElement('div');
             div.textContent = text;
             return div.innerHTML;
+        }
+        
+        // Student filtering and sorting functions
+        function filterAndSortStudents() {
+            const searchTerm = document.getElementById('student-search').value.toLowerCase();
+            const periodFilter = document.getElementById('period-filter').value;
+            const levelFilter = document.getElementById('level-filter').value;
+            const sortBy = document.getElementById('sort-filter').value;
+            
+            const cards = Array.from(document.querySelectorAll('.student-card'));
+            let visibleCount = 0;
+            
+            // First, filter cards
+            cards.forEach(card => {
+                const firstName = card.dataset.firstName;
+                const lastName = card.dataset.lastName;
+                const period = card.dataset.period;
+                const level = card.dataset.level;
+                const fullName = firstName + ' ' + lastName;
+                
+                let show = true;
+                
+                // Search filter
+                if (searchTerm && !fullName.includes(searchTerm)) {
+                    show = false;
+                }
+                
+                // Period filter
+                if (periodFilter !== 'all' && period !== periodFilter) {
+                    show = false;
+                }
+                
+                // Level filter
+                if (levelFilter !== 'all' && level !== levelFilter) {
+                    show = false;
+                }
+                
+                card.style.display = show ? '' : 'none';
+                if (show) visibleCount++;
+            });
+            
+            // Update count
+            document.getElementById('filtered-count').textContent = visibleCount;
+            
+            // Sort visible cards
+            const visibleCards = cards.filter(card => card.style.display !== 'none');
+            const container = document.getElementById('students-grid');
+            
+            visibleCards.sort((a, b) => {
+                switch(sortBy) {
+                    case 'first-asc':
+                        return a.dataset.firstName.localeCompare(b.dataset.firstName);
+                    case 'first-desc':
+                        return b.dataset.firstName.localeCompare(a.dataset.firstName);
+                    case 'last-asc':
+                        return a.dataset.lastName.localeCompare(b.dataset.lastName);
+                    case 'last-desc':
+                        return b.dataset.lastName.localeCompare(a.dataset.lastName);
+                    case 'progress-asc':
+                        return parseFloat(a.dataset.progress) - parseFloat(b.dataset.progress);
+                    case 'progress-desc':
+                        return parseFloat(b.dataset.progress) - parseFloat(a.dataset.progress);
+                    default:
+                        return 0;
+                }
+            });
+            
+            // Re-append cards in sorted order
+            visibleCards.forEach(card => container.appendChild(card));
+            
+            // Keep hidden cards at the end
+            cards.filter(card => card.style.display === 'none').forEach(card => container.appendChild(card));
+        }
+        
+        function resetFilters() {
+            document.getElementById('student-search').value = '';
+            document.getElementById('period-filter').value = 'all';
+            document.getElementById('level-filter').value = 'all';
+            document.getElementById('sort-filter').value = 'first-asc';
+            filterAndSortStudents();
         }
         
         // Event listeners for modal

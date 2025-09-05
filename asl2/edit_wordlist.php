@@ -14,6 +14,7 @@ $name = trim($_POST['wordlist_name'] ?? '');
 $words_raw = trim($_POST['words'] ?? '');
 $speed = isset($_POST['speed']) ? floatval($_POST['speed']) : 1.0;
 $count = isset($_POST['word_count']) ? intval($_POST['word_count']) : 24;
+$asl_level = isset($_POST['asl_level']) ? intval($_POST['asl_level']) : 2;
 
 if ($id <= 0 || $name === '' || $words_raw === '') {
     echo json_encode(['success' => false, 'message' => 'Missing required fields']);
@@ -23,8 +24,8 @@ if ($id <= 0 || $name === '' || $words_raw === '') {
 $words = preg_split('/[\r\n,]+/', $words_raw, -1, PREG_SPLIT_NO_EMPTY);
 
 try {
-    $stmt = $pdo->prepare("UPDATE scroller_wordlists SET name = ?, words = ?, speed_setting = ?, word_count = ? WHERE id = ? AND teacher_id = ?");
-    $stmt->execute([$name, json_encode($words), $speed, $count, $id, $_SESSION['user_id']]);
+    $stmt = $pdo->prepare("UPDATE scroller_wordlists SET name = ?, words = ?, speed_setting = ?, word_count = ?, asl_level = ? WHERE id = ? AND teacher_id = ?");
+    $stmt->execute([$name, json_encode($words), $speed, $count, $asl_level, $id, $_SESSION['user_id']]);
     echo json_encode(['success' => true]);
 } catch (PDOException $e) {
     echo json_encode(['success' => false, 'message' => 'Error updating word list']);
