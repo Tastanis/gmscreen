@@ -95,6 +95,36 @@ h2 {
     flex: 1;
 }
 
+.filter-section {
+    margin-bottom: 20px;
+    padding: 15px;
+    background: rgba(0, 0, 0, 0.2);
+    border-radius: 8px;
+    display: flex;
+    align-items: center;
+    gap: 10px;
+}
+
+.filter-section label {
+    font-weight: 600;
+    color: #e0e0e0;
+}
+
+.filter-section select {
+    padding: 8px 12px;
+    border-radius: 6px;
+    border: 1px solid rgba(74, 158, 255, 0.3);
+    background: rgba(20, 20, 40, 0.8);
+    color: #e0e0e0;
+    font-size: 1em;
+}
+
+.filter-section select:focus {
+    outline: none;
+    border-color: rgba(74, 158, 255, 0.8);
+    box-shadow: 0 0 10px rgba(74, 158, 255, 0.3);
+}
+
 .custom-words-section {
     margin-top: 15px;
 }

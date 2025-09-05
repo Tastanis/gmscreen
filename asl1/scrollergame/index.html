@@ -15,6 +15,18 @@
             <!-- Word List Selection -->
             <div class="section">
                 <h2>Select Word Lists</h2>
+                
+                <!-- ASL Level Filter -->
+                <div class="filter-section">
+                    <label for="asl-level-filter">Show Word Lists for:</label>
+                    <select id="asl-level-filter">
+                        <option value="all">All Levels</option>
+                        <option value="1">ASL 1 Only</option>
+                        <option value="2">ASL 2 Only</option>
+                        <option value="3">Both Levels</option>
+                    </select>
+                </div>
+                
                 <div id="wordlist-container" class="wordlist-container">
                     <!-- Checkboxes will be dynamically loaded here -->
                     <div class="loading">Loading word lists...</div>

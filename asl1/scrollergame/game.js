@@ -28,6 +28,11 @@ class ScrollerGame {
             document.getElementById('word-count-display').textContent = e.target.value;
         });
 
+        // ASL level filter
+        document.getElementById('asl-level-filter').addEventListener('change', () => {
+            this.loadWordLists();
+        });
+
         // Start button
         document.getElementById('start-btn').addEventListener('click', () => this.startGame());
 
@@ -39,7 +44,11 @@ class ScrollerGame {
 
     async loadWordLists() {
         try {
-            const response = await fetch('get_wordlists.php');
+            // Get the selected ASL level filter
+            const levelFilter = document.getElementById('asl-level-filter').value;
+            const url = levelFilter === 'all' ? 'get_wordlists.php' : `get_wordlists.php?level=${levelFilter}`;
+            
+            const response = await fetch(url);
             const data = await response.json();
             
             if (data.wordlists && data.wordlists.length > 0) {
