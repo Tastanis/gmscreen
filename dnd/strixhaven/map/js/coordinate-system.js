@@ -115,17 +115,24 @@ class CoordinateSystem {
      */
     axialToPixel(q, r) {
         // Account for the grid extension offset
-        // The grid now starts at row -20 and column -20, so we need to adjust the origin
-        const gridExtensionOffset = 20; // Same as gridExtensionAbove/gridExtensionLeft in generateAllHexes
+        // The grid now starts at row -60 and column -60, so we need to adjust the origin
+        const gridExtensionOffset = 60; // Same as gridExtensionAbove/gridExtensionLeft in generateAllHexes
         
         // Adjust q and r to account for the extended grid starting at negative values
         // This shifts the coordinate system so (0,0) appears in the correct position
-        const adjustedQ = q + Math.floor(gridExtensionOffset / 2);
-        const adjustedR = r + gridExtensionOffset;
+        // Using the same offset values as in generateAllHexes for consistency
+        const adjustedQ = q + gridExtensionOffset; // Column offset matches gridExtensionLeft
+        const adjustedR = r + gridExtensionOffset; // Row offset matches gridExtensionAbove
         
         // Standard flat-topped hexagon conversion with adjusted coordinates
         const x = this.gridConfig.gridOriginX + this.hexSize * (3/2 * adjustedQ);
         const y = this.gridConfig.gridOriginY + this.hexSize * (Math.sqrt(3)/2 * adjustedQ + Math.sqrt(3) * adjustedR);
+        
+        // Enhanced debug logging for coordinate conversion testing
+        if (window.DEBUG_COORDINATE_CONVERSION) {
+            console.log(`axialToPixel: (${q}, ${r}) -> adjustedQ=${adjustedQ}, adjustedR=${adjustedR} -> pixel (${x.toFixed(2)}, ${y.toFixed(2)})`);
+        }
+        
         return { x, y };
     }
     
@@ -141,17 +148,35 @@ class CoordinateSystem {
         const adjustedY = y - this.gridConfig.gridOriginY;
         
         // Account for the grid extension offset (same as in axialToPixel)
-        const gridExtensionOffset = 20;
+        const gridExtensionOffset = 60;
         
         // Convert to preliminary axial coordinates
         const prelimQ = (2/3 * adjustedX) / this.hexSize;
         const prelimR = (-1/3 * adjustedX + Math.sqrt(3)/3 * adjustedY) / this.hexSize;
         
-        // Adjust back to account for the grid extension
-        const q = prelimQ - Math.floor(gridExtensionOffset / 2);
-        const r = prelimR - gridExtensionOffset;
+        // Adjust back to account for the grid extension (inverse of axialToPixel)
+        const q = prelimQ - gridExtensionOffset; // Inverse of column offset
+        const r = prelimR - gridExtensionOffset; // Inverse of row offset
         
-        return this.axialRound(q, r);
+        const result = this.axialRound(q, r);
+        
+        // Debug logging to verify coordinate conversion symmetry
+        if (Math.random() < 0.001) { // Log 0.1% of conversions to avoid spam
+            const backToPixel = this.axialToPixel(result.q, result.r);
+            const pixelDiffX = Math.abs(x - backToPixel.x);
+            const pixelDiffY = Math.abs(y - backToPixel.y);
+            console.log(`🔍 Coordinate symmetry test:
+                Pixel→Hex: (${x.toFixed(1)}, ${y.toFixed(1)}) → (${result.q}, ${result.r})
+                Hex→Pixel: (${result.q}, ${result.r}) → (${backToPixel.x.toFixed(1)}, ${backToPixel.y.toFixed(1)})
+                Difference: (${pixelDiffX.toFixed(2)}, ${pixelDiffY.toFixed(2)})
+                ${pixelDiffX < 1 && pixelDiffY < 1 ? '✅ GOOD' : '❌ BAD'}`);
+        }
+        if (window.DEBUG_COORDINATE_CONVERSION) {
+            console.log(`pixelToAxial: pixel (${x.toFixed(2)}, ${y.toFixed(2)}) -> adjustedX=${adjustedX.toFixed(2)}, adjustedY=${adjustedY.toFixed(2)}`);
+            console.log(`  -> prelimQ=${prelimQ.toFixed(4)}, prelimR=${prelimR.toFixed(4)} -> q=${q.toFixed(4)}, r=${r.toFixed(4)} -> rounded (${result.q}, ${result.r})`);
+        }
+        
+        return result;
     }
     
     /**
@@ -411,11 +436,12 @@ class CoordinateSystem {
         const hexes = [];
         
         // Generate a much larger grid that includes negative R values
-        // Extend from the original 38x38 to include areas above (negative R) and to the sides
-        const gridExtensionAbove = 20; // Add 20 rows above (negative R)
-        const gridExtensionBelow = 20; // Add 20 rows below 
-        const gridExtensionLeft = 20; // Add 20 columns to the left
-        const gridExtensionRight = 20; // Add 20 columns to the right
+        // Extended to match the maximum range that getVisibleHexes() might request (padding = 50)
+        // This ensures every hex that can be rendered also exists in the hexes Map for hover detection
+        const gridExtensionAbove = 60; // Increased from 20 to 60 to cover getVisibleHexes padding
+        const gridExtensionBelow = 60; // Increased from 20 to 60 to cover getVisibleHexes padding  
+        const gridExtensionLeft = 60; // Increased from 20 to 60 to cover getVisibleHexes padding
+        const gridExtensionRight = 60; // Increased from 20 to 60 to cover getVisibleHexes padding
         
         const startRow = -gridExtensionAbove;
         const endRow = this.gridConfig.gridHeight + gridExtensionBelow;
@@ -656,6 +682,69 @@ class CoordinateSystem {
      */
     orientation(p, q, r) {
         return (q.y - p.y) * (r.x - q.x) - (q.x - p.x) * (r.y - q.y);
+    }
+
+    /**
+     * Test coordinate conversion symmetry for debugging
+     * Tests round-trip conversion accuracy: axial -> pixel -> axial should match
+     * @param {Array} testHexes - Array of hex coordinates to test, if not provided uses sample set
+     */
+    testCoordinateSymmetry(testHexes = null) {
+        if (!testHexes) {
+            // Test a variety of hex coordinates including problematic areas
+            testHexes = [
+                // Original grid center area
+                { q: 0, r: 0 }, { q: 5, r: 5 }, { q: -5, r: -5 },
+                // Extended negative areas (problematic)
+                { q: -15, r: -15 }, { q: -10, r: -10 }, { q: 15, r: -15 },
+                // Far corners
+                { q: 20, r: 20 }, { q: -20, r: 20 }, { q: 20, r: -20 }, { q: -20, r: -20 },
+                // Edge cases
+                { q: 0, r: -15 }, { q: 15, r: 0 }, { q: -15, r: 0 }, { q: 0, r: 15 }
+            ];
+        }
+        
+        console.log('🔍 COORDINATE SYMMETRY TEST');
+        console.log('Testing round-trip conversion: hex -> pixel -> hex');
+        
+        let mismatches = 0;
+        let maxError = { q: 0, r: 0, distance: 0 };
+        
+        testHexes.forEach(originalHex => {
+            // Convert to pixel and back
+            const pixel = this.axialToPixel(originalHex.q, originalHex.r);
+            const roundTripHex = this.pixelToAxial(pixel.x, pixel.y);
+            
+            // Check for mismatch
+            const qError = Math.abs(originalHex.q - roundTripHex.q);
+            const rError = Math.abs(originalHex.r - roundTripHex.r);
+            const totalError = qError + rError;
+            
+            if (qError > 0 || rError > 0) {
+                mismatches++;
+                console.log(`❌ MISMATCH: (${originalHex.q}, ${originalHex.r}) -> pixel (${pixel.x.toFixed(2)}, ${pixel.y.toFixed(2)}) -> (${roundTripHex.q}, ${roundTripHex.r})`);
+                console.log(`   Error: q=${qError}, r=${rError}, total=${totalError}`);
+                
+                if (totalError > maxError.distance) {
+                    maxError = { q: qError, r: rError, distance: totalError, originalHex, roundTripHex, pixel };
+                }
+            } else {
+                console.log(`✅ OK: (${originalHex.q}, ${originalHex.r}) -> (${roundTripHex.q}, ${roundTripHex.r})`);
+            }
+        });
+        
+        console.log(`\n📊 SUMMARY: ${mismatches}/${testHexes.length} mismatches detected`);
+        if (maxError.distance > 0) {
+            console.log(`Worst error: (${maxError.originalHex.q}, ${maxError.originalHex.r}) -> (${maxError.roundTripHex.q}, ${maxError.roundTripHex.r})`);
+            console.log(`Error magnitude: q=${maxError.q}, r=${maxError.r}, total=${maxError.distance}`);
+        }
+        
+        return {
+            totalTests: testHexes.length,
+            mismatches: mismatches,
+            maxError: maxError,
+            success: mismatches === 0
+        };
     }
 
     /**

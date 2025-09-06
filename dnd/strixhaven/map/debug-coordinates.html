@@ -1,0 +1,75 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <title>Coordinate System Debug Test</title>
+</head>
+<body>
+    <h1>Coordinate System Debug Test</h1>
+    <p>Open browser console to see debug output</p>
+    
+    <script src="js/coordinate-system.js"></script>
+    <script>
+        console.log('🚀 Starting Coordinate System Debug Test');
+        
+        // Enable detailed debug logging
+        window.DEBUG_COORDINATE_CONVERSION = true;
+        
+        // Create coordinate system instance
+        const coordSystem = new CoordinateSystem(23);
+        
+        // Run symmetry test
+        console.log('\n=== TESTING COORDINATE SYMMETRY ===');
+        const result = coordSystem.testCoordinateSymmetry();
+        
+        // Test specific problematic coordinates mentioned in the issue
+        console.log('\n=== TESTING SPECIFIC PROBLEMATIC COORDINATES ===');
+        const problematicHexes = [
+            // Top-right area where hover fails
+            { q: 15, r: -15 }, { q: 20, r: -20 }, { q: 10, r: -10 },
+            { q: 25, r: -10 }, { q: 30, r: -5 },
+            // Negative coordinates that were recently added
+            { q: -10, r: -10 }, { q: -15, r: -15 }, { q: -5, r: -20 }
+        ];
+        
+        const problematicResult = coordSystem.testCoordinateSymmetry(problematicHexes);
+        
+        // Test some round-trip conversions with detailed logging
+        console.log('\n=== DETAILED ROUND-TRIP CONVERSION TEST ===');
+        const testCase = { q: 15, r: -15 };
+        console.log(`Testing hex (${testCase.q}, ${testCase.r}):`);
+        
+        const pixel = coordSystem.axialToPixel(testCase.q, testCase.r);
+        console.log(`  -> Pixel: (${pixel.x.toFixed(2)}, ${pixel.y.toFixed(2)})`);
+        
+        const backToHex = coordSystem.pixelToAxial(pixel.x, pixel.y);
+        console.log(`  -> Back to hex: (${backToHex.q}, ${backToHex.r})`);
+        
+        const match = (testCase.q === backToHex.q) && (testCase.r === backToHex.r);
+        console.log(`  -> Match: ${match ? '✅' : '❌'}`);
+        
+        // Test point-in-hex detection
+        console.log('\n=== POINT-IN-HEX DETECTION TEST ===');
+        console.log(`Testing if center of rendered hex (${testCase.q}, ${testCase.r}) is detected correctly:`);
+        
+        const centerPixel = coordSystem.axialToPixel(testCase.q, testCase.r);
+        console.log(`  Center pixel: (${centerPixel.x.toFixed(2)}, ${centerPixel.y.toFixed(2)})`);
+        
+        const isInside = coordSystem.isPointInHex(centerPixel, testCase.q, testCase.r);
+        console.log(`  Point inside hex: ${isInside ? '✅' : '❌'}`);
+        
+        // Summary
+        console.log('\n=== SUMMARY ===');
+        console.log(`Main symmetry test: ${result.success ? '✅ PASS' : '❌ FAIL'} (${result.mismatches}/${result.totalTests} mismatches)`);
+        console.log(`Problematic coords test: ${problematicResult.success ? '✅ PASS' : '❌ FAIL'} (${problematicResult.mismatches}/${problematicResult.totalTests} mismatches)`);
+        
+        if (!result.success || !problematicResult.success) {
+            console.log('\n🔍 ANALYSIS NEEDED: Coordinate system has conversion mismatches that could cause hover detection failures');
+        } else {
+            console.log('\n✅ COORDINATE SYSTEM SYMMETRIC: The issue may be elsewhere');
+        }
+        
+        // Disable debug logging
+        window.DEBUG_COORDINATE_CONVERSION = false;
+    </script>
+</body>
+</html>
