@@ -62,8 +62,7 @@ class ZoomPanController {
         // Keyboard events for accessibility
         this.canvas.addEventListener('keydown', this.handleKeyDown.bind(this));
         
-        // Prevent context menu on canvas
-        this.canvas.addEventListener('contextmenu', (e) => e.preventDefault());
+        // Don't prevent context menu - let map interface handle right-clicks
         
         // Window resize
         window.addEventListener('resize', this.handleResize.bind(this));

@@ -183,8 +183,8 @@ class MapInterface {
     }
     
     setupEventListeners() {
-        // Canvas click events
-        this.canvas.addEventListener('click', this.handleCanvasClick.bind(this));
+        // Canvas interaction events - right-click for hex interaction
+        this.canvas.addEventListener('contextmenu', this.handleCanvasRightClick.bind(this));
         this.canvas.addEventListener('mousemove', this.handleCanvasMouseMove.bind(this));
         this.canvas.addEventListener('mouseleave', this.handleCanvasMouseLeave.bind(this));
         
@@ -242,7 +242,9 @@ class MapInterface {
         }
     }
     
-    handleCanvasClick(event) {
+    handleCanvasRightClick(event) {
+        event.preventDefault(); // Prevent browser context menu
+        
         if (!this.isInitialized) return;
         
         const rect = this.canvas.getBoundingClientRect();
@@ -253,7 +255,7 @@ class MapInterface {
         const hex = this.hexGrid.getHexAtPoint(x, y, viewport);
         
         if (hex) {
-            console.log(`Clicked hex: ${hex.q}, ${hex.r}`);
+            console.log(`Right-clicked hex: ${hex.q}, ${hex.r}`);
             this.handleHexClick(hex);
         }
     }

@@ -525,13 +525,99 @@ class CoordinateSystem {
     }
     
     /**
-     * Check if a hex is within the background image bounds
+     * Check if a hex overlaps with the background image bounds
      * @param {Object} hex - Hex coordinate {q, r}
-     * @returns {boolean} True if hex center is within image bounds
+     * @returns {boolean} True if any part of hex overlaps image bounds
      */
     isHexWithinImageBounds(hex) {
-        const center = this.axialToPixel(hex.q, hex.r);
-        return this.isPointWithinImageBounds(center.x, center.y);
+        const vertices = this.getHexVertices(hex.q, hex.r);
+        const imageBounds = this.getImageBounds();
+        
+        // Check if any vertex is inside the image bounds
+        for (let vertex of vertices) {
+            if (this.isPointWithinImageBounds(vertex.x, vertex.y)) {
+                return true;
+            }
+        }
+        
+        // Check if image rectangle is inside the hexagon
+        const imageCorners = [
+            { x: imageBounds.left, y: imageBounds.top },
+            { x: imageBounds.right, y: imageBounds.top },
+            { x: imageBounds.right, y: imageBounds.bottom },
+            { x: imageBounds.left, y: imageBounds.bottom }
+        ];
+        
+        for (let corner of imageCorners) {
+            if (this.isPointInPolygon(corner, vertices)) {
+                return true;
+            }
+        }
+        
+        // Check for edge intersections between hex edges and image edges
+        return this.hexRectangleIntersect(vertices, imageBounds);
+    }
+    
+    /**
+     * Check if hexagon edges intersect with rectangle edges
+     * @param {Array} hexVertices - Array of hex vertex {x, y} coordinates
+     * @param {Object} rect - Rectangle bounds {left, top, right, bottom}
+     * @returns {boolean} True if edges intersect
+     */
+    hexRectangleIntersect(hexVertices, rect) {
+        const rectLines = [
+            { p1: { x: rect.left, y: rect.top }, p2: { x: rect.right, y: rect.top } },     // top
+            { p1: { x: rect.right, y: rect.top }, p2: { x: rect.right, y: rect.bottom } }, // right
+            { p1: { x: rect.right, y: rect.bottom }, p2: { x: rect.left, y: rect.bottom } }, // bottom
+            { p1: { x: rect.left, y: rect.bottom }, p2: { x: rect.left, y: rect.top } }     // left
+        ];
+        
+        // Check each hex edge against each rectangle edge
+        for (let i = 0; i < hexVertices.length; i++) {
+            const p1 = hexVertices[i];
+            const p2 = hexVertices[(i + 1) % hexVertices.length];
+            
+            for (let rectLine of rectLines) {
+                if (this.lineSegmentsIntersect(p1, p2, rectLine.p1, rectLine.p2)) {
+                    return true;
+                }
+            }
+        }
+        
+        return false;
+    }
+    
+    /**
+     * Check if two line segments intersect
+     * @param {Object} p1 - First line start point {x, y}
+     * @param {Object} p2 - First line end point {x, y}
+     * @param {Object} p3 - Second line start point {x, y}
+     * @param {Object} p4 - Second line end point {x, y}
+     * @returns {boolean} True if line segments intersect
+     */
+    lineSegmentsIntersect(p1, p2, p3, p4) {
+        const d1 = this.orientation(p3, p4, p1);
+        const d2 = this.orientation(p3, p4, p2);
+        const d3 = this.orientation(p1, p2, p3);
+        const d4 = this.orientation(p1, p2, p4);
+        
+        if (((d1 > 0 && d2 < 0) || (d1 < 0 && d2 > 0)) &&
+            ((d3 > 0 && d4 < 0) || (d3 < 0 && d4 > 0))) {
+            return true;
+        }
+        
+        return false;
+    }
+    
+    /**
+     * Calculate orientation of three points
+     * @param {Object} p - First point {x, y}
+     * @param {Object} q - Second point {x, y}
+     * @param {Object} r - Third point {x, y}
+     * @returns {number} Positive if clockwise, negative if counterclockwise, 0 if colinear
+     */
+    orientation(p, q, r) {
+        return (q.y - p.y) * (r.x - q.x) - (q.x - p.x) * (r.y - q.y);
     }
 
     /**
