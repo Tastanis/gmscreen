@@ -119,6 +119,7 @@ class MapInterface {
     async findBackgroundImage() {
         // Try different possible background image paths
         const possiblePaths = [
+            'images/Strixhavenmap.png',  // Actual file name
             'images/strixhaven-map.jpg',
             'images/strixhaven-map.png',
             'images/background.jpg',

@@ -10,8 +10,8 @@ class HexGrid {
         this.backgroundImagePath = backgroundImagePath;
         this.backgroundImage = null;
         
-        // Initialize coordinate system
-        this.coordSystem = new CoordinateSystem(25); // Hex size 25px
+        // Initialize coordinate system for 38x38 grid
+        this.coordSystem = new CoordinateSystem(23); // Hex size 23px for 38x38 grid on 2048x1536
         
         // Grid state
         this.hexes = new Map(); // Store hex data: hexId -> hexData

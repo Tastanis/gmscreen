@@ -5,7 +5,7 @@
  */
 
 class CoordinateSystem {
-    constructor(hexSize = 30) {
+    constructor(hexSize = 23) {
         this.hexSize = hexSize;
         
         // Hexagon geometry constants
@@ -14,27 +14,28 @@ class CoordinateSystem {
         this.hexHorizontalSpacing = hexSize * 3/2;
         this.hexVerticalSpacing = this.hexHeight;
         
-        // Grid configuration
+        // Grid configuration for 38x38 hexes on 2048x1536
         this.gridConfig = {
             imageWidth: 2048,        // Background image width
             imageHeight: 1536,       // Background image height
             gridOriginX: 100,        // Where hex (0,0) appears on image
-            gridOriginY: 200,        // Where hex (0,0) appears on image
-            gridWidth: 40,           // Number of hexes horizontally
-            gridHeight: 35,          // Number of hexes vertically
+            gridOriginY: 100,        // Where hex (0,0) appears on image
+            gridWidth: 38,           // Number of hexes horizontally
+            gridHeight: 38,          // Number of hexes vertically
             hexSize: hexSize
         };
     }
     
     /**
-     * Convert axial coordinates to pixel coordinates
+     * Convert axial coordinates to pixel coordinates (Red Blob Games standard)
      * @param {number} q - Axial coordinate q
      * @param {number} r - Axial coordinate r
      * @returns {Object} {x, y} pixel coordinates
      */
     axialToPixel(q, r) {
-        const x = this.hexSize * (3/2 * q);
-        const y = this.hexSize * (Math.sqrt(3)/2 * q + Math.sqrt(3) * r);
+        // Standard flat-topped hexagon conversion
+        const x = this.gridConfig.gridOriginX + this.hexSize * (3/2 * q);
+        const y = this.gridConfig.gridOriginY + this.hexSize * (Math.sqrt(3)/2 * q + Math.sqrt(3) * r);
         return { x, y };
     }
     
@@ -45,8 +46,12 @@ class CoordinateSystem {
      * @returns {Object} {q, r} axial coordinates
      */
     pixelToAxial(x, y) {
-        const q = (2/3 * x) / this.hexSize;
-        const r = (-1/3 * x + Math.sqrt(3)/3 * y) / this.hexSize;
+        // Adjust for grid origin
+        const adjustedX = x - this.gridConfig.gridOriginX;
+        const adjustedY = y - this.gridConfig.gridOriginY;
+        
+        const q = (2/3 * adjustedX) / this.hexSize;
+        const r = (-1/3 * adjustedX + Math.sqrt(3)/3 * adjustedY) / this.hexSize;
         return this.axialRound(q, r);
     }
     
@@ -166,13 +171,23 @@ class CoordinateSystem {
      * @returns {boolean} True if within bounds
      */
     isValidHex(hex) {
-        // Convert to offset coordinates for bounds checking
-        const offsetCoord = this.axialToOffset(hex.q, hex.r);
+        return this.isWithinRectangularBounds(hex);
+    }
+    
+    /**
+     * Check if hex is within rectangular pixel bounds on the image
+     * @param {Object} hex - Hex coordinate {q, r}
+     * @returns {boolean} True if within bounds
+     */
+    isWithinRectangularBounds(hex) {
+        const pixel = this.axialToPixel(hex.q, hex.r);
         
-        return offsetCoord.col >= 0 && 
-               offsetCoord.col < this.gridConfig.gridWidth &&
-               offsetCoord.row >= 0 && 
-               offsetCoord.row < this.gridConfig.gridHeight;
+        // Check if hex center is within image bounds with some margin
+        const margin = this.hexSize;
+        return pixel.x >= margin && 
+               pixel.x <= this.gridConfig.imageWidth - margin &&
+               pixel.y >= margin && 
+               pixel.y <= this.gridConfig.imageHeight - margin;
     }
     
     /**
@@ -284,21 +299,26 @@ class CoordinateSystem {
     }
     
     /**
-     * Generate all hex coordinates for the grid
+     * Generate all hex coordinates for the grid - creates a rectangular 38x38 grid
      * @returns {Array} Array of all valid hex coordinates
      */
     generateAllHexes() {
         const hexes = [];
         
+        // Generate a rectangular grid using offset coordinates
+        // This creates a proper honeycomb pattern
         for (let row = 0; row < this.gridConfig.gridHeight; row++) {
             for (let col = 0; col < this.gridConfig.gridWidth; col++) {
-                const axial = this.offsetToAxial(col, row);
-                if (this.isValidHex(axial)) {
-                    hexes.push(axial);
-                }
+                // Convert offset to axial coordinates
+                // For flat-topped hexes with odd-row offset
+                const q = col;
+                const r = row - Math.floor(col / 2);
+                
+                hexes.push({ q, r });
             }
         }
         
+        console.log(`Generated ${hexes.length} hexes in ${this.gridConfig.gridWidth}x${this.gridConfig.gridHeight} grid`);
         return hexes;
     }
     
