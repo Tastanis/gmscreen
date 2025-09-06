@@ -22,7 +22,7 @@ class HexGrid {
         // Rendering state
         this.showGrid = true;
         this.showLabels = false;
-        this.debugMode = false;
+        this.debugMode = true; // Enable debug mode to track hover issues
         
         // Colors and styling
         this.colors = {

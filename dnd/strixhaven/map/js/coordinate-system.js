@@ -386,22 +386,34 @@ class CoordinateSystem {
     }
     
     /**
-     * Generate all hex coordinates for the grid - creates a rectangular 38x38 grid
+     * Generate all hex coordinates for the grid - creates a much larger grid including negative coordinates
      * @returns {Array} Array of all valid hex coordinates
      */
     generateAllHexes() {
         const hexes = [];
         
-        // Generate the core 38x38 grid using offset coordinates for proper honeycomb tessellation
-        // Each even row is aligned, each odd row is offset by half a hex width to the right
-        for (let row = 0; row < this.gridConfig.gridHeight; row++) {
-            for (let col = 0; col < this.gridConfig.gridWidth; col++) {
+        // Generate a much larger grid that includes negative R values
+        // Extend from the original 38x38 to include areas above (negative R) and to the sides
+        const gridExtensionAbove = 20; // Add 20 rows above (negative R)
+        const gridExtensionBelow = 20; // Add 20 rows below 
+        const gridExtensionLeft = 20; // Add 20 columns to the left
+        const gridExtensionRight = 20; // Add 20 columns to the right
+        
+        const startRow = -gridExtensionAbove;
+        const endRow = this.gridConfig.gridHeight + gridExtensionBelow;
+        const startCol = -gridExtensionLeft; 
+        const endCol = this.gridConfig.gridWidth + gridExtensionRight;
+        
+        console.log(`Generating extended hex grid: rows ${startRow} to ${endRow}, cols ${startCol} to ${endCol}`);
+        
+        for (let row = startRow; row < endRow; row++) {
+            for (let col = startCol; col < endCol; col++) {
                 // Convert offset coordinates to axial coordinates
                 // For flat-topped hexes with odd-row offset (standard Red Blob Games formula)
                 const q = col - Math.floor((row + (row & 1)) / 2);
                 const r = row;
                 
-                // Always include all hexes in the defined grid area
+                // Include all hexes in the expanded grid area
                 hexes.push({ q, r });
             }
         }
@@ -440,7 +452,12 @@ class CoordinateSystem {
             }
         }
         
-        console.log(`Generated ${hexes.length} hexes (${this.gridConfig.gridWidth}x${this.gridConfig.gridHeight} core + corner fill)`);
+        console.log(`Generated ${hexes.length} hexes (extended grid from rows ${startRow} to ${endRow-1}, cols ${startCol} to ${endCol-1} + corner fill)`);
+        
+        // Log some sample hexes to verify negative R values are included
+        const negativeRHexes = hexes.filter(h => h.r < 0).slice(0, 5);
+        console.log(`Sample negative R hexes:`, negativeRHexes);
+        
         return hexes;
     }
     
