@@ -424,8 +424,8 @@ class ZoomPanController {
             const imageBounds = window.hexGrid.coordSystem.getImageBounds();
             const canvasRect = this.canvas.getBoundingClientRect();
             
-            // Calculate reasonable padding around the image
-            const padding = 200; // Allow 200px of padding around image edges
+            // Calculate very large padding around the image to avoid jittery dragging
+            const padding = Math.max(2000, canvasRect.width); // Allow at least a full screen of padding
             
             // Convert image bounds to screen coordinates
             const imageScreenLeft = imageBounds.left * this.scale + this.offsetX;
