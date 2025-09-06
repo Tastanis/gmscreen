@@ -426,11 +426,39 @@ class ZoomPanController {
      * Constrain view to reasonable bounds
      */
     constrainView() {
-        // Optional: Add constraints to prevent panning too far
-        // For now, allow unlimited panning
-        
         // Ensure scale stays within bounds
         this.scale = Math.max(this.minScale, Math.min(this.maxScale, this.scale));
+        
+        // If we have access to image bounds, constrain panning
+        if (window.hexGrid && window.hexGrid.coordSystem) {
+            const imageBounds = window.hexGrid.coordSystem.getImageBounds();
+            const canvasRect = this.canvas.getBoundingClientRect();
+            
+            // Calculate reasonable padding around the image
+            const padding = 200; // Allow 200px of padding around image edges
+            
+            // Convert image bounds to screen coordinates
+            const imageScreenLeft = imageBounds.left * this.scale + this.offsetX;
+            const imageScreenRight = imageBounds.right * this.scale + this.offsetX;
+            const imageScreenTop = imageBounds.top * this.scale + this.offsetY;
+            const imageScreenBottom = imageBounds.bottom * this.scale + this.offsetY;
+            
+            // Constrain horizontal panning
+            if (imageScreenRight < canvasRect.width - padding) {
+                this.offsetX = (canvasRect.width - padding - imageBounds.right * this.scale);
+            }
+            if (imageScreenLeft > padding) {
+                this.offsetX = (padding - imageBounds.left * this.scale);
+            }
+            
+            // Constrain vertical panning
+            if (imageScreenBottom < canvasRect.height - padding) {
+                this.offsetY = (canvasRect.height - padding - imageBounds.bottom * this.scale);
+            }
+            if (imageScreenTop > padding) {
+                this.offsetY = (padding - imageBounds.top * this.scale);
+            }
+        }
     }
     
     /**

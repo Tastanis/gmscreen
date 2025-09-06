@@ -155,6 +155,9 @@ class HexGrid {
         // Draw hex highlights and selections
         this.drawHexStates(visibleHexes);
         
+        // Draw image boundary border
+        this.drawImageBorder();
+        
         // Draw labels if enabled
         if (this.showLabels || this.debugMode) {
             this.drawLabels(visibleHexes);
@@ -188,6 +191,25 @@ class HexGrid {
         );
     }
     
+    drawImageBorder() {
+        const bounds = this.coordSystem.getImageBounds();
+        
+        this.ctx.strokeStyle = '#ff6b6b'; // Red border color
+        this.ctx.lineWidth = 3;
+        this.ctx.setLineDash([]);
+        this.ctx.globalAlpha = 0.8;
+        
+        // Draw rectangle border around the image
+        this.ctx.strokeRect(
+            bounds.left,
+            bounds.top,
+            bounds.right - bounds.left,
+            bounds.bottom - bounds.top
+        );
+        
+        this.ctx.globalAlpha = 1;
+    }
+    
     drawGrid(visibleHexes) {
         this.ctx.strokeStyle = this.colors.gridLine;
         this.ctx.lineWidth = 1;
@@ -209,29 +231,39 @@ class HexGrid {
             if (!hexData) return;
             
             const vertices = this.coordSystem.getHexVertices(hex.q, hex.r);
+            const isWithinBounds = this.coordSystem.isHexWithinImageBounds(hex);
+            
             let fillColor = null;
             let strokeColor = null;
             let strokeWidth = 1;
+            let alpha = 1;
             
-            // Determine hex appearance based on state
-            if (this.selectedHex && this.selectedHex.q === hex.q && this.selectedHex.r === hex.r) {
-                fillColor = this.colors.hexFillActive;
-                strokeColor = this.colors.hexStrokeActive;
-                strokeWidth = 3;
-            } else if (this.highlightedHex && this.highlightedHex.q === hex.q && this.highlightedHex.r === hex.r) {
-                fillColor = this.colors.hexFillHighlight;
-                strokeColor = this.colors.hexStrokeHighlight;
-                strokeWidth = 2;
-            } else if (hexData.hasData || hexData.isActive) {
-                fillColor = this.colors.hexFillActive;
-                strokeColor = this.colors.hexStrokeActive;
-                strokeWidth = 1.5;
+            // Check if hex is outside image bounds - make it inactive
+            if (!isWithinBounds) {
+                fillColor = 'rgba(100, 100, 100, 0.1)'; // Gray, very transparent
+                strokeColor = 'rgba(100, 100, 100, 0.3)'; // Gray stroke
+                alpha = 0.3; // Reduced visibility
+            } else {
+                // Determine hex appearance based on state (only for active hexes)
+                if (this.selectedHex && this.selectedHex.q === hex.q && this.selectedHex.r === hex.r) {
+                    fillColor = this.colors.hexFillActive;
+                    strokeColor = this.colors.hexStrokeActive;
+                    strokeWidth = 3;
+                } else if (this.highlightedHex && this.highlightedHex.q === hex.q && this.highlightedHex.r === hex.r) {
+                    fillColor = this.colors.hexFillHighlight;
+                    strokeColor = this.colors.hexStrokeHighlight;
+                    strokeWidth = 2;
+                } else if (hexData.hasData || hexData.isActive) {
+                    fillColor = this.colors.hexFillActive;
+                    strokeColor = this.colors.hexStrokeActive;
+                    strokeWidth = 1.5;
+                }
             }
             
             // Draw filled hex if it has a color
             if (fillColor) {
                 this.ctx.fillStyle = fillColor;
-                this.ctx.globalAlpha = 0.7;
+                this.ctx.globalAlpha = isWithinBounds ? 0.7 : alpha;
                 this.drawHexagon(vertices, true, false);
                 this.ctx.globalAlpha = 1;
             }
@@ -240,7 +272,9 @@ class HexGrid {
             if (strokeColor) {
                 this.ctx.strokeStyle = strokeColor;
                 this.ctx.lineWidth = strokeWidth;
+                this.ctx.globalAlpha = alpha;
                 this.drawHexagon(vertices, false, true);
+                this.ctx.globalAlpha = 1;
             }
         });
     }
@@ -347,6 +381,11 @@ class HexGrid {
         const worldX = (x - viewport.offsetX) / viewport.scale;
         const worldY = (y - viewport.offsetY) / viewport.scale;
         
+        // First check if the click point is within image bounds
+        if (!this.coordSystem.isPointWithinImageBounds(worldX, worldY)) {
+            return null; // Don't allow interaction outside image bounds
+        }
+        
         // Convert to hex coordinates
         const hex = this.coordSystem.pixelToAxial(worldX, worldY);
         
@@ -354,7 +393,10 @@ class HexGrid {
         if (this.coordSystem.isValidHex(hex)) {
             // Double-check with precise point-in-hex test
             if (this.coordSystem.isPointInHex({ x: worldX, y: worldY }, hex.q, hex.r)) {
-                return hex;
+                // Final check: ensure hex is within image bounds
+                if (this.coordSystem.isHexWithinImageBounds(hex)) {
+                    return hex;
+                }
             }
         }
         
@@ -405,6 +447,11 @@ class HexGrid {
      * Set highlighted hex
      */
     setHighlightedHex(hex) {
+        // Only allow highlighting hexes within image bounds
+        if (hex && !this.coordSystem.isHexWithinImageBounds(hex)) {
+            this.highlightedHex = null;
+            return;
+        }
         this.highlightedHex = hex;
     }
     
@@ -412,6 +459,11 @@ class HexGrid {
      * Set selected hex
      */
     setSelectedHex(hex) {
+        // Only allow selecting hexes within image bounds
+        if (hex && !this.coordSystem.isHexWithinImageBounds(hex)) {
+            this.selectedHex = null;
+            return;
+        }
         this.selectedHex = hex;
     }
     

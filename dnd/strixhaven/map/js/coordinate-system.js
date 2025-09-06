@@ -497,6 +497,44 @@ class CoordinateSystem {
     }
     
     /**
+     * Get the background image rectangle boundaries in world coordinates
+     * @returns {Object} {left, top, right, bottom} bounds of the background image
+     */
+    getImageBounds() {
+        const scaling = this.getBackgroundScaling();
+        return {
+            left: this.gridConfig.gridOriginX,
+            top: this.gridConfig.gridOriginY,
+            right: this.gridConfig.gridOriginX + scaling.width,
+            bottom: this.gridConfig.gridOriginY + scaling.height
+        };
+    }
+    
+    /**
+     * Check if a point (in world coordinates) is within the background image bounds
+     * @param {number} worldX - World X coordinate
+     * @param {number} worldY - World Y coordinate
+     * @returns {boolean} True if point is within image bounds
+     */
+    isPointWithinImageBounds(worldX, worldY) {
+        const bounds = this.getImageBounds();
+        return worldX >= bounds.left && 
+               worldX <= bounds.right && 
+               worldY >= bounds.top && 
+               worldY <= bounds.bottom;
+    }
+    
+    /**
+     * Check if a hex is within the background image bounds
+     * @param {Object} hex - Hex coordinate {q, r}
+     * @returns {boolean} True if hex center is within image bounds
+     */
+    isHexWithinImageBounds(hex) {
+        const center = this.axialToPixel(hex.q, hex.r);
+        return this.isPointWithinImageBounds(center.x, center.y);
+    }
+
+    /**
      * Update grid configuration
      * @param {Object} newConfig - New configuration object
      */

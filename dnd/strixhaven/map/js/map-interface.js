@@ -113,6 +113,9 @@ class MapInterface {
         this.hexGrid = new HexGrid(this.canvas, imagePath);
         await this.hexGrid.initialize();
         
+        // Make hexGrid globally accessible for zoom constraints
+        window.hexGrid = this.hexGrid;
+        
         console.log('Hex grid initialized');
     }
     
