@@ -1,0 +1,598 @@
+/**
+ * Zoom and Pan Controller
+ * Handles viewport transformation for canvas with smooth zooming and panning
+ */
+
+class ZoomPanController {
+    constructor(canvas) {
+        this.canvas = canvas;
+        
+        // Viewport state
+        this.scale = 1.0;
+        this.offsetX = 0;
+        this.offsetY = 0;
+        this.minScale = 0.1;
+        this.maxScale = 5.0;
+        
+        // Pan state
+        this.isPanning = false;
+        this.lastPanX = 0;
+        this.lastPanY = 0;
+        
+        // Touch/gesture state
+        this.touches = {};
+        this.initialTouchDistance = 0;
+        this.initialScale = 1;
+        
+        // Smooth zoom state
+        this.targetScale = 1.0;
+        this.isZooming = false;
+        this.zoomSpeed = 0.15;
+        
+        // Animation state
+        this.animationId = null;
+        this.isAnimating = false;
+        
+        // Event callbacks
+        this.onViewportChange = null;
+        this.onZoomChange = null;
+        
+        this.initialize();
+    }
+    
+    initialize() {
+        this.setupEventListeners();
+        this.centerView();
+    }
+    
+    setupEventListeners() {
+        // Mouse events
+        this.canvas.addEventListener('mousedown', this.handleMouseDown.bind(this));
+        this.canvas.addEventListener('mousemove', this.handleMouseMove.bind(this));
+        this.canvas.addEventListener('mouseup', this.handleMouseUp.bind(this));
+        this.canvas.addEventListener('mouseleave', this.handleMouseUp.bind(this));
+        this.canvas.addEventListener('wheel', this.handleWheel.bind(this), { passive: false });
+        
+        // Touch events for mobile
+        this.canvas.addEventListener('touchstart', this.handleTouchStart.bind(this), { passive: false });
+        this.canvas.addEventListener('touchmove', this.handleTouchMove.bind(this), { passive: false });
+        this.canvas.addEventListener('touchend', this.handleTouchEnd.bind(this));
+        this.canvas.addEventListener('touchcancel', this.handleTouchEnd.bind(this));
+        
+        // Keyboard events for accessibility
+        this.canvas.addEventListener('keydown', this.handleKeyDown.bind(this));
+        
+        // Prevent context menu on canvas
+        this.canvas.addEventListener('contextmenu', (e) => e.preventDefault());
+        
+        // Window resize
+        window.addEventListener('resize', this.handleResize.bind(this));
+    }
+    
+    handleMouseDown(event) {
+        if (event.button === 0) { // Left mouse button
+            this.startPan(event.clientX, event.clientY);
+            event.preventDefault();
+        }
+    }
+    
+    handleMouseMove(event) {
+        if (this.isPanning) {
+            this.updatePan(event.clientX, event.clientY);
+            event.preventDefault();
+        }
+    }
+    
+    handleMouseUp(event) {
+        if (this.isPanning) {
+            this.endPan();
+            event.preventDefault();
+        }
+    }
+    
+    handleWheel(event) {
+        event.preventDefault();
+        
+        const rect = this.canvas.getBoundingClientRect();
+        const mouseX = event.clientX - rect.left;
+        const mouseY = event.clientY - rect.top;
+        
+        // Get world coordinates before zoom
+        const worldPoint = this.screenToWorld(mouseX, mouseY);
+        
+        // Calculate zoom factor
+        const zoomFactor = event.deltaY > 0 ? 0.9 : 1.1;
+        const newScale = Math.max(this.minScale, Math.min(this.maxScale, this.scale * zoomFactor));
+        
+        if (newScale !== this.scale) {
+            this.scale = newScale;
+            
+            // Adjust offset to keep mouse point stationary
+            const newScreenPoint = this.worldToScreen(worldPoint.x, worldPoint.y);
+            this.offsetX += mouseX - newScreenPoint.x;
+            this.offsetY += mouseY - newScreenPoint.y;
+            
+            this.constrainView();
+            this.triggerViewportChange();
+        }
+    }
+    
+    handleTouchStart(event) {
+        event.preventDefault();
+        
+        const touches = event.touches;
+        
+        if (touches.length === 1) {
+            // Single touch - start panning
+            this.startPan(touches[0].clientX, touches[0].clientY);
+        } else if (touches.length === 2) {
+            // Two touches - start pinch zoom
+            this.endPan(); // Stop panning if it was active
+            
+            const touch1 = touches[0];
+            const touch2 = touches[1];
+            
+            this.touches = {
+                touch1: { x: touch1.clientX, y: touch1.clientY },
+                touch2: { x: touch2.clientX, y: touch2.clientY }
+            };
+            
+            this.initialTouchDistance = this.getTouchDistance(touch1, touch2);
+            this.initialScale = this.scale;
+        }
+    }
+    
+    handleTouchMove(event) {
+        event.preventDefault();
+        
+        const touches = event.touches;
+        
+        if (touches.length === 1 && this.isPanning) {
+            // Single touch panning
+            this.updatePan(touches[0].clientX, touches[0].clientY);
+        } else if (touches.length === 2 && this.touches.touch1 && this.touches.touch2) {
+            // Two touch pinch zoom
+            const touch1 = touches[0];
+            const touch2 = touches[1];
+            
+            const currentDistance = this.getTouchDistance(touch1, touch2);
+            const scaleRatio = currentDistance / this.initialTouchDistance;
+            const newScale = Math.max(this.minScale, Math.min(this.maxScale, this.initialScale * scaleRatio));
+            
+            if (newScale !== this.scale) {
+                // Get center point of pinch gesture
+                const rect = this.canvas.getBoundingClientRect();
+                const centerX = ((touch1.clientX + touch2.clientX) / 2) - rect.left;
+                const centerY = ((touch1.clientY + touch2.clientY) / 2) - rect.top;
+                
+                // Get world coordinates before zoom
+                const worldPoint = this.screenToWorld(centerX, centerY);
+                
+                this.scale = newScale;
+                
+                // Adjust offset to keep center point stationary
+                const newScreenPoint = this.worldToScreen(worldPoint.x, worldPoint.y);
+                this.offsetX += centerX - newScreenPoint.x;
+                this.offsetY += centerY - newScreenPoint.y;
+                
+                this.constrainView();
+                this.triggerViewportChange();
+            }
+        }
+    }
+    
+    handleTouchEnd(event) {
+        event.preventDefault();
+        
+        if (event.touches.length === 0) {
+            // All touches ended
+            this.endPan();
+            this.touches = {};
+        } else if (event.touches.length === 1) {
+            // Went from two touches to one - start panning with remaining touch
+            this.touches = {};
+            this.startPan(event.touches[0].clientX, event.touches[0].clientY);
+        }
+    }
+    
+    handleKeyDown(event) {
+        if (!this.canvas.contains(document.activeElement)) return;
+        
+        const panStep = 50;
+        const zoomStep = 1.2;
+        
+        switch (event.key) {
+            case 'ArrowUp':
+                this.offsetY += panStep;
+                this.constrainView();
+                this.triggerViewportChange();
+                event.preventDefault();
+                break;
+            case 'ArrowDown':
+                this.offsetY -= panStep;
+                this.constrainView();
+                this.triggerViewportChange();
+                event.preventDefault();
+                break;
+            case 'ArrowLeft':
+                this.offsetX += panStep;
+                this.constrainView();
+                this.triggerViewportChange();
+                event.preventDefault();
+                break;
+            case 'ArrowRight':
+                this.offsetX -= panStep;
+                this.constrainView();
+                this.triggerViewportChange();
+                event.preventDefault();
+                break;
+            case '+':
+            case '=':
+                this.zoomIn();
+                event.preventDefault();
+                break;
+            case '-':
+                this.zoomOut();
+                event.preventDefault();
+                break;
+            case '0':
+                this.resetView();
+                event.preventDefault();
+                break;
+        }
+    }
+    
+    handleResize() {
+        // Maintain relative position on resize
+        this.constrainView();
+        this.triggerViewportChange();
+    }
+    
+    startPan(clientX, clientY) {
+        this.isPanning = true;
+        this.lastPanX = clientX;
+        this.lastPanY = clientY;
+        this.canvas.style.cursor = 'grabbing';
+    }
+    
+    updatePan(clientX, clientY) {
+        if (!this.isPanning) return;
+        
+        const deltaX = clientX - this.lastPanX;
+        const deltaY = clientY - this.lastPanY;
+        
+        this.offsetX += deltaX;
+        this.offsetY += deltaY;
+        
+        this.lastPanX = clientX;
+        this.lastPanY = clientY;
+        
+        this.constrainView();
+        this.triggerViewportChange();
+    }
+    
+    endPan() {
+        this.isPanning = false;
+        this.canvas.style.cursor = 'crosshair';
+    }
+    
+    getTouchDistance(touch1, touch2) {
+        const dx = touch1.clientX - touch2.clientX;
+        const dy = touch1.clientY - touch2.clientY;
+        return Math.sqrt(dx * dx + dy * dy);
+    }
+    
+    /**
+     * Convert screen coordinates to world coordinates
+     */
+    screenToWorld(screenX, screenY) {
+        return {
+            x: (screenX - this.offsetX) / this.scale,
+            y: (screenY - this.offsetY) / this.scale
+        };
+    }
+    
+    /**
+     * Convert world coordinates to screen coordinates
+     */
+    worldToScreen(worldX, worldY) {
+        return {
+            x: worldX * this.scale + this.offsetX,
+            y: worldY * this.scale + this.offsetY
+        };
+    }
+    
+    /**
+     * Zoom in by a fixed amount
+     */
+    zoomIn() {
+        const rect = this.canvas.getBoundingClientRect();
+        const centerX = rect.width / 2;
+        const centerY = rect.height / 2;
+        
+        this.zoomAt(centerX, centerY, 1.3);
+    }
+    
+    /**
+     * Zoom out by a fixed amount
+     */
+    zoomOut() {
+        const rect = this.canvas.getBoundingClientRect();
+        const centerX = rect.width / 2;
+        const centerY = rect.height / 2;
+        
+        this.zoomAt(centerX, centerY, 1 / 1.3);
+    }
+    
+    /**
+     * Zoom at a specific screen point
+     */
+    zoomAt(screenX, screenY, zoomFactor) {
+        const worldPoint = this.screenToWorld(screenX, screenY);
+        const newScale = Math.max(this.minScale, Math.min(this.maxScale, this.scale * zoomFactor));
+        
+        if (newScale !== this.scale) {
+            this.scale = newScale;
+            
+            const newScreenPoint = this.worldToScreen(worldPoint.x, worldPoint.y);
+            this.offsetX += screenX - newScreenPoint.x;
+            this.offsetY += screenY - newScreenPoint.y;
+            
+            this.constrainView();
+            this.triggerViewportChange();
+        }
+    }
+    
+    /**
+     * Set zoom level directly
+     */
+    setZoom(newScale, centerX = null, centerY = null) {
+        newScale = Math.max(this.minScale, Math.min(this.maxScale, newScale));
+        
+        if (newScale === this.scale) return;
+        
+        // Default to canvas center if no center point provided
+        if (centerX === null || centerY === null) {
+            const rect = this.canvas.getBoundingClientRect();
+            centerX = rect.width / 2;
+            centerY = rect.height / 2;
+        }
+        
+        const worldPoint = this.screenToWorld(centerX, centerY);
+        this.scale = newScale;
+        
+        const newScreenPoint = this.worldToScreen(worldPoint.x, worldPoint.y);
+        this.offsetX += centerX - newScreenPoint.x;
+        this.offsetY += centerY - newScreenPoint.y;
+        
+        this.constrainView();
+        this.triggerViewportChange();
+    }
+    
+    /**
+     * Pan to a specific world coordinate
+     */
+    panTo(worldX, worldY, animated = false) {
+        const rect = this.canvas.getBoundingClientRect();
+        const centerX = rect.width / 2;
+        const centerY = rect.height / 2;
+        
+        const targetOffsetX = centerX - worldX * this.scale;
+        const targetOffsetY = centerY - worldY * this.scale;
+        
+        if (animated) {
+            this.animateTo(this.offsetX, this.offsetY, this.scale, targetOffsetX, targetOffsetY, this.scale);
+        } else {
+            this.offsetX = targetOffsetX;
+            this.offsetY = targetOffsetY;
+            this.constrainView();
+            this.triggerViewportChange();
+        }
+    }
+    
+    /**
+     * Reset view to default position and zoom
+     */
+    resetView() {
+        this.scale = 1.0;
+        this.centerView();
+    }
+    
+    /**
+     * Center the view on the canvas
+     */
+    centerView() {
+        const rect = this.canvas.getBoundingClientRect();
+        
+        // Center the origin of the coordinate system in the canvas
+        this.offsetX = rect.width / 2;
+        this.offsetY = rect.height / 2;
+        
+        this.constrainView();
+        this.triggerViewportChange();
+    }
+    
+    /**
+     * Fit content to canvas
+     */
+    fitToCanvas() {
+        // This would require knowing the content bounds
+        // For now, just reset to a reasonable zoom
+        this.setZoom(0.5);
+        this.centerView();
+    }
+    
+    /**
+     * Constrain view to reasonable bounds
+     */
+    constrainView() {
+        // Optional: Add constraints to prevent panning too far
+        // For now, allow unlimited panning
+        
+        // Ensure scale stays within bounds
+        this.scale = Math.max(this.minScale, Math.min(this.maxScale, this.scale));
+    }
+    
+    /**
+     * Animate viewport change
+     */
+    animateTo(fromX, fromY, fromScale, toX, toY, toScale, duration = 500) {
+        if (this.animationId) {
+            cancelAnimationFrame(this.animationId);
+        }
+        
+        this.isAnimating = true;
+        const startTime = performance.now();
+        
+        const animate = (currentTime) => {
+            const elapsed = currentTime - startTime;
+            const progress = Math.min(elapsed / duration, 1);
+            
+            // Easing function (ease-out cubic)
+            const easeProgress = 1 - Math.pow(1 - progress, 3);
+            
+            this.offsetX = fromX + (toX - fromX) * easeProgress;
+            this.offsetY = fromY + (toY - fromY) * easeProgress;
+            this.scale = fromScale + (toScale - fromScale) * easeProgress;
+            
+            this.constrainView();
+            this.triggerViewportChange();
+            
+            if (progress < 1) {
+                this.animationId = requestAnimationFrame(animate);
+            } else {
+                this.animationId = null;
+                this.isAnimating = false;
+            }
+        };
+        
+        this.animationId = requestAnimationFrame(animate);
+    }
+    
+    /**
+     * Get current viewport state
+     */
+    getViewport() {
+        return {
+            scale: this.scale,
+            offsetX: this.offsetX,
+            offsetY: this.offsetY,
+            minScale: this.minScale,
+            maxScale: this.maxScale
+        };
+    }
+    
+    /**
+     * Set viewport state
+     */
+    setViewport(viewport) {
+        this.scale = Math.max(this.minScale, Math.min(this.maxScale, viewport.scale));
+        this.offsetX = viewport.offsetX;
+        this.offsetY = viewport.offsetY;
+        
+        this.constrainView();
+        this.triggerViewportChange();
+    }
+    
+    /**
+     * Trigger viewport change callback
+     */
+    triggerViewportChange() {
+        if (this.onViewportChange) {
+            this.onViewportChange(this.getViewport());
+        }
+        
+        if (this.onZoomChange) {
+            this.onZoomChange(this.scale);
+        }
+    }
+    
+    /**
+     * Set minimum and maximum zoom levels
+     */
+    setZoomLimits(minScale, maxScale) {
+        this.minScale = minScale;
+        this.maxScale = maxScale;
+        this.scale = Math.max(this.minScale, Math.min(this.maxScale, this.scale));
+        this.constrainView();
+    }
+    
+    /**
+     * Get zoom percentage
+     */
+    getZoomPercentage() {
+        return Math.round(this.scale * 100);
+    }
+    
+    /**
+     * Set zoom by percentage
+     */
+    setZoomPercentage(percentage) {
+        this.setZoom(percentage / 100);
+    }
+    
+    /**
+     * Check if point is visible in current viewport
+     */
+    isPointVisible(worldX, worldY) {
+        const screenPoint = this.worldToScreen(worldX, worldY);
+        const rect = this.canvas.getBoundingClientRect();
+        
+        return screenPoint.x >= 0 && 
+               screenPoint.x <= rect.width && 
+               screenPoint.y >= 0 && 
+               screenPoint.y <= rect.height;
+    }
+    
+    /**
+     * Get visible world bounds
+     */
+    getVisibleBounds() {
+        const rect = this.canvas.getBoundingClientRect();
+        const topLeft = this.screenToWorld(0, 0);
+        const bottomRight = this.screenToWorld(rect.width, rect.height);
+        
+        return {
+            left: topLeft.x,
+            top: topLeft.y,
+            right: bottomRight.x,
+            bottom: bottomRight.y,
+            width: bottomRight.x - topLeft.x,
+            height: bottomRight.y - topLeft.y
+        };
+    }
+    
+    /**
+     * Destroy the controller and remove event listeners
+     */
+    destroy() {
+        // Remove all event listeners
+        this.canvas.removeEventListener('mousedown', this.handleMouseDown);
+        this.canvas.removeEventListener('mousemove', this.handleMouseMove);
+        this.canvas.removeEventListener('mouseup', this.handleMouseUp);
+        this.canvas.removeEventListener('mouseleave', this.handleMouseUp);
+        this.canvas.removeEventListener('wheel', this.handleWheel);
+        
+        this.canvas.removeEventListener('touchstart', this.handleTouchStart);
+        this.canvas.removeEventListener('touchmove', this.handleTouchMove);
+        this.canvas.removeEventListener('touchend', this.handleTouchEnd);
+        this.canvas.removeEventListener('touchcancel', this.handleTouchEnd);
+        
+        this.canvas.removeEventListener('keydown', this.handleKeyDown);
+        this.canvas.removeEventListener('contextmenu', (e) => e.preventDefault());
+        
+        window.removeEventListener('resize', this.handleResize);
+        
+        // Cancel any ongoing animations
+        if (this.animationId) {
+            cancelAnimationFrame(this.animationId);
+            this.animationId = null;
+        }
+        
+        // Reset canvas cursor
+        this.canvas.style.cursor = '';
+    }
+}
+
+// Export for use in other modules
+window.ZoomPanController = ZoomPanController;
