@@ -252,9 +252,9 @@ class CoordinateSystem {
      * @returns {boolean} True if within bounds
      */
     isValidHex(hex) {
-        // For a fixed grid size, just check if it's within reasonable axial coordinate range
-        // This is much more permissive than pixel bounds checking
-        return Math.abs(hex.q) <= 50 && Math.abs(hex.r) <= 50;
+        // Very permissive bounds checking to allow highlighting of any hex
+        // Only prevent extreme coordinates that could cause system issues
+        return Math.abs(hex.q) <= 500 && Math.abs(hex.r) <= 500;
     }
     
     /**
@@ -466,14 +466,14 @@ class CoordinateSystem {
         const minR = Math.floor(Math.min(...allCorners.map(c => c.r)));
         const maxR = Math.ceil(Math.max(...allCorners.map(c => c.r)));
         
-        // Large padding to ensure we catch all edge cases
-        const padding = 5;
+        // Extremely large padding to ensure we catch all edge cases and allow hover highlighting anywhere
+        const padding = 50;
         
-        // Calculate hex dimensions for proper margins
+        // Calculate hex dimensions for generous margins
         const hexWidth = this.hexSize * 2;
         const hexHeight = this.hexSize * Math.sqrt(3);
-        const marginX = hexWidth * 0.75;
-        const marginY = hexHeight * 0.75;
+        const marginX = hexWidth * 3; // Very large margins for maximum detection
+        const marginY = hexHeight * 3; // Very large margins for maximum detection
         
         // Iterate through the expanded axial coordinate range
         for (let q = minQ - padding; q <= maxQ + padding; q++) {

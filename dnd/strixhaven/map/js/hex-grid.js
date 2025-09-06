@@ -373,12 +373,25 @@ class HexGrid {
         // Convert to hex coordinates
         const hex = this.coordSystem.pixelToAxial(worldX, worldY);
         
-        // Validate hex is within grid bounds and actually contains the point
-        if (this.coordSystem.isValidHex(hex)) {
-            // Double-check with precise point-in-hex test
-            if (this.coordSystem.isPointInHex({ x: worldX, y: worldY }, hex.q, hex.r)) {
+        // Debug logging when debug mode is enabled
+        if (this.debugMode) {
+            console.log(`Hex detection - Screen: (${x}, ${y}), World: (${worldX.toFixed(2)}, ${worldY.toFixed(2)}), Hex: (${hex.q}, ${hex.r})`);
+        }
+        
+        // Only check if the point is actually inside the hex geometry
+        // Removed restrictive isValidHex() check to allow highlighting of any hex
+        if (this.coordSystem.isPointInHex({ x: worldX, y: worldY }, hex.q, hex.r)) {
+            // Add basic sanity check for extreme coordinates to prevent system issues
+            if (Math.abs(hex.q) <= 500 && Math.abs(hex.r) <= 500) {
+                if (this.debugMode) {
+                    console.log(`✓ Hex found and validated: (${hex.q}, ${hex.r})`);
+                }
                 return hex;
+            } else if (this.debugMode) {
+                console.log(`✗ Hex coordinates too extreme: (${hex.q}, ${hex.r})`);
             }
+        } else if (this.debugMode) {
+            console.log(`✗ Point not inside hex geometry for: (${hex.q}, ${hex.r})`);
         }
         
         return null;

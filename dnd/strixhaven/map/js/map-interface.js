@@ -274,6 +274,13 @@ class MapInterface {
         const viewport = this.zoomPan.getViewport();
         const hex = this.hexGrid.getHexAtPoint(x, y, viewport);
         
+        // Debug logging for mouse events when debug mode is enabled
+        if (this.hexGrid.debugMode && hex) {
+            console.log(`Mouse hover detected hex: (${hex.q}, ${hex.r})`);
+        } else if (this.hexGrid.debugMode && !hex && this.lastMouseHex) {
+            console.log('Mouse left hex area - clearing highlight');
+        }
+        
         // Update hex highlight
         if (hex && (!this.lastMouseHex || hex.q !== this.lastMouseHex.q || hex.r !== this.lastMouseHex.r)) {
             this.hexGrid.setHighlightedHex(hex);
