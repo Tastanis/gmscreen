@@ -14,7 +14,7 @@ class CoordinateSystem {
         this.hexHorizontalSpacing = hexSize * 3/2;
         this.hexVerticalSpacing = this.hexHeight;
         
-        // Grid configuration for 38x38 hexes on 2048x1536
+        // Grid configuration for 38x38 hexes
         this.gridConfig = {
             imageWidth: 2048,        // Background image width
             imageHeight: 1536,       // Background image height
@@ -22,8 +22,89 @@ class CoordinateSystem {
             gridOriginY: 100,        // Where hex (0,0) appears on image
             gridWidth: 38,           // Number of hexes horizontally
             gridHeight: 38,          // Number of hexes vertically
-            hexSize: hexSize
+            hexSize: hexSize,
+            scalingMode: 'fitImageToGrid' // 'fitImageToGrid' or 'fitGridToImage'
         };
+        
+        // Calculate optimal sizing based on scaling mode
+        this.updateOptimalSizing();
+    }
+    
+    /**
+     * Update optimal sizing calculations based on scaling mode
+     */
+    updateOptimalSizing() {
+        if (this.gridConfig.scalingMode === 'fitImageToGrid') {
+            // Scale background image to fit the hex grid area
+            this.calculateGridDimensions();
+        } else if (this.gridConfig.scalingMode === 'fitGridToImage') {
+            // Adjust hex size to fit within image bounds
+            this.calculateOptimalHexSize();
+        }
+    }
+    
+    /**
+     * Calculate total grid dimensions for current hex size
+     */
+    calculateGridDimensions() {
+        const { gridWidth, gridHeight, hexSize } = this.gridConfig;
+        
+        // Calculate total area needed for the hex grid
+        const totalWidth = (gridWidth - 0.5) * hexSize * 1.5 + hexSize; // Account for hex spacing
+        const totalHeight = gridHeight * hexSize * Math.sqrt(3) * 0.75 + hexSize * Math.sqrt(3) * 0.5; // Account for row offset
+        
+        // Store calculated dimensions
+        this.gridConfig.calculatedWidth = totalWidth;
+        this.gridConfig.calculatedHeight = totalHeight;
+        
+        console.log(`Grid dimensions: ${totalWidth.toFixed(1)} x ${totalHeight.toFixed(1)}`);
+    }
+    
+    /**
+     * Calculate optimal hex size to fit grid within image bounds
+     */
+    calculateOptimalHexSize() {
+        const { gridWidth, gridHeight, imageWidth, imageHeight } = this.gridConfig;
+        
+        // Calculate hex size needed to fit grid within image
+        const maxWidthHexSize = (imageWidth - 200) / ((gridWidth - 0.5) * 1.5 + 1); // 200px margin
+        const maxHeightHexSize = (imageHeight - 200) / (gridHeight * Math.sqrt(3) * 0.75 + Math.sqrt(3) * 0.5);
+        
+        // Use the smaller size to ensure both dimensions fit
+        const optimalHexSize = Math.min(maxWidthHexSize, maxHeightHexSize);
+        
+        // Update hex size and recalculate geometry
+        this.hexSize = Math.floor(optimalHexSize);
+        this.gridConfig.hexSize = this.hexSize;
+        this.hexWidth = this.hexSize * 2;
+        this.hexHeight = this.hexSize * Math.sqrt(3);
+        this.hexHorizontalSpacing = this.hexSize * 3/2;
+        this.hexVerticalSpacing = this.hexHeight;
+        
+        console.log(`Calculated optimal hex size: ${this.hexSize}px`);
+    }
+    
+    /**
+     * Get background scaling parameters
+     */
+    getBackgroundScaling() {
+        if (this.gridConfig.scalingMode === 'fitImageToGrid') {
+            // Scale image to match grid dimensions
+            return {
+                scaleX: this.gridConfig.calculatedWidth / this.gridConfig.imageWidth,
+                scaleY: this.gridConfig.calculatedHeight / this.gridConfig.imageHeight,
+                width: this.gridConfig.calculatedWidth,
+                height: this.gridConfig.calculatedHeight
+            };
+        } else {
+            // Use image at original size
+            return {
+                scaleX: 1,
+                scaleY: 1,
+                width: this.gridConfig.imageWidth,
+                height: this.gridConfig.imageHeight
+            };
+        }
     }
     
     /**
@@ -337,32 +418,37 @@ class CoordinateSystem {
     getVisibleHexes(viewport) {
         const visibleHexes = [];
         
-        // Convert viewport corners to hex coordinates
+        // Convert all four viewport corners to hex coordinates to get proper bounds
+        // This fixes the diagonal band issue by ensuring we check the full rectangular area
         const topLeft = this.pixelToAxial(viewport.left, viewport.top);
+        const topRight = this.pixelToAxial(viewport.right, viewport.top);
+        const bottomLeft = this.pixelToAxial(viewport.left, viewport.bottom);
         const bottomRight = this.pixelToAxial(viewport.right, viewport.bottom);
         
-        // Large padding to ensure we catch all visible hexes at any zoom level
-        const padding = 8;
-        const minQ = Math.floor(topLeft.q - padding);
-        const maxQ = Math.ceil(bottomRight.q + padding);
-        const minR = Math.floor(topLeft.r - padding);
-        const maxR = Math.ceil(bottomRight.r + padding);
+        // Find the actual bounding box in axial coordinates by checking all corners
+        const allCorners = [topLeft, topRight, bottomLeft, bottomRight];
+        const minQ = Math.floor(Math.min(...allCorners.map(c => c.q)));
+        const maxQ = Math.ceil(Math.max(...allCorners.map(c => c.q)));
+        const minR = Math.floor(Math.min(...allCorners.map(c => c.r)));
+        const maxR = Math.ceil(Math.max(...allCorners.map(c => c.r)));
         
-        // For flat-topped hexes, calculate proper dimensions
+        // Large padding to ensure we catch all edge cases
+        const padding = 5;
+        
+        // Calculate hex dimensions for proper margins
         const hexWidth = this.hexSize * 2;
         const hexHeight = this.hexSize * Math.sqrt(3);
+        const marginX = hexWidth * 0.75;
+        const marginY = hexHeight * 0.75;
         
-        // Use more generous margins to prevent hexes from disappearing
-        const marginX = hexWidth;
-        const marginY = hexHeight;
-        
-        for (let q = minQ; q <= maxQ; q++) {
-            for (let r = minR; r <= maxR; r++) {
+        // Iterate through the expanded axial coordinate range
+        for (let q = minQ - padding; q <= maxQ + padding; q++) {
+            for (let r = minR - padding; r <= maxR + padding; r++) {
                 const hex = { q, r };
                 if (this.isValidHex(hex)) {
                     const pixel = this.axialToPixel(q, r);
                     
-                    // More generous visibility check with larger margins
+                    // More generous visibility check to prevent disappearing hexes
                     if (pixel.x >= viewport.left - marginX &&
                         pixel.x <= viewport.right + marginX &&
                         pixel.y >= viewport.top - marginY &&

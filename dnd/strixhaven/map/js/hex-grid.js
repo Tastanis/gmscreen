@@ -176,9 +176,15 @@ class HexGrid {
         if (!this.backgroundImage) return;
         
         const config = this.coordSystem.gridConfig;
+        const scaling = this.coordSystem.getBackgroundScaling();
+        
+        // Position background at grid origin with proper scaling
         this.ctx.drawImage(
             this.backgroundImage,
-            0, 0, config.imageWidth, config.imageHeight
+            config.gridOriginX,          // x position
+            config.gridOriginY,          // y position
+            scaling.width,               // scaled width
+            scaling.height               // scaled height
         );
     }
     
