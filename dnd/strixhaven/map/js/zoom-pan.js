@@ -46,21 +46,8 @@ class ZoomPanController {
     }
     
     setupEventListeners() {
-        // Mouse events
-        this.canvas.addEventListener('mousedown', this.handleMouseDown.bind(this));
-        this.canvas.addEventListener('mousemove', this.handleMouseMove.bind(this));
-        this.canvas.addEventListener('mouseup', this.handleMouseUp.bind(this));
-        this.canvas.addEventListener('mouseleave', this.handleMouseUp.bind(this));
+        // Only mouse wheel for zooming - no panning/dragging at all
         this.canvas.addEventListener('wheel', this.handleWheel.bind(this), { passive: false });
-        
-        // Touch events for mobile
-        this.canvas.addEventListener('touchstart', this.handleTouchStart.bind(this), { passive: false });
-        this.canvas.addEventListener('touchmove', this.handleTouchMove.bind(this), { passive: false });
-        this.canvas.addEventListener('touchend', this.handleTouchEnd.bind(this));
-        this.canvas.addEventListener('touchcancel', this.handleTouchEnd.bind(this));
-        
-        // Keyboard events for accessibility
-        this.canvas.addEventListener('keydown', this.handleKeyDown.bind(this));
         
         // Don't prevent context menu - let map interface handle right-clicks
         
@@ -425,39 +412,8 @@ class ZoomPanController {
      * Constrain view to reasonable bounds
      */
     constrainView() {
-        // Ensure scale stays within bounds
+        // Only ensure scale stays within bounds - no panning constraints
         this.scale = Math.max(this.minScale, Math.min(this.maxScale, this.scale));
-        
-        // If we have access to image bounds, constrain panning
-        if (window.hexGrid && window.hexGrid.coordSystem) {
-            const imageBounds = window.hexGrid.coordSystem.getImageBounds();
-            const canvasRect = this.canvas.getBoundingClientRect();
-            
-            // Calculate reasonable padding around the image
-            const padding = 200; // Allow 200px of padding around image edges
-            
-            // Convert image bounds to screen coordinates
-            const imageScreenLeft = imageBounds.left * this.scale + this.offsetX;
-            const imageScreenRight = imageBounds.right * this.scale + this.offsetX;
-            const imageScreenTop = imageBounds.top * this.scale + this.offsetY;
-            const imageScreenBottom = imageBounds.bottom * this.scale + this.offsetY;
-            
-            // Constrain horizontal panning
-            if (imageScreenRight < canvasRect.width - padding) {
-                this.offsetX = (canvasRect.width - padding - imageBounds.right * this.scale);
-            }
-            if (imageScreenLeft > padding) {
-                this.offsetX = (padding - imageBounds.left * this.scale);
-            }
-            
-            // Constrain vertical panning
-            if (imageScreenBottom < canvasRect.height - padding) {
-                this.offsetY = (canvasRect.height - padding - imageBounds.bottom * this.scale);
-            }
-            if (imageScreenTop > padding) {
-                this.offsetY = (padding - imageBounds.top * this.scale);
-            }
-        }
     }
     
     /**
