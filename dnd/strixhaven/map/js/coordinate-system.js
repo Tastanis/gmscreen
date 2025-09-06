@@ -438,11 +438,11 @@ class CoordinateSystem {
         
         // Bottom-left corner fill: Add hexes to extend the bottom rows horizontally  
         const bottomRowsToFill = Math.min(12, Math.floor(this.gridConfig.gridHeight / 3));
-        const startRow = this.gridConfig.gridHeight - bottomRowsToFill;
-        for (let row = startRow; row < this.gridConfig.gridHeight; row++) {
+        const bottomStartRow = this.gridConfig.gridHeight - bottomRowsToFill;
+        for (let row = bottomStartRow; row < this.gridConfig.gridHeight; row++) {
             // For odd rows, add extra hexes to the left since they create the left-side gap
             // For even rows, fewer extra hexes needed
-            const extraHexes = (row % 2 === 1) ? Math.floor((row - startRow) / 2) + 1 : Math.floor((row - startRow) / 3);
+            const extraHexes = (row % 2 === 1) ? Math.floor((row - bottomStartRow) / 2) + 1 : Math.floor((row - bottomStartRow) / 3);
             
             for (let extra = 1; extra <= extraHexes; extra++) {
                 const col = -extra;
