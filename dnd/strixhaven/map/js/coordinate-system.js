@@ -525,50 +525,40 @@ class CoordinateSystem {
     }
     
     /**
-     * Check if a hex is within the defined map boundaries
+     * Check if a hex overlaps with the background image rectangle
      * @param {Object} hex - Hex coordinate {q, r}
-     * @returns {boolean} True if hex is within the map boundary
+     * @returns {boolean} True if any part of hex overlaps the image
      */
     isHexWithinImageBounds(hex) {
-        // Define the exact boundary coordinates as specified by user
-        // These form an octagonal boundary around the actual map area
-        const boundaryVertices = [
-            { q: 0, r: 0 },     // top left corner
-            { q: 19, r: -10 },  // top middle
-            { q: 38, r: -19 },  // top right
-            { q: 38, r: -5 },   // right middle
-            { q: 38, r: 10 },   // bottom right
-            { q: 20, r: 19 },   // bottom middle
-            { q: 0, r: 29 },    // bottom left
-            { q: 0, r: 14 }     // middle left
-        ];
+        const hexVertices = this.getHexVertices(hex.q, hex.r);
+        const imageBounds = this.getImageBounds();
         
-        // Use point-in-polygon test with the hex coordinate boundary
-        return this.isHexInBoundaryPolygon(hex, boundaryVertices);
-    }
-    
-    /**
-     * Check if a hex coordinate is inside the boundary polygon
-     * @param {Object} hex - Hex coordinate {q, r} to test
-     * @param {Array} boundaryVertices - Array of boundary hex coordinates
-     * @returns {boolean} True if hex is inside boundary
-     */
-    isHexInBoundaryPolygon(hex, boundaryVertices) {
-        const testPoint = { x: hex.q, y: hex.r };
-        const vertices = boundaryVertices.map(v => ({ x: v.q, y: v.r }));
-        
-        let inside = false;
-        for (let i = 0, j = vertices.length - 1; i < vertices.length; j = i++) {
-            const vi = vertices[i];
-            const vj = vertices[j];
-            
-            if (((vi.y > testPoint.y) !== (vj.y > testPoint.y)) &&
-                (testPoint.x < (vj.x - vi.x) * (testPoint.y - vi.y) / (vj.y - vi.y) + vi.x)) {
-                inside = !inside;
+        // Check if any hex vertex is inside the image rectangle
+        for (let vertex of hexVertices) {
+            if (vertex.x >= imageBounds.left && 
+                vertex.x <= imageBounds.right && 
+                vertex.y >= imageBounds.top && 
+                vertex.y <= imageBounds.bottom) {
+                return true; // At least one vertex is inside
             }
         }
         
-        return inside;
+        // Check if any image corner is inside the hexagon
+        const imageCorners = [
+            { x: imageBounds.left, y: imageBounds.top },
+            { x: imageBounds.right, y: imageBounds.top },
+            { x: imageBounds.right, y: imageBounds.bottom },
+            { x: imageBounds.left, y: imageBounds.bottom }
+        ];
+        
+        for (let corner of imageCorners) {
+            if (this.isPointInPolygon(corner, hexVertices)) {
+                return true; // Image corner is inside hex
+            }
+        }
+        
+        // Check if hex edges intersect with image rectangle edges
+        return this.hexRectangleIntersect(hexVertices, imageBounds);
     }
     
     /**

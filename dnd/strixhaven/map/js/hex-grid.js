@@ -381,11 +381,6 @@ class HexGrid {
         const worldX = (x - viewport.offsetX) / viewport.scale;
         const worldY = (y - viewport.offsetY) / viewport.scale;
         
-        // First check if the click point is within image bounds
-        if (!this.coordSystem.isPointWithinImageBounds(worldX, worldY)) {
-            return null; // Don't allow interaction outside image bounds
-        }
-        
         // Convert to hex coordinates
         const hex = this.coordSystem.pixelToAxial(worldX, worldY);
         
@@ -393,10 +388,7 @@ class HexGrid {
         if (this.coordSystem.isValidHex(hex)) {
             // Double-check with precise point-in-hex test
             if (this.coordSystem.isPointInHex({ x: worldX, y: worldY }, hex.q, hex.r)) {
-                // Final check: ensure hex is within image bounds
-                if (this.coordSystem.isHexWithinImageBounds(hex)) {
-                    return hex;
-                }
+                return hex;
             }
         }
         
@@ -447,11 +439,7 @@ class HexGrid {
      * Set highlighted hex
      */
     setHighlightedHex(hex) {
-        // Only allow highlighting hexes within image bounds
-        if (hex && !this.coordSystem.isHexWithinImageBounds(hex)) {
-            this.highlightedHex = null;
-            return;
-        }
+        // Allow highlighting ANY hex - no boundary restrictions
         this.highlightedHex = hex;
     }
     
@@ -459,11 +447,7 @@ class HexGrid {
      * Set selected hex
      */
     setSelectedHex(hex) {
-        // Only allow selecting hexes within image bounds
-        if (hex && !this.coordSystem.isHexWithinImageBounds(hex)) {
-            this.selectedHex = null;
-            return;
-        }
+        // Allow selecting ANY hex - no boundary restrictions  
         this.selectedHex = hex;
     }
     
