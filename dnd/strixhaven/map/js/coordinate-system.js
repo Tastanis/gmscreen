@@ -114,9 +114,18 @@ class CoordinateSystem {
      * @returns {Object} {x, y} pixel coordinates
      */
     axialToPixel(q, r) {
-        // Standard flat-topped hexagon conversion
-        const x = this.gridConfig.gridOriginX + this.hexSize * (3/2 * q);
-        const y = this.gridConfig.gridOriginY + this.hexSize * (Math.sqrt(3)/2 * q + Math.sqrt(3) * r);
+        // Account for the grid extension offset
+        // The grid now starts at row -20 and column -20, so we need to adjust the origin
+        const gridExtensionOffset = 20; // Same as gridExtensionAbove/gridExtensionLeft in generateAllHexes
+        
+        // Adjust q and r to account for the extended grid starting at negative values
+        // This shifts the coordinate system so (0,0) appears in the correct position
+        const adjustedQ = q + Math.floor(gridExtensionOffset / 2);
+        const adjustedR = r + gridExtensionOffset;
+        
+        // Standard flat-topped hexagon conversion with adjusted coordinates
+        const x = this.gridConfig.gridOriginX + this.hexSize * (3/2 * adjustedQ);
+        const y = this.gridConfig.gridOriginY + this.hexSize * (Math.sqrt(3)/2 * adjustedQ + Math.sqrt(3) * adjustedR);
         return { x, y };
     }
     
@@ -131,8 +140,17 @@ class CoordinateSystem {
         const adjustedX = x - this.gridConfig.gridOriginX;
         const adjustedY = y - this.gridConfig.gridOriginY;
         
-        const q = (2/3 * adjustedX) / this.hexSize;
-        const r = (-1/3 * adjustedX + Math.sqrt(3)/3 * adjustedY) / this.hexSize;
+        // Account for the grid extension offset (same as in axialToPixel)
+        const gridExtensionOffset = 20;
+        
+        // Convert to preliminary axial coordinates
+        const prelimQ = (2/3 * adjustedX) / this.hexSize;
+        const prelimR = (-1/3 * adjustedX + Math.sqrt(3)/3 * adjustedY) / this.hexSize;
+        
+        // Adjust back to account for the grid extension
+        const q = prelimQ - Math.floor(gridExtensionOffset / 2);
+        const r = prelimR - gridExtensionOffset;
+        
         return this.axialRound(q, r);
     }
     
