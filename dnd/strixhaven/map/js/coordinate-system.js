@@ -392,7 +392,7 @@ class CoordinateSystem {
     generateAllHexes() {
         const hexes = [];
         
-        // Generate a rectangular grid using offset coordinates for proper honeycomb tessellation
+        // Generate the core 38x38 grid using offset coordinates for proper honeycomb tessellation
         // Each even row is aligned, each odd row is offset by half a hex width to the right
         for (let row = 0; row < this.gridConfig.gridHeight; row++) {
             for (let col = 0; col < this.gridConfig.gridWidth; col++) {
@@ -406,7 +406,41 @@ class CoordinateSystem {
             }
         }
         
-        console.log(`Generated ${hexes.length} hexes in ${this.gridConfig.gridWidth}x${this.gridConfig.gridHeight} rectangular grid`);
+        // Add corner hexes to make the boundary more rectangular
+        // This fills in the gaps created by the offset pattern to create horizontal top/bottom edges
+        
+        // Top-right corner fill: Add hexes to extend the top rows horizontally
+        const topRowsToFill = Math.min(12, Math.floor(this.gridConfig.gridHeight / 3));
+        for (let row = 0; row < topRowsToFill; row++) {
+            // For even rows, add 1-2 extra hexes to the right
+            // For odd rows, fewer extra hexes since they're already offset right
+            const extraHexes = (row % 2 === 0) ? Math.floor((topRowsToFill - row) / 2) + 1 : Math.floor((topRowsToFill - row) / 3);
+            
+            for (let extra = 1; extra <= extraHexes; extra++) {
+                const col = this.gridConfig.gridWidth + extra - 1;
+                const q = col - Math.floor((row + (row & 1)) / 2);
+                const r = row;
+                hexes.push({ q, r });
+            }
+        }
+        
+        // Bottom-left corner fill: Add hexes to extend the bottom rows horizontally  
+        const bottomRowsToFill = Math.min(12, Math.floor(this.gridConfig.gridHeight / 3));
+        const startRow = this.gridConfig.gridHeight - bottomRowsToFill;
+        for (let row = startRow; row < this.gridConfig.gridHeight; row++) {
+            // For odd rows, add extra hexes to the left since they create the left-side gap
+            // For even rows, fewer extra hexes needed
+            const extraHexes = (row % 2 === 1) ? Math.floor((row - startRow) / 2) + 1 : Math.floor((row - startRow) / 3);
+            
+            for (let extra = 1; extra <= extraHexes; extra++) {
+                const col = -extra;
+                const q = col - Math.floor((row + (row & 1)) / 2);
+                const r = row;
+                hexes.push({ q, r });
+            }
+        }
+        
+        console.log(`Generated ${hexes.length} hexes (${this.gridConfig.gridWidth}x${this.gridConfig.gridHeight} core + corner fill)`);
         return hexes;
     }
     
