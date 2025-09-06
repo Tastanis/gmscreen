@@ -171,7 +171,9 @@ class CoordinateSystem {
      * @returns {boolean} True if within bounds
      */
     isValidHex(hex) {
-        return this.isWithinRectangularBounds(hex);
+        // For a fixed grid size, just check if it's within reasonable axial coordinate range
+        // This is much more permissive than pixel bounds checking
+        return Math.abs(hex.q) <= 50 && Math.abs(hex.r) <= 50;
     }
     
     /**
@@ -197,6 +199,7 @@ class CoordinateSystem {
      * @returns {Object} {col, row} offset coordinates
      */
     axialToOffset(q, r) {
+        // For flat-topped hexes with odd-row offset
         const col = q + (r - (r & 1)) / 2;
         const row = r;
         return { col, row };
@@ -209,7 +212,8 @@ class CoordinateSystem {
      * @returns {Object} {q, r} axial coordinates
      */
     offsetToAxial(col, row) {
-        const q = col - (row - (row & 1)) / 2;
+        // For flat-topped hexes with odd-row offset (matches generateAllHexes)
+        const q = col - Math.floor((row + (row & 1)) / 2);
         const r = row;
         return { q, r };
     }
@@ -224,8 +228,10 @@ class CoordinateSystem {
         const center = this.axialToPixel(q, r);
         const vertices = [];
         
+        // For flat-topped hexagons, start at angle 0° (pointing right)
+        // This creates hexes with flat sides on top and bottom for proper tessellation
         for (let i = 0; i < 6; i++) {
-            const angle = (Math.PI / 180) * (60 * i - 30);
+            const angle = (Math.PI / 180) * (60 * i);  // Start at 0°, increment by 60°
             const x = center.x + this.hexSize * Math.cos(angle);
             const y = center.y + this.hexSize * Math.sin(angle);
             vertices.push({ x, y });
@@ -305,20 +311,21 @@ class CoordinateSystem {
     generateAllHexes() {
         const hexes = [];
         
-        // Generate a rectangular grid using offset coordinates
-        // This creates a proper honeycomb pattern
+        // Generate a rectangular grid using offset coordinates for proper honeycomb tessellation
+        // Each even row is aligned, each odd row is offset by half a hex width to the right
         for (let row = 0; row < this.gridConfig.gridHeight; row++) {
             for (let col = 0; col < this.gridConfig.gridWidth; col++) {
-                // Convert offset to axial coordinates
-                // For flat-topped hexes with odd-row offset
-                const q = col;
-                const r = row - Math.floor(col / 2);
+                // Convert offset coordinates to axial coordinates
+                // For flat-topped hexes with odd-row offset (standard Red Blob Games formula)
+                const q = col - Math.floor((row + (row & 1)) / 2);
+                const r = row;
                 
+                // Always include all hexes in the defined grid area
                 hexes.push({ q, r });
             }
         }
         
-        console.log(`Generated ${hexes.length} hexes in ${this.gridConfig.gridWidth}x${this.gridConfig.gridHeight} grid`);
+        console.log(`Generated ${hexes.length} hexes in ${this.gridConfig.gridWidth}x${this.gridConfig.gridHeight} rectangular grid`);
         return hexes;
     }
     
@@ -334,12 +341,20 @@ class CoordinateSystem {
         const topLeft = this.pixelToAxial(viewport.left, viewport.top);
         const bottomRight = this.pixelToAxial(viewport.right, viewport.bottom);
         
-        // Add some padding to ensure we catch hexes on the edge
-        const padding = 2;
-        const minQ = topLeft.q - padding;
-        const maxQ = bottomRight.q + padding;
-        const minR = topLeft.r - padding;
-        const maxR = bottomRight.r + padding;
+        // Large padding to ensure we catch all visible hexes at any zoom level
+        const padding = 8;
+        const minQ = Math.floor(topLeft.q - padding);
+        const maxQ = Math.ceil(bottomRight.q + padding);
+        const minR = Math.floor(topLeft.r - padding);
+        const maxR = Math.ceil(bottomRight.r + padding);
+        
+        // For flat-topped hexes, calculate proper dimensions
+        const hexWidth = this.hexSize * 2;
+        const hexHeight = this.hexSize * Math.sqrt(3);
+        
+        // Use more generous margins to prevent hexes from disappearing
+        const marginX = hexWidth;
+        const marginY = hexHeight;
         
         for (let q = minQ; q <= maxQ; q++) {
             for (let r = minR; r <= maxR; r++) {
@@ -347,11 +362,11 @@ class CoordinateSystem {
                 if (this.isValidHex(hex)) {
                     const pixel = this.axialToPixel(q, r);
                     
-                    // Check if hex center is reasonably close to viewport
-                    if (pixel.x >= viewport.left - this.hexSize &&
-                        pixel.x <= viewport.right + this.hexSize &&
-                        pixel.y >= viewport.top - this.hexSize &&
-                        pixel.y <= viewport.bottom + this.hexSize) {
+                    // More generous visibility check with larger margins
+                    if (pixel.x >= viewport.left - marginX &&
+                        pixel.x <= viewport.right + marginX &&
+                        pixel.y >= viewport.top - marginY &&
+                        pixel.y <= viewport.bottom + marginY) {
                         visibleHexes.push(hex);
                     }
                 }
