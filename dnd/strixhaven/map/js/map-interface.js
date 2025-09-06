@@ -188,7 +188,7 @@ class MapInterface {
         this.canvas.addEventListener('mousemove', this.handleCanvasMouseMove.bind(this));
         this.canvas.addEventListener('mouseleave', this.handleCanvasMouseLeave.bind(this));
         
-        // Disable right-click context menu entirely
+        // Prevent context menu on right-click but allow right-click dragging
         this.canvas.addEventListener('contextmenu', (e) => e.preventDefault());
         
         // UI button events
