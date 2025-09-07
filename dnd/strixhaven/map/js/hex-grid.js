@@ -246,7 +246,31 @@ class HexGridV2 {
         const hex = this.coordSystem.pixelToHex(worldX, worldY);
         
         if (this.coordSystem.isValidHex(hex.q, hex.r)) {
-            console.log(`Clicked hex: (${hex.q}, ${hex.r})`);
+            this.showHexPopup(hex.q, hex.r);
+        }
+    }
+    
+    /**
+     * Show hex details popup
+     */
+    showHexPopup(q, r) {
+        const popup = document.getElementById('hex-popup');
+        const hexCoords = document.getElementById('hex-coords');
+        const hexInfo = document.getElementById('hex-info');
+        
+        if (popup && hexCoords && hexInfo) {
+            // Set hex coordinates
+            hexCoords.textContent = `Hex (${q}, ${r})`;
+            
+            // Set placeholder info (can be expanded later)
+            hexInfo.innerHTML = `
+                <p><strong>Coordinates:</strong> q=${q}, r=${r}</p>
+                <p><strong>Type:</strong> Unknown</p>
+                <p><strong>Description:</strong> This hex can be customized with details, encounters, locations, etc.</p>
+            `;
+            
+            // Show the popup
+            popup.style.display = 'block';
         }
     }
     

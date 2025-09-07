@@ -68,7 +68,7 @@ class MapInterfaceV2 {
         
         // Mouse down for pan start
         this.canvas.addEventListener('mousedown', (e) => {
-            if (e.button === 0) { // Left click
+            if (e.button === 2) { // Right click
                 this.startPan(e.clientX, e.clientY);
             }
         });
@@ -84,6 +84,11 @@ class MapInterfaceV2 {
                 this.hexGrid.hoveredHex = null;
                 this.hexGrid.render();
             }
+        });
+        
+        // Prevent context menu on right click
+        this.canvas.addEventListener('contextmenu', (e) => {
+            e.preventDefault();
         });
     }
     

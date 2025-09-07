@@ -99,6 +99,72 @@ $isGM = ($user === 'GM');
             border-radius: 4px;
             z-index: 100;
         }
+        
+        /* Hex Popup Styles */
+        .hex-popup {
+            position: fixed;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            background: rgba(0, 0, 0, 0.7);
+            z-index: 1000;
+            display: flex;
+            justify-content: center;
+            align-items: center;
+        }
+        
+        .hex-popup-content {
+            background: #2a2a3e;
+            color: #eee;
+            padding: 20px;
+            border-radius: 10px;
+            box-shadow: 0 4px 20px rgba(0, 0, 0, 0.3);
+            max-width: 400px;
+            width: 90%;
+            max-height: 80%;
+            overflow-y: auto;
+            position: relative;
+        }
+        
+        .hex-popup-close {
+            position: absolute;
+            top: 10px;
+            right: 15px;
+            font-size: 24px;
+            font-weight: bold;
+            color: #aaa;
+            cursor: pointer;
+        }
+        
+        .hex-popup-close:hover {
+            color: #fff;
+        }
+        
+        .hex-popup h2 {
+            margin-top: 0;
+            color: #ff6b6b;
+            border-bottom: 1px solid #4a4a6a;
+            padding-bottom: 10px;
+        }
+        
+        .hex-popup-actions {
+            margin-top: 20px;
+            text-align: right;
+        }
+        
+        .hex-popup-actions button {
+            background: #4a4a6a;
+            color: white;
+            border: none;
+            padding: 8px 16px;
+            border-radius: 4px;
+            cursor: pointer;
+        }
+        
+        .hex-popup-actions button:hover {
+            background: #6a6a8a;
+        }
     </style>
 </head>
 <body>
@@ -206,6 +272,25 @@ $isGM = ($user === 'GM');
             isGM: <?php echo $isGM ? 'true' : 'false'; ?>,
             sessionId: '<?php echo session_id(); ?>'
         };
+        
+        // Function to close hex popup
+        function closeHexPopup() {
+            document.getElementById('hex-popup').style.display = 'none';
+        }
     </script>
+    
+    <!-- Hex Details Popup -->
+    <div id="hex-popup" class="hex-popup" style="display: none;">
+        <div class="hex-popup-content">
+            <span class="hex-popup-close" onclick="closeHexPopup()">&times;</span>
+            <h2 id="hex-coords">Hex (0, 0)</h2>
+            <div id="hex-info">
+                <!-- Hex details will be populated here -->
+            </div>
+            <div class="hex-popup-actions">
+                <button onclick="closeHexPopup()">Close</button>
+            </div>
+        </div>
+    </div>
 </body>
 </html>
