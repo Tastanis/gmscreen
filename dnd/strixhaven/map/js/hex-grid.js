@@ -7,8 +7,6 @@ class HexGrid {
     constructor(canvas, backgroundImagePath) {
         this.canvas = canvas;
         this.ctx = canvas.getContext('2d');
-        this.backgroundImagePath = backgroundImagePath;
-        this.backgroundImage = null;
         
         // Initialize coordinate system for 38x38 grid
         this.coordSystem = new CoordinateSystem(23); // Hex size 23px for 38x38 grid on 2048x1536
@@ -66,14 +64,6 @@ class HexGrid {
         console.log(`HexGrid initialized with ${this.coordSystem.gridConfig.gridWidth}x${this.coordSystem.gridConfig.gridHeight} grid`);
     }
     
-    loadImage(src) {
-        return new Promise((resolve, reject) => {
-            const img = new Image();
-            img.onload = () => resolve(img);
-            img.onerror = reject;
-            img.src = src;
-        });
-    }
     
     setupResizeObserver() {
         const resizeObserver = new ResizeObserver(() => {
@@ -137,10 +127,6 @@ class HexGrid {
         this.ctx.translate(viewport.offsetX, viewport.offsetY);
         this.ctx.scale(viewport.scale, viewport.scale);
         
-        // Draw background image
-        if (this.backgroundImage) {
-            this.drawBackground();
-        }
         
         // Get visible hexes for viewport culling
         const visibleBounds = this.getVisibleBounds(viewport);
@@ -173,21 +159,6 @@ class HexGrid {
         }
     }
     
-    drawBackground() {
-        if (!this.backgroundImage) return;
-        
-        const config = this.coordSystem.gridConfig;
-        const scaling = this.coordSystem.getBackgroundScaling();
-        
-        // Position background at grid origin with proper scaling
-        this.ctx.drawImage(
-            this.backgroundImage,
-            config.gridOriginX,          // x position
-            config.gridOriginY,          // y position
-            scaling.width,               // scaled width
-            scaling.height               // scaled height
-        );
-    }
     
     
     drawGrid(visibleHexes) {
