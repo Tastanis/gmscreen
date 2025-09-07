@@ -36,10 +36,38 @@ class MapInterfaceV2 {
         // Set up event listeners
         this.setupEventListeners();
         
+        // Center on hex (18,27) by default
+        const centerOffset = this.getCenterOffsetForHex(18, 27);
+        this.viewport.offsetX = centerOffset.offsetX;
+        this.viewport.offsetY = centerOffset.offsetY;
+        this.hexGrid.setViewport(
+            this.viewport.scale,
+            this.viewport.offsetX,
+            this.viewport.offsetY
+        );
+        
         // Initial render
         this.hexGrid.render();
         
-        console.log('Map interface initialized');
+        console.log('Map interface initialized, centered on hex (18,27)');
+    }
+    
+    /**
+     * Calculate offset needed to center a specific hex on screen
+     */
+    getCenterOffsetForHex(q, r) {
+        // Get pixel position of the target hex
+        const hexPixelPos = this.hexGrid.coordSystem.hexToPixel(q, r);
+        
+        // Get screen center
+        const screenCenterX = this.canvas.width / 2;
+        const screenCenterY = this.canvas.height / 2;
+        
+        // Calculate offset needed to center the hex
+        const offsetX = screenCenterX - hexPixelPos.x;
+        const offsetY = screenCenterY - hexPixelPos.y;
+        
+        return { offsetX, offsetY };
     }
     
     /**

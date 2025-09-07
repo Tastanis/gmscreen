@@ -223,12 +223,14 @@ $isGM = ($user === 'GM');
         // Control functions
         function resetView() {
             if (mapInterface) {
+                // Center on hex (18,27)
+                const centerOffset = mapInterface.getCenterOffsetForHex(18, 27);
                 mapInterface.viewport = {
                     scale: 1,
-                    offsetX: 0,
-                    offsetY: 0
+                    offsetX: centerOffset.offsetX,
+                    offsetY: centerOffset.offsetY
                 };
-                mapInterface.hexGrid.setViewport(1, 0, 0);
+                mapInterface.hexGrid.setViewport(1, centerOffset.offsetX, centerOffset.offsetY);
                 updateZoomInfo();
             }
         }
