@@ -114,19 +114,12 @@ class CoordinateSystem {
      * @returns {Object} {x, y} pixel coordinates
      */
     axialToPixel(q, r) {
-        // Account for the grid extension offset
-        // The grid now starts at row -60 and column -60, so we need to adjust the origin
-        const gridExtensionOffset = 60; // Same as gridExtensionAbove/gridExtensionLeft in generateAllHexes
+        // Simplified coordinate conversion - no grid extension offsets
+        // Let the hexes render where they naturally should based on their axial coordinates
         
-        // Adjust q and r to account for the extended grid starting at negative values
-        // This shifts the coordinate system so (0,0) appears in the correct position
-        // Using the same offset values as in generateAllHexes for consistency
-        const adjustedQ = q + gridExtensionOffset; // Column offset matches gridExtensionLeft
-        const adjustedR = r + gridExtensionOffset; // Row offset matches gridExtensionAbove
-        
-        // Standard flat-topped hexagon conversion with adjusted coordinates
-        const x = this.gridConfig.gridOriginX + this.hexSize * (3/2 * adjustedQ);
-        const y = this.gridConfig.gridOriginY + this.hexSize * (Math.sqrt(3)/2 * adjustedQ + Math.sqrt(3) * adjustedR);
+        // Standard flat-topped hexagon conversion (Red Blob Games formula)
+        const x = this.gridConfig.gridOriginX + this.hexSize * (3/2 * q);
+        const y = this.gridConfig.gridOriginY + this.hexSize * (Math.sqrt(3)/2 * q + Math.sqrt(3) * r);
         
         // Enhanced debug logging for coordinate conversion testing
         if (window.DEBUG_COORDINATE_CONVERSION) {
@@ -143,20 +136,13 @@ class CoordinateSystem {
      * @returns {Object} {q, r} axial coordinates
      */
     pixelToAxial(x, y) {
-        // Adjust for grid origin
+        // Simplified coordinate conversion - direct inverse of axialToPixel
         const adjustedX = x - this.gridConfig.gridOriginX;
         const adjustedY = y - this.gridConfig.gridOriginY;
         
-        // Account for the grid extension offset (same as in axialToPixel)
-        const gridExtensionOffset = 60;
-        
-        // Convert to preliminary axial coordinates
-        const prelimQ = (2/3 * adjustedX) / this.hexSize;
-        const prelimR = (-1/3 * adjustedX + Math.sqrt(3)/3 * adjustedY) / this.hexSize;
-        
-        // Adjust back to account for the grid extension (inverse of axialToPixel)
-        const q = prelimQ - gridExtensionOffset; // Inverse of column offset
-        const r = prelimR - gridExtensionOffset; // Inverse of row offset
+        // Standard flat-topped hexagon inverse conversion (Red Blob Games formula)
+        const q = (2/3 * adjustedX) / this.hexSize;
+        const r = (-1/3 * adjustedX + Math.sqrt(3)/3 * adjustedY) / this.hexSize;
         
         const result = this.axialRound(q, r);
         
