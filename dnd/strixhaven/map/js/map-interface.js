@@ -274,18 +274,23 @@ class MapInterface {
         const viewport = this.zoomPan.getViewport();
         const hex = this.hexGrid.getHexAtPoint(x, y, viewport);
         
-        // Enhanced debug logging for hover detection
-        if (this.hexGrid.debugMode) {
+        // CRITICAL DEBUG: Track coordinate mapping accuracy
+        if (this.hexGrid.debugMode && hex) {
             const worldX = (x - viewport.offsetX) / viewport.scale;
             const worldY = (y - viewport.offsetY) / viewport.scale;
             
-            if (hex) {
-                console.log(`✅ HOVER SUCCESS: Hex (${hex.q}, ${hex.r}) | Screen: (${x.toFixed(1)}, ${y.toFixed(1)}) | World: (${worldX.toFixed(1)}, ${worldY.toFixed(1)})`);
-            } else {
-                // Try to see what hex coordinates this would map to
-                const theoreticalHex = this.hexGrid.coordSystem.pixelToAxial(worldX, worldY);
-                console.log(`❌ HOVER FAILED: No hex found | Screen: (${x.toFixed(1)}, ${y.toFixed(1)}) | World: (${worldX.toFixed(1)}, ${worldY.toFixed(1)}) | Would be hex: (${theoreticalHex.q}, ${theoreticalHex.r})`);
-            }
+            // Calculate where this hex actually renders
+            const hexPixelPos = this.hexGrid.coordSystem.axialToPixel(hex.q, hex.r);
+            const hexScreenX = hexPixelPos.x * viewport.scale + viewport.offsetX;
+            const hexScreenY = hexPixelPos.y * viewport.scale + viewport.offsetY;
+            
+            const screenDistance = Math.sqrt(Math.pow(x - hexScreenX, 2) + Math.pow(y - hexScreenY, 2));
+            
+            console.log(`🎯 HOVER MAPPING: 
+                Mouse Screen: (${x.toFixed(0)}, ${y.toFixed(0)})
+                Detected Hex: (${hex.q}, ${hex.r})
+                Hex Renders At: Screen (${hexScreenX.toFixed(0)}, ${hexScreenY.toFixed(0)})
+                Distance: ${screenDistance.toFixed(0)}px ${screenDistance > 50 ? '❌ TOO FAR!' : '✅ CLOSE'}`);
         }
         
         // Update hex highlight
