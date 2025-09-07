@@ -100,104 +100,111 @@ $isGM = ($user === 'GM');
             z-index: 100;
         }
         
-        /* Hex Popup Styles */
+        /* Hex Popup Styles - DND Dashboard Theme */
         .hex-popup {
             position: fixed;
             top: 0;
             left: 0;
             width: 100%;
             height: 100%;
-            background: rgba(0, 0, 0, 0.7);
+            background: rgba(0, 0, 0, 0.5);
             z-index: 1000;
             display: flex;
             justify-content: center;
             align-items: center;
+            backdrop-filter: blur(10px);
         }
         
         .hex-popup-content {
-            background: #2a2a3e;
-            color: #eee;
-            padding: 20px;
-            border-radius: 10px;
-            box-shadow: 0 4px 20px rgba(0, 0, 0, 0.3);
-            max-width: 400px;
-            width: 90%;
-            max-height: 80%;
+            background: rgba(255, 255, 255, 0.95);
+            color: #2c3e50;
+            padding: 30px;
+            border-radius: 15px;
+            box-shadow: 0 15px 35px rgba(0, 0, 0, 0.15);
+            border: 1px solid rgba(255, 255, 255, 0.2);
+            max-width: 500px;
+            width: 95%;
+            max-height: 85%;
             overflow-y: auto;
             position: relative;
+            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
         }
         
         .hex-popup-close {
             position: absolute;
-            top: 10px;
-            right: 15px;
-            font-size: 24px;
+            top: 15px;
+            right: 20px;
+            font-size: 28px;
             font-weight: bold;
-            color: #aaa;
+            color: #666;
             cursor: pointer;
+            transition: color 0.3s ease;
         }
         
         .hex-popup-close:hover {
-            color: #fff;
+            color: #667eea;
         }
         
         .hex-popup h2 {
             margin-top: 0;
-            color: #ff6b6b;
-            border-bottom: 1px solid #4a4a6a;
-            padding-bottom: 10px;
+            color: #2c3e50;
+            border-bottom: 2px solid #ecf0f1;
+            padding-bottom: 15px;
+            font-size: 1.5em;
+            font-weight: 600;
         }
         
         .hex-popup-actions {
-            margin-top: 20px;
+            margin-top: 25px;
             text-align: right;
+            padding-top: 20px;
+            border-top: 1px solid #ecf0f1;
         }
         
         .hex-popup-actions button {
-            background: #4a4a6a;
+            background: #667eea;
             color: white;
             border: none;
-            padding: 8px 16px;
-            border-radius: 4px;
+            padding: 10px 20px;
+            border-radius: 8px;
             cursor: pointer;
+            font-size: 1em;
+            font-weight: 500;
+            margin-left: 10px;
+            transition: all 0.3s ease;
+            box-shadow: 0 2px 5px rgba(0, 0, 0, 0.1);
         }
         
         .hex-popup-actions button:hover {
-            background: #6a6a8a;
+            background: #5a67d8;
+            transform: translateY(-1px);
+            box-shadow: 0 4px 12px rgba(0, 0, 0, 0.15);
         }
         
-        /* Enhanced Hex Popup Styles */
-        .hex-popup-tabs {
-            display: flex;
-            margin-bottom: 20px;
-            border-bottom: 2px solid #4a4a6a;
-        }
-        
-        .hex-tab {
-            background: transparent;
-            color: #aaa;
-            border: none;
-            padding: 10px 20px;
-            cursor: pointer;
-            border-bottom: 3px solid transparent;
-            transition: all 0.3s ease;
-        }
-        
-        .hex-tab.active {
-            color: #ff6b6b;
-            border-bottom-color: #ff6b6b;
-        }
-        
-        .hex-tab:hover {
-            color: #fff;
-        }
-        
+        /* Section Styling */
         .hex-section {
-            display: none;
+            margin-bottom: 30px;
+            padding: 20px;
+            background: rgba(255, 255, 255, 0.7);
+            border-radius: 10px;
+            border: 1px solid rgba(255, 255, 255, 0.3);
         }
         
-        .hex-section.active {
-            display: block;
+        .hex-section:last-of-type {
+            margin-bottom: 0;
+        }
+        
+        .section-title {
+            color: #667eea;
+            font-size: 1.3em;
+            font-weight: 600;
+            margin: 0 0 20px 0;
+            padding-bottom: 10px;
+            border-bottom: 2px solid #667eea;
+        }
+        
+        .gm-only {
+            border-left: 4px solid #667eea;
         }
         
         .hex-images-container {
@@ -205,9 +212,10 @@ $isGM = ($user === 'GM');
         }
         
         .hex-images-container h3 {
-            color: #ff6b6b;
-            margin-bottom: 10px;
+            color: #34495e;
+            margin-bottom: 15px;
             font-size: 16px;
+            font-weight: 600;
         }
         
         .hex-image-upload {
@@ -215,26 +223,32 @@ $isGM = ($user === 'GM');
         }
         
         .hex-image-upload .upload-btn {
-            background: #4a4a6a;
+            background: #667eea;
             color: white;
             border: none;
             padding: 8px 16px;
-            border-radius: 4px;
+            border-radius: 6px;
             cursor: pointer;
+            font-weight: 500;
+            transition: all 0.3s ease;
+            box-shadow: 0 2px 4px rgba(0, 0, 0, 0.1);
         }
         
         .hex-image-upload .upload-btn:hover {
-            background: #6a6a8a;
+            background: #5a67d8;
+            transform: translateY(-1px);
+            box-shadow: 0 4px 8px rgba(0, 0, 0, 0.15);
         }
         
         .hex-images-gallery {
             display: grid;
             grid-template-columns: repeat(auto-fill, minmax(80px, 1fr));
-            gap: 10px;
+            gap: 12px;
             min-height: 100px;
-            padding: 10px;
-            background: rgba(0, 0, 0, 0.3);
-            border-radius: 5px;
+            padding: 15px;
+            background: rgba(255, 255, 255, 0.8);
+            border-radius: 8px;
+            border: 2px solid #ecf0f1;
         }
         
         .hex-images-gallery.single-image {
@@ -245,14 +259,16 @@ $isGM = ($user === 'GM');
         .hex-image-thumb {
             position: relative;
             aspect-ratio: 1;
-            border-radius: 4px;
+            border-radius: 6px;
             overflow: hidden;
             cursor: pointer;
-            transition: transform 0.2s ease;
+            transition: all 0.3s ease;
+            box-shadow: 0 2px 8px rgba(0, 0, 0, 0.1);
         }
         
         .hex-image-thumb:hover {
-            transform: scale(1.05);
+            transform: translateY(-2px);
+            box-shadow: 0 4px 16px rgba(0, 0, 0, 0.15);
         }
         
         .hex-image-thumb img {
@@ -262,61 +278,71 @@ $isGM = ($user === 'GM');
         }
         
         .hex-notes-container h3 {
-            color: #ff6b6b;
-            margin-bottom: 10px;
+            color: #34495e;
+            margin-bottom: 15px;
             font-size: 16px;
+            font-weight: 600;
         }
         
         .notes-controls {
             display: flex;
             align-items: center;
-            gap: 10px;
-            margin-bottom: 10px;
+            gap: 12px;
+            margin-bottom: 12px;
         }
         
         .edit-btn {
-            background: #4a4a6a;
+            background: #667eea;
             color: white;
             border: none;
-            padding: 5px 12px;
-            border-radius: 3px;
+            padding: 6px 14px;
+            border-radius: 6px;
             cursor: pointer;
-            font-size: 12px;
+            font-size: 13px;
+            font-weight: 500;
+            transition: all 0.3s ease;
+            box-shadow: 0 2px 4px rgba(0, 0, 0, 0.1);
         }
         
         .edit-btn:hover {
-            background: #6a6a8a;
+            background: #5a67d8;
+            transform: translateY(-1px);
+            box-shadow: 0 3px 6px rgba(0, 0, 0, 0.15);
         }
         
         .edit-btn.editing {
-            background: #ff6b6b;
+            background: #e74c3c;
         }
         
         .edit-status {
-            font-size: 12px;
-            color: #aaa;
+            font-size: 13px;
+            color: #666;
+            font-weight: 500;
         }
         
         .hex-notes {
             width: 100%;
             min-height: 120px;
-            background: rgba(0, 0, 0, 0.3);
-            color: #eee;
-            border: 1px solid #4a4a6a;
-            border-radius: 4px;
-            padding: 10px;
+            background: rgba(255, 255, 255, 0.9);
+            color: #2c3e50;
+            border: 2px solid #ecf0f1;
+            border-radius: 8px;
+            padding: 12px;
             resize: vertical;
             font-family: inherit;
+            transition: border-color 0.3s ease, box-shadow 0.3s ease;
         }
         
         .hex-notes[readonly] {
-            background: rgba(0, 0, 0, 0.1);
+            background: rgba(255, 255, 255, 0.6);
             cursor: not-allowed;
+            color: #666;
         }
         
         .hex-notes:focus {
             outline: none;
-            border-color: #ff6b6b;
+            border-color: #667eea;
+            box-shadow: 0 0 0 3px rgba(102, 126, 234, 0.1);
         }
         
         /* Image Lightbox Styles */
@@ -326,11 +352,12 @@ $isGM = ($user === 'GM');
             left: 0;
             width: 100%;
             height: 100%;
-            background: rgba(0, 0, 0, 0.9);
+            background: rgba(0, 0, 0, 0.8);
             z-index: 2000;
             display: flex;
             justify-content: center;
             align-items: center;
+            backdrop-filter: blur(5px);
         }
         
         .lightbox-content {
@@ -344,20 +371,22 @@ $isGM = ($user === 'GM');
             position: absolute;
             top: -40px;
             right: 0;
-            font-size: 30px;
+            font-size: 32px;
             color: white;
             cursor: pointer;
             z-index: 2001;
+            transition: color 0.3s ease;
         }
         
         .lightbox-close:hover {
-            color: #ff6b6b;
+            color: #667eea;
         }
         
         #lightbox-image {
             max-width: 100%;
             max-height: calc(100vh - 100px);
-            border-radius: 5px;
+            border-radius: 10px;
+            box-shadow: 0 8px 32px rgba(0, 0, 0, 0.3);
         }
         
         .lightbox-actions {
@@ -365,21 +394,25 @@ $isGM = ($user === 'GM');
         }
         
         .lightbox-actions button {
-            background: #4a4a6a;
+            background: #667eea;
             color: white;
             border: none;
-            padding: 8px 16px;
-            border-radius: 4px;
+            padding: 10px 18px;
+            border-radius: 8px;
             cursor: pointer;
-            margin: 0 5px;
+            margin: 0 8px;
+            font-weight: 500;
+            transition: all 0.3s ease;
+            box-shadow: 0 2px 5px rgba(0, 0, 0, 0.2);
         }
         
         .lightbox-actions .delete-btn {
-            background: #dc3545;
+            background: #e74c3c;
         }
         
         .lightbox-actions button:hover {
-            opacity: 0.8;
+            transform: translateY(-1px);
+            box-shadow: 0 4px 12px rgba(0, 0, 0, 0.3);
         }
     </style>
 </head>
@@ -504,14 +537,29 @@ $isGM = ($user === 'GM');
             <span class="hex-popup-close" onclick="closeHexPopup()">&times;</span>
             <h2 id="hex-coords">Hex (0, 0)</h2>
             
-            <!-- Section Tabs -->
-            <div class="hex-popup-tabs">
-                <button class="hex-tab active" data-section="player" onclick="switchHexTab('player')">Player</button>
-                <button class="hex-tab" data-section="gm" onclick="switchHexTab('gm')" style="display: none;">GM</button>
+            <!-- GM Section (visible only to GM, shown first) -->
+            <div id="gm-section" class="hex-section gm-only" style="display: none;">
+                <h2 class="section-title">GM Section</h2>
+                <div class="hex-images-container">
+                    <h3>GM Images</h3>
+                    <div class="hex-image-upload">
+                        <button onclick="uploadHexImage('gm')" class="upload-btn">Upload Image</button>
+                        <input type="file" id="gm-image-upload" accept="image/*" style="display: none;">
+                    </div>
+                    <div id="gm-images" class="hex-images-gallery">
+                        <!-- Images will be populated here -->
+                    </div>
+                </div>
+                
+                <div class="hex-notes-container">
+                    <h3>GM Notes</h3>
+                    <textarea id="gm-notes" class="hex-notes" placeholder="Add GM notes about this hex..."></textarea>
+                </div>
             </div>
             
-            <!-- Player Section -->
-            <div id="player-section" class="hex-section active">
+            <!-- Player Section (visible to all users) -->
+            <div id="player-section" class="hex-section">
+                <h2 class="section-title">Player Section</h2>
                 <div class="hex-images-container">
                     <h3>Images</h3>
                     <div class="hex-image-upload">
@@ -530,25 +578,6 @@ $isGM = ($user === 'GM');
                         <span id="player-edit-status" class="edit-status"></span>
                     </div>
                     <textarea id="player-notes" class="hex-notes" placeholder="Add notes about this hex..." readonly></textarea>
-                </div>
-            </div>
-            
-            <!-- GM Section -->
-            <div id="gm-section" class="hex-section" style="display: none;">
-                <div class="hex-images-container">
-                    <h3>GM Images</h3>
-                    <div class="hex-image-upload">
-                        <button onclick="uploadHexImage('gm')" class="upload-btn">Upload Image</button>
-                        <input type="file" id="gm-image-upload" accept="image/*" style="display: none;">
-                    </div>
-                    <div id="gm-images" class="hex-images-gallery">
-                        <!-- Images will be populated here -->
-                    </div>
-                </div>
-                
-                <div class="hex-notes-container">
-                    <h3>GM Notes</h3>
-                    <textarea id="gm-notes" class="hex-notes" placeholder="Add GM notes about this hex..."></textarea>
                 </div>
             </div>
             

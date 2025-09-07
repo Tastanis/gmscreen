@@ -30,27 +30,24 @@ function initHexPopup() {
         handleImageUpload(e, 'gm');
     });
     
-    // Set up GM tab visibility
-    if (isGM) {
-        document.querySelector('[data-section="gm"]').style.display = 'block';
-    }
+    // Initialize section visibility
+    initializeSectionVisibility();
 }
 
 /**
- * Switch between Player and GM tabs
+ * Initialize section visibility based on user role
  */
-function switchHexTab(section) {
-    // Update tab buttons
-    document.querySelectorAll('.hex-tab').forEach(tab => {
-        tab.classList.remove('active');
-    });
-    document.querySelector(`[data-section="${section}"]`).classList.add('active');
+function initializeSectionVisibility() {
+    // GM section is only visible for GM users
+    const gmSection = document.getElementById('gm-section');
+    if (isGM) {
+        gmSection.style.display = 'block';
+    } else {
+        gmSection.style.display = 'none';
+    }
     
-    // Update sections
-    document.querySelectorAll('.hex-section').forEach(sec => {
-        sec.classList.remove('active');
-    });
-    document.getElementById(`${section}-section`).classList.add('active');
+    // Player section is always visible
+    document.getElementById('player-section').style.display = 'block';
 }
 
 /**
@@ -98,15 +95,17 @@ function populateHexData() {
     document.getElementById('player-notes').value = currentHexData.player.notes || '';
     
     // Populate GM section if user is GM
-    if (isGM && currentHexData.gm) {
+    if (isGM) {
+        // Ensure GM data exists
+        if (!currentHexData.gm) {
+            currentHexData.gm = { images: [], notes: '' };
+        }
         populateImages('gm', currentHexData.gm.images || []);
         document.getElementById('gm-notes').value = currentHexData.gm.notes || '';
-        
-        // Set GM tab as active by default for GMs
-        switchHexTab('gm');
-    } else {
-        switchHexTab('player');
     }
+    
+    // Initialize section visibility
+    initializeSectionVisibility();
     
     // Update edit lock status
     updateEditLockStatus();
