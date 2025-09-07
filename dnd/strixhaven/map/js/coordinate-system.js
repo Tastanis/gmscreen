@@ -123,7 +123,7 @@ class CoordinateSystem {
         
         // Enhanced debug logging for coordinate conversion testing
         if (window.DEBUG_COORDINATE_CONVERSION) {
-            console.log(`axialToPixel: (${q}, ${r}) -> adjustedQ=${adjustedQ}, adjustedR=${adjustedR} -> pixel (${x.toFixed(2)}, ${y.toFixed(2)})`);
+            console.log(`axialToPixel: (${q}, ${r}) -> pixel (${x.toFixed(2)}, ${y.toFixed(2)})`);
         }
         
         return { x, y };
@@ -159,7 +159,7 @@ class CoordinateSystem {
         }
         if (window.DEBUG_COORDINATE_CONVERSION) {
             console.log(`pixelToAxial: pixel (${x.toFixed(2)}, ${y.toFixed(2)}) -> adjustedX=${adjustedX.toFixed(2)}, adjustedY=${adjustedY.toFixed(2)}`);
-            console.log(`  -> prelimQ=${prelimQ.toFixed(4)}, prelimR=${prelimR.toFixed(4)} -> q=${q.toFixed(4)}, r=${r.toFixed(4)} -> rounded (${result.q}, ${result.r})`);
+            console.log(`  -> q=${q.toFixed(4)}, r=${r.toFixed(4)} -> rounded (${result.q}, ${result.r})`);
         }
         
         return result;
