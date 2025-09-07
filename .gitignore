@@ -64,6 +64,10 @@ pnpm-lock.yaml
 # Arcane Construction data
 /dnd/strixhaven/arcaneconstruction/data/
 
+# Hex map data - user-generated content
+/dnd/strixhaven/map/hex-data/
+/dnd/strixhaven/map/hex-images/
+
 # Backup directories
 **/backups/
 **/backup/
