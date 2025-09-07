@@ -12,8 +12,8 @@ class CoordinateSystemV2 {
         this.gridHeight = 60;
         
         // Grid origin - where hex (0,0) appears on canvas
-        this.originX = 100;
-        this.originY = 100;
+        this.originX = 0;
+        this.originY = 0;
     }
     
     /**

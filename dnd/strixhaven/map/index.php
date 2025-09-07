@@ -37,11 +37,7 @@ $isGM = ($user === 'GM');
             width: 100vw;
             height: 100vh;
             overflow: hidden;
-            /* Background image - purely decorative */
-            background-image: url('images/Strixhavenmap.png');
-            background-size: cover;
-            background-position: center;
-            background-repeat: no-repeat;
+            background: #1a1a2e;
         }
         
         #hex-canvas {

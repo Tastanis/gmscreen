@@ -31,12 +31,34 @@ class HexGridV2 {
             hoverStroke: 'rgba(255, 255, 100, 0.8)'
         };
         
+        // Background image
+        this.backgroundImage = null;
+        this.imageLoaded = false;
+        
+        // Load background image
+        this.loadBackgroundImage();
+        
         // Initialize grid
         this.initializeGrid();
         
         // Set up canvas size
         this.resizeCanvas();
         window.addEventListener('resize', () => this.resizeCanvas());
+    }
+    
+    /**
+     * Load the background image
+     */
+    loadBackgroundImage() {
+        this.backgroundImage = new Image();
+        this.backgroundImage.onload = () => {
+            this.imageLoaded = true;
+            this.render();
+        };
+        this.backgroundImage.onerror = () => {
+            console.error('Failed to load background image');
+        };
+        this.backgroundImage.src = 'images/Strixhavenmap.png';
     }
     
     /**
@@ -81,6 +103,11 @@ class HexGridV2 {
         this.ctx.translate(this.viewport.offsetX, this.viewport.offsetY);
         this.ctx.scale(this.viewport.scale, this.viewport.scale);
         
+        // Draw background image if loaded
+        if (this.imageLoaded && this.backgroundImage) {
+            this.drawBackgroundImage();
+        }
+        
         // Draw all hexes
         this.drawHexGrid();
         
@@ -91,6 +118,30 @@ class HexGridV2 {
         
         // Restore context
         this.ctx.restore();
+    }
+    
+    /**
+     * Draw the background image sized for 36x36 hexes
+     */
+    drawBackgroundImage() {
+        // Calculate dimensions for 36x36 hexes
+        const hexSize = this.coordSystem.hexSize;
+        
+        // Width: 36 hexes * 1.5 * hexSize (accounting for hex overlap)
+        const imageWidth = 36 * 1.5 * hexSize;
+        
+        // Height: 36 hexes * sqrt(3) * hexSize
+        const imageHeight = 36 * Math.sqrt(3) * hexSize;
+        
+        // Get pixel position of hex (0,20) - where image should start
+        const imagePosition = this.coordSystem.hexToPixel(0, 20);
+        
+        // Draw image at hex (0,20) position
+        this.ctx.drawImage(
+            this.backgroundImage,
+            imagePosition.x, imagePosition.y,  // Position at hex (0,20)
+            imageWidth, imageHeight  // Scale to cover 36x36 hexes
+        );
     }
     
     /**
