@@ -14,8 +14,18 @@ class HexGridV2 {
         // All hexes in the grid
         this.hexes = new Map();
         
+        // Hex status data (which hexes have data)
+        this.hexStatus = new Map();
+        
         // Current highlighted hex
         this.hoveredHex = null;
+        
+        // Copy mode state
+        this.copyMode = {
+            active: false,
+            sourceHex: null,
+            targetHex: null
+        };
         
         // Viewport for panning/zooming
         this.viewport = {
@@ -28,7 +38,12 @@ class HexGridV2 {
         this.colors = {
             grid: 'rgba(100, 100, 150, 0.3)',
             hover: 'rgba(255, 255, 100, 0.4)',
-            hoverStroke: 'rgba(255, 255, 100, 0.8)'
+            hoverStroke: 'rgba(255, 255, 100, 0.8)',
+            playerDataDot: 'rgba(52, 152, 219, 0.8)',  // Blue for player data
+            gmDataDot: 'rgba(231, 76, 60, 0.8)',       // Red for GM data
+            mixedDataDot: 'rgba(155, 89, 182, 0.8)',   // Purple for both
+            copySource: 'rgba(46, 204, 113, 0.6)',     // Green for copy source
+            copyTarget: 'rgba(241, 196, 15, 0.6)'      // Yellow for copy target preview
         };
         
         // Background image
@@ -44,6 +59,9 @@ class HexGridV2 {
         // Set up canvas size
         this.resizeCanvas();
         window.addEventListener('resize', () => this.resizeCanvas());
+        
+        // Load hex status data
+        this.loadHexStatus();
     }
     
     /**
@@ -80,6 +98,35 @@ class HexGridV2 {
     }
     
     /**
+     * Load hex status data from server
+     */
+    async loadHexStatus() {
+        try {
+            const response = await fetch('hex-data-handler.php', {
+                method: 'POST',
+                headers: {
+                    'Content-Type': 'application/x-www-form-urlencoded',
+                },
+                body: 'action=get_hex_status'
+            });
+            
+            const data = await response.json();
+            if (data.success) {
+                this.hexStatus.clear();
+                for (const [coords, status] of Object.entries(data.hexStatus)) {
+                    this.hexStatus.set(coords, status);
+                }
+                console.log(`Loaded status for ${this.hexStatus.size} hexes`);
+                this.render(); // Re-render to show indicators
+            } else {
+                console.error('Failed to load hex status:', data.error);
+            }
+        } catch (error) {
+            console.error('Error loading hex status:', error);
+        }
+    }
+    
+    /**
      * Resize canvas to fit container
      */
     resizeCanvas() {
@@ -110,6 +157,11 @@ class HexGridV2 {
         
         // Draw all hexes
         this.drawHexGrid();
+        
+        // Draw copy mode highlights
+        if (this.copyMode.active) {
+            this.drawCopyModeHighlights();
+        }
         
         // Draw hovered hex if any
         if (this.hoveredHex) {
@@ -154,6 +206,9 @@ class HexGridV2 {
         for (const hex of this.hexes.values()) {
             const vertices = this.coordSystem.getHexVertices(hex.q, hex.r);
             this.drawHexagon(vertices);
+            
+            // Draw data indicator if hex has data
+            this.drawDataIndicator(hex.q, hex.r);
         }
     }
     
@@ -194,6 +249,52 @@ class HexGridV2 {
             this.ctx.lineTo(vertices[i].x, vertices[i].y);
         }
         this.ctx.closePath();
+        this.ctx.stroke();
+    }
+    
+    /**
+     * Draw data indicator dot for hex if it has data
+     */
+    drawDataIndicator(q, r) {
+        const coords = `${q},${r}`;
+        const status = this.hexStatus.get(coords);
+        
+        if (!status) return; // No data for this hex
+        
+        // Determine indicator color based on data type
+        let indicatorColor;
+        if (status.hasPlayerData && status.hasGMData) {
+            indicatorColor = this.colors.mixedDataDot;
+        } else if (status.hasPlayerData) {
+            indicatorColor = this.colors.playerDataDot;
+        } else if (status.hasGMData) {
+            indicatorColor = this.colors.gmDataDot;
+        } else {
+            return; // No data
+        }
+        
+        // Get hex center position
+        const center = this.coordSystem.hexToPixel(q, r);
+        
+        // Draw indicator dot in upper-right of hex
+        const dotRadius = 3;
+        const offsetX = this.coordSystem.hexSize * 0.6;
+        const offsetY = -this.coordSystem.hexSize * 0.6;
+        
+        this.ctx.fillStyle = indicatorColor;
+        this.ctx.beginPath();
+        this.ctx.arc(
+            center.x + offsetX,
+            center.y + offsetY,
+            dotRadius,
+            0,
+            2 * Math.PI
+        );
+        this.ctx.fill();
+        
+        // Add white border to make it more visible
+        this.ctx.strokeStyle = 'rgba(255, 255, 255, 0.8)';
+        this.ctx.lineWidth = 1;
         this.ctx.stroke();
     }
     
@@ -246,7 +347,12 @@ class HexGridV2 {
         const hex = this.coordSystem.pixelToHex(worldX, worldY);
         
         if (this.coordSystem.isValidHex(hex.q, hex.r)) {
-            this.showHexPopup(hex.q, hex.r);
+            // Handle copy mode clicks
+            if (this.copyMode.active) {
+                this.handleCopyModeClick(hex.q, hex.r);
+            } else {
+                this.showHexPopup(hex.q, hex.r);
+            }
         }
     }
     
@@ -280,6 +386,114 @@ class HexGridV2 {
         this.viewport.offsetX = offsetX;
         this.viewport.offsetY = offsetY;
         this.render();
+    }
+    
+    /**
+     * Refresh hex status data and re-render
+     */
+    refreshHexStatus() {
+        this.loadHexStatus();
+    }
+    
+    /**
+     * Start copy mode - first click selects source hex
+     */
+    startCopyMode() {
+        this.copyMode.active = true;
+        this.copyMode.sourceHex = null;
+        this.copyMode.targetHex = null;
+        this.render();
+        console.log('Copy mode started - click source hex');
+    }
+    
+    /**
+     * End copy mode
+     */
+    endCopyMode() {
+        this.copyMode.active = false;
+        this.copyMode.sourceHex = null;
+        this.copyMode.targetHex = null;
+        this.render();
+    }
+    
+    /**
+     * Handle clicks during copy mode
+     */
+    handleCopyModeClick(q, r) {
+        if (!this.copyMode.sourceHex) {
+            // First click - select source hex
+            this.copyMode.sourceHex = { q, r };
+            this.render();
+            console.log(`Source hex selected: (${q}, ${r}) - now click target hex`);
+        } else if (this.copyMode.sourceHex.q === q && this.copyMode.sourceHex.r === r) {
+            // Clicking same hex - cancel copy mode
+            this.endCopyMode();
+            console.log('Copy mode cancelled');
+        } else {
+            // Second click - select target hex and show copy options
+            this.copyMode.targetHex = { q, r };
+            this.showCopyOptionsDialog();
+        }
+    }
+    
+    /**
+     * Show copy options dialog
+     */
+    showCopyOptionsDialog() {
+        const source = this.copyMode.sourceHex;
+        const target = this.copyMode.targetHex;
+        
+        // Trigger the copy dialog from the popup system
+        if (window.showCopyDialog) {
+            window.showCopyDialog(source.q, source.r, target.q, target.r);
+        }
+    }
+    
+    /**
+     * Draw copy mode highlights
+     */
+    drawCopyModeHighlights() {
+        // Draw source hex highlight
+        if (this.copyMode.sourceHex) {
+            const vertices = this.coordSystem.getHexVertices(
+                this.copyMode.sourceHex.q,
+                this.copyMode.sourceHex.r
+            );
+            
+            this.ctx.fillStyle = this.colors.copySource;
+            this.ctx.beginPath();
+            this.ctx.moveTo(vertices[0].x, vertices[0].y);
+            for (let i = 1; i < vertices.length; i++) {
+                this.ctx.lineTo(vertices[i].x, vertices[i].y);
+            }
+            this.ctx.closePath();
+            this.ctx.fill();
+            
+            this.ctx.strokeStyle = 'rgba(46, 204, 113, 1)';
+            this.ctx.lineWidth = 3;
+            this.ctx.stroke();
+        }
+        
+        // Draw target hex highlight
+        if (this.copyMode.targetHex) {
+            const vertices = this.coordSystem.getHexVertices(
+                this.copyMode.targetHex.q,
+                this.copyMode.targetHex.r
+            );
+            
+            this.ctx.fillStyle = this.colors.copyTarget;
+            this.ctx.beginPath();
+            this.ctx.moveTo(vertices[0].x, vertices[0].y);
+            for (let i = 1; i < vertices.length; i++) {
+                this.ctx.lineTo(vertices[i].x, vertices[i].y);
+            }
+            this.ctx.closePath();
+            this.ctx.fill();
+            
+            this.ctx.strokeStyle = 'rgba(241, 196, 15, 1)';
+            this.ctx.lineWidth = 3;
+            this.ctx.stroke();
+        }
     }
 }
 

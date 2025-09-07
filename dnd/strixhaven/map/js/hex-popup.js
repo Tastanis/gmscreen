@@ -173,6 +173,11 @@ async function handleImageUpload(event, section) {
         if (result.success) {
             // Reload hex data to show new image
             await loadHexData(currentHex.q, currentHex.r);
+            
+            // Refresh hex visual indicators
+            if (window.mapInterface && window.mapInterface.hexGrid) {
+                window.mapInterface.hexGrid.refreshHexStatus();
+            }
         } else {
             alert('Failed to upload image: ' + result.error);
         }
@@ -233,6 +238,11 @@ async function deleteCurrentImage() {
             closeLightbox();
             // Reload hex data to reflect deletion
             await loadHexData(currentHex.q, currentHex.r);
+            
+            // Refresh hex visual indicators
+            if (window.mapInterface && window.mapInterface.hexGrid) {
+                window.mapInterface.hexGrid.refreshHexStatus();
+            }
         } else {
             alert('Failed to delete image: ' + result.error);
         }
@@ -348,6 +358,11 @@ async function saveHexData() {
         await saveNotes('gm');
     }
     
+    // Refresh hex visual indicators
+    if (window.mapInterface && window.mapInterface.hexGrid) {
+        window.mapInterface.hexGrid.refreshHexStatus();
+    }
+    
     alert('Hex data saved!');
 }
 
@@ -379,6 +394,329 @@ async function saveNotes(section) {
         console.error('Error saving notes:', error);
     }
 }
+
+/**
+ * Reset hex data (GM only)
+ */
+async function resetHexData() {
+    if (!isGM) {
+        alert('Only GM can reset hex data');
+        return;
+    }
+    
+    // Create custom confirmation dialog
+    const confirmationHTML = `
+        <div id="reset-confirmation" style="position: fixed; top: 0; left: 0; width: 100%; height: 100%; background: rgba(0, 0, 0, 0.7); z-index: 3000; display: flex; justify-content: center; align-items: center; backdrop-filter: blur(5px);">
+            <div style="background: white; padding: 30px; border-radius: 15px; box-shadow: 0 15px 35px rgba(0, 0, 0, 0.3); max-width: 500px; text-align: center; color: #2c3e50;">
+                <h3 style="color: #e74c3c; margin-top: 0;">⚠️ Warning: Reset Hex Data</h3>
+                <p style="margin: 20px 0; font-size: 16px; line-height: 1.5;">
+                    This will permanently delete <strong>ALL data</strong> for hex (${currentHex.q}, ${currentHex.r}), including:
+                </p>
+                <ul style="text-align: left; margin: 20px 0; padding-left: 20px;">
+                    <li>All player notes and images</li>
+                    <li>All GM notes and images</li>
+                    <li>All uploaded files</li>
+                </ul>
+                <p style="color: #e74c3c; font-weight: bold; margin: 20px 0;">
+                    This action cannot be undone!
+                </p>
+                <div style="margin-top: 30px;">
+                    <button onclick="confirmReset()" style="background: #e74c3c; color: white; border: none; padding: 12px 24px; border-radius: 8px; cursor: pointer; margin: 0 10px; font-weight: 500; font-size: 16px;">
+                        Yes, Reset Everything
+                    </button>
+                    <button onclick="cancelReset()" style="background: #95a5a6; color: white; border: none; padding: 12px 24px; border-radius: 8px; cursor: pointer; margin: 0 10px; font-weight: 500; font-size: 16px;">
+                        Cancel
+                    </button>
+                </div>
+            </div>
+        </div>
+    `;
+    
+    // Add confirmation dialog to page
+    document.body.insertAdjacentHTML('beforeend', confirmationHTML);
+}
+
+/**
+ * Confirm hex reset
+ */
+async function confirmReset() {
+    const formData = new FormData();
+    formData.append('action', 'reset_hex');
+    formData.append('q', currentHex.q);
+    formData.append('r', currentHex.r);
+    
+    try {
+        const response = await fetch('hex-data-handler.php', {
+            method: 'POST',
+            body: formData
+        });
+        
+        const result = await response.json();
+        if (result.success) {
+            // Remove confirmation dialog
+            document.getElementById('reset-confirmation').remove();
+            
+            // Close hex popup
+            closeHexPopup();
+            
+            // Refresh hex visual indicators
+            if (window.mapInterface && window.mapInterface.hexGrid) {
+                window.mapInterface.hexGrid.refreshHexStatus();
+            }
+            
+            alert('Hex data has been reset successfully!');
+        } else {
+            alert('Failed to reset hex data: ' + result.error);
+        }
+    } catch (error) {
+        console.error('Error resetting hex data:', error);
+        alert('Error resetting hex data');
+    }
+}
+
+/**
+ * Cancel hex reset
+ */
+function cancelReset() {
+    document.getElementById('reset-confirmation').remove();
+}
+
+/**
+ * Start copy mode
+ */
+function startCopyMode() {
+    if (!isGM) {
+        alert('Only GM can copy hex data');
+        return;
+    }
+    
+    // Close current popup
+    closeHexPopup();
+    
+    // Start copy mode on hex grid
+    if (window.mapInterface && window.mapInterface.hexGrid) {
+        window.mapInterface.hexGrid.startCopyMode();
+        
+        // Show instructions
+        showCopyInstructions();
+    }
+}
+
+/**
+ * Show copy instructions overlay
+ */
+function showCopyInstructions() {
+    const instructionsHTML = `
+        <div id="copy-instructions" style="position: fixed; top: 20px; left: 50%; transform: translateX(-50%); background: rgba(46, 204, 113, 0.95); color: white; padding: 15px 25px; border-radius: 10px; z-index: 2500; font-weight: 500; text-align: center; box-shadow: 0 4px 12px rgba(0, 0, 0, 0.3);">
+            <div style="font-size: 16px; margin-bottom: 8px;">📋 Copy Mode Active</div>
+            <div style="font-size: 14px;">1. Click source hex with data to copy</div>
+            <div style="font-size: 14px;">2. Click target hex to receive the data</div>
+            <div style="margin-top: 10px;">
+                <button onclick="cancelCopyMode()" style="background: rgba(255, 255, 255, 0.2); border: 1px solid white; color: white; padding: 5px 12px; border-radius: 5px; cursor: pointer; font-size: 12px;">
+                    Cancel (ESC)
+                </button>
+            </div>
+        </div>
+    `;
+    
+    document.body.insertAdjacentHTML('beforeend', instructionsHTML);
+    
+    // Listen for ESC key
+    document.addEventListener('keydown', handleCopyModeEscape);
+}
+
+/**
+ * Handle ESC key during copy mode
+ */
+function handleCopyModeEscape(event) {
+    if (event.key === 'Escape') {
+        cancelCopyMode();
+    }
+}
+
+/**
+ * Cancel copy mode
+ */
+function cancelCopyMode() {
+    // Remove instructions
+    const instructions = document.getElementById('copy-instructions');
+    if (instructions) {
+        instructions.remove();
+    }
+    
+    // Remove ESC key listener
+    document.removeEventListener('keydown', handleCopyModeEscape);
+    
+    // End copy mode on hex grid
+    if (window.mapInterface && window.mapInterface.hexGrid) {
+        window.mapInterface.hexGrid.endCopyMode();
+    }
+}
+
+/**
+ * Show copy dialog (called from hex grid)
+ */
+function showCopyDialog(sourceQ, sourceR, targetQ, targetR) {
+    // Remove instructions
+    const instructions = document.getElementById('copy-instructions');
+    if (instructions) {
+        instructions.remove();
+    }
+    
+    const copyDialogHTML = `
+        <div id="copy-dialog" style="position: fixed; top: 0; left: 0; width: 100%; height: 100%; background: rgba(0, 0, 0, 0.7); z-index: 3000; display: flex; justify-content: center; align-items: center; backdrop-filter: blur(5px);">
+            <div style="background: white; padding: 30px; border-radius: 15px; box-shadow: 0 15px 35px rgba(0, 0, 0, 0.3); max-width: 500px; text-align: center; color: #2c3e50;">
+                <h3 style="color: #2ecc71; margin-top: 0;">📋 Copy Hex Data</h3>
+                <p style="margin: 20px 0; font-size: 16px;">
+                    Copy data from <strong>Hex (${sourceQ}, ${sourceR})</strong> to <strong>Hex (${targetQ}, ${targetR})</strong>
+                </p>
+                
+                <div style="text-align: left; margin: 25px 0;">
+                    <h4 style="margin-bottom: 15px;">What to copy:</h4>
+                    
+                    <label style="display: block; margin-bottom: 12px; font-size: 14px;">
+                        <input type="checkbox" id="copy-player-data" checked style="margin-right: 8px;">
+                        Player Data (visible to all players)
+                    </label>
+                    
+                    <div style="margin-left: 20px; margin-bottom: 12px;">
+                        <label style="display: block; margin-bottom: 8px; font-size: 13px; color: #666;">
+                            <input type="checkbox" id="copy-player-notes" checked style="margin-right: 8px;">
+                            Player Notes
+                        </label>
+                        <label style="display: block; font-size: 13px; color: #666;">
+                            <input type="checkbox" id="copy-player-images" checked style="margin-right: 8px;">
+                            Player Images
+                        </label>
+                    </div>
+                    
+                    <label style="display: block; margin-bottom: 12px; font-size: 14px;">
+                        <input type="checkbox" id="copy-gm-data" checked style="margin-right: 8px;">
+                        GM Data (visible only to GM)
+                    </label>
+                    
+                    <div style="margin-left: 20px;">
+                        <label style="display: block; margin-bottom: 8px; font-size: 13px; color: #666;">
+                            <input type="checkbox" id="copy-gm-notes" checked style="margin-right: 8px;">
+                            GM Notes
+                        </label>
+                        <label style="display: block; font-size: 13px; color: #666;">
+                            <input type="checkbox" id="copy-gm-images" checked style="margin-right: 8px;">
+                            GM Images
+                        </label>
+                    </div>
+                </div>
+                
+                <div style="margin-top: 30px;">
+                    <button onclick="executeCopy(${sourceQ}, ${sourceR}, ${targetQ}, ${targetR})" style="background: #2ecc71; color: white; border: none; padding: 12px 24px; border-radius: 8px; cursor: pointer; margin: 0 10px; font-weight: 500; font-size: 16px;">
+                        Copy Data
+                    </button>
+                    <button onclick="cancelCopy()" style="background: #95a5a6; color: white; border: none; padding: 12px 24px; border-radius: 8px; cursor: pointer; margin: 0 10px; font-weight: 500; font-size: 16px;">
+                        Cancel
+                    </button>
+                </div>
+            </div>
+        </div>
+    `;
+    
+    document.body.insertAdjacentHTML('beforeend', copyDialogHTML);
+    
+    // Update checkbox dependencies
+    const playerDataCheck = document.getElementById('copy-player-data');
+    const playerNotesCheck = document.getElementById('copy-player-notes');
+    const playerImagesCheck = document.getElementById('copy-player-images');
+    const gmDataCheck = document.getElementById('copy-gm-data');
+    const gmNotesCheck = document.getElementById('copy-gm-notes');
+    const gmImagesCheck = document.getElementById('copy-gm-images');
+    
+    playerDataCheck.addEventListener('change', function() {
+        playerNotesCheck.disabled = !this.checked;
+        playerImagesCheck.disabled = !this.checked;
+        if (!this.checked) {
+            playerNotesCheck.checked = false;
+            playerImagesCheck.checked = false;
+        } else {
+            playerNotesCheck.checked = true;
+            playerImagesCheck.checked = true;
+        }
+    });
+    
+    gmDataCheck.addEventListener('change', function() {
+        gmNotesCheck.disabled = !this.checked;
+        gmImagesCheck.disabled = !this.checked;
+        if (!this.checked) {
+            gmNotesCheck.checked = false;
+            gmImagesCheck.checked = false;
+        } else {
+            gmNotesCheck.checked = true;
+            gmImagesCheck.checked = true;
+        }
+    });
+}
+
+/**
+ * Execute the copy operation
+ */
+async function executeCopy(sourceQ, sourceR, targetQ, targetR) {
+    const copyPlayerData = document.getElementById('copy-player-data').checked;
+    const copyPlayerNotes = document.getElementById('copy-player-notes').checked;
+    const copyPlayerImages = document.getElementById('copy-player-images').checked;
+    const copyGMData = document.getElementById('copy-gm-data').checked;
+    const copyGMNotes = document.getElementById('copy-gm-notes').checked;
+    const copyGMImages = document.getElementById('copy-gm-images').checked;
+    
+    const formData = new FormData();
+    formData.append('action', 'duplicate_hex');
+    formData.append('source_q', sourceQ);
+    formData.append('source_r', sourceR);
+    formData.append('q', targetQ);
+    formData.append('r', targetR);
+    formData.append('copy_player_data', copyPlayerData);
+    formData.append('copy_gm_data', copyGMData);
+    formData.append('copy_notes', copyPlayerNotes || copyGMNotes);
+    formData.append('copy_images', copyPlayerImages || copyGMImages);
+    
+    try {
+        const response = await fetch('hex-data-handler.php', {
+            method: 'POST',
+            body: formData
+        });
+        
+        const result = await response.json();
+        if (result.success) {
+            // Remove copy dialog
+            document.getElementById('copy-dialog').remove();
+            
+            // End copy mode
+            if (window.mapInterface && window.mapInterface.hexGrid) {
+                window.mapInterface.hexGrid.endCopyMode();
+                window.mapInterface.hexGrid.refreshHexStatus();
+            }
+            
+            alert(`Data successfully copied from hex (${sourceQ}, ${sourceR}) to hex (${targetQ}, ${targetR})!`);
+        } else {
+            alert('Failed to copy hex data: ' + result.error);
+        }
+    } catch (error) {
+        console.error('Error copying hex data:', error);
+        alert('Error copying hex data');
+    }
+}
+
+/**
+ * Cancel copy dialog
+ */
+function cancelCopy() {
+    document.getElementById('copy-dialog').remove();
+    
+    // End copy mode
+    if (window.mapInterface && window.mapInterface.hexGrid) {
+        window.mapInterface.hexGrid.endCopyMode();
+    }
+}
+
+// Make showCopyDialog globally available
+window.showCopyDialog = showCopyDialog;
 
 /**
  * Close hex popup and cleanup

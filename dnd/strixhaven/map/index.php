@@ -555,6 +555,15 @@ $isGM = ($user === 'GM');
                     <h3>GM Notes</h3>
                     <textarea id="gm-notes" class="hex-notes" placeholder="Add GM notes about this hex..."></textarea>
                 </div>
+                
+                <div class="gm-actions" style="margin-top: 20px; padding-top: 15px; border-top: 1px solid #ecf0f1;">
+                    <button onclick="startCopyMode()" class="copy-btn" style="background: #2ecc71; color: white; border: none; padding: 8px 16px; border-radius: 6px; cursor: pointer; font-weight: 500; margin-right: 10px;">
+                        Copy Data From Another Hex
+                    </button>
+                    <button onclick="resetHexData()" class="reset-btn" style="background: #e74c3c; color: white; border: none; padding: 8px 16px; border-radius: 6px; cursor: pointer; font-weight: 500;">
+                        Reset Hex Data
+                    </button>
+                </div>
             </div>
             
             <!-- Player Section (visible to all users) -->

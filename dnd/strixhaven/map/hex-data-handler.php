@@ -260,6 +260,154 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
             }
             break;
             
+        case 'get_hex_status':
+            $hexStatus = [];
+            
+            // Scan hex-data directory for files
+            $hexDataFiles = glob($hexDataDir . '/hex-*.json');
+            
+            foreach ($hexDataFiles as $file) {
+                $filename = basename($file);
+                if (preg_match('/hex-(-?\d+)-(-?\d+)\.json/', $filename, $matches)) {
+                    $q = (int)$matches[1];
+                    $r = (int)$matches[2];
+                    
+                    $data = json_decode(file_get_contents($file), true);
+                    if ($data) {
+                        $hasPlayerData = !empty($data['player']['notes']) || !empty($data['player']['images']);
+                        $hasGMData = !empty($data['gm']['notes']) || !empty($data['gm']['images']);
+                        
+                        // For non-GM users, only show status if there's player data
+                        if ($isGM || $hasPlayerData) {
+                            $hexStatus["$q,$r"] = [
+                                'hasPlayerData' => $hasPlayerData,
+                                'hasGMData' => $hasGMData
+                            ];
+                        }
+                    }
+                }
+            }
+            
+            echo json_encode(['success' => true, 'hexStatus' => $hexStatus]);
+            break;
+            
+        case 'reset_hex':
+            // GM-only action
+            if (!$isGM) {
+                echo json_encode(['success' => false, 'error' => 'GM access required']);
+                break;
+            }
+            
+            $hexData = loadHexData($q, $r);
+            
+            // Delete all associated image files
+            if (isset($hexData['player']['images'])) {
+                foreach ($hexData['player']['images'] as $image) {
+                    $filepath = "hex-images/" . $image['filename'];
+                    if (file_exists($filepath)) {
+                        unlink($filepath);
+                    }
+                }
+            }
+            
+            if (isset($hexData['gm']['images'])) {
+                foreach ($hexData['gm']['images'] as $image) {
+                    $filepath = "hex-images/" . $image['filename'];
+                    if (file_exists($filepath)) {
+                        unlink($filepath);
+                    }
+                }
+            }
+            
+            // Delete hex data file
+            $filePath = getHexDataPath($q, $r);
+            if (file_exists($filePath)) {
+                unlink($filePath);
+            }
+            
+            echo json_encode(['success' => true]);
+            break;
+            
+        case 'duplicate_hex':
+            // GM-only action
+            if (!$isGM) {
+                echo json_encode(['success' => false, 'error' => 'GM access required']);
+                break;
+            }
+            
+            $sourceQ = (int)($_POST['source_q'] ?? 0);
+            $sourceR = (int)($_POST['source_r'] ?? 0);
+            $copyImages = ($_POST['copy_images'] ?? 'true') === 'true';
+            $copyNotes = ($_POST['copy_notes'] ?? 'true') === 'true';
+            $copyPlayerData = ($_POST['copy_player_data'] ?? 'true') === 'true';
+            $copyGMData = ($_POST['copy_gm_data'] ?? 'true') === 'true';
+            
+            // Load source hex data
+            $sourceData = loadHexData($sourceQ, $sourceR);
+            $targetData = loadHexData($q, $r);
+            
+            // Copy player data if requested
+            if ($copyPlayerData) {
+                if ($copyNotes) {
+                    $targetData['player']['notes'] = $sourceData['player']['notes'] ?? '';
+                }
+                
+                if ($copyImages && !empty($sourceData['player']['images'])) {
+                    foreach ($sourceData['player']['images'] as $image) {
+                        // Copy image file
+                        $sourceFile = "hex-images/" . $image['filename'];
+                        if (file_exists($sourceFile)) {
+                            $extension = pathinfo($image['filename'], PATHINFO_EXTENSION);
+                            $newFilename = "hex-{$q}-{$r}-player-" . time() . "-" . rand(1000, 9999) . "." . $extension;
+                            $targetFile = "hex-images/" . $newFilename;
+                            
+                            if (copy($sourceFile, $targetFile)) {
+                                $newImage = $image;
+                                $newImage['filename'] = $newFilename;
+                                $newImage['uploaded_by'] = $user;
+                                $newImage['uploaded_at'] = date('Y-m-d H:i:s');
+                                $targetData['player']['images'][] = $newImage;
+                            }
+                        }
+                    }
+                }
+            }
+            
+            // Copy GM data if requested
+            if ($copyGMData) {
+                if ($copyNotes) {
+                    $targetData['gm']['notes'] = $sourceData['gm']['notes'] ?? '';
+                }
+                
+                if ($copyImages && !empty($sourceData['gm']['images'])) {
+                    foreach ($sourceData['gm']['images'] as $image) {
+                        // Copy image file
+                        $sourceFile = "hex-images/" . $image['filename'];
+                        if (file_exists($sourceFile)) {
+                            $extension = pathinfo($image['filename'], PATHINFO_EXTENSION);
+                            $newFilename = "hex-{$q}-{$r}-gm-" . time() . "-" . rand(1000, 9999) . "." . $extension;
+                            $targetFile = "hex-images/" . $newFilename;
+                            
+                            if (copy($sourceFile, $targetFile)) {
+                                $newImage = $image;
+                                $newImage['filename'] = $newFilename;
+                                $newImage['uploaded_by'] = $user;
+                                $newImage['uploaded_at'] = date('Y-m-d H:i:s');
+                                $targetData['gm']['images'][] = $newImage;
+                            }
+                        }
+                    }
+                }
+            }
+            
+            // Save target hex data
+            if (saveHexData($q, $r, $targetData)) {
+                echo json_encode(['success' => true]);
+            } else {
+                echo json_encode(['success' => false, 'error' => 'Failed to save duplicated data']);
+            }
+            break;
+            
         default:
             echo json_encode(['success' => false, 'error' => 'Invalid action']);
     }
