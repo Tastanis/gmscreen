@@ -359,7 +359,7 @@ class HexGrid {
     }
     
     /**
-     * Get hex at pixel coordinates
+     * Get hex at pixel coordinates - improved accuracy with multi-hex testing
      * @param {number} x - Pixel x coordinate (canvas space)
      * @param {number} y - Pixel y coordinate (canvas space)
      * @param {Object} viewport - Current viewport transformation
@@ -370,28 +370,57 @@ class HexGrid {
         const worldX = (x - viewport.offsetX) / viewport.scale;
         const worldY = (y - viewport.offsetY) / viewport.scale;
         
-        // Convert to hex coordinates
-        const hex = this.coordSystem.pixelToAxial(worldX, worldY);
+        // Get the primary hex candidate
+        const primaryHex = this.coordSystem.pixelToAxial(worldX, worldY);
         
-        // Debug logging when debug mode is enabled
-        if (this.debugMode) {
-            console.log(`Hex detection - Screen: (${x}, ${y}), World: (${worldX.toFixed(2)}, ${worldY.toFixed(2)}), Hex: (${hex.q}, ${hex.r})`);
+        // Test a much wider area around the primary hex to account for coordinate conversion errors
+        const candidates = [];
+        const searchRadius = 2; // Expand search to account for coordinate errors
+        
+        for (let dq = -searchRadius; dq <= searchRadius; dq++) {
+            for (let dr = -searchRadius; dr <= searchRadius; dr++) {
+                candidates.push({ 
+                    q: primaryHex.q + dq, 
+                    r: primaryHex.r + dr 
+                });
+            }
         }
         
-        // Only check if the point is actually inside the hex geometry
-        // Removed restrictive isValidHex() check to allow highlighting of any hex
-        if (this.coordSystem.isPointInHex({ x: worldX, y: worldY }, hex.q, hex.r)) {
-            // Add basic sanity check for extreme coordinates to prevent system issues
-            if (Math.abs(hex.q) <= 500 && Math.abs(hex.r) <= 500) {
-                if (this.debugMode) {
-                    console.log(`✓ Hex found and validated: (${hex.q}, ${hex.r})`);
+        // Find the hex that actually contains the point, or the closest one if coordinate conversion is off
+        let bestCandidate = null;
+        let bestDistance = Infinity;
+        
+        for (let candidate of candidates) {
+            if (Math.abs(candidate.q) <= 500 && Math.abs(candidate.r) <= 500) {
+                // Check if point is actually inside this hex
+                if (this.coordSystem.isPointInHex({ x: worldX, y: worldY }, candidate.q, candidate.r)) {
+                    if (this.debugMode) {
+                        console.log(`✓ Perfect hex found: (${candidate.q}, ${candidate.r}) contains point (${worldX.toFixed(1)}, ${worldY.toFixed(1)})`);
+                    }
+                    return candidate;
                 }
-                return hex;
-            } else if (this.debugMode) {
-                console.log(`✗ Hex coordinates too extreme: (${hex.q}, ${hex.r})`);
+                
+                // Otherwise, calculate distance from mouse to hex center as fallback
+                const hexCenter = this.coordSystem.axialToPixel(candidate.q, candidate.r);
+                const distance = Math.sqrt(Math.pow(worldX - hexCenter.x, 2) + Math.pow(worldY - hexCenter.y, 2));
+                
+                if (distance < bestDistance) {
+                    bestDistance = distance;
+                    bestCandidate = candidate;
+                }
             }
-        } else if (this.debugMode) {
-            console.log(`✗ Point not inside hex geometry for: (${hex.q}, ${hex.r})`);
+        }
+        
+        // If no hex perfectly contains the point, return the closest one
+        if (bestCandidate && bestDistance < this.coordSystem.hexSize * 1.5) {
+            if (this.debugMode) {
+                console.log(`✓ Closest hex found: (${bestCandidate.q}, ${bestCandidate.r}) distance ${bestDistance.toFixed(1)}px from (${worldX.toFixed(1)}, ${worldY.toFixed(1)})`);
+            }
+            return bestCandidate;
+        }
+        
+        if (this.debugMode) {
+            console.log(`✗ No hex found at world (${worldX.toFixed(1)}, ${worldY.toFixed(1)}), primary candidate was (${primaryHex.q}, ${primaryHex.r})`);
         }
         
         return null;
