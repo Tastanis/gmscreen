@@ -165,6 +165,222 @@ $isGM = ($user === 'GM');
         .hex-popup-actions button:hover {
             background: #6a6a8a;
         }
+        
+        /* Enhanced Hex Popup Styles */
+        .hex-popup-tabs {
+            display: flex;
+            margin-bottom: 20px;
+            border-bottom: 2px solid #4a4a6a;
+        }
+        
+        .hex-tab {
+            background: transparent;
+            color: #aaa;
+            border: none;
+            padding: 10px 20px;
+            cursor: pointer;
+            border-bottom: 3px solid transparent;
+            transition: all 0.3s ease;
+        }
+        
+        .hex-tab.active {
+            color: #ff6b6b;
+            border-bottom-color: #ff6b6b;
+        }
+        
+        .hex-tab:hover {
+            color: #fff;
+        }
+        
+        .hex-section {
+            display: none;
+        }
+        
+        .hex-section.active {
+            display: block;
+        }
+        
+        .hex-images-container {
+            margin-bottom: 25px;
+        }
+        
+        .hex-images-container h3 {
+            color: #ff6b6b;
+            margin-bottom: 10px;
+            font-size: 16px;
+        }
+        
+        .hex-image-upload {
+            margin-bottom: 15px;
+        }
+        
+        .hex-image-upload .upload-btn {
+            background: #4a4a6a;
+            color: white;
+            border: none;
+            padding: 8px 16px;
+            border-radius: 4px;
+            cursor: pointer;
+        }
+        
+        .hex-image-upload .upload-btn:hover {
+            background: #6a6a8a;
+        }
+        
+        .hex-images-gallery {
+            display: grid;
+            grid-template-columns: repeat(auto-fill, minmax(80px, 1fr));
+            gap: 10px;
+            min-height: 100px;
+            padding: 10px;
+            background: rgba(0, 0, 0, 0.3);
+            border-radius: 5px;
+        }
+        
+        .hex-images-gallery.single-image {
+            grid-template-columns: 1fr;
+            max-width: 200px;
+        }
+        
+        .hex-image-thumb {
+            position: relative;
+            aspect-ratio: 1;
+            border-radius: 4px;
+            overflow: hidden;
+            cursor: pointer;
+            transition: transform 0.2s ease;
+        }
+        
+        .hex-image-thumb:hover {
+            transform: scale(1.05);
+        }
+        
+        .hex-image-thumb img {
+            width: 100%;
+            height: 100%;
+            object-fit: cover;
+        }
+        
+        .hex-notes-container h3 {
+            color: #ff6b6b;
+            margin-bottom: 10px;
+            font-size: 16px;
+        }
+        
+        .notes-controls {
+            display: flex;
+            align-items: center;
+            gap: 10px;
+            margin-bottom: 10px;
+        }
+        
+        .edit-btn {
+            background: #4a4a6a;
+            color: white;
+            border: none;
+            padding: 5px 12px;
+            border-radius: 3px;
+            cursor: pointer;
+            font-size: 12px;
+        }
+        
+        .edit-btn:hover {
+            background: #6a6a8a;
+        }
+        
+        .edit-btn.editing {
+            background: #ff6b6b;
+        }
+        
+        .edit-status {
+            font-size: 12px;
+            color: #aaa;
+        }
+        
+        .hex-notes {
+            width: 100%;
+            min-height: 120px;
+            background: rgba(0, 0, 0, 0.3);
+            color: #eee;
+            border: 1px solid #4a4a6a;
+            border-radius: 4px;
+            padding: 10px;
+            resize: vertical;
+            font-family: inherit;
+        }
+        
+        .hex-notes[readonly] {
+            background: rgba(0, 0, 0, 0.1);
+            cursor: not-allowed;
+        }
+        
+        .hex-notes:focus {
+            outline: none;
+            border-color: #ff6b6b;
+        }
+        
+        /* Image Lightbox Styles */
+        .image-lightbox {
+            position: fixed;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            background: rgba(0, 0, 0, 0.9);
+            z-index: 2000;
+            display: flex;
+            justify-content: center;
+            align-items: center;
+        }
+        
+        .lightbox-content {
+            position: relative;
+            max-width: 90%;
+            max-height: 90%;
+            text-align: center;
+        }
+        
+        .lightbox-close {
+            position: absolute;
+            top: -40px;
+            right: 0;
+            font-size: 30px;
+            color: white;
+            cursor: pointer;
+            z-index: 2001;
+        }
+        
+        .lightbox-close:hover {
+            color: #ff6b6b;
+        }
+        
+        #lightbox-image {
+            max-width: 100%;
+            max-height: calc(100vh - 100px);
+            border-radius: 5px;
+        }
+        
+        .lightbox-actions {
+            margin-top: 20px;
+        }
+        
+        .lightbox-actions button {
+            background: #4a4a6a;
+            color: white;
+            border: none;
+            padding: 8px 16px;
+            border-radius: 4px;
+            cursor: pointer;
+            margin: 0 5px;
+        }
+        
+        .lightbox-actions .delete-btn {
+            background: #dc3545;
+        }
+        
+        .lightbox-actions button:hover {
+            opacity: 0.8;
+        }
     </style>
 </head>
 <body>
@@ -197,6 +413,7 @@ $isGM = ($user === 'GM');
     <script src="js/coordinate-system.js"></script>
     <script src="js/hex-grid.js"></script>
     <script src="js/map-interface.js"></script>
+    <script src="js/hex-popup.js"></script>
     
     <script>
         // Global map interface
@@ -286,11 +503,70 @@ $isGM = ($user === 'GM');
         <div class="hex-popup-content">
             <span class="hex-popup-close" onclick="closeHexPopup()">&times;</span>
             <h2 id="hex-coords">Hex (0, 0)</h2>
-            <div id="hex-info">
-                <!-- Hex details will be populated here -->
+            
+            <!-- Section Tabs -->
+            <div class="hex-popup-tabs">
+                <button class="hex-tab active" data-section="player" onclick="switchHexTab('player')">Player</button>
+                <button class="hex-tab" data-section="gm" onclick="switchHexTab('gm')" style="display: none;">GM</button>
             </div>
+            
+            <!-- Player Section -->
+            <div id="player-section" class="hex-section active">
+                <div class="hex-images-container">
+                    <h3>Images</h3>
+                    <div class="hex-image-upload">
+                        <button onclick="uploadHexImage('player')" class="upload-btn">Upload Image</button>
+                        <input type="file" id="player-image-upload" accept="image/*" style="display: none;">
+                    </div>
+                    <div id="player-images" class="hex-images-gallery">
+                        <!-- Images will be populated here -->
+                    </div>
+                </div>
+                
+                <div class="hex-notes-container">
+                    <h3>Player Notes</h3>
+                    <div class="notes-controls">
+                        <button id="player-edit-btn" onclick="toggleEdit('player')" class="edit-btn">Edit</button>
+                        <span id="player-edit-status" class="edit-status"></span>
+                    </div>
+                    <textarea id="player-notes" class="hex-notes" placeholder="Add notes about this hex..." readonly></textarea>
+                </div>
+            </div>
+            
+            <!-- GM Section -->
+            <div id="gm-section" class="hex-section" style="display: none;">
+                <div class="hex-images-container">
+                    <h3>GM Images</h3>
+                    <div class="hex-image-upload">
+                        <button onclick="uploadHexImage('gm')" class="upload-btn">Upload Image</button>
+                        <input type="file" id="gm-image-upload" accept="image/*" style="display: none;">
+                    </div>
+                    <div id="gm-images" class="hex-images-gallery">
+                        <!-- Images will be populated here -->
+                    </div>
+                </div>
+                
+                <div class="hex-notes-container">
+                    <h3>GM Notes</h3>
+                    <textarea id="gm-notes" class="hex-notes" placeholder="Add GM notes about this hex..."></textarea>
+                </div>
+            </div>
+            
             <div class="hex-popup-actions">
+                <button onclick="saveHexData()">Save</button>
                 <button onclick="closeHexPopup()">Close</button>
+            </div>
+        </div>
+    </div>
+    
+    <!-- Image Lightbox -->
+    <div id="image-lightbox" class="image-lightbox" style="display: none;">
+        <div class="lightbox-content">
+            <span class="lightbox-close" onclick="closeLightbox()">&times;</span>
+            <img id="lightbox-image" src="" alt="">
+            <div class="lightbox-actions">
+                <button onclick="deleteCurrentImage()" class="delete-btn">Delete Image</button>
+                <button onclick="closeLightbox()">Close</button>
             </div>
         </div>
     </div>

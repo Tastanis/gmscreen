@@ -256,18 +256,16 @@ class HexGridV2 {
     showHexPopup(q, r) {
         const popup = document.getElementById('hex-popup');
         const hexCoords = document.getElementById('hex-coords');
-        const hexInfo = document.getElementById('hex-info');
         
-        if (popup && hexCoords && hexInfo) {
-            // Set hex coordinates
+        if (popup && hexCoords) {
+            // Set current hex coordinates globally
+            currentHex = { q, r };
+            
+            // Update popup title
             hexCoords.textContent = `Hex (${q}, ${r})`;
             
-            // Set placeholder info (can be expanded later)
-            hexInfo.innerHTML = `
-                <p><strong>Coordinates:</strong> q=${q}, r=${r}</p>
-                <p><strong>Type:</strong> Unknown</p>
-                <p><strong>Description:</strong> This hex can be customized with details, encounters, locations, etc.</p>
-            `;
+            // Load hex data
+            loadHexData(q, r);
             
             // Show the popup
             popup.style.display = 'block';
