@@ -20,11 +20,7 @@ $isGM = ($user === 'GM');
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Strixhaven Map - Interactive Hex Grid</title>
-    
-    <!-- CSS Files -->
-    <link rel="stylesheet" href="../../css/style.css">
-    <link rel="stylesheet" href="css/hex-map.css">
+    <title>Strixhaven Map - 60x60 Hex Grid</title>
     
     <style>
         body {
@@ -41,97 +37,58 @@ $isGM = ($user === 'GM');
             width: 100vw;
             height: 100vh;
             overflow: hidden;
+            /* Background image - purely decorative */
+            background-image: url('images/Strixhavenmap.png');
+            background-size: cover;
+            background-position: center;
+            background-repeat: no-repeat;
         }
         
         #hex-canvas {
             position: absolute;
             top: 0;
             left: 0;
-            cursor: crosshair;
-            background: #2a2a3e;
+            width: 100%;
+            height: 100%;
+            cursor: default;
+            /* Canvas is transparent to show background */
+            background: transparent;
         }
         
-        .map-ui {
+        .info-panel {
+            position: absolute;
+            top: 10px;
+            right: 10px;
+            background: rgba(0, 0, 0, 0.7);
+            padding: 10px;
+            border-radius: 5px;
+            font-size: 14px;
+            z-index: 100;
+        }
+        
+        .controls {
             position: absolute;
             top: 10px;
             left: 10px;
-            z-index: 1000;
-            background: rgba(26, 26, 46, 0.9);
-            padding: 15px;
-            border-radius: 8px;
-            border: 1px solid #4a4a6a;
-            box-shadow: 0 4px 12px rgba(0, 0, 0, 0.3);
+            background: rgba(0, 0, 0, 0.7);
+            padding: 10px;
+            border-radius: 5px;
+            z-index: 100;
         }
         
-        .map-controls {
-            display: flex;
-            gap: 10px;
-            align-items: center;
-            margin-bottom: 10px;
-        }
-        
-        .map-controls button {
+        .controls button {
+            display: block;
+            margin: 5px 0;
+            padding: 5px 10px;
             background: #4a4a6a;
-            color: #eee;
-            border: 1px solid #6a6a8a;
-            padding: 8px 12px;
-            border-radius: 4px;
+            color: white;
+            border: none;
+            border-radius: 3px;
             cursor: pointer;
-            transition: all 0.3s ease;
         }
         
-        .map-controls button:hover {
+        .controls button:hover {
             background: #6a6a8a;
-        }
-        
-        .zoom-controls {
-            display: flex;
-            gap: 5px;
-            align-items: center;
-        }
-        
-        .zoom-level {
-            min-width: 60px;
-            text-align: center;
-            font-size: 12px;
-        }
-        
-        .status-bar {
-            position: absolute;
-            bottom: 10px;
-            left: 10px;
-            right: 10px;
-            z-index: 1000;
-            background: rgba(26, 26, 46, 0.9);
-            padding: 8px 15px;
-            border-radius: 4px;
-            border: 1px solid #4a4a6a;
-            display: flex;
-            justify-content: space-between;
-            align-items: center;
-            font-size: 12px;
-        }
-        
-        .coordinates {
-            color: #8a8aaa;
-        }
-        
-        .loading-overlay {
-            position: absolute;
-            top: 0;
-            left: 0;
-            right: 0;
-            bottom: 0;
-            background: rgba(26, 26, 46, 0.8);
-            display: flex;
-            justify-content: center;
-            align-items: center;
-            z-index: 2000;
-            font-size: 18px;
-        }
-        
-        .hidden {
-            display: none !important;
         }
         
         /* Version footer */
@@ -140,50 +97,31 @@ $isGM = ($user === 'GM');
             bottom: 10px;
             right: 10px;
             font-size: 10px;
-            color: #666;
+            color: #aaa;
             background: rgba(0, 0, 0, 0.5);
             padding: 4px 8px;
             border-radius: 4px;
+            z-index: 100;
         }
     </style>
 </head>
 <body>
     <div class="map-container">
-        <!-- Loading overlay -->
-        <div id="loading-overlay" class="loading-overlay">
-            <div>Loading Strixhaven Map...</div>
-        </div>
-        
-        <!-- Map UI Controls -->
-        <div class="map-ui">
-            <h3 style="margin: 0 0 10px 0;">Strixhaven Map</h3>
-            <div class="map-controls">
-                <button id="reset-view">Reset View</button>
-                <button id="toggle-grid">Toggle Grid</button>
-                <?php if ($isGM): ?>
-                    <button id="admin-mode">GM Mode</button>
-                <?php endif; ?>
-            </div>
-            <div class="zoom-controls">
-                <button id="zoom-out">-</button>
-                <div class="zoom-level" id="zoom-level">100%</div>
-                <button id="zoom-in">+</button>
-            </div>
-        </div>
-        
-        <!-- Main canvas -->
+        <!-- Main canvas for hex grid -->
         <canvas id="hex-canvas"></canvas>
         
-        <!-- Status bar -->
-        <div class="status-bar">
-            <div class="coordinates">
-                <span>Mouse: <span id="mouse-coords">-</span></span>
-                <span style="margin-left: 20px;">Hex: <span id="hex-coords">-</span></span>
-            </div>
-            <div class="user-info">
-                User: <?php echo htmlspecialchars($user); ?> 
-                <?php if ($isGM): ?><span style="color: #ff6b6b;">(GM)</span><?php endif; ?>
-            </div>
+        <!-- Controls -->
+        <div class="controls">
+            <button onclick="resetView()">Reset View</button>
+            <button onclick="zoomIn()">Zoom In</button>
+            <button onclick="zoomOut()">Zoom Out</button>
+        </div>
+        
+        <!-- Info panel -->
+        <div class="info-panel">
+            <div>User: <?php echo htmlspecialchars($user); ?> <?php if ($isGM): ?><span style="color: #ff6b6b;">(GM)</span><?php endif; ?></div>
+            <div>Hex: <span id="hex-info">-</span></div>
+            <div>Zoom: <span id="zoom-info">100%</span></div>
         </div>
         
         <!-- Version footer -->
@@ -193,19 +131,78 @@ $isGM = ($user === 'GM');
         </div>
     </div>
 
-    <!-- JavaScript Files -->
+    <!-- JavaScript Files - Clean V2 System -->
     <script src="js/coordinate-system.js"></script>
     <script src="js/hex-grid.js"></script>
-    <script src="js/zoom-pan.js"></script>
-    <script src="js/hex-data-manager.js"></script>
     <script src="js/map-interface.js"></script>
     
     <script>
-        // Initialize map system when page loads
+        // Global map interface
+        let mapInterface;
+        
+        // Initialize when page loads
         document.addEventListener('DOMContentLoaded', function() {
-            const mapInterface = new MapInterface();
+            console.log('Initializing Strixhaven 60x60 hex grid...');
+            
+            mapInterface = new MapInterface();
             mapInterface.initialize();
+            
+            // Update info panel on mouse move
+            document.getElementById('hex-canvas').addEventListener('mousemove', function(e) {
+                if (mapInterface.hexGrid && mapInterface.hexGrid.hoveredHex) {
+                    const hex = mapInterface.hexGrid.hoveredHex;
+                    document.getElementById('hex-info').textContent = `(${hex.q}, ${hex.r})`;
+                } else {
+                    document.getElementById('hex-info').textContent = '-';
+                }
+            });
         });
+        
+        // Control functions
+        function resetView() {
+            if (mapInterface) {
+                mapInterface.viewport = {
+                    scale: 1,
+                    offsetX: 0,
+                    offsetY: 0
+                };
+                mapInterface.hexGrid.setViewport(1, 0, 0);
+                updateZoomInfo();
+            }
+        }
+        
+        function zoomIn() {
+            if (mapInterface) {
+                const newScale = Math.min(mapInterface.viewport.scale * 1.2, 3);
+                mapInterface.viewport.scale = newScale;
+                mapInterface.hexGrid.setViewport(
+                    newScale,
+                    mapInterface.viewport.offsetX,
+                    mapInterface.viewport.offsetY
+                );
+                updateZoomInfo();
+            }
+        }
+        
+        function zoomOut() {
+            if (mapInterface) {
+                const newScale = Math.max(mapInterface.viewport.scale * 0.8, 0.5);
+                mapInterface.viewport.scale = newScale;
+                mapInterface.hexGrid.setViewport(
+                    newScale,
+                    mapInterface.viewport.offsetX,
+                    mapInterface.viewport.offsetY
+                );
+                updateZoomInfo();
+            }
+        }
+        
+        function updateZoomInfo() {
+            if (mapInterface) {
+                const percent = Math.round(mapInterface.viewport.scale * 100);
+                document.getElementById('zoom-info').textContent = percent + '%';
+            }
+        }
         
         // Pass PHP variables to JavaScript
         window.USER_DATA = {

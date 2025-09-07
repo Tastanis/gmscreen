@@ -1,253 +1,83 @@
 /**
- * Coordinate System for Hexagonal Grid
- * Uses axial coordinates (q, r) for mathematical efficiency
- * Provides conversion between pixel coordinates and hex coordinates
+ * Simple Coordinate System for 60x60 Hexagonal Grid
+ * Clean implementation without any background image dependencies
  */
 
-class CoordinateSystem {
-    constructor(hexSize = 23) {
+class CoordinateSystemV2 {
+    constructor(hexSize = 20) {
         this.hexSize = hexSize;
         
-        // Hexagon geometry constants
-        this.hexWidth = hexSize * 2;
-        this.hexHeight = hexSize * Math.sqrt(3);
-        this.hexHorizontalSpacing = hexSize * 3/2;
-        this.hexVerticalSpacing = this.hexHeight;
+        // Grid configuration - 60x60 hexes
+        this.gridWidth = 60;
+        this.gridHeight = 60;
         
-        // Grid configuration - simplified, no image dependencies
-        this.gridConfig = {
-            gridOriginX: 100,        // Where hex (0,0) appears on canvas
-            gridOriginY: 100,        // Where hex (0,0) appears on canvas
-            gridWidth: 38,           // Number of hexes horizontally
-            gridHeight: 38,          // Number of hexes vertically
-            hexSize: hexSize
-        };
+        // Grid origin - where hex (0,0) appears on canvas
+        this.originX = 100;
+        this.originY = 100;
     }
     
-    
     /**
-     * Convert axial coordinates to pixel coordinates (Red Blob Games standard)
-     * @param {number} q - Axial coordinate q
-     * @param {number} r - Axial coordinate r
-     * @returns {Object} {x, y} pixel coordinates
+     * Convert axial hex coordinates to pixel coordinates
+     * Uses flat-topped hexagon orientation
      */
-    axialToPixel(q, r) {
-        // Simplified coordinate conversion - no grid extension offsets
-        // Let the hexes render where they naturally should based on their axial coordinates
-        
-        // Standard flat-topped hexagon conversion (Red Blob Games formula)
-        const x = this.gridConfig.gridOriginX + this.hexSize * (3/2 * q);
-        const y = this.gridConfig.gridOriginY + this.hexSize * (Math.sqrt(3)/2 * q + Math.sqrt(3) * r);
-        
-        // Enhanced debug logging for coordinate conversion testing
-        if (window.DEBUG_COORDINATE_CONVERSION) {
-            console.log(`axialToPixel: (${q}, ${r}) -> pixel (${x.toFixed(2)}, ${y.toFixed(2)})`);
-        }
-        
+    hexToPixel(q, r) {
+        const x = this.originX + this.hexSize * (3/2 * q);
+        const y = this.originY + this.hexSize * (Math.sqrt(3)/2 * q + Math.sqrt(3) * r);
         return { x, y };
     }
     
     /**
-     * Convert pixel coordinates to axial coordinates
-     * @param {number} x - Pixel x coordinate
-     * @param {number} y - Pixel y coordinate
-     * @returns {Object} {q, r} axial coordinates
+     * Convert pixel coordinates to axial hex coordinates
      */
-    pixelToAxial(x, y) {
-        // Simplified coordinate conversion - direct inverse of axialToPixel
-        const adjustedX = x - this.gridConfig.gridOriginX;
-        const adjustedY = y - this.gridConfig.gridOriginY;
+    pixelToHex(x, y) {
+        // Adjust for origin
+        const px = x - this.originX;
+        const py = y - this.originY;
         
-        // Standard flat-topped hexagon inverse conversion (Red Blob Games formula)
-        const q = (2/3 * adjustedX) / this.hexSize;
-        const r = (-1/3 * adjustedX + Math.sqrt(3)/3 * adjustedY) / this.hexSize;
+        // Convert to fractional hex coordinates
+        const q = (2/3 * px) / this.hexSize;
+        const r = (-1/3 * px + Math.sqrt(3)/3 * py) / this.hexSize;
         
-        const result = this.axialRound(q, r);
-        
-        // Debug logging to verify coordinate conversion symmetry
-        if (Math.random() < 0.001) { // Log 0.1% of conversions to avoid spam
-            const backToPixel = this.axialToPixel(result.q, result.r);
-            const pixelDiffX = Math.abs(x - backToPixel.x);
-            const pixelDiffY = Math.abs(y - backToPixel.y);
-            console.log(`🔍 Coordinate symmetry test:
-                Pixel→Hex: (${x.toFixed(1)}, ${y.toFixed(1)}) → (${result.q}, ${result.r})
-                Hex→Pixel: (${result.q}, ${result.r}) → (${backToPixel.x.toFixed(1)}, ${backToPixel.y.toFixed(1)})
-                Difference: (${pixelDiffX.toFixed(2)}, ${pixelDiffY.toFixed(2)})
-                ${pixelDiffX < 1 && pixelDiffY < 1 ? '✅ GOOD' : '❌ BAD'}`);
-        }
-        if (window.DEBUG_COORDINATE_CONVERSION) {
-            console.log(`pixelToAxial: pixel (${x.toFixed(2)}, ${y.toFixed(2)}) -> adjustedX=${adjustedX.toFixed(2)}, adjustedY=${adjustedY.toFixed(2)}`);
-            console.log(`  -> q=${q.toFixed(4)}, r=${r.toFixed(4)} -> rounded (${result.q}, ${result.r})`);
-        }
-        
-        return result;
+        // Round to nearest hex
+        return this.hexRound(q, r);
     }
     
     /**
-     * Round fractional axial coordinates to the nearest hex
-     * @param {number} q - Fractional q coordinate
-     * @param {number} r - Fractional r coordinate
-     * @returns {Object} {q, r} rounded axial coordinates
+     * Round fractional hex coordinates to nearest integer hex
      */
-    axialRound(q, r) {
+    hexRound(q, r) {
         const s = -q - r;
         
-        const roundQ = Math.round(q);
-        const roundR = Math.round(r);
-        const roundS = Math.round(s);
+        let rq = Math.round(q);
+        let rr = Math.round(r);
+        let rs = Math.round(s);
         
-        const qDiff = Math.abs(roundQ - q);
-        const rDiff = Math.abs(roundR - r);
-        const sDiff = Math.abs(roundS - s);
+        const qDiff = Math.abs(rq - q);
+        const rDiff = Math.abs(rr - r);
+        const sDiff = Math.abs(rs - s);
         
         if (qDiff > rDiff && qDiff > sDiff) {
-            return { q: -roundR - roundS, r: roundR };
+            rq = -rr - rs;
         } else if (rDiff > sDiff) {
-            return { q: roundQ, r: -roundQ - roundS };
-        } else {
-            return { q: roundQ, r: roundR };
-        }
-    }
-    
-    /**
-     * Convert axial coordinates to cube coordinates
-     * @param {number} q - Axial q coordinate
-     * @param {number} r - Axial r coordinate
-     * @returns {Object} {x, y, z} cube coordinates
-     */
-    axialToCube(q, r) {
-        const x = q;
-        const z = r;
-        const y = -x - z;
-        return { x, y, z };
-    }
-    
-    /**
-     * Convert cube coordinates to axial coordinates
-     * @param {number} x - Cube x coordinate
-     * @param {number} y - Cube y coordinate
-     * @param {number} z - Cube z coordinate
-     * @returns {Object} {q, r} axial coordinates
-     */
-    cubeToAxial(x, y, z) {
-        const q = x;
-        const r = z;
-        return { q, r };
-    }
-    
-    /**
-     * Calculate distance between two hexes in axial coordinates
-     * @param {Object} hex1 - First hex {q, r}
-     * @param {Object} hex2 - Second hex {q, r}
-     * @returns {number} Distance in hexes
-     */
-    hexDistance(hex1, hex2) {
-        const cube1 = this.axialToCube(hex1.q, hex1.r);
-        const cube2 = this.axialToCube(hex2.q, hex2.r);
-        
-        return Math.max(
-            Math.abs(cube1.x - cube2.x),
-            Math.abs(cube1.y - cube2.y),
-            Math.abs(cube1.z - cube2.z)
-        );
-    }
-    
-    /**
-     * Get all neighbors of a hex
-     * @param {Object} hex - Center hex {q, r}
-     * @returns {Array} Array of neighboring hex coordinates
-     */
-    getHexNeighbors(hex) {
-        const directions = [
-            { q: 1, r: 0 }, { q: 1, r: -1 }, { q: 0, r: -1 },
-            { q: -1, r: 0 }, { q: -1, r: 1 }, { q: 0, r: 1 }
-        ];
-        
-        return directions.map(dir => ({
-            q: hex.q + dir.q,
-            r: hex.r + dir.r
-        }));
-    }
-    
-    /**
-     * Get all hexes within a certain range
-     * @param {Object} center - Center hex {q, r}
-     * @param {number} range - Range in hexes
-     * @returns {Array} Array of hex coordinates within range
-     */
-    getHexesInRange(center, range) {
-        const results = [];
-        
-        for (let q = -range; q <= range; q++) {
-            const r1 = Math.max(-range, -q - range);
-            const r2 = Math.min(range, -q + range);
-            
-            for (let r = r1; r <= r2; r++) {
-                results.push({
-                    q: center.q + q,
-                    r: center.r + r
-                });
-            }
+            rr = -rq - rs;
         }
         
-        return results;
+        return { q: rq, r: rr };
     }
     
     /**
-     * Check if a hex coordinate is within the grid bounds
-     * @param {Object} hex - Hex coordinate {q, r}
-     * @returns {boolean} True if within bounds
-     */
-    isValidHex(hex) {
-        // Very permissive bounds checking to allow highlighting of any hex
-        // Only prevent extreme coordinates that could cause system issues
-        return Math.abs(hex.q) <= 500 && Math.abs(hex.r) <= 500;
-    }
-    
-    
-    /**
-     * Convert axial coordinates to offset coordinates (for bounds checking)
-     * @param {number} q - Axial q coordinate
-     * @param {number} r - Axial r coordinate
-     * @returns {Object} {col, row} offset coordinates
-     */
-    axialToOffset(q, r) {
-        // For flat-topped hexes with odd-row offset
-        const col = q + (r - (r & 1)) / 2;
-        const row = r;
-        return { col, row };
-    }
-    
-    /**
-     * Convert offset coordinates to axial coordinates
-     * @param {number} col - Column in offset system
-     * @param {number} row - Row in offset system
-     * @returns {Object} {q, r} axial coordinates
-     */
-    offsetToAxial(col, row) {
-        // For flat-topped hexes with odd-row offset (matches generateAllHexes)
-        const q = col - Math.floor((row + (row & 1)) / 2);
-        const r = row;
-        return { q, r };
-    }
-    
-    /**
-     * Get the vertices of a hexagon at given axial coordinates
-     * @param {number} q - Axial q coordinate
-     * @param {number} r - Axial r coordinate
-     * @returns {Array} Array of {x, y} vertex coordinates
+     * Get the 6 vertices of a hexagon
      */
     getHexVertices(q, r) {
-        const center = this.axialToPixel(q, r);
+        const center = this.hexToPixel(q, r);
         const vertices = [];
         
-        // For flat-topped hexagons, start at angle 0° (pointing right)
-        // This creates hexes with flat sides on top and bottom for proper tessellation
         for (let i = 0; i < 6; i++) {
-            const angle = (Math.PI / 180) * (60 * i);  // Start at 0°, increment by 60°
-            const x = center.x + this.hexSize * Math.cos(angle);
-            const y = center.y + this.hexSize * Math.sin(angle);
-            vertices.push({ x, y });
+            const angle = Math.PI / 180 * (60 * i);
+            vertices.push({
+                x: center.x + this.hexSize * Math.cos(angle),
+                y: center.y + this.hexSize * Math.sin(angle)
+            });
         }
         
         return vertices;
@@ -255,36 +85,12 @@ class CoordinateSystem {
     
     /**
      * Check if a point is inside a hexagon
-     * @param {Object} point - Point {x, y}
-     * @param {number} q - Hex axial q coordinate
-     * @param {number} r - Hex axial r coordinate
-     * @returns {boolean} True if point is inside hex
      */
     isPointInHex(point, q, r) {
-        const hexCenter = this.axialToPixel(q, r);
-        const dx = Math.abs(point.x - hexCenter.x);
-        const dy = Math.abs(point.y - hexCenter.y);
-        
-        // Quick bounding box check first
-        if (dx > this.hexSize || dy > this.hexSize * Math.sqrt(3) / 2) {
-            return false;
-        }
-        
-        // More precise hexagon check
         const vertices = this.getHexVertices(q, r);
-        return this.isPointInPolygon(point, vertices);
-    }
-    
-    /**
-     * Check if a point is inside a polygon using ray casting
-     * @param {Object} point - Point {x, y}
-     * @param {Array} vertices - Array of vertex {x, y} coordinates
-     * @returns {boolean} True if point is inside polygon
-     */
-    isPointInPolygon(point, vertices) {
         let inside = false;
         
-        for (let i = 0, j = vertices.length - 1; i < vertices.length; j = i++) {
+        for (let i = 0, j = 5; i < 6; j = i++) {
             const xi = vertices[i].x, yi = vertices[i].y;
             const xj = vertices[j].x, yj = vertices[j].y;
             
@@ -298,234 +104,43 @@ class CoordinateSystem {
     }
     
     /**
-     * Convert hex coordinate to a unique string identifier
-     * @param {number} q - Axial q coordinate
-     * @param {number} r - Axial r coordinate
-     * @returns {string} Unique hex identifier
+     * Get all hexes in the 60x60 grid
      */
-    hexToId(q, r) {
-        return `${q}_${r}`;
-    }
-    
-    /**
-     * Parse hex identifier back to coordinates
-     * @param {string} hexId - Hex identifier string
-     * @returns {Object} {q, r} axial coordinates
-     */
-    idToHex(hexId) {
-        const [q, r] = hexId.split('_').map(Number);
-        return { q, r };
-    }
-    
-    /**
-     * Generate all hex coordinates for the grid - creates a much larger grid including negative coordinates
-     * @returns {Array} Array of all valid hex coordinates
-     */
-    generateAllHexes() {
+    getAllHexes() {
         const hexes = [];
         
-        // Generate a much larger grid that includes negative R values
-        // Extended to match the maximum range that getVisibleHexes() might request (padding = 50)
-        // This ensures every hex that can be rendered also exists in the hexes Map for hover detection
-        const gridExtensionAbove = 60; // Increased from 20 to 60 to cover getVisibleHexes padding
-        const gridExtensionBelow = 60; // Increased from 20 to 60 to cover getVisibleHexes padding  
-        const gridExtensionLeft = 60; // Increased from 20 to 60 to cover getVisibleHexes padding
-        const gridExtensionRight = 60; // Increased from 20 to 60 to cover getVisibleHexes padding
-        
-        const startRow = -gridExtensionAbove;
-        const endRow = this.gridConfig.gridHeight + gridExtensionBelow;
-        const startCol = -gridExtensionLeft; 
-        const endCol = this.gridConfig.gridWidth + gridExtensionRight;
-        
-        console.log(`Generating extended hex grid: rows ${startRow} to ${endRow}, cols ${startCol} to ${endCol}`);
-        
-        for (let row = startRow; row < endRow; row++) {
-            for (let col = startCol; col < endCol; col++) {
-                // Convert offset coordinates to axial coordinates
-                // For flat-topped hexes with odd-row offset (standard Red Blob Games formula)
-                const q = col - Math.floor((row + (row & 1)) / 2);
-                const r = row;
-                
-                // Include all hexes in the expanded grid area
-                hexes.push({ q, r });
-            }
-        }
-        
-        // Add corner hexes to make the boundary more rectangular
-        // This fills in the gaps created by the offset pattern to create horizontal top/bottom edges
-        
-        // Top-right corner fill: Add hexes to extend the top rows horizontally
-        const topRowsToFill = Math.min(12, Math.floor(this.gridConfig.gridHeight / 3));
-        for (let row = 0; row < topRowsToFill; row++) {
-            // For even rows, add 1-2 extra hexes to the right
-            // For odd rows, fewer extra hexes since they're already offset right
-            const extraHexes = (row % 2 === 0) ? Math.floor((topRowsToFill - row) / 2) + 1 : Math.floor((topRowsToFill - row) / 3);
-            
-            for (let extra = 1; extra <= extraHexes; extra++) {
-                const col = this.gridConfig.gridWidth + extra - 1;
-                const q = col - Math.floor((row + (row & 1)) / 2);
+        // Generate 60x60 grid in offset coordinates
+        for (let row = 0; row < this.gridHeight; row++) {
+            for (let col = 0; col < this.gridWidth; col++) {
+                // Convert offset to axial
+                const q = col - Math.floor(row / 2);
                 const r = row;
                 hexes.push({ q, r });
             }
         }
-        
-        // Bottom-left corner fill: Add hexes to extend the bottom rows horizontally  
-        const bottomRowsToFill = Math.min(12, Math.floor(this.gridConfig.gridHeight / 3));
-        const bottomStartRow = this.gridConfig.gridHeight - bottomRowsToFill;
-        for (let row = bottomStartRow; row < this.gridConfig.gridHeight; row++) {
-            // For odd rows, add extra hexes to the left since they create the left-side gap
-            // For even rows, fewer extra hexes needed
-            const extraHexes = (row % 2 === 1) ? Math.floor((row - bottomStartRow) / 2) + 1 : Math.floor((row - bottomStartRow) / 3);
-            
-            for (let extra = 1; extra <= extraHexes; extra++) {
-                const col = -extra;
-                const q = col - Math.floor((row + (row & 1)) / 2);
-                const r = row;
-                hexes.push({ q, r });
-            }
-        }
-        
-        console.log(`Generated ${hexes.length} hexes (extended grid from rows ${startRow} to ${endRow-1}, cols ${startCol} to ${endCol-1} + corner fill)`);
-        
-        // Log some sample hexes to verify negative R values are included
-        const negativeRHexes = hexes.filter(h => h.r < 0).slice(0, 5);
-        console.log(`Sample negative R hexes:`, negativeRHexes);
         
         return hexes;
     }
     
     /**
-     * Get hexes visible in a rectangular viewport
-     * @param {Object} viewport - Viewport bounds {left, top, right, bottom}
-     * @returns {Array} Array of hex coordinates visible in viewport
+     * Check if hex is within grid bounds
      */
-    getVisibleHexes(viewport) {
-        const visibleHexes = [];
+    isValidHex(q, r) {
+        // Convert to offset coordinates
+        const col = q + Math.floor(r / 2);
+        const row = r;
         
-        // Convert all four viewport corners to hex coordinates to get proper bounds
-        // This fixes the diagonal band issue by ensuring we check the full rectangular area
-        const topLeft = this.pixelToAxial(viewport.left, viewport.top);
-        const topRight = this.pixelToAxial(viewport.right, viewport.top);
-        const bottomLeft = this.pixelToAxial(viewport.left, viewport.bottom);
-        const bottomRight = this.pixelToAxial(viewport.right, viewport.bottom);
-        
-        // Find the actual bounding box in axial coordinates by checking all corners
-        const allCorners = [topLeft, topRight, bottomLeft, bottomRight];
-        const minQ = Math.floor(Math.min(...allCorners.map(c => c.q)));
-        const maxQ = Math.ceil(Math.max(...allCorners.map(c => c.q)));
-        const minR = Math.floor(Math.min(...allCorners.map(c => c.r)));
-        const maxR = Math.ceil(Math.max(...allCorners.map(c => c.r)));
-        
-        // Extremely large padding to ensure we catch all edge cases and allow hover highlighting anywhere
-        const padding = 50;
-        
-        // Calculate hex dimensions for generous margins
-        const hexWidth = this.hexSize * 2;
-        const hexHeight = this.hexSize * Math.sqrt(3);
-        const marginX = hexWidth * 3; // Very large margins for maximum detection
-        const marginY = hexHeight * 3; // Very large margins for maximum detection
-        
-        // Iterate through the expanded axial coordinate range
-        for (let q = minQ - padding; q <= maxQ + padding; q++) {
-            for (let r = minR - padding; r <= maxR + padding; r++) {
-                const hex = { q, r };
-                if (this.isValidHex(hex)) {
-                    const pixel = this.axialToPixel(q, r);
-                    
-                    // More generous visibility check to prevent disappearing hexes
-                    if (pixel.x >= viewport.left - marginX &&
-                        pixel.x <= viewport.right + marginX &&
-                        pixel.y >= viewport.top - marginY &&
-                        pixel.y <= viewport.bottom + marginY) {
-                        visibleHexes.push(hex);
-                    }
-                }
-            }
-        }
-        
-        return visibleHexes;
+        return col >= 0 && col < this.gridWidth && 
+               row >= 0 && row < this.gridHeight;
     }
     
-
     /**
-     * Test coordinate conversion symmetry for debugging
-     * Tests round-trip conversion accuracy: axial -> pixel -> axial should match
-     * @param {Array} testHexes - Array of hex coordinates to test, if not provided uses sample set
+     * Get hex ID string
      */
-    testCoordinateSymmetry(testHexes = null) {
-        if (!testHexes) {
-            // Test a variety of hex coordinates including problematic areas
-            testHexes = [
-                // Original grid center area
-                { q: 0, r: 0 }, { q: 5, r: 5 }, { q: -5, r: -5 },
-                // Extended negative areas (problematic)
-                { q: -15, r: -15 }, { q: -10, r: -10 }, { q: 15, r: -15 },
-                // Far corners
-                { q: 20, r: 20 }, { q: -20, r: 20 }, { q: 20, r: -20 }, { q: -20, r: -20 },
-                // Edge cases
-                { q: 0, r: -15 }, { q: 15, r: 0 }, { q: -15, r: 0 }, { q: 0, r: 15 }
-            ];
-        }
-        
-        console.log('🔍 COORDINATE SYMMETRY TEST');
-        console.log('Testing round-trip conversion: hex -> pixel -> hex');
-        
-        let mismatches = 0;
-        let maxError = { q: 0, r: 0, distance: 0 };
-        
-        testHexes.forEach(originalHex => {
-            // Convert to pixel and back
-            const pixel = this.axialToPixel(originalHex.q, originalHex.r);
-            const roundTripHex = this.pixelToAxial(pixel.x, pixel.y);
-            
-            // Check for mismatch
-            const qError = Math.abs(originalHex.q - roundTripHex.q);
-            const rError = Math.abs(originalHex.r - roundTripHex.r);
-            const totalError = qError + rError;
-            
-            if (qError > 0 || rError > 0) {
-                mismatches++;
-                console.log(`❌ MISMATCH: (${originalHex.q}, ${originalHex.r}) -> pixel (${pixel.x.toFixed(2)}, ${pixel.y.toFixed(2)}) -> (${roundTripHex.q}, ${roundTripHex.r})`);
-                console.log(`   Error: q=${qError}, r=${rError}, total=${totalError}`);
-                
-                if (totalError > maxError.distance) {
-                    maxError = { q: qError, r: rError, distance: totalError, originalHex, roundTripHex, pixel };
-                }
-            } else {
-                console.log(`✅ OK: (${originalHex.q}, ${originalHex.r}) -> (${roundTripHex.q}, ${roundTripHex.r})`);
-            }
-        });
-        
-        console.log(`\n📊 SUMMARY: ${mismatches}/${testHexes.length} mismatches detected`);
-        if (maxError.distance > 0) {
-            console.log(`Worst error: (${maxError.originalHex.q}, ${maxError.originalHex.r}) -> (${maxError.roundTripHex.q}, ${maxError.roundTripHex.r})`);
-            console.log(`Error magnitude: q=${maxError.q}, r=${maxError.r}, total=${maxError.distance}`);
-        }
-        
-        return {
-            totalTests: testHexes.length,
-            mismatches: mismatches,
-            maxError: maxError,
-            success: mismatches === 0
-        };
-    }
-
-    /**
-     * Update grid configuration
-     * @param {Object} newConfig - New configuration object
-     */
-    updateConfig(newConfig) {
-        this.gridConfig = { ...this.gridConfig, ...newConfig };
-        
-        if (newConfig.hexSize) {
-            this.hexSize = newConfig.hexSize;
-            this.hexWidth = this.hexSize * 2;
-            this.hexHeight = this.hexSize * Math.sqrt(3);
-            this.hexHorizontalSpacing = this.hexSize * 3/2;
-            this.hexVerticalSpacing = this.hexHeight;
-        }
+    hexToId(q, r) {
+        return `${q},${r}`;
     }
 }
 
-// Export for use in other modules
-window.CoordinateSystem = CoordinateSystem;
+// Export for use
+window.CoordinateSystem = CoordinateSystemV2;
