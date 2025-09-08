@@ -414,6 +414,41 @@ $isGM = ($user === 'GM');
             transform: translateY(-1px);
             box-shadow: 0 4px 12px rgba(0, 0, 0, 0.3);
         }
+        
+        /* Hex Tooltip Styles */
+        #hex-tooltip {
+            position: fixed;
+            background: rgba(0, 0, 0, 0.9);
+            color: white;
+            padding: 12px;
+            border-radius: 8px;
+            border: 1px solid rgba(255, 255, 255, 0.2);
+            box-shadow: 0 4px 12px rgba(0, 0, 0, 0.5);
+            pointer-events: none;
+            z-index: 2000;
+            max-width: 250px;
+            display: none;
+            backdrop-filter: blur(5px);
+        }
+        
+        #hex-tooltip .tooltip-title {
+            font-size: 16px;
+            font-weight: 600;
+            margin-bottom: 8px;
+            color: #667eea;
+        }
+        
+        #hex-tooltip .tooltip-image {
+            width: 100%;
+            max-width: 200px;
+            height: auto;
+            border-radius: 6px;
+            margin-top: 8px;
+        }
+        
+        #hex-tooltip.visible {
+            display: block;
+        }
     </style>
 </head>
 <body>
@@ -540,6 +575,13 @@ $isGM = ($user === 'GM');
             <!-- GM Section (visible only to GM, shown first) -->
             <div id="gm-section" class="hex-section gm-only" style="display: none;">
                 <h2 class="section-title">GM Section</h2>
+                
+                <div class="hex-title-container" style="margin-bottom: 20px;">
+                    <label style="display: block; margin-bottom: 8px; font-weight: 600; color: #667eea;">Location Title (GM):</label>
+                    <input type="text" id="gm-title" class="hex-title-input" placeholder="Enter location name (visible only to GM)..." 
+                           style="width: 100%; padding: 10px; border: 2px solid #ecf0f1; border-radius: 6px; font-size: 16px; background: rgba(255, 255, 255, 0.9); color: #2c3e50;">
+                </div>
+                
                 <div class="hex-images-container">
                     <h3>GM Images</h3>
                     <div class="hex-image-upload">
@@ -569,6 +611,13 @@ $isGM = ($user === 'GM');
             <!-- Player Section (visible to all users) -->
             <div id="player-section" class="hex-section">
                 <h2 class="section-title">Player Section</h2>
+                
+                <div class="hex-title-container" style="margin-bottom: 20px;">
+                    <label style="display: block; margin-bottom: 8px; font-weight: 600; color: #667eea;">Location Title:</label>
+                    <input type="text" id="player-title" class="hex-title-input" placeholder="Enter location name (visible to all players)..." 
+                           style="width: 100%; padding: 10px; border: 2px solid #ecf0f1; border-radius: 6px; font-size: 16px; background: rgba(255, 255, 255, 0.9); color: #2c3e50;">
+                </div>
+                
                 <div class="hex-images-container">
                     <h3>Images</h3>
                     <div class="hex-image-upload">
@@ -607,6 +656,12 @@ $isGM = ($user === 'GM');
                 <button onclick="closeLightbox()">Close</button>
             </div>
         </div>
+    </div>
+    
+    <!-- Hex Tooltip -->
+    <div id="hex-tooltip">
+        <div class="tooltip-title"></div>
+        <img class="tooltip-image" style="display: none;">
     </div>
 </body>
 </html>

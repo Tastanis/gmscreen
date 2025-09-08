@@ -17,8 +17,18 @@ class HexGridV2 {
         // Hex status data (which hexes have data)
         this.hexStatus = new Map();
         
+        // All hex data for tooltips
+        this.allHexData = new Map();
+        
         // Current highlighted hex
         this.hoveredHex = null;
+        
+        // Tooltip state
+        this.tooltipState = {
+            currentHex: null,
+            hoverTimer: null,
+            tooltipElement: null
+        };
         
         // Copy mode state
         this.copyMode = {
@@ -60,6 +70,12 @@ class HexGridV2 {
         
         // Load hex status data
         this.loadHexStatus();
+        
+        // Load all hex data for tooltips
+        this.loadAllHexData();
+        
+        // Initialize tooltip element
+        this.tooltipState.tooltipElement = document.getElementById('hex-tooltip');
     }
     
     /**
@@ -121,6 +137,34 @@ class HexGridV2 {
             }
         } catch (error) {
             console.error('Error loading hex status:', error);
+        }
+    }
+    
+    /**
+     * Load all hex data for tooltips
+     */
+    async loadAllHexData() {
+        try {
+            const response = await fetch('hex-data-handler.php', {
+                method: 'POST',
+                headers: {
+                    'Content-Type': 'application/x-www-form-urlencoded',
+                },
+                body: 'action=get_all_hex_data'
+            });
+            
+            const data = await response.json();
+            if (data.success) {
+                this.allHexData.clear();
+                for (const [coords, hexData] of Object.entries(data.hexData)) {
+                    this.allHexData.set(coords, hexData);
+                }
+                console.log(`Loaded data for ${this.allHexData.size} hexes for tooltips`);
+            } else {
+                console.error('Failed to load hex data for tooltips:', data.error);
+            }
+        } catch (error) {
+            console.error('Error loading hex data for tooltips:', error);
         }
     }
     
@@ -312,12 +356,21 @@ class HexGridV2 {
                 this.hoveredHex.r !== hex.r) {
                 this.hoveredHex = hex;
                 this.render();
+                
+                // Handle tooltip
+                this.handleTooltipHover(hex.q, hex.r, clientX, clientY);
+            }
+            
+            // Update tooltip position if showing
+            if (this.tooltipState.tooltipElement && this.tooltipState.tooltipElement.classList.contains('visible')) {
+                this.updateTooltipPosition(clientX, clientY);
             }
         } else {
             // Clear hover if outside grid
             if (this.hoveredHex) {
                 this.hoveredHex = null;
                 this.render();
+                this.hideTooltip();
             }
         }
     }
@@ -326,6 +379,9 @@ class HexGridV2 {
      * Handle mouse click
      */
     handleMouseClick(clientX, clientY) {
+        // Hide tooltip when clicking
+        this.hideTooltip();
+        
         const rect = this.canvas.getBoundingClientRect();
         const canvasX = clientX - rect.left;
         const canvasY = clientY - rect.top;
@@ -484,6 +540,123 @@ class HexGridV2 {
             this.ctx.strokeStyle = 'rgba(241, 196, 15, 1)';
             this.ctx.lineWidth = 3;
             this.ctx.stroke();
+        }
+    }
+    
+    /**
+     * Handle tooltip hover
+     */
+    handleTooltipHover(q, r, mouseX, mouseY) {
+        const coords = `${q},${r}`;
+        
+        // Clear existing timer
+        if (this.tooltipState.hoverTimer) {
+            clearTimeout(this.tooltipState.hoverTimer);
+        }
+        
+        // Check if hex has data
+        const hexData = this.allHexData.get(coords);
+        if (!hexData) {
+            this.hideTooltip();
+            return;
+        }
+        
+        // Set new timer for 1 second delay
+        this.tooltipState.hoverTimer = setTimeout(() => {
+            this.showTooltip(hexData, mouseX, mouseY);
+        }, 1000);
+    }
+    
+    /**
+     * Show tooltip
+     */
+    showTooltip(hexData, mouseX, mouseY) {
+        if (!this.tooltipState.tooltipElement) return;
+        
+        // Determine which data to show
+        let dataToShow = null;
+        let title = '';
+        let image = null;
+        
+        // For players: only show player data
+        // For GM: show player data if available, otherwise GM data
+        if (hexData.player) {
+            dataToShow = hexData.player;
+            title = dataToShow.title || 'Location';
+            image = dataToShow.firstImage;
+        } else if (hexData.gm && window.USER_DATA && window.USER_DATA.isGM) {
+            dataToShow = hexData.gm;
+            title = dataToShow.title || 'GM Location';
+            image = dataToShow.firstImage;
+        }
+        
+        if (!dataToShow) {
+            this.hideTooltip();
+            return;
+        }
+        
+        // Update tooltip content
+        const titleElement = this.tooltipState.tooltipElement.querySelector('.tooltip-title');
+        const imageElement = this.tooltipState.tooltipElement.querySelector('.tooltip-image');
+        
+        // Set title
+        if (title) {
+            titleElement.textContent = title;
+            titleElement.style.display = 'block';
+        } else {
+            titleElement.style.display = 'none';
+        }
+        
+        // Set image
+        if (image) {
+            imageElement.src = `hex-images/${image}`;
+            imageElement.style.display = 'block';
+        } else {
+            imageElement.style.display = 'none';
+        }
+        
+        // Only show if there's content
+        if (title || image) {
+            this.tooltipState.tooltipElement.classList.add('visible');
+            this.updateTooltipPosition(mouseX, mouseY);
+        }
+    }
+    
+    /**
+     * Update tooltip position
+     */
+    updateTooltipPosition(mouseX, mouseY) {
+        if (!this.tooltipState.tooltipElement) return;
+        
+        const tooltip = this.tooltipState.tooltipElement;
+        const offsetX = 15;
+        const offsetY = 15;
+        
+        // Position tooltip near cursor
+        tooltip.style.left = (mouseX + offsetX) + 'px';
+        tooltip.style.top = (mouseY + offsetY) + 'px';
+        
+        // Adjust if tooltip goes off screen
+        const rect = tooltip.getBoundingClientRect();
+        if (rect.right > window.innerWidth) {
+            tooltip.style.left = (mouseX - rect.width - offsetX) + 'px';
+        }
+        if (rect.bottom > window.innerHeight) {
+            tooltip.style.top = (mouseY - rect.height - offsetY) + 'px';
+        }
+    }
+    
+    /**
+     * Hide tooltip
+     */
+    hideTooltip() {
+        if (this.tooltipState.hoverTimer) {
+            clearTimeout(this.tooltipState.hoverTimer);
+            this.tooltipState.hoverTimer = null;
+        }
+        
+        if (this.tooltipState.tooltipElement) {
+            this.tooltipState.tooltipElement.classList.remove('visible');
         }
     }
 }

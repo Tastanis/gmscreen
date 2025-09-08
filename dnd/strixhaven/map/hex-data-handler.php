@@ -46,10 +46,12 @@ function loadHexData($q, $r) {
     // Return default structure
     return [
         'player' => [
+            'title' => '',
             'images' => [],
             'notes' => ''
         ],
         'gm' => [
+            'title' => '',
             'images' => [],
             'notes' => ''
         ],
@@ -157,6 +159,26 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                 echo json_encode(['success' => true]);
             } else {
                 echo json_encode(['success' => false, 'error' => 'Failed to save notes']);
+            }
+            break;
+            
+        case 'save_title':
+            $section = $_POST['section'] ?? '';
+            $title = $_POST['title'] ?? '';
+            
+            // Check permissions
+            if ($section === 'gm' && !$isGM) {
+                echo json_encode(['success' => false, 'error' => 'GM access required']);
+                break;
+            }
+            
+            $hexData = loadHexData($q, $r);
+            $hexData[$section]['title'] = $title;
+            
+            if (saveHexData($q, $r, $hexData)) {
+                echo json_encode(['success' => true]);
+            } else {
+                echo json_encode(['success' => false, 'error' => 'Failed to save title']);
             }
             break;
             
@@ -274,8 +296,8 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                     
                     $data = json_decode(file_get_contents($file), true);
                     if ($data) {
-                        $hasPlayerData = !empty($data['player']['notes']) || !empty($data['player']['images']);
-                        $hasGMData = !empty($data['gm']['notes']) || !empty($data['gm']['images']);
+                        $hasPlayerData = !empty($data['player']['title']) || !empty($data['player']['notes']) || !empty($data['player']['images']);
+                        $hasGMData = !empty($data['gm']['title']) || !empty($data['gm']['notes']) || !empty($data['gm']['images']);
                         
                         // For non-GM users, only show status if there's player data
                         if ($isGM || $hasPlayerData) {
@@ -289,6 +311,48 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
             }
             
             echo json_encode(['success' => true, 'hexStatus' => $hexStatus]);
+            break;
+            
+        case 'get_all_hex_data':
+            // Get basic data for all hexes (for tooltips)
+            $allHexData = [];
+            $hexDataFiles = glob($hexDataDir . '/hex-*.json');
+            
+            foreach ($hexDataFiles as $file) {
+                $filename = basename($file);
+                if (preg_match('/hex-(-?\d+)-(-?\d+)\.json/', $filename, $matches)) {
+                    $q = (int)$matches[1];
+                    $r = (int)$matches[2];
+                    $coords = "$q,$r";
+                    
+                    $data = json_decode(file_get_contents($file), true);
+                    if ($data) {
+                        $hexInfo = [];
+                        
+                        // Include player data if it exists
+                        if (!empty($data['player']['title']) || !empty($data['player']['images'])) {
+                            $hexInfo['player'] = [
+                                'title' => $data['player']['title'] ?? '',
+                                'firstImage' => !empty($data['player']['images']) ? $data['player']['images'][0]['filename'] : null
+                            ];
+                        }
+                        
+                        // Include GM data only for GM users
+                        if ($isGM && (!empty($data['gm']['title']) || !empty($data['gm']['images']))) {
+                            $hexInfo['gm'] = [
+                                'title' => $data['gm']['title'] ?? '',
+                                'firstImage' => !empty($data['gm']['images']) ? $data['gm']['images'][0]['filename'] : null
+                            ];
+                        }
+                        
+                        if (!empty($hexInfo)) {
+                            $allHexData[$coords] = $hexInfo;
+                        }
+                    }
+                }
+            }
+            
+            echo json_encode(['success' => true, 'hexData' => $allHexData]);
             break;
             
         case 'reset_hex':

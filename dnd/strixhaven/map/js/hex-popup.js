@@ -73,11 +73,11 @@ async function loadHexData(q, r) {
             console.error('Failed to load hex data:', result.error);
             // Initialize with empty data
             currentHexData = {
-                player: { images: [], notes: '' },
+                player: { title: '', images: [], notes: '' },
                 editing: { user: '', timestamp: '', section: '' }
             };
             if (isGM) {
-                currentHexData.gm = { images: [], notes: '' };
+                currentHexData.gm = { title: '', images: [], notes: '' };
             }
             populateHexData();
         }
@@ -93,15 +93,17 @@ function populateHexData() {
     // Populate player section
     populateImages('player', currentHexData.player.images || []);
     document.getElementById('player-notes').value = currentHexData.player.notes || '';
+    document.getElementById('player-title').value = currentHexData.player.title || '';
     
     // Populate GM section if user is GM
     if (isGM) {
         // Ensure GM data exists
         if (!currentHexData.gm) {
-            currentHexData.gm = { images: [], notes: '' };
+            currentHexData.gm = { title: '', images: [], notes: '' };
         }
         populateImages('gm', currentHexData.gm.images || []);
         document.getElementById('gm-notes').value = currentHexData.gm.notes || '';
+        document.getElementById('gm-title').value = currentHexData.gm.title || '';
     }
     
     // Initialize section visibility
@@ -350,17 +352,20 @@ function updateEditLockStatus() {
  * Save hex data
  */
 async function saveHexData() {
-    // Save player notes
+    // Save player notes and title
     await saveNotes('player');
+    await saveTitle('player');
     
-    // Save GM notes if GM
+    // Save GM notes and title if GM
     if (isGM) {
         await saveNotes('gm');
+        await saveTitle('gm');
     }
     
     // Refresh hex visual indicators
     if (window.mapInterface && window.mapInterface.hexGrid) {
         window.mapInterface.hexGrid.refreshHexStatus();
+        window.mapInterface.hexGrid.loadAllHexData(); // Refresh tooltip data
     }
     
     alert('Hex data saved!');
@@ -392,6 +397,35 @@ async function saveNotes(section) {
         }
     } catch (error) {
         console.error('Error saving notes:', error);
+    }
+}
+
+/**
+ * Save title for a section
+ */
+async function saveTitle(section) {
+    const titleInput = document.getElementById(`${section}-title`);
+    const title = titleInput.value;
+    
+    const formData = new FormData();
+    formData.append('action', 'save_title');
+    formData.append('q', currentHex.q);
+    formData.append('r', currentHex.r);
+    formData.append('section', section);
+    formData.append('title', title);
+    
+    try {
+        const response = await fetch('hex-data-handler.php', {
+            method: 'POST',
+            body: formData
+        });
+        
+        const result = await response.json();
+        if (!result.success) {
+            console.error('Failed to save title:', result.error);
+        }
+    } catch (error) {
+        console.error('Error saving title:', error);
     }
 }
 
