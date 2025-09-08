@@ -39,9 +39,7 @@ class HexGridV2 {
             grid: 'rgba(100, 100, 150, 0.3)',
             hover: 'rgba(255, 255, 100, 0.4)',
             hoverStroke: 'rgba(255, 255, 100, 0.8)',
-            playerDataDot: 'rgba(52, 152, 219, 0.8)',  // Blue for player data
-            gmDataDot: 'rgba(231, 76, 60, 0.8)',       // Red for GM data
-            mixedDataDot: 'rgba(155, 89, 182, 0.8)',   // Purple for both
+            dataOutline: 'rgba(128, 128, 128, 0.8)',   // Grey outline for data
             copySource: 'rgba(46, 204, 113, 0.6)',     // Green for copy source
             copyTarget: 'rgba(241, 196, 15, 0.6)'      // Yellow for copy target preview
         };
@@ -253,7 +251,7 @@ class HexGridV2 {
     }
     
     /**
-     * Draw data indicator dot for hex if it has data
+     * Draw data indicator outline for hex if it has data
      */
     drawDataIndicator(q, r) {
         const coords = `${q},${r}`;
@@ -261,43 +259,30 @@ class HexGridV2 {
         
         if (!status) return; // No data for this hex
         
-        // Determine indicator color based on data type
-        let indicatorColor;
-        if (status.hasPlayerData && status.hasGMData) {
-            indicatorColor = this.colors.mixedDataDot;
-        } else if (status.hasPlayerData) {
-            indicatorColor = this.colors.playerDataDot;
-        } else if (status.hasGMData) {
-            indicatorColor = this.colors.gmDataDot;
-        } else {
-            return; // No data
-        }
+        // Check if we should show the indicator
+        // Show if there's player data (everyone sees it)
+        // OR if there's GM data and user is GM (only GM sees it)
+        const shouldShowIndicator = status.hasPlayerData || 
+                                   (status.hasGMData && window.USER_DATA && window.USER_DATA.isGM);
+        
+        if (!shouldShowIndicator) return;
         
         // Save the current context state before modifying it
         this.ctx.save();
         
-        // Get hex center position
-        const center = this.coordSystem.hexToPixel(q, r);
+        // Get hex vertices for drawing the outline
+        const vertices = this.coordSystem.getHexVertices(q, r);
         
-        // Draw indicator dot in upper-right of hex
-        const dotRadius = 3;
-        const offsetX = this.coordSystem.hexSize * 0.6;
-        const offsetY = -this.coordSystem.hexSize * 0.6;
+        // Draw hex outline with thicker grey border
+        this.ctx.strokeStyle = this.colors.dataOutline;
+        this.ctx.lineWidth = 2.5;  // Thicker than normal grid lines
         
-        this.ctx.fillStyle = indicatorColor;
         this.ctx.beginPath();
-        this.ctx.arc(
-            center.x + offsetX,
-            center.y + offsetY,
-            dotRadius,
-            0,
-            2 * Math.PI
-        );
-        this.ctx.fill();
-        
-        // Add white border to make it more visible
-        this.ctx.strokeStyle = 'rgba(255, 255, 255, 0.8)';
-        this.ctx.lineWidth = 1;
+        this.ctx.moveTo(vertices[0].x, vertices[0].y);
+        for (let i = 1; i < vertices.length; i++) {
+            this.ctx.lineTo(vertices[i].x, vertices[i].y);
+        }
+        this.ctx.closePath();
         this.ctx.stroke();
         
         // Restore the original context state
