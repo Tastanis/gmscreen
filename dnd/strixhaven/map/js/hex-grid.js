@@ -273,6 +273,9 @@ class HexGridV2 {
             return; // No data
         }
         
+        // Save the current context state before modifying it
+        this.ctx.save();
+        
         // Get hex center position
         const center = this.coordSystem.hexToPixel(q, r);
         
@@ -296,6 +299,9 @@ class HexGridV2 {
         this.ctx.strokeStyle = 'rgba(255, 255, 255, 0.8)';
         this.ctx.lineWidth = 1;
         this.ctx.stroke();
+        
+        // Restore the original context state
+        this.ctx.restore();
     }
     
     /**
