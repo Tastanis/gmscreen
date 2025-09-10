@@ -167,7 +167,31 @@ class ScrollerGame {
 
     startCountdown() {
         const countdownEl = document.getElementById('countdown');
+        const countdownSound = document.getElementById('countdown-sound');
         let count = 5;
+        
+        // Play the countdown sound
+        if (countdownSound) {
+            // Reset the audio to the beginning
+            countdownSound.currentTime = 0;
+            
+            // The countdown takes 6 seconds total (5 counts + 1 second after)
+            // Get the actual duration of the audio file
+            countdownSound.addEventListener('loadedmetadata', () => {
+                const audioDuration = countdownSound.duration;
+                const targetDuration = 6; // 6 seconds total
+                
+                // Adjust playback rate if needed to sync with countdown
+                if (audioDuration > 0) {
+                    countdownSound.playbackRate = audioDuration / targetDuration;
+                }
+            });
+            
+            // Play the sound
+            countdownSound.play().catch(e => {
+                console.log('Could not play countdown sound:', e);
+            });
+        }
         
         const countInterval = setInterval(() => {
             if (count > 0) {
