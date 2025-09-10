@@ -170,27 +170,39 @@ class ScrollerGame {
         const countdownSound = document.getElementById('countdown-sound');
         let count = 5;
         
-        // Play the countdown sound
+        // Delay playing the countdown sound by 1 second (start at "4")
         if (countdownSound) {
-            // Reset the audio to the beginning
-            countdownSound.currentTime = 0;
-            
-            // The countdown takes 6 seconds total (5 counts + 1 second after)
-            // Get the actual duration of the audio file
-            countdownSound.addEventListener('loadedmetadata', () => {
-                const audioDuration = countdownSound.duration;
-                const targetDuration = 6; // 6 seconds total
+            setTimeout(() => {
+                // Reset the audio to the beginning
+                countdownSound.currentTime = 0;
                 
-                // Adjust playback rate if needed to sync with countdown
-                if (audioDuration > 0) {
-                    countdownSound.playbackRate = audioDuration / targetDuration;
+                // The sound plays from "4" to 1 second after "1" (5 seconds total)
+                // Get the actual duration of the audio file
+                if (countdownSound.readyState >= 2) {
+                    const audioDuration = countdownSound.duration;
+                    const targetDuration = 5; // 5 seconds total (from "4" to end)
+                    
+                    // Adjust playback rate if needed to sync with countdown
+                    if (audioDuration > 0) {
+                        countdownSound.playbackRate = audioDuration / targetDuration;
+                    }
+                } else {
+                    countdownSound.addEventListener('loadedmetadata', () => {
+                        const audioDuration = countdownSound.duration;
+                        const targetDuration = 5; // 5 seconds total (from "4" to end)
+                        
+                        // Adjust playback rate if needed to sync with countdown
+                        if (audioDuration > 0) {
+                            countdownSound.playbackRate = audioDuration / targetDuration;
+                        }
+                    });
                 }
-            });
-            
-            // Play the sound
-            countdownSound.play().catch(e => {
-                console.log('Could not play countdown sound:', e);
-            });
+                
+                // Play the sound
+                countdownSound.play().catch(e => {
+                    console.log('Could not play countdown sound:', e);
+                });
+            }, 1000); // Wait 1 second before playing (starts at "4")
         }
         
         const countInterval = setInterval(() => {
