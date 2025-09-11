@@ -412,6 +412,20 @@ class HexGridV2 {
         const worldX = (canvasX - this.viewport.offsetX) / this.viewport.scale;
         const worldY = (canvasY - this.viewport.offsetY) / this.viewport.scale;
         
+        // Check if mouse is within the image bounds (not in the border area)
+        if (this.imageBounds) {
+            if (worldX < this.imageBounds.left || worldX > this.imageBounds.right ||
+                worldY < this.imageBounds.top || worldY > this.imageBounds.bottom) {
+                // Mouse is in the border area, clear any hover
+                if (this.hoveredHex) {
+                    this.hoveredHex = null;
+                    this.render();
+                    this.hideTooltip();
+                }
+                return;
+            }
+        }
+        
         // Get hex at position
         const hex = this.coordSystem.pixelToHex(worldX, worldY);
         
