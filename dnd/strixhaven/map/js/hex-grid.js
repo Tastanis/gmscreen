@@ -651,10 +651,10 @@ class HexGridV2 {
             return;
         }
         
-        // Set new timer for 0.5 second delay
+        // Set new timer for 0.25 second delay
         this.tooltipState.hoverTimer = setTimeout(() => {
             this.showTooltip(hexData, mouseX, mouseY);
-        }, 500);
+        }, 250);
     }
     
     /**
