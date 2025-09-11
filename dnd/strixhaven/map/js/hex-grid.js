@@ -200,6 +200,9 @@ class HexGridV2 {
         // Draw all hexes
         this.drawHexGrid();
         
+        // Draw border overlay to cover hexes outside the image area
+        this.drawBorderOverlay();
+        
         // Draw copy mode highlights
         if (this.copyMode.active) {
             this.drawCopyModeHighlights();
@@ -235,6 +238,70 @@ class HexGridV2 {
             this.backgroundImage,
             imagePosition.x, imagePosition.y,  // Position at hex (0,20)
             imageWidth, imageHeight  // Scale to cover 36x36 hexes
+        );
+    }
+    
+    /**
+     * Draw border overlay around the map image
+     * Creates a thick border that covers hexes outside the image area
+     */
+    drawBorderOverlay() {
+        const hexSize = this.coordSystem.hexSize;
+        const borderThickness = 1000; // Thick border as requested
+        
+        // Calculate image boundaries (36x36 hexes starting at hex 0,20)
+        const imageStartPos = this.coordSystem.hexToPixel(0, 20);
+        const imageWidth = 36 * 1.5 * hexSize;
+        const imageHeight = 36 * Math.sqrt(3) * hexSize;
+        
+        // Store image bounds for click detection
+        this.imageBounds = {
+            left: imageStartPos.x,
+            top: imageStartPos.y,
+            right: imageStartPos.x + imageWidth,
+            bottom: imageStartPos.y + imageHeight
+        };
+        
+        // Set border color to match page background
+        this.ctx.fillStyle = '#1a1a2e';
+        
+        // Calculate canvas bounds in world coordinates
+        const canvasLeft = -this.viewport.offsetX / this.viewport.scale - borderThickness;
+        const canvasTop = -this.viewport.offsetY / this.viewport.scale - borderThickness;
+        const canvasRight = (this.canvas.width - this.viewport.offsetX) / this.viewport.scale + borderThickness;
+        const canvasBottom = (this.canvas.height - this.viewport.offsetY) / this.viewport.scale + borderThickness;
+        
+        // Draw four rectangles forming the border
+        // Top border
+        this.ctx.fillRect(
+            canvasLeft,
+            canvasTop,
+            canvasRight - canvasLeft,
+            imageStartPos.y - canvasTop
+        );
+        
+        // Bottom border
+        this.ctx.fillRect(
+            canvasLeft,
+            imageStartPos.y + imageHeight,
+            canvasRight - canvasLeft,
+            canvasBottom - (imageStartPos.y + imageHeight)
+        );
+        
+        // Left border
+        this.ctx.fillRect(
+            canvasLeft,
+            imageStartPos.y,
+            imageStartPos.x - canvasLeft,
+            imageHeight
+        );
+        
+        // Right border
+        this.ctx.fillRect(
+            imageStartPos.x + imageWidth,
+            imageStartPos.y,
+            canvasRight - (imageStartPos.x + imageWidth),
+            imageHeight
         );
     }
     
@@ -389,6 +456,15 @@ class HexGridV2 {
         // Convert to world coordinates
         const worldX = (canvasX - this.viewport.offsetX) / this.viewport.scale;
         const worldY = (canvasY - this.viewport.offsetY) / this.viewport.scale;
+        
+        // Check if click is within the image bounds (not in the border area)
+        if (this.imageBounds) {
+            if (worldX < this.imageBounds.left || worldX > this.imageBounds.right ||
+                worldY < this.imageBounds.top || worldY > this.imageBounds.bottom) {
+                // Click is in the border area, ignore it
+                return;
+            }
+        }
         
         // Get hex at position
         const hex = this.coordSystem.pixelToHex(worldX, worldY);
