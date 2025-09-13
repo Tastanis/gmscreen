@@ -1,0 +1,354 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Universal Actions - D&D Rules</title>
+    <style>
+        body {
+            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+            line-height: 1.6;
+            margin: 20px;
+            background-color: #f5f5f5;
+            color: #333;
+        }
+        .container {
+            max-width: 1400px;
+            margin: 0 auto;
+            background: white;
+            padding: 30px;
+            border-radius: 10px;
+            box-shadow: 0 2px 10px rgba(0,0,0,0.1);
+        }
+        h1 {
+            color: #28a745;
+            border-bottom: 3px solid #28a745;
+            padding-bottom: 10px;
+            margin-bottom: 30px;
+        }
+        h2 {
+            color: #28a745;
+            margin-top: 30px;
+            margin-bottom: 15px;
+        }
+        .actions-grid {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(400px, 1fr));
+            gap: 30px;
+            margin-top: 30px;
+        }
+        .action-category {
+            margin-bottom: 30px;
+            padding: 20px;
+            background-color: #f8fff8;
+            border-left: 5px solid #28a745;
+            border-radius: 5px;
+        }
+        .action-category h3 {
+            color: #28a745;
+            margin-top: 0;
+            margin-bottom: 20px;
+            font-size: 1.3em;
+            border-bottom: 2px solid #e9ecef;
+            padding-bottom: 8px;
+        }
+        .action {
+            margin-bottom: 20px;
+            padding: 15px;
+            background-color: white;
+            border-radius: 5px;
+            box-shadow: 0 1px 3px rgba(0,0,0,0.1);
+            border-left: 3px solid #28a745;
+        }
+        .action-name {
+            font-size: 1.1em;
+            font-weight: bold;
+            color: #28a745;
+            text-decoration: underline;
+            margin-bottom: 8px;
+        }
+        .action-text {
+            font-size: 0.95em;
+            line-height: 1.6;
+        }
+        .mechanic {
+            color: #dc3545;
+            font-weight: bold;
+        }
+        .highlight {
+            background-color: #fff3cd;
+            padding: 2px 4px;
+            border-radius: 3px;
+            font-weight: bold;
+        }
+        .damage {
+            background-color: #f8d7da;
+            color: #721c24;
+            padding: 2px 4px;
+            border-radius: 3px;
+            font-weight: bold;
+        }
+        .bonus {
+            background-color: #d4edda;
+            color: #155724;
+            padding: 2px 4px;
+            border-radius: 3px;
+            font-weight: bold;
+        }
+        .formula {
+            background-color: #e2e3e5;
+            padding: 8px;
+            border-radius: 5px;
+            font-family: 'Courier New', monospace;
+            font-weight: bold;
+            margin: 8px 0;
+        }
+        .ability-block {
+            background-color: #f1f3f4;
+            padding: 10px;
+            border-radius: 5px;
+            margin: 8px 0;
+            border-left: 3px solid #6c757d;
+        }
+        .keywords {
+            font-style: italic;
+            color: #6c757d;
+            font-size: 0.9em;
+        }
+        .range {
+            color: #17a2b8;
+            font-weight: bold;
+        }
+        .roll-results {
+            margin-left: 15px;
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <h1>⚡ Universal Actions Reference</h1>
+
+        <div class="actions-grid">
+            <!-- Combat Actions -->
+            <div class="action-category">
+                <h3>⚔️ Combat Actions</h3>
+
+                <div class="action">
+                    <div class="action-name">FREE STRIKES</div>
+                    <div class="action-text">
+                        Basic weapon attacks usable <span class="highlight">on or off your turn</span>. Every hero has <span class="mechanic">melee</span> and <span class="mechanic">ranged</span> free strikes.
+                        <div class="ability-block">
+                            <strong>Melee Weapon Free Strike</strong><br>
+                            <span class="keywords">Charge, Melee, Strike, Weapon</span> • <span class="range">Melee 1</span><br>
+                            <div class="roll-results">
+                                <strong>11-:</strong> <span class="damage">2 + M/A damage</span><br>
+                                <strong>12-16:</strong> <span class="damage">5 + M/A damage</span><br>
+                                <strong>17+:</strong> <span class="damage">7 + M/A damage</span>
+                            </div>
+                        </div>
+                        <div class="ability-block">
+                            <strong>Ranged Weapon Free Strike</strong><br>
+                            <span class="keywords">Ranged, Strike, Weapon</span> • <span class="range">Ranged 5</span><br>
+                            <div class="roll-results">
+                                <strong>11-:</strong> <span class="damage">2 + M/A damage</span><br>
+                                <strong>12-16:</strong> <span class="damage">4 + M/A damage</span><br>
+                                <strong>17+:</strong> <span class="damage">6 + M/A damage</span>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+
+                <div class="action">
+                    <div class="action-name">CHARGE</div>
+                    <div class="action-text">
+                        <span class="mechanic">Main Action:</span> Move up to speed in a <span class="highlight">straight line</span>, then make a <span class="mechanic">melee free strike</span>. Cannot move through <span class="mechanic">difficult terrain</span> or <span class="mechanic">shift</span>.
+                    </div>
+                </div>
+
+                <div class="action">
+                    <div class="action-name">DEFEND</div>
+                    <div class="action-text">
+                        <span class="mechanic">Main Action:</span> Ability rolls against you take <span class="bonus">double bane</span>. You gain <span class="bonus">double edge</span> on environmental resistance tests. No benefit while <span class="mechanic">taunted</span>.
+                    </div>
+                </div>
+
+                <div class="action">
+                    <div class="action-name">AID ATTACK</div>
+                    <div class="action-text">
+                        <span class="mechanic">Maneuver:</span> Choose adjacent enemy. Next ally's ability roll against them gains <span class="bonus">edge</span> until start of your next turn.
+                    </div>
+                </div>
+            </div>
+
+            <!-- Movement Actions -->
+            <div class="action-category">
+                <h3>🏃 Movement Actions</h3>
+
+                <div class="action">
+                    <div class="action-name">SHIFTING</div>
+                    <div class="action-text">
+                        Careful movement that prevents <span class="mechanic">opportunity attacks</span>. Cannot shift into or through <span class="mechanic">difficult/damaging terrain</span>. Can choose to move normally instead.
+                    </div>
+                </div>
+
+                <div class="action">
+                    <div class="action-name">DISENGAGE</div>
+                    <div class="action-text">
+                        <span class="mechanic">Move Action:</span> <span class="mechanic">Shift 1 square</span>. Can break up movement with maneuver and main action. Only once per round.
+                    </div>
+                </div>
+
+                <div class="action">
+                    <div class="action-name">RIDE</div>
+                    <div class="action-text">
+                        <span class="mechanic">Move Action:</span> While mounted, move your mount up to its speed OR have mount <span class="mechanic">Disengage</span>. Once per round per mount.
+                    </div>
+                </div>
+
+                <div class="action">
+                    <div class="action-name">BURROW & DIG</div>
+                    <div class="action-text">
+                        <strong>Burrow:</strong> Move through dirt horizontally at full speed (requires burrow speed).<br>
+                        <strong>Dig:</strong> <span class="mechanic">Maneuver</span> to move vertically up to your <span class="mechanic">size</span> in squares (requires burrow speed ≥ size).
+                    </div>
+                </div>
+
+                <div class="action">
+                    <div class="action-name">CLIMB & SWIM</div>
+                    <div class="action-text">
+                        With special movement: full speed. Without: <span class="highlight">2 movement per square</span>. Difficult surfaces require <span class="mechanic">Might test</span> (failure wastes no movement).
+                    </div>
+                </div>
+
+                <div class="action">
+                    <div class="action-name">JUMP</div>
+                    <div class="action-text">
+                        <strong>Base:</strong> <span class="mechanic">Might or Agility score</span> squares long, <span class="highlight">1 square high</span>.<br>
+                        <strong>Enhanced:</strong> Test for extra distance:
+                        <div class="roll-results">
+                            <strong>11-:</strong> No bonus<br>
+                            <strong>12-16:</strong> <span class="bonus">+1 square</span><br>
+                            <strong>17+:</strong> <span class="bonus">+2 squares</span>
+                        </div>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Stealth Actions -->
+            <div class="action-category">
+                <h3>🥷 Stealth Actions</h3>
+
+                <div class="action">
+                    <div class="action-name">HIDE & SNEAK</div>
+                    <div class="action-text">
+                        <strong>Hide:</strong> Requires <span class="mechanic">cover/concealment</span> from unobserving enemies. <span class="mechanic">Maneuver</span> in combat, automatic if conditions met.<br>
+                        <strong>Benefits:</strong> Cannot be targeted by non-Area abilities. <span class="bonus">Edge</span> on ability rolls until end of turn after becoming unhidden.<br>
+                        <strong>Sneak:</strong> While hidden outside combat, move at <span class="highlight">half speed</span> with <span class="mechanic">Agility test</span> to stay hidden.
+                    </div>
+                </div>
+            </div>
+
+            <!-- Utility Actions -->
+            <div class="action-category">
+                <h3>🔧 Utility Actions</h3>
+
+                <div class="action">
+                    <div class="action-name">ASSIST A TEST</div>
+                    <div class="action-text">
+                        Make a test to help another creature:
+                        <div class="roll-results">
+                            <strong>11-:</strong> <span class="damage">Bane</span> on their test<br>
+                            <strong>12-16:</strong> <span class="bonus">Edge</span> on their test<br>
+                            <strong>17+:</strong> <span class="bonus">Double edge</span> on their test
+                        </div>
+                    </div>
+                </div>
+
+                <div class="action">
+                    <div class="action-name">CATCH BREATH</div>
+                    <div class="action-text">
+                        <span class="mechanic">Maneuver:</span> Spend a <span class="mechanic">Recovery</span> to regain Stamina equal to your <span class="highlight">recovery value</span>. Cannot use while <span class="mechanic">dying</span>.
+                    </div>
+                </div>
+
+                <div class="action">
+                    <div class="action-name">USE CONSUMABLE</div>
+                    <div class="action-text">
+                        <span class="mechanic">Maneuver:</span> Activate a consumable treasure (potion, etc.) on yourself or adjacent willing creature.
+                    </div>
+                </div>
+
+                <div class="action">
+                    <div class="action-name">STAND UP</div>
+                    <div class="action-text">
+                        <span class="mechanic">Maneuver:</span> End <span class="mechanic">prone</span> condition on yourself or adjacent willing creature.
+                    </div>
+                </div>
+
+                <div class="action">
+                    <div class="action-name">MAKE OR ASSIST A TEST</div>
+                    <div class="action-text">
+                        Most tests are <span class="mechanic">maneuvers</span> in combat (search, pick lock, lift). Complex tests may require <span class="mechanic">actions</span>. Instant tests are <span class="mechanic">free maneuvers</span>.
+                    </div>
+                </div>
+            </div>
+
+            <!-- Grappling Actions -->
+            <div class="action-category">
+                <h3>🤼 Grappling Actions</h3>
+
+                <div class="action">
+                    <div class="action-name">ESCAPE GRAB</div>
+                    <div class="action-text">
+                        <span class="mechanic">Maneuver:</span> Power Roll + Might or Agility:
+                        <div class="roll-results">
+                            <strong>11-:</strong> No effect<br>
+                            <strong>12-16:</strong> Escape, but grabber makes <span class="mechanic">free strike</span><br>
+                            <strong>17+:</strong> Escape cleanly
+                        </div>
+                        <span class="damage">Bane</span> if you're smaller than grabber.
+                    </div>
+                </div>
+
+                <div class="action">
+                    <div class="action-name">GRAB</div>
+                    <div class="action-text">
+                        <span class="mechanic">Maneuver:</span> <span class="keywords">Melee, Weapon</span> • <span class="range">Melee 1</span><br>
+                        Power Roll + Might vs one creature (size ≤ yours, or ≤ Might score):
+                        <div class="roll-results">
+                            <strong>11-:</strong> No effect<br>
+                            <strong>12-16:</strong> Grab, but target makes <span class="mechanic">free strike</span><br>
+                            <strong>17+:</strong> Target is <span class="mechanic">grabbed</span>
+                        </div>
+                    </div>
+                </div>
+
+                <div class="action">
+                    <div class="action-name">KNOCKBACK</div>
+                    <div class="action-text">
+                        <span class="mechanic">Maneuver:</span> <span class="keywords">Melee, Weapon</span> • <span class="range">Melee 1</span><br>
+                        Power Roll + Might vs one creature (size ≤ yours, or ≤ Might score):
+                        <div class="roll-results">
+                            <strong>11-:</strong> <span class="mechanic">Push 1</span><br>
+                            <strong>12-16:</strong> <span class="mechanic">Push 2</span><br>
+                            <strong>17+:</strong> <span class="mechanic">Push 3</span>
+                        </div>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Healing Action -->
+            <div class="action-category">
+                <h3>💚 Healing Action</h3>
+
+                <div class="action">
+                    <div class="action-name">HEAL</div>
+                    <div class="action-text">
+                        <span class="mechanic">Main Action:</span> Adjacent creature can spend a <span class="mechanic">Recovery</span> to regain Stamina OR make a <span class="bonus">saving throw</span> against one effect ended by saves.
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+</body>
+</html>

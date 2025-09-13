@@ -899,7 +899,7 @@ $defaultInventoryTab = $is_gm ? 'frunk' : $user;
                     <a href="#" onclick="openRulesSection('breakthrough')">Breakthrough</a>
                     <a href="#" onclick="openRulesSection('respites')">Respites</a>
                     <a href="#" onclick="openRulesSection('negotiation')">Negotiation</a>
-                    <a href="#" onclick="openRulesSection('coming-soon-2')">Coming Soon</a>
+                    <a href="#" onclick="openRulesSection('universal-actions')">Universal Actions</a>
                     <a href="#" onclick="openRulesSection('coming-soon-3')">Coming Soon</a>
                 </div>
             </div>
