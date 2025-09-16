@@ -338,9 +338,18 @@ $progress_percentage = $student['total_possible_points'] > 0 ?
             background: #e2e8f0;
             color: #4a5568;
         }
-        
+
         .btn-secondary:hover {
             background: #cbd5e0;
+        }
+
+        .btn-danger {
+            background: #f56565;
+            color: white;
+        }
+
+        .btn-danger:hover {
+            background: #c53030;
         }
     </style>
 </head>
@@ -421,6 +430,7 @@ $progress_percentage = $student['total_possible_points'] > 0 ?
                     <div class="button-group">
                         <button type="submit" class="form-button btn-primary">Update Student Details</button>
                         <a href="teacher_dashboard.php" class="form-button btn-secondary" style="text-decoration: none; display: inline-block; text-align: center;">Cancel</a>
+                        <button type="button" class="form-button btn-danger" id="delete-student-btn">Delete Student</button>
                     </div>
                 </form>
             </div>
@@ -448,5 +458,51 @@ $progress_percentage = $student['total_possible_points'] > 0 ?
             </div>
         </div>
     </div>
+
+    <script>
+        (function() {
+            const deleteButton = document.getElementById('delete-student-btn');
+            if (!deleteButton) {
+                return;
+            }
+
+            deleteButton.addEventListener('click', function() {
+                if (!confirm('Are you sure you want to delete this student? This action cannot be undone.')) {
+                    return;
+                }
+
+                const originalText = deleteButton.textContent;
+                deleteButton.disabled = true;
+                deleteButton.textContent = 'Deleting...';
+
+                const params = new URLSearchParams();
+                params.append('student_id', '<?php echo $student['id']; ?>');
+
+                fetch('delete_student.php', {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/x-www-form-urlencoded'
+                    },
+                    body: params.toString()
+                })
+                .then(response => response.json())
+                .then(data => {
+                    if (data.success) {
+                        window.location.href = 'teacher_dashboard.php';
+                        return;
+                    }
+
+                    alert(data.message || 'Unable to delete student. Please try again.');
+                    deleteButton.disabled = false;
+                    deleteButton.textContent = originalText;
+                })
+                .catch(() => {
+                    alert('An unexpected error occurred while deleting the student.');
+                    deleteButton.disabled = false;
+                    deleteButton.textContent = originalText;
+                });
+            });
+        })();
+    </script>
 </body>
 </html>
