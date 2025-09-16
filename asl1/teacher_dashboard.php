@@ -95,7 +95,7 @@ try {
                 <!-- Students Section -->
                 <div id="students-section">
                     <h2>Student Progress Overview</h2>
-                    <p>Total Students: <strong><span id="filtered-count"><?php echo count($students); ?></span></strong> of <strong><?php echo count($students); ?></strong> | Total Skills: <strong><?php echo $total_skills; ?></strong></p>
+                    <p>Total Students: <strong><span id="filtered-count"><?php echo count($students); ?></span></strong> of <strong><span id="total-count"><?php echo count($students); ?></span></strong> | Total Skills: <strong><?php echo $total_skills; ?></strong></p>
                     
                     <!-- Filtering and Sorting Controls -->
                     <div class="filter-controls" style="margin: 20px 0; padding: 20px; background: rgba(247, 250, 252, 0.8); border-radius: 12px; border: 2px solid #e2e8f0;">
@@ -149,12 +149,13 @@ try {
                             $progress_percentage = $student['total_possible_points'] > 0 ? 
                                 round(($student['earned_points'] / $student['total_possible_points']) * 100) : 0;
                             ?>
-                            <div class="student-card" 
+                            <div class="student-card"
                                  data-first-name="<?php echo htmlspecialchars(strtolower($student['first_name'])); ?>"
                                  data-last-name="<?php echo htmlspecialchars(strtolower($student['last_name'])); ?>"
                                  data-period="<?php echo $student['class_period'] ?? 'unassigned'; ?>"
                                  data-level="<?php echo $student['level'] ?? '1'; ?>"
-                                 data-progress="<?php echo $progress_percentage; ?>">
+                                 data-progress="<?php echo $progress_percentage; ?>"
+                                 data-student-id="<?php echo $student['id']; ?>">
                                 <div class="student-name">
                                     <?php echo htmlspecialchars($student['first_name'] . ' ' . $student['last_name']); ?>
                                 </div>
@@ -188,9 +189,14 @@ try {
                                         Points: <?php echo $student['earned_points']; ?> / <?php echo $student['total_possible_points']; ?>
                                     </small>
                                 </div>
-                                <button class="form-button" onclick="viewStudentDetails(<?php echo $student['id']; ?>)" style="margin-top: 10px; font-size: 0.9rem; padding: 6px 12px;">
-                                    View Details
-                                </button>
+                                <div class="student-card-actions">
+                                    <button class="form-button" onclick="viewStudentDetails(<?php echo $student['id']; ?>)" style="font-size: 0.9rem; padding: 6px 12px;">
+                                        View Details
+                                    </button>
+                                    <button class="form-button delete-student-button" onclick="deleteStudent(<?php echo $student['id']; ?>, '<?php echo htmlspecialchars($student['first_name'] . ' ' . $student['last_name'], ENT_QUOTES); ?>', this)" style="font-size: 0.9rem; padding: 6px 12px;">
+                                        Delete
+                                    </button>
+                                </div>
                             </div>
                         <?php endforeach; ?>
                     </div>
@@ -537,7 +543,66 @@ try {
             // Redirect to student details page
             window.location.href = 'student_details.php?id=' + studentId;
         }
-        
+
+        function deleteStudent(studentId, studentName, buttonElement) {
+            if (!confirm('Delete ' + studentName + '? This action cannot be undone.')) {
+                return;
+            }
+
+            const deleteButton = buttonElement || null;
+            const originalText = deleteButton ? deleteButton.textContent : '';
+
+            if (deleteButton) {
+                deleteButton.disabled = true;
+                deleteButton.textContent = 'Deleting...';
+            }
+
+            const params = new URLSearchParams();
+            params.append('student_id', studentId);
+
+            fetch('delete_student.php', {
+                method: 'POST',
+                headers: {
+                    'Content-Type': 'application/x-www-form-urlencoded'
+                },
+                body: params.toString()
+            })
+            .then(response => response.json())
+            .then(data => {
+                if (data.success) {
+                    const card = document.querySelector('.student-card[data-student-id="' + studentId + '"]');
+                    if (card) {
+                        card.remove();
+                    }
+
+                    const totalCountElement = document.getElementById('total-count');
+                    if (totalCountElement) {
+                        const currentTotal = parseInt(totalCountElement.textContent, 10);
+                        if (!Number.isNaN(currentTotal) && currentTotal > 0) {
+                            totalCountElement.textContent = currentTotal - 1;
+                        }
+                    }
+
+                    showMessage(studentName + ' has been deleted.', 'success');
+                    filterAndSortStudents();
+                } else {
+                    showMessage(data.message || 'Error deleting student.', 'error');
+                    if (deleteButton) {
+                        deleteButton.disabled = false;
+                        deleteButton.textContent = originalText;
+                    }
+                }
+            })
+            .catch(error => {
+                console.error('Error deleting student:', error);
+                showMessage('Error deleting student. Please try again.', 'error');
+                if (deleteButton) {
+                    deleteButton.disabled = false;
+                    deleteButton.textContent = originalText;
+                }
+            });
+        }
+
         function showAddSkillForm() {
             document.getElementById('add-skill-form').style.display = 'block';
         }
@@ -1290,10 +1355,15 @@ try {
             const periodFilter = document.getElementById('period-filter').value;
             const levelFilter = document.getElementById('level-filter').value;
             const sortBy = document.getElementById('sort-filter').value;
-            
+
             const cards = Array.from(document.querySelectorAll('.student-card'));
             let visibleCount = 0;
-            
+
+            const totalCountElement = document.getElementById('total-count');
+            if (totalCountElement) {
+                totalCountElement.textContent = cards.length;
+            }
+
             // First, filter cards
             cards.forEach(card => {
                 const firstName = card.dataset.firstName;
@@ -1396,7 +1466,22 @@ try {
         .teacher-dashboard .main-content {
             grid-column: 1 / -1;
         }
-        
+
+        .student-card-actions {
+            display: flex;
+            gap: 8px;
+            margin-top: 10px;
+        }
+
+        .delete-student-button {
+            background: #f56565;
+            color: white;
+        }
+
+        .delete-student-button:hover {
+            background: #c53030;
+        }
+
         .skill-summary-card {
             background: rgba(247, 250, 252, 0.8);
             border-radius: 12px;
