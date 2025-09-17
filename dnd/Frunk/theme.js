@@ -1,7 +1,12 @@
 (function () {
     const MIN_RAGE_INTERVAL = 15000;
     const MAX_RAGE_INTERVAL = 28000;
+    const BUNNY_INTERVAL = 30000;
+    const INITIAL_BUNNY_MIN_DELAY = 1500;
+    const INITIAL_BUNNY_MAX_DELAY = 5000;
+
     let rageTimer = null;
+    let bunnyTimer = null;
     let active = false;
 
     function randomBetween(min, max) {
@@ -41,12 +46,50 @@
         rageTimer = window.setTimeout(triggerRage, delay);
     }
 
+    function removeBunnyElements() {
+        document.querySelectorAll('.frunk-bunny').forEach(element => {
+            element.remove();
+        });
+    }
+
+    function spawnBunny() {
+        if (!active) {
+            return;
+        }
+
+        const bunny = document.createElement('div');
+        bunny.className = 'frunk-bunny';
+        document.body.appendChild(bunny);
+
+        const handleAnimationEnd = () => {
+            bunny.removeEventListener('animationend', handleAnimationEnd);
+            bunny.remove();
+        };
+
+        bunny.addEventListener('animationend', handleAnimationEnd);
+
+        scheduleNextBunny();
+    }
+
+    function scheduleNextBunny(initial = false) {
+        if (!active) {
+            return;
+        }
+
+        const delay = initial
+            ? randomBetween(INITIAL_BUNNY_MIN_DELAY, INITIAL_BUNNY_MAX_DELAY)
+            : BUNNY_INTERVAL;
+
+        bunnyTimer = window.setTimeout(spawnBunny, delay);
+    }
+
     function enableRage() {
         if (active) {
             return;
         }
         active = true;
         scheduleNextRage();
+        scheduleNextBunny(true);
     }
 
     function disableRage() {
@@ -58,8 +101,13 @@
             clearTimeout(rageTimer);
             rageTimer = null;
         }
+        if (bunnyTimer) {
+            clearTimeout(bunnyTimer);
+            bunnyTimer = null;
+        }
         removeRageClass(document.querySelector('.nav-title'));
         removeRageClass(document.getElementById('theme-toggle-btn'));
+        removeBunnyElements();
     }
 
     function handleThemeChange(themeName) {
