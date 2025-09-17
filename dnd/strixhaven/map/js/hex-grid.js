@@ -27,7 +27,8 @@ class HexGridV2 {
         this.tooltipState = {
             currentHex: null,
             hoverTimer: null,
-            tooltipElement: null
+            tooltipElement: null,
+            imageRequestId: 0
         };
         
         // Copy mode state
@@ -699,10 +700,44 @@ class HexGridV2 {
         
         // Set image
         if (image) {
-            imageElement.src = `hex-images/${image}`;
-            imageElement.style.display = 'block';
+            const requestedImage = `hex-images/${image}`;
+
+            // If the requested image is already loaded, show it immediately
+            if (imageElement.dataset.currentImage === image) {
+                imageElement.style.display = 'block';
+            } else {
+                // Hide the current image while the new one loads
+                imageElement.style.display = 'none';
+                imageElement.removeAttribute('src');
+
+                const requestId = ++this.tooltipState.imageRequestId;
+                const loader = new Image();
+
+                loader.onload = () => {
+                    // Only show if this is still the most recent request
+                    if (this.tooltipState.imageRequestId !== requestId) {
+                        return;
+                    }
+                    imageElement.src = requestedImage;
+                    imageElement.dataset.currentImage = image;
+                    imageElement.style.display = 'block';
+                };
+
+                loader.onerror = () => {
+                    if (this.tooltipState.imageRequestId !== requestId) {
+                        return;
+                    }
+                    imageElement.style.display = 'none';
+                    delete imageElement.dataset.currentImage;
+                    imageElement.removeAttribute('src');
+                };
+
+                loader.src = requestedImage;
+            }
         } else {
             imageElement.style.display = 'none';
+            delete imageElement.dataset.currentImage;
+            imageElement.removeAttribute('src');
         }
         
         // Only show if there's content
@@ -744,7 +779,12 @@ class HexGridV2 {
             clearTimeout(this.tooltipState.hoverTimer);
             this.tooltipState.hoverTimer = null;
         }
-        
+
+        // Cancel any pending image load for the tooltip
+        if (this.tooltipState) {
+            this.tooltipState.imageRequestId++;
+        }
+
         if (this.tooltipState.tooltipElement) {
             this.tooltipState.tooltipElement.classList.remove('visible');
         }
