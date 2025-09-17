@@ -1,0 +1,415 @@
+@import url('https://fonts.googleapis.com/css2?family=Mountains+of+Christmas:wght@400;700&family=Nunito:wght@400;600;700&display=swap');
+
+body.christmas-theme {
+    font-family: 'Nunito', 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+    background: linear-gradient(180deg, #0b3d91 0%, #0b1a3d 45%, #020915 100%);
+    color: #f5f9ff;
+    position: relative;
+    overflow-x: hidden;
+}
+
+body.christmas-theme::before {
+    content: '';
+    position: fixed;
+    inset: 0;
+    pointer-events: none;
+    background: radial-gradient(circle at 20% 20%, rgba(255, 255, 255, 0.22) 0%, rgba(255, 255, 255, 0) 45%),
+        radial-gradient(circle at 80% 25%, rgba(222, 34, 61, 0.18) 0%, rgba(222, 34, 61, 0) 40%),
+        radial-gradient(circle at 30% 75%, rgba(45, 191, 102, 0.22) 0%, rgba(45, 191, 102, 0) 50%),
+        radial-gradient(circle at 85% 70%, rgba(255, 255, 255, 0.18) 0%, rgba(255, 255, 255, 0) 55%);
+    z-index: -1;
+}
+
+body.christmas-theme::after {
+    content: '';
+    position: fixed;
+    inset: 0;
+    pointer-events: none;
+    background-image: linear-gradient(135deg, rgba(255, 255, 255, 0.12) 25%, transparent 25%, transparent 50%, rgba(255, 255, 255, 0.12) 50%, rgba(255, 255, 255, 0.12) 75%, transparent 75%, transparent);
+    background-size: 220px 220px;
+    opacity: 0.15;
+    z-index: -1;
+}
+
+body.christmas-theme .top-nav {
+    background: rgba(10, 43, 20, 0.92);
+    border-bottom: 2px solid rgba(255, 255, 255, 0.35);
+    box-shadow: 0 18px 36px rgba(0, 0, 0, 0.55);
+}
+
+body.christmas-theme .nav-title {
+    font-family: 'Mountains of Christmas', cursive;
+    color: #e8f5ff;
+    text-shadow: 0 0 14px rgba(227, 245, 255, 0.65), 0 0 6px rgba(181, 237, 255, 0.35);
+    letter-spacing: 0.05em;
+}
+
+body.christmas-theme .nav-btn {
+    background: linear-gradient(145deg, #2dbf66, #1d8a46);
+    color: #f5f9ff;
+    border: 1px solid rgba(233, 255, 244, 0.35);
+    box-shadow: 0 8px 18px rgba(45, 191, 102, 0.45);
+    text-transform: uppercase;
+    letter-spacing: 0.04em;
+}
+
+body.christmas-theme .nav-btn:hover {
+    background: linear-gradient(145deg, #35d476, #29a65c);
+    transform: translateY(-1px) scale(1.01);
+}
+
+body.christmas-theme .nav-btn.logout-btn {
+    background: linear-gradient(145deg, #de223d, #ab142a);
+    box-shadow: 0 8px 20px rgba(222, 34, 61, 0.45);
+}
+
+body.christmas-theme .nav-btn.logout-btn:hover {
+    background: linear-gradient(145deg, #f32d4a, #c61d35);
+}
+
+body.christmas-theme #theme-toggle-btn {
+    position: relative;
+    overflow: hidden;
+    box-shadow: 0 0 18px rgba(181, 237, 255, 0.4);
+}
+
+body.christmas-theme #theme-toggle-btn::before {
+    content: '🎄';
+    margin-right: 8px;
+}
+
+body.christmas-theme #theme-toggle-btn.theme-active::after {
+    content: '';
+    position: absolute;
+    inset: -30%;
+    background: radial-gradient(circle at 50% 50%, rgba(255, 255, 255, 0.35) 0%, rgba(255, 255, 255, 0) 65%);
+    mix-blend-mode: screen;
+    animation: christmas-glow 8s infinite alternate;
+    z-index: -1;
+}
+
+@keyframes christmas-glow {
+    from {
+        opacity: 0.45;
+        transform: scale(0.95);
+    }
+    to {
+        opacity: 0.85;
+        transform: scale(1.1);
+    }
+}
+
+body.christmas-theme .dropdown-content {
+    background: rgba(5, 26, 44, 0.92);
+    border: 1px solid rgba(232, 245, 255, 0.25);
+    box-shadow: 0 20px 45px rgba(0, 0, 0, 0.55);
+}
+
+body.christmas-theme .dropdown-content a {
+    color: #e8f5ff;
+}
+
+body.christmas-theme .dropdown-content a:hover {
+    background: rgba(45, 191, 102, 0.2);
+}
+
+body.christmas-theme .main-container {
+    max-width: 1400px;
+    margin: 30px auto;
+    padding: 0 20px 60px;
+}
+
+body.christmas-theme .character-tabs,
+body.christmas-theme .inventory-tabs {
+    background: rgba(7, 30, 56, 0.92);
+    border-radius: 18px 18px 0 0;
+    border: 1px solid rgba(232, 245, 255, 0.28);
+    box-shadow: 0 15px 45px rgba(0, 0, 0, 0.55);
+}
+
+body.christmas-theme .character-tab,
+body.christmas-theme .inventory-tab {
+    color: #e8f5ff;
+    text-transform: uppercase;
+}
+
+body.christmas-theme .character-tab:hover,
+body.christmas-theme .inventory-tab:hover {
+    background: rgba(45, 191, 102, 0.22);
+}
+
+body.christmas-theme .character-tab.active,
+body.christmas-theme .inventory-tab.active {
+    background: rgba(222, 34, 61, 0.3);
+    border-bottom-color: rgba(181, 237, 255, 0.7);
+}
+
+body.christmas-theme .content-wrapper,
+body.christmas-theme .inventory-container,
+body.christmas-theme .inventory-content-wrapper {
+    background: rgba(4, 20, 38, 0.85);
+    border: 1px solid rgba(181, 237, 255, 0.25);
+    border-radius: 0 0 20px 20px;
+    box-shadow: 0 30px 60px rgba(0, 0, 0, 0.65);
+}
+
+body.christmas-theme .section h2,
+body.christmas-theme .inventory-section h2 {
+    color: #f1f9ff;
+    border-bottom-color: rgba(181, 237, 255, 0.35);
+}
+
+body.christmas-theme input,
+body.christmas-theme textarea,
+body.christmas-theme select {
+    background: rgba(15, 53, 88, 0.7);
+    border: 1px solid rgba(181, 237, 255, 0.35);
+    color: #f1f9ff;
+}
+
+body.christmas-theme input:focus,
+body.christmas-theme textarea:focus,
+body.christmas-theme select:focus {
+    border-color: rgba(45, 191, 102, 0.7);
+    box-shadow: 0 0 0 3px rgba(45, 191, 102, 0.25);
+}
+
+body.christmas-theme .upload-btn {
+    background: linear-gradient(145deg, #de223d, #a40f25);
+    border-color: rgba(255, 255, 255, 0.35);
+    color: #fdfbfb;
+}
+
+body.christmas-theme .upload-btn:hover {
+    background: linear-gradient(145deg, #f32d4a, #c61d35);
+}
+
+body.christmas-theme .relationship-entry,
+body.christmas-theme .inventory-item {
+    background: rgba(15, 53, 88, 0.65);
+    border-color: rgba(181, 237, 255, 0.25);
+}
+
+body.christmas-theme .inventory-tab.gm {
+    color: #ffccd5;
+}
+
+body.christmas-theme .gm-allowed {
+    color: #ffdfdf;
+}
+
+body.christmas-theme .gm-restricted,
+body.christmas-theme .access-restricted {
+    color: rgba(255, 255, 255, 0.45);
+}
+
+body.christmas-theme .card,
+body.christmas-theme .inventory-card {
+    background: rgba(12, 47, 80, 0.75);
+    border: 1px solid rgba(181, 237, 255, 0.25);
+    box-shadow: 0 12px 28px rgba(0, 0, 0, 0.45);
+}
+
+body.christmas-theme .card:hover,
+body.christmas-theme .inventory-card:hover {
+    transform: translateY(-3px);
+    box-shadow: 0 18px 36px rgba(0, 0, 0, 0.5);
+}
+
+body.christmas-theme .save-status {
+    color: #b5edff;
+}
+
+body.christmas-theme .status-indicator[data-status="dirty"] {
+    color: #de223d;
+}
+
+body.christmas-theme .status-indicator[data-status="saving"] {
+    color: #f3d45c;
+}
+
+body.christmas-theme .status-indicator[data-status="saved"] {
+    color: #2dbf66;
+}
+
+body.christmas-theme .inventory-section h3 {
+    color: #ffdfdf;
+}
+
+body.christmas-theme .inventory-section strong {
+    color: #b5edff;
+}
+
+body.christmas-theme .inventory-content-wrapper::-webkit-scrollbar-thumb {
+    background: rgba(45, 191, 102, 0.4);
+}
+
+body.christmas-theme .inventory-content-wrapper::-webkit-scrollbar-track {
+    background: rgba(4, 20, 38, 0.65);
+}
+
+body.christmas-theme .portrait-frame {
+    border-color: rgba(255, 255, 255, 0.35);
+    background: rgba(8, 30, 52, 0.65);
+}
+
+body.christmas-theme .portrait-placeholder {
+    color: rgba(255, 255, 255, 0.55);
+}
+
+body.christmas-theme .club-entry,
+body.christmas-theme .project-entry {
+    background: rgba(15, 53, 88, 0.55);
+    border-color: rgba(181, 237, 255, 0.2);
+}
+
+body.christmas-theme .club-entry:hover,
+body.christmas-theme .project-entry:hover {
+    border-color: rgba(222, 34, 61, 0.4);
+}
+
+body.christmas-theme .relationship-entry:hover {
+    border-color: rgba(45, 191, 102, 0.4);
+}
+
+body.christmas-theme .monster-card {
+    background: rgba(12, 47, 80, 0.85);
+    border-color: rgba(181, 237, 255, 0.25);
+}
+
+body.christmas-theme .monster-card .monster-name {
+    color: #ffdfdf;
+}
+
+body.christmas-theme .monster-card .monster-details {
+    color: #d9eaff;
+}
+
+body.christmas-theme .schedule-table th {
+    background: rgba(45, 191, 102, 0.4);
+}
+
+body.christmas-theme .schedule-table td {
+    background: rgba(12, 47, 80, 0.6);
+}
+
+body.christmas-theme .schedule-table tr:nth-child(even) td {
+    background: rgba(18, 65, 105, 0.6);
+}
+
+body.christmas-theme .schedule-table tr:hover td {
+    background: rgba(222, 34, 61, 0.25);
+}
+
+body.christmas-theme .inventory-note {
+    background: rgba(15, 53, 88, 0.5);
+}
+
+body.christmas-theme .inventory-note strong {
+    color: #ffdfdf;
+}
+
+body.christmas-theme .inventory-note em {
+    color: #b5edff;
+}
+
+body.christmas-theme .status-bar {
+    background: rgba(12, 47, 80, 0.7);
+    border-color: rgba(181, 237, 255, 0.25);
+}
+
+body.christmas-theme .status-bar .status-label {
+    color: #e8f5ff;
+}
+
+body.christmas-theme .status-bar .status-value {
+    color: #ffdfdf;
+}
+
+body.christmas-theme .tab-description {
+    color: rgba(229, 244, 255, 0.85);
+}
+
+body.christmas-theme .tab-description strong {
+    color: #ffdfdf;
+}
+
+body.christmas-theme .tab-description em {
+    color: #b5edff;
+}
+
+body.christmas-theme .inventory-search input {
+    background: rgba(12, 47, 80, 0.6);
+    border-color: rgba(181, 237, 255, 0.35);
+}
+
+body.christmas-theme .inventory-search input:focus {
+    border-color: rgba(45, 191, 102, 0.7);
+}
+
+body.christmas-theme .inventory-list-item {
+    background: rgba(12, 47, 80, 0.55);
+    border-color: rgba(181, 237, 255, 0.25);
+}
+
+body.christmas-theme .inventory-list-item:hover {
+    border-color: rgba(222, 34, 61, 0.4);
+}
+
+body.christmas-theme .inventory-section .section-header {
+    color: #ffdfdf;
+}
+
+body.christmas-theme .inventory-actions button {
+    background: linear-gradient(145deg, #2dbf66, #1d8a46);
+    border-color: rgba(255, 255, 255, 0.35);
+}
+
+body.christmas-theme .inventory-actions button:hover {
+    background: linear-gradient(145deg, #35d476, #29a65c);
+}
+
+body.christmas-theme .inventory-section .note {
+    color: rgba(229, 244, 255, 0.85);
+}
+
+body.christmas-theme .relationship-entry strong,
+body.christmas-theme .inventory-item strong {
+    color: #ffdfdf;
+}
+
+body.christmas-theme .relationship-entry .relationship-notes,
+body.christmas-theme .inventory-item .item-notes {
+    color: #d9eaff;
+}
+
+body.christmas-theme .relationship-entry .relationship-points {
+    color: #35d476;
+}
+
+body.christmas-theme .christmas-snowflake {
+    position: fixed;
+    top: -40px;
+    width: 12px;
+    height: 12px;
+    background: radial-gradient(circle, #ffffff 0%, rgba(255, 255, 255, 0.1) 70%);
+    border-radius: 50%;
+    opacity: 0.9;
+    pointer-events: none;
+    animation: christmas-snowfall 12s linear forwards;
+    z-index: 1000;
+}
+
+@keyframes christmas-snowfall {
+    0% {
+        transform: translateY(0) translateX(0) scale(1);
+        opacity: 0;
+    }
+    10% {
+        opacity: 0.9;
+    }
+    100% {
+        transform: translateY(110vh) translateX(30px) scale(0.8);
+        opacity: 0;
+    }
+}
