@@ -116,7 +116,7 @@ $templatesData = loadTemplatesData();
                             <div class="header-right">
                                 <div class="image-and-circle">
                                     <div class="image-container">
-                                        <img id="template-image" src="" alt="Template Image" style="display: none;">
+                                        <img id="template-image" src="" alt="Template Image" style="display: none;" tabindex="0" role="button" aria-label="View template image">
                                         <div id="image-placeholder" class="image-placeholder">
                                             <p>No Image</p>
                                             <?php if ($is_gm): ?>
@@ -212,6 +212,18 @@ $templatesData = loadTemplatesData();
             <div class="modal-buttons">
                 <button class="btn-danger" onclick="confirmDelete()">Delete</button>
                 <button class="btn-secondary" onclick="cancelDelete()">Cancel</button>
+            </div>
+        </div>
+    </div>
+
+    <!-- Image Preview Modal -->
+    <div id="image-modal" class="modal" style="display: none;" aria-hidden="true" role="dialog" aria-modal="true" aria-label="Template image preview">
+        <div class="image-modal-content">
+            <button type="button" id="image-modal-close" class="image-modal-close" aria-label="Close image preview">&times;</button>
+            <img id="image-modal-img" src="" alt="Template Image Preview">
+            <div class="image-modal-actions">
+                <a id="image-modal-open" class="image-modal-link" href="#" target="_blank" rel="noopener noreferrer">Open in new tab</a>
+                <a id="image-modal-download" class="image-modal-link image-modal-download" href="#" download>Download</a>
             </div>
         </div>
     </div>

@@ -14,21 +14,62 @@ document.addEventListener('DOMContentLoaded', function() {
 
 // Setup event listeners
 function setupEventListeners() {
+    const templateImage = document.getElementById('template-image');
+    if (templateImage) {
+        const openModal = () => {
+            if (templateImage.style.display === 'none' || !templateImage.src) return;
+            openImageModal(templateImage.src);
+        };
+
+        templateImage.addEventListener('click', openModal);
+        templateImage.addEventListener('keydown', (event) => {
+            if (templateImage.style.display === 'none' || !templateImage.src) return;
+            const key = event.key;
+            if (key === 'Enter' || key === ' ' || key === 'Spacebar') {
+                event.preventDefault();
+                openModal();
+            }
+        });
+    }
+
+    const imageModal = document.getElementById('image-modal');
+    if (imageModal) {
+        imageModal.addEventListener('click', (event) => {
+            if (event.target === imageModal) {
+                closeImageModal();
+            }
+        });
+    }
+
+    const imageModalClose = document.getElementById('image-modal-close');
+    if (imageModalClose) {
+        imageModalClose.addEventListener('click', closeImageModal);
+    }
+
+    document.addEventListener('keydown', (event) => {
+        if (event.key === 'Escape') {
+            const modal = document.getElementById('image-modal');
+            if (modal && modal.style.display !== 'none') {
+                closeImageModal();
+            }
+        }
+    });
+
     if (!isGM) return;
-    
+
     // Track changes in title input
     document.getElementById('template-title').addEventListener('input', () => {
         hasUnsavedChanges = true;
     });
-    
+
     // Context menu
     document.addEventListener('contextmenu', handleContextMenu);
-    
+
     // Hide context menu on click
     document.addEventListener('click', () => {
         document.getElementById('context-menu').style.display = 'none';
     });
-    
+
     // Warn before leaving with unsaved changes
     window.addEventListener('beforeunload', (e) => {
         if (hasUnsavedChanges && isGM) {
@@ -385,16 +426,25 @@ function loadTemplateForm(template) {
     // Load image
     const templateImage = document.getElementById('template-image');
     const imagePlaceholder = document.getElementById('image-placeholder');
-    
+    const templateTitleValue = template.title || '';
+    const ariaLabel = templateTitleValue ? `View image for ${templateTitleValue}` : 'View template image';
+    const imageAlt = templateTitleValue ? `${templateTitleValue} image` : 'Template Image';
+
+    templateImage.setAttribute('aria-label', ariaLabel);
+    templateImage.alt = imageAlt;
+
     if (template.image) {
         templateImage.src = template.image;
         templateImage.style.display = 'block';
         imagePlaceholder.style.display = 'none';
+        templateImage.title = 'Click to view full image';
     } else {
+        templateImage.src = '';
         templateImage.style.display = 'none';
         imagePlaceholder.style.display = 'flex';
+        templateImage.removeAttribute('title');
     }
-    
+
     // Load color circle
     const colorCircle = document.getElementById('color-circle');
     const colorIndex = colors.indexOf(template.color || colors[0]);
@@ -710,7 +760,7 @@ function uploadImage() {
 // Handle image upload
 function handleImageUpload(event) {
     if (!isGM) return;
-    
+
     const file = event.target.files[0];
     if (!file) return;
     
@@ -739,7 +789,14 @@ function handleImageUpload(event) {
                 templateImage.src = data.image_path;
                 templateImage.style.display = 'block';
                 imagePlaceholder.style.display = 'none';
-                
+                const titleField = document.getElementById('template-title');
+                const updatedTitle = titleField ? titleField.value.trim() : '';
+                const newAriaLabel = updatedTitle ? `View image for ${updatedTitle}` : 'View template image';
+                const newAlt = updatedTitle ? `${updatedTitle} image` : 'Template Image';
+                templateImage.setAttribute('aria-label', newAriaLabel);
+                templateImage.alt = newAlt;
+                templateImage.title = 'Click to view full image';
+
                 // Update thumbnail
                 loadTemplatesInStrip();
                 
@@ -754,6 +811,91 @@ function handleImageUpload(event) {
         console.error('Upload error:', error);
         showStatus('Failed to upload image', 'error');
     });
+}
+
+// Open full-size image preview
+function openImageModal(imageSrc) {
+    if (!imageSrc) return;
+
+    const modal = document.getElementById('image-modal');
+    const modalImage = document.getElementById('image-modal-img');
+    const openLink = document.getElementById('image-modal-open');
+    const downloadLink = document.getElementById('image-modal-download');
+    const closeButton = document.getElementById('image-modal-close');
+
+    if (!modal || !modalImage || !openLink || !downloadLink) return;
+
+    const titleField = document.getElementById('template-title');
+    const templateTitle = titleField ? titleField.value.trim() : '';
+
+    modalImage.src = imageSrc;
+    modalImage.alt = templateTitle ? `Preview of ${templateTitle}` : 'Template Image Preview';
+    openLink.href = imageSrc;
+    downloadLink.href = imageSrc;
+    downloadLink.download = getDownloadFileName(imageSrc, templateTitle);
+
+    modal.style.display = 'block';
+    modal.setAttribute('aria-hidden', 'false');
+
+    if (closeButton) {
+        closeButton.focus();
+    }
+}
+
+// Close the image preview modal
+function closeImageModal() {
+    const modal = document.getElementById('image-modal');
+    if (!modal || modal.style.display === 'none') return;
+
+    const modalImage = document.getElementById('image-modal-img');
+    if (modalImage) {
+        modalImage.src = '';
+    }
+
+    modal.style.display = 'none';
+    modal.setAttribute('aria-hidden', 'true');
+
+    const templateImage = document.getElementById('template-image');
+    if (templateImage && templateImage.style.display !== 'none') {
+        templateImage.focus();
+    }
+}
+
+// Determine a friendly download filename for the template image
+function getDownloadFileName(imageSrc, templateTitle = '') {
+    if (!imageSrc) {
+        return 'template-image';
+    }
+
+    const srcWithoutQuery = imageSrc.split('?')[0];
+    const extensionMatch = srcWithoutQuery.match(/\.([a-zA-Z0-9]+)$/);
+    let extension = extensionMatch ? extensionMatch[1] : '';
+
+    if (!extension && srcWithoutQuery.startsWith('data:image/')) {
+        const mimeMatch = srcWithoutQuery.match(/^data:image\/([a-zA-Z0-9+.-]+);/);
+        if (mimeMatch && mimeMatch[1]) {
+            extension = mimeMatch[1].toLowerCase() === 'jpeg' ? 'jpg' : mimeMatch[1].toLowerCase();
+        }
+    }
+
+    if (templateTitle) {
+        const sanitizedTitle = templateTitle.trim()
+            .toLowerCase()
+            .replace(/[^a-z0-9]+/g, '-')
+            .replace(/^-+|-+$/g, '');
+
+        if (sanitizedTitle) {
+            return extension ? `${sanitizedTitle}.${extension}` : sanitizedTitle;
+        }
+    }
+
+    const fallbackName = srcWithoutQuery.substring(srcWithoutQuery.lastIndexOf('/') + 1) || 'template-image';
+
+    if (fallbackName.toLowerCase().includes('base64')) {
+        return extension ? `template-image.${extension}` : 'template-image';
+    }
+
+    return fallbackName;
 }
 
 // Save template data
