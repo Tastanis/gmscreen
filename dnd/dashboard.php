@@ -884,7 +884,7 @@ $defaultInventoryTab = $is_gm ? 'frunk' : $user;
     <link rel="stylesheet" href="css/style.css">
     <link rel="stylesheet" href="css/inventory.css">
     <link rel="stylesheet" href="Halloween/theme.css" id="halloween-theme" disabled>
-    <link rel="stylesheet" href="Christmas/theme.css" id="christmas-theme" disabled>
+    <link rel="stylesheet" href="Halloween/christmas.css" id="christmas-theme" disabled>
 </head>
 <body>
     <!-- Top Navigation Bar -->
