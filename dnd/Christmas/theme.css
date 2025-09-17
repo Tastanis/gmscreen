@@ -1,0 +1,401 @@
+@import url('https://fonts.googleapis.com/css2?family=Mountains+of+Christmas:wght@400;700&family=Nunito:wght@400;600;700&display=swap');
+
+body.christmas-theme {
+    font-family: 'Nunito', 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+    color: #f7fbff;
+    background: linear-gradient(180deg, #0c2a3d 0%, #123d52 45%, #0b1f2d 100%);
+    position: relative;
+    overflow-x: hidden;
+}
+
+body.christmas-theme::before {
+    content: '';
+    position: fixed;
+    inset: 0;
+    pointer-events: none;
+    background:
+        radial-gradient(circle at 15% 20%, rgba(255, 255, 255, 0.14) 0%, rgba(255, 255, 255, 0) 55%),
+        radial-gradient(circle at 80% 12%, rgba(173, 216, 230, 0.25) 0%, rgba(173, 216, 230, 0) 50%),
+        radial-gradient(circle at 25% 80%, rgba(46, 160, 84, 0.2) 0%, rgba(46, 160, 84, 0) 55%);
+    z-index: -2;
+}
+
+body.christmas-theme::after {
+    content: '';
+    position: fixed;
+    inset: 0;
+    pointer-events: none;
+    background-image: url('data:image/svg+xml,%3Csvg xmlns="http://www.w3.org/2000/svg" width="160" height="160" viewBox="0 0 160 160"%3E%3Cg fill="none" stroke="%23ffffff" stroke-width="1" stroke-opacity="0.4"%3E%3Ccircle cx="20" cy="30" r="1.5"/%3E%3Ccircle cx="60" cy="90" r="1"/%3E%3Ccircle cx="120" cy="40" r="1.2"/%3E%3Ccircle cx="140" cy="120" r="1.5"/%3E%3Ccircle cx="40" cy="130" r="1"/%3E%3Ccircle cx="90" cy="140" r="1.3"/%3E%3Ccircle cx="30" cy="80" r="1.1"/%3E%3Ccircle cx="110" cy="100" r="1"/%3E%3C/g%3E%3C/svg%3E');
+    animation: christmas-snow 18s linear infinite;
+    opacity: 0.45;
+    z-index: -1;
+}
+
+@keyframes christmas-snow {
+    from { transform: translateY(-10%); }
+    to { transform: translateY(10%); }
+}
+
+body.christmas-theme a {
+    color: #d3f8ff;
+}
+
+body.christmas-theme .top-nav {
+    background: rgba(7, 23, 33, 0.9);
+    border-bottom: 2px solid rgba(233, 58, 72, 0.55);
+    box-shadow: 0 20px 40px rgba(4, 14, 20, 0.6);
+}
+
+body.christmas-theme .nav-title {
+    font-family: 'Mountains of Christmas', cursive;
+    color: #f6d88c;
+    letter-spacing: 0.12em;
+    text-shadow: 0 0 18px rgba(246, 216, 140, 0.6);
+}
+
+body.christmas-theme .nav-btn {
+    background: linear-gradient(145deg, #e93a48, #a6172b);
+    color: #fff5f5;
+    border: 1px solid rgba(246, 204, 146, 0.6);
+    box-shadow: 0 8px 18px rgba(233, 58, 72, 0.35);
+    text-transform: uppercase;
+    letter-spacing: 0.06em;
+}
+
+body.christmas-theme .nav-btn:hover {
+    background: linear-gradient(145deg, #f05561, #c51d33);
+    transform: translateY(-2px) scale(1.02);
+}
+
+body.christmas-theme .nav-btn.logout-btn {
+    background: linear-gradient(145deg, #0d5f43, #093c2a);
+    color: #d8fff3;
+    box-shadow: 0 8px 18px rgba(7, 73, 52, 0.4);
+}
+
+body.christmas-theme .nav-btn.logout-btn:hover {
+    background: linear-gradient(145deg, #107956, #0b4a32);
+}
+
+body.christmas-theme #theme-toggle-btn {
+    position: relative;
+    isolation: isolate;
+    overflow: hidden;
+    box-shadow: 0 0 22px rgba(233, 58, 72, 0.55);
+}
+
+body.christmas-theme #theme-toggle-btn::before {
+    content: '🎄';
+    margin-right: 8px;
+}
+
+body.christmas-theme #theme-toggle-btn.theme-active::after {
+    content: '';
+    position: absolute;
+    inset: -25%;
+    background: radial-gradient(circle at 70% 30%, rgba(255, 255, 255, 0.5) 0%, rgba(255, 255, 255, 0) 70%);
+    mix-blend-mode: screen;
+    animation: christmas-twinkle 6s infinite alternate;
+    z-index: -1;
+}
+
+@keyframes christmas-twinkle {
+    from { opacity: 0.3; transform: scale(1); }
+    to { opacity: 0.9; transform: scale(1.25); }
+}
+
+body.christmas-theme .dropdown-content {
+    background: rgba(10, 36, 48, 0.95);
+    border: 1px solid rgba(246, 204, 146, 0.45);
+    box-shadow: 0 24px 50px rgba(4, 14, 20, 0.55);
+}
+
+body.christmas-theme .dropdown-content a {
+    color: #f4fbff;
+}
+
+body.christmas-theme .dropdown-content a:hover {
+    background: rgba(233, 58, 72, 0.22);
+}
+
+body.christmas-theme .main-container {
+    max-width: 1380px;
+    margin: 32px auto;
+    padding: 0 22px 70px;
+}
+
+body.christmas-theme .character-tabs,
+body.christmas-theme .inventory-tabs {
+    background: rgba(9, 31, 42, 0.92);
+    border-radius: 20px 20px 0 0;
+    border: 1px solid rgba(246, 204, 146, 0.4);
+    box-shadow: 0 18px 50px rgba(6, 18, 26, 0.7);
+}
+
+body.christmas-theme .character-tab,
+body.christmas-theme .inventory-tab {
+    color: #f6f8fb;
+    text-transform: uppercase;
+    letter-spacing: 0.04em;
+}
+
+body.christmas-theme .character-tab:hover,
+body.christmas-theme .inventory-tab:hover {
+    background: rgba(233, 58, 72, 0.18);
+    color: #ffffff;
+}
+
+body.christmas-theme .character-tab.active,
+body.christmas-theme .inventory-tab.active {
+    background: rgba(15, 82, 60, 0.5);
+    color: #f6d88c;
+    border-bottom-color: rgba(233, 58, 72, 0.8);
+}
+
+body.christmas-theme .content-wrapper,
+body.christmas-theme .inventory-container,
+body.christmas-theme .inventory-content-wrapper {
+    background: rgba(7, 25, 35, 0.88);
+    border: 1px solid rgba(246, 204, 146, 0.38);
+    border-radius: 0 0 22px 22px;
+    box-shadow: 0 32px 65px rgba(3, 11, 16, 0.75);
+}
+
+body.christmas-theme .section-tabs {
+    background: rgba(12, 38, 52, 0.95);
+    border-bottom: 1px solid rgba(246, 204, 146, 0.35);
+}
+
+body.christmas-theme .section-tab {
+    color: #e2f6ff;
+}
+
+body.christmas-theme .section-tab:hover {
+    background: rgba(233, 58, 72, 0.2);
+    color: #ffffff;
+}
+
+body.christmas-theme .section-tab.active {
+    background: rgba(19, 64, 85, 0.95);
+    color: #f6d88c;
+    border-bottom-color: rgba(233, 58, 72, 0.8);
+}
+
+body.christmas-theme .section-content,
+body.christmas-theme .inventory-section {
+    background:
+        radial-gradient(circle at 25% 25%, rgba(233, 58, 72, 0.08) 0%, rgba(233, 58, 72, 0) 55%),
+        radial-gradient(circle at 80% 75%, rgba(15, 82, 60, 0.15) 0%, rgba(15, 82, 60, 0) 55%),
+        rgba(6, 20, 28, 0.65);
+    border-radius: 0 0 20px 20px;
+}
+
+body.christmas-theme h2,
+body.christmas-theme h3,
+body.christmas-theme h4 {
+    color: #f6d88c;
+    font-family: 'Mountains of Christmas', cursive;
+    letter-spacing: 0.08em;
+}
+
+body.christmas-theme .form-group label {
+    color: #f4f0d5;
+    font-weight: 700;
+}
+
+body.christmas-theme input,
+body.christmas-theme textarea,
+body.christmas-theme select,
+body.christmas-theme .data-table td,
+body.christmas-theme .data-table th {
+    background: rgba(9, 31, 42, 0.85);
+    border: 1px solid rgba(233, 58, 72, 0.35);
+    color: #f7fbff;
+    box-shadow: inset 0 0 12px rgba(0, 0, 0, 0.35);
+}
+
+body.christmas-theme input:focus,
+body.christmas-theme textarea:focus,
+body.christmas-theme select:focus {
+    outline: 2px solid rgba(246, 204, 146, 0.8);
+    box-shadow: 0 0 0 4px rgba(233, 58, 72, 0.25);
+}
+
+body.christmas-theme .data-table th {
+    background: rgba(233, 58, 72, 0.3);
+    color: #fff5f5;
+    text-transform: uppercase;
+    letter-spacing: 0.05em;
+}
+
+body.christmas-theme .data-table tr:nth-child(even) {
+    background: rgba(10, 36, 48, 0.65);
+}
+
+body.christmas-theme .data-table tr:hover {
+    background: rgba(233, 58, 72, 0.18);
+}
+
+body.christmas-theme .card,
+body.christmas-theme .panel,
+body.christmas-theme .inventory-card {
+    background: rgba(8, 27, 37, 0.88);
+    border: 1px solid rgba(246, 204, 146, 0.32);
+    box-shadow: 0 14px 30px rgba(4, 12, 18, 0.55);
+    border-radius: 18px;
+}
+
+body.christmas-theme .card-header,
+body.christmas-theme .panel-header,
+body.christmas-theme .inventory-card h3 {
+    color: #f6d88c;
+    border-bottom: 1px solid rgba(246, 204, 146, 0.3);
+}
+
+body.christmas-theme .button-primary,
+body.christmas-theme .save-button,
+body.christmas-theme .inventory-action {
+    background: linear-gradient(145deg, #0f523c, #0a3526);
+    border: 1px solid rgba(246, 204, 146, 0.4);
+    color: #e9fff7;
+    box-shadow: 0 10px 20px rgba(6, 44, 31, 0.4);
+}
+
+body.christmas-theme .button-primary:hover,
+body.christmas-theme .save-button:hover,
+body.christmas-theme .inventory-action:hover {
+    background: linear-gradient(145deg, #157050, #0c4430);
+}
+
+body.christmas-theme .gm-only,
+body.christmas-theme .gm-allowed,
+body.christmas-theme .gm-restricted {
+    border-radius: 12px;
+    border: 1px solid rgba(233, 58, 72, 0.4);
+    background: rgba(233, 58, 72, 0.12);
+    color: #ffeaea;
+}
+
+body.christmas-theme .gm-restricted {
+    opacity: 0.85;
+}
+
+body.christmas-theme .character-portrait img {
+    border: 3px solid rgba(246, 204, 146, 0.6);
+    box-shadow: 0 18px 40px rgba(3, 11, 16, 0.6);
+}
+
+body.christmas-theme .toast-notification,
+body.christmas-theme .status-banner {
+    background: linear-gradient(135deg, rgba(233, 58, 72, 0.9), rgba(15, 82, 60, 0.85));
+    border: 1px solid rgba(246, 204, 146, 0.45);
+    color: #fff9f0;
+    box-shadow: 0 16px 32px rgba(3, 11, 16, 0.55);
+}
+
+body.christmas-theme .progress-bar {
+    background: rgba(255, 255, 255, 0.15);
+}
+
+body.christmas-theme .progress-bar span {
+    background: linear-gradient(145deg, #e93a48, #f6d88c);
+    box-shadow: 0 10px 20px rgba(233, 58, 72, 0.35);
+}
+
+body.christmas-theme .modal {
+    background: rgba(8, 27, 37, 0.96);
+    border: 1px solid rgba(246, 204, 146, 0.38);
+    box-shadow: 0 40px 80px rgba(3, 11, 16, 0.75);
+}
+
+body.christmas-theme .modal-header,
+body.christmas-theme .modal-footer {
+    border-color: rgba(246, 204, 146, 0.3);
+}
+
+body.christmas-theme .modal-title {
+    color: #f6d88c;
+    font-family: 'Mountains of Christmas', cursive;
+}
+
+body.christmas-theme .tab-highlight {
+    background: linear-gradient(145deg, rgba(233, 58, 72, 0.4), rgba(15, 82, 60, 0.35));
+    border: 1px solid rgba(246, 204, 146, 0.3);
+}
+
+body.christmas-theme .inventory-summary,
+body.christmas-theme .inventory-totals {
+    background: rgba(11, 37, 50, 0.9);
+    border: 1px solid rgba(246, 204, 146, 0.4);
+    color: #f4fbff;
+}
+
+body.christmas-theme .inventory-summary h3,
+body.christmas-theme .inventory-totals h3 {
+    color: #f6d88c;
+}
+
+body.christmas-theme .tag,
+body.christmas-theme .pill,
+body.christmas-theme .badge {
+    background: linear-gradient(145deg, rgba(233, 58, 72, 0.8), rgba(15, 82, 60, 0.8));
+    color: #fff5f5;
+    border: 1px solid rgba(246, 204, 146, 0.4);
+}
+
+body.christmas-theme .status-indicator.success {
+    background: rgba(15, 82, 60, 0.75);
+    color: #d8fff3;
+}
+
+body.christmas-theme .status-indicator.warning {
+    background: rgba(246, 204, 146, 0.75);
+    color: #5b2c06;
+}
+
+body.christmas-theme .status-indicator.error {
+    background: rgba(233, 58, 72, 0.75);
+    color: #fff5f5;
+}
+
+body.christmas-theme .timeline::before,
+body.christmas-theme .timeline-item::before {
+    background: linear-gradient(180deg, rgba(233, 58, 72, 0.6), rgba(15, 82, 60, 0.6));
+}
+
+body.christmas-theme .timeline-item {
+    border: 1px solid rgba(246, 204, 146, 0.3);
+    background: rgba(8, 27, 37, 0.88);
+    box-shadow: 0 16px 30px rgba(3, 11, 16, 0.6);
+}
+
+body.christmas-theme .tooltip {
+    background: rgba(15, 82, 60, 0.92);
+    color: #f7fff7;
+    border: 1px solid rgba(246, 204, 146, 0.4);
+}
+
+body.christmas-theme .tooltip::after {
+    border-top-color: rgba(15, 82, 60, 0.92);
+}
+
+body.christmas-theme .floating-action-button {
+    background: linear-gradient(145deg, #e93a48, #f6d88c);
+    color: #103240;
+    box-shadow: 0 16px 40px rgba(233, 58, 72, 0.45);
+}
+
+body.christmas-theme .floating-action-button:hover {
+    transform: translateY(-3px) scale(1.03);
+}
+
+body.christmas-theme footer {
+    background: rgba(7, 23, 33, 0.95);
+    border-top: 1px solid rgba(246, 204, 146, 0.35);
+    color: #f4fbff;
+}
+
+body.christmas-theme footer a {
+    color: #f6d88c;
+}
+
