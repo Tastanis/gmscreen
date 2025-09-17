@@ -2,9 +2,13 @@
     const MIN_INTERVAL = 30000;
     const MAX_INTERVAL = 45000;
     const MAX_FLAKES = 3;
+    const FIRST_SPAWN_DELAY = 2000;
+    const FIRST_MIN_FLAKES = 4;
+    const FIRST_MAX_FLAKES = 7;
     let spawnTimer = null;
     let active = false;
     let lastSpawnTime = 0;
+    let firstBurstPending = false;
 
     function randomBetween(min, max) {
         return Math.floor(Math.random() * (max - min + 1)) + min;
@@ -32,12 +36,18 @@
             return;
         }
         const now = Date.now();
-        if (now - lastSpawnTime < MIN_INTERVAL) {
+        if (!firstBurstPending && now - lastSpawnTime < MIN_INTERVAL) {
             scheduleNext();
             return;
         }
         lastSpawnTime = now;
-        const flakeCount = randomBetween(1, MAX_FLAKES);
+        let flakeCount;
+        if (firstBurstPending) {
+            flakeCount = randomBetween(FIRST_MIN_FLAKES, FIRST_MAX_FLAKES);
+            firstBurstPending = false;
+        } else {
+            flakeCount = randomBetween(1, MAX_FLAKES);
+        }
         for (let i = 0; i < flakeCount; i += 1) {
             setTimeout(createSnowflake, i * 250);
         }
@@ -57,11 +67,13 @@
         });
     }
 
-    function scheduleNext() {
+    function scheduleNext(delayOverride) {
         if (!active) {
             return;
         }
-        const delay = randomBetween(MIN_INTERVAL, MAX_INTERVAL);
+        const delay = typeof delayOverride === 'number'
+            ? delayOverride
+            : randomBetween(MIN_INTERVAL, MAX_INTERVAL);
         spawnTimer = window.setTimeout(spawnSnowfall, delay);
     }
 
@@ -71,7 +83,8 @@
         }
         active = true;
         lastSpawnTime = Date.now() - MIN_INTERVAL;
-        scheduleNext();
+        firstBurstPending = true;
+        scheduleNext(FIRST_SPAWN_DELAY);
     }
 
     function disableSnowfall() {
@@ -79,6 +92,7 @@
             return;
         }
         active = false;
+        firstBurstPending = false;
         clearSnowfall();
     }
 
