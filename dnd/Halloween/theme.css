@@ -416,6 +416,27 @@ body.halloween-theme::-webkit-scrollbar-thumb:hover,
 body.halloween-theme *::-webkit-scrollbar-thumb:hover {
     background: linear-gradient(145deg, #ffb347, #fb923c);
 }
+
+body.halloween-theme .halloween-jumpscare-overlay {
+    position: fixed;
+    inset: 0;
+    z-index: 9999;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    background: rgba(0, 0, 0, 0.85);
+    pointer-events: none;
+}
+
+body.halloween-theme .halloween-jumpscare-overlay img {
+    max-width: min(90vw, 700px);
+    max-height: 90vh;
+    width: auto;
+    height: auto;
+    object-fit: contain;
+    box-shadow: 0 0 45px rgba(0, 0, 0, 0.85);
+}
+
 body.halloween-theme.halloween-theme-active .nav-title {
     animation: halloween-flicker 8s infinite ease-in-out;
 }
