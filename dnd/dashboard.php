@@ -883,6 +883,7 @@ $defaultInventoryTab = $is_gm ? 'frunk' : $user;
     <title>Strixhaven Report Card - <?php echo htmlspecialchars($user); ?></title>
     <link rel="stylesheet" href="css/style.css">
     <link rel="stylesheet" href="css/inventory.css">
+    <link rel="stylesheet" href="Halloween/theme.css" id="halloween-theme" disabled>
 </head>
 <body>
     <!-- Top Navigation Bar -->
@@ -921,6 +922,7 @@ $defaultInventoryTab = $is_gm ? 'frunk' : $user;
             </div>
             <button class="nav-btn" onclick="openCombatTracker()">Combat Tracker</button>
             <button class="nav-btn" onclick="openSchedule()">Schedule</button>
+            <button type="button" class="nav-btn" id="theme-toggle-btn" title="Enable the Halloween theme">Theme</button>
             <button class="nav-btn logout-btn" onclick="window.location.href='logout.php'">Logout</button>
         </div>
         <h1 class="nav-title"><?php echo $is_gm ? 'GM Dashboard' : ucfirst($user) . '\'s Character Sheet'; ?></h1>
@@ -1471,6 +1473,7 @@ $defaultInventoryTab = $is_gm ? 'frunk' : $user;
             }
         }
     </script>
+    <script src="Halloween/theme.js"></script>
     <script src="strixhaven/gm/js/character-lookup.js"></script>
     <script src="js/character-sheet.js"></script>
     <script src="js/inventory-integrated.js"></script>
