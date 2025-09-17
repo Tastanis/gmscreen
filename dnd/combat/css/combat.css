@@ -178,6 +178,40 @@ body {
 .combat-area-inner {
     position: relative;
     min-height: calc(100% + 400px); /* Always allow scrolling */
+    z-index: 0; /* Create stacking context for gradient overlay */
+}
+
+.combat-area-inner::before {
+    content: "";
+    position: absolute;
+    top: 60px; /* Align with startY used in combat.js */
+    left: 0;
+    right: 0;
+    bottom: 0;
+    background-image:
+        repeating-linear-gradient(
+            to bottom,
+            rgba(255, 255, 255, 0.18) 0px,
+            rgba(255, 255, 255, 0.18) 1px,
+            rgba(255, 255, 255, 0) 1px,
+            rgba(255, 255, 255, 0) 165px
+        ),
+        linear-gradient(
+            to bottom,
+            rgba(255, 255, 255, 0.05) 0%,
+            rgba(255, 255, 255, 0.05) 50%,
+            rgba(0, 0, 0, 0.22) 50%,
+            rgba(0, 0, 0, 0.22) 100%
+        );
+    background-size:
+        100% 165px,
+        100% 165px;
+    background-repeat:
+        repeat-y,
+        repeat-y;
+    pointer-events: none;
+    z-index: 0;
+    opacity: 0.85; /* Subtle but readable contrast */
 }
 
 /* Center Line removed - using column dividers instead */
