@@ -1,6 +1,7 @@
 (function () {
-    const JUMPSCARE_DELAY = 5000;
-    const JUMPSCARE_DISPLAY_DURATION = 2000;
+    const JUMPSCARE_INITIAL_DELAY = 60000;
+    const JUMPSCARE_REPEAT_INTERVAL = 300000;
+    const JUMPSCARE_DISPLAY_DURATION = 500;
     const scriptElement = document.currentScript;
     const assetBase = scriptElement ? scriptElement.src.replace(/[^/]+$/, '') : '';
     const JUMPSCARE_IMAGE_SRC = assetBase ? `${assetBase}images/jumpscare.png` : 'images/jumpscare.png';
@@ -25,6 +26,18 @@
             scareTimer = null;
         }
         clearOverlay();
+    }
+
+    function scheduleNextJumpscare(delay) {
+        if (scareTimer) {
+            clearTimeout(scareTimer);
+        }
+        const body = document.body;
+        if (!isHalloweenActive(body)) {
+            scareTimer = null;
+            return;
+        }
+        scareTimer = window.setTimeout(showJumpscare, delay);
     }
 
     function showJumpscare() {
@@ -56,6 +69,8 @@
         if (image.complete) {
             scheduleRemoval();
         }
+
+        scheduleNextJumpscare(JUMPSCARE_REPEAT_INTERVAL);
     }
 
     function scheduleJumpscare(body) {
@@ -74,7 +89,7 @@
             }
         }
 
-        scareTimer = window.setTimeout(showJumpscare, JUMPSCARE_DELAY);
+        scheduleNextJumpscare(JUMPSCARE_INITIAL_DELAY);
     }
 
     function applyActiveState(themeName) {
