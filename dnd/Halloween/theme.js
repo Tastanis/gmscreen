@@ -1,5 +1,6 @@
 (function () {
-    const JUMPSCARE_DELAY = 60000;
+    const JUMPSCARE_DELAY = 5000;
+    const JUMPSCARE_DISPLAY_DURATION = 2000;
     const scriptElement = document.currentScript;
     const assetBase = scriptElement ? scriptElement.src.replace(/[^/]+$/, '') : '';
     const JUMPSCARE_IMAGE_SRC = assetBase ? `${assetBase}images/jumpscare.png` : 'images/jumpscare.png';
@@ -37,16 +38,24 @@
         const image = document.createElement('img');
         image.src = JUMPSCARE_IMAGE_SRC;
         image.alt = 'Halloween jumpscare';
+        const scheduleRemoval = function () {
+            window.setTimeout(function () {
+                if (activeOverlay === overlay) {
+                    clearOverlay();
+                }
+            }, JUMPSCARE_DISPLAY_DURATION);
+        };
+
+        image.addEventListener('load', scheduleRemoval, { once: true });
+        image.addEventListener('error', scheduleRemoval, { once: true });
         overlay.appendChild(image);
 
         body.appendChild(overlay);
         activeOverlay = overlay;
 
-        window.setTimeout(function () {
-            if (activeOverlay === overlay) {
-                clearOverlay();
-            }
-        }, 500);
+        if (image.complete) {
+            scheduleRemoval();
+        }
     }
 
     function scheduleJumpscare(body) {
@@ -58,6 +67,11 @@
         if (!preloadedImage) {
             preloadedImage = new Image();
             preloadedImage.src = JUMPSCARE_IMAGE_SRC;
+            if (typeof preloadedImage.decode === 'function') {
+                preloadedImage.decode().catch(function () {
+                    /* Ignore decode errors; the load event handler will handle fallback timing. */
+                });
+            }
         }
 
         scareTimer = window.setTimeout(showJumpscare, JUMPSCARE_DELAY);
