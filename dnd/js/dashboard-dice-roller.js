@@ -7,6 +7,14 @@ class DashboardDiceRoller {
         }
 
         this.currentRollQueue = [];
+        this.lastPosition = null;
+        this.hasCustomPosition = false;
+        this.dragState = {
+            active: false,
+            offsetX: 0,
+            offsetY: 0
+        };
+
         this.buildUI();
         this.attachEvents();
 
@@ -15,6 +23,12 @@ class DashboardDiceRoller {
                 this.close();
             }
         };
+
+        this.handlePointerMove = (event) => this.onPointerMove(event);
+        this.handlePointerUp = (event) => this.onPointerUp(event);
+        this.handleResize = () => this.keepModalInBounds();
+
+        window.addEventListener('resize', this.handleResize);
     }
 
     buildUI() {
@@ -30,6 +44,7 @@ class DashboardDiceRoller {
 
         const header = document.createElement('div');
         header.className = 'dice-modal-header';
+        header.addEventListener('pointerdown', (event) => this.startDrag(event));
 
         const title = document.createElement('h2');
         title.className = 'dice-modal-title';
@@ -146,7 +161,17 @@ class DashboardDiceRoller {
 
         this.resultLabel = document.createElement('div');
         this.resultLabel.className = 'dice-result';
-        this.resultLabel.textContent = 'Result: -';
+
+        this.resultTotal = document.createElement('div');
+        this.resultTotal.className = 'dice-result-total';
+        this.resultTotal.textContent = 'Result: -';
+
+        this.resultDetail = document.createElement('div');
+        this.resultDetail.className = 'dice-result-detail';
+        this.resultDetail.style.display = 'none';
+
+        this.resultLabel.appendChild(this.resultTotal);
+        this.resultLabel.appendChild(this.resultDetail);
 
         actions.appendChild(rollBtn);
         actions.appendChild(clearBtn);
@@ -158,7 +183,19 @@ class DashboardDiceRoller {
         if (this.overlay) {
             this.overlay.classList.remove('hidden');
             document.addEventListener('keydown', this.handleKeyDown);
-            requestAnimationFrame(() => this.modal.focus());
+            requestAnimationFrame(() => {
+                if (!this.modal) {
+                    return;
+                }
+
+                if (this.hasCustomPosition && this.lastPosition) {
+                    this.applyLastPosition();
+                } else {
+                    this.centerModal();
+                }
+
+                this.modal.focus();
+            });
         }
     }
 
@@ -166,6 +203,7 @@ class DashboardDiceRoller {
         if (this.overlay) {
             this.overlay.classList.add('hidden');
             document.removeEventListener('keydown', this.handleKeyDown);
+            this.onPointerUp();
         }
     }
 
@@ -191,42 +229,59 @@ class DashboardDiceRoller {
     clearQueue() {
         this.currentRollQueue = [];
         this.updateQueueDisplay();
-        if (this.resultLabel) {
-            this.resultLabel.textContent = 'Result: -';
+        if (this.resultTotal && this.resultDetail) {
+            this.resultTotal.textContent = 'Result: -';
+            this.resultDetail.textContent = '';
+            this.resultDetail.style.display = 'none';
         }
     }
 
     calculateRoll() {
         if (this.currentRollQueue.length === 0) {
-            if (this.resultLabel) {
-                this.resultLabel.textContent = 'Nothing to roll!';
+            if (this.resultTotal && this.resultDetail) {
+                this.resultTotal.textContent = 'Nothing to roll!';
+                this.resultDetail.textContent = '';
+                this.resultDetail.style.display = 'none';
             }
             return;
         }
 
         try {
             let totalResult = 0;
+            const detailParts = [];
 
             for (const item of this.currentRollQueue) {
                 if (item.startsWith('+')) {
                     totalResult += parseInt(item.substring(1), 10);
+                    detailParts.push(item);
                 } else if (item.startsWith('-')) {
                     totalResult -= parseInt(item.substring(1), 10);
+                    detailParts.push(item);
                 } else {
-                    const { result } = this.parseAndRollDice(item);
+                    const { result, detail } = this.parseAndRollDice(item);
                     totalResult += result;
+                    detailParts.push(...detail.map((roll) => roll.toString()));
                 }
             }
 
-            if (this.resultLabel) {
-                this.resultLabel.textContent = `Result: ${totalResult}`;
+            if (this.resultTotal && this.resultDetail) {
+                this.resultTotal.textContent = `Result: ${totalResult}`;
+                if (detailParts.length > 0) {
+                    this.resultDetail.textContent = detailParts.join(' ');
+                    this.resultDetail.style.display = 'block';
+                } else {
+                    this.resultDetail.textContent = '';
+                    this.resultDetail.style.display = 'none';
+                }
             }
 
             this.currentRollQueue = [];
             this.updateQueueDisplay();
         } catch (error) {
-            if (this.resultLabel) {
-                this.resultLabel.textContent = `Error: ${error.message}`;
+            if (this.resultTotal && this.resultDetail) {
+                this.resultTotal.textContent = `Error: ${error.message}`;
+                this.resultDetail.textContent = '';
+                this.resultDetail.style.display = 'none';
             }
         }
     }
@@ -249,6 +304,114 @@ class DashboardDiceRoller {
 
         const total = rolls.reduce((sum, roll) => sum + roll, 0);
         return { result: total, detail: rolls };
+    }
+
+    centerModal() {
+        if (!this.modal) {
+            return;
+        }
+
+        const rect = this.modal.getBoundingClientRect();
+        const desiredLeft = (window.innerWidth - rect.width) / 2;
+        const desiredTop = (window.innerHeight - rect.height) / 2;
+        const { left, top } = this.constrainPosition(desiredLeft, desiredTop);
+
+        this.modal.style.left = `${left}px`;
+        this.modal.style.top = `${top}px`;
+        this.lastPosition = { left, top };
+    }
+
+    applyLastPosition() {
+        if (!this.modal || !this.lastPosition) {
+            return;
+        }
+
+        const { left, top } = this.constrainPosition(this.lastPosition.left, this.lastPosition.top);
+        this.modal.style.left = `${left}px`;
+        this.modal.style.top = `${top}px`;
+        this.lastPosition = { left, top };
+    }
+
+    startDrag(event) {
+        if (!this.modal || (event.button !== undefined && event.button !== 0)) {
+            return;
+        }
+
+        if (event.target.closest('.dice-modal-close')) {
+            return;
+        }
+
+        const rect = this.modal.getBoundingClientRect();
+        this.dragState.active = true;
+        this.dragState.offsetX = event.clientX - rect.left;
+        this.dragState.offsetY = event.clientY - rect.top;
+
+        this.modal.classList.add('dragging');
+
+        document.addEventListener('pointermove', this.handlePointerMove);
+        document.addEventListener('pointerup', this.handlePointerUp);
+
+        event.preventDefault();
+    }
+
+    onPointerMove(event) {
+        if (!this.modal || !this.dragState.active) {
+            return;
+        }
+
+        const proposedLeft = event.clientX - this.dragState.offsetX;
+        const proposedTop = event.clientY - this.dragState.offsetY;
+        const { left, top } = this.constrainPosition(proposedLeft, proposedTop);
+
+        this.modal.style.left = `${left}px`;
+        this.modal.style.top = `${top}px`;
+        this.lastPosition = { left, top };
+        this.hasCustomPosition = true;
+    }
+
+    onPointerUp() {
+        if (!this.dragState.active) {
+            return;
+        }
+
+        this.dragState.active = false;
+        if (this.modal) {
+            this.modal.classList.remove('dragging');
+        }
+
+        document.removeEventListener('pointermove', this.handlePointerMove);
+        document.removeEventListener('pointerup', this.handlePointerUp);
+    }
+
+    keepModalInBounds() {
+        if (!this.modal) {
+            return;
+        }
+
+        const currentLeft = parseFloat(this.modal.style.left) || 0;
+        const currentTop = parseFloat(this.modal.style.top) || 0;
+        const { left, top } = this.constrainPosition(currentLeft, currentTop);
+
+        this.modal.style.left = `${left}px`;
+        this.modal.style.top = `${top}px`;
+        this.lastPosition = { left, top };
+    }
+
+    constrainPosition(left, top) {
+        if (!this.modal) {
+            return { left, top };
+        }
+
+        const modalWidth = this.modal.offsetWidth;
+        const modalHeight = this.modal.offsetHeight;
+
+        const maxLeft = Math.max(window.innerWidth - modalWidth, 0);
+        const maxTop = Math.max(window.innerHeight - modalHeight, 0);
+
+        return {
+            left: Math.min(Math.max(left, 0), maxLeft),
+            top: Math.min(Math.max(top, 0), maxTop)
+        };
     }
 }
 

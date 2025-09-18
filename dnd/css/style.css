@@ -1141,6 +1141,7 @@ body:not(.gm-mode) .club-navigation button:hover:not(:disabled) {
 }
 
 .dice-modal {
+    position: absolute;
     background: #f4f6f8;
     color: #2c3e50;
     border-radius: 12px;
@@ -1160,6 +1161,9 @@ body:not(.gm-mode) .club-navigation button:hover:not(:disabled) {
     color: #ecf0f1;
     border-top-left-radius: 12px;
     border-top-right-radius: 12px;
+    cursor: grab;
+    user-select: none;
+    touch-action: none;
 }
 
 .dice-modal-title {
@@ -1284,10 +1288,33 @@ body:not(.gm-mode) .club-navigation button:hover:not(:disabled) {
 
 .dice-result {
     flex: 1;
-    min-width: 120px;
-    font-size: 1.1rem;
-    font-weight: 600;
+    min-width: 160px;
+    display: flex;
+    flex-direction: column;
+    align-items: flex-end;
+    gap: 0.3rem;
+}
+
+.dice-result-total {
+    font-size: 1.75rem;
+    font-weight: 700;
     color: #2c3e50;
+    text-align: right;
+}
+
+.dice-result-detail {
+    font-size: 0.85rem;
+    color: #566573;
+    font-family: 'Courier New', Courier, monospace;
+    text-align: right;
+}
+
+.dice-modal.dragging {
+    cursor: grabbing;
+}
+
+.dice-modal.dragging .dice-modal-header {
+    cursor: grabbing;
 }
 
 @media (max-width: 600px) {
@@ -1305,6 +1332,12 @@ body:not(.gm-mode) .club-navigation button:hover:not(:disabled) {
     }
 
     .dice-result {
+        align-items: center;
+    }
+
+    .dice-result-total,
+    .dice-result-detail {
         text-align: center;
+        width: 100%;
     }
 }
