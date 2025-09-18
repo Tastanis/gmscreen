@@ -392,13 +392,14 @@ body.christmas-theme .relationship-entry .relationship-points {
 body.christmas-theme .christmas-snowflake {
     position: fixed;
     top: -40px;
-    width: 12px;
-    height: 12px;
-    background: radial-gradient(circle, #ffffff 0%, rgba(255, 255, 255, 0.1) 70%);
+    width: 14px;
+    height: 14px;
+    background: radial-gradient(circle, rgba(255, 255, 255, 0.95) 0%, rgba(255, 255, 255, 0.12) 65%, rgba(255, 255, 255, 0) 100%);
     border-radius: 50%;
-    opacity: 0.9;
+    opacity: 0.95;
     pointer-events: none;
     animation: christmas-snowfall 12s linear forwards;
+    filter: drop-shadow(0 0 8px rgba(181, 237, 255, 0.35));
     z-index: 1000;
 }
 
@@ -413,5 +414,36 @@ body.christmas-theme .christmas-snowflake {
     100% {
         transform: translateY(110vh) translateX(30px) scale(0.8);
         opacity: 0;
+    }
+}
+
+body.christmas-theme .christmas-mouseflake {
+    position: fixed;
+    left: 0;
+    top: 0;
+    width: 10px;
+    height: 10px;
+    pointer-events: none;
+    border-radius: 50%;
+    background: radial-gradient(circle, rgba(255, 255, 255, 0.95) 0%, rgba(255, 255, 255, 0.25) 60%, rgba(255, 255, 255, 0) 100%);
+    filter: drop-shadow(0 0 6px rgba(222, 246, 255, 0.45));
+    opacity: 0;
+    z-index: 1001;
+    --start-x: -50%;
+    --start-y: -50%;
+    --drift-x: 0px;
+    --drift-y: -60px;
+    transform: translate(var(--start-x), var(--start-y)) scale(0.85);
+    animation: christmas-mouse-trail 0.7s ease-out forwards;
+}
+
+@keyframes christmas-mouse-trail {
+    0% {
+        opacity: 0.9;
+        transform: translate(var(--start-x), var(--start-y)) scale(0.85);
+    }
+    100% {
+        opacity: 0;
+        transform: translate(calc(var(--start-x) + var(--drift-x)), calc(var(--start-y) + var(--drift-y))) scale(1.3);
     }
 }
