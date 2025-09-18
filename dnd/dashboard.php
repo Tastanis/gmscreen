@@ -925,6 +925,7 @@ $defaultInventoryTab = $is_gm ? 'frunk' : $user;
             <button class="nav-btn" onclick="openCombatTracker()">Combat Tracker</button>
             <button class="nav-btn" onclick="openSchedule()">Schedule</button>
             <button type="button" class="nav-btn" id="theme-toggle-btn" title="Switch theme">Theme</button>
+            <button type="button" class="nav-btn" id="dice-roller-btn" title="Open dice roller">Dice Roller</button>
             <button class="nav-btn logout-btn" onclick="window.location.href='logout.php'">Logout</button>
         </div>
         <h1 class="nav-title"><?php echo $is_gm ? 'GM Dashboard' : ucfirst($user) . '\'s Character Sheet'; ?></h1>
@@ -1475,6 +1476,7 @@ $defaultInventoryTab = $is_gm ? 'frunk' : $user;
             }
         }
     </script>
+    <script src="js/dashboard-dice-roller.js"></script>
     <script src="js/theme-manager.js"></script>
     <script src="Halloween/theme.js" defer></script>
     <script src="Christmas/theme.js" defer></script>
