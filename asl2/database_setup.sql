@@ -24,6 +24,7 @@ CREATE TABLE IF NOT EXISTS skills (
     skill_name VARCHAR(255) NOT NULL,
     skill_description TEXT,
     unit VARCHAR(255) NULL,
+    asl_level TINYINT NOT NULL DEFAULT 1,
     points_not_started INT DEFAULT 0,
     points_progressing INT DEFAULT 1,
     points_proficient INT DEFAULT 3,
@@ -71,6 +72,7 @@ INSERT INTO resources (skill_id, resource_name, resource_url, order_index) VALUE
 
 -- Add unit column to existing skills table (for existing databases)
 ALTER TABLE skills ADD COLUMN IF NOT EXISTS unit VARCHAR(255) NULL AFTER skill_description;
+ALTER TABLE skills ADD COLUMN IF NOT EXISTS asl_level TINYINT NOT NULL DEFAULT 1 AFTER unit;
 
 -- Word lists for scroller game
 CREATE TABLE IF NOT EXISTS wordlists (

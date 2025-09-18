@@ -14,10 +14,12 @@ if (isset($_SESSION['is_teacher']) && $_SESSION['is_teacher']) {
     exit;
 }
 
+$user_level = intval($_SESSION['user_level'] ?? 1);
+
 // Get all skills with user's progress
 try {
     $stmt = $pdo->prepare("
-        SELECT 
+        SELECT
             s.id,
             s.skill_name,
             s.skill_description,
@@ -28,14 +30,15 @@ try {
             COALESCE(us.status, 'not_started') as user_status
         FROM skills s
         LEFT JOIN user_skills us ON s.id = us.skill_id AND us.user_id = ?
+        WHERE s.asl_level = ?
         ORDER BY s.order_index
     ");
-    $stmt->execute([$_SESSION['user_id']]);
+    $stmt->execute([$_SESSION['user_id'], $user_level]);
     $skills = $stmt->fetchAll();
-    
+
     // Get unique units for filter dropdown
-    $stmt = $pdo->prepare("SELECT DISTINCT unit FROM skills WHERE unit IS NOT NULL ORDER BY unit");
-    $stmt->execute();
+    $stmt = $pdo->prepare("SELECT DISTINCT unit FROM skills WHERE unit IS NOT NULL AND asl_level = ? ORDER BY unit");
+    $stmt->execute([$user_level]);
     $units = $stmt->fetchAll(PDO::FETCH_COLUMN);
     
     // Get resources for each skill

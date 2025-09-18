@@ -29,98 +29,99 @@ if ($skill_id <= 0) {
 
 try {
     // Get current skill position
-    $stmt = $pdo->prepare("SELECT order_index FROM skills WHERE id = ?");
+    $stmt = $pdo->prepare("SELECT order_index, asl_level FROM skills WHERE id = ?");
     $stmt->execute([$skill_id]);
     $current_skill = $stmt->fetch();
-    
+
     if (!$current_skill) {
         http_response_code(404);
         echo json_encode(['success' => false, 'message' => 'Skill not found']);
         exit;
     }
-    
+
     $current_position = $current_skill['order_index'];
-    
+    $skill_level = $current_skill['asl_level'];
+
     // Get total number of skills
-    $stmt = $pdo->prepare("SELECT COUNT(*) as total FROM skills");
-    $stmt->execute();
+    $stmt = $pdo->prepare("SELECT COUNT(*) as total FROM skills WHERE asl_level = ?");
+    $stmt->execute([$skill_level]);
     $total_skills = $stmt->fetchColumn();
-    
+
     switch ($action) {
         case 'move_up':
             if ($current_position <= 1) {
                 echo json_encode(['success' => false, 'message' => 'Skill is already at the top']);
                 exit;
             }
-            
+
             // Find the skill immediately above
-            $stmt = $pdo->prepare("SELECT id, order_index FROM skills WHERE order_index < ? ORDER BY order_index DESC LIMIT 1");
-            $stmt->execute([$current_position]);
+            $stmt = $pdo->prepare("SELECT id, order_index FROM skills WHERE asl_level = ? AND order_index < ? ORDER BY order_index DESC LIMIT 1");
+            $stmt->execute([$skill_level, $current_position]);
             $skill_above = $stmt->fetch();
-            
+
             if ($skill_above) {
                 // Swap positions
                 $pdo->beginTransaction();
-                
+
                 $stmt = $pdo->prepare("UPDATE skills SET order_index = ? WHERE id = ?");
                 $stmt->execute([$skill_above['order_index'], $skill_id]);
-                
+
                 $stmt = $pdo->prepare("UPDATE skills SET order_index = ? WHERE id = ?");
                 $stmt->execute([$current_position, $skill_above['id']]);
-                
+
                 $pdo->commit();
                 echo json_encode(['success' => true, 'message' => 'Skill moved up successfully']);
             } else {
                 echo json_encode(['success' => false, 'message' => 'Could not move skill up']);
             }
             break;
-            
+
         case 'move_down':
             if ($current_position >= $total_skills) {
                 echo json_encode(['success' => false, 'message' => 'Skill is already at the bottom']);
                 exit;
             }
-            
+
             // Find the skill immediately below
-            $stmt = $pdo->prepare("SELECT id, order_index FROM skills WHERE order_index > ? ORDER BY order_index ASC LIMIT 1");
-            $stmt->execute([$current_position]);
+            $stmt = $pdo->prepare("SELECT id, order_index FROM skills WHERE asl_level = ? AND order_index > ? ORDER BY order_index ASC LIMIT 1");
+            $stmt->execute([$skill_level, $current_position]);
             $skill_below = $stmt->fetch();
-            
+
             if ($skill_below) {
                 // Swap positions
                 $pdo->beginTransaction();
-                
+
                 $stmt = $pdo->prepare("UPDATE skills SET order_index = ? WHERE id = ?");
                 $stmt->execute([$skill_below['order_index'], $skill_id]);
-                
+
                 $stmt = $pdo->prepare("UPDATE skills SET order_index = ? WHERE id = ?");
                 $stmt->execute([$current_position, $skill_below['id']]);
-                
+
                 $pdo->commit();
                 echo json_encode(['success' => true, 'message' => 'Skill moved down successfully']);
             } else {
                 echo json_encode(['success' => false, 'message' => 'Could not move skill down']);
             }
             break;
-            
+
         case 'move_to_position':
             if ($target_position < 1 || $target_position > $total_skills) {
                 echo json_encode(['success' => false, 'message' => 'Invalid target position']);
                 exit;
             }
-            
+
             if ($target_position == $current_position) {
                 echo json_encode(['success' => true, 'message' => 'Skill is already at position ' . $target_position]);
                 exit;
             }
-            
+
             $pdo->beginTransaction();
-            
+
             // First, ensure all skills have sequential order_index values
-            $stmt = $pdo->prepare("SELECT id FROM skills ORDER BY order_index, id");
-            $stmt->execute();
+            $stmt = $pdo->prepare("SELECT id FROM skills WHERE asl_level = ? ORDER BY order_index, id");
+            $stmt->execute([$skill_level]);
             $all_skills = $stmt->fetchAll();
-            
+
             $index = 1;
             foreach ($all_skills as $skill) {
                 $stmt = $pdo->prepare("UPDATE skills SET order_index = ? WHERE id = ?");
@@ -130,30 +131,30 @@ try {
                 }
                 $index++;
             }
-            
+
             // Now move the skill to the target position
             if ($target_position < $current_position) {
                 // Moving up - shift skills down
                 $stmt = $pdo->prepare("
-                    UPDATE skills 
-                    SET order_index = order_index + 1 
-                    WHERE order_index >= ? AND order_index < ?
+                    UPDATE skills
+                    SET order_index = order_index + 1
+                    WHERE asl_level = ? AND order_index >= ? AND order_index < ?
                 ");
-                $stmt->execute([$target_position, $current_position]);
+                $stmt->execute([$skill_level, $target_position, $current_position]);
             } else {
                 // Moving down - shift skills up
                 $stmt = $pdo->prepare("
-                    UPDATE skills 
-                    SET order_index = order_index - 1 
-                    WHERE order_index > ? AND order_index <= ?
+                    UPDATE skills
+                    SET order_index = order_index - 1
+                    WHERE asl_level = ? AND order_index > ? AND order_index <= ?
                 ");
-                $stmt->execute([$current_position, $target_position]);
+                $stmt->execute([$skill_level, $current_position, $target_position]);
             }
-            
+
             // Set the skill to its target position
             $stmt = $pdo->prepare("UPDATE skills SET order_index = ? WHERE id = ?");
             $stmt->execute([$target_position, $skill_id]);
-            
+
             $pdo->commit();
             echo json_encode(['success' => true, 'message' => 'Skill moved to position ' . $target_position]);
             break;

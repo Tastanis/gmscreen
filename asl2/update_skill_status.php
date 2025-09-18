@@ -25,6 +25,7 @@ if (!isset($_POST['skill_id']) || !isset($_POST['status'])) {
 
 $skill_id = intval($_POST['skill_id']);
 $status = $_POST['status'];
+$user_level = intval($_SESSION['user_level'] ?? 1);
 
 // Validate status
 if (!in_array($status, ['not_started', 'progressing', 'proficient'])) {
@@ -35,11 +36,18 @@ if (!in_array($status, ['not_started', 'progressing', 'proficient'])) {
 
 try {
     // Check if the skill exists
-    $stmt = $pdo->prepare("SELECT id FROM skills WHERE id = ?");
+    $stmt = $pdo->prepare("SELECT id, asl_level FROM skills WHERE id = ?");
     $stmt->execute([$skill_id]);
-    if (!$stmt->fetch()) {
+    $skill = $stmt->fetch();
+    if (!$skill) {
         http_response_code(404);
         echo json_encode(['success' => false, 'message' => 'Skill not found']);
+        exit;
+    }
+
+    if ((int)$skill['asl_level'] !== $user_level) {
+        http_response_code(403);
+        echo json_encode(['success' => false, 'message' => 'You cannot update skills from another ASL level']);
         exit;
     }
     
@@ -53,18 +61,19 @@ try {
     
     // Calculate new progress percentage
     $stmt = $pdo->prepare("
-        SELECT 
-            SUM(CASE 
-                WHEN us.status = 'not_started' THEN s.points_not_started
-                WHEN us.status = 'progressing' THEN s.points_progressing
-                WHEN us.status = 'proficient' THEN s.points_proficient
+        SELECT
+            SUM(CASE
+                WHEN s.asl_level = ? AND us.status = 'not_started' THEN s.points_not_started
+                WHEN s.asl_level = ? AND us.status = 'progressing' THEN s.points_progressing
+                WHEN s.asl_level = ? AND us.status = 'proficient' THEN s.points_proficient
                 ELSE 0
             END) as earned_points,
-            SUM(s.points_proficient) as total_possible_points
+            SUM(CASE WHEN s.asl_level = ? THEN s.points_proficient ELSE 0 END) as total_possible_points
         FROM skills s
         LEFT JOIN user_skills us ON s.id = us.skill_id AND us.user_id = ?
+        WHERE s.asl_level = ?
     ");
-    $stmt->execute([$_SESSION['user_id']]);
+    $stmt->execute([$user_level, $user_level, $user_level, $user_level, $_SESSION['user_id'], $user_level]);
     $progress = $stmt->fetch();
     
     $earned_points = $progress['earned_points'] ?? 0;
