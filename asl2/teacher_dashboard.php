@@ -9,10 +9,9 @@ if (!isset($_SESSION['user_id']) || !isset($_SESSION['is_teacher']) || !$_SESSIO
 }
 
 // Get all students and their progress
-$skill_counts_by_level = [];
 try {
     $stmt = $pdo->prepare("
-        SELECT
+        SELECT 
             u.id,
             u.first_name,
             u.last_name,
@@ -20,19 +19,15 @@ try {
             u.class_period,
             u.level,
             COALESCE(
-                SUM(CASE
-                    WHEN s.asl_level = u.level AND us.status = 'not_started' THEN s.points_not_started
-                    WHEN s.asl_level = u.level AND us.status = 'progressing' THEN s.points_progressing
-                    WHEN s.asl_level = u.level AND us.status = 'proficient' THEN s.points_proficient
+                SUM(CASE 
+                    WHEN us.status = 'not_started' THEN s.points_not_started
+                    WHEN us.status = 'progressing' THEN s.points_progressing
+                    WHEN us.status = 'proficient' THEN s.points_proficient
                     ELSE 0
                 END), 0
             ) as earned_points,
             COALESCE(
-                (
-                    SELECT SUM(points_proficient)
-                    FROM skills
-                    WHERE asl_level = u.level
-                ), 0
+                (SELECT SUM(points_proficient) FROM skills), 0
             ) as total_possible_points
         FROM users u
         LEFT JOIN user_skills us ON u.id = us.user_id
@@ -43,30 +38,24 @@ try {
     ");
     $stmt->execute();
     $students = $stmt->fetchAll();
-
+    
     // Get total skills count
-    $stmt = $pdo->prepare("SELECT asl_level, COUNT(*) as total FROM skills GROUP BY asl_level");
+    $stmt = $pdo->prepare("SELECT COUNT(*) as total_skills FROM skills");
     $stmt->execute();
-    $skill_counts_by_level = [];
-    while ($row = $stmt->fetch(PDO::FETCH_ASSOC)) {
-        $skill_counts_by_level[(int)$row['asl_level']] = (int)$row['total'];
-    }
-    $total_skills = array_sum($skill_counts_by_level);
-
+    $total_skills = $stmt->fetchColumn();
+    
     // Get skills summary
     $stmt = $pdo->prepare("
-        SELECT
-            s.id,
+        SELECT 
             s.skill_name,
-            s.asl_level,
             COUNT(CASE WHEN us.status = 'not_started' OR us.status IS NULL THEN 1 END) as not_started,
             COUNT(CASE WHEN us.status = 'progressing' THEN 1 END) as progressing,
             COUNT(CASE WHEN us.status = 'proficient' THEN 1 END) as proficient
         FROM skills s
         LEFT JOIN user_skills us ON s.id = us.skill_id
-        LEFT JOIN users u ON us.user_id = u.id AND u.is_teacher = FALSE AND u.level = s.asl_level
-        GROUP BY s.id, s.skill_name, s.asl_level
-        ORDER BY s.asl_level, s.order_index
+        LEFT JOIN users u ON us.user_id = u.id AND u.is_teacher = FALSE
+        GROUP BY s.id, s.skill_name
+        ORDER BY s.order_index
     ");
     $stmt->execute();
     $skills_summary = $stmt->fetchAll();
@@ -75,7 +64,6 @@ try {
     $students = [];
     $total_skills = 0;
     $skills_summary = [];
-    $skill_counts_by_level = [];
 }
 ?>
 <!DOCTYPE html>
@@ -107,7 +95,7 @@ try {
                 <!-- Students Section -->
                 <div id="students-section">
                     <h2>Student Progress Overview</h2>
-                    <p>Total Students: <strong><span id="filtered-count"><?php echo count($students); ?></span></strong> of <strong><span id="total-count"><?php echo count($students); ?></span></strong> | Total Skills: <strong><?php echo $total_skills; ?></strong> (ASL 1: <?php echo $skill_counts_by_level[1] ?? 0; ?> | ASL 2: <?php echo $skill_counts_by_level[2] ?? 0; ?>)</p>
+                    <p>Total Students: <strong><span id="filtered-count"><?php echo count($students); ?></span></strong> of <strong><span id="total-count"><?php echo count($students); ?></span></strong> | Total Skills: <strong><?php echo $total_skills; ?></strong></p>
                     
                     <!-- Filtering and Sorting Controls -->
                     <div class="filter-controls" style="margin: 20px 0; padding: 20px; background: rgba(247, 250, 252, 0.8); border-radius: 12px; border: 2px solid #e2e8f0;">
@@ -220,85 +208,74 @@ try {
                     <p>Progress summary across all skills and students</p>
                     
                     <div class="skills-summary">
-                        <?php
+                        <?php 
                         // Get all skills with their IDs for the action buttons
-                        $stmt = $pdo->prepare("SELECT id, skill_name, skill_description, unit, order_index, asl_level FROM skills ORDER BY asl_level, order_index");
+                        $stmt = $pdo->prepare("SELECT id, skill_name, skill_description, unit, order_index FROM skills ORDER BY order_index");
                         $stmt->execute();
                         $all_skills = $stmt->fetchAll();
-
-                        $skills_summary_map = [];
-                        foreach ($skills_summary as $summary) {
-                            $skills_summary_map[$summary['id']] = $summary;
-                        }
-
-                        $skills_by_level = [];
-                        foreach ($all_skills as $skill) {
-                            $level = (int)$skill['asl_level'];
-                            if (!isset($skills_by_level[$level])) {
-                                $skills_by_level[$level] = [];
+                        
+                        $position_number = 1;
+                        foreach ($all_skills as $skill): 
+                            // Find the corresponding skill summary
+                            $skill_summary = null;
+                            foreach ($skills_summary as $summary) {
+                                if ($summary['skill_name'] === $skill['skill_name']) {
+                                    $skill_summary = $summary;
+                                    break;
+                                }
                             }
-                            $skills_by_level[$level][] = $skill;
-                        }
-
-                        ksort($skills_by_level);
-                        foreach ($skills_by_level as $level => $level_skills):
-                            $level_total = count($level_skills);
-                            $position_number = 1;
+                            
+                            if (!$skill_summary) {
+                                $skill_summary = [
+                                    'skill_name' => $skill['skill_name'],
+                                    'not_started' => 0,
+                                    'progressing' => 0,
+                                    'proficient' => 0
+                                ];
+                            }
                         ?>
-                            <div class="skill-level-group" data-asl-level="<?php echo $level; ?>" style="width: 100%;">
-                                <h3 style="margin: 10px 0 15px; color: #2d3748;">ASL Level <?php echo $level; ?> Skills</h3>
-                                <?php foreach ($level_skills as $skill):
-                                    $skill_summary = $skills_summary_map[$skill['id']] ?? [
-                                        'not_started' => 0,
-                                        'progressing' => 0,
-                                        'proficient' => 0
-                                    ];
-                                ?>
-                                    <div class="skill-summary-card" data-skill-id="<?php echo $skill['id']; ?>" data-asl-level="<?php echo $level; ?>">
-                                        <div class="skill-position-controls">
-                                            <span class="skill-position-number">#<?php echo $position_number; ?></span>
-                                            <div class="position-buttons">
-                                                <button class="position-btn" onclick="moveSkill(<?php echo $skill['id']; ?>, 'move_up')" <?php echo $position_number == 1 ? 'disabled' : ''; ?> title="Move Up">▲</button>
-                                                <button class="position-btn" onclick="moveSkill(<?php echo $skill['id']; ?>, 'move_down')" <?php echo $position_number == $level_total ? 'disabled' : ''; ?> title="Move Down">▼</button>
-                                                <input type="number" class="position-input" id="position-<?php echo $skill['id']; ?>" min="1" max="<?php echo $level_total; ?>" value="<?php echo $position_number; ?>" onchange="moveToPosition(<?php echo $skill['id']; ?>, this.value)" title="Move to position">
-                                            </div>
-                                        </div>
-                                        <div class="skill-summary-header">
-                                            <div>
-                                                <h3><?php echo htmlspecialchars($skill['skill_name']); ?></h3>
-                                                <span style="display: inline-block; margin-top: 4px; padding: 2px 8px; border-radius: 999px; background: rgba(66, 153, 225, 0.15); color: #2b6cb0; font-size: 0.8rem; font-weight: 600;">ASL <?php echo $level; ?></span>
-                                                <?php if (!empty($skill['unit'])): ?>
-                                                    <span class="skill-unit">Unit: <?php echo htmlspecialchars($skill['unit']); ?></span>
-                                                <?php else: ?>
-                                                    <span class="skill-unit no-unit">No Unit</span>
-                                                <?php endif; ?>
-                                            </div>
-                                            <div class="skill-actions">
-                                                <button class="action-btn edit-btn" onclick="editSkill(<?php echo $skill['id']; ?>, '<?php echo htmlspecialchars($skill['skill_name']); ?>', '<?php echo htmlspecialchars($skill['skill_description']); ?>', '<?php echo htmlspecialchars($skill['unit'] ?? ''); ?>', <?php echo $level; ?>)">Edit</button>
-                                                <button class="action-btn resources-btn" onclick="manageResources(<?php echo $skill['id']; ?>, '<?php echo htmlspecialchars($skill['skill_name']); ?>')">Resources</button>
-                                                <button class="action-btn delete-btn" onclick="deleteSkill(<?php echo $skill['id']; ?>,'<?php echo htmlspecialchars($skill['skill_name']); ?>')">Delete</button>
-                                            </div>
-                                        </div>
-                                        <div class="skill-stats">
-                                            <div class="stat-item">
-                                                <span class="stat-label">Not Started:</span>
-                                                <span class="stat-value not-started"><?php echo $skill_summary['not_started']; ?></span>
-                                            </div>
-                                            <div class="stat-item">
-                                                <span class="stat-label">Progressing:</span>
-                                                <span class="stat-value progressing"><?php echo $skill_summary['progressing']; ?></span>
-                                            </div>
-                                            <div class="stat-item">
-                                                <span class="stat-label">Proficient:</span>
-                                                <span class="stat-value proficient"><?php echo $skill_summary['proficient']; ?></span>
-                                            </div>
-                                        </div>
+                            <div class="skill-summary-card" data-skill-id="<?php echo $skill['id']; ?>">
+                                <div class="skill-position-controls">
+                                    <span class="skill-position-number">#<?php echo $position_number; ?></span>
+                                    <div class="position-buttons">
+                                        <button class="position-btn" onclick="moveSkill(<?php echo $skill['id']; ?>, 'move_up')" <?php echo $position_number == 1 ? 'disabled' : ''; ?> title="Move Up">▲</button>
+                                        <button class="position-btn" onclick="moveSkill(<?php echo $skill['id']; ?>, 'move_down')" <?php echo $position_number == count($all_skills) ? 'disabled' : ''; ?> title="Move Down">▼</button>
+                                        <input type="number" class="position-input" id="position-<?php echo $skill['id']; ?>" min="1" max="<?php echo count($all_skills); ?>" value="<?php echo $position_number; ?>" onchange="moveToPosition(<?php echo $skill['id']; ?>, this.value)" title="Move to position">
                                     </div>
-                                <?php
-                                    $position_number++;
-                                endforeach; ?>
+                                </div>
+                                <div class="skill-summary-header">
+                                    <div>
+                                        <h3><?php echo htmlspecialchars($skill_summary['skill_name']); ?></h3>
+                                        <?php if (!empty($skill['unit'])): ?>
+                                            <span class="skill-unit">Unit: <?php echo htmlspecialchars($skill['unit']); ?></span>
+                                        <?php else: ?>
+                                            <span class="skill-unit no-unit">No Unit</span>
+                                        <?php endif; ?>
+                                    </div>
+                                    <div class="skill-actions">
+                                        <button class="action-btn edit-btn" onclick="editSkill(<?php echo $skill['id']; ?>, '<?php echo htmlspecialchars($skill['skill_name']); ?>', '<?php echo htmlspecialchars($skill['skill_description']); ?>', '<?php echo htmlspecialchars($skill['unit'] ?? ''); ?>')">Edit</button>
+                                        <button class="action-btn resources-btn" onclick="manageResources(<?php echo $skill['id']; ?>, '<?php echo htmlspecialchars($skill['skill_name']); ?>')">Resources</button>
+                                        <button class="action-btn delete-btn" onclick="deleteSkill(<?php echo $skill['id']; ?>, '<?php echo htmlspecialchars($skill['skill_name']); ?>')">Delete</button>
+                                    </div>
+                                </div>
+                                <div class="skill-stats">
+                                    <div class="stat-item">
+                                        <span class="stat-label">Not Started:</span>
+                                        <span class="stat-value not-started"><?php echo $skill_summary['not_started']; ?></span>
+                                    </div>
+                                    <div class="stat-item">
+                                        <span class="stat-label">Progressing:</span>
+                                        <span class="stat-value progressing"><?php echo $skill_summary['progressing']; ?></span>
+                                    </div>
+                                    <div class="stat-item">
+                                        <span class="stat-label">Proficient:</span>
+                                        <span class="stat-value proficient"><?php echo $skill_summary['proficient']; ?></span>
+                                    </div>
+                                </div>
                             </div>
-                        <?php endforeach; ?>
+                        <?php 
+                            $position_number++;
+                        endforeach; ?>
                     </div>
                 </div>
                 
@@ -330,13 +307,6 @@ try {
                             <div class="form-group">
                                 <label>Unit (optional - leave blank for year-round skills)</label>
                                 <input type="text" name="unit" class="form-input" placeholder="e.g., Unit 1, Semester 1, etc.">
-                            </div>
-                            <div class="form-group">
-                                <label>ASL Level</label>
-                                <select name="asl_level" class="form-input" required>
-                                    <option value="1" selected>ASL 1</option>
-                                    <option value="2">ASL 2</option>
-                                </select>
                             </div>
                             <div class="form-group">
                                 <label>Resources (one per line)</label>
@@ -406,8 +376,8 @@ try {
                                 <div class="form-group">
                                     <label>ASL Level</label>
                                     <select name="asl_level" class="form-input" required>
-                                        <option value="1" selected>ASL 1 Only</option>
-                                        <option value="2">ASL 2 Only</option>
+                                        <option value="1">ASL 1 Only</option>
+                                        <option value="2" selected>ASL 2 Only</option>
                                         <option value="3">Both ASL 1 & 2</option>
                                     </select>
                                     <small style="color: #6c757d; font-size: 0.85rem; margin-top: 5px; display: block;">
@@ -686,10 +656,6 @@ try {
         function submitNewSkill() {
             const form = document.getElementById('new-skill-form');
             const formData = new FormData(form);
-            const levelField = form.querySelector('[name="asl_level"]');
-            if (levelField) {
-                formData.set('asl_level', levelField.value);
-            }
             const submitButton = form.querySelector('button[type="submit"]');
             
             // Show loading state
@@ -849,7 +815,7 @@ try {
             document.getElementById('edit-words').value = (list.words || []).join('\n');
             document.getElementById('edit-speed').value = list.speed;
             document.getElementById('edit-word-count').value = list.word_count;
-            document.getElementById('edit-asl-level').value = list.asl_level || 1;
+            document.getElementById('edit-asl-level').value = list.asl_level || 2;
             document.getElementById('edit-wordlist-modal').style.display = 'block';
         }
 
@@ -972,25 +938,16 @@ try {
         }
         
         function moveToPosition(skillId, targetPosition) {
-            const positionInput = document.getElementById('position-' + skillId);
-            const currentPosition = parseInt(positionInput.defaultValue, 10);
-            const numericTarget = parseInt(targetPosition, 10);
-
-            if (Number.isNaN(numericTarget)) {
-                showMessage('Please enter a valid position number.', 'error');
-                positionInput.value = currentPosition;
-                return;
-            }
-
-            if (numericTarget === currentPosition) {
-                positionInput.value = currentPosition;
+            const currentPosition = document.getElementById('position-' + skillId).defaultValue;
+            
+            if (targetPosition === currentPosition) {
                 return; // No change
             }
-
+            
             const formData = new FormData();
             formData.append('skill_id', skillId);
             formData.append('action', 'move_to_position');
-            formData.append('target_position', numericTarget);
+            formData.append('target_position', targetPosition);
             
             fetch('reorder_skill.php', {
                 method: 'POST',
@@ -1050,36 +1007,26 @@ try {
         }
         
         // Edit skill function
-        function editSkill(skillId, skillName, skillDescription, skillUnit, skillLevel) {
+        function editSkill(skillId, skillName, skillDescription, skillUnit) {
             const newName = prompt('Edit skill name:', skillName);
             if (newName === null) return; // User cancelled
-
+            
             if (newName.trim() === '') {
                 alert('Skill name cannot be empty');
                 return;
             }
-
+            
             const newDescription = prompt('Edit skill description:', skillDescription);
             if (newDescription === null) return; // User cancelled
-
+            
             const newUnit = prompt('Edit unit (leave blank for year-round skills):', skillUnit || '');
             if (newUnit === null) return; // User cancelled
-
-            const levelPrompt = prompt('Edit ASL level (1 or 2):', String(skillLevel || 1));
-            if (levelPrompt === null) return;
-
-            const parsedLevel = parseInt(levelPrompt, 10);
-            if (![1, 2].includes(parsedLevel)) {
-                alert('ASL level must be 1 or 2');
-                return;
-            }
-
+            
             const formData = new FormData();
             formData.append('skill_id', skillId);
             formData.append('skill_name', newName.trim());
             formData.append('skill_description', newDescription.trim());
             formData.append('unit', newUnit.trim());
-            formData.append('asl_level', parsedLevel);
             
             fetch('edit_skill.php', {
                 method: 'POST',

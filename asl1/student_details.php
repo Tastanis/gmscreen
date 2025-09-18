@@ -49,42 +49,40 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['action']) && $_POST['
 // Get student details
 try {
     $stmt = $pdo->prepare("
-        SELECT
+        SELECT 
             u.id,
             u.first_name,
             u.last_name,
             u.email,
             u.level,
             COALESCE(
-                SUM(CASE
-                    WHEN s.asl_level = u.level AND us.status = 'not_started' THEN s.points_not_started
-                    WHEN s.asl_level = u.level AND us.status = 'progressing' THEN s.points_progressing
-                    WHEN s.asl_level = u.level AND us.status = 'proficient' THEN s.points_proficient
+                SUM(CASE 
+                    WHEN us.status = 'not_started' THEN s.points_not_started
+                    WHEN us.status = 'progressing' THEN s.points_progressing
+                    WHEN us.status = 'proficient' THEN s.points_proficient
                     ELSE 0
                 END), 0
             ) as earned_points,
             COALESCE(
-                (SELECT SUM(points_proficient) FROM skills WHERE asl_level = u.level), 0
+                (SELECT SUM(points_proficient) FROM skills), 0
             ) as total_possible_points
         FROM users u
         LEFT JOIN user_skills us ON u.id = us.user_id
-        LEFT JOIN skills s ON us.skill_id = s.id AND s.asl_level = u.level
+        LEFT JOIN skills s ON us.skill_id = s.id
         WHERE u.id = ? AND u.is_teacher = FALSE
         GROUP BY u.id, u.first_name, u.last_name, u.email, u.level
     ");
     $stmt->execute([$student_id]);
     $student = $stmt->fetch();
-
+    
     if (!$student) {
         header('Location: teacher_dashboard.php');
         exit;
     }
-
-    $student_level = (int)($student['level'] ?? 1);
-
+    
     // Get student's skills progress
     $stmt = $pdo->prepare("
-        SELECT
+        SELECT 
             s.skill_name,
             s.skill_description,
             s.unit,
@@ -94,10 +92,9 @@ try {
             s.points_proficient
         FROM skills s
         LEFT JOIN user_skills us ON s.id = us.skill_id AND us.user_id = ?
-        WHERE s.asl_level = ?
         ORDER BY s.order_index
     ");
-    $stmt->execute([$student_id, $student_level]);
+    $stmt->execute([$student_id]);
     $skills = $stmt->fetchAll();
     
     // Note: In a production environment, you should NEVER store or display passwords in plain text

@@ -21,7 +21,6 @@ $skill_name = trim($_POST['skill_name'] ?? '');
 $skill_description = trim($_POST['skill_description'] ?? '');
 $unit = trim($_POST['unit'] ?? '');
 $resources_text = trim($_POST['resources'] ?? '');
-$asl_level = intval($_POST['asl_level'] ?? 0);
 
 // Validate required fields
 if (empty($skill_name)) {
@@ -30,35 +29,29 @@ if (empty($skill_name)) {
     exit;
 }
 
-if (!in_array($asl_level, [1, 2], true)) {
-    http_response_code(400);
-    echo json_encode(['success' => false, 'message' => 'A valid ASL level is required']);
-    exit;
-}
-
 try {
     // Check if skill name already exists
-    $stmt = $pdo->prepare("SELECT id FROM skills WHERE skill_name = ? AND asl_level = ?");
-    $stmt->execute([$skill_name, $asl_level]);
+    $stmt = $pdo->prepare("SELECT id FROM skills WHERE skill_name = ?");
+    $stmt->execute([$skill_name]);
     if ($stmt->fetch()) {
         http_response_code(409);
         echo json_encode(['success' => false, 'message' => 'A skill with this name already exists']);
         exit;
     }
-
+    
     // Get the next order index
-    $stmt = $pdo->prepare("SELECT COALESCE(MAX(order_index), 0) + 1 as next_order FROM skills WHERE asl_level = ?");
-    $stmt->execute([$asl_level]);
+    $stmt = $pdo->prepare("SELECT MAX(order_index) + 1 as next_order FROM skills");
+    $stmt->execute();
     $next_order = $stmt->fetchColumn() ?: 1;
-
+    
     // Insert the new skill
     $stmt = $pdo->prepare("
-        INSERT INTO skills (skill_name, skill_description, unit, asl_level, points_not_started, points_progressing, points_proficient, order_index)
-        VALUES (?, ?, ?, ?, 0, 1, 3, ?)
+        INSERT INTO skills (skill_name, skill_description, unit, points_not_started, points_progressing, points_proficient, order_index) 
+        VALUES (?, ?, ?, 0, 1, 3, ?)
     ");
     $unit_value = empty($unit) ? null : $unit;
-    $stmt->execute([$skill_name, $skill_description, $unit_value, $asl_level, $next_order]);
-
+    $stmt->execute([$skill_name, $skill_description, $unit_value, $next_order]);
+    
     $skill_id = $pdo->lastInsertId();
     
     // Process resources if provided
@@ -103,7 +96,6 @@ try {
         'message' => 'Skill added successfully!',
         'skill_id' => $skill_id,
         'skill_name' => $skill_name,
-        'asl_level' => $asl_level,
         'resources_added' => $resources_added
     ]);
     
