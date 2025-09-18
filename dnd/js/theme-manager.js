@@ -106,16 +106,20 @@
 
         button.removeAttribute('aria-disabled');
 
+        const normalizedCurrent = normalizeThemeName(currentTheme);
+        const currentConfig = getThemeConfig(normalizedCurrent);
+        const currentLabel = currentConfig ? currentConfig.label : formatLabel(normalizedCurrent);
+
         const nextTheme = getNextTheme(currentTheme, themeCycle);
         const nextConfig = getThemeConfig(nextTheme);
-        const label = nextConfig ? nextConfig.label : formatLabel(nextTheme);
+        const nextLabel = nextConfig ? nextConfig.label : formatLabel(nextTheme);
         const isAlternateTheme = normalizeThemeName(currentTheme) !== DEFAULT_THEME;
 
         button.classList.toggle('theme-active', isAlternateTheme);
         button.setAttribute('aria-pressed', isAlternateTheme ? 'true' : 'false');
 
-        const buttonLabel = label ? `Theme: ${label}` : 'Theme';
-        const buttonTitle = label ? `Switch to the ${label} theme` : 'Switch theme';
+        const buttonLabel = currentLabel || 'Theme';
+        const buttonTitle = nextLabel ? `Switch to the ${nextLabel} theme` : 'Switch theme';
 
         button.textContent = buttonLabel;
         button.title = buttonTitle;
