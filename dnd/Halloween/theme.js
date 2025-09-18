@@ -42,17 +42,11 @@
         body.appendChild(overlay);
         activeOverlay = overlay;
 
-        let frames = 0;
-        function removeOnNextFrame() {
-            frames += 1;
-            if (frames >= 2) {
+        window.setTimeout(function () {
+            if (activeOverlay === overlay) {
                 clearOverlay();
-                return;
             }
-            requestAnimationFrame(removeOnNextFrame);
-        }
-
-        requestAnimationFrame(removeOnNextFrame);
+        }, 500);
     }
 
     function scheduleJumpscare(body) {
