@@ -111,11 +111,11 @@ function createInventoryItemCard(item, index, tab) {
     card.innerHTML = `
         <div class="inventory-item-card-header">
             <div class="inventory-item-name">${escapeHtml(item.name || 'Unnamed Item')}</div>
-            ${item.image ? `<img src="${item.image}" alt="${escapeHtml(item.name)}" class="inventory-item-image-small">` : ''}
+            ${item.image ? `<img src="${item.image}" alt="${escapeHtml(item.name)}" class="inventory-item-image-small" draggable="true">` : ''}
         </div>
         
         <div class="inventory-item-details">
-            ${item.image ? `<img src="${item.image}" alt="${escapeHtml(item.name)}" class="inventory-item-image-large">` : ''}
+            ${item.image ? `<img src="${item.image}" alt="${escapeHtml(item.name)}" class="inventory-item-image-large" draggable="true">` : ''}
             
             <div class="inventory-item-field">
                 <label>Name:</label>
@@ -182,7 +182,37 @@ function createInventoryItemCard(item, index, tab) {
         }
         expandInventoryCard(this);
     });
-    
+
+    const dragImages = card.querySelectorAll('.inventory-item-image-small, .inventory-item-image-large');
+    dragImages.forEach((img) => {
+        if (!img || !img.getAttribute('src')) {
+            return;
+        }
+
+        const url = img.getAttribute('src');
+        if (typeof window.makeImageDraggable === 'function') {
+            window.makeImageDraggable(img, url);
+            return;
+        }
+
+        const absoluteUrl = (() => {
+            try {
+                return new URL(url, window.location.href).toString();
+            } catch (error) {
+                return url;
+            }
+        })();
+
+        img.addEventListener('dragstart', (event) => {
+            if (!event.dataTransfer) {
+                return;
+            }
+            event.dataTransfer.effectAllowed = 'copy';
+            event.dataTransfer.setData('text/uri-list', absoluteUrl);
+            event.dataTransfer.setData('text/plain', absoluteUrl);
+        });
+    });
+
     return card;
 }
 

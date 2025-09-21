@@ -1379,7 +1379,7 @@ $defaultInventoryTab = $is_gm ? 'frunk' : $user;
         <button id="chat-panel-toggle" class="chat-panel-toggle" type="button" aria-expanded="false" aria-controls="chat-panel">
             Open Chat
         </button>
-        <div id="chat-drop-target" class="chat-drop-target" hidden aria-hidden="true">Drop files to upload</div>
+        <div id="chat-drop-target" class="chat-drop-target" hidden aria-hidden="true">Drop images or image links to share</div>
     </div>
 
     <!-- Modal for Past Class Details -->

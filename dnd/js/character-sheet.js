@@ -1924,12 +1924,72 @@ function handlePortraitUpload(event) {
     }
 }
 
+function makeImageDraggable(img, imageUrl) {
+    if (!img) {
+        return;
+    }
+
+    if (img._chatDragHandler) {
+        img.removeEventListener('dragstart', img._chatDragHandler);
+        delete img._chatDragHandler;
+    }
+
+    if (!imageUrl) {
+        img.removeAttribute('draggable');
+        return;
+    }
+
+    let absoluteUrl = imageUrl;
+    try {
+        absoluteUrl = new URL(imageUrl, window.location.href).toString();
+    } catch (error) {
+        absoluteUrl = imageUrl;
+    }
+
+    img.setAttribute('draggable', 'true');
+
+    const handler = (event) => {
+        if (!event.dataTransfer) {
+            return;
+        }
+        event.dataTransfer.effectAllowed = 'copy';
+        event.dataTransfer.setData('text/uri-list', absoluteUrl);
+        event.dataTransfer.setData('text/plain', absoluteUrl);
+    };
+
+    img.addEventListener('dragstart', handler);
+    img._chatDragHandler = handler;
+}
+
+window.makeImageDraggable = makeImageDraggable;
+
 function loadPortrait(portraitPath) {
     const img = document.getElementById('character-portrait');
     const placeholder = document.getElementById('portrait-placeholder');
-    
+
+    if (!img || !placeholder) {
+        return;
+    }
+
+    makeImageDraggable(img, null);
+
     if (portraitPath && portraitPath.trim() !== '') {
-        img.src = portraitPath;
+        const normalizedPath = portraitPath.trim();
+        const applyDrag = () => {
+            makeImageDraggable(img, img.currentSrc || normalizedPath);
+        };
+        const handleError = () => {
+            makeImageDraggable(img, null);
+        };
+
+        img.addEventListener('load', applyDrag, { once: true });
+        img.addEventListener('error', handleError, { once: true });
+        img.src = normalizedPath;
+
+        if (img.complete && img.naturalWidth !== 0) {
+            applyDrag();
+        }
+
         img.style.display = 'block';
         placeholder.style.display = 'none';
     } else {

@@ -198,7 +198,7 @@ $type = $result['type'];
                 }
                 
                 if ($imagePath && file_exists($imagePath)): ?>
-                    <img src="<?php echo htmlspecialchars($imagePath); ?>" alt="<?php echo htmlspecialchars($character['name']); ?>" class="character-portrait">
+                    <img src="<?php echo htmlspecialchars($imagePath); ?>" alt="<?php echo htmlspecialchars($character['name']); ?>" class="character-portrait" draggable="true">
                 <?php else: ?>
                     <div class="character-portrait" style="background: linear-gradient(135deg, #667eea 0%, #764ba2 100%); display: flex; align-items: center; justify-content: center; color: white; font-size: 3em;">
                         <?php echo $type === 'location' ? '📍' : '👤'; ?>
@@ -344,5 +344,33 @@ $type = $result['type'];
             </div>
         </div>
     </div>
+<?php if ($imagePath && file_exists($imagePath)): ?>
+<script>
+    (function() {
+        const portrait = document.querySelector('.character-portrait');
+        if (!portrait) {
+            return;
+        }
+
+        portrait.setAttribute('draggable', 'true');
+        const src = portrait.getAttribute('src');
+        let absoluteUrl = src;
+        try {
+            absoluteUrl = new URL(src, window.location.href).href;
+        } catch (error) {
+            absoluteUrl = src;
+        }
+
+        portrait.addEventListener('dragstart', function(event) {
+            if (!event.dataTransfer) {
+                return;
+            }
+            event.dataTransfer.effectAllowed = 'copy';
+            event.dataTransfer.setData('text/uri-list', absoluteUrl);
+            event.dataTransfer.setData('text/plain', absoluteUrl);
+        });
+    })();
+</script>
+<?php endif; ?>
 </body>
 </html>
