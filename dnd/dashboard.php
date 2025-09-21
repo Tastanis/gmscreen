@@ -10,6 +10,22 @@ if (!isset($_SESSION['logged_in']) || $_SESSION['logged_in'] !== true) {
 $user = $_SESSION['user'];
 $is_gm = ($user === 'GM');
 
+// Ensure chat data storage exists
+$chatDataDir = __DIR__ . '/data';
+if (!is_dir($chatDataDir)) {
+    mkdir($chatDataDir, 0755, true);
+}
+
+$chatMessagesFile = $chatDataDir . '/chat_messages.json';
+if (!file_exists($chatMessagesFile)) {
+    file_put_contents($chatMessagesFile, json_encode([], JSON_PRETTY_PRINT), LOCK_EX);
+}
+
+$chatUploadsDir = __DIR__ . '/chat_uploads';
+if (!is_dir($chatUploadsDir)) {
+    mkdir($chatUploadsDir, 0755, true);
+}
+
 // Define character list
 $characters = array('frunk', 'sharon', 'indigo', 'zepha');
 
@@ -388,11 +404,11 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['action'])) {
     
     // Handle inventory requests (separate from character data)
     // Use exact action matching to prevent false matches
-    if (isset($_POST['action']) && 
-        ($_POST['action'] === 'inventory_load' || 
-         $_POST['action'] === 'inventory_save' || 
-         $_POST['action'] === 'inventory_update' || 
-         $_POST['action'] === 'inventory_delete' || 
+    if (isset($_POST['action']) &&
+        ($_POST['action'] === 'inventory_load' ||
+         $_POST['action'] === 'inventory_save' ||
+         $_POST['action'] === 'inventory_update' ||
+         $_POST['action'] === 'inventory_delete' ||
          $_POST['action'] === 'inventory_add' ||
          $_POST['action'] === 'inventory_save_item' ||
          $_POST['action'] === 'inventory_delete_item' ||
@@ -404,7 +420,13 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['action'])) {
         include_once 'inventory_handler.php';
         exit;
     }
-    
+
+    if (isset($_POST['action']) && strpos($_POST['action'], 'chat_') === 0) {
+        error_log("DEBUG: Routing to chat handler for action: " . $_POST['action']);
+        include_once 'chat_handler.php';
+        exit;
+    }
+
     error_log("DEBUG: Processing character data action: " . $_POST['action']);
     
     // BLOCK ALL SAVE OPERATIONS FOR NON-GM USERS (character data only)
