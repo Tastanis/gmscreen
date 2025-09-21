@@ -18,13 +18,34 @@ class DashboardBackupHelper {
         if ($dataDir === null) {
             $dataDir = __DIR__ . '/../../data';
         }
-        
-        $this->dataFile = $dataDir . '/characters.json';
-        $this->backupDir = $dataDir . '/backups';
-        
+
+        if (!is_dir($dataDir)) {
+            mkdir($dataDir, 0755, true);
+        }
+
+        $resolvedDataDir = realpath($dataDir) ?: $dataDir;
+
+        $this->dataFile = $resolvedDataDir . '/characters.json';
+        $this->backupDir = $resolvedDataDir . '/backups';
+
         // Ensure backup directory exists
         if (!is_dir($this->backupDir)) {
             mkdir($this->backupDir, 0755, true);
+        }
+
+        $chatDataFile = $resolvedDataDir . '/chat_messages.json';
+        if (!file_exists($chatDataFile)) {
+            file_put_contents($chatDataFile, json_encode([], JSON_PRETTY_PRINT), LOCK_EX);
+        }
+
+        $baseDir = dirname($resolvedDataDir);
+        if ($baseDir === '.' || $baseDir === DIRECTORY_SEPARATOR || $baseDir === '') {
+            $baseDir = realpath(__DIR__ . '/..') ?: __DIR__ . '/..';
+        }
+
+        $chatUploadsDir = $baseDir . '/chat_uploads';
+        if (!is_dir($chatUploadsDir)) {
+            mkdir($chatUploadsDir, 0755, true);
         }
     }
     
