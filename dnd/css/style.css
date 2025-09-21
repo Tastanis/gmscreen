@@ -196,6 +196,208 @@ body {
     padding: 0 20px;
 }
 
+/* Chat panel */
+.chat-panel {
+    position: fixed;
+    right: 20px;
+    bottom: 20px;
+    width: 360px;
+    max-width: calc(100% - 40px);
+    background: #ffffff;
+    border-radius: 16px;
+    box-shadow: 0 12px 30px rgba(0, 0, 0, 0.15);
+    display: flex;
+    flex-direction: column;
+    overflow: hidden;
+    transform: translateX(calc(100% + 40px));
+    transition: transform 0.3s ease;
+    z-index: 1200;
+}
+
+.chat-panel--open {
+    transform: translateX(0);
+}
+
+.chat-panel--closed {
+    pointer-events: none;
+}
+
+.chat-panel__header {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    padding: 12px 16px;
+    background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+    color: #fff;
+}
+
+.chat-panel__title {
+    font-size: 1rem;
+    font-weight: 600;
+}
+
+.chat-panel__close {
+    background: transparent;
+    border: none;
+    color: inherit;
+    font-size: 1.5rem;
+    cursor: pointer;
+    padding: 0 4px;
+    line-height: 1;
+}
+
+.chat-panel__history {
+    padding: 12px 16px;
+    display: flex;
+    flex-direction: column;
+    gap: 8px;
+    max-height: 360px;
+    overflow-y: auto;
+    background: #f7f8fc;
+}
+
+.chat-message {
+    display: flex;
+    flex-direction: column;
+    background: #fff;
+    border-radius: 10px;
+    padding: 8px 12px;
+    box-shadow: 0 2px 6px rgba(0, 0, 0, 0.08);
+    font-size: 0.9rem;
+}
+
+.chat-message--self {
+    align-self: flex-end;
+    background: #e2e8ff;
+}
+
+.chat-message__meta {
+    display: flex;
+    justify-content: space-between;
+    font-size: 0.75rem;
+    color: #6b7280;
+    margin-bottom: 4px;
+}
+
+.chat-message__text {
+    color: #1f2937;
+    white-space: pre-wrap;
+    word-break: break-word;
+}
+
+.chat-message--pending .chat-message__meta::after {
+    content: ' (sending...)';
+    font-style: italic;
+    color: #a0aec0;
+}
+
+.chat-message--error {
+    border: 1px solid #f87171;
+}
+
+.chat-panel__input {
+    display: flex;
+    gap: 8px;
+    padding: 12px 16px 16px;
+    border-top: 1px solid #e5e7eb;
+    background: #ffffff;
+}
+
+.chat-panel__textarea {
+    flex: 1;
+    resize: none;
+    border: 1px solid #d1d5db;
+    border-radius: 10px;
+    padding: 8px 10px;
+    font-family: inherit;
+    font-size: 0.95rem;
+    min-height: 48px;
+}
+
+.chat-panel__send {
+    background: #667eea;
+    border: none;
+    color: #fff;
+    padding: 10px 16px;
+    border-radius: 10px;
+    cursor: pointer;
+    font-weight: 600;
+    transition: background 0.2s ease;
+}
+
+.chat-panel__send:hover {
+    background: #5a67d8;
+}
+
+.chat-panel-toggle {
+    position: fixed;
+    right: 20px;
+    bottom: 20px;
+    background: #1f2937;
+    color: #fff;
+    border: none;
+    border-radius: 999px;
+    padding: 10px 18px;
+    font-weight: 600;
+    cursor: pointer;
+    box-shadow: 0 8px 20px rgba(0, 0, 0, 0.18);
+    z-index: 1190;
+    transition: transform 0.2s ease, background 0.2s ease;
+}
+
+.chat-panel-toggle:hover {
+    transform: translateY(-2px);
+    background: #111827;
+}
+
+.chat-panel-toggle[aria-expanded="true"] {
+    background: #667eea;
+}
+
+.chat-drop-target {
+    position: fixed;
+    inset: 0;
+    background: rgba(102, 126, 234, 0.85);
+    color: #fff;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    font-size: 1.4rem;
+    font-weight: 600;
+    z-index: 1300;
+}
+
+.chat-drop-target[hidden] {
+    display: none;
+}
+
+@media (max-width: 1024px) {
+    .chat-panel {
+        width: 320px;
+    }
+}
+
+@media (max-width: 768px) {
+    .chat-panel {
+        right: 10px;
+        left: 10px;
+        width: auto;
+        max-width: none;
+        bottom: 90px;
+        transform: translateY(calc(100% + 40px));
+    }
+
+    .chat-panel--open {
+        transform: translateY(0);
+    }
+
+    .chat-panel-toggle {
+        right: 10px;
+        left: 10px;
+        width: calc(100% - 20px);
+    }
+}
+
 /* Character tabs (GM only) */
 .character-tabs {
     display: flex;

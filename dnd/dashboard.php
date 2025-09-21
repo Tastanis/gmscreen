@@ -1363,6 +1363,23 @@ $defaultInventoryTab = $is_gm ? 'frunk' : $user;
                 </button>
             </div>
         <?php endif; ?>
+
+        <!-- Chat Panel -->
+        <div id="chat-panel" class="chat-panel chat-panel--closed" aria-hidden="true">
+            <div class="chat-panel__header">
+                <h3 class="chat-panel__title">Table Chat</h3>
+                <button type="button" id="chat-panel-close" class="chat-panel__close" aria-label="Close chat">&times;</button>
+            </div>
+            <div id="chat-message-list" class="chat-panel__history" role="log" aria-live="polite"></div>
+            <form id="chat-input-form" class="chat-panel__input" autocomplete="off">
+                <textarea id="chat-input" class="chat-panel__textarea" rows="2" placeholder="Type a message..."></textarea>
+                <button type="submit" id="chat-send-btn" class="chat-panel__send">Send</button>
+            </form>
+        </div>
+        <button id="chat-panel-toggle" class="chat-panel-toggle" type="button" aria-expanded="false" aria-controls="chat-panel">
+            Open Chat
+        </button>
+        <div id="chat-drop-target" class="chat-drop-target" hidden aria-hidden="true">Drop files to upload</div>
     </div>
 
     <!-- Modal for Past Class Details -->
@@ -1425,6 +1442,8 @@ $defaultInventoryTab = $is_gm ? 'frunk' : $user;
             loadInventoryData();
             setupInventoryAutoSave();
             updateInventoryPermissions();
+
+            initChatPanel(isGM, currentUser);
         });
 
         // Session backup functionality for Dashboard
@@ -1498,6 +1517,7 @@ $defaultInventoryTab = $is_gm ? 'frunk' : $user;
             }
         }
     </script>
+    <script src="js/chat-panel.js"></script>
     <script src="js/dashboard-dice-roller.js"></script>
     <script src="js/theme-manager.js"></script>
     <script src="Halloween/theme.js" defer></script>
