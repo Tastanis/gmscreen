@@ -512,6 +512,32 @@ class CharacterLookup {
                         ${this.createStudentDetailContent(student)}
                     </div>
                 </div>
+                <script>
+                    (function() {
+                        const portrait = document.querySelector('.character-portrait');
+                        if (!portrait) {
+                            return;
+                        }
+
+                        portrait.setAttribute('draggable', 'true');
+                        const src = portrait.getAttribute('src');
+                        let absoluteUrl = src;
+                        try {
+                            absoluteUrl = new URL(src, window.location.href).href;
+                        } catch (error) {
+                            absoluteUrl = src;
+                        }
+
+                        portrait.addEventListener('dragstart', function(event) {
+                            if (!event.dataTransfer) {
+                                return;
+                            }
+                            event.dataTransfer.effectAllowed = 'copy';
+                            event.dataTransfer.setData('text/uri-list', absoluteUrl);
+                            event.dataTransfer.setData('text/plain', absoluteUrl);
+                        });
+                    })();
+                </script>
             </body>
             </html>
         `);
@@ -560,6 +586,32 @@ class CharacterLookup {
                         ${this.createStaffDetailContent(staff)}
                     </div>
                 </div>
+                <script>
+                    (function() {
+                        const portrait = document.querySelector('.character-portrait');
+                        if (!portrait) {
+                            return;
+                        }
+
+                        portrait.setAttribute('draggable', 'true');
+                        const src = portrait.getAttribute('src');
+                        let absoluteUrl = src;
+                        try {
+                            absoluteUrl = new URL(src, window.location.href).href;
+                        } catch (error) {
+                            absoluteUrl = src;
+                        }
+
+                        portrait.addEventListener('dragstart', function(event) {
+                            if (!event.dataTransfer) {
+                                return;
+                            }
+                            event.dataTransfer.effectAllowed = 'copy';
+                            event.dataTransfer.setData('text/uri-list', absoluteUrl);
+                            event.dataTransfer.setData('text/plain', absoluteUrl);
+                        });
+                    })();
+                </script>
             </body>
             </html>
         `);
@@ -608,6 +660,32 @@ class CharacterLookup {
                         ${this.createLocationDetailContent(location)}
                     </div>
                 </div>
+                <script>
+                    (function() {
+                        const portrait = document.querySelector('.character-portrait');
+                        if (!portrait) {
+                            return;
+                        }
+
+                        portrait.setAttribute('draggable', 'true');
+                        const src = portrait.getAttribute('src');
+                        let absoluteUrl = src;
+                        try {
+                            absoluteUrl = new URL(src, window.location.href).href;
+                        } catch (error) {
+                            absoluteUrl = src;
+                        }
+
+                        portrait.addEventListener('dragstart', function(event) {
+                            if (!event.dataTransfer) {
+                                return;
+                            }
+                            event.dataTransfer.effectAllowed = 'copy';
+                            event.dataTransfer.setData('text/uri-list', absoluteUrl);
+                            event.dataTransfer.setData('text/plain', absoluteUrl);
+                        });
+                    })();
+                </script>
             </body>
             </html>
         `);
@@ -619,8 +697,8 @@ class CharacterLookup {
         const imagePath = student.image_path ? `../students/${student.image_path}?t=${Date.now()}` : '';
         return `
             <div class="character-portrait-section">
-                ${imagePath ? 
-                    `<img src="${imagePath}" alt="${this.escapeHtml(student.name)}" class="character-portrait">` : 
+                ${imagePath ?
+                    `<img src="${imagePath}" alt="${this.escapeHtml(student.name)}" class="character-portrait" draggable="true">` :
                     '<div class="character-portrait-placeholder">No Photo</div>'
                 }
             </div>
@@ -717,8 +795,8 @@ class CharacterLookup {
         const imagePath = staff.image_path ? `../staff/${staff.image_path}?t=${Date.now()}` : '';
         return `
             <div class="character-portrait-section">
-                ${imagePath ? 
-                    `<img src="${imagePath}" alt="${this.escapeHtml(staff.name)}" class="character-portrait">` : 
+                ${imagePath ?
+                    `<img src="${imagePath}" alt="${this.escapeHtml(staff.name)}" class="character-portrait" draggable="true">` :
                     '<div class="character-portrait-placeholder">No Photo</div>'
                 }
             </div>
@@ -755,8 +833,8 @@ class CharacterLookup {
         const imagePath = location.image_path ? `../locations/${location.image_path}?t=${Date.now()}` : '';
         return `
             <div class="character-portrait-section">
-                ${imagePath ? 
-                    `<img src="${imagePath}" alt="${this.escapeHtml(location.name)}" class="character-portrait">` : 
+                ${imagePath ?
+                    `<img src="${imagePath}" alt="${this.escapeHtml(location.name)}" class="character-portrait" draggable="true">` :
                     '<div class="character-portrait-placeholder">📍</div>'
                 }
             </div>

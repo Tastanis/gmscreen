@@ -285,6 +285,23 @@ body {
     word-break: break-word;
 }
 
+.chat-message__text--image {
+    display: flex;
+    flex-direction: column;
+    gap: 8px;
+}
+
+.chat-message__image {
+    max-width: 260px;
+    border-radius: 10px;
+    box-shadow: 0 6px 18px rgba(15, 23, 42, 0.25);
+}
+
+.chat-message__caption {
+    font-size: 0.8rem;
+    color: #4b5563;
+}
+
 .chat-message--pending .chat-message__meta::after {
     content: ' (sending...)';
     font-style: italic;
@@ -369,6 +386,35 @@ body {
 
 .chat-drop-target[hidden] {
     display: none;
+}
+
+.chat-toast {
+    position: fixed;
+    right: 20px;
+    bottom: 20px;
+    background: rgba(31, 41, 55, 0.95);
+    color: #ffffff;
+    padding: 12px 18px;
+    border-radius: 12px;
+    box-shadow: 0 12px 30px rgba(15, 23, 42, 0.35);
+    font-size: 0.9rem;
+    z-index: 1500;
+    opacity: 1;
+    transform: translateY(0);
+    transition: opacity 0.2s ease, transform 0.2s ease;
+}
+
+.chat-toast--error {
+    background: rgba(239, 68, 68, 0.95);
+}
+
+.chat-toast--success {
+    background: rgba(16, 185, 129, 0.95);
+}
+
+.chat-toast--hide {
+    opacity: 0;
+    transform: translateY(14px);
 }
 
 @media (max-width: 1024px) {

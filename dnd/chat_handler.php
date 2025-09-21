@@ -83,6 +83,45 @@ function sanitizeMessage($message) {
     return htmlspecialchars($clean, ENT_QUOTES | ENT_SUBSTITUTE, 'UTF-8');
 }
 
+function sanitizeImageUrl($url) {
+    if (!is_string($url)) {
+        return '';
+    }
+
+    $trimmed = trim($url);
+    if ($trimmed === '') {
+        return '';
+    }
+
+    $sanitized = filter_var($trimmed, FILTER_SANITIZE_URL);
+    if ($sanitized === '') {
+        return '';
+    }
+
+    $lower = strtolower($sanitized);
+    if (strpos($lower, 'javascript:') === 0) {
+        return '';
+    }
+
+    if (preg_match('#^(https?:)?//#', $sanitized)) {
+        return $sanitized;
+    }
+
+    if (strpos($sanitized, '..') !== false) {
+        return '';
+    }
+
+    if ($sanitized[0] === '/') {
+        return $sanitized;
+    }
+
+    if (preg_match('/^[A-Za-z0-9_\-./]+$/', $sanitized)) {
+        return $sanitized;
+    }
+
+    return '';
+}
+
 function handleChatSend($dataFile, $maxMessages) {
     if (!isset($_SESSION['user'])) {
         echo json_encode(['success' => false, 'error' => 'Not authenticated']);
@@ -90,9 +129,11 @@ function handleChatSend($dataFile, $maxMessages) {
     }
 
     $rawMessage = $_POST['message'] ?? '';
+    $rawImageUrl = $_POST['imageUrl'] ?? '';
     $message = sanitizeMessage($rawMessage);
+    $imageUrl = sanitizeImageUrl($rawImageUrl);
 
-    if ($message === '') {
+    if ($message === '' && $imageUrl === '') {
         echo json_encode(['success' => false, 'error' => 'Message cannot be empty']);
         exit;
     }
@@ -105,6 +146,10 @@ function handleChatSend($dataFile, $maxMessages) {
         'user' => $_SESSION['user'],
         'message' => $message
     ];
+
+    if ($imageUrl !== '') {
+        $entry['imageUrl'] = $imageUrl;
+    }
 
     $messages[] = $entry;
     if (count($messages) > $maxMessages) {

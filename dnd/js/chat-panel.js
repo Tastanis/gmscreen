@@ -50,6 +50,55 @@
             return parsed.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
         }
 
+        function showChatToast(message, type = 'error') {
+            const existing = document.querySelector('.chat-toast');
+            if (existing) {
+                existing.parentElement.removeChild(existing);
+            }
+
+            const toast = document.createElement('div');
+            toast.className = `chat-toast chat-toast--${type}`;
+            toast.textContent = message;
+
+            document.body.appendChild(toast);
+
+            window.setTimeout(() => {
+                toast.classList.add('chat-toast--hide');
+                window.setTimeout(() => {
+                    if (toast.parentElement) {
+                        toast.parentElement.removeChild(toast);
+                    }
+                }, 220);
+            }, 3200);
+        }
+
+        function getAbsoluteUrl(value) {
+            if (!value) {
+                return '';
+            }
+
+            try {
+                const absolute = new URL(value, window.location.href);
+                return absolute.toString();
+            } catch (error) {
+                return value;
+            }
+        }
+
+        function isSupportedImageUrl(url) {
+            if (!url) {
+                return false;
+            }
+
+            try {
+                const absolute = new URL(url, window.location.href);
+                const path = absolute.pathname ? absolute.pathname.toLowerCase() : '';
+                return /(\.png|\.jpe?g|\.gif|\.webp|\.bmp|\.svg)$/i.test(path);
+            } catch (error) {
+                return /(\.png|\.jpe?g|\.gif|\.webp|\.bmp|\.svg)$/i.test(url.toLowerCase());
+            }
+        }
+
         function createMessageElement(message) {
             const wrapper = document.createElement('div');
             wrapper.className = 'chat-message';
@@ -79,7 +128,33 @@
 
             const body = document.createElement('div');
             body.className = 'chat-message__text';
-            body.textContent = message.message || '';
+
+            if (message.imageUrl) {
+                body.classList.add('chat-message__text--image');
+
+                const imageLink = document.createElement('a');
+                imageLink.href = message.imageUrl;
+                imageLink.target = '_blank';
+                imageLink.rel = 'noopener noreferrer';
+
+                const image = document.createElement('img');
+                image.className = 'chat-message__image';
+                image.src = message.imageUrl;
+                image.alt = message.message || 'Shared image';
+                image.loading = 'lazy';
+
+                imageLink.appendChild(image);
+                body.appendChild(imageLink);
+
+                if (message.message) {
+                    const caption = document.createElement('div');
+                    caption.className = 'chat-message__caption';
+                    caption.textContent = message.message;
+                    body.appendChild(caption);
+                }
+            } else {
+                body.textContent = message.message || '';
+            }
 
             wrapper.appendChild(meta);
             wrapper.appendChild(body);
@@ -219,48 +294,14 @@
                 return;
             }
 
-            const tempId = `temp-${Date.now()}`;
-            const optimisticMessage = {
-                id: tempId,
-                timestamp: new Date().toISOString(),
-                user: currentUser || 'You',
-                message: text,
-                pending: true,
-                error: false
-            };
-
-            messages.push(optimisticMessage);
-            trimMessages();
-            renderMessages();
-
             textarea.value = '';
-            textarea.focus();
             sendButton.disabled = true;
 
             try {
-                const params = new URLSearchParams();
-                params.append('action', 'chat_send');
-                params.append('message', text);
-
-                const response = await fetch('chat_handler.php', {
-                    method: 'POST',
-                    headers: {
-                        'Content-Type': 'application/x-www-form-urlencoded'
-                    },
-                    body: params.toString()
-                });
-
-                const data = await response.json();
-                if (data && data.success && data.message) {
-                    resolvePendingMessage(tempId, data.message);
-                    updateLatestTimestamp(data.message.timestamp);
-                } else {
-                    markMessageError(tempId);
-                }
-            } catch (error) {
-                markMessageError(tempId);
+                await sendChatMessage({ message: text });
             } finally {
                 sendButton.disabled = false;
+                textarea.focus();
             }
         }
 
@@ -285,6 +326,71 @@
             }
         }
 
+        async function sendChatMessage({ message = '', imageUrl = '' }) {
+            const text = typeof message === 'string' ? message.trim() : '';
+            const image = typeof imageUrl === 'string' ? imageUrl.trim() : '';
+
+            if (text === '' && image === '') {
+                return false;
+            }
+
+            const tempId = `temp-${Date.now()}-${Math.random().toString(16).slice(2)}`;
+            const optimisticMessage = {
+                id: tempId,
+                timestamp: new Date().toISOString(),
+                user: currentUser || 'You',
+                message: text,
+                pending: true,
+                error: false
+            };
+
+            if (image) {
+                optimisticMessage.imageUrl = image;
+            }
+
+            messages.push(optimisticMessage);
+            trimMessages();
+            renderMessages();
+
+            try {
+                const params = new URLSearchParams();
+                params.append('action', 'chat_send');
+                if (text !== '') {
+                    params.append('message', text);
+                }
+                if (image !== '') {
+                    params.append('imageUrl', image);
+                }
+
+                const response = await fetch('chat_handler.php', {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/x-www-form-urlencoded'
+                    },
+                    body: params.toString()
+                });
+
+                if (!response.ok) {
+                    throw new Error('Network response was not ok');
+                }
+
+                const data = await response.json();
+                if (data && data.success && data.message) {
+                    resolvePendingMessage(tempId, data.message);
+                    updateLatestTimestamp(data.message.timestamp);
+                    return true;
+                }
+
+                markMessageError(tempId);
+                showChatToast(data && data.error ? data.error : 'Failed to send message', 'error');
+            } catch (error) {
+                markMessageError(tempId);
+                showChatToast('Failed to send message', 'error');
+            }
+
+            return false;
+        }
+
         function handleTextareaKeydown(event) {
             if (event.key === 'Enter' && !event.shiftKey) {
                 event.preventDefault();
@@ -297,7 +403,84 @@
                 return false;
             }
             const types = Array.from(event.dataTransfer.types || []);
-            return types.includes('Files');
+            return types.includes('Files') || types.includes('text/uri-list') || types.includes('text/plain');
+        }
+
+        function isImageFile(file) {
+            if (!file) {
+                return false;
+            }
+
+            if (file.type && file.type.startsWith('image/')) {
+                return true;
+            }
+
+            const name = file.name || '';
+            return /(\.png|\.jpe?g|\.gif|\.webp|\.bmp|\.svg)$/i.test(name);
+        }
+
+        async function uploadFileForChat(file) {
+            const formData = new FormData();
+            formData.append('action', 'chat_upload');
+            formData.append('file', file);
+
+            const response = await fetch('chat_handler.php', {
+                method: 'POST',
+                body: formData
+            });
+
+            if (!response.ok) {
+                throw new Error('Failed to upload file');
+            }
+
+            const data = await response.json();
+            if (data && data.success && data.url) {
+                await sendChatMessage({ message: file.name || '', imageUrl: data.url });
+                return;
+            }
+
+            throw new Error(data && data.error ? data.error : 'Failed to upload file');
+        }
+
+        async function handleFileDrop(fileList) {
+            const files = Array.from(fileList || []);
+            if (files.length === 0) {
+                return;
+            }
+
+            for (const file of files) {
+                if (!isImageFile(file)) {
+                    showChatToast('Only image files can be dropped into chat.', 'error');
+                    continue;
+                }
+
+                try {
+                    await uploadFileForChat(file);
+                } catch (error) {
+                    showChatToast(error.message || 'Failed to upload file', 'error');
+                }
+            }
+        }
+
+        async function processDroppedUrl(rawData) {
+            if (!rawData) {
+                showChatToast('Only image URLs can be dropped into chat.', 'error');
+                return;
+            }
+
+            const cleaned = rawData.trim().split('\n')[0];
+            if (cleaned === '') {
+                showChatToast('Only image URLs can be dropped into chat.', 'error');
+                return;
+            }
+
+            const absolute = getAbsoluteUrl(cleaned);
+            if (!isSupportedImageUrl(absolute)) {
+                showChatToast('Only image URLs can be dropped into chat.', 'error');
+                return;
+            }
+
+            await sendChatMessage({ imageUrl: absolute });
         }
 
         function showDropTarget() {
@@ -326,6 +509,9 @@
         document.addEventListener('dragover', (event) => {
             if (shouldHandleDrag(event)) {
                 event.preventDefault();
+                if (event.dataTransfer) {
+                    event.dataTransfer.dropEffect = 'copy';
+                }
             }
         });
 
@@ -335,11 +521,31 @@
             }
         });
 
-        document.addEventListener('drop', (event) => {
-            if (shouldHandleDrag(event)) {
-                event.preventDefault();
-                hideDropTarget();
+        document.addEventListener('drop', async (event) => {
+            hideDropTarget();
+            if (!event.dataTransfer) {
+                return;
             }
+
+            if (!shouldHandleDrag(event)) {
+                return;
+            }
+
+            event.preventDefault();
+
+            if (event.dataTransfer.files && event.dataTransfer.files.length > 0) {
+                await handleFileDrop(event.dataTransfer.files);
+                return;
+            }
+
+            const uriData = event.dataTransfer.getData('text/uri-list');
+            const textData = event.dataTransfer.getData('text/plain');
+            if (uriData || textData) {
+                await processDroppedUrl(uriData || textData);
+                return;
+            }
+
+            showChatToast('Only image files or image links can be dropped into chat.', 'error');
         });
 
         toggleButton.addEventListener('click', () => {
