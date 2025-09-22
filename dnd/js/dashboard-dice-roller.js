@@ -22,6 +22,7 @@ class DashboardDiceRoller {
             message: null,
             selectedIndex: null,
             selectedName: '',
+            hasCustomPosition: false,
             drag: {
                 active: false,
                 offsetX: 0,
@@ -44,7 +45,10 @@ class DashboardDiceRoller {
 
         this.handlePointerMove = (event) => this.onPointerMove(event);
         this.handlePointerUp = (event) => this.onPointerUp(event);
-        this.handleResize = () => this.keepModalInBounds();
+        this.handleResize = () => {
+            this.keepModalInBounds();
+            this.repositionProjectPrompt();
+        };
 
         window.addEventListener('resize', this.handleResize);
     }
@@ -230,6 +234,7 @@ class DashboardDiceRoller {
     addToQueue(item) {
         this.currentRollQueue.push(item);
         this.updateQueueDisplay();
+        this.updateProjectPromptStatusMessage();
     }
 
     updateQueueDisplay() {
@@ -253,6 +258,38 @@ class DashboardDiceRoller {
             this.resultTotal.textContent = 'Result: -';
             this.resultDetail.textContent = '';
             this.resultDetail.style.display = 'none';
+        }
+        this.updateProjectPromptStatusMessage();
+    }
+
+    updateProjectPromptStatusMessage(customMessage = null) {
+        if (!this.projectPromptState.active || !this.projectPromptState.message) {
+            return;
+        }
+
+        if (typeof customMessage === 'string') {
+            this.projectPromptState.message.textContent = customMessage;
+            return;
+        }
+
+        const nameInputValue = this.projectPromptState.nameInput && typeof this.projectPromptState.nameInput.value === 'string'
+            ? this.projectPromptState.nameInput.value.trim()
+            : '';
+        const projectName = nameInputValue || this.projectPromptState.selectedName;
+
+        if (projectName) {
+            if (this.currentRollQueue.length === 0) {
+                this.projectPromptState.message.textContent = `Project selected (${projectName}). Add dice to the queue to roll.`;
+            } else {
+                this.projectPromptState.message.textContent = `Project selected (${projectName}). Ready to roll!`;
+            }
+            return;
+        }
+
+        if (this.currentRollQueue.length === 0) {
+            this.projectPromptState.message.textContent = 'Add dice to the queue, then click a project to select it.';
+        } else {
+            this.projectPromptState.message.textContent = 'Click a project to fill its name automatically.';
         }
     }
 
@@ -387,16 +424,107 @@ class DashboardDiceRoller {
     }
 
     startProjectRollFlow() {
-        if (this.currentRollQueue.length === 0) {
-            if (this.resultTotal && this.resultDetail) {
-                this.resultTotal.textContent = 'Nothing to roll!';
-                this.resultDetail.textContent = '';
-                this.resultDetail.style.display = 'none';
+        this.focusProjectsSection();
+        this.positionDiceModalForProjectRoll();
+
+        if (this.projectPromptState.active) {
+            this.projectPromptState.hasCustomPosition = false;
+            this.positionProjectPrompt(true);
+            this.updateProjectPromptStatusMessage();
+        } else {
+            this.openProjectPrompt();
+        }
+    }
+
+    focusProjectsSection() {
+        if (typeof window.switchSection === 'function') {
+            const maybePromise = window.switchSection('projects');
+            if (maybePromise && typeof maybePromise.catch === 'function') {
+                maybePromise.catch((error) => {
+                    console.error('Failed to switch to projects section:', error);
+                });
             }
+        }
+
+        const projectsSection = document.getElementById('projects-section');
+        if (projectsSection && typeof projectsSection.scrollIntoView === 'function') {
+            projectsSection.scrollIntoView({ behavior: 'smooth', block: 'start' });
+        }
+    }
+
+    positionDiceModalForProjectRoll() {
+        if (!this.modal) {
             return;
         }
 
-        this.openProjectPrompt();
+        const modalWidth = this.modal.offsetWidth || 0;
+        const modalHeight = this.modal.offsetHeight || 0;
+        const targetLeft = Math.min(
+            Math.max(window.innerWidth * (2 / 3), 0),
+            Math.max(window.innerWidth - modalWidth, 0)
+        );
+        const verticalCenter = (window.innerHeight - modalHeight) / 2;
+        const targetTop = Math.min(
+            Math.max(Number.isFinite(verticalCenter) ? verticalCenter : 0, 20),
+            Math.max(window.innerHeight - modalHeight, 0)
+        );
+
+        const constrained = this.constrainPosition(targetLeft, targetTop);
+        this.modal.style.left = `${constrained.left}px`;
+        this.modal.style.top = `${constrained.top}px`;
+        this.lastPosition = { left: constrained.left, top: constrained.top };
+        this.hasCustomPosition = true;
+    }
+
+    positionProjectPrompt(force = false) {
+        if (!this.projectPromptState.active || !this.projectPromptState.container) {
+            return;
+        }
+
+        if (this.projectPromptState.hasCustomPosition && !force) {
+            return;
+        }
+
+        const prompt = this.projectPromptState.container;
+        const promptWidth = prompt.offsetWidth || 0;
+        const promptHeight = prompt.offsetHeight || 0;
+        const baseLeft = Math.min(
+            Math.max(window.innerWidth * (2 / 3), 0),
+            Math.max(window.innerWidth - promptWidth, 0)
+        );
+
+        let baseTop = (window.innerHeight - promptHeight) / 2;
+        if (this.modal) {
+            const modalRect = this.modal.getBoundingClientRect();
+            baseTop = modalRect.bottom + 16;
+            if (baseTop + promptHeight > window.innerHeight) {
+                baseTop = modalRect.top - promptHeight - 16;
+            }
+            if (baseTop < 0) {
+                baseTop = modalRect.top;
+            }
+        }
+
+        const { left, top } = this.constrainPromptPosition(baseLeft, baseTop);
+        prompt.style.left = `${left}px`;
+        prompt.style.top = `${top}px`;
+    }
+
+    repositionProjectPrompt(force = false) {
+        if (!this.projectPromptState.active || !this.projectPromptState.container) {
+            return;
+        }
+
+        if (this.projectPromptState.hasCustomPosition && !force) {
+            const currentLeft = parseFloat(this.projectPromptState.container.style.left) || 0;
+            const currentTop = parseFloat(this.projectPromptState.container.style.top) || 0;
+            const { left, top } = this.constrainPromptPosition(currentLeft, currentTop);
+            this.projectPromptState.container.style.left = `${left}px`;
+            this.projectPromptState.container.style.top = `${top}px`;
+            return;
+        }
+
+        this.positionProjectPrompt(force);
     }
 
     openProjectPrompt() {
@@ -411,6 +539,7 @@ class DashboardDiceRoller {
         this.projectPromptState.container = prompt;
         this.projectPromptState.selectedIndex = null;
         this.projectPromptState.selectedName = '';
+        this.projectPromptState.hasCustomPosition = false;
 
         const nameInput = prompt.querySelector('input');
         const message = prompt.querySelector('.project-roll-prompt__message');
@@ -419,9 +548,13 @@ class DashboardDiceRoller {
 
         document.addEventListener('click', this.handleProjectSelection, true);
 
-        const { left, top } = this.constrainPromptPosition((window.innerWidth - prompt.offsetWidth) / 2, 120);
-        prompt.style.left = `${left}px`;
-        prompt.style.top = `${top}px`;
+        requestAnimationFrame(() => {
+            if (!this.projectPromptState.active || this.projectPromptState.container !== prompt) {
+                return;
+            }
+            this.positionProjectPrompt(true);
+            this.updateProjectPromptStatusMessage();
+        });
 
         if (nameInput) {
             nameInput.focus();
@@ -449,6 +582,7 @@ class DashboardDiceRoller {
         this.projectPromptState.message = null;
         this.projectPromptState.selectedIndex = null;
         this.projectPromptState.selectedName = '';
+        this.projectPromptState.hasCustomPosition = false;
         this.projectPromptState.drag.active = false;
     }
 
@@ -476,6 +610,7 @@ class DashboardDiceRoller {
         nameInput.type = 'text';
         nameInput.className = 'project-roll-prompt__input';
         nameInput.placeholder = 'Select a project...';
+        nameInput.addEventListener('input', () => this.updateProjectPromptStatusMessage());
 
         const message = document.createElement('div');
         message.className = 'project-roll-prompt__message';
@@ -539,9 +674,7 @@ class DashboardDiceRoller {
             this.projectPromptState.nameInput.value = name;
         }
 
-        if (this.projectPromptState.message) {
-            this.projectPromptState.message.textContent = 'Project selected. Ready to roll!';
-        }
+        this.updateProjectPromptStatusMessage();
     }
 
     findProjectIndexByName(name) {
@@ -597,9 +730,15 @@ class DashboardDiceRoller {
             return;
         }
 
+        if (this.currentRollQueue.length === 0) {
+            this.updateProjectPromptStatusMessage('Please add dice to the roll before continuing.');
+            return;
+        }
+
         try {
             const rollResult = this.performRoll();
             if (!rollResult) {
+                this.updateProjectPromptStatusMessage('Please add dice to the roll before continuing.');
                 return;
             }
 
@@ -616,14 +755,15 @@ class DashboardDiceRoller {
                 characterId,
                 status: 'pending'
             });
+
+            this.closeProjectPrompt();
         } catch (error) {
             if (this.resultTotal && this.resultDetail) {
                 this.resultTotal.textContent = `Error: ${error.message}`;
                 this.resultDetail.textContent = '';
                 this.resultDetail.style.display = 'none';
             }
-        } finally {
-            this.closeProjectPrompt();
+            this.updateProjectPromptStatusMessage('There was a problem rolling the dice. Please try again.');
         }
     }
 
@@ -640,6 +780,7 @@ class DashboardDiceRoller {
         this.projectPromptState.drag.active = true;
         this.projectPromptState.drag.offsetX = event.clientX - rect.left;
         this.projectPromptState.drag.offsetY = event.clientY - rect.top;
+        this.projectPromptState.hasCustomPosition = true;
 
         this.projectPromptState.container.classList.add('project-roll-prompt--dragging');
 
@@ -671,6 +812,8 @@ class DashboardDiceRoller {
         if (this.projectPromptState.container) {
             this.projectPromptState.container.classList.remove('project-roll-prompt--dragging');
         }
+
+        this.repositionProjectPrompt();
 
         document.removeEventListener('pointermove', this.handleProjectPromptPointerMove);
         document.removeEventListener('pointerup', this.handleProjectPromptPointerUp);

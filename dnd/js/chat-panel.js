@@ -408,8 +408,7 @@
                 image.className = 'chat-message__image';
                 image.src = message.imageUrl;
                 image.alt = message.message || 'Shared image';
-                image.loading = 'lazy';
-                image.decoding = 'async';
+                image.loading = 'eager';
 
                 const handleImageInteraction = (event) => {
                     event.preventDefault();
@@ -472,6 +471,40 @@
                 }
             });
 
+            const deriveAwardFromPayload = (payload) => {
+                if (!payload || typeof payload !== 'object') {
+                    return null;
+                }
+
+                const characterId = typeof payload.characterId === 'string' ? payload.characterId : '';
+                const projectIndexRaw = payload.projectIndex;
+                const totalRaw = payload.total;
+                const projectIndex = Number.isInteger(projectIndexRaw) ? projectIndexRaw : parseInt(projectIndexRaw, 10);
+                const delta = Number.isInteger(totalRaw) ? totalRaw : parseInt(totalRaw, 10);
+
+                if (!characterId || Number.isNaN(projectIndex) || Number.isNaN(delta)) {
+                    return null;
+                }
+
+                let newPoints = delta;
+                if (typeof window.currentCharacter === 'string'
+                    && characterId === window.currentCharacter
+                    && window.characterData
+                    && Array.isArray(window.characterData.projects)
+                    && window.characterData.projects[projectIndex]) {
+                    const project = window.characterData.projects[projectIndex];
+                    const currentValue = parseInt(project.points_earned, 10) || 0;
+                    newPoints = currentValue + delta;
+                }
+
+                return {
+                    character: characterId,
+                    projectIndex,
+                    delta,
+                    newPoints
+                };
+            };
+
             try {
                 const params = new URLSearchParams();
                 params.append('action', 'chat_update_roll');
@@ -497,8 +530,17 @@
 
                 updateMessageFromServer(data.message);
 
-                if (status === 'accepted' && data.award && typeof window.handleAcceptedProjectRoll === 'function') {
-                    window.handleAcceptedProjectRoll(data.award);
+                if (status === 'accepted' && typeof window.handleAcceptedProjectRoll === 'function') {
+                    let awardPayload = null;
+                    if (data.award && typeof data.award === 'object') {
+                        awardPayload = data.award;
+                    } else if (data.message && data.message.payload) {
+                        awardPayload = deriveAwardFromPayload(data.message.payload);
+                    }
+
+                    if (awardPayload) {
+                        window.handleAcceptedProjectRoll(awardPayload);
+                    }
                 }
 
                 const toastMessage = status === 'accepted' ? 'Project roll accepted' : status === 'denied' ? 'Project roll denied' : 'Project roll updated';
