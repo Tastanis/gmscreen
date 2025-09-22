@@ -2,38 +2,40 @@
 // Chat handler for dashboard real-time messaging
 // Handles chat_send, chat_fetch, and chat_upload actions
 
-if (session_status() === PHP_SESSION_NONE) {
-    session_start();
-}
+if (PHP_SAPI !== 'cli') {
+    if (session_status() === PHP_SESSION_NONE) {
+        session_start();
+    }
 
-$chatDataFile = __DIR__ . '/data/chat_messages.json';
-$chatUploadsDir = __DIR__ . '/chat_uploads';
-$maxMessages = 100;
+    $chatDataFile = __DIR__ . '/data/chat_messages.json';
+    $chatUploadsDir = __DIR__ . '/chat_uploads';
+    $maxMessages = 100;
 
-ensureChatStorage($chatDataFile, $chatUploadsDir);
+    ensureChatStorage($chatDataFile, $chatUploadsDir);
 
-$chatAction = substr($_POST['action'], 5); // remove "chat_" prefix
+    $chatAction = substr($_POST['action'], 5); // remove "chat_" prefix
 
-switch ($chatAction) {
-    case 'send':
-        handleChatSend($chatDataFile, $maxMessages);
-        break;
+    switch ($chatAction) {
+        case 'send':
+            handleChatSend($chatDataFile, $maxMessages);
+            break;
 
-    case 'fetch':
-        handleChatFetch($chatDataFile);
-        break;
+        case 'fetch':
+            handleChatFetch($chatDataFile);
+            break;
 
-    case 'upload':
-        handleChatUpload($chatUploadsDir);
-        break;
+        case 'upload':
+            handleChatUpload($chatUploadsDir);
+            break;
 
-    case 'update_roll':
-        handleRollStatusUpdate($chatDataFile);
-        break;
+        case 'update_roll':
+            handleRollStatusUpdate($chatDataFile);
+            break;
 
-    default:
-        echo json_encode(['success' => false, 'error' => 'Invalid chat action']);
-        exit;
+        default:
+            echo json_encode(['success' => false, 'error' => 'Invalid chat action']);
+            exit;
+    }
 }
 
 function ensureChatStorage($dataFile, $uploadsDir) {
@@ -358,7 +360,7 @@ function sanitizeImageUrl($url) {
         return $sanitized;
     }
 
-    if (preg_match('/^[A-Za-z0-9_\-./]+$/', $sanitized)) {
+    if (preg_match('#^[A-Za-z0-9_\-./]+$#', $sanitized)) {
         return $sanitized;
     }
 
