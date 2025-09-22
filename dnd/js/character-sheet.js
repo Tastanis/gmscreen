@@ -1049,7 +1049,8 @@ function loadProjects() {
 function createProjectElement(project, index) {
     const div = document.createElement('div');
     div.className = 'project-item';
-    
+    div.setAttribute('data-project-index', index);
+
     const projectName = project.project_name || 'Unnamed Project';
     const pointsEarned = parseInt(project.points_earned) || 0;
     const totalPoints = parseInt(project.total_points) || 1;
@@ -1251,9 +1252,9 @@ function saveProjectData(index) {
 function updateProjectHistory(index) {
     const project = characterData.projects[index];
     const pointsHistory = project.points_history || [];
-    
+
     const historyElement = document.querySelector(`#projects-list .project-item:nth-child(${index + 1}) .points-history`);
-    
+
     if (historyElement) {
         if (pointsHistory.length > 0) {
             historyElement.textContent = `History: ${pointsHistory.slice(-3).join(' → ')}`;
@@ -1262,6 +1263,51 @@ function updateProjectHistory(index) {
         }
     }
 }
+
+window.handleAcceptedProjectRoll = function handleAcceptedProjectRoll(award) {
+    if (typeof isGM !== 'undefined' && !isGM) {
+        return;
+    }
+
+    if (!award || typeof award !== 'object') {
+        return;
+    }
+
+    const character = typeof award.character === 'string' ? award.character : '';
+    const projectIndex = typeof award.projectIndex === 'number' ? award.projectIndex : parseInt(award.projectIndex, 10);
+    const newPoints = typeof award.newPoints === 'number' ? award.newPoints : parseInt(award.newPoints, 10);
+    const delta = typeof award.delta === 'number' ? award.delta : parseInt(award.delta, 10);
+
+    if (!character || Number.isNaN(projectIndex) || Number.isNaN(newPoints)) {
+        return;
+    }
+
+    if (characterData && character === currentCharacter && Array.isArray(characterData.projects) && characterData.projects[projectIndex]) {
+        const project = characterData.projects[projectIndex];
+        project.points_earned = String(newPoints);
+        if (!Array.isArray(project.points_history)) {
+            project.points_history = [];
+        }
+        project.points_history.push(newPoints);
+        if (project.points_history.length > 10) {
+            project.points_history = project.points_history.slice(-10);
+        }
+
+        const pointsInput = document.getElementById(`points-earned-${projectIndex}`);
+        if (pointsInput) {
+            pointsInput.value = newPoints;
+        }
+
+        updateProjectProgressBar(projectIndex);
+        updateProjectHistory(projectIndex);
+
+        if (typeof delta === 'number' && !Number.isNaN(delta)) {
+            showSaveStatus(`Added ${delta} points to project`, 'success');
+        }
+    } else {
+        console.info('Project roll applied for', character, 'project index', projectIndex, 'new points', newPoints);
+    }
+};
 
 // Update project field (GM only)
 function updateProjectField(index, field, value) {

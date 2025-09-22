@@ -15,6 +15,24 @@ class DashboardDiceRoller {
             offsetY: 0
         };
 
+        this.projectPromptState = {
+            active: false,
+            container: null,
+            nameInput: null,
+            message: null,
+            selectedIndex: null,
+            selectedName: '',
+            drag: {
+                active: false,
+                offsetX: 0,
+                offsetY: 0
+            }
+        };
+
+        this.handleProjectSelection = (event) => this.onProjectSelected(event);
+        this.handleProjectPromptPointerMove = (event) => this.onProjectPromptPointerMove(event);
+        this.handleProjectPromptPointerUp = () => this.onProjectPromptPointerUp();
+
         this.buildUI();
         this.attachEvents();
 
@@ -158,6 +176,7 @@ class DashboardDiceRoller {
         projectBtn.type = 'button';
         projectBtn.className = 'dice-project-btn';
         projectBtn.textContent = 'Project Roll';
+        projectBtn.addEventListener('click', () => this.startProjectRollFlow());
 
         this.resultLabel = document.createElement('div');
         this.resultLabel.className = 'dice-result';
@@ -237,6 +256,107 @@ class DashboardDiceRoller {
         }
     }
 
+    performRoll() {
+        if (this.currentRollQueue.length === 0) {
+            return null;
+        }
+
+        const components = [...this.currentRollQueue];
+        const breakdown = [];
+        let totalResult = 0;
+
+        for (const item of components) {
+            if (typeof item !== 'string' || item.trim() === '') {
+                continue;
+            }
+
+            if (/^[+-]\d+$/.test(item.trim())) {
+                const modifierValue = parseInt(item, 10);
+                totalResult += modifierValue;
+                breakdown.push({
+                    type: 'modifier',
+                    notation: item.trim(),
+                    value: modifierValue
+                });
+            } else {
+                const { result, detail } = this.parseAndRollDice(item.trim());
+                const rolls = Array.isArray(detail) ? detail.map((roll) => parseInt(roll, 10)) : [];
+                totalResult += result;
+                breakdown.push({
+                    type: 'dice',
+                    notation: item.trim(),
+                    rolls,
+                    total: result
+                });
+            }
+        }
+
+        return {
+            total: totalResult,
+            components,
+            breakdown,
+            expression: components.join(' ')
+        };
+    }
+
+    updateResultDisplay(rollResult) {
+        if (!this.resultTotal || !this.resultDetail || !rollResult) {
+            return;
+        }
+
+        this.resultTotal.textContent = `Result: ${rollResult.total}`;
+
+        const detailParts = [];
+        if (Array.isArray(rollResult.breakdown)) {
+            rollResult.breakdown.forEach((entry) => {
+                if (!entry) {
+                    return;
+                }
+                if (entry.type === 'dice') {
+                    const notation = entry.notation || '';
+                    const rolls = Array.isArray(entry.rolls) ? entry.rolls.join(', ') : '';
+                    detailParts.push(`${notation}: ${rolls}`.trim());
+                } else if (entry.type === 'modifier') {
+                    detailParts.push(entry.notation || `${entry.value >= 0 ? '+' : ''}${entry.value}`);
+                }
+            });
+        }
+
+        if (detailParts.length > 0) {
+            this.resultDetail.textContent = detailParts.join(' | ');
+            this.resultDetail.style.display = 'block';
+        } else {
+            this.resultDetail.textContent = '';
+            this.resultDetail.style.display = 'none';
+        }
+    }
+
+    publishRollToChat(type, rollResult, extraPayload = {}) {
+        if (!rollResult || !window.dashboardChat || typeof window.dashboardChat.sendMessage !== 'function') {
+            return;
+        }
+
+        const payload = Object.assign({}, rollResult, extraPayload);
+        if (type === 'project_roll' && !payload.status) {
+            payload.status = 'pending';
+        }
+
+        const expression = rollResult.expression || (Array.isArray(rollResult.components) ? rollResult.components.join(' ') : '');
+        const fallbackMessage = type === 'project_roll' && payload.projectName
+            ? `Project roll for ${payload.projectName}: ${rollResult.total}`
+            : `Dice roll (${expression}): ${rollResult.total}`;
+
+        const maybePromise = window.dashboardChat.sendMessage({
+            message: fallbackMessage,
+            type,
+            payload
+        });
+
+        if (maybePromise && typeof maybePromise.then === 'function') {
+            maybePromise.catch(() => {});
+        }
+    }
+
     calculateRoll() {
         if (this.currentRollQueue.length === 0) {
             if (this.resultTotal && this.resultDetail) {
@@ -248,36 +368,15 @@ class DashboardDiceRoller {
         }
 
         try {
-            let totalResult = 0;
-            const detailParts = [];
-
-            for (const item of this.currentRollQueue) {
-                if (item.startsWith('+')) {
-                    totalResult += parseInt(item.substring(1), 10);
-                    detailParts.push(item);
-                } else if (item.startsWith('-')) {
-                    totalResult -= parseInt(item.substring(1), 10);
-                    detailParts.push(item);
-                } else {
-                    const { result, detail } = this.parseAndRollDice(item);
-                    totalResult += result;
-                    detailParts.push(...detail.map((roll) => roll.toString()));
-                }
+            const rollResult = this.performRoll();
+            if (!rollResult) {
+                return;
             }
 
-            if (this.resultTotal && this.resultDetail) {
-                this.resultTotal.textContent = `Result: ${totalResult}`;
-                if (detailParts.length > 0) {
-                    this.resultDetail.textContent = detailParts.join(' ');
-                    this.resultDetail.style.display = 'block';
-                } else {
-                    this.resultDetail.textContent = '';
-                    this.resultDetail.style.display = 'none';
-                }
-            }
-
+            this.updateResultDisplay(rollResult);
             this.currentRollQueue = [];
             this.updateQueueDisplay();
+            this.publishRollToChat('dice_roll', rollResult);
         } catch (error) {
             if (this.resultTotal && this.resultDetail) {
                 this.resultTotal.textContent = `Error: ${error.message}`;
@@ -285,6 +384,314 @@ class DashboardDiceRoller {
                 this.resultDetail.style.display = 'none';
             }
         }
+    }
+
+    startProjectRollFlow() {
+        if (this.currentRollQueue.length === 0) {
+            if (this.resultTotal && this.resultDetail) {
+                this.resultTotal.textContent = 'Nothing to roll!';
+                this.resultDetail.textContent = '';
+                this.resultDetail.style.display = 'none';
+            }
+            return;
+        }
+
+        this.openProjectPrompt();
+    }
+
+    openProjectPrompt() {
+        if (this.projectPromptState.active) {
+            return;
+        }
+
+        const prompt = this.createProjectPrompt();
+        document.body.appendChild(prompt);
+
+        this.projectPromptState.active = true;
+        this.projectPromptState.container = prompt;
+        this.projectPromptState.selectedIndex = null;
+        this.projectPromptState.selectedName = '';
+
+        const nameInput = prompt.querySelector('input');
+        const message = prompt.querySelector('.project-roll-prompt__message');
+        this.projectPromptState.nameInput = nameInput;
+        this.projectPromptState.message = message;
+
+        document.addEventListener('click', this.handleProjectSelection, true);
+
+        const { left, top } = this.constrainPromptPosition((window.innerWidth - prompt.offsetWidth) / 2, 120);
+        prompt.style.left = `${left}px`;
+        prompt.style.top = `${top}px`;
+
+        if (nameInput) {
+            nameInput.focus();
+        }
+    }
+
+    closeProjectPrompt() {
+        if (!this.projectPromptState.active) {
+            return;
+        }
+
+        this.onProjectPromptPointerUp();
+
+        document.removeEventListener('click', this.handleProjectSelection, true);
+        document.removeEventListener('pointermove', this.handleProjectPromptPointerMove);
+        document.removeEventListener('pointerup', this.handleProjectPromptPointerUp);
+
+        if (this.projectPromptState.container && this.projectPromptState.container.parentElement) {
+            this.projectPromptState.container.parentElement.removeChild(this.projectPromptState.container);
+        }
+
+        this.projectPromptState.active = false;
+        this.projectPromptState.container = null;
+        this.projectPromptState.nameInput = null;
+        this.projectPromptState.message = null;
+        this.projectPromptState.selectedIndex = null;
+        this.projectPromptState.selectedName = '';
+        this.projectPromptState.drag.active = false;
+    }
+
+    createProjectPrompt() {
+        const prompt = document.createElement('div');
+        prompt.className = 'project-roll-prompt';
+        prompt.setAttribute('role', 'dialog');
+        prompt.setAttribute('aria-modal', 'true');
+        prompt.tabIndex = -1;
+
+        const header = document.createElement('div');
+        header.className = 'project-roll-prompt__header';
+        header.textContent = 'Project Roll';
+        header.addEventListener('pointerdown', (event) => this.startProjectPromptDrag(event));
+
+        const instructions = document.createElement('p');
+        instructions.className = 'project-roll-prompt__instructions';
+        instructions.textContent = 'Click on the project you want to roll for.';
+
+        const nameLabel = document.createElement('label');
+        nameLabel.className = 'project-roll-prompt__label';
+        nameLabel.textContent = 'Project Name';
+
+        const nameInput = document.createElement('input');
+        nameInput.type = 'text';
+        nameInput.className = 'project-roll-prompt__input';
+        nameInput.placeholder = 'Select a project...';
+
+        const message = document.createElement('div');
+        message.className = 'project-roll-prompt__message';
+        message.textContent = 'Click a project to fill its name automatically.';
+
+        const actions = document.createElement('div');
+        actions.className = 'project-roll-prompt__actions';
+
+        const rollBtn = document.createElement('button');
+        rollBtn.type = 'button';
+        rollBtn.className = 'project-roll-prompt__btn project-roll-prompt__btn--confirm';
+        rollBtn.textContent = 'Roll Project';
+        rollBtn.addEventListener('click', () => this.completeProjectRoll());
+
+        const cancelBtn = document.createElement('button');
+        cancelBtn.type = 'button';
+        cancelBtn.className = 'project-roll-prompt__btn project-roll-prompt__btn--cancel';
+        cancelBtn.textContent = 'Cancel';
+        cancelBtn.addEventListener('click', () => this.closeProjectPrompt());
+
+        actions.appendChild(rollBtn);
+        actions.appendChild(cancelBtn);
+
+        prompt.appendChild(header);
+        prompt.appendChild(instructions);
+        prompt.appendChild(nameLabel);
+        prompt.appendChild(nameInput);
+        prompt.appendChild(message);
+        prompt.appendChild(actions);
+
+        return prompt;
+    }
+
+    onProjectSelected(event) {
+        if (!this.projectPromptState.active) {
+            return;
+        }
+
+        const projectItem = event.target.closest('#projects-list .project-item');
+        if (!projectItem) {
+            return;
+        }
+
+        const indexAttr = projectItem.getAttribute('data-project-index');
+        if (indexAttr === null) {
+            return;
+        }
+
+        const parsedIndex = parseInt(indexAttr, 10);
+        if (Number.isNaN(parsedIndex)) {
+            return;
+        }
+
+        const titleElement = projectItem.querySelector('.project-header h3');
+        const name = titleElement ? titleElement.textContent.trim() : '';
+
+        this.projectPromptState.selectedIndex = parsedIndex;
+        this.projectPromptState.selectedName = name;
+
+        if (this.projectPromptState.nameInput) {
+            this.projectPromptState.nameInput.value = name;
+        }
+
+        if (this.projectPromptState.message) {
+            this.projectPromptState.message.textContent = 'Project selected. Ready to roll!';
+        }
+    }
+
+    findProjectIndexByName(name) {
+        if (!name) {
+            return null;
+        }
+
+        const normalized = name.trim().toLowerCase();
+        if (normalized === '') {
+            return null;
+        }
+
+        const projectItems = document.querySelectorAll('#projects-list .project-item');
+        for (const item of projectItems) {
+            const header = item.querySelector('.project-header h3');
+            if (!header) {
+                continue;
+            }
+            const text = header.textContent.trim().toLowerCase();
+            if (text === normalized) {
+                const indexAttr = item.getAttribute('data-project-index');
+                const parsedIndex = indexAttr !== null ? parseInt(indexAttr, 10) : NaN;
+                if (!Number.isNaN(parsedIndex)) {
+                    return parsedIndex;
+                }
+            }
+        }
+
+        return null;
+    }
+
+    completeProjectRoll() {
+        if (!this.projectPromptState.active) {
+            return;
+        }
+
+        const nameInput = this.projectPromptState.nameInput;
+        const providedName = nameInput ? nameInput.value.trim() : '';
+        let projectIndex = this.projectPromptState.selectedIndex;
+
+        if ((projectIndex === null || Number.isNaN(projectIndex)) && providedName !== '') {
+            const foundIndex = this.findProjectIndexByName(providedName);
+            if (foundIndex !== null) {
+                projectIndex = foundIndex;
+                this.projectPromptState.selectedIndex = foundIndex;
+            }
+        }
+
+        if (projectIndex === null || Number.isNaN(projectIndex)) {
+            if (this.projectPromptState.message) {
+                this.projectPromptState.message.textContent = 'Please select a project before rolling.';
+            }
+            return;
+        }
+
+        try {
+            const rollResult = this.performRoll();
+            if (!rollResult) {
+                return;
+            }
+
+            this.updateResultDisplay(rollResult);
+            this.currentRollQueue = [];
+            this.updateQueueDisplay();
+
+            const projectName = providedName || this.projectPromptState.selectedName || `Project ${projectIndex + 1}`;
+            const characterId = typeof window.currentCharacter === 'string' ? window.currentCharacter : '';
+
+            this.publishRollToChat('project_roll', rollResult, {
+                projectName,
+                projectIndex,
+                characterId,
+                status: 'pending'
+            });
+        } catch (error) {
+            if (this.resultTotal && this.resultDetail) {
+                this.resultTotal.textContent = `Error: ${error.message}`;
+                this.resultDetail.textContent = '';
+                this.resultDetail.style.display = 'none';
+            }
+        } finally {
+            this.closeProjectPrompt();
+        }
+    }
+
+    startProjectPromptDrag(event) {
+        if (!this.projectPromptState.active || !this.projectPromptState.container) {
+            return;
+        }
+
+        if (event.button !== undefined && event.button !== 0) {
+            return;
+        }
+
+        const rect = this.projectPromptState.container.getBoundingClientRect();
+        this.projectPromptState.drag.active = true;
+        this.projectPromptState.drag.offsetX = event.clientX - rect.left;
+        this.projectPromptState.drag.offsetY = event.clientY - rect.top;
+
+        this.projectPromptState.container.classList.add('project-roll-prompt--dragging');
+
+        document.addEventListener('pointermove', this.handleProjectPromptPointerMove);
+        document.addEventListener('pointerup', this.handleProjectPromptPointerUp);
+
+        event.preventDefault();
+    }
+
+    onProjectPromptPointerMove(event) {
+        if (!this.projectPromptState.active || !this.projectPromptState.drag.active || !this.projectPromptState.container) {
+            return;
+        }
+
+        const proposedLeft = event.clientX - this.projectPromptState.drag.offsetX;
+        const proposedTop = event.clientY - this.projectPromptState.drag.offsetY;
+        const { left, top } = this.constrainPromptPosition(proposedLeft, proposedTop);
+
+        this.projectPromptState.container.style.left = `${left}px`;
+        this.projectPromptState.container.style.top = `${top}px`;
+    }
+
+    onProjectPromptPointerUp() {
+        if (!this.projectPromptState.drag.active) {
+            return;
+        }
+
+        this.projectPromptState.drag.active = false;
+        if (this.projectPromptState.container) {
+            this.projectPromptState.container.classList.remove('project-roll-prompt--dragging');
+        }
+
+        document.removeEventListener('pointermove', this.handleProjectPromptPointerMove);
+        document.removeEventListener('pointerup', this.handleProjectPromptPointerUp);
+    }
+
+    constrainPromptPosition(left, top) {
+        const prompt = this.projectPromptState.container;
+        if (!prompt) {
+            return { left, top };
+        }
+
+        const width = prompt.offsetWidth;
+        const height = prompt.offsetHeight;
+
+        const maxLeft = Math.max(window.innerWidth - width, 0);
+        const maxTop = Math.max(window.innerHeight - height, 0);
+
+        return {
+            left: Math.min(Math.max(left, 0), maxLeft),
+            top: Math.min(Math.max(top, 0), maxTop)
+        };
     }
 
     parseAndRollDice(diceNotation) {

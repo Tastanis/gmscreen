@@ -213,11 +213,149 @@
             escapeListenerAttached = true;
         }
 
+        function normalizeMessageType(rawType) {
+            if (!rawType) {
+                return 'text';
+            }
+            return typeof rawType === 'string' ? rawType : 'text';
+        }
+
+        function createRollBreakdownList(payload) {
+            const breakdown = Array.isArray(payload.breakdown) ? payload.breakdown : [];
+            if (breakdown.length === 0) {
+                return null;
+            }
+
+            const list = document.createElement('ul');
+            list.className = 'chat-roll-card__breakdown';
+
+            breakdown.forEach((entry) => {
+                if (!entry || typeof entry !== 'object') {
+                    return;
+                }
+
+                const item = document.createElement('li');
+                if (entry.type === 'dice') {
+                    const notation = entry.notation || 'Dice';
+                    const rolls = Array.isArray(entry.rolls) ? entry.rolls.map((roll) => parseInt(roll, 10)).join(', ') : '';
+                    const total = Number.isFinite(entry.total) ? entry.total : parseInt(entry.total, 10);
+                    const totalText = Number.isFinite(total) ? ` = ${total}` : '';
+                    item.textContent = `${notation}: [${rolls}]${totalText}`;
+                } else if (entry.type === 'modifier') {
+                    const value = Number.isFinite(entry.value) ? entry.value : parseInt(entry.value, 10) || 0;
+                    const label = entry.notation || (value >= 0 ? `+${value}` : `${value}`);
+                    item.textContent = `${label} modifier`;
+                } else {
+                    item.textContent = '';
+                }
+                list.appendChild(item);
+            });
+
+            return list.childElementCount > 0 ? list : null;
+        }
+
+        function appendRollSummary(card, payload) {
+            if (!payload) {
+                return;
+            }
+
+            const expression = payload.expression || (Array.isArray(payload.components) ? payload.components.filter(Boolean).join(' ') : '');
+            const totalValue = Number.isFinite(payload.total) ? payload.total : parseInt(payload.total, 10);
+
+            const headerRow = document.createElement('div');
+            headerRow.className = 'chat-roll-card__row';
+
+            const expressionSpan = document.createElement('span');
+            expressionSpan.className = 'chat-roll-card__expression';
+            expressionSpan.textContent = expression || 'Roll';
+
+            const totalSpan = document.createElement('span');
+            totalSpan.className = 'chat-roll-card__total';
+            totalSpan.textContent = Number.isFinite(totalValue) ? `Total: ${totalValue}` : 'Total: -';
+
+            headerRow.appendChild(expressionSpan);
+            headerRow.appendChild(totalSpan);
+            card.appendChild(headerRow);
+
+            const breakdownList = createRollBreakdownList(payload);
+            if (breakdownList) {
+                card.appendChild(breakdownList);
+            }
+        }
+
+        function createDiceRollCard(message) {
+            const payload = message && message.payload ? message.payload : {};
+            const card = document.createElement('div');
+            card.className = 'chat-roll-card';
+            appendRollSummary(card, payload);
+
+            return card;
+        }
+
+        function createProjectRollCard(message) {
+            const payload = message && message.payload ? message.payload : {};
+            const status = (payload.status || 'pending').toLowerCase();
+            const card = document.createElement('div');
+            card.className = 'chat-roll-card chat-roll-card--project';
+
+            const name = document.createElement('div');
+            name.className = 'chat-roll-card__project-name';
+            name.textContent = payload.projectName || 'Project Roll';
+            card.appendChild(name);
+
+            appendRollSummary(card, payload);
+
+            const statusLabel = document.createElement('div');
+            statusLabel.className = `chat-roll-card__status chat-roll-card__status--${status}`;
+            if (status === 'accepted') {
+                statusLabel.textContent = 'Accepted';
+            } else if (status === 'denied') {
+                statusLabel.textContent = 'Denied';
+            } else {
+                statusLabel.textContent = isGM ? 'Awaiting decision' : 'Pending GM review';
+            }
+
+            if (isGM && status === 'pending' && !message.pending && !message.error) {
+                const actions = document.createElement('div');
+                actions.className = 'chat-roll-card__actions';
+
+                const acceptBtn = document.createElement('button');
+                acceptBtn.type = 'button';
+                acceptBtn.className = 'chat-roll-card__btn chat-roll-card__btn--accept';
+                acceptBtn.textContent = 'Accept';
+
+                const denyBtn = document.createElement('button');
+                denyBtn.type = 'button';
+                denyBtn.className = 'chat-roll-card__btn chat-roll-card__btn--deny';
+                denyBtn.textContent = 'Deny';
+
+                const buttons = [acceptBtn, denyBtn];
+
+                acceptBtn.addEventListener('click', () => {
+                    handleProjectRollDecision(message, 'accepted', buttons);
+                });
+
+                denyBtn.addEventListener('click', () => {
+                    handleProjectRollDecision(message, 'denied', buttons);
+                });
+
+                actions.appendChild(acceptBtn);
+                actions.appendChild(denyBtn);
+                card.appendChild(actions);
+            } else {
+                card.appendChild(statusLabel);
+            }
+
+            return card;
+        }
+
         function createMessageElement(message) {
             const wrapper = document.createElement('div');
             wrapper.className = 'chat-message';
 
-            if (message.user === currentUser) {
+            const messageType = normalizeMessageType(message.type);
+
+            if (message.user === currentUser && messageType !== 'project_roll') {
                 wrapper.classList.add('chat-message--self');
             }
 
@@ -227,6 +365,16 @@
 
             if (message.error) {
                 wrapper.classList.add('chat-message--error');
+            }
+
+            if (messageType === 'dice_roll') {
+                wrapper.classList.add('chat-message--dice-roll');
+            }
+
+            if (messageType === 'project_roll') {
+                const status = (message.payload && message.payload.status) ? message.payload.status.toLowerCase() : 'pending';
+                wrapper.classList.add('chat-message--project-roll');
+                wrapper.classList.add(`chat-message--project-roll-${status}`);
             }
 
             const meta = document.createElement('div');
@@ -243,7 +391,11 @@
             const body = document.createElement('div');
             body.className = 'chat-message__text';
 
-            if (message.imageUrl) {
+            if (messageType === 'dice_roll') {
+                body.appendChild(createDiceRollCard(message));
+            } else if (messageType === 'project_roll') {
+                body.appendChild(createProjectRollCard(message));
+            } else if (message.imageUrl) {
                 body.classList.add('chat-message__text--image');
 
                 const imageLink = document.createElement('a');
@@ -284,6 +436,81 @@
             wrapper.appendChild(body);
 
             return wrapper;
+        }
+
+        function updateMessageFromServer(serverMessage) {
+            if (!serverMessage || !serverMessage.id) {
+                return;
+            }
+
+            const index = messages.findIndex((msg) => msg.id === serverMessage.id);
+            if (index !== -1) {
+                const existing = messages[index] || {};
+                messages[index] = Object.assign({}, existing, serverMessage, { pending: false, error: false });
+            } else {
+                messages.push(Object.assign({ pending: false, error: false }, serverMessage));
+            }
+
+            trimMessages();
+            renderMessages();
+        }
+
+        async function handleProjectRollDecision(message, status, buttons) {
+            if (!message || !message.id) {
+                return;
+            }
+
+            const previousStatus = message.payload && message.payload.status ? message.payload.status : 'pending';
+            if (previousStatus === status) {
+                return;
+            }
+
+            const controls = Array.isArray(buttons) ? buttons : [];
+            controls.forEach((btn) => {
+                if (btn) {
+                    btn.disabled = true;
+                }
+            });
+
+            try {
+                const params = new URLSearchParams();
+                params.append('action', 'chat_update_roll');
+                params.append('messageId', message.id);
+                params.append('status', status);
+
+                const response = await fetch('chat_handler.php', {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/x-www-form-urlencoded'
+                    },
+                    body: params.toString()
+                });
+
+                if (!response.ok) {
+                    throw new Error('Failed to update roll');
+                }
+
+                const data = await response.json();
+                if (!data || !data.success || !data.message) {
+                    throw new Error(data && data.error ? data.error : 'Failed to update roll');
+                }
+
+                updateMessageFromServer(data.message);
+
+                if (status === 'accepted' && data.award && typeof window.handleAcceptedProjectRoll === 'function') {
+                    window.handleAcceptedProjectRoll(data.award);
+                }
+
+                const toastMessage = status === 'accepted' ? 'Project roll accepted' : status === 'denied' ? 'Project roll denied' : 'Project roll updated';
+                showChatToast(toastMessage, 'success');
+            } catch (error) {
+                controls.forEach((btn) => {
+                    if (btn) {
+                        btn.disabled = false;
+                    }
+                });
+                showChatToast(error.message || 'Failed to update roll', 'error');
+            }
         }
 
         function renderMessages() {
@@ -432,14 +659,10 @@
         function resolvePendingMessage(tempId, serverMessage) {
             const index = messages.findIndex((message) => message.id === tempId);
             if (index !== -1) {
-                const existing = messages[index] || {};
-                messages[index] = Object.assign({}, existing, serverMessage, { pending: false, error: false });
-            } else {
-                messages.push(Object.assign({}, serverMessage, { pending: false, error: false }));
+                messages.splice(index, 1);
             }
 
-            trimMessages();
-            renderMessages();
+            updateMessageFromServer(serverMessage);
         }
 
         function markMessageError(tempId) {
@@ -451,11 +674,13 @@
             }
         }
 
-        async function sendChatMessage({ message = '', imageUrl = '' }) {
+        async function sendChatMessage({ message = '', imageUrl = '', type = 'text', payload = null }) {
             const text = typeof message === 'string' ? message.trim() : '';
             const image = typeof imageUrl === 'string' ? imageUrl.trim() : '';
+            const normalizedType = typeof type === 'string' && type.trim() !== '' ? type.trim() : 'text';
+            const payloadObject = payload && typeof payload === 'object' ? payload : null;
 
-            if (text === '' && image === '') {
+            if (text === '' && image === '' && !payloadObject) {
                 return false;
             }
 
@@ -465,12 +690,21 @@
                 timestamp: new Date().toISOString(),
                 user: currentUser || 'You',
                 message: text,
+                type: normalizedType,
                 pending: true,
                 error: false
             };
 
             if (image) {
                 optimisticMessage.imageUrl = image;
+            }
+
+            if (payloadObject) {
+                try {
+                    optimisticMessage.payload = JSON.parse(JSON.stringify(payloadObject));
+                } catch (error) {
+                    optimisticMessage.payload = payloadObject;
+                }
             }
 
             messages.push(optimisticMessage);
@@ -485,6 +719,16 @@
                 }
                 if (image !== '') {
                     params.append('imageUrl', image);
+                }
+                if (normalizedType !== 'text' || payloadObject) {
+                    params.append('type', normalizedType);
+                }
+                if (payloadObject) {
+                    try {
+                        params.append('payload', JSON.stringify(payloadObject));
+                    } catch (error) {
+                        // Ignore serialization error
+                    }
                 }
 
                 const response = await fetch('chat_handler.php', {
@@ -688,6 +932,15 @@
         renderMessages();
         ensureInterval();
         fetchMessages();
+
+        window.dashboardChat = {
+            sendMessage: sendChatMessage,
+            updateFromServer: updateMessageFromServer,
+            isGM,
+            getMessages() {
+                return [...messages];
+            }
+        };
     }
 
     window.initChatPanel = initChatPanel;

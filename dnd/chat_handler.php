@@ -27,6 +27,10 @@ switch ($chatAction) {
         handleChatUpload($chatUploadsDir);
         break;
 
+    case 'update_roll':
+        handleRollStatusUpdate($chatDataFile);
+        break;
+
     default:
         echo json_encode(['success' => false, 'error' => 'Invalid chat action']);
         exit;
@@ -81,6 +85,195 @@ function sanitizeMessage($message) {
     }
 
     return htmlspecialchars($clean, ENT_QUOTES | ENT_SUBSTITUTE, 'UTF-8');
+}
+
+function sanitizePlainText($value)
+{
+    if (!is_string($value)) {
+        return '';
+    }
+
+    return trim(strip_tags($value));
+}
+
+function sanitizeMessageType($type)
+{
+    if (!is_string($type)) {
+        return 'text';
+    }
+
+    $clean = strtolower(trim($type));
+    $allowed = ['text', 'dice_roll', 'project_roll'];
+    return in_array($clean, $allowed, true) ? $clean : 'text';
+}
+
+function sanitizeDiceNotation($notation)
+{
+    if (!is_string($notation)) {
+        return '';
+    }
+
+    $clean = preg_replace('/[^0-9dD+\-\s]/', '', $notation);
+    return trim($clean);
+}
+
+function sanitizeRollBreakdown(array $breakdown)
+{
+    $sanitized = [];
+
+    foreach ($breakdown as $entry) {
+        if (!is_array($entry) || !isset($entry['type'])) {
+            continue;
+        }
+
+        $type = $entry['type'];
+        if ($type === 'dice') {
+            $rolls = [];
+            if (isset($entry['rolls']) && is_array($entry['rolls'])) {
+                foreach ($entry['rolls'] as $roll) {
+                    $rolls[] = intval($roll);
+                }
+            }
+
+            $sanitized[] = [
+                'type' => 'dice',
+                'notation' => sanitizeDiceNotation($entry['notation'] ?? ''),
+                'rolls' => $rolls,
+                'total' => isset($entry['total']) ? intval($entry['total']) : array_sum($rolls)
+            ];
+        } elseif ($type === 'modifier') {
+            $value = isset($entry['value']) ? intval($entry['value']) : 0;
+            $sanitized[] = [
+                'type' => 'modifier',
+                'notation' => sanitizeDiceNotation($entry['notation'] ?? ''),
+                'value' => $value
+            ];
+        }
+    }
+
+    return $sanitized;
+}
+
+function sanitizeRollComponents($components)
+{
+    if (!is_array($components)) {
+        return [];
+    }
+
+    $sanitized = [];
+    foreach ($components as $component) {
+        $sanitized[] = sanitizeDiceNotation(is_string($component) ? $component : '');
+    }
+
+    return $sanitized;
+}
+
+function sanitizeProjectIdentifier($value)
+{
+    if (!is_string($value)) {
+        return '';
+    }
+
+    return preg_replace('/[^a-z0-9_\-]/i', '', $value);
+}
+
+function sanitizeRollPayload($type, $payload)
+{
+    if (!is_array($payload)) {
+        return [];
+    }
+
+    switch ($type) {
+        case 'dice_roll':
+            return [
+                'expression' => sanitizeDiceNotation($payload['expression'] ?? ''),
+                'components' => sanitizeRollComponents($payload['components'] ?? []),
+                'breakdown' => sanitizeRollBreakdown($payload['breakdown'] ?? []),
+                'total' => isset($payload['total']) ? intval($payload['total']) : 0
+            ];
+
+        case 'project_roll':
+            $status = strtolower(trim($payload['status'] ?? 'pending'));
+            if (!in_array($status, ['pending', 'accepted', 'denied'], true)) {
+                $status = 'pending';
+            }
+
+            return [
+                'expression' => sanitizeDiceNotation($payload['expression'] ?? ''),
+                'components' => sanitizeRollComponents($payload['components'] ?? []),
+                'breakdown' => sanitizeRollBreakdown($payload['breakdown'] ?? []),
+                'total' => isset($payload['total']) ? intval($payload['total']) : 0,
+                'projectName' => sanitizePlainText($payload['projectName'] ?? ''),
+                'projectIndex' => isset($payload['projectIndex']) ? max(0, intval($payload['projectIndex'])) : 0,
+                'characterId' => sanitizeProjectIdentifier($payload['characterId'] ?? ''),
+                'status' => $status
+            ];
+
+        default:
+            return [];
+    }
+}
+
+function applyProjectRollAward(array $payload)
+{
+    $character = $payload['characterId'] ?? '';
+    $projectIndex = isset($payload['projectIndex']) ? intval($payload['projectIndex']) : -1;
+    $delta = isset($payload['total']) ? intval($payload['total']) : 0;
+
+    if ($character === '' || $projectIndex < 0) {
+        return false;
+    }
+
+    $dataFile = __DIR__ . '/data/characters.json';
+    if (!file_exists($dataFile)) {
+        return false;
+    }
+
+    $fp = fopen($dataFile, 'c+');
+    if ($fp === false) {
+        return false;
+    }
+
+    if (!flock($fp, LOCK_EX)) {
+        fclose($fp);
+        return false;
+    }
+
+    $content = stream_get_contents($fp);
+    $data = json_decode($content, true);
+
+    if (!is_array($data) || !isset($data[$character]['projects'][$projectIndex])) {
+        flock($fp, LOCK_UN);
+        fclose($fp);
+        return false;
+    }
+
+    $project = &$data[$character]['projects'][$projectIndex];
+    $current = isset($project['points_earned']) ? intval($project['points_earned']) : 0;
+    $newTotal = $current + $delta;
+    $project['points_earned'] = (string) $newTotal;
+
+    if (!isset($project['points_history']) || !is_array($project['points_history'])) {
+        $project['points_history'] = [];
+    }
+    $project['points_history'][] = $newTotal;
+    if (count($project['points_history']) > 10) {
+        $project['points_history'] = array_slice($project['points_history'], -10);
+    }
+
+    ftruncate($fp, 0);
+    rewind($fp);
+    fwrite($fp, json_encode($data, JSON_PRETTY_PRINT));
+    fflush($fp);
+    flock($fp, LOCK_UN);
+    fclose($fp);
+
+    return [
+        'character' => $character,
+        'projectIndex' => $projectIndex,
+        'delta' => $delta,
+        'newPoints' => $newTotal
+    ];
 }
 
 function sanitizeImageUrl($url) {
@@ -138,17 +331,32 @@ function handleChatSend($dataFile, $maxMessages) {
         exit;
     }
 
+    $messageType = sanitizeMessageType($_POST['type'] ?? 'text');
+    $payloadRaw = $_POST['payload'] ?? '';
+    $payload = [];
+    if ($payloadRaw !== '') {
+        $decoded = json_decode($payloadRaw, true);
+        if (is_array($decoded)) {
+            $payload = sanitizeRollPayload($messageType, $decoded);
+        }
+    }
+
     $messages = loadChatMessages($dataFile);
 
     $entry = [
         'id' => uniqid('msg_', true),
         'timestamp' => date('c'),
         'user' => $_SESSION['user'],
-        'message' => $message
+        'message' => $message,
+        'type' => $messageType
     ];
 
     if ($imageUrl !== '') {
         $entry['imageUrl'] = $imageUrl;
+    }
+
+    if (!empty($payload)) {
+        $entry['payload'] = $payload;
     }
 
     $messages[] = $entry;
@@ -196,6 +404,71 @@ function handleChatFetch($dataFile) {
         'success' => true,
         'messages' => $filtered,
         'latest' => $latest
+    ]);
+    exit;
+}
+
+function handleRollStatusUpdate($dataFile)
+{
+    if (!isset($_SESSION['user']) || $_SESSION['user'] !== 'GM') {
+        echo json_encode(['success' => false, 'error' => 'Only GM can modify roll status']);
+        exit;
+    }
+
+    $messageId = isset($_POST['messageId']) ? trim($_POST['messageId']) : '';
+    $status = isset($_POST['status']) ? strtolower(trim($_POST['status'])) : '';
+    $allowed = ['pending', 'accepted', 'denied'];
+
+    if ($messageId === '' || !in_array($status, $allowed, true)) {
+        echo json_encode(['success' => false, 'error' => 'Invalid request']);
+        exit;
+    }
+
+    $messages = loadChatMessages($dataFile);
+    $updatedMessage = null;
+    $awardResult = false;
+
+    foreach ($messages as &$message) {
+        if (!isset($message['id']) || $message['id'] !== $messageId) {
+            continue;
+        }
+
+        $messageType = sanitizeMessageType($message['type'] ?? 'text');
+        if ($messageType !== 'project_roll') {
+            break;
+        }
+
+        if (!isset($message['payload']) || !is_array($message['payload'])) {
+            $message['payload'] = [];
+        }
+
+        // Ensure payload is sanitized before updating
+        $message['payload'] = sanitizeRollPayload('project_roll', $message['payload']);
+        $previousStatus = $message['payload']['status'] ?? 'pending';
+        $message['payload']['status'] = $status;
+
+        if ($status === 'accepted' && $previousStatus !== 'accepted') {
+            $awardResult = applyProjectRollAward($message['payload']);
+        }
+
+        $updatedMessage = $message;
+        break;
+    }
+
+    if ($updatedMessage === null) {
+        echo json_encode(['success' => false, 'error' => 'Message not found']);
+        exit;
+    }
+
+    if (!saveChatMessages($dataFile, $messages)) {
+        echo json_encode(['success' => false, 'error' => 'Failed to update message']);
+        exit;
+    }
+
+    echo json_encode([
+        'success' => true,
+        'message' => $updatedMessage,
+        'award' => $awardResult
     ]);
     exit;
 }
