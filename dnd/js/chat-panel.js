@@ -432,7 +432,8 @@
         function resolvePendingMessage(tempId, serverMessage) {
             const index = messages.findIndex((message) => message.id === tempId);
             if (index !== -1) {
-                messages[index] = Object.assign({}, serverMessage, { pending: false, error: false });
+                const existing = messages[index] || {};
+                messages[index] = Object.assign({}, existing, serverMessage, { pending: false, error: false });
             } else {
                 messages.push(Object.assign({}, serverMessage, { pending: false, error: false }));
             }
