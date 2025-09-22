@@ -1505,17 +1505,17 @@ body:not(.gm-mode) .club-navigation button:hover:not(:disabled) {
 .dice-modal-overlay {
     position: fixed;
     inset: 0;
-    background: rgba(0, 0, 0, 0.55);
     display: flex;
     align-items: center;
     justify-content: center;
     z-index: 1050;
-    transition: opacity 0.2s ease;
+    pointer-events: none;
+    background: transparent;
 }
 
 .dice-modal-overlay.hidden {
     opacity: 0;
-    pointer-events: none;
+    visibility: hidden;
 }
 
 .dice-modal {
@@ -1528,6 +1528,7 @@ body:not(.gm-mode) .club-navigation button:hover:not(:disabled) {
     display: flex;
     flex-direction: column;
     outline: none;
+    pointer-events: auto;
 }
 
 .dice-modal-header {
@@ -1640,7 +1641,8 @@ body:not(.gm-mode) .club-navigation button:hover:not(:disabled) {
 }
 
 .dice-roll-btn,
-.dice-clear-btn {
+.dice-clear-btn,
+.dice-project-btn {
     border: none;
     border-radius: 8px;
     padding: 0.65rem 1.5rem;
@@ -1658,8 +1660,13 @@ body:not(.gm-mode) .club-navigation button:hover:not(:disabled) {
     background: #e67e22;
 }
 
+.dice-project-btn {
+    background: #16a085;
+}
+
 .dice-roll-btn:hover,
-.dice-clear-btn:hover {
+.dice-clear-btn:hover,
+.dice-project-btn:hover {
     transform: translateY(-1px);
     box-shadow: 0 6px 12px rgba(0, 0, 0, 0.15);
 }

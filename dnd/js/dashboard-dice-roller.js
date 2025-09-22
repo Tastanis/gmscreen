@@ -73,11 +73,6 @@ class DashboardDiceRoller {
         this.overlay.appendChild(this.modal);
         document.body.appendChild(this.overlay);
 
-        this.overlay.addEventListener('click', (event) => {
-            if (event.target === this.overlay) {
-                this.close();
-            }
-        });
     }
 
     attachEvents() {
@@ -159,6 +154,11 @@ class DashboardDiceRoller {
         clearBtn.textContent = 'Clear';
         clearBtn.addEventListener('click', () => this.clearQueue());
 
+        const projectBtn = document.createElement('button');
+        projectBtn.type = 'button';
+        projectBtn.className = 'dice-project-btn';
+        projectBtn.textContent = 'Project Roll';
+
         this.resultLabel = document.createElement('div');
         this.resultLabel.className = 'dice-result';
 
@@ -175,6 +175,7 @@ class DashboardDiceRoller {
 
         actions.appendChild(rollBtn);
         actions.appendChild(clearBtn);
+        actions.appendChild(projectBtn);
         actions.appendChild(this.resultLabel);
         return actions;
     }
