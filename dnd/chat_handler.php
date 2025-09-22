@@ -216,64 +216,114 @@ function sanitizeRollPayload($type, $payload)
 
 function applyProjectRollAward(array $payload)
 {
-    $character = $payload['characterId'] ?? '';
+    $characterRaw = $payload['characterId'] ?? '';
+    $character = is_string($characterRaw) ? trim($characterRaw) : '';
     $projectIndex = isset($payload['projectIndex']) ? intval($payload['projectIndex']) : -1;
     $delta = isset($payload['total']) ? intval($payload['total']) : 0;
+    $projectNameRaw = $payload['projectName'] ?? '';
+    $projectName = is_string($projectNameRaw) ? trim($projectNameRaw) : '';
 
-    if ($character === '' || $projectIndex < 0) {
-        return false;
+    if ($character === '') {
+        return ['error' => 'Character not specified'];
     }
 
     $dataFile = __DIR__ . '/data/characters.json';
     if (!file_exists($dataFile)) {
-        return false;
+        return ['error' => 'Character data not found'];
     }
 
     $fp = fopen($dataFile, 'c+');
     if ($fp === false) {
-        return false;
+        return ['error' => 'Unable to open character data'];
     }
 
-    if (!flock($fp, LOCK_EX)) {
+    $lockAcquired = false;
+
+    try {
+        if (!flock($fp, LOCK_EX)) {
+            return ['error' => 'Unable to lock character data'];
+        }
+
+        $lockAcquired = true;
+        rewind($fp);
+        $content = stream_get_contents($fp);
+        $data = json_decode($content, true);
+
+        if (!is_array($data) || !isset($data[$character])) {
+            return ['error' => 'Character not found'];
+        }
+
+        if (!isset($data[$character]['projects']) || !is_array($data[$character]['projects'])) {
+            return ['error' => 'No projects found for character'];
+        }
+
+        $projects = &$data[$character]['projects'];
+        $resolvedIndex = null;
+
+        if ($projectIndex >= 0 && isset($projects[$projectIndex])) {
+            $resolvedIndex = $projectIndex;
+        } elseif ($projectName !== '') {
+            $normalizedName = strtolower($projectName);
+
+            foreach ($projects as $index => $project) {
+                if (!is_array($project)) {
+                    continue;
+                }
+
+                $candidate = '';
+                if (isset($project['project_name']) && is_string($project['project_name'])) {
+                    $candidate = $project['project_name'];
+                } elseif (isset($project['name']) && is_string($project['name'])) {
+                    $candidate = $project['name'];
+                }
+
+                if ($candidate === '') {
+                    continue;
+                }
+
+                if (strtolower(trim($candidate)) === $normalizedName) {
+                    $resolvedIndex = (int) $index;
+                    break;
+                }
+            }
+        }
+
+        if ($resolvedIndex === null) {
+            return ['error' => 'Selected project could not be found'];
+        }
+
+        $project = &$projects[$resolvedIndex];
+        $current = isset($project['points_earned']) ? intval($project['points_earned']) : 0;
+        $newTotal = $current + $delta;
+        $project['points_earned'] = (string) $newTotal;
+
+        if (!isset($project['points_history']) || !is_array($project['points_history'])) {
+            $project['points_history'] = [];
+        }
+
+        $project['points_history'][] = $newTotal;
+        if (count($project['points_history']) > 10) {
+            $project['points_history'] = array_slice($project['points_history'], -10);
+        }
+
+        ftruncate($fp, 0);
+        rewind($fp);
+        fwrite($fp, json_encode($data, JSON_PRETTY_PRINT));
+        fflush($fp);
+
+        return [
+            'character' => $character,
+            'projectIndex' => $resolvedIndex,
+            'delta' => $delta,
+            'newPoints' => $newTotal
+        ];
+    } finally {
+        if ($lockAcquired) {
+            flock($fp, LOCK_UN);
+        }
+
         fclose($fp);
-        return false;
     }
-
-    $content = stream_get_contents($fp);
-    $data = json_decode($content, true);
-
-    if (!is_array($data) || !isset($data[$character]['projects'][$projectIndex])) {
-        flock($fp, LOCK_UN);
-        fclose($fp);
-        return false;
-    }
-
-    $project = &$data[$character]['projects'][$projectIndex];
-    $current = isset($project['points_earned']) ? intval($project['points_earned']) : 0;
-    $newTotal = $current + $delta;
-    $project['points_earned'] = (string) $newTotal;
-
-    if (!isset($project['points_history']) || !is_array($project['points_history'])) {
-        $project['points_history'] = [];
-    }
-    $project['points_history'][] = $newTotal;
-    if (count($project['points_history']) > 10) {
-        $project['points_history'] = array_slice($project['points_history'], -10);
-    }
-
-    ftruncate($fp, 0);
-    rewind($fp);
-    fwrite($fp, json_encode($data, JSON_PRETTY_PRINT));
-    fflush($fp);
-    flock($fp, LOCK_UN);
-    fclose($fp);
-
-    return [
-        'character' => $character,
-        'projectIndex' => $projectIndex,
-        'delta' => $delta,
-        'newPoints' => $newTotal
-    ];
 }
 
 function sanitizeImageUrl($url) {
@@ -426,12 +476,16 @@ function handleRollStatusUpdate($dataFile)
 
     $messages = loadChatMessages($dataFile);
     $updatedMessage = null;
-    $awardResult = false;
+    $awardResult = null;
+    $awardError = null;
+    $messageFound = false;
 
     foreach ($messages as &$message) {
         if (!isset($message['id']) || $message['id'] !== $messageId) {
             continue;
         }
+
+        $messageFound = true;
 
         $messageType = sanitizeMessageType($message['type'] ?? 'text');
         if ($messageType !== 'project_roll') {
@@ -442,21 +496,38 @@ function handleRollStatusUpdate($dataFile)
             $message['payload'] = [];
         }
 
-        // Ensure payload is sanitized before updating
-        $message['payload'] = sanitizeRollPayload('project_roll', $message['payload']);
-        $previousStatus = $message['payload']['status'] ?? 'pending';
-        $message['payload']['status'] = $status;
+        $sanitizedPayload = sanitizeRollPayload('project_roll', $message['payload']);
+        $previousStatus = $sanitizedPayload['status'] ?? 'pending';
+        $sanitizedPayload['status'] = $status;
 
         if ($status === 'accepted' && $previousStatus !== 'accepted') {
-            $awardResult = applyProjectRollAward($message['payload']);
+            $awardResult = applyProjectRollAward($sanitizedPayload);
+
+            if (!is_array($awardResult) || isset($awardResult['error'])) {
+                $awardError = is_array($awardResult) && isset($awardResult['error'])
+                    ? $awardResult['error']
+                    : 'Failed to award project roll.';
+                $awardResult = null;
+                break;
+            }
+
+            if (isset($awardResult['projectIndex'])) {
+                $sanitizedPayload['projectIndex'] = $awardResult['projectIndex'];
+            }
         }
 
+        $message['payload'] = $sanitizedPayload;
         $updatedMessage = $message;
         break;
     }
 
-    if ($updatedMessage === null) {
+    if ($updatedMessage === null && !$messageFound) {
         echo json_encode(['success' => false, 'error' => 'Message not found']);
+        exit;
+    }
+
+    if ($awardError !== null) {
+        echo json_encode(['success' => false, 'error' => $awardError]);
         exit;
     }
 

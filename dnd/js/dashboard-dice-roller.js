@@ -15,6 +15,10 @@ class DashboardDiceRoller {
             offsetY: 0
         };
 
+        this.rollButton = null;
+        this.projectRollButton = null;
+        this.clearButton = null;
+
         this.projectPromptState = {
             active: false,
             container: null,
@@ -182,6 +186,10 @@ class DashboardDiceRoller {
         projectBtn.textContent = 'Project Roll';
         projectBtn.addEventListener('click', () => this.startProjectRollFlow());
 
+        this.rollButton = rollBtn;
+        this.clearButton = clearBtn;
+        this.projectRollButton = projectBtn;
+
         this.resultLabel = document.createElement('div');
         this.resultLabel.className = 'dice-result';
 
@@ -201,6 +209,22 @@ class DashboardDiceRoller {
         actions.appendChild(projectBtn);
         actions.appendChild(this.resultLabel);
         return actions;
+    }
+
+    setStandardRollControlsVisible(shouldShow) {
+        const displayValue = shouldShow ? '' : 'none';
+
+        if (this.rollButton) {
+            this.rollButton.style.display = displayValue;
+        }
+
+        if (this.projectRollButton) {
+            this.projectRollButton.style.display = displayValue;
+        }
+
+        if (this.clearButton) {
+            this.clearButton.disabled = false;
+        }
     }
 
     open() {
@@ -228,6 +252,8 @@ class DashboardDiceRoller {
             this.overlay.classList.add('hidden');
             document.removeEventListener('keydown', this.handleKeyDown);
             this.onPointerUp();
+            this.closeProjectPrompt();
+            this.setStandardRollControlsVisible(true);
         }
     }
 
@@ -427,6 +453,8 @@ class DashboardDiceRoller {
         this.focusProjectsSection();
         this.positionDiceModalForProjectRoll();
 
+        this.setStandardRollControlsVisible(false);
+
         if (this.projectPromptState.active) {
             this.projectPromptState.hasCustomPosition = false;
             this.positionProjectPrompt(true);
@@ -556,6 +584,8 @@ class DashboardDiceRoller {
             this.updateProjectPromptStatusMessage();
         });
 
+        this.setStandardRollControlsVisible(false);
+
         if (nameInput) {
             nameInput.focus();
         }
@@ -584,6 +614,8 @@ class DashboardDiceRoller {
         this.projectPromptState.selectedName = '';
         this.projectPromptState.hasCustomPosition = false;
         this.projectPromptState.drag.active = false;
+
+        this.setStandardRollControlsVisible(true);
     }
 
     createProjectPrompt() {
