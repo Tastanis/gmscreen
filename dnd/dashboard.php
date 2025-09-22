@@ -1412,6 +1412,7 @@ $defaultInventoryTab = $is_gm ? 'frunk' : $user;
         const isGM = <?php echo $is_gm ? 'true' : 'false'; ?>;
         const currentUser = '<?php echo $user; ?>';
         let currentCharacter = '<?php echo $currentCharacter; ?>';
+        window.currentCharacter = currentCharacter;
         let characterData = {};
         let currentClubIndex = 0;
         let currentPastClassIndex = -1;
