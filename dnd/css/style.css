@@ -293,6 +293,236 @@ body {
     word-break: break-word;
 }
 
+.chat-message--dice-roll {
+    background: #eef2ff;
+    border: 1px solid #c7d2fe;
+}
+
+.chat-message.chat-message--project-roll {
+    background: #fff8db;
+    border: 1px solid #f7d794;
+}
+
+.chat-message.chat-message--project-roll-accepted {
+    background: #d4edda;
+    border-color: #a3d5a1;
+}
+
+.chat-message.chat-message--project-roll-denied {
+    background: #f8d7da;
+    border-color: #f5b5b9;
+}
+
+.chat-roll-card {
+    background: rgba(255, 255, 255, 0.85);
+    border-radius: 8px;
+    padding: 8px 10px;
+    display: flex;
+    flex-direction: column;
+    gap: 6px;
+    box-shadow: inset 0 0 0 1px rgba(99, 102, 241, 0.12);
+}
+
+.chat-roll-card--project {
+    box-shadow: inset 0 0 0 1px rgba(217, 119, 6, 0.15);
+}
+
+.chat-roll-card__row {
+    display: flex;
+    justify-content: space-between;
+    align-items: baseline;
+    gap: 12px;
+}
+
+.chat-roll-card__expression {
+    font-weight: 600;
+    color: #312e81;
+    text-transform: uppercase;
+    letter-spacing: 0.04em;
+    font-size: 0.75rem;
+}
+
+.chat-roll-card__total {
+    font-weight: 700;
+    color: #1d4ed8;
+    font-size: 0.9rem;
+}
+
+.chat-roll-card__breakdown {
+    margin: 0;
+    padding-left: 18px;
+    font-size: 0.8rem;
+    color: #1f2937;
+}
+
+.chat-roll-card__breakdown li {
+    margin-bottom: 2px;
+}
+
+.chat-roll-card__project-name {
+    font-weight: 700;
+    font-size: 0.9rem;
+    color: #92400e;
+    text-transform: uppercase;
+    letter-spacing: 0.05em;
+}
+
+.chat-roll-card__status {
+    font-size: 0.75rem;
+    font-weight: 600;
+    padding: 4px 6px;
+    border-radius: 999px;
+    align-self: flex-start;
+}
+
+.chat-roll-card__status--pending {
+    background: rgba(250, 204, 21, 0.18);
+    color: #a16207;
+}
+
+.chat-roll-card__status--accepted {
+    background: rgba(74, 222, 128, 0.2);
+    color: #166534;
+}
+
+.chat-roll-card__status--denied {
+    background: rgba(248, 113, 113, 0.18);
+    color: #991b1b;
+}
+
+.chat-roll-card__actions {
+    display: flex;
+    gap: 8px;
+}
+
+.chat-roll-card__btn {
+    padding: 4px 10px;
+    border-radius: 6px;
+    border: none;
+    font-weight: 600;
+    cursor: pointer;
+    transition: background 0.18s ease, transform 0.18s ease;
+}
+
+.chat-roll-card__btn:disabled {
+    opacity: 0.6;
+    cursor: not-allowed;
+}
+
+.chat-roll-card__btn--accept {
+    background: #22c55e;
+    color: #fff;
+}
+
+.chat-roll-card__btn--accept:hover:not(:disabled) {
+    background: #16a34a;
+    transform: translateY(-1px);
+}
+
+.chat-roll-card__btn--deny {
+    background: #ef4444;
+    color: #fff;
+}
+
+.chat-roll-card__btn--deny:hover:not(:disabled) {
+    background: #dc2626;
+    transform: translateY(-1px);
+}
+
+.project-roll-prompt {
+    position: fixed;
+    z-index: 3000;
+    width: 280px;
+    background: #ffffff;
+    border-radius: 12px;
+    box-shadow: 0 18px 45px rgba(15, 23, 42, 0.28);
+    border: 1px solid #c7d2fe;
+    padding: 14px 16px;
+    user-select: none;
+}
+
+.project-roll-prompt__header {
+    font-weight: 700;
+    color: #312e81;
+    margin-bottom: 6px;
+    cursor: move;
+    font-size: 1rem;
+}
+
+.project-roll-prompt__instructions {
+    margin: 0 0 8px;
+    font-size: 0.85rem;
+    color: #1f2937;
+}
+
+.project-roll-prompt__label {
+    display: block;
+    font-size: 0.75rem;
+    font-weight: 600;
+    color: #4338ca;
+    margin-bottom: 4px;
+}
+
+.project-roll-prompt__input {
+    width: 100%;
+    padding: 6px 8px;
+    border-radius: 6px;
+    border: 1px solid #c7d2fe;
+    font-size: 0.85rem;
+    margin-bottom: 8px;
+}
+
+.project-roll-prompt__input:focus {
+    outline: none;
+    border-color: #6366f1;
+    box-shadow: 0 0 0 2px rgba(99, 102, 241, 0.2);
+}
+
+.project-roll-prompt__message {
+    font-size: 0.75rem;
+    color: #4b5563;
+    margin-bottom: 10px;
+}
+
+.project-roll-prompt__actions {
+    display: flex;
+    justify-content: flex-end;
+    gap: 8px;
+}
+
+.project-roll-prompt__btn {
+    padding: 6px 12px;
+    border-radius: 6px;
+    border: none;
+    font-weight: 600;
+    cursor: pointer;
+    transition: background 0.18s ease, transform 0.18s ease;
+}
+
+.project-roll-prompt__btn--confirm {
+    background: #4338ca;
+    color: #fff;
+}
+
+.project-roll-prompt__btn--confirm:hover {
+    background: #3730a3;
+    transform: translateY(-1px);
+}
+
+.project-roll-prompt__btn--cancel {
+    background: #e5e7eb;
+    color: #374151;
+}
+
+.project-roll-prompt__btn--cancel:hover {
+    background: #d1d5db;
+    transform: translateY(-1px);
+}
+
+.project-roll-prompt--dragging {
+    cursor: grabbing;
+}
+
 .chat-message__text--image {
     display: flex;
     flex-direction: column;
