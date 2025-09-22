@@ -330,6 +330,7 @@ async function switchCharacter(character) {
         
         // Update current character AFTER saving the previous one
         currentCharacter = character;
+        window.currentCharacter = currentCharacter;
         
         // Update tab appearance
         document.querySelectorAll('.character-tab').forEach(tab => {
