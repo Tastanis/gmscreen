@@ -300,14 +300,107 @@ body {
 }
 
 .chat-message__image {
+    display: block;
     max-width: 260px;
+    max-height: 180px;
+    width: auto;
+    height: auto;
     border-radius: 10px;
     box-shadow: 0 6px 18px rgba(15, 23, 42, 0.25);
+    cursor: zoom-in;
+    transition: transform 0.18s ease;
+}
+
+.chat-message__image:hover {
+    transform: scale(1.02);
+}
+
+.chat-message__image-link {
+    display: inline-block;
+    line-height: 0;
 }
 
 .chat-message__caption {
     font-size: 0.8rem;
     color: #4b5563;
+}
+
+.chat-image-lightbox {
+    position: fixed;
+    inset: 0;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    background: transparent;
+    visibility: hidden;
+    opacity: 0;
+    pointer-events: none;
+    transition: opacity 0.2s ease, visibility 0.2s ease;
+    z-index: 1100;
+}
+
+.chat-image-lightbox--visible {
+    visibility: visible;
+    opacity: 1;
+    pointer-events: auto;
+}
+
+.chat-image-lightbox__backdrop {
+    position: absolute;
+    inset: 0;
+    background: rgba(15, 23, 42, 0.78);
+}
+
+.chat-image-lightbox__body {
+    position: relative;
+    display: flex;
+    flex-direction: column;
+    gap: 12px;
+    max-width: min(92vw, 960px);
+    max-height: 90vh;
+    padding: 20px;
+    border-radius: 14px;
+    background: rgba(17, 24, 39, 0.96);
+    box-shadow: 0 24px 60px rgba(15, 23, 42, 0.55);
+    overflow: hidden;
+}
+
+.chat-image-lightbox__image {
+    max-width: 85vw;
+    max-height: 70vh;
+    object-fit: contain;
+    border-radius: 12px;
+    background: #0f172a;
+}
+
+.chat-image-lightbox__caption {
+    font-size: 0.9rem;
+    color: #e2e8f0;
+    text-align: center;
+    word-break: break-word;
+}
+
+.chat-image-lightbox__close {
+    position: absolute;
+    top: 10px;
+    right: 12px;
+    border: none;
+    background: transparent;
+    color: #f8fafc;
+    font-size: 1.75rem;
+    line-height: 1;
+    cursor: pointer;
+    padding: 6px;
+    transition: transform 0.18s ease;
+}
+
+.chat-image-lightbox__close:hover {
+    transform: scale(1.1);
+}
+
+.chat-image-lightbox__close:focus-visible {
+    outline: 2px solid #6366f1;
+    outline-offset: 3px;
 }
 
 .chat-message--pending .chat-message__meta::after {

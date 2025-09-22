@@ -1,6 +1,7 @@
 (function () {
     const FETCH_INTERVAL_MS = 2500;
     const MAX_MESSAGES = 100;
+    let escapeListenerAttached = false;
 
     function initChatPanel(isGM, currentUser) {
         const panel = document.getElementById('chat-panel');
@@ -21,6 +22,8 @@
         let fetchInProgress = false;
         let latestServerTimestamp = '';
         let messages = [];
+        let lightboxElements = null;
+        let lastFocusedBeforeLightbox = null;
 
         const existingMessages = messageList.dataset.initialMessages;
         if (existingMessages) {
@@ -99,6 +102,117 @@
             }
         }
 
+        function closeImageLightbox() {
+            if (!lightboxElements) {
+                return;
+            }
+
+            const { overlay, image, caption } = lightboxElements;
+            if (!overlay.classList.contains('chat-image-lightbox--visible')) {
+                return;
+            }
+
+            overlay.classList.remove('chat-image-lightbox--visible');
+            overlay.setAttribute('aria-hidden', 'true');
+            image.src = '';
+            image.alt = '';
+            caption.textContent = '';
+            caption.hidden = true;
+
+            if (lastFocusedBeforeLightbox && typeof lastFocusedBeforeLightbox.focus === 'function') {
+                lastFocusedBeforeLightbox.focus();
+            }
+
+            lastFocusedBeforeLightbox = null;
+        }
+
+        function ensureImageLightbox() {
+            if (lightboxElements) {
+                return lightboxElements;
+            }
+
+            const overlay = document.createElement('div');
+            overlay.className = 'chat-image-lightbox';
+            overlay.setAttribute('aria-hidden', 'true');
+            overlay.setAttribute('role', 'dialog');
+            overlay.setAttribute('aria-modal', 'true');
+
+            const backdrop = document.createElement('div');
+            backdrop.className = 'chat-image-lightbox__backdrop';
+
+            const body = document.createElement('div');
+            body.className = 'chat-image-lightbox__body';
+
+            const closeButton = document.createElement('button');
+            closeButton.type = 'button';
+            closeButton.className = 'chat-image-lightbox__close';
+            closeButton.setAttribute('aria-label', 'Close image preview');
+            closeButton.innerHTML = '&times;';
+
+            const image = document.createElement('img');
+            image.className = 'chat-image-lightbox__image';
+            image.alt = '';
+
+            const caption = document.createElement('div');
+            caption.className = 'chat-image-lightbox__caption';
+
+            body.appendChild(closeButton);
+            body.appendChild(image);
+            body.appendChild(caption);
+
+            overlay.appendChild(backdrop);
+            overlay.appendChild(body);
+
+            overlay.addEventListener('click', (event) => {
+                if (event.target === overlay) {
+                    closeImageLightbox();
+                }
+            });
+
+            backdrop.addEventListener('click', closeImageLightbox);
+            closeButton.addEventListener('click', closeImageLightbox);
+
+            document.body.appendChild(overlay);
+
+            lightboxElements = { overlay, image, caption, closeButton };
+            return lightboxElements;
+        }
+
+        function openImageLightbox(src, altText, captionText) {
+            if (!src) {
+                return;
+            }
+
+            const elements = ensureImageLightbox();
+            const { overlay, image, caption, closeButton } = elements;
+
+            image.src = src;
+            image.alt = altText || '';
+
+            if (captionText) {
+                caption.textContent = captionText;
+                caption.hidden = false;
+            } else {
+                caption.textContent = '';
+                caption.hidden = true;
+            }
+
+            overlay.classList.add('chat-image-lightbox--visible');
+            overlay.setAttribute('aria-hidden', 'false');
+
+            lastFocusedBeforeLightbox = document.activeElement;
+            closeButton.focus();
+        }
+
+        if (!escapeListenerAttached) {
+            document.addEventListener('keydown', (event) => {
+                if (event.key === 'Escape') {
+                    closeImageLightbox();
+                }
+            });
+            escapeListenerAttached = true;
+        }
+
         function createMessageElement(message) {
             const wrapper = document.createElement('div');
             wrapper.className = 'chat-message';
@@ -136,12 +250,22 @@
                 imageLink.href = message.imageUrl;
                 imageLink.target = '_blank';
                 imageLink.rel = 'noopener noreferrer';
+                imageLink.className = 'chat-message__image-link';
 
                 const image = document.createElement('img');
                 image.className = 'chat-message__image';
                 image.src = message.imageUrl;
                 image.alt = message.message || 'Shared image';
                 image.loading = 'lazy';
+                image.decoding = 'async';
+
+                const handleImageInteraction = (event) => {
+                    event.preventDefault();
+                    openImageLightbox(message.imageUrl, image.alt, message.message);
+                };
+
+                image.addEventListener('click', handleImageInteraction);
+                imageLink.addEventListener('click', handleImageInteraction);
 
                 imageLink.appendChild(image);
                 body.appendChild(imageLink);
