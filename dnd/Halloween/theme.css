@@ -6,6 +6,7 @@ body.halloween-theme {
     color: #fbead2;
     position: relative;
     overflow-x: hidden;
+    cursor: url('data:image/svg+xml,%3Csvg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24"%3E%3Cpath fill="%23ff8c1a" stroke="%23b45309" stroke-width="1.5" stroke-linejoin="round" d="M3 2l6.4 18L12 15l5.5 5.5l2.2-2.2L14 13l7-4.1z"/%3E%3C/svg%3E') 2 2, auto;
 }
 
 body.halloween-theme::before {
@@ -424,7 +425,7 @@ body.halloween-theme .halloween-jumpscare-overlay {
     display: flex;
     align-items: center;
     justify-content: center;
-    background: rgba(0, 0, 0, 0.85);
+    background: transparent;
     pointer-events: none;
 }
 
@@ -434,7 +435,72 @@ body.halloween-theme .halloween-jumpscare-overlay img {
     width: auto;
     height: auto;
     object-fit: contain;
-    box-shadow: 0 0 45px rgba(0, 0, 0, 0.85);
+    filter: drop-shadow(0 0 32px rgba(0, 0, 0, 0.8));
+}
+
+body.halloween-theme .halloween-bat {
+    position: fixed;
+    top: 50%;
+    left: 50%;
+    width: clamp(90px, 14vw, 260px);
+    pointer-events: none;
+    transform-origin: center;
+    z-index: 9998;
+    opacity: 0;
+    animation-duration: var(--bat-flight-duration, 6s);
+    animation-timing-function: ease-out;
+    animation-fill-mode: forwards;
+}
+
+body.halloween-theme .halloween-bat img {
+    width: 100%;
+    height: auto;
+    display: block;
+    filter: drop-shadow(0 0 26px rgba(255, 153, 0, 0.45));
+}
+
+body.halloween-theme .halloween-bat.from-left {
+    animation-name: halloween-bat-flight-left;
+}
+
+body.halloween-theme .halloween-bat.from-right {
+    animation-name: halloween-bat-flight-right;
+}
+
+@keyframes halloween-bat-flight-left {
+    0% {
+        transform: translate(-160%, -120%) scale(0.14);
+        opacity: 0;
+    }
+    35% {
+        opacity: 0.85;
+    }
+    70% {
+        transform: translate(-80%, -60%) scale(1.45);
+        opacity: 1;
+    }
+    100% {
+        transform: translate(-50%, -50%) scale(3.1);
+        opacity: 1;
+    }
+}
+
+@keyframes halloween-bat-flight-right {
+    0% {
+        transform: translate(260%, -130%) scale(0.14);
+        opacity: 0;
+    }
+    35% {
+        opacity: 0.85;
+    }
+    70% {
+        transform: translate(60%, -60%) scale(1.45);
+        opacity: 1;
+    }
+    100% {
+        transform: translate(-50%, -50%) scale(3.1);
+        opacity: 1;
+    }
 }
 
 body.halloween-theme.halloween-theme-active .nav-title {
