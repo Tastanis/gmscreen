@@ -1,16 +1,35 @@
 (function () {
     const MIN_RAGE_INTERVAL = 15000;
     const MAX_RAGE_INTERVAL = 28000;
-    const BUNNY_INTERVAL = 30000;
-    const INITIAL_BUNNY_MIN_DELAY = 1500;
-    const INITIAL_BUNNY_MAX_DELAY = 5000;
+    const BUNNY_INTERVAL_MIN = 170000;
+    const BUNNY_INTERVAL_MAX = 190000;
+    const INITIAL_BUNNY_WINDOW = 5000;
+    const INITIAL_BUNNY_COUNT_MIN = 4;
+    const INITIAL_BUNNY_COUNT_MAX = 5;
+    const RECURRING_BUNNY_COUNT_MIN = 1;
+    const RECURRING_BUNNY_COUNT_MAX = 2;
+    const BUNNY_WAVE_SPREAD = 900;
+    const BUNNY_BOTTOM_MIN_REM = 1.5;
+    const BUNNY_BOTTOM_MAX_REM = 6.5;
 
     let rageTimer = null;
-    let bunnyTimer = null;
+    const bunnyTimers = new Set();
     let active = false;
 
     function randomBetween(min, max) {
         return Math.floor(Math.random() * (max - min + 1)) + min;
+    }
+
+    function randomBetweenFloat(min, max) {
+        return Math.random() * (max - min) + min;
+    }
+
+    function managedTimeout(callback, delay) {
+        const timerId = window.setTimeout(() => {
+            bunnyTimers.delete(timerId);
+            callback();
+        }, delay);
+        bunnyTimers.add(timerId);
     }
 
     function removeRageClass(target) {
@@ -52,6 +71,13 @@
         });
     }
 
+    function scheduleBunnyWave(count) {
+        for (let index = 0; index < count; index += 1) {
+            const offset = Math.floor(Math.random() * Math.max(1, BUNNY_WAVE_SPREAD));
+            managedTimeout(spawnBunny, offset);
+        }
+    }
+
     function spawnBunny() {
         if (!active) {
             return;
@@ -59,6 +85,8 @@
 
         const bunny = document.createElement('div');
         bunny.className = 'frunk-bunny';
+        const randomBottom = randomBetweenFloat(BUNNY_BOTTOM_MIN_REM, BUNNY_BOTTOM_MAX_REM);
+        bunny.style.bottom = `${randomBottom.toFixed(2)}rem`;
         document.body.appendChild(bunny);
 
         const handleAnimationEnd = () => {
@@ -67,20 +95,37 @@
         };
 
         bunny.addEventListener('animationend', handleAnimationEnd);
-
-        scheduleNextBunny();
     }
 
-    function scheduleNextBunny(initial = false) {
+    function scheduleRecurringBunnies() {
         if (!active) {
             return;
         }
 
-        const delay = initial
-            ? randomBetween(INITIAL_BUNNY_MIN_DELAY, INITIAL_BUNNY_MAX_DELAY)
-            : BUNNY_INTERVAL;
+        const delay = randomBetween(BUNNY_INTERVAL_MIN, BUNNY_INTERVAL_MAX);
+        managedTimeout(() => {
+            if (!active) {
+                return;
+            }
+            const count = randomBetween(RECURRING_BUNNY_COUNT_MIN, RECURRING_BUNNY_COUNT_MAX);
+            scheduleBunnyWave(count);
+            scheduleRecurringBunnies();
+        }, delay);
+    }
 
-        bunnyTimer = window.setTimeout(spawnBunny, delay);
+    function scheduleInitialBunnies() {
+        if (!active) {
+            return;
+        }
+
+        const bunnyCount = randomBetween(INITIAL_BUNNY_COUNT_MIN, INITIAL_BUNNY_COUNT_MAX);
+        const baseSpacing = INITIAL_BUNNY_WINDOW / Math.max(1, bunnyCount);
+
+        for (let index = 0; index < bunnyCount; index += 1) {
+            const jitter = Math.floor(Math.random() * (baseSpacing / 2));
+            const delay = Math.floor(index * baseSpacing + jitter);
+            managedTimeout(spawnBunny, delay);
+        }
     }
 
     function enableRage() {
@@ -89,7 +134,8 @@
         }
         active = true;
         scheduleNextRage();
-        scheduleNextBunny(true);
+        scheduleInitialBunnies();
+        scheduleRecurringBunnies();
     }
 
     function disableRage() {
@@ -101,10 +147,10 @@
             clearTimeout(rageTimer);
             rageTimer = null;
         }
-        if (bunnyTimer) {
-            clearTimeout(bunnyTimer);
-            bunnyTimer = null;
-        }
+        bunnyTimers.forEach(timerId => {
+            clearTimeout(timerId);
+        });
+        bunnyTimers.clear();
         removeRageClass(document.querySelector('.nav-title'));
         removeRageClass(document.getElementById('theme-toggle-btn'));
         removeBunnyElements();
