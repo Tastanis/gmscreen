@@ -11,6 +11,7 @@
         const form = document.getElementById('chat-input-form');
         const textarea = document.getElementById('chat-input');
         const sendButton = document.getElementById('chat-send-btn');
+        const clearButton = document.getElementById('chat-clear-btn');
         const dropTarget = document.getElementById('chat-drop-target');
 
         if (!panel || !toggleButton || !messageList || !form || !textarea || !sendButton) {
@@ -680,6 +681,42 @@
             }
         }
 
+        async function requestChatClear() {
+            if (!isGM) {
+                throw new Error('Only the GM can clear the chat.');
+            }
+
+            const params = new URLSearchParams();
+            params.append('action', 'chat_clear');
+
+            const response = await fetch('chat_handler.php', {
+                method: 'POST',
+                headers: {
+                    'Content-Type': 'application/x-www-form-urlencoded'
+                },
+                body: params.toString()
+            });
+
+            if (!response.ok) {
+                throw new Error('Failed to clear chat history.');
+            }
+
+            const data = await response.json();
+            if (!data || !data.success) {
+                throw new Error((data && data.error) || 'Failed to clear chat history.');
+            }
+
+            messages = [];
+            latestServerTimestamp = '';
+            if (messageList && messageList.dataset) {
+                messageList.dataset.initialMessages = '[]';
+            }
+
+            renderMessages();
+            showChatToast('Chat history cleared.', 'success');
+            return true;
+        }
+
         async function handleSend(event) {
             event.preventDefault();
             const text = textarea.value.trim();
@@ -959,6 +996,24 @@
             showChatToast('Only image files or image links can be dropped into chat.', 'error');
         });
 
+        if (isGM && clearButton) {
+            clearButton.addEventListener('click', async () => {
+                const confirmed = window.confirm('Are you sure you want to clear the entire chat history? This cannot be undone.');
+                if (!confirmed) {
+                    return;
+                }
+
+                clearButton.disabled = true;
+                try {
+                    await requestChatClear();
+                } catch (error) {
+                    showChatToast(error.message || 'Failed to clear chat history.', 'error');
+                } finally {
+                    clearButton.disabled = false;
+                }
+            });
+        }
+
         toggleButton.addEventListener('click', () => {
             setOpen(!isOpen);
         });
@@ -979,6 +1034,7 @@
             sendMessage: sendChatMessage,
             updateFromServer: updateMessageFromServer,
             isGM,
+            clearHistory: requestChatClear,
             getMessages() {
                 return [...messages];
             }

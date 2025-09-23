@@ -1368,7 +1368,12 @@ $defaultInventoryTab = $is_gm ? 'frunk' : $user;
         <div id="chat-panel" class="chat-panel chat-panel--closed" aria-hidden="true">
             <div class="chat-panel__header">
                 <h3 class="chat-panel__title">Table Chat</h3>
-                <button type="button" id="chat-panel-close" class="chat-panel__close" aria-label="Close chat">&times;</button>
+                <div class="chat-panel__actions">
+                    <?php if ($is_gm): ?>
+                        <button type="button" id="chat-clear-btn" class="chat-panel__clear">Clear Chat</button>
+                    <?php endif; ?>
+                    <button type="button" id="chat-panel-close" class="chat-panel__close" aria-label="Close chat">&times;</button>
+                </div>
             </div>
             <div id="chat-message-list" class="chat-panel__history" role="log" aria-live="polite"></div>
             <form id="chat-input-form" class="chat-panel__input" autocomplete="off">
