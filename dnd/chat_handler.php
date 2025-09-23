@@ -32,6 +32,10 @@ if (PHP_SAPI !== 'cli') {
             handleRollStatusUpdate($chatDataFile);
             break;
 
+        case 'clear':
+            handleChatClear($chatDataFile);
+            break;
+
         default:
             echo json_encode(['success' => false, 'error' => 'Invalid chat action']);
             exit;
@@ -457,6 +461,22 @@ function handleChatFetch($dataFile) {
         'messages' => $filtered,
         'latest' => $latest
     ]);
+    exit;
+}
+
+function handleChatClear($dataFile)
+{
+    if (!isset($_SESSION['user']) || $_SESSION['user'] !== 'GM') {
+        echo json_encode(['success' => false, 'error' => 'Only the GM can clear the chat history.']);
+        exit;
+    }
+
+    if (!saveChatMessages($dataFile, [])) {
+        echo json_encode(['success' => false, 'error' => 'Failed to clear chat history.']);
+        exit;
+    }
+
+    echo json_encode(['success' => true]);
     exit;
 }
 
