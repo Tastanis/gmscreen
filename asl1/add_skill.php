@@ -21,6 +21,11 @@ $skill_name = trim($_POST['skill_name'] ?? '');
 $skill_description = trim($_POST['skill_description'] ?? '');
 $unit = trim($_POST['unit'] ?? '');
 $resources_text = trim($_POST['resources'] ?? '');
+$asl_level = intval($_POST['asl_level'] ?? 1);
+
+if (!in_array($asl_level, [1, 2, 3], true)) {
+    $asl_level = 1;
+}
 
 // Validate required fields
 if (empty($skill_name)) {
@@ -46,11 +51,11 @@ try {
     
     // Insert the new skill
     $stmt = $pdo->prepare("
-        INSERT INTO skills (skill_name, skill_description, unit, points_not_started, points_progressing, points_proficient, order_index) 
-        VALUES (?, ?, ?, 0, 1, 3, ?)
+        INSERT INTO skills (skill_name, skill_description, unit, points_not_started, points_progressing, points_proficient, order_index, asl_level)
+        VALUES (?, ?, ?, 0, 1, 3, ?, ?)
     ");
     $unit_value = empty($unit) ? null : $unit;
-    $stmt->execute([$skill_name, $skill_description, $unit_value, $next_order]);
+    $stmt->execute([$skill_name, $skill_description, $unit_value, $next_order, $asl_level]);
     
     $skill_id = $pdo->lastInsertId();
     

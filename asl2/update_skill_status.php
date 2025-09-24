@@ -25,6 +25,11 @@ if (!isset($_POST['skill_id']) || !isset($_POST['status'])) {
 
 $skill_id = intval($_POST['skill_id']);
 $status = $_POST['status'];
+$user_level = intval($_SESSION['user_level'] ?? 2);
+
+if (!in_array($user_level, [1, 2], true)) {
+    $user_level = 2;
+}
 
 // Validate status
 if (!in_array($status, ['not_started', 'progressing', 'proficient'])) {
@@ -35,8 +40,8 @@ if (!in_array($status, ['not_started', 'progressing', 'proficient'])) {
 
 try {
     // Check if the skill exists
-    $stmt = $pdo->prepare("SELECT id FROM skills WHERE id = ?");
-    $stmt->execute([$skill_id]);
+    $stmt = $pdo->prepare("SELECT id FROM skills WHERE id = ? AND (asl_level = ? OR asl_level = 3)");
+    $stmt->execute([$skill_id, $user_level]);
     if (!$stmt->fetch()) {
         http_response_code(404);
         echo json_encode(['success' => false, 'message' => 'Skill not found']);
@@ -63,8 +68,9 @@ try {
             SUM(s.points_proficient) as total_possible_points
         FROM skills s
         LEFT JOIN user_skills us ON s.id = us.skill_id AND us.user_id = ?
+        WHERE s.asl_level = ? OR s.asl_level = 3
     ");
-    $stmt->execute([$_SESSION['user_id']]);
+    $stmt->execute([$_SESSION['user_id'], $user_level]);
     $progress = $stmt->fetch();
     
     $earned_points = $progress['earned_points'] ?? 0;
