@@ -18,6 +18,8 @@ class DashboardDiceRoller {
         this.rollButton = null;
         this.projectRollButton = null;
         this.clearButton = null;
+        this.advantageToggleButton = null;
+        this.advantageEnabled = false;
 
         this.projectPromptState = {
             active: false,
@@ -31,7 +33,12 @@ class DashboardDiceRoller {
                 active: false,
                 offsetX: 0,
                 offsetY: 0
-            }
+            },
+            confirmButton: null,
+            manualEntryActive: false,
+            manualInput: null,
+            manualEntryContainer: null,
+            manualToggleButton: null
         };
 
         this.handleProjectSelection = (event) => this.onProjectSelected(event);
@@ -168,6 +175,13 @@ class DashboardDiceRoller {
         const actions = document.createElement('div');
         actions.className = 'dice-actions';
 
+        const advantageToggle = document.createElement('button');
+        advantageToggle.type = 'button';
+        advantageToggle.className = 'dice-advantage-toggle';
+        advantageToggle.textContent = 'Advantage: Off';
+        advantageToggle.setAttribute('aria-pressed', 'false');
+        advantageToggle.addEventListener('click', () => this.toggleAdvantage());
+
         const rollBtn = document.createElement('button');
         rollBtn.type = 'button';
         rollBtn.className = 'dice-roll-btn';
@@ -189,6 +203,7 @@ class DashboardDiceRoller {
         this.rollButton = rollBtn;
         this.clearButton = clearBtn;
         this.projectRollButton = projectBtn;
+        this.advantageToggleButton = advantageToggle;
 
         this.resultLabel = document.createElement('div');
         this.resultLabel.className = 'dice-result';
@@ -204,11 +219,30 @@ class DashboardDiceRoller {
         this.resultLabel.appendChild(this.resultTotal);
         this.resultLabel.appendChild(this.resultDetail);
 
+        actions.appendChild(advantageToggle);
         actions.appendChild(rollBtn);
         actions.appendChild(clearBtn);
         actions.appendChild(projectBtn);
         actions.appendChild(this.resultLabel);
         return actions;
+    }
+
+    toggleAdvantage() {
+        this.advantageEnabled = !this.advantageEnabled;
+
+        if (!this.advantageToggleButton) {
+            return;
+        }
+
+        if (this.advantageEnabled) {
+            this.advantageToggleButton.classList.add('dice-advantage-toggle--active');
+            this.advantageToggleButton.textContent = 'Advantage: On';
+            this.advantageToggleButton.setAttribute('aria-pressed', 'true');
+        } else {
+            this.advantageToggleButton.classList.remove('dice-advantage-toggle--active');
+            this.advantageToggleButton.textContent = 'Advantage: Off';
+            this.advantageToggleButton.setAttribute('aria-pressed', 'false');
+        }
     }
 
     setStandardRollControlsVisible(shouldShow) {
@@ -301,7 +335,21 @@ class DashboardDiceRoller {
         const nameInputValue = this.projectPromptState.nameInput && typeof this.projectPromptState.nameInput.value === 'string'
             ? this.projectPromptState.nameInput.value.trim()
             : '';
+        const manualValue = this.projectPromptState.manualInput && typeof this.projectPromptState.manualInput.value === 'string'
+            ? this.projectPromptState.manualInput.value.trim()
+            : '';
         const projectName = nameInputValue || this.projectPromptState.selectedName;
+
+        if (this.projectPromptState.manualEntryActive) {
+            if (manualValue === '') {
+                this.projectPromptState.message.textContent = 'Enter the result value you want to submit.';
+            } else if (projectName) {
+                this.projectPromptState.message.textContent = `Manual result ready for ${projectName}.`;
+            } else {
+                this.projectPromptState.message.textContent = 'Manual result ready. Select a project to attach it to.';
+            }
+            return;
+        }
 
         if (projectName) {
             if (this.currentRollQueue.length === 0) {
@@ -362,14 +410,106 @@ class DashboardDiceRoller {
         };
     }
 
+    resolveCurrentRollResult() {
+        const baseRoll = this.performRoll();
+        if (!baseRoll) {
+            return null;
+        }
+
+        if (!this.advantageEnabled) {
+            baseRoll.advantage = { active: false };
+            return baseRoll;
+        }
+
+        const secondRoll = this.performRoll();
+        if (!secondRoll) {
+            baseRoll.advantage = { active: false };
+            return baseRoll;
+        }
+
+        const attempts = [baseRoll, secondRoll];
+        const keptIndex = attempts[0].total >= attempts[1].total ? 0 : 1;
+        const keptRoll = {
+            ...attempts[keptIndex],
+            components: Array.isArray(attempts[keptIndex].components)
+                ? [...attempts[keptIndex].components]
+                : attempts[keptIndex].components,
+            breakdown: Array.isArray(attempts[keptIndex].breakdown)
+                ? attempts[keptIndex].breakdown.map((entry) => {
+                    if (!entry || typeof entry !== 'object') {
+                        return entry;
+                    }
+
+                    const cloned = { ...entry };
+                    if (Array.isArray(entry.rolls)) {
+                        cloned.rolls = [...entry.rolls];
+                    }
+                    return cloned;
+                })
+                : attempts[keptIndex].breakdown
+        };
+
+        keptRoll.advantage = {
+            active: true,
+            keptIndex,
+            attempts: attempts.map((roll, index) => ({
+                index,
+                total: roll.total,
+                expression: roll.expression
+            }))
+        };
+
+        return keptRoll;
+    }
+
     updateResultDisplay(rollResult) {
         if (!this.resultTotal || !this.resultDetail || !rollResult) {
             return;
         }
 
-        this.resultTotal.textContent = `Result: ${rollResult.total}`;
+        const isManual = rollResult.manualEntry && rollResult.manualEntry.active;
+        const hasAdvantage = rollResult.advantage && rollResult.advantage.active;
+        const resultLabel = isManual
+            ? 'Manual Result'
+            : hasAdvantage
+                ? 'Result (Advantage)'
+                : 'Result';
+
+        this.resultTotal.textContent = `${resultLabel}: ${rollResult.total}`;
 
         const detailParts = [];
+        if (hasAdvantage) {
+            const attempts = Array.isArray(rollResult.advantage.attempts)
+                ? rollResult.advantage.attempts
+                : [];
+            const keptIndex = typeof rollResult.advantage.keptIndex === 'number'
+                ? rollResult.advantage.keptIndex
+                : 0;
+
+            if (attempts.length > 0) {
+                const attemptSummary = attempts
+                    .map((attempt, index) => {
+                        const total = typeof attempt.total === 'number' ? attempt.total : '?';
+                        return `#${index + 1}: ${total}`;
+                    })
+                    .join(', ');
+                const keptAttempt = attempts[keptIndex];
+                const keptTotal = keptAttempt && typeof keptAttempt.total === 'number'
+                    ? keptAttempt.total
+                    : rollResult.total;
+                detailParts.push(`Advantage applied (kept #${keptIndex + 1}: ${keptTotal}). Rolls ${attemptSummary}.`);
+            } else {
+                detailParts.push('Advantage applied: best of two rolls kept.');
+            }
+        }
+
+        if (isManual) {
+            const manualValue = rollResult.manualEntry && typeof rollResult.manualEntry.value !== 'undefined'
+                ? rollResult.manualEntry.value
+                : rollResult.total;
+            detailParts.push(`Manual result entered (${manualValue}).`);
+        }
+
         if (Array.isArray(rollResult.breakdown)) {
             rollResult.breakdown.forEach((entry) => {
                 if (!entry) {
@@ -405,9 +545,14 @@ class DashboardDiceRoller {
         }
 
         const expression = rollResult.expression || (Array.isArray(rollResult.components) ? rollResult.components.join(' ') : '');
+        const descriptor = rollResult.manualEntry && rollResult.manualEntry.active
+            ? ' (Manual)'
+            : rollResult.advantage && rollResult.advantage.active
+                ? ' (Advantage)'
+                : '';
         const fallbackMessage = type === 'project_roll' && payload.projectName
-            ? `Project roll for ${payload.projectName}: ${rollResult.total}`
-            : `Dice roll (${expression}): ${rollResult.total}`;
+            ? `Project roll for ${payload.projectName}${descriptor}: ${rollResult.total}`
+            : `Dice roll${descriptor} (${expression}): ${rollResult.total}`;
 
         const maybePromise = window.dashboardChat.sendMessage({
             message: fallbackMessage,
@@ -431,7 +576,7 @@ class DashboardDiceRoller {
         }
 
         try {
-            const rollResult = this.performRoll();
+            const rollResult = this.resolveCurrentRollResult();
             if (!rollResult) {
                 return;
             }
@@ -569,10 +714,37 @@ class DashboardDiceRoller {
         this.projectPromptState.selectedName = '';
         this.projectPromptState.hasCustomPosition = false;
 
-        const nameInput = prompt.querySelector('input');
+        const nameInput = prompt.querySelector('.project-roll-prompt__input:not(.project-roll-prompt__input--manual)');
+        const manualInput = prompt.querySelector('.project-roll-prompt__input--manual');
+        const manualEntryContainer = prompt.querySelector('.project-roll-prompt__manual-entry');
+        const manualToggleButton = prompt.querySelector('.project-roll-prompt__btn--manual');
+        const confirmButton = prompt.querySelector('.project-roll-prompt__btn--confirm');
         const message = prompt.querySelector('.project-roll-prompt__message');
         this.projectPromptState.nameInput = nameInput;
         this.projectPromptState.message = message;
+        this.projectPromptState.manualInput = manualInput;
+        this.projectPromptState.manualEntryContainer = manualEntryContainer;
+        this.projectPromptState.manualToggleButton = manualToggleButton;
+        this.projectPromptState.confirmButton = confirmButton;
+        this.projectPromptState.manualEntryActive = false;
+
+        if (manualEntryContainer) {
+            manualEntryContainer.style.display = 'none';
+        }
+
+        if (manualInput) {
+            manualInput.value = '';
+        }
+
+        if (manualToggleButton) {
+            manualToggleButton.classList.remove('project-roll-prompt__btn--manual-active');
+            manualToggleButton.setAttribute('aria-pressed', 'false');
+            manualToggleButton.textContent = 'Manual Result';
+        }
+
+        if (confirmButton) {
+            confirmButton.textContent = 'Roll Project';
+        }
 
         document.addEventListener('click', this.handleProjectSelection, true);
 
@@ -613,6 +785,11 @@ class DashboardDiceRoller {
         this.projectPromptState.selectedIndex = null;
         this.projectPromptState.selectedName = '';
         this.projectPromptState.hasCustomPosition = false;
+        this.projectPromptState.manualEntryActive = false;
+        this.projectPromptState.manualInput = null;
+        this.projectPromptState.manualEntryContainer = null;
+        this.projectPromptState.manualToggleButton = null;
+        this.projectPromptState.confirmButton = null;
         this.projectPromptState.drag.active = false;
 
         this.setStandardRollControlsVisible(true);
@@ -648,8 +825,37 @@ class DashboardDiceRoller {
         message.className = 'project-roll-prompt__message';
         message.textContent = 'Click a project to fill its name automatically.';
 
+        const manualEntryContainer = document.createElement('div');
+        manualEntryContainer.className = 'project-roll-prompt__manual-entry';
+        manualEntryContainer.style.display = 'none';
+
+        const manualLabel = document.createElement('label');
+        manualLabel.className = 'project-roll-prompt__label project-roll-prompt__label--manual';
+        manualLabel.textContent = 'Manual Result';
+
+        const manualInputId = `project-roll-manual-result-${Date.now()}`;
+
+        const manualInput = document.createElement('input');
+        manualInput.type = 'number';
+        manualInput.className = 'project-roll-prompt__input project-roll-prompt__input--manual';
+        manualInput.placeholder = 'Enter a result (e.g. 12)';
+        manualInput.id = manualInputId;
+        manualInput.addEventListener('input', () => this.updateProjectPromptStatusMessage());
+
+        manualLabel.setAttribute('for', manualInputId);
+
+        manualEntryContainer.appendChild(manualLabel);
+        manualEntryContainer.appendChild(manualInput);
+
         const actions = document.createElement('div');
         actions.className = 'project-roll-prompt__actions';
+
+        const manualBtn = document.createElement('button');
+        manualBtn.type = 'button';
+        manualBtn.className = 'project-roll-prompt__btn project-roll-prompt__btn--manual';
+        manualBtn.textContent = 'Manual Result';
+        manualBtn.setAttribute('aria-pressed', 'false');
+        manualBtn.addEventListener('click', () => this.toggleManualProjectResult());
 
         const rollBtn = document.createElement('button');
         rollBtn.type = 'button';
@@ -663,6 +869,7 @@ class DashboardDiceRoller {
         cancelBtn.textContent = 'Cancel';
         cancelBtn.addEventListener('click', () => this.closeProjectPrompt());
 
+        actions.appendChild(manualBtn);
         actions.appendChild(rollBtn);
         actions.appendChild(cancelBtn);
 
@@ -671,9 +878,45 @@ class DashboardDiceRoller {
         prompt.appendChild(nameLabel);
         prompt.appendChild(nameInput);
         prompt.appendChild(message);
+        prompt.appendChild(manualEntryContainer);
         prompt.appendChild(actions);
 
         return prompt;
+    }
+
+    toggleManualProjectResult() {
+        if (!this.projectPromptState.active) {
+            return;
+        }
+
+        const nextState = !this.projectPromptState.manualEntryActive;
+        this.projectPromptState.manualEntryActive = nextState;
+
+        const { manualEntryContainer, manualToggleButton, manualInput, confirmButton } = this.projectPromptState;
+
+        if (manualEntryContainer) {
+            manualEntryContainer.style.display = nextState ? '' : 'none';
+        }
+
+        if (manualToggleButton) {
+            manualToggleButton.classList.toggle('project-roll-prompt__btn--manual-active', nextState);
+            manualToggleButton.setAttribute('aria-pressed', nextState ? 'true' : 'false');
+            manualToggleButton.textContent = nextState ? 'Manual Result On' : 'Manual Result';
+        }
+
+        if (confirmButton) {
+            confirmButton.textContent = nextState ? 'Submit Result' : 'Roll Project';
+        }
+
+        if (!nextState && manualInput) {
+            manualInput.value = '';
+        }
+
+        this.updateProjectPromptStatusMessage();
+
+        if (nextState && manualInput) {
+            manualInput.focus();
+        }
     }
 
     onProjectSelected(event) {
@@ -762,13 +1005,61 @@ class DashboardDiceRoller {
             return;
         }
 
+        const manualActive = this.projectPromptState.manualEntryActive;
+        const manualInput = this.projectPromptState.manualInput;
+        const manualValueRaw = manualActive && manualInput && typeof manualInput.value === 'string'
+            ? manualInput.value.trim()
+            : '';
+
+        if (manualActive) {
+            if (manualValueRaw === '') {
+                this.updateProjectPromptStatusMessage('Enter the result value you want to submit.');
+                return;
+            }
+
+            const manualValue = Number(manualValueRaw);
+            if (!Number.isFinite(manualValue)) {
+                this.updateProjectPromptStatusMessage('Please enter a valid number for the manual result.');
+                return;
+            }
+
+            const manualRollResult = {
+                total: manualValue,
+                components: [],
+                breakdown: [],
+                expression: `Manual: ${manualValue}`,
+                manualEntry: {
+                    active: true,
+                    value: manualValue
+                },
+                advantage: { active: false }
+            };
+
+            this.updateResultDisplay(manualRollResult);
+            this.currentRollQueue = [];
+            this.updateQueueDisplay();
+
+            const projectName = providedName || this.projectPromptState.selectedName || `Project ${projectIndex + 1}`;
+            const characterId = typeof window.currentCharacter === 'string' ? window.currentCharacter : '';
+
+            this.publishRollToChat('project_roll', manualRollResult, {
+                projectName,
+                projectIndex,
+                characterId,
+                status: 'pending'
+            });
+
+            this.closeProjectPrompt();
+            return;
+        }
+
         if (this.currentRollQueue.length === 0) {
             this.updateProjectPromptStatusMessage('Please add dice to the roll before continuing.');
             return;
         }
 
         try {
-            const rollResult = this.performRoll();
+            const rollResult = this.resolveCurrentRollResult();
             if (!rollResult) {
                 this.updateProjectPromptStatusMessage('Please add dice to the roll before continuing.');
                 return;
