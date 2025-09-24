@@ -14,10 +14,16 @@ if (isset($_SESSION['is_teacher']) && $_SESSION['is_teacher']) {
     exit;
 }
 
+// Determine the user's ASL level (default to 1 if not set)
+$user_level = intval($_SESSION['user_level'] ?? 1);
+if (!in_array($user_level, [1, 2], true)) {
+    $user_level = 1;
+}
+
 // Get all skills with user's progress
 try {
     $stmt = $pdo->prepare("
-        SELECT 
+        SELECT
             s.id,
             s.skill_name,
             s.skill_description,
@@ -25,17 +31,19 @@ try {
             s.points_not_started,
             s.points_progressing,
             s.points_proficient,
+            s.asl_level,
             COALESCE(us.status, 'not_started') as user_status
         FROM skills s
         LEFT JOIN user_skills us ON s.id = us.skill_id AND us.user_id = ?
+        WHERE s.asl_level = ? OR s.asl_level = 3
         ORDER BY s.order_index
     ");
-    $stmt->execute([$_SESSION['user_id']]);
+    $stmt->execute([$_SESSION['user_id'], $user_level]);
     $skills = $stmt->fetchAll();
-    
+
     // Get unique units for filter dropdown
-    $stmt = $pdo->prepare("SELECT DISTINCT unit FROM skills WHERE unit IS NOT NULL ORDER BY unit");
-    $stmt->execute();
+    $stmt = $pdo->prepare("SELECT DISTINCT unit FROM skills WHERE unit IS NOT NULL AND (asl_level = ? OR asl_level = 3) ORDER BY unit");
+    $stmt->execute([$user_level]);
     $units = $stmt->fetchAll(PDO::FETCH_COLUMN);
     
     // Get resources for each skill
@@ -153,10 +161,11 @@ try {
                     </div>
                     
                     <?php foreach ($skills as $skill): ?>
-                        <div class="skill-item" 
-                             id="skill-<?php echo $skill['id']; ?>" 
+                        <div class="skill-item"
+                             id="skill-<?php echo $skill['id']; ?>"
                              data-status="<?php echo $skill['user_status']; ?>"
-                             data-unit="<?php echo htmlspecialchars($skill['unit'] ?? 'no-unit'); ?>">
+                             data-unit="<?php echo htmlspecialchars($skill['unit'] ?? 'no-unit'); ?>"
+                             data-asl-level="<?php echo (int)($skill['asl_level'] ?? 3); ?>">
                             <div class="skill-header">
                                 <?php echo htmlspecialchars($skill['skill_name']); ?>
                                 <?php if (!empty($skill['unit'])): ?>

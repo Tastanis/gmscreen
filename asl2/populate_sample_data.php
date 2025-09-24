@@ -29,8 +29,8 @@ try {
     ];
     
     $skill_insert = $pdo->prepare("
-        INSERT INTO skills (skill_name, skill_description, points_not_started, points_progressing, points_proficient, order_index) 
-        VALUES (?, ?, 0, 1, 3, ?)
+        INSERT INTO skills (skill_name, skill_description, points_not_started, points_progressing, points_proficient, order_index, asl_level)
+        VALUES (?, ?, 0, 1, 3, ?, 3)
     ");
     
     $resource_insert = $pdo->prepare("

@@ -8,6 +8,11 @@ if (!isset($_SESSION['user_id'])) {
     exit;
 }
 
+$user_level = intval($_SESSION['user_level'] ?? 2);
+if (!in_array($user_level, [1, 2], true)) {
+    $user_level = 2;
+}
+
 // Redirect teachers to teacher dashboard
 if (isset($_SESSION['is_teacher']) && $_SESSION['is_teacher']) {
     header('Location: teacher_dashboard.php');
@@ -27,14 +32,14 @@ try {
 // Get user's progress
 try {
     // Get total skills count
-    $stmt = $pdo->prepare("SELECT COUNT(*) as total_skills FROM skills");
-    $stmt->execute();
+    $stmt = $pdo->prepare("SELECT COUNT(*) as total_skills FROM skills WHERE asl_level = ? OR asl_level = 3");
+    $stmt->execute([$user_level]);
     $total_skills = $stmt->fetchColumn();
-    
+
     // Get user's skill progress
     $stmt = $pdo->prepare("
-        SELECT 
-            SUM(CASE 
+        SELECT
+            SUM(CASE
                 WHEN us.status = 'not_started' THEN s.points_not_started
                 WHEN us.status = 'progressing' THEN s.points_progressing
                 WHEN us.status = 'proficient' THEN s.points_proficient
@@ -43,8 +48,9 @@ try {
             SUM(s.points_proficient) as total_possible_points
         FROM skills s
         LEFT JOIN user_skills us ON s.id = us.skill_id AND us.user_id = ?
+        WHERE s.asl_level = ? OR s.asl_level = 3
     ");
-    $stmt->execute([$_SESSION['user_id']]);
+    $stmt->execute([$_SESSION['user_id'], $user_level]);
     $progress = $stmt->fetch();
     
     $earned_points = $progress['earned_points'] ?? 0;
