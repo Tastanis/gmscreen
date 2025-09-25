@@ -24,6 +24,7 @@ CREATE TABLE IF NOT EXISTS skills (
     skill_name VARCHAR(255) NOT NULL,
     skill_description TEXT,
     unit VARCHAR(255) NULL,
+    asl_level TINYINT NOT NULL DEFAULT 3,
     points_not_started INT DEFAULT 0,
     points_progressing INT DEFAULT 1,
     points_proficient INT DEFAULT 3,
@@ -57,9 +58,9 @@ CREATE TABLE IF NOT EXISTS resources (
 );
 
 -- Insert sample skills
-INSERT INTO skills (skill_name, skill_description, order_index) VALUES
-('Skill Test 1', 'This is the first skill test for ASL students', 1),
-('Skill Test 2', 'This is the second skill test for ASL students', 2);
+INSERT INTO skills (skill_name, skill_description, order_index, asl_level) VALUES
+('Skill Test 1', 'This is the first skill test for ASL students', 1, 3),
+('Skill Test 2', 'This is the second skill test for ASL students', 2, 3);
 
 -- Insert sample resources
 INSERT INTO resources (skill_id, resource_name, resource_url, order_index) VALUES
