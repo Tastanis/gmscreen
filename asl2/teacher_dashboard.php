@@ -831,17 +831,27 @@ try {
         }
 
         function showEditWordlistModal(list) {
+            const modal = document.getElementById('edit-wordlist-modal');
             document.getElementById('edit-wordlist-id').value = list.id;
             document.getElementById('edit-wordlist-name').value = list.wordlist_name;
             document.getElementById('edit-words').value = (list.words || []).join('\n');
             document.getElementById('edit-speed').value = list.speed;
             document.getElementById('edit-word-count').value = list.word_count;
             document.getElementById('edit-asl-level').value = list.asl_level || 2;
-            document.getElementById('edit-wordlist-modal').style.display = 'block';
+
+            // Display modal with animation similar to resource modal
+            modal.style.display = 'flex';
+            requestAnimationFrame(() => modal.classList.add('active'));
+            document.body.style.overflow = 'hidden';
         }
 
         function closeEditWordlistModal() {
-            document.getElementById('edit-wordlist-modal').style.display = 'none';
+            const modal = document.getElementById('edit-wordlist-modal');
+            modal.classList.remove('active');
+            document.body.style.overflow = '';
+            setTimeout(() => {
+                modal.style.display = 'none';
+            }, 300);
         }
 
         function submitEditWordlist() {
