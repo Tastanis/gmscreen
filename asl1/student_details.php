@@ -107,7 +107,23 @@ try {
     ");
     $stmt->execute([$student_id, $student_level]);
     $skills = $stmt->fetchAll();
-    
+
+    $stmt = $pdo->prepare("
+        SELECT
+            id,
+            framework,
+            goal_type,
+            goal_focus,
+            success_criteria,
+            COALESCE(status, 'not_started') as status,
+            created_at
+        FROM user_goals
+        WHERE user_id = ?
+        ORDER BY created_at DESC
+    ");
+    $stmt->execute([$student_id]);
+    $goals = $stmt->fetchAll();
+
     // Note: In a production environment, you should NEVER store or display passwords in plain text
     // This is only for educational purposes and specific requirement
     // We'll retrieve the actual password for display (educational/demo purposes only)
@@ -120,8 +136,37 @@ try {
     exit;
 }
 
-$progress_percentage = $student['total_possible_points'] > 0 ? 
+$progress_percentage = $student['total_possible_points'] > 0 ?
     round(($student['earned_points'] / $student['total_possible_points']) * 100) : 0;
+
+$goal_progress_percentage = 0;
+$goal_status_counts = [
+    'not_started' => 0,
+    'progressing' => 0,
+    'proficient' => 0,
+];
+
+if (!empty($goals)) {
+    $status_weights = [
+        'not_started' => 0,
+        'progressing' => 0.5,
+        'proficient' => 1,
+    ];
+
+    $total_weight = 0;
+
+    foreach ($goals as $goal) {
+        $status_key = $goal['status'] ?? 'not_started';
+        if (!isset($status_weights[$status_key])) {
+            $status_key = 'not_started';
+        }
+
+        $goal_status_counts[$status_key]++;
+        $total_weight += $status_weights[$status_key];
+    }
+
+    $goal_progress_percentage = (int) round(($total_weight / count($goals)) * 100);
+}
 ?>
 <!DOCTYPE html>
 <html lang="en">
@@ -362,6 +407,113 @@ $progress_percentage = $student['total_possible_points'] > 0 ?
         .btn-danger:hover {
             background: #c53030;
         }
+
+        .goal-progress-overview {
+            display: grid;
+            gap: 20px;
+            margin-bottom: 25px;
+        }
+
+        .goal-progress-bar {
+            position: relative;
+            background: #e2e8f0;
+            border-radius: 8px;
+            overflow: hidden;
+            height: 20px;
+        }
+
+        .goal-progress-fill {
+            height: 100%;
+            background: linear-gradient(135deg, #68d391 0%, #38a169 100%);
+            transition: width 0.3s ease;
+        }
+
+        .goal-progress-text {
+            font-weight: 600;
+            color: #2d3748;
+        }
+
+        .goal-status-summary {
+            display: flex;
+            flex-wrap: wrap;
+            gap: 15px;
+        }
+
+        .goal-summary-item {
+            background: #f7fafc;
+            border: 1px solid #e2e8f0;
+            border-radius: 8px;
+            padding: 10px 15px;
+            font-size: 0.95rem;
+            color: #4a5568;
+        }
+
+        .goal-card-list {
+            display: grid;
+            gap: 15px;
+        }
+
+        .goal-card {
+            background: white;
+            border: 1px solid #e2e8f0;
+            border-radius: 10px;
+            padding: 18px;
+        }
+
+        .goal-card-header {
+            display: flex;
+            justify-content: space-between;
+            align-items: flex-start;
+            gap: 15px;
+            margin-bottom: 12px;
+        }
+
+        .goal-card-title {
+            font-weight: 600;
+            color: #2d3748;
+            margin-bottom: 4px;
+        }
+
+        .goal-card-date {
+            font-size: 0.85rem;
+            color: #718096;
+        }
+
+        .goal-card-body {
+            display: grid;
+            gap: 10px;
+        }
+
+        .goal-card-body strong {
+            display: block;
+            margin-bottom: 4px;
+            color: #4a5568;
+        }
+
+        .goal-status-tag {
+            display: inline-flex;
+            align-items: center;
+            justify-content: center;
+            padding: 4px 10px;
+            border-radius: 999px;
+            font-size: 0.85rem;
+            font-weight: 600;
+        }
+
+        .goal-empty-state {
+            background: #f7fafc;
+            border: 1px dashed #cbd5e0;
+            border-radius: 10px;
+            padding: 25px;
+            text-align: center;
+            color: #4a5568;
+        }
+
+        @media (max-width: 768px) {
+            .goal-status-summary {
+                flex-direction: column;
+            }
+        }
     </style>
 </head>
 <body>
@@ -401,12 +553,12 @@ $progress_percentage = $student['total_possible_points'] > 0 ?
             
             <div class="details-section">
                 <h3 class="section-title">Edit Student Information</h3>
-                
+
                 <div class="password-info">
                     <div class="password-info-title">Password Information</div>
                     <div>For security reasons, the current password cannot be displayed. You can set a new password below if needed.</div>
                 </div>
-                
+
                 <form method="POST" class="edit-form">
                     <input type="hidden" name="action" value="update">
                     
@@ -445,7 +597,78 @@ $progress_percentage = $student['total_possible_points'] > 0 ?
                     </div>
                 </form>
             </div>
-            
+
+            <div class="details-section">
+                <h3 class="section-title">Goal Progress</h3>
+
+                <?php if (!empty($goals)): ?>
+                    <div class="goal-progress-overview">
+                        <div>
+                            <div class="goal-progress-bar">
+                                <div class="goal-progress-fill" style="width: <?php echo $goal_progress_percentage; ?>%"></div>
+                            </div>
+                            <div class="goal-progress-text" style="margin-top: 8px;">
+                                <?php echo $goal_progress_percentage; ?>% of goals completed or progressing
+                            </div>
+                        </div>
+
+                        <div class="goal-status-summary">
+                            <div class="goal-summary-item">
+                                <strong>Not Started:</strong> <?php echo $goal_status_counts['not_started']; ?>
+                            </div>
+                            <div class="goal-summary-item">
+                                <strong>Progressing:</strong> <?php echo $goal_status_counts['progressing']; ?>
+                            </div>
+                            <div class="goal-summary-item">
+                                <strong>Proficient:</strong> <?php echo $goal_status_counts['proficient']; ?>
+                            </div>
+                            <div class="goal-summary-item">
+                                <strong>Total Goals:</strong> <?php echo count($goals); ?>
+                            </div>
+                        </div>
+                    </div>
+
+                    <div class="goal-card-list">
+                        <?php foreach ($goals as $goal): ?>
+                            <?php
+                                $status_key = $goal['status'] ?? 'not_started';
+                                if (!in_array($status_key, ['not_started', 'progressing', 'proficient'], true)) {
+                                    $status_key = 'not_started';
+                                }
+                                $status_label = ucfirst(str_replace('_', ' ', $status_key));
+                                $goal_type_value = $goal['goal_type'] ?? '';
+                                $goal_type_label = $goal_type_value !== '' ? ucfirst($goal_type_value) . ' Goal' : 'Goal';
+                                $created_at = $goal['created_at'] ? date('F j, Y', strtotime($goal['created_at'])) : 'Unknown date';
+                            ?>
+                            <div class="goal-card">
+                                <div class="goal-card-header">
+                                    <div>
+                                        <div class="goal-card-title"><?php echo htmlspecialchars($goal_type_label); ?></div>
+                                        <div class="goal-card-date">Created <?php echo htmlspecialchars($created_at); ?></div>
+                                    </div>
+                                    <span class="goal-status-tag status-<?php echo $status_key; ?>"><?php echo htmlspecialchars($status_label); ?></span>
+                                </div>
+                                <div class="goal-card-body">
+                                    <div>
+                                        <strong>Focus</strong>
+                                        <div><?php echo nl2br(htmlspecialchars($goal['goal_focus'] ?? '')); ?></div>
+                                    </div>
+                                    <div>
+                                        <strong>Success Criteria</strong>
+                                        <div><?php echo nl2br(htmlspecialchars($goal['success_criteria'] ?? '')); ?></div>
+                                    </div>
+                                </div>
+                            </div>
+                        <?php endforeach; ?>
+                    </div>
+                <?php else: ?>
+                    <div class="goal-empty-state">
+                        <h4 style="margin-top: 0;">No goals yet</h4>
+                        <p>This student hasn't created any goals. Encourage them to set a daily or weekly goal from their dashboard.</p>
+                    </div>
+                <?php endif; ?>
+            </div>
+
             <div class="details-section">
                 <h3 class="section-title">Skills Progress</h3>
                 <div class="skills-grid">
