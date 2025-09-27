@@ -48,5 +48,37 @@ if (!function_exists('aslhubEnsureSkillLevels')) {
     }
 }
 
+if (!function_exists('aslhubEnsureGoalsTable')) {
+    function aslhubEnsureGoalsTable(PDO $pdo): void
+    {
+        static $checkedGoals = false;
+
+        if ($checkedGoals) {
+            return;
+        }
+
+        $checkedGoals = true;
+
+        try {
+            $pdo->exec("CREATE TABLE IF NOT EXISTS user_goals (
+                id INT AUTO_INCREMENT PRIMARY KEY,
+                user_id INT NOT NULL,
+                framework VARCHAR(100) NOT NULL,
+                goal_type ENUM('daily','weekly') NOT NULL DEFAULT 'daily',
+                goal_focus TEXT NOT NULL,
+                success_criteria TEXT NOT NULL,
+                status ENUM('not_started','progressing','proficient') NOT NULL DEFAULT 'not_started',
+                created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+                updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+                INDEX idx_user_goals_user (user_id),
+                CONSTRAINT fk_user_goals_user FOREIGN KEY (user_id) REFERENCES users(id) ON DELETE CASCADE
+            ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci");
+        } catch (PDOException $e) {
+            error_log('ASL Hub schema check (user_goals) failed: ' . $e->getMessage());
+        }
+    }
+}
+
 aslhubEnsureSkillLevels($pdo, 2);
+aslhubEnsureGoalsTable($pdo);
 ?>

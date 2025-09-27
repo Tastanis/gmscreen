@@ -109,7 +109,7 @@ try {
             <div class="sidebar">
                 <button class="sidebar-button" onclick="showContent('skills')">Skills</button>
                 <button class="sidebar-button" onclick="window.open('scrollergame/index.html', '_blank')">Scroller Game</button>
-                <button class="sidebar-button" onclick="showContent('coming-soon')">Coming Soon</button>
+                <button class="sidebar-button" onclick="openGoals()">Goals</button>
                 <button class="sidebar-button" onclick="showContent('coming-soon')">Coming Soon</button>
                 <button class="sidebar-button" onclick="showContent('coming-soon')">Coming Soon</button>
                 <button class="sidebar-button" onclick="showContent('coming-soon')">Coming Soon</button>
@@ -122,6 +122,7 @@ try {
                     <ul>
                         <li><strong>Skills:</strong> Track your progress through various ASL skills and access learning resources</li>
                         <li><strong>Scroller Game:</strong> Practice ASL vocabulary with an interactive word scrolling game</li>
+                        <li><strong>Goals:</strong> Create personal ASL practice goals and monitor how you're doing.</li>
                         <li><strong>Coming Soon:</strong> More exciting features are being developed!</li>
                     </ul>
                     <p>Your current progress: <strong><?php echo $progress_percentage; ?>%</strong> complete</p>
@@ -188,6 +189,10 @@ try {
                 // Activate the clicked button
                 event.target.classList.add('active');
             }
+        }
+
+        function openGoals() {
+            window.open('goals/index.php', 'aslGoalsWindow', 'width=960,height=720,scrollbars=yes,resizable=yes');
         }
         
         let originalClassPeriod = '<?php echo $current_class_period ?? ''; ?>';
