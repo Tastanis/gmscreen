@@ -16,27 +16,7 @@ require_once '../../version.php';
 
 // Include character integration for character details functionality
 require_once '../gm/includes/character-integration.php';
-
-// Function to load student data
-function loadStudentData() {
-    $dataFile = 'students.json';
-    if (file_exists($dataFile)) {
-        $content = file_get_contents($dataFile);
-        $data = json_decode($content, true);
-        if ($data && isset($data['students'])) {
-            return $data;
-        }
-    }
-    
-    // Return default data structure if file doesn't exist
-    return array(
-        'students' => array(),
-        'metadata' => array(
-            'last_updated' => date('Y-m-d H:i:s'),
-            'total_students' => 0
-        )
-    );
-}
+require_once __DIR__ . '/data-utils.php';
 
 // Function to sync student relationships back to character dashboard
 function syncRelationshipsToCharacters($student) {
@@ -44,63 +24,57 @@ function syncRelationshipsToCharacters($student) {
         return;
     }
     
-    // Load character data
-    $charactersFile = '../../data/characters.json';
+    $charactersFile = __DIR__ . '/../../data/characters.json';
     if (!file_exists($charactersFile)) {
         return;
     }
-    
-    $charactersData = json_decode(file_get_contents($charactersFile), true);
-    if (!$charactersData) {
-        return;
-    }
-    
-    $relationships = $student['relationships'];
-    $student_id = $student['student_id'];
-    $student_name = $student['name'];
-    
-    // Check each PC's relationship data
-    $pcs = array('frunk', 'zepha', 'sharon', 'indigo');
-    $updated = false;
-    
-    foreach ($pcs as $pc) {
-        if (isset($relationships[$pc . '_points']) || isset($relationships[$pc . '_notes'])) {
-            $points = isset($relationships[$pc . '_points']) ? $relationships[$pc . '_points'] : '';
-            $notes = isset($relationships[$pc . '_notes']) ? $relationships[$pc . '_notes'] : '';
-            
-            // Find if this PC has a relationship with this student
-            if (isset($charactersData[$pc]['relationships'])) {
+
+    $result = modifyJsonFileWithLock(
+        $charactersFile,
+        function (&$charactersData) use ($student) {
+            if (!is_array($charactersData) || empty($charactersData)) {
+                return ['save' => false, 'error' => 'Character data unavailable'];
+            }
+
+            $relationships = $student['relationships'];
+            $studentId = $student['student_id'];
+            $studentName = isset($student['name']) ? $student['name'] : '';
+            $pcs = array('frunk', 'zepha', 'sharon', 'indigo');
+            $updated = false;
+
+            foreach ($pcs as $pc) {
+                if (!isset($charactersData[$pc]['relationships']) || !is_array($charactersData[$pc]['relationships'])) {
+                    continue;
+                }
+
+                $points = isset($relationships[$pc . '_points']) ? $relationships[$pc . '_points'] : '';
+                $notes = isset($relationships[$pc . '_notes']) ? $relationships[$pc . '_notes'] : '';
+
                 foreach ($charactersData[$pc]['relationships'] as &$rel) {
-                    if (isset($rel['student_id']) && $rel['student_id'] === $student_id) {
-                        // Update existing relationship
+                    if (isset($rel['student_id']) && $rel['student_id'] === $studentId) {
                         $rel['points'] = $points;
                         $rel['extra'] = $notes;
-                        $rel['npc_name'] = $student_name; // Update name in case it changed
+                        $rel['npc_name'] = $studentName;
                         $updated = true;
                         break;
                     }
                 }
             }
-        }
-    }
-    
-    // Save if any updates were made
-    if ($updated) {
-        $jsonData = json_encode($charactersData, JSON_PRETTY_PRINT);
-        file_put_contents($charactersFile, $jsonData, LOCK_EX);
-    }
-}
 
-// Function to save student data
-function saveStudentData($data) {
-    $dataFile = 'students.json';
-    
-    // Update metadata
-    $data['metadata']['last_updated'] = date('Y-m-d H:i:s');
-    $data['metadata']['total_students'] = count($data['students']);
-    
-    $jsonData = json_encode($data, JSON_PRETTY_PRINT);
-    return file_put_contents($dataFile, $jsonData, LOCK_EX);
+            return $updated ? ['result' => true] : ['save' => false];
+        },
+        [
+            'default' => function () {
+                return [];
+            },
+            'backup_prefix' => 'characters',
+            'lock_file' => __DIR__ . '/../../data/characters.lock',
+        ]
+    );
+
+    if (!$result['success'] && isset($result['error']) && $result['error'] !== 'Character data unavailable') {
+        error_log('Failed to sync relationship data to characters: ' . $result['error']);
+    }
 }
 
 // Handle AJAX requests
@@ -191,144 +165,109 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['action'])) {
         $value = isset($_POST['value']) ? $_POST['value'] : '';
         
         if ($student_id && $field) {
-            $data = loadStudentData();
-            
-            // Find student
-            $student_index = -1;
-            foreach ($data['students'] as $index => $student) {
-                if ($student['student_id'] === $student_id) {
-                    $student_index = $index;
-                    break;
-                }
-            }
-            
-            if ($student_index !== -1) {
-                // Handle nested fields (details.* and character_info.*)
-                if (strpos($field, 'details.') === 0) {
-                    $detail_field = substr($field, 8);
-                    if (!isset($data['students'][$student_index]['details'])) {
-                        $data['students'][$student_index]['details'] = array();
+            $updatedStudent = null;
+            $result = modifyStudentData(function (&$data) use ($student_id, $field, $value, &$updatedStudent) {
+                foreach ($data['students'] as &$student) {
+                    if ($student['student_id'] === $student_id) {
+                        if (strpos($field, 'details.') === 0) {
+                            $detailField = substr($field, 8);
+                            if (!isset($student['details']) || !is_array($student['details'])) {
+                                $student['details'] = array();
+                            }
+                            $student['details'][$detailField] = $value;
+                        } elseif (strpos($field, 'character_info.') === 0) {
+                            $charInfoField = substr($field, 15);
+                            if (!isset($student['character_info']) || !is_array($student['character_info'])) {
+                                $student['character_info'] = array();
+                            }
+                            $student['character_info'][$charInfoField] = $value;
+                        } elseif ($field === 'clubs' || $field === 'skills') {
+                            $decoded = json_decode($value, true);
+                            if ($decoded === null && json_last_error() !== JSON_ERROR_NONE) {
+                                return ['save' => false, 'error' => 'Invalid data format'];
+                            }
+                            $student[$field] = is_array($decoded) ? $decoded : array();
+                        } elseif ($field === 'relationships') {
+                            $decoded = json_decode($value, true);
+                            if (!is_array($decoded)) {
+                                return ['save' => false, 'error' => 'Invalid relationships data'];
+                            }
+                            $student['relationships'] = $decoded;
+                        } else {
+                            $student[$field] = $value;
+                        }
+
+                        $updatedStudent = $student;
+                        return ['result' => true];
                     }
-                    $data['students'][$student_index]['details'][$detail_field] = $value;
-                } elseif (strpos($field, 'character_info.') === 0) {
-                    $char_info_field = substr($field, 15);
-                    if (!isset($data['students'][$student_index]['character_info'])) {
-                        $data['students'][$student_index]['character_info'] = array();
-                    }
-                    $data['students'][$student_index]['character_info'][$char_info_field] = $value;
-                } elseif ($field === 'clubs' || $field === 'skills') {
-                    // Handle array fields
-                    $data['students'][$student_index][$field] = json_decode($value, true);
-                } elseif ($field === 'relationships') {
-                    // Handle relationships object
-                    $data['students'][$student_index]['relationships'] = json_decode($value, true);
-                    
-                    // Sync relationships back to character dashboard
-                    syncRelationshipsToCharacters($data['students'][$student_index]);
-                } else {
-                    $data['students'][$student_index][$field] = $value;
                 }
-                
-                if (saveStudentData($data)) {
-                    echo json_encode(array('success' => true));
-                } else {
-                    echo json_encode(array('success' => false, 'error' => 'Failed to save data'));
+
+                return ['save' => false, 'error' => 'Student not found'];
+            });
+
+            if ($result['success']) {
+                if ($field === 'relationships' && $updatedStudent !== null) {
+                    syncRelationshipsToCharacters($updatedStudent);
                 }
+                echo json_encode(array('success' => true));
             } else {
-                echo json_encode(array('success' => false, 'error' => 'Student not found'));
+                $error = isset($result['error']) ? $result['error'] : 'Failed to save data';
+                echo json_encode(array('success' => false, 'error' => $error));
             }
         } else {
             echo json_encode(array('success' => false, 'error' => 'Invalid parameters'));
         }
         
     } elseif ($_POST['action'] === 'add_student') {
-        $data = loadStudentData();
-        
-        $new_student = array(
-            'student_id' => 'student_' . time() . '_' . uniqid(),
-            'name' => 'New Student',
-            'images' => array(),
-            'grade_level' => '1st Year',
-            'college' => '',
-            'clubs' => array(),
-            'job' => '',
-            'race' => '',
-            'age' => '',
-            'skills' => array(),
-            'edge' => '',
-            'bane' => '',
-            'favorites' => array(),
-            'relationships' => array(
-                'frunk_points' => '',
-                'frunk_notes' => '',
-                'zepha_points' => '',
-                'zepha_notes' => '',
-                'sharon_points' => '',
-                'sharon_notes' => '',
-                'indigo_points' => '',
-                'indigo_notes' => ''
-            ),
-            'character_info' => array(
-                'origin' => '',
-                'desire' => '',
-                'fear' => '',
-                'connection' => '',
-                'impact' => '',
-                'change' => ''
-            ),
-            'details' => array(
-                'backstory' => '',
-                'core_want' => '',
-                'core_fear' => '',
-                'other' => ''
-            )
-        );
-        
-        $data['students'][] = $new_student;
-        
-        if (saveStudentData($data)) {
+        $new_student = getBlankStudentRecord();
+        $result = modifyStudentData(function (&$data) use (&$new_student) {
+            $data['students'][] = $new_student;
+            return ['result' => $new_student];
+        });
+
+        if ($result['success']) {
             echo json_encode(array('success' => true, 'student' => $new_student));
         } else {
-            echo json_encode(array('success' => false, 'error' => 'Failed to add student'));
+            $error = isset($result['error']) ? $result['error'] : 'Failed to add student';
+            echo json_encode(array('success' => false, 'error' => $error));
         }
         
     } elseif ($_POST['action'] === 'delete_student') {
         $student_id = isset($_POST['student_id']) ? $_POST['student_id'] : '';
         
         if ($student_id) {
-            $data = loadStudentData();
-            
-            $student_index = -1;
-            foreach ($data['students'] as $index => $student) {
-                if ($student['student_id'] === $student_id) {
-                    $student_index = $index;
-                    break;
-                }
-            }
-            
-            if ($student_index !== -1) {
-                // Delete associated images
-                $student = $data['students'][$student_index];
-                if (isset($student['images'])) {
-                    foreach ($student['images'] as $image_path) {
-                        if (!empty($image_path) && file_exists($image_path)) {
-                            unlink($image_path);
+            $imagesToDelete = array();
+            $result = modifyStudentData(function (&$data) use ($student_id, &$imagesToDelete) {
+                foreach ($data['students'] as $index => $student) {
+                    if ($student['student_id'] === $student_id) {
+                        if (isset($student['images']) && is_array($student['images'])) {
+                            foreach ($student['images'] as $image_path) {
+                                if (!empty($image_path)) {
+                                    $imagesToDelete[] = $image_path;
+                                }
+                            }
+                        } elseif (isset($student['image_path']) && !empty($student['image_path'])) {
+                            $imagesToDelete[] = $student['image_path'];
                         }
+
+                        array_splice($data['students'], $index, 1);
+                        return ['result' => true];
                     }
-                } elseif (isset($student['image_path']) && !empty($student['image_path']) && file_exists($student['image_path'])) {
-                    // Backward compatibility
-                    unlink($student['image_path']);
                 }
-                
-                array_splice($data['students'], $student_index, 1);
-                
-                if (saveStudentData($data)) {
-                    echo json_encode(array('success' => true));
-                } else {
-                    echo json_encode(array('success' => false, 'error' => 'Failed to delete student'));
+
+                return ['save' => false, 'error' => 'Student not found'];
+            });
+
+            if ($result['success']) {
+                foreach ($imagesToDelete as $image_path) {
+                    if (!empty($image_path) && file_exists($image_path)) {
+                        unlink($image_path);
+                    }
                 }
+                echo json_encode(array('success' => true));
             } else {
-                echo json_encode(array('success' => false, 'error' => 'Student not found'));
+                $error = isset($result['error']) ? $result['error'] : 'Failed to delete student';
+                echo json_encode(array('success' => false, 'error' => $error));
             }
         } else {
             echo json_encode(array('success' => false, 'error' => 'Invalid student ID'));
@@ -338,29 +277,29 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['action'])) {
         $student_id = isset($_POST['student_id']) ? $_POST['student_id'] : '';
         
         if ($student_id) {
-            $data = loadStudentData();
-            
-            foreach ($data['students'] as &$student) {
-                if ($student['student_id'] === $student_id) {
-                    // Initialize favorites array if it doesn't exist
-                    if (!isset($student['favorites'])) {
-                        $student['favorites'] = array();
+            $result = modifyStudentData(function (&$data) use ($student_id, $user) {
+                foreach ($data['students'] as &$student) {
+                    if ($student['student_id'] === $student_id) {
+                        if (!isset($student['favorites']) || !is_array($student['favorites'])) {
+                            $student['favorites'] = array();
+                        }
+
+                        $current_status = isset($student['favorites'][$user]) ? (bool)$student['favorites'][$user] : false;
+                        $student['favorites'][$user] = !$current_status;
+
+                        return ['result' => $student['favorites'][$user]];
                     }
-                    
-                    // Toggle favorite status for current user
-                    $current_status = isset($student['favorites'][$user]) ? $student['favorites'][$user] : false;
-                    $student['favorites'][$user] = !$current_status;
-                    
-                    if (saveStudentData($data)) {
-                        echo json_encode(array('success' => true, 'is_favorite' => $student['favorites'][$user]));
-                    } else {
-                        echo json_encode(array('success' => false, 'error' => 'Failed to update favorite status'));
-                    }
-                    exit;
                 }
+
+                return ['save' => false, 'error' => 'Student not found'];
+            });
+
+            if ($result['success']) {
+                echo json_encode(array('success' => true, 'is_favorite' => (bool)$result['result']));
+            } else {
+                $error = isset($result['error']) ? $result['error'] : 'Failed to update favorite status';
+                echo json_encode(array('success' => false, 'error' => $error));
             }
-            
-            echo json_encode(array('success' => false, 'error' => 'Student not found'));
         } else {
             echo json_encode(array('success' => false, 'error' => 'Invalid student ID'));
         }
@@ -538,41 +477,37 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['action'])) {
         
         // Move uploaded file
         if (move_uploaded_file($file['tmp_name'], $filepath)) {
-            // Update student data
-            $data = loadStudentData();
-            $student_found = false;
-            
-            foreach ($data['students'] as &$student) {
-                if ($student['student_id'] === $student_id) {
-                    // Initialize images array if it doesn't exist (backward compatibility)
-                    if (!isset($student['images'])) {
-                        $student['images'] = array();
-                        // Migrate old image_path to images array
-                        if (!empty($student['image_path'])) {
-                            $student['images'][] = $student['image_path'];
-                            unset($student['image_path']);
+            $result = modifyStudentData(function (&$data) use ($student_id, $filepath) {
+                foreach ($data['students'] as &$student) {
+                    if ($student['student_id'] === $student_id) {
+                        if (!isset($student['images']) || !is_array($student['images'])) {
+                            $student['images'] = array();
+                            if (!empty($student['image_path'])) {
+                                $student['images'][] = $student['image_path'];
+                                unset($student['image_path']);
+                            }
                         }
+
+                        $student['images'][] = $filepath;
+                        return ['result' => true];
                     }
-                    
-                    // Add new image to array
-                    $student['images'][] = $filepath;
-                    $student_found = true;
-                    break;
                 }
-            }
-            
-            if ($student_found && saveStudentData($data)) {
+
+                return ['save' => false, 'error' => 'Student not found'];
+            });
+
+            if ($result['success']) {
                 echo json_encode(array(
-                    'success' => true, 
+                    'success' => true,
                     'image_path' => $filepath,
                     'message' => 'Image uploaded successfully'
                 ));
             } else {
-                // Clean up uploaded file if database update failed
                 if (file_exists($filepath)) {
                     unlink($filepath);
                 }
-                echo json_encode(array('success' => false, 'error' => 'Failed to update student data'));
+                $error = isset($result['error']) ? $result['error'] : 'Failed to update student data';
+                echo json_encode(array('success' => false, 'error' => $error));
             }
         } else {
             echo json_encode(array('success' => false, 'error' => 'Failed to save uploaded file'));
@@ -583,38 +518,39 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['action'])) {
         $image_path = isset($_POST['image_path']) ? $_POST['image_path'] : '';
         
         if ($student_id && $image_path) {
-            $data = loadStudentData();
-            $student_found = false;
-            
-            foreach ($data['students'] as &$student) {
-                if ($student['student_id'] === $student_id) {
-                    // Handle backward compatibility
-                    if (!isset($student['images']) && isset($student['image_path'])) {
-                        $student['images'] = array($student['image_path']);
-                        unset($student['image_path']);
-                    }
-                    
-                    if (isset($student['images'])) {
-                        $image_index = array_search($image_path, $student['images']);
-                        if ($image_index !== false) {
-                            // Remove from array
-                            array_splice($student['images'], $image_index, 1);
-                            $student_found = true;
-                            
-                            // Delete physical file
-                            if (file_exists($image_path)) {
-                                unlink($image_path);
+            $shouldDeleteFile = false;
+            $result = modifyStudentData(function (&$data) use ($student_id, $image_path, &$shouldDeleteFile) {
+                foreach ($data['students'] as &$student) {
+                    if ($student['student_id'] === $student_id) {
+                        if (!isset($student['images']) && isset($student['image_path'])) {
+                            $student['images'] = array($student['image_path']);
+                            unset($student['image_path']);
+                        }
+
+                        if (isset($student['images'])) {
+                            $image_index = array_search($image_path, $student['images']);
+                            if ($image_index !== false) {
+                                array_splice($student['images'], $image_index, 1);
+                                $shouldDeleteFile = true;
+                                return ['result' => true];
                             }
                         }
+
+                        return ['save' => false, 'error' => 'Image not found'];
                     }
-                    break;
                 }
-            }
-            
-            if ($student_found && saveStudentData($data)) {
+
+                return ['save' => false, 'error' => 'Student not found'];
+            });
+
+            if ($result['success']) {
+                if ($shouldDeleteFile && file_exists($image_path)) {
+                    unlink($image_path);
+                }
                 echo json_encode(array('success' => true));
             } else {
-                echo json_encode(array('success' => false, 'error' => 'Failed to delete image'));
+                $error = isset($result['error']) ? $result['error'] : 'Failed to delete image';
+                echo json_encode(array('success' => false, 'error' => $error));
             }
         } else {
             echo json_encode(array('success' => false, 'error' => 'Invalid parameters'));

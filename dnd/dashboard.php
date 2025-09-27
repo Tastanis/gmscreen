@@ -31,40 +31,32 @@ $characters = array('frunk', 'sharon', 'indigo', 'zepha');
 
 // Include character integration utilities for loading student data
 require_once __DIR__ . '/strixhaven/gm/includes/character-integration.php';
+require_once __DIR__ . '/strixhaven/students/data-utils.php';
 
 // Update a student's relationship points with a PC
 function updateStudentRelationshipPoints($npcName, $pcName, $points) {
-    $studentsFile = __DIR__ . '/strixhaven/students/students.json';
-    if (!file_exists($studentsFile)) {
-        return;
-    }
+    $npcNameLower = strtolower($npcName);
+    $pcKey = strtolower($pcName) . '_points';
 
-    $content = file_get_contents($studentsFile);
-    $data = json_decode($content, true);
-    if (!$data || !isset($data['students'])) {
-        return;
-    }
+    $result = modifyStudentData(function (&$data) use ($npcNameLower, $pcKey, $points) {
+        $updated = false;
 
-    $updated = false;
-    foreach ($data['students'] as &$student) {
-        if (strcasecmp($student['name'], $npcName) === 0) {
-            if (!isset($student['relationships'])) {
-                $student['relationships'] = array();
+        foreach ($data['students'] as &$student) {
+            if (isset($student['name']) && strtolower($student['name']) === $npcNameLower) {
+                if (!isset($student['relationships']) || !is_array($student['relationships'])) {
+                    $student['relationships'] = array();
+                }
+                $student['relationships'][$pcKey] = $points;
+                $updated = true;
+                break;
             }
-            $key = strtolower($pcName) . '_points';
-            $student['relationships'][$key] = $points;
-            $updated = true;
-            break;
         }
-    }
 
-    if ($updated) {
-        if (!isset($data['metadata'])) {
-            $data['metadata'] = array();
-        }
-        $data['metadata']['last_updated'] = date('Y-m-d H:i:s');
-        $data['metadata']['total_students'] = count($data['students']);
-        file_put_contents($studentsFile, json_encode($data, JSON_PRETTY_PRINT));
+        return $updated ? ['result' => true] : ['save' => false];
+    });
+
+    if (!$result['success'] && isset($result['error'])) {
+        error_log('Failed to update student relationship points: ' . $result['error']);
     }
 }
 

@@ -12,39 +12,7 @@ $is_gm = ($user === 'GM');
 
 // Include character integration for character details functionality
 require_once '../gm/includes/character-integration.php';
-
-// Function to load staff data
-function loadStaffData() {
-    $dataFile = 'staff.json';
-    if (file_exists($dataFile)) {
-        $content = file_get_contents($dataFile);
-        $data = json_decode($content, true);
-        if ($data && isset($data['staff'])) {
-            return $data;
-        }
-    }
-    
-    // Return default data structure if file doesn't exist
-    return array(
-        'staff' => array(),
-        'metadata' => array(
-            'last_updated' => date('Y-m-d H:i:s'),
-            'total_staff' => 0
-        )
-    );
-}
-
-// Function to save staff data
-function saveStaffData($data) {
-    $dataFile = 'staff.json';
-    
-    // Update metadata
-    $data['metadata']['last_updated'] = date('Y-m-d H:i:s');
-    $data['metadata']['total_staff'] = count($data['staff']);
-    
-    $jsonData = json_encode($data, JSON_PRETTY_PRINT);
-    return file_put_contents($dataFile, $jsonData, LOCK_EX);
-}
+require_once __DIR__ . '/data-utils.php';
 
 // Handle AJAX requests
 if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['action'])) {
@@ -111,117 +79,92 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['action'])) {
         $value = isset($_POST['value']) ? $_POST['value'] : '';
         
         if ($staff_id && $field) {
-            $data = loadStaffData();
-            
-            // Find staff member
-            $staff_index = -1;
-            foreach ($data['staff'] as $index => $member) {
-                if ($member['staff_id'] === $staff_id) {
-                    $staff_index = $index;
-                    break;
-                }
-            }
-            
-            if ($staff_index !== -1) {
-                // Handle nested fields (gm_only.* and character_info.*)
-                if (strpos($field, 'gm_only.') === 0) {
-                    $gm_field = substr($field, 8);
-                    if (!isset($data['staff'][$staff_index]['gm_only'])) {
-                        $data['staff'][$staff_index]['gm_only'] = array();
+            $result = modifyStaffData(function (&$data) use ($staff_id, $field, $value) {
+                foreach ($data['staff'] as &$member) {
+                    if ($member['staff_id'] === $staff_id) {
+                        if (strpos($field, 'gm_only.') === 0) {
+                            $gmField = substr($field, 8);
+                            if (!isset($member['gm_only']) || !is_array($member['gm_only'])) {
+                                $member['gm_only'] = array();
+                            }
+                            $member['gm_only'][$gmField] = $value;
+                        } elseif (strpos($field, 'character_info.') === 0) {
+                            $charInfoField = substr($field, 15);
+                            if (!isset($member['character_info']) || !is_array($member['character_info'])) {
+                                $member['character_info'] = array();
+                            }
+                            $member['character_info'][$charInfoField] = $value;
+                        } else {
+                            $member[$field] = $value;
+                        }
+
+                        return ['result' => true];
                     }
-                    $data['staff'][$staff_index]['gm_only'][$gm_field] = $value;
-                } elseif (strpos($field, 'character_info.') === 0) {
-                    $char_info_field = substr($field, 15);
-                    if (!isset($data['staff'][$staff_index]['character_info'])) {
-                        $data['staff'][$staff_index]['character_info'] = array();
-                    }
-                    $data['staff'][$staff_index]['character_info'][$char_info_field] = $value;
-                } else {
-                    $data['staff'][$staff_index][$field] = $value;
                 }
-                
-                if (saveStaffData($data)) {
-                    echo json_encode(array('success' => true));
-                } else {
-                    echo json_encode(array('success' => false, 'error' => 'Failed to save data'));
-                }
+
+                return ['save' => false, 'error' => 'Staff member not found'];
+            });
+
+            if ($result['success']) {
+                echo json_encode(array('success' => true));
             } else {
-                echo json_encode(array('success' => false, 'error' => 'Staff member not found'));
+                $error = isset($result['error']) ? $result['error'] : 'Failed to save data';
+                echo json_encode(array('success' => false, 'error' => $error));
             }
         } else {
             echo json_encode(array('success' => false, 'error' => 'Invalid parameters'));
         }
         
     } elseif ($_POST['action'] === 'add_staff') {
-        $data = loadStaffData();
-        
-        $new_staff = array(
-            'staff_id' => 'staff_' . time() . '_' . uniqid(),
-            'name' => 'New Staff Member',
-            'images' => array(),
-            'college' => '',
-            'character_description' => '',
-            'general_info' => '',
-            'favorites' => array(),
-            'character_info' => array(
-                'origin' => '',
-                'desire' => '',
-                'fear' => '',
-                'connection' => '',
-                'impact' => '',
-                'change' => ''
-            ),
-            'gm_only' => array(
-                'personality' => '',
-                'other' => ''
-            )
-        );
-        
-        $data['staff'][] = $new_staff;
-        
-        if (saveStaffData($data)) {
+        $new_staff = getBlankStaffRecord();
+        $result = modifyStaffData(function (&$data) use (&$new_staff) {
+            $data['staff'][] = $new_staff;
+            return ['result' => $new_staff];
+        });
+
+        if ($result['success']) {
             echo json_encode(array('success' => true, 'staff' => $new_staff));
         } else {
-            echo json_encode(array('success' => false, 'error' => 'Failed to add staff member'));
+            $error = isset($result['error']) ? $result['error'] : 'Failed to add staff member';
+            echo json_encode(array('success' => false, 'error' => $error));
         }
         
     } elseif ($_POST['action'] === 'delete_staff') {
         $staff_id = isset($_POST['staff_id']) ? $_POST['staff_id'] : '';
         
         if ($staff_id) {
-            $data = loadStaffData();
-            
-            $staff_index = -1;
-            foreach ($data['staff'] as $index => $member) {
-                if ($member['staff_id'] === $staff_id) {
-                    $staff_index = $index;
-                    break;
-                }
-            }
-            
-            if ($staff_index !== -1) {
-                // Delete associated images
-                $member = $data['staff'][$staff_index];
-                if (isset($member['images'])) {
-                    foreach ($member['images'] as $image_path) {
-                        if (!empty($image_path) && file_exists($image_path)) {
-                            unlink($image_path);
+            $imagesToDelete = array();
+            $result = modifyStaffData(function (&$data) use ($staff_id, &$imagesToDelete) {
+                foreach ($data['staff'] as $index => $member) {
+                    if ($member['staff_id'] === $staff_id) {
+                        if (isset($member['images']) && is_array($member['images'])) {
+                            foreach ($member['images'] as $image_path) {
+                                if (!empty($image_path)) {
+                                    $imagesToDelete[] = $image_path;
+                                }
+                            }
+                        } elseif (isset($member['image_path']) && !empty($member['image_path'])) {
+                            $imagesToDelete[] = $member['image_path'];
                         }
+
+                        array_splice($data['staff'], $index, 1);
+                        return ['result' => true];
                     }
-                } elseif (isset($member['image_path']) && !empty($member['image_path']) && file_exists($member['image_path'])) {
-                    // Backward compatibility
-                    unlink($member['image_path']);
                 }
-                
-                array_splice($data['staff'], $staff_index, 1);
-                
-                if (saveStaffData($data)) {
-                    echo json_encode(array('success' => true));
-                } else {
-                    echo json_encode(array('success' => false, 'error' => 'Failed to delete staff member'));
+
+                return ['save' => false, 'error' => 'Staff member not found'];
+            });
+
+            if ($result['success']) {
+                foreach ($imagesToDelete as $image_path) {
+                    if (!empty($image_path) && file_exists($image_path)) {
+                        unlink($image_path);
+                    }
                 }
+                echo json_encode(array('success' => true));
             } else {
-                echo json_encode(array('success' => false, 'error' => 'Staff member not found'));
+                $error = isset($result['error']) ? $result['error'] : 'Failed to delete staff member';
+                echo json_encode(array('success' => false, 'error' => $error));
             }
         } else {
             echo json_encode(array('success' => false, 'error' => 'Invalid staff ID'));
@@ -231,29 +174,29 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['action'])) {
         $staff_id = isset($_POST['staff_id']) ? $_POST['staff_id'] : '';
         
         if ($staff_id) {
-            $data = loadStaffData();
-            
-            foreach ($data['staff'] as &$member) {
-                if ($member['staff_id'] === $staff_id) {
-                    // Initialize favorites array if it doesn't exist
-                    if (!isset($member['favorites'])) {
-                        $member['favorites'] = array();
+            $result = modifyStaffData(function (&$data) use ($staff_id, $user) {
+                foreach ($data['staff'] as &$member) {
+                    if ($member['staff_id'] === $staff_id) {
+                        if (!isset($member['favorites']) || !is_array($member['favorites'])) {
+                            $member['favorites'] = array();
+                        }
+
+                        $current_status = isset($member['favorites'][$user]) ? (bool)$member['favorites'][$user] : false;
+                        $member['favorites'][$user] = !$current_status;
+
+                        return ['result' => $member['favorites'][$user]];
                     }
-                    
-                    // Toggle favorite status for current user
-                    $current_status = isset($member['favorites'][$user]) ? $member['favorites'][$user] : false;
-                    $member['favorites'][$user] = !$current_status;
-                    
-                    if (saveStaffData($data)) {
-                        echo json_encode(array('success' => true, 'is_favorite' => $member['favorites'][$user]));
-                    } else {
-                        echo json_encode(array('success' => false, 'error' => 'Failed to update favorite status'));
-                    }
-                    exit;
                 }
+
+                return ['save' => false, 'error' => 'Staff member not found'];
+            });
+
+            if ($result['success']) {
+                echo json_encode(array('success' => true, 'is_favorite' => (bool)$result['result']));
+            } else {
+                $error = isset($result['error']) ? $result['error'] : 'Failed to update favorite status';
+                echo json_encode(array('success' => false, 'error' => $error));
             }
-            
-            echo json_encode(array('success' => false, 'error' => 'Staff member not found'));
         } else {
             echo json_encode(array('success' => false, 'error' => 'Invalid staff ID'));
         }
@@ -373,83 +316,80 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['action'])) {
         
         // Move uploaded file
         if (move_uploaded_file($file['tmp_name'], $filepath)) {
-            // Update staff data
-            $data = loadStaffData();
-            $staff_found = false;
-            
-            foreach ($data['staff'] as &$member) {
-                if ($member['staff_id'] === $staff_id) {
-                    // Initialize images array if it doesn't exist (backward compatibility)
-                    if (!isset($member['images'])) {
-                        $member['images'] = array();
-                        // Migrate old image_path to images array
-                        if (!empty($member['image_path'])) {
-                            $member['images'][] = $member['image_path'];
-                            unset($member['image_path']);
+            $result = modifyStaffData(function (&$data) use ($staff_id, $filepath) {
+                foreach ($data['staff'] as &$member) {
+                    if ($member['staff_id'] === $staff_id) {
+                        if (!isset($member['images']) || !is_array($member['images'])) {
+                            $member['images'] = array();
+                            if (!empty($member['image_path'])) {
+                                $member['images'][] = $member['image_path'];
+                                unset($member['image_path']);
+                            }
                         }
+
+                        $member['images'][] = $filepath;
+                        return ['result' => true];
                     }
-                    
-                    // Add new image to array
-                    $member['images'][] = $filepath;
-                    $staff_found = true;
-                    break;
                 }
-            }
-            
-            if ($staff_found && saveStaffData($data)) {
+
+                return ['save' => false, 'error' => 'Staff member not found'];
+            });
+
+            if ($result['success']) {
                 echo json_encode(array(
-                    'success' => true, 
+                    'success' => true,
                     'image_path' => $filepath,
                     'message' => 'Image uploaded successfully'
                 ));
             } else {
-                // Clean up uploaded file if database update failed
                 if (file_exists($filepath)) {
                     unlink($filepath);
                 }
-                echo json_encode(array('success' => false, 'error' => 'Failed to update staff data'));
+                $error = isset($result['error']) ? $result['error'] : 'Failed to update staff data';
+                echo json_encode(array('success' => false, 'error' => $error));
             }
         } else {
             echo json_encode(array('success' => false, 'error' => 'Failed to save uploaded file'));
         }
-        
+
     } elseif ($_POST['action'] === 'delete_image') {
         $staff_id = isset($_POST['staff_id']) ? $_POST['staff_id'] : '';
         $image_path = isset($_POST['image_path']) ? $_POST['image_path'] : '';
         
         if ($staff_id && $image_path) {
-            $data = loadStaffData();
-            $staff_found = false;
-            
-            foreach ($data['staff'] as &$member) {
-                if ($member['staff_id'] === $staff_id) {
-                    // Handle backward compatibility
-                    if (!isset($member['images']) && isset($member['image_path'])) {
-                        $member['images'] = array($member['image_path']);
-                        unset($member['image_path']);
-                    }
-                    
-                    if (isset($member['images'])) {
-                        $image_index = array_search($image_path, $member['images']);
-                        if ($image_index !== false) {
-                            // Remove from array
-                            array_splice($member['images'], $image_index, 1);
-                            $staff_found = true;
-                            
-                            // Delete physical file
-                            if (file_exists($image_path)) {
-                                unlink($image_path);
+            $shouldDeleteFile = false;
+            $result = modifyStaffData(function (&$data) use ($staff_id, $image_path, &$shouldDeleteFile) {
+                foreach ($data['staff'] as &$member) {
+                    if ($member['staff_id'] === $staff_id) {
+                        if (!isset($member['images']) && isset($member['image_path'])) {
+                            $member['images'] = array($member['image_path']);
+                            unset($member['image_path']);
+                        }
+
+                        if (isset($member['images'])) {
+                            $image_index = array_search($image_path, $member['images']);
+                            if ($image_index !== false) {
+                                array_splice($member['images'], $image_index, 1);
+                                $shouldDeleteFile = true;
+                                return ['result' => true];
                             }
                         }
+
+                        return ['save' => false, 'error' => 'Image not found'];
                     }
-                    break;
                 }
-            }
-            
-            if ($staff_found && saveStaffData($data)) {
+
+                return ['save' => false, 'error' => 'Staff member not found'];
+            });
+
+            if ($result['success']) {
+                if ($shouldDeleteFile && file_exists($image_path)) {
+                    unlink($image_path);
+                }
                 echo json_encode(array('success' => true));
             } else {
-                echo json_encode(array('success' => false, 'error' => 'Failed to delete image'));
+                $error = isset($result['error']) ? $result['error'] : 'Failed to delete image';
+                echo json_encode(array('success' => false, 'error' => $error));
             }
         } else {
             echo json_encode(array('success' => false, 'error' => 'Invalid parameters'));
