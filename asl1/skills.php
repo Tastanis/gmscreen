@@ -122,7 +122,7 @@ try {
             <div class="sidebar">
                 <button class="sidebar-button active" onclick="showContent('skills')">Skills</button>
                 <button class="sidebar-button" onclick="goBack()">Scroller Game</button>
-                <button class="sidebar-button" onclick="goBack()">Coming Soon</button>
+                <button class="sidebar-button" onclick="openGoals()">Goals</button>
                 <button class="sidebar-button" onclick="goBack()">Coming Soon</button>
                 <button class="sidebar-button" onclick="goBack()">Coming Soon</button>
                 <button class="sidebar-button" onclick="goBack()">Coming Soon</button>
@@ -357,6 +357,10 @@ try {
         
         function goBack() {
             window.location.href = 'dashboard.php';
+        }
+
+        function openGoals() {
+            window.open('goals/index.php', 'aslGoalsWindow', 'width=960,height=720,scrollbars=yes,resizable=yes');
         }
         
         // Get active status filters
