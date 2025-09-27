@@ -48,38 +48,7 @@ if (!isset($importData['name']) || empty(trim($importData['name']))) {
     exit;
 }
 
-// Load existing student data
-function loadStudentData() {
-    $dataFile = 'students.json';
-    if (file_exists($dataFile)) {
-        $content = file_get_contents($dataFile);
-        $data = json_decode($content, true);
-        if ($data && isset($data['students'])) {
-            return $data;
-        }
-    }
-    
-    // Return default data structure if file doesn't exist
-    return array(
-        'students' => array(),
-        'metadata' => array(
-            'last_updated' => date('Y-m-d H:i:s'),
-            'total_students' => 0
-        )
-    );
-}
-
-// Function to save student data
-function saveStudentData($data) {
-    $dataFile = 'students.json';
-    
-    // Update metadata
-    $data['metadata']['last_updated'] = date('Y-m-d H:i:s');
-    $data['metadata']['total_students'] = count($data['students']);
-    
-    $jsonData = json_encode($data, JSON_PRETTY_PRINT);
-    return file_put_contents($dataFile, $jsonData, LOCK_EX);
-}
+require_once __DIR__ . '/data-utils.php';
 
 // Define valid options for validation
 $validColleges = ['Silverquill', 'Prismari', 'Witherbloom', 'Lorehold', 'Quandrix'];
@@ -111,34 +80,26 @@ $validSkills = [
 // Function to map import data to student structure
 function mapImportDataToStudent($importData) {
     global $validColleges, $validYears, $validSkills;
-    
+
     $warnings = [];
-    
-    // Generate unique student ID
-    $student_id = 'student_' . time() . '_' . uniqid();
-    
-    // Map basic fields
-    $student = array(
-        'student_id' => $student_id,
-        'name' => trim($importData['name']),
-        'images' => array(),
-        'race' => isset($importData['race']) ? trim($importData['race']) : '',
-        'age' => isset($importData['age']) ? trim($importData['age']) : '',
-        'job' => isset($importData['job']) ? trim($importData['job']) : '',
-        'edge' => isset($importData['edge']) ? trim($importData['edge']) : '',
-        'bane' => isset($importData['bane']) ? trim($importData['bane']) : '',
-        'favorites' => array(),
-        'relationships' => array(
-            'frunk_points' => '',
-            'frunk_notes' => '',
-            'zepha_points' => '',
-            'zepha_notes' => '',
-            'sharon_points' => '',
-            'sharon_notes' => '',
-            'indigo_points' => '',
-            'indigo_notes' => ''
-        )
-    );
+    $student = getBlankStudentRecord();
+
+    $student['name'] = trim($importData['name']);
+    if (isset($importData['race'])) {
+        $student['race'] = trim($importData['race']);
+    }
+    if (isset($importData['age'])) {
+        $student['age'] = trim($importData['age']);
+    }
+    if (isset($importData['job'])) {
+        $student['job'] = trim($importData['job']);
+    }
+    if (isset($importData['edge'])) {
+        $student['edge'] = trim($importData['edge']);
+    }
+    if (isset($importData['bane'])) {
+        $student['bane'] = trim($importData['bane']);
+    }
     
     // Handle year to grade_level conversion
     if (isset($importData['year'])) {
@@ -201,19 +162,9 @@ function mapImportDataToStudent($importData) {
         $student['skills'] = array();
     }
     
-    // Handle character_information mapping to character_info
-    $student['character_info'] = array(
-        'origin' => '',
-        'desire' => '',
-        'fear' => '',
-        'connection' => '',
-        'impact' => '',
-        'change' => ''
-    );
-    
     if (isset($importData['character_information']) && is_array($importData['character_information'])) {
         $charInfo = $importData['character_information'];
-        
+
         if (isset($charInfo['origin'])) {
             $student['character_info']['origin'] = trim($charInfo['origin']);
         }
@@ -234,41 +185,27 @@ function mapImportDataToStudent($importData) {
         }
     }
     
-    // Handle details section
-    $student['details'] = array(
-        'backstory' => '',
-        'core_want' => '',
-        'core_fear' => '',
-        'other' => isset($importData['other_notes']) ? trim($importData['other_notes']) : ''
-    );
-    
+    if (isset($importData['other_notes'])) {
+        $student['details']['other'] = trim($importData['other_notes']);
+    }
+
     return array('student' => $student, 'warnings' => $warnings);
 }
 
 try {
-    // Load existing data
-    $data = loadStudentData();
-    
     // Map import data to student structure
     $result = mapImportDataToStudent($importData);
     $newStudent = $result['student'];
     $warnings = $result['warnings'];
-    
-    // Create backup of existing file
-    $dataFile = 'students.json';
-    if (file_exists($dataFile)) {
-        $backupFile = 'students_backup_' . date('Y-m-d_H-i-s') . '.json';
-        copy($dataFile, $backupFile);
-    }
-    
-    // Add new student to data
-    $data['students'][] = $newStudent;
-    
-    // Save updated data
-    $saveResult = saveStudentData($data);
-    
-    if ($saveResult === false) {
-        throw new Exception('Failed to save student data');
+
+    $saveResult = modifyStudentData(function (&$data) use ($newStudent) {
+        $data['students'][] = $newStudent;
+        return ['result' => true];
+    });
+
+    if (!$saveResult['success']) {
+        $error = isset($saveResult['error']) ? $saveResult['error'] : 'Failed to save student data';
+        throw new Exception($error);
     }
     
     // Return success response

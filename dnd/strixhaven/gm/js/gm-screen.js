@@ -24,6 +24,8 @@ class GMScreen {
         this.currentPopup = null;
         this.localStorageKey = 'gmscreen_unsaved_tabs';
         this.recoveryCheckInterval = null;
+        this.saveQueue = Promise.resolve();
+        this.lastPopupData = null;
     }
 
     // Initialize the GM Screen
@@ -376,7 +378,7 @@ class GMScreen {
                 saveTimeout = setTimeout(() => {
                     // Simple delay to allow any quick operations to complete
                     setTimeout(() => {
-                        this.saveTabFromPopup(tab, popup, richTextEditor);
+                        this.queuePopupSave(tab, popup, richTextEditor);
                     }, 100);
                 }, 1000); // Reduced back to 1000ms
             });
@@ -418,7 +420,7 @@ class GMScreen {
                     saveTimeout = setTimeout(() => {
                         // Simple delay to allow any quick operations to complete
                         setTimeout(() => {
-                            this.saveTabFromPopup(tab, popup, richTextEditor);
+                            this.queuePopupSave(tab, popup, richTextEditor);
                         }, 100);
                     }, 1000); // Reduced back to 1000ms
                 });
@@ -456,19 +458,75 @@ class GMScreen {
         }
     }
 
+    getPopupTabData(tab, popup, richTextEditor) {
+        const titleInput = popup.querySelector('.tab-popup-title');
+        return {
+            ...tab,
+            name: titleInput && titleInput.value ? titleInput.value : tab.name,
+            content: richTextEditor.getContent(),
+            lastModified: new Date().toISOString()
+        };
+    }
+
+    queuePopupSave(tab, popup, richTextEditor, tabData = null) {
+        const payload = tabData || this.getPopupTabData(tab, popup, richTextEditor);
+        this.lastPopupData = payload;
+
+        const runSave = () => this.saveTabFromPopup(tab, popup, richTextEditor, 0, payload);
+        const nextOperation = this.saveQueue.then(runSave);
+        this.saveQueue = nextOperation.catch(error => {
+            console.error('Queued popup save failed:', error);
+        });
+
+        return nextOperation;
+    }
+
+    flushPendingChanges(useBeacon = false) {
+        if (!this.currentPopup || !this.currentPopup.tab || !this.currentPopup.richTextEditor) {
+            return useBeacon ? true : Promise.resolve(true);
+        }
+
+        const { tab, popup, richTextEditor } = this.currentPopup;
+        const tabData = this.getPopupTabData(tab, popup, richTextEditor);
+
+        if (useBeacon && typeof navigator !== 'undefined' && navigator.sendBeacon) {
+            try {
+                const formData = new FormData();
+                formData.append('action', 'save_tab');
+                formData.append('tab_data', JSON.stringify(tabData));
+                this.saveToLocalStorage(tabData);
+                const success = navigator.sendBeacon('index.php', formData);
+                if (success) {
+                    this.unsavedChanges = false;
+                }
+                return success;
+            } catch (error) {
+                console.warn('Failed to send beacon save:', error);
+                return false;
+            }
+        }
+
+        return this.queuePopupSave(tab, popup, richTextEditor, tabData)
+            .then(() => true)
+            .catch(error => {
+                console.warn('Flush save failed:', error);
+                return false;
+            });
+    }
+
     // Save tab from popup with retry logic
-    async saveTabFromPopup(tab, popup, richTextEditor, retryCount = 0) {
+    async saveTabFromPopup(tab, popup, richTextEditor, retryCount = 0, tabDataOverride = null) {
         const maxRetries = 3;
-        
+
         try {
             console.log(`Saving tab ${tab.id} (attempt ${retryCount + 1})`);
             this.updatePopupSaveStatus('Saving...', 'saving');
-            
+
             const titleInput = popup.querySelector('.tab-popup-title');
-            
-            const updatedTabData = {
+
+            const updatedTabData = tabDataOverride || {
                 ...tab,
-                name: titleInput.value || tab.name,
+                name: titleInput && titleInput.value ? titleInput.value : tab.name,
                 content: richTextEditor.getContent(),
                 lastModified: new Date().toISOString()
             };
@@ -526,7 +584,7 @@ class GMScreen {
                 // Wait before retry
                 await new Promise(resolve => setTimeout(resolve, 1000));
                 
-                return this.saveTabFromPopup(tab, popup, richTextEditor, retryCount + 1);
+                return this.saveTabFromPopup(tab, popup, richTextEditor, retryCount + 1, updatedTabData);
             } else {
                 this.updatePopupSaveStatus('Save failed!', 'error');
                 // Keep in localStorage for recovery
@@ -575,8 +633,9 @@ class GMScreen {
                         // Save changes before closing with timeout
                         this.updatePopupSaveStatus('Saving before close...', 'saving');
                         try {
+                            const latestData = this.getPopupTabData(this.currentPopup.tab, this.currentPopup.popup, this.currentPopup.richTextEditor);
                             await Promise.race([
-                                this.saveTabFromPopup(this.currentPopup.tab, this.currentPopup.popup, this.currentPopup.richTextEditor),
+                                this.queuePopupSave(this.currentPopup.tab, this.currentPopup.popup, this.currentPopup.richTextEditor, latestData),
                                 new Promise((_, reject) => setTimeout(() => reject(new Error('Save timeout')), 10000))
                             ]);
                             this.updatePopupSaveStatus('Saved successfully', 'success');
@@ -997,6 +1056,18 @@ class GMScreen {
         window.addEventListener('focus', () => {
             console.log('Window focused, refreshing tabs...');
             this.loadTabs();
+        });
+
+        document.addEventListener('visibilitychange', () => {
+            if (document.visibilityState === 'hidden') {
+                this.flushPendingChanges(true);
+            }
+        });
+
+        window.addEventListener('beforeunload', () => {
+            if (this.unsavedChanges) {
+                this.flushPendingChanges(true);
+            }
         });
     }
 
