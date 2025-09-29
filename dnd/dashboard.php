@@ -26,6 +26,15 @@ if (!is_dir($chatUploadsDir)) {
     mkdir($chatUploadsDir, 0755, true);
 }
 
+$chatParticipantsMap = require __DIR__ . '/includes/chat_participants.php';
+$chatParticipantList = array();
+foreach ($chatParticipantsMap as $participantId => $participantLabel) {
+    $chatParticipantList[] = array(
+        'id' => $participantId,
+        'label' => $participantLabel
+    );
+}
+
 // Define character list
 $characters = array('frunk', 'sharon', 'indigo', 'zepha');
 
@@ -1368,6 +1377,7 @@ $defaultInventoryTab = $is_gm ? 'frunk' : $user;
                 </div>
             </div>
             <div id="chat-message-list" class="chat-panel__history" role="log" aria-live="polite"></div>
+            <div id="chat-whisper-targets" class="chat-panel__whispers" role="group" aria-label="Whisper targets"></div>
             <form id="chat-input-form" class="chat-panel__input" autocomplete="off">
                 <textarea id="chat-input" class="chat-panel__textarea" rows="2" placeholder="Type a message..."></textarea>
                 <button type="submit" id="chat-send-btn" class="chat-panel__send">Send</button>
@@ -1377,6 +1387,8 @@ $defaultInventoryTab = $is_gm ? 'frunk' : $user;
             Open Chat
         </button>
         <div id="chat-drop-target" class="chat-drop-target" hidden aria-hidden="true">Drop images or image links to share</div>
+        <div id="chat-whisper-popouts" class="chat-whisper-popouts" aria-live="polite" aria-atomic="false"></div>
+        <div id="chat-whisper-alerts" class="chat-whisper-alerts" aria-live="assertive" aria-atomic="true"></div>
     </div>
 
     <!-- Modal for Past Class Details -->
@@ -1408,8 +1420,10 @@ $defaultInventoryTab = $is_gm ? 'frunk' : $user;
         // Global variables
         const isGM = <?php echo $is_gm ? 'true' : 'false'; ?>;
         const currentUser = '<?php echo $user; ?>';
+        const chatParticipants = <?php echo json_encode($chatParticipantList); ?>;
         let currentCharacter = '<?php echo $currentCharacter; ?>';
         window.currentCharacter = currentCharacter;
+        window.chatParticipants = chatParticipants;
         let characterData = {};
         let currentClubIndex = 0;
         let currentPastClassIndex = -1;

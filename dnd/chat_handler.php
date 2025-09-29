@@ -10,6 +10,8 @@ if (PHP_SAPI !== 'cli') {
     $chatDataFile = __DIR__ . '/data/chat_messages.json';
     $chatUploadsDir = __DIR__ . '/chat_uploads';
     $maxMessages = 100;
+    $chatParticipantsMap = require __DIR__ . '/includes/chat_participants.php';
+    $chatParticipantIds = array_keys($chatParticipantsMap);
 
     ensureChatStorage($chatDataFile, $chatUploadsDir);
 
@@ -17,11 +19,11 @@ if (PHP_SAPI !== 'cli') {
 
     switch ($chatAction) {
         case 'send':
-            handleChatSend($chatDataFile, $maxMessages);
+            handleChatSend($chatDataFile, $maxMessages, $chatParticipantIds);
             break;
 
         case 'fetch':
-            handleChatFetch($chatDataFile);
+            handleChatFetch($chatDataFile, $chatParticipantIds);
             break;
 
         case 'upload':
@@ -109,8 +111,94 @@ function sanitizeMessageType($type)
     }
 
     $clean = strtolower(trim($type));
-    $allowed = ['text', 'dice_roll', 'project_roll'];
+    $allowed = ['text', 'dice_roll', 'project_roll', 'whisper'];
     return in_array($clean, $allowed, true) ? $clean : 'text';
+}
+
+function sanitizeChatTarget($value, array $validParticipants)
+{
+    if (!is_string($value)) {
+        return '';
+    }
+
+    $trimmed = trim($value);
+    if ($trimmed === '') {
+        return '';
+    }
+
+    return in_array($trimmed, $validParticipants, true) ? $trimmed : '';
+}
+
+function normalizeWhisperConversationKey($sender, $recipient)
+{
+    $participants = [$sender ?? '', $recipient ?? ''];
+    sort($participants, SORT_STRING);
+    return implode('|', $participants);
+}
+
+function pruneWhisperMessages(array $messages, $limitPerConversation = 5)
+{
+    if ($limitPerConversation <= 0) {
+        return $messages;
+    }
+
+    $conversationMap = [];
+
+    foreach ($messages as $index => $message) {
+        if (!is_array($message)) {
+            continue;
+        }
+
+        $type = sanitizeMessageType($message['type'] ?? 'text');
+        if ($type !== 'whisper') {
+            continue;
+        }
+
+        $sender = isset($message['user']) ? (string) $message['user'] : '';
+        $recipient = isset($message['target']) ? (string) $message['target'] : '';
+        if ($sender === '' || $recipient === '') {
+            continue;
+        }
+
+        $key = normalizeWhisperConversationKey($sender, $recipient);
+        if (!isset($conversationMap[$key])) {
+            $conversationMap[$key] = [];
+        }
+
+        $conversationMap[$key][] = $index;
+    }
+
+    foreach ($conversationMap as $indices) {
+        if (count($indices) <= $limitPerConversation) {
+            continue;
+        }
+
+        $excess = count($indices) - $limitPerConversation;
+        sort($indices, SORT_NUMERIC);
+        for ($i = 0; $i < $excess; $i++) {
+            $removeIndex = $indices[$i];
+            unset($messages[$removeIndex]);
+        }
+    }
+
+    return array_values($messages);
+}
+
+function isWhisperVisibleTo(array $message, $currentUser)
+{
+    $type = sanitizeMessageType($message['type'] ?? 'text');
+    if ($type !== 'whisper') {
+        return true;
+    }
+
+    if (!is_string($currentUser) || $currentUser === '') {
+        return false;
+    }
+
+    $sender = isset($message['user']) ? (string) $message['user'] : '';
+    $recipient = isset($message['target']) ? (string) $message['target'] : '';
+
+    return $sender === $currentUser || $recipient === $currentUser;
 }
 
 function sanitizeDiceNotation($notation)
@@ -371,7 +459,7 @@ function sanitizeImageUrl($url) {
     return '';
 }
 
-function handleChatSend($dataFile, $maxMessages) {
+function handleChatSend($dataFile, $maxMessages, array $validParticipants) {
     if (!isset($_SESSION['user'])) {
         echo json_encode(['success' => false, 'error' => 'Not authenticated']);
         exit;
@@ -388,6 +476,8 @@ function handleChatSend($dataFile, $maxMessages) {
     }
 
     $messageType = sanitizeMessageType($_POST['type'] ?? 'text');
+    $targetRaw = $_POST['target'] ?? '';
+    $target = sanitizeChatTarget($targetRaw, $validParticipants);
     $payloadRaw = $_POST['payload'] ?? '';
     $payload = [];
     if ($payloadRaw !== '') {
@@ -397,12 +487,23 @@ function handleChatSend($dataFile, $maxMessages) {
         }
     }
 
+    $currentUser = $_SESSION['user'];
+
+    if ($messageType === 'whisper') {
+        if ($target === '' || $target === $currentUser) {
+            echo json_encode(['success' => false, 'error' => 'Invalid whisper target']);
+            exit;
+        }
+    } else {
+        $target = '';
+    }
+
     $messages = loadChatMessages($dataFile);
 
     $entry = [
         'id' => uniqid('msg_', true),
         'timestamp' => date('c'),
-        'user' => $_SESSION['user'],
+        'user' => $currentUser,
         'message' => $message,
         'type' => $messageType
     ];
@@ -415,7 +516,12 @@ function handleChatSend($dataFile, $maxMessages) {
         $entry['payload'] = $payload;
     }
 
+    if ($target !== '') {
+        $entry['target'] = $target;
+    }
+
     $messages[] = $entry;
+    $messages = pruneWhisperMessages($messages, 5);
     if (count($messages) > $maxMessages) {
         $messages = array_slice($messages, -1 * $maxMessages);
     }
@@ -429,26 +535,39 @@ function handleChatSend($dataFile, $maxMessages) {
     exit;
 }
 
-function handleChatFetch($dataFile) {
+function handleChatFetch($dataFile, array $validParticipants) {
+    if (!isset($_SESSION['user'])) {
+        echo json_encode(['success' => false, 'error' => 'Not authenticated']);
+        exit;
+    }
+
     $messages = loadChatMessages($dataFile);
     $since = $_POST['since'] ?? '';
-    $filtered = $messages;
+    $sinceTime = $since !== '' ? strtotime($since) : false;
+    $currentUser = $_SESSION['user'];
+    $filtered = [];
 
-    if ($since !== '') {
-        $filtered = array_filter($messages, function ($message) use ($since) {
+    foreach ($messages as $message) {
+        if (!is_array($message)) {
+            continue;
+        }
+
+        if (!isWhisperVisibleTo($message, $currentUser)) {
+            continue;
+        }
+
+        if ($sinceTime !== false) {
             if (!isset($message['timestamp'])) {
-                return false;
+                continue;
             }
 
             $messageTime = strtotime($message['timestamp']);
-            $sinceTime = strtotime($since);
-            if ($sinceTime === false) {
-                return true;
+            if ($messageTime === false || $messageTime <= $sinceTime) {
+                continue;
             }
+        }
 
-            return $messageTime !== false && $messageTime > $sinceTime;
-        });
-        $filtered = array_values($filtered);
+        $filtered[] = $message;
     }
 
     $latest = null;
@@ -458,7 +577,7 @@ function handleChatFetch($dataFile) {
 
     echo json_encode([
         'success' => true,
-        'messages' => $filtered,
+        'messages' => array_values($filtered),
         'latest' => $latest
     ]);
     exit;
