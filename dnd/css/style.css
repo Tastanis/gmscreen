@@ -779,32 +779,10 @@ body {
 
 .chat-whisper-popouts {
     position: fixed;
-    left: 24px;
-    bottom: 24px;
-    display: flex;
-    flex-direction: column;
-    gap: 12px;
+    inset: 0;
     z-index: 1500;
-    pointer-events: auto;
-    max-height: calc(100vh - 140px);
-    overflow-y: auto;
-    justify-content: flex-end;
-    padding-right: 6px;
-    overscroll-behavior: contain;
-    scrollbar-width: thin;
-}
-
-.chat-whisper-popouts::-webkit-scrollbar {
-    width: 8px;
-}
-
-.chat-whisper-popouts::-webkit-scrollbar-thumb {
-    background: rgba(99, 102, 241, 0.35);
-    border-radius: 999px;
-}
-
-.chat-whisper-popouts::-webkit-scrollbar-track {
-    background: transparent;
+    pointer-events: none;
+    overflow: visible;
 }
 
 .chat-whisper-popout {
@@ -820,6 +798,7 @@ body {
     transition: opacity 0.25s ease, transform 0.25s ease;
     pointer-events: auto;
     visibility: hidden;
+    position: absolute;
 }
 
 .chat-whisper-popout--open {
@@ -836,6 +815,7 @@ body {
     background: linear-gradient(135deg, #7f9cf5 0%, #a855f7 100%);
     color: #fff;
     border-radius: 14px 14px 0 0;
+    cursor: move;
 }
 
 .chat-whisper-popout__title {
