@@ -13,6 +13,9 @@
         const sendButton = document.getElementById('chat-send-btn');
         const clearButton = document.getElementById('chat-clear-btn');
         const dropTarget = document.getElementById('chat-drop-target');
+        const whisperContainer = document.getElementById('chat-whisper-targets');
+        const whisperPopoutHost = document.getElementById('chat-whisper-popouts');
+        const whisperAlertHost = document.getElementById('chat-whisper-alerts');
 
         if (!panel || !toggleButton || !messageList || !form || !textarea || !sendButton) {
             return;
@@ -25,6 +28,24 @@
         let messages = [];
         let lightboxElements = null;
         let lastFocusedBeforeLightbox = null;
+        const participants = Array.isArray(window.chatParticipants) ? window.chatParticipants.filter(Boolean) : [];
+        const participantLookup = new Map();
+        participants.forEach((participant) => {
+            if (!participant || typeof participant.id !== 'string') {
+                return;
+            }
+            const id = participant.id;
+            const label = typeof participant.label === 'string' && participant.label.trim() !== ''
+                ? participant.label
+                : id;
+            participantLookup.set(id, label);
+        });
+        const MAX_WHISPER_MESSAGES = 5;
+        const whisperPopouts = new Map();
+        const whisperMessages = new Map();
+        const whisperButtons = new Map();
+        const unreadWhispers = new Set();
+        let whisperAudioContext = null;
 
         const existingMessages = messageList.dataset.initialMessages;
         if (existingMessages) {
@@ -39,6 +60,470 @@
             if (messages.length > MAX_MESSAGES) {
                 messages = messages.slice(-MAX_MESSAGES);
             }
+        }
+
+        function getParticipantLabel(id) {
+            return participantLookup.get(id) || id || '';
+        }
+
+        function getWhisperTargets() {
+            return participants.filter((participant) => {
+                if (!participant || typeof participant.id !== 'string') {
+                    return false;
+                }
+                return participant.id !== currentUser;
+            });
+        }
+
+        function ensureWhisperStore(targetId) {
+            if (!whisperMessages.has(targetId)) {
+                whisperMessages.set(targetId, []);
+            }
+            return whisperMessages.get(targetId);
+        }
+
+        function isWhisperPopoutOpen(targetId) {
+            const popout = whisperPopouts.get(targetId);
+            return Boolean(popout && popout.element && popout.element.classList.contains('chat-whisper-popout--open'));
+        }
+
+        function setWhisperButtonUnread(targetId, state) {
+            const button = whisperButtons.get(targetId);
+            if (!button) {
+                if (!state) {
+                    unreadWhispers.delete(targetId);
+                } else {
+                    unreadWhispers.add(targetId);
+                }
+                return;
+            }
+
+            if (state) {
+                unreadWhispers.add(targetId);
+                button.classList.add('chat-whisper-btn--unread');
+                button.setAttribute('data-unread', 'true');
+            } else {
+                unreadWhispers.delete(targetId);
+                button.classList.remove('chat-whisper-btn--unread');
+                button.removeAttribute('data-unread');
+            }
+        }
+
+        function renderWhisperButtons() {
+            if (!whisperContainer) {
+                return;
+            }
+
+            const targets = getWhisperTargets();
+            whisperContainer.innerHTML = '';
+            whisperButtons.clear();
+
+            if (targets.length === 0) {
+                whisperContainer.hidden = true;
+                return;
+            }
+
+            whisperContainer.hidden = false;
+
+            targets.forEach((participant) => {
+                if (!participant || typeof participant.id !== 'string') {
+                    return;
+                }
+
+                const button = document.createElement('button');
+                button.type = 'button';
+                button.className = 'chat-whisper-btn';
+                button.textContent = getParticipantLabel(participant.id);
+                button.addEventListener('click', () => {
+                    openWhisperPopout(participant.id);
+                });
+                whisperButtons.set(participant.id, button);
+                if (unreadWhispers.has(participant.id)) {
+                    button.classList.add('chat-whisper-btn--unread');
+                    button.setAttribute('data-unread', 'true');
+                }
+                whisperContainer.appendChild(button);
+            });
+        }
+
+        function createWhisperPopout(targetId) {
+            if (!whisperPopoutHost) {
+                return null;
+            }
+
+            const popout = document.createElement('div');
+            popout.className = 'chat-whisper-popout';
+            popout.setAttribute('role', 'dialog');
+            popout.setAttribute('aria-live', 'polite');
+            popout.setAttribute('aria-modal', 'false');
+            popout.setAttribute('aria-hidden', 'true');
+            popout.dataset.target = targetId;
+
+            const header = document.createElement('div');
+            header.className = 'chat-whisper-popout__header';
+
+            const title = document.createElement('h4');
+            title.className = 'chat-whisper-popout__title';
+            title.textContent = `Whisper with ${getParticipantLabel(targetId)}`;
+
+            const closeBtn = document.createElement('button');
+            closeBtn.type = 'button';
+            closeBtn.className = 'chat-whisper-popout__close';
+            closeBtn.setAttribute('aria-label', 'Close whisper window');
+            closeBtn.innerHTML = '&times;';
+
+            header.appendChild(title);
+            header.appendChild(closeBtn);
+
+            const messagesContainer = document.createElement('div');
+            messagesContainer.className = 'chat-whisper-popout__messages';
+
+            const formElement = document.createElement('form');
+            formElement.className = 'chat-whisper-popout__form';
+            formElement.noValidate = true;
+
+            const textareaElement = document.createElement('textarea');
+            textareaElement.className = 'chat-whisper-popout__textarea';
+            textareaElement.rows = 3;
+            textareaElement.placeholder = `Send a whisper to ${getParticipantLabel(targetId)}...`;
+
+            const controls = document.createElement('div');
+            controls.className = 'chat-whisper-popout__controls';
+
+            const sendBtn = document.createElement('button');
+            sendBtn.type = 'submit';
+            sendBtn.className = 'chat-whisper-popout__send';
+            sendBtn.textContent = 'Send Whisper';
+
+            controls.appendChild(sendBtn);
+            formElement.appendChild(textareaElement);
+            formElement.appendChild(controls);
+
+            formElement.addEventListener('submit', (event) => {
+                event.preventDefault();
+                handleWhisperSubmit(targetId, textareaElement, sendBtn);
+            });
+
+            textareaElement.addEventListener('keydown', (event) => {
+                if (event.key === 'Enter' && !event.shiftKey) {
+                    event.preventDefault();
+                    formElement.requestSubmit();
+                }
+            });
+
+            closeBtn.addEventListener('click', () => {
+                closeWhisperPopout(targetId);
+            });
+
+            popout.appendChild(header);
+            popout.appendChild(messagesContainer);
+            popout.appendChild(formElement);
+
+            whisperPopoutHost.appendChild(popout);
+
+            const popoutData = {
+                element: popout,
+                messageContainer: messagesContainer,
+                textarea: textareaElement,
+                sendButton: sendBtn
+            };
+            whisperPopouts.set(targetId, popoutData);
+            return popoutData;
+        }
+
+        function openWhisperPopout(targetId) {
+            let popout = whisperPopouts.get(targetId);
+            if (!popout) {
+                popout = createWhisperPopout(targetId);
+            }
+
+            if (!popout || !popout.element) {
+                return;
+            }
+
+            popout.element.classList.add('chat-whisper-popout--open');
+            popout.element.setAttribute('aria-hidden', 'false');
+            setWhisperButtonUnread(targetId, false);
+            renderWhisperMessages(targetId);
+            window.setTimeout(() => {
+                popout.textarea.focus();
+            }, 10);
+        }
+
+        function closeWhisperPopout(targetId) {
+            const popout = whisperPopouts.get(targetId);
+            if (!popout || !popout.element) {
+                return;
+            }
+
+            popout.element.classList.remove('chat-whisper-popout--open');
+            popout.element.setAttribute('aria-hidden', 'true');
+        }
+
+        function normalizeWhisperMessage(message, overrides = {}) {
+            if (!message || typeof message !== 'object') {
+                return null;
+            }
+
+            const sender = typeof message.user === 'string' ? message.user : '';
+            const target = typeof message.target === 'string' ? message.target : '';
+            const direction = sender === currentUser ? 'outgoing' : 'incoming';
+
+            return {
+                id: typeof message.id === 'string' ? message.id : '',
+                timestamp: typeof message.timestamp === 'string' && message.timestamp !== ''
+                    ? message.timestamp
+                    : new Date().toISOString(),
+                message: typeof message.message === 'string' ? message.message : '',
+                user: sender,
+                target,
+                direction,
+                pending: overrides.pending !== undefined ? overrides.pending : Boolean(message.pending),
+                error: overrides.error !== undefined ? overrides.error : Boolean(message.error)
+            };
+        }
+
+        function deriveWhisperPartner(message) {
+            if (!message || typeof message !== 'object') {
+                return '';
+            }
+
+            const sender = typeof message.user === 'string' ? message.user : '';
+            const target = typeof message.target === 'string' ? message.target : '';
+
+            if (sender === currentUser && target !== '') {
+                return target;
+            }
+
+            if (target === currentUser && sender !== '') {
+                return sender;
+            }
+
+            return '';
+        }
+
+        function renderWhisperMessages(targetId) {
+            const popout = whisperPopouts.get(targetId);
+            if (!popout || !popout.messageContainer) {
+                return;
+            }
+
+            const store = ensureWhisperStore(targetId);
+            const sorted = [...store].sort((a, b) => {
+                const timeA = new Date(a.timestamp || 0).getTime();
+                const timeB = new Date(b.timestamp || 0).getTime();
+                return timeA - timeB;
+            });
+
+            popout.messageContainer.innerHTML = '';
+
+            sorted.forEach((message) => {
+                const item = document.createElement('div');
+                item.className = 'chat-whisper-popout__message';
+                if (message.direction === 'outgoing') {
+                    item.classList.add('chat-whisper-popout__message--outgoing');
+                }
+                if (message.pending) {
+                    item.classList.add('chat-whisper-popout__message--pending');
+                }
+                if (message.error) {
+                    item.classList.add('chat-whisper-popout__message--error');
+                }
+
+                const meta = document.createElement('div');
+                meta.className = 'chat-whisper-popout__meta';
+
+                const author = document.createElement('span');
+                author.textContent = message.direction === 'outgoing' ? 'You' : getParticipantLabel(message.user);
+
+                const timestamp = document.createElement('span');
+                if (message.pending) {
+                    timestamp.textContent = 'Sending…';
+                } else if (message.error) {
+                    timestamp.textContent = 'Failed';
+                } else {
+                    timestamp.textContent = formatTimestamp(message.timestamp);
+                }
+
+                meta.appendChild(author);
+                meta.appendChild(timestamp);
+
+                const text = document.createElement('div');
+                text.className = 'chat-whisper-popout__text';
+                text.textContent = message.message || '';
+
+                item.appendChild(meta);
+                item.appendChild(text);
+
+                popout.messageContainer.appendChild(item);
+            });
+
+            popout.messageContainer.scrollTop = popout.messageContainer.scrollHeight;
+        }
+
+        function addOptimisticWhisper(targetId, message) {
+            const normalized = normalizeWhisperMessage(message, { pending: true, error: false });
+            if (!normalized) {
+                return;
+            }
+
+            const store = ensureWhisperStore(targetId);
+            store.push(normalized);
+            if (store.length > MAX_WHISPER_MESSAGES) {
+                store.splice(0, store.length - MAX_WHISPER_MESSAGES);
+            }
+            renderWhisperMessages(targetId);
+        }
+
+        function resolveWhisperMessage(targetId, tempId, serverMessage) {
+            const normalized = normalizeWhisperMessage(serverMessage, { pending: false, error: false });
+            if (!normalized) {
+                return;
+            }
+
+            const store = ensureWhisperStore(targetId);
+            const index = store.findIndex((entry) => entry.id === tempId);
+            if (index !== -1) {
+                store[index] = normalized;
+            } else {
+                store.push(normalized);
+            }
+
+            store.sort((a, b) => new Date(a.timestamp || 0) - new Date(b.timestamp || 0));
+            if (store.length > MAX_WHISPER_MESSAGES) {
+                store.splice(0, store.length - MAX_WHISPER_MESSAGES);
+            }
+
+            renderWhisperMessages(targetId);
+        }
+
+        function markWhisperMessageError(targetId, tempId) {
+            const store = ensureWhisperStore(targetId);
+            const index = store.findIndex((entry) => entry.id === tempId);
+            if (index === -1) {
+                return;
+            }
+
+            store[index] = Object.assign({}, store[index], {
+                pending: false,
+                error: true
+            });
+            renderWhisperMessages(targetId);
+        }
+
+        function playWhisperSound() {
+            try {
+                if (!whisperAudioContext) {
+                    const AudioContextClass = window.AudioContext || window.webkitAudioContext;
+                    if (!AudioContextClass) {
+                        return;
+                    }
+                    whisperAudioContext = new AudioContextClass();
+                }
+
+                if (whisperAudioContext.state === 'suspended') {
+                    whisperAudioContext.resume().catch(() => {});
+                }
+
+                const context = whisperAudioContext;
+                const oscillator = context.createOscillator();
+                const gain = context.createGain();
+
+                oscillator.type = 'sine';
+                oscillator.frequency.setValueAtTime(880, context.currentTime);
+
+                gain.gain.setValueAtTime(0.0001, context.currentTime);
+                gain.gain.exponentialRampToValueAtTime(0.2, context.currentTime + 0.01);
+                gain.gain.exponentialRampToValueAtTime(0.0001, context.currentTime + 0.4);
+
+                oscillator.connect(gain);
+                gain.connect(context.destination);
+
+                oscillator.start();
+                oscillator.stop(context.currentTime + 0.45);
+            } catch (error) {
+                // Ignore audio errors silently
+            }
+        }
+
+        function showWhisperAlert(message) {
+            if (!whisperAlertHost) {
+                return;
+            }
+
+            const alert = document.createElement('div');
+            alert.className = 'chat-whisper-alert';
+
+            const title = document.createElement('div');
+            title.className = 'chat-whisper-alert__title';
+            title.textContent = `Whisper from ${getParticipantLabel(message.user)}`;
+
+            const body = document.createElement('div');
+            body.className = 'chat-whisper-alert__body';
+            body.textContent = message.message || '';
+
+            const closeBtn = document.createElement('button');
+            closeBtn.type = 'button';
+            closeBtn.className = 'chat-whisper-alert__close';
+            closeBtn.setAttribute('aria-label', 'Dismiss whisper alert');
+            closeBtn.innerHTML = '&times;';
+
+            const removeAlert = () => {
+                if (!alert.parentElement) {
+                    return;
+                }
+                alert.parentElement.removeChild(alert);
+            };
+
+            closeBtn.addEventListener('click', removeAlert);
+
+            alert.appendChild(closeBtn);
+            alert.appendChild(title);
+            alert.appendChild(body);
+
+            whisperAlertHost.appendChild(alert);
+
+            window.setTimeout(removeAlert, 6500);
+        }
+
+        function handleIncomingWhisper(serverMessage, { notify = true } = {}) {
+            const partnerId = deriveWhisperPartner(serverMessage);
+            if (!partnerId) {
+                return;
+            }
+
+            const normalized = normalizeWhisperMessage(serverMessage, { pending: false, error: false });
+            if (!normalized) {
+                return;
+            }
+
+            const store = ensureWhisperStore(partnerId);
+            const existingIndex = normalized.id ? store.findIndex((entry) => entry.id === normalized.id) : -1;
+            const wasPending = existingIndex !== -1 ? Boolean(store[existingIndex].pending) : false;
+
+            if (existingIndex !== -1) {
+                store[existingIndex] = normalized;
+            } else {
+                store.push(normalized);
+            }
+
+            store.sort((a, b) => new Date(a.timestamp || 0) - new Date(b.timestamp || 0));
+            if (store.length > MAX_WHISPER_MESSAGES) {
+                store.splice(0, store.length - MAX_WHISPER_MESSAGES);
+            }
+
+            if (normalized.direction === 'incoming' && notify) {
+                if (!isWhisperPopoutOpen(partnerId)) {
+                    setWhisperButtonUnread(partnerId, true);
+                }
+
+                if (existingIndex === -1 || wasPending) {
+                    showWhisperAlert(normalized);
+                    playWhisperSound();
+                }
+            }
+
+            renderWhisperMessages(partnerId);
         }
 
         function formatTimestamp(timestamp) {
@@ -351,10 +836,14 @@
         }
 
         function createMessageElement(message) {
+            const messageType = normalizeMessageType(message.type);
+
+            if (messageType === 'whisper') {
+                return null;
+            }
+
             const wrapper = document.createElement('div');
             wrapper.className = 'chat-message';
-
-            const messageType = normalizeMessageType(message.type);
 
             if (message.user === currentUser && messageType !== 'project_roll') {
                 wrapper.classList.add('chat-message--self');
@@ -440,6 +929,12 @@
 
         function updateMessageFromServer(serverMessage) {
             if (!serverMessage || !serverMessage.id) {
+                return;
+            }
+
+            const messageType = normalizeMessageType(serverMessage.type);
+            if (messageType === 'whisper') {
+                handleIncomingWhisper(serverMessage, { notify: serverMessage.user !== currentUser });
                 return;
             }
 
@@ -566,7 +1061,10 @@
             });
 
             for (const message of sorted) {
-                messageList.appendChild(createMessageElement(message));
+                const element = createMessageElement(message);
+                if (element) {
+                    messageList.appendChild(element);
+                }
             }
 
             messageList.scrollTop = messageList.scrollHeight;
@@ -627,6 +1125,12 @@
                 }
 
                 updateLatestTimestamp(message.timestamp);
+
+                const messageType = normalizeMessageType(message.type);
+                if (messageType === 'whisper') {
+                    handleIncomingWhisper(message, { notify: message.user !== currentUser });
+                    continue;
+                }
 
                 if (idToIndex.has(message.id)) {
                     const idx = idToIndex.get(message.id);
@@ -717,6 +1221,62 @@
             return true;
         }
 
+        async function handleWhisperSubmit(targetId, textareaElement, sendBtn) {
+            if (!textareaElement) {
+                return;
+            }
+
+            const text = textareaElement.value.trim();
+            if (text === '') {
+                return;
+            }
+
+            textareaElement.value = '';
+            if (sendBtn) {
+                sendBtn.disabled = true;
+            }
+
+            let tempId = null;
+
+            try {
+                const result = await sendChatMessage({
+                    message: text,
+                    type: 'whisper',
+                    target: targetId,
+                    onOptimistic: (optimisticMessage) => {
+                        tempId = optimisticMessage && optimisticMessage.id ? optimisticMessage.id : null;
+                        addOptimisticWhisper(targetId, optimisticMessage);
+                    },
+                    onSuccess: (serverMessage) => {
+                        if (tempId) {
+                            resolveWhisperMessage(targetId, tempId, serverMessage);
+                        } else {
+                            handleIncomingWhisper(serverMessage, { notify: false });
+                        }
+                    },
+                    onError: () => {
+                        if (tempId) {
+                            markWhisperMessageError(targetId, tempId);
+                        }
+                    }
+                });
+
+                if (!result && tempId) {
+                    markWhisperMessageError(targetId, tempId);
+                }
+            } catch (error) {
+                if (tempId) {
+                    markWhisperMessageError(targetId, tempId);
+                }
+                showChatToast('Failed to send whisper', 'error');
+            } finally {
+                if (sendBtn) {
+                    sendBtn.disabled = false;
+                }
+                textareaElement.focus();
+            }
+        }
+
         async function handleSend(event) {
             event.preventDefault();
             const text = textarea.value.trim();
@@ -753,11 +1313,13 @@
             }
         }
 
-        async function sendChatMessage({ message = '', imageUrl = '', type = 'text', payload = null }) {
+        async function sendChatMessage({ message = '', imageUrl = '', type = 'text', payload = null, target = '', onOptimistic = null, onSuccess = null, onError = null }) {
             const text = typeof message === 'string' ? message.trim() : '';
             const image = typeof imageUrl === 'string' ? imageUrl.trim() : '';
             const normalizedType = typeof type === 'string' && type.trim() !== '' ? type.trim() : 'text';
             const payloadObject = payload && typeof payload === 'object' ? payload : null;
+            const normalizedTarget = typeof target === 'string' ? target.trim() : '';
+            const isWhisper = normalizedType === 'whisper';
 
             if (text === '' && image === '' && !payloadObject) {
                 return false;
@@ -786,9 +1348,21 @@
                 }
             }
 
-            messages.push(optimisticMessage);
-            trimMessages();
-            renderMessages();
+            if (isWhisper) {
+                if (normalizedTarget === '') {
+                    return false;
+                }
+                optimisticMessage.target = normalizedTarget;
+                if (typeof onOptimistic === 'function') {
+                    onOptimistic(optimisticMessage);
+                } else {
+                    addOptimisticWhisper(normalizedTarget, optimisticMessage);
+                }
+            } else {
+                messages.push(optimisticMessage);
+                trimMessages();
+                renderMessages();
+            }
 
             try {
                 const params = new URLSearchParams();
@@ -809,6 +1383,9 @@
                         // Ignore serialization error
                     }
                 }
+                if (isWhisper && normalizedTarget !== '') {
+                    params.append('target', normalizedTarget);
+                }
 
                 const response = await fetch('chat_handler.php', {
                     method: 'POST',
@@ -824,15 +1401,37 @@
 
                 const data = await response.json();
                 if (data && data.success && data.message) {
-                    resolvePendingMessage(tempId, data.message);
                     updateLatestTimestamp(data.message.timestamp);
+                    if (isWhisper) {
+                        if (typeof onSuccess === 'function') {
+                            onSuccess(data.message);
+                        } else {
+                            resolveWhisperMessage(normalizedTarget, tempId, data.message);
+                        }
+                    } else {
+                        resolvePendingMessage(tempId, data.message);
+                    }
                     return true;
                 }
 
-                markMessageError(tempId);
+                if (isWhisper) {
+                    if (typeof onError === 'function') {
+                        onError(data && data.error ? data.error : null);
+                    }
+                    markWhisperMessageError(normalizedTarget, tempId);
+                } else {
+                    markMessageError(tempId);
+                }
                 showChatToast(data && data.error ? data.error : 'Failed to send message', 'error');
             } catch (error) {
-                markMessageError(tempId);
+                if (isWhisper) {
+                    if (typeof onError === 'function') {
+                        onError(error);
+                    }
+                    markWhisperMessageError(normalizedTarget, tempId);
+                } else {
+                    markMessageError(tempId);
+                }
                 showChatToast('Failed to send message', 'error');
             }
 
@@ -1013,6 +1612,8 @@
                 }
             });
         }
+
+        renderWhisperButtons();
 
         toggleButton.addEventListener('click', () => {
             setOpen(!isOpen);
