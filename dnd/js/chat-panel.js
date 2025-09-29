@@ -46,6 +46,7 @@
         const whisperButtons = new Map();
         const unreadWhispers = new Set();
         let whisperAudioContext = null;
+        let hasCompletedInitialFetch = false;
 
         const existingMessages = messageList.dataset.initialMessages;
         if (existingMessages) {
@@ -190,14 +191,44 @@
             const controls = document.createElement('div');
             controls.className = 'chat-whisper-popout__controls';
 
+            const imageBtn = document.createElement('button');
+            imageBtn.type = 'button';
+            imageBtn.className = 'chat-whisper-popout__attach';
+            imageBtn.textContent = 'Add Image';
+            imageBtn.setAttribute('aria-label', 'Attach image to whisper');
+
+            const fileInput = document.createElement('input');
+            fileInput.type = 'file';
+            fileInput.accept = 'image/*';
+            fileInput.hidden = true;
+            fileInput.setAttribute('aria-hidden', 'true');
+            fileInput.tabIndex = -1;
+
             const sendBtn = document.createElement('button');
             sendBtn.type = 'submit';
             sendBtn.className = 'chat-whisper-popout__send';
             sendBtn.textContent = 'Send Whisper';
 
+            imageBtn.addEventListener('click', () => {
+                fileInput.value = '';
+                fileInput.click();
+            });
+
+            fileInput.addEventListener('change', async () => {
+                const [file] = fileInput.files || [];
+                if (!file) {
+                    return;
+                }
+                const popoutData = whisperPopouts.get(targetId);
+                await handleWhisperImageUpload(targetId, file, popoutData);
+                fileInput.value = '';
+            });
+
+            controls.appendChild(imageBtn);
             controls.appendChild(sendBtn);
             formElement.appendChild(textareaElement);
             formElement.appendChild(controls);
+            formElement.appendChild(fileInput);
 
             formElement.addEventListener('submit', (event) => {
                 event.preventDefault();
@@ -225,7 +256,9 @@
                 element: popout,
                 messageContainer: messagesContainer,
                 textarea: textareaElement,
-                sendButton: sendBtn
+                sendButton: sendBtn,
+                imageButton: imageBtn,
+                fileInput
             };
             whisperPopouts.set(targetId, popoutData);
             return popoutData;
@@ -275,6 +308,7 @@
                     ? message.timestamp
                     : new Date().toISOString(),
                 message: typeof message.message === 'string' ? message.message : '',
+                imageUrl: typeof message.imageUrl === 'string' ? message.imageUrl : '',
                 user: sender,
                 target,
                 direction,
@@ -348,12 +382,52 @@
                 meta.appendChild(author);
                 meta.appendChild(timestamp);
 
-                const text = document.createElement('div');
-                text.className = 'chat-whisper-popout__text';
-                text.textContent = message.message || '';
+                const body = document.createElement('div');
+                body.className = 'chat-whisper-popout__body';
+
+                if (message.message) {
+                    const text = document.createElement('div');
+                    text.className = 'chat-whisper-popout__text';
+                    text.textContent = message.message;
+                    body.appendChild(text);
+                }
+
+                if (message.imageUrl) {
+                    const imageWrapper = document.createElement('div');
+                    imageWrapper.className = 'chat-whisper-popout__image';
+
+                    const imageButton = document.createElement('button');
+                    imageButton.type = 'button';
+                    imageButton.className = 'chat-whisper-popout__thumbnail-button';
+
+                    const image = document.createElement('img');
+                    image.className = 'chat-whisper-popout__thumbnail';
+                    image.src = message.imageUrl;
+                    image.alt = message.message || 'Shared image';
+                    image.loading = 'lazy';
+
+                    const handlePreview = (event) => {
+                        event.preventDefault();
+                        openImageLightbox(message.imageUrl, image.alt, message.message);
+                    };
+
+                    imageButton.addEventListener('click', handlePreview);
+                    image.addEventListener('click', handlePreview);
+
+                    imageButton.appendChild(image);
+                    imageWrapper.appendChild(imageButton);
+                    body.appendChild(imageWrapper);
+                }
+
+                if (!message.message && !message.imageUrl) {
+                    const text = document.createElement('div');
+                    text.className = 'chat-whisper-popout__text';
+                    text.textContent = '';
+                    body.appendChild(text);
+                }
 
                 item.appendChild(meta);
-                item.appendChild(text);
+                item.appendChild(body);
 
                 popout.messageContainer.appendChild(item);
             });
@@ -460,7 +534,10 @@
 
             const body = document.createElement('div');
             body.className = 'chat-whisper-alert__body';
-            body.textContent = message.message || '';
+            const alertText = message.message
+                ? message.message
+                : (message.imageUrl ? 'Sent an image' : '');
+            body.textContent = alertText;
 
             const closeBtn = document.createElement('button');
             closeBtn.type = 'button';
@@ -513,13 +590,16 @@
             }
 
             if (normalized.direction === 'incoming' && notify) {
-                if (!isWhisperPopoutOpen(partnerId)) {
-                    setWhisperButtonUnread(partnerId, true);
-                }
-
-                if (existingIndex === -1 || wasPending) {
+                const isNewMessage = existingIndex === -1 || wasPending;
+                if (isNewMessage) {
+                    openWhisperPopout(partnerId);
+                    if (!isWhisperPopoutOpen(partnerId)) {
+                        setWhisperButtonUnread(partnerId, true);
+                    }
                     showWhisperAlert(normalized);
                     playWhisperSound();
+                } else if (!isWhisperPopoutOpen(partnerId)) {
+                    setWhisperButtonUnread(partnerId, true);
                 }
             }
 
@@ -1108,6 +1188,7 @@
 
         function mergeMessages(incoming) {
             if (!Array.isArray(incoming) || incoming.length === 0) {
+                hasCompletedInitialFetch = true;
                 return;
             }
 
@@ -1128,7 +1209,8 @@
 
                 const messageType = normalizeMessageType(message.type);
                 if (messageType === 'whisper') {
-                    handleIncomingWhisper(message, { notify: message.user !== currentUser });
+                    const shouldNotify = hasCompletedInitialFetch && message.user !== currentUser;
+                    handleIncomingWhisper(message, { notify: shouldNotify });
                     continue;
                 }
 
@@ -1146,6 +1228,8 @@
                 trimMessages();
                 renderMessages();
             }
+
+            hasCompletedInitialFetch = true;
         }
 
         async function fetchMessages() {
@@ -1274,6 +1358,58 @@
                     sendBtn.disabled = false;
                 }
                 textareaElement.focus();
+            }
+        }
+
+        async function handleWhisperImageUpload(targetId, file, popoutData = null) {
+            if (!file) {
+                return;
+            }
+
+            if (!targetId || typeof targetId !== 'string') {
+                showChatToast('Invalid whisper target', 'error');
+                return;
+            }
+
+            if (!isImageFile(file)) {
+                showChatToast('Only image files can be sent via whisper.', 'error');
+                return;
+            }
+
+            const textareaElement = popoutData && popoutData.textarea ? popoutData.textarea : null;
+            const sendBtn = popoutData && popoutData.sendButton ? popoutData.sendButton : null;
+            const imageBtn = popoutData && popoutData.imageButton ? popoutData.imageButton : null;
+
+            const previousSendDisabled = sendBtn ? sendBtn.disabled : false;
+            const previousImageDisabled = imageBtn ? imageBtn.disabled : false;
+
+            if (sendBtn) {
+                sendBtn.disabled = true;
+            }
+            if (imageBtn) {
+                imageBtn.disabled = true;
+            }
+
+            const caption = textareaElement ? textareaElement.value.trim() : '';
+
+            try {
+                await uploadFileForChat(file, { type: 'whisper', target: targetId, caption });
+                if (textareaElement) {
+                    textareaElement.value = '';
+                }
+            } catch (error) {
+                const errorMessage = error && error.message ? error.message : 'Failed to send image';
+                showChatToast(errorMessage, 'error');
+            } finally {
+                if (sendBtn) {
+                    sendBtn.disabled = previousSendDisabled;
+                }
+                if (imageBtn) {
+                    imageBtn.disabled = previousImageDisabled;
+                }
+                if (textareaElement) {
+                    textareaElement.focus();
+                }
             }
         }
 
@@ -1466,7 +1602,7 @@
             return /(\.png|\.jpe?g|\.gif|\.webp|\.bmp|\.svg)$/i.test(name);
         }
 
-        async function uploadFileForChat(file) {
+        async function uploadFileForChat(file, { type = 'text', target = '', caption = '' } = {}) {
             const formData = new FormData();
             formData.append('action', 'chat_upload');
             formData.append('file', file);
@@ -1482,7 +1618,27 @@
 
             const data = await response.json();
             if (data && data.success && data.url) {
-                await sendChatMessage({ message: file.name || '', imageUrl: data.url });
+                const normalizedType = typeof type === 'string' && type.trim() !== '' ? type.trim() : 'text';
+                const normalizedTarget = typeof target === 'string' ? target.trim() : '';
+                const normalizedCaption = typeof caption === 'string' ? caption.trim() : '';
+
+                const payload = {
+                    message: normalizedCaption !== '' ? normalizedCaption : (file.name || ''),
+                    imageUrl: data.url
+                };
+
+                if (normalizedType !== 'text') {
+                    payload.type = normalizedType;
+                }
+
+                if (normalizedType === 'whisper' && normalizedTarget !== '') {
+                    payload.target = normalizedTarget;
+                }
+
+                const result = await sendChatMessage(payload);
+                if (!result) {
+                    throw new Error('Failed to send image');
+                }
                 return;
             }
 
