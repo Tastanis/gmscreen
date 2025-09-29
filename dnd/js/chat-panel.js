@@ -47,6 +47,9 @@
         const unreadWhispers = new Set();
         let whisperAudioContext = null;
         let hasCompletedInitialFetch = false;
+        let whisperPopoutZIndex = 1600;
+        let whisperPopoutStackOffset = 0;
+        let activeWhisperDrag = null;
 
         const existingMessages = messageList.dataset.initialMessages;
         if (existingMessages) {
@@ -146,6 +149,126 @@
                 whisperContainer.appendChild(button);
             });
         }
+
+        function bringWhisperPopoutToFront(popoutData) {
+            if (!popoutData || !popoutData.element) {
+                return;
+            }
+            whisperPopoutZIndex += 1;
+            popoutData.element.style.zIndex = String(whisperPopoutZIndex);
+        }
+
+        function setWhisperPopoutPosition(popoutData, left, top) {
+            if (!popoutData || !popoutData.element) {
+                return;
+            }
+
+            const element = popoutData.element;
+            const maxLeft = Math.max(0, window.innerWidth - element.offsetWidth);
+            const maxTop = Math.max(0, window.innerHeight - element.offsetHeight);
+            const clampedLeft = Math.min(Math.max(left, 0), maxLeft);
+            const clampedTop = Math.min(Math.max(top, 0), maxTop);
+
+            element.style.left = `${clampedLeft}px`;
+            element.style.top = `${clampedTop}px`;
+            element.style.right = 'auto';
+            element.style.bottom = 'auto';
+            popoutData.position = { left: clampedLeft, top: clampedTop };
+        }
+
+        function initializeWhisperPopoutPosition(popoutData) {
+            if (!popoutData || !popoutData.element) {
+                return;
+            }
+
+            window.requestAnimationFrame(() => {
+                if (!popoutData || !popoutData.element) {
+                    return;
+                }
+
+                const existing = popoutData.position;
+                if (existing) {
+                    setWhisperPopoutPosition(popoutData, existing.left, existing.top);
+                    return;
+                }
+
+                const element = popoutData.element;
+                const defaultLeft = 24 + (whisperPopoutStackOffset % 3) * 24;
+                const defaultTop = Math.max(
+                    24,
+                    window.innerHeight - element.offsetHeight - 24 - whisperPopoutStackOffset
+                );
+                whisperPopoutStackOffset = (whisperPopoutStackOffset + 48) % 240;
+                setWhisperPopoutPosition(popoutData, defaultLeft, defaultTop);
+            });
+        }
+
+        function initializeWhisperPopoutDrag(popoutData, dragHandle) {
+            if (!popoutData || !popoutData.element || !dragHandle) {
+                return;
+            }
+
+            dragHandle.addEventListener('pointerdown', (event) => {
+                if (event.button !== undefined && event.button !== 0) {
+                    return;
+                }
+                const target = event.target;
+                if (target instanceof Element && target.closest('.chat-whisper-popout__close')) {
+                    return;
+                }
+                event.preventDefault();
+                if (typeof dragHandle.setPointerCapture === 'function') {
+                    dragHandle.setPointerCapture(event.pointerId);
+                }
+                const rect = popoutData.element.getBoundingClientRect();
+                activeWhisperDrag = {
+                    popoutData,
+                    pointerId: event.pointerId,
+                    offsetX: event.clientX - rect.left,
+                    offsetY: event.clientY - rect.top
+                };
+                bringWhisperPopoutToFront(popoutData);
+            });
+
+            dragHandle.addEventListener('pointermove', (event) => {
+                if (!activeWhisperDrag || event.pointerId !== activeWhisperDrag.pointerId) {
+                    return;
+                }
+                event.preventDefault();
+                const left = event.clientX - activeWhisperDrag.offsetX;
+                const top = event.clientY - activeWhisperDrag.offsetY;
+                setWhisperPopoutPosition(activeWhisperDrag.popoutData, left, top);
+            });
+
+            function endDrag(event) {
+                if (!activeWhisperDrag || event.pointerId !== activeWhisperDrag.pointerId) {
+                    return;
+                }
+                if (typeof dragHandle.releasePointerCapture === 'function') {
+                    try {
+                        dragHandle.releasePointerCapture(event.pointerId);
+                    } catch (error) {
+                        // Ignore failures when the pointer was not captured.
+                    }
+                }
+                activeWhisperDrag = null;
+            }
+
+            dragHandle.addEventListener('pointerup', endDrag);
+            dragHandle.addEventListener('pointercancel', endDrag);
+            dragHandle.addEventListener('lostpointercapture', () => {
+                activeWhisperDrag = null;
+            });
+        }
+
+        window.addEventListener('resize', () => {
+            whisperPopouts.forEach((popoutData) => {
+                if (!popoutData || !popoutData.element || !popoutData.position) {
+                    return;
+                }
+                setWhisperPopoutPosition(popoutData, popoutData.position.left, popoutData.position.top);
+            });
+        });
 
         function createWhisperPopout(targetId) {
             if (!whisperPopoutHost) {
@@ -258,9 +381,18 @@
                 textarea: textareaElement,
                 sendButton: sendBtn,
                 imageButton: imageBtn,
-                fileInput
+                fileInput,
+                position: null
             };
             whisperPopouts.set(targetId, popoutData);
+            initializeWhisperPopoutDrag(popoutData, header);
+            initializeWhisperPopoutPosition(popoutData);
+            popout.addEventListener('pointerdown', () => {
+                bringWhisperPopoutToFront(popoutData);
+            });
+            popout.addEventListener('focusin', () => {
+                bringWhisperPopoutToFront(popoutData);
+            });
             return popoutData;
         }
 
@@ -276,6 +408,8 @@
 
             popout.element.classList.add('chat-whisper-popout--open');
             popout.element.setAttribute('aria-hidden', 'false');
+            initializeWhisperPopoutPosition(popout);
+            bringWhisperPopoutToFront(popout);
             setWhisperButtonUnread(targetId, false);
             renderWhisperMessages(targetId);
             window.setTimeout(() => {
