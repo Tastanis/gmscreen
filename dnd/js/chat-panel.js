@@ -2,6 +2,9 @@
     const FETCH_INTERVAL_MS = 2500;
     const MAX_MESSAGES = 100;
     let escapeListenerAttached = false;
+    const CHAT_ENDPOINT = (typeof window !== 'undefined' && window.chatHandlerUrl)
+        ? window.chatHandlerUrl
+        : 'chat_handler.php';
 
     function initChatPanel(isGM, currentUser) {
         const panel = document.getElementById('chat-panel');
@@ -1220,7 +1223,7 @@
                 params.append('messageId', message.id);
                 params.append('status', status);
 
-                const response = await fetch('chat_handler.php', {
+                const response = await fetch(CHAT_ENDPOINT, {
                     method: 'POST',
                     headers: {
                         'Content-Type': 'application/x-www-form-urlencoded'
@@ -1378,7 +1381,7 @@
                     params.append('since', latestServerTimestamp);
                 }
 
-                const response = await fetch('chat_handler.php', {
+                const response = await fetch(CHAT_ENDPOINT, {
                     method: 'POST',
                     headers: {
                         'Content-Type': 'application/x-www-form-urlencoded'
@@ -1410,7 +1413,7 @@
             const params = new URLSearchParams();
             params.append('action', 'chat_clear');
 
-            const response = await fetch('chat_handler.php', {
+            const response = await fetch(CHAT_ENDPOINT, {
                 method: 'POST',
                 headers: {
                     'Content-Type': 'application/x-www-form-urlencoded'
@@ -1656,7 +1659,7 @@
                     params.append('target', normalizedTarget);
                 }
 
-                const response = await fetch('chat_handler.php', {
+                const response = await fetch(CHAT_ENDPOINT, {
                     method: 'POST',
                     headers: {
                         'Content-Type': 'application/x-www-form-urlencoded'
@@ -1740,7 +1743,7 @@
             formData.append('action', 'chat_upload');
             formData.append('file', file);
 
-            const response = await fetch('chat_handler.php', {
+            const response = await fetch(CHAT_ENDPOINT, {
                 method: 'POST',
                 body: formData
             });
