@@ -151,7 +151,7 @@ $vttConfig = [
                     class="scene-display__map<?php echo $activeSceneMap['image'] === '' ? ' scene-display__map--empty' : ''; ?>"
                     data-grid-scale="<?php echo (int) $activeSceneMap['gridScale']; ?>"
                 >
-                    <div class="scene-display__map-inner">
+                    <div id="scene-map-inner" class="scene-display__map-inner">
                         <img
                             id="scene-map-image"
                             class="scene-display__map-image<?php echo $activeSceneMap['image'] === '' ? ' scene-display__map-image--hidden' : ''; ?>"

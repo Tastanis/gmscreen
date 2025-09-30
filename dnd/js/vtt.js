@@ -47,6 +47,7 @@
         const sceneName = document.getElementById('scene-display-name');
         const sceneDescription = document.getElementById('scene-display-description');
         const sceneMap = document.getElementById('scene-map');
+        const sceneMapInner = document.getElementById('scene-map-inner');
         const sceneMapImage = document.getElementById('scene-map-image');
         const sceneMapGrid = document.getElementById('scene-map-grid');
         const sceneMapEmpty = document.getElementById('scene-map-empty');
@@ -84,6 +85,7 @@
             selectedSceneId: config.initialSceneId,
             mapUpdateTimer: null,
             openSceneMenuId: null,
+            mapAspectRatio: null,
         };
 
         let isPanelOpen = false;
@@ -166,6 +168,11 @@
                 });
             }
 
+            if (sceneMapImage) {
+                sceneMapImage.addEventListener('load', onSceneMapImageLoad);
+                sceneMapImage.addEventListener('error', onSceneMapImageError);
+            }
+
             document.addEventListener('click', onDocumentClick);
             document.addEventListener('keydown', onDocumentKeyDown);
         }
@@ -217,6 +224,26 @@
                     closeSceneMenu();
                 } else {
                     openSceneMenu(sceneId);
+                }
+                return;
+            }
+
+            const addSceneButton = event.target.closest('[data-scene-create-after]');
+            if (addSceneButton) {
+                const sceneId = addSceneButton.getAttribute('data-scene-create-after');
+                if (sceneId) {
+                    closeSceneMenu();
+                    createSceneRelativeTo(sceneId);
+                }
+                return;
+            }
+
+            const renameButton = event.target.closest('[data-scene-rename]');
+            if (renameButton) {
+                const sceneId = renameButton.getAttribute('data-scene-rename');
+                if (sceneId) {
+                    closeSceneMenu();
+                    renameScene(sceneId);
                 }
                 return;
             }
@@ -327,13 +354,46 @@
         }
 
         function onCreateScene() {
-            const folderId = state.selectedFolderId || '';
+            const name = promptForSceneName('Name your new scene:', 'New Scene');
+            if (name === null) {
+                return;
+            }
+            createSceneRequest(state.selectedFolderId, name);
+        }
+
+        function createSceneRelativeTo(sceneId) {
+            const scene = getSceneById(state.scenes, sceneId);
+            const folderId = scene ? scene.folderId : state.selectedFolderId;
+            const name = promptForSceneName('Name your new scene:', 'New Scene');
+            if (name === null) {
+                return;
+            }
+            if ((folderId || null) !== state.selectedFolderId) {
+                state.selectedFolderId = folderId || null;
+                renderFolderBar();
+            }
+            createSceneRequest(folderId, name);
+        }
+
+        function createSceneRequest(folderId, name) {
+            const normalizedFolderId = typeof folderId === 'string' && folderId.trim() !== ''
+                ? folderId.trim()
+                : null;
+            const trimmedName = typeof name === 'string' ? name.trim() : '';
+            if (trimmedName === '') {
+                setStatus('Scene name cannot be empty.', 'error');
+                return;
+            }
+
             const body = new URLSearchParams({
                 action: 'create_scene',
+                name: trimmedName,
             });
-            if (folderId !== '') {
-                body.set('folder_id', folderId);
+            if (normalizedFolderId !== null) {
+                body.set('folder_id', normalizedFolderId);
             }
+
+            state.selectedFolderId = normalizedFolderId;
 
             setStatus('Creating new scene…', 'info');
             fetch(state.sceneEndpoint, {
@@ -361,6 +421,109 @@
                     console.error(error);
                     setStatus('Unable to create scene.', 'error');
                 });
+        }
+
+        function renameScene(sceneId) {
+            const scene = getSceneById(state.scenes, sceneId);
+            const fallbackName = scene && scene.name ? scene.name : 'Scene';
+            if (!scene) {
+                setStatus('Scene not found.', 'error');
+                return;
+            }
+
+            const name = promptForSceneName('Rename scene:', fallbackName);
+            if (name === null) {
+                return;
+            }
+
+            const body = new URLSearchParams({
+                action: 'rename_scene',
+                scene_id: sceneId,
+                name,
+            });
+
+            setStatus('Renaming scene…', 'info');
+            fetch(state.sceneEndpoint, {
+                method: 'POST',
+                headers: {
+                    'Content-Type': 'application/x-www-form-urlencoded; charset=UTF-8',
+                    'Accept': 'application/json',
+                },
+                body,
+            })
+                .then(handleJsonResponse)
+                .then((data) => {
+                    if (!data || data.success !== true || !data.sceneData) {
+                        throw new Error((data && data.error) || 'Unable to rename scene.');
+                    }
+                    applySceneStateFromServer(data);
+                    state.selectedSceneId = sceneId;
+                    if (typeof data.active_scene_id === 'string') {
+                        state.activeSceneId = data.active_scene_id;
+                    }
+                    renderFolderBar();
+                    renderSceneList();
+                    updateMapSettingsPanel();
+                    setStatus('Scene renamed.', 'success');
+                })
+                .catch((error) => {
+                    console.error(error);
+                    setStatus('Unable to rename scene.', 'error');
+                });
+        }
+
+        function promptForSceneName(message, defaultValue) {
+            const promptMessage = typeof message === 'string' && message.trim() !== ''
+                ? message
+                : 'Scene name?';
+            const fallback = typeof defaultValue === 'string' && defaultValue !== ''
+                ? defaultValue
+                : 'New Scene';
+
+            if (typeof window === 'undefined' || typeof window.prompt !== 'function') {
+                return fallback.trim();
+            }
+
+            const response = window.prompt(promptMessage, fallback);
+            if (response === null) {
+                return null;
+            }
+
+            const trimmed = response.trim();
+            if (trimmed === '') {
+                setStatus('Scene name cannot be empty.', 'error');
+                return null;
+            }
+
+            return trimmed;
+        }
+
+        function onSceneMapImageLoad() {
+            applyMapAspectRatioFromImage();
+        }
+
+        function onSceneMapImageError() {
+            clearMapAspectRatio();
+        }
+
+        function applyMapAspectRatioFromImage() {
+            if (!sceneMapInner || !sceneMapImage) {
+                return;
+            }
+            const width = sceneMapImage.naturalWidth;
+            const height = sceneMapImage.naturalHeight;
+            if (!Number.isFinite(width) || !Number.isFinite(height) || width <= 0 || height <= 0) {
+                return;
+            }
+            sceneMapInner.style.aspectRatio = `${width} / ${height}`;
+            state.mapAspectRatio = width / height;
+        }
+
+        function clearMapAspectRatio() {
+            if (sceneMapInner) {
+                sceneMapInner.style.aspectRatio = '';
+            }
+            state.mapAspectRatio = null;
         }
 
         function onMapImageSelected(event) {
@@ -742,6 +905,18 @@
             menu.setAttribute('data-scene-menu', scene.id);
             menu.hidden = !isMenuOpen;
 
+            const addSibling = document.createElement('button');
+            addSibling.type = 'button';
+            addSibling.className = 'scene-card__menu-item';
+            addSibling.textContent = 'Add Scene';
+            addSibling.setAttribute('data-scene-create-after', scene.id);
+
+            const rename = document.createElement('button');
+            rename.type = 'button';
+            rename.className = 'scene-card__menu-item';
+            rename.textContent = 'Rename Scene';
+            rename.setAttribute('data-scene-rename', scene.id);
+
             const activate = document.createElement('button');
             activate.type = 'button';
             activate.className = 'scene-card__menu-item';
@@ -755,6 +930,8 @@
             remove.textContent = 'Delete Scene';
             remove.setAttribute('data-scene-delete', scene.id);
 
+            menu.appendChild(addSibling);
+            menu.appendChild(rename);
             menu.appendChild(activate);
             menu.appendChild(remove);
             menuContainer.appendChild(menu);
@@ -927,11 +1104,15 @@
                 sceneMapImage.classList.remove('scene-display__map-image--hidden');
                 sceneMapEmpty.hidden = true;
                 sceneMap.classList.remove('scene-display__map--empty');
+                if (sceneMapImage.complete) {
+                    applyMapAspectRatioFromImage();
+                }
             } else {
                 sceneMapImage.removeAttribute('src');
                 sceneMapImage.classList.add('scene-display__map-image--hidden');
                 sceneMapEmpty.hidden = false;
                 sceneMap.classList.add('scene-display__map--empty');
+                clearMapAspectRatio();
             }
 
             sceneMap.setAttribute('data-grid-scale', String(gridScale));
