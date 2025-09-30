@@ -134,6 +134,55 @@ switch ($action) {
         ]);
         exit;
 
+    case 'rename_scene':
+        if (!$isGm) {
+            http_response_code(403);
+            echo json_encode(['success' => false, 'error' => 'Only the GM can manage scenes.']);
+            exit;
+        }
+
+        $sceneId = isset($_POST['scene_id']) && is_string($_POST['scene_id']) ? trim($_POST['scene_id']) : '';
+        $name = isset($_POST['name']) && is_string($_POST['name']) ? trim($_POST['name']) : '';
+        if ($sceneId === '' || $name === '') {
+            http_response_code(400);
+            echo json_encode(['success' => false, 'error' => 'A scene identifier and name are required.']);
+            exit;
+        }
+
+        [$sceneData, $renamedScene] = renameScene($sceneData, $sceneId, $name);
+        if ($renamedScene === null) {
+            http_response_code(404);
+            echo json_encode(['success' => false, 'error' => 'Scene not found.']);
+            exit;
+        }
+
+        if (!saveScenesData($sceneData)) {
+            http_response_code(500);
+            echo json_encode(['success' => false, 'error' => 'Unable to rename scene.']);
+            exit;
+        }
+
+        $defaultSceneId = getFirstSceneId($sceneData);
+        $scenes = flattenScenes($sceneData);
+        $sceneLookup = [];
+        foreach ($scenes as $item) {
+            if (!is_array($item) || !isset($item['id'])) {
+                continue;
+            }
+            $sceneLookup[$item['id']] = $item;
+        }
+
+        $activeSceneId = loadActiveSceneId($sceneStateFile, $defaultSceneId, $sceneLookup);
+
+        echo json_encode([
+            'success' => true,
+            'scene' => $renamedScene,
+            'sceneData' => $sceneData,
+            'scenes' => array_values($scenes),
+            'active_scene_id' => $activeSceneId,
+        ]);
+        exit;
+
     case 'delete_scene':
         if (!$isGm) {
             http_response_code(403);

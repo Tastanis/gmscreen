@@ -189,9 +189,10 @@ function createFolder(array $data, string $name): array
 
 function createScene(array $data, ?string $folderId = null, ?string $name = null): array
 {
+    $trimmedName = $name !== null ? trim($name) : '';
     $scene = [
         'id' => generateIdentifier('scene'),
-        'name' => $name !== null && $name !== '' ? $name : 'New Scene',
+        'name' => $trimmedName !== '' ? $trimmedName : 'New Scene',
         'description' => '',
         'accent' => '',
         'map' => [
@@ -256,6 +257,46 @@ function deleteScene(array $data, string $sceneId): array
     }
 
     return [$data, $removed];
+}
+
+function renameScene(array $data, string $sceneId, string $name): array
+{
+    $trimmedName = trim($name);
+    if ($trimmedName === '') {
+        return [$data, null];
+    }
+
+    $updatedScene = null;
+
+    if (isset($data['rootScenes']) && is_array($data['rootScenes'])) {
+        foreach ($data['rootScenes'] as &$scene) {
+            if (isset($scene['id']) && $scene['id'] === $sceneId) {
+                $scene['name'] = $trimmedName;
+                $updatedScene = $scene;
+                break;
+            }
+        }
+        unset($scene);
+    }
+
+    if ($updatedScene === null && isset($data['folders']) && is_array($data['folders'])) {
+        foreach ($data['folders'] as &$folder) {
+            if (!isset($folder['scenes']) || !is_array($folder['scenes'])) {
+                continue;
+            }
+            foreach ($folder['scenes'] as &$scene) {
+                if (isset($scene['id']) && $scene['id'] === $sceneId) {
+                    $scene['name'] = $trimmedName;
+                    $updatedScene = $scene;
+                    break 2;
+                }
+            }
+            unset($scene);
+        }
+        unset($folder);
+    }
+
+    return [$data, $updatedScene];
 }
 
 function getSceneById(array $data, string $sceneId): ?array
