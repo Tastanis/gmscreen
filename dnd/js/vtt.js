@@ -48,6 +48,7 @@
         const sceneDescription = document.getElementById('scene-display-description');
         const sceneMap = document.getElementById('scene-map');
         const sceneMapInner = document.getElementById('scene-map-inner');
+        const sceneMapContent = document.getElementById('scene-map-content');
         const sceneMapImage = document.getElementById('scene-map-image');
         const sceneMapGrid = document.getElementById('scene-map-grid');
         const sceneMapEmpty = document.getElementById('scene-map-empty');
@@ -60,6 +61,9 @@
         }
 
         const initialSceneData = normalizeSceneDataForClient(config.sceneData);
+        const MAP_MIN_SCALE = 0.5;
+        const MAP_MAX_SCALE = 4;
+        const MAP_WHEEL_SENSITIVITY = 0.002;
 
         const state = {
             isGM: Boolean(config.isGM),
@@ -80,6 +84,20 @@
             mapUpdateTimer: null,
             openSceneMenuId: null,
             mapAspectRatio: null,
+            skipNextDocumentClick: false,
+            mapTransform: {
+                scale: 1,
+                translateX: 0,
+                translateY: 0,
+            },
+            mapDragState: {
+                pointerId: null,
+                active: false,
+                lastX: 0,
+                lastY: 0,
+            },
+            mapImageSrc: sceneMapImage ? (sceneMapImage.getAttribute('src') || '') : '',
+            mapHasImage: Boolean(sceneMapImage && !sceneMapImage.classList.contains('scene-display__map-image--hidden')),
         };
 
         let isPanelOpen = false;
@@ -89,6 +107,7 @@
         applySceneToDisplay(config.initialScene || getSceneById(state.scenes, state.activeSceneId), true);
         renderFolderBar();
         renderSceneList();
+        initMapInteractions();
 
         toggleButton.addEventListener('click', function () {
             if (isPanelOpen) {
@@ -510,10 +529,12 @@
 
         function onSceneMapImageLoad() {
             applyMapAspectRatioFromImage();
+            resetMapTransform();
         }
 
         function onSceneMapImageError() {
             clearMapAspectRatio();
+            resetMapTransform();
         }
 
         function applyMapAspectRatioFromImage() {
@@ -534,6 +555,229 @@
                 sceneMapInner.style.aspectRatio = '';
             }
             state.mapAspectRatio = null;
+        }
+
+        function initMapInteractions() {
+            if (!sceneMapInner || !sceneMapContent) {
+                return;
+            }
+            try {
+                sceneMapInner.addEventListener('wheel', onMapWheel, { passive: false });
+            } catch (error) {
+                sceneMapInner.addEventListener('wheel', onMapWheel, false);
+            }
+            sceneMapInner.addEventListener('pointerdown', onMapPointerDown);
+            sceneMapInner.addEventListener('pointermove', onMapPointerMove);
+            sceneMapInner.addEventListener('pointerup', onMapPointerUp);
+            sceneMapInner.addEventListener('pointercancel', onMapPointerCancel);
+            sceneMapInner.addEventListener('dblclick', onMapDoubleClick);
+            window.addEventListener('resize', onMapViewportResize);
+            updateMapInteractionState();
+            applyMapTransform();
+        }
+
+        function updateMapInteractionState() {
+            if (!sceneMapContent) {
+                return;
+            }
+            sceneMapContent.classList.toggle('scene-display__map-content--inactive', !state.mapHasImage);
+            sceneMapContent.classList.toggle('scene-display__map-content--dragging', state.mapDragState.active);
+        }
+
+        function applyMapTransform() {
+            if (!sceneMapContent || !sceneMapInner) {
+                return;
+            }
+            const clamped = clampMapTranslation(
+                state.mapTransform.scale,
+                state.mapTransform.translateX,
+                state.mapTransform.translateY
+            );
+            state.mapTransform.translateX = clamped.translateX;
+            state.mapTransform.translateY = clamped.translateY;
+
+            if (!state.mapHasImage && state.mapTransform.scale === 1 && clamped.translateX === 0 && clamped.translateY === 0) {
+                sceneMapContent.style.transform = '';
+            } else {
+                sceneMapContent.style.transform = `translate3d(${clamped.translateX}px, ${clamped.translateY}px, 0) scale(${state.mapTransform.scale})`;
+            }
+
+            updateMapInteractionState();
+        }
+
+        function resetMapTransform() {
+            state.mapTransform.scale = 1;
+            state.mapTransform.translateX = 0;
+            state.mapTransform.translateY = 0;
+            state.mapDragState.active = false;
+            state.mapDragState.pointerId = null;
+            applyMapTransform();
+        }
+
+        function updateMapScale(nextScale, focalX, focalY) {
+            if (!sceneMapInner) {
+                return;
+            }
+            const currentScale = state.mapTransform.scale;
+            if (!Number.isFinite(nextScale) || nextScale === currentScale) {
+                return;
+            }
+            const rect = sceneMapInner.getBoundingClientRect();
+            const originX = typeof focalX === 'number' ? focalX : rect.width / 2;
+            const originY = typeof focalY === 'number' ? focalY : rect.height / 2;
+
+            const contentX = originX - state.mapTransform.translateX;
+            const contentY = originY - state.mapTransform.translateY;
+            const scaleRatio = nextScale / currentScale;
+
+            state.mapTransform.scale = nextScale;
+            updateMapTranslation(originX - contentX * scaleRatio, originY - contentY * scaleRatio);
+        }
+
+        function updateMapTranslation(nextX, nextY) {
+            const clamped = clampMapTranslation(state.mapTransform.scale, nextX, nextY);
+            state.mapTransform.translateX = clamped.translateX;
+            state.mapTransform.translateY = clamped.translateY;
+            applyMapTransform();
+        }
+
+        function clampMapTranslation(scale, translateX, translateY) {
+            if (!sceneMapInner || !sceneMapContent) {
+                return { translateX, translateY };
+            }
+            const viewportWidth = sceneMapInner.clientWidth;
+            const viewportHeight = sceneMapInner.clientHeight;
+            if (viewportWidth === 0 || viewportHeight === 0) {
+                return { translateX, translateY };
+            }
+
+            const contentWidth = sceneMapContent.offsetWidth;
+            const contentHeight = sceneMapContent.offsetHeight;
+            const scaledWidth = contentWidth * scale;
+            const scaledHeight = contentHeight * scale;
+
+            let minX;
+            let maxX;
+            if (scaledWidth <= viewportWidth) {
+                const centerX = (viewportWidth - scaledWidth) / 2;
+                minX = centerX;
+                maxX = centerX;
+            } else {
+                minX = viewportWidth - scaledWidth;
+                maxX = 0;
+            }
+
+            let minY;
+            let maxY;
+            if (scaledHeight <= viewportHeight) {
+                const centerY = (viewportHeight - scaledHeight) / 2;
+                minY = centerY;
+                maxY = centerY;
+            } else {
+                minY = viewportHeight - scaledHeight;
+                maxY = 0;
+            }
+
+            return {
+                translateX: clampNumber(translateX, minX, maxX),
+                translateY: clampNumber(translateY, minY, maxY),
+            };
+        }
+
+        function onMapWheel(event) {
+            if (!state.mapHasImage) {
+                return;
+            }
+            if (typeof event.preventDefault === 'function') {
+                event.preventDefault();
+            }
+            const rect = sceneMapInner.getBoundingClientRect();
+            const pointerX = event.clientX - rect.left;
+            const pointerY = event.clientY - rect.top;
+            const delta = clampNumber(event.deltaY, -1000, 1000);
+            const zoomFactor = Math.exp(-delta * MAP_WHEEL_SENSITIVITY);
+            const nextScale = clampNumber(state.mapTransform.scale * zoomFactor, MAP_MIN_SCALE, MAP_MAX_SCALE);
+            updateMapScale(nextScale, pointerX, pointerY);
+        }
+
+        function onMapPointerDown(event) {
+            if (!state.mapHasImage) {
+                return;
+            }
+            if (!event.isPrimary) {
+                return;
+            }
+            if (event.pointerType === 'mouse' && event.button !== 0) {
+                return;
+            }
+            state.mapDragState.pointerId = event.pointerId;
+            state.mapDragState.active = true;
+            state.mapDragState.lastX = event.clientX;
+            state.mapDragState.lastY = event.clientY;
+            if (sceneMapInner && typeof sceneMapInner.setPointerCapture === 'function') {
+                try {
+                    sceneMapInner.setPointerCapture(event.pointerId);
+                } catch (error) {
+                    // ignore
+                }
+            }
+            updateMapInteractionState();
+        }
+
+        function onMapPointerMove(event) {
+            if (!state.mapDragState.active || event.pointerId !== state.mapDragState.pointerId) {
+                return;
+            }
+            const dx = event.clientX - state.mapDragState.lastX;
+            const dy = event.clientY - state.mapDragState.lastY;
+            state.mapDragState.lastX = event.clientX;
+            state.mapDragState.lastY = event.clientY;
+            updateMapTranslation(state.mapTransform.translateX + dx, state.mapTransform.translateY + dy);
+        }
+
+        function onMapPointerUp(event) {
+            if (event.pointerId !== state.mapDragState.pointerId) {
+                return;
+            }
+            endMapDrag();
+        }
+
+        function onMapPointerCancel(event) {
+            if (event.pointerId !== state.mapDragState.pointerId) {
+                return;
+            }
+            endMapDrag();
+        }
+
+        function endMapDrag() {
+            if (!state.mapDragState.active) {
+                return;
+            }
+            if (sceneMapInner && typeof sceneMapInner.releasePointerCapture === 'function' && state.mapDragState.pointerId !== null) {
+                try {
+                    sceneMapInner.releasePointerCapture(state.mapDragState.pointerId);
+                } catch (error) {
+                    // ignore
+                }
+            }
+            state.mapDragState.active = false;
+            state.mapDragState.pointerId = null;
+            updateMapInteractionState();
+            applyMapTransform();
+        }
+
+        function onMapDoubleClick(event) {
+            if (!state.mapHasImage) {
+                return;
+            }
+            if (typeof event.preventDefault === 'function') {
+                event.preventDefault();
+            }
+            resetMapTransform();
+        }
+
+        function onMapViewportResize() {
+            applyMapTransform();
         }
 
         function onMapImageSelected(event, sceneId) {
@@ -1057,6 +1301,7 @@
 
         function openSceneMenu(sceneId) {
             state.openSceneMenuId = sceneId;
+            state.skipNextDocumentClick = true;
             renderSceneList();
             if (!sceneListElement) {
                 return;
@@ -1085,12 +1330,17 @@
                 return;
             }
             state.openSceneMenuId = null;
+            state.skipNextDocumentClick = false;
             if (shouldRender) {
                 renderSceneList();
             }
         }
 
         function onDocumentClick(event) {
+            if (state.skipNextDocumentClick) {
+                state.skipNextDocumentClick = false;
+                return;
+            }
             if (state.openSceneMenuId === null) {
                 return;
             }
@@ -1124,11 +1374,13 @@
             if (!sceneMap || !sceneMapImage || !sceneMapGrid || !sceneMapEmpty) {
                 return;
             }
-            const hasImage = map && typeof map.image === 'string' && map.image.trim() !== '';
+            const hasImage = Boolean(map && typeof map.image === 'string' && map.image.trim() !== '');
+            const imagePath = hasImage ? map.image.trim() : '';
             const gridScale = clampGridScale(parseInt(map && map.gridScale, 10));
+            const imageChanged = state.mapImageSrc !== imagePath;
 
             if (hasImage) {
-                sceneMapImage.src = map.image;
+                sceneMapImage.src = imagePath;
                 sceneMapImage.classList.remove('scene-display__map-image--hidden');
                 sceneMapEmpty.hidden = true;
                 sceneMap.classList.remove('scene-display__map--empty');
@@ -1146,6 +1398,16 @@
             sceneMap.setAttribute('data-grid-scale', String(gridScale));
             sceneMap.style.setProperty('--grid-size', `${gridScale}px`);
             sceneMapGrid.style.backgroundSize = `${gridScale}px ${gridScale}px`;
+
+            state.mapHasImage = hasImage;
+            state.mapImageSrc = imagePath;
+            updateMapInteractionState();
+
+            if (!hasImage || imageChanged) {
+                resetMapTransform();
+            } else {
+                applyMapTransform();
+            }
         }
 
         function applySceneAccent(accentHex) {
@@ -1456,6 +1718,20 @@
         }
         const folder = normalized.folders.find((item) => item.id === folderId);
         return folder ? folder.scenes.slice() : [];
+    }
+
+    function clampNumber(value, min, max) {
+        let numeric = Number(value);
+        if (!Number.isFinite(numeric)) {
+            numeric = 0;
+        }
+        if (numeric < min) {
+            return min;
+        }
+        if (numeric > max) {
+            return max;
+        }
+        return numeric;
     }
 
     function clampGridScale(value) {

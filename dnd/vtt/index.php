@@ -152,13 +152,15 @@ $vttConfig = [
                     data-grid-scale="<?php echo (int) $activeSceneMap['gridScale']; ?>"
                 >
                     <div id="scene-map-inner" class="scene-display__map-inner">
-                        <img
-                            id="scene-map-image"
-                            class="scene-display__map-image<?php echo $activeSceneMap['image'] === '' ? ' scene-display__map-image--hidden' : ''; ?>"
-                            src="<?php echo htmlspecialchars($activeSceneMap['image'], ENT_QUOTES); ?>"
-                            alt="Scene map"
-                        >
-                        <div id="scene-map-grid" class="scene-display__map-grid"></div>
+                        <div id="scene-map-content" class="scene-display__map-content">
+                            <img
+                                id="scene-map-image"
+                                class="scene-display__map-image<?php echo $activeSceneMap['image'] === '' ? ' scene-display__map-image--hidden' : ''; ?>"
+                                src="<?php echo htmlspecialchars($activeSceneMap['image'], ENT_QUOTES); ?>"
+                                alt="Scene map"
+                            >
+                            <div id="scene-map-grid" class="scene-display__map-grid"></div>
+                        </div>
                     </div>
                     <p
                         id="scene-map-empty"
