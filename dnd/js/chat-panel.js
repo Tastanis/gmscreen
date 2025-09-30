@@ -212,6 +212,9 @@
                 if (event.button !== undefined && event.button !== 0) {
                     return;
                 }
+                if (event.target && event.target.closest('.chat-whisper-popout__close')) {
+                    return;
+                }
                 event.preventDefault();
                 if (typeof dragHandle.setPointerCapture === 'function') {
                     dragHandle.setPointerCapture(event.pointerId);
