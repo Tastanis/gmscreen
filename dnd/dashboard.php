@@ -947,6 +947,7 @@ $defaultInventoryTab = $is_gm ? 'frunk' : $user;
             </div>
             <button class="nav-btn" onclick="openCombatTracker()">Combat Tracker</button>
             <button class="nav-btn" onclick="openSchedule()">Schedule</button>
+            <button class="nav-btn" onclick="openVTT()">VTT</button>
             <button type="button" class="nav-btn" id="theme-toggle-btn" title="Switch theme">Theme</button>
             <button type="button" class="nav-btn" id="dice-roller-btn" title="Open dice roller">Dice Roller</button>
             <button class="nav-btn logout-btn" onclick="window.location.href='logout.php'">Logout</button>
