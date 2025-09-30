@@ -2109,6 +2109,11 @@ function openSchedule() {
     window.open(url, '_blank');
 }
 
+function openVTT() {
+    const url = `vtt/index.php`;
+    window.open(url, '_blank');
+}
+
 function debounce(func, wait) {
     let timeout;
     return function executedFunction(...args) {
