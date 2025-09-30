@@ -80,6 +80,56 @@
     color: rgba(226, 232, 240, 0.88);
 }
 
+.scene-display__map {
+    margin-top: 2rem;
+    display: flex;
+    flex-direction: column;
+    gap: 0.75rem;
+}
+
+.scene-display__map-inner {
+    position: relative;
+    display: inline-flex;
+    border-radius: 18px;
+    overflow: hidden;
+    background: rgba(15, 23, 42, 0.75);
+    border: 1px solid rgba(148, 163, 184, 0.35);
+    box-shadow: 0 18px 48px rgba(15, 23, 42, 0.55);
+}
+
+.scene-display__map-image {
+    display: block;
+    max-width: min(100%, 720px);
+    height: auto;
+    object-fit: cover;
+}
+
+.scene-display__map-image--hidden {
+    display: none;
+}
+
+.scene-display__map-grid {
+    position: absolute;
+    inset: 0;
+    pointer-events: none;
+    background-image: linear-gradient(to right, rgba(226, 232, 240, 0.12) 1px, transparent 1px),
+        linear-gradient(to bottom, rgba(226, 232, 240, 0.12) 1px, transparent 1px);
+    background-size: var(--grid-size, 50px) var(--grid-size, 50px);
+    mix-blend-mode: screen;
+}
+
+.scene-display__map-empty {
+    margin: 0;
+    font-size: 0.95rem;
+    color: rgba(226, 232, 240, 0.7);
+}
+
+.scene-display__map--empty .scene-display__map-inner {
+    min-height: 220px;
+    align-items: center;
+    justify-content: center;
+}
+
 .settings-panel {
     position: fixed;
     top: var(--settings-panel-offset);
@@ -196,6 +246,229 @@
     flex-direction: column;
     gap: 0.75rem;
     padding: 0.5rem 0 0.25rem;
+}
+
+.scene-management {
+    display: flex;
+    flex-direction: column;
+    gap: 1rem;
+}
+
+.scene-management__folders {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 0.5rem;
+}
+
+.scene-folder__button {
+    padding: 0.45rem 0.9rem;
+    border-radius: 999px;
+    border: 1px solid rgba(148, 163, 184, 0.3);
+    background: rgba(30, 41, 59, 0.7);
+    color: rgba(226, 232, 240, 0.85);
+    font-size: 0.85rem;
+    letter-spacing: 0.04em;
+    cursor: pointer;
+    transition: background 160ms ease, border-color 160ms ease, color 160ms ease;
+}
+
+.scene-folder__button:hover,
+.scene-folder__button:focus {
+    background: rgba(56, 189, 248, 0.18);
+    border-color: rgba(56, 189, 248, 0.6);
+    color: #fff;
+}
+
+.scene-folder__button--active {
+    background: rgba(56, 189, 248, 0.24);
+    border-color: rgba(56, 189, 248, 0.75);
+    color: #fff;
+    box-shadow: 0 10px 24px rgba(56, 189, 248, 0.2);
+}
+
+.scene-management__scene-list {
+    display: flex;
+    flex-direction: column;
+    gap: 0.75rem;
+}
+
+.scene-management__empty {
+    margin: 0;
+    font-size: 0.9rem;
+    color: rgba(226, 232, 240, 0.7);
+}
+
+.scene-management__add-folder,
+.scene-management__add-scene {
+    align-self: flex-start;
+    padding: 0.45rem 0.9rem;
+    border-radius: 10px;
+    border: 1px solid rgba(148, 163, 184, 0.3);
+    background: rgba(30, 41, 59, 0.7);
+    color: rgba(226, 232, 240, 0.85);
+    font-size: 0.85rem;
+    letter-spacing: 0.08em;
+    text-transform: uppercase;
+    cursor: pointer;
+    transition: background 160ms ease, border-color 160ms ease, color 160ms ease;
+}
+
+.scene-management__add-folder:hover,
+.scene-management__add-folder:focus,
+.scene-management__add-scene:hover,
+.scene-management__add-scene:focus {
+    background: rgba(56, 189, 248, 0.18);
+    border-color: rgba(56, 189, 248, 0.6);
+    color: #fff;
+}
+
+.scene-management__map-settings {
+    padding: 1rem;
+    border-radius: 16px;
+    border: 1px solid rgba(148, 163, 184, 0.25);
+    background: rgba(15, 23, 42, 0.65);
+    display: flex;
+    flex-direction: column;
+    gap: 0.75rem;
+}
+
+.scene-management__map-title {
+    margin: 0;
+    font-size: 0.9rem;
+    letter-spacing: 0.1em;
+    text-transform: uppercase;
+    color: rgba(226, 232, 240, 0.7);
+}
+
+.scene-management__field {
+    display: flex;
+    flex-direction: column;
+    gap: 0.35rem;
+}
+
+.scene-management__label {
+    font-size: 0.85rem;
+    letter-spacing: 0.05em;
+    text-transform: uppercase;
+    color: rgba(226, 232, 240, 0.65);
+}
+
+.scene-management__file {
+    font-size: 0.9rem;
+    color: rgba(226, 232, 240, 0.85);
+}
+
+.scene-management__file-name {
+    margin: 0;
+    font-size: 0.85rem;
+    color: rgba(226, 232, 240, 0.7);
+}
+
+.scene-management__grid-controls {
+    display: flex;
+    align-items: center;
+    gap: 0.5rem;
+}
+
+.scene-management__grid-range {
+    flex: 1;
+}
+
+.scene-management__grid-value {
+    width: 70px;
+    padding: 0.35rem 0.5rem;
+    border-radius: 8px;
+    border: 1px solid rgba(148, 163, 184, 0.4);
+    background: rgba(15, 23, 42, 0.6);
+    color: rgba(226, 232, 240, 0.85);
+}
+
+.scene-management__grid-unit {
+    font-size: 0.8rem;
+    color: rgba(226, 232, 240, 0.6);
+    letter-spacing: 0.05em;
+    text-transform: uppercase;
+}
+
+.scene-card {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 0.75rem;
+    padding: 0.75rem 0.9rem;
+    border-radius: 14px;
+    border: 1px solid rgba(148, 163, 184, 0.25);
+    background: rgba(30, 41, 59, 0.7);
+    transition: border-color 160ms ease, background 160ms ease, box-shadow 160ms ease;
+}
+
+.scene-card--selected {
+    border-color: rgba(56, 189, 248, 0.65);
+    background: rgba(56, 189, 248, 0.18);
+    box-shadow: 0 12px 26px rgba(56, 189, 248, 0.18);
+}
+
+.scene-card__body {
+    display: flex;
+    align-items: center;
+    gap: 0.5rem;
+    background: none;
+    border: none;
+    color: inherit;
+    font-size: 0.95rem;
+    font-weight: 600;
+    cursor: pointer;
+}
+
+.scene-card__badge {
+    padding: 0.2rem 0.55rem;
+    border-radius: 999px;
+    background: rgba(56, 189, 248, 0.2);
+    border: 1px solid rgba(56, 189, 248, 0.5);
+    font-size: 0.7rem;
+    letter-spacing: 0.08em;
+    text-transform: uppercase;
+}
+
+.scene-card__actions {
+    display: flex;
+    gap: 0.5rem;
+}
+
+.scene-card__action {
+    padding: 0.35rem 0.75rem;
+    border-radius: 8px;
+    border: 1px solid rgba(148, 163, 184, 0.3);
+    background: rgba(15, 23, 42, 0.6);
+    color: rgba(226, 232, 240, 0.85);
+    font-size: 0.8rem;
+    letter-spacing: 0.05em;
+    cursor: pointer;
+    transition: background 160ms ease, border-color 160ms ease, color 160ms ease;
+}
+
+.scene-card__action:disabled {
+    opacity: 0.6;
+    cursor: not-allowed;
+}
+
+.scene-card__action--primary:hover,
+.scene-card__action--primary:focus {
+    background: rgba(56, 189, 248, 0.2);
+    border-color: rgba(56, 189, 248, 0.6);
+    color: #fff;
+}
+
+.scene-card__action--danger {
+    border-color: rgba(248, 113, 113, 0.35);
+    color: rgba(248, 113, 113, 0.85);
+}
+
+.scene-card__action--danger:hover,
+.scene-card__action--danger:focus {
+    background: rgba(248, 113, 113, 0.2);
+    border-color: rgba(248, 113, 113, 0.6);
+    color: #fff;
 }
 
 .scene-option {

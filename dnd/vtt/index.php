@@ -20,10 +20,17 @@ foreach ($chatParticipantsMap as $participantId => $participantLabel) {
     ];
 }
 
-$scenes = require __DIR__ . '/scenes.php';
-if (!is_array($scenes)) {
-    $scenes = [];
+require_once __DIR__ . '/scenes_repository.php';
+
+$sceneData = require __DIR__ . '/scenes.php';
+if (!is_array($sceneData)) {
+    $sceneData = [
+        'folders' => [],
+        'rootScenes' => [],
+    ];
 }
+
+$scenes = flattenScenes($sceneData);
 
 $sceneLookup = [];
 foreach ($scenes as $scene) {
@@ -75,11 +82,27 @@ $activeScene = $activeSceneId !== null && isset($sceneLookup[$activeSceneId])
 $activeSceneAccent = is_array($activeScene) && isset($activeScene['accent'])
     ? (string) $activeScene['accent']
     : '';
+$activeSceneMap = [
+    'image' => '',
+    'gridScale' => 50,
+];
+if (is_array($activeScene) && isset($activeScene['map']) && is_array($activeScene['map'])) {
+    $activeSceneMap['image'] = isset($activeScene['map']['image']) ? (string) $activeScene['map']['image'] : '';
+    $gridScale = isset($activeScene['map']['gridScale']) ? (int) $activeScene['map']['gridScale'] : 50;
+    if ($gridScale < 10) {
+        $gridScale = 10;
+    }
+    if ($gridScale > 300) {
+        $gridScale = 300;
+    }
+    $activeSceneMap['gridScale'] = $gridScale;
+}
 
 $vttConfig = [
     'isGM' => $isGm,
     'currentUser' => $user,
     'scenes' => array_values($scenes),
+    'sceneData' => $sceneData,
     'activeSceneId' => $activeSceneId,
     'activeScene' => $activeScene,
     'sceneEndpoint' => 'scenes_handler.php',
@@ -123,6 +146,32 @@ $vttConfig = [
                     }
                     ?>
                 </p>
+                <div
+                    id="scene-map"
+                    class="scene-display__map<?php echo $activeSceneMap['image'] === '' ? ' scene-display__map--empty' : ''; ?>"
+                    data-grid-scale="<?php echo (int) $activeSceneMap['gridScale']; ?>"
+                >
+                    <div class="scene-display__map-inner">
+                        <img
+                            id="scene-map-image"
+                            class="scene-display__map-image<?php echo $activeSceneMap['image'] === '' ? ' scene-display__map-image--hidden' : ''; ?>"
+                            src="<?php echo htmlspecialchars($activeSceneMap['image'], ENT_QUOTES); ?>"
+                            alt="Scene map"
+                        >
+                        <div id="scene-map-grid" class="scene-display__map-grid"></div>
+                    </div>
+                    <p
+                        id="scene-map-empty"
+                        class="scene-display__map-empty"
+                        <?php echo $activeSceneMap['image'] !== '' ? 'hidden' : ''; ?>
+                    >
+                        <?php if ($isGm): ?>
+                            Upload a map image to begin building this scene.
+                        <?php else: ?>
+                            The GM has not shared a map for this scene yet.
+                        <?php endif; ?>
+                    </p>
+                </div>
             </div>
         </main>
     </div>
@@ -133,7 +182,7 @@ $vttConfig = [
             <button type="button" id="settings-panel-close" class="settings-panel__close" aria-label="Close settings">&times;</button>
         </div>
         <div class="settings-panel__content">
-            <?php if ($isGm && !empty($sceneLookup)): ?>
+            <?php if ($isGm): ?>
                 <div class="settings-panel__group settings-panel__group--scenes">
                     <button
                         type="button"
@@ -145,27 +194,28 @@ $vttConfig = [
                         Scenes
                     </button>
                     <div id="settings-scenes-list" class="settings-panel__scenes">
-                        <?php foreach ($scenes as $scene): ?>
-                            <?php
-                            $sceneId = $scene['id'] ?? '';
-                            if ($sceneId === '') {
-                                continue;
-                            }
-                            $isActive = $sceneId === $activeSceneId;
-                            $sceneAccent = isset($scene['accent']) ? (string) $scene['accent'] : '';
-                            ?>
-                            <button
-                                type="button"
-                                class="scene-option<?php echo $isActive ? ' scene-option--active' : ''; ?>"
-                                data-scene-id="<?php echo htmlspecialchars($sceneId, ENT_QUOTES); ?>"
-                                data-scene-accent="<?php echo htmlspecialchars($sceneAccent, ENT_QUOTES); ?>"
-                            >
-                                <span class="scene-option__name"><?php echo htmlspecialchars($scene['name'] ?? 'Untitled Scene', ENT_QUOTES); ?></span>
-                                <?php if (!empty($scene['description'])): ?>
-                                    <span class="scene-option__description"><?php echo htmlspecialchars($scene['description'], ENT_QUOTES); ?></span>
-                                <?php endif; ?>
-                            </button>
-                        <?php endforeach; ?>
+                        <div id="scene-management" class="scene-management">
+                            <div class="scene-management__folders" id="scene-folder-bar" role="tablist" aria-label="Scene folders"></div>
+                            <button type="button" id="scene-add-folder" class="scene-management__add-folder">+ Folder</button>
+                            <div id="scene-list" class="scene-management__scene-list" role="list"></div>
+                            <button type="button" id="scene-add" class="scene-management__add-scene">+ Scene</button>
+                            <div id="scene-map-settings" class="scene-management__map-settings" hidden>
+                                <h4 class="scene-management__map-title">Map Settings</h4>
+                                <div class="scene-management__field">
+                                    <label for="scene-map-image-input" class="scene-management__label">Scene Image</label>
+                                    <input type="file" id="scene-map-image-input" class="scene-management__file" accept="image/*">
+                                    <p id="scene-map-image-name" class="scene-management__file-name">No image selected</p>
+                                </div>
+                                <div class="scene-management__field">
+                                    <label for="scene-grid-scale" class="scene-management__label">Grid Scale</label>
+                                    <div class="scene-management__grid-controls">
+                                        <input type="range" id="scene-grid-scale" class="scene-management__grid-range" min="10" max="300" step="5" value="50">
+                                        <input type="number" id="scene-grid-scale-value" class="scene-management__grid-value" min="10" max="300" step="5" value="50">
+                                        <span class="scene-management__grid-unit">px</span>
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
                     </div>
                     <p id="settings-scenes-status" class="settings-panel__status" role="status" aria-live="polite"></p>
                 </div>
