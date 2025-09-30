@@ -289,7 +289,7 @@
 .scene-management__scene-list {
     display: flex;
     flex-direction: column;
-    gap: 0.75rem;
+    gap: 1rem;
 }
 
 .scene-management__empty {
@@ -390,85 +390,209 @@
     text-transform: uppercase;
 }
 
+.sr-only {
+    position: absolute;
+    width: 1px;
+    height: 1px;
+    padding: 0;
+    margin: -1px;
+    overflow: hidden;
+    clip: rect(0, 0, 0, 0);
+    white-space: nowrap;
+    border: 0;
+}
+
 .scene-card {
+    position: relative;
     display: flex;
-    align-items: center;
-    justify-content: space-between;
-    gap: 0.75rem;
-    padding: 0.75rem 0.9rem;
-    border-radius: 14px;
-    border: 1px solid rgba(148, 163, 184, 0.25);
-    background: rgba(30, 41, 59, 0.7);
-    transition: border-color 160ms ease, background 160ms ease, box-shadow 160ms ease;
+    flex-direction: column;
+    border-radius: 18px;
+    border: 1px solid rgba(148, 163, 184, 0.22);
+    background: rgba(15, 23, 42, 0.65);
+    transition: border-color 160ms ease, box-shadow 160ms ease, transform 160ms ease;
+}
+
+.scene-card:hover,
+.scene-card:focus-within {
+    border-color: rgba(56, 189, 248, 0.45);
+    box-shadow: 0 16px 36px rgba(56, 189, 248, 0.18);
+    transform: translateY(-2px);
 }
 
 .scene-card--selected {
     border-color: rgba(56, 189, 248, 0.65);
-    background: rgba(56, 189, 248, 0.18);
-    box-shadow: 0 12px 26px rgba(56, 189, 248, 0.18);
+    box-shadow: 0 16px 40px rgba(56, 189, 248, 0.22);
 }
 
-.scene-card__body {
-    display: flex;
-    align-items: center;
-    gap: 0.5rem;
-    background: none;
+.scene-card--active {
+    border-color: rgba(129, 230, 217, 0.65);
+}
+
+.scene-card__preview {
+    position: relative;
+    display: block;
+    width: 100%;
+    padding: 0;
     border: none;
-    color: inherit;
-    font-size: 0.95rem;
-    font-weight: 600;
+    background: none;
     cursor: pointer;
+    border-radius: inherit;
+    overflow: hidden;
+}
+
+.scene-card__preview:focus-visible {
+    outline: 2px solid rgba(56, 189, 248, 0.75);
+    outline-offset: 3px;
+}
+
+.scene-card__preview-media {
+    position: relative;
+    display: flex;
+    align-items: flex-end;
+    justify-content: space-between;
+    min-height: 160px;
+    width: 100%;
+    background: #020617;
+    overflow: hidden;
+}
+
+.scene-card__preview-media::after {
+    content: '';
+    position: absolute;
+    inset: 0;
+    background: linear-gradient(to top, rgba(15, 23, 42, 0.85), transparent 55%);
+    pointer-events: none;
+}
+
+.scene-card__preview-media--empty {
+    background: #000;
+    box-shadow: inset 0 0 0 1px rgba(148, 163, 184, 0.25);
+}
+
+.scene-card__image {
+    position: absolute;
+    inset: 0;
+    width: 100%;
+    height: 100%;
+    object-fit: cover;
+}
+
+.scene-card__details {
+    position: relative;
+    z-index: 1;
+    display: flex;
+    flex-direction: column;
+    gap: 0.35rem;
+    padding: 1.1rem 1.25rem;
+    width: 100%;
+}
+
+.scene-card__name {
+    font-size: 1.05rem;
+    font-weight: 600;
+    letter-spacing: 0.04em;
+    color: rgba(226, 232, 240, 0.96);
+    text-align: left;
 }
 
 .scene-card__badge {
-    padding: 0.2rem 0.55rem;
+    align-self: flex-start;
+    padding: 0.25rem 0.75rem;
     border-radius: 999px;
-    background: rgba(56, 189, 248, 0.2);
-    border: 1px solid rgba(56, 189, 248, 0.5);
+    border: 1px solid rgba(129, 230, 217, 0.65);
+    background: rgba(16, 185, 129, 0.22);
     font-size: 0.7rem;
     letter-spacing: 0.08em;
     text-transform: uppercase;
+    color: rgba(203, 250, 245, 0.95);
 }
 
-.scene-card__actions {
+.scene-card__menu {
+    position: absolute;
+    top: 0.6rem;
+    right: 0.6rem;
     display: flex;
+    flex-direction: column;
+    align-items: flex-end;
     gap: 0.5rem;
 }
 
-.scene-card__action {
-    padding: 0.35rem 0.75rem;
-    border-radius: 8px;
-    border: 1px solid rgba(148, 163, 184, 0.3);
-    background: rgba(15, 23, 42, 0.6);
+.scene-card__menu-trigger {
+    width: 34px;
+    height: 34px;
+    border-radius: 50%;
+    border: 1px solid rgba(148, 163, 184, 0.35);
+    background: rgba(15, 23, 42, 0.65);
     color: rgba(226, 232, 240, 0.85);
-    font-size: 0.8rem;
-    letter-spacing: 0.05em;
     cursor: pointer;
+    display: grid;
+    place-items: center;
     transition: background 160ms ease, border-color 160ms ease, color 160ms ease;
 }
 
-.scene-card__action:disabled {
-    opacity: 0.6;
-    cursor: not-allowed;
-}
-
-.scene-card__action--primary:hover,
-.scene-card__action--primary:focus {
+.scene-card__menu-trigger:hover,
+.scene-card__menu-trigger:focus-visible {
     background: rgba(56, 189, 248, 0.2);
     border-color: rgba(56, 189, 248, 0.6);
     color: #fff;
 }
 
-.scene-card__action--danger {
-    border-color: rgba(248, 113, 113, 0.35);
-    color: rgba(248, 113, 113, 0.85);
+.scene-card__menu-icon {
+    font-size: 1.4rem;
+    line-height: 1;
+    transform: translateY(-2px);
 }
 
-.scene-card__action--danger:hover,
-.scene-card__action--danger:focus {
-    background: rgba(248, 113, 113, 0.2);
-    border-color: rgba(248, 113, 113, 0.6);
+.scene-card__menu-popover {
+    min-width: 160px;
+    padding: 0.5rem;
+    border-radius: 12px;
+    border: 1px solid rgba(148, 163, 184, 0.35);
+    background: rgba(15, 23, 42, 0.95);
+    box-shadow: 0 18px 36px rgba(15, 23, 42, 0.55);
+    display: flex;
+    flex-direction: column;
+    gap: 0.25rem;
+    z-index: 20;
+}
+
+.scene-card__menu-item {
+    width: 100%;
+    padding: 0.5rem 0.75rem;
+    border-radius: 8px;
+    border: none;
+    background: transparent;
+    color: rgba(226, 232, 240, 0.9);
+    font-size: 0.85rem;
+    text-align: left;
+    cursor: pointer;
+    transition: background 160ms ease, color 160ms ease;
+}
+
+.scene-card__menu-item:hover,
+.scene-card__menu-item:focus-visible {
+    background: rgba(56, 189, 248, 0.18);
     color: #fff;
+}
+
+.scene-card__menu-item:disabled {
+    opacity: 0.6;
+    cursor: not-allowed;
+    background: none;
+}
+
+.scene-card__menu-item--danger {
+    color: rgba(248, 113, 113, 0.95);
+}
+
+.scene-card__menu-item--danger:hover,
+.scene-card__menu-item--danger:focus-visible {
+    background: rgba(248, 113, 113, 0.18);
+    color: #fff;
+}
+
+.scene-card--menu-open .scene-card__menu-popover {
+    display: flex;
 }
 
 .scene-option {
