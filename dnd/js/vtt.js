@@ -83,6 +83,7 @@
             selectedFolderId: determineInitialFolderId(initialSceneData, config.initialSceneId),
             selectedSceneId: config.initialSceneId,
             mapUpdateTimer: null,
+            openSceneMenuId: null,
         };
 
         let isPanelOpen = false;
@@ -144,6 +145,7 @@
 
             if (sceneListElement) {
                 sceneListElement.addEventListener('click', onSceneListClick);
+                sceneListElement.addEventListener('contextmenu', onSceneListContextMenu);
             }
 
             if (mapImageInput) {
@@ -163,6 +165,9 @@
                     scheduleGridScaleUpdate();
                 });
             }
+
+            document.addEventListener('click', onDocumentClick);
+            document.addEventListener('keydown', onDocumentKeyDown);
         }
 
         startScenePolling();
@@ -201,10 +206,26 @@
         }
 
         function onSceneListClick(event) {
+            const menuToggle = event.target.closest('[data-scene-menu-toggle]');
+            if (menuToggle) {
+                event.preventDefault();
+                const sceneId = menuToggle.getAttribute('data-scene-menu-toggle');
+                if (!sceneId) {
+                    return;
+                }
+                if (state.openSceneMenuId === sceneId) {
+                    closeSceneMenu();
+                } else {
+                    openSceneMenu(sceneId);
+                }
+                return;
+            }
+
             const activateButton = event.target.closest('[data-scene-activate]');
             if (activateButton) {
                 const sceneId = activateButton.getAttribute('data-scene-activate');
                 if (sceneId && sceneId !== state.activeSceneId) {
+                    closeSceneMenu();
                     activateScene(sceneId);
                 }
                 return;
@@ -214,8 +235,14 @@
             if (deleteButton) {
                 const sceneId = deleteButton.getAttribute('data-scene-delete');
                 if (sceneId) {
+                    closeSceneMenu();
                     deleteScene(sceneId);
                 }
+                return;
+            }
+
+            const menu = event.target.closest('[data-scene-menu]');
+            if (menu) {
                 return;
             }
 
@@ -224,10 +251,35 @@
                 const sceneId = card.getAttribute('data-scene-card');
                 if (sceneId && state.selectedSceneId !== sceneId) {
                     state.selectedSceneId = sceneId;
+                    closeSceneMenu(false);
                     renderSceneList();
                     updateMapSettingsPanel();
                 }
             }
+        }
+
+        function onSceneListContextMenu(event) {
+            const card = event.target.closest('[data-scene-card]');
+            if (!card) {
+                return;
+            }
+
+            event.preventDefault();
+            const sceneId = card.getAttribute('data-scene-card');
+            if (!sceneId) {
+                return;
+            }
+
+            if (state.openSceneMenuId === sceneId) {
+                return;
+            }
+
+            if (state.selectedSceneId !== sceneId) {
+                state.selectedSceneId = sceneId;
+                updateMapSettingsPanel();
+            }
+
+            openSceneMenu(sceneId);
         }
 
         function onCreateFolder() {
@@ -606,47 +658,107 @@
         }
 
         function buildSceneCard(scene) {
-            const wrapper = document.createElement('div');
+            const isSelected = state.selectedSceneId === scene.id;
+            const isActive = state.activeSceneId === scene.id;
+            const isMenuOpen = state.openSceneMenuId === scene.id;
+
+            const wrapper = document.createElement('article');
             wrapper.className = 'scene-card';
             wrapper.setAttribute('data-scene-card', scene.id);
-
-            const button = document.createElement('button');
-            button.type = 'button';
-            button.className = 'scene-card__body';
-            button.setAttribute('data-scene-card', scene.id);
-            button.textContent = scene.name || 'Untitled Scene';
-            if (state.selectedSceneId === scene.id) {
+            if (isSelected) {
                 wrapper.classList.add('scene-card--selected');
             }
+            if (isActive) {
+                wrapper.classList.add('scene-card--active');
+            }
+            if (isMenuOpen) {
+                wrapper.classList.add('scene-card--menu-open');
+            }
 
-            if (state.activeSceneId === scene.id) {
+            const previewButton = document.createElement('button');
+            previewButton.type = 'button';
+            previewButton.className = 'scene-card__preview';
+            previewButton.setAttribute('data-scene-card', scene.id);
+            previewButton.setAttribute('aria-label', `Select ${scene.name || 'scene'}`);
+
+            const previewMedia = document.createElement('div');
+            previewMedia.className = 'scene-card__preview-media';
+            const mapImage = scene.map && typeof scene.map.image === 'string' ? scene.map.image.trim() : '';
+            if (mapImage !== '') {
+                const image = document.createElement('img');
+                image.className = 'scene-card__image';
+                image.src = mapImage;
+                image.alt = '';
+                previewMedia.appendChild(image);
+            } else {
+                previewMedia.classList.add('scene-card__preview-media--empty');
+            }
+
+            const details = document.createElement('div');
+            details.className = 'scene-card__details';
+
+            const name = document.createElement('span');
+            name.className = 'scene-card__name';
+            name.textContent = scene.name || 'Untitled Scene';
+            details.appendChild(name);
+
+            if (isActive) {
                 const badge = document.createElement('span');
                 badge.className = 'scene-card__badge';
                 badge.textContent = 'Active';
-                button.appendChild(badge);
+                details.appendChild(badge);
             }
 
-            wrapper.appendChild(button);
+            previewMedia.appendChild(details);
+            previewButton.appendChild(previewMedia);
+            wrapper.appendChild(previewButton);
 
-            const actions = document.createElement('div');
-            actions.className = 'scene-card__actions';
+            const menuContainer = document.createElement('div');
+            menuContainer.className = 'scene-card__menu';
+
+            const menuToggle = document.createElement('button');
+            menuToggle.type = 'button';
+            menuToggle.className = 'scene-card__menu-trigger';
+            menuToggle.setAttribute('data-scene-menu-toggle', scene.id);
+            menuToggle.setAttribute('aria-haspopup', 'true');
+            menuToggle.setAttribute('aria-expanded', isMenuOpen ? 'true' : 'false');
+            menuToggle.setAttribute('title', 'Scene options');
+
+            const menuToggleLabel = document.createElement('span');
+            menuToggleLabel.className = 'sr-only';
+            menuToggleLabel.textContent = 'Scene options';
+            menuToggle.appendChild(menuToggleLabel);
+
+            const menuToggleIcon = document.createElement('span');
+            menuToggleIcon.setAttribute('aria-hidden', 'true');
+            menuToggleIcon.className = 'scene-card__menu-icon';
+            menuToggleIcon.textContent = '⋯';
+            menuToggle.appendChild(menuToggleIcon);
+
+            menuContainer.appendChild(menuToggle);
+
+            const menu = document.createElement('div');
+            menu.className = 'scene-card__menu-popover';
+            menu.setAttribute('data-scene-menu', scene.id);
+            menu.hidden = !isMenuOpen;
 
             const activate = document.createElement('button');
             activate.type = 'button';
-            activate.className = 'scene-card__action scene-card__action--primary';
-            activate.textContent = state.activeSceneId === scene.id ? 'Active' : 'Activate';
-            activate.disabled = state.activeSceneId === scene.id;
+            activate.className = 'scene-card__menu-item';
+            activate.textContent = isActive ? 'Active Scene' : 'Set Active';
+            activate.disabled = isActive;
             activate.setAttribute('data-scene-activate', scene.id);
 
             const remove = document.createElement('button');
             remove.type = 'button';
-            remove.className = 'scene-card__action scene-card__action--danger';
-            remove.textContent = 'Delete';
+            remove.className = 'scene-card__menu-item scene-card__menu-item--danger';
+            remove.textContent = 'Delete Scene';
             remove.setAttribute('data-scene-delete', scene.id);
 
-            actions.appendChild(activate);
-            actions.appendChild(remove);
-            wrapper.appendChild(actions);
+            menu.appendChild(activate);
+            menu.appendChild(remove);
+            menuContainer.appendChild(menu);
+            wrapper.appendChild(menuContainer);
 
             return wrapper;
         }
@@ -735,6 +847,71 @@
 
             if (!skipStatus) {
                 setStatus('', '');
+            }
+        }
+
+        function openSceneMenu(sceneId) {
+            state.openSceneMenuId = sceneId;
+            renderSceneList();
+            if (!sceneListElement) {
+                return;
+            }
+            const scheduleFocus = (typeof window !== 'undefined' && typeof window.requestAnimationFrame === 'function')
+                ? window.requestAnimationFrame.bind(window)
+                : function (callback) {
+                    if (typeof window !== 'undefined' && typeof window.setTimeout === 'function') {
+                        window.setTimeout(callback, 0);
+                    }
+                };
+            scheduleFocus(() => {
+                const menu = sceneListElement.querySelector(`[data-scene-menu="${sceneId}"]`);
+                if (!menu || menu.hidden) {
+                    return;
+                }
+                const focusTarget = menu.querySelector('button:not(:disabled)');
+                if (focusTarget) {
+                    focusTarget.focus();
+                }
+            });
+        }
+
+        function closeSceneMenu(shouldRender = true) {
+            if (state.openSceneMenuId === null) {
+                return;
+            }
+            state.openSceneMenuId = null;
+            if (shouldRender) {
+                renderSceneList();
+            }
+        }
+
+        function onDocumentClick(event) {
+            if (state.openSceneMenuId === null) {
+                return;
+            }
+            if (!sceneListElement) {
+                closeSceneMenu();
+                return;
+            }
+            const selector = `[data-scene-card="${state.openSceneMenuId}"]`;
+            const currentCard = sceneListElement.querySelector(selector);
+            if (!currentCard) {
+                closeSceneMenu();
+                return;
+            }
+            if (currentCard.contains(event.target)) {
+                const toggle = event.target.closest('[data-scene-menu-toggle]');
+                const menu = event.target.closest('[data-scene-menu]');
+                if (toggle || menu) {
+                    return;
+                }
+            }
+            closeSceneMenu();
+        }
+
+        function onDocumentKeyDown(event) {
+            if (event.key === 'Escape' && state.openSceneMenuId !== null) {
+                closeSceneMenu();
             }
         }
 
@@ -854,6 +1031,7 @@
             }
             state.sceneData = normalizeSceneDataForClient(payload.sceneData);
             state.scenes = flattenScenesForClient(state.sceneData);
+            state.openSceneMenuId = null;
             if (typeof payload.active_scene_id === 'string') {
                 state.activeSceneId = payload.active_scene_id;
             }
