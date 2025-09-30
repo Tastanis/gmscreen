@@ -199,22 +199,6 @@ $vttConfig = [
                             <button type="button" id="scene-add-folder" class="scene-management__add-folder">+ Folder</button>
                             <div id="scene-list" class="scene-management__scene-list" role="list"></div>
                             <button type="button" id="scene-add" class="scene-management__add-scene">+ Scene</button>
-                            <div id="scene-map-settings" class="scene-management__map-settings" hidden>
-                                <h4 class="scene-management__map-title">Map Settings</h4>
-                                <div class="scene-management__field">
-                                    <label for="scene-map-image-input" class="scene-management__label">Scene Image</label>
-                                    <input type="file" id="scene-map-image-input" class="scene-management__file" accept="image/*">
-                                    <p id="scene-map-image-name" class="scene-management__file-name">No image selected</p>
-                                </div>
-                                <div class="scene-management__field">
-                                    <label for="scene-grid-scale" class="scene-management__label">Grid Scale</label>
-                                    <div class="scene-management__grid-controls">
-                                        <input type="range" id="scene-grid-scale" class="scene-management__grid-range" min="10" max="300" step="5" value="50">
-                                        <input type="number" id="scene-grid-scale-value" class="scene-management__grid-value" min="10" max="300" step="5" value="50">
-                                        <span class="scene-management__grid-unit">px</span>
-                                    </div>
-                                </div>
-                            </div>
                         </div>
                     </div>
                     <p id="settings-scenes-status" class="settings-panel__status" role="status" aria-live="polite"></p>

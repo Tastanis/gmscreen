@@ -574,6 +574,27 @@
     z-index: 20;
 }
 
+.scene-card__map-settings {
+    margin: 0.85rem 1rem 1.1rem;
+    position: relative;
+    z-index: 1;
+}
+
+.scene-card__map-settings::before {
+    content: '';
+    position: absolute;
+    inset: -1px;
+    border-radius: 16px;
+    border: 1px solid rgba(56, 189, 248, 0.2);
+    pointer-events: none;
+    opacity: 0;
+    transition: opacity 160ms ease;
+}
+
+.scene-card--selected .scene-card__map-settings::before {
+    opacity: 1;
+}
+
 .scene-card__menu-item {
     width: 100%;
     padding: 0.5rem 0.75rem;
