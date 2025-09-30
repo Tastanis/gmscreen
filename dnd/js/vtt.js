@@ -55,12 +55,6 @@
         const sceneListElement = document.getElementById('scene-list');
         const addFolderButton = document.getElementById('scene-add-folder');
         const addSceneButton = document.getElementById('scene-add');
-        const mapSettings = document.getElementById('scene-map-settings');
-        const mapImageInput = document.getElementById('scene-map-image-input');
-        const mapImageName = document.getElementById('scene-map-image-name');
-        const gridScaleRange = document.getElementById('scene-grid-scale');
-        const gridScaleValue = document.getElementById('scene-grid-scale-value');
-
         if (!panel || !toggleButton || !sceneDisplay || !sceneName || !sceneDescription) {
             return;
         }
@@ -95,7 +89,6 @@
         applySceneToDisplay(config.initialScene || getSceneById(state.scenes, state.activeSceneId), true);
         renderFolderBar();
         renderSceneList();
-        updateMapSettingsPanel();
 
         toggleButton.addEventListener('click', function () {
             if (isPanelOpen) {
@@ -148,24 +141,8 @@
             if (sceneListElement) {
                 sceneListElement.addEventListener('click', onSceneListClick);
                 sceneListElement.addEventListener('contextmenu', onSceneListContextMenu);
-            }
-
-            if (mapImageInput) {
-                mapImageInput.addEventListener('change', onMapImageSelected);
-            }
-
-            if (gridScaleRange) {
-                gridScaleRange.addEventListener('input', function () {
-                    syncGridScaleInputs('range');
-                    scheduleGridScaleUpdate();
-                });
-            }
-
-            if (gridScaleValue) {
-                gridScaleValue.addEventListener('input', function () {
-                    syncGridScaleInputs('number');
-                    scheduleGridScaleUpdate();
-                });
+                sceneListElement.addEventListener('change', onSceneListChange);
+                sceneListElement.addEventListener('input', onSceneListInput);
             }
 
             if (sceneMapImage) {
@@ -207,9 +184,9 @@
             }
             state.selectedFolderId = normalizedId;
             state.selectedSceneId = null;
+            cancelScheduledMapUpdate();
             renderFolderBar();
             renderSceneList();
-            updateMapSettingsPanel();
         }
 
         function onSceneListClick(event) {
@@ -277,10 +254,10 @@
             if (card) {
                 const sceneId = card.getAttribute('data-scene-card');
                 if (sceneId && state.selectedSceneId !== sceneId) {
+                    cancelScheduledMapUpdate();
                     state.selectedSceneId = sceneId;
                     closeSceneMenu(false);
                     renderSceneList();
-                    updateMapSettingsPanel();
                 }
             }
         }
@@ -302,11 +279,46 @@
             }
 
             if (state.selectedSceneId !== sceneId) {
+                cancelScheduledMapUpdate();
                 state.selectedSceneId = sceneId;
-                updateMapSettingsPanel();
             }
 
             openSceneMenu(sceneId);
+        }
+
+        function onSceneListChange(event) {
+            const fileInput = event.target.closest('input[type="file"][data-scene-map-upload]');
+            if (!fileInput) {
+                return;
+            }
+
+            const sceneId = fileInput.getAttribute('data-scene-map-upload');
+            if (!sceneId) {
+                return;
+            }
+
+            onMapImageSelected(event, sceneId);
+        }
+
+        function onSceneListInput(event) {
+            const rangeInput = event.target.closest('input[data-scene-grid-range]');
+            if (rangeInput) {
+                const sceneId = rangeInput.getAttribute('data-scene-grid-range');
+                if (sceneId) {
+                    syncGridScaleInputs(sceneId, 'range');
+                    scheduleGridScaleUpdate(sceneId);
+                }
+                return;
+            }
+
+            const numberInput = event.target.closest('input[data-scene-grid-value]');
+            if (numberInput) {
+                const sceneId = numberInput.getAttribute('data-scene-grid-value');
+                if (sceneId) {
+                    syncGridScaleInputs(sceneId, 'number');
+                    scheduleGridScaleUpdate(sceneId);
+                }
+            }
         }
 
         function onCreateFolder() {
@@ -414,7 +426,6 @@
                     state.activeSceneId = data.active_scene_id || state.activeSceneId;
                     renderFolderBar();
                     renderSceneList();
-                    updateMapSettingsPanel();
                     setStatus('Scene created. Upload a map to get started.', 'success');
                 })
                 .catch((error) => {
@@ -463,7 +474,6 @@
                     }
                     renderFolderBar();
                     renderSceneList();
-                    updateMapSettingsPanel();
                     setStatus('Scene renamed.', 'success');
                 })
                 .catch((error) => {
@@ -526,22 +536,37 @@
             state.mapAspectRatio = null;
         }
 
-        function onMapImageSelected(event) {
+        function onMapImageSelected(event, sceneId) {
             const input = event.target;
             if (!input || !input.files || input.files.length === 0) {
                 return;
             }
+
             const file = input.files[0];
-            if (!file || !state.selectedSceneId) {
+            const targetSceneId = sceneId || input.getAttribute('data-scene-map-upload') || state.selectedSceneId;
+            if (!file || !targetSceneId) {
                 return;
             }
-            uploadSceneMap(state.selectedSceneId, file);
+
+            if (file.name) {
+                updateMapImageName(targetSceneId, `Uploading ${file.name}…`);
+            }
+
+            uploadSceneMap(targetSceneId, file);
         }
 
-        function syncGridScaleInputs(source) {
+        function syncGridScaleInputs(sceneId, source) {
+            const card = getSceneCard(sceneId);
+            if (!card) {
+                return;
+            }
+
+            const gridScaleRange = card.querySelector('[data-scene-grid-range]');
+            const gridScaleValue = card.querySelector('[data-scene-grid-value]');
             if (!gridScaleRange || !gridScaleValue) {
                 return;
             }
+
             if (source === 'range') {
                 gridScaleValue.value = gridScaleRange.value;
             } else {
@@ -551,19 +576,34 @@
             }
         }
 
-        function scheduleGridScaleUpdate() {
-            if (!state.selectedSceneId || !gridScaleRange) {
+        function scheduleGridScaleUpdate(sceneId) {
+            if (!sceneId) {
                 return;
             }
+
             if (state.mapUpdateTimer !== null) {
                 window.clearTimeout(state.mapUpdateTimer);
             }
-            state.mapUpdateTimer = window.setTimeout(submitGridScaleUpdate, 400);
+
+            state.mapUpdateTimer = window.setTimeout(function () {
+                submitGridScaleUpdate(sceneId);
+            }, 400);
         }
 
-        function submitGridScaleUpdate() {
+        function submitGridScaleUpdate(sceneId) {
             state.mapUpdateTimer = null;
-            if (!state.selectedSceneId || !gridScaleRange) {
+            if (!sceneId) {
+                return;
+            }
+
+            const card = getSceneCard(sceneId);
+            if (!card) {
+                return;
+            }
+
+            const gridScaleRange = card.querySelector('[data-scene-grid-range]');
+            const gridScaleValue = card.querySelector('[data-scene-grid-value]');
+            if (!gridScaleRange) {
                 return;
             }
 
@@ -575,7 +615,7 @@
 
             const body = new URLSearchParams({
                 action: 'update_scene_map',
-                scene_id: state.selectedSceneId,
+                scene_id: sceneId,
                 grid_scale: String(value),
             });
 
@@ -594,12 +634,12 @@
                         throw new Error((data && data.error) || 'Unable to update grid.');
                     }
                     applySceneStateFromServer(data);
-                    updateMapSettingsPanel();
                     setStatus('Grid updated.', 'success');
-                    if (state.activeSceneId === state.selectedSceneId) {
-                        const updatedScene = getSceneById(state.scenes, state.selectedSceneId);
+                    if (state.activeSceneId === sceneId) {
+                        const updatedScene = getSceneById(state.scenes, sceneId);
                         applySceneToDisplay(updatedScene, true);
                     }
+                    renderSceneList();
                 })
                 .catch((error) => {
                     console.error(error);
@@ -607,13 +647,24 @@
                 });
         }
 
+        function cancelScheduledMapUpdate() {
+            if (state.mapUpdateTimer !== null) {
+                window.clearTimeout(state.mapUpdateTimer);
+                state.mapUpdateTimer = null;
+            }
+        }
+
         function uploadSceneMap(sceneId, file) {
             const formData = new FormData();
             formData.append('action', 'update_scene_map');
             formData.append('scene_id', sceneId);
             formData.append('map_image', file);
-            if (gridScaleRange) {
-                formData.append('grid_scale', String(clampGridScale(parseInt(gridScaleRange.value, 10))));
+            const card = getSceneCard(sceneId);
+            if (card) {
+                const gridScaleRange = card.querySelector('[data-scene-grid-range]');
+                if (gridScaleRange) {
+                    formData.append('grid_scale', String(clampGridScale(parseInt(gridScaleRange.value, 10))));
+                }
             }
 
             setStatus('Uploading map…', 'info');
@@ -627,21 +678,19 @@
                         throw new Error((data && data.error) || 'Unable to upload map.');
                     }
                     applySceneStateFromServer(data);
-                    updateMapSettingsPanel();
                     setStatus('Map updated.', 'success');
                     if (state.activeSceneId === sceneId) {
                         const updatedScene = getSceneById(state.scenes, sceneId);
                         applySceneToDisplay(updatedScene, true);
                     }
+                    renderSceneList();
                 })
                 .catch((error) => {
                     console.error(error);
                     setStatus('Unable to upload map.', 'error');
                 })
                 .finally(() => {
-                    if (mapImageInput) {
-                        mapImageInput.value = '';
-                    }
+                    resetSceneMapInput(sceneId);
                 });
         }
 
@@ -681,7 +730,6 @@
                     }
                     renderFolderBar();
                     renderSceneList();
-                    updateMapSettingsPanel();
                     setStatus('Scene deleted.', 'success');
                 })
                 .catch((error) => {
@@ -752,7 +800,6 @@
                     applySceneStateFromServer(data);
                     renderFolderBar();
                     renderSceneList();
-                    updateMapSettingsPanel();
                     if (showStatus) {
                         setStatus('Scenes refreshed.', 'success');
                     }
@@ -812,6 +859,15 @@
                 empty.textContent = 'No scenes yet. Create one to get started.';
                 sceneListElement.appendChild(empty);
                 return;
+            }
+
+            const previousSelection = state.selectedSceneId;
+            const selectedExists = scenes.some((scene) => scene.id === state.selectedSceneId);
+            if (!selectedExists) {
+                state.selectedSceneId = scenes[0].id;
+            }
+            if (state.selectedSceneId !== previousSelection) {
+                cancelScheduledMapUpdate();
             }
 
             scenes.forEach((scene) => {
@@ -937,42 +993,14 @@
             menuContainer.appendChild(menu);
             wrapper.appendChild(menuContainer);
 
-            return wrapper;
-        }
-
-        function updateMapSettingsPanel() {
-            if (!mapSettings) {
-                return;
-            }
-
-            if (!state.selectedSceneId) {
-                mapSettings.hidden = true;
-                if (mapImageName) {
-                    mapImageName.textContent = 'Select a scene to edit its map.';
+            if (isSelected && state.isGM) {
+                const mapSettings = buildSceneMapSettings(scene);
+                if (mapSettings) {
+                    wrapper.appendChild(mapSettings);
                 }
-                return;
             }
 
-            const scene = getSceneById(state.scenes, state.selectedSceneId);
-            if (!scene) {
-                mapSettings.hidden = true;
-                return;
-            }
-
-            mapSettings.hidden = false;
-            const map = scene.map || {};
-            const image = typeof map.image === 'string' ? map.image : '';
-            const gridScale = clampGridScale(parseInt(map.gridScale, 10));
-
-            if (mapImageName) {
-                mapImageName.textContent = image ? `Current image: ${extractFileName(image)}` : 'No image uploaded yet.';
-            }
-            if (gridScaleRange) {
-                gridScaleRange.value = gridScale;
-            }
-            if (gridScaleValue) {
-                gridScaleValue.value = gridScale;
-            }
+            return wrapper;
         }
 
         function setStatus(message, type) {
@@ -1221,6 +1249,7 @@
             }
             if (state.selectedSceneId && !getSceneById(state.scenes, state.selectedSceneId)) {
                 state.selectedSceneId = null;
+                cancelScheduledMapUpdate();
             }
         }
     }
@@ -1294,6 +1323,119 @@
         });
 
         return collection;
+    }
+
+    function getSceneCard(sceneId) {
+        const list = document.getElementById('scene-list');
+        if (!list || !sceneId) {
+            return null;
+        }
+        return list.querySelector(`[data-scene-card="${sceneId}"]`);
+    }
+
+    function resetSceneMapInput(sceneId) {
+        const card = getSceneCard(sceneId);
+        if (!card) {
+            return;
+        }
+        const input = card.querySelector('input[type="file"][data-scene-map-upload]');
+        if (input) {
+            input.value = '';
+        }
+    }
+
+    function updateMapImageName(sceneId, message) {
+        const card = getSceneCard(sceneId);
+        if (!card) {
+            return;
+        }
+        const nameElement = card.querySelector('[data-scene-map-name]');
+        if (nameElement) {
+            nameElement.textContent = message;
+        }
+    }
+
+    function buildSceneMapSettings(scene) {
+        if (!scene || typeof scene !== 'object') {
+            return null;
+        }
+
+        const container = document.createElement('div');
+        container.className = 'scene-card__map-settings scene-management__map-settings';
+        container.setAttribute('data-scene-map-settings', scene.id);
+
+        const title = document.createElement('h4');
+        title.className = 'scene-management__map-title';
+        title.textContent = 'Map Settings';
+        container.appendChild(title);
+
+        const imageField = document.createElement('div');
+        imageField.className = 'scene-management__field';
+
+        const imageLabel = document.createElement('label');
+        imageLabel.className = 'scene-management__label';
+        imageLabel.textContent = 'Scene Image';
+        imageField.appendChild(imageLabel);
+
+        const fileInput = document.createElement('input');
+        fileInput.type = 'file';
+        fileInput.accept = 'image/*';
+        fileInput.className = 'scene-management__file';
+        fileInput.setAttribute('data-scene-map-upload', scene.id);
+        imageField.appendChild(fileInput);
+
+        const fileName = document.createElement('p');
+        fileName.className = 'scene-management__file-name';
+        fileName.setAttribute('data-scene-map-name', scene.id);
+        if (scene.map && typeof scene.map.image === 'string' && scene.map.image.trim() !== '') {
+            fileName.textContent = `Current image: ${extractFileName(scene.map.image)}`;
+        } else {
+            fileName.textContent = 'No image uploaded yet.';
+        }
+        imageField.appendChild(fileName);
+
+        container.appendChild(imageField);
+
+        const gridField = document.createElement('div');
+        gridField.className = 'scene-management__field';
+
+        const gridLabel = document.createElement('label');
+        gridLabel.className = 'scene-management__label';
+        gridLabel.textContent = 'Grid Scale';
+        gridField.appendChild(gridLabel);
+
+        const gridControls = document.createElement('div');
+        gridControls.className = 'scene-management__grid-controls';
+
+        const range = document.createElement('input');
+        range.type = 'range';
+        range.min = '10';
+        range.max = '300';
+        range.step = '5';
+        range.className = 'scene-management__grid-range';
+        range.setAttribute('data-scene-grid-range', scene.id);
+        range.value = String(clampGridScale(parseInt(scene.map && scene.map.gridScale, 10)));
+        gridControls.appendChild(range);
+
+        const number = document.createElement('input');
+        number.type = 'number';
+        number.min = '10';
+        number.max = '300';
+        number.step = '5';
+        number.className = 'scene-management__grid-value';
+        number.setAttribute('data-scene-grid-value', scene.id);
+        number.value = String(clampGridScale(parseInt(scene.map && scene.map.gridScale, 10)));
+        gridControls.appendChild(number);
+
+        const unit = document.createElement('span');
+        unit.className = 'scene-management__grid-unit';
+        unit.textContent = 'px';
+        gridControls.appendChild(unit);
+
+        gridField.appendChild(gridControls);
+        container.appendChild(gridField);
+
+        return container;
     }
 
     function determineInitialFolderId(sceneData, sceneId) {
