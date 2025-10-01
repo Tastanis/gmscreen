@@ -64,8 +64,8 @@
         const MAP_MIN_SCALE = 0.5;
         const MAP_MAX_SCALE = 4;
         const MAP_WHEEL_SENSITIVITY = 0.002;
-        const MAP_PAN_BUFFER_PX = 220;
-        const MAP_PAN_BUFFER_RATIO = 0.12;
+        const MAP_DRAG_BUFFER_MIN_PX = 220;
+        const MAP_DRAG_BUFFER_SCALE = 0.5;
 
         const state = {
             isGM: Boolean(config.isGM),
@@ -661,10 +661,10 @@
             const scaledHeight = contentHeight * scale;
 
             const bufferX = state.mapHasImage
-                ? Math.max(MAP_PAN_BUFFER_PX, viewportWidth * MAP_PAN_BUFFER_RATIO)
+                ? Math.max(MAP_DRAG_BUFFER_MIN_PX, scaledWidth * MAP_DRAG_BUFFER_SCALE)
                 : 0;
             const bufferY = state.mapHasImage
-                ? Math.max(MAP_PAN_BUFFER_PX, viewportHeight * MAP_PAN_BUFFER_RATIO)
+                ? Math.max(MAP_DRAG_BUFFER_MIN_PX, scaledHeight * MAP_DRAG_BUFFER_SCALE)
                 : 0;
 
             let minX;
