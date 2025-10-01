@@ -148,6 +148,11 @@
             });
         }
 
+        if (sceneMapImage) {
+            sceneMapImage.addEventListener('load', onSceneMapImageLoad);
+            sceneMapImage.addEventListener('error', onSceneMapImageError);
+        }
+
         if (state.isGM) {
             if (addFolderButton) {
                 addFolderButton.addEventListener('click', onCreateFolder);
@@ -166,11 +171,6 @@
                 sceneListElement.addEventListener('contextmenu', onSceneListContextMenu);
                 sceneListElement.addEventListener('change', onSceneListChange);
                 sceneListElement.addEventListener('input', onSceneListInput);
-            }
-
-            if (sceneMapImage) {
-                sceneMapImage.addEventListener('load', onSceneMapImageLoad);
-                sceneMapImage.addEventListener('error', onSceneMapImageError);
             }
 
             document.addEventListener('click', onDocumentClick);
@@ -563,18 +563,17 @@
 
             const viewportWidth = sceneMapInner ? sceneMapInner.clientWidth : 0;
             const viewportHeight = sceneMapInner ? sceneMapInner.clientHeight : 0;
-            const shouldUseIntrinsicSize = (
-                (viewportWidth > 0 && width > viewportWidth) ||
-                (viewportHeight > 0 && height > viewportHeight)
-            );
+            const hasViewportSize = viewportWidth > 0 && viewportHeight > 0;
+            const shouldUseIntrinsicSize = !hasViewportSize || width > viewportWidth || height > viewportHeight;
 
-            if (shouldUseIntrinsicSize) {
-                sceneMapContent.style.width = `${width}px`;
-                sceneMapContent.style.height = `${height}px`;
-                sceneMapContent.style.flex = '0 0 auto';
-            } else {
+            if (!shouldUseIntrinsicSize) {
                 clearMapContentSizing();
+                return;
             }
+
+            sceneMapContent.style.width = `${width}px`;
+            sceneMapContent.style.height = `${height}px`;
+            sceneMapContent.style.flex = '0 0 auto';
         }
 
         function applyMapAspectRatioFromImage() {
