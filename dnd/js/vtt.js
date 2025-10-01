@@ -561,9 +561,20 @@
                 return;
             }
 
-            sceneMapContent.style.width = `${width}px`;
-            sceneMapContent.style.height = `${height}px`;
-            sceneMapContent.style.flex = '0 0 auto';
+            const viewportWidth = sceneMapInner ? sceneMapInner.clientWidth : 0;
+            const viewportHeight = sceneMapInner ? sceneMapInner.clientHeight : 0;
+            const shouldUseIntrinsicSize = (
+                (viewportWidth > 0 && width > viewportWidth) ||
+                (viewportHeight > 0 && height > viewportHeight)
+            );
+
+            if (shouldUseIntrinsicSize) {
+                sceneMapContent.style.width = `${width}px`;
+                sceneMapContent.style.height = `${height}px`;
+                sceneMapContent.style.flex = '0 0 auto';
+            } else {
+                clearMapContentSizing();
+            }
         }
 
         function applyMapAspectRatioFromImage() {
