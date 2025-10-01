@@ -566,6 +566,7 @@
             } catch (error) {
                 sceneMapInner.addEventListener('wheel', onMapWheel, false);
             }
+            sceneMapInner.addEventListener('contextmenu', onMapContextMenu);
             sceneMapInner.addEventListener('pointerdown', onMapPointerDown);
             sceneMapInner.addEventListener('pointermove', onMapPointerMove);
             sceneMapInner.addEventListener('pointerup', onMapPointerUp);
@@ -707,8 +708,13 @@
             if (!event.isPrimary) {
                 return;
             }
-            if (event.pointerType === 'mouse' && event.button !== 0) {
-                return;
+            if (event.pointerType === 'mouse') {
+                if (event.button !== 2) {
+                    return;
+                }
+                if (typeof event.preventDefault === 'function') {
+                    event.preventDefault();
+                }
             }
             state.mapDragState.pointerId = event.pointerId;
             state.mapDragState.active = true;
@@ -726,6 +732,10 @@
 
         function onMapPointerMove(event) {
             if (!state.mapDragState.active || event.pointerId !== state.mapDragState.pointerId) {
+                return;
+            }
+            if (event.pointerType === 'mouse' && event.buttons !== 2) {
+                endMapDrag();
                 return;
             }
             const dx = event.clientX - state.mapDragState.lastX;
@@ -774,6 +784,16 @@
                 event.preventDefault();
             }
             resetMapTransform();
+        }
+
+        function onMapContextMenu(event) {
+            if (!sceneMapInner) {
+                return;
+            }
+            if (!state.mapHasImage) {
+                return;
+            }
+            event.preventDefault();
         }
 
         function onMapViewportResize() {

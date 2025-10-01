@@ -717,7 +717,7 @@
     top: 50%;
     left: 0;
     transform: translate3d(-55%, -50%, 0);
-    padding: 0.75rem 1.6rem;
+    padding: 1.6rem 0.75rem;
     border-radius: 0 16px 16px 0;
     border: 1px solid var(--vtt-panel-border);
     background: var(--vtt-panel-bg);
@@ -729,6 +729,12 @@
     box-shadow: 0 18px 48px rgba(8, 15, 35, 0.6);
     transition: transform 220ms ease, background 160ms ease, color 160ms ease;
     z-index: 1390;
+    writing-mode: vertical-rl;
+    text-orientation: mixed;
+    white-space: nowrap;
+    display: flex;
+    align-items: center;
+    justify-content: center;
 }
 
 .settings-panel-toggle:hover,
@@ -779,6 +785,9 @@
         transform: translate3d(0, 0, 0);
         left: 50%;
         border-radius: 18px;
+        writing-mode: horizontal-tb;
+        text-orientation: initial;
+        padding: 0.65rem 1.4rem;
     }
 
     .settings-panel-toggle[aria-expanded="true"] {

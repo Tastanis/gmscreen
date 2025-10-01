@@ -19,6 +19,8 @@
         const whisperContainer = document.getElementById('chat-whisper-targets');
         const whisperPopoutHost = document.getElementById('chat-whisper-popouts');
         const whisperAlertHost = document.getElementById('chat-whisper-alerts');
+        const sceneDisplay = document.getElementById('scene-display');
+        const sceneMap = document.getElementById('scene-map');
 
         if (!panel || !toggleButton || !messageList || !form || !textarea || !sendButton) {
             return;
@@ -1722,7 +1724,52 @@
                 return false;
             }
             const types = Array.from(event.dataTransfer.types || []);
-            return types.includes('Files') || types.includes('text/uri-list') || types.includes('text/plain');
+            const hasSupportedType = types.includes('Files') || types.includes('text/uri-list') || types.includes('text/plain');
+            if (!hasSupportedType) {
+                return false;
+            }
+            if (isDragOverScene(event)) {
+                return false;
+            }
+            return true;
+        }
+
+        function isDragOverScene(event) {
+            if (isEventWithinElement(event, sceneMap)) {
+                return true;
+            }
+            if (!sceneMap && isEventWithinElement(event, sceneDisplay)) {
+                return true;
+            }
+            return false;
+        }
+
+        function isEventWithinElement(event, element) {
+            if (!event || !element) {
+                return false;
+            }
+
+            if (event.target instanceof Node && element.contains(event.target)) {
+                return true;
+            }
+
+            if (typeof event.composedPath === 'function') {
+                const path = event.composedPath();
+                if (Array.isArray(path) && path.includes(element)) {
+                    return true;
+                }
+            }
+
+            if (Number.isFinite(event.clientX) && Number.isFinite(event.clientY)) {
+                const rect = element.getBoundingClientRect();
+                const x = event.clientX;
+                const y = event.clientY;
+                if (x >= rect.left && x <= rect.right && y >= rect.top && y <= rect.bottom) {
+                    return true;
+                }
+            }
+
+            return false;
         }
 
         function isImageFile(file) {
@@ -1842,6 +1889,8 @@
             if (shouldHandleDrag(event)) {
                 event.preventDefault();
                 showDropTarget();
+            } else {
+                hideDropTarget();
             }
         });
 
@@ -1851,6 +1900,8 @@
                 if (event.dataTransfer) {
                     event.dataTransfer.dropEffect = 'copy';
                 }
+            } else {
+                hideDropTarget();
             }
         });
 
