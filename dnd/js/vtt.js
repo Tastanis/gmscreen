@@ -62,6 +62,7 @@
 
         const initialSceneData = normalizeSceneDataForClient(config.sceneData);
         const MAP_MIN_SCALE = 0.5;
+        const MAP_ABSOLUTE_MIN_SCALE = 0.05;
         const MAP_MAX_SCALE = 4;
         const MAP_WHEEL_SENSITIVITY = 0.002;
         const MAP_DRAG_BUFFER_MIN_PX = 220;
@@ -92,6 +93,7 @@
                 translateX: 0,
                 translateY: 0,
             },
+            mapMinScale: MAP_MIN_SCALE,
             mapDragState: {
                 pointerId: null,
                 active: false,
@@ -539,6 +541,31 @@
             resetMapTransform();
         }
 
+        function clearMapContentSizing() {
+            if (!sceneMapContent) {
+                return;
+            }
+            sceneMapContent.style.removeProperty('width');
+            sceneMapContent.style.removeProperty('height');
+            sceneMapContent.style.removeProperty('flex');
+        }
+
+        function applyMapContentIntrinsicSize() {
+            if (!sceneMapContent || !sceneMapImage) {
+                return;
+            }
+
+            const width = sceneMapImage.naturalWidth;
+            const height = sceneMapImage.naturalHeight;
+            if (!Number.isFinite(width) || !Number.isFinite(height) || width <= 0 || height <= 0) {
+                return;
+            }
+
+            sceneMapContent.style.width = `${width}px`;
+            sceneMapContent.style.height = `${height}px`;
+            sceneMapContent.style.flex = '0 0 auto';
+        }
+
         function applyMapAspectRatioFromImage() {
             if (!sceneMapInner || !sceneMapImage) {
                 return;
@@ -550,6 +577,10 @@
             }
             sceneMapInner.style.removeProperty('aspect-ratio');
             state.mapAspectRatio = width / height;
+            applyMapContentIntrinsicSize();
+            const fitScale = calculateFitScale();
+            const minScale = Math.min(fitScale, MAP_MIN_SCALE);
+            state.mapMinScale = clampNumber(minScale, MAP_ABSOLUTE_MIN_SCALE, MAP_MAX_SCALE);
         }
 
         function clearMapAspectRatio() {
@@ -557,6 +588,8 @@
                 sceneMapInner.style.removeProperty('aspect-ratio');
             }
             state.mapAspectRatio = null;
+            clearMapContentSizing();
+            state.mapMinScale = MAP_MIN_SCALE;
         }
 
         function initMapInteractions() {
@@ -587,6 +620,11 @@
             sceneMapContent.classList.toggle('scene-display__map-content--dragging', state.mapDragState.active);
         }
 
+        function getMapMinScale() {
+            const minScale = typeof state.mapMinScale === 'number' ? state.mapMinScale : MAP_MIN_SCALE;
+            return clampNumber(minScale, MAP_ABSOLUTE_MIN_SCALE, MAP_MAX_SCALE);
+        }
+
         function applyMapTransform() {
             if (!sceneMapContent || !sceneMapInner) {
                 return;
@@ -609,7 +647,10 @@
         }
 
         function resetMapTransform() {
-            state.mapTransform.scale = 1;
+            const fitScale = state.mapHasImage ? calculateFitScale() : 1;
+            const minScale = state.mapHasImage ? Math.min(fitScale, MAP_MIN_SCALE) : MAP_MIN_SCALE;
+            state.mapMinScale = clampNumber(minScale, MAP_ABSOLUTE_MIN_SCALE, MAP_MAX_SCALE);
+            state.mapTransform.scale = clampNumber(fitScale, getMapMinScale(), MAP_MAX_SCALE);
             const bounds = getMapTranslationBounds(state.mapTransform.scale);
             state.mapTransform.translateX = clampNumber((bounds.minX + bounds.maxX) / 2, bounds.minX, bounds.maxX);
             state.mapTransform.translateY = clampNumber((bounds.minY + bounds.maxY) / 2, bounds.minY, bounds.maxY);
@@ -618,12 +659,36 @@
             applyMapTransform();
         }
 
+        function calculateFitScale() {
+            if (!sceneMapInner || !sceneMapContent) {
+                return 1;
+            }
+
+            const viewportWidth = sceneMapInner.clientWidth;
+            const viewportHeight = sceneMapInner.clientHeight;
+            if (viewportWidth <= 0 || viewportHeight <= 0) {
+                return 1;
+            }
+
+            const contentWidth = sceneMapContent.offsetWidth || viewportWidth;
+            const contentHeight = sceneMapContent.offsetHeight || viewportHeight;
+            if (contentWidth <= 0 || contentHeight <= 0) {
+                return 1;
+            }
+
+            const scaleX = viewportWidth / contentWidth;
+            const scaleY = viewportHeight / contentHeight;
+            const fitScale = Math.min(scaleX, scaleY, 1);
+            return clampNumber(fitScale, MAP_ABSOLUTE_MIN_SCALE, MAP_MAX_SCALE);
+        }
+
         function updateMapScale(nextScale, focalX, focalY) {
             if (!sceneMapInner) {
                 return;
             }
             const currentScale = state.mapTransform.scale;
-            if (!Number.isFinite(nextScale) || nextScale === currentScale) {
+            const clampedScale = clampNumber(nextScale, getMapMinScale(), MAP_MAX_SCALE);
+            if (!Number.isFinite(clampedScale) || clampedScale === currentScale) {
                 return;
             }
             const rect = sceneMapInner.getBoundingClientRect();
@@ -632,9 +697,9 @@
 
             const contentX = originX - state.mapTransform.translateX;
             const contentY = originY - state.mapTransform.translateY;
-            const scaleRatio = nextScale / currentScale;
+            const scaleRatio = clampedScale / currentScale;
 
-            state.mapTransform.scale = nextScale;
+            state.mapTransform.scale = clampedScale;
             updateMapTranslation(originX - contentX * scaleRatio, originY - contentY * scaleRatio);
         }
 
@@ -714,7 +779,7 @@
             const pointerY = event.clientY - rect.top;
             const delta = clampNumber(event.deltaY, -1000, 1000);
             const zoomFactor = Math.exp(-delta * MAP_WHEEL_SENSITIVITY);
-            const nextScale = clampNumber(state.mapTransform.scale * zoomFactor, MAP_MIN_SCALE, MAP_MAX_SCALE);
+            const nextScale = clampNumber(state.mapTransform.scale * zoomFactor, getMapMinScale(), MAP_MAX_SCALE);
             updateMapScale(nextScale, pointerX, pointerY);
         }
 
@@ -1417,6 +1482,10 @@
             const imageChanged = state.mapImageSrc !== imagePath;
 
             if (hasImage) {
+                if (imageChanged) {
+                    clearMapContentSizing();
+                    state.mapMinScale = MAP_MIN_SCALE;
+                }
                 if (imageChanged || !sceneMapImage.hasAttribute('src')) {
                     sceneMapImage.src = imagePath;
                 }
