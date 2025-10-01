@@ -602,7 +602,7 @@ $studentData = loadStudentData();
     <!-- Top Navigation Bar -->
     <div class="top-nav">
         <div class="nav-buttons">
-            <button class="nav-btn" onclick="window.location.href='../../dashboard.php'">← Back to Dashboard</button>
+            <button class="nav-btn" onclick="window.close()">Close Students</button>
             <button class="nav-btn logout-btn" onclick="window.location.href='../../logout.php'">Logout</button>
         </div>
         <h1 class="nav-title">Strixhaven Students<?php echo $is_gm ? ' - GM View' : ' - Player View'; ?></h1>
