@@ -64,6 +64,8 @@
         const MAP_MIN_SCALE = 0.5;
         const MAP_MAX_SCALE = 4;
         const MAP_WHEEL_SENSITIVITY = 0.002;
+        const MAP_PAN_BUFFER_PX = 220;
+        const MAP_PAN_BUFFER_RATIO = 0.12;
 
         const state = {
             isGM: Boolean(config.isGM),
@@ -546,13 +548,13 @@
             if (!Number.isFinite(width) || !Number.isFinite(height) || width <= 0 || height <= 0) {
                 return;
             }
-            sceneMapInner.style.aspectRatio = `${width} / ${height}`;
+            sceneMapInner.style.removeProperty('aspect-ratio');
             state.mapAspectRatio = width / height;
         }
 
         function clearMapAspectRatio() {
             if (sceneMapInner) {
-                sceneMapInner.style.aspectRatio = '';
+                sceneMapInner.style.removeProperty('aspect-ratio');
             }
             state.mapAspectRatio = null;
         }
@@ -608,8 +610,9 @@
 
         function resetMapTransform() {
             state.mapTransform.scale = 1;
-            state.mapTransform.translateX = 0;
-            state.mapTransform.translateY = 0;
+            const bounds = getMapTranslationBounds(state.mapTransform.scale);
+            state.mapTransform.translateX = clampNumber((bounds.minX + bounds.maxX) / 2, bounds.minX, bounds.maxX);
+            state.mapTransform.translateY = clampNumber((bounds.minY + bounds.maxY) / 2, bounds.minY, bounds.maxY);
             state.mapDragState.active = false;
             state.mapDragState.pointerId = null;
             applyMapTransform();
@@ -642,46 +645,60 @@
             applyMapTransform();
         }
 
-        function clampMapTranslation(scale, translateX, translateY) {
+        function getMapTranslationBounds(scale) {
             if (!sceneMapInner || !sceneMapContent) {
-                return { translateX, translateY };
+                return { minX: 0, maxX: 0, minY: 0, maxY: 0 };
             }
             const viewportWidth = sceneMapInner.clientWidth;
             const viewportHeight = sceneMapInner.clientHeight;
             if (viewportWidth === 0 || viewportHeight === 0) {
-                return { translateX, translateY };
+                return { minX: 0, maxX: 0, minY: 0, maxY: 0 };
             }
 
-            const contentWidth = sceneMapContent.offsetWidth;
-            const contentHeight = sceneMapContent.offsetHeight;
+            const contentWidth = sceneMapContent.offsetWidth || viewportWidth;
+            const contentHeight = sceneMapContent.offsetHeight || viewportHeight;
             const scaledWidth = contentWidth * scale;
             const scaledHeight = contentHeight * scale;
+
+            const bufferX = state.mapHasImage
+                ? Math.max(MAP_PAN_BUFFER_PX, viewportWidth * MAP_PAN_BUFFER_RATIO)
+                : 0;
+            const bufferY = state.mapHasImage
+                ? Math.max(MAP_PAN_BUFFER_PX, viewportHeight * MAP_PAN_BUFFER_RATIO)
+                : 0;
 
             let minX;
             let maxX;
             if (scaledWidth <= viewportWidth) {
                 const centerX = (viewportWidth - scaledWidth) / 2;
-                minX = centerX;
-                maxX = centerX;
+                minX = centerX - bufferX;
+                maxX = centerX + bufferX;
             } else {
-                minX = viewportWidth - scaledWidth;
-                maxX = 0;
+                const edgeOffset = viewportWidth - scaledWidth;
+                minX = edgeOffset - bufferX;
+                maxX = bufferX;
             }
 
             let minY;
             let maxY;
             if (scaledHeight <= viewportHeight) {
                 const centerY = (viewportHeight - scaledHeight) / 2;
-                minY = centerY;
-                maxY = centerY;
+                minY = centerY - bufferY;
+                maxY = centerY + bufferY;
             } else {
-                minY = viewportHeight - scaledHeight;
-                maxY = 0;
+                const edgeOffsetY = viewportHeight - scaledHeight;
+                minY = edgeOffsetY - bufferY;
+                maxY = bufferY;
             }
 
+            return { minX, maxX, minY, maxY };
+        }
+
+        function clampMapTranslation(scale, translateX, translateY) {
+            const bounds = getMapTranslationBounds(scale);
             return {
-                translateX: clampNumber(translateX, minX, maxX),
-                translateY: clampNumber(translateY, minY, maxY),
+                translateX: clampNumber(translateX, bounds.minX, bounds.maxX),
+                translateY: clampNumber(translateY, bounds.minY, bounds.maxY),
             };
         }
 
