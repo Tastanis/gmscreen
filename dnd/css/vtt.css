@@ -155,6 +155,8 @@
     width: 100%;
     height: 100%;
     object-fit: contain;
+    max-width: none;
+    max-height: none;
 }
 
 .scene-display__map-image--hidden {

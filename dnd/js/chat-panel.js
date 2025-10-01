@@ -6,6 +6,28 @@
         ? window.chatHandlerUrl
         : 'chat_handler.php';
 
+    const decodeHtmlEntities = (() => {
+        let textarea = null;
+        return (value) => {
+            if (typeof value !== 'string') {
+                return '';
+            }
+            if (value.indexOf('&') === -1) {
+                return value;
+            }
+            if (!textarea) {
+                textarea = document.createElement('textarea');
+            }
+            textarea.innerHTML = value;
+            return textarea.value;
+        };
+    })();
+
+    function getDisplayText(value) {
+        const decoded = decodeHtmlEntities(value);
+        return typeof decoded === 'string' ? decoded : '';
+    }
+
     function initChatPanel(isGM, currentUser) {
         const panel = document.getElementById('chat-panel');
         const toggleButton = document.getElementById('chat-panel-toggle');
@@ -59,7 +81,14 @@
         const existingMessages = messageList.dataset.initialMessages;
         if (existingMessages) {
             try {
-                messages = JSON.parse(existingMessages);
+                const parsed = JSON.parse(existingMessages);
+                if (Array.isArray(parsed)) {
+                    messages = parsed
+                        .map((msg) => normalizeChatMessage(msg))
+                        .filter((msg) => Boolean(msg && msg.id));
+                } else {
+                    messages = [];
+                }
             } catch (error) {
                 messages = [];
             }
@@ -73,6 +102,23 @@
 
         function getParticipantLabel(id) {
             return participantLookup.get(id) || id || '';
+        }
+
+        function normalizeChatMessage(message) {
+            if (!message || typeof message !== 'object') {
+                return null;
+            }
+
+            const id = typeof message.id === 'string'
+                ? message.id
+                : (message.id !== undefined && message.id !== null ? String(message.id) : '');
+            if (id === '') {
+                return null;
+            }
+
+            const normalized = Object.assign({}, message, { id });
+            normalized.message = getDisplayText(typeof message.message === 'string' ? message.message : '');
+            return normalized;
         }
 
         function getWhisperTargets() {
@@ -445,7 +491,7 @@
                 timestamp: typeof message.timestamp === 'string' && message.timestamp !== ''
                     ? message.timestamp
                     : new Date().toISOString(),
-                message: typeof message.message === 'string' ? message.message : '',
+                message: getDisplayText(typeof message.message === 'string' ? message.message : ''),
                 imageUrl: typeof message.imageUrl === 'string' ? message.imageUrl : '',
                 user: sender,
                 target,
@@ -1063,6 +1109,8 @@
             const wrapper = document.createElement('div');
             wrapper.className = 'chat-message';
 
+            const messageText = getDisplayText(typeof message.message === 'string' ? message.message : '');
+
             if (message.user === currentUser && messageType !== 'project_roll') {
                 wrapper.classList.add('chat-message--self');
             }
@@ -1115,12 +1163,12 @@
                 const image = document.createElement('img');
                 image.className = 'chat-message__image';
                 image.src = message.imageUrl;
-                image.alt = message.message || 'Shared image';
+                image.alt = messageText || 'Shared image';
                 image.loading = 'eager';
 
                 const handleImageInteraction = (event) => {
                     event.preventDefault();
-                    openImageLightbox(message.imageUrl, image.alt, message.message);
+                    openImageLightbox(message.imageUrl, image.alt, messageText);
                 };
 
                 image.addEventListener('click', handleImageInteraction);
@@ -1129,14 +1177,14 @@
                 imageLink.appendChild(image);
                 body.appendChild(imageLink);
 
-                if (message.message) {
+                if (messageText) {
                     const caption = document.createElement('div');
                     caption.className = 'chat-message__caption';
-                    caption.textContent = message.message;
+                    caption.textContent = messageText;
                     body.appendChild(caption);
                 }
             } else {
-                body.textContent = message.message || '';
+                body.textContent = messageText;
             }
 
             wrapper.appendChild(meta);
@@ -1156,12 +1204,17 @@
                 return;
             }
 
-            const index = messages.findIndex((msg) => msg.id === serverMessage.id);
+            const normalized = normalizeChatMessage(serverMessage);
+            if (!normalized) {
+                return;
+            }
+
+            const index = messages.findIndex((msg) => msg.id === normalized.id);
             if (index !== -1) {
                 const existing = messages[index] || {};
-                messages[index] = Object.assign({}, existing, serverMessage, { pending: false, error: false });
+                messages[index] = Object.assign({}, existing, normalized, { pending: false, error: false });
             } else {
-                messages.push(Object.assign({ pending: false, error: false }, serverMessage));
+                messages.push(Object.assign({ pending: false, error: false }, normalized));
             }
 
             trimMessages();
@@ -1352,11 +1405,16 @@
                     continue;
                 }
 
-                if (idToIndex.has(message.id)) {
-                    const idx = idToIndex.get(message.id);
-                    messages[idx] = Object.assign({}, messages[idx], message, { pending: false, error: false });
+                const normalized = normalizeChatMessage(message);
+                if (!normalized) {
+                    continue;
+                }
+
+                if (idToIndex.has(normalized.id)) {
+                    const idx = idToIndex.get(normalized.id);
+                    messages[idx] = Object.assign({}, messages[idx], normalized, { pending: false, error: false });
                 } else {
-                    messages.push(Object.assign({}, message, { pending: false, error: false }));
+                    messages.push(Object.assign({}, normalized, { pending: false, error: false }));
                 }
 
                 hasChanges = true;
@@ -1589,6 +1647,7 @@
 
         async function sendChatMessage({ message = '', imageUrl = '', type = 'text', payload = null, target = '', onOptimistic = null, onSuccess = null, onError = null }) {
             const text = typeof message === 'string' ? message.trim() : '';
+            const displayText = getDisplayText(text);
             const image = typeof imageUrl === 'string' ? imageUrl.trim() : '';
             const normalizedType = typeof type === 'string' && type.trim() !== '' ? type.trim() : 'text';
             const payloadObject = payload && typeof payload === 'object' ? payload : null;
@@ -1604,7 +1663,7 @@
                 id: tempId,
                 timestamp: new Date().toISOString(),
                 user: currentUser || 'You',
-                message: text,
+                message: displayText,
                 type: normalizedType,
                 pending: true,
                 error: false
