@@ -1417,7 +1417,9 @@
             const imageChanged = state.mapImageSrc !== imagePath;
 
             if (hasImage) {
-                sceneMapImage.src = imagePath;
+                if (imageChanged || !sceneMapImage.hasAttribute('src')) {
+                    sceneMapImage.src = imagePath;
+                }
                 sceneMapImage.classList.remove('scene-display__map-image--hidden');
                 sceneMapEmpty.hidden = true;
                 sceneMap.classList.remove('scene-display__map--empty');
@@ -1425,7 +1427,9 @@
                     applyMapAspectRatioFromImage();
                 }
             } else {
-                sceneMapImage.removeAttribute('src');
+                if (sceneMapImage.hasAttribute('src')) {
+                    sceneMapImage.removeAttribute('src');
+                }
                 sceneMapImage.classList.add('scene-display__map-image--hidden');
                 sceneMapEmpty.hidden = false;
                 sceneMap.classList.add('scene-display__map--empty');
