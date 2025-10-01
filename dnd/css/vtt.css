@@ -171,7 +171,7 @@
         linear-gradient(to bottom, rgba(226, 232, 240, 0.12) 1px, transparent 1px);
     background-size: var(--grid-size, 50px) var(--grid-size, 50px);
     background-position: center;
-    mix-blend-mode: screen;
+    opacity: 0.7;
 }
 
 .scene-display__map-empty {
