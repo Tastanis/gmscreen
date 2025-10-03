@@ -796,9 +796,11 @@ async function executeCopy(sourceQ, sourceR, targetQ, targetR) {
     formData.append('q', targetQ);
     formData.append('r', targetR);
     formData.append('copy_player_data', copyPlayerData);
+    formData.append('copy_player_notes', copyPlayerNotes);
+    formData.append('copy_player_images', copyPlayerImages);
     formData.append('copy_gm_data', copyGMData);
-    formData.append('copy_notes', copyPlayerNotes || copyGMNotes);
-    formData.append('copy_images', copyPlayerImages || copyGMImages);
+    formData.append('copy_gm_notes', copyGMNotes);
+    formData.append('copy_gm_images', copyGMImages);
     
     try {
         const response = await fetch('hex-data-handler.php', {

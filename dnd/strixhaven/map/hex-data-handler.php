@@ -475,66 +475,124 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
             
             $sourceQ = (int)($_POST['source_q'] ?? 0);
             $sourceR = (int)($_POST['source_r'] ?? 0);
-            $copyImages = ($_POST['copy_images'] ?? 'true') === 'true';
-            $copyNotes = ($_POST['copy_notes'] ?? 'true') === 'true';
+            $copyPlayerNotes = ($_POST['copy_player_notes'] ?? 'true') === 'true';
+            $copyPlayerImages = ($_POST['copy_player_images'] ?? 'true') === 'true';
             $copyPlayerData = ($_POST['copy_player_data'] ?? 'true') === 'true';
+            $copyGMNotes = ($_POST['copy_gm_notes'] ?? 'true') === 'true';
+            $copyGMImages = ($_POST['copy_gm_images'] ?? 'true') === 'true';
             $copyGMData = ($_POST['copy_gm_data'] ?? 'true') === 'true';
-            
+
             // Load source hex data
             $sourceData = loadHexData($sourceQ, $sourceR);
             $targetData = loadHexData($q, $r);
-            
+
+            if (!isset($targetData['player']) || !is_array($targetData['player'])) {
+                $targetData['player'] = [
+                    'title' => '',
+                    'notes' => '',
+                    'images' => []
+                ];
+            }
+
+            if (!isset($targetData['gm']) || !is_array($targetData['gm'])) {
+                $targetData['gm'] = [
+                    'title' => '',
+                    'notes' => '',
+                    'images' => []
+                ];
+            }
+
             // Copy player data if requested
             if ($copyPlayerData) {
-                if ($copyNotes) {
+                $targetData['player']['title'] = $sourceData['player']['title'] ?? '';
+
+                if ($copyPlayerNotes) {
                     $targetData['player']['notes'] = $sourceData['player']['notes'] ?? '';
                 }
-                
-                if ($copyImages && !empty($sourceData['player']['images'])) {
-                    foreach ($sourceData['player']['images'] as $image) {
-                        // Copy image file
+
+                if ($copyPlayerImages) {
+                    $existingPlayerImages = $targetData['player']['images'] ?? [];
+                    $copiedPlayerImages = [];
+
+                    foreach ($sourceData['player']['images'] ?? [] as $image) {
                         $sourceFile = "hex-images/" . $image['filename'];
-                        if (file_exists($sourceFile)) {
-                            $extension = pathinfo($image['filename'], PATHINFO_EXTENSION);
-                            $newFilename = "hex-{$q}-{$r}-player-" . time() . "-" . rand(1000, 9999) . "." . $extension;
-                            $targetFile = "hex-images/" . $newFilename;
-                            
-                            if (copy($sourceFile, $targetFile)) {
-                                $newImage = $image;
-                                $newImage['filename'] = $newFilename;
-                                $newImage['uploaded_by'] = $user;
-                                $newImage['uploaded_at'] = date('Y-m-d H:i:s');
-                                $targetData['player']['images'][] = $newImage;
-                            }
+                        if (!file_exists($sourceFile)) {
+                            continue;
+                        }
+
+                        $extension = pathinfo($image['filename'], PATHINFO_EXTENSION);
+                        $newFilename = "hex-{$q}-{$r}-player-" . time() . "-" . rand(1000, 9999) . "." . $extension;
+                        $targetFile = "hex-images/" . $newFilename;
+
+                        if (copy($sourceFile, $targetFile)) {
+                            $newImage = $image;
+                            $newImage['filename'] = $newFilename;
+                            $newImage['uploaded_by'] = $user;
+                            $newImage['uploaded_at'] = date('Y-m-d H:i:s');
+                            $copiedPlayerImages[] = $newImage;
                         }
                     }
+
+                    foreach ($existingPlayerImages as $image) {
+                        $existingFilename = $image['filename'] ?? '';
+                        if (!$existingFilename) {
+                            continue;
+                        }
+
+                        $filepath = "hex-images/" . $existingFilename;
+                        if (file_exists($filepath) && is_file($filepath)) {
+                            unlink($filepath);
+                        }
+                    }
+
+                    $targetData['player']['images'] = $copiedPlayerImages;
                 }
             }
-            
+
             // Copy GM data if requested
             if ($copyGMData) {
-                if ($copyNotes) {
+                $targetData['gm']['title'] = $sourceData['gm']['title'] ?? '';
+
+                if ($copyGMNotes) {
                     $targetData['gm']['notes'] = $sourceData['gm']['notes'] ?? '';
                 }
-                
-                if ($copyImages && !empty($sourceData['gm']['images'])) {
-                    foreach ($sourceData['gm']['images'] as $image) {
-                        // Copy image file
+
+                if ($copyGMImages) {
+                    $existingGMImages = $targetData['gm']['images'] ?? [];
+                    $copiedGMImages = [];
+
+                    foreach ($sourceData['gm']['images'] ?? [] as $image) {
                         $sourceFile = "hex-images/" . $image['filename'];
-                        if (file_exists($sourceFile)) {
-                            $extension = pathinfo($image['filename'], PATHINFO_EXTENSION);
-                            $newFilename = "hex-{$q}-{$r}-gm-" . time() . "-" . rand(1000, 9999) . "." . $extension;
-                            $targetFile = "hex-images/" . $newFilename;
-                            
-                            if (copy($sourceFile, $targetFile)) {
-                                $newImage = $image;
-                                $newImage['filename'] = $newFilename;
-                                $newImage['uploaded_by'] = $user;
-                                $newImage['uploaded_at'] = date('Y-m-d H:i:s');
-                                $targetData['gm']['images'][] = $newImage;
-                            }
+                        if (!file_exists($sourceFile)) {
+                            continue;
+                        }
+
+                        $extension = pathinfo($image['filename'], PATHINFO_EXTENSION);
+                        $newFilename = "hex-{$q}-{$r}-gm-" . time() . "-" . rand(1000, 9999) . "." . $extension;
+                        $targetFile = "hex-images/" . $newFilename;
+
+                        if (copy($sourceFile, $targetFile)) {
+                            $newImage = $image;
+                            $newImage['filename'] = $newFilename;
+                            $newImage['uploaded_by'] = $user;
+                            $newImage['uploaded_at'] = date('Y-m-d H:i:s');
+                            $copiedGMImages[] = $newImage;
                         }
                     }
+
+                    foreach ($existingGMImages as $image) {
+                        $existingFilename = $image['filename'] ?? '';
+                        if (!$existingFilename) {
+                            continue;
+                        }
+
+                        $filepath = "hex-images/" . $existingFilename;
+                        if (file_exists($filepath) && is_file($filepath)) {
+                            unlink($filepath);
+                        }
+                    }
+
+                    $targetData['gm']['images'] = $copiedGMImages;
                 }
             }
             
