@@ -518,6 +518,9 @@ $isGM = ($user === 'GM');
             
             mapInterface = new MapInterface();
             mapInterface.initialize();
+
+            // Expose the interface globally for popup helpers (copy mode, etc.)
+            window.mapInterface = mapInterface;
             
             // Update info panel on mouse move
             document.getElementById('hex-canvas').addEventListener('mousemove', function(e) {
