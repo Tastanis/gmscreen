@@ -110,6 +110,7 @@
     gap: 0.75rem;
     flex: 1;
     min-height: 0;
+    position: relative;
 }
 
 .scene-display__map-inner {
@@ -168,14 +169,86 @@
 }
 
 .scene-display__map-grid {
+    --grid-opacity: 0.7;
+    --grid-line-size: 1px;
     position: absolute;
     inset: 0;
     pointer-events: none;
-    background-image: linear-gradient(to right, rgba(226, 232, 240, 0.12) 1px, transparent 1px),
-        linear-gradient(to bottom, rgba(226, 232, 240, 0.12) 1px, transparent 1px);
+    background-image:
+        linear-gradient(
+            to right,
+            rgba(226, 232, 240, var(--grid-opacity)) 0,
+            rgba(226, 232, 240, var(--grid-opacity)) var(--grid-line-size),
+            transparent var(--grid-line-size),
+            transparent var(--grid-size, 50px)
+        ),
+        linear-gradient(
+            to bottom,
+            rgba(226, 232, 240, var(--grid-opacity)) 0,
+            rgba(226, 232, 240, var(--grid-opacity)) var(--grid-line-size),
+            transparent var(--grid-line-size),
+            transparent var(--grid-size, 50px)
+        );
     background-size: var(--grid-size, 50px) var(--grid-size, 50px);
     background-position: center;
-    opacity: 0.7;
+}
+
+.scene-display__grid-controls {
+    position: absolute;
+    bottom: 1.25rem;
+    right: 1.25rem;
+    display: flex;
+    align-items: center;
+    gap: 0.75rem;
+    padding: 0.75rem 1rem;
+    background: rgba(15, 23, 42, 0.72);
+    border: 1px solid rgba(148, 163, 184, 0.35);
+    border-radius: 12px;
+    color: #e2e8f0;
+    font-size: 0.85rem;
+    line-height: 1.2;
+    box-shadow: 0 18px 48px rgba(15, 23, 42, 0.45);
+    backdrop-filter: blur(10px);
+    z-index: 20;
+    pointer-events: auto;
+}
+
+.scene-display__grid-controls:focus-within {
+    border-color: rgba(94, 234, 212, 0.65);
+    box-shadow: 0 0 0 2px rgba(94, 234, 212, 0.25);
+}
+
+.scene-display__grid-label {
+    font-weight: 500;
+    white-space: nowrap;
+}
+
+.scene-display__grid-range {
+    width: 140px;
+    accent-color: #38bdf8;
+}
+
+.scene-display__grid-value {
+    min-width: 3ch;
+    text-align: right;
+    font-variant-numeric: tabular-nums;
+    color: rgba(226, 232, 240, 0.9);
+}
+
+@media (max-width: 680px) {
+    .scene-display__grid-controls {
+        left: 50%;
+        right: auto;
+        transform: translateX(-50%);
+        flex-wrap: wrap;
+        justify-content: center;
+        gap: 0.5rem;
+        padding: 0.65rem 0.85rem;
+    }
+
+    .scene-display__grid-range {
+        width: min(220px, 60vw);
+    }
 }
 
 .scene-display__map-empty {

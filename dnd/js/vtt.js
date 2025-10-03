@@ -52,6 +52,9 @@
         const sceneMapImage = document.getElementById('scene-map-image');
         const sceneMapGrid = document.getElementById('scene-map-grid');
         const sceneMapEmpty = document.getElementById('scene-map-empty');
+        const gridOpacityControls = document.getElementById('scene-grid-controls');
+        const gridOpacityInput = document.getElementById('scene-grid-opacity');
+        const gridOpacityValue = document.getElementById('scene-grid-opacity-value');
         const folderBar = document.getElementById('scene-folder-bar');
         const sceneListElement = document.getElementById('scene-list');
         const addFolderButton = document.getElementById('scene-add-folder');
@@ -68,6 +71,11 @@
         const MAP_DRAG_BUFFER_MIN_PX = 220;
         const MAP_DRAG_BUFFER_SCALE = 0.5;
         const MAP_ACCELERATION_DIMENSION_LIMIT = 8192;
+        const GRID_OPACITY_STORAGE_KEY = 'vtt-grid-opacity';
+        const GRID_OPACITY_DEFAULT = 0.7;
+        const GRID_OPACITY_MIN = 0;
+        const GRID_OPACITY_MAX = 1;
+        const GRID_LINE_WIDTH_MAX = 6;
 
         const state = {
             isGM: Boolean(config.isGM),
@@ -103,6 +111,7 @@
             },
             mapImageSrc: sceneMapImage ? (sceneMapImage.getAttribute('src') || '') : '',
             mapHasImage: Boolean(sceneMapImage && !sceneMapImage.classList.contains('scene-display__map-image--hidden')),
+            gridOpacity: loadStoredGridOpacity(),
         };
 
         let isPanelOpen = false;
@@ -110,6 +119,8 @@
             state.selectedFolderId = state.sceneData.folders[0].id || null;
         }
         applySceneToDisplay(config.initialScene || getSceneById(state.scenes, state.activeSceneId), true);
+        initGridOpacityControls();
+        applyGridOpacity(state.gridOpacity, false);
         renderFolderBar();
         renderSceneList();
         initMapInteractions();
@@ -625,6 +636,113 @@
             sceneMapContent.classList.remove('scene-display__map-content--no-accel');
         }
 
+        function initGridOpacityControls() {
+            if (!gridOpacityInput) {
+                if (gridOpacityControls) {
+                    gridOpacityControls.hidden = true;
+                    gridOpacityControls.setAttribute('aria-hidden', 'true');
+                }
+                return;
+            }
+
+            const sliderValue = getSliderValueFromOpacity(state.gridOpacity);
+            gridOpacityInput.value = String(sliderValue);
+            if (gridOpacityValue) {
+                gridOpacityValue.textContent = `${sliderValue}%`;
+            }
+
+            gridOpacityInput.addEventListener('input', onGridOpacitySliderInput);
+            gridOpacityInput.addEventListener('change', onGridOpacitySliderInput);
+        }
+
+        function onGridOpacitySliderInput(event) {
+            if (!event || !event.target) {
+                return;
+            }
+            const sliderValue = parseInt(event.target.value, 10);
+            if (!Number.isFinite(sliderValue)) {
+                return;
+            }
+            const opacity = getOpacityFromSliderValue(sliderValue);
+            applyGridOpacity(opacity);
+        }
+
+        function applyGridOpacity(opacity, persist = true) {
+            const clampedOpacity = clampGridOpacity(opacity);
+            state.gridOpacity = clampedOpacity;
+
+            if (sceneMapGrid) {
+                sceneMapGrid.style.setProperty('--grid-opacity', String(clampedOpacity));
+            }
+
+            if (gridOpacityInput) {
+                const sliderValue = getSliderValueFromOpacity(clampedOpacity);
+                if (gridOpacityInput.value !== String(sliderValue)) {
+                    gridOpacityInput.value = String(sliderValue);
+                }
+                if (gridOpacityValue) {
+                    gridOpacityValue.textContent = `${sliderValue}%`;
+                }
+            }
+
+            if (persist) {
+                storeGridOpacity(clampedOpacity);
+            }
+        }
+
+        function clampGridOpacity(value) {
+            let numeric = Number(value);
+            if (!Number.isFinite(numeric)) {
+                numeric = GRID_OPACITY_DEFAULT;
+            }
+            if (numeric < GRID_OPACITY_MIN) {
+                return GRID_OPACITY_MIN;
+            }
+            if (numeric > GRID_OPACITY_MAX) {
+                return GRID_OPACITY_MAX;
+            }
+            return numeric;
+        }
+
+        function getSliderValueFromOpacity(opacity) {
+            return Math.round(clampGridOpacity(opacity) * 100);
+        }
+
+        function getOpacityFromSliderValue(value) {
+            const clamped = clampNumber(value, 0, 100);
+            return clampGridOpacity(clamped / 100);
+        }
+
+        function loadStoredGridOpacity() {
+            if (typeof window === 'undefined' || typeof window.localStorage === 'undefined') {
+                return GRID_OPACITY_DEFAULT;
+            }
+            try {
+                const stored = window.localStorage.getItem(GRID_OPACITY_STORAGE_KEY);
+                if (stored === null) {
+                    return GRID_OPACITY_DEFAULT;
+                }
+                const numeric = parseFloat(stored);
+                if (!Number.isFinite(numeric)) {
+                    return GRID_OPACITY_DEFAULT;
+                }
+                return clampGridOpacity(numeric);
+            } catch (error) {
+                return GRID_OPACITY_DEFAULT;
+            }
+        }
+
+        function storeGridOpacity(value) {
+            if (typeof window === 'undefined' || typeof window.localStorage === 'undefined') {
+                return;
+            }
+            try {
+                window.localStorage.setItem(GRID_OPACITY_STORAGE_KEY, String(value));
+            } catch (error) {
+                // Ignore storage errors (e.g., private browsing)
+            }
+        }
+
         function initMapInteractions() {
             if (!sceneMapInner || !sceneMapContent) {
                 return;
@@ -690,6 +808,7 @@
                 }
             }
 
+            updateGridLineAppearance(state.mapTransform.scale);
             updateMapInteractionState();
         }
 
@@ -1554,10 +1673,16 @@
 
             sceneMap.setAttribute('data-grid-scale', String(gridScale));
             sceneMap.style.setProperty('--grid-size', `${gridScale}px`);
-            sceneMapGrid.style.backgroundSize = `${gridScale}px ${gridScale}px`;
 
             state.mapHasImage = hasImage;
             state.mapImageSrc = imagePath;
+            if (gridOpacityControls) {
+                gridOpacityControls.hidden = !hasImage;
+                gridOpacityControls.setAttribute('aria-hidden', hasImage ? 'false' : 'true');
+                if (gridOpacityInput) {
+                    gridOpacityInput.disabled = !hasImage;
+                }
+            }
             updateMapInteractionState();
 
             if (!hasImage || imageChanged) {
@@ -1565,6 +1690,25 @@
             } else {
                 applyMapTransform();
             }
+
+            if (sceneMapGrid) {
+                sceneMapGrid.style.backgroundSize = `${gridScale}px ${gridScale}px`;
+                applyGridOpacity(state.gridOpacity, false);
+                updateGridLineAppearance(state.mapTransform.scale);
+            }
+        }
+
+        function updateGridLineAppearance(scale) {
+            if (!sceneMapGrid) {
+                return;
+            }
+            const clampedScale = clampNumber(scale, MAP_ABSOLUTE_MIN_SCALE, MAP_MAX_SCALE);
+            let lineSize = 1;
+            if (clampedScale < 1) {
+                lineSize = Math.max(1, Math.round(1 / clampedScale));
+            }
+            lineSize = clampNumber(lineSize, 1, GRID_LINE_WIDTH_MAX);
+            sceneMapGrid.style.setProperty('--grid-line-size', `${lineSize}px`);
         }
 
         function applySceneAccent(accentHex) {

@@ -162,6 +162,19 @@ $vttConfig = [
                             <div id="scene-map-grid" class="scene-display__map-grid"></div>
                         </div>
                     </div>
+                    <div id="scene-grid-controls" class="scene-display__grid-controls">
+                        <label for="scene-grid-opacity" class="scene-display__grid-label">Grid Opacity</label>
+                        <input
+                            type="range"
+                            id="scene-grid-opacity"
+                            class="scene-display__grid-range"
+                            min="0"
+                            max="100"
+                            step="1"
+                            value="70"
+                        >
+                        <span id="scene-grid-opacity-value" class="scene-display__grid-value">70%</span>
+                    </div>
                     <p
                         id="scene-map-empty"
                         class="scene-display__map-empty"

@@ -220,8 +220,12 @@ $isGM = ($user === 'GM');
         
         .hex-image-upload {
             margin-bottom: 15px;
+            display: flex;
+            flex-wrap: wrap;
+            align-items: center;
+            gap: 10px;
         }
-        
+
         .hex-image-upload .upload-btn {
             background: #667eea;
             color: white;
@@ -233,11 +237,32 @@ $isGM = ($user === 'GM');
             transition: all 0.3s ease;
             box-shadow: 0 2px 4px rgba(0, 0, 0, 0.1);
         }
-        
+
         .hex-image-upload .upload-btn:hover {
             background: #5a67d8;
             transform: translateY(-1px);
             box-shadow: 0 4px 8px rgba(0, 0, 0, 0.15);
+        }
+
+        .hex-image-upload .upload-btn--secondary {
+            background: rgba(102, 126, 234, 0.18);
+            color: #3248c4;
+            box-shadow: none;
+        }
+
+        .hex-image-upload .upload-btn--secondary:hover {
+            background: rgba(102, 126, 234, 0.28);
+            color: #2537a0;
+            box-shadow: 0 2px 6px rgba(37, 55, 160, 0.25);
+        }
+
+        .hex-image-upload .upload-btn:disabled,
+        .hex-image-upload .upload-btn--disabled {
+            background: rgba(148, 163, 184, 0.35);
+            color: rgba(44, 62, 80, 0.6);
+            cursor: not-allowed;
+            transform: none;
+            box-shadow: none;
         }
         
         .hex-images-gallery {
@@ -585,7 +610,7 @@ $isGM = ($user === 'GM');
                 <div class="hex-images-container">
                     <h3>GM Images</h3>
                     <div class="hex-image-upload">
-                        <button onclick="uploadHexImage('gm')" class="upload-btn">Upload Image</button>
+                        <button type="button" onclick="uploadHexImage('gm')" class="upload-btn">Upload Image</button>
                         <input type="file" id="gm-image-upload" accept="image/*" style="display: none;">
                     </div>
                     <div id="gm-images" class="hex-images-gallery">
@@ -621,8 +646,13 @@ $isGM = ($user === 'GM');
                 <div class="hex-images-container">
                     <h3>Images</h3>
                     <div class="hex-image-upload">
-                        <button onclick="uploadHexImage('player')" class="upload-btn">Upload Image</button>
+                        <button type="button" onclick="uploadHexImage('player')" class="upload-btn">Upload Image</button>
                         <input type="file" id="player-image-upload" accept="image/*" style="display: none;">
+                        <?php if ($isGM): ?>
+                            <button type="button" id="player-use-gm-image" class="upload-btn upload-btn--secondary" onclick="useGmImagesForPlayers()">
+                                Use GM Image
+                            </button>
+                        <?php endif; ?>
                     </div>
                     <div id="player-images" class="hex-images-gallery">
                         <!-- Images will be populated here -->

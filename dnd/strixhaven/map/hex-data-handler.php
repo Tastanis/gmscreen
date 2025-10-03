@@ -187,11 +187,65 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
             $result = handleImageUpload($q, $r, $section);
             echo json_encode($result);
             break;
-            
+
+        case 'share_gm_images':
+            if (!$isGM) {
+                echo json_encode(['success' => false, 'error' => 'GM access required']);
+                break;
+            }
+
+            $hexData = loadHexData($q, $r);
+            $gmImages = [];
+            if (isset($hexData['gm']['images']) && is_array($hexData['gm']['images'])) {
+                $gmImages = $hexData['gm']['images'];
+            }
+
+            if (count($gmImages) === 0) {
+                echo json_encode(['success' => false, 'error' => 'No GM images available to share.']);
+                break;
+            }
+
+            $playerImages = [];
+            if (isset($hexData['player']['images']) && is_array($hexData['player']['images'])) {
+                $playerImages = $hexData['player']['images'];
+            }
+
+            $existing = [];
+            foreach ($playerImages as $image) {
+                if (is_array($image) && isset($image['filename'])) {
+                    $existing[$image['filename']] = true;
+                }
+            }
+
+            $sharedFiles = [];
+            foreach ($gmImages as $image) {
+                if (!is_array($image) || !isset($image['filename'])) {
+                    continue;
+                }
+                $filename = $image['filename'];
+                if (isset($existing[$filename])) {
+                    continue;
+                }
+                $sharedImage = $image;
+                $sharedImage['shared_from'] = 'gm';
+                $playerImages[] = $sharedImage;
+                $existing[$filename] = true;
+                $sharedFiles[] = $filename;
+            }
+
+            $hexData['player']['images'] = $playerImages;
+
+            if (saveHexData($q, $r, $hexData)) {
+                echo json_encode(['success' => true, 'shared' => $sharedFiles]);
+            } else {
+                echo json_encode(['success' => false, 'error' => 'Failed to share GM images.']);
+            }
+            break;
+
         case 'delete_image':
             $section = $_POST['section'] ?? '';
             $filename = $_POST['filename'] ?? '';
-            
+
             // Check permissions
             if ($section === 'gm' && !$isGM) {
                 echo json_encode(['success' => false, 'error' => 'GM access required']);
@@ -209,13 +263,33 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                     if (file_exists($filepath)) {
                         unlink($filepath);
                     }
-                    
+
                     // Remove from array
                     array_splice($images, $i, 1);
+                    if ($section === 'gm' && isset($hexData['player']['images']) && is_array($hexData['player']['images'])) {
+                        $hexData['player']['images'] = array_values(array_filter(
+                            $hexData['player']['images'],
+                            function ($playerImage) use ($filename) {
+                                if (!is_array($playerImage)) {
+                                    return false;
+                                }
+                                if (!isset($playerImage['filename'])) {
+                                    return true;
+                                }
+                                if ($playerImage['filename'] !== $filename) {
+                                    return true;
+                                }
+                                if (isset($playerImage['shared_from']) && $playerImage['shared_from'] === 'gm') {
+                                    return false;
+                                }
+                                return true;
+                            }
+                        ));
+                    }
                     break;
                 }
             }
-            
+
             if (saveHexData($q, $r, $hexData)) {
                 echo json_encode(['success' => true]);
             } else {
