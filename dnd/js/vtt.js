@@ -673,7 +673,21 @@
             if (!state.mapHasImage && state.mapTransform.scale === 1 && clamped.translateX === 0 && clamped.translateY === 0) {
                 sceneMapContent.style.transform = '';
             } else {
-                sceneMapContent.style.transform = `translate3d(${clamped.translateX}px, ${clamped.translateY}px, 0) scale(${state.mapTransform.scale})`;
+                const baseOffsetX = typeof sceneMapContent.offsetLeft === 'number'
+                    ? sceneMapContent.offsetLeft
+                    : 0;
+                const baseOffsetY = typeof sceneMapContent.offsetTop === 'number'
+                    ? sceneMapContent.offsetTop
+                    : 0;
+                const translateX = clamped.translateX - baseOffsetX;
+                const translateY = clamped.translateY - baseOffsetY;
+                const scale = state.mapTransform.scale;
+                const accelerationDisabled = sceneMapContent.classList.contains('scene-display__map-content--no-accel');
+                if (accelerationDisabled) {
+                    sceneMapContent.style.transform = `translate(${translateX}px, ${translateY}px) scale(${scale})`;
+                } else {
+                    sceneMapContent.style.transform = `translate3d(${translateX}px, ${translateY}px, 0) scale(${scale})`;
+                }
             }
 
             updateMapInteractionState();
