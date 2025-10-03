@@ -10,6 +10,7 @@ let currentEditLock = null;
 let currentImageForDelete = null;
 let isGM = false;
 let currentUser = '';
+let gmShareButton = null;
 
 /**
  * Initialize hex popup system
@@ -25,11 +26,21 @@ function initHexPopup() {
     document.getElementById('player-image-upload').addEventListener('change', (e) => {
         handleImageUpload(e, 'player');
     });
-    
+
     document.getElementById('gm-image-upload').addEventListener('change', (e) => {
         handleImageUpload(e, 'gm');
     });
-    
+
+    gmShareButton = document.getElementById('player-use-gm-image');
+    if (gmShareButton) {
+        if (!isGM) {
+            gmShareButton.style.display = 'none';
+        } else {
+            gmShareButton.disabled = true;
+            gmShareButton.classList.add('upload-btn--disabled');
+        }
+    }
+
     // Initialize section visibility
     initializeSectionVisibility();
 }
@@ -105,10 +116,12 @@ function populateHexData() {
         document.getElementById('gm-notes').value = currentHexData.gm.notes || '';
         document.getElementById('gm-title').value = currentHexData.gm.title || '';
     }
-    
+
+    updateShareButtonState();
+
     // Initialize section visibility
     initializeSectionVisibility();
-    
+
     // Update edit lock status
     updateEditLockStatus();
 }
@@ -119,7 +132,7 @@ function populateHexData() {
 function populateImages(section, images) {
     const gallery = document.getElementById(`${section}-images`);
     gallery.innerHTML = '';
-    
+
     if (images.length === 0) {
         gallery.innerHTML = '<div style="color: #aaa; text-align: center; padding: 20px;">No images uploaded</div>';
         gallery.classList.remove('single-image');
@@ -144,11 +157,88 @@ function populateImages(section, images) {
     });
 }
 
+function updateShareButtonState() {
+    if (!gmShareButton) {
+        return;
+    }
+
+    if (!isGM) {
+        gmShareButton.style.display = 'none';
+        return;
+    }
+
+    const gmImages = (currentHexData && currentHexData.gm && Array.isArray(currentHexData.gm.images))
+        ? currentHexData.gm.images
+        : [];
+    const hasImages = gmImages.length > 0;
+
+    gmShareButton.disabled = !hasImages;
+    gmShareButton.classList.toggle('upload-btn--disabled', !hasImages);
+    if (!hasImages) {
+        gmShareButton.title = 'Upload a GM image before sharing it with players.';
+    } else {
+        gmShareButton.title = 'Share the GM image with players.';
+    }
+}
+
 /**
  * Trigger image upload
  */
 function uploadHexImage(section) {
     document.getElementById(`${section}-image-upload`).click();
+}
+
+/**
+ * Share GM images with players without reuploading
+ */
+async function useGmImagesForPlayers() {
+    if (!isGM) {
+        alert('Only the GM can share images with the players.');
+        return;
+    }
+
+    const gmImages = (currentHexData && currentHexData.gm && Array.isArray(currentHexData.gm.images))
+        ? currentHexData.gm.images
+        : [];
+
+    if (gmImages.length === 0) {
+        alert('Upload a GM image before sharing it with the players.');
+        return;
+    }
+
+    if (gmShareButton) {
+        gmShareButton.disabled = true;
+        gmShareButton.classList.add('upload-btn--disabled');
+    }
+
+    const formData = new FormData();
+    formData.append('action', 'share_gm_images');
+    formData.append('q', currentHex.q);
+    formData.append('r', currentHex.r);
+
+    try {
+        const response = await fetch('hex-data-handler.php', {
+            method: 'POST',
+            body: formData
+        });
+
+        const result = await response.json();
+        if (result.success) {
+            await loadHexData(currentHex.q, currentHex.r);
+
+            if (window.mapInterface && window.mapInterface.hexGrid) {
+                window.mapInterface.hexGrid.refreshHexStatus();
+            }
+        } else {
+            const errorMessage = result.error ? `Failed to share image: ${result.error}` : 'Failed to share image.';
+            alert(errorMessage);
+        }
+    } catch (error) {
+        console.error('Error sharing GM image:', error);
+        alert('Error sharing GM image with players.');
+    } finally {
+        updateShareButtonState();
+    }
 }
 
 /**
