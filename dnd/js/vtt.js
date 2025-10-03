@@ -40,6 +40,8 @@
         const panel = document.getElementById('settings-panel');
         const toggleButton = document.getElementById('settings-panel-toggle');
         const closeButton = document.getElementById('settings-panel-close');
+        const tabButtons = Array.prototype.slice.call(document.querySelectorAll('.settings-panel__tab'));
+        const tabPanels = Array.prototype.slice.call(document.querySelectorAll('.settings-panel__tabpanel'));
         const scenesToggle = document.getElementById('settings-scenes-toggle');
         const scenesList = document.getElementById('settings-scenes-list');
         const statusElement = document.getElementById('settings-scenes-status');
@@ -119,11 +121,13 @@
             state.selectedFolderId = state.sceneData.folders[0].id || null;
         }
         applySceneToDisplay(config.initialScene || getSceneById(state.scenes, state.activeSceneId), true);
+        initSettingsTabs();
         initGridOpacityControls();
         applyGridOpacity(state.gridOpacity, false);
         renderFolderBar();
         renderSceneList();
         initMapInteractions();
+        initTokenManagement();
 
         toggleButton.addEventListener('click', function () {
             if (isPanelOpen) {
@@ -187,6 +191,740 @@
 
             document.addEventListener('click', onDocumentClick);
             document.addEventListener('keydown', onDocumentKeyDown);
+        }
+
+        function initSettingsTabs() {
+            if (!Array.isArray(tabButtons) || !Array.isArray(tabPanels) || tabButtons.length === 0 || tabPanels.length === 0) {
+                return;
+            }
+
+            let activeTabId = null;
+
+            tabButtons.forEach(function (button) {
+                const targetId = button.getAttribute('data-tab-target');
+                if (button.classList.contains('settings-panel__tab--active') && targetId) {
+                    activeTabId = targetId;
+                }
+                button.addEventListener('click', function () {
+                    if (!targetId || activeTabId === targetId) {
+                        return;
+                    }
+                    setActiveTab(targetId);
+                });
+            });
+
+            if (!activeTabId) {
+                const firstPanel = tabPanels[0];
+                if (firstPanel) {
+                    activeTabId = firstPanel.id;
+                }
+            }
+
+            setActiveTab(activeTabId);
+
+            function setActiveTab(targetId) {
+                if (!targetId) {
+                    return;
+                }
+                activeTabId = targetId;
+                tabButtons.forEach(function (button) {
+                    const isActive = button.getAttribute('data-tab-target') === targetId;
+                    button.classList.toggle('settings-panel__tab--active', isActive);
+                    button.setAttribute('aria-selected', isActive ? 'true' : 'false');
+                    button.setAttribute('tabindex', isActive ? '0' : '-1');
+                });
+                tabPanels.forEach(function (panel) {
+                    panel.hidden = panel.id !== targetId;
+                });
+            }
+        }
+
+        function initTokenManagement() {
+            const tokenPanel = document.getElementById('settings-tabpanel-tokens');
+            if (!tokenPanel) {
+                return;
+            }
+
+            const tokenFolderList = document.getElementById('token-folder-list');
+            const tokenGrid = document.getElementById('token-grid');
+            const tokenFiltersContainer = document.getElementById('token-school-filters');
+            if (!tokenFolderList || !tokenGrid || !tokenFiltersContainer) {
+                return;
+            }
+
+            const tokenForm = document.getElementById('token-create-form');
+            const tokenNameInput = document.getElementById('token-name');
+            const tokenFolderSelect = document.getElementById('token-folder-select');
+            const tokenSchoolSelect = document.getElementById('token-school-select');
+            const tokenWidthInput = document.getElementById('token-size-width');
+            const tokenHeightInput = document.getElementById('token-size-height');
+            const tokenStaminaInput = document.getElementById('token-stamina');
+            const tokenStatus = document.getElementById('token-form-status');
+            const dropzone = document.getElementById('token-image-dropzone');
+            const fileInput = document.getElementById('token-image-input');
+            const browseButton = document.getElementById('token-image-browse');
+            const cropperContainer = document.getElementById('token-image-cropper');
+            const cropperStage = document.getElementById('token-cropper-stage');
+            const cropperImage = document.getElementById('token-cropper-image');
+            const resetButton = document.getElementById('token-image-reset');
+            const clearButton = document.getElementById('token-image-clear');
+
+            const folders = [
+                { id: 'pcs', label: 'PCs', gmOnly: false },
+                { id: 'npcs', label: 'NPCs', gmOnly: true },
+                { id: 'monsters', label: 'Monsters', gmOnly: true },
+            ];
+
+            const schoolFilters = [
+                { id: 'lorehold', label: 'Lorehold' },
+                { id: 'prismari', label: 'Prismari' },
+                { id: 'quandrix', label: 'Quandrix' },
+                { id: 'silverquill', label: 'Silverquill' },
+                { id: 'witherbloom', label: 'Witherbloom' },
+                { id: 'other', label: 'Other' },
+            ];
+
+            const allowedFolderIds = folders.map(function (folder) { return folder.id; });
+            const allowedSchoolIds = schoolFilters.map(function (filter) { return filter.id; });
+
+            const storageKey = 'vtt.token-library';
+
+            const tokenState = {
+                isGM: state.isGM,
+                folders: folders,
+                schoolFilters: schoolFilters,
+                activeFolderId: state.isGM ? 'pcs' : 'pcs',
+                schoolFilterId: null,
+                tokens: loadTokensFromStorage(),
+                cropper: createEmptyCropperState(),
+            };
+
+            renderFolderButtons();
+            renderSchoolFilters();
+            renderTokenList();
+
+            if (tokenForm && dropzone && fileInput && cropperImage && cropperStage && cropperContainer) {
+                dropzone.addEventListener('click', function (event) {
+                    if (event.defaultPrevented) {
+                        return;
+                    }
+                    if (event.target === browseButton) {
+                        return;
+                    }
+                    event.preventDefault();
+                    fileInput.click();
+                });
+
+                dropzone.addEventListener('keydown', function (event) {
+                    if (event.key === 'Enter' || event.key === ' ') {
+                        event.preventDefault();
+                        fileInput.click();
+                    }
+                });
+
+                dropzone.addEventListener('dragover', function (event) {
+                    event.preventDefault();
+                    dropzone.classList.add('token-dropzone--dragging');
+                });
+
+                dropzone.addEventListener('dragleave', function () {
+                    dropzone.classList.remove('token-dropzone--dragging');
+                });
+
+                dropzone.addEventListener('drop', function (event) {
+                    event.preventDefault();
+                    dropzone.classList.remove('token-dropzone--dragging');
+                    const files = event.dataTransfer && event.dataTransfer.files;
+                    if (files && files.length > 0) {
+                        handleTokenImageSelected(files[0]);
+                    }
+                });
+
+                if (browseButton) {
+                    browseButton.addEventListener('click', function (event) {
+                        event.preventDefault();
+                        fileInput.click();
+                    });
+                }
+
+                fileInput.addEventListener('change', function (event) {
+                    const files = event.target.files;
+                    if (files && files.length > 0) {
+                        handleTokenImageSelected(files[0]);
+                    }
+                });
+
+                if (resetButton) {
+                    resetButton.addEventListener('click', function (event) {
+                        event.preventDefault();
+                        resetCropper();
+                    });
+                }
+
+                if (clearButton) {
+                    clearButton.addEventListener('click', function (event) {
+                        event.preventDefault();
+                        clearTokenImage();
+                    });
+                }
+
+                if (cropperStage) {
+                    cropperStage.addEventListener('pointerdown', onCropperPointerDown);
+                    cropperStage.addEventListener('pointermove', onCropperPointerMove);
+                    cropperStage.addEventListener('pointerup', onCropperPointerUp);
+                    cropperStage.addEventListener('pointercancel', onCropperPointerUp);
+                    cropperStage.addEventListener('wheel', onCropperWheel, { passive: false });
+                }
+
+                tokenForm.addEventListener('submit', function (event) {
+                    event.preventDefault();
+                    createTokenFromForm();
+                });
+            }
+
+            function createEmptyCropperState() {
+                return {
+                    hasImage: false,
+                    naturalWidth: 0,
+                    naturalHeight: 0,
+                    baseScale: 1,
+                    scale: 1,
+                    minScale: 0.5,
+                    maxScale: 4,
+                    translateX: 0,
+                    translateY: 0,
+                    pointerId: null,
+                    pointerStartX: 0,
+                    pointerStartY: 0,
+                    startTranslateX: 0,
+                    startTranslateY: 0,
+                    stageSize: cropperStage ? (cropperStage.offsetWidth || cropperStage.clientWidth || 0) : 0,
+                    sourceUrl: '',
+                };
+            }
+
+            function loadTokensFromStorage() {
+                if (typeof window === 'undefined' || !window.localStorage) {
+                    return [];
+                }
+                try {
+                    const raw = window.localStorage.getItem(storageKey);
+                    if (!raw) {
+                        return [];
+                    }
+                    const parsed = JSON.parse(raw);
+                    if (!Array.isArray(parsed)) {
+                        return [];
+                    }
+                    return parsed
+                        .map(function (entry) {
+                            if (!isPlainObject(entry)) {
+                                return null;
+                            }
+                            const size = isPlainObject(entry.size) ? entry.size : {};
+                            const folderId = typeof entry.folderId === 'string' && allowedFolderIds.indexOf(entry.folderId) !== -1
+                                ? entry.folderId
+                                : 'pcs';
+                            const schoolId = typeof entry.schoolId === 'string' && allowedSchoolIds.indexOf(entry.schoolId) !== -1
+                                ? entry.schoolId
+                                : 'other';
+                            return {
+                                id: typeof entry.id === 'string' ? entry.id : 'token-' + Math.random().toString(36).slice(2),
+                                name: typeof entry.name === 'string' ? entry.name : 'Unnamed Token',
+                                folderId: folderId,
+                                schoolId: schoolId,
+                                size: {
+                                    width: clampTokenDimension(size.width),
+                                    height: clampTokenDimension(size.height),
+                                },
+                                stamina: clampTokenStamina(entry.stamina),
+                                imageData: typeof entry.imageData === 'string' ? entry.imageData : '',
+                                createdAt: typeof entry.createdAt === 'number' ? entry.createdAt : Date.now(),
+                            };
+                        })
+                        .filter(function (token) {
+                            return Boolean(token) && token.imageData !== '' && token.name !== '';
+                        });
+                } catch (error) {
+                    return [];
+                }
+            }
+
+            function saveTokensToStorage() {
+                if (typeof window === 'undefined' || !window.localStorage) {
+                    return;
+                }
+                try {
+                    const payload = JSON.stringify(tokenState.tokens);
+                    window.localStorage.setItem(storageKey, payload);
+                } catch (error) {
+                    // Ignore storage errors (e.g., storage full or disabled)
+                }
+            }
+
+            function clampTokenDimension(value) {
+                const numericValue = typeof value === 'number' ? value : parseInt(value, 10);
+                if (Number.isNaN(numericValue) || !Number.isFinite(numericValue)) {
+                    return 1;
+                }
+                return clampNumber(numericValue, 1, 12);
+            }
+
+            function clampTokenStamina(value) {
+                const numericValue = typeof value === 'number' ? value : parseInt(value, 10);
+                if (Number.isNaN(numericValue) || !Number.isFinite(numericValue)) {
+                    return 0;
+                }
+                return Math.max(0, Math.round(numericValue));
+            }
+
+            function renderFolderButtons() {
+                const availableFolders = tokenState.folders.filter(function (folder) {
+                    if (!tokenState.isGM && folder.gmOnly) {
+                        return false;
+                    }
+                    return true;
+                });
+
+                if (!availableFolders.some(function (folder) { return folder.id === tokenState.activeFolderId; })) {
+                    tokenState.activeFolderId = availableFolders.length > 0 ? availableFolders[0].id : 'pcs';
+                }
+
+                tokenFolderList.innerHTML = '';
+
+                availableFolders.forEach(function (folder) {
+                    const button = document.createElement('button');
+                    button.type = 'button';
+                    button.className = 'token-folder-button';
+                    button.dataset.folderId = folder.id;
+                    button.textContent = folder.label;
+                    button.setAttribute('role', 'tab');
+                    const isActive = folder.id === tokenState.activeFolderId;
+                    button.classList.toggle('token-folder-button--active', isActive);
+                    button.setAttribute('aria-selected', isActive ? 'true' : 'false');
+                    button.setAttribute('tabindex', isActive ? '0' : '-1');
+                    button.addEventListener('click', function () {
+                        if (tokenState.activeFolderId === folder.id) {
+                            return;
+                        }
+                        tokenState.activeFolderId = folder.id;
+                        if (!tokenState.isGM) {
+                            tokenState.schoolFilterId = null;
+                        }
+                        renderFolderButtons();
+                        renderSchoolFilters();
+                        renderTokenList();
+                        if (tokenState.isGM && tokenFolderSelect) {
+                            tokenFolderSelect.value = folder.id;
+                        }
+                    });
+                    tokenFolderList.appendChild(button);
+                });
+
+                if (tokenState.isGM && tokenFolderSelect) {
+                    tokenFolderSelect.value = tokenState.activeFolderId;
+                }
+            }
+
+            function renderSchoolFilters() {
+                tokenFiltersContainer.innerHTML = '';
+
+                const disableFilters = tokenState.activeFolderId === 'pcs';
+                if (disableFilters) {
+                    tokenState.schoolFilterId = null;
+                }
+
+                tokenState.schoolFilters.forEach(function (filter) {
+                    const button = document.createElement('button');
+                    button.type = 'button';
+                    button.className = 'token-filter-button';
+                    button.textContent = filter.label;
+                    const isActive = tokenState.schoolFilterId === filter.id;
+                    button.classList.toggle('token-filter-button--active', isActive);
+                    button.disabled = disableFilters;
+                    button.setAttribute('aria-pressed', isActive ? 'true' : 'false');
+                    button.addEventListener('click', function () {
+                        if (disableFilters) {
+                            return;
+                        }
+                        if (tokenState.schoolFilterId === filter.id) {
+                            tokenState.schoolFilterId = null;
+                        } else {
+                            tokenState.schoolFilterId = filter.id;
+                        }
+                        renderSchoolFilters();
+                        renderTokenList();
+                    });
+                    tokenFiltersContainer.appendChild(button);
+                });
+            }
+
+            function renderTokenList() {
+                tokenGrid.innerHTML = '';
+
+                const folderId = tokenState.activeFolderId;
+                let tokensForFolder = tokenState.tokens.filter(function (token) {
+                    return token.folderId === folderId;
+                });
+
+                if (folderId !== 'pcs' && tokenState.schoolFilterId) {
+                    tokensForFolder = tokensForFolder.filter(function (token) {
+                        return (token.schoolId || 'other') === tokenState.schoolFilterId;
+                    });
+                }
+
+                if (tokensForFolder.length === 0) {
+                    tokenGrid.classList.add('token-browser__list--empty');
+                    const emptyMessage = document.createElement('p');
+                    emptyMessage.className = 'token-empty-state';
+                    if (folderId === 'pcs') {
+                        emptyMessage.textContent = 'No tokens saved yet. Create one to get started.';
+                    } else if (tokenState.schoolFilterId) {
+                        emptyMessage.textContent = 'No tokens match the selected college filter.';
+                    } else {
+                        emptyMessage.textContent = 'No tokens in this folder yet.';
+                    }
+                    tokenGrid.appendChild(emptyMessage);
+                    return;
+                }
+
+                tokenGrid.classList.remove('token-browser__list--empty');
+
+                tokensForFolder
+                    .slice()
+                    .sort(function (a, b) {
+                        return a.createdAt - b.createdAt;
+                    })
+                    .forEach(function (token) {
+                        const card = createTokenCard(token);
+                        tokenGrid.appendChild(card);
+                    });
+            }
+
+            function createTokenCard(token) {
+                const card = document.createElement('article');
+                card.className = 'token-card';
+                card.setAttribute('role', 'listitem');
+
+                const portrait = document.createElement('div');
+                portrait.className = 'token-card__portrait';
+                const portraitImage = document.createElement('img');
+                portraitImage.className = 'token-card__portrait-image';
+                portraitImage.src = token.imageData;
+                portraitImage.alt = token.name + ' token portrait';
+                portrait.appendChild(portraitImage);
+                card.appendChild(portrait);
+
+                const name = document.createElement('h5');
+                name.className = 'token-card__name';
+                name.textContent = token.name;
+                card.appendChild(name);
+
+                const details = document.createElement('div');
+                details.className = 'token-card__details';
+                const sizeLabel = token.size.width + '\u00D7' + token.size.height + ' squares';
+                details.appendChild(createTokenPill(sizeLabel, 'token-pill token-pill--size'));
+                details.appendChild(createTokenPill(token.stamina + ' stamina', 'token-pill token-pill--stamina'));
+                const schoolId = token.schoolId || 'other';
+                details.appendChild(createTokenPill(getSchoolLabel(schoolId), 'token-pill token-pill--school-' + schoolId));
+                card.appendChild(details);
+
+                return card;
+            }
+
+            function createTokenPill(label, className) {
+                const pill = document.createElement('span');
+                pill.className = className;
+                pill.textContent = label;
+                return pill;
+            }
+
+            function getSchoolLabel(id) {
+                const filter = tokenState.schoolFilters.find(function (entry) {
+                    return entry.id === id;
+                });
+                return filter ? filter.label : 'Other';
+            }
+
+            function handleTokenImageSelected(file) {
+                if (!file) {
+                    return;
+                }
+                if (!/^image\//i.test(file.type || '')) {
+                    showStatusMessage('Please choose an image file for the token.', true);
+                    return;
+                }
+                const reader = new FileReader();
+                reader.onload = function (event) {
+                    const result = event.target && event.target.result;
+                    if (typeof result === 'string') {
+                        prepareCropperImage(result);
+                    }
+                };
+                reader.readAsDataURL(file);
+            }
+
+            function prepareCropperImage(dataUrl) {
+                if (!cropperImage || !cropperStage || !cropperContainer) {
+                    return;
+                }
+                cropperImage.onload = function () {
+                    tokenState.cropper = createEmptyCropperState();
+                    tokenState.cropper.hasImage = true;
+                    tokenState.cropper.sourceUrl = dataUrl;
+                    tokenState.cropper.naturalWidth = cropperImage.naturalWidth;
+                    tokenState.cropper.naturalHeight = cropperImage.naturalHeight;
+                    if (tokenState.cropper.naturalWidth === 0 || tokenState.cropper.naturalHeight === 0) {
+                        showStatusMessage('Could not load that image. Try a different file.', true);
+                        clearTokenImage();
+                        return;
+                    }
+                    const stageSize = cropperStage.offsetWidth || cropperStage.clientWidth || 0;
+                    tokenState.cropper.stageSize = stageSize > 0 ? stageSize : 260;
+                    const coverScale = Math.max(
+                        tokenState.cropper.stageSize / tokenState.cropper.naturalWidth,
+                        tokenState.cropper.stageSize / tokenState.cropper.naturalHeight
+                    );
+                    tokenState.cropper.baseScale = coverScale;
+                    tokenState.cropper.scale = 1;
+                    tokenState.cropper.translateX = 0;
+                    tokenState.cropper.translateY = 0;
+                    tokenState.cropper.minScale = 0.35;
+                    tokenState.cropper.maxScale = 6;
+                    cropperContainer.hidden = false;
+                    cropperStage.classList.add('token-cropper__stage--active');
+                    if (dropzone) {
+                        dropzone.classList.remove('token-dropzone--dragging');
+                    }
+                    applyCropperTransform();
+                    showStatusMessage('Image loaded. Adjust the framing, then create your token.', false);
+                };
+                cropperImage.onerror = function () {
+                    showStatusMessage('Could not load that image. Try a different file.', true);
+                    clearTokenImage();
+                };
+                cropperImage.src = dataUrl;
+                fileInput.value = '';
+            }
+
+            function applyCropperTransform() {
+                if (!cropperImage) {
+                    return;
+                }
+                if (!tokenState.cropper.hasImage) {
+                    cropperImage.style.transform = 'translate(-50%, -50%) scale(1)';
+                    return;
+                }
+                const totalScale = tokenState.cropper.baseScale * tokenState.cropper.scale;
+                const transformValue = 'translate3d(' + tokenState.cropper.translateX + 'px, ' + tokenState.cropper.translateY + 'px, 0) scale(' + totalScale + ') translate(-50%, -50%)';
+                cropperImage.style.transform = transformValue;
+            }
+
+            function resetCropper() {
+                if (!tokenState.cropper.hasImage) {
+                    return;
+                }
+                tokenState.cropper.translateX = 0;
+                tokenState.cropper.translateY = 0;
+                tokenState.cropper.scale = 1;
+                applyCropperTransform();
+            }
+
+            function clearTokenImage() {
+                tokenState.cropper = createEmptyCropperState();
+                if (cropperImage) {
+                    cropperImage.removeAttribute('src');
+                    cropperImage.style.transform = 'translate(-50%, -50%) scale(1)';
+                }
+                if (cropperContainer) {
+                    cropperContainer.hidden = true;
+                }
+                if (cropperStage) {
+                    cropperStage.classList.remove('token-cropper__stage--active');
+                    cropperStage.classList.remove('token-cropper__stage--dragging');
+                }
+                if (dropzone) {
+                    dropzone.classList.remove('token-dropzone--dragging');
+                }
+                if (fileInput) {
+                    fileInput.value = '';
+                }
+            }
+
+            function onCropperPointerDown(event) {
+                if (!tokenState.cropper.hasImage) {
+                    return;
+                }
+                event.preventDefault();
+                cropperStage.setPointerCapture(event.pointerId);
+                tokenState.cropper.pointerId = event.pointerId;
+                tokenState.cropper.pointerStartX = event.clientX;
+                tokenState.cropper.pointerStartY = event.clientY;
+                tokenState.cropper.startTranslateX = tokenState.cropper.translateX;
+                tokenState.cropper.startTranslateY = tokenState.cropper.translateY;
+                cropperStage.classList.add('token-cropper__stage--dragging');
+            }
+
+            function onCropperPointerMove(event) {
+                if (!tokenState.cropper.hasImage || tokenState.cropper.pointerId !== event.pointerId) {
+                    return;
+                }
+                const deltaX = event.clientX - tokenState.cropper.pointerStartX;
+                const deltaY = event.clientY - tokenState.cropper.pointerStartY;
+                tokenState.cropper.translateX = tokenState.cropper.startTranslateX + deltaX;
+                tokenState.cropper.translateY = tokenState.cropper.startTranslateY + deltaY;
+                applyCropperTransform();
+            }
+
+            function onCropperPointerUp(event) {
+                if (tokenState.cropper.pointerId !== event.pointerId) {
+                    return;
+                }
+                cropperStage.releasePointerCapture(event.pointerId);
+                tokenState.cropper.pointerId = null;
+                cropperStage.classList.remove('token-cropper__stage--dragging');
+            }
+
+            function onCropperWheel(event) {
+                if (!tokenState.cropper.hasImage) {
+                    return;
+                }
+                event.preventDefault();
+                const delta = event.deltaY;
+                const scaleStep = delta > 0 ? 0.92 : 1.08;
+                const nextScale = tokenState.cropper.scale * scaleStep;
+                tokenState.cropper.scale = clampNumber(nextScale, tokenState.cropper.minScale, tokenState.cropper.maxScale);
+                applyCropperTransform();
+            }
+
+            function createTokenFromForm() {
+                if (!tokenForm || !tokenState.cropper.hasImage) {
+                    showStatusMessage('Add an image before creating the token.', true);
+                    return;
+                }
+                showStatusMessage('', false);
+                const name = tokenNameInput ? tokenNameInput.value.trim() : '';
+                if (name === '') {
+                    showStatusMessage('Name the token before saving it.', true);
+                    if (tokenNameInput) {
+                        tokenNameInput.focus();
+                    }
+                    return;
+                }
+
+                const folderId = tokenFolderSelect ? tokenFolderSelect.value : 'pcs';
+                const schoolId = tokenSchoolSelect ? tokenSchoolSelect.value : 'other';
+                const width = clampTokenDimension(tokenWidthInput ? tokenWidthInput.value : 1);
+                const height = clampTokenDimension(tokenHeightInput ? tokenHeightInput.value : 1);
+                const stamina = clampTokenStamina(tokenStaminaInput ? tokenStaminaInput.value : 0);
+
+                const imageData = exportTokenImage();
+                if (!imageData) {
+                    showStatusMessage('Something went wrong while preparing the artwork. Try again.', true);
+                    return;
+                }
+
+                const token = {
+                    id: 'token-' + Date.now() + '-' + Math.random().toString(36).slice(2),
+                    name: name,
+                    folderId: folderId,
+                    schoolId: schoolId,
+                    size: { width: width, height: height },
+                    stamina: stamina,
+                    imageData: imageData,
+                    createdAt: Date.now(),
+                };
+
+                tokenState.tokens.push(token);
+                saveTokensToStorage();
+                if (tokenState.activeFolderId !== folderId) {
+                    tokenState.activeFolderId = folderId;
+                    renderFolderButtons();
+                    renderSchoolFilters();
+                    if (tokenState.isGM && tokenFolderSelect) {
+                        tokenFolderSelect.value = folderId;
+                    }
+                }
+                renderTokenList();
+                showStatusMessage('Token created!', false);
+                resetFormFields();
+            }
+
+            function exportTokenImage() {
+                if (!cropperImage || !tokenState.cropper.hasImage) {
+                    return null;
+                }
+                const canvasSize = 512;
+                const borderWidth = 6;
+                const canvas = document.createElement('canvas');
+                canvas.width = canvasSize;
+                canvas.height = canvasSize;
+                const context = canvas.getContext('2d');
+                if (!context) {
+                    return null;
+                }
+
+                context.fillStyle = '#000';
+                context.fillRect(0, 0, canvasSize, canvasSize);
+                context.save();
+                context.beginPath();
+                context.arc(canvasSize / 2, canvasSize / 2, (canvasSize / 2) - (borderWidth / 2), 0, Math.PI * 2);
+                context.closePath();
+                context.clip();
+
+                const stageSize = tokenState.cropper.stageSize || cropperStage.offsetWidth || cropperStage.clientWidth || canvasSize;
+                const scaleMultiplier = canvasSize / stageSize;
+                const totalScale = tokenState.cropper.baseScale * tokenState.cropper.scale * scaleMultiplier;
+                const translateX = tokenState.cropper.translateX * scaleMultiplier;
+                const translateY = tokenState.cropper.translateY * scaleMultiplier;
+
+                context.translate(canvasSize / 2 + translateX, canvasSize / 2 + translateY);
+                context.scale(totalScale, totalScale);
+                context.drawImage(
+                    cropperImage,
+                    -tokenState.cropper.naturalWidth / 2,
+                    -tokenState.cropper.naturalHeight / 2
+                );
+
+                context.restore();
+                context.beginPath();
+                context.arc(canvasSize / 2, canvasSize / 2, (canvasSize / 2) - (borderWidth / 2), 0, Math.PI * 2);
+                context.strokeStyle = '#000';
+                context.lineWidth = borderWidth;
+                context.stroke();
+
+                return canvas.toDataURL('image/png');
+            }
+
+            function resetFormFields() {
+                if (tokenNameInput) {
+                    tokenNameInput.value = '';
+                }
+                if (tokenWidthInput) {
+                    tokenWidthInput.value = '1';
+                }
+                if (tokenHeightInput) {
+                    tokenHeightInput.value = '1';
+                }
+                if (tokenStaminaInput) {
+                    tokenStaminaInput.value = '0';
+                }
+                clearTokenImage();
+                if (tokenNameInput) {
+                    tokenNameInput.focus();
+                }
+            }
+
+            function showStatusMessage(message, isError) {
+                if (!tokenStatus) {
+                    return;
+                }
+                tokenStatus.textContent = message || '';
+                tokenStatus.classList.remove('token-form__status--error', 'token-form__status--success');
+                if (message) {
+                    tokenStatus.classList.add(isError ? 'token-form__status--error' : 'token-form__status--success');
+                }
+            }
         }
 
         startScenePolling();

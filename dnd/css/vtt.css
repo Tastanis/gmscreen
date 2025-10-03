@@ -351,6 +351,51 @@
     font-size: 0.95rem;
 }
 
+.settings-panel__tabs {
+    display: flex;
+    flex-direction: column;
+    gap: 1.5rem;
+}
+
+.settings-panel__tab-bar {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 0.5rem;
+}
+
+.settings-panel__tab {
+    padding: 0.6rem 1.2rem;
+    border-radius: 999px;
+    border: 1px solid rgba(148, 163, 184, 0.35);
+    background: rgba(15, 23, 42, 0.65);
+    color: rgba(226, 232, 240, 0.78);
+    font-size: 0.75rem;
+    letter-spacing: 0.18em;
+    text-transform: uppercase;
+    cursor: pointer;
+    transition: background 160ms ease, border-color 160ms ease, color 160ms ease, box-shadow 160ms ease;
+}
+
+.settings-panel__tab:hover,
+.settings-panel__tab:focus {
+    background: rgba(56, 189, 248, 0.14);
+    border-color: rgba(56, 189, 248, 0.6);
+    color: #fff;
+}
+
+.settings-panel__tab--active {
+    background: rgba(56, 189, 248, 0.24);
+    border-color: rgba(56, 189, 248, 0.75);
+    color: #fff;
+    box-shadow: 0 10px 30px rgba(56, 189, 248, 0.24);
+}
+
+.settings-panel__tabpanel {
+    display: flex;
+    flex-direction: column;
+    gap: 1.5rem;
+}
+
 .settings-panel__primary-action {
     align-self: flex-start;
     padding: 0.45rem 0.85rem;
@@ -379,6 +424,472 @@
     flex-direction: column;
     gap: 0.75rem;
     padding: 0.5rem 0 0.25rem;
+}
+
+.settings-panel__group--tokens-intro {
+    gap: 0.35rem;
+}
+
+.settings-panel__group--tokens-info {
+    gap: 0.35rem;
+}
+
+.token-form {
+    display: flex;
+    flex-direction: column;
+    gap: 1rem;
+    padding: 1rem;
+    border-radius: 18px;
+    border: 1px solid rgba(148, 163, 184, 0.22);
+    background: rgba(15, 23, 42, 0.55);
+    box-shadow: inset 0 0 0 1px rgba(15, 23, 42, 0.2);
+}
+
+.token-form__fieldset {
+    display: flex;
+    flex-direction: column;
+    gap: 1.25rem;
+    border: none;
+    padding: 0;
+    margin: 0;
+}
+
+.token-form__legend {
+    font-size: 0.85rem;
+    letter-spacing: 0.16em;
+    text-transform: uppercase;
+    color: rgba(226, 232, 240, 0.65);
+}
+
+.token-form__layout {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));
+    gap: 1rem;
+}
+
+.token-form__options {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(160px, 1fr));
+    gap: 1rem;
+}
+
+.token-form__field {
+    display: flex;
+    flex-direction: column;
+    gap: 0.4rem;
+}
+
+.token-form__field--image {
+    min-height: 100%;
+}
+
+.token-form__label {
+    font-size: 0.8rem;
+    letter-spacing: 0.12em;
+    text-transform: uppercase;
+    color: rgba(226, 232, 240, 0.55);
+}
+
+.token-form__input,
+.token-form__select {
+    width: 100%;
+    padding: 0.55rem 0.7rem;
+    border-radius: 12px;
+    border: 1px solid rgba(148, 163, 184, 0.3);
+    background: rgba(15, 23, 42, 0.65);
+    color: rgba(226, 232, 240, 0.92);
+    font-size: 0.95rem;
+}
+
+.token-form__input:focus,
+.token-form__select:focus {
+    outline: none;
+    border-color: rgba(56, 189, 248, 0.6);
+    box-shadow: 0 0 0 3px rgba(56, 189, 248, 0.18);
+}
+
+.token-form__input--number {
+    max-width: 100%;
+}
+
+.token-size-inputs {
+    display: flex;
+    align-items: center;
+    gap: 0.4rem;
+}
+
+.token-size-input__separator {
+    font-size: 1rem;
+    color: rgba(226, 232, 240, 0.65);
+}
+
+.token-dropzone {
+    position: relative;
+    display: flex;
+    justify-content: center;
+    align-items: center;
+    text-align: center;
+    padding: 1.1rem;
+    border: 2px dashed rgba(56, 189, 248, 0.25);
+    border-radius: 14px;
+    background: rgba(15, 23, 42, 0.45);
+    color: rgba(148, 163, 184, 0.85);
+    cursor: pointer;
+    transition: border-color 160ms ease, background 160ms ease, color 160ms ease;
+}
+
+.token-dropzone:hover,
+.token-dropzone:focus {
+    border-color: rgba(56, 189, 248, 0.6);
+    background: rgba(30, 41, 59, 0.65);
+    color: rgba(226, 232, 240, 0.92);
+    outline: none;
+}
+
+.token-dropzone__text {
+    margin: 0;
+    font-size: 0.9rem;
+}
+
+.token-dropzone__browse {
+    appearance: none;
+    border: none;
+    background: none;
+    color: rgba(94, 234, 212, 0.85);
+    font-size: 0.9rem;
+    cursor: pointer;
+    padding: 0;
+    text-decoration: underline;
+}
+
+.token-dropzone__browse:hover,
+.token-dropzone__browse:focus {
+    color: rgba(45, 212, 191, 1);
+}
+
+.token-dropzone--dragging {
+    border-color: rgba(56, 189, 248, 0.75);
+    background: rgba(56, 189, 248, 0.12);
+    color: rgba(226, 232, 240, 0.92);
+}
+
+.token-cropper {
+    display: flex;
+    flex-direction: column;
+    gap: 0.65rem;
+    margin-top: 0.75rem;
+}
+
+.token-cropper__stage {
+    position: relative;
+    width: min(260px, 100%);
+    aspect-ratio: 1 / 1;
+    border-radius: 50%;
+    background: #000;
+    border: 2px solid rgba(15, 23, 42, 0.95);
+    overflow: hidden;
+    margin: 0 auto;
+    box-shadow: 0 18px 45px rgba(15, 23, 42, 0.45);
+}
+
+.token-cropper__stage--active {
+    cursor: grab;
+}
+
+.token-cropper__stage--dragging {
+    cursor: grabbing;
+}
+
+.token-cropper__image {
+    position: absolute;
+    top: 50%;
+    left: 50%;
+    transform: translate(-50%, -50%);
+    transform-origin: center;
+    pointer-events: none;
+    user-select: none;
+}
+
+.token-cropper__help {
+    margin: 0;
+    font-size: 0.8rem;
+    color: rgba(226, 232, 240, 0.55);
+    text-align: center;
+}
+
+.token-cropper__actions {
+    display: flex;
+    justify-content: center;
+    gap: 0.75rem;
+}
+
+.token-cropper__action {
+    padding: 0.35rem 0.75rem;
+    border-radius: 999px;
+    border: 1px solid rgba(148, 163, 184, 0.35);
+    background: rgba(15, 23, 42, 0.65);
+    color: rgba(226, 232, 240, 0.85);
+    font-size: 0.75rem;
+    letter-spacing: 0.08em;
+    text-transform: uppercase;
+    cursor: pointer;
+}
+
+.token-cropper__action:hover,
+.token-cropper__action:focus {
+    background: rgba(56, 189, 248, 0.2);
+    border-color: rgba(56, 189, 248, 0.6);
+    color: #fff;
+}
+
+.token-form__actions {
+    display: flex;
+    align-items: center;
+    gap: 1rem;
+}
+
+.token-form__submit {
+    padding: 0.65rem 1.4rem;
+    border-radius: 12px;
+    border: none;
+    background: linear-gradient(135deg, rgba(56, 189, 248, 0.85), rgba(45, 212, 191, 0.85));
+    color: #0f172a;
+    font-weight: 600;
+    letter-spacing: 0.08em;
+    text-transform: uppercase;
+    cursor: pointer;
+    transition: transform 160ms ease, box-shadow 160ms ease;
+}
+
+.token-form__submit:hover,
+.token-form__submit:focus {
+    transform: translateY(-1px);
+    box-shadow: 0 18px 38px rgba(56, 189, 248, 0.35);
+}
+
+.token-form__status {
+    margin: 0;
+    font-size: 0.85rem;
+    color: rgba(226, 232, 240, 0.7);
+    min-height: 1.2rem;
+}
+
+.token-form__status--error {
+    color: #f87171;
+}
+
+.token-form__status--success {
+    color: #5eead4;
+}
+
+.token-browser {
+    display: flex;
+    flex-direction: column;
+    gap: 1.25rem;
+    border-radius: 18px;
+    border: 1px solid rgba(148, 163, 184, 0.18);
+    background: rgba(15, 23, 42, 0.45);
+    padding: 1rem;
+}
+
+.token-browser__folders {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 0.6rem;
+}
+
+.token-folder-button {
+    padding: 0.5rem 1rem;
+    border-radius: 999px;
+    border: 1px solid rgba(148, 163, 184, 0.3);
+    background: rgba(15, 23, 42, 0.6);
+    color: rgba(226, 232, 240, 0.82);
+    font-size: 0.85rem;
+    letter-spacing: 0.05em;
+    cursor: pointer;
+    transition: background 160ms ease, border-color 160ms ease, color 160ms ease;
+}
+
+.token-folder-button:hover,
+.token-folder-button:focus {
+    background: rgba(56, 189, 248, 0.2);
+    border-color: rgba(56, 189, 248, 0.6);
+    color: #fff;
+}
+
+.token-folder-button--active {
+    background: rgba(56, 189, 248, 0.26);
+    border-color: rgba(56, 189, 248, 0.75);
+    color: #fff;
+    box-shadow: 0 10px 30px rgba(56, 189, 248, 0.24);
+}
+
+.token-browser__list {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(150px, 1fr));
+    gap: 1rem;
+}
+
+.token-browser__list--empty {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    min-height: 140px;
+    font-size: 0.95rem;
+    color: rgba(226, 232, 240, 0.65);
+}
+
+.token-card {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    gap: 0.6rem;
+    padding: 0.9rem;
+    border-radius: 16px;
+    border: 1px solid rgba(148, 163, 184, 0.2);
+    background: rgba(15, 23, 42, 0.55);
+    box-shadow: 0 12px 28px rgba(15, 23, 42, 0.35);
+    transition: transform 160ms ease, box-shadow 160ms ease, border-color 160ms ease;
+}
+
+.token-card:hover,
+.token-card:focus-within {
+    transform: translateY(-2px);
+    border-color: rgba(56, 189, 248, 0.45);
+    box-shadow: 0 18px 40px rgba(56, 189, 248, 0.18);
+}
+
+.token-card__portrait {
+    width: 120px;
+    height: 120px;
+    border-radius: 50%;
+    border: 2px solid rgba(15, 23, 42, 0.95);
+    background: #000;
+    overflow: hidden;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+}
+
+.token-card__portrait-image {
+    display: block;
+    width: 100%;
+    height: 100%;
+    object-fit: cover;
+}
+
+.token-card__name {
+    margin: 0;
+    font-size: 0.95rem;
+    color: rgba(226, 232, 240, 0.92);
+    text-align: center;
+}
+
+.token-card__meta {
+    display: flex;
+    flex-direction: column;
+    gap: 0.4rem;
+    width: 100%;
+}
+
+.token-card__details {
+    display: flex;
+    flex-wrap: wrap;
+    justify-content: center;
+    gap: 0.4rem;
+}
+
+.token-pill {
+    padding: 0.2rem 0.65rem;
+    border-radius: 999px;
+    background: rgba(56, 189, 248, 0.18);
+    border: 1px solid rgba(56, 189, 248, 0.35);
+    color: rgba(226, 232, 240, 0.85);
+    font-size: 0.7rem;
+    letter-spacing: 0.08em;
+    text-transform: uppercase;
+}
+
+.token-pill--school-lorehold { background: rgba(244, 114, 182, 0.18); border-color: rgba(244, 114, 182, 0.4); }
+.token-pill--school-prismari { background: rgba(56, 189, 248, 0.18); border-color: rgba(56, 189, 248, 0.4); }
+.token-pill--school-quandrix { background: rgba(34, 197, 94, 0.18); border-color: rgba(34, 197, 94, 0.4); }
+.token-pill--school-silverquill { background: rgba(148, 163, 184, 0.2); border-color: rgba(148, 163, 184, 0.45); }
+.token-pill--school-witherbloom { background: rgba(16, 185, 129, 0.18); border-color: rgba(16, 185, 129, 0.4); }
+.token-pill--school-other { background: rgba(94, 234, 212, 0.18); border-color: rgba(94, 234, 212, 0.4); }
+
+.token-pill--size {
+    background: rgba(250, 204, 21, 0.18);
+    border-color: rgba(250, 204, 21, 0.35);
+    color: rgba(250, 250, 250, 0.9);
+}
+
+.token-pill--stamina {
+    background: rgba(248, 113, 113, 0.18);
+    border-color: rgba(248, 113, 113, 0.4);
+    color: rgba(248, 250, 252, 0.95);
+}
+
+.token-filters {
+    display: flex;
+    flex-direction: column;
+    gap: 0.75rem;
+    padding: 1rem;
+    border-radius: 18px;
+    border: 1px solid rgba(148, 163, 184, 0.18);
+    background: rgba(15, 23, 42, 0.45);
+}
+
+.token-filters__title {
+    margin: 0;
+    font-size: 0.85rem;
+    letter-spacing: 0.12em;
+    text-transform: uppercase;
+    color: rgba(226, 232, 240, 0.6);
+}
+
+.token-filters__buttons {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 0.5rem;
+}
+
+.token-filter-button {
+    padding: 0.4rem 0.9rem;
+    border-radius: 999px;
+    border: 1px solid rgba(148, 163, 184, 0.3);
+    background: rgba(15, 23, 42, 0.6);
+    color: rgba(226, 232, 240, 0.8);
+    font-size: 0.75rem;
+    letter-spacing: 0.1em;
+    text-transform: uppercase;
+    cursor: pointer;
+    transition: background 160ms ease, border-color 160ms ease, color 160ms ease;
+}
+
+.token-filter-button:hover,
+.token-filter-button:focus {
+    background: rgba(56, 189, 248, 0.2);
+    border-color: rgba(56, 189, 248, 0.6);
+    color: #fff;
+}
+
+.token-filter-button:disabled {
+    opacity: 0.4;
+    cursor: not-allowed;
+}
+
+.token-filter-button--active {
+    background: rgba(56, 189, 248, 0.26);
+    border-color: rgba(56, 189, 248, 0.75);
+    color: #fff;
+    box-shadow: 0 12px 32px rgba(56, 189, 248, 0.22);
+}
+
+.token-empty-state {
+    margin: 0;
+    text-align: center;
+    font-size: 0.95rem;
+    color: rgba(226, 232, 240, 0.7);
 }
 
 .scene-management {
