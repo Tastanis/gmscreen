@@ -234,7 +234,9 @@
                     button.setAttribute('tabindex', isActive ? '0' : '-1');
                 });
                 tabPanels.forEach(function (panel) {
-                    panel.hidden = panel.id !== targetId;
+                    const isActivePanel = panel.id === targetId;
+                    panel.hidden = !isActivePanel;
+                    panel.setAttribute('aria-hidden', isActivePanel ? 'false' : 'true');
                 });
             }
         }

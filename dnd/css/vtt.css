@@ -396,6 +396,10 @@
     gap: 1.5rem;
 }
 
+.settings-panel__tabpanel[hidden] {
+    display: none;
+}
+
 .settings-panel__primary-action {
     align-self: flex-start;
     padding: 0.45rem 0.85rem;
