@@ -542,6 +542,18 @@
     transition: border-color 160ms ease, background 160ms ease, color 160ms ease;
 }
 
+.token-dropzone__input {
+    position: absolute;
+    width: 1px;
+    height: 1px;
+    padding: 0;
+    margin: -1px;
+    overflow: hidden;
+    clip: rect(0 0 0 0);
+    white-space: nowrap;
+    border: 0;
+}
+
 .token-dropzone:hover,
 .token-dropzone:focus {
     border-color: rgba(56, 189, 248, 0.6);

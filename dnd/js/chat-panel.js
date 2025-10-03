@@ -6,6 +6,35 @@
         ? window.chatHandlerUrl
         : 'chat_handler.php';
 
+    const chatEndpointBase = (() => {
+        if (typeof window === 'undefined') {
+            return '';
+        }
+
+        const ensureTrailingSlash = (value) => {
+            if (typeof value !== 'string' || value === '') {
+                return '/';
+            }
+            return value.endsWith('/') ? value : `${value}/`;
+        };
+
+        try {
+            const endpointUrl = new URL(CHAT_ENDPOINT, window.location.href);
+            const path = endpointUrl.pathname || '/';
+            const basePath = path.endsWith('/') ? path : path.replace(/[^/]+$/, '');
+            return `${endpointUrl.origin}${ensureTrailingSlash(basePath)}`;
+        } catch (error) {
+            try {
+                const origin = window.location && window.location.origin ? window.location.origin : '';
+                const path = window.location && window.location.pathname ? window.location.pathname : '';
+                const basePath = path === '' ? '/' : path.replace(/[^/]*$/, '');
+                return `${origin}${ensureTrailingSlash(basePath)}`;
+            } catch (innerError) {
+                return '';
+            }
+        }
+    })();
+
     const decodeHtmlEntities = (() => {
         let textarea = null;
         return (value) => {
@@ -26,6 +55,45 @@
     function getDisplayText(value) {
         const decoded = decodeHtmlEntities(value);
         return typeof decoded === 'string' ? decoded : '';
+    }
+
+    function normalizeChatImageUrl(value) {
+        if (typeof value !== 'string') {
+            return '';
+        }
+
+        const trimmed = value.trim();
+        if (trimmed === '') {
+            return '';
+        }
+
+        const hasProtocol = /^[a-zA-Z][a-zA-Z0-9+.-]*:/.test(trimmed);
+        if (hasProtocol || trimmed.startsWith('//')) {
+            return trimmed;
+        }
+
+        if (typeof window !== 'undefined' && trimmed.startsWith('/')) {
+            const origin = window.location && window.location.origin ? window.location.origin : '';
+            return origin ? `${origin}${trimmed}` : trimmed;
+        }
+
+        if (chatEndpointBase) {
+            try {
+                return new URL(trimmed, chatEndpointBase).toString();
+            } catch (error) {
+                // Fall through to the final attempt
+            }
+        }
+
+        if (typeof window !== 'undefined') {
+            try {
+                return new URL(trimmed, window.location.href).toString();
+            } catch (error) {
+                return trimmed;
+            }
+        }
+
+        return trimmed;
     }
 
     function initChatPanel(isGM, currentUser) {
@@ -118,6 +186,11 @@
 
             const normalized = Object.assign({}, message, { id });
             normalized.message = getDisplayText(typeof message.message === 'string' ? message.message : '');
+            if (typeof message.imageUrl === 'string') {
+                normalized.imageUrl = normalizeChatImageUrl(message.imageUrl);
+            } else {
+                delete normalized.imageUrl;
+            }
             return normalized;
         }
 
@@ -830,12 +903,38 @@
                 return '';
             }
 
-            try {
-                const absolute = new URL(value, window.location.href);
-                return absolute.toString();
-            } catch (error) {
-                return value;
+            const trimmed = typeof value === 'string' ? value.trim() : '';
+            if (trimmed === '') {
+                return '';
             }
+
+            const hasProtocol = /^[a-zA-Z][a-zA-Z0-9+.-]*:/.test(trimmed);
+            if (hasProtocol || trimmed.startsWith('//')) {
+                return trimmed;
+            }
+
+            if (typeof window !== 'undefined' && trimmed.startsWith('/')) {
+                const origin = window.location && window.location.origin ? window.location.origin : '';
+                return origin ? `${origin}${trimmed}` : trimmed;
+            }
+
+            if (chatEndpointBase) {
+                try {
+                    return new URL(trimmed, chatEndpointBase).toString();
+                } catch (error) {
+                    // Fall through to final attempt below
+                }
+            }
+
+            if (typeof window !== 'undefined') {
+                try {
+                    return new URL(trimmed, window.location.href).toString();
+                } catch (error) {
+                    return trimmed;
+                }
+            }
+
+            return trimmed;
         }
 
         function isSupportedImageUrl(url) {
@@ -844,12 +943,29 @@
             }
 
             try {
-                const absolute = new URL(url, window.location.href);
+                const base = chatEndpointBase || (typeof window !== 'undefined' ? window.location.href : undefined);
+                const absolute = new URL(url, base);
                 const path = absolute.pathname ? absolute.pathname.toLowerCase() : '';
                 return /(\.png|\.jpe?g|\.gif|\.webp|\.bmp|\.svg)$/i.test(path);
             } catch (error) {
                 return /(\.png|\.jpe?g|\.gif|\.webp|\.bmp|\.svg)$/i.test(url.toLowerCase());
             }
+        }
+
+        function isChatDropIgnored(event) {
+            if (!event) {
+                return false;
+            }
+
+            const isElement = typeof Element !== 'undefined' && event.target instanceof Element;
+            const target = isElement
+                ? event.target
+                : (event.target && event.target.nodeType === 1 ? event.target : null);
+            if (!target) {
+                return false;
+            }
+
+            return Boolean(target.closest('[data-chat-drop-ignore="true"]'));
         }
 
         function closeImageLightbox() {
@@ -1649,6 +1765,7 @@
             const text = typeof message === 'string' ? message.trim() : '';
             const displayText = getDisplayText(text);
             const image = typeof imageUrl === 'string' ? imageUrl.trim() : '';
+            const normalizedImage = image ? normalizeChatImageUrl(image) : '';
             const normalizedType = typeof type === 'string' && type.trim() !== '' ? type.trim() : 'text';
             const payloadObject = payload && typeof payload === 'object' ? payload : null;
             const normalizedTarget = typeof target === 'string' ? target.trim() : '';
@@ -1670,7 +1787,7 @@
             };
 
             if (image) {
-                optimisticMessage.imageUrl = image;
+                optimisticMessage.imageUrl = normalizedImage || image;
             }
 
             if (payloadObject) {
@@ -1785,6 +1902,9 @@
             const types = Array.from(event.dataTransfer.types || []);
             const hasSupportedType = types.includes('Files') || types.includes('text/uri-list') || types.includes('text/plain');
             if (!hasSupportedType) {
+                return false;
+            }
+            if (isChatDropIgnored(event)) {
                 return false;
             }
             if (isDragOverScene(event)) {
