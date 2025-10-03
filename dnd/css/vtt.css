@@ -142,6 +142,10 @@
     background: #000;
 }
 
+.scene-display__map-content--no-accel {
+    will-change: auto;
+}
+
 .scene-display__map-content--inactive {
     cursor: default;
 }

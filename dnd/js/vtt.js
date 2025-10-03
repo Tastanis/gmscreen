@@ -67,6 +67,7 @@
         const MAP_WHEEL_SENSITIVITY = 0.002;
         const MAP_DRAG_BUFFER_MIN_PX = 220;
         const MAP_DRAG_BUFFER_SCALE = 0.5;
+        const MAP_ACCELERATION_DIMENSION_LIMIT = 8192;
 
         const state = {
             isGM: Boolean(config.isGM),
@@ -548,6 +549,7 @@
             sceneMapContent.style.removeProperty('width');
             sceneMapContent.style.removeProperty('height');
             sceneMapContent.style.removeProperty('flex');
+            enableMapAcceleration();
         }
 
         function applyMapContentIntrinsicSize() {
@@ -561,6 +563,7 @@
                 return;
             }
 
+            updateMapAcceleration(width, height);
             const viewportWidth = sceneMapInner ? sceneMapInner.clientWidth : 0;
             const viewportHeight = sceneMapInner ? sceneMapInner.clientHeight : 0;
             const hasViewportSize = viewportWidth > 0 && viewportHeight > 0;
@@ -600,6 +603,26 @@
             state.mapAspectRatio = null;
             clearMapContentSizing();
             state.mapMinScale = MAP_MIN_SCALE;
+            enableMapAcceleration();
+        }
+
+        function updateMapAcceleration(width, height) {
+            if (!sceneMapContent) {
+                return;
+            }
+            const maxDimension = Math.max(width, height);
+            if (Number.isFinite(maxDimension) && maxDimension > MAP_ACCELERATION_DIMENSION_LIMIT) {
+                sceneMapContent.classList.add('scene-display__map-content--no-accel');
+            } else {
+                sceneMapContent.classList.remove('scene-display__map-content--no-accel');
+            }
+        }
+
+        function enableMapAcceleration() {
+            if (!sceneMapContent) {
+                return;
+            }
+            sceneMapContent.classList.remove('scene-display__map-content--no-accel');
         }
 
         function initMapInteractions() {
