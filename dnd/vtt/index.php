@@ -41,13 +41,7 @@ foreach ($scenes as $scene) {
     $sceneLookup[$scene['id']] = $scene;
 }
 
-$defaultSceneId = null;
-if (!empty($scenes)) {
-    $firstScene = reset($scenes);
-    if (is_array($firstScene) && isset($firstScene['id'])) {
-        $defaultSceneId = $firstScene['id'];
-    }
-}
+$defaultSceneId = getFirstSceneId($sceneData);
 
 $sceneStateFile = __DIR__ . '/../data/vtt_active_scene.json';
 $sceneStateDir = dirname($sceneStateFile);
@@ -73,8 +67,15 @@ if (file_exists($sceneStateFile)) {
     );
 }
 
+if ($activeSceneId === null && $defaultSceneId !== null) {
+    $activeSceneId = $defaultSceneId;
+}
+
 if ($activeSceneId === null && !empty($sceneLookup)) {
-    $activeSceneId = array_key_first($sceneLookup);
+    foreach ($sceneLookup as $sceneId => $_scene) {
+        $activeSceneId = $sceneId;
+        break;
+    }
 }
 
 $activeScene = $activeSceneId !== null && isset($sceneLookup[$activeSceneId])

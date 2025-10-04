@@ -31,6 +31,9 @@ pnpm-lock.yaml
 /dnd/data/pcs.json
 /dnd/data/characters_backup_*.json
 /dnd/data/characters_emergency_*.json
+/dnd/data/vtt_change_log.json
+/dnd/data/vtt_scene_tokens.json
+/dnd/data/vtt_token_library.json
 
 # Schedule data
 /dnd/schedule/data/schedules.json
