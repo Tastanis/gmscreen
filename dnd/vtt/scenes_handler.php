@@ -436,7 +436,7 @@ function ensureSceneStateFile($filePath, $defaultSceneId)
     }
 }
 
-function buildSceneStateResponse(array $sceneData, array $scenes, array $sceneLookup, string $stateFile, ?string $defaultSceneId): array
+function buildSceneStateResponse($sceneData, $scenes, $sceneLookup, $stateFile, $defaultSceneId)
 {
     $activeSceneId = loadActiveSceneId($stateFile, $defaultSceneId, $sceneLookup);
 
