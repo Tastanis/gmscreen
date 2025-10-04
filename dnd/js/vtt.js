@@ -24,6 +24,7 @@
             sceneEndpoint,
             initialSceneId,
             initialScene,
+            latestChangeId: typeof config.latestChangeId === 'number' ? config.latestChangeId : 0,
         });
     }
 
@@ -35,6 +36,7 @@
             sceneEndpoint: 'scenes_handler.php',
             initialSceneId: null,
             initialScene: null,
+            latestChangeId: 0,
         }, options || {});
 
         const panel = document.getElementById('settings-panel');
@@ -114,6 +116,7 @@
             mapImageSrc: sceneMapImage ? (sceneMapImage.getAttribute('src') || '') : '',
             mapHasImage: Boolean(sceneMapImage && !sceneMapImage.classList.contains('scene-display__map-image--hidden')),
             gridOpacity: loadStoredGridOpacity(),
+            latestChangeId: typeof config.latestChangeId === 'number' ? config.latestChangeId : 0,
         };
 
         let isPanelOpen = false;
@@ -2082,6 +2085,12 @@
                     if (!data || data.success !== true || !data.active_scene_id) {
                         throw new Error((data && data.error) || 'Unable to activate scene.');
                     }
+                    if (typeof data.latest_change_id === 'number') {
+                        const changeId = Number(data.latest_change_id);
+                        if (Number.isFinite(changeId)) {
+                            state.latestChangeId = Math.max(state.latestChangeId, changeId);
+                        }
+                    }
                     state.activeSceneId = data.active_scene_id;
                     applySceneToDisplay(data.scene || getSceneById(state.scenes, data.active_scene_id));
                     setStatus(data.scene && data.scene.name ? `Activated “${data.scene.name}.”` : 'Scene activated.', 'success');
@@ -2101,8 +2110,12 @@
             if (!state.isGM) {
                 return;
             }
-            const requestUrl = buildSceneActionUrl(state.sceneEndpoint, 'list');
-            fetch(requestUrl, {
+            fetchSceneState(showStatus).catch(() => {});
+        }
+
+        function fetchSceneState(showStatus) {
+            const requestUrl = buildSceneActionUrl(state.sceneEndpoint, 'state');
+            return fetch(requestUrl, {
                 method: 'GET',
                 headers: {
                     'Accept': 'application/json',
@@ -2125,6 +2138,7 @@
                     if (showStatus) {
                         setStatus('Unable to refresh scenes.', 'error');
                     }
+                    throw error;
                 });
         }
 
@@ -2544,11 +2558,11 @@
             if (state.pollingTimer !== null) {
                 window.clearInterval(state.pollingTimer);
             }
-            state.pollingTimer = window.setInterval(fetchActiveScene, SCENE_POLL_INTERVAL_MS);
-            fetchActiveScene();
+            state.pollingTimer = window.setInterval(pollForChanges, SCENE_POLL_INTERVAL_MS);
+            pollForChanges();
         }
 
-        function fetchActiveScene() {
+        function pollForChanges() {
             if (state.isGM && state.pendingRequest) {
                 return;
             }
@@ -2557,7 +2571,15 @@
             }
             state.isFetching = true;
 
-            const requestUrl = buildSceneEndpointUrl(state.sceneEndpoint);
+            let requestUrl = buildSceneActionUrl(state.sceneEndpoint, 'changes');
+            try {
+                const url = new URL(requestUrl, window.location.href);
+                url.searchParams.set('since', String(state.latestChangeId || 0));
+                requestUrl = url.toString();
+            } catch (error) {
+                const separator = requestUrl.indexOf('?') >= 0 ? '&' : '?';
+                requestUrl = `${requestUrl}${separator}since=${encodeURIComponent(String(state.latestChangeId || 0))}`;
+            }
 
             fetch(requestUrl, {
                 method: 'GET',
@@ -2568,28 +2590,26 @@
                 .then(handleJsonResponse)
                 .then((data) => {
                     if (!data || data.success !== true) {
-                        throw new Error('Invalid scene response.');
+                        throw new Error('Invalid change response.');
                     }
-                    if (typeof data.active_scene_id !== 'string') {
+                    const changeId = typeof data.latest_change_id === 'number'
+                        ? Number(data.latest_change_id)
+                        : null;
+                    if (Number.isFinite(changeId)) {
+                        state.latestChangeId = Math.max(state.latestChangeId, changeId);
+                    }
+                    const changes = Array.isArray(data.changes) ? data.changes : [];
+                    if (changes.length === 0) {
                         return;
                     }
-                    if (state.activeSceneId !== data.active_scene_id) {
-                        state.activeSceneId = data.active_scene_id;
-                        applySceneToDisplay(data.scene || getSceneById(state.scenes, state.activeSceneId));
-                        renderSceneList();
-                        if (statusElement && !state.isGM) {
-                            statusElement.textContent = '';
-                        }
-                    } else if (data.scene) {
-                        applySceneToDisplay(data.scene, true);
+                    const requiresReload = applyChangeEntries(changes);
+                    if (requiresReload) {
+                        fetchSceneState(false).catch(() => {});
                     }
                 })
                 .catch((error) => {
-                    if (statusElement && !state.isGM) {
-                        statusElement.textContent = '';
-                    }
                     if (window.console && typeof window.console.warn === 'function') {
-                        console.warn('Scene polling error:', error);
+                        console.warn('Change polling error:', error);
                     }
                 })
                 .finally(() => {
@@ -2597,13 +2617,106 @@
                 });
         }
 
-        function buildSceneEndpointUrl(endpoint) {
-            return buildSceneActionUrl(endpoint, 'get_active');
+        function applyChangeEntries(entries) {
+            let requiresReload = false;
+
+            entries.forEach((entry) => {
+                if (!isPlainObject(entry)) {
+                    return;
+                }
+                const entityType = typeof entry.entityType === 'string' ? entry.entityType : '';
+                if (entityType === 'active_scene') {
+                    handleActiveSceneChange(entry);
+                    return;
+                }
+                requiresReload = true;
+            });
+
+            return requiresReload;
+        }
+
+        function handleActiveSceneChange(entry) {
+            const payload = isPlainObject(entry.payload) ? entry.payload : {};
+            const newActiveSceneId = typeof payload.activeSceneId === 'string' ? payload.activeSceneId : '';
+            if (newActiveSceneId !== '' && state.activeSceneId !== newActiveSceneId) {
+                state.activeSceneId = newActiveSceneId;
+            }
+
+            let scenePayload = null;
+            if (isPlainObject(payload.scene)) {
+                scenePayload = normalizeSceneRecord(payload.scene);
+            }
+
+            if (scenePayload) {
+                applySceneToDisplay(scenePayload, true);
+                mergeScenePayloadIntoState(scenePayload);
+            } else if (newActiveSceneId) {
+                const existingScene = getSceneById(state.scenes, newActiveSceneId);
+                if (existingScene) {
+                    applySceneToDisplay(existingScene, true);
+                }
+            }
+
+            renderSceneList();
+            if (statusElement && !state.isGM) {
+                statusElement.textContent = '';
+            }
+        }
+
+        function mergeScenePayloadIntoState(scene) {
+            if (!isPlainObject(scene) || typeof scene.id !== 'string') {
+                return;
+            }
+
+            if (!isPlainObject(state.sceneData)) {
+                state.sceneData = { folders: [], rootScenes: [] };
+            }
+
+            if (!Array.isArray(state.sceneData.rootScenes)) {
+                state.sceneData.rootScenes = [];
+            }
+
+            if (!Array.isArray(state.sceneData.folders)) {
+                state.sceneData.folders = [];
+            }
+
+            const folderId = typeof scene.folderId === 'string' && scene.folderId.trim() !== ''
+                ? scene.folderId
+                : null;
+
+            state.sceneData.rootScenes = state.sceneData.rootScenes.filter((item) => item && item.id !== scene.id);
+            state.sceneData.folders.forEach((folder) => {
+                if (folder && Array.isArray(folder.scenes)) {
+                    folder.scenes = folder.scenes.filter((item) => item && item.id !== scene.id);
+                }
+            });
+
+            if (folderId === null) {
+                state.sceneData.rootScenes.push(scene);
+            } else {
+                let folder = state.sceneData.folders.find((item) => item && item.id === folderId);
+                if (!folder) {
+                    folder = { id: folderId, name: 'Folder', scenes: [] };
+                    state.sceneData.folders.push(folder);
+                }
+                if (!Array.isArray(folder.scenes)) {
+                    folder.scenes = [];
+                }
+                folder.scenes.push(scene);
+            }
+
+            state.scenes = flattenScenesForClient(state.sceneData);
         }
 
         function applySceneStateFromServer(payload) {
             if (!payload || !payload.sceneData) {
                 return;
+            }
+            if (typeof payload.latest_change_id === 'number') {
+                const changeId = Number(payload.latest_change_id);
+                if (Number.isFinite(changeId)) {
+                    state.latestChangeId = Math.max(state.latestChangeId, changeId);
+                }
             }
             state.sceneData = normalizeSceneDataForClient(payload.sceneData);
             state.scenes = flattenScenesForClient(state.sceneData);

@@ -4,6 +4,13 @@ declare(strict_types=1);
 
 const VTT_SCENES_FILE = __DIR__ . '/../data/vtt_scenes.json';
 const VTT_MAP_UPLOAD_DIR = __DIR__ . '/../images/vtt/maps';
+const VTT_CHANGE_LOG_FILE = __DIR__ . '/../data/vtt_change_log.json';
+const VTT_CHANGE_LOG_MAX_ENTRIES = 200;
+
+function currentUtcTimestamp(): string
+{
+    return gmdate('c');
+}
 
 function loadScenesData(): array
 {
@@ -38,12 +45,12 @@ function loadScenesData(): array
             $folders[] = [
                 'id' => $folderId,
                 'name' => isset($folder['name']) ? (string) $folder['name'] : 'Untitled Folder',
-                'scenes' => normalizeScenesList($folder['scenes'] ?? []),
+                'scenes' => normalizeScenesList($folder['scenes'] ?? [], $folderId),
             ];
         }
     }
 
-    $rootScenes = normalizeScenesList($data['rootScenes'] ?? []);
+    $rootScenes = normalizeScenesList($data['rootScenes'] ?? [], null);
 
     return [
         'folders' => $folders,
@@ -102,7 +109,7 @@ function ensureScenesDataFile(): void
     }
 }
 
-function normalizeScenesList($scenes): array
+function normalizeScenesList($scenes, ?string $folderId = null): array
 {
     if (!is_array($scenes)) {
         return [];
@@ -113,28 +120,56 @@ function normalizeScenesList($scenes): array
         if (!is_array($scene)) {
             continue;
         }
-        $sceneId = isset($scene['id']) ? (string) $scene['id'] : generateIdentifier('scene');
-        $map = isset($scene['map']) && is_array($scene['map']) ? $scene['map'] : [];
-        $gridScale = isset($map['gridScale']) ? (int) $map['gridScale'] : 50;
-        if ($gridScale < 10) {
-            $gridScale = 10;
-        }
-        if ($gridScale > 300) {
-            $gridScale = 300;
-        }
-        $normalized[] = [
-            'id' => $sceneId,
-            'name' => isset($scene['name']) ? (string) $scene['name'] : 'New Scene',
-            'description' => isset($scene['description']) ? (string) $scene['description'] : '',
-            'accent' => isset($scene['accent']) ? (string) $scene['accent'] : '',
-            'map' => [
-                'image' => isset($map['image']) ? (string) $map['image'] : '',
-                'gridScale' => $gridScale,
-            ],
-        ];
+        $normalized[] = normalizeSceneRecordForStorage($scene, $folderId);
     }
 
     return $normalized;
+}
+
+function normalizeSceneRecordForStorage(array $scene, ?string $folderId = null): array
+{
+    $sceneId = isset($scene['id']) ? (string) $scene['id'] : generateIdentifier('scene');
+    $map = isset($scene['map']) && is_array($scene['map']) ? $scene['map'] : [];
+    $gridScale = isset($map['gridScale']) ? (int) $map['gridScale'] : 50;
+    if ($gridScale < 10) {
+        $gridScale = 10;
+    }
+    if ($gridScale > 300) {
+        $gridScale = 300;
+    }
+
+    $version = isset($scene['version']) ? (int) $scene['version'] : 1;
+    if ($version < 1) {
+        $version = 1;
+    }
+
+    $updatedAt = isset($scene['updatedAt']) && is_string($scene['updatedAt']) && $scene['updatedAt'] !== ''
+        ? $scene['updatedAt']
+        : currentUtcTimestamp();
+
+    $normalizedFolderId = $folderId !== null && $folderId !== '' ? $folderId : null;
+    if (array_key_exists('folderId', $scene)) {
+        $sceneFolderId = $scene['folderId'];
+        if ($sceneFolderId === null || $sceneFolderId === '') {
+            $normalizedFolderId = null;
+        } elseif (is_string($sceneFolderId) && trim($sceneFolderId) !== '') {
+            $normalizedFolderId = trim($sceneFolderId);
+        }
+    }
+
+    return [
+        'id' => $sceneId,
+        'name' => isset($scene['name']) ? (string) $scene['name'] : 'New Scene',
+        'description' => isset($scene['description']) ? (string) $scene['description'] : '',
+        'accent' => isset($scene['accent']) ? (string) $scene['accent'] : '',
+        'map' => [
+            'image' => isset($map['image']) ? (string) $map['image'] : '',
+            'gridScale' => $gridScale,
+        ],
+        'version' => $version,
+        'updatedAt' => $updatedAt,
+        'folderId' => $normalizedFolderId,
+    ];
 }
 
 function generateIdentifier(string $prefix): string
@@ -199,6 +234,9 @@ function createScene(array $data, ?string $folderId = null, ?string $name = null
             'image' => '',
             'gridScale' => 50,
         ],
+        'version' => 1,
+        'updatedAt' => currentUtcTimestamp(),
+        'folderId' => $folderId,
     ];
 
     $folderAttached = false;
@@ -220,6 +258,7 @@ function createScene(array $data, ?string $folderId = null, ?string $name = null
         if (!isset($data['rootScenes']) || !is_array($data['rootScenes'])) {
             $data['rootScenes'] = [];
         }
+        $scene['folderId'] = null;
         $data['rootScenes'][] = $scene;
     }
 
@@ -228,27 +267,29 @@ function createScene(array $data, ?string $folderId = null, ?string $name = null
 
 function deleteScene(array $data, string $sceneId): array
 {
-    $removed = false;
+    $removed = null;
 
     if (isset($data['rootScenes']) && is_array($data['rootScenes'])) {
         foreach ($data['rootScenes'] as $index => $scene) {
             if (isset($scene['id']) && $scene['id'] === $sceneId) {
+                $scene['folderId'] = null;
+                $removed = $scene;
                 array_splice($data['rootScenes'], $index, 1);
-                $removed = true;
                 break;
             }
         }
     }
 
-    if (!$removed && isset($data['folders']) && is_array($data['folders'])) {
+    if ($removed === null && isset($data['folders']) && is_array($data['folders'])) {
         foreach ($data['folders'] as &$folder) {
             if (!isset($folder['scenes']) || !is_array($folder['scenes'])) {
                 continue;
             }
             foreach ($folder['scenes'] as $index => $scene) {
                 if (isset($scene['id']) && $scene['id'] === $sceneId) {
+                    $scene['folderId'] = $folder['id'] ?? null;
+                    $removed = $scene;
                     array_splice($folder['scenes'], $index, 1);
-                    $removed = true;
                     break 2;
                 }
             }
@@ -272,6 +313,8 @@ function renameScene(array $data, string $sceneId, string $name): array
         foreach ($data['rootScenes'] as &$scene) {
             if (isset($scene['id']) && $scene['id'] === $sceneId) {
                 $scene['name'] = $trimmedName;
+                $scene['folderId'] = null;
+                bumpSceneVersion($scene);
                 $updatedScene = $scene;
                 break;
             }
@@ -287,6 +330,8 @@ function renameScene(array $data, string $sceneId, string $name): array
             foreach ($folder['scenes'] as &$scene) {
                 if (isset($scene['id']) && $scene['id'] === $sceneId) {
                     $scene['name'] = $trimmedName;
+                    $scene['folderId'] = $folder['id'] ?? null;
+                    bumpSceneVersion($scene);
                     $updatedScene = $scene;
                     break 2;
                 }
@@ -327,7 +372,7 @@ function updateSceneMap(array $data, string $sceneId, ?string $imagePath, ?int $
     if (isset($data['rootScenes']) && is_array($data['rootScenes'])) {
         foreach ($data['rootScenes'] as &$scene) {
             if (isset($scene['id']) && $scene['id'] === $sceneId) {
-                $scene = applySceneMapChanges($scene, $imagePath, $gridScale);
+                $scene = applySceneMapChanges($scene, $imagePath, $gridScale, null);
                 $updatedScene = $scene;
                 break;
             }
@@ -342,7 +387,7 @@ function updateSceneMap(array $data, string $sceneId, ?string $imagePath, ?int $
             }
             foreach ($folder['scenes'] as &$scene) {
                 if (isset($scene['id']) && $scene['id'] === $sceneId) {
-                    $scene = applySceneMapChanges($scene, $imagePath, $gridScale);
+                    $scene = applySceneMapChanges($scene, $imagePath, $gridScale, $folder['id'] ?? null);
                     $updatedScene = $scene;
                     break 2;
                 }
@@ -355,7 +400,7 @@ function updateSceneMap(array $data, string $sceneId, ?string $imagePath, ?int $
     return [$data, $updatedScene];
 }
 
-function applySceneMapChanges(array $scene, ?string $imagePath, ?int $gridScale): array
+function applySceneMapChanges(array $scene, ?string $imagePath, ?int $gridScale, ?string $folderId): array
 {
     if (!isset($scene['map']) || !is_array($scene['map'])) {
         $scene['map'] = [];
@@ -375,7 +420,20 @@ function applySceneMapChanges(array $scene, ?string $imagePath, ?int $gridScale)
         $scene['map']['gridScale'] = $gridScale;
     }
 
+    $scene['folderId'] = $folderId !== null && $folderId !== '' ? $folderId : ($scene['folderId'] ?? null);
+    bumpSceneVersion($scene);
+
     return $scene;
+}
+
+function bumpSceneVersion(array &$scene): void
+{
+    $version = isset($scene['version']) ? (int) $scene['version'] : 1;
+    if ($version < 1) {
+        $version = 1;
+    }
+    $scene['version'] = $version + 1;
+    $scene['updatedAt'] = currentUtcTimestamp();
 }
 
 function getFirstSceneId(array $data): ?string
@@ -416,5 +474,246 @@ function sanitizeFileExtension(string $filename): string
     $extension = strtolower(pathinfo($filename, PATHINFO_EXTENSION));
     $allowed = ['jpg', 'jpeg', 'png', 'gif', 'webp'];
     return in_array($extension, $allowed, true) ? $extension : '';
+}
+
+function ensureChangeLogFile(): void
+{
+    $directory = dirname(VTT_CHANGE_LOG_FILE);
+    if (!is_dir($directory)) {
+        mkdir($directory, 0755, true);
+    }
+
+    if (!file_exists(VTT_CHANGE_LOG_FILE)) {
+        file_put_contents(
+            VTT_CHANGE_LOG_FILE,
+            json_encode([
+                'last_id' => 0,
+                'entries' => [],
+            ], JSON_PRETTY_PRINT | JSON_UNESCAPED_SLASHES),
+            LOCK_EX
+        );
+    }
+}
+
+function loadChangeLogState(): array
+{
+    ensureChangeLogFile();
+
+    $content = @file_get_contents(VTT_CHANGE_LOG_FILE);
+    if ($content === false) {
+        return [
+            'last_id' => 0,
+            'entries' => [],
+        ];
+    }
+
+    $data = json_decode($content, true);
+    if (!is_array($data)) {
+        return [
+            'last_id' => 0,
+            'entries' => [],
+        ];
+    }
+
+    $lastId = isset($data['last_id']) ? (int) $data['last_id'] : 0;
+    $entries = [];
+    if (isset($data['entries']) && is_array($data['entries'])) {
+        foreach ($data['entries'] as $entry) {
+            if (!is_array($entry)) {
+                continue;
+            }
+            $entries[] = $entry;
+        }
+    }
+
+    return [
+        'last_id' => $lastId,
+        'entries' => $entries,
+    ];
+}
+
+function appendChangeLogEntry(array $entry): array
+{
+    ensureChangeLogFile();
+
+    $fp = fopen(VTT_CHANGE_LOG_FILE, 'c+');
+    if ($fp === false) {
+        return [];
+    }
+
+    $writtenEntry = [];
+    if (flock($fp, LOCK_EX)) {
+        $content = stream_get_contents($fp);
+        $state = json_decode($content, true);
+        if (!is_array($state)) {
+            $state = [
+                'last_id' => 0,
+                'entries' => [],
+            ];
+        }
+
+        $lastId = isset($state['last_id']) ? (int) $state['last_id'] : 0;
+        $nextId = $lastId + 1;
+
+        $entry['id'] = $nextId;
+        $entry['timestamp'] = currentUtcTimestamp();
+        $state['last_id'] = $nextId;
+        if (!isset($entry['payload']) || !is_array($entry['payload'])) {
+            $entry['payload'] = [];
+        }
+
+        $entries = isset($state['entries']) && is_array($state['entries']) ? $state['entries'] : [];
+        $entries[] = $entry;
+        if (count($entries) > VTT_CHANGE_LOG_MAX_ENTRIES) {
+            $entries = array_slice($entries, -VTT_CHANGE_LOG_MAX_ENTRIES);
+        }
+        $state['entries'] = $entries;
+
+        $payload = json_encode($state, JSON_PRETTY_PRINT | JSON_UNESCAPED_SLASHES);
+        if ($payload !== false) {
+            ftruncate($fp, 0);
+            rewind($fp);
+            fwrite($fp, $payload);
+            fflush($fp);
+            $writtenEntry = $entry;
+        }
+
+        flock($fp, LOCK_UN);
+    }
+
+    fclose($fp);
+
+    return $writtenEntry;
+}
+
+function getSceneChangesSince(int $changeId): array
+{
+    $state = loadChangeLogState();
+    $entries = $state['entries'] ?? [];
+    $since = $changeId < 0 ? 0 : $changeId;
+
+    return array_values(array_filter($entries, static function ($entry) use ($since) {
+        if (!is_array($entry)) {
+            return false;
+        }
+        if (!isset($entry['id'])) {
+            return false;
+        }
+        return (int) $entry['id'] > $since;
+    }));
+}
+
+function getLatestChangeId(): int
+{
+    $state = loadChangeLogState();
+    return isset($state['last_id']) ? (int) $state['last_id'] : 0;
+}
+
+function recordSceneChange(array $scene, string $operation): array
+{
+    $normalized = normalizeSceneForPayload($scene);
+    return appendChangeLogEntry([
+        'entityType' => 'scene',
+        'entityId' => $normalized['id'],
+        'operation' => $operation,
+        'version' => $normalized['version'],
+        'payload' => [
+            'scene' => $normalized,
+        ],
+    ]);
+}
+
+function recordSceneDeletion(array $scene): array
+{
+    $normalized = normalizeSceneForPayload($scene);
+    return appendChangeLogEntry([
+        'entityType' => 'scene',
+        'entityId' => $normalized['id'],
+        'operation' => 'deleted',
+        'version' => $normalized['version'],
+        'payload' => [
+            'scene' => $normalized,
+        ],
+    ]);
+}
+
+function recordFolderChange(array $folder, string $operation): array
+{
+    $folderId = isset($folder['id']) ? (string) $folder['id'] : '';
+    $folderName = isset($folder['name']) ? (string) $folder['name'] : 'Untitled Folder';
+
+    return appendChangeLogEntry([
+        'entityType' => 'folder',
+        'entityId' => $folderId,
+        'operation' => $operation,
+        'version' => null,
+        'payload' => [
+            'folder' => [
+                'id' => $folderId,
+                'name' => $folderName,
+            ],
+        ],
+    ]);
+}
+
+function recordActiveSceneChange(?array $scene): array
+{
+    $scenePayload = $scene !== null ? normalizeSceneForPayload($scene) : null;
+    $sceneId = $scenePayload['id'] ?? '';
+    $version = $scenePayload['version'] ?? null;
+
+    return appendChangeLogEntry([
+        'entityType' => 'active_scene',
+        'entityId' => $sceneId,
+        'operation' => 'changed',
+        'version' => $version,
+        'payload' => [
+            'activeSceneId' => $sceneId,
+            'scene' => $scenePayload,
+        ],
+    ]);
+}
+
+function normalizeSceneForPayload(array $scene): array
+{
+    $map = isset($scene['map']) && is_array($scene['map']) ? $scene['map'] : [];
+    $gridScale = isset($map['gridScale']) ? (int) $map['gridScale'] : 50;
+    if ($gridScale < 10) {
+        $gridScale = 10;
+    }
+    if ($gridScale > 300) {
+        $gridScale = 300;
+    }
+
+    $folderId = null;
+    if (isset($scene['folderId'])) {
+        $folderValue = $scene['folderId'];
+        if (is_string($folderValue) && trim($folderValue) !== '') {
+            $folderId = trim($folderValue);
+        }
+    }
+
+    $version = isset($scene['version']) ? (int) $scene['version'] : 1;
+    if ($version < 1) {
+        $version = 1;
+    }
+
+    $updatedAt = isset($scene['updatedAt']) && is_string($scene['updatedAt']) && $scene['updatedAt'] !== ''
+        ? $scene['updatedAt']
+        : currentUtcTimestamp();
+
+    return [
+        'id' => isset($scene['id']) ? (string) $scene['id'] : generateIdentifier('scene'),
+        'name' => isset($scene['name']) ? (string) $scene['name'] : 'New Scene',
+        'description' => isset($scene['description']) ? (string) $scene['description'] : '',
+        'accent' => isset($scene['accent']) ? (string) $scene['accent'] : '',
+        'map' => [
+            'image' => isset($map['image']) ? (string) $map['image'] : '',
+            'gridScale' => $gridScale,
+        ],
+        'version' => $version,
+        'updatedAt' => $updatedAt,
+        'folderId' => $folderId,
+    ];
 }
 
