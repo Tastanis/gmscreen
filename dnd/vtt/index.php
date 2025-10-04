@@ -279,8 +279,11 @@ $vttConfig = [
                                     <div class="token-form__field token-form__field--image">
                                         <span class="token-form__label">Artwork</span>
                                         <div id="token-image-dropzone" class="token-dropzone" tabindex="0" data-chat-drop-ignore="true">
-                                            <p class="token-dropzone__text">Drag &amp; drop an image here or <label for="token-image-input" id="token-image-browse" class="token-dropzone__browse" role="button" tabindex="0">browse</label></p>
+                                            <p class="token-dropzone__text">Drag &amp; drop an image here</p>
                                             <input type="file" id="token-image-input" class="token-dropzone__input" accept="image/*">
+                                        </div>
+                                        <div class="token-dropzone__actions">
+                                            <label for="token-image-input" id="token-image-browse" class="token-dropzone__browse" role="button" tabindex="0">Browse</label>
                                         </div>
                                         <div id="token-image-cropper" class="token-cropper" hidden>
                                             <div id="token-cropper-stage" class="token-cropper__stage">

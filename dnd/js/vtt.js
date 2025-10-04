@@ -741,7 +741,9 @@
                 const safeScale = Number.isFinite(totalScale) && totalScale > 0 ? totalScale : 1;
                 const translateX = Number.isFinite(tokenState.cropper.translateX) ? tokenState.cropper.translateX : 0;
                 const translateY = Number.isFinite(tokenState.cropper.translateY) ? tokenState.cropper.translateY : 0;
-                const transformValue = 'translate3d(' + translateX + 'px, ' + translateY + 'px, 0) scale(' + safeScale + ') translate(-50%, -50%)';
+                const translateXValue = 'calc(-50% + (' + translateX + 'px))';
+                const translateYValue = 'calc(-50% + (' + translateY + 'px))';
+                const transformValue = 'translate(' + translateXValue + ', ' + translateYValue + ') scale(' + safeScale + ')';
                 cropperImage.style.transform = transformValue;
             }
 
