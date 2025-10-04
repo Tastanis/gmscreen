@@ -55,6 +55,7 @@
         const sceneMapContent = document.getElementById('scene-map-content');
         const sceneMapImage = document.getElementById('scene-map-image');
         const sceneMapGrid = document.getElementById('scene-map-grid');
+        const sceneTokenLayer = document.getElementById('scene-token-layer');
         const sceneMapEmpty = document.getElementById('scene-map-empty');
         const gridOpacityControls = document.getElementById('scene-grid-controls');
         const gridOpacityInput = document.getElementById('scene-grid-opacity');
@@ -80,6 +81,12 @@
         const GRID_OPACITY_MIN = 0;
         const GRID_OPACITY_MAX = 1;
         const GRID_LINE_WIDTH_MAX = 6;
+        const SCENE_TOKEN_STORAGE_PREFIX = 'vtt.scene-tokens.';
+        const TOKEN_DRAG_MIME = 'application/vnd.gmscreen-token';
+
+        let tokenState = null;
+        let tokenContextMenu = null;
+        let tokenContextMenuTokenId = null;
 
         const state = {
             isGM: Boolean(config.isGM),
@@ -117,6 +124,9 @@
             mapHasImage: Boolean(sceneMapImage && !sceneMapImage.classList.contains('scene-display__map-image--hidden')),
             gridOpacity: loadStoredGridOpacity(),
             latestChangeId: typeof config.latestChangeId === 'number' ? config.latestChangeId : 0,
+            sceneTokens: [],
+            selectedSceneTokenId: null,
+            activeSceneTokenStorageKey: null,
         };
 
         let isPanelOpen = false;
@@ -196,6 +206,8 @@
             document.addEventListener('keydown', onDocumentKeyDown);
         }
 
+        document.addEventListener('keydown', onGlobalKeyDown);
+
         function initSettingsTabs() {
             if (!Array.isArray(tabButtons) || !Array.isArray(tabPanels) || tabButtons.length === 0 || tabPanels.length === 0) {
                 return;
@@ -265,6 +277,8 @@
             const tokenHeightInput = document.getElementById('token-size-height');
             const tokenStaminaInput = document.getElementById('token-stamina');
             const tokenStatus = document.getElementById('token-form-status');
+            const tokenSubmitButton = document.getElementById('token-create-confirm');
+            const tokenFormLegend = tokenForm ? tokenForm.querySelector('.token-form__legend') : null;
             const dropzone = document.getElementById('token-image-dropzone');
             const fileInput = document.getElementById('token-image-input');
             const browseButton = document.getElementById('token-image-browse');
@@ -294,7 +308,7 @@
 
             const storageKey = 'vtt.token-library';
 
-            const tokenState = {
+            tokenState = {
                 isGM: state.isGM,
                 folders: folders,
                 schoolFilters: schoolFilters,
@@ -302,11 +316,111 @@
                 schoolFilterId: null,
                 tokens: loadTokensFromStorage(),
                 cropper: createEmptyCropperState(),
+                editingTokenId: null,
+                editingOriginalImageData: '',
             };
 
             renderFolderButtons();
             renderSchoolFilters();
             renderTokenList();
+            updateTokenFormMode();
+
+            function ensureTokenContextMenuElement() {
+                if (tokenContextMenu) {
+                    return;
+                }
+                tokenContextMenu = document.createElement('div');
+                tokenContextMenu.className = 'token-context-menu';
+                tokenContextMenu.setAttribute('role', 'menu');
+                tokenContextMenu.hidden = true;
+                document.body.appendChild(tokenContextMenu);
+            }
+
+            function positionTokenContextMenu(clientX, clientY) {
+                if (!tokenContextMenu) {
+                    return;
+                }
+                tokenContextMenu.style.left = `${clientX}px`;
+                tokenContextMenu.style.top = `${clientY}px`;
+                const rect = tokenContextMenu.getBoundingClientRect();
+                let nextX = clientX;
+                let nextY = clientY;
+                if (rect.right > window.innerWidth) {
+                    nextX = Math.max(8, window.innerWidth - rect.width - 8);
+                }
+                if (rect.bottom > window.innerHeight) {
+                    nextY = Math.max(8, window.innerHeight - rect.height - 8);
+                }
+                tokenContextMenu.style.left = `${nextX}px`;
+                tokenContextMenu.style.top = `${nextY}px`;
+            }
+
+            function openTokenContextMenu(token, clientX, clientY) {
+                if (!token || !tokenState || !tokenState.isGM) {
+                    return;
+                }
+                ensureTokenContextMenuElement();
+                closeTokenContextMenu();
+                if (!tokenContextMenu) {
+                    return;
+                }
+                tokenContextMenuTokenId = token.id;
+                tokenContextMenu.innerHTML = '';
+                const editButton = document.createElement('button');
+                editButton.type = 'button';
+                editButton.className = 'token-context-menu__button';
+                editButton.textContent = 'Edit Token';
+                editButton.addEventListener('click', function () {
+                    closeTokenContextMenu();
+                    beginTokenEdit(token.id);
+                });
+                tokenContextMenu.appendChild(editButton);
+                tokenContextMenu.hidden = false;
+                positionTokenContextMenu(clientX, clientY);
+                if (typeof window !== 'undefined' && typeof window.requestAnimationFrame === 'function') {
+                    window.requestAnimationFrame(function () {
+                        if (editButton && typeof editButton.focus === 'function') {
+                            editButton.focus();
+                        }
+                    });
+                } else if (editButton && typeof editButton.focus === 'function') {
+                    editButton.focus();
+                }
+                document.addEventListener('click', onTokenContextMenuOutsideClick, true);
+                document.addEventListener('contextmenu', onTokenContextMenuOutsideClick, true);
+                document.addEventListener('keydown', onTokenContextMenuKeyDown);
+            }
+
+            function closeTokenContextMenu() {
+                if (!tokenContextMenu || tokenContextMenu.hidden) {
+                    return;
+                }
+                tokenContextMenu.hidden = true;
+                tokenContextMenu.innerHTML = '';
+                tokenContextMenuTokenId = null;
+                document.removeEventListener('click', onTokenContextMenuOutsideClick, true);
+                document.removeEventListener('contextmenu', onTokenContextMenuOutsideClick, true);
+                document.removeEventListener('keydown', onTokenContextMenuKeyDown);
+            }
+
+            function onTokenContextMenuOutsideClick(event) {
+                if (!tokenContextMenu || tokenContextMenu.hidden) {
+                    return;
+                }
+                if (tokenContextMenu.contains(event.target)) {
+                    return;
+                }
+                if (event.type === 'contextmenu' && typeof event.preventDefault === 'function') {
+                    event.preventDefault();
+                }
+                closeTokenContextMenu();
+            }
+
+            function onTokenContextMenuKeyDown(event) {
+                if (event.key === 'Escape') {
+                    closeTokenContextMenu();
+                }
+            }
 
             function openTokenImagePicker() {
                 if (!fileInput) {
@@ -599,6 +713,7 @@
             }
 
             function renderTokenList() {
+                closeTokenContextMenu();
                 tokenGrid.innerHTML = '';
 
                 const folderId = tokenState.activeFolderId;
@@ -644,6 +759,14 @@
                 const card = document.createElement('article');
                 card.className = 'token-card';
                 card.setAttribute('role', 'listitem');
+                card.setAttribute('data-token-id', token.id);
+                card.draggable = true;
+                card.addEventListener('dragstart', function (event) {
+                    onTokenCardDragStart(event, token);
+                });
+                card.addEventListener('contextmenu', function (event) {
+                    onTokenCardContextMenu(event, token);
+                });
 
                 const portrait = document.createElement('div');
                 portrait.className = 'token-card__portrait';
@@ -651,6 +774,10 @@
                 portraitImage.className = 'token-card__portrait-image';
                 portraitImage.src = token.imageData;
                 portraitImage.alt = token.name + ' token portrait';
+                portraitImage.draggable = true;
+                portraitImage.addEventListener('dragstart', function (event) {
+                    onTokenCardDragStart(event, token);
+                });
                 portrait.appendChild(portraitImage);
                 card.appendChild(portrait);
 
@@ -676,6 +803,108 @@
                 pill.className = className;
                 pill.textContent = label;
                 return pill;
+            }
+
+            function onTokenCardDragStart(event, token) {
+                if (!token || !token.id) {
+                    return;
+                }
+                closeTokenContextMenu();
+                if (!event || !event.dataTransfer) {
+                    return;
+                }
+                event.dataTransfer.effectAllowed = 'copy';
+                try {
+                    event.dataTransfer.setData(TOKEN_DRAG_MIME, token.id);
+                } catch (error) {
+                    // Some browsers may not allow custom MIME types
+                }
+                try {
+                    event.dataTransfer.setData('text/plain', `token:${token.id}`);
+                } catch (error) {
+                    // Ignore text/plain errors
+                }
+                const dragImageSource = event.target && event.target.closest('.token-card__portrait-image')
+                    ? event.target.closest('.token-card__portrait-image')
+                    : event.currentTarget && event.currentTarget.querySelector
+                        ? event.currentTarget.querySelector('.token-card__portrait-image')
+                        : null;
+                if (dragImageSource && typeof event.dataTransfer.setDragImage === 'function') {
+                    const rect = dragImageSource.getBoundingClientRect();
+                    event.dataTransfer.setDragImage(dragImageSource, rect.width / 2, rect.height / 2);
+                }
+            }
+
+            function onTokenCardContextMenu(event, token) {
+                if (typeof event.preventDefault === 'function') {
+                    event.preventDefault();
+                }
+                if (!token || !token.id) {
+                    return;
+                }
+                openTokenContextMenu(token, event.clientX, event.clientY);
+            }
+
+            function beginTokenEdit(tokenId) {
+                if (!tokenState || typeof tokenId !== 'string') {
+                    return;
+                }
+                closeTokenContextMenu();
+                const token = tokenState.tokens.find(function (entry) {
+                    return entry && entry.id === tokenId;
+                });
+                if (!token) {
+                    showStatusMessage('Token not found for editing.', true);
+                    return;
+                }
+                tokenState.editingTokenId = token.id;
+                tokenState.editingOriginalImageData = token.imageData || '';
+
+                const folderId = token.folderId && typeof token.folderId === 'string'
+                    ? token.folderId
+                    : 'pcs';
+                const schoolId = token.schoolId && typeof token.schoolId === 'string'
+                    ? token.schoolId
+                    : 'other';
+
+                if (tokenNameInput) {
+                    tokenNameInput.value = token.name || '';
+                }
+                if (tokenFolderSelect) {
+                    tokenFolderSelect.value = folderId;
+                }
+                if (tokenSchoolSelect) {
+                    tokenSchoolSelect.value = schoolId;
+                }
+                if (tokenWidthInput) {
+                    tokenWidthInput.value = String(clampTokenDimension(token.size && token.size.width));
+                }
+                if (tokenHeightInput) {
+                    tokenHeightInput.value = String(clampTokenDimension(token.size && token.size.height));
+                }
+                if (tokenStaminaInput) {
+                    tokenStaminaInput.value = String(clampTokenStamina(token.stamina));
+                }
+
+                if (token.imageData) {
+                    prepareCropperImage(token.imageData);
+                }
+
+                updateTokenFormMode();
+                showStatusMessage('Editing token. Update the details and press Update Token.', false);
+                if (tokenNameInput && typeof tokenNameInput.focus === 'function') {
+                    tokenNameInput.focus();
+                }
+            }
+
+            function updateTokenFormMode() {
+                const isEditing = Boolean(tokenState && tokenState.editingTokenId);
+                if (tokenSubmitButton) {
+                    tokenSubmitButton.textContent = isEditing ? 'Update Token' : 'Create Token';
+                }
+                if (tokenFormLegend) {
+                    tokenFormLegend.textContent = isEditing ? 'Edit Token' : 'Create a Token';
+                }
             }
 
             function getSchoolLabel(id) {
@@ -867,8 +1096,15 @@
             }
 
             function createTokenFromForm() {
-                if (!tokenForm || !tokenState.cropper.hasImage) {
-                    showStatusMessage('Add an image before creating the token.', true);
+                if (!tokenForm || !tokenState) {
+                    return;
+                }
+                const isEditing = Boolean(tokenState.editingTokenId);
+                if (!tokenState.cropper.hasImage) {
+                    showStatusMessage(
+                        isEditing ? 'Add or re-add artwork before updating the token.' : 'Add an image before creating the token.',
+                        true
+                    );
                     return;
                 }
                 showStatusMessage('', false);
@@ -893,14 +1129,49 @@
                     return;
                 }
 
+                if (isEditing) {
+                    const index = tokenState.tokens.findIndex(function (entry) {
+                        return entry && entry.id === tokenState.editingTokenId;
+                    });
+                    if (index === -1) {
+                        showStatusMessage('Unable to update the token. It may have been removed.', true);
+                        return;
+                    }
+                    const existing = tokenState.tokens[index] || {};
+                    tokenState.tokens[index] = Object.assign({}, existing, {
+                        id: existing.id,
+                        name,
+                        folderId,
+                        schoolId,
+                        size: { width, height },
+                        stamina,
+                        imageData,
+                        createdAt: existing.createdAt || Date.now(),
+                        updatedAt: Date.now(),
+                    });
+                    saveTokensToStorage();
+                    if (tokenState.activeFolderId !== folderId) {
+                        tokenState.activeFolderId = folderId;
+                        renderFolderButtons();
+                        renderSchoolFilters();
+                        if (tokenState.isGM && tokenFolderSelect) {
+                            tokenFolderSelect.value = folderId;
+                        }
+                    }
+                    renderTokenList();
+                    showStatusMessage('Token updated!', false);
+                    resetFormFields();
+                    return;
+                }
+
                 const token = {
                     id: 'token-' + Date.now() + '-' + Math.random().toString(36).slice(2),
-                    name: name,
-                    folderId: folderId,
-                    schoolId: schoolId,
-                    size: { width: width, height: height },
-                    stamina: stamina,
-                    imageData: imageData,
+                    name,
+                    folderId,
+                    schoolId,
+                    size: { width, height },
+                    stamina,
+                    imageData,
                     createdAt: Date.now(),
                 };
 
@@ -978,6 +1249,11 @@
                 if (tokenStaminaInput) {
                     tokenStaminaInput.value = '0';
                 }
+                if (tokenState) {
+                    tokenState.editingTokenId = null;
+                    tokenState.editingOriginalImageData = '';
+                }
+                updateTokenFormMode();
                 clearTokenImage();
                 if (tokenNameInput) {
                     tokenNameInput.focus();
@@ -1559,12 +1835,15 @@
             } catch (error) {
                 sceneMapInner.addEventListener('wheel', onMapWheel, false);
             }
+            sceneMapInner.addEventListener('pointerdown', onScenePointerDownSelect);
             sceneMapInner.addEventListener('contextmenu', onMapContextMenu);
             sceneMapInner.addEventListener('pointerdown', onMapPointerDown);
             sceneMapInner.addEventListener('pointermove', onMapPointerMove);
             sceneMapInner.addEventListener('pointerup', onMapPointerUp);
             sceneMapInner.addEventListener('pointercancel', onMapPointerCancel);
             sceneMapInner.addEventListener('dblclick', onMapDoubleClick);
+            sceneMapInner.addEventListener('dragover', onMapDragOver);
+            sceneMapInner.addEventListener('drop', onMapDrop);
             window.addEventListener('resize', onMapViewportResize);
             updateMapInteractionState();
             applyMapTransform();
@@ -2346,6 +2625,9 @@
 
         function applySceneToDisplay(scene, skipStatus) {
             const fallbackDescription = 'When the GM activates a scene it will appear here for everyone at the table.';
+            const nextSceneId = scene && typeof scene === 'object' && typeof scene.id === 'string'
+                ? scene.id
+                : null;
 
             if (scene && typeof scene === 'object') {
                 if (sceneName) {
@@ -2379,6 +2661,8 @@
                 }
                 updateMapDisplay(null);
             }
+
+            loadSceneTokensForScene(nextSceneId);
 
             if (!skipStatus) {
                 setStatus('', '');
@@ -2514,6 +2798,8 @@
                 applyGridOpacity(state.gridOpacity, false);
                 updateGridLineAppearance(state.mapTransform.scale);
             }
+
+            renderSceneTokens();
         }
 
         function updateGridLineAppearance(scale) {
@@ -2527,6 +2813,534 @@
             }
             lineSize = clampNumber(lineSize, 1, GRID_LINE_WIDTH_MAX);
             sceneMapGrid.style.setProperty('--grid-line-size', `${lineSize}px`);
+        }
+
+        function getActiveGridScale() {
+            if (!sceneMap) {
+                return 50;
+            }
+            const attr = parseInt(sceneMap.getAttribute('data-grid-scale'), 10);
+            const numeric = Number.isFinite(attr) ? attr : 50;
+            return clampGridScale(numeric);
+        }
+
+        function getMapPixelSize() {
+            if (!sceneMapContent) {
+                return { width: 0, height: 0 };
+            }
+            const width = sceneMapContent.offsetWidth || (sceneMapImage && sceneMapImage.naturalWidth) || 0;
+            const height = sceneMapContent.offsetHeight || (sceneMapImage && sceneMapImage.naturalHeight) || 0;
+            return {
+                width: Number.isFinite(width) ? width : 0,
+                height: Number.isFinite(height) ? height : 0,
+            };
+        }
+
+        function getSceneTokenStorageKey(sceneId) {
+            if (typeof sceneId !== 'string' || sceneId.trim() === '') {
+                return null;
+            }
+            return SCENE_TOKEN_STORAGE_PREFIX + sceneId;
+        }
+
+        function loadSceneTokensForScene(sceneId) {
+            const key = getSceneTokenStorageKey(sceneId);
+            if (state.activeSceneTokenStorageKey && state.activeSceneTokenStorageKey !== key) {
+                saveActiveSceneTokens();
+            }
+            if (state.activeSceneTokenStorageKey === key) {
+                renderSceneTokens();
+                return;
+            }
+            state.activeSceneTokenStorageKey = key;
+            if (!key) {
+                state.sceneTokens = [];
+                state.selectedSceneTokenId = null;
+                renderSceneTokens();
+                return;
+            }
+            state.sceneTokens = loadSceneTokens(sceneId);
+            state.selectedSceneTokenId = null;
+            renderSceneTokens();
+        }
+
+        function loadSceneTokens(sceneId) {
+            const key = getSceneTokenStorageKey(sceneId);
+            if (!key || typeof window === 'undefined' || typeof window.localStorage === 'undefined') {
+                return [];
+            }
+            try {
+                const raw = window.localStorage.getItem(key);
+                if (!raw) {
+                    return [];
+                }
+                const parsed = JSON.parse(raw);
+                if (!Array.isArray(parsed)) {
+                    return [];
+                }
+                return parsed
+                    .map(normalizeSceneTokenEntry)
+                    .filter(function (entry) { return entry !== null; });
+            } catch (error) {
+                return [];
+            }
+        }
+
+        function normalizeSceneTokenEntry(entry) {
+            if (!isPlainObject(entry)) {
+                return null;
+            }
+            const id = typeof entry.id === 'string' && entry.id.trim() !== '' ? entry.id : null;
+            const imageData = typeof entry.imageData === 'string' ? entry.imageData : '';
+            if (!id || imageData === '') {
+                return null;
+            }
+            const name = typeof entry.name === 'string' ? entry.name : '';
+            const libraryId = typeof entry.libraryId === 'string' ? entry.libraryId : '';
+            const staminaValue = Number(entry.stamina);
+            const stamina = Number.isFinite(staminaValue) && staminaValue > 0
+                ? Math.max(0, Math.round(staminaValue))
+                : 0;
+            const width = clampSceneTokenDimension(entry.size && entry.size.width);
+            const height = clampSceneTokenDimension(entry.size && entry.size.height);
+            const position = isPlainObject(entry.position) ? entry.position : {};
+            const xValue = Number(position.x);
+            const yValue = Number(position.y);
+            const x = Number.isFinite(xValue) ? xValue : 0;
+            const y = Number.isFinite(yValue) ? yValue : 0;
+            return {
+                id,
+                libraryId,
+                name,
+                imageData,
+                stamina,
+                size: { width, height },
+                position: { x, y },
+            };
+        }
+
+        function clampSceneTokenDimension(value) {
+            const numeric = Number.parseInt(value, 10);
+            if (!Number.isFinite(numeric)) {
+                return 1;
+            }
+            return clampNumber(numeric, 1, 12);
+        }
+
+        function saveActiveSceneTokens() {
+            if (typeof window === 'undefined' || typeof window.localStorage === 'undefined') {
+                return;
+            }
+            const key = state.activeSceneTokenStorageKey;
+            if (!key) {
+                return;
+            }
+            try {
+                const payload = JSON.stringify(state.sceneTokens.map(serializeSceneToken));
+                window.localStorage.setItem(key, payload);
+            } catch (error) {
+                // Ignore persistence errors
+            }
+        }
+
+        function serializeSceneToken(token) {
+            return {
+                id: token.id,
+                libraryId: token.libraryId || '',
+                name: token.name || '',
+                imageData: token.imageData || '',
+                stamina: Number.isFinite(token.stamina) ? token.stamina : 0,
+                size: {
+                    width: clampSceneTokenDimension(token.size && token.size.width),
+                    height: clampSceneTokenDimension(token.size && token.size.height),
+                },
+                position: {
+                    x: Number.isFinite(token.position && token.position.x) ? token.position.x : 0,
+                    y: Number.isFinite(token.position && token.position.y) ? token.position.y : 0,
+                },
+            };
+        }
+
+        function renderSceneTokens() {
+            if (!sceneTokenLayer) {
+                return;
+            }
+            sceneTokenLayer.innerHTML = '';
+            if (!Array.isArray(state.sceneTokens) || state.sceneTokens.length === 0) {
+                return;
+            }
+            const gridScale = getActiveGridScale();
+            const bounds = getMapPixelSize();
+            let positionsAdjusted = false;
+            state.sceneTokens.forEach(function (token) {
+                if (!token || typeof token !== 'object') {
+                    return;
+                }
+                const clampedPosition = clampSceneTokenPosition(
+                    token.position,
+                    token.size.width,
+                    token.size.height,
+                    gridScale,
+                    bounds
+                );
+                if (clampedPosition.x !== token.position.x || clampedPosition.y !== token.position.y) {
+                    token.position = clampedPosition;
+                    positionsAdjusted = true;
+                }
+                const element = createSceneTokenElement(token, gridScale);
+                sceneTokenLayer.appendChild(element);
+            });
+            if (positionsAdjusted) {
+                saveActiveSceneTokens();
+            }
+            updateSceneTokenSelection();
+        }
+
+        function createSceneTokenElement(token, gridScale) {
+            const element = document.createElement('div');
+            element.className = 'scene-token';
+            element.setAttribute('role', 'button');
+            element.setAttribute('tabindex', '0');
+            element.setAttribute('data-scene-token-id', token.id);
+            if (token.name) {
+                element.setAttribute('aria-label', token.name);
+                element.title = token.name;
+            }
+            const widthPx = token.size.width * gridScale;
+            const heightPx = token.size.height * gridScale;
+            element.style.width = `${widthPx}px`;
+            element.style.height = `${heightPx}px`;
+            element.style.left = `${token.position.x * gridScale}px`;
+            element.style.top = `${token.position.y * gridScale}px`;
+            element.style.backgroundImage = `url(${token.imageData})`;
+            element.addEventListener('pointerdown', onSceneTokenPointerDown);
+            element.addEventListener('click', onSceneTokenClick);
+            element.addEventListener('focus', onSceneTokenFocus);
+            return element;
+        }
+
+        function onSceneTokenPointerDown(event) {
+            if (event.button !== 0) {
+                return;
+            }
+            const element = event.currentTarget;
+            const tokenId = element && element.getAttribute('data-scene-token-id');
+            if (tokenId) {
+                selectSceneToken(tokenId, false);
+            }
+        }
+
+        function onSceneTokenClick(event) {
+            const element = event.currentTarget;
+            const tokenId = element && element.getAttribute('data-scene-token-id');
+            if (tokenId) {
+                selectSceneToken(tokenId, false);
+            }
+        }
+
+        function onSceneTokenFocus(event) {
+            const element = event.currentTarget;
+            const tokenId = element && element.getAttribute('data-scene-token-id');
+            if (tokenId) {
+                selectSceneToken(tokenId, false);
+            }
+        }
+
+        function selectSceneToken(tokenId, focusElement) {
+            if (typeof tokenId !== 'string') {
+                return;
+            }
+            if (state.selectedSceneTokenId === tokenId) {
+                if (focusElement) {
+                    focusSceneTokenElement(tokenId);
+                }
+                return;
+            }
+            state.selectedSceneTokenId = tokenId;
+            updateSceneTokenSelection();
+            if (focusElement) {
+                focusSceneTokenElement(tokenId);
+            }
+        }
+
+        function deselectSceneToken() {
+            if (state.selectedSceneTokenId === null) {
+                return;
+            }
+            state.selectedSceneTokenId = null;
+            updateSceneTokenSelection();
+        }
+
+        function updateSceneTokenSelection() {
+            if (!sceneTokenLayer) {
+                return;
+            }
+            const selectedId = state.selectedSceneTokenId;
+            const children = Array.prototype.slice.call(sceneTokenLayer.children);
+            children.forEach(function (child) {
+                const childId = child.getAttribute('data-scene-token-id');
+                const isSelected = selectedId !== null && childId === selectedId;
+                child.classList.toggle('scene-token--selected', isSelected);
+                child.setAttribute('aria-pressed', isSelected ? 'true' : 'false');
+            });
+        }
+
+        function focusSceneTokenElement(tokenId) {
+            if (!sceneTokenLayer) {
+                return;
+            }
+            const element = sceneTokenLayer.querySelector(`[data-scene-token-id="${tokenId}"]`);
+            if (element && typeof element.focus === 'function') {
+                element.focus({ preventScroll: false });
+            }
+        }
+
+        function addSceneTokenFromLibrary(libraryToken, mapX, mapY) {
+            if (!libraryToken || typeof libraryToken !== 'object') {
+                return;
+            }
+            const gridScale = getActiveGridScale();
+            if (gridScale <= 0) {
+                return;
+            }
+            const bounds = getMapPixelSize();
+            const width = clampSceneTokenDimension(libraryToken.size && libraryToken.size.width);
+            const height = clampSceneTokenDimension(libraryToken.size && libraryToken.size.height);
+            const snapped = snapTokenPositionToGrid(mapX, mapY, width, height, gridScale, bounds);
+            const staminaValue = Number(libraryToken.stamina);
+            const stamina = Number.isFinite(staminaValue) && staminaValue > 0
+                ? Math.max(0, Math.round(staminaValue))
+                : 0;
+            const tokenInstance = {
+                id: `scene-token-${Date.now()}-${Math.random().toString(36).slice(2)}`,
+                libraryId: typeof libraryToken.id === 'string' ? libraryToken.id : '',
+                name: libraryToken.name || '',
+                imageData: libraryToken.imageData || '',
+                stamina,
+                size: { width, height },
+                position: snapped,
+            };
+            state.selectedSceneTokenId = tokenInstance.id;
+            state.sceneTokens.push(tokenInstance);
+            renderSceneTokens();
+            saveActiveSceneTokens();
+            focusSceneTokenElement(tokenInstance.id);
+        }
+
+        function snapTokenPositionToGrid(mapX, mapY, widthSquares, heightSquares, gridScale, bounds) {
+            const safeScale = gridScale > 0 ? gridScale : 50;
+            const pointerSquaresX = mapX / safeScale;
+            const pointerSquaresY = mapY / safeScale;
+            const centerOffsetX = widthSquares % 2 === 0 ? 0 : 0.5;
+            const centerOffsetY = heightSquares % 2 === 0 ? 0 : 0.5;
+            const centerX = Math.round(pointerSquaresX - centerOffsetX) + centerOffsetX;
+            const centerY = Math.round(pointerSquaresY - centerOffsetY) + centerOffsetY;
+            let topLeftX = centerX - (widthSquares / 2);
+            let topLeftY = centerY - (heightSquares / 2);
+            const boundsSquaresX = bounds.width > 0 ? bounds.width / safeScale : null;
+            const boundsSquaresY = bounds.height > 0 ? bounds.height / safeScale : null;
+            if (Number.isFinite(boundsSquaresX)) {
+                const maxX = Math.max(0, boundsSquaresX - widthSquares);
+                topLeftX = clampNumber(topLeftX, 0, maxX);
+            }
+            if (Number.isFinite(boundsSquaresY)) {
+                const maxY = Math.max(0, boundsSquaresY - heightSquares);
+                topLeftY = clampNumber(topLeftY, 0, maxY);
+            }
+            return {
+                x: topLeftX,
+                y: topLeftY,
+            };
+        }
+
+        function clampSceneTokenPosition(position, widthSquares, heightSquares, gridScale, bounds) {
+            const safeScale = gridScale > 0 ? gridScale : 50;
+            const boundsSquaresX = bounds.width > 0 ? bounds.width / safeScale : null;
+            const boundsSquaresY = bounds.height > 0 ? bounds.height / safeScale : null;
+            let x = Number(position && position.x);
+            let y = Number(position && position.y);
+            if (!Number.isFinite(x)) {
+                x = 0;
+            }
+            if (!Number.isFinite(y)) {
+                y = 0;
+            }
+            if (Number.isFinite(boundsSquaresX)) {
+                const maxX = Math.max(0, boundsSquaresX - widthSquares);
+                x = clampNumber(x, 0, maxX);
+            }
+            if (Number.isFinite(boundsSquaresY)) {
+                const maxY = Math.max(0, boundsSquaresY - heightSquares);
+                y = clampNumber(y, 0, maxY);
+            }
+            return { x, y };
+        }
+
+        function moveSelectedSceneToken(deltaX, deltaY) {
+            if (!state.selectedSceneTokenId) {
+                return;
+            }
+            if (deltaX === 0 && deltaY === 0) {
+                return;
+            }
+            const token = state.sceneTokens.find(function (entry) {
+                return entry && entry.id === state.selectedSceneTokenId;
+            });
+            if (!token) {
+                return;
+            }
+            const gridScale = getActiveGridScale();
+            const bounds = getMapPixelSize();
+            const nextPosition = {
+                x: token.position.x + deltaX,
+                y: token.position.y + deltaY,
+            };
+            const clamped = clampSceneTokenPosition(nextPosition, token.size.width, token.size.height, gridScale, bounds);
+            if (clamped.x === token.position.x && clamped.y === token.position.y) {
+                return;
+            }
+            token.position = clamped;
+            renderSceneTokens();
+            saveActiveSceneTokens();
+            focusSceneTokenElement(token.id);
+        }
+
+        function onScenePointerDownSelect(event) {
+            if (event.button !== 0) {
+                return;
+            }
+            if (event.target && event.target.closest('.scene-token')) {
+                return;
+            }
+            deselectSceneToken();
+        }
+
+        function onMapDragOver(event) {
+            if (!isTokenDragEvent(event)) {
+                return;
+            }
+            event.preventDefault();
+            if (event.dataTransfer) {
+                event.dataTransfer.dropEffect = 'copy';
+            }
+        }
+
+        function onMapDrop(event) {
+            if (!isTokenDragEvent(event)) {
+                return;
+            }
+            event.preventDefault();
+            const tokenId = getDraggedTokenId(event);
+            if (!tokenId || !tokenState || !sceneMapContent) {
+                return;
+            }
+            const libraryToken = tokenState.tokens.find(function (token) {
+                return token && token.id === tokenId;
+            });
+            if (!libraryToken) {
+                return;
+            }
+            const rect = sceneMapContent.getBoundingClientRect();
+            const scale = state.mapTransform && Number.isFinite(state.mapTransform.scale) && state.mapTransform.scale > 0
+                ? state.mapTransform.scale
+                : 1;
+            const pointerX = (event.clientX - rect.left) / scale;
+            const pointerY = (event.clientY - rect.top) / scale;
+            const bounds = getMapPixelSize();
+            const widthLimit = bounds.width > 0 ? bounds.width : pointerX;
+            const heightLimit = bounds.height > 0 ? bounds.height : pointerY;
+            const clampedX = clampNumber(pointerX, 0, widthLimit);
+            const clampedY = clampNumber(pointerY, 0, heightLimit);
+            addSceneTokenFromLibrary(libraryToken, clampedX, clampedY);
+        }
+
+        function isTokenDragEvent(event) {
+            if (!event || !event.dataTransfer) {
+                return false;
+            }
+            const types = event.dataTransfer.types;
+            if (!types) {
+                return false;
+            }
+            if (typeof types.includes === 'function') {
+                return types.includes(TOKEN_DRAG_MIME) || types.includes('text/plain');
+            }
+            if (typeof types.indexOf === 'function') {
+                return types.indexOf(TOKEN_DRAG_MIME) !== -1 || types.indexOf('text/plain') !== -1;
+            }
+            if (typeof types.contains === 'function') {
+                return types.contains(TOKEN_DRAG_MIME) || types.contains('text/plain');
+            }
+            return false;
+        }
+
+        function getDraggedTokenId(event) {
+            if (!event || !event.dataTransfer) {
+                return null;
+            }
+            const custom = event.dataTransfer.getData(TOKEN_DRAG_MIME);
+            if (custom) {
+                return custom;
+            }
+            const fallback = event.dataTransfer.getData('text/plain');
+            if (typeof fallback === 'string' && fallback.indexOf('token:') === 0) {
+                return fallback.slice(6);
+            }
+            return null;
+        }
+
+        function onGlobalKeyDown(event) {
+            if (event.defaultPrevented) {
+                return;
+            }
+            if (event.altKey || event.metaKey || event.ctrlKey) {
+                return;
+            }
+            const activeElement = document.activeElement;
+            if (activeElement) {
+                const tag = activeElement.tagName ? activeElement.tagName.toLowerCase() : '';
+                if (tag === 'input' || tag === 'textarea' || tag === 'select' || activeElement.isContentEditable) {
+                    return;
+                }
+            }
+            let handled = false;
+            switch (event.key) {
+                case 'ArrowUp':
+                    if (state.selectedSceneTokenId) {
+                        moveSelectedSceneToken(0, -1);
+                        handled = true;
+                    }
+                    break;
+                case 'ArrowDown':
+                    if (state.selectedSceneTokenId) {
+                        moveSelectedSceneToken(0, 1);
+                        handled = true;
+                    }
+                    break;
+                case 'ArrowLeft':
+                    if (state.selectedSceneTokenId) {
+                        moveSelectedSceneToken(-1, 0);
+                        handled = true;
+                    }
+                    break;
+                case 'ArrowRight':
+                    if (state.selectedSceneTokenId) {
+                        moveSelectedSceneToken(1, 0);
+                        handled = true;
+                    }
+                    break;
+                case 'Escape':
+                    if (state.selectedSceneTokenId !== null) {
+                        deselectSceneToken();
+                        handled = true;
+                    }
+                    break;
+                default:
+                    break;
+            }
+            if (handled) {
+                event.preventDefault();
+            }
         }
 
         function applySceneAccent(accentHex) {
