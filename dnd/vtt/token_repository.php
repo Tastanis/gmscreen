@@ -1,7 +1,5 @@
 <?php
 
-declare(strict_types=1);
-
 require_once __DIR__ . '/scenes_repository.php';
 
 const VTT_TOKEN_LIBRARY_FILE = __DIR__ . '/../data/vtt_token_library.json';
@@ -10,7 +8,7 @@ const VTT_SCENE_TOKENS_FILE = __DIR__ . '/../data/vtt_scene_tokens.json';
 /**
  * Load the token library entries from disk.
  */
-function loadTokenLibrary(): array
+function loadTokenLibrary()
 {
     ensureTokenLibraryFile();
 
@@ -30,8 +28,12 @@ function loadTokenLibrary(): array
 /**
  * Persist the token library to disk and return the normalized payload.
  */
-function saveTokenLibrary(array $tokens): ?array
+function saveTokenLibrary($tokens)
 {
+    if (!is_array($tokens)) {
+        $tokens = [];
+    }
+
     ensureTokenLibraryFile();
 
     $normalized = normalizeTokenLibraryEntries($tokens);
@@ -52,9 +54,9 @@ function saveTokenLibrary(array $tokens): ?array
 /**
  * Load the scene token entries for a specific scene.
  */
-function loadSceneTokensByScene(string $sceneId): array
+function loadSceneTokensByScene($sceneId)
 {
-    $sceneId = trim($sceneId);
+    $sceneId = trim((string) $sceneId);
     if ($sceneId === '') {
         return [];
     }
@@ -72,9 +74,9 @@ function loadSceneTokensByScene(string $sceneId): array
 /**
  * Save scene tokens for a given scene and return the normalized payload.
  */
-function saveSceneTokensByScene(string $sceneId, array $tokens): ?array
+function saveSceneTokensByScene($sceneId, $tokens)
 {
-    $sceneId = trim($sceneId);
+    $sceneId = trim((string) $sceneId);
     if ($sceneId === '') {
         return null;
     }
@@ -97,7 +99,7 @@ function saveSceneTokensByScene(string $sceneId, array $tokens): ?array
     return $normalized;
 }
 
-function ensureTokenLibraryFile(): void
+function ensureTokenLibraryFile()
 {
     $directory = dirname(VTT_TOKEN_LIBRARY_FILE);
     if (!is_dir($directory)) {
@@ -109,7 +111,7 @@ function ensureTokenLibraryFile(): void
     }
 }
 
-function ensureSceneTokenFile(): void
+function ensureSceneTokenFile()
 {
     $directory = dirname(VTT_SCENE_TOKENS_FILE);
     if (!is_dir($directory)) {
@@ -121,7 +123,7 @@ function ensureSceneTokenFile(): void
     }
 }
 
-function loadSceneTokenState(): array
+function loadSceneTokenState()
 {
     ensureSceneTokenFile();
 
@@ -149,7 +151,7 @@ function loadSceneTokenState(): array
     return $state;
 }
 
-function normalizeTokenLibraryEntries($entries): array
+function normalizeTokenLibraryEntries($entries)
 {
     if (!is_array($entries)) {
         return [];
@@ -166,7 +168,7 @@ function normalizeTokenLibraryEntries($entries): array
     return $normalized;
 }
 
-function normalizeTokenLibraryEntry($entry): ?array
+function normalizeTokenLibraryEntry($entry)
 {
     if (!is_array($entry)) {
         return null;
@@ -224,7 +226,7 @@ function normalizeTokenLibraryEntry($entry): ?array
     ];
 }
 
-function normalizeSceneTokenEntries($entries): array
+function normalizeSceneTokenEntries($entries)
 {
     if (!is_array($entries)) {
         return [];
@@ -241,7 +243,7 @@ function normalizeSceneTokenEntries($entries): array
     return $normalized;
 }
 
-function normalizeSceneTokenEntry($entry): ?array
+function normalizeSceneTokenEntry($entry)
 {
     if (!is_array($entry)) {
         return null;
@@ -282,7 +284,7 @@ function normalizeSceneTokenEntry($entry): ?array
     ];
 }
 
-function clampTokenDimension($value): int
+function clampTokenDimension($value)
 {
     if (is_int($value)) {
         $numeric = $value;
@@ -302,7 +304,7 @@ function clampTokenDimension($value): int
     return $numeric;
 }
 
-function clampTokenStamina($value): int
+function clampTokenStamina($value)
 {
     if (!is_numeric($value)) {
         return 0;
@@ -316,7 +318,7 @@ function clampTokenStamina($value): int
     return $numeric;
 }
 
-function normalizeTimestamp($value): int
+function normalizeTimestamp($value)
 {
     if (!is_numeric($value)) {
         return (int) floor(microtime(true) * 1000);
@@ -330,7 +332,7 @@ function normalizeTimestamp($value): int
     return $timestamp;
 }
 
-function normalizeCoordinate($value): float
+function normalizeCoordinate($value)
 {
     if (!is_numeric($value)) {
         return 0.0;
@@ -344,8 +346,11 @@ function normalizeCoordinate($value): float
     return round($numeric, 4);
 }
 
-function writeFileWithLock(string $filePath, string $contents): bool
+function writeFileWithLock($filePath, $contents)
 {
+    $filePath = (string) $filePath;
+    $contents = (string) $contents;
+
     $fp = fopen($filePath, 'c+');
     if ($fp === false) {
         return false;
@@ -366,7 +371,7 @@ function writeFileWithLock(string $filePath, string $contents): bool
     return $result;
 }
 
-function recordTokenLibraryChange(): void
+function recordTokenLibraryChange()
 {
     appendChangeLogEntry([
         'entityType' => 'token_library',
@@ -379,8 +384,10 @@ function recordTokenLibraryChange(): void
     ]);
 }
 
-function recordSceneTokensChange(string $sceneId): void
+function recordSceneTokensChange($sceneId)
 {
+    $sceneId = (string) $sceneId;
+
     appendChangeLogEntry([
         'entityType' => 'scene_tokens',
         'entityId' => $sceneId,
