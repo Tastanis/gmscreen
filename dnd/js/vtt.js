@@ -153,6 +153,7 @@
         renderSceneList();
         initMapInteractions();
         initTokenManagement();
+        registerLifecycleHandlers();
 
         toggleButton.addEventListener('click', function () {
             if (isPanelOpen) {
@@ -638,16 +639,48 @@
                 };
             }
 
-            function persistTokenLibrary(showError) {
+            function sendJsonBeacon(url, payload) {
+                if (!url || typeof navigator === 'undefined' || typeof navigator.sendBeacon !== 'function') {
+                    return false;
+                }
+                let resolvedUrl = url;
+                if (typeof URL === 'function') {
+                    try {
+                        resolvedUrl = new URL(url, window.location.href).toString();
+                    } catch (error) {
+                        resolvedUrl = url;
+                    }
+                }
+                try {
+                    const json = JSON.stringify(payload);
+                    if (typeof json !== 'string') {
+                        return false;
+                    }
+                    const body = typeof Blob === 'function'
+                        ? new Blob([json], { type: 'application/json' })
+                        : json;
+                    return navigator.sendBeacon(resolvedUrl, body);
+                } catch (error) {
+                    return false;
+                }
+            }
+
+            function persistTokenLibrary(showError, options) {
                 if (!tokenState || !tokenState.isGM) {
                     return Promise.resolve(tokenState ? tokenState.tokens : []);
                 }
+                const configOptions = isPlainObject(options) ? options : {};
+                const useBeacon = configOptions.useBeacon === true;
                 const payload = {
                     action: 'save_library',
                     tokens: tokenState.tokens
                         .map(serializeTokenLibraryEntry)
                         .filter(function (entry) { return entry !== null; }),
                 };
+                if (useBeacon && sendJsonBeacon(tokenEndpoint, payload)) {
+                    tokenState.pendingSave = false;
+                    return Promise.resolve(tokenState.tokens);
+                }
                 tokenState.pendingSave = true;
                 return fetch(tokenEndpoint, {
                     method: 'POST',
@@ -3068,7 +3101,7 @@
             };
         }
 
-        function flushPendingSceneTokenSave() {
+        function flushPendingSceneTokenSave(options) {
             if (state.sceneTokensSaveTimer !== null) {
                 window.clearTimeout(state.sceneTokensSaveTimer);
                 state.sceneTokensSaveTimer = null;
@@ -3079,8 +3112,9 @@
             }
             if (state.sceneTokensPendingSave && state.activeSceneTokensSceneId) {
                 const sceneId = state.activeSceneTokensSceneId;
+                const tokensSnapshot = state.sceneTokens.slice();
                 state.sceneTokensPendingSave = false;
-                persistSceneTokens(sceneId, state.sceneTokens.slice()).catch(function () {});
+                persistSceneTokens(sceneId, tokensSnapshot, options).catch(function () {});
             }
         }
 
@@ -3119,19 +3153,24 @@
                 });
         }
 
-        function persistSceneTokens(sceneId, tokens) {
+        function persistSceneTokens(sceneId, tokens, options) {
             if (!state.isGM) {
                 return Promise.resolve();
             }
             if (typeof sceneId !== 'string' || sceneId.trim() === '') {
                 return Promise.resolve();
             }
+            const configOptions = isPlainObject(options) ? options : {};
+            const useBeacon = configOptions.useBeacon === true;
             const payload = {
                 action: 'save_scene_tokens',
                 sceneId: sceneId,
                 tokens: (Array.isArray(tokens) ? tokens : state.sceneTokens)
                     .map(serializeSceneToken),
             };
+            if (useBeacon && sendJsonBeacon(tokenEndpoint, payload)) {
+                return Promise.resolve();
+            }
             return fetch(tokenEndpoint, {
                 method: 'POST',
                 headers: {
@@ -3165,6 +3204,27 @@
                     }
                     throw error;
                 });
+        }
+
+        function registerLifecycleHandlers() {
+            if (typeof window === 'undefined') {
+                return;
+            }
+            const handleLifecycleEvent = function () {
+                flushPendingSceneTokenSave({ useBeacon: true });
+                if (tokenState && tokenState.isGM && tokenState.pendingSave) {
+                    persistTokenLibrary(false, { useBeacon: true }).catch(function () {});
+                }
+            };
+            window.addEventListener('beforeunload', handleLifecycleEvent);
+            window.addEventListener('pagehide', handleLifecycleEvent);
+            if (typeof document !== 'undefined' && typeof document.addEventListener === 'function') {
+                document.addEventListener('visibilitychange', function () {
+                    if (document.visibilityState === 'hidden') {
+                        handleLifecycleEvent();
+                    }
+                });
+            }
         }
 
         function renderSceneTokens() {
