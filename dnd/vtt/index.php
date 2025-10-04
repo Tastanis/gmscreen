@@ -161,6 +161,7 @@ $vttConfig = [
                                 alt="Scene map"
                             >
                             <div id="scene-map-grid" class="scene-display__map-grid"></div>
+                            <div id="scene-token-layer" class="scene-display__token-layer" aria-live="polite"></div>
                         </div>
                     </div>
                     <div id="scene-grid-controls" class="scene-display__grid-controls">
