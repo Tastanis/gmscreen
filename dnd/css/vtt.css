@@ -567,21 +567,33 @@
     font-size: 0.9rem;
 }
 
+.token-dropzone__actions {
+    margin-top: 0.65rem;
+    text-align: center;
+}
+
 .token-dropzone__browse {
     appearance: none;
-    border: none;
-    background: none;
-    color: rgba(94, 234, 212, 0.85);
-    font-size: 0.9rem;
+    border: 1px solid rgba(94, 234, 212, 0.35);
+    background: rgba(15, 23, 42, 0.65);
+    color: rgba(94, 234, 212, 0.92);
+    font-size: 0.85rem;
     cursor: pointer;
-    padding: 0;
-    text-decoration: underline;
-    display: inline-block;
+    padding: 0.35rem 0.9rem;
+    border-radius: 999px;
+    text-decoration: none;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    letter-spacing: 0.06em;
+    text-transform: uppercase;
 }
 
 .token-dropzone__browse:hover,
 .token-dropzone__browse:focus {
-    color: rgba(45, 212, 191, 1);
+    color: #fff;
+    background: rgba(45, 212, 191, 0.25);
+    border-color: rgba(94, 234, 212, 0.75);
 }
 
 .token-dropzone--dragging {
