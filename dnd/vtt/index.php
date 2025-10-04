@@ -106,6 +106,7 @@ $vttConfig = [
     'activeSceneId' => $activeSceneId,
     'activeScene' => $activeScene,
     'sceneEndpoint' => 'scenes_handler.php',
+    'latestChangeId' => getLatestChangeId(),
 ];
 ?>
 <!DOCTYPE html>
