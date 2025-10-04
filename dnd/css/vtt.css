@@ -190,7 +190,7 @@
             transparent var(--grid-size, 50px)
         );
     background-size: var(--grid-size, 50px) var(--grid-size, 50px);
-    background-position: center;
+    background-position: top left;
 }
 
 .scene-display__token-layer {
