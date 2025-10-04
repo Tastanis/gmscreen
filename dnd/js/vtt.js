@@ -34,9 +34,12 @@
             scenes: [],
             sceneData: { folders: [], rootScenes: [] },
             sceneEndpoint: 'scenes_handler.php',
+            tokenEndpoint: 'token_handler.php',
             initialSceneId: null,
             initialScene: null,
             latestChangeId: 0,
+            tokenLibrary: [],
+            activeSceneTokens: [],
         }, options || {});
 
         const panel = document.getElementById('settings-panel');
@@ -81,12 +84,18 @@
         const GRID_OPACITY_MIN = 0;
         const GRID_OPACITY_MAX = 1;
         const GRID_LINE_WIDTH_MAX = 6;
-        const SCENE_TOKEN_STORAGE_PREFIX = 'vtt.scene-tokens.';
         const TOKEN_DRAG_MIME = 'application/vnd.gmscreen-token';
+        const SCENE_TOKENS_SAVE_DELAY_MS = 400;
 
         let tokenState = null;
         let tokenContextMenu = null;
         let tokenContextMenuTokenId = null;
+
+        const tokenEndpoint = typeof config.tokenEndpoint === 'string' && config.tokenEndpoint.trim() !== ''
+            ? config.tokenEndpoint
+            : 'token_handler.php';
+        const initialTokenLibrary = Array.isArray(config.tokenLibrary) ? config.tokenLibrary : [];
+        const initialSceneTokens = Array.isArray(config.activeSceneTokens) ? config.activeSceneTokens : [];
 
         const state = {
             isGM: Boolean(config.isGM),
@@ -94,6 +103,7 @@
             scenes: flattenScenesForClient(initialSceneData),
             activeSceneId: config.initialSceneId,
             sceneEndpoint: config.sceneEndpoint,
+            tokenEndpoint,
             pendingRequest: null,
             pollingTimer: null,
             isFetching: false,
@@ -124,9 +134,11 @@
             mapHasImage: Boolean(sceneMapImage && !sceneMapImage.classList.contains('scene-display__map-image--hidden')),
             gridOpacity: loadStoredGridOpacity(),
             latestChangeId: typeof config.latestChangeId === 'number' ? config.latestChangeId : 0,
-            sceneTokens: [],
+            sceneTokens: normalizeSceneTokenEntries(initialSceneTokens),
             selectedSceneTokenId: null,
-            activeSceneTokenStorageKey: null,
+            activeSceneTokensSceneId: typeof config.initialSceneId === 'string' ? config.initialSceneId : null,
+            sceneTokensSaveTimer: null,
+            sceneTokensPendingSave: false,
         };
 
         let isPanelOpen = false;
@@ -306,24 +318,24 @@
             const allowedFolderIds = folders.map(function (folder) { return folder.id; });
             const allowedSchoolIds = schoolFilters.map(function (filter) { return filter.id; });
 
-            const storageKey = 'vtt.token-library';
-
             tokenState = {
                 isGM: state.isGM,
                 folders: folders,
                 schoolFilters: schoolFilters,
                 activeFolderId: state.isGM ? 'pcs' : 'pcs',
                 schoolFilterId: null,
-                tokens: loadTokensFromStorage(),
+                tokens: normalizeTokenLibraryEntries(initialTokenLibrary),
                 cropper: createEmptyCropperState(),
                 editingTokenId: null,
                 editingOriginalImageData: '',
+                pendingSave: false,
             };
 
             renderFolderButtons();
             renderSchoolFilters();
             renderTokenList();
             updateTokenFormMode();
+            refreshTokenLibraryFromServer(false);
 
             function ensureTokenContextMenuElement() {
                 if (tokenContextMenu) {
@@ -556,63 +568,161 @@
                 };
             }
 
-            function loadTokensFromStorage() {
-                if (typeof window === 'undefined' || !window.localStorage) {
+            function normalizeTokenLibraryEntries(entries) {
+                if (!Array.isArray(entries)) {
                     return [];
                 }
-                try {
-                    const raw = window.localStorage.getItem(storageKey);
-                    if (!raw) {
-                        return [];
-                    }
-                    const parsed = JSON.parse(raw);
-                    if (!Array.isArray(parsed)) {
-                        return [];
-                    }
-                    return parsed
-                        .map(function (entry) {
-                            if (!isPlainObject(entry)) {
-                                return null;
-                            }
-                            const size = isPlainObject(entry.size) ? entry.size : {};
-                            const folderId = typeof entry.folderId === 'string' && allowedFolderIds.indexOf(entry.folderId) !== -1
-                                ? entry.folderId
-                                : 'pcs';
-                            const schoolId = typeof entry.schoolId === 'string' && allowedSchoolIds.indexOf(entry.schoolId) !== -1
-                                ? entry.schoolId
-                                : 'other';
-                            return {
-                                id: typeof entry.id === 'string' ? entry.id : 'token-' + Math.random().toString(36).slice(2),
-                                name: typeof entry.name === 'string' ? entry.name : 'Unnamed Token',
-                                folderId: folderId,
-                                schoolId: schoolId,
-                                size: {
-                                    width: clampTokenDimension(size.width),
-                                    height: clampTokenDimension(size.height),
-                                },
-                                stamina: clampTokenStamina(entry.stamina),
-                                imageData: typeof entry.imageData === 'string' ? entry.imageData : '',
-                                createdAt: typeof entry.createdAt === 'number' ? entry.createdAt : Date.now(),
-                            };
-                        })
-                        .filter(function (token) {
-                            return Boolean(token) && token.imageData !== '' && token.name !== '';
-                        });
-                } catch (error) {
-                    return [];
-                }
+                return entries
+                    .map(function (entry) {
+                        if (!isPlainObject(entry)) {
+                            return null;
+                        }
+                        const size = isPlainObject(entry.size) ? entry.size : {};
+                        const folderId = typeof entry.folderId === 'string' && allowedFolderIds.indexOf(entry.folderId) !== -1
+                            ? entry.folderId
+                            : 'pcs';
+                        const schoolId = typeof entry.schoolId === 'string' && allowedSchoolIds.indexOf(entry.schoolId) !== -1
+                            ? entry.schoolId
+                            : 'other';
+                        const createdAt = typeof entry.createdAt === 'number' ? entry.createdAt : Date.now();
+                        const updatedAt = typeof entry.updatedAt === 'number' ? entry.updatedAt : createdAt;
+                        const imageData = typeof entry.imageData === 'string' ? entry.imageData : '';
+                        const name = typeof entry.name === 'string' ? entry.name : '';
+                        if (imageData === '' || name.trim() === '') {
+                            return null;
+                        }
+                        return {
+                            id: typeof entry.id === 'string' && entry.id.trim() !== ''
+                                ? entry.id
+                                : 'token-' + Math.random().toString(36).slice(2),
+                            name: name,
+                            folderId: folderId,
+                            schoolId: schoolId,
+                            size: {
+                                width: clampTokenDimension(size.width),
+                                height: clampTokenDimension(size.height),
+                            },
+                            stamina: clampTokenStamina(entry.stamina),
+                            imageData: imageData,
+                            createdAt: createdAt,
+                            updatedAt: updatedAt,
+                        };
+                    })
+                    .filter(function (token) {
+                        return Boolean(token) && token.imageData !== '' && token.name !== '';
+                    });
             }
 
-            function saveTokensToStorage() {
-                if (typeof window === 'undefined' || !window.localStorage) {
-                    return;
+            function serializeTokenLibraryEntry(token) {
+                if (!token || typeof token !== 'object') {
+                    return null;
                 }
-                try {
-                    const payload = JSON.stringify(tokenState.tokens);
-                    window.localStorage.setItem(storageKey, payload);
-                } catch (error) {
-                    // Ignore storage errors (e.g., storage full or disabled)
+                const size = isPlainObject(token.size) ? token.size : {};
+                const createdAt = typeof token.createdAt === 'number' ? token.createdAt : Date.now();
+                const updatedAt = typeof token.updatedAt === 'number' ? token.updatedAt : createdAt;
+                return {
+                    id: typeof token.id === 'string' && token.id.trim() !== ''
+                        ? token.id
+                        : 'token-' + Date.now() + '-' + Math.random().toString(36).slice(2),
+                    name: typeof token.name === 'string' ? token.name : '',
+                    folderId: typeof token.folderId === 'string' ? token.folderId : 'pcs',
+                    schoolId: typeof token.schoolId === 'string' ? token.schoolId : 'other',
+                    size: {
+                        width: clampTokenDimension(size.width),
+                        height: clampTokenDimension(size.height),
+                    },
+                    stamina: clampTokenStamina(token.stamina),
+                    imageData: typeof token.imageData === 'string' ? token.imageData : '',
+                    createdAt: createdAt,
+                    updatedAt: updatedAt,
+                };
+            }
+
+            function persistTokenLibrary(showError) {
+                if (!tokenState || !tokenState.isGM) {
+                    return Promise.resolve(tokenState ? tokenState.tokens : []);
                 }
+                const payload = {
+                    action: 'save_library',
+                    tokens: tokenState.tokens
+                        .map(serializeTokenLibraryEntry)
+                        .filter(function (entry) { return entry !== null; }),
+                };
+                tokenState.pendingSave = true;
+                return fetch(tokenEndpoint, {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json',
+                        'Accept': 'application/json',
+                    },
+                    body: JSON.stringify(payload),
+                })
+                    .then(handleJsonResponse)
+                    .then(function (data) {
+                        if (!data || data.success !== true) {
+                            throw new Error((data && data.error) || 'Unable to save token library.');
+                        }
+                        if (typeof data.latest_change_id === 'number') {
+                            const changeId = Number(data.latest_change_id);
+                            if (Number.isFinite(changeId)) {
+                                state.latestChangeId = Math.max(state.latestChangeId, changeId);
+                            }
+                        }
+                        const tokens = Array.isArray(data.tokens)
+                            ? normalizeTokenLibraryEntries(data.tokens)
+                            : tokenState.tokens;
+                        tokenState.tokens = tokens;
+                        renderTokenList();
+                        return tokens;
+                    })
+                    .catch(function (error) {
+                        if (showError !== false) {
+                            showStatusMessage('Unable to save the token library. Try again.', true);
+                        }
+                        throw error;
+                    })
+                    .finally(function () {
+                        tokenState.pendingSave = false;
+                    });
+            }
+
+            function refreshTokenLibraryFromServer(showStatus) {
+                fetchTokenLibraryFromServer()
+                    .then(function (tokens) {
+                        tokenState.tokens = tokens;
+                        renderTokenList();
+                        if (showStatus) {
+                            showStatusMessage('Token library updated.', false);
+                        }
+                    })
+                    .catch(function () {
+                        if (showStatus) {
+                            showStatusMessage('Unable to load the token library.', true);
+                        }
+                    });
+            }
+
+            function fetchTokenLibraryFromServer() {
+                const requestUrl = buildTokenActionUrl(tokenEndpoint, 'library');
+                return fetch(requestUrl, {
+                    method: 'GET',
+                    headers: {
+                        'Accept': 'application/json',
+                    },
+                })
+                    .then(handleJsonResponse)
+                    .then(function (data) {
+                        if (!data || data.success !== true) {
+                            throw new Error((data && data.error) || 'Unable to load token library.');
+                        }
+                        if (typeof data.latest_change_id === 'number') {
+                            const changeId = Number(data.latest_change_id);
+                            if (Number.isFinite(changeId)) {
+                                state.latestChangeId = Math.max(state.latestChangeId, changeId);
+                            }
+                        }
+                        return normalizeTokenLibraryEntries(Array.isArray(data.tokens) ? data.tokens : []);
+                    });
             }
 
             function clampTokenDimension(value) {
@@ -1149,7 +1259,7 @@
                         createdAt: existing.createdAt || Date.now(),
                         updatedAt: Date.now(),
                     });
-                    saveTokensToStorage();
+                    persistTokenLibrary().catch(function () {});
                     if (tokenState.activeFolderId !== folderId) {
                         tokenState.activeFolderId = folderId;
                         renderFolderButtons();
@@ -1173,10 +1283,11 @@
                     stamina,
                     imageData,
                     createdAt: Date.now(),
+                    updatedAt: Date.now(),
                 };
 
                 tokenState.tokens.push(token);
-                saveTokensToStorage();
+                persistTokenLibrary().catch(function () {});
                 if (tokenState.activeFolderId !== folderId) {
                     tokenState.activeFolderId = folderId;
                     renderFolderButtons();
@@ -2836,54 +2947,44 @@
             };
         }
 
-        function getSceneTokenStorageKey(sceneId) {
-            if (typeof sceneId !== 'string' || sceneId.trim() === '') {
-                return null;
-            }
-            return SCENE_TOKEN_STORAGE_PREFIX + sceneId;
-        }
-
         function loadSceneTokensForScene(sceneId) {
-            const key = getSceneTokenStorageKey(sceneId);
-            if (state.activeSceneTokenStorageKey && state.activeSceneTokenStorageKey !== key) {
-                saveActiveSceneTokens();
+            const normalizedSceneId = typeof sceneId === 'string' && sceneId.trim() !== '' ? sceneId.trim() : null;
+            if (state.activeSceneTokensSceneId && state.activeSceneTokensSceneId !== normalizedSceneId) {
+                flushPendingSceneTokenSave();
             }
-            if (state.activeSceneTokenStorageKey === key) {
-                renderSceneTokens();
-                return;
-            }
-            state.activeSceneTokenStorageKey = key;
-            if (!key) {
+            const isSameScene = state.activeSceneTokensSceneId === normalizedSceneId;
+            state.activeSceneTokensSceneId = normalizedSceneId;
+            if (!isSameScene) {
                 state.sceneTokens = [];
                 state.selectedSceneTokenId = null;
-                renderSceneTokens();
+            }
+            renderSceneTokens();
+            if (!normalizedSceneId) {
                 return;
             }
-            state.sceneTokens = loadSceneTokens(sceneId);
-            state.selectedSceneTokenId = null;
-            renderSceneTokens();
+            fetchSceneTokensFromServer(normalizedSceneId)
+                .then(function (tokens) {
+                    if (state.activeSceneTokensSceneId !== normalizedSceneId) {
+                        return;
+                    }
+                    state.sceneTokens = tokens;
+                    renderSceneTokens();
+                })
+                .catch(function () {
+                    if (!isSameScene) {
+                        state.sceneTokens = [];
+                        renderSceneTokens();
+                    }
+                });
         }
 
-        function loadSceneTokens(sceneId) {
-            const key = getSceneTokenStorageKey(sceneId);
-            if (!key || typeof window === 'undefined' || typeof window.localStorage === 'undefined') {
+        function normalizeSceneTokenEntries(entries) {
+            if (!Array.isArray(entries)) {
                 return [];
             }
-            try {
-                const raw = window.localStorage.getItem(key);
-                if (!raw) {
-                    return [];
-                }
-                const parsed = JSON.parse(raw);
-                if (!Array.isArray(parsed)) {
-                    return [];
-                }
-                return parsed
-                    .map(normalizeSceneTokenEntry)
-                    .filter(function (entry) { return entry !== null; });
-            } catch (error) {
-                return [];
-            }
+            return entries
+                .map(normalizeSceneTokenEntry)
+                .filter(function (entry) { return entry !== null; });
         }
 
         function normalizeSceneTokenEntry(entry) {
@@ -2928,19 +3029,25 @@
         }
 
         function saveActiveSceneTokens() {
-            if (typeof window === 'undefined' || typeof window.localStorage === 'undefined') {
+            if (!state.isGM) {
                 return;
             }
-            const key = state.activeSceneTokenStorageKey;
-            if (!key) {
+            const sceneId = state.activeSceneTokensSceneId;
+            if (!sceneId) {
                 return;
             }
-            try {
-                const payload = JSON.stringify(state.sceneTokens.map(serializeSceneToken));
-                window.localStorage.setItem(key, payload);
-            } catch (error) {
-                // Ignore persistence errors
+            state.sceneTokensPendingSave = true;
+            if (state.sceneTokensSaveTimer !== null) {
+                window.clearTimeout(state.sceneTokensSaveTimer);
             }
+            state.sceneTokensSaveTimer = window.setTimeout(function () {
+                state.sceneTokensSaveTimer = null;
+                if (!state.sceneTokensPendingSave) {
+                    return;
+                }
+                state.sceneTokensPendingSave = false;
+                persistSceneTokens(sceneId, state.sceneTokens.slice()).catch(function () {});
+            }, SCENE_TOKENS_SAVE_DELAY_MS);
         }
 
         function serializeSceneToken(token) {
@@ -2959,6 +3066,105 @@
                     y: Number.isFinite(token.position && token.position.y) ? token.position.y : 0,
                 },
             };
+        }
+
+        function flushPendingSceneTokenSave() {
+            if (state.sceneTokensSaveTimer !== null) {
+                window.clearTimeout(state.sceneTokensSaveTimer);
+                state.sceneTokensSaveTimer = null;
+            }
+            if (!state.isGM) {
+                state.sceneTokensPendingSave = false;
+                return;
+            }
+            if (state.sceneTokensPendingSave && state.activeSceneTokensSceneId) {
+                const sceneId = state.activeSceneTokensSceneId;
+                state.sceneTokensPendingSave = false;
+                persistSceneTokens(sceneId, state.sceneTokens.slice()).catch(function () {});
+            }
+        }
+
+        function fetchSceneTokensFromServer(sceneId) {
+            if (typeof sceneId !== 'string' || sceneId.trim() === '') {
+                return Promise.resolve([]);
+            }
+            let requestUrl = buildTokenActionUrl(tokenEndpoint, 'scene_tokens');
+            try {
+                const url = new URL(requestUrl, window.location.href);
+                url.searchParams.set('scene_id', sceneId);
+                requestUrl = url.toString();
+            } catch (error) {
+                const separator = requestUrl.indexOf('?') >= 0 ? '&' : '?';
+                requestUrl = `${requestUrl}${separator}scene_id=${encodeURIComponent(sceneId)}`;
+            }
+            return fetch(requestUrl, {
+                method: 'GET',
+                headers: {
+                    'Accept': 'application/json',
+                },
+            })
+                .then(handleJsonResponse)
+                .then(function (data) {
+                    if (!data || data.success !== true) {
+                        throw new Error((data && data.error) || 'Unable to load scene tokens.');
+                    }
+                    if (typeof data.latest_change_id === 'number') {
+                        const changeId = Number(data.latest_change_id);
+                        if (Number.isFinite(changeId)) {
+                            state.latestChangeId = Math.max(state.latestChangeId, changeId);
+                        }
+                    }
+                    const tokens = Array.isArray(data.tokens) ? data.tokens : [];
+                    return tokens.map(normalizeSceneTokenEntry).filter(function (entry) { return entry !== null; });
+                });
+        }
+
+        function persistSceneTokens(sceneId, tokens) {
+            if (!state.isGM) {
+                return Promise.resolve();
+            }
+            if (typeof sceneId !== 'string' || sceneId.trim() === '') {
+                return Promise.resolve();
+            }
+            const payload = {
+                action: 'save_scene_tokens',
+                sceneId: sceneId,
+                tokens: (Array.isArray(tokens) ? tokens : state.sceneTokens)
+                    .map(serializeSceneToken),
+            };
+            return fetch(tokenEndpoint, {
+                method: 'POST',
+                headers: {
+                    'Content-Type': 'application/json',
+                    'Accept': 'application/json',
+                },
+                body: JSON.stringify(payload),
+            })
+                .then(handleJsonResponse)
+                .then(function (data) {
+                    if (!data || data.success !== true) {
+                        throw new Error((data && data.error) || 'Unable to save scene tokens.');
+                    }
+                    if (typeof data.latest_change_id === 'number') {
+                        const changeId = Number(data.latest_change_id);
+                        if (Number.isFinite(changeId)) {
+                            state.latestChangeId = Math.max(state.latestChangeId, changeId);
+                        }
+                    }
+                    if (state.activeSceneTokensSceneId === sceneId && Array.isArray(data.tokens)) {
+                        const normalized = data.tokens
+                            .map(normalizeSceneTokenEntry)
+                            .filter(function (entry) { return entry !== null; });
+                        state.sceneTokens = normalized;
+                        renderSceneTokens();
+                    }
+                })
+                .catch(function (error) {
+                    if (window.console && typeof window.console.error === 'function') {
+                        console.error('Scene token save failed:', error);
+                    }
+                    throw error;
+                });
         }
 
         function renderSceneTokens() {
@@ -3443,6 +3649,24 @@
                     handleActiveSceneChange(entry);
                     return;
                 }
+                if (entityType === 'token_library') {
+                    refreshTokenLibraryFromServer(false);
+                    return;
+                }
+                if (entityType === 'scene_tokens') {
+                    const sceneId = typeof entry.entityId === 'string' ? entry.entityId : '';
+                    if (sceneId && sceneId === state.activeSceneTokensSceneId) {
+                        fetchSceneTokensFromServer(sceneId)
+                            .then(function (tokens) {
+                                if (state.activeSceneTokensSceneId === sceneId) {
+                                    state.sceneTokens = tokens;
+                                    renderSceneTokens();
+                                }
+                            })
+                            .catch(function () {});
+                    }
+                    return;
+                }
                 requiresReload = true;
             });
 
@@ -3791,6 +4015,25 @@
         const baseEndpoint = typeof endpoint === 'string' && endpoint.trim() !== ''
             ? endpoint
             : 'scenes_handler.php';
+
+        if (typeof URL === 'function') {
+            try {
+                const url = new URL(baseEndpoint, window.location.href);
+                url.searchParams.set('action', action);
+                return url.toString();
+            } catch (error) {
+                // fall back to manual concatenation below
+            }
+        }
+
+        const separator = baseEndpoint.indexOf('?') >= 0 ? '&' : '?';
+        return `${baseEndpoint}${separator}action=${encodeURIComponent(action)}`;
+    }
+
+    function buildTokenActionUrl(endpoint, action) {
+        const baseEndpoint = typeof endpoint === 'string' && endpoint.trim() !== ''
+            ? endpoint
+            : 'token_handler.php';
 
         if (typeof URL === 'function') {
             try {
