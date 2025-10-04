@@ -311,11 +311,15 @@
                     if (event.defaultPrevented) {
                         return;
                     }
-                    if (event.target === browseButton) {
+                    const isBrowseButtonClick = browseButton
+                        && (event.target === browseButton || browseButton.contains(event.target));
+                    if (isBrowseButtonClick) {
                         return;
                     }
                     event.preventDefault();
-                    fileInput.click();
+                    if (fileInput) {
+                        fileInput.click();
+                    }
                 });
 
                 dropzone.addEventListener('keydown', function (event) {
@@ -349,11 +353,18 @@
                     }
                 });
 
-                if (browseButton) {
+                if (browseButton && fileInput) {
                     browseButton.addEventListener('click', function (event) {
                         event.preventDefault();
                         event.stopPropagation();
                         fileInput.click();
+                    });
+                    browseButton.addEventListener('keydown', function (event) {
+                        if (event.key === 'Enter' || event.key === ' ') {
+                            event.preventDefault();
+                            event.stopPropagation();
+                            fileInput.click();
+                        }
                     });
                 }
 
@@ -707,6 +718,7 @@
                         dropzone.classList.remove('token-dropzone--dragging');
                     }
                     applyCropperTransform();
+                    scheduleCropperStageMeasurement();
                     showStatusMessage('Image loaded. Adjust the framing, then create your token.', false);
                 };
                 cropperImage.onerror = function () {
@@ -726,8 +738,35 @@
                     return;
                 }
                 const totalScale = tokenState.cropper.baseScale * tokenState.cropper.scale;
-                const transformValue = 'translate3d(' + tokenState.cropper.translateX + 'px, ' + tokenState.cropper.translateY + 'px, 0) scale(' + totalScale + ') translate(-50%, -50%)';
+                const safeScale = Number.isFinite(totalScale) && totalScale > 0 ? totalScale : 1;
+                const translateX = Number.isFinite(tokenState.cropper.translateX) ? tokenState.cropper.translateX : 0;
+                const translateY = Number.isFinite(tokenState.cropper.translateY) ? tokenState.cropper.translateY : 0;
+                const transformValue = 'translate3d(' + translateX + 'px, ' + translateY + 'px, 0) scale(' + safeScale + ') translate(-50%, -50%)';
                 cropperImage.style.transform = transformValue;
+            }
+
+            function scheduleCropperStageMeasurement() {
+                var raf = (typeof window !== 'undefined' && typeof window.requestAnimationFrame === 'function')
+                    ? window.requestAnimationFrame
+                    : null;
+                if (raf) {
+                    raf(function () {
+                        measureCropperStage();
+                    });
+                } else {
+                    measureCropperStage();
+                }
+            }
+
+            function measureCropperStage() {
+                if (!cropperStage || !tokenState.cropper.hasImage) {
+                    return;
+                }
+                const measuredStageSize = cropperStage.offsetWidth || cropperStage.clientWidth || 0;
+                if (measuredStageSize > 0 && measuredStageSize !== tokenState.cropper.stageSize) {
+                    tokenState.cropper.stageSize = measuredStageSize;
+                    applyCropperTransform();
+                }
             }
 
             function resetCropper() {

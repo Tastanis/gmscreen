@@ -576,6 +576,7 @@
     cursor: pointer;
     padding: 0;
     text-decoration: underline;
+    display: inline-block;
 }
 
 .token-dropzone__browse:hover,
@@ -624,6 +625,8 @@
     transform-origin: center;
     pointer-events: none;
     user-select: none;
+    max-width: none;
+    max-height: none;
 }
 
 .token-cropper__help {
