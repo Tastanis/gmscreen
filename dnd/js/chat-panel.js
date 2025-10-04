@@ -961,11 +961,34 @@
             const target = isElement
                 ? event.target
                 : (event.target && event.target.nodeType === 1 ? event.target : null);
-            if (!target) {
+            if (target && target.closest('[data-chat-drop-ignore="true"]')) {
+                return true;
+            }
+
+            const x = Number.isFinite(event.clientX) ? event.clientX : null;
+            const y = Number.isFinite(event.clientY) ? event.clientY : null;
+            if (x === null || y === null) {
                 return false;
             }
 
-            return Boolean(target.closest('[data-chat-drop-ignore="true"]'));
+            if (typeof document !== 'undefined') {
+                if (typeof document.elementsFromPoint === 'function') {
+                    const elements = document.elementsFromPoint(x, y) || [];
+                    return elements.some(function (element) {
+                        return element instanceof Element
+                            && Boolean(element.closest('[data-chat-drop-ignore="true"]'));
+                    });
+                }
+
+                if (typeof document.elementFromPoint === 'function') {
+                    const element = document.elementFromPoint(x, y);
+                    if (element && element.closest('[data-chat-drop-ignore="true"]')) {
+                        return true;
+                    }
+                }
+            }
+
+            return false;
         }
 
         function closeImageLightbox() {
