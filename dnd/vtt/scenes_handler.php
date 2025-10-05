@@ -13,7 +13,7 @@ if (!isset($_SESSION['logged_in']) || $_SESSION['logged_in'] !== true) {
 
 require_once __DIR__ . '/scenes_repository.php';
 
-$user = isset($_SESSION['user']) ? $_SESSION['user'] : '';
+$user = $_SESSION['user'] ?? '';
 $isGm = strtolower((string) $user) === 'gm';
 
 $sceneData = loadScenesData();
@@ -31,38 +31,10 @@ $defaultSceneId = getFirstSceneId($sceneData);
 $sceneStateFile = __DIR__ . '/../data/vtt_active_scene.json';
 ensureSceneStateFile($sceneStateFile, $defaultSceneId);
 
-$action = isset($_REQUEST['action']) ? $_REQUEST['action'] : 'get_active';
+$action = $_REQUEST['action'] ?? 'get_active';
 $action = is_string($action) ? strtolower(trim($action)) : 'get_active';
 
 switch ($action) {
-    case 'state':
-        $stateResponse = buildSceneStateResponse(
-            $sceneData,
-            $scenes,
-            $sceneLookup,
-            $sceneStateFile,
-            $defaultSceneId
-        );
-        echo json_encode($stateResponse);
-        exit;
-
-    case 'changes':
-        $sinceParam = isset($_GET['since'])
-            ? $_GET['since']
-            : (isset($_POST['since']) ? $_POST['since'] : 0);
-        $since = filter_var($sinceParam, FILTER_VALIDATE_INT);
-        if ($since === false || $since < 0) {
-            $since = 0;
-        }
-
-        $changes = getSceneChangesSince($since);
-        echo json_encode([
-            'success' => true,
-            'changes' => $changes,
-            'latest_change_id' => getLatestChangeId(),
-        ]);
-        exit;
-
     case 'list':
         if (!$isGm) {
             http_response_code(403);
@@ -70,14 +42,13 @@ switch ($action) {
             exit;
         }
 
-        $stateResponse = buildSceneStateResponse(
-            $sceneData,
-            $scenes,
-            $sceneLookup,
-            $sceneStateFile,
-            $defaultSceneId
-        );
-        echo json_encode($stateResponse);
+        $activeSceneId = loadActiveSceneId($sceneStateFile, $defaultSceneId, $sceneLookup);
+        echo json_encode([
+            'success' => true,
+            'sceneData' => $sceneData,
+            'scenes' => array_values($scenes),
+            'active_scene_id' => $activeSceneId,
+        ]);
         exit;
 
     case 'create_folder':
@@ -95,8 +66,6 @@ switch ($action) {
             exit;
         }
 
-        $changeEntry = recordFolderChange($folder, 'created');
-
         $scenes = flattenScenes($sceneData);
         $sceneLookup = [];
         foreach ($scenes as $scene) {
@@ -113,7 +82,6 @@ switch ($action) {
             'sceneData' => $sceneData,
             'scenes' => array_values($scenes),
             'active_scene_id' => $activeSceneId,
-            'latest_change_id' => isset($changeEntry['id']) ? $changeEntry['id'] : getLatestChangeId(),
         ]);
         exit;
 
@@ -137,8 +105,6 @@ switch ($action) {
             echo json_encode(['success' => false, 'error' => 'Unable to save scene.']);
             exit;
         }
-
-        $changeEntry = recordSceneChange($scene, 'created');
 
         $defaultSceneId = getFirstSceneId($sceneData);
         $scenes = flattenScenes($sceneData);
@@ -165,7 +131,6 @@ switch ($action) {
             'sceneData' => $sceneData,
             'scenes' => array_values($scenes),
             'active_scene_id' => $activeSceneId,
-            'latest_change_id' => isset($changeEntry['id']) ? $changeEntry['id'] : getLatestChangeId(),
         ]);
         exit;
 
@@ -197,8 +162,6 @@ switch ($action) {
             exit;
         }
 
-        $changeEntry = recordSceneChange($renamedScene, 'updated');
-
         $defaultSceneId = getFirstSceneId($sceneData);
         $scenes = flattenScenes($sceneData);
         $sceneLookup = [];
@@ -217,7 +180,6 @@ switch ($action) {
             'sceneData' => $sceneData,
             'scenes' => array_values($scenes),
             'active_scene_id' => $activeSceneId,
-            'latest_change_id' => isset($changeEntry['id']) ? $changeEntry['id'] : getLatestChangeId(),
         ]);
         exit;
 
@@ -236,7 +198,7 @@ switch ($action) {
         }
 
         [$sceneData, $removed] = deleteScene($sceneData, $sceneId);
-        if ($removed === null) {
+        if (!$removed) {
             http_response_code(404);
             echo json_encode(['success' => false, 'error' => 'Scene not found.']);
             exit;
@@ -247,8 +209,6 @@ switch ($action) {
             echo json_encode(['success' => false, 'error' => 'Unable to remove scene.']);
             exit;
         }
-
-        $changeEntry = recordSceneDeletion($removed);
 
         $defaultSceneId = getFirstSceneId($sceneData);
         $scenes = flattenScenes($sceneData);
@@ -277,7 +237,6 @@ switch ($action) {
             'sceneData' => $sceneData,
             'scenes' => array_values($scenes),
             'active_scene_id' => $activeSceneId,
-            'latest_change_id' => isset($changeEntry['id']) ? $changeEntry['id'] : getLatestChangeId(),
         ]);
         exit;
 
@@ -306,14 +265,13 @@ switch ($action) {
         $imagePath = null;
         if (!empty($_FILES['map_image']) && is_array($_FILES['map_image'])) {
             $file = $_FILES['map_image'];
-            $uploadError = isset($file['error']) ? $file['error'] : UPLOAD_ERR_OK;
-            if ($uploadError !== UPLOAD_ERR_OK) {
+            if (($file['error'] ?? UPLOAD_ERR_OK) !== UPLOAD_ERR_OK) {
                 http_response_code(400);
                 echo json_encode(['success' => false, 'error' => 'Unable to process uploaded image.']);
                 exit;
             }
 
-            $originalName = isset($file['name']) ? $file['name'] : '';
+            $originalName = $file['name'] ?? '';
             $extension = sanitizeFileExtension($originalName);
             if ($extension === '') {
                 http_response_code(400);
@@ -322,13 +280,10 @@ switch ($action) {
             }
 
             ensureMapUploadDirectory();
-            $random = uniqid();
-            if (function_exists('random_bytes')) {
-                try {
-                    $random = bin2hex(random_bytes(4));
-                } catch (Exception $exception) {
-                    $random = uniqid();
-                }
+            try {
+                $random = bin2hex(random_bytes(4));
+            } catch (Throwable $exception) {
+                $random = uniqid();
             }
             $filename = sprintf('scene-%s-%s.%s', $sceneId, $random, $extension);
             $destination = VTT_MAP_UPLOAD_DIR . '/' . $filename;
@@ -354,8 +309,6 @@ switch ($action) {
             exit;
         }
 
-        $changeEntry = recordSceneChange($updatedScene, 'updated');
-
         $defaultSceneId = getFirstSceneId($sceneData);
         $scenes = flattenScenes($sceneData);
         $sceneLookup = [];
@@ -374,7 +327,6 @@ switch ($action) {
             'sceneData' => $sceneData,
             'scenes' => array_values($scenes),
             'active_scene_id' => $activeSceneId,
-            'latest_change_id' => isset($changeEntry['id']) ? $changeEntry['id'] : getLatestChangeId(),
         ]);
         exit;
 
@@ -385,7 +337,7 @@ switch ($action) {
             exit;
         }
 
-        $sceneId = isset($_POST['scene_id']) ? $_POST['scene_id'] : '';
+        $sceneId = $_POST['scene_id'] ?? '';
         $sceneId = is_string($sceneId) ? trim($sceneId) : '';
         if ($sceneId === '' || !isset($sceneLookup[$sceneId])) {
             http_response_code(400);
@@ -399,14 +351,10 @@ switch ($action) {
             exit;
         }
 
-        $activeScene = $sceneLookup[$sceneId];
-        $changeEntry = recordActiveSceneChange($activeScene);
-
         echo json_encode([
             'success' => true,
             'active_scene_id' => $sceneId,
-            'scene' => $activeScene,
-            'latest_change_id' => isset($changeEntry['id']) ? $changeEntry['id'] : getLatestChangeId(),
+            'scene' => $sceneLookup[$sceneId],
         ]);
         exit;
 
@@ -421,7 +369,6 @@ switch ($action) {
             'success' => true,
             'active_scene_id' => $activeSceneId,
             'scene' => $scene,
-            'latest_change_id' => getLatestChangeId(),
         ]);
         exit;
 }
@@ -440,19 +387,6 @@ function ensureSceneStateFile($filePath, $defaultSceneId)
             LOCK_EX
         );
     }
-}
-
-function buildSceneStateResponse($sceneData, $scenes, $sceneLookup, $stateFile, $defaultSceneId)
-{
-    $activeSceneId = loadActiveSceneId($stateFile, $defaultSceneId, $sceneLookup);
-
-    return [
-        'success' => true,
-        'sceneData' => $sceneData,
-        'scenes' => array_values($scenes),
-        'active_scene_id' => $activeSceneId,
-        'latest_change_id' => getLatestChangeId(),
-    ];
 }
 
 function loadActiveSceneId($filePath, $defaultSceneId, array $sceneLookup)

@@ -8,7 +8,7 @@ if (!isset($_SESSION['logged_in']) || $_SESSION['logged_in'] !== true) {
     exit;
 }
 
-$user = isset($_SESSION['user']) ? $_SESSION['user'] : 'Adventurer';
+$user = $_SESSION['user'] ?? 'Adventurer';
 $isGm = strtolower($user) === 'gm';
 
 $chatParticipantsMap = require __DIR__ . '/../includes/chat_participants.php';
@@ -21,7 +21,6 @@ foreach ($chatParticipantsMap as $participantId => $participantLabel) {
 }
 
 require_once __DIR__ . '/scenes_repository.php';
-require_once __DIR__ . '/token_repository.php';
 
 $sceneData = require __DIR__ . '/scenes.php';
 if (!is_array($sceneData)) {
@@ -41,7 +40,13 @@ foreach ($scenes as $scene) {
     $sceneLookup[$scene['id']] = $scene;
 }
 
-$defaultSceneId = getFirstSceneId($sceneData);
+$defaultSceneId = null;
+if (!empty($scenes)) {
+    $firstScene = reset($scenes);
+    if (is_array($firstScene) && isset($firstScene['id'])) {
+        $defaultSceneId = $firstScene['id'];
+    }
+}
 
 $sceneStateFile = __DIR__ . '/../data/vtt_active_scene.json';
 $sceneStateDir = dirname($sceneStateFile);
@@ -67,15 +72,8 @@ if (file_exists($sceneStateFile)) {
     );
 }
 
-if ($activeSceneId === null && $defaultSceneId !== null) {
-    $activeSceneId = $defaultSceneId;
-}
-
 if ($activeSceneId === null && !empty($sceneLookup)) {
-    foreach ($sceneLookup as $sceneId => $_scene) {
-        $activeSceneId = $sceneId;
-        break;
-    }
+    $activeSceneId = array_key_first($sceneLookup);
 }
 
 $activeScene = $activeSceneId !== null && isset($sceneLookup[$activeSceneId])
@@ -100,16 +98,6 @@ if (is_array($activeScene) && isset($activeScene['map']) && is_array($activeScen
     $activeSceneMap['gridScale'] = $gridScale;
 }
 
-$tokenLibrary = loadTokenLibrary();
-$activeSceneTokens = $activeSceneId !== null
-    ? loadSceneTokensByScene($activeSceneId)
-    : [];
-
-$activeSceneIdAttr = $activeSceneId !== null ? $activeSceneId : '';
-$sceneHeading = isset($activeScene['name'])
-    ? $activeScene['name']
-    : 'Waiting for the GM to pick a scene';
-
 $vttConfig = [
     'isGM' => $isGm,
     'currentUser' => $user,
@@ -118,10 +106,6 @@ $vttConfig = [
     'activeSceneId' => $activeSceneId,
     'activeScene' => $activeScene,
     'sceneEndpoint' => 'scenes_handler.php',
-    'tokenEndpoint' => 'token_handler.php',
-    'tokenLibrary' => $tokenLibrary,
-    'activeSceneTokens' => $activeSceneTokens,
-    'latestChangeId' => getLatestChangeId(),
 ];
 ?>
 <!DOCTYPE html>
@@ -139,7 +123,7 @@ $vttConfig = [
             <div
                 id="scene-display"
                 class="scene-display"
-                data-scene-id="<?php echo htmlspecialchars($activeSceneIdAttr, ENT_QUOTES); ?>"
+                data-scene-id="<?php echo htmlspecialchars($activeSceneId ?? '', ENT_QUOTES); ?>"
                 data-scene-accent="<?php echo htmlspecialchars($activeSceneAccent, ENT_QUOTES); ?>"
             >
                 <div class="scene-display__meta">
@@ -151,7 +135,7 @@ $vttConfig = [
                     <?php endif; ?>
                 </div>
                 <h1 id="scene-display-name" class="scene-display__name">
-                    <?php echo htmlspecialchars($sceneHeading, ENT_QUOTES); ?>
+                    <?php echo htmlspecialchars($activeScene['name'] ?? 'Waiting for the GM to pick a scene', ENT_QUOTES); ?>
                 </h1>
                 <p id="scene-display-description" class="scene-display__description">
                     <?php
@@ -176,7 +160,6 @@ $vttConfig = [
                                 alt="Scene map"
                             >
                             <div id="scene-map-grid" class="scene-display__map-grid"></div>
-                            <div id="scene-token-layer" class="scene-display__token-layer" aria-live="polite"></div>
                         </div>
                     </div>
                     <div id="scene-grid-controls" class="scene-display__grid-controls">
@@ -300,7 +283,7 @@ $vttConfig = [
                                             <input type="file" id="token-image-input" class="token-dropzone__input" accept="image/*">
                                         </div>
                                         <div class="token-dropzone__actions">
-                                            <label for="token-image-input" id="token-image-browse" class="token-dropzone__browse" role="button" tabindex="0">Browse</label>
+                                            <button type="button" id="token-image-browse" class="token-dropzone__browse">Browse</button>
                                         </div>
                                         <div id="token-image-cropper" class="token-cropper" hidden>
                                             <div id="token-cropper-stage" class="token-cropper__stage">
