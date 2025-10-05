@@ -58,7 +58,7 @@ switch ($action) {
         break;
 }
 
-function handleGetLibrary(): void
+function handleGetLibrary()
 {
     $tokens = loadTokenLibrary();
     echo json_encode([
@@ -68,7 +68,7 @@ function handleGetLibrary(): void
     ]);
 }
 
-function handleSaveLibrary(): void
+function handleSaveLibrary()
 {
     $payload = readJsonPayload();
     $tokens = $payload['tokens'] ?? null;
@@ -92,7 +92,7 @@ function handleSaveLibrary(): void
     ]);
 }
 
-function handleGetSceneTokens(): void
+function handleGetSceneTokens()
 {
     $sceneId = isset($_REQUEST['scene_id']) && is_string($_REQUEST['scene_id'])
         ? trim($_REQUEST['scene_id'])
@@ -112,7 +112,7 @@ function handleGetSceneTokens(): void
     ]);
 }
 
-function handleSaveSceneTokens(): void
+function handleSaveSceneTokens()
 {
     $payload = readJsonPayload();
     $sceneId = isset($payload['sceneId']) && is_string($payload['sceneId'])
