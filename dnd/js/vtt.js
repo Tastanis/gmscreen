@@ -142,6 +142,8 @@
             activeSceneTokensSceneId: typeof config.initialSceneId === 'string' ? config.initialSceneId : null,
             sceneTokensSaveTimer: null,
             sceneTokensPendingSave: false,
+            sceneTokensSaveSequence: 0,
+            sceneTokensLastAppliedSequence: 0,
         };
 
         let isPanelOpen = false;
@@ -3166,12 +3168,14 @@
             }
             const configOptions = isPlainObject(options) ? options : {};
             const useBeacon = configOptions.useBeacon === true;
+            const requestId = ++state.sceneTokensSaveSequence;
             const payload = {
                 action: 'save_scene_tokens',
                 sceneId: sceneId,
                 tokens: (Array.isArray(tokens) ? tokens : state.sceneTokens)
                     .map(serializeSceneToken),
             };
+            state.sceneTokensLastAppliedSequence = Math.max(state.sceneTokensLastAppliedSequence, requestId);
             if (useBeacon && sendJsonBeacon(tokenEndpoint, payload)) {
                 return Promise.resolve();
             }
@@ -3194,6 +3198,10 @@
                             state.latestChangeId = Math.max(state.latestChangeId, changeId);
                         }
                     }
+                    if (requestId < state.sceneTokensLastAppliedSequence) {
+                        return;
+                    }
+                    state.sceneTokensLastAppliedSequence = Math.max(state.sceneTokensLastAppliedSequence, requestId);
                     if (state.activeSceneTokensSceneId === sceneId && Array.isArray(data.tokens)) {
                         const normalized = data.tokens
                             .map(normalizeSceneTokenEntry)
