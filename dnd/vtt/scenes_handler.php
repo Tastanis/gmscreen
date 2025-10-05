@@ -3,6 +3,9 @@ if (session_status() === PHP_SESSION_NONE) {
     session_start();
 }
 
+require_once __DIR__ . '/../includes/http_error_handler.php';
+VttHttpErrorHandler::registerJson();
+
 header('Content-Type: application/json');
 
 if (!isset($_SESSION['logged_in']) || $_SESSION['logged_in'] !== true) {
