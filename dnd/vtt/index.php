@@ -22,6 +22,7 @@ foreach ($chatParticipantsMap as $participantId => $participantLabel) {
 
 require_once __DIR__ . '/scenes_repository.php';
 require_once __DIR__ . '/scene_state_repository.php';
+require_once __DIR__ . '/token_repository.php';
 
 $sceneData = require __DIR__ . '/scenes.php';
 if (!is_array($sceneData)) {
@@ -75,6 +76,11 @@ if (is_array($activeScene) && isset($activeScene['map']) && is_array($activeScen
     $activeSceneMap['gridScale'] = $gridScale;
 }
 
+$tokenLibrary = loadTokenLibrary();
+if (!$isGm) {
+    $tokenLibrary = filterTokensForPlayers($tokenLibrary);
+}
+
 $vttConfig = [
     'isGM' => $isGm,
     'currentUser' => $user,
@@ -83,6 +89,8 @@ $vttConfig = [
     'activeSceneId' => $activeSceneId,
     'activeScene' => $activeScene,
     'sceneEndpoint' => 'scenes_handler.php',
+    'tokenEndpoint' => 'token_handler.php',
+    'tokenLibrary' => $tokenLibrary,
     'latestChangeId' => getLatestSceneChangeId(),
 ];
 ?>
