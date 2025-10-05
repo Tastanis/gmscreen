@@ -279,7 +279,13 @@ function normalizeSceneTokenEntries(array $entries): array
 
         $position = isset($entry['position']) && is_array($entry['position']) ? $entry['position'] : [];
         $x = isset($position['x']) ? (float) $position['x'] : 0.0;
+        if (!is_finite($x)) {
+            $x = 0.0;
+        }
         $y = isset($position['y']) ? (float) $position['y'] : 0.0;
+        if (!is_finite($y)) {
+            $y = 0.0;
+        }
 
         $staminaValue = isset($entry['stamina']) ? (int) round((float) $entry['stamina']) : 0;
         if ($staminaValue < 0) {
@@ -340,7 +346,12 @@ function loadAllSceneTokens(): array
  */
 function clampTokenDimension($value): int
 {
-    $numeric = is_numeric($value) ? (int) round((float) $value) : 1;
+    $numericValue = is_numeric($value) ? (float) $value : 1.0;
+    if (!is_finite($numericValue)) {
+        $numericValue = 1.0;
+    }
+
+    $numeric = (int) round($numericValue);
     if ($numeric < 1) {
         return 1;
     }
