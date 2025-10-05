@@ -34,7 +34,10 @@ pnpm-lock.yaml
 /dnd/data/vtt_change_log.json
 /dnd/data/vtt_active_scene.json
 /dnd/data/vtt_scene_changes.json
+/dnd/data/vtt_scene_tokens.json
 /dnd/data/vtt_scenes.json
+/dnd/data/vtt_token_library.json
+/dnd/data/vtt_tokens.json
 /dnd/images/vtt/maps/
 
 # Schedule data
