@@ -78,7 +78,11 @@ if (is_array($activeScene) && isset($activeScene['map']) && is_array($activeScen
 }
 
 if (is_string($activeSceneId) && $activeSceneId !== '') {
-    $activeSceneTokens = loadSceneTokens($activeSceneId);
+    if (function_exists('loadSceneTokens')) {
+        $activeSceneTokens = loadSceneTokens($activeSceneId);
+    } else {
+        error_log('loadSceneTokens helper is missing; active scene tokens unavailable.');
+    }
 }
 
 $tokenLibrary = loadTokenLibrary();
