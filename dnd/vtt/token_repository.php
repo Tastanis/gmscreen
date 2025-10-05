@@ -197,6 +197,54 @@ function saveSceneTokens(string $sceneId, array $tokens): bool
 }
 
 /**
+ * Remove a scene token entry from storage.
+ */
+function resetSceneTokens(string $sceneId): bool
+{
+    if ($sceneId === '') {
+        return false;
+    }
+
+    ensureSceneTokensFile();
+
+    $fp = fopen(VTT_SCENE_TOKENS_FILE, 'c+');
+    if ($fp === false) {
+        return false;
+    }
+
+    $result = false;
+    if (flock($fp, LOCK_EX)) {
+        $content = stream_get_contents($fp);
+        $data = ['scenes' => []];
+        if (is_string($content) && $content !== '') {
+            $decoded = json_decode($content, true);
+            if (is_array($decoded) && isset($decoded['scenes']) && is_array($decoded['scenes'])) {
+                $data['scenes'] = $decoded['scenes'];
+            }
+        }
+
+        if (isset($data['scenes'][$sceneId])) {
+            unset($data['scenes'][$sceneId]);
+        }
+
+        $payload = json_encode(['scenes' => $data['scenes']], JSON_PRETTY_PRINT);
+        if ($payload !== false) {
+            ftruncate($fp, 0);
+            rewind($fp);
+            $bytesWritten = fwrite($fp, $payload);
+            fflush($fp);
+            $result = $bytesWritten !== false;
+        }
+
+        flock($fp, LOCK_UN);
+    }
+
+    fclose($fp);
+
+    return $result;
+}
+
+/**
  * Return only the token entries intended for non-GM players.
  */
 function filterTokensForPlayers(array $tokens): array
@@ -377,6 +425,208 @@ function normalizeSceneTokenEntries(array $entries): array
     }
 
     return $normalized;
+}
+
+/**
+ * Sanitize scene token entries to remove values that cannot be persisted safely.
+ */
+function sanitizeSceneTokenEntriesForPersistence(array $entries): array
+{
+    $normalized = normalizeSceneTokenEntries($entries);
+    $sanitized = [];
+
+    foreach ($normalized as $entry) {
+        $sanitizedEntry = sanitizeSceneTokenEntryForPersistence($entry);
+        if ($sanitizedEntry !== null) {
+            $sanitized[] = $sanitizedEntry;
+        }
+    }
+
+    return $sanitized;
+}
+
+/**
+ * Attempt to clean a single scene token entry.
+ */
+function sanitizeSceneTokenEntryForPersistence(array $entry): ?array
+{
+    $entry['id'] = sanitizeUtf8TokenString($entry['id'] ?? '');
+    if ($entry['id'] === '') {
+        return null;
+    }
+
+    $entry['libraryId'] = sanitizeUtf8TokenString($entry['libraryId'] ?? '');
+    $entry['name'] = sanitizeUtf8TokenString($entry['name'] ?? '');
+    $entry['imageData'] = sanitizeTokenImageData($entry['imageData'] ?? '');
+
+    if ($entry['imageData'] === '') {
+        return null;
+    }
+
+    if (!isset($entry['size']) || !is_array($entry['size'])) {
+        $entry['size'] = ['width' => 1, 'height' => 1];
+    }
+
+    $entry['size']['width'] = clampTokenDimension($entry['size']['width'] ?? 1);
+    $entry['size']['height'] = clampTokenDimension($entry['size']['height'] ?? 1);
+
+    if (!isset($entry['position']) || !is_array($entry['position'])) {
+        $entry['position'] = ['x' => 0.0, 'y' => 0.0];
+    }
+
+    $entry['position']['x'] = isset($entry['position']['x']) && is_numeric($entry['position']['x']) && is_finite((float) $entry['position']['x'])
+        ? (float) $entry['position']['x']
+        : 0.0;
+    $entry['position']['y'] = isset($entry['position']['y']) && is_numeric($entry['position']['y']) && is_finite((float) $entry['position']['y'])
+        ? (float) $entry['position']['y']
+        : 0.0;
+
+    $entry['stamina'] = isset($entry['stamina']) ? max(0, (int) $entry['stamina']) : 0;
+
+    if (json_encode($entry) === false) {
+        return null;
+    }
+
+    return $entry;
+}
+
+/**
+ * Ensure token text fields are valid UTF-8 without control characters.
+ */
+function sanitizeUtf8TokenString($value): string
+{
+    if (!is_string($value) || $value === '') {
+        return '';
+    }
+
+    $trimmed = trim($value);
+    if ($trimmed === '') {
+        return '';
+    }
+
+    $converted = @mb_convert_encoding($trimmed, 'UTF-8', 'UTF-8');
+    if (!is_string($converted)) {
+        return '';
+    }
+
+    $filtered = preg_replace('/[^\P{C}\t\n\r]/u', '', $converted);
+    if (!is_string($filtered)) {
+        return '';
+    }
+
+    return $filtered;
+}
+
+/**
+ * Sanitize base64 token image data.
+ */
+function sanitizeTokenImageData($value): string
+{
+    if (!is_string($value) || $value === '') {
+        return '';
+    }
+
+    $trimmed = trim($value);
+    if ($trimmed === '') {
+        return '';
+    }
+
+    $converted = @mb_convert_encoding($trimmed, 'UTF-8', 'UTF-8');
+    if (!is_string($converted)) {
+        return '';
+    }
+
+    if (json_encode($converted) === false) {
+        $converted = preg_replace('/[^\P{C}\t\n\r]/u', '', $converted);
+        if (!is_string($converted) || $converted === '') {
+            return '';
+        }
+    }
+
+    return $converted;
+}
+
+/**
+ * Attempt to persist scene tokens, falling back to sanitizing or resetting entries when needed.
+ */
+function persistSceneTokensWithRecovery(
+    string $sceneId,
+    array $tokens,
+    ?callable $saveCallback = null,
+    ?callable $sanitizeCallback = null,
+    ?callable $resetCallback = null,
+    ?callable $logger = null
+): array {
+    $saveCallback = $saveCallback ?? 'saveSceneTokens';
+    $sanitizeCallback = $sanitizeCallback ?? 'sanitizeSceneTokenEntriesForPersistence';
+    $resetCallback = $resetCallback ?? 'resetSceneTokens';
+    $logger = $logger ?? 'logVttErrorMessage';
+
+    $initialTokens = $tokens;
+    $removedCorruptTokens = false;
+
+    if (call_user_func($saveCallback, $sceneId, $tokens)) {
+        return [
+            'success' => true,
+            'tokens' => $tokens,
+            'removed_corrupt_tokens' => false,
+        ];
+    }
+
+    $sanitizedTokens = call_user_func($sanitizeCallback, $initialTokens);
+    $removedCorruptTokens = count($sanitizedTokens) !== count($initialTokens);
+
+    if (call_user_func($saveCallback, $sceneId, $sanitizedTokens)) {
+        return [
+            'success' => true,
+            'tokens' => $sanitizedTokens,
+            'removed_corrupt_tokens' => $removedCorruptTokens,
+        ];
+    }
+
+    $resetResult = call_user_func($resetCallback, $sceneId);
+    $removedCorruptTokens = true;
+
+    call_user_func($logger, sprintf('Failed to persist scene tokens for scene "%s"; applying reset.', $sceneId), [
+        'original_count' => count($initialTokens),
+        'sanitized_count' => count($sanitizedTokens),
+    ]);
+
+    if ($resetResult) {
+        return [
+            'success' => true,
+            'tokens' => [],
+            'removed_corrupt_tokens' => true,
+        ];
+    }
+
+    return [
+        'success' => false,
+        'tokens' => [],
+        'removed_corrupt_tokens' => true,
+    ];
+}
+
+/**
+ * Append an entry to the VTT error log file.
+ */
+function logVttErrorMessage(string $message, array $context = []): void
+{
+    $logFile = __DIR__ . '/../logs/vtt_error.log';
+    $directory = dirname($logFile);
+    if (!is_dir($directory)) {
+        mkdir($directory, 0775, true);
+    }
+
+    if (!empty($context)) {
+        $encodedContext = json_encode($context, JSON_UNESCAPED_SLASHES | JSON_UNESCAPED_UNICODE);
+        if ($encodedContext !== false) {
+            $message = sprintf('%s %s', $message, $encodedContext);
+        }
+    }
+
+    $entry = sprintf('[%s] %s%s', date('c'), $message, PHP_EOL);
+    file_put_contents($logFile, $entry, FILE_APPEND);
 }
 
 /**

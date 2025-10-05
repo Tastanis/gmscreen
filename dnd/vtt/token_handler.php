@@ -156,23 +156,32 @@ function handleSaveSceneTokensRequest(array $requestData): void
     }
 
     $tokens = normalizeSceneTokenEntries($entries);
-    if (!saveSceneTokens($sceneId, $tokens)) {
+    $saveOutcome = persistSceneTokensWithRecovery($sceneId, $tokens);
+
+    if (!$saveOutcome['success']) {
         http_response_code(500);
         echo json_encode(['success' => false, 'error' => 'Unable to save scene tokens.']);
         exit;
     }
 
+    $persistedTokens = $saveOutcome['tokens'];
     $changeId = recordSceneChange('scene_tokens', $sceneId, [
         'action' => 'save_scene_tokens',
         'sceneId' => $sceneId,
-        'token_count' => count($tokens),
-        'tokens' => summarizeSceneTokensForChangeLog($tokens),
+        'token_count' => count($persistedTokens),
+        'tokens' => summarizeSceneTokensForChangeLog($persistedTokens),
     ]);
 
-    echo json_encode([
+    $response = [
         'success' => true,
-        'tokens' => $tokens,
+        'tokens' => $persistedTokens,
         'latest_change_id' => $changeId ?? getLatestSceneChangeId(),
-    ]);
+    ];
+
+    if (!empty($saveOutcome['removed_corrupt_tokens'])) {
+        $response['removed_corrupt_tokens'] = true;
+    }
+
+    echo json_encode($response);
     exit;
 }
