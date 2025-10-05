@@ -84,7 +84,10 @@ function saveScenesData(array $data): bool
     return $result;
 }
 
-function ensureScenesDataFile(): void
+/**
+ * @return void
+ */
+function ensureScenesDataFile()
 {
     $directory = dirname(VTT_SCENES_FILE);
     if (!is_dir($directory)) {
@@ -190,7 +193,13 @@ function createFolder(array $data, string $name): array
     return [$data, $folder];
 }
 
-function createScene(array $data, ?string $folderId = null, ?string $name = null): array
+/**
+ * @param array $data
+ * @param string|null $folderId
+ * @param string|null $name
+ * @return array
+ */
+function createScene(array $data, $folderId = null, $name = null): array
 {
     $trimmedName = $name !== null ? trim($name) : '';
     $scene = [
@@ -302,7 +311,12 @@ function renameScene(array $data, string $sceneId, string $name): array
     return [$data, $updatedScene];
 }
 
-function getSceneById(array $data, string $sceneId): ?array
+/**
+ * @param array $data
+ * @param string $sceneId
+ * @return array|null
+ */
+function getSceneById(array $data, string $sceneId)
 {
     foreach ($data['rootScenes'] ?? [] as $scene) {
         if (isset($scene['id']) && $scene['id'] === $sceneId) {
@@ -323,7 +337,14 @@ function getSceneById(array $data, string $sceneId): ?array
     return null;
 }
 
-function updateSceneMap(array $data, string $sceneId, ?string $imagePath, ?int $gridScale): array
+/**
+ * @param array $data
+ * @param string $sceneId
+ * @param string|null $imagePath
+ * @param int|null $gridScale
+ * @return array
+ */
+function updateSceneMap(array $data, string $sceneId, $imagePath, $gridScale): array
 {
     $updatedScene = null;
 
@@ -358,7 +379,13 @@ function updateSceneMap(array $data, string $sceneId, ?string $imagePath, ?int $
     return [$data, $updatedScene];
 }
 
-function applySceneMapChanges(array $scene, ?string $imagePath, ?int $gridScale): array
+/**
+ * @param array $scene
+ * @param string|null $imagePath
+ * @param int|null $gridScale
+ * @return array
+ */
+function applySceneMapChanges(array $scene, $imagePath, $gridScale): array
 {
     if (!isset($scene['map']) || !is_array($scene['map'])) {
         $scene['map'] = [];
@@ -381,7 +408,11 @@ function applySceneMapChanges(array $scene, ?string $imagePath, ?int $gridScale)
     return $scene;
 }
 
-function getFirstSceneId(array $data): ?string
+/**
+ * @param array $data
+ * @return string|null
+ */
+function getFirstSceneId(array $data)
 {
     if (!empty($data['rootScenes'])) {
         $first = $data['rootScenes'][0];
@@ -402,7 +433,10 @@ function getFirstSceneId(array $data): ?string
     return null;
 }
 
-function ensureSceneChangesFile(): void
+/**
+ * @return void
+ */
+function ensureSceneChangesFile()
 {
     $directory = dirname(VTT_SCENE_CHANGES_FILE);
     if (!is_dir($directory)) {
@@ -489,7 +523,13 @@ function saveSceneChangeState(array $state): bool
     return $result;
 }
 
-function recordSceneChange(string $entityType, ?string $entityId, array $payload = []): ?int
+/**
+ * @param string $entityType
+ * @param string|null $entityId
+ * @param array $payload
+ * @return int|null
+ */
+function recordSceneChange(string $entityType, $entityId, array $payload = [])
 {
     ensureSceneChangesFile();
 
@@ -591,7 +631,10 @@ function getLatestSceneChangeId(): int
     return isset($state['latest_change_id']) ? (int) $state['latest_change_id'] : 0;
 }
 
-function ensureMapUploadDirectory(): void
+/**
+ * @return void
+ */
+function ensureMapUploadDirectory()
 {
     if (!is_dir(VTT_MAP_UPLOAD_DIR)) {
         mkdir(VTT_MAP_UPLOAD_DIR, 0755, true);

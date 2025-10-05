@@ -72,7 +72,7 @@ switch ($action) {
         exit;
 }
 
-function handleLibraryRequest(bool $isGm): void
+function handleLibraryRequest(bool $isGm)
 {
     $tokens = loadTokenLibrary();
     if (!$isGm) {
@@ -87,7 +87,7 @@ function handleLibraryRequest(bool $isGm): void
     exit;
 }
 
-function handleSaveLibraryRequest(array $requestData): void
+function handleSaveLibraryRequest(array $requestData)
 {
     $entries = [];
     if (isset($requestData['tokens']) && is_array($requestData['tokens'])) {
@@ -115,7 +115,7 @@ function handleSaveLibraryRequest(array $requestData): void
     exit;
 }
 
-function handleSceneTokensRequest(array $requestData): void
+function handleSceneTokensRequest(array $requestData)
 {
     $sceneId = '';
     if (isset($_GET['scene_id'])) {
@@ -141,7 +141,7 @@ function handleSceneTokensRequest(array $requestData): void
     exit;
 }
 
-function handleSaveSceneTokensRequest(array $requestData): void
+function handleSaveSceneTokensRequest(array $requestData)
 {
     $sceneId = isset($requestData['sceneId']) ? trim((string) $requestData['sceneId']) : '';
     if ($sceneId === '') {

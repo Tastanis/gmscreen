@@ -7,8 +7,10 @@ const VTT_SCENE_TOKENS_FILE = __DIR__ . '/../data/vtt_scene_tokens.json';
 
 /**
  * Ensure the token library storage file exists on disk.
+ *
+ * @return void
  */
-function ensureTokenLibraryFile(): void
+function ensureTokenLibraryFile()
 {
     $directory = dirname(VTT_TOKEN_LIBRARY_FILE);
     if (!is_dir($directory)) {
@@ -39,8 +41,10 @@ function ensureTokenLibraryFile(): void
 
 /**
  * Ensure the scene token storage file exists on disk.
+ *
+ * @return void
  */
-function ensureSceneTokensFile(): void
+function ensureSceneTokensFile()
 {
     $directory = dirname(VTT_SCENE_TOKENS_FILE);
     if (!is_dir($directory)) {
@@ -460,8 +464,11 @@ function sanitizeSceneTokenEntriesForPersistence(array $entries): array
 
 /**
  * Attempt to clean a single scene token entry.
+ *
+ * @param array $entry
+ * @return array|null
  */
-function sanitizeSceneTokenEntryForPersistence(array $entry): ?array
+function sanitizeSceneTokenEntryForPersistence(array $entry)
 {
     $entry['id'] = sanitizeUtf8TokenString($entry['id'] ?? '');
     if ($entry['id'] === '') {
@@ -565,10 +572,10 @@ function sanitizeTokenImageData($value): string
 function persistSceneTokensWithRecovery(
     string $sceneId,
     array $tokens,
-    ?callable $saveCallback = null,
-    ?callable $sanitizeCallback = null,
-    ?callable $resetCallback = null,
-    ?callable $logger = null
+    $saveCallback = null,
+    $sanitizeCallback = null,
+    $resetCallback = null,
+    $logger = null
 ): array {
     $saveCallback = $saveCallback ?? 'saveSceneTokens';
     $sanitizeCallback = $sanitizeCallback ?? 'sanitizeSceneTokenEntriesForPersistence';
@@ -622,8 +629,12 @@ function persistSceneTokensWithRecovery(
 
 /**
  * Append an entry to the VTT error log file.
+ *
+ * @param string $message
+ * @param array $context
+ * @return void
  */
-function logVttErrorMessage(string $message, array $context = []): void
+function logVttErrorMessage(string $message, array $context = [])
 {
     $logFile = __DIR__ . '/../logs/vtt_error.log';
     $directory = dirname($logFile);
@@ -787,8 +798,11 @@ function summarizeSceneTokensForChangeLog(array $tokens): array
 
 /**
  * Produce a short hash that identifies token artwork without storing the full image data.
+ *
+ * @param mixed $imageData
+ * @return string|null
  */
-function buildTokenImageHash($imageData): ?string
+function buildTokenImageHash($imageData)
 {
     if (!is_string($imageData) || $imageData === '') {
         return null;
