@@ -64,6 +64,7 @@ $activeSceneMap = [
     'image' => '',
     'gridScale' => 50,
 ];
+$activeSceneTokens = [];
 if (is_array($activeScene) && isset($activeScene['map']) && is_array($activeScene['map'])) {
     $activeSceneMap['image'] = isset($activeScene['map']['image']) ? (string) $activeScene['map']['image'] : '';
     $gridScale = isset($activeScene['map']['gridScale']) ? (int) $activeScene['map']['gridScale'] : 50;
@@ -74,6 +75,10 @@ if (is_array($activeScene) && isset($activeScene['map']) && is_array($activeScen
         $gridScale = 300;
     }
     $activeSceneMap['gridScale'] = $gridScale;
+}
+
+if (is_string($activeSceneId) && $activeSceneId !== '') {
+    $activeSceneTokens = loadSceneTokens($activeSceneId);
 }
 
 $tokenLibrary = loadTokenLibrary();
@@ -92,6 +97,7 @@ $vttConfig = [
     'tokenEndpoint' => 'token_handler.php',
     'tokenLibrary' => $tokenLibrary,
     'latestChangeId' => getLatestSceneChangeId(),
+    'activeSceneTokens' => $activeSceneTokens,
 ];
 ?>
 <!DOCTYPE html>
@@ -146,6 +152,7 @@ $vttConfig = [
                                 alt="Scene map"
                             >
                             <div id="scene-map-grid" class="scene-display__map-grid"></div>
+                            <div id="scene-token-layer" class="scene-display__token-layer" aria-live="polite"></div>
                         </div>
                     </div>
                     <div id="scene-grid-controls" class="scene-display__grid-controls">
