@@ -17,7 +17,11 @@ require_once __DIR__ . '/token_repository.php';
 $user = isset($_SESSION['user']) ? $_SESSION['user'] : '';
 $isGm = strtolower((string) $user) === 'gm';
 
+$jsonPayload = getJsonRequestPayload();
 $action = isset($_REQUEST['action']) ? $_REQUEST['action'] : '';
+if ($action === '' && is_array($jsonPayload) && isset($jsonPayload['action'])) {
+    $action = $jsonPayload['action'];
+}
 $action = is_string($action) ? strtolower(trim($action)) : '';
 if ($action === '') {
     $action = $_SERVER['REQUEST_METHOD'] === 'POST' ? 'save_library' : 'library';
@@ -35,7 +39,7 @@ switch ($action) {
             echo json_encode(['success' => false, 'error' => 'Only the GM can modify the token library.']);
             exit;
         }
-        handleSaveLibrary();
+        handleSaveLibrary($jsonPayload);
         break;
 
     case 'scene_tokens':
@@ -49,7 +53,7 @@ switch ($action) {
             echo json_encode(['success' => false, 'error' => 'Only the GM can update scene tokens.']);
             exit;
         }
-        handleSaveSceneTokens();
+        handleSaveSceneTokens($jsonPayload);
         break;
 
     default:
@@ -68,9 +72,11 @@ function handleGetLibrary()
     ]);
 }
 
-function handleSaveLibrary()
+function handleSaveLibrary($payload = null)
 {
-    $payload = readJsonPayload();
+    if (!is_array($payload) || empty($payload)) {
+        $payload = readJsonPayload();
+    }
     $tokens = isset($payload['tokens']) ? $payload['tokens'] : null;
     if (!is_array($tokens)) {
         http_response_code(400);
@@ -112,9 +118,11 @@ function handleGetSceneTokens()
     ]);
 }
 
-function handleSaveSceneTokens()
+function handleSaveSceneTokens($payload = null)
 {
-    $payload = readJsonPayload();
+    if (!is_array($payload) || empty($payload)) {
+        $payload = readJsonPayload();
+    }
     $sceneId = isset($payload['sceneId']) && is_string($payload['sceneId'])
         ? trim($payload['sceneId'])
         : '';
@@ -148,15 +156,35 @@ function handleSaveSceneTokens()
 
 function readJsonPayload()
 {
+    $payload = getJsonRequestPayload();
+    return is_array($payload) ? $payload : [];
+}
+
+function getJsonRequestPayload()
+{
+    static $cachedPayload;
+    static $initialized = false;
+
+    if ($initialized) {
+        return $cachedPayload;
+    }
+
+    $initialized = true;
+
     $raw = file_get_contents('php://input');
-    if ($raw === false || trim($raw) === '') {
-        return [];
+    if ($raw === false) {
+        $cachedPayload = [];
+        return $cachedPayload;
     }
 
-    $decoded = json_decode($raw, true);
-    if (!is_array($decoded)) {
-        return [];
+    $trimmed = trim($raw);
+    if ($trimmed === '') {
+        $cachedPayload = [];
+        return $cachedPayload;
     }
 
-    return $decoded;
+    $decoded = json_decode($trimmed, true);
+    $cachedPayload = is_array($decoded) ? $decoded : [];
+
+    return $cachedPayload;
 }
