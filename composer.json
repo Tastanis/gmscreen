@@ -1,0 +1,8 @@
+{
+    "name": "gmscreen/app",
+    "type": "project",
+    "require": {},
+    "require-dev": {
+        "phpunit/phpunit": "^9.6"
+    }
+}

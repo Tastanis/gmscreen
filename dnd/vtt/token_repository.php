@@ -211,6 +211,36 @@ function filterTokensForPlayers(array $tokens): array
 }
 
 /**
+ * Validate image payloads before persisting them to disk.
+ */
+function isValidImageDataUri(string $imageData): bool
+{
+    if ($imageData === '') {
+        return false;
+    }
+
+    if (!mb_check_encoding($imageData, 'UTF-8')) {
+        return false;
+    }
+
+    if (!preg_match('/^data:image\/[a-zA-Z0-9.+-]+;base64,[A-Za-z0-9+\/]+=*$/', $imageData)) {
+        return false;
+    }
+
+    $separatorPosition = strpos($imageData, ',');
+    if ($separatorPosition === false) {
+        return false;
+    }
+
+    $base64Payload = substr($imageData, $separatorPosition + 1);
+    if ($base64Payload === false || $base64Payload === '') {
+        return false;
+    }
+
+    return base64_decode($base64Payload, true) !== false;
+}
+
+/**
  * Normalize an array of token library entries.
  */
 function normalizeTokenLibraryEntries(array $entries): array
@@ -224,13 +254,19 @@ function normalizeTokenLibraryEntries(array $entries): array
             continue;
         }
 
+        $id = isset($entry['id']) ? trim((string) $entry['id']) : '';
         $name = isset($entry['name']) ? trim((string) $entry['name']) : '';
         $imageData = isset($entry['imageData']) ? (string) $entry['imageData'] : '';
         if ($name === '' || $imageData === '') {
             continue;
         }
 
-        $id = isset($entry['id']) ? trim((string) $entry['id']) : '';
+        if (!isValidImageDataUri($imageData)) {
+            $logId = $id !== '' ? $id : '[unidentified]';
+            error_log(sprintf('normalizeTokenLibraryEntries: rejected token "%s" due to invalid image data.', $logId));
+            continue;
+        }
+
         if ($id === '') {
             $id = generateTokenIdentifier('token');
         }
@@ -293,6 +329,11 @@ function normalizeSceneTokenEntries(array $entries): array
         $id = isset($entry['id']) ? trim((string) $entry['id']) : '';
         $imageData = isset($entry['imageData']) ? (string) $entry['imageData'] : '';
         if ($id === '' || $imageData === '') {
+            continue;
+        }
+
+        if (!isValidImageDataUri($imageData)) {
+            error_log(sprintf('normalizeSceneTokenEntries: rejected token "%s" due to invalid image data.', $id));
             continue;
         }
 
