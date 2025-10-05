@@ -14,10 +14,10 @@ if (!isset($_SESSION['logged_in']) || $_SESSION['logged_in'] !== true) {
 
 require_once __DIR__ . '/token_repository.php';
 
-$user = $_SESSION['user'] ?? '';
+$user = isset($_SESSION['user']) ? $_SESSION['user'] : '';
 $isGm = strtolower((string) $user) === 'gm';
 
-$action = $_REQUEST['action'] ?? '';
+$action = isset($_REQUEST['action']) ? $_REQUEST['action'] : '';
 $action = is_string($action) ? strtolower(trim($action)) : '';
 if ($action === '') {
     $action = $_SERVER['REQUEST_METHOD'] === 'POST' ? 'save_library' : 'library';
@@ -71,7 +71,7 @@ function handleGetLibrary()
 function handleSaveLibrary()
 {
     $payload = readJsonPayload();
-    $tokens = $payload['tokens'] ?? null;
+    $tokens = isset($payload['tokens']) ? $payload['tokens'] : null;
     if (!is_array($tokens)) {
         http_response_code(400);
         echo json_encode(['success' => false, 'error' => 'A token list is required.']);
@@ -124,7 +124,7 @@ function handleSaveSceneTokens()
         return;
     }
 
-    $tokens = $payload['tokens'] ?? null;
+    $tokens = isset($payload['tokens']) ? $payload['tokens'] : null;
     if (!is_array($tokens)) {
         http_response_code(400);
         echo json_encode(['success' => false, 'error' => 'A list of tokens is required.']);
@@ -146,7 +146,7 @@ function handleSaveSceneTokens()
     ]);
 }
 
-function readJsonPayload(): array
+function readJsonPayload()
 {
     $raw = file_get_contents('php://input');
     if ($raw === false || trim($raw) === '') {

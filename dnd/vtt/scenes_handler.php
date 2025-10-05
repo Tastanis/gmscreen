@@ -13,7 +13,7 @@ if (!isset($_SESSION['logged_in']) || $_SESSION['logged_in'] !== true) {
 
 require_once __DIR__ . '/scenes_repository.php';
 
-$user = $_SESSION['user'] ?? '';
+$user = isset($_SESSION['user']) ? $_SESSION['user'] : '';
 $isGm = strtolower((string) $user) === 'gm';
 
 $sceneData = loadScenesData();
@@ -31,7 +31,7 @@ $defaultSceneId = getFirstSceneId($sceneData);
 $sceneStateFile = __DIR__ . '/../data/vtt_active_scene.json';
 ensureSceneStateFile($sceneStateFile, $defaultSceneId);
 
-$action = $_REQUEST['action'] ?? 'get_active';
+$action = isset($_REQUEST['action']) ? $_REQUEST['action'] : 'get_active';
 $action = is_string($action) ? strtolower(trim($action)) : 'get_active';
 
 switch ($action) {
@@ -47,7 +47,9 @@ switch ($action) {
         exit;
 
     case 'changes':
-        $sinceParam = $_GET['since'] ?? $_POST['since'] ?? 0;
+        $sinceParam = isset($_GET['since'])
+            ? $_GET['since']
+            : (isset($_POST['since']) ? $_POST['since'] : 0);
         $since = filter_var($sinceParam, FILTER_VALIDATE_INT);
         if ($since === false || $since < 0) {
             $since = 0;
@@ -111,7 +113,7 @@ switch ($action) {
             'sceneData' => $sceneData,
             'scenes' => array_values($scenes),
             'active_scene_id' => $activeSceneId,
-            'latest_change_id' => $changeEntry['id'] ?? getLatestChangeId(),
+            'latest_change_id' => isset($changeEntry['id']) ? $changeEntry['id'] : getLatestChangeId(),
         ]);
         exit;
 
@@ -163,7 +165,7 @@ switch ($action) {
             'sceneData' => $sceneData,
             'scenes' => array_values($scenes),
             'active_scene_id' => $activeSceneId,
-            'latest_change_id' => $changeEntry['id'] ?? getLatestChangeId(),
+            'latest_change_id' => isset($changeEntry['id']) ? $changeEntry['id'] : getLatestChangeId(),
         ]);
         exit;
 
@@ -215,7 +217,7 @@ switch ($action) {
             'sceneData' => $sceneData,
             'scenes' => array_values($scenes),
             'active_scene_id' => $activeSceneId,
-            'latest_change_id' => $changeEntry['id'] ?? getLatestChangeId(),
+            'latest_change_id' => isset($changeEntry['id']) ? $changeEntry['id'] : getLatestChangeId(),
         ]);
         exit;
 
@@ -275,7 +277,7 @@ switch ($action) {
             'sceneData' => $sceneData,
             'scenes' => array_values($scenes),
             'active_scene_id' => $activeSceneId,
-            'latest_change_id' => $changeEntry['id'] ?? getLatestChangeId(),
+            'latest_change_id' => isset($changeEntry['id']) ? $changeEntry['id'] : getLatestChangeId(),
         ]);
         exit;
 
@@ -304,13 +306,14 @@ switch ($action) {
         $imagePath = null;
         if (!empty($_FILES['map_image']) && is_array($_FILES['map_image'])) {
             $file = $_FILES['map_image'];
-            if (($file['error'] ?? UPLOAD_ERR_OK) !== UPLOAD_ERR_OK) {
+            $uploadError = isset($file['error']) ? $file['error'] : UPLOAD_ERR_OK;
+            if ($uploadError !== UPLOAD_ERR_OK) {
                 http_response_code(400);
                 echo json_encode(['success' => false, 'error' => 'Unable to process uploaded image.']);
                 exit;
             }
 
-            $originalName = $file['name'] ?? '';
+            $originalName = isset($file['name']) ? $file['name'] : '';
             $extension = sanitizeFileExtension($originalName);
             if ($extension === '') {
                 http_response_code(400);
@@ -319,10 +322,13 @@ switch ($action) {
             }
 
             ensureMapUploadDirectory();
-            try {
-                $random = bin2hex(random_bytes(4));
-            } catch (Throwable $exception) {
-                $random = uniqid();
+            $random = uniqid();
+            if (function_exists('random_bytes')) {
+                try {
+                    $random = bin2hex(random_bytes(4));
+                } catch (Exception $exception) {
+                    $random = uniqid();
+                }
             }
             $filename = sprintf('scene-%s-%s.%s', $sceneId, $random, $extension);
             $destination = VTT_MAP_UPLOAD_DIR . '/' . $filename;
@@ -368,7 +374,7 @@ switch ($action) {
             'sceneData' => $sceneData,
             'scenes' => array_values($scenes),
             'active_scene_id' => $activeSceneId,
-            'latest_change_id' => $changeEntry['id'] ?? getLatestChangeId(),
+            'latest_change_id' => isset($changeEntry['id']) ? $changeEntry['id'] : getLatestChangeId(),
         ]);
         exit;
 
@@ -379,7 +385,7 @@ switch ($action) {
             exit;
         }
 
-        $sceneId = $_POST['scene_id'] ?? '';
+        $sceneId = isset($_POST['scene_id']) ? $_POST['scene_id'] : '';
         $sceneId = is_string($sceneId) ? trim($sceneId) : '';
         if ($sceneId === '' || !isset($sceneLookup[$sceneId])) {
             http_response_code(400);
@@ -400,7 +406,7 @@ switch ($action) {
             'success' => true,
             'active_scene_id' => $sceneId,
             'scene' => $activeScene,
-            'latest_change_id' => $changeEntry['id'] ?? getLatestChangeId(),
+            'latest_change_id' => isset($changeEntry['id']) ? $changeEntry['id'] : getLatestChangeId(),
         ]);
         exit;
 

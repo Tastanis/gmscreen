@@ -62,7 +62,7 @@ function loadSceneTokensByScene($sceneId)
     }
 
     $state = loadSceneTokenState();
-    $tokens = $state[$sceneId] ?? [];
+    $tokens = isset($state[$sceneId]) ? $state[$sceneId] : [];
 
     if (!is_array($tokens)) {
         return [];
@@ -202,13 +202,14 @@ function normalizeTokenLibraryEntry($entry)
     }
 
     $size = isset($entry['size']) && is_array($entry['size']) ? $entry['size'] : [];
-    $width = clampTokenDimension($size['width'] ?? null);
-    $height = clampTokenDimension($size['height'] ?? null);
+    $width = clampTokenDimension(isset($size['width']) ? $size['width'] : null);
+    $height = clampTokenDimension(isset($size['height']) ? $size['height'] : null);
 
-    $stamina = clampTokenStamina($entry['stamina'] ?? 0);
+    $stamina = clampTokenStamina(isset($entry['stamina']) ? $entry['stamina'] : 0);
 
-    $createdAt = normalizeTimestamp($entry['createdAt'] ?? null);
-    $updatedAt = normalizeTimestamp($entry['updatedAt'] ?? $createdAt);
+    $createdAt = normalizeTimestamp(isset($entry['createdAt']) ? $entry['createdAt'] : null);
+    $updatedAtSource = isset($entry['updatedAt']) ? $entry['updatedAt'] : $createdAt;
+    $updatedAt = normalizeTimestamp($updatedAtSource);
 
     return [
         'id' => $id,
@@ -257,15 +258,15 @@ function normalizeSceneTokenEntry($entry)
 
     $name = isset($entry['name']) ? (string) $entry['name'] : '';
     $libraryId = isset($entry['libraryId']) ? (string) $entry['libraryId'] : '';
-    $stamina = clampTokenStamina($entry['stamina'] ?? 0);
+    $stamina = clampTokenStamina(isset($entry['stamina']) ? $entry['stamina'] : 0);
 
     $size = isset($entry['size']) && is_array($entry['size']) ? $entry['size'] : [];
-    $width = clampTokenDimension($size['width'] ?? null);
-    $height = clampTokenDimension($size['height'] ?? null);
+    $width = clampTokenDimension(isset($size['width']) ? $size['width'] : null);
+    $height = clampTokenDimension(isset($size['height']) ? $size['height'] : null);
 
     $position = isset($entry['position']) && is_array($entry['position']) ? $entry['position'] : [];
-    $x = normalizeCoordinate($position['x'] ?? 0);
-    $y = normalizeCoordinate($position['y'] ?? 0);
+    $x = normalizeCoordinate(isset($position['x']) ? $position['x'] : 0);
+    $y = normalizeCoordinate(isset($position['y']) ? $position['y'] : 0);
 
     return [
         'id' => $id,
