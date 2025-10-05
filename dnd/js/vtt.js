@@ -338,7 +338,6 @@
             updateTokenFormMode();
             refreshTokenLibraryFromServer(false);
 
-<<<<<<< HEAD
             function ensureTokenContextMenuElement() {
                 if (tokenContextMenu) {
                     return;
@@ -435,9 +434,6 @@
                     closeTokenContextMenu();
                 }
             }
-
-=======
->>>>>>> parent of de66a72 (Merge pull request #85 from Tastanis/codex/fix-browse-button-under-token-artwork)
             if (tokenForm && dropzone && fileInput && cropperImage && cropperStage && cropperContainer) {
                 dropzone.addEventListener('click', function (event) {
                     event.stopPropagation();
