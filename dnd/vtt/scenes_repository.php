@@ -40,15 +40,17 @@ function loadScenesData()
             if ($folderId === '') {
                 $folderId = generateIdentifier('folder');
             }
+            $folderScenes = isset($folder['scenes']) ? $folder['scenes'] : [];
             $folders[] = [
                 'id' => $folderId,
                 'name' => isset($folder['name']) ? (string) $folder['name'] : 'Untitled Folder',
-                'scenes' => normalizeScenesList($folder['scenes'] ?? [], $folderId),
+                'scenes' => normalizeScenesList($folderScenes, $folderId),
             ];
         }
     }
 
-    $rootScenes = normalizeScenesList($data['rootScenes'] ?? [], null);
+    $rootScenesSource = isset($data['rootScenes']) ? $data['rootScenes'] : [];
+    $rootScenes = normalizeScenesList($rootScenesSource, null);
 
     return [
         'folders' => $folders,
@@ -67,9 +69,12 @@ function saveScenesData($data)
 
     ensureScenesDataFile();
 
+    $foldersData = isset($data['folders']) ? $data['folders'] : [];
+    $rootScenesData = isset($data['rootScenes']) ? $data['rootScenes'] : [];
+
     $payload = json_encode([
-        'folders' => $data['folders'] ?? [],
-        'rootScenes' => $data['rootScenes'] ?? [],
+        'folders' => $foldersData,
+        'rootScenes' => $rootScenesData,
     ], JSON_PRETTY_PRINT);
 
     if ($payload === false) {
@@ -185,11 +190,16 @@ function generateIdentifier($prefix)
 {
     $prefix = (string) $prefix;
 
-    try {
-        return sprintf('%s-%s', $prefix, bin2hex(random_bytes(6)));
-    } catch (Throwable $exception) {
-        return sprintf('%s-%s', $prefix, uniqid());
+    $randomComponent = str_replace('.', '', uniqid('', true));
+    if (function_exists('random_bytes')) {
+        try {
+            $randomComponent = bin2hex(random_bytes(6));
+        } catch (Exception $exception) {
+            $randomComponent = str_replace('.', '', uniqid('', true));
+        }
     }
+
+    return sprintf('%s-%s', $prefix, $randomComponent);
 }
 
 function flattenScenes($data)
@@ -198,7 +208,8 @@ function flattenScenes($data)
         $data = [];
     }
     $scenes = [];
-    foreach ($data['rootScenes'] ?? [] as $scene) {
+    $rootScenesList = isset($data['rootScenes']) ? $data['rootScenes'] : [];
+    foreach ($rootScenesList as $scene) {
         if (!is_array($scene)) {
             continue;
         }
@@ -206,12 +217,14 @@ function flattenScenes($data)
         $scenes[] = $scene;
     }
 
-    foreach ($data['folders'] ?? [] as $folder) {
+    $folderList = isset($data['folders']) ? $data['folders'] : [];
+    foreach ($folderList as $folder) {
         if (!is_array($folder) || !isset($folder['scenes'])) {
             continue;
         }
-        $folderId = $folder['id'] ?? null;
-        foreach ($folder['scenes'] as $scene) {
+        $folderId = isset($folder['id']) ? $folder['id'] : null;
+        $folderScenes = is_array($folder['scenes']) ? $folder['scenes'] : [];
+        foreach ($folderScenes as $scene) {
             if (!is_array($scene)) {
                 continue;
             }
@@ -324,7 +337,7 @@ function deleteScene($data, $sceneId)
             }
             foreach ($folder['scenes'] as $index => $scene) {
                 if (isset($scene['id']) && $scene['id'] === $sceneId) {
-                    $scene['folderId'] = $folder['id'] ?? null;
+                    $scene['folderId'] = isset($folder['id']) ? $folder['id'] : null;
                     $removed = $scene;
                     array_splice($folder['scenes'], $index, 1);
                     break 2;
@@ -375,7 +388,7 @@ function renameScene($data, $sceneId, $name)
             foreach ($folder['scenes'] as &$scene) {
                 if (isset($scene['id']) && $scene['id'] === $sceneId) {
                     $scene['name'] = $trimmedName;
-                    $scene['folderId'] = $folder['id'] ?? null;
+                    $scene['folderId'] = isset($folder['id']) ? $folder['id'] : null;
                     bumpSceneVersion($scene);
                     $updatedScene = $scene;
                     break 2;
@@ -396,17 +409,20 @@ function getSceneById($data, $sceneId)
     }
 
     $sceneId = (string) $sceneId;
-    foreach ($data['rootScenes'] ?? [] as $scene) {
+    $rootScenesList = isset($data['rootScenes']) ? $data['rootScenes'] : [];
+    foreach ($rootScenesList as $scene) {
         if (isset($scene['id']) && $scene['id'] === $sceneId) {
             $scene['folderId'] = null;
             return $scene;
         }
     }
 
-    foreach ($data['folders'] ?? [] as $folder) {
-        foreach ($folder['scenes'] ?? [] as $scene) {
+    $folderList = isset($data['folders']) ? $data['folders'] : [];
+    foreach ($folderList as $folder) {
+        $folderScenes = isset($folder['scenes']) ? $folder['scenes'] : [];
+        foreach ($folderScenes as $scene) {
             if (isset($scene['id']) && $scene['id'] === $sceneId) {
-                $scene['folderId'] = $folder['id'] ?? null;
+                $scene['folderId'] = isset($folder['id']) ? $folder['id'] : null;
                 return $scene;
             }
         }
@@ -445,7 +461,12 @@ function updateSceneMap($data, $sceneId, $imagePath, $gridScale)
             }
             foreach ($folder['scenes'] as &$scene) {
                 if (isset($scene['id']) && $scene['id'] === $sceneId) {
-                    $scene = applySceneMapChanges($scene, $imagePath, $gridScale, $folder['id'] ?? null);
+                    $scene = applySceneMapChanges(
+                        $scene,
+                        $imagePath,
+                        $gridScale,
+                        isset($folder['id']) ? $folder['id'] : null
+                    );
                     $updatedScene = $scene;
                     break 2;
                 }
@@ -482,7 +503,8 @@ function applySceneMapChanges($scene, $imagePath, $gridScale, $folderId)
         $scene['map']['gridScale'] = $gridScale;
     }
 
-    $scene['folderId'] = $folderId !== null && $folderId !== '' ? $folderId : ($scene['folderId'] ?? null);
+    $existingFolder = isset($scene['folderId']) ? $scene['folderId'] : null;
+    $scene['folderId'] = $folderId !== null && $folderId !== '' ? $folderId : $existingFolder;
     bumpSceneVersion($scene);
 
     return $scene;
@@ -513,7 +535,8 @@ function getFirstSceneId($data)
         }
     }
 
-    foreach ($data['folders'] ?? [] as $folder) {
+    $folderList = isset($data['folders']) ? $data['folders'] : [];
+    foreach ($folderList as $folder) {
         if (!empty($folder['scenes'])) {
             $first = $folder['scenes'][0];
             if (isset($first['id'])) {
@@ -662,7 +685,7 @@ function getSceneChangesSince($changeId)
 {
     $changeId = (int) $changeId;
     $state = loadChangeLogState();
-    $entries = $state['entries'] ?? [];
+    $entries = isset($state['entries']) ? $state['entries'] : [];
     $since = $changeId < 0 ? 0 : $changeId;
 
     return array_values(array_filter($entries, static function ($entry) use ($since) {
@@ -736,8 +759,8 @@ function recordFolderChange($folder, $operation)
 function recordActiveSceneChange($scene)
 {
     $scenePayload = $scene !== null ? normalizeSceneForPayload($scene) : null;
-    $sceneId = $scenePayload['id'] ?? '';
-    $version = $scenePayload['version'] ?? null;
+    $sceneId = isset($scenePayload['id']) ? $scenePayload['id'] : '';
+    $version = isset($scenePayload['version']) ? $scenePayload['version'] : null;
 
     return appendChangeLogEntry([
         'entityType' => 'active_scene',

@@ -8,7 +8,7 @@ if (!isset($_SESSION['logged_in']) || $_SESSION['logged_in'] !== true) {
     exit;
 }
 
-$user = $_SESSION['user'] ?? 'Adventurer';
+$user = isset($_SESSION['user']) ? $_SESSION['user'] : 'Adventurer';
 $isGm = strtolower($user) === 'gm';
 
 $chatParticipantsMap = require __DIR__ . '/../includes/chat_participants.php';
@@ -105,6 +105,11 @@ $activeSceneTokens = $activeSceneId !== null
     ? loadSceneTokensByScene($activeSceneId)
     : [];
 
+$activeSceneIdAttr = $activeSceneId !== null ? $activeSceneId : '';
+$sceneHeading = isset($activeScene['name'])
+    ? $activeScene['name']
+    : 'Waiting for the GM to pick a scene';
+
 $vttConfig = [
     'isGM' => $isGm,
     'currentUser' => $user,
@@ -134,7 +139,7 @@ $vttConfig = [
             <div
                 id="scene-display"
                 class="scene-display"
-                data-scene-id="<?php echo htmlspecialchars($activeSceneId ?? '', ENT_QUOTES); ?>"
+                data-scene-id="<?php echo htmlspecialchars($activeSceneIdAttr, ENT_QUOTES); ?>"
                 data-scene-accent="<?php echo htmlspecialchars($activeSceneAccent, ENT_QUOTES); ?>"
             >
                 <div class="scene-display__meta">
@@ -146,7 +151,7 @@ $vttConfig = [
                     <?php endif; ?>
                 </div>
                 <h1 id="scene-display-name" class="scene-display__name">
-                    <?php echo htmlspecialchars($activeScene['name'] ?? 'Waiting for the GM to pick a scene', ENT_QUOTES); ?>
+                    <?php echo htmlspecialchars($sceneHeading, ENT_QUOTES); ?>
                 </h1>
                 <p id="scene-display-description" class="scene-display__description">
                     <?php
