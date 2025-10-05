@@ -24,6 +24,9 @@
             sceneEndpoint,
             initialSceneId,
             initialScene,
+            tokenEndpoint: config.tokenEndpoint,
+            tokenLibrary: config.tokenLibrary,
+            activeSceneTokens: config.activeSceneTokens,
             latestChangeId: typeof config.latestChangeId === 'number' ? config.latestChangeId : 0,
         });
     }
