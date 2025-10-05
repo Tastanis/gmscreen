@@ -9,7 +9,12 @@ function getSceneStateFilePath(): string
     return VTT_SCENE_STATE_FILE;
 }
 
-function ensureSceneStateFile(?string $filePath = null, ?string $defaultSceneId = null): void
+/**
+ * @param string|null $filePath
+ * @param string|null $defaultSceneId
+ * @return void
+ */
+function ensureSceneStateFile($filePath = null, $defaultSceneId = null)
 {
     $path = $filePath ?? getSceneStateFilePath();
     $directory = dirname($path);
@@ -27,7 +32,13 @@ function ensureSceneStateFile(?string $filePath = null, ?string $defaultSceneId 
     }
 }
 
-function loadActiveSceneId(array $sceneLookup, ?string $defaultSceneId = null, ?string $filePath = null): ?string
+/**
+ * @param array $sceneLookup
+ * @param string|null $defaultSceneId
+ * @param string|null $filePath
+ * @return string|null
+ */
+function loadActiveSceneId(array $sceneLookup, $defaultSceneId = null, $filePath = null)
 {
     $path = $filePath ?? getSceneStateFilePath();
     ensureSceneStateFile($path, $defaultSceneId);
@@ -71,7 +82,12 @@ function loadActiveSceneId(array $sceneLookup, ?string $defaultSceneId = null, ?
     return null;
 }
 
-function saveActiveSceneId($sceneId, ?string $filePath = null): bool
+/**
+ * @param mixed $sceneId
+ * @param string|null $filePath
+ * @return bool
+ */
+function saveActiveSceneId($sceneId, $filePath = null): bool
 {
     $path = $filePath ?? getSceneStateFilePath();
     $directory = dirname($path);
