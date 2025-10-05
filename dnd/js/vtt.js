@@ -435,6 +435,25 @@
                 }
             }
             if (tokenForm && dropzone && fileInput && cropperImage && cropperStage && cropperContainer) {
+                function openTokenImagePicker() {
+                    if (!fileInput) {
+                        return;
+                    }
+                    if (typeof fileInput.showPicker === 'function') {
+                        try {
+                            fileInput.showPicker();
+                            return;
+                        } catch (error) {
+                            if (!(error && error.name === 'AbortError')) {
+                                if (typeof console !== 'undefined' && console && typeof console.warn === 'function') {
+                                    console.warn('Unable to open file picker with showPicker()', error);
+                                }
+                            }
+                        }
+                    }
+                    fileInput.click();
+                }
+
                 dropzone.addEventListener('click', function (event) {
                     event.stopPropagation();
                     if (event.defaultPrevented) {
@@ -446,16 +465,14 @@
                         return;
                     }
                     event.preventDefault();
-                    if (fileInput) {
-                        fileInput.click();
-                    }
+                    openTokenImagePicker();
                 });
 
                 dropzone.addEventListener('keydown', function (event) {
                     event.stopPropagation();
                     if (event.key === 'Enter' || event.key === ' ') {
                         event.preventDefault();
-                        fileInput.click();
+                        openTokenImagePicker();
                     }
                 });
 
@@ -486,13 +503,13 @@
                     browseButton.addEventListener('click', function (event) {
                         event.preventDefault();
                         event.stopPropagation();
-                        fileInput.click();
+                        openTokenImagePicker();
                     });
                     browseButton.addEventListener('keydown', function (event) {
                         if (event.key === 'Enter' || event.key === ' ') {
                             event.preventDefault();
                             event.stopPropagation();
-                            fileInput.click();
+                            openTokenImagePicker();
                         }
                     });
                 }
