@@ -35,7 +35,7 @@ pnpm-lock.yaml
 /dnd/data/characters_emergency_*.json
 /dnd/data/vtt_change_log.json
 # Temporarily allow active scene data to be versioned; re-add '/dnd/data/vtt_active_scene.json' to .gitignore once the VTT issue is resolved.
-/dnd/data/vtt_scene_changes.json
+# /dnd/data/vtt_scene_changes.json is intentionally versioned to help recover corrupted VTT scenes; re-add it here once the issue is resolved.
 # Temporarily allow token data to be versioned; re-add '/dnd/data/vtt_scene_tokens.json' to .gitignore once token bug is resolved.
 # Temporarily allow token data to be versioned; re-add '/dnd/data/vtt_scenes.json' to .gitignore once token bug is resolved.
 # Temporarily allow token data to be versioned; re-add '/dnd/data/vtt_token_library.json' to .gitignore once token bug is resolved.
