@@ -7,7 +7,10 @@ final class VttHttpErrorHandler
     private const FORMAT_JSON = 'json';
     private const FORMAT_HTML = 'html';
 
-    private static ?self $instance = null;
+    /**
+     * @var self|null
+     */
+    private static $instance = null;
 
     /** @var string */
     private $format;
