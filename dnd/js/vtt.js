@@ -3090,19 +3090,25 @@
         }
 
         function serializeSceneToken(token) {
+            const staminaNumeric = Number(token.stamina);
+            const widthNumeric = Number(token.size && token.size.width);
+            const heightNumeric = Number(token.size && token.size.height);
+            const positionX = Number(token.position && token.position.x);
+            const positionY = Number(token.position && token.position.y);
+
             return {
                 id: token.id,
                 libraryId: token.libraryId || '',
                 name: token.name || '',
                 imageData: token.imageData || '',
-                stamina: Number.isFinite(token.stamina) ? token.stamina : 0,
+                stamina: Number.isFinite(staminaNumeric) ? staminaNumeric : 0,
                 size: {
-                    width: clampSceneTokenDimension(token.size && token.size.width),
-                    height: clampSceneTokenDimension(token.size && token.size.height),
+                    width: clampSceneTokenDimension(Number.isFinite(widthNumeric) ? widthNumeric : 1),
+                    height: clampSceneTokenDimension(Number.isFinite(heightNumeric) ? heightNumeric : 1),
                 },
                 position: {
-                    x: Number.isFinite(token.position && token.position.x) ? token.position.x : 0,
-                    y: Number.isFinite(token.position && token.position.y) ? token.position.y : 0,
+                    x: Number.isFinite(positionX) ? positionX : 0,
+                    y: Number.isFinite(positionY) ? positionY : 0,
                 },
             };
         }
