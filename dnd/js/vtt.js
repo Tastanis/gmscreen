@@ -3009,7 +3009,15 @@
                     state.sceneTokens = tokens;
                     renderSceneTokens();
                 })
-                .catch(function () {
+                .catch(function (error) {
+                    if (window.console && typeof window.console.error === 'function') {
+                        console.error('Failed to load scene tokens:', error);
+                    }
+                    const message = error && typeof error.message === 'string'
+                        ? error.message
+                        : 'Unable to load scene tokens.';
+                    setStatus('Scene token request failed: ' + message, 'error');
+
                     if (!isSameScene) {
                         state.sceneTokens = [];
                         renderSceneTokens();
@@ -4128,13 +4136,84 @@
     }
 
     function handleJsonResponse(response) {
-        if (typeof Response !== 'undefined' && response instanceof Response) {
-            if (!response.ok) {
-                throw new Error('Network error');
-            }
-            return response.json();
+        if (typeof Response === 'undefined' || !(response instanceof Response)) {
+            return Promise.resolve(response);
         }
-        return response;
+
+        const contentType = (response.headers && typeof response.headers.get === 'function')
+            ? (response.headers.get('Content-Type') || '')
+            : '';
+
+        return response.text().then(function (text) {
+            const normalizedContentType = contentType.toLowerCase();
+            const isJson = normalizedContentType.indexOf('application/json') !== -1;
+            let data = null;
+
+            if (text && isJson) {
+                try {
+                    data = JSON.parse(text);
+                } catch (parseError) {
+                    if (response.ok) {
+                        throw new Error('Invalid JSON response from the server.');
+                    }
+                }
+            }
+
+            if (!response.ok) {
+                const details = (data && typeof data === 'object') ? data : (text ? { raw: text } : null);
+                let message = 'Request failed with status ' + response.status;
+
+                if (details) {
+                    if (typeof details.error === 'string' && details.error.trim() !== '') {
+                        message = details.error.trim();
+                    } else if (details.error && typeof details.error === 'object') {
+                        const errorObject = details.error;
+                        if (typeof errorObject.message === 'string' && errorObject.message.trim() !== '') {
+                            message = errorObject.message.trim();
+                        }
+
+                        const contextParts = [];
+                        if (typeof errorObject.type === 'string' && errorObject.type.trim() !== '') {
+                            contextParts.push(errorObject.type.trim());
+                        }
+                        const locationParts = [];
+                        if (typeof errorObject.file === 'string' && errorObject.file.trim() !== '') {
+                            locationParts.push(errorObject.file.trim());
+                        }
+                        if (typeof errorObject.line === 'number' && Number.isFinite(errorObject.line)) {
+                            locationParts.push('line ' + errorObject.line);
+                        }
+                        if (locationParts.length > 0) {
+                            contextParts.push(locationParts.join(': '));
+                        }
+                        if (contextParts.length > 0) {
+                            message += ' (' + contextParts.join(' • ') + ')';
+                        }
+                    }
+                }
+
+                const error = new Error(message);
+                error.status = response.status;
+                if (details) {
+                    error.details = details;
+                }
+                throw error;
+            }
+
+            if (!text) {
+                return data !== null ? data : {};
+            }
+
+            if (data !== null) {
+                return data;
+            }
+
+            if (isJson) {
+                throw new Error('Invalid JSON response from the server.');
+            }
+
+            return text;
+        });
     }
 
     function isPlainObject(value) {
