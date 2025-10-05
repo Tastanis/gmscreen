@@ -9,9 +9,6 @@ vtt_active_scene.json
 vtt_change_log.json
 vtt_scene_changes.json
 vtt_scenes.json
-vtt_scene_tokens.json
-vtt_token_library.json
-vtt_tokens.json
 
 # Ignore all backup files
 characters_backup_*.json
