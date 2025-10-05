@@ -1,15 +1,3 @@
-# Ignore actual data files (keep only .example files)
-characters.json
-combat.json
-inventory.json
-version.json
-
-# VTT scene data files (auto-generated)
-vtt_change_log.json
-vtt_scene_changes.json
-vtt_scene_tokens.json
-vtt_tokens.json
-
 # Ignore all backup files
 characters_backup_*.json
 characters_temp.json
