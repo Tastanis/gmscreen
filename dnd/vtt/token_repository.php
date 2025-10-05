@@ -362,6 +362,112 @@ function clampTokenDimension($value): int
 }
 
 /**
+ * Build a lightweight summary of token library entries for the change log.
+ */
+function summarizeTokenLibraryForChangeLog(array $tokens): array
+{
+    $summary = [];
+    foreach ($tokens as $token) {
+        if (!is_array($token)) {
+            continue;
+        }
+
+        $id = isset($token['id']) ? (string) $token['id'] : '';
+        if ($id === '') {
+            continue;
+        }
+
+        $name = isset($token['name']) ? (string) $token['name'] : '';
+        $folderId = isset($token['folderId']) ? (string) $token['folderId'] : '';
+        $schoolId = isset($token['schoolId']) ? (string) $token['schoolId'] : '';
+        $stamina = isset($token['stamina']) ? (int) $token['stamina'] : 0;
+        $size = isset($token['size']) && is_array($token['size']) ? $token['size'] : [];
+
+        $summary[] = [
+            'id' => $id,
+            'name' => $name,
+            'folderId' => $folderId,
+            'schoolId' => $schoolId,
+            'stamina' => $stamina,
+            'size' => [
+                'width' => clampTokenDimension($size['width'] ?? 1),
+                'height' => clampTokenDimension($size['height'] ?? 1),
+            ],
+            'hasImage' => isset($token['imageData']) && is_string($token['imageData']) && $token['imageData'] !== '',
+            'imageHash' => buildTokenImageHash($token['imageData'] ?? null),
+            'createdAt' => isset($token['createdAt']) ? (int) $token['createdAt'] : 0,
+            'updatedAt' => isset($token['updatedAt']) ? (int) $token['updatedAt'] : 0,
+        ];
+    }
+
+    return $summary;
+}
+
+/**
+ * Build a lightweight summary of scene token entries for the change log.
+ */
+function summarizeSceneTokensForChangeLog(array $tokens): array
+{
+    $summary = [];
+    foreach ($tokens as $token) {
+        if (!is_array($token)) {
+            continue;
+        }
+
+        $id = isset($token['id']) ? (string) $token['id'] : '';
+        if ($id === '') {
+            continue;
+        }
+
+        $libraryId = isset($token['libraryId']) ? (string) $token['libraryId'] : '';
+        $name = isset($token['name']) ? (string) $token['name'] : '';
+        $stamina = isset($token['stamina']) ? (int) $token['stamina'] : 0;
+        $size = isset($token['size']) && is_array($token['size']) ? $token['size'] : [];
+        $position = isset($token['position']) && is_array($token['position']) ? $token['position'] : [];
+
+        $x = isset($position['x']) && is_numeric($position['x']) ? (float) $position['x'] : 0.0;
+        if (!is_finite($x)) {
+            $x = 0.0;
+        }
+        $y = isset($position['y']) && is_numeric($position['y']) ? (float) $position['y'] : 0.0;
+        if (!is_finite($y)) {
+            $y = 0.0;
+        }
+
+        $summary[] = [
+            'id' => $id,
+            'libraryId' => $libraryId,
+            'name' => $name,
+            'stamina' => $stamina,
+            'size' => [
+                'width' => clampTokenDimension($size['width'] ?? 1),
+                'height' => clampTokenDimension($size['height'] ?? 1),
+            ],
+            'position' => [
+                'x' => $x,
+                'y' => $y,
+            ],
+            'hasImage' => isset($token['imageData']) && is_string($token['imageData']) && $token['imageData'] !== '',
+            'imageHash' => buildTokenImageHash($token['imageData'] ?? null),
+        ];
+    }
+
+    return $summary;
+}
+
+/**
+ * Produce a short hash that identifies token artwork without storing the full image data.
+ */
+function buildTokenImageHash($imageData): ?string
+{
+    if (!is_string($imageData) || $imageData === '') {
+        return null;
+    }
+
+    return substr(hash('sha1', $imageData), 0, 12);
+}
+
+/**
  * Generate a random identifier for token objects.
  */
 function generateTokenIdentifier(string $prefix = 'token'): string

@@ -101,6 +101,7 @@ function handleSaveLibraryRequest(array $requestData): void
     $changeId = recordSceneChange('token_library', null, [
         'action' => 'save_library',
         'token_count' => count($tokens),
+        'tokens' => summarizeTokenLibraryForChangeLog($tokens),
     ]);
 
     echo json_encode([
@@ -162,6 +163,7 @@ function handleSaveSceneTokensRequest(array $requestData): void
         'action' => 'save_scene_tokens',
         'sceneId' => $sceneId,
         'token_count' => count($tokens),
+        'tokens' => summarizeSceneTokensForChangeLog($tokens),
     ]);
 
     echo json_encode([

@@ -53,6 +53,68 @@ if (count($result) !== 1) {
         fwrite(STDERR, "json_encode failed for the normalized token.\n");
         $allPassed = false;
     }
+
+    $sceneSummary = summarizeSceneTokensForChangeLog([$token]);
+    if (count($sceneSummary) !== 1) {
+        fwrite(STDERR, "Scene token change summary should contain one entry.\n");
+        $allPassed = false;
+    } else {
+        $summaryToken = $sceneSummary[0];
+        if (isset($summaryToken['imageData'])) {
+            fwrite(STDERR, "Scene token change summary must not include raw image data.\n");
+            $allPassed = false;
+        }
+        if (empty($summaryToken['hasImage'])) {
+            fwrite(STDERR, "Scene token change summary lost the hasImage flag.\n");
+            $allPassed = false;
+        }
+        if (!isset($summaryToken['imageHash']) || !is_string($summaryToken['imageHash']) || strlen($summaryToken['imageHash']) < 8) {
+            fwrite(STDERR, "Scene token change summary is missing the image hash identifier.\n");
+            $allPassed = false;
+        }
+        if (json_encode($sceneSummary) === false) {
+            fwrite(STDERR, "json_encode failed for the scene token summary.\n");
+            $allPassed = false;
+        }
+    }
+}
+
+$libraryEntries = [
+    [
+        'id' => 'library-token-1',
+        'name' => 'Professor Onyx',
+        'folderId' => 'pcs',
+        'schoolId' => 'witherbloom',
+        'stamina' => 12,
+        'size' => ['width' => 2, 'height' => 2],
+        'imageData' => 'data:image/png;base64,' . str_repeat('A', 32),
+        'createdAt' => 123,
+        'updatedAt' => 456,
+    ],
+];
+
+$librarySummary = summarizeTokenLibraryForChangeLog($libraryEntries);
+if (count($librarySummary) !== 1) {
+    fwrite(STDERR, "Token library change summary should contain one entry.\n");
+    $allPassed = false;
+} else {
+    $summaryToken = $librarySummary[0];
+    if (isset($summaryToken['imageData'])) {
+        fwrite(STDERR, "Token library change summary must not include raw image data.\n");
+        $allPassed = false;
+    }
+    if (empty($summaryToken['hasImage'])) {
+        fwrite(STDERR, "Token library change summary lost the hasImage flag.\n");
+        $allPassed = false;
+    }
+    if (!isset($summaryToken['imageHash']) || !is_string($summaryToken['imageHash']) || strlen($summaryToken['imageHash']) < 8) {
+        fwrite(STDERR, "Token library change summary is missing the image hash identifier.\n");
+        $allPassed = false;
+    }
+    if (json_encode($librarySummary) === false) {
+        fwrite(STDERR, "json_encode failed for the token library summary.\n");
+        $allPassed = false;
+    }
 }
 
 if (!$allPassed) {
