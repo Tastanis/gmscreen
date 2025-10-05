@@ -12,6 +12,7 @@ if (!isset($_SESSION['logged_in']) || $_SESSION['logged_in'] !== true) {
 }
 
 require_once __DIR__ . '/scenes_repository.php';
+require_once __DIR__ . '/scene_state_repository.php';
 
 $user = $_SESSION['user'] ?? '';
 $isGm = strtolower((string) $user) === 'gm';
@@ -28,7 +29,7 @@ foreach ($scenes as $scene) {
 
 $defaultSceneId = getFirstSceneId($sceneData);
 
-$sceneStateFile = __DIR__ . '/../data/vtt_active_scene.json';
+$sceneStateFile = getSceneStateFilePath();
 ensureSceneStateFile($sceneStateFile, $defaultSceneId);
 
 $action = $_REQUEST['action'] ?? 'get_active';
@@ -36,7 +37,7 @@ $action = is_string($action) ? strtolower(trim($action)) : 'get_active';
 
 switch ($action) {
     case 'state':
-        $activeSceneId = loadActiveSceneId($sceneStateFile, $defaultSceneId, $sceneLookup);
+        $activeSceneId = loadActiveSceneId($sceneLookup, $defaultSceneId, $sceneStateFile);
         $activeScene = ($activeSceneId !== null && isset($sceneLookup[$activeSceneId]))
             ? $sceneLookup[$activeSceneId]
             : null;
@@ -79,7 +80,7 @@ switch ($action) {
             exit;
         }
 
-        $activeSceneId = loadActiveSceneId($sceneStateFile, $defaultSceneId, $sceneLookup);
+        $activeSceneId = loadActiveSceneId($sceneLookup, $defaultSceneId, $sceneStateFile);
         echo json_encode([
             'success' => true,
             'sceneData' => $sceneData,
@@ -112,7 +113,7 @@ switch ($action) {
             }
             $sceneLookup[$scene['id']] = $scene;
         }
-        $activeSceneId = loadActiveSceneId($sceneStateFile, $defaultSceneId, $sceneLookup);
+        $activeSceneId = loadActiveSceneId($sceneLookup, $defaultSceneId, $sceneStateFile);
         $latestChangeId = recordSceneChange('scene_state', $folder['id'] ?? null, [
             'action' => 'create_folder',
             'folderId' => $folder['id'] ?? null,
@@ -159,14 +160,14 @@ switch ($action) {
             $sceneLookup[$item['id']] = $item;
         }
 
-        $activeSceneId = loadActiveSceneId($sceneStateFile, $defaultSceneId, $sceneLookup);
+        $activeSceneId = loadActiveSceneId($sceneLookup, $defaultSceneId, $sceneStateFile);
         $latestChangeId = recordSceneChange('scene_state', $scene['id'] ?? null, [
             'action' => 'create_scene',
             'sceneId' => $scene['id'] ?? null,
         ]);
         if ($activeSceneId === null) {
             $firstSceneId = getFirstSceneId($sceneData);
-            if ($firstSceneId !== null && saveActiveSceneId($sceneStateFile, $firstSceneId)) {
+            if ($firstSceneId !== null && saveActiveSceneId($firstSceneId, $sceneStateFile)) {
                 $activeSceneId = $firstSceneId;
                 $activeSceneChange = recordSceneChange('active_scene', $firstSceneId, [
                     'activeSceneId' => $firstSceneId,
@@ -226,7 +227,7 @@ switch ($action) {
             $sceneLookup[$item['id']] = $item;
         }
 
-        $activeSceneId = loadActiveSceneId($sceneStateFile, $defaultSceneId, $sceneLookup);
+        $activeSceneId = loadActiveSceneId($sceneLookup, $defaultSceneId, $sceneStateFile);
         $latestChangeId = recordSceneChange('scene_state', $sceneId, [
             'action' => 'rename_scene',
             'sceneId' => $sceneId,
@@ -279,7 +280,7 @@ switch ($action) {
             $sceneLookup[$item['id']] = $item;
         }
 
-        $activeSceneId = loadActiveSceneId($sceneStateFile, $defaultSceneId, $sceneLookup);
+        $activeSceneId = loadActiveSceneId($sceneLookup, $defaultSceneId, $sceneStateFile);
         $latestChangeId = recordSceneChange('scene_state', $sceneId, [
             'action' => 'delete_scene',
             'sceneId' => $sceneId,
@@ -287,7 +288,7 @@ switch ($action) {
         if ($activeSceneId === $sceneId) {
             $newSceneId = getFirstSceneId($sceneData);
             if ($newSceneId !== null) {
-                if (saveActiveSceneId($sceneStateFile, $newSceneId)) {
+                if (saveActiveSceneId($newSceneId, $sceneStateFile)) {
                     $activeSceneId = $newSceneId;
                     $activeSceneChange = recordSceneChange('active_scene', $newSceneId, [
                         'activeSceneId' => $newSceneId,
@@ -298,7 +299,7 @@ switch ($action) {
                     }
                 }
             } else {
-                if (saveActiveSceneId($sceneStateFile, '')) {
+                if (saveActiveSceneId('', $sceneStateFile)) {
                     $activeSceneId = null;
                     $clearedChange = recordSceneChange('active_scene', '', [
                         'activeSceneId' => '',
@@ -399,7 +400,7 @@ switch ($action) {
             $sceneLookup[$item['id']] = $item;
         }
 
-        $activeSceneId = loadActiveSceneId($sceneStateFile, $defaultSceneId, $sceneLookup);
+        $activeSceneId = loadActiveSceneId($sceneLookup, $defaultSceneId, $sceneStateFile);
         $latestChangeId = recordSceneChange('scene_state', $sceneId, [
             'action' => 'update_scene_map',
             'sceneId' => $sceneId,
@@ -430,7 +431,7 @@ switch ($action) {
             exit;
         }
 
-        if (!saveActiveSceneId($sceneStateFile, $sceneId)) {
+        if (!saveActiveSceneId($sceneId, $sceneStateFile)) {
             http_response_code(500);
             echo json_encode(['success' => false, 'error' => 'Unable to update the active scene.']);
             exit;
@@ -451,7 +452,7 @@ switch ($action) {
 
     case 'get_active':
     default:
-        $activeSceneId = loadActiveSceneId($sceneStateFile, $defaultSceneId, $sceneLookup);
+        $activeSceneId = loadActiveSceneId($sceneLookup, $defaultSceneId, $sceneStateFile);
         $scene = $activeSceneId !== null && isset($sceneLookup[$activeSceneId])
             ? $sceneLookup[$activeSceneId]
             : null;
@@ -465,80 +466,3 @@ switch ($action) {
         exit;
 }
 
-function ensureSceneStateFile($filePath, $defaultSceneId)
-{
-    $directory = dirname($filePath);
-    if (!is_dir($directory)) {
-        mkdir($directory, 0755, true);
-    }
-
-    if (!file_exists($filePath) && $defaultSceneId !== null) {
-        file_put_contents(
-            $filePath,
-            json_encode(['active_scene_id' => $defaultSceneId], JSON_PRETTY_PRINT),
-            LOCK_EX
-        );
-    }
-}
-
-function loadActiveSceneId($filePath, $defaultSceneId, array $sceneLookup)
-{
-    if (!file_exists($filePath)) {
-        return $defaultSceneId;
-    }
-
-    $fp = fopen($filePath, 'r');
-    if ($fp === false) {
-        return $defaultSceneId;
-    }
-
-    $content = '';
-    if (flock($fp, LOCK_SH)) {
-        $content = stream_get_contents($fp);
-        flock($fp, LOCK_UN);
-    }
-    fclose($fp);
-
-    $data = json_decode($content, true);
-    if (is_array($data) && isset($data['active_scene_id'])) {
-        $sceneId = (string) $data['active_scene_id'];
-        if ($sceneId === '') {
-            return null;
-        }
-        if (isset($sceneLookup[$sceneId])) {
-            return $sceneId;
-        }
-    }
-
-    if ($defaultSceneId !== null) {
-        saveActiveSceneId($filePath, $defaultSceneId);
-    }
-
-    return $defaultSceneId;
-}
-
-function saveActiveSceneId($filePath, $sceneId)
-{
-    $directory = dirname($filePath);
-    if (!is_dir($directory)) {
-        mkdir($directory, 0755, true);
-    }
-
-    $fp = fopen($filePath, 'c+');
-    if ($fp === false) {
-        return false;
-    }
-
-    $result = false;
-    if (flock($fp, LOCK_EX)) {
-        ftruncate($fp, 0);
-        rewind($fp);
-        $bytesWritten = fwrite($fp, json_encode(['active_scene_id' => $sceneId], JSON_PRETTY_PRINT));
-        fflush($fp);
-        flock($fp, LOCK_UN);
-        $result = $bytesWritten !== false;
-    }
-
-    fclose($fp);
-    return $result;
-}
