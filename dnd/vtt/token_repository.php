@@ -267,7 +267,7 @@ function isValidImageDataUri(string $imageData): bool
         return false;
     }
 
-    if (!mb_check_encoding($imageData, 'UTF-8')) {
+    if (!isUtf8String($imageData)) {
         return false;
     }
 
@@ -286,6 +286,19 @@ function isValidImageDataUri(string $imageData): bool
     }
 
     return base64_decode($base64Payload, true) !== false;
+}
+
+function isUtf8String(string $value): bool
+{
+    if (function_exists('mb_check_encoding')) {
+        return mb_check_encoding($value, 'UTF-8');
+    }
+
+    if ($value === '') {
+        return true;
+    }
+
+    return preg_match('//u', $value) === 1;
 }
 
 /**
