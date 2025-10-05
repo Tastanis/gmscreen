@@ -16,9 +16,22 @@ function ensureTokenLibraryFile(): void
     }
 
     if (!file_exists(VTT_TOKEN_LIBRARY_FILE)) {
+        $payload = json_encode(['tokens' => []], JSON_PRETTY_PRINT);
+        if ($payload === false) {
+            $payload = '{"tokens": []}';
+        }
+
+        $examplePath = VTT_TOKEN_LIBRARY_FILE . '.example';
+        if (is_file($examplePath)) {
+            $exampleContent = file_get_contents($examplePath);
+            if (is_string($exampleContent) && $exampleContent !== '') {
+                $payload = $exampleContent;
+            }
+        }
+
         file_put_contents(
             VTT_TOKEN_LIBRARY_FILE,
-            json_encode(['tokens' => []], JSON_PRETTY_PRINT),
+            $payload,
             LOCK_EX
         );
     }
@@ -35,9 +48,22 @@ function ensureSceneTokensFile(): void
     }
 
     if (!file_exists(VTT_SCENE_TOKENS_FILE)) {
+        $payload = json_encode(['scenes' => new stdClass()], JSON_PRETTY_PRINT);
+        if ($payload === false) {
+            $payload = '{"scenes": {}}';
+        }
+
+        $examplePath = VTT_SCENE_TOKENS_FILE . '.example';
+        if (is_file($examplePath)) {
+            $exampleContent = file_get_contents($examplePath);
+            if (is_string($exampleContent) && $exampleContent !== '') {
+                $payload = $exampleContent;
+            }
+        }
+
         file_put_contents(
             VTT_SCENE_TOKENS_FILE,
-            json_encode(['scenes' => new stdClass()], JSON_PRETTY_PRINT),
+            $payload,
             LOCK_EX
         );
     }
