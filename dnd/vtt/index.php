@@ -300,7 +300,7 @@ $vttConfig = [
                                             <input type="file" id="token-image-input" class="token-dropzone__input" accept="image/*">
                                         </div>
                                         <div class="token-dropzone__actions">
-                                            <button type="button" id="token-image-browse" class="token-dropzone__browse">Browse</button>
+                                            <label for="token-image-input" id="token-image-browse" class="token-dropzone__browse" role="button" tabindex="0">Browse</label>
                                         </div>
                                         <div id="token-image-cropper" class="token-cropper" hidden>
                                             <div id="token-cropper-stage" class="token-cropper__stage">

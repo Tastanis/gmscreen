@@ -435,23 +435,6 @@
                 }
             }
 
-            function openTokenImagePicker() {
-                if (!fileInput) {
-                    return;
-                }
-                if (typeof fileInput.showPicker === 'function') {
-                    try {
-                        fileInput.showPicker();
-                        return;
-                    } catch (error) {
-                        // Ignore and fall back to click for browsers without showPicker support
-                    }
-                }
-                if (typeof fileInput.click === 'function') {
-                    fileInput.click();
-                }
-            }
-
             if (tokenForm && dropzone && fileInput && cropperImage && cropperStage && cropperContainer) {
                 dropzone.addEventListener('click', function (event) {
                     event.stopPropagation();
@@ -464,14 +447,16 @@
                         return;
                     }
                     event.preventDefault();
-                    openTokenImagePicker();
+                    if (fileInput) {
+                        fileInput.click();
+                    }
                 });
 
                 dropzone.addEventListener('keydown', function (event) {
                     event.stopPropagation();
                     if (event.key === 'Enter' || event.key === ' ') {
                         event.preventDefault();
-                        openTokenImagePicker();
+                        fileInput.click();
                     }
                 });
 
@@ -502,13 +487,13 @@
                     browseButton.addEventListener('click', function (event) {
                         event.preventDefault();
                         event.stopPropagation();
-                        openTokenImagePicker();
+                        fileInput.click();
                     });
                     browseButton.addEventListener('keydown', function (event) {
                         if (event.key === 'Enter' || event.key === ' ') {
                             event.preventDefault();
                             event.stopPropagation();
-                            openTokenImagePicker();
+                            fileInput.click();
                         }
                     });
                 }
