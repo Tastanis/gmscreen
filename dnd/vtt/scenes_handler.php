@@ -35,6 +35,43 @@ $action = $_REQUEST['action'] ?? 'get_active';
 $action = is_string($action) ? strtolower(trim($action)) : 'get_active';
 
 switch ($action) {
+    case 'state':
+        $activeSceneId = loadActiveSceneId($sceneStateFile, $defaultSceneId, $sceneLookup);
+        $activeScene = ($activeSceneId !== null && isset($sceneLookup[$activeSceneId]))
+            ? $sceneLookup[$activeSceneId]
+            : null;
+        echo json_encode([
+            'success' => true,
+            'sceneData' => $sceneData,
+            'scenes' => array_values($scenes),
+            'active_scene_id' => $activeSceneId,
+            'active_scene' => $activeScene,
+            'latest_change_id' => getLatestSceneChangeId(),
+        ]);
+        exit;
+
+    case 'changes':
+        $sinceParam = $_GET['since'] ?? $_POST['since'] ?? 0;
+        if (is_string($sinceParam)) {
+            $sinceParam = trim($sinceParam);
+        }
+        if (is_string($sinceParam) && $sinceParam !== '') {
+            if (!preg_match('/^-?\d+$/', $sinceParam)) {
+                $sinceParam = 0;
+            }
+        }
+        $since = (int) $sinceParam;
+        if ($since < 0) {
+            $since = 0;
+        }
+        [$changes, $latestChangeId] = getSceneChangesSince($since);
+        echo json_encode([
+            'success' => true,
+            'changes' => $changes,
+            'latest_change_id' => $latestChangeId,
+        ]);
+        exit;
+
     case 'list':
         if (!$isGm) {
             http_response_code(403);
@@ -48,6 +85,7 @@ switch ($action) {
             'sceneData' => $sceneData,
             'scenes' => array_values($scenes),
             'active_scene_id' => $activeSceneId,
+            'latest_change_id' => getLatestSceneChangeId(),
         ]);
         exit;
 
@@ -75,6 +113,10 @@ switch ($action) {
             $sceneLookup[$scene['id']] = $scene;
         }
         $activeSceneId = loadActiveSceneId($sceneStateFile, $defaultSceneId, $sceneLookup);
+        $latestChangeId = recordSceneChange('scene_state', $folder['id'] ?? null, [
+            'action' => 'create_folder',
+            'folderId' => $folder['id'] ?? null,
+        ]);
 
         echo json_encode([
             'success' => true,
@@ -82,6 +124,7 @@ switch ($action) {
             'sceneData' => $sceneData,
             'scenes' => array_values($scenes),
             'active_scene_id' => $activeSceneId,
+            'latest_change_id' => $latestChangeId ?? getLatestSceneChangeId(),
         ]);
         exit;
 
@@ -117,11 +160,21 @@ switch ($action) {
         }
 
         $activeSceneId = loadActiveSceneId($sceneStateFile, $defaultSceneId, $sceneLookup);
+        $latestChangeId = recordSceneChange('scene_state', $scene['id'] ?? null, [
+            'action' => 'create_scene',
+            'sceneId' => $scene['id'] ?? null,
+        ]);
         if ($activeSceneId === null) {
             $firstSceneId = getFirstSceneId($sceneData);
-            if ($firstSceneId !== null) {
-                saveActiveSceneId($sceneStateFile, $firstSceneId);
+            if ($firstSceneId !== null && saveActiveSceneId($sceneStateFile, $firstSceneId)) {
                 $activeSceneId = $firstSceneId;
+                $activeSceneChange = recordSceneChange('active_scene', $firstSceneId, [
+                    'activeSceneId' => $firstSceneId,
+                    'scene' => $sceneLookup[$firstSceneId] ?? null,
+                ]);
+                if ($activeSceneChange !== null) {
+                    $latestChangeId = max($latestChangeId ?? 0, $activeSceneChange);
+                }
             }
         }
 
@@ -131,6 +184,7 @@ switch ($action) {
             'sceneData' => $sceneData,
             'scenes' => array_values($scenes),
             'active_scene_id' => $activeSceneId,
+            'latest_change_id' => $latestChangeId ?? getLatestSceneChangeId(),
         ]);
         exit;
 
@@ -173,6 +227,10 @@ switch ($action) {
         }
 
         $activeSceneId = loadActiveSceneId($sceneStateFile, $defaultSceneId, $sceneLookup);
+        $latestChangeId = recordSceneChange('scene_state', $sceneId, [
+            'action' => 'rename_scene',
+            'sceneId' => $sceneId,
+        ]);
 
         echo json_encode([
             'success' => true,
@@ -180,6 +238,7 @@ switch ($action) {
             'sceneData' => $sceneData,
             'scenes' => array_values($scenes),
             'active_scene_id' => $activeSceneId,
+            'latest_change_id' => $latestChangeId ?? getLatestSceneChangeId(),
         ]);
         exit;
 
@@ -221,14 +280,34 @@ switch ($action) {
         }
 
         $activeSceneId = loadActiveSceneId($sceneStateFile, $defaultSceneId, $sceneLookup);
+        $latestChangeId = recordSceneChange('scene_state', $sceneId, [
+            'action' => 'delete_scene',
+            'sceneId' => $sceneId,
+        ]);
         if ($activeSceneId === $sceneId) {
             $newSceneId = getFirstSceneId($sceneData);
             if ($newSceneId !== null) {
-                saveActiveSceneId($sceneStateFile, $newSceneId);
-                $activeSceneId = $newSceneId;
+                if (saveActiveSceneId($sceneStateFile, $newSceneId)) {
+                    $activeSceneId = $newSceneId;
+                    $activeSceneChange = recordSceneChange('active_scene', $newSceneId, [
+                        'activeSceneId' => $newSceneId,
+                        'scene' => $sceneLookup[$newSceneId] ?? null,
+                    ]);
+                    if ($activeSceneChange !== null) {
+                        $latestChangeId = max($latestChangeId ?? 0, $activeSceneChange);
+                    }
+                }
             } else {
-                saveActiveSceneId($sceneStateFile, '');
-                $activeSceneId = null;
+                if (saveActiveSceneId($sceneStateFile, '')) {
+                    $activeSceneId = null;
+                    $clearedChange = recordSceneChange('active_scene', '', [
+                        'activeSceneId' => '',
+                        'scene' => null,
+                    ]);
+                    if ($clearedChange !== null) {
+                        $latestChangeId = max($latestChangeId ?? 0, $clearedChange);
+                    }
+                }
             }
         }
 
@@ -237,6 +316,7 @@ switch ($action) {
             'sceneData' => $sceneData,
             'scenes' => array_values($scenes),
             'active_scene_id' => $activeSceneId,
+            'latest_change_id' => $latestChangeId ?? getLatestSceneChangeId(),
         ]);
         exit;
 
@@ -320,6 +400,10 @@ switch ($action) {
         }
 
         $activeSceneId = loadActiveSceneId($sceneStateFile, $defaultSceneId, $sceneLookup);
+        $latestChangeId = recordSceneChange('scene_state', $sceneId, [
+            'action' => 'update_scene_map',
+            'sceneId' => $sceneId,
+        ]);
 
         echo json_encode([
             'success' => true,
@@ -327,6 +411,7 @@ switch ($action) {
             'sceneData' => $sceneData,
             'scenes' => array_values($scenes),
             'active_scene_id' => $activeSceneId,
+            'latest_change_id' => $latestChangeId ?? getLatestSceneChangeId(),
         ]);
         exit;
 
@@ -351,10 +436,16 @@ switch ($action) {
             exit;
         }
 
+        $changeId = recordSceneChange('active_scene', $sceneId, [
+            'activeSceneId' => $sceneId,
+            'scene' => $sceneLookup[$sceneId] ?? null,
+        ]);
+
         echo json_encode([
             'success' => true,
             'active_scene_id' => $sceneId,
             'scene' => $sceneLookup[$sceneId],
+            'latest_change_id' => $changeId ?? getLatestSceneChangeId(),
         ]);
         exit;
 
@@ -369,6 +460,7 @@ switch ($action) {
             'success' => true,
             'active_scene_id' => $activeSceneId,
             'scene' => $scene,
+            'latest_change_id' => getLatestSceneChangeId(),
         ]);
         exit;
 }
