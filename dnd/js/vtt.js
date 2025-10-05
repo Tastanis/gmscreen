@@ -3075,7 +3075,7 @@
             return clampNumber(numeric, 1, 12);
         }
 
-        function saveActiveSceneTokens() {
+        function saveActiveSceneTokens(options) {
             if (!state.isGM) {
                 return;
             }
@@ -3083,9 +3083,20 @@
             if (!sceneId) {
                 return;
             }
+            const configOptions = isPlainObject(options) ? options : {};
+            const immediate = configOptions.immediate === true;
+            const persistOptions = Object.assign({}, configOptions);
+            if (persistOptions.hasOwnProperty('immediate')) {
+                delete persistOptions.immediate;
+            }
             state.sceneTokensPendingSave = true;
             if (state.sceneTokensSaveTimer !== null) {
                 window.clearTimeout(state.sceneTokensSaveTimer);
+                state.sceneTokensSaveTimer = null;
+            }
+            if (immediate) {
+                flushPendingSceneTokenSave(persistOptions);
+                return;
             }
             state.sceneTokensSaveTimer = window.setTimeout(function () {
                 state.sceneTokensSaveTimer = null;
@@ -3093,7 +3104,7 @@
                     return;
                 }
                 state.sceneTokensPendingSave = false;
-                persistSceneTokens(sceneId, state.sceneTokens.slice()).catch(function () {});
+                persistSceneTokens(sceneId, state.sceneTokens.slice(), persistOptions).catch(function () {});
             }, SCENE_TOKENS_SAVE_DELAY_MS);
         }
 
@@ -3415,7 +3426,7 @@
             state.selectedSceneTokenId = tokenInstance.id;
             state.sceneTokens.push(tokenInstance);
             renderSceneTokens();
-            saveActiveSceneTokens();
+            saveActiveSceneTokens({ immediate: true });
             focusSceneTokenElement(tokenInstance.id);
         }
 
