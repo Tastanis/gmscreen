@@ -21,6 +21,7 @@ foreach ($chatParticipantsMap as $participantId => $participantLabel) {
 }
 
 require_once __DIR__ . '/scenes_repository.php';
+require_once __DIR__ . '/scene_state_repository.php';
 
 $sceneData = require __DIR__ . '/scenes.php';
 if (!is_array($sceneData)) {
@@ -48,33 +49,9 @@ if (!empty($scenes)) {
     }
 }
 
-$sceneStateFile = __DIR__ . '/../data/vtt_active_scene.json';
-$sceneStateDir = dirname($sceneStateFile);
-if (!is_dir($sceneStateDir)) {
-    mkdir($sceneStateDir, 0755, true);
-}
-
-$activeSceneId = $defaultSceneId;
-if (file_exists($sceneStateFile)) {
-    $rawSceneState = file_get_contents($sceneStateFile);
-    $decodedSceneState = json_decode($rawSceneState, true);
-    if (is_array($decodedSceneState) && isset($decodedSceneState['active_scene_id'])) {
-        $storedSceneId = $decodedSceneState['active_scene_id'];
-        if (isset($sceneLookup[$storedSceneId])) {
-            $activeSceneId = $storedSceneId;
-        }
-    }
-} elseif ($defaultSceneId !== null) {
-    file_put_contents(
-        $sceneStateFile,
-        json_encode(['active_scene_id' => $defaultSceneId], JSON_PRETTY_PRINT),
-        LOCK_EX
-    );
-}
-
-if ($activeSceneId === null && !empty($sceneLookup)) {
-    $activeSceneId = array_key_first($sceneLookup);
-}
+$sceneStateFile = getSceneStateFilePath();
+ensureSceneStateFile($sceneStateFile, $defaultSceneId);
+$activeSceneId = loadActiveSceneId($sceneLookup, $defaultSceneId, $sceneStateFile);
 
 $activeScene = $activeSceneId !== null && isset($sceneLookup[$activeSceneId])
     ? $sceneLookup[$activeSceneId]
