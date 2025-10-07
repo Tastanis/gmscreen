@@ -1,0 +1,50 @@
+.vtt-app {
+  display: grid;
+  grid-template-columns: 320px minmax(0, 1fr) 360px;
+  gap: 1.5rem;
+  min-height: 100vh;
+  padding: 2rem;
+}
+
+.vtt-app__sidebar {
+  background: var(--vtt-panel-bg);
+  border: 1px solid var(--vtt-panel-border);
+  border-radius: var(--vtt-radius);
+  backdrop-filter: blur(10px);
+  box-shadow: 0 18px 45px rgba(15, 23, 42, 0.45);
+}
+
+.vtt-app__main {
+  background: rgba(15, 23, 42, 0.6);
+  border-radius: var(--vtt-radius);
+  border: 1px solid var(--vtt-panel-border);
+  position: relative;
+  overflow: hidden;
+}
+
+@media (max-width: 1280px) {
+  .vtt-app {
+    grid-template-columns: 280px minmax(0, 1fr);
+    grid-template-areas:
+      "settings settings"
+      "board board"
+      "chat chat";
+  }
+
+  .vtt-app__sidebar--settings,
+  .vtt-app__sidebar--chat {
+    grid-area: auto;
+  }
+}
+
+@media (max-width: 960px) {
+  .vtt-app {
+    grid-template-columns: minmax(0, 1fr);
+    grid-auto-rows: auto;
+  }
+
+  .vtt-app__sidebar,
+  .vtt-app__main {
+    width: 100%;
+  }
+}

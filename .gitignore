@@ -4,6 +4,9 @@
 # Node.js dependencies and files
 node_modules/
 vendor/
+!dnd/vtt/assets/js/vendor/
+dnd/vtt/assets/js/vendor/*
+!dnd/vtt/assets/js/vendor/.gitkeep
 .phpunit.result.cache
 npm-debug.log*
 yarn-debug.log*
@@ -65,8 +68,9 @@ pnpm-lock.yaml
 /dnd/strixhaven/map/hex-images/
 
 # Backup directories
-**/backups/
-**/backup/
+**/backups/*
+**/backup/*
+!**/backups/.gitkeep
 
 # Log files
 *.log
@@ -91,3 +95,4 @@ Thumbs.db
 
 # Keep the directories but not the data files
 !**/.gitkeep
+!**/vendor/.gitkeep
