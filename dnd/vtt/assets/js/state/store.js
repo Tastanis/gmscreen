@@ -16,6 +16,12 @@ export function initializeState(snapshot = {}) {
       ...snapshot.boardState,
     };
   }
+  if (snapshot.grid && typeof snapshot.grid === 'object') {
+    state.grid = {
+      ...state.grid,
+      ...snapshot.grid,
+    };
+  }
   notify();
 }
 

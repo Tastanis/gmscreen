@@ -21,7 +21,7 @@ async function bootstrap() {
     boardState: config.boardState,
   });
 
-  mountSettingsPanel(routes, { getState, subscribe });
+  mountSettingsPanel(routes, { getState, subscribe, updateState });
   mountChatPanel(routes);
   mountBoardInteractions({ getState, subscribe, updateState }, routes);
   mountDragRuler();

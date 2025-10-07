@@ -66,6 +66,35 @@
   gap: 0.5rem;
 }
 
+.scene-controls__buttons .btn.is-active {
+  background: rgba(99, 102, 241, 0.18);
+  border-color: rgba(99, 102, 241, 0.45);
+  color: var(--vtt-text-primary);
+}
+
+.scene-controls__grid {
+  display: grid;
+  gap: 0.35rem;
+}
+
+.scene-controls__grid-label {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  font-size: 0.9rem;
+  color: var(--vtt-text-muted);
+}
+
+.scene-controls__grid-value {
+  font-variant-numeric: tabular-nums;
+  color: var(--vtt-text-primary);
+  font-weight: 600;
+}
+
+.scene-controls__grid input[type='range'] {
+  width: 100%;
+}
+
 .scene-controls__hint {
   margin: 0;
   color: var(--vtt-text-muted);

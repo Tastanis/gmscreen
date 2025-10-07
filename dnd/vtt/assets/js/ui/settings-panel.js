@@ -7,6 +7,10 @@ export function mountSettingsPanel(routes, store) {
 
   const toggle = document.getElementById('vtt-settings-toggle');
   const closeButton = panel.querySelector('[data-action="close-settings"]');
+  const toggleGridButton = panel.querySelector('[data-action="toggle-grid"]');
+  const lockGridButton = panel.querySelector('[data-action="lock-grid"]');
+  const gridSizeInput = panel.querySelector('[data-grid-size-input]');
+  const gridSizeDisplay = panel.querySelector('[data-grid-size-display]');
 
   let isOpen = false;
 
@@ -47,8 +51,80 @@ export function mountSettingsPanel(routes, store) {
     setActiveTab(panel, tabId);
   });
 
-  renderSceneList(routes, store);
-  renderTokenLibrary(routes, store);
+  const storeApi = store ?? {};
+
+  const syncGridControls = (state) => {
+    const gridState = state?.grid ?? {};
+    const parsedSize = Number.parseInt(gridState.size, 10);
+    const size = Number.isFinite(parsedSize) ? parsedSize : 64;
+    const visible = gridState.visible ?? true;
+    const locked = gridState.locked ?? false;
+
+    if (gridSizeInput) {
+      gridSizeInput.value = String(size);
+      gridSizeInput.disabled = locked;
+    }
+
+    if (gridSizeDisplay) {
+      gridSizeDisplay.textContent = String(size);
+    }
+
+    if (toggleGridButton) {
+      toggleGridButton.textContent = visible ? 'Hide Grid' : 'Show Grid';
+      toggleGridButton.setAttribute('aria-pressed', String(visible));
+    }
+
+    if (lockGridButton) {
+      lockGridButton.textContent = locked ? 'Unlock Grid' : 'Lock Grid';
+      lockGridButton.classList.toggle('is-active', locked);
+      lockGridButton.setAttribute('aria-pressed', String(locked));
+    }
+  };
+
+  syncGridControls(storeApi.getState?.());
+
+  if (typeof storeApi.subscribe === 'function') {
+    storeApi.subscribe((state) => syncGridControls(state));
+  }
+
+  const ensureGridDraft = (draft) => {
+    if (!draft.grid || typeof draft.grid !== 'object') {
+      draft.grid = { size: 64, locked: false, visible: true };
+    }
+  };
+
+  if (gridSizeInput && typeof storeApi.updateState === 'function') {
+    gridSizeInput.addEventListener('input', () => {
+      const nextSize = Number.parseInt(gridSizeInput.value, 10);
+      if (!Number.isFinite(nextSize)) return;
+
+      storeApi.updateState((draft) => {
+        ensureGridDraft(draft);
+        draft.grid.size = Math.max(8, nextSize);
+      });
+    });
+  }
+
+  if (toggleGridButton && typeof storeApi.updateState === 'function') {
+    toggleGridButton.addEventListener('click', () => {
+      storeApi.updateState((draft) => {
+        ensureGridDraft(draft);
+        draft.grid.visible = !draft.grid.visible;
+      });
+    });
+  }
+
+  if (lockGridButton && typeof storeApi.updateState === 'function') {
+    lockGridButton.addEventListener('click', () => {
+      storeApi.updateState((draft) => {
+        ensureGridDraft(draft);
+        draft.grid.locked = !draft.grid.locked;
+      });
+    });
+  }
+
+  renderSceneList(routes, storeApi);
+  renderTokenLibrary(routes, storeApi);
 }
 
 function setActiveTab(panel, tabId) {

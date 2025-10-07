@@ -44,6 +44,27 @@ function renderVttSettingsPanel(string $tokenLibraryMarkup = ''): string
                             <button class="btn" type="button" data-action="toggle-grid">Toggle Grid</button>
                             <button class="btn" type="button" data-action="lock-grid">Lock Grid</button>
                         </div>
+                        <div class="scene-controls__grid">
+                            <div class="scene-controls__grid-label">
+                                <label for="vtt-grid-size-input">Grid Size</label>
+                                <span class="scene-controls__grid-value">
+                                    <span data-grid-size-display>64</span> px
+                                </span>
+                            </div>
+                            <input
+                                id="vtt-grid-size-input"
+                                type="range"
+                                min="24"
+                                max="160"
+                                step="4"
+                                value="64"
+                                data-grid-size-input
+                                aria-describedby="vtt-grid-size-hint"
+                            />
+                            <p id="vtt-grid-size-hint" class="scene-controls__hint">
+                                Adjust how large each grid square should appear on the board.
+                            </p>
+                        </div>
                         <p class="scene-controls__hint">Upload a background map and adjust the shared grid without leaving settings.</p>
                     </section>
                     <div class="scene-manager" id="scene-manager"></div>
