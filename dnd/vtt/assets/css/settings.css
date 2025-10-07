@@ -49,6 +49,33 @@
   padding: 1rem;
 }
 
+.scene-controls {
+  display: flex;
+  flex-direction: column;
+  gap: 0.75rem;
+  margin-bottom: 1rem;
+  padding: 0.75rem;
+  border: 1px dashed rgba(148, 163, 184, 0.35);
+  border-radius: var(--vtt-radius);
+  background: rgba(15, 23, 42, 0.5);
+}
+
+.scene-controls__buttons {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.5rem;
+}
+
+.scene-controls__hint {
+  margin: 0;
+  color: var(--vtt-text-muted);
+  font-size: 0.85rem;
+}
+
+.scene-manager {
+  min-height: 140px;
+}
+
 .vtt-token-library {
   display: flex;
   flex-direction: column;
