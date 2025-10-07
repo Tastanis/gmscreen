@@ -5,24 +5,51 @@ function renderVttChatPanel(): string
 {
     ob_start();
     ?>
-    <aside class="vtt-panel vtt-panel--chat" data-module="vtt-chat">
-        <header class="vtt-panel__header">
-            <h2 class="vtt-panel__title">VTT Chat</h2>
-            <button type="button" class="vtt-panel__toggle" data-action="toggle-chat" aria-expanded="false">
-                <span class="visually-hidden">Toggle VTT chat</span>
-            </button>
-        </header>
-        <div class="vtt-panel__body">
-            <div id="vtt-chat-log" class="chat-log" aria-live="polite"></div>
-            <form id="vtt-chat-form" class="chat-form" autocomplete="off">
-                <label class="visually-hidden" for="vtt-chat-input">Message</label>
-                <textarea id="vtt-chat-input" name="message" rows="3" placeholder="Send a message..." required></textarea>
-                <div class="chat-form__actions">
-                    <button type="submit" class="btn btn--primary">Send</button>
-                </div>
-            </form>
+    <aside
+        id="chat-panel"
+        class="chat-panel chat-panel--closed"
+        aria-hidden="true"
+        data-module="vtt-chat"
+    >
+        <div class="chat-panel__header">
+            <h3 class="chat-panel__title">VTT Chat</h3>
+            <div class="chat-panel__actions">
+                <button
+                    type="button"
+                    id="chat-panel-close"
+                    class="chat-panel__close"
+                    aria-label="Close chat"
+                    data-action="close-chat"
+                >&times;</button>
+            </div>
         </div>
+        <div id="chat-message-list" class="chat-panel__history" role="log" aria-live="polite"></div>
+        <div id="chat-whisper-targets" class="chat-panel__whispers" role="group" aria-label="Whisper targets"></div>
+        <form id="chat-input-form" class="chat-panel__input" autocomplete="off">
+            <textarea
+                id="chat-input"
+                class="chat-panel__textarea"
+                rows="2"
+                placeholder="Type a message..."
+            ></textarea>
+            <button type="submit" id="chat-send-btn" class="chat-panel__send">Send</button>
+        </form>
     </aside>
+    <button
+        id="chat-panel-toggle"
+        class="chat-panel-toggle"
+        type="button"
+        aria-expanded="false"
+        aria-controls="chat-panel"
+        data-action="toggle-chat"
+    >
+        Open Chat
+    </button>
+    <div id="chat-drop-target" class="chat-drop-target" hidden aria-hidden="true">
+        Drop images or image links to share
+    </div>
+    <div id="chat-whisper-popouts" class="chat-whisper-popouts" aria-live="polite" aria-atomic="false"></div>
+    <div id="chat-whisper-alerts" class="chat-whisper-alerts" aria-live="assertive" aria-atomic="true"></div>
     <?php
     return trim((string) ob_get_clean());
 }

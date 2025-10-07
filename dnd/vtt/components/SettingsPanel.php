@@ -5,14 +5,22 @@ function renderVttSettingsPanel(string $tokenLibraryMarkup = ''): string
 {
     ob_start();
     ?>
-    <aside class="vtt-panel vtt-panel--settings" data-module="vtt-settings">
-        <header class="vtt-panel__header">
-            <h2 class="vtt-panel__title">Settings</h2>
-            <button type="button" class="vtt-panel__toggle" data-action="toggle-settings" aria-expanded="false">
-                <span class="visually-hidden">Toggle settings</span>
-            </button>
+    <aside
+        id="vtt-settings-panel"
+        class="vtt-settings-panel vtt-settings-panel--closed"
+        data-module="vtt-settings"
+        aria-hidden="true"
+    >
+        <header class="vtt-settings-panel__header">
+            <h2 class="vtt-settings-panel__title">Settings</h2>
+            <button
+                type="button"
+                class="vtt-settings-panel__close"
+                data-action="close-settings"
+                aria-label="Close settings"
+            >&times;</button>
         </header>
-        <div class="vtt-panel__body">
+        <div class="vtt-settings-panel__body">
             <nav class="settings-tabs" aria-label="Settings">
                 <button class="settings-tab is-active" data-settings-tab="scenes" type="button">Scenes</button>
                 <button class="settings-tab" data-settings-tab="tokens" type="button">Tokens</button>
@@ -44,6 +52,16 @@ function renderVttSettingsPanel(string $tokenLibraryMarkup = ''): string
             </section>
         </div>
     </aside>
+    <button
+        id="vtt-settings-toggle"
+        class="vtt-settings-toggle"
+        type="button"
+        aria-controls="vtt-settings-panel"
+        aria-expanded="false"
+        data-action="toggle-settings"
+    >
+        Settings
+    </button>
     <?php
     return trim((string) ob_get_clean());
 }
