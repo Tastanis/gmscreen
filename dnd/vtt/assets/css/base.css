@@ -71,6 +71,13 @@ body.vtt-body {
   background: #4f46e5;
 }
 
+.btn[disabled],
+.btn:disabled,
+.btn.is-loading {
+  opacity: 0.65;
+  cursor: not-allowed;
+}
+
 .empty-state {
   color: var(--vtt-text-muted);
   text-align: center;

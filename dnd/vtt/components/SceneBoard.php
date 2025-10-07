@@ -12,6 +12,13 @@ function renderVttSceneBoard(): string
                 <p id="active-scene-status" class="vtt-board__status">Select or create a scene to begin.</p>
             </div>
             <div class="vtt-board__controls">
+                <input
+                    id="vtt-map-upload-input"
+                    class="visually-hidden"
+                    type="file"
+                    accept="image/*"
+                />
+                <button class="btn btn--primary" type="button" data-action="upload-map">Upload Map</button>
                 <button class="btn" type="button" data-action="toggle-grid">Toggle Grid</button>
                 <button class="btn" type="button" data-action="lock-grid">Lock Grid</button>
                 <button class="btn" type="button" data-action="measure-distance">Measure</button>
@@ -20,6 +27,11 @@ function renderVttSceneBoard(): string
         <div class="vtt-board__canvas-wrapper">
             <div id="vtt-grid-overlay" class="vtt-board__grid" aria-hidden="true"></div>
             <div id="vtt-board-canvas" class="vtt-board__canvas" tabindex="0" role="application">
+                <div id="vtt-map-surface" class="vtt-board__map-surface" aria-live="polite">
+                    <div id="vtt-map-backdrop" class="vtt-board__map-backdrop">
+                        <img id="vtt-map-image" class="vtt-board__map-image" alt="Scene map" hidden />
+                    </div>
+                </div>
                 <p class="vtt-board__empty">Drag a scene map here or create a scene from the settings panel.</p>
             </div>
             <div id="vtt-distance-ruler" class="vtt-board__ruler" hidden>
