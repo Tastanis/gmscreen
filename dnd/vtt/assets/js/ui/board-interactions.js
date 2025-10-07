@@ -81,13 +81,6 @@ export function mountBoardInteractions(store, routes = {}) {
     });
   }
 
-  const toggleGridButton = document.querySelector('[data-action="toggle-grid"]');
-  if (toggleGridButton && grid) {
-    toggleGridButton.addEventListener('click', () => {
-      grid.classList.toggle('is-visible');
-    });
-  }
-
   mapSurface.addEventListener('contextmenu', (event) => {
     event.preventDefault();
   });
@@ -162,16 +155,37 @@ export function mountBoardInteractions(store, routes = {}) {
   mapSurface.addEventListener('pointercancel', endPan);
   mapSurface.addEventListener('pointerleave', endPan);
 
+  const applyGridState = (gridState = {}) => {
+    if (!grid) return;
+
+    const parsedSize = Number.parseInt(gridState.size, 10);
+    const size = Number.isFinite(parsedSize) ? parsedSize : 64;
+    const dimension = `${Math.max(8, size)}px`;
+    grid.style.setProperty('--vtt-grid-size', dimension);
+    const isVisible = gridState.visible ?? true;
+    grid.classList.toggle('is-visible', Boolean(isVisible));
+  };
+
+  const applyStateToBoard = (state = {}) => {
+    const nextUrl = state.boardState?.mapUrl ?? null;
+    if (nextUrl !== viewState.activeMapUrl) {
+      loadMap(nextUrl);
+    }
+    applyGridState(state.grid ?? {});
+  };
+
   if (typeof boardApi.subscribe === 'function') {
-    boardApi.subscribe((state) => {
-      const nextUrl = state.boardState?.mapUrl ?? null;
-      if (nextUrl !== viewState.activeMapUrl) {
-        loadMap(nextUrl);
-      }
+    boardApi.subscribe(applyStateToBoard);
+  }
+
+  if (grid && (!boardApi || typeof boardApi.updateState !== 'function')) {
+    const toggleGridButton = document.querySelector('[data-action="toggle-grid"]');
+    toggleGridButton?.addEventListener('click', () => {
+      grid.classList.toggle('is-visible');
     });
   }
 
-  loadMap(boardApi.getState?.().boardState?.mapUrl ?? null);
+  applyStateToBoard(boardApi.getState?.() ?? {});
 
   function loadMap(url) {
     viewState.activeMapUrl = url || null;
