@@ -37,7 +37,9 @@ async function hydrateFromServer(routes) {
     ]);
 
     updateState((draft) => {
-      draft.scenes = scenes ?? draft.scenes;
+      if (scenes) {
+        draft.scenes = normalizeSceneState(scenes);
+      }
       draft.tokens = tokens ?? draft.tokens;
     });
   } catch (error) {
@@ -46,3 +48,18 @@ async function hydrateFromServer(routes) {
 }
 
 document.addEventListener('DOMContentLoaded', bootstrap);
+
+function normalizeSceneState(raw = {}) {
+  if (Array.isArray(raw)) {
+    return { folders: [], items: raw };
+  }
+
+  return {
+    folders: Array.isArray(raw?.folders) ? raw.folders : [],
+    items: Array.isArray(raw?.items)
+      ? raw.items
+      : Array.isArray(raw?.scenes)
+      ? raw.scenes
+      : [],
+  };
+}
