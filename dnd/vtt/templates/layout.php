@@ -21,15 +21,11 @@ $assetVersion = (int) ($config['assetsVersion'] ?? time());
 </head>
 <body class="vtt-body">
     <div id="vtt-app" class="vtt-app" data-routes='<?= json_encode($routes, JSON_HEX_TAG | JSON_HEX_APOS | JSON_HEX_QUOT | JSON_HEX_AMP) ?>'>
-        <div class="vtt-app__sidebar vtt-app__sidebar--settings">
-            <?= $sections['settingsPanel'] ?? '' ?>
-        </div>
+        <?= $sections['settingsPanel'] ?? '' ?>
         <main class="vtt-app__main" id="vtt-main" tabindex="-1">
             <?= $sections['sceneBoard'] ?? '' ?>
         </main>
-        <div class="vtt-app__sidebar vtt-app__sidebar--chat">
-            <?= $sections['chatPanel'] ?? '' ?>
-        </div>
+        <?= $sections['chatPanel'] ?? '' ?>
     </div>
     <script>
         window.vttConfig = <?= json_encode($config, JSON_HEX_TAG | JSON_HEX_APOS | JSON_HEX_QUOT | JSON_HEX_AMP) ?>;
