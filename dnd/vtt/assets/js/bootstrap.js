@@ -40,7 +40,9 @@ async function hydrateFromServer(routes) {
       if (scenes) {
         draft.scenes = normalizeSceneState(scenes);
       }
-      draft.tokens = tokens ?? draft.tokens;
+      if (tokens) {
+        draft.tokens = normalizeTokenState(tokens);
+      }
     });
   } catch (error) {
     console.warn('[VTT] Failed to hydrate data', error);
@@ -60,6 +62,21 @@ function normalizeSceneState(raw = {}) {
       ? raw.items
       : Array.isArray(raw?.scenes)
       ? raw.scenes
+      : [],
+  };
+}
+
+function normalizeTokenState(raw = {}) {
+  if (Array.isArray(raw)) {
+    return { folders: [], items: raw };
+  }
+
+  return {
+    folders: Array.isArray(raw?.folders) ? raw.folders : [],
+    items: Array.isArray(raw?.items)
+      ? raw.items
+      : Array.isArray(raw?.tokens)
+      ? raw.tokens
       : [],
   };
 }

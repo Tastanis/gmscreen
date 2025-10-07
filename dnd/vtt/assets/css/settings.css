@@ -256,6 +256,61 @@
   justify-content: flex-start;
 }
 
+.token-maker__field {
+  display: flex;
+  flex-direction: column;
+  gap: 0.35rem;
+}
+
+.token-maker__field input,
+.token-maker__field select {
+  width: 100%;
+}
+
+.token-maker__field--inline {
+  flex-direction: row;
+  align-items: flex-end;
+  gap: 0.75rem;
+}
+
+.token-maker__field-group {
+  flex: 1 1 auto;
+  display: flex;
+  flex-direction: column;
+  gap: 0.35rem;
+}
+
+.token-maker__field--inline > .btn {
+  align-self: center;
+}
+
+.token-maker__hint {
+  margin: 0;
+  font-size: 0.75rem;
+  color: var(--vtt-text-muted);
+}
+
+.token-maker__actions {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 0.75rem;
+}
+
+.token-maker__feedback {
+  margin: 0;
+  font-size: 0.85rem;
+  color: var(--vtt-text-muted);
+}
+
+.token-maker__feedback[data-variant='error'] {
+  color: var(--vtt-danger);
+}
+
+.token-maker__feedback[data-variant='success'] {
+  color: var(--vtt-success);
+}
+
 .token-maker__dropzone {
   padding: 1.25rem 1rem;
   border: 1px dashed rgba(148, 163, 184, 0.4);
@@ -305,17 +360,40 @@
   padding: 1.5rem 1rem;
 }
 
-#token-template-list {
-  display: grid;
-  gap: 0.75rem;
-}
 
 #token-template-list li {
   list-style: none;
 }
 
-#token-template-list li + li {
-  margin-top: 0;
+.token-group + .token-group {
+  margin-top: 1rem;
+}
+
+.token-group__header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  margin-bottom: 0.5rem;
+}
+
+.token-group__title {
+  margin: 0;
+  font-size: 0.95rem;
+  font-weight: 600;
+  color: var(--vtt-text-primary);
+}
+
+.token-group__count {
+  font-size: 0.8rem;
+  color: var(--vtt-text-muted);
+}
+
+.token-group__list {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: grid;
+  gap: 0.75rem;
 }
 
 .token-item {
@@ -334,6 +412,15 @@
   height: 48px;
   border-radius: 50%;
   background: rgba(99, 102, 241, 0.25);
+  overflow: hidden;
+  position: relative;
+}
+
+.token-item__thumb img {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+  display: block;
 }
 
 .token-item__meta h4 {

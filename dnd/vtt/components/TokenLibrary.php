@@ -11,7 +11,7 @@ function renderVttTokenLibrary(): string
             <div class="vtt-token-library__actions">
                 <label class="visually-hidden" for="token-search">Search tokens</label>
                 <input id="token-search" type="search" placeholder="Search tokens" />
-                <button class="btn btn--primary" type="button" data-action="create-token">Create Token</button>
+                <button class="btn" type="button" data-action="create-token-folder">New Folder</button>
             </div>
         </header>
         <div class="vtt-token-library__content">
@@ -41,6 +41,31 @@ function renderVttTokenLibrary(): string
                     <p class="token-maker__controls-hint">
                         Scroll to zoom. Right-click and drag inside the circle to reposition.
                     </p>
+                    <div class="token-maker__field">
+                        <label for="token-name-input">Token Name</label>
+                        <input
+                            id="token-name-input"
+                            type="text"
+                            name="token-name"
+                            placeholder="Name this token"
+                            autocomplete="off"
+                            data-token-name-input
+                        />
+                    </div>
+                    <div class="token-maker__field token-maker__field--inline">
+                        <div class="token-maker__field-group">
+                            <label for="token-folder-select">Folder</label>
+                            <select id="token-folder-select" name="token-folder" data-token-folder-select>
+                                <option value="">Unsorted</option>
+                            </select>
+                            <p class="token-maker__hint">Keep tokens organized by adventure or encounter.</p>
+                        </div>
+                        <button class="btn" type="button" data-action="create-token-folder">New Folder</button>
+                    </div>
+                    <div class="token-maker__actions">
+                        <button class="btn btn--primary" type="button" data-action="create-token">Create Token</button>
+                        <p class="token-maker__feedback" data-token-feedback hidden></p>
+                    </div>
                 </div>
             </section>
             <ul id="token-template-list" class="token-template-list" aria-live="polite">
