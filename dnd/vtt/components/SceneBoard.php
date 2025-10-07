@@ -16,11 +16,13 @@ function renderVttSceneBoard(): string
             </div>
         </header>
         <div class="vtt-board__canvas-wrapper">
-            <div id="vtt-grid-overlay" class="vtt-board__grid" aria-hidden="true"></div>
             <div id="vtt-board-canvas" class="vtt-board__canvas" tabindex="0" role="application">
                 <div id="vtt-map-surface" class="vtt-board__map-surface" aria-live="polite">
-                    <div id="vtt-map-backdrop" class="vtt-board__map-backdrop">
-                        <img id="vtt-map-image" class="vtt-board__map-image" alt="Scene map" hidden />
+                    <div id="vtt-map-transform" class="vtt-board__map-transform" hidden>
+                        <div id="vtt-map-backdrop" class="vtt-board__map-backdrop">
+                            <img id="vtt-map-image" class="vtt-board__map-image" alt="Scene map" hidden />
+                        </div>
+                        <div id="vtt-grid-overlay" class="vtt-board__grid" aria-hidden="true"></div>
                     </div>
                 </div>
                 <p class="vtt-board__empty">Drag a scene map here or create a scene from the settings panel.</p>

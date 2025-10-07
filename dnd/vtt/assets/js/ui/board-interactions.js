@@ -1,14 +1,15 @@
 export function mountBoardInteractions(store, routes = {}) {
   const board = document.getElementById('vtt-board-canvas');
-  const grid = document.getElementById('vtt-grid-overlay');
   const mapSurface = document.getElementById('vtt-map-surface');
+  const mapTransform = document.getElementById('vtt-map-transform');
+  const grid = document.getElementById('vtt-grid-overlay');
   const mapBackdrop = document.getElementById('vtt-map-backdrop');
   const mapImage = document.getElementById('vtt-map-image');
   const emptyState = board?.querySelector('.vtt-board__empty');
   const status = document.getElementById('active-scene-status');
   const uploadButton = document.querySelector('[data-action="upload-map"]');
   const uploadInput = document.getElementById('vtt-map-upload-input');
-  if (!board || !mapSurface || !mapBackdrop || !mapImage) return;
+  if (!board || !mapSurface || !mapTransform || !mapBackdrop || !mapImage) return;
 
   const defaultStatusText = status?.textContent ?? '';
 
@@ -192,9 +193,16 @@ export function mountBoardInteractions(store, routes = {}) {
     viewState.mapLoaded = false;
     mapImage.hidden = true;
     mapBackdrop.hidden = !url;
+    mapTransform.hidden = !url;
+    if (grid) {
+      grid.hidden = !url;
+    }
     resetView();
+    applyGridOffsets();
 
     if (!url) {
+      mapTransform.style.width = '';
+      mapTransform.style.height = '';
       emptyState?.removeAttribute('hidden');
       if (status) {
         status.textContent = defaultStatusText;
@@ -208,6 +216,11 @@ export function mountBoardInteractions(store, routes = {}) {
       calibrateToBoard();
       mapImage.hidden = false;
       mapBackdrop.hidden = false;
+      mapTransform.hidden = false;
+      if (grid) {
+        grid.hidden = false;
+        applyGridState(boardApi.getState?.().grid ?? {});
+      }
       if (status) {
         status.textContent = 'Right-click and drag to pan. Use the mouse wheel to zoom.';
       }
@@ -216,6 +229,12 @@ export function mountBoardInteractions(store, routes = {}) {
       viewState.mapLoaded = false;
       mapImage.hidden = true;
       mapBackdrop.hidden = true;
+      mapTransform.hidden = true;
+      mapTransform.style.width = '';
+      mapTransform.style.height = '';
+      if (grid) {
+        grid.hidden = true;
+      }
       emptyState?.removeAttribute('hidden');
       if (status) {
         status.textContent = 'Unable to display the uploaded map.';
@@ -227,10 +246,24 @@ export function mountBoardInteractions(store, routes = {}) {
   function calibrateToBoard() {
     const boardRect = board.getBoundingClientRect();
     const styles = getComputedStyle(mapBackdrop);
-    const paddingX = parseFloat(styles.paddingLeft || '0') + parseFloat(styles.paddingRight || '0');
-    const paddingY = parseFloat(styles.paddingTop || '0') + parseFloat(styles.paddingBottom || '0');
-    const mapWidth = mapImage.naturalWidth + paddingX;
-    const mapHeight = mapImage.naturalHeight + paddingY;
+    const paddingTop = parseFloat(styles.paddingTop || '0');
+    const paddingRight = parseFloat(styles.paddingRight || '0');
+    const paddingBottom = parseFloat(styles.paddingBottom || '0');
+    const paddingLeft = parseFloat(styles.paddingLeft || '0');
+    const mapWidth = mapImage.naturalWidth + paddingLeft + paddingRight;
+    const mapHeight = mapImage.naturalHeight + paddingTop + paddingBottom;
+
+    if (mapTransform) {
+      mapTransform.style.width = `${mapWidth}px`;
+      mapTransform.style.height = `${mapHeight}px`;
+    }
+
+    applyGridOffsets({
+      top: paddingTop,
+      right: paddingRight,
+      bottom: paddingBottom,
+      left: paddingLeft,
+    });
 
     const scaleX = boardRect.width / mapWidth;
     const scaleY = boardRect.height / mapHeight;
@@ -248,13 +281,24 @@ export function mountBoardInteractions(store, routes = {}) {
   }
 
   function applyTransform() {
-    mapBackdrop.style.transform = `translate3d(${viewState.translation.x}px, ${viewState.translation.y}px, 0) scale(${viewState.scale})`;
+    if (!mapTransform) return;
+    mapTransform.style.transform = `translate3d(${viewState.translation.x}px, ${viewState.translation.y}px, 0) scale(${viewState.scale})`;
   }
 
   function resetView() {
     viewState.scale = 1;
     viewState.translation = { x: 0, y: 0 };
     applyTransform();
+  }
+
+  function applyGridOffsets(offsets = {}) {
+    if (!grid) return;
+    const { top = 0, right = 0, bottom = 0, left = 0 } = offsets;
+    const sanitize = (value) => (Number.isFinite(value) ? value : 0);
+    grid.style.setProperty('--vtt-grid-offset-top', `${sanitize(top)}px`);
+    grid.style.setProperty('--vtt-grid-offset-right', `${sanitize(right)}px`);
+    grid.style.setProperty('--vtt-grid-offset-bottom', `${sanitize(bottom)}px`);
+    grid.style.setProperty('--vtt-grid-offset-left', `${sanitize(left)}px`);
   }
 
   function setUploadingState(isUploading) {

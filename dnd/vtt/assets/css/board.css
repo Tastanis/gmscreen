@@ -29,6 +29,7 @@
   flex-wrap: wrap;
 }
 
+
 .vtt-board__canvas-wrapper {
   flex: 1;
   position: relative;
@@ -66,22 +67,6 @@
   display: none;
 }
 
-.vtt-board__grid {
-  position: absolute;
-  inset: 0;
-  background-image: linear-gradient(to right, rgba(148, 163, 184, 0.2) 1px, transparent 1px),
-    linear-gradient(to bottom, rgba(148, 163, 184, 0.2) 1px, transparent 1px);
-  background-size: var(--vtt-grid-size, 64px) var(--vtt-grid-size, 64px);
-  pointer-events: none;
-  opacity: 0;
-  transition: opacity var(--vtt-transition);
-  z-index: 3;
-}
-
-.vtt-board__grid.is-visible {
-  opacity: 1;
-}
-
 .vtt-board__map-surface {
   position: absolute;
   inset: 0;
@@ -95,16 +80,28 @@
   cursor: grabbing;
 }
 
-.vtt-board__map-backdrop {
+.vtt-board__map-transform {
   position: absolute;
   top: 0;
   left: 0;
-  padding: var(--vtt-map-padding, 18rem);
   transform-origin: top left;
   will-change: transform;
+  pointer-events: none;
+  z-index: 1;
+}
+
+.vtt-board__map-transform[hidden] {
+  display: none;
+}
+
+.vtt-board__map-backdrop {
+  position: absolute;
+  inset: 0;
+  padding: var(--vtt-map-padding, 18rem);
   border-radius: calc(var(--vtt-radius) * 1.5);
   box-shadow: 0 45px 95px rgba(15, 23, 42, 0.5);
   background: rgba(15, 23, 42, 0.55);
+  box-sizing: border-box;
 }
 
 .vtt-board__map-backdrop[hidden] {
@@ -119,6 +116,25 @@
   border-radius: calc(var(--vtt-radius) * 1.25);
   box-shadow: 0 25px 55px rgba(15, 23, 42, 0.65);
   pointer-events: none;
+}
+
+.vtt-board__grid {
+  position: absolute;
+  top: var(--vtt-grid-offset-top, 0px);
+  right: var(--vtt-grid-offset-right, 0px);
+  bottom: var(--vtt-grid-offset-bottom, 0px);
+  left: var(--vtt-grid-offset-left, 0px);
+  background-image: linear-gradient(to right, rgba(148, 163, 184, 0.2) 1px, transparent 1px),
+    linear-gradient(to bottom, rgba(148, 163, 184, 0.2) 1px, transparent 1px);
+  background-size: var(--vtt-grid-size, 64px) var(--vtt-grid-size, 64px);
+  pointer-events: none;
+  opacity: 0;
+  transition: opacity var(--vtt-transition);
+  z-index: 2;
+}
+
+.vtt-board__grid.is-visible {
+  opacity: 1;
 }
 
 .vtt-board__ruler {
