@@ -269,14 +269,17 @@ function renderSceneItem(scene, activeSceneId) {
   const name = escapeHtml(scene.name || 'Untitled Scene');
   return `
     <article class="scene-item${isActive ? ' is-active' : ''}" data-scene-id="${scene.id}">
-      <header class="scene-item__header">
-        <h4>${name}</h4>
-        <span class="scene-item__status">${isActive ? 'Active' : ''}</span>
-      </header>
-      <footer class="scene-item__footer">
-        <button type="button" class="btn" data-action="activate-scene" data-scene-id="${scene.id}">Activate</button>
-        <button type="button" class="btn btn--danger" data-action="delete-scene" data-scene-id="${scene.id}">Delete</button>
-      </footer>
+      ${renderScenePreview(scene, scene.name)}
+      <div class="scene-item__content">
+        <header class="scene-item__header">
+          <h4>${name}</h4>
+          <span class="scene-item__status">${isActive ? 'Active' : ''}</span>
+        </header>
+        <footer class="scene-item__footer">
+          <button type="button" class="btn" data-action="activate-scene" data-scene-id="${scene.id}">Activate</button>
+          <button type="button" class="btn btn--danger" data-action="delete-scene" data-scene-id="${scene.id}">Delete</button>
+        </footer>
+      </div>
     </article>
   `;
 }
@@ -288,6 +291,25 @@ function escapeHtml(value = '') {
     .replace(/>/g, '&gt;')
     .replace(/"/g, '&quot;')
     .replace(/'/g, '&#039;');
+}
+
+function renderScenePreview(scene, fallbackName) {
+  const url = typeof scene.mapUrl === 'string' ? scene.mapUrl.trim() : '';
+  if (!url) {
+    return `
+      <div class="scene-item__preview scene-item__preview--empty">
+        <span class="scene-item__preview-text">No Map</span>
+      </div>
+    `;
+  }
+
+  const safeName = typeof fallbackName === 'string' ? fallbackName.trim() : '';
+  const label = safeName ? `Preview of ${safeName}` : 'Scene preview';
+  return `
+    <div class="scene-item__preview">
+      <img src="${escapeHtml(url)}" alt="${escapeHtml(label)}" loading="lazy" />
+    </div>
+  `;
 }
 
 function showFeedback(element, message, type = 'info') {
