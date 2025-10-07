@@ -23,7 +23,7 @@ async function bootstrap() {
 
   mountSettingsPanel(routes, { getState, subscribe });
   mountChatPanel(routes);
-  mountBoardInteractions({ getState, subscribe, updateState });
+  mountBoardInteractions({ getState, subscribe, updateState }, routes);
   mountDragRuler();
 
   await hydrateFromServer(routes);

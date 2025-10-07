@@ -3,14 +3,19 @@ const listeners = new Set();
 const state = {
   scenes: [],
   tokens: [],
-  boardState: { activeSceneId: null, placements: {} },
+  boardState: { activeSceneId: null, placements: {}, mapUrl: null },
   grid: { size: 64, locked: false, visible: true },
 };
 
 export function initializeState(snapshot = {}) {
   state.scenes = snapshot.scenes ?? [];
   state.tokens = snapshot.tokens ?? [];
-  state.boardState = snapshot.boardState ?? state.boardState;
+  if (snapshot.boardState && typeof snapshot.boardState === 'object') {
+    state.boardState = {
+      ...state.boardState,
+      ...snapshot.boardState,
+    };
+  }
   notify();
 }
 
