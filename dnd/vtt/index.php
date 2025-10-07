@@ -100,10 +100,7 @@ $vttConfig = [
     'sceneData' => $sceneData,
     'activeSceneId' => $activeSceneId,
     'activeScene' => $activeScene,
-    'sceneEndpoint' => 'scenes_handler.php',
-    'tokenEndpoint' => 'token_handler.php',
     'tokenLibrary' => $tokenLibrary,
-    'latestChangeId' => getLatestSceneChangeId(),
     'activeSceneTokens' => $activeSceneTokens,
 ];
 ?>
@@ -230,24 +227,9 @@ $vttConfig = [
                 >
                     <?php if ($isGm): ?>
                         <div class="settings-panel__group settings-panel__group--scenes">
-                            <button
-                                type="button"
-                                id="settings-scenes-toggle"
-                                class="settings-panel__primary-action"
-                                aria-expanded="true"
-                                aria-controls="settings-scenes-list"
-                            >
-                                Manage Scenes
-                            </button>
-                            <div id="settings-scenes-list" class="settings-panel__scenes">
-                                <div id="scene-management" class="scene-management">
-                                    <div class="scene-management__folders" id="scene-folder-bar" role="tablist" aria-label="Scene folders"></div>
-                                    <button type="button" id="scene-add-folder" class="scene-management__add-folder">+ Folder</button>
-                                    <div id="scene-list" class="scene-management__scene-list" role="list"></div>
-                                    <button type="button" id="scene-add" class="scene-management__add-scene">+ Scene</button>
-                                </div>
-                            </div>
-                            <p id="settings-scenes-status" class="settings-panel__status" role="status" aria-live="polite"></p>
+                            <h3 class="settings-panel__group-title">Scenes</h3>
+                            <p class="settings-panel__text">Choose an available scene to share with the table.</p>
+                            <div id="scene-selector" class="scene-selector" role="listbox" aria-label="Available scenes"></div>
                         </div>
                     <?php else: ?>
                         <div class="settings-panel__group settings-panel__group--scenes-info">
@@ -267,88 +249,7 @@ $vttConfig = [
                         <h3 class="settings-panel__group-title">Token Library</h3>
                         <p class="settings-panel__text">Organize the character and creature tokens that appear on your maps.</p>
                     </div>
-                    <?php if ($isGm): ?>
-                        <form id="token-create-form" class="token-form" autocomplete="off">
-                            <fieldset class="token-form__fieldset">
-                                <legend class="token-form__legend">Create a Token</legend>
-                                <div class="token-form__layout">
-                                    <label class="token-form__field" for="token-name">
-                                        <span class="token-form__label">Token Name</span>
-                                        <input type="text" id="token-name" class="token-form__input" name="token-name" placeholder="e.g. Professor Onyx" required>
-                                    </label>
-                                    <div class="token-form__field token-form__field--image">
-                                        <span class="token-form__label">Artwork</span>
-                                        <div id="token-image-dropzone" class="token-dropzone" tabindex="0" data-chat-drop-ignore="true">
-                                            <p class="token-dropzone__text">Drag &amp; drop an image here</p>
-                                            <input type="file" id="token-image-input" class="token-dropzone__input" accept="image/*">
-                                        </div>
-                                        <div class="token-dropzone__actions">
-                                            <button
-                                                type="button"
-                                                id="token-image-browse"
-                                                class="token-dropzone__browse"
-                                            >
-                                                Browse
-                                            </button>
-                                        </div>
-                                        <div id="token-image-cropper" class="token-cropper" hidden>
-                                            <div id="token-cropper-stage" class="token-cropper__stage">
-                                                <img id="token-cropper-image" class="token-cropper__image" alt="Token artwork preview" draggable="false">
-                                            </div>
-                                            <p class="token-cropper__help">Scroll to zoom. Drag to reposition the art inside the circle.</p>
-                                            <div class="token-cropper__actions">
-                                                <button type="button" id="token-image-reset" class="token-cropper__action">Reset View</button>
-                                                <button type="button" id="token-image-clear" class="token-cropper__action">Remove Image</button>
-                                            </div>
-                                        </div>
-                                    </div>
-                                </div>
-                                <div class="token-form__options">
-                                    <label class="token-form__field" for="token-folder-select">
-                                        <span class="token-form__label">Folder</span>
-                                        <select id="token-folder-select" class="token-form__select" name="token-folder">
-                                            <option value="pcs">PCs</option>
-                                            <option value="npcs">NPCs</option>
-                                            <option value="monsters">Monsters</option>
-                                        </select>
-                                    </label>
-                                    <label class="token-form__field" for="token-school-select">
-                                        <span class="token-form__label">Strixhaven School</span>
-                                        <select id="token-school-select" class="token-form__select" name="token-school">
-                                            <option value="lorehold">Lorehold</option>
-                                            <option value="prismari">Prismari</option>
-                                            <option value="quandrix">Quandrix</option>
-                                            <option value="silverquill">Silverquill</option>
-                                            <option value="witherbloom">Witherbloom</option>
-                                            <option value="other" selected>Other</option>
-                                        </select>
-                                    </label>
-                                    <div class="token-form__field token-form__field--size">
-                                        <span class="token-form__label">Token Size</span>
-                                        <div class="token-size-inputs">
-                                            <label class="token-size-input">
-                                                <span class="sr-only">Squares wide</span>
-                                                <input type="number" id="token-size-width" class="token-form__input token-form__input--number" name="token-width" min="1" max="12" value="1">
-                                            </label>
-                                            <span class="token-size-input__separator">&times;</span>
-                                            <label class="token-size-input">
-                                                <span class="sr-only">Squares tall</span>
-                                                <input type="number" id="token-size-height" class="token-form__input token-form__input--number" name="token-height" min="1" max="12" value="1">
-                                            </label>
-                                        </div>
-                                    </div>
-                                    <label class="token-form__field" for="token-stamina">
-                                        <span class="token-form__label">Stamina</span>
-                                        <input type="number" id="token-stamina" class="token-form__input token-form__input--number" name="token-stamina" min="0" value="0">
-                                    </label>
-                                </div>
-                                <div class="token-form__actions">
-                                    <button type="submit" id="token-create-confirm" class="token-form__submit">Create Token</button>
-                                    <p id="token-form-status" class="token-form__status" role="status" aria-live="polite"></p>
-                                </div>
-                            </fieldset>
-                        </form>
-                    <?php else: ?>
+                    <?php if (!$isGm): ?>
                         <div class="settings-panel__group settings-panel__group--tokens-info">
                             <p class="settings-panel__text">Browse the player character tokens shared by your GM. New tokens will appear here automatically.</p>
                         </div>
