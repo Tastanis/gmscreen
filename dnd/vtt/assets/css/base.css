@@ -71,6 +71,16 @@ body.vtt-body {
   background: #4f46e5;
 }
 
+.btn--danger {
+  background: rgba(244, 63, 94, 0.18);
+  border-color: rgba(244, 63, 94, 0.4);
+  color: var(--vtt-danger);
+}
+
+.btn--danger:hover {
+  background: rgba(244, 63, 94, 0.3);
+}
+
 .btn[disabled],
 .btn:disabled,
 .btn.is-loading {

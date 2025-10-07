@@ -7,6 +7,7 @@ export function mountBoardInteractions(store, routes = {}) {
   const mapImage = document.getElementById('vtt-map-image');
   const emptyState = board?.querySelector('.vtt-board__empty');
   const status = document.getElementById('active-scene-status');
+  const sceneName = document.getElementById('active-scene-name');
   const uploadButton = document.querySelector('[data-action="upload-map"]');
   const uploadInput = document.getElementById('vtt-map-upload-input');
   if (!board || !mapSurface || !mapTransform || !mapBackdrop || !mapImage) return;
@@ -168,6 +169,12 @@ export function mountBoardInteractions(store, routes = {}) {
   };
 
   const applyStateToBoard = (state = {}) => {
+    const sceneState = normalizeSceneState(state.scenes);
+    const activeSceneId = state.boardState?.activeSceneId ?? null;
+    const activeScene = sceneState.items.find((scene) => scene.id === activeSceneId) ?? null;
+
+    updateSceneMeta(activeScene);
+
     const nextUrl = state.boardState?.mapUrl ?? null;
     if (nextUrl !== viewState.activeMapUrl) {
       loadMap(nextUrl);
@@ -204,9 +211,7 @@ export function mountBoardInteractions(store, routes = {}) {
       mapTransform.style.width = '';
       mapTransform.style.height = '';
       emptyState?.removeAttribute('hidden');
-      if (status) {
-        status.textContent = defaultStatusText;
-      }
+      updateSceneMeta(null);
       return;
     }
 
@@ -224,6 +229,7 @@ export function mountBoardInteractions(store, routes = {}) {
       if (status) {
         status.textContent = 'Right-click and drag to pan. Use the mouse wheel to zoom.';
       }
+      updateSceneMeta(activeSceneFromState());
     };
     mapImage.onerror = () => {
       viewState.mapLoaded = false;
@@ -315,6 +321,22 @@ export function mountBoardInteractions(store, routes = {}) {
     }
   }
 
+  function updateSceneMeta(scene) {
+    if (sceneName) {
+      sceneName.textContent = scene ? scene.name || 'Untitled Scene' : 'No Active Scene';
+    }
+    if (status && !viewState.mapLoaded) {
+      status.textContent = scene ? 'Loading scene map…' : defaultStatusText;
+    }
+  }
+
+  function activeSceneFromState() {
+    const state = boardApi.getState?.() ?? {};
+    const sceneState = normalizeSceneState(state.scenes);
+    const activeSceneId = state.boardState?.activeSceneId ?? null;
+    return sceneState.items.find((scene) => scene.id === activeSceneId) ?? null;
+  }
+
   function getPointerPosition(event, element) {
     const rect = element.getBoundingClientRect();
     return {
@@ -357,6 +379,21 @@ export function mountBoardInteractions(store, routes = {}) {
       return '';
     }
   }
+}
+
+function normalizeSceneState(raw = {}) {
+  if (Array.isArray(raw)) {
+    return { folders: [], items: raw };
+  }
+
+  return {
+    folders: Array.isArray(raw?.folders) ? raw.folders : [],
+    items: Array.isArray(raw?.items)
+      ? raw.items
+      : Array.isArray(raw?.scenes)
+      ? raw.scenes
+      : [],
+  };
 }
 
 function movementFromKey(key) {

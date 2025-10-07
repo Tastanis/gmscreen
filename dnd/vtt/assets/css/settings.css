@@ -101,6 +101,80 @@
   font-size: 0.85rem;
 }
 
+.scene-creator {
+  display: flex;
+  flex-direction: column;
+  gap: 0.75rem;
+  margin-bottom: 1rem;
+  padding: 0.75rem;
+  border: 1px solid rgba(148, 163, 184, 0.2);
+  border-radius: var(--vtt-radius);
+  background: rgba(15, 23, 42, 0.45);
+}
+
+.scene-creator.is-pending {
+  opacity: 0.75;
+  pointer-events: none;
+}
+
+.scene-creator__field {
+  display: flex;
+  flex-direction: column;
+  gap: 0.35rem;
+}
+
+.scene-creator__field label {
+  font-weight: 600;
+  color: var(--vtt-text-muted);
+}
+
+.scene-creator__field input,
+.scene-creator__field select {
+  background: rgba(15, 23, 42, 0.65);
+  border: 1px solid rgba(148, 163, 184, 0.25);
+  border-radius: var(--vtt-radius);
+  color: var(--vtt-text-primary);
+  padding: 0.55rem 0.65rem;
+}
+
+.scene-creator__field input:focus,
+.scene-creator__field select:focus {
+  outline: none;
+  border-color: rgba(99, 102, 241, 0.65);
+  box-shadow: 0 0 0 2px rgba(99, 102, 241, 0.2);
+}
+
+.scene-creator__hint {
+  margin: 0;
+  font-size: 0.85rem;
+  color: var(--vtt-text-muted);
+}
+
+.scene-creator__actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.75rem;
+  align-items: center;
+}
+
+.scene-creator__feedback {
+  margin: 0;
+  font-size: 0.85rem;
+  color: var(--vtt-text-muted);
+}
+
+.scene-creator__feedback[data-variant='error'] {
+  color: var(--vtt-danger);
+}
+
+.scene-creator__feedback[data-variant='success'] {
+  color: var(--vtt-success);
+}
+
+.scene-creator__feedback[data-variant='info'] {
+  color: var(--vtt-text-muted);
+}
+
 .scene-manager {
   min-height: 140px;
 }
@@ -204,6 +278,35 @@
 .scene-item__footer {
   display: flex;
   gap: 0.5rem;
+}
+
+.scene-group {
+  border: 1px solid rgba(148, 163, 184, 0.2);
+  border-radius: var(--vtt-radius);
+  background: rgba(15, 23, 42, 0.35);
+}
+
+.scene-group__header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  padding: 0.65rem 0.75rem;
+  border-bottom: 1px solid rgba(148, 163, 184, 0.15);
+}
+
+.scene-group__header h4 {
+  margin: 0;
+  font-size: 0.95rem;
+  color: var(--vtt-text-muted);
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+}
+
+.scene-group__body {
+  display: flex;
+  flex-direction: column;
+  gap: 0.65rem;
+  padding: 0.75rem;
 }
 
 :root {
