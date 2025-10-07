@@ -18,6 +18,8 @@ require_once '../../version.php';
 require_once '../gm/includes/character-integration.php';
 require_once __DIR__ . '/data-utils.php';
 
+$students_endpoint = $_SERVER['PHP_SELF'] ?? ($_SERVER['SCRIPT_NAME'] ?? '/dnd/strixhaven/students/index.php');
+
 // Function to sync student relationships back to character dashboard
 function syncRelationshipsToCharacters($student) {
     if (!isset($student['relationships']) || !isset($student['student_id'])) {
@@ -699,6 +701,7 @@ $studentData = loadStudentData();
         // Global variables
         const isGM = <?php echo $is_gm ? 'true' : 'false'; ?>;
         const currentUser = '<?php echo $user; ?>';
+        const STUDENTS_ENDPOINT = <?php echo json_encode($students_endpoint); ?>;
         let currentPage = 1;
         let currentSort = 'name';
         let currentFilters = {
