@@ -39,3 +39,18 @@ export async function createTokenFolder(endpoint, name) {
 
   return data.data;
 }
+
+export async function updateToken(endpoint, payload) {
+  const response = await fetch(endpoint, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ action: 'update-token', ...payload }),
+  });
+
+  const data = await response.json().catch(() => ({}));
+  if (!response.ok || !data.success) {
+    throw new Error(data.error || 'Unable to update token');
+  }
+
+  return data.data;
+}
