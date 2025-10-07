@@ -155,12 +155,19 @@
   --vtt-settings-panel-offset: 20px;
 }
 
+body.vtt-body {
+  --vtt-settings-panel-effective-width: min(
+    var(--vtt-settings-panel-width, 360px),
+    calc(100vw - (var(--vtt-settings-panel-offset, 20px) * 2))
+  );
+}
+
 .vtt-settings-panel {
   position: fixed;
   top: var(--vtt-settings-panel-offset);
   left: 0;
   bottom: var(--vtt-settings-panel-offset);
-  width: min(var(--vtt-settings-panel-width), calc(100vw - (var(--vtt-settings-panel-offset) * 2)));
+  width: var(--vtt-settings-panel-effective-width);
   background: rgba(15, 23, 42, 0.92);
   border-radius: 0 16px 16px 0;
   border-right: 1px solid rgba(148, 163, 184, 0.3);
@@ -244,17 +251,32 @@
 
 .vtt-settings-toggle[aria-expanded="true"] {
   background: #6366f1;
-  transform: translate3d(calc(var(--vtt-settings-panel-width) + var(--vtt-settings-panel-offset)), -50%, 0);
+  transform: translate3d(
+    calc(var(--vtt-settings-panel-effective-width) + var(--vtt-settings-panel-offset, 20px)),
+    -50%,
+    0
+  );
 }
 
 .vtt-settings-toggle[aria-expanded="true"]:hover {
-  transform: translate3d(calc(var(--vtt-settings-panel-width) + var(--vtt-settings-panel-offset) + 6px), -50%, 0);
+  transform: translate3d(
+    calc(var(--vtt-settings-panel-effective-width) + var(--vtt-settings-panel-offset, 20px) + 6px),
+    -50%,
+    0
+  );
 }
 
 @media (max-width: 768px) {
   :root {
     --vtt-settings-panel-width: calc(100vw - 24px);
     --vtt-settings-panel-offset: 12px;
+  }
+
+  body.vtt-body {
+    --vtt-settings-panel-effective-width: min(
+      var(--vtt-settings-panel-width, calc(100vw - 24px)),
+      calc(100vw - (var(--vtt-settings-panel-offset, 12px) * 2))
+    );
   }
 
   .vtt-settings-panel {
