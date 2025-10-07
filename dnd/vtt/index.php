@@ -23,16 +23,26 @@ foreach ($chatParticipantsMap as $participantId => $participantLabel) {
     ];
 }
 
-require_once __DIR__ . '/scenes_repository.php';
-require_once __DIR__ . '/scene_state_repository.php';
-require_once __DIR__ . '/token_repository.php';
+/** @var array{
+ *     sceneData?: array,
+ *     defaultActiveSceneId?: string|null,
+ *     tokenLibrary?: array,
+ *     sceneTokens?: array,
+ *     latestChangeId?: int
+ * } $staticContent
+ */
+$staticContent = require __DIR__ . '/static_content.php';
 
-$sceneData = require __DIR__ . '/scenes.php';
-if (!is_array($sceneData)) {
-    $sceneData = [
-        'folders' => [],
-        'rootScenes' => [],
-    ];
+$sceneData = [];
+if (isset($staticContent['sceneData']) && is_array($staticContent['sceneData'])) {
+    $sceneData = $staticContent['sceneData'];
+}
+
+if (!isset($sceneData['folders']) || !is_array($sceneData['folders'])) {
+    $sceneData['folders'] = [];
+}
+if (!isset($sceneData['rootScenes']) || !is_array($sceneData['rootScenes'])) {
+    $sceneData['rootScenes'] = [];
 }
 
 $scenes = flattenScenes($sceneData);
@@ -46,16 +56,20 @@ foreach ($scenes as $scene) {
 }
 
 $defaultSceneId = null;
-if (!empty($scenes)) {
-    $firstScene = reset($scenes);
-    if (is_array($firstScene) && isset($firstScene['id'])) {
-        $defaultSceneId = $firstScene['id'];
+if (isset($staticContent['defaultActiveSceneId'])) {
+    $defaultSceneId = $staticContent['defaultActiveSceneId'];
+}
+
+if ($defaultSceneId === null || $defaultSceneId === '') {
+    if (!empty($scenes)) {
+        $firstScene = reset($scenes);
+        if (is_array($firstScene) && isset($firstScene['id'])) {
+            $defaultSceneId = $firstScene['id'];
+        }
     }
 }
 
-$sceneStateFile = getSceneStateFilePath();
-ensureSceneStateFile($sceneStateFile, $defaultSceneId);
-$activeSceneId = loadActiveSceneId($sceneLookup, $defaultSceneId, $sceneStateFile);
+$activeSceneId = $defaultSceneId;
 
 $activeScene = $activeSceneId !== null && isset($sceneLookup[$activeSceneId])
     ? $sceneLookup[$activeSceneId]
@@ -80,18 +94,24 @@ if (is_array($activeScene) && isset($activeScene['map']) && is_array($activeScen
     $activeSceneMap['gridScale'] = $gridScale;
 }
 
-if (is_string($activeSceneId) && $activeSceneId !== '') {
-    if (function_exists('loadSceneTokens')) {
-        $activeSceneTokens = loadSceneTokens($activeSceneId);
-    } else {
-        error_log('loadSceneTokens helper is missing; active scene tokens unavailable.');
-    }
+$sceneTokens = [];
+if (isset($staticContent['sceneTokens']) && is_array($staticContent['sceneTokens'])) {
+    $sceneTokens = $staticContent['sceneTokens'];
 }
 
-$tokenLibrary = loadTokenLibrary();
+if (is_string($activeSceneId) && $activeSceneId !== '' && isset($sceneTokens[$activeSceneId]) && is_array($sceneTokens[$activeSceneId])) {
+    $activeSceneTokens = array_values(array_filter($sceneTokens[$activeSceneId], 'is_array'));
+}
+
+$tokenLibrary = [];
+if (isset($staticContent['tokenLibrary']) && is_array($staticContent['tokenLibrary'])) {
+    $tokenLibrary = array_values(array_filter($staticContent['tokenLibrary'], 'is_array'));
+}
 if (!$isGm) {
     $tokenLibrary = filterTokensForPlayers($tokenLibrary);
 }
+
+$latestChangeId = isset($staticContent['latestChangeId']) ? (int) $staticContent['latestChangeId'] : 0;
 
 $vttConfig = [
     'isGM' => $isGm,
@@ -103,7 +123,7 @@ $vttConfig = [
     'sceneEndpoint' => 'scenes_handler.php',
     'tokenEndpoint' => 'token_handler.php',
     'tokenLibrary' => $tokenLibrary,
-    'latestChangeId' => getLatestSceneChangeId(),
+    'latestChangeId' => $latestChangeId,
     'activeSceneTokens' => $activeSceneTokens,
 ];
 ?>
