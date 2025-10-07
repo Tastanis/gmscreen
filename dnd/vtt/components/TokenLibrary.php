@@ -15,6 +15,34 @@ function renderVttTokenLibrary(): string
             </div>
         </header>
         <div class="vtt-token-library__content">
+            <section class="token-maker" data-module="vtt-token-maker" aria-label="Token image builder">
+                <div class="token-maker__preview" data-token-preview>
+                    <span class="token-maker__preview-hint" data-token-placeholder>Drop an image or browse to begin.</span>
+                    <img
+                        class="token-maker__preview-image"
+                        data-token-image
+                        alt=""
+                        hidden
+                    />
+                </div>
+                <div class="token-maker__controls">
+                    <div class="token-maker__dropzone" data-token-dropzone>
+                        <p class="token-maker__dropzone-title">Drag &amp; Drop</p>
+                        <p class="token-maker__dropzone-hint">PNG or JPG up to 10MB</p>
+                    </div>
+                    <input
+                        id="token-image-input"
+                        class="visually-hidden"
+                        type="file"
+                        accept="image/*"
+                        data-token-input
+                    />
+                    <button class="btn" type="button" data-action="browse-token-image">Browse Images</button>
+                    <p class="token-maker__controls-hint">
+                        Scroll to zoom. Right-click and drag inside the circle to reposition.
+                    </p>
+                </div>
+            </section>
             <ul id="token-template-list" class="token-template-list" aria-live="polite">
                 <li class="token-template-list__empty">No tokens saved yet.</li>
             </ul>
