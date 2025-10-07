@@ -283,6 +283,11 @@ export function mountBoardInteractions(store, routes = {}) {
   function applyTransform() {
     if (!mapTransform) return;
     mapTransform.style.transform = `translate3d(${viewState.translation.x}px, ${viewState.translation.y}px, 0) scale(${viewState.scale})`;
+    mapTransform.style.setProperty('--vtt-map-scale', String(viewState.scale));
+    if (grid) {
+      const lineWidth = Math.max(1, 1 / viewState.scale);
+      grid.style.setProperty('--vtt-grid-line-width', `${lineWidth}px`);
+    }
   }
 
   function resetView() {
