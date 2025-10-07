@@ -103,7 +103,7 @@ $vttConfig = [
     'sceneEndpoint' => 'scenes_handler.php',
     'tokenEndpoint' => 'token_handler.php',
     'tokenLibrary' => $tokenLibrary,
-    'latestChangeId' => getLatestSceneChangeId(),
+    'latestChangeId' => 0,
     'activeSceneTokens' => $activeSceneTokens,
 ];
 ?>
