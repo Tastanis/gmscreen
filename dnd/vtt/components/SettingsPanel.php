@@ -31,7 +31,23 @@ function renderVttSettingsPanel(string $tokenLibraryMarkup = ''): string
                     <h3>Scene Manager</h3>
                     <button class="btn btn--primary" type="button" data-action="create-scene">New Scene</button>
                 </header>
-                <div class="settings-view__content" id="scene-manager"></div>
+                <div class="settings-view__content">
+                    <section class="scene-controls" aria-label="Scene map and grid controls">
+                        <input
+                            id="vtt-map-upload-input"
+                            class="visually-hidden"
+                            type="file"
+                            accept="image/*"
+                        />
+                        <div class="scene-controls__buttons">
+                            <button class="btn btn--primary" type="button" data-action="upload-map">Upload Map</button>
+                            <button class="btn" type="button" data-action="toggle-grid">Toggle Grid</button>
+                            <button class="btn" type="button" data-action="lock-grid">Lock Grid</button>
+                        </div>
+                        <p class="scene-controls__hint">Upload a background map and adjust the shared grid without leaving settings.</p>
+                    </section>
+                    <div class="scene-manager" id="scene-manager"></div>
+                </div>
             </section>
             <section class="settings-view settings-view--tokens" data-settings-view="tokens" hidden>
                 <header class="settings-view__header">

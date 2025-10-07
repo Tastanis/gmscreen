@@ -12,15 +12,6 @@ function renderVttSceneBoard(): string
                 <p id="active-scene-status" class="vtt-board__status">Select or create a scene to begin.</p>
             </div>
             <div class="vtt-board__controls">
-                <input
-                    id="vtt-map-upload-input"
-                    class="visually-hidden"
-                    type="file"
-                    accept="image/*"
-                />
-                <button class="btn btn--primary" type="button" data-action="upload-map">Upload Map</button>
-                <button class="btn" type="button" data-action="toggle-grid">Toggle Grid</button>
-                <button class="btn" type="button" data-action="lock-grid">Lock Grid</button>
                 <button class="btn" type="button" data-action="measure-distance">Measure</button>
             </div>
         </header>
