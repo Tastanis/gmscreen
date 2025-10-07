@@ -88,6 +88,7 @@
   will-change: transform;
   pointer-events: none;
   z-index: 1;
+  --vtt-map-scale: 1;
 }
 
 .vtt-board__map-transform[hidden] {
@@ -124,13 +125,24 @@
   right: var(--vtt-grid-offset-right, 0px);
   bottom: var(--vtt-grid-offset-bottom, 0px);
   left: var(--vtt-grid-offset-left, 0px);
-  background-image: linear-gradient(to right, rgba(148, 163, 184, 0.2) 1px, transparent 1px),
-    linear-gradient(to bottom, rgba(148, 163, 184, 0.2) 1px, transparent 1px);
+  --vtt-grid-line-color: rgba(226, 232, 240, 0.45);
+  --vtt-grid-line-width: 1px;
+  background-image: linear-gradient(
+      to right,
+      var(--vtt-grid-line-color) var(--vtt-grid-line-width),
+      transparent var(--vtt-grid-line-width)
+    ),
+    linear-gradient(
+      to bottom,
+      var(--vtt-grid-line-color) var(--vtt-grid-line-width),
+      transparent var(--vtt-grid-line-width)
+    );
   background-size: var(--vtt-grid-size, 64px) var(--vtt-grid-size, 64px);
   pointer-events: none;
   opacity: 0;
   transition: opacity var(--vtt-transition);
   z-index: 2;
+  mix-blend-mode: screen;
 }
 
 .vtt-board__grid.is-visible {
