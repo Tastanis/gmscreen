@@ -1,9 +1,13 @@
+import { initializeTokenMaker } from './token-maker.js';
+
 export function renderTokenLibrary(routes, store) {
   const moduleRoot = document.querySelector('[data-module="vtt-token-library"]');
   if (!moduleRoot) return;
 
   const listContainer = moduleRoot.querySelector('#token-template-list');
   if (!listContainer) return;
+
+  initializeTokenMaker(moduleRoot);
 
   const render = (state) => {
     const { tokens } = state;
