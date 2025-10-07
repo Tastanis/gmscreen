@@ -55,3 +55,38 @@
   display: flex;
   justify-content: flex-end;
 }
+
+/*
+ * The chat panel markup reuses the legacy dashboard structure so we inherit
+ * its toggle styles from ../css/style.css. When the panel is undocked in the
+ * VTT workspace, the legacy CSS assumes a fixed width which causes the toggle
+ * tab to drift away from the panel on narrow viewports. By computing a shared
+ * effective width we keep the toggle aligned regardless of the available
+ * screen space.
+ */
+body.vtt-body {
+  --vtt-chat-panel-effective-width: min(
+    var(--chat-panel-width, 360px),
+    calc(100vw - (var(--chat-panel-offset, 20px) * 2))
+  );
+}
+
+body.vtt-body .chat-panel {
+  width: var(--vtt-chat-panel-effective-width);
+}
+
+body.vtt-body .chat-panel-toggle[aria-expanded="true"] {
+  transform: translate3d(
+    calc(-1 * (var(--vtt-chat-panel-effective-width) + var(--chat-panel-offset, 20px))),
+    -50%,
+    0
+  );
+}
+
+body.vtt-body .chat-panel-toggle[aria-expanded="true"]:hover {
+  transform: translate3d(
+    calc(-1 * (var(--vtt-chat-panel-effective-width) + var(--chat-panel-offset, 20px) + 6px)),
+    -50%,
+    0
+  );
+}
