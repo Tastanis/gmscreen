@@ -1,5 +1,9 @@
 // Students Management JavaScript
 
+const studentsEndpoint = (typeof STUDENTS_ENDPOINT !== 'undefined' && STUDENTS_ENDPOINT)
+    ? STUDENTS_ENDPOINT
+    : 'index.php';
+
 // Store rich text editor instances
 let modalRichTextEditors = new Map();
 
@@ -236,7 +240,7 @@ function loadStudents() {
     formData.append('show_favorites', currentFilters.favorites.toString());
     formData.append('search_term', currentFilters.search);
     
-    fetch('index.php', {
+    fetch(studentsEndpoint, {
         method: 'POST',
         body: formData
     })
@@ -648,6 +652,7 @@ function expandStudentToNewTab() {
     
     const newWindow = window.open('', '_blank');
     const student = selectedStudent;
+    const endpoint = studentsEndpoint;
     
     newWindow.document.write(`
         <!DOCTYPE html>
@@ -708,6 +713,7 @@ function expandStudentToNewTab() {
                 const isGM = ${isGM};
                 const currentUser = '${currentUser}';
                 const studentData = ${JSON.stringify(student)};
+                const studentsEndpoint = '${endpoint}';
                 
                 // Save function for popout window (GM only)
                 function saveStudentField(studentId, field, value) {
@@ -731,7 +737,7 @@ function expandStudentToNewTab() {
                         currentRelationships[relationshipField] = value;
                         formData.append('value', JSON.stringify(currentRelationships));
                         
-                        fetch('index.php', {
+                        fetch(studentsEndpoint, {
                             method: 'POST',
                             body: formData
                         })
@@ -756,7 +762,7 @@ function expandStudentToNewTab() {
                     formData.append('field', field);
                     formData.append('value', Array.isArray(value) ? JSON.stringify(value) : value);
                     
-                    fetch('index.php', {
+                    fetch(studentsEndpoint, {
                         method: 'POST',
                         body: formData
                     })
@@ -818,7 +824,7 @@ function expandStudentToNewTab() {
                     formData.append('field', 'skills');
                     formData.append('value', JSON.stringify(newSkills));
                     
-                    fetch('index.php', {
+                    fetch(studentsEndpoint, {
                         method: 'POST',
                         body: formData
                     })
@@ -849,7 +855,7 @@ function expandStudentToNewTab() {
                     formData.append('field', 'skills');
                     formData.append('value', JSON.stringify(newSkills));
                     
-                    fetch('index.php', {
+                    fetch(studentsEndpoint, {
                         method: 'POST',
                         body: formData
                     })
@@ -1041,7 +1047,7 @@ function saveStudentField(studentId, field, value) {
         currentRelationships[relationshipField] = value;
         formData.append('value', JSON.stringify(currentRelationships));
         
-        fetch('index.php', {
+        fetch(studentsEndpoint, {
             method: 'POST',
             body: formData
         })
@@ -1067,7 +1073,7 @@ function saveStudentField(studentId, field, value) {
     formData.append('field', field);
     formData.append('value', Array.isArray(value) ? JSON.stringify(value) : value);
     
-    fetch('index.php', {
+    fetch(studentsEndpoint, {
         method: 'POST',
         body: formData
     })
@@ -1126,7 +1132,7 @@ function addSkillToStudent(studentId, skill) {
     formData.append('field', 'skills');
     formData.append('value', JSON.stringify(newSkills));
     
-    fetch('index.php', {
+    fetch(studentsEndpoint, {
         method: 'POST',
         body: formData
     })
@@ -1163,7 +1169,7 @@ function removeSkill(studentId, skill) {
     formData.append('field', 'skills');
     formData.append('value', JSON.stringify(newSkills));
     
-    fetch('index.php', {
+    fetch(studentsEndpoint, {
         method: 'POST',
         body: formData
     })
@@ -1203,7 +1209,7 @@ function addStudent() {
     const formData = new FormData();
     formData.append('action', 'add_student');
     
-    fetch('index.php', {
+    fetch(studentsEndpoint, {
         method: 'POST',
         body: formData
     })
@@ -1230,7 +1236,7 @@ function toggleStudentFavorite() {
     formData.append('action', 'toggle_favorite');
     formData.append('student_id', selectedStudent.student_id);
     
-    fetch('index.php', {
+    fetch(studentsEndpoint, {
         method: 'POST',
         body: formData
     })
@@ -1274,7 +1280,7 @@ function deleteStudent() {
     formData.append('action', 'delete_student');
     formData.append('student_id', selectedStudent.student_id);
     
-    fetch('index.php', {
+    fetch(studentsEndpoint, {
         method: 'POST',
         body: formData
     })
@@ -1333,7 +1339,7 @@ function uploadImageFile(studentId, file) {
     // Show upload progress
     showUploadProgress(true);
     
-    fetch('index.php', {
+    fetch(studentsEndpoint, {
         method: 'POST',
         body: formData
     })
@@ -1651,7 +1657,7 @@ function deleteImage(itemId, imagePath, itemType) {
     formData.append('student_id', itemId);
     formData.append('image_path', imagePath);
     
-    fetch('index.php', {
+    fetch(studentsEndpoint, {
         method: 'POST',
         body: formData
     })
@@ -1704,7 +1710,7 @@ function uploadStudentPortrait(studentId) {
         formData.append('student_id', studentId);
         formData.append('portrait', file);
         
-        fetch('index.php', {
+        fetch(studentsEndpoint, {
             method: 'POST',
             body: formData
         })
@@ -1761,7 +1767,7 @@ function exportStudents() {
     const formData = new FormData();
     formData.append('action', 'export_students');
     
-    fetch('index.php', {
+    fetch(studentsEndpoint, {
         method: 'POST',
         body: formData
     })
