@@ -1,5 +1,7 @@
 import { initializeTokenMaker } from './token-maker.js';
-import { createToken, createTokenFolder } from '../services/token-service.js';
+import { createToken, createTokenFolder, updateToken } from '../services/token-service.js';
+
+const UNSORTED_KEY = '__unsorted';
 
 export function renderTokenLibrary(routes, store) {
   const moduleRoot = document.querySelector('[data-module="vtt-token-library"]');
@@ -18,6 +20,13 @@ export function renderTokenLibrary(routes, store) {
   const stateApi = store ?? {};
   const endpoints = routes ?? {};
 
+  const collapseState = new Map();
+  const tokenIndex = new Map();
+  const contextMenu = createTokenContextMenu(moduleRoot);
+  let contextTokenId = null;
+  let contextTokenElement = null;
+  let removeContextListeners = null;
+
   if (!endpoints.tokens) {
     createButtons.forEach((button) => {
       button.disabled = true;
@@ -29,16 +38,161 @@ export function renderTokenLibrary(routes, store) {
     });
   }
 
+  function closeContextMenu() {
+    if (!contextMenu?.element) {
+      return;
+    }
+
+    if (typeof removeContextListeners === 'function') {
+      removeContextListeners();
+      removeContextListeners = null;
+    }
+
+    if (contextTokenElement) {
+      contextTokenElement.classList.remove('is-context-active');
+      contextTokenElement = null;
+    }
+
+    contextTokenId = null;
+
+    if (!contextMenu.element.hidden) {
+      contextMenu.element.hidden = true;
+      contextMenu.element.dataset.open = 'false';
+    }
+
+    if (contextMenu.form) {
+      contextMenu.form.reset();
+    }
+
+    setContextMenuPending(contextMenu, false);
+    showFeedback(contextMenu.feedback, '', 'info');
+  }
+
+  function attachContextMenuListeners(onClose) {
+    const handlePointerDown = (event) => {
+      if (!contextMenu.element.contains(event.target)) {
+        onClose();
+      }
+    };
+
+    const handleContextMenu = (event) => {
+      if (!contextMenu.element.contains(event.target)) {
+        onClose();
+      }
+    };
+
+    const handleScroll = () => {
+      onClose();
+    };
+
+    const handleResize = () => {
+      onClose();
+    };
+
+    const handleKeydown = (event) => {
+      if (event.key === 'Escape') {
+        event.preventDefault();
+        onClose();
+      }
+    };
+
+    document.addEventListener('pointerdown', handlePointerDown, true);
+    document.addEventListener('contextmenu', handleContextMenu, true);
+    document.addEventListener('keydown', handleKeydown);
+    window.addEventListener('resize', handleResize);
+    window.addEventListener('scroll', handleScroll, true);
+
+    return () => {
+      document.removeEventListener('pointerdown', handlePointerDown, true);
+      document.removeEventListener('contextmenu', handleContextMenu, true);
+      document.removeEventListener('keydown', handleKeydown);
+      window.removeEventListener('resize', handleResize);
+      window.removeEventListener('scroll', handleScroll, true);
+    };
+  }
+
+  function openContextMenu(token, clientX, clientY, sourceElement) {
+    if (!contextMenu?.element || !token) {
+      return;
+    }
+
+    if (contextTokenElement && contextTokenElement !== sourceElement) {
+      contextTokenElement.classList.remove('is-context-active');
+    }
+
+    contextTokenElement = sourceElement ?? null;
+    if (contextTokenElement) {
+      contextTokenElement.classList.add('is-context-active');
+    }
+
+    contextTokenId = token.id;
+
+    if (contextMenu.sizeInput) {
+      contextMenu.sizeInput.value = typeof token.size === 'string' ? token.size : '';
+    }
+
+    if (contextMenu.hpInput) {
+      if (typeof token.hp === 'number' && !Number.isNaN(token.hp)) {
+        contextMenu.hpInput.value = String(token.hp);
+      } else if (typeof token.hp === 'string') {
+        contextMenu.hpInput.value = token.hp;
+      } else {
+        contextMenu.hpInput.value = '';
+      }
+    }
+
+    setContextMenuPending(contextMenu, false);
+    showFeedback(contextMenu.feedback, '', 'info');
+
+    contextMenu.element.hidden = false;
+    contextMenu.element.dataset.open = 'true';
+    contextMenu.element.style.visibility = 'hidden';
+    contextMenu.element.style.left = '0px';
+    contextMenu.element.style.top = '0px';
+    positionContextMenu(contextMenu.element, clientX, clientY);
+    contextMenu.element.style.visibility = '';
+
+    if (contextMenu.sizeInput) {
+      focusElement(contextMenu.sizeInput);
+      if (typeof contextMenu.sizeInput.select === 'function') {
+        contextMenu.sizeInput.select();
+      }
+    } else {
+      focusElement(contextMenu.element);
+    }
+
+    if (typeof removeContextListeners === 'function') {
+      removeContextListeners();
+    }
+    removeContextListeners = attachContextMenuListeners(closeContextMenu);
+  }
+
   const render = (state) => {
+    closeContextMenu();
+
     const tokensState = normalizeTokenState(state?.tokens);
     updateFolderOptions(folderSelect, tokensState.folders);
+
+    tokenIndex.clear();
+    tokensState.items.forEach((token) => {
+      if (token && typeof token.id === 'string') {
+        tokenIndex.set(token.id, token);
+      }
+    });
 
     if (!tokensState.items.length) {
       listContainer.innerHTML = '<li class="token-template-list__empty">No tokens saved yet.</li>';
       return;
     }
 
-    listContainer.innerHTML = buildTokenMarkup(tokensState);
+    const groups = groupTokens(tokensState);
+    pruneCollapseState(collapseState, groups);
+
+    const markup = buildTokenMarkup(groups, {
+      isCollapsed: (folderId) => isGroupCollapsed(collapseState, folderId),
+    });
+
+    listContainer.innerHTML = markup;
   };
 
   render(stateApi.getState?.() ?? {});
@@ -49,6 +203,20 @@ export function renderTokenLibrary(routes, store) {
     if (!target) return;
 
     const action = target.getAttribute('data-action');
+
+    if (action === 'toggle-token-group') {
+      const folderId = target.getAttribute('data-folder-id') || null;
+      const nextCollapsed = !isGroupCollapsed(collapseState, folderId);
+      setGroupCollapsed(collapseState, folderId, nextCollapsed);
+      const group = target.closest('.token-group');
+      if (group) {
+        group.classList.toggle('is-collapsed', nextCollapsed);
+      }
+      target.setAttribute('aria-expanded', nextCollapsed ? 'false' : 'true');
+      closeContextMenu();
+      return;
+    }
+
     if (action === 'create-token-folder') {
       if (!endpoints.tokens) {
         showFeedback(feedback, 'Token folders are unavailable right now.', 'error');
@@ -133,6 +301,105 @@ export function renderTokenLibrary(routes, store) {
       }
     }
   });
+
+  moduleRoot.addEventListener('contextmenu', (event) => {
+    if (contextMenu?.element?.contains(event.target)) {
+      return;
+    }
+
+    const tokenElement = event.target.closest('.token-item');
+    if (!tokenElement) {
+      return;
+    }
+
+    event.preventDefault();
+
+    if (!endpoints.tokens) {
+      showFeedback(feedback, 'Token editing is unavailable right now.', 'error');
+      return;
+    }
+
+    const tokenId = tokenElement.getAttribute('data-token-id');
+    if (!tokenId) {
+      return;
+    }
+
+    const token = tokenIndex.get(tokenId);
+    if (!token) {
+      return;
+    }
+
+    openContextMenu(token, event.clientX, event.clientY, tokenElement);
+  });
+
+  if (contextMenu?.element) {
+    contextMenu.element.addEventListener('keydown', (event) => {
+      if (event.key === 'Escape') {
+        event.preventDefault();
+        closeContextMenu();
+      }
+    });
+
+    contextMenu.element.addEventListener('contextmenu', (event) => {
+      event.preventDefault();
+    });
+  }
+
+  if (contextMenu?.form) {
+    contextMenu.form.addEventListener('submit', async (event) => {
+      event.preventDefault();
+
+      if (!contextTokenId) {
+        return;
+      }
+
+      if (!endpoints.tokens) {
+        showFeedback(contextMenu.feedback, 'Token editing is unavailable right now.', 'error');
+        return;
+      }
+
+      const sizeValue = contextMenu.sizeInput ? contextMenu.sizeInput.value.trim() : '';
+      const hpValue = contextMenu.hpInput ? contextMenu.hpInput.value.trim() : '';
+
+      try {
+        setContextMenuPending(contextMenu, true);
+        showFeedback(contextMenu.feedback, 'Saving…', 'info');
+
+        const updated = await updateToken(endpoints.tokens, {
+          id: contextTokenId,
+          size: sizeValue,
+          hp: hpValue,
+        });
+
+        stateApi.updateState?.((draft) => {
+          ensureTokenDraft(draft);
+          const index = draft.tokens.items.findIndex((item) => item.id === updated.id);
+          if (index >= 0) {
+            const nextToken = {
+              ...draft.tokens.items[index],
+              ...updated,
+            };
+
+            if (!Object.prototype.hasOwnProperty.call(updated, 'size')) {
+              delete nextToken.size;
+            }
+            if (!Object.prototype.hasOwnProperty.call(updated, 'hp')) {
+              delete nextToken.hp;
+            }
+
+            draft.tokens.items[index] = nextToken;
+          }
+        });
+
+        closeContextMenu();
+      } catch (error) {
+        console.error('[VTT] Failed to update token', error);
+        showFeedback(contextMenu.feedback, error?.message || 'Unable to update token.', 'error');
+      } finally {
+        setContextMenuPending(contextMenu, false);
+      }
+    });
+  }
 }
 
 function normalizeTokenState(raw = {}) {
@@ -165,7 +432,7 @@ function updateFolderOptions(select, folders = []) {
   select.value = folders.some((folder) => folder.id === current) ? current : '';
 }
 
-function buildTokenMarkup(tokenState) {
+function groupTokens(tokenState) {
   const groups = [];
 
   tokenState.folders.forEach((folder) => {
@@ -187,41 +454,91 @@ function buildTokenMarkup(tokenState) {
     groups.push({ id: null, title: 'Unsorted Tokens', items: unsorted });
   }
 
+  return groups;
+}
+
+function buildTokenMarkup(groups, options = {}) {
   if (!groups.length) {
     return '<li class="token-template-list__empty">No tokens saved yet.</li>';
   }
 
+  const isCollapsed = typeof options.isCollapsed === 'function' ? options.isCollapsed : () => false;
+
   return groups
-    .map(
-      (group) => `
-        <li class="token-group" data-folder-id="${group.id ?? ''}">
+    .map((group) => {
+      const collapsed = isCollapsed(group.id);
+      const listId = buildGroupListId(group.id);
+      return `
+        <li class="token-group${collapsed ? ' is-collapsed' : ''}" data-folder-id="${group.id ?? ''}">
           <div class="token-group__header">
-            <h4 class="token-group__title">${escapeHtml(group.title)}</h4>
-            <span class="token-group__count">${group.items.length}</span>
+            <button
+              type="button"
+              class="token-group__toggle"
+              data-action="toggle-token-group"
+              data-folder-id="${group.id ?? ''}"
+              aria-expanded="${collapsed ? 'false' : 'true'}"
+              aria-controls="${listId}"
+            >
+              <span class="token-group__chevron" aria-hidden="true"></span>
+              <span class="token-group__title">${escapeHtml(group.title)}</span>
+              <span class="token-group__count">${group.items.length}</span>
+            </button>
           </div>
-          <ul class="token-group__list">
+          <ul class="token-group__list" id="${listId}">
             ${group.items.map((token) => renderTokenItem(token)).join('')}
           </ul>
         </li>
-      `
-    )
+      `;
+    })
     .join('');
+}
+
+function buildGroupListId(groupId) {
+  const base = groupId ? String(groupId) : 'unsorted';
+  return `token-group-list-${base.replace(/[^a-zA-Z0-9_-]/g, '-') || 'unsorted'}`;
 }
 
 function renderTokenItem(token) {
   const name = escapeHtml(token.name || 'Untitled Token');
   const thumb = renderTokenThumb(token);
+  const sizeAttr = typeof token.size === 'string' ? ` data-token-size="${escapeHtml(token.size)}"` : '';
+  const hpAttr =
+    typeof token.hp === 'number' && !Number.isNaN(token.hp)
+      ? ` data-token-hp="${escapeHtml(token.hp)}"`
+      : '';
+
   return `
     <li>
-      <article class="token-item" draggable="true" data-token-id="${token.id}">
+      <article class="token-item" draggable="true" data-token-id="${escapeHtml(token.id)}"${sizeAttr}${hpAttr}>
         ${thumb}
         <div class="token-item__meta">
           <h4>${name}</h4>
-          <p>${token.type ? escapeHtml(token.type) : ''}</p>
+          ${renderTokenDetails(token)}
         </div>
       </article>
     </li>
   `;
+}
+
+function renderTokenDetails(token) {
+  const lines = [];
+  if (token.type) {
+    lines.push(`<p class="token-item__subtext">${escapeHtml(token.type)}</p>`);
+  }
+
+  const stats = [];
+  if (token.size) {
+    stats.push(`Size: ${escapeHtml(token.size)}`);
+  }
+  if (typeof token.hp === 'number' && !Number.isNaN(token.hp)) {
+    stats.push(`HP: ${escapeHtml(token.hp)}`);
+  }
+
+  if (stats.length) {
+    lines.push(`<p class="token-item__details">${stats.join(' · ')}</p>`);
+  }
+
+  return lines.join('');
 }
 
 function renderTokenThumb(token) {
@@ -270,6 +587,17 @@ function setButtonPending(button, pending) {
   button.classList.toggle('is-loading', pending);
 }
 
+function setContextMenuPending(menu, pending) {
+  if (!menu) return;
+  const elements = [menu.sizeInput, menu.hpInput, menu.submitButton].filter(Boolean);
+  elements.forEach((element) => {
+    element.disabled = pending;
+    if (element.classList?.contains('btn')) {
+      element.classList.toggle('is-loading', pending);
+    }
+  });
+}
+
 function ensureTokenDraft(draft) {
   if (!draft.tokens || typeof draft.tokens !== 'object') {
     draft.tokens = { folders: [], items: [] };
@@ -277,4 +605,115 @@ function ensureTokenDraft(draft) {
     draft.tokens.folders = Array.isArray(draft.tokens.folders) ? draft.tokens.folders : [];
     draft.tokens.items = Array.isArray(draft.tokens.items) ? draft.tokens.items : [];
   }
+}
+
+function focusElement(element) {
+  if (!element || typeof element.focus !== 'function') {
+    return;
+  }
+
+  try {
+    element.focus({ preventScroll: true });
+  } catch (error) {
+    element.focus();
+  }
+}
+
+function createTokenContextMenu(root) {
+  const element = document.createElement('div');
+  element.className = 'token-context-menu';
+  element.setAttribute('role', 'dialog');
+  element.setAttribute('aria-modal', 'false');
+  element.setAttribute('aria-label', 'Edit token');
+  element.hidden = true;
+  element.dataset.open = 'false';
+  element.tabIndex = -1;
+  element.innerHTML = `
+    <form class="token-context-menu__form" data-token-context-form>
+      <header class="token-context-menu__header">
+        <h3 class="token-context-menu__title">Token Details</h3>
+      </header>
+      <div class="token-context-menu__field">
+        <label for="token-context-size">Size</label>
+        <input
+          id="token-context-size"
+          type="text"
+          placeholder="e.g. 1x1"
+          autocomplete="off"
+          data-token-context-size
+        />
+      </div>
+      <div class="token-context-menu__field">
+        <label for="token-context-hp">HP</label>
+        <input
+          id="token-context-hp"
+          type="number"
+          min="0"
+          step="1"
+          inputmode="numeric"
+          data-token-context-hp
+        />
+      </div>
+      <p class="token-context-menu__hint">Leave a field empty to clear its value.</p>
+      <div class="token-context-menu__actions">
+        <button class="btn btn--primary" type="submit">Save</button>
+      </div>
+      <p class="token-context-menu__feedback" data-token-context-feedback hidden></p>
+    </form>
+  `;
+
+  root.appendChild(element);
+
+  return {
+    element,
+    form: element.querySelector('[data-token-context-form]'),
+    sizeInput: element.querySelector('[data-token-context-size]'),
+    hpInput: element.querySelector('[data-token-context-hp]'),
+    feedback: element.querySelector('[data-token-context-feedback]'),
+    submitButton: element.querySelector('.token-context-menu__actions .btn'),
+  };
+}
+
+function positionContextMenu(element, clientX, clientY) {
+  const padding = 12;
+  const viewportWidth = window.innerWidth || document.documentElement.clientWidth || 0;
+  const viewportHeight = window.innerHeight || document.documentElement.clientHeight || 0;
+
+  const rect = element.getBoundingClientRect();
+  let x = clientX;
+  let y = clientY;
+
+  if (x + rect.width + padding > viewportWidth) {
+    x = viewportWidth - rect.width - padding;
+  }
+  if (y + rect.height + padding > viewportHeight) {
+    y = viewportHeight - rect.height - padding;
+  }
+
+  x = Math.max(padding, x);
+  y = Math.max(padding, y);
+
+  element.style.left = `${x}px`;
+  element.style.top = `${y}px`;
+}
+
+function isGroupCollapsed(state, folderId) {
+  return state.get(getGroupKey(folderId)) === true;
+}
+
+function setGroupCollapsed(state, folderId, collapsed) {
+  state.set(getGroupKey(folderId), collapsed);
+}
+
+function pruneCollapseState(state, groups) {
+  const activeKeys = new Set(groups.map((group) => getGroupKey(group.id)));
+  Array.from(state.keys()).forEach((key) => {
+    if (!activeKeys.has(key)) {
+      state.delete(key);
+    }
+  });
+}
+
+function getGroupKey(folderId) {
+  return folderId ?? UNSORTED_KEY;
 }

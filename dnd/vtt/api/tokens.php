@@ -35,6 +35,14 @@ try {
             ]);
         }
 
+        if ($action === 'update-token') {
+            $token = updateToken($payload);
+            respondJson(200, [
+                'success' => true,
+                'data' => $token,
+            ]);
+        }
+
         respondJson(400, [
             'success' => false,
             'error' => 'Unsupported action.',
@@ -189,6 +197,16 @@ function createToken(array $payload): array
         'createdAt' => date(DATE_ATOM),
     ];
 
+    $size = normalizeTokenSize($payload['size'] ?? null);
+    if ($size !== null) {
+        $token['size'] = $size;
+    }
+
+    $hitPoints = normalizeTokenHitPoints($payload['hp'] ?? null);
+    if ($hitPoints !== null) {
+        $token['hp'] = $hitPoints;
+    }
+
     $storage['items'][] = $token;
     persistTokens($storage);
 
@@ -197,6 +215,65 @@ function createToken(array $payload): array
     }
 
     return $token;
+}
+
+function updateToken(array $payload): array
+{
+    $tokenId = trim((string) ($payload['id'] ?? ''));
+    if ($tokenId === '') {
+        respondJson(422, [
+            'success' => false,
+            'error' => 'Token id is required.',
+        ]);
+    }
+
+    $storage = loadTokensPayload();
+    $updated = null;
+
+    foreach ($storage['items'] as &$token) {
+        if (($token['id'] ?? null) !== $tokenId) {
+            continue;
+        }
+
+        $size = normalizeTokenSize($payload['size'] ?? null);
+        if ($size === null) {
+            unset($token['size']);
+        } else {
+            $token['size'] = $size;
+        }
+
+        $hitPoints = normalizeTokenHitPoints($payload['hp'] ?? null);
+        if ($hitPoints === null) {
+            unset($token['hp']);
+        } else {
+            $token['hp'] = $hitPoints;
+        }
+
+        $token['updatedAt'] = date(DATE_ATOM);
+        $updated = $token;
+        break;
+    }
+    unset($token);
+
+    if ($updated === null) {
+        respondJson(404, [
+            'success' => false,
+            'error' => 'Token not found.',
+        ]);
+    }
+
+    persistTokens($storage);
+
+    if (($updated['folderId'] ?? null) !== null) {
+        foreach ($storage['folders'] as $folder) {
+            if (($folder['id'] ?? null) === $updated['folderId']) {
+                $updated['folder'] = $folder;
+                break;
+            }
+        }
+    }
+
+    return $updated;
 }
 
 function decodeTokenImage(string $dataUrl): ?array
@@ -233,6 +310,66 @@ function persistTokens(array $storage): void
             'error' => 'Failed to save tokens.',
         ]);
     }
+}
+
+function normalizeTokenSize($value): ?string
+{
+    if ($value === null) {
+        return null;
+    }
+
+    if (is_numeric($value)) {
+        $value = (string) $value;
+    }
+
+    if (!is_string($value)) {
+        respondJson(422, [
+            'success' => false,
+            'error' => 'Token size must be a string like 1x1.',
+        ]);
+    }
+
+    $size = strtolower(trim($value));
+    if ($size === '') {
+        return null;
+    }
+
+    if (!preg_match('/^[1-9][0-9]*x[1-9][0-9]*$/', $size)) {
+        respondJson(422, [
+            'success' => false,
+            'error' => 'Token size must be formatted like 1x1.',
+        ]);
+    }
+
+    return $size;
+}
+
+function normalizeTokenHitPoints($value): ?int
+{
+    if ($value === null) {
+        return null;
+    }
+
+    if (is_string($value)) {
+        $value = trim($value);
+    }
+
+    if ($value === '') {
+        return null;
+    }
+
+    $filtered = filter_var($value, FILTER_VALIDATE_INT, [
+        'options' => ['min_range' => 0, 'max_range' => 100000],
+    ]);
+
+    if ($filtered === false) {
+        respondJson(422, [
+            'success' => false,
+            'error' => 'Token HP must be a whole number between 0 and 100000.',
+        ]);
+    }
+
+    return (int) $filtered;
 }
 
 function normalizeCollection($collection): array
