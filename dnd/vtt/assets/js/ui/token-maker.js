@@ -1,8 +1,16 @@
 const MAX_ZOOM_MULTIPLIER = 10;
 
+const fallbackApi = {
+  hasImage: () => false,
+  async exportToken() {
+    return null;
+  },
+  reset() {},
+};
+
 export function initializeTokenMaker(moduleRoot) {
   const makerRoot = moduleRoot?.querySelector('[data-module="vtt-token-maker"]');
-  if (!makerRoot) return;
+  if (!makerRoot) return fallbackApi;
 
   const preview = makerRoot.querySelector('[data-token-preview]');
   const placeholder = makerRoot.querySelector('[data-token-placeholder]');
@@ -12,7 +20,7 @@ export function initializeTokenMaker(moduleRoot) {
   const browseButton = makerRoot.querySelector('[data-action="browse-token-image"]');
 
   if (!preview || !image || !fileInput) {
-    return;
+    return fallbackApi;
   }
 
   const state = {
@@ -67,7 +75,7 @@ export function initializeTokenMaker(moduleRoot) {
 
     const nextUrl = URL.createObjectURL(file);
     const handleLoad = () => {
-      const bounds = preview.getBoundingClientRect();
+      const bounds = getPreviewBounds(preview);
       const naturalWidth = image.naturalWidth || 1;
       const naturalHeight = image.naturalHeight || 1;
       const coverScale = Math.max(
@@ -210,10 +218,79 @@ export function initializeTokenMaker(moduleRoot) {
 
   applyTransform();
   setHasImage(false);
+
+  return {
+    hasImage: () => state.hasImage,
+    async exportToken(options = {}) {
+      if (!state.hasImage) {
+        return null;
+      }
+
+      const size = Number.isFinite(options.size) && options.size > 0 ? options.size : 512;
+      const bounds = getPreviewBounds(preview);
+      const dimension = Math.max(bounds.width, bounds.height, 1);
+      const ratio = size / dimension;
+
+      const canvas = document.createElement('canvas');
+      canvas.width = size;
+      canvas.height = size;
+
+      const context = canvas.getContext('2d');
+      if (!context) {
+        return null;
+      }
+
+      context.imageSmoothingEnabled = true;
+      context.imageSmoothingQuality = 'high';
+
+      context.save();
+      context.translate(size / 2, size / 2);
+      const scaleFactor = state.scale * ratio;
+      context.scale(scaleFactor, scaleFactor);
+      context.translate(state.offsetX, state.offsetY);
+      context.drawImage(image, -image.naturalWidth / 2, -image.naturalHeight / 2);
+      context.restore();
+
+      context.globalCompositeOperation = 'destination-in';
+      context.beginPath();
+      context.arc(size / 2, size / 2, size / 2, 0, Math.PI * 2);
+      context.closePath();
+      context.fill();
+
+      return {
+        dataUrl: canvas.toDataURL('image/png'),
+        size,
+      };
+    },
+    reset() {
+      cleanupObjectUrl(objectUrl);
+      objectUrl = null;
+      image.removeAttribute('src');
+      setHasImage(false);
+      resetPosition(1);
+      fileInput.value = '';
+    },
+  };
 }
 
 function clamp(value, min, max) {
   return Math.min(Math.max(value, min), max);
+}
+
+function getPreviewBounds(element) {
+  if (!element) {
+    return { width: 220, height: 220 };
+  }
+
+  const rect = element.getBoundingClientRect();
+  if (rect.width > 0 && rect.height > 0) {
+    return { width: rect.width, height: rect.height };
+  }
+
+  const computed = window.getComputedStyle(element);
+  const width = Number.parseFloat(computed.width) || element.clientWidth || 220;
+  const height = Number.parseFloat(computed.height) || element.clientHeight || width || 220;
+  return { width, height };
 }
 
 export default initializeTokenMaker;

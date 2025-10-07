@@ -2,14 +2,14 @@ const listeners = new Set();
 
 const state = {
   scenes: { folders: [], items: [] },
-  tokens: [],
+  tokens: { folders: [], items: [] },
   boardState: { activeSceneId: null, placements: {}, mapUrl: null },
   grid: { size: 64, locked: false, visible: true },
 };
 
 export function initializeState(snapshot = {}) {
   state.scenes = normalizeScenes(snapshot.scenes);
-  state.tokens = snapshot.tokens ?? [];
+  state.tokens = normalizeTokens(snapshot.tokens);
   if (snapshot.boardState && typeof snapshot.boardState === 'object') {
     state.boardState = {
       ...state.boardState,
@@ -58,5 +58,23 @@ function normalizeScenes(raw = {}) {
   return {
     folders: folders.filter((folder) => folder && typeof folder.id === 'string'),
     items: items.filter((scene) => scene && typeof scene.id === 'string'),
+  };
+}
+
+function normalizeTokens(raw = {}) {
+  if (Array.isArray(raw)) {
+    return { folders: [], items: raw };
+  }
+
+  const folders = Array.isArray(raw?.folders) ? raw.folders : [];
+  const items = Array.isArray(raw?.items)
+    ? raw.items
+    : Array.isArray(raw?.tokens)
+    ? raw.tokens
+    : [];
+
+  return {
+    folders: folders.filter((folder) => folder && typeof folder.id === 'string'),
+    items: items.filter((token) => token && typeof token.id === 'string'),
   };
 }
