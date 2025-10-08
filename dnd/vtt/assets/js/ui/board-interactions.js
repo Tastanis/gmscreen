@@ -55,6 +55,10 @@ export function mountBoardInteractions(store, routes = {}) {
   let movementScheduled = false;
   const MAX_QUEUED_MOVEMENTS = 12;
   const DRAG_ACTIVATION_DISTANCE = 6;
+  const DEFAULT_HP_PLACEHOLDER = '—';
+  const tokenSettingsMenu = createTokenSettingsMenu();
+  let activeTokenSettingsId = null;
+  let removeTokenSettingsListeners = null;
 
   board.addEventListener('keydown', (event) => {
     if (event.key === 'Delete' || event.key === 'Backspace') {
@@ -125,6 +129,12 @@ export function mountBoardInteractions(store, routes = {}) {
     event.preventDefault();
   });
 
+  if (tokenLayer) {
+    tokenLayer.addEventListener('pointerdown', handleTriggerIndicatorPointerDown);
+    tokenLayer.addEventListener('click', handleTriggerIndicatorClick);
+    tokenLayer.addEventListener('keydown', handleTriggerIndicatorKeydown);
+  }
+
   mapSurface.addEventListener(
     'wheel',
     (event) => {
@@ -152,6 +162,7 @@ export function mountBoardInteractions(store, routes = {}) {
     }
 
     if (event.button === 0) {
+      closeTokenSettings();
       const placement = findRenderedPlacementAtPoint(event);
       if (placement) {
         const selectionChanged = updateSelection(placement.id, {
@@ -178,21 +189,42 @@ export function mountBoardInteractions(store, routes = {}) {
       return;
     }
 
-    if (event.button !== 2) {
+    if (event.button === 2) {
+      const placement = findRenderedPlacementAtPoint(event);
+      if (placement) {
+        const opened = openTokenSettingsById(placement.id, event.clientX, event.clientY);
+        if (opened) {
+          const selectionChanged = updateSelection(placement.id, { additive: false });
+          if (selectionChanged) {
+            renderTokens(boardApi.getState?.() ?? {}, tokenLayer, viewState);
+          }
+          clearDragCandidate();
+          if (viewState.dragState) {
+            endTokenDrag({ commit: false });
+          }
+          focusBoard();
+          event.preventDefault();
+          return;
+        }
+      }
+
+      closeTokenSettings();
+      event.preventDefault();
+      focusBoard();
+      viewState.isPanning = true;
+      viewState.pointerId = event.pointerId;
+      viewState.lastPointer = { x: event.clientX, y: event.clientY };
+      mapSurface.classList.add('is-panning');
+      try {
+        mapSurface.setPointerCapture(event.pointerId);
+      } catch (error) {
+        console.warn('[VTT] Unable to set pointer capture', error);
+      }
       return;
     }
 
-    event.preventDefault();
-    focusBoard();
-    viewState.isPanning = true;
-    viewState.pointerId = event.pointerId;
-    viewState.lastPointer = { x: event.clientX, y: event.clientY };
-    mapSurface.classList.add('is-panning');
-    try {
-      mapSurface.setPointerCapture(event.pointerId);
-    } catch (error) {
-      console.warn('[VTT] Unable to set pointer capture', error);
-    }
+    closeTokenSettings();
+    return;
   });
 
   mapSurface.addEventListener('pointermove', (event) => {
@@ -411,6 +443,7 @@ export function mountBoardInteractions(store, routes = {}) {
         }
         viewState.dragState = null;
       }
+      closeTokenSettings();
     }
     const activeScene = sceneState.items.find((scene) => scene.id === activeSceneId) ?? null;
 
@@ -422,6 +455,15 @@ export function mountBoardInteractions(store, routes = {}) {
     }
     applyGridState(state.grid ?? {});
     renderTokens(state, tokenLayer, viewState);
+
+    if (activeTokenSettingsId) {
+      const placementForSettings = resolvePlacementById(state, activeSceneId, activeTokenSettingsId);
+      if (!placementForSettings) {
+        closeTokenSettings();
+      } else {
+        syncTokenSettingsForm(placementForSettings);
+      }
+    }
   };
 
   if (typeof boardApi.subscribe === 'function') {
@@ -1308,6 +1350,7 @@ export function mountBoardInteractions(store, routes = {}) {
       layer.hidden = true;
       renderedPlacements = [];
       selectedTokenIds.clear();
+      closeTokenSettings();
       return;
     }
 
@@ -1404,6 +1447,9 @@ export function mountBoardInteractions(store, routes = {}) {
         token.style.zIndex = '';
       }
 
+      token.dataset.tokenName = normalized.name || '';
+      applyTokenOverlays(token, normalized);
+
       fragment.appendChild(token);
       renderedCount += 1;
     });
@@ -1435,6 +1481,115 @@ export function mountBoardInteractions(store, routes = {}) {
       layer.hidden = true;
       renderedPlacements = [];
     }
+  }
+
+  function applyTokenOverlays(tokenElement, placement) {
+    if (!tokenElement || !placement) {
+      return;
+    }
+
+    syncTokenHitPoints(tokenElement, placement);
+    syncTriggeredActionIndicator(tokenElement, placement);
+  }
+
+  function syncTokenHitPoints(tokenElement, placement) {
+    const showHp = Boolean(placement.showHp);
+    const hpValue = normalizeHitPointsValue(placement.hp);
+    let hpBar = tokenElement.querySelector('.vtt-token__hp-bar');
+
+    if (!showHp) {
+      if (hpBar) {
+        hpBar.remove();
+      }
+      return;
+    }
+
+    if (!hpBar) {
+      hpBar = document.createElement('div');
+      hpBar.className = 'vtt-token__hp-bar';
+      const value = document.createElement('span');
+      value.className = 'vtt-token__hp-value';
+      hpBar.appendChild(value);
+      tokenElement.appendChild(hpBar);
+    }
+
+    const valueElement = hpBar.querySelector('.vtt-token__hp-value');
+    const displayValue = hpValue || DEFAULT_HP_PLACEHOLDER;
+    if (valueElement && valueElement.textContent !== displayValue) {
+      valueElement.textContent = displayValue;
+    }
+    hpBar.dataset.empty = hpValue ? 'false' : 'true';
+  }
+
+  function syncTriggeredActionIndicator(tokenElement, placement) {
+    const shouldShow = Boolean(placement.showTriggeredAction);
+    let indicator = tokenElement.querySelector('.vtt-token__trigger-indicator');
+
+    if (!shouldShow) {
+      if (indicator) {
+        indicator.remove();
+      }
+      return;
+    }
+
+    if (!indicator) {
+      indicator = document.createElement('button');
+      indicator.type = 'button';
+      indicator.className = 'vtt-token__trigger-indicator';
+      indicator.setAttribute('data-token-trigger-indicator', 'true');
+      tokenElement.appendChild(indicator);
+    }
+
+    const isReady = placement.triggeredActionReady !== false;
+    indicator.classList.toggle('is-spent', !isReady);
+    indicator.setAttribute('aria-pressed', (!isReady).toString());
+    indicator.setAttribute(
+      'aria-label',
+      isReady ? 'Triggered action ready. Click to mark used.' : 'Triggered action used. Click to reset.'
+    );
+    indicator.title = isReady ? 'Triggered action ready' : 'Triggered action used';
+  }
+
+  function handleTriggerIndicatorPointerDown(event) {
+    const indicator = event.target.closest('.vtt-token__trigger-indicator');
+    if (!indicator) {
+      return;
+    }
+    event.preventDefault();
+    event.stopPropagation();
+  }
+
+  function handleTriggerIndicatorClick(event) {
+    const indicator = event.target.closest('.vtt-token__trigger-indicator');
+    if (!indicator) {
+      return;
+    }
+    event.preventDefault();
+    event.stopPropagation();
+    const tokenElement = indicator.closest('.vtt-token');
+    const placementId = tokenElement?.dataset?.placementId ?? null;
+    if (!placementId) {
+      return;
+    }
+    toggleTriggeredActionState(placementId);
+  }
+
+  function handleTriggerIndicatorKeydown(event) {
+    if (event.key !== 'Enter' && event.key !== ' ') {
+      return;
+    }
+    const indicator = event.target.closest('.vtt-token__trigger-indicator');
+    if (!indicator) {
+      return;
+    }
+    event.preventDefault();
+    event.stopPropagation();
+    const tokenElement = indicator.closest('.vtt-token');
+    const placementId = tokenElement?.dataset?.placementId ?? null;
+    if (!placementId) {
+      return;
+    }
+    toggleTriggeredActionState(placementId);
   }
 
   function findRenderedPlacementAtPoint(event) {
@@ -1546,8 +1701,29 @@ export function mountBoardInteractions(store, routes = {}) {
     const height = Math.max(1, toNonNegativeNumber(placement.height ?? placement.rows ?? 1));
     const name = typeof placement.name === 'string' ? placement.name : '';
     const imageUrl = typeof placement.imageUrl === 'string' ? placement.imageUrl : '';
+    const hp = normalizeHitPointsValue(
+      placement.hp ?? placement.hitPoints ?? placement?.overlays?.hitPoints?.value ?? null
+    );
+    const showHp = Boolean(placement.showHp ?? placement.showHitPoints ?? placement?.overlays?.hitPoints?.visible ?? false);
+    const showTriggeredAction = Boolean(
+      placement.showTriggeredAction ?? placement?.overlays?.triggeredAction?.visible ?? false
+    );
+    const triggeredActionReady =
+      placement.triggeredActionReady ?? placement?.overlays?.triggeredAction?.ready ?? true;
 
-    return { id, column, row, width, height, name, imageUrl };
+    return {
+      id,
+      column,
+      row,
+      width,
+      height,
+      name,
+      imageUrl,
+      hp,
+      showHp,
+      showTriggeredAction,
+      triggeredActionReady: triggeredActionReady !== false,
+    };
   }
 
   function toNonNegativeNumber(value, fallback = 0) {
@@ -1651,12 +1827,14 @@ export function mountBoardInteractions(store, routes = {}) {
 
       const rawSize = typeof parsed.size === 'string' ? parsed.size : '';
       const size = rawSize.trim() || '1x1';
+      const hp = normalizeHitPointsValue(parsed.hp ?? parsed.hitPoints ?? null);
 
       return {
         id: typeof parsed.id === 'string' ? parsed.id : null,
         name: typeof parsed.name === 'string' ? parsed.name : '',
         imageUrl,
         size,
+        hp,
       };
     } catch (error) {
       console.warn('[VTT] Failed to parse dropped token payload', error);
@@ -1735,7 +1913,427 @@ export function mountBoardInteractions(store, routes = {}) {
       width: size.width,
       height: size.height,
       size: size.formatted,
+      hp: normalizeHitPointsValue(template.hp ?? null),
+      showHp: false,
+      showTriggeredAction: false,
+      triggeredActionReady: true,
     };
+  }
+
+  function toggleTriggeredActionState(placementId) {
+    if (!placementId || typeof boardApi.updateState !== 'function') {
+      return false;
+    }
+
+    const state = boardApi.getState?.() ?? {};
+    const activeSceneId = state.boardState?.activeSceneId ?? null;
+    if (!activeSceneId) {
+      return false;
+    }
+
+    let updated = false;
+    let nextReady = true;
+    boardApi.updateState?.((draft) => {
+      const scenePlacements = ensureScenePlacementDraft(draft, activeSceneId);
+      const target = scenePlacements.find((item) => item && item.id === placementId);
+      if (!target) {
+        return;
+      }
+      const current = target.triggeredActionReady !== false;
+      nextReady = !current;
+      target.triggeredActionReady = nextReady;
+      updated = true;
+    });
+
+    if (!updated) {
+      return false;
+    }
+
+    const latestState = boardApi.getState?.() ?? {};
+    const placement = resolvePlacementById(latestState, activeSceneId, placementId);
+    if (status && placement) {
+      const label = tokenLabel(placement);
+      status.textContent = nextReady
+        ? `${label} is ready to act.`
+        : `${label} has used their triggered action.`;
+    }
+
+    refreshTokenSettings();
+    return true;
+  }
+
+  function updatePlacementById(placementId, mutator) {
+    if (!placementId || typeof mutator !== 'function' || typeof boardApi.updateState !== 'function') {
+      return;
+    }
+
+    const state = boardApi.getState?.() ?? {};
+    const activeSceneId = state.boardState?.activeSceneId ?? null;
+    if (!activeSceneId) {
+      return;
+    }
+
+    boardApi.updateState?.((draft) => {
+      const scenePlacements = ensureScenePlacementDraft(draft, activeSceneId);
+      const target = scenePlacements.find((item) => item && item.id === placementId);
+      if (!target) {
+        return;
+      }
+      mutator(target);
+    });
+  }
+
+  function getPlacementFromStore(placementId) {
+    if (!placementId) {
+      return null;
+    }
+    const state = boardApi.getState?.() ?? {};
+    const activeSceneId = state.boardState?.activeSceneId ?? null;
+    if (!activeSceneId) {
+      return null;
+    }
+    return resolvePlacementById(state, activeSceneId, placementId);
+  }
+
+  function resolvePlacementById(state, sceneId, placementId) {
+    if (!state || !sceneId || !placementId) {
+      return null;
+    }
+    const placements = state.boardState?.placements;
+    if (!placements || typeof placements !== 'object') {
+      return null;
+    }
+    const scenePlacements = placements[sceneId];
+    if (!Array.isArray(scenePlacements)) {
+      return null;
+    }
+    return scenePlacements.find((placement) => placement && placement.id === placementId) ?? null;
+  }
+
+  function tokenLabel(placement) {
+    if (!placement || typeof placement !== 'object') {
+      return 'Token';
+    }
+    const rawName = typeof placement.name === 'string' ? placement.name.trim() : '';
+    return rawName || 'Token';
+  }
+
+  function normalizeHitPointsValue(value) {
+    if (typeof value === 'number' && Number.isFinite(value)) {
+      return String(Math.trunc(value));
+    }
+
+    if (typeof value === 'string') {
+      return value.trim();
+    }
+
+    if (value && typeof value === 'object') {
+      if (typeof value.value === 'number' && Number.isFinite(value.value)) {
+        return String(Math.trunc(value.value));
+      }
+      if (typeof value.value === 'string') {
+        return value.value.trim();
+      }
+    }
+
+    return '';
+  }
+
+  function createTokenSettingsMenu() {
+    if (!document?.body) {
+      return null;
+    }
+
+    const element = document.createElement('div');
+    element.className = 'vtt-token-settings';
+    element.hidden = true;
+    element.dataset.open = 'false';
+    element.tabIndex = -1;
+    element.setAttribute('role', 'dialog');
+    element.setAttribute('aria-modal', 'false');
+    element.innerHTML = `
+      <form class="vtt-token-settings__form" novalidate>
+        <header class="vtt-token-settings__header">
+          <h2 class="vtt-token-settings__title" data-token-settings-title>Token Settings</h2>
+          <button type="button" class="vtt-token-settings__close" data-token-settings-close aria-label="Close token settings">×</button>
+        </header>
+        <div class="vtt-token-settings__section">
+          <label class="vtt-token-settings__toggle">
+            <input type="checkbox" data-token-settings-toggle="hitPoints" />
+            <span>Show Hit Points</span>
+          </label>
+          <label class="vtt-token-settings__field" data-token-settings-field="hitPoints">
+            <span class="vtt-token-settings__field-label">Hit Points</span>
+            <input type="text" data-token-settings-input="hitPoints" autocomplete="off" autocapitalize="off" spellcheck="false" inputmode="text" />
+          </label>
+        </div>
+        <div class="vtt-token-settings__section">
+          <label class="vtt-token-settings__toggle">
+            <input type="checkbox" data-token-settings-toggle="triggeredAction" />
+            <span>Show Triggered Action</span>
+          </label>
+          <p class="vtt-token-settings__hint" data-token-settings-hint>Click the on-board indicator to toggle its state.</p>
+        </div>
+      </form>
+    `;
+    document.body.appendChild(element);
+
+    const menu = {
+      element,
+      form: element.querySelector('form'),
+      title: element.querySelector('[data-token-settings-title]'),
+      closeButton: element.querySelector('[data-token-settings-close]'),
+      showHpToggle: element.querySelector('[data-token-settings-toggle="hitPoints"]'),
+      hpField: element.querySelector('[data-token-settings-field="hitPoints"]'),
+      hpInput: element.querySelector('[data-token-settings-input="hitPoints"]'),
+      triggeredToggle: element.querySelector('[data-token-settings-toggle="triggeredAction"]'),
+    };
+
+    element.addEventListener('contextmenu', (event) => {
+      event.preventDefault();
+    });
+
+    menu.closeButton?.addEventListener('click', () => {
+      closeTokenSettings();
+    });
+
+    if (menu.showHpToggle) {
+      menu.showHpToggle.addEventListener('change', () => {
+        if (!activeTokenSettingsId) {
+          return;
+        }
+        const visible = menu.showHpToggle.checked;
+        updatePlacementById(activeTokenSettingsId, (target) => {
+          target.showHp = Boolean(visible);
+          if (visible && typeof target.hp !== 'string' && typeof target.hp !== 'number') {
+            target.hp = '';
+          }
+        });
+        refreshTokenSettings();
+      });
+    }
+
+    if (menu.hpInput) {
+      menu.hpInput.addEventListener('input', () => {
+        if (!activeTokenSettingsId) {
+          return;
+        }
+        const nextValue = normalizeHitPointsValue(menu.hpInput.value);
+        updatePlacementById(activeTokenSettingsId, (target) => {
+          target.hp = nextValue;
+        });
+        if (menu.hpInput.value !== nextValue) {
+          menu.hpInput.value = nextValue;
+        }
+        refreshTokenSettings();
+      });
+
+      menu.hpInput.addEventListener('blur', () => {
+        const normalized = normalizeHitPointsValue(menu.hpInput.value);
+        if (menu.hpInput.value !== normalized) {
+          menu.hpInput.value = normalized;
+        }
+      });
+    }
+
+    if (menu.triggeredToggle) {
+      menu.triggeredToggle.addEventListener('change', () => {
+        if (!activeTokenSettingsId) {
+          return;
+        }
+        const visible = menu.triggeredToggle.checked;
+        updatePlacementById(activeTokenSettingsId, (target) => {
+          target.showTriggeredAction = Boolean(visible);
+          if (visible && target.triggeredActionReady === undefined) {
+            target.triggeredActionReady = true;
+          }
+        });
+        refreshTokenSettings();
+      });
+    }
+
+    return menu;
+  }
+
+  function openTokenSettingsById(placementId, clientX, clientY) {
+    if (!placementId || !tokenSettingsMenu?.element) {
+      return false;
+    }
+
+    const placement = getPlacementFromStore(placementId);
+    if (!placement) {
+      return false;
+    }
+
+    activeTokenSettingsId = placementId;
+    syncTokenSettingsForm(placement);
+
+    tokenSettingsMenu.element.hidden = false;
+    tokenSettingsMenu.element.dataset.open = 'true';
+    tokenSettingsMenu.element.dataset.placementId = placementId;
+    tokenSettingsMenu.element.style.visibility = 'hidden';
+    positionTokenSettings(tokenSettingsMenu.element, clientX, clientY);
+    tokenSettingsMenu.element.style.visibility = '';
+
+    if (typeof removeTokenSettingsListeners === 'function') {
+      removeTokenSettingsListeners();
+    }
+    removeTokenSettingsListeners = attachTokenSettingsListeners();
+
+    focusTokenSettings();
+    return true;
+  }
+
+  function closeTokenSettings() {
+    if (typeof removeTokenSettingsListeners === 'function') {
+      removeTokenSettingsListeners();
+      removeTokenSettingsListeners = null;
+    }
+
+    if (tokenSettingsMenu?.element) {
+      tokenSettingsMenu.element.hidden = true;
+      tokenSettingsMenu.element.dataset.open = 'false';
+      tokenSettingsMenu.element.dataset.placementId = '';
+    }
+
+    activeTokenSettingsId = null;
+  }
+
+  function focusTokenSettings() {
+    if (!tokenSettingsMenu?.element) {
+      return;
+    }
+
+    let focusTarget = null;
+    if (
+      tokenSettingsMenu.showHpToggle?.checked &&
+      tokenSettingsMenu.hpInput &&
+      tokenSettingsMenu.hpInput.disabled === false
+    ) {
+      focusTarget = tokenSettingsMenu.hpInput;
+    } else if (tokenSettingsMenu.showHpToggle) {
+      focusTarget = tokenSettingsMenu.showHpToggle;
+    } else if (tokenSettingsMenu.triggeredToggle) {
+      focusTarget = tokenSettingsMenu.triggeredToggle;
+    } else {
+      focusTarget = tokenSettingsMenu.element;
+    }
+
+    if (focusTarget && typeof focusTarget.focus === 'function') {
+      try {
+        focusTarget.focus({ preventScroll: true });
+      } catch (error) {
+        focusTarget.focus();
+      }
+    }
+  }
+
+  function attachTokenSettingsListeners() {
+    const handlePointerDown = (event) => {
+      if (tokenSettingsMenu?.element?.contains(event.target)) {
+        return;
+      }
+      closeTokenSettings();
+    };
+
+    const handleKeydown = (event) => {
+      if (event.key === 'Escape') {
+        event.preventDefault();
+        closeTokenSettings();
+      }
+    };
+
+    const handleResize = () => {
+      closeTokenSettings();
+    };
+
+    document.addEventListener('pointerdown', handlePointerDown, true);
+    document.addEventListener('keydown', handleKeydown);
+    window.addEventListener('resize', handleResize);
+    window.addEventListener('scroll', handleResize, true);
+
+    return () => {
+      document.removeEventListener('pointerdown', handlePointerDown, true);
+      document.removeEventListener('keydown', handleKeydown);
+      window.removeEventListener('resize', handleResize);
+      window.removeEventListener('scroll', handleResize, true);
+    };
+  }
+
+  function positionTokenSettings(element, clientX, clientY) {
+    if (!element) {
+      return;
+    }
+
+    const margin = 12;
+    const viewportWidth = window.innerWidth || document.documentElement.clientWidth || 0;
+    const viewportHeight = window.innerHeight || document.documentElement.clientHeight || 0;
+    const baseX = Number.isFinite(clientX) ? clientX : viewportWidth / 2;
+    const baseY = Number.isFinite(clientY) ? clientY : viewportHeight / 2;
+
+    let left = baseX + margin;
+    let top = baseY + margin;
+
+    const rect = element.getBoundingClientRect();
+    if (left + rect.width + margin > viewportWidth) {
+      left = viewportWidth - rect.width - margin;
+    }
+    if (top + rect.height + margin > viewportHeight) {
+      top = viewportHeight - rect.height - margin;
+    }
+
+    left = Math.max(margin, left);
+    top = Math.max(margin, top);
+
+    element.style.left = `${left}px`;
+    element.style.top = `${top}px`;
+  }
+
+  function refreshTokenSettings() {
+    if (!activeTokenSettingsId) {
+      return;
+    }
+
+    const placement = getPlacementFromStore(activeTokenSettingsId);
+    if (!placement) {
+      closeTokenSettings();
+      return;
+    }
+
+    syncTokenSettingsForm(placement);
+  }
+
+  function syncTokenSettingsForm(placement) {
+    if (!tokenSettingsMenu?.element) {
+      return;
+    }
+
+    const label = tokenLabel(placement);
+    if (tokenSettingsMenu.title) {
+      tokenSettingsMenu.title.textContent = `${label} Settings`;
+    }
+    tokenSettingsMenu.element.setAttribute('aria-label', `${label} settings`);
+
+    const showHp = Boolean(placement.showHp);
+    if (tokenSettingsMenu.showHpToggle) {
+      tokenSettingsMenu.showHpToggle.checked = showHp;
+    }
+
+    if (tokenSettingsMenu.hpInput) {
+      const hpValue = normalizeHitPointsValue(placement.hp);
+      if (tokenSettingsMenu.hpInput.value !== hpValue) {
+        tokenSettingsMenu.hpInput.value = hpValue;
+      }
+      tokenSettingsMenu.hpInput.disabled = !showHp;
+    }
+
+    if (tokenSettingsMenu.hpField) {
+      tokenSettingsMenu.hpField.classList.toggle('is-disabled', !showHp);
+    }
+
+    if (tokenSettingsMenu.triggeredToggle) {
+      tokenSettingsMenu.triggeredToggle.checked = Boolean(placement.showTriggeredAction);
+    }
   }
 
   function ensureScenePlacementDraft(draft, sceneId) {
