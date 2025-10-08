@@ -11,7 +11,6 @@ function renderVttTokenLibrary(): string
             <div class="vtt-token-library__actions">
                 <label class="visually-hidden" for="token-search">Search tokens</label>
                 <input id="token-search" type="search" placeholder="Search tokens" />
-                <button class="btn" type="button" data-action="create-token-folder">New Folder</button>
             </div>
         </header>
         <div class="vtt-token-library__content">
