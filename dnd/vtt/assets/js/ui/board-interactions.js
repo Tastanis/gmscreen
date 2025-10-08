@@ -38,6 +38,9 @@ export function mountBoardInteractions(store, routes = {}) {
   const boardApi = store ?? {};
   const TOKEN_DRAG_TYPE = 'application/x-vtt-token-template';
   let tokenDropDepth = 0;
+  let selectedTokenId = null;
+  let renderedPlacements = [];
+  let lastActiveSceneId = null;
 
   board.addEventListener('keydown', (event) => {
     const movement = movementFromKey(event.key);
@@ -115,7 +118,26 @@ export function mountBoardInteractions(store, routes = {}) {
   );
 
   mapSurface.addEventListener('pointerdown', (event) => {
-    if (event.button !== 2 || !viewState.mapLoaded) {
+    if (!viewState.mapLoaded) {
+      return;
+    }
+
+    if (event.button === 0) {
+      const placement = findRenderedPlacementAtPoint(event);
+      if (placement) {
+        if (selectedTokenId !== placement.id) {
+          selectedTokenId = placement.id;
+          renderTokens(boardApi.getState?.() ?? {}, tokenLayer, viewState);
+        }
+      } else if (selectedTokenId) {
+        selectedTokenId = null;
+        renderTokens(boardApi.getState?.() ?? {}, tokenLayer, viewState);
+      }
+      event.preventDefault();
+      return;
+    }
+
+    if (event.button !== 2) {
       return;
     }
 
@@ -278,6 +300,10 @@ export function mountBoardInteractions(store, routes = {}) {
   const applyStateToBoard = (state = {}) => {
     const sceneState = normalizeSceneState(state.scenes);
     const activeSceneId = state.boardState?.activeSceneId ?? null;
+    if (activeSceneId !== lastActiveSceneId) {
+      lastActiveSceneId = activeSceneId;
+      selectedTokenId = null;
+    }
     const activeScene = sceneState.items.find((scene) => scene.id === activeSceneId) ?? null;
 
     updateSceneMeta(activeScene);
@@ -306,6 +332,8 @@ export function mountBoardInteractions(store, routes = {}) {
   function loadMap(url) {
     viewState.activeMapUrl = url || null;
     viewState.mapLoaded = false;
+    selectedTokenId = null;
+    renderedPlacements = [];
     mapImage.hidden = true;
     mapBackdrop.hidden = !url;
     mapTransform.hidden = !url;
@@ -511,6 +539,8 @@ export function mountBoardInteractions(store, routes = {}) {
       return;
     }
 
+    renderedPlacements = [];
+
     const gridSize = Math.max(8, Number.isFinite(view?.gridSize) ? view.gridSize : 64);
     const offsets = view?.gridOffsets ?? {};
     const leftOffset = Number.isFinite(offsets.left) ? offsets.left : 0;
@@ -522,17 +552,28 @@ export function mountBoardInteractions(store, routes = {}) {
         layer.removeChild(layer.firstChild);
       }
       layer.hidden = true;
+      renderedPlacements = [];
+      selectedTokenId = null;
       return;
     }
 
     const fragment = document.createDocumentFragment();
     let rendered = 0;
+    let selectionFound = false;
 
     placements.forEach((placement) => {
       const normalized = normalizePlacementForRender(placement);
       if (!normalized) {
         return;
       }
+
+      renderedPlacements.push({
+        id: normalized.id,
+        column: normalized.column,
+        row: normalized.row,
+        width: normalized.width,
+        height: normalized.height,
+      });
 
       const token = document.createElement('div');
       token.className = 'vtt-token';
@@ -553,9 +594,18 @@ export function mountBoardInteractions(store, routes = {}) {
         token.classList.add('vtt-token--placeholder');
       }
 
+      if (selectedTokenId && normalized.id === selectedTokenId) {
+        token.classList.add('is-selected');
+        selectionFound = true;
+      }
+
       fragment.appendChild(token);
       rendered += 1;
     });
+
+    if (selectedTokenId && !selectionFound) {
+      selectedTokenId = null;
+    }
 
     while (layer.firstChild) {
       layer.removeChild(layer.firstChild);
@@ -566,7 +616,84 @@ export function mountBoardInteractions(store, routes = {}) {
       layer.hidden = false;
     } else {
       layer.hidden = true;
+      renderedPlacements = [];
     }
+  }
+
+  function findRenderedPlacementAtPoint(event) {
+    if (!renderedPlacements.length) {
+      return null;
+    }
+
+    const pointer = getPointerPosition(event, mapSurface);
+    const scale = Number.isFinite(viewState.scale) && viewState.scale !== 0 ? viewState.scale : 1;
+    const translation = viewState.translation ?? { x: 0, y: 0 };
+    const offsetX = Number.isFinite(translation.x) ? translation.x : 0;
+    const offsetY = Number.isFinite(translation.y) ? translation.y : 0;
+    const localX = (pointer.x - offsetX) / scale;
+    const localY = (pointer.y - offsetY) / scale;
+
+    if (!Number.isFinite(localX) || !Number.isFinite(localY)) {
+      return null;
+    }
+
+    const mapWidth = Number.isFinite(viewState.mapPixelSize?.width) ? viewState.mapPixelSize.width : 0;
+    const mapHeight = Number.isFinite(viewState.mapPixelSize?.height) ? viewState.mapPixelSize.height : 0;
+    if (mapWidth <= 0 || mapHeight <= 0) {
+      return null;
+    }
+
+    const offsets = viewState.gridOffsets ?? {};
+    const offsetLeft = Number.isFinite(offsets.left) ? offsets.left : 0;
+    const offsetRight = Number.isFinite(offsets.right) ? offsets.right : 0;
+    const offsetTop = Number.isFinite(offsets.top) ? offsets.top : 0;
+    const offsetBottom = Number.isFinite(offsets.bottom) ? offsets.bottom : 0;
+
+    const innerWidth = Math.max(0, mapWidth - offsetLeft - offsetRight);
+    const innerHeight = Math.max(0, mapHeight - offsetTop - offsetBottom);
+    if (innerWidth <= 0 || innerHeight <= 0) {
+      return null;
+    }
+
+    if (
+      localX < offsetLeft ||
+      localX > offsetLeft + innerWidth ||
+      localY < offsetTop ||
+      localY > offsetTop + innerHeight
+    ) {
+      return null;
+    }
+
+    const gridSize = Math.max(8, Number.isFinite(viewState.gridSize) ? viewState.gridSize : 64);
+    if (!Number.isFinite(gridSize) || gridSize <= 0) {
+      return null;
+    }
+
+    const pointX = localX - offsetLeft;
+    const pointY = localY - offsetTop;
+
+    for (let index = renderedPlacements.length - 1; index >= 0; index -= 1) {
+      const placement = renderedPlacements[index];
+      if (!placement || typeof placement !== 'object') {
+        continue;
+      }
+
+      const column = Number.isFinite(placement.column) ? placement.column : 0;
+      const row = Number.isFinite(placement.row) ? placement.row : 0;
+      const width = Math.max(1, Number.isFinite(placement.width) ? placement.width : 1);
+      const height = Math.max(1, Number.isFinite(placement.height) ? placement.height : 1);
+
+      const left = column * gridSize;
+      const top = row * gridSize;
+      const right = left + width * gridSize;
+      const bottom = top + height * gridSize;
+
+      if (pointX >= left && pointX < right && pointY >= top && pointY < bottom) {
+        return placement;
+      }
+    }
+
+    return null;
   }
 
   function getActiveScenePlacements(state = {}) {
@@ -668,11 +795,14 @@ export function mountBoardInteractions(store, routes = {}) {
         return null;
       }
 
+      const rawSize = typeof parsed.size === 'string' ? parsed.size : '';
+      const size = rawSize.trim() || '1x1';
+
       return {
         id: typeof parsed.id === 'string' ? parsed.id : null,
         name: typeof parsed.name === 'string' ? parsed.name : '',
         imageUrl,
-        size: typeof parsed.size === 'string' ? parsed.size : '',
+        size,
       };
     } catch (error) {
       console.warn('[VTT] Failed to parse dropped token payload', error);
