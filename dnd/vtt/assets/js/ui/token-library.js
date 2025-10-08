@@ -134,7 +134,8 @@ export function renderTokenLibrary(routes, store) {
     contextTokenId = token.id;
 
     if (contextMenu.sizeInput) {
-      const sizeValue = typeof token.size === 'string' ? token.size : '';
+      const rawSize = typeof token.size === 'string' ? token.size : '';
+      const sizeValue = rawSize.trim();
       if (sizeValue) {
         const hasOption = Array.from(contextMenu.sizeInput.options || []).some(
           (option) => option.value === sizeValue
@@ -148,7 +149,7 @@ export function renderTokenLibrary(routes, store) {
         }
         contextMenu.sizeInput.value = sizeValue;
       } else {
-        contextMenu.sizeInput.value = '';
+        contextMenu.sizeInput.value = '1x1';
       }
     }
 
@@ -498,10 +499,10 @@ function buildTokenDragData(element, tokenIndex) {
     return null;
   }
 
-  const sizeValue =
-    typeof record?.size === 'string' && record.size
-      ? record.size
-      : element.getAttribute('data-token-size') || '';
+  const recordSize = typeof record?.size === 'string' ? record.size.trim() : '';
+  const elementSize = element.getAttribute('data-token-size');
+  const fallbackSize = typeof elementSize === 'string' ? elementSize.trim() : '';
+  const sizeValue = recordSize || fallbackSize || '1x1';
 
   return {
     id: tokenId,
@@ -724,7 +725,8 @@ function createTokenContextMenu(root) {
   element.tabIndex = -1;
   const sizeOptions = Array.from({ length: 10 }, (_, index) => {
     const size = `${index + 1}x${index + 1}`;
-    return `<option value="${size}">${size}</option>`;
+    const selected = index === 0 ? ' selected' : '';
+    return `<option value="${size}"${selected}>${size}</option>`;
   }).join('');
 
   element.innerHTML = `
@@ -738,8 +740,8 @@ function createTokenContextMenu(root) {
           id="token-context-size"
           data-token-context-size
         >
-          <option value="">No size override</option>
           ${sizeOptions}
+          <option value="">No size override</option>
         </select>
       </div>
       <div class="token-context-menu__field">
