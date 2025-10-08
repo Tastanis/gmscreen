@@ -208,7 +208,10 @@ function clearMeasurement(state) {
 }
 
 function handleShiftKey(state) {
-  if (!state.measuring || state.mode !== 'pointer') {
+  if (
+    !state.measuring ||
+    (state.mode !== 'pointer' && state.mode !== 'external')
+  ) {
     return;
   }
 
