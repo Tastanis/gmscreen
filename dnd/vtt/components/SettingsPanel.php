@@ -100,7 +100,6 @@ function renderVttSettingsPanel(string $tokenLibraryMarkup = ''): string
             <section class="settings-view settings-view--tokens" data-settings-view="tokens" hidden>
                 <header class="settings-view__header">
                     <h3>Token Maker</h3>
-                    <button class="btn" type="button" data-action="create-token-folder">New Folder</button>
                 </header>
                 <div class="settings-view__content" id="token-library">
                     <?= $tokenLibraryMarkup ?>

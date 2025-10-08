@@ -64,6 +64,12 @@ export function renderTokenLibrary(routes, store) {
       contextMenu.form.reset();
     }
 
+    if (contextMenu.sizeInput) {
+      Array.from(
+        contextMenu.sizeInput.querySelectorAll('option[data-dynamic-size-option="true"]')
+      ).forEach((option) => option.remove());
+    }
+
     setContextMenuPending(contextMenu, false);
     showFeedback(contextMenu.feedback, '', 'info');
   }
@@ -128,7 +134,22 @@ export function renderTokenLibrary(routes, store) {
     contextTokenId = token.id;
 
     if (contextMenu.sizeInput) {
-      contextMenu.sizeInput.value = typeof token.size === 'string' ? token.size : '';
+      const sizeValue = typeof token.size === 'string' ? token.size : '';
+      if (sizeValue) {
+        const hasOption = Array.from(contextMenu.sizeInput.options || []).some(
+          (option) => option.value === sizeValue
+        );
+        if (!hasOption) {
+          const dynamicOption = document.createElement('option');
+          dynamicOption.value = sizeValue;
+          dynamicOption.textContent = sizeValue;
+          dynamicOption.dataset.dynamicSizeOption = 'true';
+          contextMenu.sizeInput.appendChild(dynamicOption);
+        }
+        contextMenu.sizeInput.value = sizeValue;
+      } else {
+        contextMenu.sizeInput.value = '';
+      }
     }
 
     if (contextMenu.hpInput) {
@@ -628,6 +649,11 @@ function createTokenContextMenu(root) {
   element.hidden = true;
   element.dataset.open = 'false';
   element.tabIndex = -1;
+  const sizeOptions = Array.from({ length: 10 }, (_, index) => {
+    const size = `${index + 1}x${index + 1}`;
+    return `<option value="${size}">${size}</option>`;
+  }).join('');
+
   element.innerHTML = `
     <form class="token-context-menu__form" data-token-context-form>
       <header class="token-context-menu__header">
@@ -635,13 +661,13 @@ function createTokenContextMenu(root) {
       </header>
       <div class="token-context-menu__field">
         <label for="token-context-size">Size</label>
-        <input
+        <select
           id="token-context-size"
-          type="text"
-          placeholder="e.g. 1x1"
-          autocomplete="off"
           data-token-context-size
-        />
+        >
+          <option value="">No size override</option>
+          ${sizeOptions}
+        </select>
       </div>
       <div class="token-context-menu__field">
         <label for="token-context-hp">HP</label>
