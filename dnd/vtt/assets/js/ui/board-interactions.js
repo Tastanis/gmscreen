@@ -33,6 +33,8 @@ export function mountBoardInteractions(store, routes = {}) {
     gridSize: 64,
     gridOffsets: { top: 0, right: 0, bottom: 0, left: 0 },
     mapPixelSize: { width: 0, height: 0 },
+    dragCandidate: null,
+    dragState: null,
   };
 
   const boardApi = store ?? {};
@@ -44,6 +46,7 @@ export function mountBoardInteractions(store, routes = {}) {
   const movementQueue = [];
   let movementScheduled = false;
   const MAX_QUEUED_MOVEMENTS = 12;
+  const DRAG_ACTIVATION_DISTANCE = 6;
 
   board.addEventListener('keydown', (event) => {
     if (event.key === 'Delete' || event.key === 'Backspace') {
@@ -150,10 +153,17 @@ export function mountBoardInteractions(store, routes = {}) {
         if (selectionChanged) {
           renderTokens(boardApi.getState?.() ?? {}, tokenLayer, viewState);
         }
+        prepareTokenDrag(event, placement);
       } else if (!event.shiftKey && !event.ctrlKey && !event.metaKey) {
         if (clearSelection()) {
           renderTokens(boardApi.getState?.() ?? {}, tokenLayer, viewState);
         }
+        clearDragCandidate();
+        if (viewState.dragState) {
+          endTokenDrag({ commit: false });
+        }
+      } else {
+        clearDragCandidate();
       }
       focusBoard();
       event.preventDefault();
@@ -178,6 +188,34 @@ export function mountBoardInteractions(store, routes = {}) {
   });
 
   mapSurface.addEventListener('pointermove', (event) => {
+    if (!viewState.mapLoaded) {
+      return;
+    }
+
+    if (viewState.dragState && event.pointerId === viewState.dragState.pointerId) {
+      event.preventDefault();
+      updateTokenDrag(event);
+      return;
+    }
+
+    if (viewState.dragCandidate && event.pointerId === viewState.dragCandidate.pointerId) {
+      if ((event.buttons & 1) === 0) {
+        clearDragCandidate(event.pointerId);
+      } else {
+        const deltaX = event.clientX - viewState.dragCandidate.startClient.x;
+        const deltaY = event.clientY - viewState.dragCandidate.startClient.y;
+        const distance = Math.hypot(deltaX, deltaY);
+        if (distance >= DRAG_ACTIVATION_DISTANCE) {
+          const started = beginTokenDrag(event);
+          if (started) {
+            event.preventDefault();
+            updateTokenDrag(event);
+            return;
+          }
+        }
+      }
+    }
+
     if (!viewState.isPanning || event.pointerId !== viewState.pointerId) {
       return;
     }
@@ -205,9 +243,38 @@ export function mountBoardInteractions(store, routes = {}) {
     }
   };
 
-  mapSurface.addEventListener('pointerup', endPan);
-  mapSurface.addEventListener('pointercancel', endPan);
-  mapSurface.addEventListener('pointerleave', endPan);
+  const handlePointerUp = (event) => {
+    if (viewState.dragState && event.pointerId === viewState.dragState.pointerId) {
+      const isPrimaryButton = event.button === 0 || event.button === -1;
+      endTokenDrag({ commit: isPrimaryButton, pointerId: event.pointerId });
+    } else if (viewState.dragCandidate && event.pointerId === viewState.dragCandidate.pointerId) {
+      clearDragCandidate(event.pointerId);
+    }
+
+    if (event.button === 2) {
+      endPan(event);
+    }
+  };
+
+  const handlePointerCancel = (event) => {
+    if (viewState.dragState && event.pointerId === viewState.dragState.pointerId) {
+      endTokenDrag({ commit: false, pointerId: event.pointerId });
+    }
+    clearDragCandidate(event.pointerId);
+    endPan(event);
+  };
+
+  const handlePointerLeave = (event) => {
+    if (viewState.dragState && event.pointerId === viewState.dragState.pointerId) {
+      endTokenDrag({ commit: false, pointerId: event.pointerId });
+    }
+    clearDragCandidate(event.pointerId);
+    endPan(event);
+  };
+
+  mapSurface.addEventListener('pointerup', handlePointerUp);
+  mapSurface.addEventListener('pointercancel', handlePointerCancel);
+  mapSurface.addEventListener('pointerleave', handlePointerLeave);
 
   mapSurface.addEventListener('dragenter', (event) => {
     if (!viewState.mapLoaded) {
@@ -327,6 +394,15 @@ export function mountBoardInteractions(store, routes = {}) {
     if (activeSceneId !== lastActiveSceneId) {
       lastActiveSceneId = activeSceneId;
       selectedTokenIds.clear();
+      clearDragCandidate();
+      if (viewState.dragState) {
+        try {
+          mapSurface.releasePointerCapture?.(viewState.dragState.pointerId);
+        } catch (error) {
+          // Ignore release errors when swapping scenes
+        }
+        viewState.dragState = null;
+      }
     }
     const activeScene = sceneState.items.find((scene) => scene.id === activeSceneId) ?? null;
 
@@ -409,6 +485,332 @@ export function mountBoardInteractions(store, routes = {}) {
     }
     selectedTokenIds.clear();
     return true;
+  }
+
+  function prepareTokenDrag(event, placement) {
+    if (!viewState.mapLoaded) {
+      return;
+    }
+    if (!placement || typeof placement !== 'object' || !placement.id) {
+      return;
+    }
+
+    const pointer = getLocalMapPoint(event);
+    if (!pointer) {
+      return;
+    }
+
+    const state = boardApi.getState?.() ?? {};
+    const placements = getActiveScenePlacements(state);
+    if (!Array.isArray(placements) || !placements.length) {
+      return;
+    }
+
+    const candidateIds =
+      selectedTokenIds.size && selectedTokenIds.has(placement.id)
+        ? Array.from(selectedTokenIds)
+        : [placement.id];
+    if (!candidateIds.length) {
+      return;
+    }
+
+    const placementMap = new Map();
+    placements.forEach((entry) => {
+      const normalized = normalizePlacementForRender(entry);
+      if (normalized) {
+        placementMap.set(normalized.id, normalized);
+      }
+    });
+
+    const tokens = [];
+    const originals = new Map();
+    candidateIds.forEach((id) => {
+      const info = placementMap.get(id);
+      if (!info) {
+        return;
+      }
+      tokens.push({ ...info });
+      originals.set(id, {
+        column: info.column,
+        row: info.row,
+        width: info.width,
+        height: info.height,
+      });
+    });
+
+    if (!tokens.length) {
+      return;
+    }
+
+    viewState.dragCandidate = {
+      pointerId: event.pointerId,
+      startClient: { x: event.clientX, y: event.clientY },
+      startPointer: pointer,
+      tokens,
+      originalPositions: originals,
+    };
+  }
+
+  function beginTokenDrag(event) {
+    const candidate = viewState.dragCandidate;
+    if (!candidate || candidate.pointerId !== event.pointerId) {
+      return false;
+    }
+    if (!candidate.tokens || !candidate.tokens.length) {
+      viewState.dragCandidate = null;
+      return false;
+    }
+
+    viewState.dragCandidate = null;
+
+    const preview = new Map();
+    candidate.tokens.forEach((token) => {
+      if (!token || !token.id) {
+        return;
+      }
+      preview.set(token.id, {
+        column: token.column ?? 0,
+        row: token.row ?? 0,
+        width: token.width ?? 1,
+        height: token.height ?? 1,
+      });
+    });
+
+    viewState.dragState = {
+      pointerId: candidate.pointerId,
+      startPointer: candidate.startPointer,
+      tokens: candidate.tokens.map((token) => ({ ...token })),
+      originalPositions: candidate.originalPositions,
+      previewPositions: preview,
+      hasMoved: false,
+    };
+
+    try {
+      mapSurface.setPointerCapture?.(candidate.pointerId);
+    } catch (error) {
+      // Ignore capture issues for unsupported browsers
+    }
+
+    applyDragPreview(preview, false);
+    return true;
+  }
+
+  function updateTokenDrag(event) {
+    const dragState = viewState.dragState;
+    if (!dragState || dragState.pointerId !== event.pointerId) {
+      return;
+    }
+
+    if ((event.buttons & 1) === 0) {
+      endTokenDrag({ commit: false, pointerId: event.pointerId });
+      return;
+    }
+
+    const pointer = getLocalMapPoint(event);
+    if (!pointer) {
+      return;
+    }
+
+    const gridSize = Math.max(8, Number.isFinite(viewState.gridSize) ? viewState.gridSize : 64);
+    if (!Number.isFinite(gridSize) || gridSize <= 0) {
+      return;
+    }
+
+    const deltaX = (pointer.x - dragState.startPointer.x) / gridSize;
+    const deltaY = (pointer.y - dragState.startPointer.y) / gridSize;
+    if (!Number.isFinite(deltaX) || !Number.isFinite(deltaY)) {
+      return;
+    }
+
+    const nextPreview = new Map();
+    let changed = false;
+
+    dragState.tokens.forEach((token) => {
+      if (!token || !token.id) {
+        return;
+      }
+      const origin = dragState.originalPositions.get(token.id);
+      if (!origin) {
+        return;
+      }
+      const width = Math.max(1, toNonNegativeNumber(origin.width ?? token.width ?? 1, 1));
+      const height = Math.max(1, toNonNegativeNumber(origin.height ?? token.height ?? 1, 1));
+      const baseColumn = toNonNegativeNumber(origin.column ?? token.column ?? 0, 0);
+      const baseRow = toNonNegativeNumber(origin.row ?? token.row ?? 0, 0);
+      const nextColumn = baseColumn + deltaX;
+      const nextRow = baseRow + deltaY;
+      const clamped = clampPlacementToBounds(nextColumn, nextRow, width, height);
+      const previous = dragState.previewPositions?.get(token.id);
+      if (!previous || previous.column !== clamped.column || previous.row !== clamped.row) {
+        changed = true;
+      }
+      nextPreview.set(token.id, {
+        column: clamped.column,
+        row: clamped.row,
+        width,
+        height,
+      });
+    });
+
+    if (!nextPreview.size) {
+      return;
+    }
+
+    applyDragPreview(nextPreview, changed);
+  }
+
+  function endTokenDrag({ commit = false, pointerId = null } = {}) {
+    const dragState = viewState.dragState;
+    if (!dragState) {
+      clearDragCandidate(pointerId);
+      return;
+    }
+
+    if (pointerId !== null && dragState.pointerId !== pointerId) {
+      return;
+    }
+
+    try {
+      mapSurface.releasePointerCapture?.(dragState.pointerId);
+    } catch (error) {
+      // Ignore release errors
+    }
+
+    const preview = dragState.previewPositions;
+    const moved = dragState.hasMoved;
+    viewState.dragState = null;
+    clearDragCandidate(pointerId);
+
+    if (commit && moved && preview && preview.size) {
+      commitDragPreview(preview);
+    } else {
+      renderTokens(boardApi.getState?.() ?? {}, tokenLayer, viewState);
+    }
+  }
+
+  function applyDragPreview(preview, changed) {
+    if (!viewState.dragState) {
+      return;
+    }
+    viewState.dragState.previewPositions = preview;
+    if (changed) {
+      viewState.dragState.hasMoved = true;
+    }
+    renderTokens(boardApi.getState?.() ?? {}, tokenLayer, viewState);
+  }
+
+  function clearDragCandidate(pointerId = null) {
+    if (!viewState.dragCandidate) {
+      return;
+    }
+    if (pointerId !== null && viewState.dragCandidate.pointerId !== pointerId) {
+      return;
+    }
+    viewState.dragCandidate = null;
+  }
+
+  function commitDragPreview(preview) {
+    if (typeof boardApi.updateState !== 'function') {
+      renderTokens(boardApi.getState?.() ?? {}, tokenLayer, viewState);
+      return;
+    }
+
+    const state = boardApi.getState?.() ?? {};
+    const activeSceneId = state.boardState?.activeSceneId ?? null;
+    if (!activeSceneId) {
+      renderTokens(state, tokenLayer, viewState);
+      return;
+    }
+
+    const updates = new Map();
+    preview.forEach((position, id) => {
+      if (!id) {
+        return;
+      }
+      const column = toNonNegativeNumber(position.column ?? position.col ?? 0);
+      const row = toNonNegativeNumber(position.row ?? position.y ?? 0);
+      const width = Math.max(1, toNonNegativeNumber(position.width ?? position.columns ?? 1));
+      const height = Math.max(1, toNonNegativeNumber(position.height ?? position.rows ?? 1));
+      updates.set(id, { column, row, width, height });
+    });
+
+    if (!updates.size) {
+      renderTokens(state, tokenLayer, viewState);
+      return;
+    }
+
+    let movedCount = 0;
+    boardApi.updateState?.((draft) => {
+      const scenePlacements = ensureScenePlacementDraft(draft, activeSceneId);
+      if (!Array.isArray(scenePlacements) || !scenePlacements.length) {
+        return;
+      }
+      scenePlacements.forEach((placement) => {
+        if (!placement || typeof placement !== 'object') {
+          return;
+        }
+        const next = updates.get(placement.id);
+        if (!next) {
+          return;
+        }
+        const clamped = clampPlacementToBounds(next.column, next.row, next.width, next.height);
+        if (placement.column !== clamped.column || placement.row !== clamped.row) {
+          placement.column = clamped.column;
+          placement.row = clamped.row;
+          movedCount += 1;
+        }
+      });
+    });
+
+    if (movedCount && status) {
+      const noun = movedCount === 1 ? 'token' : 'tokens';
+      status.textContent = `Moved ${movedCount} ${noun}.`;
+    }
+
+    renderTokens(boardApi.getState?.() ?? {}, tokenLayer, viewState);
+  }
+
+  function getLocalMapPoint(event) {
+    const pointer = getPointerPosition(event, mapSurface);
+    const scale = Number.isFinite(viewState.scale) && viewState.scale !== 0 ? viewState.scale : 1;
+    const translation = viewState.translation ?? { x: 0, y: 0 };
+    const offsetX = Number.isFinite(translation.x) ? translation.x : 0;
+    const offsetY = Number.isFinite(translation.y) ? translation.y : 0;
+    const localX = (pointer.x - offsetX) / scale;
+    const localY = (pointer.y - offsetY) / scale;
+    if (!Number.isFinite(localX) || !Number.isFinite(localY)) {
+      return null;
+    }
+    return { x: localX, y: localY };
+  }
+
+  function clampPlacementToBounds(column, row, width, height) {
+    const mapWidth = Number.isFinite(viewState.mapPixelSize?.width) ? viewState.mapPixelSize.width : 0;
+    const mapHeight = Number.isFinite(viewState.mapPixelSize?.height) ? viewState.mapPixelSize.height : 0;
+    const offsets = viewState.gridOffsets ?? {};
+    const offsetLeft = Number.isFinite(offsets.left) ? offsets.left : 0;
+    const offsetRight = Number.isFinite(offsets.right) ? offsets.right : 0;
+    const offsetTop = Number.isFinite(offsets.top) ? offsets.top : 0;
+    const offsetBottom = Number.isFinite(offsets.bottom) ? offsets.bottom : 0;
+    const gridSize = Math.max(8, Number.isFinite(viewState.gridSize) ? viewState.gridSize : 64);
+
+    const innerWidth = Math.max(0, mapWidth - offsetLeft - offsetRight);
+    const innerHeight = Math.max(0, mapHeight - offsetTop - offsetBottom);
+
+    if (innerWidth <= 0 || innerHeight <= 0 || !Number.isFinite(gridSize) || gridSize <= 0) {
+      return {
+        column: Math.max(0, Math.round(column)),
+        row: Math.max(0, Math.round(row)),
+      };
+    }
+
+    const maxColumn = Math.max(0, Math.floor(innerWidth / gridSize - Math.max(1, width)));
+    const maxRow = Math.max(0, Math.floor(innerHeight / gridSize - Math.max(1, height)));
+
+    return {
+      column: clamp(Math.round(column), 0, maxColumn),
+      row: clamp(Math.round(row), 0, maxRow),
+    };
   }
 
   function enqueueMovement(delta) {
@@ -596,6 +998,15 @@ export function mountBoardInteractions(store, routes = {}) {
   function loadMap(url) {
     viewState.activeMapUrl = url || null;
     viewState.mapLoaded = false;
+    clearDragCandidate();
+    if (viewState.dragState) {
+      try {
+        mapSurface.releasePointerCapture?.(viewState.dragState.pointerId);
+      } catch (error) {
+        // Ignore release issues when resetting the map
+      }
+      viewState.dragState = null;
+    }
     selectedTokenIds.clear();
     renderedPlacements = [];
     mapImage.hidden = true;
@@ -821,8 +1232,23 @@ export function mountBoardInteractions(store, routes = {}) {
       return;
     }
 
+    const previewPositions = view?.dragState?.previewPositions ?? null;
+    const existingNodes = new Map();
+    Array.from(layer.children).forEach((child) => {
+      if (!(child instanceof HTMLElement)) {
+        layer.removeChild(child);
+        return;
+      }
+      const id = child.dataset?.placementId;
+      if (id) {
+        existingNodes.set(id, child);
+      } else {
+        layer.removeChild(child);
+      }
+    });
+
     const fragment = document.createDocumentFragment();
-    let rendered = 0;
+    let renderedCount = 0;
     const retainedSelection = new Set();
 
     placements.forEach((placement) => {
@@ -831,40 +1257,76 @@ export function mountBoardInteractions(store, routes = {}) {
         return;
       }
 
-      renderedPlacements.push({
-        id: normalized.id,
-        column: normalized.column,
-        row: normalized.row,
-        width: normalized.width,
-        height: normalized.height,
-      });
+      let column = normalized.column;
+      let row = normalized.row;
+      let width = normalized.width;
+      let height = normalized.height;
 
-      const token = document.createElement('div');
-      token.className = 'vtt-token';
+      if (previewPositions && previewPositions.has(normalized.id)) {
+        const preview = previewPositions.get(normalized.id) ?? {};
+        column = toNonNegativeNumber(preview.column ?? column, column);
+        row = toNonNegativeNumber(preview.row ?? row, row);
+        width = Math.max(1, toNonNegativeNumber(preview.width ?? width, width));
+        height = Math.max(1, toNonNegativeNumber(preview.height ?? height, height));
+      }
+
+      renderedPlacements.push({ id: normalized.id, column, row, width, height });
+
+      let token = existingNodes.get(normalized.id);
+      if (token) {
+        existingNodes.delete(normalized.id);
+      } else {
+        token = document.createElement('div');
+        token.className = 'vtt-token';
+      }
+
       token.dataset.placementId = normalized.id;
-      token.style.width = `${normalized.width * gridSize}px`;
-      token.style.height = `${normalized.height * gridSize}px`;
-      const left = leftOffset + normalized.column * gridSize;
-      const top = topOffset + normalized.row * gridSize;
+      token.style.width = `${width * gridSize}px`;
+      token.style.height = `${height * gridSize}px`;
+      const left = leftOffset + column * gridSize;
+      const top = topOffset + row * gridSize;
       token.style.transform = `translate3d(${left}px, ${top}px, 0)`;
 
       if (normalized.imageUrl) {
-        const img = document.createElement('img');
-        img.className = 'vtt-token__image';
-        img.src = normalized.imageUrl;
-        img.alt = normalized.name || 'Token';
-        token.appendChild(img);
+        let img = token.querySelector('img.vtt-token__image');
+        if (!img) {
+          img = document.createElement('img');
+          img.className = 'vtt-token__image';
+          token.appendChild(img);
+        }
+        if (img.src !== normalized.imageUrl) {
+          img.src = normalized.imageUrl;
+        }
+        const alt = normalized.name || 'Token';
+        if (img.alt !== alt) {
+          img.alt = alt;
+        }
+        token.classList.remove('vtt-token--placeholder');
       } else {
+        const existingImage = token.querySelector('img.vtt-token__image');
+        if (existingImage) {
+          existingImage.remove();
+        }
         token.classList.add('vtt-token--placeholder');
       }
 
       if (selectedTokenIds.has(normalized.id)) {
         token.classList.add('is-selected');
         retainedSelection.add(normalized.id);
+      } else {
+        token.classList.remove('is-selected');
+      }
+
+      if (previewPositions && previewPositions.has(normalized.id)) {
+        token.classList.add('is-dragging');
+        token.style.zIndex = '10';
+      } else {
+        token.classList.remove('is-dragging');
+        token.style.zIndex = '';
       }
 
       fragment.appendChild(token);
-      rendered += 1;
+      renderedCount += 1;
     });
 
     if (selectedTokenIds.size) {
@@ -879,11 +1341,15 @@ export function mountBoardInteractions(store, routes = {}) {
       }
     }
 
+    existingNodes.forEach((node) => {
+      node.remove();
+    });
+
     while (layer.firstChild) {
       layer.removeChild(layer.firstChild);
     }
 
-    if (rendered > 0) {
+    if (renderedCount > 0) {
       layer.appendChild(fragment);
       layer.hidden = false;
     } else {
