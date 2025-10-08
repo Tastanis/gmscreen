@@ -1,3 +1,11 @@
+import {
+  beginExternalMeasurement,
+  cancelExternalMeasurement,
+  finalizeExternalMeasurement,
+  isMeasureModeActive,
+  updateExternalMeasurement,
+} from './drag-ruler.js';
+
 export function mountBoardInteractions(store, routes = {}) {
   const board = document.getElementById('vtt-board-canvas');
   const mapSurface = document.getElementById('vtt-map-surface');
@@ -583,7 +591,26 @@ export function mountBoardInteractions(store, routes = {}) {
       originalPositions: candidate.originalPositions,
       previewPositions: preview,
       hasMoved: false,
+      measurement: null,
     };
+
+    if (isMeasureModeActive()) {
+      const primaryToken = candidate.tokens.find((token) => token && token.id) ?? null;
+      if (primaryToken) {
+        const original = candidate.originalPositions.get(primaryToken.id) ?? {
+          column: primaryToken.column ?? 0,
+          row: primaryToken.row ?? 0,
+          width: primaryToken.width ?? 1,
+          height: primaryToken.height ?? 1,
+        };
+        const startPoint = measurementPointFromToken(original);
+        if (startPoint && beginExternalMeasurement(startPoint)) {
+          viewState.dragState.measurement = {
+            tokenId: primaryToken.id,
+          };
+        }
+      }
+    }
 
     try {
       mapSurface.setPointerCapture?.(candidate.pointerId);
@@ -678,6 +705,24 @@ export function mountBoardInteractions(store, routes = {}) {
 
     const preview = dragState.previewPositions;
     const moved = dragState.hasMoved;
+    const measurement = dragState.measurement ?? null;
+
+    if (measurement) {
+      if (!isMeasureModeActive()) {
+        cancelExternalMeasurement();
+      } else if (commit && moved && preview && preview.size && measurement.tokenId) {
+        const finalPosition = preview instanceof Map ? preview.get(measurement.tokenId) : null;
+        const finalPoint = finalPosition ? measurementPointFromToken(finalPosition) : null;
+        if (finalPoint) {
+          finalizeExternalMeasurement(finalPoint);
+        } else {
+          cancelExternalMeasurement();
+        }
+      } else {
+        cancelExternalMeasurement();
+      }
+    }
+
     viewState.dragState = null;
     clearDragCandidate(pointerId);
 
@@ -696,7 +741,41 @@ export function mountBoardInteractions(store, routes = {}) {
     if (changed) {
       viewState.dragState.hasMoved = true;
     }
+    if (viewState.dragState.measurement) {
+      syncTokenMeasurement(preview);
+    }
     renderTokens(boardApi.getState?.() ?? {}, tokenLayer, viewState);
+  }
+
+  function syncTokenMeasurement(preview) {
+    const dragState = viewState.dragState;
+    if (!dragState || !dragState.measurement) {
+      return;
+    }
+
+    if (!isMeasureModeActive()) {
+      cancelExternalMeasurement();
+      dragState.measurement = null;
+      return;
+    }
+
+    const tokenId = dragState.measurement.tokenId;
+    if (!tokenId) {
+      cancelExternalMeasurement();
+      dragState.measurement = null;
+      return;
+    }
+
+    const previewMap = preview instanceof Map ? preview : null;
+    const position = previewMap?.get(tokenId) ?? dragState.originalPositions?.get(tokenId) ?? null;
+    const nextPoint = position ? measurementPointFromToken(position) : null;
+    if (!nextPoint) {
+      cancelExternalMeasurement();
+      dragState.measurement = null;
+      return;
+    }
+
+    updateExternalMeasurement(nextPoint);
   }
 
   function clearDragCandidate(pointerId = null) {
@@ -1482,6 +1561,43 @@ export function mountBoardInteractions(store, routes = {}) {
     }
 
     return Math.max(0, Math.trunc(fallback));
+  }
+
+  function measurementPointFromToken(position) {
+    if (!position || !viewState.mapLoaded) {
+      return null;
+    }
+
+    const gridSize = Math.max(8, Number.isFinite(viewState.gridSize) ? viewState.gridSize : 64);
+    if (!Number.isFinite(gridSize) || gridSize <= 0) {
+      return null;
+    }
+
+    const offsets = viewState.gridOffsets ?? {};
+    const offsetLeft = Number.isFinite(offsets.left) ? offsets.left : 0;
+    const offsetTop = Number.isFinite(offsets.top) ? offsets.top : 0;
+
+    const width = Math.max(1, toNonNegativeNumber(position.width ?? position.columns ?? 1, 1));
+    const height = Math.max(1, toNonNegativeNumber(position.height ?? position.rows ?? 1, 1));
+    const column = toNonNegativeNumber(position.column ?? position.col ?? 0, 0);
+    const row = toNonNegativeNumber(position.row ?? position.y ?? 0, 0);
+
+    const centerColumn = column + width / 2 - 0.5;
+    const centerRow = row + height / 2 - 0.5;
+
+    const mapX = offsetLeft + (centerColumn + 0.5) * gridSize;
+    const mapY = offsetTop + (centerRow + 0.5) * gridSize;
+
+    if (!Number.isFinite(mapX) || !Number.isFinite(mapY)) {
+      return null;
+    }
+
+    return {
+      column: centerColumn,
+      row: centerRow,
+      mapX,
+      mapY,
+    };
   }
 
   function hasTokenData(dataTransfer, type) {

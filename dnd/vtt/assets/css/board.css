@@ -252,3 +252,9 @@
   paint-order: stroke fill;
   letter-spacing: 0.02em;
 }
+
+.vtt-measure-overlay__total {
+  font-size: 16px;
+  font-weight: 700;
+  letter-spacing: 0.04em;
+}

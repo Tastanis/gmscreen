@@ -1,5 +1,7 @@
 const SVG_NS = 'http://www.w3.org/2000/svg';
 
+let sharedState = null;
+
 export function mountDragRuler() {
   const ruler = document.getElementById('vtt-distance-ruler');
   const rulerValue = ruler?.querySelector('.vtt-board__ruler-value');
@@ -27,7 +29,10 @@ export function mountDragRuler() {
     mapTransform,
     grid,
     overlaySize: { width: 0, height: 0 },
+    mode: null,
   };
+
+  sharedState = state;
 
   state.measureButton.setAttribute('aria-pressed', 'false');
 
@@ -53,7 +58,15 @@ export function mountDragRuler() {
   mapSurface.addEventListener(
     'pointerdown',
     (event) => {
-      if (!state.active || event.button !== 0) {
+      if (!state.active || event.button !== 0 || state.mode === 'external') {
+        return;
+      }
+
+      if (
+        event.target instanceof Element &&
+        event.target.closest &&
+        event.target.closest('.vtt-token')
+      ) {
         return;
       }
 
@@ -76,7 +89,7 @@ export function mountDragRuler() {
   );
 
   mapSurface.addEventListener('pointermove', (event) => {
-    if (!state.measuring || event.pointerId !== state.pointerId) {
+    if (!state.measuring || state.mode !== 'pointer' || event.pointerId !== state.pointerId) {
       return;
     }
 
@@ -91,7 +104,7 @@ export function mountDragRuler() {
   });
 
   mapSurface.addEventListener('pointerup', (event) => {
-    if (!state.measuring || event.pointerId !== state.pointerId) {
+    if (!state.measuring || state.mode !== 'pointer' || event.pointerId !== state.pointerId) {
       return;
     }
 
@@ -106,7 +119,7 @@ export function mountDragRuler() {
   });
 
   mapSurface.addEventListener('pointercancel', (event) => {
-    if (state.measuring && event.pointerId === state.pointerId) {
+    if (state.measuring && state.mode === 'pointer' && event.pointerId === state.pointerId) {
       event.stopPropagation();
       endMeasurement(state);
       mapSurface.releasePointerCapture?.(event.pointerId);
@@ -154,6 +167,7 @@ function beginMeasurement(state, pointerId, startPoint) {
   state.pointerId = pointerId;
   state.points = [startPoint];
   state.hoverPoint = startPoint;
+  state.mode = 'pointer';
   updateOverlay(state);
 }
 
@@ -179,6 +193,9 @@ function endMeasurement(state) {
   state.measuring = false;
   state.pointerId = null;
   state.hoverPoint = null;
+  if (state.mode === 'pointer') {
+    state.mode = null;
+  }
   updateOverlay(state);
 }
 
@@ -190,11 +207,12 @@ function clearMeasurement(state) {
   state.pointerId = null;
   state.points = [];
   state.hoverPoint = null;
+  state.mode = null;
   updateOverlay(state);
 }
 
 function handleShiftKey(state) {
-  if (!state.measuring) {
+  if (!state.measuring || state.mode !== 'pointer') {
     return;
   }
 
@@ -311,6 +329,7 @@ function updateOverlay(state) {
     state.overlay.labels.innerHTML = '';
     state.ruler.setAttribute('hidden', 'hidden');
     state.rulerValue.textContent = '0 squares';
+    state.overlay.total?.setAttribute('hidden', 'hidden');
     return;
   }
 
@@ -326,6 +345,15 @@ function updateOverlay(state) {
   state.ruler.removeAttribute('hidden');
   state.rulerValue.textContent =
     totalSquares === 1 ? '1 square' : `${totalSquares} squares`;
+
+  const endPoint = points[points.length - 1];
+  if (state.overlay.total && endPoint) {
+    state.overlay.total.textContent =
+      totalSquares === 1 ? '1 square' : `${totalSquares} squares`;
+    state.overlay.total.setAttribute('x', endPoint.mapX);
+    state.overlay.total.setAttribute('y', endPoint.mapY);
+    state.overlay.total.removeAttribute('hidden');
+  }
 }
 
 function getRenderablePoints(state) {
@@ -442,9 +470,17 @@ function createOverlay(container) {
   labels.classList.add('vtt-measure-overlay__labels');
   svg.appendChild(labels);
 
+  const total = document.createElementNS(SVG_NS, 'text');
+  total.classList.add('vtt-measure-overlay__label', 'vtt-measure-overlay__total');
+  total.setAttribute('text-anchor', 'middle');
+  total.setAttribute('dominant-baseline', 'middle');
+  total.setAttribute('hidden', 'hidden');
+  total.setAttribute('dy', '-18');
+  svg.appendChild(total);
+
   container.appendChild(svg);
 
-  return { svg, path, nodes, labels };
+  return { svg, path, nodes, labels, total };
 }
 
 function syncOverlaySize(state) {
@@ -464,4 +500,92 @@ function syncOverlaySize(state) {
 
 function clamp(value, min, max) {
   return Math.min(Math.max(value, min), max);
+}
+
+function clonePoint(point) {
+  if (!point) {
+    return null;
+  }
+  const { mapX, mapY, column, row } = point;
+  if (
+    !Number.isFinite(mapX) ||
+    !Number.isFinite(mapY) ||
+    !Number.isFinite(column) ||
+    !Number.isFinite(row)
+  ) {
+    return null;
+  }
+  return {
+    mapX,
+    mapY,
+    column,
+    row,
+  };
+}
+
+export function isMeasureModeActive() {
+  return Boolean(sharedState?.active);
+}
+
+export function beginExternalMeasurement(point) {
+  if (!sharedState || !sharedState.active) {
+    return false;
+  }
+  const snapshot = clonePoint(point);
+  if (!snapshot) {
+    return false;
+  }
+
+  clearMeasurement(sharedState);
+  sharedState.points = [snapshot];
+  sharedState.hoverPoint = snapshot;
+  sharedState.measuring = true;
+  sharedState.mode = 'external';
+  sharedState.pointerId = null;
+  updateOverlay(sharedState);
+  return true;
+}
+
+export function updateExternalMeasurement(point) {
+  if (!sharedState || sharedState.mode !== 'external' || !sharedState.measuring) {
+    return;
+  }
+  const snapshot = clonePoint(point);
+  if (!snapshot) {
+    return;
+  }
+  sharedState.hoverPoint = snapshot;
+  updateOverlay(sharedState);
+}
+
+export function finalizeExternalMeasurement(point) {
+  if (!sharedState || sharedState.mode !== 'external') {
+    return;
+  }
+
+  const snapshot = clonePoint(point);
+  if (snapshot) {
+    if (!sharedState.points.length) {
+      sharedState.points = [snapshot];
+    } else if (sharedState.points.length === 1) {
+      sharedState.points.push(snapshot);
+    } else {
+      sharedState.points[sharedState.points.length - 1] = snapshot;
+    }
+  }
+
+  sharedState.measuring = false;
+  sharedState.pointerId = null;
+  sharedState.hoverPoint = null;
+  sharedState.mode = null;
+  updateOverlay(sharedState);
+}
+
+export function cancelExternalMeasurement() {
+  if (!sharedState) {
+    return;
+  }
+  if (sharedState.mode === 'external') {
+    clearMeasurement(sharedState);
+  }
 }
