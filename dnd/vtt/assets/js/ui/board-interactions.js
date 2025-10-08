@@ -3,6 +3,7 @@ export function mountBoardInteractions(store, routes = {}) {
   const mapSurface = document.getElementById('vtt-map-surface');
   const mapTransform = document.getElementById('vtt-map-transform');
   const grid = document.getElementById('vtt-grid-overlay');
+  const tokenLayer = document.getElementById('vtt-token-layer');
   const mapBackdrop = document.getElementById('vtt-map-backdrop');
   const mapImage = document.getElementById('vtt-map-image');
   const emptyState = board?.querySelector('.vtt-board__empty');
@@ -29,9 +30,14 @@ export function mountBoardInteractions(store, routes = {}) {
     lastPointer: { x: 0, y: 0 },
     mapLoaded: false,
     activeMapUrl: null,
+    gridSize: 64,
+    gridOffsets: { top: 0, right: 0, bottom: 0, left: 0 },
+    mapPixelSize: { width: 0, height: 0 },
   };
 
   const boardApi = store ?? {};
+  const TOKEN_DRAG_TYPE = 'application/x-vtt-token-template';
+  let tokenDropDepth = 0;
 
   board.addEventListener('keydown', (event) => {
     const movement = movementFromKey(event.key);
@@ -157,6 +163,106 @@ export function mountBoardInteractions(store, routes = {}) {
   mapSurface.addEventListener('pointercancel', endPan);
   mapSurface.addEventListener('pointerleave', endPan);
 
+  mapSurface.addEventListener('dragenter', (event) => {
+    if (!viewState.mapLoaded) {
+      return;
+    }
+
+    if (!hasTokenData(event.dataTransfer, TOKEN_DRAG_TYPE)) {
+      return;
+    }
+
+    event.preventDefault();
+    tokenDropDepth += 1;
+    mapSurface.classList.add('is-token-drop-active');
+  });
+
+  mapSurface.addEventListener('dragleave', (event) => {
+    if (!viewState.mapLoaded) {
+      return;
+    }
+
+    if (!hasTokenData(event.dataTransfer, TOKEN_DRAG_TYPE)) {
+      return;
+    }
+
+    const related = event.relatedTarget;
+    if (related && mapSurface.contains(related)) {
+      return;
+    }
+
+    tokenDropDepth = Math.max(0, tokenDropDepth - 1);
+    if (tokenDropDepth === 0) {
+      mapSurface.classList.remove('is-token-drop-active');
+    }
+  });
+
+  mapSurface.addEventListener('dragover', (event) => {
+    if (!viewState.mapLoaded) {
+      return;
+    }
+
+    if (!hasTokenData(event.dataTransfer, TOKEN_DRAG_TYPE)) {
+      return;
+    }
+
+    event.preventDefault();
+    if (event.dataTransfer) {
+      event.dataTransfer.dropEffect = 'copy';
+    }
+  });
+
+  mapSurface.addEventListener('drop', (event) => {
+    if (!viewState.mapLoaded) {
+      return;
+    }
+
+    if (!hasTokenData(event.dataTransfer, TOKEN_DRAG_TYPE)) {
+      return;
+    }
+
+    event.preventDefault();
+    mapSurface.classList.remove('is-token-drop-active');
+    tokenDropDepth = 0;
+
+    const template = readTokenTemplate(event.dataTransfer, TOKEN_DRAG_TYPE);
+    if (!template) {
+      return;
+    }
+
+    const state = boardApi.getState?.() ?? {};
+    const activeSceneId = state.boardState?.activeSceneId ?? null;
+    if (!activeSceneId) {
+      if (status) {
+        status.textContent = 'Activate a scene before placing tokens.';
+      }
+      return;
+    }
+
+    const placement = calculateTokenPlacement(template, event, mapSurface, viewState);
+    if (!placement) {
+      if (status) {
+        status.textContent = 'Unable to place token inside the map bounds.';
+      }
+      return;
+    }
+
+    boardApi.updateState?.((draft) => {
+      const scenePlacements = ensureScenePlacementDraft(draft, activeSceneId);
+      scenePlacements.push(placement);
+    });
+
+    if (status) {
+      const label = template.name ? `"${template.name}"` : 'Token';
+      status.textContent = `Placed ${label} on the scene.`;
+    }
+  });
+
+  document.addEventListener('dragend', () => {
+    tokenDropDepth = 0;
+    mapSurface.classList.remove('is-token-drop-active');
+  });
+
   const applyGridState = (gridState = {}) => {
     if (!grid) return;
 
@@ -166,6 +272,7 @@ export function mountBoardInteractions(store, routes = {}) {
     grid.style.setProperty('--vtt-grid-size', dimension);
     const isVisible = gridState.visible ?? true;
     grid.classList.toggle('is-visible', Boolean(isVisible));
+    viewState.gridSize = Math.max(8, size);
   };
 
   const applyStateToBoard = (state = {}) => {
@@ -180,6 +287,7 @@ export function mountBoardInteractions(store, routes = {}) {
       loadMap(nextUrl);
     }
     applyGridState(state.grid ?? {});
+    renderTokens(state, tokenLayer, viewState);
   };
 
   if (typeof boardApi.subscribe === 'function') {
@@ -212,6 +320,8 @@ export function mountBoardInteractions(store, routes = {}) {
       mapTransform.style.height = '';
       emptyState?.removeAttribute('hidden');
       updateSceneMeta(null);
+      viewState.mapPixelSize = { width: 0, height: 0 };
+      renderTokens(boardApi.getState?.() ?? {}, tokenLayer, viewState);
       return;
     }
 
@@ -230,6 +340,7 @@ export function mountBoardInteractions(store, routes = {}) {
         status.textContent = 'Right-click and drag to pan. Use the mouse wheel to zoom.';
       }
       updateSceneMeta(activeSceneFromState());
+      renderTokens(boardApi.getState?.() ?? {}, tokenLayer, viewState);
     };
     mapImage.onerror = () => {
       viewState.mapLoaded = false;
@@ -245,6 +356,8 @@ export function mountBoardInteractions(store, routes = {}) {
       if (status) {
         status.textContent = 'Unable to display the uploaded map.';
       }
+      viewState.mapPixelSize = { width: 0, height: 0 };
+      renderTokens(boardApi.getState?.() ?? {}, tokenLayer, viewState);
     };
     mapImage.src = url;
   }
@@ -264,6 +377,7 @@ export function mountBoardInteractions(store, routes = {}) {
       mapTransform.style.height = `${mapHeight}px`;
     }
 
+    viewState.mapPixelSize = { width: mapWidth, height: mapHeight };
     applyGridOffsets({
       top: paddingTop,
       right: paddingRight,
@@ -284,6 +398,7 @@ export function mountBoardInteractions(store, routes = {}) {
     viewState.translation.x = (boardRect.width - mapWidth * viewState.scale) / 2;
     viewState.translation.y = (boardRect.height - mapHeight * viewState.scale) / 2;
     applyTransform();
+    renderTokens(boardApi.getState?.() ?? {}, tokenLayer, viewState);
   }
 
   function applyTransform() {
@@ -303,13 +418,24 @@ export function mountBoardInteractions(store, routes = {}) {
   }
 
   function applyGridOffsets(offsets = {}) {
-    if (!grid) return;
     const { top = 0, right = 0, bottom = 0, left = 0 } = offsets;
     const sanitize = (value) => (Number.isFinite(value) ? value : 0);
-    grid.style.setProperty('--vtt-grid-offset-top', `${sanitize(top)}px`);
-    grid.style.setProperty('--vtt-grid-offset-right', `${sanitize(right)}px`);
-    grid.style.setProperty('--vtt-grid-offset-bottom', `${sanitize(bottom)}px`);
-    grid.style.setProperty('--vtt-grid-offset-left', `${sanitize(left)}px`);
+    const nextOffsets = {
+      top: sanitize(top),
+      right: sanitize(right),
+      bottom: sanitize(bottom),
+      left: sanitize(left),
+    };
+    viewState.gridOffsets = nextOffsets;
+    if (!grid) {
+      renderTokens(boardApi.getState?.() ?? {}, tokenLayer, viewState);
+      return;
+    }
+    grid.style.setProperty('--vtt-grid-offset-top', `${nextOffsets.top}px`);
+    grid.style.setProperty('--vtt-grid-offset-right', `${nextOffsets.right}px`);
+    grid.style.setProperty('--vtt-grid-offset-bottom', `${nextOffsets.bottom}px`);
+    grid.style.setProperty('--vtt-grid-offset-left', `${nextOffsets.left}px`);
+    renderTokens(boardApi.getState?.() ?? {}, tokenLayer, viewState);
   }
 
   function setUploadingState(isUploading) {
@@ -378,6 +504,295 @@ export function mountBoardInteractions(store, routes = {}) {
     } catch (error) {
       return '';
     }
+  }
+
+  function renderTokens(state = {}, layer, view) {
+    if (!layer) {
+      return;
+    }
+
+    const gridSize = Math.max(8, Number.isFinite(view?.gridSize) ? view.gridSize : 64);
+    const offsets = view?.gridOffsets ?? {};
+    const leftOffset = Number.isFinite(offsets.left) ? offsets.left : 0;
+    const topOffset = Number.isFinite(offsets.top) ? offsets.top : 0;
+
+    const placements = view?.mapLoaded ? getActiveScenePlacements(state) : [];
+    if (!view?.mapLoaded || !placements.length || !Number.isFinite(gridSize) || gridSize <= 0) {
+      while (layer.firstChild) {
+        layer.removeChild(layer.firstChild);
+      }
+      layer.hidden = true;
+      return;
+    }
+
+    const fragment = document.createDocumentFragment();
+    let rendered = 0;
+
+    placements.forEach((placement) => {
+      const normalized = normalizePlacementForRender(placement);
+      if (!normalized) {
+        return;
+      }
+
+      const token = document.createElement('div');
+      token.className = 'vtt-token';
+      token.dataset.placementId = normalized.id;
+      token.style.width = `${normalized.width * gridSize}px`;
+      token.style.height = `${normalized.height * gridSize}px`;
+      const left = leftOffset + normalized.column * gridSize;
+      const top = topOffset + normalized.row * gridSize;
+      token.style.transform = `translate3d(${left}px, ${top}px, 0)`;
+
+      if (normalized.imageUrl) {
+        const img = document.createElement('img');
+        img.className = 'vtt-token__image';
+        img.src = normalized.imageUrl;
+        img.alt = normalized.name || 'Token';
+        token.appendChild(img);
+      } else {
+        token.classList.add('vtt-token--placeholder');
+      }
+
+      fragment.appendChild(token);
+      rendered += 1;
+    });
+
+    while (layer.firstChild) {
+      layer.removeChild(layer.firstChild);
+    }
+
+    if (rendered > 0) {
+      layer.appendChild(fragment);
+      layer.hidden = false;
+    } else {
+      layer.hidden = true;
+    }
+  }
+
+  function getActiveScenePlacements(state = {}) {
+    const boardState = state.boardState;
+    if (!boardState || typeof boardState !== 'object') {
+      return [];
+    }
+    const activeSceneId = boardState.activeSceneId ?? null;
+    if (!activeSceneId) {
+      return [];
+    }
+    const placements = boardState.placements;
+    if (!placements || typeof placements !== 'object') {
+      return [];
+    }
+    const scenePlacements = placements[activeSceneId];
+    return Array.isArray(scenePlacements) ? scenePlacements : [];
+  }
+
+  function normalizePlacementForRender(placement) {
+    if (!placement || typeof placement !== 'object') {
+      return null;
+    }
+
+    const id = typeof placement.id === 'string' ? placement.id : null;
+    if (!id) {
+      return null;
+    }
+
+    const column = toNonNegativeNumber(placement.column ?? placement.col ?? 0);
+    const row = toNonNegativeNumber(placement.row ?? placement.y ?? 0);
+    const width = Math.max(1, toNonNegativeNumber(placement.width ?? placement.columns ?? 1));
+    const height = Math.max(1, toNonNegativeNumber(placement.height ?? placement.rows ?? 1));
+    const name = typeof placement.name === 'string' ? placement.name : '';
+    const imageUrl = typeof placement.imageUrl === 'string' ? placement.imageUrl : '';
+
+    return { id, column, row, width, height, name, imageUrl };
+  }
+
+  function toNonNegativeNumber(value, fallback = 0) {
+    if (typeof value === 'number' && Number.isFinite(value)) {
+      return Math.max(0, Math.trunc(value));
+    }
+
+    const parsed = Number.parseInt(value, 10);
+    if (Number.isFinite(parsed)) {
+      return Math.max(0, parsed);
+    }
+
+    return Math.max(0, Math.trunc(fallback));
+  }
+
+  function hasTokenData(dataTransfer, type) {
+    if (!dataTransfer) {
+      return false;
+    }
+
+    try {
+      const types = Array.from(dataTransfer.types || []);
+      if (types.includes(type)) {
+        return true;
+      }
+    } catch (error) {
+      // Ignore DOMStringList conversion issues
+    }
+
+    try {
+      const payload = dataTransfer.getData(type);
+      return Boolean(payload);
+    } catch (error) {
+      return false;
+    }
+  }
+
+  function readTokenTemplate(dataTransfer, type) {
+    if (!dataTransfer) {
+      return null;
+    }
+
+    let raw = '';
+    try {
+      raw = dataTransfer.getData(type);
+    } catch (error) {
+      return null;
+    }
+
+    if (!raw) {
+      return null;
+    }
+
+    try {
+      const parsed = JSON.parse(raw);
+      if (!parsed || typeof parsed !== 'object') {
+        return null;
+      }
+
+      const imageUrl = typeof parsed.imageUrl === 'string' ? parsed.imageUrl : '';
+      if (!imageUrl) {
+        return null;
+      }
+
+      return {
+        id: typeof parsed.id === 'string' ? parsed.id : null,
+        name: typeof parsed.name === 'string' ? parsed.name : '',
+        imageUrl,
+        size: typeof parsed.size === 'string' ? parsed.size : '',
+      };
+    } catch (error) {
+      console.warn('[VTT] Failed to parse dropped token payload', error);
+      return null;
+    }
+  }
+
+  function calculateTokenPlacement(template, event, surface, view) {
+    if (!template || !surface || !view) {
+      return null;
+    }
+
+    const pointer = getPointerPosition(event, surface);
+    const scale = Number.isFinite(view.scale) && view.scale !== 0 ? view.scale : 1;
+    const translation = view.translation ?? { x: 0, y: 0 };
+    const localX = (pointer.x - (Number.isFinite(translation.x) ? translation.x : 0)) / scale;
+    const localY = (pointer.y - (Number.isFinite(translation.y) ? translation.y : 0)) / scale;
+
+    if (!Number.isFinite(localX) || !Number.isFinite(localY)) {
+      return null;
+    }
+
+    const mapWidth = Number.isFinite(view.mapPixelSize?.width) ? view.mapPixelSize.width : 0;
+    const mapHeight = Number.isFinite(view.mapPixelSize?.height) ? view.mapPixelSize.height : 0;
+    if (mapWidth <= 0 || mapHeight <= 0) {
+      return null;
+    }
+
+    const offsets = view.gridOffsets ?? {};
+    const offsetLeft = Number.isFinite(offsets.left) ? offsets.left : 0;
+    const offsetRight = Number.isFinite(offsets.right) ? offsets.right : 0;
+    const offsetTop = Number.isFinite(offsets.top) ? offsets.top : 0;
+    const offsetBottom = Number.isFinite(offsets.bottom) ? offsets.bottom : 0;
+
+    const innerWidth = Math.max(0, mapWidth - offsetLeft - offsetRight);
+    const innerHeight = Math.max(0, mapHeight - offsetTop - offsetBottom);
+    if (innerWidth <= 0 || innerHeight <= 0) {
+      return null;
+    }
+
+    const gridSize = Math.max(8, Number.isFinite(view.gridSize) ? view.gridSize : 64);
+    if (!Number.isFinite(gridSize) || gridSize <= 0) {
+      return null;
+    }
+
+    const size = parseTokenSize(template.size);
+
+    const withinBoundsX = localX >= offsetLeft && localX <= offsetLeft + innerWidth;
+    const withinBoundsY = localY >= offsetTop && localY <= offsetTop + innerHeight;
+    if (!withinBoundsX || !withinBoundsY) {
+      return null;
+    }
+
+    const gridCoordX = (localX - offsetLeft) / gridSize;
+    const gridCoordY = (localY - offsetTop) / gridSize;
+    if (!Number.isFinite(gridCoordX) || !Number.isFinite(gridCoordY)) {
+      return null;
+    }
+
+    let column = Math.round(gridCoordX - size.width / 2);
+    let row = Math.round(gridCoordY - size.height / 2);
+
+    const maxColumn = Math.max(0, Math.floor(innerWidth / gridSize - size.width));
+    const maxRow = Math.max(0, Math.floor(innerHeight / gridSize - size.height));
+
+    column = Math.max(0, Math.min(column, maxColumn));
+    row = Math.max(0, Math.min(row, maxRow));
+
+    return {
+      id: createPlacementId(),
+      tokenId: template.id,
+      name: template.name ?? '',
+      imageUrl: template.imageUrl ?? '',
+      column,
+      row,
+      width: size.width,
+      height: size.height,
+      size: size.formatted,
+    };
+  }
+
+  function ensureScenePlacementDraft(draft, sceneId) {
+    if (!draft.boardState || typeof draft.boardState !== 'object') {
+      draft.boardState = { activeSceneId: null, mapUrl: null, placements: {} };
+    }
+
+    if (!draft.boardState.placements || typeof draft.boardState.placements !== 'object') {
+      draft.boardState.placements = {};
+    }
+
+    if (!Array.isArray(draft.boardState.placements[sceneId])) {
+      draft.boardState.placements[sceneId] = [];
+    }
+
+    return draft.boardState.placements[sceneId];
+  }
+
+  function createPlacementId() {
+    if (window.crypto?.randomUUID) {
+      return `tpl_${window.crypto.randomUUID()}`;
+    }
+
+    const random = Math.floor(Math.random() * 1_000_000);
+    return `tpl_${Date.now().toString(36)}_${random.toString(36)}`;
+  }
+
+  function parseTokenSize(rawSize) {
+    if (typeof rawSize !== 'string') {
+      return { width: 1, height: 1, formatted: '1x1' };
+    }
+
+    const trimmed = rawSize.trim().toLowerCase();
+    const match = trimmed.match(/^([1-9][0-9]*)x([1-9][0-9]*)$/);
+    if (!match) {
+      return { width: 1, height: 1, formatted: '1x1' };
+    }
+
+    const width = Math.max(1, Number.parseInt(match[1], 10));
+    const height = Math.max(1, Number.parseInt(match[2], 10));
+    return { width, height, formatted: `${width}x${height}` };
   }
 }
 

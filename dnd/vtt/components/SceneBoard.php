@@ -23,6 +23,12 @@ function renderVttSceneBoard(): string
                             <img id="vtt-map-image" class="vtt-board__map-image" alt="Scene map" hidden />
                         </div>
                         <div id="vtt-grid-overlay" class="vtt-board__grid" aria-hidden="true"></div>
+                        <div
+                            id="vtt-token-layer"
+                            class="vtt-board__tokens"
+                            aria-live="off"
+                            hidden
+                        ></div>
                     </div>
                 </div>
                 <p class="vtt-board__empty">Drag a scene map here or create a scene from the settings panel.</p>

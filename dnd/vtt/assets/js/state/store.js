@@ -10,12 +10,14 @@ const state = {
 export function initializeState(snapshot = {}) {
   state.scenes = normalizeScenes(snapshot.scenes);
   state.tokens = normalizeTokens(snapshot.tokens);
-  if (snapshot.boardState && typeof snapshot.boardState === 'object') {
-    state.boardState = {
-      ...state.boardState,
-      ...snapshot.boardState,
-    };
-  }
+  const boardSnapshot = snapshot.boardState && typeof snapshot.boardState === 'object' ? snapshot.boardState : {};
+  state.boardState = {
+    ...state.boardState,
+    ...boardSnapshot,
+  };
+  state.boardState.placements = normalizePlacements(
+    boardSnapshot.placements ?? state.boardState.placements ?? {}
+  );
   if (snapshot.grid && typeof snapshot.grid === 'object') {
     state.grid = {
       ...state.grid,
@@ -77,4 +79,64 @@ function normalizeTokens(raw = {}) {
     folders: folders.filter((folder) => folder && typeof folder.id === 'string'),
     items: items.filter((token) => token && typeof token.id === 'string'),
   };
+}
+
+function normalizePlacements(raw = {}) {
+  if (!raw || typeof raw !== 'object') {
+    return {};
+  }
+
+  const normalized = {};
+  Object.keys(raw).forEach((sceneId) => {
+    const placements = Array.isArray(raw[sceneId]) ? raw[sceneId] : [];
+    normalized[sceneId] = placements
+      .map((entry) => normalizePlacementEntry(entry))
+      .filter(Boolean);
+  });
+  return normalized;
+}
+
+function normalizePlacementEntry(entry) {
+  if (!entry || typeof entry !== 'object') {
+    return null;
+  }
+
+  const id = typeof entry.id === 'string' ? entry.id : null;
+  if (!id) {
+    return null;
+  }
+
+  const tokenId = typeof entry.tokenId === 'string' ? entry.tokenId : null;
+  const name = typeof entry.name === 'string' ? entry.name : '';
+  const imageUrl = typeof entry.imageUrl === 'string' ? entry.imageUrl : '';
+  const column = toNonNegativeInt(entry.column ?? entry.col ?? entry.x ?? 0);
+  const row = toNonNegativeInt(entry.row ?? entry.y ?? 0);
+  const width = Math.max(1, toNonNegativeInt(entry.width ?? entry.columns ?? entry.w ?? 1));
+  const height = Math.max(1, toNonNegativeInt(entry.height ?? entry.rows ?? entry.h ?? 1));
+  const size = typeof entry.size === 'string' && entry.size ? entry.size : `${width}x${height}`;
+
+  return {
+    id,
+    tokenId,
+    name,
+    imageUrl,
+    column,
+    row,
+    width,
+    height,
+    size,
+  };
+}
+
+function toNonNegativeInt(value, fallback = 0) {
+  if (typeof value === 'number' && Number.isFinite(value)) {
+    return Math.max(0, Math.trunc(value));
+  }
+
+  const parsed = Number.parseInt(value, 10);
+  if (Number.isFinite(parsed)) {
+    return Math.max(0, parsed);
+  }
+
+  return Math.max(0, Math.trunc(fallback));
 }
