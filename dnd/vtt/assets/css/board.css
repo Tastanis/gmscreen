@@ -219,3 +219,36 @@
   border: 1px solid var(--vtt-panel-border);
   color: #fff;
 }
+
+.vtt-measure-overlay {
+  position: absolute;
+  inset: 0;
+  pointer-events: none;
+  overflow: visible;
+  z-index: 4;
+}
+
+.vtt-measure-overlay__path {
+  stroke: rgba(96, 165, 250, 0.85);
+  stroke-width: 3;
+  stroke-linecap: round;
+  stroke-linejoin: round;
+  fill: none;
+}
+
+.vtt-measure-overlay__node {
+  fill: rgba(59, 130, 246, 0.95);
+  stroke: rgba(15, 23, 42, 0.9);
+  stroke-width: 3;
+}
+
+.vtt-measure-overlay__label {
+  font-family: 'Inter', system-ui, -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
+  font-weight: 600;
+  font-size: 14px;
+  fill: #fff;
+  stroke: rgba(15, 23, 42, 0.85);
+  stroke-width: 4;
+  paint-order: stroke fill;
+  letter-spacing: 0.02em;
+}
