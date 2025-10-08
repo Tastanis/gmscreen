@@ -38,16 +38,34 @@ export function mountBoardInteractions(store, routes = {}) {
   const boardApi = store ?? {};
   const TOKEN_DRAG_TYPE = 'application/x-vtt-token-template';
   let tokenDropDepth = 0;
-  let selectedTokenId = null;
+  const selectedTokenIds = new Set();
   let renderedPlacements = [];
   let lastActiveSceneId = null;
+  const movementQueue = [];
+  let movementScheduled = false;
+  const MAX_QUEUED_MOVEMENTS = 12;
 
   board.addEventListener('keydown', (event) => {
+    if (event.key === 'Delete' || event.key === 'Backspace') {
+      if (!selectedTokenIds.size) {
+        return;
+      }
+      event.preventDefault();
+      removeSelectedTokens();
+      return;
+    }
+
     const movement = movementFromKey(event.key);
-    if (!movement) return;
+    if (!movement) {
+      return;
+    }
+
+    if (!selectedTokenIds.size) {
+      return;
+    }
 
     event.preventDefault();
-    console.info('[VTT] Token movement pending implementation', movement);
+    enqueueMovement(movement);
   });
 
   board.addEventListener('contextmenu', (event) => {
@@ -125,14 +143,19 @@ export function mountBoardInteractions(store, routes = {}) {
     if (event.button === 0) {
       const placement = findRenderedPlacementAtPoint(event);
       if (placement) {
-        if (selectedTokenId !== placement.id) {
-          selectedTokenId = placement.id;
+        const selectionChanged = updateSelection(placement.id, {
+          additive: event.shiftKey,
+          toggle: event.ctrlKey || event.metaKey,
+        });
+        if (selectionChanged) {
           renderTokens(boardApi.getState?.() ?? {}, tokenLayer, viewState);
         }
-      } else if (selectedTokenId) {
-        selectedTokenId = null;
-        renderTokens(boardApi.getState?.() ?? {}, tokenLayer, viewState);
+      } else if (!event.shiftKey && !event.ctrlKey && !event.metaKey) {
+        if (clearSelection()) {
+          renderTokens(boardApi.getState?.() ?? {}, tokenLayer, viewState);
+        }
       }
+      focusBoard();
       event.preventDefault();
       return;
     }
@@ -142,6 +165,7 @@ export function mountBoardInteractions(store, routes = {}) {
     }
 
     event.preventDefault();
+    focusBoard();
     viewState.isPanning = true;
     viewState.pointerId = event.pointerId;
     viewState.lastPointer = { x: event.clientX, y: event.clientY };
@@ -302,7 +326,7 @@ export function mountBoardInteractions(store, routes = {}) {
     const activeSceneId = state.boardState?.activeSceneId ?? null;
     if (activeSceneId !== lastActiveSceneId) {
       lastActiveSceneId = activeSceneId;
-      selectedTokenId = null;
+      selectedTokenIds.clear();
     }
     const activeScene = sceneState.items.find((scene) => scene.id === activeSceneId) ?? null;
 
@@ -329,10 +353,250 @@ export function mountBoardInteractions(store, routes = {}) {
 
   applyStateToBoard(boardApi.getState?.() ?? {});
 
+  function focusBoard() {
+    if (!board) {
+      return;
+    }
+    if (document.activeElement === board) {
+      return;
+    }
+    try {
+      board.focus({ preventScroll: true });
+    } catch (error) {
+      board.focus();
+    }
+  }
+
+  function updateSelection(id, { additive = false, toggle = false } = {}) {
+    if (typeof id !== 'string' || !id) {
+      return false;
+    }
+
+    if (toggle) {
+      if (selectedTokenIds.has(id)) {
+        selectedTokenIds.delete(id);
+        return true;
+      }
+      selectedTokenIds.add(id);
+      return true;
+    }
+
+    if (additive) {
+      if (selectedTokenIds.has(id)) {
+        return false;
+      }
+      selectedTokenIds.add(id);
+      return true;
+    }
+
+    if (selectedTokenIds.size === 1 && selectedTokenIds.has(id)) {
+      return false;
+    }
+
+    if (selectedTokenIds.size === 0) {
+      selectedTokenIds.add(id);
+      return true;
+    }
+
+    selectedTokenIds.clear();
+    selectedTokenIds.add(id);
+    return true;
+  }
+
+  function clearSelection() {
+    if (!selectedTokenIds.size) {
+      return false;
+    }
+    selectedTokenIds.clear();
+    return true;
+  }
+
+  function enqueueMovement(delta) {
+    if (!delta || typeof delta !== 'object') {
+      return;
+    }
+    const stepX = Number.isFinite(delta.x) ? Math.trunc(delta.x) : 0;
+    const stepY = Number.isFinite(delta.y) ? Math.trunc(delta.y) : 0;
+    if (stepX === 0 && stepY === 0) {
+      return;
+    }
+    if (movementQueue.length >= MAX_QUEUED_MOVEMENTS) {
+      return;
+    }
+    movementQueue.push({ x: stepX, y: stepY });
+    scheduleMovementProcessing();
+  }
+
+  function scheduleMovementProcessing() {
+    if (movementScheduled) {
+      return;
+    }
+    movementScheduled = true;
+    const schedule = window.requestAnimationFrame?.bind(window) ?? ((callback) => window.setTimeout(callback, 16));
+    schedule(processMovementQueue);
+  }
+
+  function processMovementQueue() {
+    movementScheduled = false;
+    const next = movementQueue.shift();
+    if (!next) {
+      return;
+    }
+    applyMovementDelta(next);
+    if (movementQueue.length) {
+      scheduleMovementProcessing();
+    }
+  }
+
+  function applyMovementDelta(delta) {
+    if (!viewState.mapLoaded) {
+      return;
+    }
+    if (typeof boardApi.updateState !== 'function') {
+      return;
+    }
+
+    const stepX = Number.isFinite(delta?.x) ? Math.trunc(delta.x) : 0;
+    const stepY = Number.isFinite(delta?.y) ? Math.trunc(delta.y) : 0;
+    if (stepX === 0 && stepY === 0) {
+      return;
+    }
+
+    const selectedIds = Array.from(selectedTokenIds);
+    if (!selectedIds.length) {
+      return;
+    }
+
+    const gridSize = Math.max(8, Number.isFinite(viewState.gridSize) ? viewState.gridSize : 64);
+    if (!Number.isFinite(gridSize) || gridSize <= 0) {
+      return;
+    }
+
+    const mapWidth = Number.isFinite(viewState.mapPixelSize?.width) ? viewState.mapPixelSize.width : 0;
+    const mapHeight = Number.isFinite(viewState.mapPixelSize?.height) ? viewState.mapPixelSize.height : 0;
+    if (mapWidth <= 0 || mapHeight <= 0) {
+      return;
+    }
+
+    const offsets = viewState.gridOffsets ?? {};
+    const offsetLeft = Number.isFinite(offsets.left) ? offsets.left : 0;
+    const offsetRight = Number.isFinite(offsets.right) ? offsets.right : 0;
+    const offsetTop = Number.isFinite(offsets.top) ? offsets.top : 0;
+    const offsetBottom = Number.isFinite(offsets.bottom) ? offsets.bottom : 0;
+
+    const innerWidth = Math.max(0, mapWidth - offsetLeft - offsetRight);
+    const innerHeight = Math.max(0, mapHeight - offsetTop - offsetBottom);
+    if (innerWidth <= 0 || innerHeight <= 0) {
+      return;
+    }
+
+    const gridColumns = Math.max(0, Math.floor(innerWidth / gridSize));
+    const gridRows = Math.max(0, Math.floor(innerHeight / gridSize));
+    if (gridColumns <= 0 && gridRows <= 0) {
+      return;
+    }
+
+    const selectedSet = new Set(selectedIds);
+    const state = boardApi.getState?.() ?? {};
+    const activeSceneId = state.boardState?.activeSceneId ?? null;
+    if (!activeSceneId) {
+      return;
+    }
+
+    let moved = false;
+    boardApi.updateState?.((draft) => {
+      if (!draft.boardState || typeof draft.boardState !== 'object') {
+        return;
+      }
+      const placementsByScene = draft.boardState.placements;
+      if (!placementsByScene || typeof placementsByScene !== 'object') {
+        return;
+      }
+      const scenePlacements = placementsByScene[activeSceneId];
+      if (!Array.isArray(scenePlacements) || !scenePlacements.length) {
+        return;
+      }
+
+      scenePlacements.forEach((placement) => {
+        if (!placement || typeof placement !== 'object') {
+          return;
+        }
+        if (!selectedSet.has(placement.id)) {
+          return;
+        }
+        const width = Math.max(1, Number.isFinite(placement.width) ? placement.width : 1);
+        const height = Math.max(1, Number.isFinite(placement.height) ? placement.height : 1);
+        const currentColumn = Number.isFinite(placement.column) ? placement.column : 0;
+        const currentRow = Number.isFinite(placement.row) ? placement.row : 0;
+        const maxColumn = Math.max(0, gridColumns - width);
+        const maxRow = Math.max(0, gridRows - height);
+        const nextColumn = clamp(currentColumn + stepX, 0, maxColumn);
+        const nextRow = clamp(currentRow + stepY, 0, maxRow);
+        if (nextColumn !== currentColumn || nextRow !== currentRow) {
+          placement.column = nextColumn;
+          placement.row = nextRow;
+          moved = true;
+        }
+      });
+    });
+
+    if (moved && status) {
+      const count = selectedSet.size;
+      const noun = count === 1 ? 'token' : 'tokens';
+      status.textContent = `Moved ${count} ${noun}.`;
+    }
+  }
+
+  function removeSelectedTokens() {
+    if (!selectedTokenIds.size) {
+      return;
+    }
+    if (typeof boardApi.updateState !== 'function') {
+      return;
+    }
+
+    const state = boardApi.getState?.() ?? {};
+    const activeSceneId = state.boardState?.activeSceneId ?? null;
+    if (!activeSceneId) {
+      return;
+    }
+
+    const selectedSet = new Set(selectedTokenIds);
+    if (!selectedSet.size) {
+      return;
+    }
+
+    let removedCount = 0;
+    boardApi.updateState?.((draft) => {
+      const scenePlacements = ensureScenePlacementDraft(draft, activeSceneId);
+      if (!Array.isArray(scenePlacements) || !scenePlacements.length) {
+        return;
+      }
+      const nextPlacements = scenePlacements.filter((placement) => {
+        if (!placement || typeof placement !== 'object') {
+          return true;
+        }
+        return !selectedSet.has(placement.id);
+      });
+      removedCount = scenePlacements.length - nextPlacements.length;
+      if (removedCount > 0) {
+        draft.boardState.placements[activeSceneId] = nextPlacements;
+      }
+    });
+
+    if (removedCount > 0) {
+      selectedTokenIds.clear();
+      if (status) {
+        const noun = removedCount === 1 ? 'token' : 'tokens';
+        status.textContent = `Removed ${removedCount} ${noun} from the scene.`;
+      }
+    }
+  }
+
   function loadMap(url) {
     viewState.activeMapUrl = url || null;
     viewState.mapLoaded = false;
-    selectedTokenId = null;
+    selectedTokenIds.clear();
     renderedPlacements = [];
     mapImage.hidden = true;
     mapBackdrop.hidden = !url;
@@ -553,13 +817,13 @@ export function mountBoardInteractions(store, routes = {}) {
       }
       layer.hidden = true;
       renderedPlacements = [];
-      selectedTokenId = null;
+      selectedTokenIds.clear();
       return;
     }
 
     const fragment = document.createDocumentFragment();
     let rendered = 0;
-    let selectionFound = false;
+    const retainedSelection = new Set();
 
     placements.forEach((placement) => {
       const normalized = normalizePlacementForRender(placement);
@@ -594,17 +858,25 @@ export function mountBoardInteractions(store, routes = {}) {
         token.classList.add('vtt-token--placeholder');
       }
 
-      if (selectedTokenId && normalized.id === selectedTokenId) {
+      if (selectedTokenIds.has(normalized.id)) {
         token.classList.add('is-selected');
-        selectionFound = true;
+        retainedSelection.add(normalized.id);
       }
 
       fragment.appendChild(token);
       rendered += 1;
     });
 
-    if (selectedTokenId && !selectionFound) {
-      selectedTokenId = null;
+    if (selectedTokenIds.size) {
+      const missing = [];
+      selectedTokenIds.forEach((id) => {
+        if (!retainedSelection.has(id)) {
+          missing.push(id);
+        }
+      });
+      if (missing.length) {
+        missing.forEach((id) => selectedTokenIds.delete(id));
+      }
     }
 
     while (layer.firstChild) {
