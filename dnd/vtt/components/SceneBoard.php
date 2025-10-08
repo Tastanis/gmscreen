@@ -12,7 +12,7 @@ function renderVttSceneBoard(): string
                 <p id="active-scene-status" class="vtt-board__status">Select or create a scene to begin.</p>
             </div>
             <div class="vtt-board__controls">
-                <button class="btn" type="button" data-action="measure-distance">Measure</button>
+                <button class="btn" type="button" data-action="measure-distance" aria-pressed="false">Measure</button>
             </div>
         </header>
         <div class="vtt-board__canvas-wrapper">
@@ -34,7 +34,7 @@ function renderVttSceneBoard(): string
                 <p class="vtt-board__empty">Drag a scene map here or create a scene from the settings panel.</p>
             </div>
             <div id="vtt-distance-ruler" class="vtt-board__ruler" hidden>
-                <span class="vtt-board__ruler-value">0 ft</span>
+                <span class="vtt-board__ruler-value">0 squares</span>
             </div>
         </div>
     </section>

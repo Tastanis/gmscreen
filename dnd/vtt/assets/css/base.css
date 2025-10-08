@@ -57,6 +57,12 @@ body.vtt-body {
   background: rgba(99, 102, 241, 0.25);
 }
 
+.btn.is-active {
+  background: rgba(99, 102, 241, 0.35);
+  border-color: rgba(99, 102, 241, 0.65);
+  color: #fff;
+}
+
 .btn:active {
   transform: scale(0.98);
 }
