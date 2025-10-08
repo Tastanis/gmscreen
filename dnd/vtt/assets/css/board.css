@@ -169,6 +169,8 @@
   background: radial-gradient(circle at 30% 30%, rgba(255, 255, 255, 0.3), rgba(15, 23, 42, 0.85));
   pointer-events: none;
   transform: translate3d(0, 0, 0);
+  transition: transform 180ms ease, width 180ms ease, height 180ms ease;
+  will-change: transform;
 }
 
 .vtt-token.is-selected {
@@ -177,6 +179,13 @@
     0 0 0 2px rgba(99, 102, 241, 0.85),
     0 0 0 8px rgba(165, 180, 252, 0.55),
     0 14px 30px rgba(15, 23, 42, 0.55);
+}
+
+.vtt-token.is-dragging {
+  box-shadow:
+    0 0 0 2px rgba(99, 102, 241, 0.75),
+    0 0 0 10px rgba(165, 180, 252, 0.35),
+    0 16px 36px rgba(79, 70, 229, 0.4);
 }
 
 .vtt-token__image {
