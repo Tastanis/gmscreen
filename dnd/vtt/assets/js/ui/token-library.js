@@ -353,6 +353,43 @@ export function renderTokenLibrary(routes, store) {
     openContextMenu(token, event.clientX, event.clientY, tokenElement);
   });
 
+  moduleRoot.addEventListener('dragstart', (event) => {
+    const tokenElement = event.target.closest('.token-item');
+    if (!tokenElement) {
+      return;
+    }
+
+    const dragData = buildTokenDragData(tokenElement, tokenIndex);
+    const dataTransfer = event.dataTransfer;
+    if (!dragData || !dataTransfer) {
+      event.preventDefault();
+      return;
+    }
+
+    closeContextMenu();
+
+    try {
+      const payload = JSON.stringify(dragData);
+      dataTransfer.setData('application/x-vtt-token-template', payload);
+      dataTransfer.setData('text/plain', dragData.name || 'Token');
+      dataTransfer.effectAllowed = 'copy';
+      dataTransfer.dropEffect = 'copy';
+
+      const dragImage = tokenElement.querySelector('img');
+      if (dragImage) {
+        const rect = dragImage.getBoundingClientRect();
+        dataTransfer.setDragImage(
+          dragImage,
+          rect.width / 2,
+          rect.height / 2
+        );
+      }
+    } catch (error) {
+      console.warn('[VTT] Unable to start token drag operation', error);
+      event.preventDefault();
+    }
+  });
+
   if (contextMenu?.element) {
     contextMenu.element.addEventListener('keydown', (event) => {
       if (event.key === 'Escape') {
@@ -436,6 +473,42 @@ function normalizeTokenState(raw = {}) {
   return {
     folders: folders.filter((folder) => folder && typeof folder.id === 'string'),
     items: items.filter((token) => token && typeof token.id === 'string'),
+  };
+}
+
+function buildTokenDragData(element, tokenIndex) {
+  if (!element) {
+    return null;
+  }
+
+  const tokenId = element.getAttribute('data-token-id');
+  if (!tokenId) {
+    return null;
+  }
+
+  const record = tokenIndex?.get?.(tokenId) ?? null;
+  const titleElement = element.querySelector('h4');
+  const name = (record?.name || titleElement?.textContent || '').trim();
+  const imageElement = element.querySelector('img');
+  const imageUrl = typeof record?.imageUrl === 'string' && record.imageUrl
+    ? record.imageUrl
+    : imageElement?.getAttribute('src') || '';
+
+  if (!imageUrl) {
+    return null;
+  }
+
+  const sizeValue =
+    typeof record?.size === 'string' && record.size
+      ? record.size
+      : element.getAttribute('data-token-size') || '';
+
+  return {
+    id: tokenId,
+    name,
+    imageUrl,
+    size: sizeValue,
+    source: 'token-library',
   };
 }
 
