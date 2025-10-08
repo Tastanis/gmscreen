@@ -62,11 +62,7 @@ export function mountDragRuler() {
         return;
       }
 
-      if (
-        event.target instanceof Element &&
-        event.target.closest &&
-        event.target.closest('.vtt-token')
-      ) {
+      if (isPointerOverToken(event)) {
         return;
       }
 
@@ -230,6 +226,42 @@ function handleShiftKey(state) {
   }
 }
 
+function isPointerOverToken(event) {
+  const tokenLayer = document.getElementById('vtt-token-layer');
+  if (!tokenLayer || tokenLayer.hidden) {
+    return false;
+  }
+
+  const { clientX, clientY } = event;
+  if (!Number.isFinite(clientX) || !Number.isFinite(clientY)) {
+    return false;
+  }
+
+  const tokens = tokenLayer.querySelectorAll('.vtt-token');
+  if (!tokens.length) {
+    return false;
+  }
+
+  for (const token of tokens) {
+    if (!(token instanceof Element)) {
+      continue;
+    }
+    const rect = token.getBoundingClientRect();
+    if (
+      rect.width > 0 &&
+      rect.height > 0 &&
+      clientX >= rect.left &&
+      clientX <= rect.right &&
+      clientY >= rect.top &&
+      clientY <= rect.bottom
+    ) {
+      return true;
+    }
+  }
+
+  return false;
+}
+
 function getSnappedPoint(state, event) {
   const mapCoords = getMapCoordinates(state.mapTransform, event);
   if (!mapCoords) {
@@ -324,16 +356,22 @@ function updateOverlay(state) {
 
   if (!segments.length) {
     state.overlay.svg.setAttribute('hidden', 'hidden');
+    state.overlay.svg.style.display = 'none';
     state.overlay.path.setAttribute('points', '');
     state.overlay.nodes.innerHTML = '';
     state.overlay.labels.innerHTML = '';
     state.ruler.setAttribute('hidden', 'hidden');
     state.rulerValue.textContent = '0 squares';
-    state.overlay.total?.setAttribute('hidden', 'hidden');
+    if (state.overlay.total) {
+      state.overlay.total.setAttribute('hidden', 'hidden');
+      state.overlay.total.style.display = 'none';
+      state.overlay.total.textContent = '';
+    }
     return;
   }
 
   state.overlay.svg.removeAttribute('hidden');
+  state.overlay.svg.style.display = '';
   state.overlay.path.setAttribute(
     'points',
     points.map((point) => `${point.mapX},${point.mapY}`).join(' ')
@@ -353,6 +391,7 @@ function updateOverlay(state) {
     state.overlay.total.setAttribute('x', endPoint.mapX);
     state.overlay.total.setAttribute('y', endPoint.mapY);
     state.overlay.total.removeAttribute('hidden');
+    state.overlay.total.style.display = '';
   }
 }
 
