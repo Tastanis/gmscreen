@@ -503,12 +503,23 @@ function buildTokenDragData(element, tokenIndex) {
   const elementSize = element.getAttribute('data-token-size');
   const fallbackSize = typeof elementSize === 'string' ? elementSize.trim() : '';
   const sizeValue = recordSize || fallbackSize || '1x1';
+  const recordHp = record?.hp;
+  const elementHp = element.getAttribute('data-token-hp');
+  let hpValue = '';
+  if (typeof recordHp === 'number' && Number.isFinite(recordHp)) {
+    hpValue = String(Math.trunc(recordHp));
+  } else if (typeof recordHp === 'string' && recordHp.trim()) {
+    hpValue = recordHp.trim();
+  } else if (typeof elementHp === 'string' && elementHp.trim()) {
+    hpValue = elementHp.trim();
+  }
 
   return {
     id: tokenId,
     name,
     imageUrl,
     size: sizeValue,
+    hp: hpValue,
     source: 'token-library',
   };
 }

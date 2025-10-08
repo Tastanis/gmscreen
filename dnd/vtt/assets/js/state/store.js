@@ -114,6 +114,17 @@ function normalizePlacementEntry(entry) {
   const width = Math.max(1, toNonNegativeInt(entry.width ?? entry.columns ?? entry.w ?? 1));
   const height = Math.max(1, toNonNegativeInt(entry.height ?? entry.rows ?? entry.h ?? 1));
   const size = typeof entry.size === 'string' && entry.size ? entry.size : `${width}x${height}`;
+  const hp = normalizeHitPointsValue(
+    entry.hp ?? entry.hitPoints ?? entry?.overlays?.hitPoints?.value ?? entry?.stats?.hp ?? null
+  );
+  const showHp = Boolean(
+    entry.showHp ?? entry.showHitPoints ?? entry?.overlays?.hitPoints?.visible ?? false
+  );
+  const showTriggeredAction = Boolean(
+    entry.showTriggeredAction ?? entry?.overlays?.triggeredAction?.visible ?? false
+  );
+  const triggeredActionReady =
+    entry.triggeredActionReady ?? entry?.overlays?.triggeredAction?.ready ?? true;
 
   return {
     id,
@@ -125,6 +136,10 @@ function normalizePlacementEntry(entry) {
     width,
     height,
     size,
+    hp,
+    showHp,
+    showTriggeredAction,
+    triggeredActionReady: triggeredActionReady !== false,
   };
 }
 
@@ -139,4 +154,25 @@ function toNonNegativeInt(value, fallback = 0) {
   }
 
   return Math.max(0, Math.trunc(fallback));
+}
+
+function normalizeHitPointsValue(value) {
+  if (typeof value === 'number' && Number.isFinite(value)) {
+    return String(Math.trunc(value));
+  }
+
+  if (typeof value === 'string') {
+    return value.trim();
+  }
+
+  if (value && typeof value === 'object') {
+    if (typeof value.value === 'number' && Number.isFinite(value.value)) {
+      return String(Math.trunc(value.value));
+    }
+    if (typeof value.value === 'string') {
+      return value.value.trim();
+    }
+  }
+
+  return '';
 }
