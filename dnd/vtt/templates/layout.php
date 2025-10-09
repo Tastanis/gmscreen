@@ -29,7 +29,10 @@ $assetVersion = (int) ($config['assetsVersion'] ?? time());
     </div>
     <script>
         window.vttConfig = <?= json_encode($config, JSON_HEX_TAG | JSON_HEX_APOS | JSON_HEX_QUOT | JSON_HEX_AMP) ?>;
+        window.chatHandlerUrl = <?= json_encode($config['chatHandlerUrl'] ?? ($routes['chat'] ?? '/dnd/chat_handler.php'), JSON_HEX_TAG | JSON_HEX_APOS | JSON_HEX_QUOT | JSON_HEX_AMP) ?>;
+        window.chatParticipants = <?= json_encode($config['chatParticipants'] ?? [], JSON_HEX_TAG | JSON_HEX_APOS | JSON_HEX_QUOT | JSON_HEX_AMP) ?>;
     </script>
+    <script src="../js/chat-panel.js?v=<?= $assetVersion ?>"></script>
     <script type="module" src="assets/js/bootstrap.js?v=<?= $assetVersion ?>"></script>
 </body>
 </html>

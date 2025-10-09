@@ -114,6 +114,8 @@ function getVttBootstrapConfig(?array $authContext = null): array
         'assetsVersion' => time(),
         'isGM' => $isGm,
         'currentUser' => $context['user'] ?? '',
+        'chatParticipants' => loadChatParticipants(),
+        'chatHandlerUrl' => $routes['chat'] ?? '/dnd/chat_handler.php',
     ];
 }
 
@@ -125,7 +127,7 @@ function buildVttSections(bool $isGm = false): array
     $tokenLibraryMarkup = renderVttTokenLibrary($isGm);
 
     return [
-        'chatPanel' => renderVttChatPanel(),
+        'chatPanel' => renderVttChatPanel($isGm),
         'settingsPanel' => renderVttSettingsPanel($tokenLibraryMarkup, $isGm),
         'sceneBoard' => renderVttSceneBoard(),
         'tokenLibrary' => $tokenLibraryMarkup,
@@ -181,6 +183,43 @@ function loadVttTokens(): array
         'folders' => array_values($folders),
         'items' => array_values($items),
     ];
+}
+
+/**
+ * @return array<int,array{id:string,label:string}>
+ */
+function loadChatParticipants(): array
+{
+    static $participants = null;
+
+    if ($participants !== null) {
+        return $participants;
+    }
+
+    $mapPath = __DIR__ . '/../includes/chat_participants.php';
+    if (!is_file($mapPath)) {
+        $participants = [];
+        return $participants;
+    }
+
+    $raw = require $mapPath;
+    if (!is_array($raw)) {
+        $participants = [];
+        return $participants;
+    }
+
+    $list = [];
+    foreach ($raw as $id => $label) {
+        $idString = (string) $id;
+        $labelString = trim((string) $label);
+        $list[] = [
+            'id' => $idString,
+            'label' => $labelString !== '' ? $labelString : $idString,
+        ];
+    }
+
+    $participants = $list;
+    return $participants;
 }
 
 /**

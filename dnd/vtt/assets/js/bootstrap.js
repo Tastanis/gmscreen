@@ -29,7 +29,8 @@ async function bootstrap() {
   });
 
   mountSettingsPanel(routes, { getState, subscribe, updateState }, userContext);
-  mountChatPanel(routes);
+  const chatParticipants = Array.isArray(config.chatParticipants) ? config.chatParticipants : [];
+  mountChatPanel(routes, userContext, chatParticipants);
   mountBoardInteractions({ getState, subscribe, updateState }, routes);
   mountDragRuler();
 
