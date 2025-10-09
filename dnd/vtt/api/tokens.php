@@ -6,12 +6,33 @@ require_once __DIR__ . '/../bootstrap.php';
 header('Content-Type: application/json');
 
 try {
+    $auth = getVttUserContext();
+    if (!($auth['isLoggedIn'] ?? false)) {
+        respondJson(401, [
+            'success' => false,
+            'error' => 'Authentication required.',
+        ]);
+    }
+
+    $isGm = (bool) ($auth['isGM'] ?? false);
+
     $method = strtoupper($_SERVER['REQUEST_METHOD'] ?? 'GET');
 
     if ($method === 'GET') {
+        $payload = loadTokensPayload();
+        if (!$isGm) {
+            $payload = filterTokensForPlayerView($payload);
+        }
         respondJson(200, [
             'success' => true,
-            'data' => loadTokensPayload(),
+            'data' => $payload,
+        ]);
+    }
+
+    if (!$isGm) {
+        respondJson(403, [
+            'success' => false,
+            'error' => 'Only the GM can modify tokens.',
         ]);
     }
 

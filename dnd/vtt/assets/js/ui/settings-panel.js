@@ -1,7 +1,7 @@
 import { renderSceneList } from './scene-manager.js';
 import { renderTokenLibrary } from './token-library.js';
 
-export function mountSettingsPanel(routes, store) {
+export function mountSettingsPanel(routes, store, user = {}) {
   const panel = document.getElementById('vtt-settings-panel');
   if (!panel) return;
 
@@ -52,6 +52,8 @@ export function mountSettingsPanel(routes, store) {
   });
 
   const storeApi = store ?? {};
+  const initialState = typeof storeApi.getState === 'function' ? storeApi.getState() : {};
+  const isGM = Boolean(user?.isGM ?? initialState?.user?.isGM);
 
   const syncGridControls = (state) => {
     const gridState = state?.grid ?? {};
@@ -123,8 +125,10 @@ export function mountSettingsPanel(routes, store) {
     });
   }
 
-  renderSceneList(routes, storeApi);
-  renderTokenLibrary(routes, storeApi);
+  if (isGM) {
+    renderSceneList(routes, storeApi);
+  }
+  renderTokenLibrary(routes, storeApi, { isGM });
 }
 
 function setActiveTab(panel, tabId) {
