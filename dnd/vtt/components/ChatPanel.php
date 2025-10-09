@@ -1,7 +1,7 @@
 <?php
 declare(strict_types=1);
 
-function renderVttChatPanel(): string
+function renderVttChatPanel(bool $isGm = false): string
 {
     ob_start();
     ?>
@@ -14,6 +14,16 @@ function renderVttChatPanel(): string
         <div class="chat-panel__header">
             <h3 class="chat-panel__title">VTT Chat</h3>
             <div class="chat-panel__actions">
+                <?php if ($isGm): ?>
+                    <button
+                        type="button"
+                        id="chat-clear-btn"
+                        class="chat-panel__clear"
+                        data-action="clear-chat"
+                    >
+                        Clear Chat
+                    </button>
+                <?php endif; ?>
                 <button
                     type="button"
                     id="chat-panel-close"

@@ -13,6 +13,15 @@ function renderVttSceneBoard(): string
             </div>
             <div class="vtt-board__controls">
                 <button class="btn" type="button" data-action="measure-distance" aria-pressed="false">Measure</button>
+                <button
+                    class="btn"
+                    type="button"
+                    data-action="open-templates"
+                    aria-haspopup="true"
+                    aria-expanded="false"
+                >
+                    Templates
+                </button>
             </div>
         </header>
         <div class="vtt-board__canvas-wrapper">
@@ -23,6 +32,7 @@ function renderVttSceneBoard(): string
                             <img id="vtt-map-image" class="vtt-board__map-image" alt="Scene map" hidden />
                         </div>
                         <div id="vtt-grid-overlay" class="vtt-board__grid" aria-hidden="true"></div>
+                        <div id="vtt-template-layer" class="vtt-board__templates" aria-hidden="true"></div>
                         <div
                             id="vtt-token-layer"
                             class="vtt-board__tokens"

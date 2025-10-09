@@ -13,6 +13,7 @@ export function mountBoardInteractions(store, routes = {}) {
   const mapTransform = document.getElementById('vtt-map-transform');
   const grid = document.getElementById('vtt-grid-overlay');
   const tokenLayer = document.getElementById('vtt-token-layer');
+  const templateLayer = document.getElementById('vtt-template-layer');
   const mapBackdrop = document.getElementById('vtt-map-backdrop');
   const mapImage = document.getElementById('vtt-map-image');
   const emptyState = board?.querySelector('.vtt-board__empty');
@@ -20,7 +21,8 @@ export function mountBoardInteractions(store, routes = {}) {
   const sceneName = document.getElementById('active-scene-name');
   const uploadButton = document.querySelector('[data-action="upload-map"]');
   const uploadInput = document.getElementById('vtt-map-upload-input');
-  if (!board || !mapSurface || !mapTransform || !mapBackdrop || !mapImage) return;
+  const templatesButton = document.querySelector('[data-action="open-templates"]');
+  if (!board || !mapSurface || !mapTransform || !mapBackdrop || !mapImage || !templateLayer) return;
 
   const defaultStatusText = status?.textContent ?? '';
 
@@ -47,6 +49,7 @@ export function mountBoardInteractions(store, routes = {}) {
   };
 
   const boardApi = store ?? {};
+  const templateTool = createTemplateTool();
   const TOKEN_DRAG_TYPE = 'application/x-vtt-token-template';
   let tokenDropDepth = 0;
   const selectedTokenIds = new Set();
@@ -82,6 +85,10 @@ export function mountBoardInteractions(store, routes = {}) {
   };
 
   board.addEventListener('keydown', (event) => {
+    if (templateTool?.handleKeydown?.(event)) {
+      return;
+    }
+
     if (event.key === 'Delete' || event.key === 'Backspace') {
       if (!selectedTokenIds.size) {
         return;
@@ -193,10 +200,12 @@ export function mountBoardInteractions(store, routes = {}) {
           renderTokens(boardApi.getState?.() ?? {}, tokenLayer, viewState);
         }
         prepareTokenDrag(event, placement);
+        templateTool.clearSelection();
       } else if (!event.shiftKey && !event.ctrlKey && !event.metaKey) {
         if (clearSelection()) {
           renderTokens(boardApi.getState?.() ?? {}, tokenLayer, viewState);
         }
+        templateTool.clearSelection();
         clearDragCandidate();
         if (viewState.dragState) {
           endTokenDrag({ commit: false });
@@ -218,6 +227,7 @@ export function mountBoardInteractions(store, routes = {}) {
           if (selectionChanged) {
             renderTokens(boardApi.getState?.() ?? {}, tokenLayer, viewState);
           }
+          templateTool.clearSelection();
           clearDragCandidate();
           if (viewState.dragState) {
             endTokenDrag({ commit: false });
@@ -448,6 +458,7 @@ export function mountBoardInteractions(store, routes = {}) {
     const isVisible = gridState.visible ?? true;
     grid.classList.toggle('is-visible', Boolean(isVisible));
     viewState.gridSize = Math.max(8, size);
+    templateTool.notifyGridChanged();
   };
 
   const applyStateToBoard = (state = {}) => {
@@ -1177,6 +1188,7 @@ export function mountBoardInteractions(store, routes = {}) {
       updateSceneMeta(null);
       viewState.mapPixelSize = { width: 0, height: 0 };
       renderTokens(boardApi.getState?.() ?? {}, tokenLayer, viewState);
+      templateTool.reset();
       return;
     }
 
@@ -1196,6 +1208,7 @@ export function mountBoardInteractions(store, routes = {}) {
       }
       updateSceneMeta(activeSceneFromState());
       renderTokens(boardApi.getState?.() ?? {}, tokenLayer, viewState);
+      templateTool.notifyMapState();
     };
     mapImage.onerror = () => {
       viewState.mapLoaded = false;
@@ -1213,6 +1226,7 @@ export function mountBoardInteractions(store, routes = {}) {
       }
       viewState.mapPixelSize = { width: 0, height: 0 };
       renderTokens(boardApi.getState?.() ?? {}, tokenLayer, viewState);
+      templateTool.reset();
     };
     mapImage.src = url;
   }
@@ -1254,6 +1268,7 @@ export function mountBoardInteractions(store, routes = {}) {
     viewState.translation.y = (boardRect.height - mapHeight * viewState.scale) / 2;
     applyTransform();
     renderTokens(boardApi.getState?.() ?? {}, tokenLayer, viewState);
+    templateTool.notifyMapState();
   }
 
   function applyTransform() {
@@ -1291,6 +1306,7 @@ export function mountBoardInteractions(store, routes = {}) {
     grid.style.setProperty('--vtt-grid-offset-bottom', `${nextOffsets.bottom}px`);
     grid.style.setProperty('--vtt-grid-offset-left', `${nextOffsets.left}px`);
     renderTokens(boardApi.getState?.() ?? {}, tokenLayer, viewState);
+    templateTool.notifyGridChanged();
   }
 
   function setUploadingState(isUploading) {
@@ -2697,6 +2713,1020 @@ export function mountBoardInteractions(store, routes = {}) {
 
     return draft.boardState;
   }
+
+
+function createTemplateTool() {
+  const layer = templateLayer;
+  const shapes = [];
+  let selectedId = null;
+  let previewShape = null;
+  let placementState = null;
+  let activeDrag = null;
+  let menuController = null;
+  let outsideClickHandler = null;
+  let colorIndex = 0;
+  const colorPalette = [
+    'rgba(59, 130, 246, 0.95)',
+    'rgba(14, 165, 233, 0.95)',
+    'rgba(236, 72, 153, 0.95)',
+    'rgba(16, 185, 129, 0.95)',
+    'rgba(244, 114, 182, 0.95)',
+  ];
+  const MIN_RECT_DIMENSION = 1;
+  const MIN_CIRCLE_RADIUS = 0.5;
+
+  if (!layer) {
+    return {
+      render() {},
+      reset() {},
+      notifyGridChanged() {},
+      notifyMapState() {},
+      cancelPlacement() {
+        return false;
+      },
+      handleKeydown() {
+        return false;
+      },
+      clearSelection() {},
+    };
+  }
+
+  updateLayerVisibility();
+
+  if (templatesButton) {
+    templatesButton.addEventListener('click', (event) => {
+      event.preventDefault();
+      const controller = ensureMenu();
+      controller.toggle();
+    });
+  }
+
+  mapSurface.addEventListener('pointerdown', handlePlacementPointerDown, true);
+  mapSurface.addEventListener('pointermove', handlePlacementPointerMove, true);
+  mapSurface.addEventListener('pointerup', handlePlacementPointerUp, true);
+  mapSurface.addEventListener('pointercancel', handlePlacementPointerCancel, true);
+
+  function render(view = viewState) {
+    updateLayerVisibility(view);
+    shapes.forEach((shape) => updateShapeElement(shape, view));
+    if (previewShape) {
+      updateShapeElement(previewShape, view);
+    }
+  }
+
+  function reset() {
+    shapes.splice(0, shapes.length).forEach((shape) => {
+      shape.elements.root.remove();
+    });
+    clearPreview();
+    placementState = null;
+    activeDrag = null;
+    selectedId = null;
+    updateLayerVisibility();
+  }
+
+  function notifyGridChanged() {
+    render(viewState);
+  }
+
+  function notifyMapState() {
+    render(viewState);
+  }
+
+  function cancelPlacement() {
+    if (!placementState) {
+      return false;
+    }
+    if (placementState.pointerId !== null) {
+      try {
+        mapSurface.releasePointerCapture?.(placementState.pointerId);
+      } catch (error) {
+        // Ignore release failures when aborting placement.
+      }
+    }
+    placementState = null;
+    clearPreview();
+    restoreStatus();
+    updateLayerVisibility();
+    return true;
+  }
+
+  function handleKeydown(event) {
+    if (event.key === 'Escape') {
+      const handled = cancelPlacement();
+      if (handled) {
+        event.preventDefault();
+        return true;
+      }
+      if (selectedId) {
+        clearSelection();
+        event.preventDefault();
+        return true;
+      }
+      if (menuController?.isOpen()) {
+        menuController.hide();
+        event.preventDefault();
+        return true;
+      }
+      return false;
+    }
+
+    if ((event.key === 'Delete' || event.key === 'Backspace') && selectedId) {
+      removeShape(selectedId);
+      event.preventDefault();
+      return true;
+    }
+
+    if (event.key === 'r' && selectedId) {
+      rotateShape(selectedId, 1);
+      event.preventDefault();
+      return true;
+    }
+
+    return false;
+  }
+
+  function handlePlacementPointerDown(event) {
+    if (!placementState || event.button !== 0) {
+      return;
+    }
+
+    if (event.target && event.target.closest('.vtt-template__node')) {
+      return;
+    }
+
+    const localPoint = getLocalMapPoint(event);
+    if (!localPoint) {
+      return;
+    }
+    const gridPoint = mapPointToGrid(localPoint, viewState);
+    if (!gridPoint) {
+      return;
+    }
+
+    event.preventDefault();
+    event.stopPropagation();
+
+    if (placementState.type === 'circle') {
+      if (isFiniteNumber(placementState.values.radius)) {
+        finalizePlacement({
+          type: 'circle',
+          center: gridPoint,
+          radius: Math.max(MIN_CIRCLE_RADIUS, placementState.values.radius),
+        });
+        return;
+      }
+
+      placementState.stage = 'sizing-circle';
+      placementState.start = gridPoint;
+      placementState.pointerId = event.pointerId;
+      previewShape = createShape('circle', {
+        center: gridPoint,
+        radius: MIN_CIRCLE_RADIUS,
+      }, { preview: true });
+      layer.appendChild(previewShape.elements.root);
+      updateStatus('Drag to set the radius.');
+      try {
+        mapSurface.setPointerCapture(event.pointerId);
+      } catch (error) {
+        // Ignore capture failures.
+      }
+      render(viewState);
+      return;
+    }
+
+    if (placementState.type === 'rectangle') {
+      const hasLength = isFiniteNumber(placementState.values.length);
+      const hasWidth = isFiniteNumber(placementState.values.width);
+
+      if (hasLength && hasWidth) {
+        finalizePlacement({
+          type: 'rectangle',
+          start: gridPoint,
+          length: Math.max(MIN_RECT_DIMENSION, placementState.values.length),
+          width: Math.max(MIN_RECT_DIMENSION, placementState.values.width),
+          rotationSteps: 0,
+        });
+        return;
+      }
+
+      placementState.stage = 'sizing-rectangle';
+      placementState.start = gridPoint;
+      placementState.pointerId = event.pointerId;
+      previewShape = createShape('rectangle', {
+        start: gridPoint,
+        length: MIN_RECT_DIMENSION,
+        width: MIN_RECT_DIMENSION,
+        rotationSteps: 0,
+      }, { preview: true });
+      layer.appendChild(previewShape.elements.root);
+      updateStatus('Drag to define the rectangle. Move sideways to adjust width.');
+      try {
+        mapSurface.setPointerCapture(event.pointerId);
+      } catch (error) {
+        // Ignore capture failures.
+      }
+      render(viewState);
+    }
+  }
+
+  function handlePlacementPointerMove(event) {
+    if (!placementState || placementState.pointerId === null || event.pointerId !== placementState.pointerId) {
+      return;
+    }
+
+    const localPoint = getLocalMapPoint(event);
+    if (!localPoint) {
+      return;
+    }
+    const gridPoint = mapPointToGrid(localPoint, viewState);
+    if (!gridPoint) {
+      return;
+    }
+
+    event.preventDefault();
+    event.stopPropagation();
+
+    if (placementState.stage === 'sizing-circle' && previewShape) {
+      const dx = gridPoint.column - placementState.start.column;
+      const dy = gridPoint.row - placementState.start.row;
+      const radius = Math.max(MIN_CIRCLE_RADIUS, Math.sqrt(dx * dx + dy * dy));
+      previewShape.center = { ...placementState.start };
+      previewShape.radius = radius;
+      render(viewState);
+      return;
+    }
+
+    if (placementState.stage === 'sizing-rectangle' && previewShape) {
+      const deltaX = Math.max(0, gridPoint.column - placementState.start.column);
+      const deltaY = Math.max(0, gridPoint.row - placementState.start.row);
+      const length = Math.max(MIN_RECT_DIMENSION, deltaX);
+      const width = Math.max(MIN_RECT_DIMENSION, deltaY);
+      const vertical = deltaY > deltaX;
+      previewShape.start = { ...placementState.start };
+      previewShape.length = vertical ? width : length;
+      previewShape.width = vertical ? length : width;
+      previewShape.rotationSteps = vertical ? 1 : 0;
+      render(viewState);
+    }
+  }
+
+  function handlePlacementPointerUp(event) {
+    if (!placementState || placementState.pointerId === null || event.pointerId !== placementState.pointerId) {
+      return;
+    }
+
+    const localPoint = getLocalMapPoint(event);
+    if (!localPoint) {
+      cancelPlacement();
+      return;
+    }
+    const gridPoint = mapPointToGrid(localPoint, viewState);
+    if (!gridPoint) {
+      cancelPlacement();
+      return;
+    }
+
+    event.preventDefault();
+    event.stopPropagation();
+
+    if (placementState.stage === 'sizing-circle') {
+      const dx = gridPoint.column - placementState.start.column;
+      const dy = gridPoint.row - placementState.start.row;
+      const radius = Math.max(MIN_CIRCLE_RADIUS, Math.sqrt(dx * dx + dy * dy));
+      finalizePlacement({
+        type: 'circle',
+        center: placementState.start,
+        radius,
+      });
+    } else if (placementState.stage === 'sizing-rectangle') {
+      const deltaX = Math.max(0, gridPoint.column - placementState.start.column);
+      const deltaY = Math.max(0, gridPoint.row - placementState.start.row);
+      const length = Math.max(MIN_RECT_DIMENSION, deltaX);
+      const width = Math.max(MIN_RECT_DIMENSION, deltaY);
+      const vertical = deltaY > deltaX;
+      finalizePlacement({
+        type: 'rectangle',
+        start: placementState.start,
+        length: vertical ? width : length,
+        width: vertical ? length : width,
+        rotationSteps: vertical ? 1 : 0,
+      });
+    } else {
+      cancelPlacement();
+    }
+  }
+
+  function handlePlacementPointerCancel(event) {
+    if (!placementState || placementState.pointerId === null || event.pointerId !== placementState.pointerId) {
+      return;
+    }
+    cancelPlacement();
+  }
+
+  function finalizePlacement(config) {
+    clearPreview();
+    restoreStatus();
+    placementState = null;
+    updateLayerVisibility();
+
+    if (config.type === 'circle') {
+      const center = clampCircleCenter(config.center, config.radius, viewState);
+      const shape = createShape('circle', {
+        center,
+        radius: config.radius,
+      });
+      addShape(shape);
+      return;
+    }
+
+    const start = clampRectanglePosition(config.start, config.length, config.width, config.rotationSteps ?? 0, viewState);
+    const shape = createShape('rectangle', {
+      start,
+      length: config.length,
+      width: config.width,
+      rotationSteps: config.rotationSteps ?? 0,
+    });
+    addShape(shape);
+  }
+
+  function addShape(shape) {
+    shapes.push(shape);
+    layer.appendChild(shape.elements.root);
+    selectShape(shape.id);
+    render(viewState);
+  }
+
+  function createShape(type, data, options = {}) {
+    const isPreview = Boolean(options.preview);
+    const id = isPreview ? `preview_${Date.now()}` : createPlacementId();
+    const color = isPreview ? 'rgba(148, 163, 184, 0.8)' : nextColor();
+    const root = document.createElement('div');
+    root.className = `vtt-template vtt-template--${type}${isPreview ? ' vtt-template--preview' : ''}`;
+    root.dataset.templateId = id;
+    root.style.setProperty('--vtt-template-color', color);
+
+    const shapeEl = document.createElement('div');
+    shapeEl.className = 'vtt-template__shape';
+    root.appendChild(shapeEl);
+
+    const node = document.createElement('button');
+    node.type = 'button';
+    node.className = 'vtt-template__node';
+    node.innerHTML = '<span class="vtt-template__node-symbol">◆</span>';
+    node.dataset.templateNode = id;
+    root.appendChild(node);
+
+    const label = document.createElement('div');
+    label.className = 'vtt-template__label';
+    node.appendChild(label);
+
+    const actions = document.createElement('div');
+    actions.className = 'vtt-template__actions';
+    node.appendChild(actions);
+
+    let rotateCcw = null;
+    let rotateCw = null;
+    let removeBtn = null;
+    if (!isPreview && type === 'rectangle') {
+      rotateCcw = document.createElement('button');
+      rotateCcw.type = 'button';
+      rotateCcw.className = 'vtt-template__action-btn';
+      rotateCcw.textContent = '⟲';
+      rotateCcw.setAttribute('aria-label', 'Rotate counterclockwise');
+      actions.appendChild(rotateCcw);
+
+      rotateCw = document.createElement('button');
+      rotateCw.type = 'button';
+      rotateCw.className = 'vtt-template__action-btn';
+      rotateCw.textContent = '⟳';
+      rotateCw.setAttribute('aria-label', 'Rotate clockwise');
+      actions.appendChild(rotateCw);
+    }
+
+    if (!isPreview) {
+      removeBtn = document.createElement('button');
+      removeBtn.type = 'button';
+      removeBtn.className = 'vtt-template__action-btn';
+      removeBtn.textContent = '✕';
+      removeBtn.setAttribute('aria-label', 'Delete template');
+      actions.appendChild(removeBtn);
+    }
+
+    if (isPreview || type !== 'rectangle') {
+      actions.style.display = 'none';
+    }
+
+    const shape = {
+      id,
+      type,
+      color,
+      elements: { root, shape: shapeEl, node, label, actions },
+      isPreview,
+    };
+
+    if (type === 'circle') {
+      shape.center = {
+        column: data.center?.column ?? 0,
+        row: data.center?.row ?? 0,
+      };
+      shape.radius = Math.max(MIN_CIRCLE_RADIUS, data.radius ?? MIN_CIRCLE_RADIUS);
+    } else {
+      shape.start = {
+        column: data.start?.column ?? 0,
+        row: data.start?.row ?? 0,
+      };
+      shape.length = Math.max(MIN_RECT_DIMENSION, data.length ?? MIN_RECT_DIMENSION);
+      shape.width = Math.max(MIN_RECT_DIMENSION, data.width ?? MIN_RECT_DIMENSION);
+      shape.rotationSteps = Number.isInteger(data.rotationSteps) ? data.rotationSteps % 4 : 0;
+    }
+
+    if (!isPreview) {
+      node.addEventListener('pointerdown', (event) => handleNodePointerDown(event, shape));
+      node.addEventListener('pointermove', (event) => handleNodePointerMove(event, shape));
+      node.addEventListener('pointerup', handleNodePointerUp);
+      node.addEventListener('pointercancel', handleNodePointerCancel);
+      node.addEventListener('click', (event) => handleNodeClick(event, shape));
+
+      if (rotateCcw) {
+        rotateCcw.addEventListener('click', (event) => {
+          event.preventDefault();
+          event.stopPropagation();
+          rotateShape(shape.id, -1);
+        });
+      }
+      if (rotateCw) {
+        rotateCw.addEventListener('click', (event) => {
+          event.preventDefault();
+          event.stopPropagation();
+          rotateShape(shape.id, 1);
+        });
+      }
+      if (removeBtn) {
+        removeBtn.addEventListener('click', (event) => {
+          event.preventDefault();
+          event.stopPropagation();
+          removeShape(shape.id);
+        });
+      }
+    }
+
+    return shape;
+  }
+
+  function clearPreview() {
+    if (previewShape) {
+      previewShape.elements.root.remove();
+      previewShape = null;
+    }
+  }
+
+  function selectShape(id) {
+    if (selectedId === id) {
+      return;
+    }
+    selectedId = id;
+    shapes.forEach((shape) => {
+      const isSelected = shape.id === id;
+      shape.elements.root.classList.toggle('is-selected', isSelected);
+      if (isSelected) {
+        try {
+          shape.elements.node.focus({ preventScroll: true });
+        } catch (error) {
+          // Ignore focus issues in browsers that do not support preventScroll.
+        }
+      }
+    });
+    if (selectedId) {
+      updateStatus('Template selected. Drag to move, rotate, or press Delete to remove.');
+    } else {
+      restoreStatus();
+    }
+  }
+
+  function clearSelection() {
+    selectedId = null;
+    shapes.forEach((shape) => {
+      shape.elements.root.classList.remove('is-selected');
+    });
+    restoreStatus();
+  }
+
+  function removeShape(id) {
+    const index = shapes.findIndex((shape) => shape.id === id);
+    if (index === -1) {
+      return;
+    }
+    const [removed] = shapes.splice(index, 1);
+    removed.elements.root.remove();
+    if (selectedId === id) {
+      selectedId = null;
+    }
+    render(viewState);
+    restoreStatus();
+    updateLayerVisibility();
+  }
+
+  function rotateShape(id, direction) {
+    const shape = shapes.find((item) => item.id === id && item.type === 'rectangle');
+    if (!shape) {
+      return;
+    }
+    const delta = direction >= 0 ? 1 : -1;
+    shape.rotationSteps = (shape.rotationSteps + delta + 4) % 4;
+    const clamped = clampRectanglePosition(shape.start, shape.length, shape.width, shape.rotationSteps, viewState);
+    shape.start.column = clamped.column;
+    shape.start.row = clamped.row;
+    render(viewState);
+  }
+
+  function handleNodeClick(event, shape) {
+    event.preventDefault();
+    event.stopPropagation();
+    selectShape(shape.id);
+  }
+
+  function handleNodePointerDown(event, shape) {
+    if (event.button !== 0) {
+      return;
+    }
+    event.preventDefault();
+    event.stopPropagation();
+    selectShape(shape.id);
+
+    const localPoint = getLocalMapPoint(event);
+    if (!localPoint) {
+      return;
+    }
+    const gridPoint = mapPointToGrid(localPoint, viewState);
+    if (!gridPoint) {
+      return;
+    }
+
+    activeDrag = {
+      shapeId: shape.id,
+      pointerId: event.pointerId,
+      origin: shape.type === 'circle'
+        ? { column: shape.center.column, row: shape.center.row }
+        : { column: shape.start.column, row: shape.start.row },
+      startPointer: gridPoint,
+    };
+
+    updateStatus('Drag to reposition the template.');
+    try {
+      event.currentTarget.setPointerCapture(event.pointerId);
+    } catch (error) {
+      // Ignore capture failures on older browsers.
+    }
+  }
+
+  function handleNodePointerMove(event, shape) {
+    if (!activeDrag || activeDrag.shapeId !== shape.id || event.pointerId !== activeDrag.pointerId) {
+      return;
+    }
+
+    const localPoint = getLocalMapPoint(event);
+    if (!localPoint) {
+      return;
+    }
+    const gridPoint = mapPointToGrid(localPoint, viewState);
+    if (!gridPoint) {
+      return;
+    }
+
+    event.preventDefault();
+
+    const deltaColumn = gridPoint.column - activeDrag.startPointer.column;
+    const deltaRow = gridPoint.row - activeDrag.startPointer.row;
+
+    if (shape.type === 'circle') {
+      const nextCenter = clampCircleCenter({
+        column: activeDrag.origin.column + deltaColumn,
+        row: activeDrag.origin.row + deltaRow,
+      }, shape.radius, viewState);
+      shape.center.column = nextCenter.column;
+      shape.center.row = nextCenter.row;
+    } else {
+      const nextStart = clampRectanglePosition({
+        column: activeDrag.origin.column + deltaColumn,
+        row: activeDrag.origin.row + deltaRow,
+      }, shape.length, shape.width, shape.rotationSteps, viewState);
+      shape.start.column = nextStart.column;
+      shape.start.row = nextStart.row;
+    }
+    render(viewState);
+  }
+
+  function handleNodePointerUp(event) {
+    if (!activeDrag || event.pointerId !== activeDrag.pointerId) {
+      return;
+    }
+    event.preventDefault();
+    event.stopPropagation();
+    try {
+      event.currentTarget.releasePointerCapture(event.pointerId);
+    } catch (error) {
+      // Ignore release issues.
+    }
+    activeDrag = null;
+    restoreStatus();
+  }
+
+  function handleNodePointerCancel(event) {
+    if (!activeDrag || event.pointerId !== activeDrag.pointerId) {
+      return;
+    }
+    try {
+      event.currentTarget.releasePointerCapture(event.pointerId);
+    } catch (error) {
+      // Ignore release issues.
+    }
+    activeDrag = null;
+    restoreStatus();
+    render(viewState);
+  }
+
+  function updateShapeElement(shape, view = viewState) {
+    const { root, node, label } = shape.elements;
+    if (!view.mapLoaded) {
+      root.hidden = true;
+      return;
+    }
+    root.hidden = false;
+
+    const offsets = view.gridOffsets ?? {};
+    const offsetLeft = Number.isFinite(offsets.left) ? offsets.left : 0;
+    const offsetTop = Number.isFinite(offsets.top) ? offsets.top : 0;
+    const gridSize = Math.max(8, Number.isFinite(view.gridSize) ? view.gridSize : 64);
+
+    if (shape.type === 'circle') {
+      const radius = Math.max(MIN_CIRCLE_RADIUS, shape.radius);
+      const diameter = radius * 2;
+      const boundsColumn = shape.center.column - radius;
+      const boundsRow = shape.center.row - radius;
+      const left = offsetLeft + boundsColumn * gridSize;
+      const top = offsetTop + boundsRow * gridSize;
+      const size = diameter * gridSize;
+
+      root.style.left = `${left}px`;
+      root.style.top = `${top}px`;
+      root.style.width = `${size}px`;
+      root.style.height = `${size}px`;
+
+      const nodeOffset = Math.max(0, (radius - 0.5) * gridSize);
+      node.style.left = `${nodeOffset}px`;
+      node.style.top = `${nodeOffset}px`;
+      node.style.width = `${gridSize}px`;
+      node.style.height = `${gridSize}px`;
+
+      label.textContent = `Radius: ${radius.toFixed(1)}`;
+      return;
+    }
+
+    const rotationSteps = ((shape.rotationSteps ?? 0) % 4 + 4) % 4;
+    const isVertical = rotationSteps % 2 !== 0;
+    const widthUnits = isVertical ? shape.width : shape.length;
+    const heightUnits = isVertical ? shape.length : shape.width;
+
+    const left = offsetLeft + shape.start.column * gridSize;
+    const top = offsetTop + shape.start.row * gridSize;
+    const width = Math.max(gridSize, widthUnits * gridSize);
+    const height = Math.max(gridSize, heightUnits * gridSize);
+
+    root.style.left = `${left}px`;
+    root.style.top = `${top}px`;
+    root.style.width = `${width}px`;
+    root.style.height = `${height}px`;
+    root.style.transform = '';
+
+    node.style.left = '0px';
+    node.style.top = '0px';
+    node.style.width = `${gridSize}px`;
+    node.style.height = `${gridSize}px`;
+
+    label.textContent = `${widthUnits.toFixed(1)} × ${heightUnits.toFixed(1)}`;
+  }
+
+  function updateLayerVisibility(view = viewState) {
+    const visible = Boolean(view.mapLoaded && (shapes.length > 0 || previewShape || placementState));
+    layer.hidden = !visible;
+    layer.setAttribute('aria-hidden', visible ? 'false' : 'true');
+  }
+
+  function nextColor() {
+    const color = colorPalette[colorIndex % colorPalette.length];
+    colorIndex += 1;
+    return color;
+  }
+
+  function ensureMenu() {
+    if (menuController) {
+      return menuController;
+    }
+
+    const menu = document.createElement('div');
+    menu.className = 'vtt-template-menu';
+    menu.hidden = true;
+
+    const title = document.createElement('h3');
+    title.className = 'vtt-template-menu__title';
+    title.textContent = 'Templates';
+    menu.appendChild(title);
+
+    const list = document.createElement('div');
+    list.className = 'vtt-template-menu__list';
+    menu.appendChild(list);
+
+    let activeType = 'rectangle';
+
+    const circleChoice = document.createElement('button');
+    circleChoice.type = 'button';
+    circleChoice.className = 'vtt-template-menu__choice';
+    circleChoice.textContent = 'Circle';
+    circleChoice.dataset.template = 'circle';
+    list.appendChild(circleChoice);
+
+    const rectChoice = document.createElement('button');
+    rectChoice.type = 'button';
+    rectChoice.className = 'vtt-template-menu__choice is-active';
+    rectChoice.textContent = 'Rectangle';
+    rectChoice.dataset.template = 'rectangle';
+    list.appendChild(rectChoice);
+
+    const form = document.createElement('form');
+    form.className = 'vtt-template-menu__form is-visible';
+    menu.appendChild(form);
+
+    const circleField = createNumberField('Radius (squares)', 'radius');
+    const lengthField = createNumberField('Length (squares)', 'length');
+    const widthField = createNumberField('Width (squares)', 'width');
+
+    form.appendChild(lengthField.wrapper);
+    form.appendChild(widthField.wrapper);
+
+    const actions = document.createElement('div');
+    actions.className = 'vtt-template-menu__actions';
+    form.appendChild(actions);
+
+    const cancelButton = document.createElement('button');
+    cancelButton.type = 'button';
+    cancelButton.className = 'vtt-template-menu__cancel';
+    cancelButton.textContent = 'Cancel';
+    actions.appendChild(cancelButton);
+
+    const confirmButton = document.createElement('button');
+    confirmButton.type = 'submit';
+    confirmButton.className = 'vtt-template-menu__confirm';
+    confirmButton.textContent = 'Create';
+    actions.appendChild(confirmButton);
+
+    function setActiveType(nextType) {
+      activeType = nextType;
+      if (nextType === 'circle') {
+        rectChoice.classList.remove('is-active');
+        circleChoice.classList.add('is-active');
+        form.replaceChildren(circleField.wrapper, actions);
+      } else {
+        circleChoice.classList.remove('is-active');
+        rectChoice.classList.add('is-active');
+        form.replaceChildren(lengthField.wrapper, widthField.wrapper, actions);
+      }
+    }
+
+    circleChoice.addEventListener('click', () => setActiveType('circle'));
+    rectChoice.addEventListener('click', () => setActiveType('rectangle'));
+
+    cancelButton.addEventListener('click', () => {
+      controller.hide();
+    });
+
+    form.addEventListener('submit', (event) => {
+      event.preventDefault();
+      const values = {
+        radius: parseFieldValue(circleField.input.value),
+        length: parseFieldValue(lengthField.input.value),
+        width: parseFieldValue(widthField.input.value),
+      };
+      controller.hide();
+      beginPlacement(activeType, values);
+    });
+
+    document.body.appendChild(menu);
+
+    function hideMenu() {
+      menu.hidden = true;
+      templatesButton?.setAttribute('aria-expanded', 'false');
+      if (outsideClickHandler) {
+        document.removeEventListener('pointerdown', outsideClickHandler, true);
+        outsideClickHandler = null;
+      }
+    }
+
+    const controller = {
+      show() {
+        const anchor = templatesButton?.getBoundingClientRect();
+        const top = (anchor?.bottom ?? 0) + window.scrollY + 8;
+        const left = (anchor?.left ?? 0) + window.scrollX;
+        menu.style.top = `${top}px`;
+        menu.style.left = `${left}px`;
+        menu.hidden = false;
+        templatesButton?.setAttribute('aria-expanded', 'true');
+        if (!outsideClickHandler) {
+          outsideClickHandler = (event) => {
+            if (!menu.contains(event.target) && event.target !== templatesButton) {
+              hideMenu();
+            }
+          };
+          document.addEventListener('pointerdown', outsideClickHandler, true);
+        }
+      },
+      hide: hideMenu,
+      toggle() {
+        if (menu.hidden) {
+          this.show();
+        } else {
+          hideMenu();
+        }
+      },
+      isOpen() {
+        return !menu.hidden;
+      },
+    };
+
+    menuController = controller;
+    return controller;
+  }
+
+  function beginPlacement(type, values) {
+    cancelPlacement();
+    clearSelection();
+    placementState = {
+      type,
+      values,
+      stage: 'awaiting-start',
+      pointerId: null,
+      start: null,
+    };
+    if (type === 'circle') {
+      if (isFiniteNumber(values.radius)) {
+        updateStatus('Click the map to place the circle template.');
+      } else {
+        updateStatus('Click and drag to size your circle.');
+      }
+    } else {
+      if (isFiniteNumber(values.length) && isFiniteNumber(values.width)) {
+        updateStatus('Click the map to place the rectangle template.');
+      } else {
+        updateStatus('Click and drag to size your rectangle.');
+      }
+    }
+    updateLayerVisibility();
+  }
+
+  function updateStatus(message) {
+    if (!status) {
+      return;
+    }
+    status.textContent = message || defaultStatusText;
+  }
+
+  function restoreStatus() {
+    if (!status) {
+      return;
+    }
+    if (!placementState && !activeDrag && !selectedId) {
+      status.textContent = defaultStatusText;
+    }
+  }
+
+  function createNumberField(labelText, name) {
+    const wrapper = document.createElement('div');
+    wrapper.className = 'vtt-template-menu__field';
+
+    const labelEl = document.createElement('label');
+    labelEl.textContent = labelText;
+    wrapper.appendChild(labelEl);
+
+    const input = document.createElement('input');
+    input.type = 'number';
+    input.name = name;
+    input.min = '0';
+    input.step = '0.5';
+    wrapper.appendChild(input);
+
+    return { wrapper, input };
+  }
+
+  function parseFieldValue(value) {
+    const parsed = Number.parseFloat(value);
+    return Number.isFinite(parsed) && parsed > 0 ? parsed : null;
+  }
+
+  function mapPointToGrid(point, view = viewState) {
+    const mapWidth = Number.isFinite(view.mapPixelSize?.width) ? view.mapPixelSize.width : 0;
+    const mapHeight = Number.isFinite(view.mapPixelSize?.height) ? view.mapPixelSize.height : 0;
+    if (mapWidth <= 0 || mapHeight <= 0) {
+      return null;
+    }
+    const offsets = view.gridOffsets ?? {};
+    const offsetLeft = Number.isFinite(offsets.left) ? offsets.left : 0;
+    const offsetRight = Number.isFinite(offsets.right) ? offsets.right : 0;
+    const offsetTop = Number.isFinite(offsets.top) ? offsets.top : 0;
+    const offsetBottom = Number.isFinite(offsets.bottom) ? offsets.bottom : 0;
+    const gridSize = Math.max(8, Number.isFinite(view.gridSize) ? view.gridSize : 64);
+
+    const innerWidth = Math.max(0, mapWidth - offsetLeft - offsetRight);
+    const innerHeight = Math.max(0, mapHeight - offsetTop - offsetBottom);
+    if (innerWidth <= 0 || innerHeight <= 0) {
+      return null;
+    }
+
+    const localX = point.x;
+    const localY = point.y;
+    const withinX = localX >= offsetLeft && localX <= offsetLeft + innerWidth;
+    const withinY = localY >= offsetTop && localY <= offsetTop + innerHeight;
+    if (!withinX || !withinY) {
+      return null;
+    }
+
+    const column = (localX - offsetLeft) / gridSize;
+    const row = (localY - offsetTop) / gridSize;
+    return { column, row };
+  }
+
+  function clampRectanglePosition(start, length, width, rotationSteps = 0, view = viewState) {
+    const mapWidth = Number.isFinite(view.mapPixelSize?.width) ? view.mapPixelSize.width : 0;
+    const mapHeight = Number.isFinite(view.mapPixelSize?.height) ? view.mapPixelSize.height : 0;
+    if (mapWidth <= 0 || mapHeight <= 0) {
+      return { column: start.column, row: start.row };
+    }
+    const offsets = view.gridOffsets ?? {};
+    const offsetLeft = Number.isFinite(offsets.left) ? offsets.left : 0;
+    const offsetRight = Number.isFinite(offsets.right) ? offsets.right : 0;
+    const offsetTop = Number.isFinite(offsets.top) ? offsets.top : 0;
+    const offsetBottom = Number.isFinite(offsets.bottom) ? offsets.bottom : 0;
+    const gridSize = Math.max(8, Number.isFinite(view.gridSize) ? view.gridSize : 64);
+
+    const innerWidth = Math.max(0, mapWidth - offsetLeft - offsetRight);
+    const innerHeight = Math.max(0, mapHeight - offsetTop - offsetBottom);
+    if (innerWidth <= 0 || innerHeight <= 0) {
+      return { column: start.column, row: start.row };
+    }
+
+    const isVertical = rotationSteps % 2 !== 0;
+    const widthUnits = isVertical ? width : length;
+    const heightUnits = isVertical ? length : width;
+    const maxColumn = Math.max(0, innerWidth / gridSize - widthUnits);
+    const maxRow = Math.max(0, innerHeight / gridSize - heightUnits);
+
+    return {
+      column: clamp(start.column, 0, maxColumn),
+      row: clamp(start.row, 0, maxRow),
+    };
+  }
+
+  function clampCircleCenter(center, radius, view = viewState) {
+    const mapWidth = Number.isFinite(view.mapPixelSize?.width) ? view.mapPixelSize.width : 0;
+    const mapHeight = Number.isFinite(view.mapPixelSize?.height) ? view.mapPixelSize.height : 0;
+    if (mapWidth <= 0 || mapHeight <= 0) {
+      return { column: center.column, row: center.row };
+    }
+    const offsets = view.gridOffsets ?? {};
+    const offsetLeft = Number.isFinite(offsets.left) ? offsets.left : 0;
+    const offsetRight = Number.isFinite(offsets.right) ? offsets.right : 0;
+    const offsetTop = Number.isFinite(offsets.top) ? offsets.top : 0;
+    const offsetBottom = Number.isFinite(offsets.bottom) ? offsets.bottom : 0;
+    const gridSize = Math.max(8, Number.isFinite(view.gridSize) ? view.gridSize : 64);
+
+    const innerWidth = Math.max(0, mapWidth - offsetLeft - offsetRight);
+    const innerHeight = Math.max(0, mapHeight - offsetTop - offsetBottom);
+    if (innerWidth <= 0 || innerHeight <= 0) {
+      return { column: center.column, row: center.row };
+    }
+
+    const maxColumn = Math.max(radius, innerWidth / gridSize - radius);
+    const maxRow = Math.max(radius, innerHeight / gridSize - radius);
+
+    return {
+      column: clamp(center.column, radius, maxColumn),
+      row: clamp(center.row, radius, maxRow),
+    };
+  }
+
+  function isFiniteNumber(value) {
+    return typeof value === 'number' && Number.isFinite(value) && value > 0;
+  }
+
+  return {
+    render,
+    reset,
+    notifyGridChanged,
+    notifyMapState,
+    cancelPlacement,
+    handleKeydown,
+    clearSelection,
+  };
+}
 
   function createPlacementId() {
     if (window.crypto?.randomUUID) {
