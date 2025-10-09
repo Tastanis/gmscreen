@@ -60,6 +60,7 @@ export function mountBoardInteractions(store, routes = {}) {
   const tokenSettingsMenu = createTokenSettingsMenu();
   let activeTokenSettingsId = null;
   let removeTokenSettingsListeners = null;
+  let hitPointsEditSession = null;
 
   board.addEventListener('keydown', (event) => {
     if (event.key === 'Delete' || event.key === 'Backspace') {
@@ -2054,6 +2055,116 @@ export function mountBoardInteractions(store, routes = {}) {
     return rawName || 'Token';
   }
 
+  function getActiveHitPointsSnapshot() {
+    if (!activeTokenSettingsId) {
+      return null;
+    }
+    const placement = getPlacementFromStore(activeTokenSettingsId);
+    if (!placement) {
+      return null;
+    }
+    return ensurePlacementHitPoints(placement.hp);
+  }
+
+  function isEditingHitPoints() {
+    return (
+      Boolean(hitPointsEditSession) &&
+      activeTokenSettingsId !== null &&
+      hitPointsEditSession.placementId === activeTokenSettingsId &&
+      tokenSettingsMenu?.hpCurrentInput === document.activeElement
+    );
+  }
+
+  function restoreHitPointsInputValue() {
+    if (!tokenSettingsMenu?.hpCurrentInput) {
+      return;
+    }
+    const snapshot = getActiveHitPointsSnapshot();
+    tokenSettingsMenu.hpCurrentInput.value = snapshot ? snapshot.current : '';
+  }
+
+  function commitHitPointsInput(rawValue) {
+    if (!activeTokenSettingsId) {
+      return false;
+    }
+
+    const placement = getPlacementFromStore(activeTokenSettingsId);
+    if (!placement) {
+      return false;
+    }
+
+    const baseSnapshot = hitPointsEditSession && hitPointsEditSession.placementId === activeTokenSettingsId
+      ? {
+          current: hitPointsEditSession.originalCurrent,
+          max: hitPointsEditSession.originalMax,
+        }
+      : ensurePlacementHitPoints(placement.hp);
+
+    const draft = typeof rawValue === 'string' ? rawValue.trim() : '';
+    if (draft === '') {
+      return false;
+    }
+
+    const relativeMatch = /^([+-])\s*(\d+)$/u.exec(draft);
+    let nextValue = null;
+
+    if (relativeMatch) {
+      const [, operator, digits] = relativeMatch;
+      const delta = Number.parseInt(digits, 10);
+      if (!Number.isFinite(delta)) {
+        return false;
+      }
+      const baseValue =
+        parseHitPointsNumber(baseSnapshot.current) ?? parseHitPointsNumber(baseSnapshot.max) ?? 0;
+      const computed = operator === '-' ? baseValue - delta : baseValue + delta;
+      if (!Number.isFinite(computed)) {
+        return false;
+      }
+      nextValue = String(computed);
+    } else {
+      const normalized = normalizeHitPointsValue(draft);
+      const parsed = parseHitPointsNumber(normalized);
+      if (parsed === null) {
+        return false;
+      }
+      nextValue = String(parsed);
+    }
+
+    hitPointsEditSession = null;
+
+    updatePlacementById(activeTokenSettingsId, (target) => {
+      const hitPoints = ensurePlacementHitPoints(target.hp, baseSnapshot.max);
+      hitPoints.current = nextValue;
+      if (hitPoints.max === '' && nextValue !== '') {
+        hitPoints.max = nextValue;
+      }
+      target.hp = hitPoints;
+    });
+
+    const latestPlacement = getPlacementFromStore(activeTokenSettingsId);
+    const latestSnapshot = latestPlacement ? ensurePlacementHitPoints(latestPlacement.hp) : null;
+
+    if (tokenSettingsMenu?.hpCurrentInput && latestSnapshot) {
+      tokenSettingsMenu.hpCurrentInput.value = latestSnapshot.current;
+    }
+
+    refreshTokenSettings();
+
+    if (
+      tokenSettingsMenu?.hpCurrentInput &&
+      latestSnapshot &&
+      document.activeElement === tokenSettingsMenu.hpCurrentInput
+    ) {
+      hitPointsEditSession = {
+        placementId: activeTokenSettingsId,
+        originalCurrent: latestSnapshot.current,
+        originalMax: latestSnapshot.max,
+      };
+    }
+
+    return true;
+  }
+
   function normalizeHitPointsValue(value) {
     if (typeof value === 'number' && Number.isFinite(value)) {
       return String(Math.trunc(value));
@@ -2241,34 +2352,70 @@ export function mountBoardInteractions(store, routes = {}) {
           }
         });
         refreshTokenSettings();
+        if (!visible) {
+          hitPointsEditSession = null;
+        }
       });
     }
 
     if (menu.hpCurrentInput) {
-      menu.hpCurrentInput.addEventListener('input', () => {
+      menu.hpCurrentInput.addEventListener('focus', () => {
         if (!activeTokenSettingsId) {
+          hitPointsEditSession = null;
           return;
         }
-        const nextValue = normalizeHitPointsValue(menu.hpCurrentInput.value);
-        updatePlacementById(activeTokenSettingsId, (target) => {
-          const hitPoints = ensurePlacementHitPoints(target.hp);
-          hitPoints.current = nextValue;
-          if (hitPoints.max === '' && nextValue !== '') {
-            hitPoints.max = nextValue;
-          }
-          target.hp = hitPoints;
-        });
-        if (menu.hpCurrentInput.value !== nextValue) {
-          menu.hpCurrentInput.value = nextValue;
+        const snapshot = getActiveHitPointsSnapshot();
+        if (!snapshot) {
+          hitPointsEditSession = null;
+          return;
         }
-        refreshTokenSettings();
+        hitPointsEditSession = {
+          placementId: activeTokenSettingsId,
+          originalCurrent: snapshot.current,
+          originalMax: snapshot.max,
+        };
+      });
+
+      menu.hpCurrentInput.addEventListener('keydown', (event) => {
+        if (event.key === 'Enter') {
+          event.preventDefault();
+          const committed = commitHitPointsInput(menu.hpCurrentInput.value);
+          if (!committed) {
+            return;
+          }
+        } else if (event.key === 'Escape') {
+          event.preventDefault();
+          if (hitPointsEditSession) {
+            restoreHitPointsInputValue();
+            hitPointsEditSession = null;
+          }
+          menu.hpCurrentInput.blur();
+        }
+      });
+
+      menu.hpCurrentInput.addEventListener('input', () => {
+        if (
+          !hitPointsEditSession &&
+          activeTokenSettingsId &&
+          document.activeElement === menu.hpCurrentInput
+        ) {
+          const snapshot = getActiveHitPointsSnapshot();
+          if (snapshot) {
+            hitPointsEditSession = {
+              placementId: activeTokenSettingsId,
+              originalCurrent: snapshot.current,
+              originalMax: snapshot.max,
+            };
+          }
+        }
       });
 
       menu.hpCurrentInput.addEventListener('blur', () => {
-        const normalized = normalizeHitPointsValue(menu.hpCurrentInput.value);
-        if (menu.hpCurrentInput.value !== normalized) {
-          menu.hpCurrentInput.value = normalized;
+        if (!hitPointsEditSession) {
+          return;
         }
+        restoreHitPointsInputValue();
+        hitPointsEditSession = null;
       });
     }
 
@@ -2308,6 +2455,7 @@ export function mountBoardInteractions(store, routes = {}) {
     }
 
     activeTokenSettingsId = placementId;
+    hitPointsEditSession = null;
     syncTokenSettingsForm(placement);
 
     tokenSettingsMenu.element.hidden = false;
@@ -2339,6 +2487,7 @@ export function mountBoardInteractions(store, routes = {}) {
     }
 
     activeTokenSettingsId = null;
+    hitPointsEditSession = null;
   }
 
   function focusTokenSettings() {
@@ -2464,7 +2613,7 @@ export function mountBoardInteractions(store, routes = {}) {
     const hitPoints = ensurePlacementHitPoints(placement.hp);
 
     if (tokenSettingsMenu.hpCurrentInput) {
-      if (tokenSettingsMenu.hpCurrentInput.value !== hitPoints.current) {
+      if (!isEditingHitPoints() && tokenSettingsMenu.hpCurrentInput.value !== hitPoints.current) {
         tokenSettingsMenu.hpCurrentInput.value = hitPoints.current;
       }
       tokenSettingsMenu.hpCurrentInput.disabled = !showHp;
