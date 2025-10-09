@@ -3,6 +3,7 @@ import {
   createSceneFolder,
   deleteScene,
 } from '../services/scene-service.js';
+import { persistBoardState } from '../services/board-state-service.js';
 
 export function renderSceneList(routes, store) {
   const container = document.getElementById('scene-manager');
@@ -38,6 +39,20 @@ export function renderSceneList(routes, store) {
   render(stateApi.getState?.());
   stateApi.subscribe?.((nextState) => render(nextState));
 
+  const persistBoardStateSnapshot = () => {
+    if (!endpoints.state || typeof stateApi.getState !== 'function') {
+      return;
+    }
+
+    const latest = stateApi.getState?.();
+    const boardState = latest?.boardState ?? null;
+    if (!boardState || typeof boardState !== 'object') {
+      return;
+    }
+
+    persistBoardState(endpoints.state, boardState);
+  };
+
   container.addEventListener('click', async (event) => {
     const target = event.target.closest('[data-action]');
     if (!target) return;
@@ -65,6 +80,8 @@ export function renderSceneList(routes, store) {
         draft.grid.locked = Boolean(scene.grid?.locked);
         draft.grid.visible = scene.grid?.visible ?? draft.grid.visible;
       });
+
+      persistBoardStateSnapshot();
     }
 
     if (action === 'delete-scene' && sceneId) {
@@ -83,6 +100,7 @@ export function renderSceneList(routes, store) {
             draft.boardState.mapUrl = null;
           }
         });
+        persistBoardStateSnapshot();
         showFeedback(feedback, 'Scene deleted.', 'info');
       } catch (error) {
         console.error('[VTT] Failed to delete scene', error);
@@ -141,6 +159,8 @@ export function renderSceneList(routes, store) {
           ...scene.grid,
         };
       });
+
+      persistBoardStateSnapshot();
 
       if (nameInput) {
         nameInput.value = '';
