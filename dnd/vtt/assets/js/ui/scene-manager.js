@@ -68,17 +68,21 @@ export function renderSceneList(routes, store) {
 
       stateApi.updateState?.((draft) => {
         ensureSceneDraft(draft);
-        if (!draft.boardState || typeof draft.boardState !== 'object') {
-          draft.boardState = { activeSceneId: null, mapUrl: null };
-        }
-        draft.boardState.activeSceneId = scene.id;
-        draft.boardState.mapUrl = scene.mapUrl ?? null;
+        const boardDraft = ensureBoardStateDraft(draft);
+        boardDraft.activeSceneId = scene.id;
+        boardDraft.mapUrl = scene.mapUrl ?? null;
+        const sceneBoardState = ensureSceneBoardStateEntry(
+          boardDraft,
+          scene.id,
+          scene.grid ?? null
+        );
         if (!draft.grid || typeof draft.grid !== 'object') {
           draft.grid = { size: 64, locked: false, visible: true };
         }
-        draft.grid.size = Number.isFinite(scene.grid?.size) ? scene.grid.size : draft.grid.size;
-        draft.grid.locked = Boolean(scene.grid?.locked);
-        draft.grid.visible = scene.grid?.visible ?? draft.grid.visible;
+        const sceneGrid = sceneBoardState?.grid ?? normalizeGridConfig(scene.grid ?? {});
+        draft.grid.size = sceneGrid.size;
+        draft.grid.locked = sceneGrid.locked;
+        draft.grid.visible = sceneGrid.visible;
       });
 
       persistBoardStateSnapshot();
@@ -95,9 +99,16 @@ export function renderSceneList(routes, store) {
         stateApi.updateState?.((draft) => {
           ensureSceneDraft(draft);
           draft.scenes.items = draft.scenes.items.filter((item) => item.id !== sceneId);
-          if (draft.boardState?.activeSceneId === sceneId) {
-            draft.boardState.activeSceneId = null;
-            draft.boardState.mapUrl = null;
+          const boardDraft = ensureBoardStateDraft(draft);
+          if (boardDraft.activeSceneId === sceneId) {
+            boardDraft.activeSceneId = null;
+            boardDraft.mapUrl = null;
+          }
+          if (boardDraft.placements && typeof boardDraft.placements === 'object') {
+            delete boardDraft.placements[sceneId];
+          }
+          if (boardDraft.sceneState && typeof boardDraft.sceneState === 'object') {
+            delete boardDraft.sceneState[sceneId];
           }
         });
         persistBoardStateSnapshot();
@@ -146,18 +157,17 @@ export function renderSceneList(routes, store) {
         if (scene.folderId && !hasFolder && scene.folder) {
           draft.scenes.folders.push(scene.folder);
         }
-        if (!draft.boardState || typeof draft.boardState !== 'object') {
-          draft.boardState = { activeSceneId: null, mapUrl: null };
-        }
-        draft.boardState.activeSceneId = scene.id;
-        draft.boardState.mapUrl = scene.mapUrl ?? null;
+        const boardDraft = ensureBoardStateDraft(draft);
+        boardDraft.activeSceneId = scene.id;
+        boardDraft.mapUrl = scene.mapUrl ?? null;
+        const sceneBoardState = ensureSceneBoardStateEntry(boardDraft, scene.id, scene.grid ?? null);
         if (!draft.grid || typeof draft.grid !== 'object') {
           draft.grid = { size: 64, locked: false, visible: true };
         }
-        draft.grid = {
-          ...draft.grid,
-          ...scene.grid,
-        };
+        const gridConfig = sceneBoardState?.grid ?? normalizeGridConfig(scene.grid ?? {});
+        draft.grid.size = gridConfig.size;
+        draft.grid.locked = gridConfig.locked;
+        draft.grid.visible = gridConfig.visible;
       });
 
       persistBoardStateSnapshot();
@@ -228,6 +238,59 @@ function ensureSceneDraft(draft) {
     draft.scenes.folders = Array.isArray(draft.scenes.folders) ? draft.scenes.folders : [];
     draft.scenes.items = Array.isArray(draft.scenes.items) ? draft.scenes.items : [];
   }
+}
+
+function ensureBoardStateDraft(draft) {
+  if (!draft.boardState || typeof draft.boardState !== 'object') {
+    draft.boardState = { activeSceneId: null, mapUrl: null, placements: {}, sceneState: {} };
+  }
+
+  if (!draft.boardState.placements || typeof draft.boardState.placements !== 'object') {
+    draft.boardState.placements = {};
+  }
+
+  if (!draft.boardState.sceneState || typeof draft.boardState.sceneState !== 'object') {
+    draft.boardState.sceneState = {};
+  }
+
+  return draft.boardState;
+}
+
+function ensureSceneBoardStateEntry(boardState, sceneId, fallbackGrid = null) {
+  if (!boardState || !sceneId) {
+    return null;
+  }
+
+  const key = typeof sceneId === 'string' ? sceneId : String(sceneId);
+  if (!key) {
+    return null;
+  }
+
+  if (!boardState.sceneState || typeof boardState.sceneState !== 'object') {
+    boardState.sceneState = {};
+  }
+
+  const existing = boardState.sceneState[key];
+  if (existing && typeof existing === 'object') {
+    existing.grid = normalizeGridConfig(existing.grid ?? fallbackGrid ?? {});
+    return existing;
+  }
+
+  const entry = { grid: normalizeGridConfig(fallbackGrid ?? {}) };
+  boardState.sceneState[key] = entry;
+  return entry;
+}
+
+function normalizeGridConfig(raw = {}) {
+  const sizeValue = Number.parseInt(raw.size, 10);
+  const size = Number.isFinite(sizeValue) ? sizeValue : Number(raw.size);
+  const resolvedSize = Number.isFinite(size) ? Math.max(8, Math.min(320, Math.trunc(size))) : 64;
+
+  return {
+    size: resolvedSize,
+    locked: Boolean(raw.locked),
+    visible: raw.visible === undefined ? true : Boolean(raw.visible),
+  };
 }
 
 function updateFolderOptions(select, folders = []) {

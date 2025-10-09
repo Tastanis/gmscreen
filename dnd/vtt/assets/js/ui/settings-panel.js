@@ -1,5 +1,6 @@
 import { renderSceneList } from './scene-manager.js';
 import { renderTokenLibrary } from './token-library.js';
+import { persistBoardState } from '../services/board-state-service.js';
 
 export function mountSettingsPanel(routes, store, user = {}) {
   const panel = document.getElementById('vtt-settings-panel');
@@ -55,6 +56,24 @@ export function mountSettingsPanel(routes, store, user = {}) {
   const initialState = typeof storeApi.getState === 'function' ? storeApi.getState() : {};
   const isGM = Boolean(user?.isGM ?? initialState?.user?.isGM);
 
+  const persistBoardStateSnapshot = () => {
+    if (!routes?.state || typeof storeApi.getState !== 'function') {
+      return;
+    }
+
+    const latest = storeApi.getState();
+    if (!latest?.user?.isGM) {
+      return;
+    }
+
+    const boardState = latest?.boardState ?? null;
+    if (!boardState || typeof boardState !== 'object') {
+      return;
+    }
+
+    persistBoardState(routes.state, boardState);
+  };
+
   const syncGridControls = (state) => {
     const gridState = state?.grid ?? {};
     const parsedSize = Number.parseInt(gridState.size, 10);
@@ -95,6 +114,33 @@ export function mountSettingsPanel(routes, store, user = {}) {
     }
   };
 
+  const syncGridToActiveScene = (draft) => {
+    if (!draft || typeof draft !== 'object') {
+      return;
+    }
+
+    if (!draft.boardState || typeof draft.boardState !== 'object') {
+      draft.boardState = { activeSceneId: null, mapUrl: null, placements: {}, sceneState: {} };
+    }
+
+    if (!draft.boardState.sceneState || typeof draft.boardState.sceneState !== 'object') {
+      draft.boardState.sceneState = {};
+    }
+
+    const activeSceneId = draft.boardState.activeSceneId;
+    if (!activeSceneId) {
+      return;
+    }
+
+    const size = Math.max(8, Number.parseInt(draft.grid.size, 10) || 64);
+    const locked = Boolean(draft.grid.locked);
+    const visible = draft.grid.visible === undefined ? true : Boolean(draft.grid.visible);
+
+    const entry = draft.boardState.sceneState[activeSceneId] ?? {};
+    entry.grid = { size, locked, visible };
+    draft.boardState.sceneState[activeSceneId] = entry;
+  };
+
   if (gridSizeInput && typeof storeApi.updateState === 'function') {
     gridSizeInput.addEventListener('input', () => {
       const nextSize = Number.parseInt(gridSizeInput.value, 10);
@@ -103,7 +149,9 @@ export function mountSettingsPanel(routes, store, user = {}) {
       storeApi.updateState((draft) => {
         ensureGridDraft(draft);
         draft.grid.size = Math.max(8, nextSize);
+        syncGridToActiveScene(draft);
       });
+      persistBoardStateSnapshot();
     });
   }
 
@@ -112,7 +160,9 @@ export function mountSettingsPanel(routes, store, user = {}) {
       storeApi.updateState((draft) => {
         ensureGridDraft(draft);
         draft.grid.visible = !draft.grid.visible;
+        syncGridToActiveScene(draft);
       });
+      persistBoardStateSnapshot();
     });
   }
 
@@ -121,7 +171,9 @@ export function mountSettingsPanel(routes, store, user = {}) {
       storeApi.updateState((draft) => {
         ensureGridDraft(draft);
         draft.grid.locked = !draft.grid.locked;
+        syncGridToActiveScene(draft);
       });
+      persistBoardStateSnapshot();
     });
   }
 

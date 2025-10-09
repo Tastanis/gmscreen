@@ -5,7 +5,7 @@ export const PLAYER_VISIBLE_TOKEN_FOLDER = "PC's";
 const state = {
   scenes: { folders: [], items: [] },
   tokens: { folders: [], items: [] },
-  boardState: { activeSceneId: null, placements: {}, mapUrl: null },
+  boardState: { activeSceneId: null, placements: {}, mapUrl: null, sceneState: {} },
   grid: { size: 64, locked: false, visible: true },
   user: { isGM: false, name: '' },
 };
@@ -21,12 +21,17 @@ export function initializeState(snapshot = {}) {
   state.boardState.placements = normalizePlacements(
     boardSnapshot.placements ?? state.boardState.placements ?? {}
   );
+  state.boardState.sceneState = normalizeSceneBoardState(
+    boardSnapshot.sceneState ?? state.boardState.sceneState ?? {}
+  );
   if (snapshot.grid && typeof snapshot.grid === 'object') {
     state.grid = {
       ...state.grid,
       ...snapshot.grid,
     };
   }
+
+  applySceneGridState(state);
 
   const snapshotUser = snapshot.user && typeof snapshot.user === 'object' ? snapshot.user : {};
   const isGM = Boolean(
@@ -117,6 +122,69 @@ function normalizePlacements(raw = {}) {
       .filter(Boolean);
   });
   return normalized;
+}
+
+function normalizeSceneBoardState(raw = {}) {
+  if (!raw || typeof raw !== 'object') {
+    return {};
+  }
+
+  const normalized = {};
+  Object.keys(raw).forEach((sceneId) => {
+    const key = typeof sceneId === 'string' ? sceneId.trim() : String(sceneId || '');
+    if (!key) {
+      return;
+    }
+
+    const value = raw[sceneId];
+    if (!value || typeof value !== 'object') {
+      return;
+    }
+
+    const grid = normalizeGridState(value.grid ?? value);
+    normalized[key] = { grid };
+  });
+
+  return normalized;
+}
+
+function normalizeGridState(raw = {}) {
+  const sizeValue = Number.parseInt(raw.size, 10);
+  const size = Number.isFinite(sizeValue) ? sizeValue : Number(raw.size);
+  const resolvedSize = Number.isFinite(size) ? Math.max(8, Math.min(320, Math.trunc(size))) : 64;
+
+  return {
+    size: resolvedSize,
+    locked: Boolean(raw.locked),
+    visible: raw.visible === undefined ? true : Boolean(raw.visible),
+  };
+}
+
+function applySceneGridState(state) {
+  if (!state || !state.boardState) {
+    return;
+  }
+
+  const activeSceneId = state.boardState.activeSceneId;
+  if (!activeSceneId) {
+    return;
+  }
+
+  const sceneState = state.boardState.sceneState ?? {};
+  if (!sceneState || typeof sceneState !== 'object') {
+    return;
+  }
+
+  const sceneEntry = sceneState[activeSceneId];
+  if (!sceneEntry || typeof sceneEntry !== 'object') {
+    return;
+  }
+
+  const gridState = normalizeGridState(sceneEntry.grid ?? sceneEntry);
+  state.grid = {
+    ...state.grid,
+    ...gridState,
+  };
 }
 
 export function restrictTokensToPlayerView(tokenState = {}) {

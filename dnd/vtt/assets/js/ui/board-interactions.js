@@ -5,6 +5,7 @@ import {
   isMeasureModeActive,
   updateExternalMeasurement,
 } from './drag-ruler.js';
+import { persistBoardState } from '../services/board-state-service.js';
 
 export function mountBoardInteractions(store, routes = {}) {
   const board = document.getElementById('vtt-board-canvas');
@@ -62,6 +63,24 @@ export function mountBoardInteractions(store, routes = {}) {
   let removeTokenSettingsListeners = null;
   let hitPointsEditSession = null;
 
+  const persistBoardStateSnapshot = () => {
+    if (!routes?.state || typeof boardApi.getState !== 'function') {
+      return;
+    }
+
+    const latest = boardApi.getState();
+    if (!latest?.user?.isGM) {
+      return;
+    }
+
+    const boardState = latest?.boardState ?? null;
+    if (!boardState || typeof boardState !== 'object') {
+      return;
+    }
+
+    persistBoardState(routes.state, boardState);
+  };
+
   board.addEventListener('keydown', (event) => {
     if (event.key === 'Delete' || event.key === 'Backspace') {
       if (!selectedTokenIds.size) {
@@ -107,11 +126,10 @@ export function mountBoardInteractions(store, routes = {}) {
         }
 
         boardApi.updateState?.((draft) => {
-          if (!draft.boardState || typeof draft.boardState !== 'object') {
-            draft.boardState = {};
-          }
-          draft.boardState.mapUrl = url;
+          const boardDraft = ensureBoardStateDraft(draft);
+          boardDraft.mapUrl = url;
         });
+        persistBoardStateSnapshot();
 
         if (status) {
           status.textContent = 'Map uploaded successfully. Right-click to pan and scroll to zoom.';
@@ -406,6 +424,8 @@ export function mountBoardInteractions(store, routes = {}) {
       const scenePlacements = ensureScenePlacementDraft(draft, activeSceneId);
       scenePlacements.push(placement);
     });
+
+    persistBoardStateSnapshot();
 
     if (status) {
       const label = template.name ? `"${template.name}"` : 'Token';
@@ -885,6 +905,10 @@ export function mountBoardInteractions(store, routes = {}) {
       });
     });
 
+    if (movedCount) {
+      persistBoardStateSnapshot();
+    }
+
     if (movedCount && status) {
       const noun = movedCount === 1 ? 'token' : 'tokens';
       status.textContent = `Moved ${movedCount} ${noun}.`;
@@ -1065,6 +1089,10 @@ export function mountBoardInteractions(store, routes = {}) {
       });
     });
 
+    if (moved) {
+      persistBoardStateSnapshot();
+    }
+
     if (moved && status) {
       const count = selectedSet.size;
       const noun = count === 1 ? 'token' : 'tokens';
@@ -1110,6 +1138,7 @@ export function mountBoardInteractions(store, routes = {}) {
     });
 
     if (removedCount > 0) {
+      persistBoardStateSnapshot();
       selectedTokenIds.clear();
       if (status) {
         const noun = removedCount === 1 ? 'token' : 'tokens';
@@ -1986,6 +2015,8 @@ export function mountBoardInteractions(store, routes = {}) {
       return false;
     }
 
+    persistBoardStateSnapshot();
+
     const latestState = boardApi.getState?.() ?? {};
     const placement = resolvePlacementById(latestState, activeSceneId, placementId);
     if (status && placement) {
@@ -2001,15 +2032,16 @@ export function mountBoardInteractions(store, routes = {}) {
 
   function updatePlacementById(placementId, mutator) {
     if (!placementId || typeof mutator !== 'function' || typeof boardApi.updateState !== 'function') {
-      return;
+      return false;
     }
 
     const state = boardApi.getState?.() ?? {};
     const activeSceneId = state.boardState?.activeSceneId ?? null;
     if (!activeSceneId) {
-      return;
+      return false;
     }
 
+    let updated = false;
     boardApi.updateState?.((draft) => {
       const scenePlacements = ensureScenePlacementDraft(draft, activeSceneId);
       const target = scenePlacements.find((item) => item && item.id === placementId);
@@ -2017,7 +2049,14 @@ export function mountBoardInteractions(store, routes = {}) {
         return;
       }
       mutator(target);
+      updated = true;
     });
+
+    if (updated) {
+      persistBoardStateSnapshot();
+    }
+
+    return updated;
   }
 
   function getPlacementFromStore(placementId) {
@@ -2634,19 +2673,29 @@ export function mountBoardInteractions(store, routes = {}) {
   }
 
   function ensureScenePlacementDraft(draft, sceneId) {
+    const boardDraft = ensureBoardStateDraft(draft);
+
+    if (!Array.isArray(boardDraft.placements[sceneId])) {
+      boardDraft.placements[sceneId] = [];
+    }
+
+    return boardDraft.placements[sceneId];
+  }
+
+  function ensureBoardStateDraft(draft) {
     if (!draft.boardState || typeof draft.boardState !== 'object') {
-      draft.boardState = { activeSceneId: null, mapUrl: null, placements: {} };
+      draft.boardState = { activeSceneId: null, mapUrl: null, placements: {}, sceneState: {} };
     }
 
     if (!draft.boardState.placements || typeof draft.boardState.placements !== 'object') {
       draft.boardState.placements = {};
     }
 
-    if (!Array.isArray(draft.boardState.placements[sceneId])) {
-      draft.boardState.placements[sceneId] = [];
+    if (!draft.boardState.sceneState || typeof draft.boardState.sceneState !== 'object') {
+      draft.boardState.sceneState = {};
     }
 
-    return draft.boardState.placements[sceneId];
+    return draft.boardState;
   }
 
   function createPlacementId() {

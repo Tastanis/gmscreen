@@ -34,6 +34,9 @@ pnpm-lock.yaml
 # VTT scene data
 /dnd/vtt/storage/scenes.json
 /dnd/vtt/storage/uploads/
+/dnd/vtt/storage/board-state.json
+/dnd/vtt/storage/tokens.json
+/dnd/vtt/storage/tokens/
 
 # Schedule data
 /dnd/schedule/data/schedules.json
