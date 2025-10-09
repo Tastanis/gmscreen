@@ -143,12 +143,23 @@ function sanitizeBoardStateUpdates(array $raw): array
         }
     }
 
+    if (array_key_exists('sceneState', $raw)) {
+        $rawSceneState = $raw['sceneState'];
+        if ($rawSceneState === null) {
+            $updates['sceneState'] = [];
+        } elseif (is_array($rawSceneState)) {
+            $updates['sceneState'] = normalizeSceneStatePayload($rawSceneState);
+        } else {
+            throw new InvalidArgumentException('Scene state must be an array or object.');
+        }
+    }
+
     return $updates;
 }
 
 /**
  * @param mixed $raw
- * @return array{activeSceneId: ?string, mapUrl: ?string, placements: array}
+ * @return array{activeSceneId: ?string, mapUrl: ?string, placements: array, sceneState: array}
  */
 function normalizeBoardState($raw): array
 {
@@ -156,6 +167,7 @@ function normalizeBoardState($raw): array
         'activeSceneId' => null,
         'mapUrl' => null,
         'placements' => [],
+        'sceneState' => [],
     ];
 
     if (!is_array($raw)) {
@@ -186,6 +198,10 @@ function normalizeBoardState($raw): array
         $state['placements'] = normalizePlacementsPayload($raw['placements']);
     }
 
+    if (array_key_exists('sceneState', $raw) && is_array($raw['sceneState'])) {
+        $state['sceneState'] = normalizeSceneStatePayload($raw['sceneState']);
+    }
+
     return $state;
 }
 
@@ -210,6 +226,63 @@ function normalizePlacementsPayload(array $rawPlacements): array
     }
 
     return $normalized;
+}
+
+/**
+ * @param array<string|int,mixed> $rawSceneState
+ * @return array<string,array<string,mixed>>
+ */
+function normalizeSceneStatePayload(array $rawSceneState): array
+{
+    $normalized = [];
+
+    foreach ($rawSceneState as $sceneId => $config) {
+        if (!is_array($config)) {
+            continue;
+        }
+
+        $key = is_string($sceneId) ? trim($sceneId) : (string) $sceneId;
+        if ($key === '') {
+            continue;
+        }
+
+        $gridSource = $config['grid'] ?? $config;
+        $normalized[$key] = [
+            'grid' => normalizeGridSettings($gridSource),
+        ];
+    }
+
+    return $normalized;
+}
+
+/**
+ * @param mixed $grid
+ */
+function normalizeGridSettings($grid): array
+{
+    $size = 64;
+    $locked = false;
+    $visible = true;
+
+    if (is_array($grid)) {
+        if (array_key_exists('size', $grid) && is_numeric($grid['size'])) {
+            $size = max(8, min(320, (int) round((float) $grid['size'])));
+        }
+
+        if (array_key_exists('locked', $grid)) {
+            $locked = (bool) $grid['locked'];
+        }
+
+        if (array_key_exists('visible', $grid)) {
+            $visible = (bool) $grid['visible'];
+        }
+    }
+
+    return [
+        'size' => $size,
+        'locked' => $locked,
+        'visible' => $visible,
+    ];
 }
 
 function respondJson(int $status, array $payload): void
