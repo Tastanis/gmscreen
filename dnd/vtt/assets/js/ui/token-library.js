@@ -756,7 +756,7 @@ function createTokenContextMenu(root) {
         </select>
       </div>
       <div class="token-context-menu__field">
-        <label for="token-context-hp">HP</label>
+        <label for="token-context-hp">Max HP</label>
         <input
           id="token-context-hp"
           type="number"

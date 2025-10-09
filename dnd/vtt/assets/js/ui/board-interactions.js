@@ -56,6 +56,7 @@ export function mountBoardInteractions(store, routes = {}) {
   const MAX_QUEUED_MOVEMENTS = 12;
   const DRAG_ACTIVATION_DISTANCE = 6;
   const DEFAULT_HP_PLACEHOLDER = '—';
+  const DEFAULT_HP_DISPLAY = `${DEFAULT_HP_PLACEHOLDER} / ${DEFAULT_HP_PLACEHOLDER}`;
   const tokenSettingsMenu = createTokenSettingsMenu();
   let activeTokenSettingsId = null;
   let removeTokenSettingsListeners = null;
@@ -1494,7 +1495,6 @@ export function mountBoardInteractions(store, routes = {}) {
 
   function syncTokenHitPoints(tokenElement, placement) {
     const showHp = Boolean(placement.showHp);
-    const hpValue = normalizeHitPointsValue(placement.hp);
     let hpBar = tokenElement.querySelector('.vtt-token__hp-bar');
 
     if (!showHp) {
@@ -1507,18 +1507,46 @@ export function mountBoardInteractions(store, routes = {}) {
     if (!hpBar) {
       hpBar = document.createElement('div');
       hpBar.className = 'vtt-token__hp-bar';
-      const value = document.createElement('span');
-      value.className = 'vtt-token__hp-value';
-      hpBar.appendChild(value);
       tokenElement.appendChild(hpBar);
     }
 
-    const valueElement = hpBar.querySelector('.vtt-token__hp-value');
-    const displayValue = hpValue || DEFAULT_HP_PLACEHOLDER;
+    let track = hpBar.querySelector('.vtt-token__hp-track');
+    if (!track) {
+      track = document.createElement('div');
+      track.className = 'vtt-token__hp-track';
+      hpBar.insertBefore(track, hpBar.firstChild || null);
+    }
+
+    let fillElement = track.querySelector('.vtt-token__hp-fill');
+    if (!fillElement) {
+      fillElement = document.createElement('div');
+      fillElement.className = 'vtt-token__hp-fill';
+      track.appendChild(fillElement);
+    }
+
+    let valueElement = hpBar.querySelector('.vtt-token__hp-value');
+    if (!valueElement) {
+      valueElement = document.createElement('span');
+      valueElement.className = 'vtt-token__hp-value';
+      hpBar.appendChild(valueElement);
+    }
+
+    const hp = normalizePlacementHitPoints(placement.hp);
+    const displayValue = formatHitPointsDisplay(hp);
+
     if (valueElement && valueElement.textContent !== displayValue) {
       valueElement.textContent = displayValue;
     }
-    hpBar.dataset.empty = hpValue ? 'false' : 'true';
+
+    if (fillElement) {
+      const percent = calculateHitPointsFillPercentage(hp);
+      fillElement.style.width = `${percent}%`;
+    }
+
+    const isEmpty = !hp || (hp.current === '' && hp.max === '');
+    hpBar.dataset.empty = isEmpty ? 'true' : 'false';
+    const ariaLabel = isEmpty ? 'Hit points not set' : `${displayValue} hit points`;
+    hpBar.setAttribute('aria-label', ariaLabel);
   }
 
   function syncTriggeredActionIndicator(tokenElement, placement) {
@@ -1701,8 +1729,13 @@ export function mountBoardInteractions(store, routes = {}) {
     const height = Math.max(1, toNonNegativeNumber(placement.height ?? placement.rows ?? 1));
     const name = typeof placement.name === 'string' ? placement.name : '';
     const imageUrl = typeof placement.imageUrl === 'string' ? placement.imageUrl : '';
-    const hp = normalizeHitPointsValue(
-      placement.hp ?? placement.hitPoints ?? placement?.overlays?.hitPoints?.value ?? null
+    const hp = normalizePlacementHitPoints(
+      placement.hp ??
+        placement.hitPoints ??
+        placement?.overlays?.hitPoints ??
+        placement?.overlays?.hitPoints?.value ??
+        placement?.stats?.hp ??
+        null
     );
     const showHp = Boolean(placement.showHp ?? placement.showHitPoints ?? placement?.overlays?.hitPoints?.visible ?? false);
     const showTriggeredAction = Boolean(
@@ -1827,14 +1860,15 @@ export function mountBoardInteractions(store, routes = {}) {
 
       const rawSize = typeof parsed.size === 'string' ? parsed.size : '';
       const size = rawSize.trim() || '1x1';
-      const hp = normalizeHitPointsValue(parsed.hp ?? parsed.hitPoints ?? null);
+      const maxHp = normalizeHitPointsValue(parsed.hp ?? parsed.hitPoints ?? null);
 
       return {
         id: typeof parsed.id === 'string' ? parsed.id : null,
         name: typeof parsed.name === 'string' ? parsed.name : '',
         imageUrl,
         size,
-        hp,
+        maxHp,
+        hp: maxHp,
       };
     } catch (error) {
       console.warn('[VTT] Failed to parse dropped token payload', error);
@@ -1903,6 +1937,8 @@ export function mountBoardInteractions(store, routes = {}) {
     column = Math.max(0, Math.min(column, maxColumn));
     row = Math.max(0, Math.min(row, maxRow));
 
+    const hitPoints = normalizePlacementHitPoints(template.hp ?? template.maxHp ?? null);
+
     return {
       id: createPlacementId(),
       tokenId: template.id,
@@ -1913,7 +1949,7 @@ export function mountBoardInteractions(store, routes = {}) {
       width: size.width,
       height: size.height,
       size: size.formatted,
-      hp: normalizeHitPointsValue(template.hp ?? null),
+      hp: hitPoints,
       showHp: false,
       showTriggeredAction: false,
       triggeredActionReady: true,
@@ -2039,6 +2075,89 @@ export function mountBoardInteractions(store, routes = {}) {
     return '';
   }
 
+  function normalizePlacementHitPoints(value, fallbackMax = '') {
+    const normalized = { current: '', max: '' };
+
+    if (value && typeof value === 'object') {
+      const currentSource =
+        value.current ?? value.value ?? value.hp ?? value.currentHp ?? value.hpCurrent ?? null;
+      const maxSource =
+        value.max ??
+        value.maxHp ??
+        value.total ??
+        value.maximum ??
+        value.value ??
+        value.hp ??
+        value.hitPoints ??
+        null;
+
+      normalized.current = normalizeHitPointsValue(currentSource);
+      normalized.max = normalizeHitPointsValue(maxSource);
+    } else {
+      const parsed = normalizeHitPointsValue(value);
+      normalized.current = parsed;
+      normalized.max = parsed;
+    }
+
+    const fallback = normalizeHitPointsValue(fallbackMax);
+    if (normalized.max === '' && fallback !== '') {
+      normalized.max = fallback;
+    }
+
+    if (normalized.current === '' && normalized.max !== '') {
+      normalized.current = normalized.max;
+    }
+
+    return normalized;
+  }
+
+  function ensurePlacementHitPoints(value, fallbackMax = '') {
+    const normalized = normalizePlacementHitPoints(value, fallbackMax);
+    return { current: normalized.current, max: normalized.max };
+  }
+
+  function parseHitPointsNumber(value) {
+    const normalized = normalizeHitPointsValue(value);
+    if (normalized === '') {
+      return null;
+    }
+
+    const parsed = Number.parseInt(normalized, 10);
+    if (!Number.isFinite(parsed)) {
+      return null;
+    }
+
+    return parsed;
+  }
+
+  function calculateHitPointsFillPercentage(value) {
+    const hp = normalizePlacementHitPoints(value);
+    const maxValue = parseHitPointsNumber(hp.max);
+    const currentValue = parseHitPointsNumber(hp.current);
+
+    if (maxValue === null || maxValue <= 0) {
+      if (currentValue === null || currentValue <= 0) {
+        return 0;
+      }
+      return 100;
+    }
+
+    const safeCurrent = currentValue === null ? maxValue : currentValue;
+    const ratio = Math.max(0, Math.min(safeCurrent / maxValue, 1));
+    return Math.round(ratio * 100);
+  }
+
+  function formatHitPointsDisplay(value) {
+    const hp = normalizePlacementHitPoints(value);
+    if (hp.current === '' && hp.max === '') {
+      return DEFAULT_HP_DISPLAY;
+    }
+    const currentText =
+      hp.current === '' ? (hp.max === '' ? DEFAULT_HP_PLACEHOLDER : hp.max) : hp.current;
+    const maxText = hp.max === '' ? DEFAULT_HP_PLACEHOLDER : hp.max;
+    return `${currentText} / ${maxText}`;
+  }
+
   function createTokenSettingsMenu() {
     if (!document?.body) {
       return null;
@@ -2064,7 +2183,18 @@ export function mountBoardInteractions(store, routes = {}) {
           </label>
           <label class="vtt-token-settings__field" data-token-settings-field="hitPoints">
             <span class="vtt-token-settings__field-label">Hit Points</span>
-            <input type="text" data-token-settings-input="hitPoints" autocomplete="off" autocapitalize="off" spellcheck="false" inputmode="text" />
+            <div class="vtt-token-settings__hp-group">
+              <input
+                type="text"
+                data-token-settings-input="hitPointsCurrent"
+                autocomplete="off"
+                autocapitalize="off"
+                spellcheck="false"
+                inputmode="numeric"
+              />
+              <span class="vtt-token-settings__hp-separator" aria-hidden="true">/</span>
+              <span class="vtt-token-settings__hp-max" data-token-settings-hp-max>${DEFAULT_HP_PLACEHOLDER}</span>
+            </div>
           </label>
         </div>
         <div class="vtt-token-settings__section">
@@ -2085,7 +2215,8 @@ export function mountBoardInteractions(store, routes = {}) {
       closeButton: element.querySelector('[data-token-settings-close]'),
       showHpToggle: element.querySelector('[data-token-settings-toggle="hitPoints"]'),
       hpField: element.querySelector('[data-token-settings-field="hitPoints"]'),
-      hpInput: element.querySelector('[data-token-settings-input="hitPoints"]'),
+      hpCurrentInput: element.querySelector('[data-token-settings-input="hitPointsCurrent"]'),
+      hpMaxDisplay: element.querySelector('[data-token-settings-hp-max]'),
       triggeredToggle: element.querySelector('[data-token-settings-toggle="triggeredAction"]'),
     };
 
@@ -2105,33 +2236,38 @@ export function mountBoardInteractions(store, routes = {}) {
         const visible = menu.showHpToggle.checked;
         updatePlacementById(activeTokenSettingsId, (target) => {
           target.showHp = Boolean(visible);
-          if (visible && typeof target.hp !== 'string' && typeof target.hp !== 'number') {
-            target.hp = '';
+          if (visible) {
+            target.hp = ensurePlacementHitPoints(target.hp);
           }
         });
         refreshTokenSettings();
       });
     }
 
-    if (menu.hpInput) {
-      menu.hpInput.addEventListener('input', () => {
+    if (menu.hpCurrentInput) {
+      menu.hpCurrentInput.addEventListener('input', () => {
         if (!activeTokenSettingsId) {
           return;
         }
-        const nextValue = normalizeHitPointsValue(menu.hpInput.value);
+        const nextValue = normalizeHitPointsValue(menu.hpCurrentInput.value);
         updatePlacementById(activeTokenSettingsId, (target) => {
-          target.hp = nextValue;
+          const hitPoints = ensurePlacementHitPoints(target.hp);
+          hitPoints.current = nextValue;
+          if (hitPoints.max === '' && nextValue !== '') {
+            hitPoints.max = nextValue;
+          }
+          target.hp = hitPoints;
         });
-        if (menu.hpInput.value !== nextValue) {
-          menu.hpInput.value = nextValue;
+        if (menu.hpCurrentInput.value !== nextValue) {
+          menu.hpCurrentInput.value = nextValue;
         }
         refreshTokenSettings();
       });
 
-      menu.hpInput.addEventListener('blur', () => {
-        const normalized = normalizeHitPointsValue(menu.hpInput.value);
-        if (menu.hpInput.value !== normalized) {
-          menu.hpInput.value = normalized;
+      menu.hpCurrentInput.addEventListener('blur', () => {
+        const normalized = normalizeHitPointsValue(menu.hpCurrentInput.value);
+        if (menu.hpCurrentInput.value !== normalized) {
+          menu.hpCurrentInput.value = normalized;
         }
       });
     }
@@ -2149,6 +2285,12 @@ export function mountBoardInteractions(store, routes = {}) {
           }
         });
         refreshTokenSettings();
+      });
+    }
+
+    if (menu.form) {
+      menu.form.addEventListener('submit', (event) => {
+        event.preventDefault();
       });
     }
 
@@ -2207,10 +2349,10 @@ export function mountBoardInteractions(store, routes = {}) {
     let focusTarget = null;
     if (
       tokenSettingsMenu.showHpToggle?.checked &&
-      tokenSettingsMenu.hpInput &&
-      tokenSettingsMenu.hpInput.disabled === false
+      tokenSettingsMenu.hpCurrentInput &&
+      tokenSettingsMenu.hpCurrentInput.disabled === false
     ) {
-      focusTarget = tokenSettingsMenu.hpInput;
+      focusTarget = tokenSettingsMenu.hpCurrentInput;
     } else if (tokenSettingsMenu.showHpToggle) {
       focusTarget = tokenSettingsMenu.showHpToggle;
     } else if (tokenSettingsMenu.triggeredToggle) {
@@ -2319,12 +2461,18 @@ export function mountBoardInteractions(store, routes = {}) {
       tokenSettingsMenu.showHpToggle.checked = showHp;
     }
 
-    if (tokenSettingsMenu.hpInput) {
-      const hpValue = normalizeHitPointsValue(placement.hp);
-      if (tokenSettingsMenu.hpInput.value !== hpValue) {
-        tokenSettingsMenu.hpInput.value = hpValue;
+    const hitPoints = ensurePlacementHitPoints(placement.hp);
+
+    if (tokenSettingsMenu.hpCurrentInput) {
+      if (tokenSettingsMenu.hpCurrentInput.value !== hitPoints.current) {
+        tokenSettingsMenu.hpCurrentInput.value = hitPoints.current;
       }
-      tokenSettingsMenu.hpInput.disabled = !showHp;
+      tokenSettingsMenu.hpCurrentInput.disabled = !showHp;
+    }
+
+    if (tokenSettingsMenu.hpMaxDisplay) {
+      tokenSettingsMenu.hpMaxDisplay.textContent =
+        hitPoints.max === '' ? DEFAULT_HP_PLACEHOLDER : hitPoints.max;
     }
 
     if (tokenSettingsMenu.hpField) {

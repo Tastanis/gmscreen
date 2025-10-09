@@ -114,8 +114,13 @@ function normalizePlacementEntry(entry) {
   const width = Math.max(1, toNonNegativeInt(entry.width ?? entry.columns ?? entry.w ?? 1));
   const height = Math.max(1, toNonNegativeInt(entry.height ?? entry.rows ?? entry.h ?? 1));
   const size = typeof entry.size === 'string' && entry.size ? entry.size : `${width}x${height}`;
-  const hp = normalizeHitPointsValue(
-    entry.hp ?? entry.hitPoints ?? entry?.overlays?.hitPoints?.value ?? entry?.stats?.hp ?? null
+  const hp = normalizePlacementHitPoints(
+    entry.hp ??
+      entry.hitPoints ??
+      entry?.overlays?.hitPoints ??
+      entry?.overlays?.hitPoints?.value ??
+      entry?.stats?.hp ??
+      null
   );
   const showHp = Boolean(
     entry.showHp ?? entry.showHitPoints ?? entry?.overlays?.hitPoints?.visible ?? false
@@ -175,4 +180,40 @@ function normalizeHitPointsValue(value) {
   }
 
   return '';
+}
+
+function normalizePlacementHitPoints(value, fallbackMax = '') {
+  const normalized = { current: '', max: '' };
+
+  if (value && typeof value === 'object') {
+    const currentSource =
+      value.current ?? value.value ?? value.hp ?? value.currentHp ?? value.hpCurrent ?? null;
+    const maxSource =
+      value.max ??
+      value.maxHp ??
+      value.total ??
+      value.maximum ??
+      value.value ??
+      value.hp ??
+      value.hitPoints ??
+      null;
+
+    normalized.current = normalizeHitPointsValue(currentSource);
+    normalized.max = normalizeHitPointsValue(maxSource);
+  } else {
+    const parsed = normalizeHitPointsValue(value);
+    normalized.current = parsed;
+    normalized.max = parsed;
+  }
+
+  const fallback = normalizeHitPointsValue(fallbackMax);
+  if (normalized.max === '' && fallback !== '') {
+    normalized.max = fallback;
+  }
+
+  if (normalized.current === '' && normalized.max !== '') {
+    normalized.current = normalized.max;
+  }
+
+  return normalized;
 }
