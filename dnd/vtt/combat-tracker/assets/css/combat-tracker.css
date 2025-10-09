@@ -1,0 +1,7 @@
+/* Placeholder stylesheet for the VTT combat tracker panel.
+   Actual styling will align with the dashboard gradient palette and VTT layout conventions. */
+
+.vtt-combat-tracker {
+  display: flex;
+  flex-direction: column;
+}

@@ -49,6 +49,7 @@ vtt/
 │   ├── tokens.php
 │   ├── uploads.php
 │   └── state.php
+├── combat-tracker/       # Self-contained combat tracker module (see README)
 ├── storage/
 │   ├── scenes.json
 │   ├── tokens.json
@@ -83,6 +84,12 @@ vtt/
 - `api/tokens.php`: Manages token templates and scene-specific placements with optimistic versioning.
 - `api/uploads.php`: Reuses existing upload sanitization pipelines for scene and token assets.
 - `api/state.php`: Delivers a combined snapshot of scenes and board state for initialization and recovery.
+
+## Combat Tracker Module
+- Lives under `combat-tracker/` to keep turn-management logic isolated from the core board.
+- Mirrors dashboard tracker capabilities (initiative, rounds, conditions) but will integrate tightly with active scenes/tokens.
+- Provides its own PHP component, API endpoints, storage file, and front-end bootstrap so the feature can ship independently.
+- See `combat-tracker/README.md` for the detailed blueprint, data model sketch, and development milestones.
 
 ## Persistence & Resilience Strategy
 - JSON files in `storage/` are the source of truth. Each write is staged to a temp file and then atomically renamed. Previous versions are stored in `storage/backups/`.
