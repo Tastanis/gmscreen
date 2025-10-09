@@ -905,6 +905,7 @@ $defaultInventoryTab = $is_gm ? 'frunk' : $user;
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>Strixhaven Report Card - <?php echo htmlspecialchars($user); ?></title>
     <link rel="stylesheet" href="css/style.css">
+    <link rel="stylesheet" href="dice-roller/dice-roller.css">
     <link rel="stylesheet" href="css/inventory.css">
     <link rel="stylesheet" href="Halloween/theme.css" id="halloween-theme" disabled>
     <link rel="stylesheet" href="Christmas/theme.css" id="christmas-theme" disabled>
@@ -1531,7 +1532,7 @@ $defaultInventoryTab = $is_gm ? 'frunk' : $user;
         }
     </script>
     <script src="js/chat-panel.js"></script>
-    <script src="js/dashboard-dice-roller.js"></script>
+    <script src="dice-roller/dice-roller.js"></script>
     <script src="js/theme-manager.js"></script>
     <script src="Halloween/theme.js" defer></script>
     <script src="Christmas/theme.js" defer></script>
