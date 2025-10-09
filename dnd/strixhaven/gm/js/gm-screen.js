@@ -1356,6 +1356,7 @@ class DiceRoller {
         const diceRow1 = [
             { text: 'D2', dice: '1d2' },
             { text: 'D4', dice: '1d4' },
+            { text: 'D6', dice: '1d6' },
             { text: 'D8', dice: '1d8' },
             { text: 'D10', dice: '1d10' },
             { text: 'D20', dice: '1d20' }
