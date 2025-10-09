@@ -450,7 +450,7 @@ function syncNodeMarkers(group, points) {
     if (!circle) {
       circle = document.createElementNS(SVG_NS, 'circle');
       circle.classList.add('vtt-measure-overlay__node');
-      circle.setAttribute('r', '6');
+      circle.setAttribute('r', '10');
       circle.setAttribute('vector-effect', 'non-scaling-stroke');
       group.appendChild(circle);
       nodes.push(circle);
@@ -517,7 +517,7 @@ function createOverlay(container) {
   total.setAttribute('text-anchor', 'middle');
   total.setAttribute('dominant-baseline', 'middle');
   total.setAttribute('hidden', 'hidden');
-  total.setAttribute('dy', '-18');
+  total.setAttribute('dy', '-28');
   svg.appendChild(total);
 
   container.appendChild(svg);

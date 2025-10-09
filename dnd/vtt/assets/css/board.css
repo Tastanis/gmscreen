@@ -473,11 +473,21 @@
   position: absolute;
   bottom: 1rem;
   right: 1rem;
-  background: rgba(15, 23, 42, 0.75);
-  padding: 0.75rem 1rem;
+  background: rgba(15, 23, 42, 0.85);
+  padding: 1rem 1.25rem;
   border-radius: var(--vtt-radius);
   border: 1px solid var(--vtt-panel-border);
   color: #fff;
+  font-size: 1.1rem;
+  font-weight: 600;
+  box-shadow: 0 12px 32px rgba(15, 23, 42, 0.35);
+}
+
+.vtt-board__ruler-value {
+  display: block;
+  font-size: 1.35rem;
+  font-weight: 700;
+  letter-spacing: 0.04em;
 }
 
 .vtt-measure-overlay {
@@ -489,8 +499,8 @@
 }
 
 .vtt-measure-overlay__path {
-  stroke: rgba(96, 165, 250, 0.85);
-  stroke-width: 3;
+  stroke: rgba(96, 165, 250, 0.9);
+  stroke-width: 6;
   stroke-linecap: round;
   stroke-linejoin: round;
   fill: none;
@@ -498,23 +508,23 @@
 
 .vtt-measure-overlay__node {
   fill: rgba(59, 130, 246, 0.95);
-  stroke: rgba(15, 23, 42, 0.9);
-  stroke-width: 3;
+  stroke: rgba(15, 23, 42, 0.92);
+  stroke-width: 4;
 }
 
 .vtt-measure-overlay__label {
   font-family: 'Inter', system-ui, -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
-  font-weight: 600;
-  font-size: 14px;
+  font-weight: 700;
+  font-size: 18px;
   fill: #fff;
   stroke: rgba(15, 23, 42, 0.85);
-  stroke-width: 4;
+  stroke-width: 6;
   paint-order: stroke fill;
-  letter-spacing: 0.02em;
+  letter-spacing: 0.04em;
 }
 
 .vtt-measure-overlay__total {
-  font-size: 16px;
-  font-weight: 700;
-  letter-spacing: 0.04em;
+  font-size: 22px;
+  font-weight: 800;
+  letter-spacing: 0.05em;
 }
