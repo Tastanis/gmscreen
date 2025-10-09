@@ -607,12 +607,20 @@ export function finalizeExternalMeasurement(point) {
 
   const snapshot = clonePoint(point);
   if (snapshot) {
-    if (!sharedState.points.length) {
+    const lastIndex = sharedState.points.length - 1;
+    if (lastIndex < 0) {
       sharedState.points = [snapshot];
-    } else if (sharedState.points.length === 1) {
-      sharedState.points.push(snapshot);
     } else {
-      sharedState.points[sharedState.points.length - 1] = snapshot;
+      const lastPoint = sharedState.points[lastIndex];
+      if (
+        lastPoint &&
+        lastPoint.column === snapshot.column &&
+        lastPoint.row === snapshot.row
+      ) {
+        sharedState.points[lastIndex] = snapshot;
+      } else {
+        sharedState.points.push(snapshot);
+      }
     }
   }
 
