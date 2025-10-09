@@ -198,6 +198,73 @@
   border-radius: 999px;
 }
 
+.vtt-template--wall {
+  --vtt-template-color: rgba(13, 148, 136, 0.92);
+}
+
+.vtt-template__shape--wall {
+  border: none;
+  background: transparent;
+}
+
+.vtt-template--preview .vtt-template__shape--wall {
+  opacity: 0.9;
+}
+
+.vtt-wall {
+  position: absolute;
+  inset: 0;
+  pointer-events: none;
+}
+
+.vtt-wall__tile {
+  position: absolute;
+  border-radius: 0.35rem;
+  background: linear-gradient(145deg, rgba(148, 163, 184, 0.95) 0%, rgba(51, 65, 85, 0.98) 90%);
+  border: 1px solid rgba(15, 23, 42, 0.65);
+  box-shadow:
+    inset 0 3px 6px rgba(255, 255, 255, 0.25),
+    inset 0 -5px 8px rgba(15, 23, 42, 0.6),
+    0 8px 18px rgba(15, 23, 42, 0.55);
+}
+
+.vtt-template--preview .vtt-wall__tile {
+  opacity: 0.9;
+}
+
+.vtt-template--wall.is-selected .vtt-wall__tile {
+  border-color: rgba(96, 165, 250, 0.9);
+  box-shadow:
+    inset 0 3px 6px rgba(255, 255, 255, 0.3),
+    inset 0 -5px 8px rgba(30, 58, 138, 0.55),
+    0 10px 20px rgba(30, 64, 175, 0.45);
+}
+
+.vtt-wall__tile::after {
+  content: '';
+  position: absolute;
+  inset: 4px 6px;
+  border-radius: 0.25rem;
+  background: linear-gradient(135deg, rgba(226, 232, 240, 0.6) 0%, rgba(51, 65, 85, 0.2) 100%);
+}
+
+.vtt-wall__connector {
+  position: absolute;
+  pointer-events: none;
+  background: linear-gradient(90deg, rgba(148, 163, 184, 0.85), rgba(51, 65, 85, 0.95));
+  border-radius: 9999px;
+  opacity: 0.9;
+  transform-origin: 50% 50%;
+}
+
+.vtt-wall__connector--se {
+  transform: rotate(45deg);
+}
+
+.vtt-wall__connector--ne {
+  transform: rotate(-45deg);
+}
+
 .vtt-template__node {
   position: absolute;
   width: var(--vtt-grid-size, 64px);

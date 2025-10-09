@@ -44,6 +44,15 @@ function renderVttChatPanel(bool $isGm = false): string
             ></textarea>
             <button type="submit" id="chat-send-btn" class="chat-panel__send">Send</button>
         </form>
+        <div
+            id="chat-drop-target"
+            class="chat-drop-target"
+            data-drop-scope="panel"
+            hidden
+            aria-hidden="true"
+        >
+            Drop images or image links to share
+        </div>
     </aside>
     <button
         id="chat-panel-toggle"
@@ -55,9 +64,6 @@ function renderVttChatPanel(bool $isGm = false): string
     >
         Open Chat
     </button>
-    <div id="chat-drop-target" class="chat-drop-target" hidden aria-hidden="true">
-        Drop images or image links to share
-    </div>
     <div id="chat-whisper-popouts" class="chat-whisper-popouts" aria-live="polite" aria-atomic="false"></div>
     <div id="chat-whisper-alerts" class="chat-whisper-alerts" aria-live="assertive" aria-atomic="true"></div>
     <?php

@@ -1110,6 +1110,26 @@ body {
     display: none;
 }
 
+.vtt-body .chat-panel {
+    position: fixed;
+    overflow: hidden;
+}
+
+.vtt-body .chat-panel .chat-drop-target {
+    position: absolute;
+    inset: 0;
+    z-index: 20;
+    border-radius: inherit;
+    pointer-events: none;
+    padding: 24px 16px 16px;
+    text-align: center;
+    line-height: 1.4;
+}
+
+.vtt-body .chat-panel .chat-drop-target:not([hidden]) {
+    pointer-events: auto;
+}
+
 .chat-toast {
     position: fixed;
     right: 20px;

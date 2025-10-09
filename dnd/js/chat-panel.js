@@ -106,6 +106,17 @@
         const sendButton = document.getElementById('chat-send-btn');
         const clearButton = document.getElementById('chat-clear-btn');
         const dropTarget = document.getElementById('chat-drop-target');
+        const dropScope = (dropTarget && dropTarget.dataset && dropTarget.dataset.dropScope)
+            ? dropTarget.dataset.dropScope
+            : (panel && panel.dataset ? panel.dataset.dropScope : '');
+        const restrictDropToPanel = dropScope === 'panel';
+        if (restrictDropToPanel && dropTarget && panel && dropTarget.parentElement !== panel) {
+            try {
+                panel.appendChild(dropTarget);
+            } catch (error) {
+                // Ignore DOM move issues.
+            }
+        }
         const whisperContainer = document.getElementById('chat-whisper-targets');
         const whisperPopoutHost = document.getElementById('chat-whisper-popouts');
         const whisperAlertHost = document.getElementById('chat-whisper-alerts');
@@ -1918,6 +1929,13 @@
             }
         }
 
+        function isChatPanelOpenNow() {
+            if (typeof isOpen === 'boolean') {
+                return isOpen;
+            }
+            return panel.classList.contains('chat-panel--open');
+        }
+
         function shouldHandleDrag(event) {
             if (!event.dataTransfer) {
                 return false;
@@ -1932,6 +1950,14 @@
             }
             if (isDragOverScene(event)) {
                 return false;
+            }
+            if (restrictDropToPanel) {
+                if (!isChatPanelOpenNow()) {
+                    return false;
+                }
+                if (!isEventWithinElement(event, panel)) {
+                    return false;
+                }
             }
             return true;
         }
@@ -2075,6 +2101,9 @@
             if (!dropTarget) {
                 return;
             }
+            if (restrictDropToPanel && !isChatPanelOpenNow()) {
+                return;
+            }
             dropTarget.hidden = false;
             dropTarget.setAttribute('aria-hidden', 'false');
         }
@@ -2087,27 +2116,44 @@
             dropTarget.setAttribute('aria-hidden', 'true');
         }
 
-        document.addEventListener('dragenter', (event) => {
-            if (shouldHandleDrag(event)) {
-                event.preventDefault();
-                showDropTarget();
-            } else {
-                hideDropTarget();
-            }
-        });
+        let dragDepth = 0;
+        const dragEventTarget = restrictDropToPanel && panel ? panel : document;
 
-        document.addEventListener('dragover', (event) => {
-            if (shouldHandleDrag(event)) {
-                event.preventDefault();
-                if (event.dataTransfer) {
-                    event.dataTransfer.dropEffect = 'copy';
+        dragEventTarget.addEventListener('dragenter', (event) => {
+            if (!shouldHandleDrag(event)) {
+                if (!restrictDropToPanel) {
+                    hideDropTarget();
                 }
-            } else {
-                hideDropTarget();
+                return;
+            }
+            event.preventDefault();
+            if (restrictDropToPanel) {
+                dragDepth += 1;
+            }
+            showDropTarget();
+        });
+
+        dragEventTarget.addEventListener('dragover', (event) => {
+            if (!shouldHandleDrag(event)) {
+                if (!restrictDropToPanel) {
+                    hideDropTarget();
+                }
+                return;
+            }
+            event.preventDefault();
+            if (event.dataTransfer) {
+                event.dataTransfer.dropEffect = 'copy';
             }
         });
 
-        document.addEventListener('dragleave', (event) => {
+        dragEventTarget.addEventListener('dragleave', (event) => {
+            if (restrictDropToPanel) {
+                dragDepth = Math.max(0, dragDepth - 1);
+                if (dragDepth === 0) {
+                    hideDropTarget();
+                }
+                return;
+            }
             if (event.target === dropTarget || !event.relatedTarget) {
                 hideDropTarget();
             }
@@ -2123,7 +2169,15 @@
                 return;
             }
 
+            if (restrictDropToPanel && !isEventWithinElement(event, panel)) {
+                return;
+            }
+
             event.preventDefault();
+
+            if (restrictDropToPanel) {
+                dragDepth = 0;
+            }
 
             if (event.dataTransfer.files && event.dataTransfer.files.length > 0) {
                 await handleFileDrop(event.dataTransfer.files);

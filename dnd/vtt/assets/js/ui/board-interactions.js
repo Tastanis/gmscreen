@@ -2851,7 +2851,7 @@ function createTemplateTool() {
       return;
     }
 
-    if (event.target && event.target.closest('.vtt-template__node')) {
+    if (placementState.type !== 'wall' && event.target && event.target.closest('.vtt-template__node')) {
       return;
     }
 
@@ -2867,12 +2867,30 @@ function createTemplateTool() {
     event.preventDefault();
     event.stopPropagation();
 
+    if (placementState.type === 'wall') {
+      handleWallPlacement(gridPoint);
+      return;
+    }
+
     if (placementState.type === 'circle') {
-      if (isFiniteNumber(placementState.values.radius)) {
+      if (placementState.stage === 'hover-circle' && previewShape) {
+        finalizePlacement({
+          type: 'circle',
+          center: { ...previewShape.center },
+          radius: Math.max(MIN_CIRCLE_RADIUS, previewShape.radius ?? MIN_CIRCLE_RADIUS),
+        });
+        return;
+      }
+
+      if (!placementState.dynamic && isFiniteNumber(placementState.values.radius)) {
+        const radius = Math.max(
+          MIN_CIRCLE_RADIUS,
+          placementState.fixedRadius ?? placementState.values.radius
+        );
         finalizePlacement({
           type: 'circle',
           center: gridPoint,
-          radius: Math.max(MIN_CIRCLE_RADIUS, placementState.values.radius),
+          radius,
         });
         return;
       }
@@ -2880,12 +2898,19 @@ function createTemplateTool() {
       placementState.stage = 'sizing-circle';
       placementState.start = gridPoint;
       placementState.pointerId = event.pointerId;
+      placementState.hasMoved = false;
+
+      clearPreview();
+      const radius = Math.max(
+        MIN_CIRCLE_RADIUS,
+        placementState.fixedRadius ?? MIN_CIRCLE_RADIUS
+      );
       previewShape = createShape('circle', {
         center: gridPoint,
-        radius: MIN_CIRCLE_RADIUS,
+        radius,
       }, { preview: true });
       layer.appendChild(previewShape.elements.root);
-      updateStatus('Drag to set the radius.');
+      updateStatus('Drag to set the radius. You can release and move the cursor before clicking to confirm.');
       try {
         mapSurface.setPointerCapture(event.pointerId);
       } catch (error) {
@@ -2896,10 +2921,21 @@ function createTemplateTool() {
     }
 
     if (placementState.type === 'rectangle') {
+      if (placementState.stage === 'hover-rectangle' && previewShape) {
+        finalizePlacement({
+          type: 'rectangle',
+          start: { ...previewShape.start },
+          length: previewShape.length,
+          width: previewShape.width,
+          rotationSteps: previewShape.rotationSteps ?? 0,
+        });
+        return;
+      }
+
       const hasLength = isFiniteNumber(placementState.values.length);
       const hasWidth = isFiniteNumber(placementState.values.width);
 
-      if (hasLength && hasWidth) {
+      if (!placementState.dynamic && hasLength && hasWidth) {
         finalizePlacement({
           type: 'rectangle',
           start: gridPoint,
@@ -2913,14 +2949,19 @@ function createTemplateTool() {
       placementState.stage = 'sizing-rectangle';
       placementState.start = gridPoint;
       placementState.pointerId = event.pointerId;
+      placementState.hasMoved = false;
+
+      clearPreview();
+      const baseLength = Math.max(MIN_RECT_DIMENSION, placementState.fixedLength ?? MIN_RECT_DIMENSION);
+      const baseWidth = Math.max(MIN_RECT_DIMENSION, placementState.fixedWidth ?? MIN_RECT_DIMENSION);
       previewShape = createShape('rectangle', {
         start: gridPoint,
-        length: MIN_RECT_DIMENSION,
-        width: MIN_RECT_DIMENSION,
+        length: baseLength,
+        width: baseWidth,
         rotationSteps: 0,
       }, { preview: true });
       layer.appendChild(previewShape.elements.root);
-      updateStatus('Drag to define the rectangle. Move sideways to adjust width.');
+      updateStatus('Drag to define the rectangle. You can release and adjust before clicking to confirm.');
       try {
         mapSurface.setPointerCapture(event.pointerId);
       } catch (error) {
@@ -2931,8 +2972,16 @@ function createTemplateTool() {
   }
 
   function handlePlacementPointerMove(event) {
-    if (!placementState || placementState.pointerId === null || event.pointerId !== placementState.pointerId) {
+    if (!placementState) {
       return;
+    }
+
+    const stage = placementState.stage;
+    const trackingHover = stage === 'hover-circle' || stage === 'hover-rectangle';
+    if (!trackingHover) {
+      if (placementState.pointerId === null || event.pointerId !== placementState.pointerId) {
+        return;
+      }
     }
 
     const localPoint = getLocalMapPoint(event);
@@ -2947,27 +2996,34 @@ function createTemplateTool() {
     event.preventDefault();
     event.stopPropagation();
 
-    if (placementState.stage === 'sizing-circle' && previewShape) {
+    if (placementState.type === 'circle' && previewShape) {
+      if (stage !== 'sizing-circle' && stage !== 'hover-circle') {
+        return;
+      }
       const dx = gridPoint.column - placementState.start.column;
       const dy = gridPoint.row - placementState.start.row;
       const radius = Math.max(MIN_CIRCLE_RADIUS, Math.sqrt(dx * dx + dy * dy));
       previewShape.center = { ...placementState.start };
       previewShape.radius = radius;
+      if (stage === 'sizing-circle' && radius > MIN_CIRCLE_RADIUS + 0.05) {
+        placementState.hasMoved = true;
+      }
       render(viewState);
       return;
     }
 
-    if (placementState.stage === 'sizing-rectangle' && previewShape) {
-      const deltaX = Math.max(0, gridPoint.column - placementState.start.column);
-      const deltaY = Math.max(0, gridPoint.row - placementState.start.row);
-      const length = Math.max(MIN_RECT_DIMENSION, deltaX);
-      const width = Math.max(MIN_RECT_DIMENSION, deltaY);
-      const vertical = deltaY > deltaX;
-      previewShape.start = { ...placementState.start };
-      previewShape.length = vertical ? width : length;
-      previewShape.width = vertical ? length : width;
-      previewShape.rotationSteps = vertical ? 1 : 0;
-      render(viewState);
+    if (placementState.type === 'rectangle' && previewShape) {
+      if (stage !== 'sizing-rectangle' && stage !== 'hover-rectangle') {
+        return;
+      }
+      const deltaX = gridPoint.column - placementState.start.column;
+      const deltaY = gridPoint.row - placementState.start.row;
+      if (stage === 'sizing-rectangle') {
+        if (Math.abs(deltaX) > 0.05 || Math.abs(deltaY) > 0.05) {
+          placementState.hasMoved = true;
+        }
+      }
+      updateRectanglePreview(gridPoint, deltaX, deltaY);
     }
   }
 
@@ -2977,20 +3033,32 @@ function createTemplateTool() {
     }
 
     const localPoint = getLocalMapPoint(event);
-    if (!localPoint) {
-      cancelPlacement();
-      return;
-    }
-    const gridPoint = mapPointToGrid(localPoint, viewState);
-    if (!gridPoint) {
-      cancelPlacement();
-      return;
-    }
+    const gridPoint = localPoint ? mapPointToGrid(localPoint, viewState) : null;
 
     event.preventDefault();
     event.stopPropagation();
 
-    if (placementState.stage === 'sizing-circle') {
+    try {
+      mapSurface.releasePointerCapture?.(event.pointerId);
+    } catch (error) {
+      // Ignore release issues.
+    }
+
+    const stage = placementState.stage;
+    placementState.pointerId = null;
+
+    if (placementState.type === 'circle') {
+      if (!gridPoint || stage !== 'sizing-circle') {
+        cancelPlacement();
+        return;
+      }
+
+      if (placementState.dynamic && !placementState.hasMoved) {
+        placementState.stage = 'hover-circle';
+        updateStatus('Move the cursor to set the radius, then click to confirm.');
+        return;
+      }
+
       const dx = gridPoint.column - placementState.start.column;
       const dy = gridPoint.row - placementState.start.row;
       const radius = Math.max(MIN_CIRCLE_RADIUS, Math.sqrt(dx * dx + dy * dy));
@@ -2999,22 +3067,46 @@ function createTemplateTool() {
         center: placementState.start,
         radius,
       });
-    } else if (placementState.stage === 'sizing-rectangle') {
-      const deltaX = Math.max(0, gridPoint.column - placementState.start.column);
-      const deltaY = Math.max(0, gridPoint.row - placementState.start.row);
-      const length = Math.max(MIN_RECT_DIMENSION, deltaX);
-      const width = Math.max(MIN_RECT_DIMENSION, deltaY);
-      const vertical = deltaY > deltaX;
+      return;
+    }
+
+    if (placementState.type === 'rectangle') {
+      if (!gridPoint || stage !== 'sizing-rectangle') {
+        cancelPlacement();
+        return;
+      }
+
+      if (placementState.dynamic && !placementState.hasMoved) {
+        placementState.stage = 'hover-rectangle';
+        updateStatus('Move the cursor to size your rectangle, then click to confirm.');
+        return;
+      }
+
+      if (previewShape && previewShape.type === 'rectangle') {
+        finalizePlacement({
+          type: 'rectangle',
+          start: { ...previewShape.start },
+          length: previewShape.length,
+          width: previewShape.width,
+          rotationSteps: previewShape.rotationSteps ?? 0,
+        });
+        return;
+      }
+
+      const deltaX = gridPoint.column - placementState.start.column;
+      const deltaY = gridPoint.row - placementState.start.row;
+      const fallback = computeRectangleSizingFallback(deltaX, deltaY);
       finalizePlacement({
         type: 'rectangle',
-        start: placementState.start,
-        length: vertical ? width : length,
-        width: vertical ? length : width,
-        rotationSteps: vertical ? 1 : 0,
+        start: fallback.start,
+        length: fallback.length,
+        width: fallback.width,
+        rotationSteps: 0,
       });
-    } else {
-      cancelPlacement();
+      return;
     }
+
+    cancelPlacement();
   }
 
   function handlePlacementPointerCancel(event) {
@@ -3036,6 +3128,17 @@ function createTemplateTool() {
         center,
         radius: config.radius,
       });
+      addShape(shape);
+      return;
+    }
+
+    if (config.type === 'wall') {
+      const squares = clampWallSquares(config.squares, viewState);
+      if (squares.length === 0) {
+        render(viewState);
+        return;
+      }
+      const shape = createShape('wall', { squares });
       addShape(shape);
       return;
     }
@@ -3068,7 +3171,17 @@ function createTemplateTool() {
 
     const shapeEl = document.createElement('div');
     shapeEl.className = 'vtt-template__shape';
+    if (type === 'wall') {
+      shapeEl.classList.add('vtt-template__shape--wall');
+    }
     root.appendChild(shapeEl);
+
+    let wallTileContainer = null;
+    if (type === 'wall') {
+      wallTileContainer = document.createElement('div');
+      wallTileContainer.className = 'vtt-wall';
+      shapeEl.appendChild(wallTileContainer);
+    }
 
     const node = document.createElement('button');
     node.type = 'button';
@@ -3121,7 +3234,7 @@ function createTemplateTool() {
       id,
       type,
       color,
-      elements: { root, shape: shapeEl, node, label, actions },
+      elements: { root, shape: shapeEl, node, label, actions, tileContainer: wallTileContainer, tiles: new Map(), connectors: new Map() },
       isPreview,
     };
 
@@ -3131,7 +3244,7 @@ function createTemplateTool() {
         row: data.center?.row ?? 0,
       };
       shape.radius = Math.max(MIN_CIRCLE_RADIUS, data.radius ?? MIN_CIRCLE_RADIUS);
-    } else {
+    } else if (type === 'rectangle') {
       shape.start = {
         column: data.start?.column ?? 0,
         row: data.start?.row ?? 0,
@@ -3139,6 +3252,8 @@ function createTemplateTool() {
       shape.length = Math.max(MIN_RECT_DIMENSION, data.length ?? MIN_RECT_DIMENSION);
       shape.width = Math.max(MIN_RECT_DIMENSION, data.width ?? MIN_RECT_DIMENSION);
       shape.rotationSteps = Number.isInteger(data.rotationSteps) ? data.rotationSteps % 4 : 0;
+    } else if (type === 'wall') {
+      shape.squares = sanitizeWallSquares(data.squares);
     }
 
     if (!isPreview) {
@@ -3263,13 +3378,20 @@ function createTemplateTool() {
       return;
     }
 
+    const origin = shape.type === 'circle'
+      ? { column: shape.center.column, row: shape.center.row }
+      : shape.type === 'wall'
+      ? null
+      : { column: shape.start.column, row: shape.start.row };
+
     activeDrag = {
       shapeId: shape.id,
       pointerId: event.pointerId,
-      origin: shape.type === 'circle'
-        ? { column: shape.center.column, row: shape.center.row }
-        : { column: shape.start.column, row: shape.start.row },
+      origin,
       startPointer: gridPoint,
+      originalSquares: shape.type === 'wall'
+        ? shape.squares?.map((square) => ({ column: square.column, row: square.row })) ?? []
+        : null,
     };
 
     updateStatus('Drag to reposition the template.');
@@ -3306,13 +3428,22 @@ function createTemplateTool() {
       }, shape.radius, viewState);
       shape.center.column = nextCenter.column;
       shape.center.row = nextCenter.row;
-    } else {
+    } else if (shape.type === 'rectangle') {
       const nextStart = clampRectanglePosition({
         column: activeDrag.origin.column + deltaColumn,
         row: activeDrag.origin.row + deltaRow,
       }, shape.length, shape.width, shape.rotationSteps, viewState);
       shape.start.column = nextStart.column;
       shape.start.row = nextStart.row;
+    } else if (shape.type === 'wall') {
+      const originalSquares = Array.isArray(activeDrag.originalSquares) ? activeDrag.originalSquares : [];
+      const moveColumn = Math.round(deltaColumn);
+      const moveRow = Math.round(deltaRow);
+      const clamped = clampWallDelta(originalSquares, moveColumn, moveRow, viewState);
+      shape.squares = originalSquares.map((square) => ({
+        column: square.column + clamped.column,
+        row: square.row + clamped.row,
+      }));
     }
     render(viewState);
   }
@@ -3358,6 +3489,15 @@ function createTemplateTool() {
     const offsetLeft = Number.isFinite(offsets.left) ? offsets.left : 0;
     const offsetTop = Number.isFinite(offsets.top) ? offsets.top : 0;
     const gridSize = Math.max(8, Number.isFinite(view.gridSize) ? view.gridSize : 64);
+
+    if (shape.type === 'wall') {
+      updateWallElement(shape, view);
+      node.style.left = '0px';
+      node.style.top = '0px';
+      node.style.width = `${gridSize}px`;
+      node.style.height = `${gridSize}px`;
+      return;
+    }
 
     if (shape.type === 'circle') {
       const radius = Math.max(MIN_CIRCLE_RADIUS, shape.radius);
@@ -3453,13 +3593,31 @@ function createTemplateTool() {
     rectChoice.dataset.template = 'rectangle';
     list.appendChild(rectChoice);
 
+    const wallChoice = document.createElement('button');
+    wallChoice.type = 'button';
+    wallChoice.className = 'vtt-template-menu__choice';
+    wallChoice.textContent = 'Wall';
+    wallChoice.dataset.template = 'wall';
+    list.appendChild(wallChoice);
+
     const form = document.createElement('form');
     form.className = 'vtt-template-menu__form is-visible';
     menu.appendChild(form);
 
-    const circleField = createNumberField('Radius (squares)', 'radius');
-    const lengthField = createNumberField('Length (squares)', 'length');
-    const widthField = createNumberField('Width (squares)', 'width');
+    const circleField = createNumberField('Radius (squares)', 'radius', { step: '0.5', min: '0' });
+    circleField.input.placeholder = 'Optional';
+
+    const lengthField = createNumberField('Length (squares)', 'length', { step: '0.5', min: '0' });
+    lengthField.input.placeholder = 'Optional';
+
+    const widthField = createNumberField('Width (squares)', 'width', { step: '0.5', min: '0' });
+    widthField.input.placeholder = 'Optional';
+
+    const wallField = createNumberField('Wall squares', 'squares', { step: '1', min: '1' });
+    wallField.input.step = '1';
+    wallField.input.min = '1';
+    wallField.input.inputMode = 'numeric';
+    wallField.input.pattern = '\\d*';
 
     form.appendChild(lengthField.wrapper);
     form.appendChild(widthField.wrapper);
@@ -3482,19 +3640,22 @@ function createTemplateTool() {
 
     function setActiveType(nextType) {
       activeType = nextType;
+      circleChoice.classList.toggle('is-active', nextType === 'circle');
+      rectChoice.classList.toggle('is-active', nextType === 'rectangle');
+      wallChoice.classList.toggle('is-active', nextType === 'wall');
+
       if (nextType === 'circle') {
-        rectChoice.classList.remove('is-active');
-        circleChoice.classList.add('is-active');
         form.replaceChildren(circleField.wrapper, actions);
-      } else {
-        circleChoice.classList.remove('is-active');
-        rectChoice.classList.add('is-active');
+      } else if (nextType === 'rectangle') {
         form.replaceChildren(lengthField.wrapper, widthField.wrapper, actions);
+      } else {
+        form.replaceChildren(wallField.wrapper, actions);
       }
     }
 
     circleChoice.addEventListener('click', () => setActiveType('circle'));
     rectChoice.addEventListener('click', () => setActiveType('rectangle'));
+    wallChoice.addEventListener('click', () => setActiveType('wall'));
 
     cancelButton.addEventListener('click', () => {
       controller.hide();
@@ -3506,6 +3667,7 @@ function createTemplateTool() {
         radius: parseFieldValue(circleField.input.value),
         length: parseFieldValue(lengthField.input.value),
         width: parseFieldValue(widthField.input.value),
+        squares: parseSquareCount(wallField.input.value),
       };
       controller.hide();
       beginPlacement(activeType, values);
@@ -3525,11 +3687,33 @@ function createTemplateTool() {
     const controller = {
       show() {
         const anchor = templatesButton?.getBoundingClientRect();
-        const top = (anchor?.bottom ?? 0) + window.scrollY + 8;
-        const left = (anchor?.left ?? 0) + window.scrollX;
+        const scrollX = window.scrollX || window.pageXOffset || 0;
+        const scrollY = window.scrollY || window.pageYOffset || 0;
+        const top = (anchor?.bottom ?? 0) + scrollY + 8;
+        let left = (anchor?.left ?? 0) + scrollX;
+
+        menu.hidden = false;
+        menu.style.visibility = 'hidden';
         menu.style.top = `${top}px`;
         menu.style.left = `${left}px`;
-        menu.hidden = false;
+        menu.style.right = '';
+
+        const viewportWidth = Math.max(document.documentElement?.clientWidth || 0, window.innerWidth || 0);
+        const menuRect = menu.getBoundingClientRect();
+        const margin = 16;
+        if (menuRect.width && viewportWidth) {
+          const anchorRight = (anchor?.right ?? anchor?.left ?? 0) + scrollX;
+          const maxLeft = scrollX + viewportWidth - menuRect.width - margin;
+          if (left > maxLeft) {
+            left = Math.min(anchorRight - menuRect.width, maxLeft);
+          }
+          if (left < scrollX + margin) {
+            left = scrollX + margin;
+          }
+        }
+
+        menu.style.left = `${left}px`;
+        menu.style.visibility = '';
         templatesButton?.setAttribute('aria-expanded', 'true');
         if (!outsideClickHandler) {
           outsideClickHandler = (event) => {
@@ -3560,27 +3744,80 @@ function createTemplateTool() {
   function beginPlacement(type, values) {
     cancelPlacement();
     clearSelection();
+    if (type === 'wall') {
+      const totalSquares = Number.isInteger(values?.squares)
+        ? values.squares
+        : parseSquareCount(values?.squares);
+      if (!Number.isInteger(totalSquares) || totalSquares <= 0) {
+        updateStatus('Enter the number of wall squares to place.');
+        placementState = null;
+        updateLayerVisibility();
+        return;
+      }
+
+      placementState = {
+        type: 'wall',
+        values: { squares: totalSquares },
+        stage: 'wall-select',
+        pointerId: null,
+        start: null,
+        squares: [],
+      };
+
+      previewShape = createShape('wall', { squares: [] }, { preview: true });
+      layer.appendChild(previewShape.elements.root);
+      updateStatus('Select the first square for your wall.');
+      updateLayerVisibility();
+      return;
+    }
+
     placementState = {
       type,
       values,
       stage: 'awaiting-start',
       pointerId: null,
       start: null,
+      dynamic: false,
+      hasMoved: false,
     };
+
     if (type === 'circle') {
-      if (isFiniteNumber(values.radius)) {
+      const fixedRadius = isFiniteNumber(values.radius)
+        ? Math.max(MIN_CIRCLE_RADIUS, values.radius)
+        : null;
+      placementState.fixedRadius = fixedRadius;
+      placementState.dynamic = !isFiniteNumber(values.radius);
+
+      if (fixedRadius !== null) {
         updateStatus('Click the map to place the circle template.');
       } else {
-        updateStatus('Click and drag to size your circle.');
+        updateStatus('Click to set the circle center, then drag or move the cursor to size it.');
       }
-    } else {
-      if (isFiniteNumber(values.length) && isFiniteNumber(values.width)) {
+      updateLayerVisibility();
+      return;
+    }
+
+    if (type === 'rectangle') {
+      const hasLength = isFiniteNumber(values.length);
+      const hasWidth = isFiniteNumber(values.width);
+
+      placementState.dynamicLength = !hasLength;
+      placementState.dynamicWidth = !hasWidth;
+      placementState.fixedLength = hasLength
+        ? Math.max(MIN_RECT_DIMENSION, values.length)
+        : null;
+      placementState.fixedWidth = hasWidth
+        ? Math.max(MIN_RECT_DIMENSION, values.width)
+        : null;
+      placementState.dynamic = !hasLength || !hasWidth;
+
+      if (hasLength && hasWidth) {
         updateStatus('Click the map to place the rectangle template.');
       } else {
-        updateStatus('Click and drag to size your rectangle.');
+        updateStatus('Click to set the rectangle start, then drag or move the cursor to size it.');
       }
+      updateLayerVisibility();
     }
-    updateLayerVisibility();
   }
 
   function updateStatus(message) {
@@ -3599,7 +3836,7 @@ function createTemplateTool() {
     }
   }
 
-  function createNumberField(labelText, name) {
+  function createNumberField(labelText, name, options = {}) {
     const wrapper = document.createElement('div');
     wrapper.className = 'vtt-template-menu__field';
 
@@ -3610,8 +3847,11 @@ function createTemplateTool() {
     const input = document.createElement('input');
     input.type = 'number';
     input.name = name;
-    input.min = '0';
-    input.step = '0.5';
+    input.min = typeof options.min === 'string' ? options.min : String(options.min ?? '0');
+    input.step = typeof options.step === 'string' ? options.step : String(options.step ?? '0.5');
+    if (typeof options.placeholder === 'string') {
+      input.placeholder = options.placeholder;
+    }
     wrapper.appendChild(input);
 
     return { wrapper, input };
@@ -3620,6 +3860,395 @@ function createTemplateTool() {
   function parseFieldValue(value) {
     const parsed = Number.parseFloat(value);
     return Number.isFinite(parsed) && parsed > 0 ? parsed : null;
+  }
+
+  function parseSquareCount(value) {
+    if (value === undefined || value === null || value === '') {
+      return null;
+    }
+    const parsed = Number.parseInt(value, 10);
+    return Number.isFinite(parsed) && parsed > 0 ? parsed : null;
+  }
+
+  function updateRectanglePreview(gridPoint, deltaX, deltaY) {
+    if (!previewShape || previewShape.type !== 'rectangle' || !placementState?.start) {
+      return;
+    }
+
+    const startPoint = placementState.start;
+    let startColumn = startPoint.column;
+    let startRow = startPoint.row;
+    let length = placementState.fixedLength ?? MIN_RECT_DIMENSION;
+    let width = placementState.fixedWidth ?? MIN_RECT_DIMENSION;
+
+    if (placementState.dynamicLength) {
+      const absX = Math.max(MIN_RECT_DIMENSION, Math.abs(deltaX));
+      length = absX;
+      if (deltaX < 0) {
+        startColumn = startPoint.column - length;
+      }
+    } else if (deltaX < 0) {
+      startColumn = startPoint.column - length;
+    }
+
+    if (placementState.dynamicWidth) {
+      const absY = Math.max(MIN_RECT_DIMENSION, Math.abs(deltaY));
+      width = absY;
+      if (deltaY < 0) {
+        startRow = startPoint.row - width;
+      }
+    } else if (deltaY < 0) {
+      startRow = startPoint.row - width;
+    }
+
+    previewShape.start = { column: startColumn, row: startRow };
+    previewShape.length = Math.max(MIN_RECT_DIMENSION, length);
+    previewShape.width = Math.max(MIN_RECT_DIMENSION, width);
+    previewShape.rotationSteps = 0;
+    render(viewState);
+  }
+
+  function computeRectangleSizingFallback(deltaX, deltaY) {
+    const startPoint = placementState?.start ?? { column: 0, row: 0 };
+    let startColumn = startPoint.column;
+    let startRow = startPoint.row;
+    let length = placementState?.fixedLength ?? MIN_RECT_DIMENSION;
+    let width = placementState?.fixedWidth ?? MIN_RECT_DIMENSION;
+
+    if (placementState?.dynamicLength) {
+      const absX = Math.max(MIN_RECT_DIMENSION, Math.abs(deltaX));
+      length = absX;
+      if (deltaX < 0) {
+        startColumn = startPoint.column - length;
+      }
+    } else if (deltaX < 0) {
+      startColumn = startPoint.column - length;
+    }
+
+    if (placementState?.dynamicWidth) {
+      const absY = Math.max(MIN_RECT_DIMENSION, Math.abs(deltaY));
+      width = absY;
+      if (deltaY < 0) {
+        startRow = startPoint.row - width;
+      }
+    } else if (deltaY < 0) {
+      startRow = startPoint.row - width;
+    }
+
+    return {
+      start: { column: startColumn, row: startRow },
+      length: Math.max(MIN_RECT_DIMENSION, length),
+      width: Math.max(MIN_RECT_DIMENSION, width),
+    };
+  }
+
+  function handleWallPlacement(gridPoint) {
+    const square = snapWallSquare(gridPoint, viewState);
+    if (!square) {
+      return;
+    }
+
+    if (!Array.isArray(placementState.squares)) {
+      placementState.squares = [];
+    }
+
+    if (placementState.squares.some((existing) => existing.column === square.column && existing.row === square.row)) {
+      return;
+    }
+
+    if (placementState.squares.length > 0 && !isWallSquareAdjacent(square, placementState.squares)) {
+      updateStatus('Select an adjacent square to continue the wall.');
+      return;
+    }
+
+    placementState.squares.push(square);
+    updateWallPreviewShape(placementState.squares);
+
+    const total = Number.isInteger(placementState.values?.squares) ? placementState.values.squares : placementState.squares.length;
+    const remaining = Math.max(0, total - placementState.squares.length);
+    if (remaining <= 0) {
+      finalizePlacement({ type: 'wall', squares: placementState.squares.slice() });
+      return;
+    }
+
+    updateStatus(`Wall squares remaining: ${remaining}.`);
+  }
+
+  function snapWallSquare(gridPoint, view = viewState) {
+    const bounds = getMapGridBounds(view);
+    if (!bounds) {
+      return null;
+    }
+    const column = Math.floor(gridPoint.column);
+    const row = Math.floor(gridPoint.row);
+    if (column < 0 || row < 0 || column >= bounds.columns || row >= bounds.rows) {
+      return null;
+    }
+    return { column, row };
+  }
+
+  function isWallSquareAdjacent(candidate, existing = []) {
+    return existing.some((square) => {
+      const dx = Math.abs(square.column - candidate.column);
+      const dy = Math.abs(square.row - candidate.row);
+      return dx <= 1 && dy <= 1 && (dx !== 0 || dy !== 0);
+    });
+  }
+
+  function updateWallPreviewShape(squares) {
+    const sanitized = sanitizeWallSquares(squares);
+    if (!previewShape || previewShape.type !== 'wall') {
+      clearPreview();
+      previewShape = createShape('wall', { squares: sanitized }, { preview: true });
+      layer.appendChild(previewShape.elements.root);
+    } else {
+      previewShape.squares = sanitized;
+    }
+    render(viewState);
+    updateLayerVisibility();
+  }
+
+  function sanitizeWallSquares(input = []) {
+    if (!Array.isArray(input)) {
+      return [];
+    }
+    const seen = new Set();
+    const result = [];
+    input.forEach((square) => {
+      const column = Number.isFinite(square?.column) ? Math.floor(square.column) : null;
+      const row = Number.isFinite(square?.row) ? Math.floor(square.row) : null;
+      if (column === null || row === null) {
+        return;
+      }
+      const key = `${column},${row}`;
+      if (seen.has(key)) {
+        return;
+      }
+      seen.add(key);
+      result.push({ column, row });
+    });
+    return result;
+  }
+
+  function clampWallSquares(squares, view = viewState) {
+    const bounds = getMapGridBounds(view);
+    const sanitized = sanitizeWallSquares(squares);
+    if (!bounds) {
+      return sanitized;
+    }
+    return sanitized.filter((square) => {
+      return square.column >= 0 && square.column < bounds.columns && square.row >= 0 && square.row < bounds.rows;
+    });
+  }
+
+  function getMapGridBounds(view = viewState) {
+    const mapWidth = Number.isFinite(view.mapPixelSize?.width) ? view.mapPixelSize.width : 0;
+    const mapHeight = Number.isFinite(view.mapPixelSize?.height) ? view.mapPixelSize.height : 0;
+    if (mapWidth <= 0 || mapHeight <= 0) {
+      return null;
+    }
+
+    const offsets = view.gridOffsets ?? {};
+    const offsetLeft = Number.isFinite(offsets.left) ? offsets.left : 0;
+    const offsetRight = Number.isFinite(offsets.right) ? offsets.right : 0;
+    const offsetTop = Number.isFinite(offsets.top) ? offsets.top : 0;
+    const offsetBottom = Number.isFinite(offsets.bottom) ? offsets.bottom : 0;
+    const gridSize = Math.max(8, Number.isFinite(view.gridSize) ? view.gridSize : 64);
+
+    const innerWidth = Math.max(0, mapWidth - offsetLeft - offsetRight);
+    const innerHeight = Math.max(0, mapHeight - offsetTop - offsetBottom);
+    if (innerWidth <= 0 || innerHeight <= 0) {
+      return null;
+    }
+
+    const columns = Math.max(0, Math.floor(innerWidth / gridSize));
+    const rows = Math.max(0, Math.floor(innerHeight / gridSize));
+    if (columns === 0 || rows === 0) {
+      return null;
+    }
+
+    return { columns, rows, gridSize, offsetLeft, offsetTop };
+  }
+
+  function clampWallDelta(originalSquares = [], deltaColumn, deltaRow, view = viewState) {
+    const bounds = getMapGridBounds(view);
+    if (!bounds || !Array.isArray(originalSquares) || originalSquares.length === 0) {
+      return { column: 0, row: 0 };
+    }
+
+    let minCol = Infinity;
+    let maxCol = -Infinity;
+    let minRow = Infinity;
+    let maxRow = -Infinity;
+    originalSquares.forEach((square) => {
+      if (!square) {
+        return;
+      }
+      if (square.column < minCol) {
+        minCol = square.column;
+      }
+      if (square.column > maxCol) {
+        maxCol = square.column;
+      }
+      if (square.row < minRow) {
+        minRow = square.row;
+      }
+      if (square.row > maxRow) {
+        maxRow = square.row;
+      }
+    });
+
+    if (!Number.isFinite(minCol) || !Number.isFinite(minRow)) {
+      return { column: 0, row: 0 };
+    }
+
+    const maxRight = bounds.columns - 1 - maxCol;
+    const maxLeft = -minCol;
+    const maxDown = bounds.rows - 1 - maxRow;
+    const maxUp = -minRow;
+
+    const clampedColumn = Math.max(Math.min(deltaColumn, maxRight), maxLeft);
+    const clampedRow = Math.max(Math.min(deltaRow, maxDown), maxUp);
+    return { column: clampedColumn, row: clampedRow };
+  }
+
+  function updateWallElement(shape, view = viewState) {
+    const squares = clampWallSquares(shape.squares, view);
+    if (!view.mapLoaded || squares.length === 0) {
+      shape.elements.root.hidden = true;
+      shape.elements.root.setAttribute('aria-hidden', 'true');
+      return;
+    }
+
+    shape.squares = squares;
+    const bounds = getMapGridBounds(view);
+    if (!bounds) {
+      shape.elements.root.hidden = true;
+      shape.elements.root.setAttribute('aria-hidden', 'true');
+      return;
+    }
+
+    const minColumn = Math.min(...squares.map((square) => square.column));
+    const maxColumn = Math.max(...squares.map((square) => square.column)) + 1;
+    const minRow = Math.min(...squares.map((square) => square.row));
+    const maxRow = Math.max(...squares.map((square) => square.row)) + 1;
+
+    const left = bounds.offsetLeft + minColumn * bounds.gridSize;
+    const top = bounds.offsetTop + minRow * bounds.gridSize;
+    const width = Math.max(bounds.gridSize, (maxColumn - minColumn) * bounds.gridSize);
+    const height = Math.max(bounds.gridSize, (maxRow - minRow) * bounds.gridSize);
+
+    const root = shape.elements.root;
+    root.hidden = false;
+    root.setAttribute('aria-hidden', 'false');
+    root.style.left = `${left}px`;
+    root.style.top = `${top}px`;
+    root.style.width = `${width}px`;
+    root.style.height = `${height}px`;
+    root.style.setProperty('--vtt-wall-grid', `${bounds.gridSize}px`);
+
+    const container = shape.elements.tileContainer;
+    if (!container) {
+      return;
+    }
+
+    const tilesMap = shape.elements.tiles ?? new Map();
+    const connectorsMap = shape.elements.connectors ?? new Map();
+    shape.elements.tiles = tilesMap;
+    shape.elements.connectors = connectorsMap;
+
+    const activeTileKeys = new Set();
+    squares.forEach((square) => {
+      const key = `${square.column},${square.row}`;
+      activeTileKeys.add(key);
+      let tile = tilesMap.get(key);
+      if (!tile) {
+        tile = document.createElement('div');
+        tile.className = 'vtt-wall__tile';
+        container.appendChild(tile);
+        tilesMap.set(key, tile);
+      }
+      const localLeft = (square.column - minColumn) * bounds.gridSize;
+      const localTop = (square.row - minRow) * bounds.gridSize;
+      tile.style.left = `${localLeft}px`;
+      tile.style.top = `${localTop}px`;
+      tile.style.width = `${bounds.gridSize}px`;
+      tile.style.height = `${bounds.gridSize}px`;
+    });
+
+    tilesMap.forEach((tile, key) => {
+      if (!activeTileKeys.has(key)) {
+        tile.remove();
+        tilesMap.delete(key);
+      }
+    });
+
+    const connectorKeys = new Set();
+    const squareKeySet = new Set(squares.map((square) => `${square.column},${square.row}`));
+    squares.forEach((square) => {
+      const southEastKey = `${square.column + 1},${square.row + 1}`;
+      if (squareKeySet.has(southEastKey)) {
+        const key = ensureWallConnector(shape, bounds, { column: square.column, row: square.row }, { column: square.column + 1, row: square.row + 1 }, 'se', minColumn, minRow);
+        if (key) {
+          connectorKeys.add(key);
+        }
+      }
+
+      const northEastKey = `${square.column + 1},${square.row - 1}`;
+      if (squareKeySet.has(northEastKey)) {
+        const key = ensureWallConnector(shape, bounds, { column: square.column, row: square.row }, { column: square.column + 1, row: square.row - 1 }, 'ne', minColumn, minRow);
+        if (key) {
+          connectorKeys.add(key);
+        }
+      }
+    });
+
+    connectorsMap.forEach((element, key) => {
+      if (!connectorKeys.has(key)) {
+        element.remove();
+        connectorsMap.delete(key);
+      }
+    });
+
+    if (shape.elements.label) {
+      const count = squares.length;
+      shape.elements.label.textContent = `${count} square${count === 1 ? '' : 's'}`;
+    }
+  }
+
+  function ensureWallConnector(shape, bounds, startSquare, endSquare, orientation, minColumn, minRow) {
+    const container = shape.elements.tileContainer;
+    if (!container) {
+      return null;
+    }
+
+    const connectorsMap = shape.elements.connectors ?? new Map();
+    shape.elements.connectors = connectorsMap;
+
+    const baseColumn = Math.min(startSquare.column, endSquare.column);
+    const baseRow = Math.min(startSquare.row, endSquare.row);
+    const key = `diag:${baseColumn},${baseRow}:${orientation}`;
+    let connector = connectorsMap.get(key);
+    if (!connector) {
+      connector = document.createElement('div');
+      connector.className = `vtt-wall__connector vtt-wall__connector--${orientation}`;
+      container.appendChild(connector);
+      connectorsMap.set(key, connector);
+    }
+
+    const midColumn = ((startSquare.column + endSquare.column) / 2) + 0.5;
+    const midRow = ((startSquare.row + endSquare.row) / 2) + 0.5;
+    const localLeft = (midColumn - minColumn) * bounds.gridSize;
+    const localTop = (midRow - minRow) * bounds.gridSize;
+
+    const connectorWidth = bounds.gridSize * Math.SQRT2;
+    const connectorThickness = Math.max(4, bounds.gridSize * 0.35);
+    connector.style.width = `${connectorWidth}px`;
+    connector.style.height = `${connectorThickness}px`;
+    connector.style.left = `${localLeft - connectorWidth / 2}px`;
+    connector.style.top = `${localTop - connectorThickness / 2}px`;
+
+    return key;
   }
 
   function mapPointToGrid(point, view = viewState) {
