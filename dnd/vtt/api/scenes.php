@@ -6,6 +6,21 @@ require_once __DIR__ . '/../bootstrap.php';
 header('Content-Type: application/json');
 
 try {
+    $auth = getVttUserContext();
+    if (!($auth['isLoggedIn'] ?? false)) {
+        respondJson(401, [
+            'success' => false,
+            'error' => 'Authentication required.',
+        ]);
+    }
+
+    if (!($auth['isGM'] ?? false)) {
+        respondJson(403, [
+            'success' => false,
+            'error' => 'Only the GM can manage scenes.',
+        ]);
+    }
+
     $method = strtoupper($_SERVER['REQUEST_METHOD'] ?? 'GET');
 
     if ($method === 'GET') {

@@ -1,10 +1,13 @@
 const listeners = new Set();
 
+export const PLAYER_VISIBLE_TOKEN_FOLDER = "PC's";
+
 const state = {
   scenes: { folders: [], items: [] },
   tokens: { folders: [], items: [] },
   boardState: { activeSceneId: null, placements: {}, mapUrl: null },
   grid: { size: 64, locked: false, visible: true },
+  user: { isGM: false, name: '' },
 };
 
 export function initializeState(snapshot = {}) {
@@ -24,6 +27,23 @@ export function initializeState(snapshot = {}) {
       ...snapshot.grid,
     };
   }
+
+  const snapshotUser = snapshot.user && typeof snapshot.user === 'object' ? snapshot.user : {};
+  const isGM = Boolean(
+    snapshotUser.isGM ?? snapshot.isGM ?? snapshotUser.gm ?? snapshot?.user?.is_gm
+  );
+  const name =
+    typeof snapshotUser.name === 'string'
+      ? snapshotUser.name
+      : typeof snapshot.currentUser === 'string'
+      ? snapshot.currentUser
+      : '';
+
+  state.user = { isGM, name };
+
+  if (!state.user.isGM) {
+    state.tokens = restrictTokensToPlayerView(state.tokens);
+  }
   notify();
 }
 
@@ -38,6 +58,9 @@ export function subscribe(listener) {
 
 export function updateState(updater) {
   updater(state);
+  if (!state.user?.isGM) {
+    state.tokens = restrictTokensToPlayerView(state.tokens);
+  }
   notify();
 }
 
@@ -94,6 +117,81 @@ function normalizePlacements(raw = {}) {
       .filter(Boolean);
   });
   return normalized;
+}
+
+export function restrictTokensToPlayerView(tokenState = {}) {
+  const folders = Array.isArray(tokenState.folders) ? tokenState.folders : [];
+  const items = Array.isArray(tokenState.items) ? tokenState.items : [];
+
+  const visibleFolders = [];
+  const allowedIds = new Set();
+
+  folders.forEach((folder) => {
+    if (!folder || typeof folder !== 'object') {
+      return;
+    }
+
+    const name = typeof folder.name === 'string' ? folder.name.trim() : '';
+    if (name !== PLAYER_VISIBLE_TOKEN_FOLDER) {
+      return;
+    }
+
+    const id = typeof folder.id === 'string' ? folder.id : '';
+    if (!id) {
+      return;
+    }
+
+    if (!allowedIds.has(id)) {
+      allowedIds.add(id);
+      visibleFolders.push(folder);
+    }
+  });
+
+  const visibleItems = [];
+
+  items.forEach((token) => {
+    if (!token || typeof token !== 'object') {
+      return;
+    }
+
+    const folderId = typeof token.folderId === 'string' ? token.folderId : '';
+    if (folderId && allowedIds.has(folderId)) {
+      visibleItems.push(token);
+      return;
+    }
+
+    const folderName =
+      typeof token.folder?.name === 'string' ? token.folder.name.trim() : '';
+    if (folderName === PLAYER_VISIBLE_TOKEN_FOLDER) {
+      if (folderId && !allowedIds.has(folderId)) {
+        allowedIds.add(folderId);
+        visibleFolders.push({ id: folderId, name: PLAYER_VISIBLE_TOKEN_FOLDER });
+      }
+      visibleItems.push(token);
+    }
+  });
+
+  return {
+    folders: dedupeFoldersById(visibleFolders),
+    items: visibleItems,
+  };
+}
+
+function dedupeFoldersById(folders) {
+  const seen = new Set();
+  const result = [];
+  folders.forEach((folder) => {
+    if (!folder || typeof folder !== 'object') {
+      return;
+    }
+    const id = typeof folder.id === 'string' ? folder.id : '';
+    if (!id || seen.has(id)) {
+      return;
+    }
+    seen.add(id);
+    result.push(folder);
+  });
+  return result;
 }
 
 function normalizePlacementEntry(entry) {

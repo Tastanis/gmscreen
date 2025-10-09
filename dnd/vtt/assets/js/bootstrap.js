@@ -3,6 +3,7 @@ import {
   getState,
   subscribe,
   updateState,
+  restrictTokensToPlayerView,
 } from './state/store.js';
 import { mountSettingsPanel } from './ui/settings-panel.js';
 import { mountChatPanel } from './ui/chat-panel.js';
@@ -15,13 +16,19 @@ async function bootstrap() {
   const config = window.vttConfig ?? {};
   const routes = config.routes ?? {};
 
+  const userContext = {
+    isGM: Boolean(config.isGM),
+    name: typeof config.currentUser === 'string' ? config.currentUser : '',
+  };
+
   initializeState({
     scenes: config.scenes,
     tokens: config.tokens,
     boardState: config.boardState,
+    user: userContext,
   });
 
-  mountSettingsPanel(routes, { getState, subscribe, updateState });
+  mountSettingsPanel(routes, { getState, subscribe, updateState }, userContext);
   mountChatPanel(routes);
   mountBoardInteractions({ getState, subscribe, updateState }, routes);
   mountDragRuler();
@@ -36,12 +43,16 @@ async function hydrateFromServer(routes) {
       routes.tokens ? fetchTokens(routes.tokens) : [],
     ]);
 
+    const currentState = getState();
+    const isGM = Boolean(currentState?.user?.isGM);
+
     updateState((draft) => {
       if (scenes) {
         draft.scenes = normalizeSceneState(scenes);
       }
       if (tokens) {
-        draft.tokens = normalizeTokenState(tokens);
+        const normalized = normalizeTokenState(tokens);
+        draft.tokens = isGM ? normalized : restrictTokensToPlayerView(normalized);
       }
     });
   } catch (error) {

@@ -1,9 +1,10 @@
 import { initializeTokenMaker } from './token-maker.js';
 import { createToken, createTokenFolder, updateToken } from '../services/token-service.js';
+import { restrictTokensToPlayerView } from '../state/store.js';
 
 const UNSORTED_KEY = '__unsorted';
 
-export function renderTokenLibrary(routes, store) {
+export function renderTokenLibrary(routes, store, options = {}) {
   const moduleRoot = document.querySelector('[data-module="vtt-token-library"]');
   if (!moduleRoot) return;
 
@@ -15,19 +16,21 @@ export function renderTokenLibrary(routes, store) {
   const folderButtons = moduleRoot.querySelectorAll('[data-action="create-token-folder"]');
   if (!listContainer) return;
 
-  const maker = initializeTokenMaker(moduleRoot);
-
   const stateApi = store ?? {};
   const endpoints = routes ?? {};
+  const initialState = typeof stateApi.getState === 'function' ? stateApi.getState() : {};
+  const isGM = Boolean(options?.isGM ?? initialState?.user?.isGM);
+
+  const maker = isGM ? initializeTokenMaker(moduleRoot) : null;
 
   const collapseState = new Map();
   const tokenIndex = new Map();
-  const contextMenu = createTokenContextMenu(moduleRoot);
+  const contextMenu = isGM ? createTokenContextMenu(moduleRoot) : null;
   let contextTokenId = null;
   let contextTokenElement = null;
   let removeContextListeners = null;
 
-  if (!endpoints.tokens) {
+  if (!endpoints.tokens || !isGM) {
     createButtons.forEach((button) => {
       button.disabled = true;
       button.title = 'Token saving is unavailable right now.';
@@ -192,7 +195,10 @@ export function renderTokenLibrary(routes, store) {
   const render = (state) => {
     closeContextMenu();
 
-    const tokensState = normalizeTokenState(state?.tokens);
+    let tokensState = normalizeTokenState(state?.tokens);
+    if (!isGM) {
+      tokensState = restrictTokensToPlayerView(tokensState);
+    }
     updateFolderOptions(folderSelect, tokensState.folders);
 
     tokenIndex.clear();
@@ -240,6 +246,10 @@ export function renderTokenLibrary(routes, store) {
     }
 
     if (action === 'create-token-folder') {
+      if (!isGM) {
+        showFeedback(feedback, 'Only the GM can create token folders.', 'error');
+        return;
+      }
       if (!endpoints.tokens) {
         showFeedback(feedback, 'Token folders are unavailable right now.', 'error');
         return;
@@ -273,6 +283,10 @@ export function renderTokenLibrary(routes, store) {
     }
 
     if (action === 'create-token') {
+      if (!isGM) {
+        showFeedback(feedback, 'Only the GM can create tokens.', 'error');
+        return;
+      }
       if (!endpoints.tokens) {
         showFeedback(feedback, 'Token saving is unavailable right now.', 'error');
         return;
@@ -325,6 +339,14 @@ export function renderTokenLibrary(routes, store) {
   });
 
   moduleRoot.addEventListener('contextmenu', (event) => {
+    if (!isGM) {
+      return;
+    }
+
+    if (!contextMenu) {
+      return;
+    }
+
     if (contextMenu?.element?.contains(event.target)) {
       return;
     }

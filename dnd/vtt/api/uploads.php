@@ -15,6 +15,25 @@ if (strtoupper($method) !== 'POST') {
     return;
 }
 
+$auth = getVttUserContext();
+if (!($auth['isLoggedIn'] ?? false)) {
+    http_response_code(401);
+    echo json_encode([
+        'success' => false,
+        'error' => 'Authentication required.',
+    ]);
+    return;
+}
+
+if (!($auth['isGM'] ?? false)) {
+    http_response_code(403);
+    echo json_encode([
+        'success' => false,
+        'error' => 'Only the GM can upload scene maps.',
+    ]);
+    return;
+}
+
 if (!isset($_FILES['map'])) {
     http_response_code(400);
     echo json_encode([

@@ -31,6 +31,10 @@ pnpm-lock.yaml
 
 # Character and game data (tracking temporarily to diagnose VTT issues)
 
+# VTT scene data
+/dnd/vtt/storage/scenes.json
+/dnd/vtt/storage/uploads/
+
 # Schedule data
 /dnd/schedule/data/schedules.json
 /dnd/schedule/data/backups/
