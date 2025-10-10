@@ -1,7 +1,7 @@
 .vtt-app {
   position: relative;
   min-height: 100vh;
-  padding: 2.5rem 3.5rem;
+  padding: 1.75rem 3.5rem 2.5rem;
   display: flex;
   align-items: stretch;
   justify-content: center;
@@ -19,6 +19,6 @@
 
 @media (max-width: 960px) {
   .vtt-app {
-    padding: 1.5rem;
+    padding: 1.25rem;
   }
 }
