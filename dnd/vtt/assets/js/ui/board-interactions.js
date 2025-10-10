@@ -25,7 +25,19 @@ export function mountBoardInteractions(store, routes = {}) {
   const uploadButton = document.querySelector('[data-action="upload-map"]');
   const uploadInput = document.getElementById('vtt-map-upload-input');
   const templatesButton = document.querySelector('[data-action="open-templates"]');
+  const groupButton = document.querySelector('[data-action="group-combatants"]');
   if (!board || !mapSurface || !mapTransform || !mapBackdrop || !mapImage || !templateLayer) return;
+
+  if (groupButton) {
+    groupButton.addEventListener('click', () => {
+      if (groupButton.disabled) {
+        return;
+      }
+      handleGroupSelectedTokens();
+    });
+  }
+
+  notifySelectionChanged();
 
   const defaultStatusText = status?.textContent ?? '';
 
@@ -56,6 +68,9 @@ export function mountBoardInteractions(store, routes = {}) {
   const TOKEN_DRAG_TYPE = 'application/x-vtt-token-template';
   let tokenDropDepth = 0;
   const selectedTokenIds = new Set();
+  const combatTrackerGroups = new Map();
+  const combatantGroupRepresentative = new Map();
+  let lastCombatTrackerEntries = [];
   let renderedPlacements = [];
   let lastActiveSceneId = null;
   const movementQueue = [];
@@ -470,6 +485,8 @@ export function mountBoardInteractions(store, routes = {}) {
     if (activeSceneId !== lastActiveSceneId) {
       lastActiveSceneId = activeSceneId;
       selectedTokenIds.clear();
+      notifySelectionChanged();
+      resetCombatGroups();
       clearDragCandidate();
       if (viewState.dragState) {
         try {
@@ -529,6 +546,18 @@ export function mountBoardInteractions(store, routes = {}) {
     }
   }
 
+  function notifySelectionChanged() {
+    if (!groupButton) {
+      return;
+    }
+
+    const canGroup = selectedTokenIds.size > 1;
+    groupButton.disabled = !canGroup;
+    groupButton.title = canGroup
+      ? 'Group selected tokens in the combat tracker'
+      : 'Select at least two tokens to enable grouping';
+  }
+
   function updateSelection(id, { additive = false, toggle = false } = {}) {
     if (typeof id !== 'string' || !id) {
       return false;
@@ -537,9 +566,11 @@ export function mountBoardInteractions(store, routes = {}) {
     if (toggle) {
       if (selectedTokenIds.has(id)) {
         selectedTokenIds.delete(id);
+        notifySelectionChanged();
         return true;
       }
       selectedTokenIds.add(id);
+      notifySelectionChanged();
       return true;
     }
 
@@ -548,6 +579,7 @@ export function mountBoardInteractions(store, routes = {}) {
         return false;
       }
       selectedTokenIds.add(id);
+      notifySelectionChanged();
       return true;
     }
 
@@ -557,11 +589,13 @@ export function mountBoardInteractions(store, routes = {}) {
 
     if (selectedTokenIds.size === 0) {
       selectedTokenIds.add(id);
+      notifySelectionChanged();
       return true;
     }
 
     selectedTokenIds.clear();
     selectedTokenIds.add(id);
+    notifySelectionChanged();
     return true;
   }
 
@@ -570,6 +604,7 @@ export function mountBoardInteractions(store, routes = {}) {
       return false;
     }
     selectedTokenIds.clear();
+    notifySelectionChanged();
     return true;
   }
 
@@ -1154,6 +1189,7 @@ export function mountBoardInteractions(store, routes = {}) {
     if (removedCount > 0) {
       persistBoardStateSnapshot();
       selectedTokenIds.clear();
+      notifySelectionChanged();
       if (status) {
         const noun = removedCount === 1 ? 'token' : 'tokens';
         status.textContent = `Removed ${removedCount} ${noun} from the scene.`;
@@ -1174,6 +1210,7 @@ export function mountBoardInteractions(store, routes = {}) {
       viewState.dragState = null;
     }
     selectedTokenIds.clear();
+    notifySelectionChanged();
     renderedPlacements = [];
     mapImage.hidden = true;
     mapBackdrop.hidden = !url;
@@ -1190,6 +1227,7 @@ export function mountBoardInteractions(store, routes = {}) {
       emptyState?.removeAttribute('hidden');
       updateSceneMeta(null);
       viewState.mapPixelSize = { width: 0, height: 0 };
+      resetCombatGroups();
       renderTokens(boardApi.getState?.() ?? {}, tokenLayer, viewState);
       templateTool.reset();
       return;
@@ -1401,6 +1439,7 @@ export function mountBoardInteractions(store, routes = {}) {
       layer.hidden = true;
       renderedPlacements = [];
       selectedTokenIds.clear();
+      notifySelectionChanged();
       closeTokenSettings();
       updateCombatTracker([]);
       return;
@@ -1504,6 +1543,7 @@ export function mountBoardInteractions(store, routes = {}) {
 
       token.dataset.tokenName = normalized.name || '';
       applyTokenOverlays(token, normalized);
+      attachBoardTokenHover(token, normalized.id);
 
       fragment.appendChild(token);
       renderedCount += 1;
@@ -1518,6 +1558,7 @@ export function mountBoardInteractions(store, routes = {}) {
       });
       if (missing.length) {
         missing.forEach((id) => selectedTokenIds.delete(id));
+        notifySelectionChanged();
       }
     }
 
@@ -1540,16 +1581,31 @@ export function mountBoardInteractions(store, routes = {}) {
     updateCombatTracker(trackerEntries);
   }
 
-  function updateCombatTracker(combatants = []) {
+  function updateCombatTracker(combatants = [], options = {}) {
     if (!combatTrackerRoot || !combatTrackerWaiting || !combatTrackerCompleted) {
       return;
     }
 
     const waitingContainer = combatTrackerWaiting;
     const completedContainer = combatTrackerCompleted;
-    const entries = Array.isArray(combatants) ? combatants : [];
+    const entries = Array.isArray(combatants) ? combatants.filter(Boolean) : [];
+
+    if (!options?.skipCache) {
+      lastCombatTrackerEntries = entries.map(cloneCombatantEntry).filter(Boolean);
+    }
+
+    const activeIds = new Set();
+    entries.forEach((entry) => {
+      if (entry && typeof entry.id === 'string') {
+        activeIds.add(entry.id);
+      }
+    });
+
+    pruneCombatGroups(activeIds);
+
     const waitingFragment = document.createDocumentFragment();
     const seenIds = new Set();
+    const renderedRepresentatives = new Set();
 
     entries.forEach((combatant) => {
       if (!combatant || typeof combatant !== 'object') {
@@ -1562,14 +1618,27 @@ export function mountBoardInteractions(store, routes = {}) {
       }
 
       seenIds.add(id);
-      const label = typeof combatant.name === 'string' && combatant.name.trim() ? combatant.name.trim() : 'Token';
+      const representativeId = getRepresentativeIdFor(id);
+      if (!representativeId || representativeId !== id) {
+        return;
+      }
 
+      if (renderedRepresentatives.has(representativeId)) {
+        return;
+      }
+      renderedRepresentatives.add(representativeId);
+
+      const label = typeof combatant.name === 'string' && combatant.name.trim() ? combatant.name.trim() : 'Token';
       const token = document.createElement('div');
       token.className = 'vtt-combat-token';
-      token.dataset.combatantId = id;
+      token.dataset.combatantId = representativeId;
       token.setAttribute('role', 'listitem');
-      token.setAttribute('aria-label', label);
-      token.title = label;
+
+      const groupMembers = getGroupMembers(representativeId);
+      const groupSize = groupMembers.length;
+      const accessibleLabel = groupSize > 1 ? `${label} (group of ${groupSize})` : label;
+      token.setAttribute('aria-label', accessibleLabel);
+      token.title = accessibleLabel;
 
       const imageUrl = typeof combatant.imageUrl === 'string' ? combatant.imageUrl : '';
       if (imageUrl) {
@@ -1584,6 +1653,12 @@ export function mountBoardInteractions(store, routes = {}) {
         token.appendChild(initials);
       }
 
+      if (groupSize > 1) {
+        token.dataset.groupSize = String(groupSize);
+      } else if ('groupSize' in token.dataset) {
+        delete token.dataset.groupSize;
+      }
+
       waitingFragment.appendChild(token);
     });
 
@@ -1591,7 +1666,6 @@ export function mountBoardInteractions(store, routes = {}) {
     waitingContainer.appendChild(waitingFragment);
     waitingContainer.dataset.empty = waitingContainer.children.length ? 'false' : 'true';
 
-    let completedHasTokens = false;
     Array.from(completedContainer.querySelectorAll('[data-combatant-id]')).forEach((node) => {
       const combatantId = node.getAttribute('data-combatant-id');
       if (!seenIds.has(combatantId)) {
@@ -1599,12 +1673,291 @@ export function mountBoardInteractions(store, routes = {}) {
       }
     });
 
-    if (completedContainer.children.length) {
-      completedHasTokens = true;
+    completedContainer.dataset.empty = completedContainer.children.length ? 'false' : 'true';
+    combatTrackerRoot.dataset.hasCombatants =
+      waitingContainer.children.length || completedContainer.children.length ? 'true' : 'false';
+
+    attachTrackerHoverHandlers(waitingContainer);
+    attachTrackerHoverHandlers(completedContainer);
+  }
+
+  function cloneCombatantEntry(entry) {
+    if (!entry || typeof entry !== 'object') {
+      return null;
     }
 
-    completedContainer.dataset.empty = completedHasTokens ? 'false' : 'true';
-    combatTrackerRoot.dataset.hasCombatants = waitingContainer.children.length || completedContainer.children.length ? 'true' : 'false';
+    const clone = { ...entry };
+    if (entry.hp && typeof entry.hp === 'object') {
+      clone.hp = { ...entry.hp };
+    }
+    return clone;
+  }
+
+  function refreshCombatTracker() {
+    if (!combatTrackerRoot || !combatTrackerWaiting || !combatTrackerCompleted) {
+      return;
+    }
+    updateCombatTracker(lastCombatTrackerEntries, { skipCache: true });
+  }
+
+  function pruneCombatGroups(activeIds) {
+    const activeSet = activeIds instanceof Set ? activeIds : new Set(activeIds ?? []);
+
+    const representativesToDelete = [];
+    combatTrackerGroups.forEach((members, representativeId) => {
+      if (!activeSet.has(representativeId)) {
+        members.forEach((memberId) => {
+          if (memberId !== representativeId) {
+            combatantGroupRepresentative.delete(memberId);
+          }
+        });
+        representativesToDelete.push(representativeId);
+        return;
+      }
+
+      const filtered = new Set();
+      members.forEach((memberId) => {
+        if (activeSet.has(memberId)) {
+          filtered.add(memberId);
+        } else if (memberId !== representativeId) {
+          combatantGroupRepresentative.delete(memberId);
+        }
+      });
+
+      filtered.add(representativeId);
+
+      if (filtered.size <= 1) {
+        filtered.forEach((memberId) => {
+          if (memberId !== representativeId) {
+            combatantGroupRepresentative.delete(memberId);
+          }
+        });
+        representativesToDelete.push(representativeId);
+      } else {
+        combatTrackerGroups.set(representativeId, filtered);
+      }
+    });
+
+    representativesToDelete.forEach((repId) => {
+      combatTrackerGroups.delete(repId);
+    });
+
+    Array.from(combatantGroupRepresentative.keys()).forEach((memberId) => {
+      if (!activeSet.has(memberId)) {
+        combatantGroupRepresentative.delete(memberId);
+      }
+    });
+  }
+
+  function getRepresentativeIdFor(combatantId) {
+    if (!combatantId) {
+      return null;
+    }
+    return combatantGroupRepresentative.get(combatantId) || combatantId;
+  }
+
+  function getGroupMembers(representativeId) {
+    if (!representativeId) {
+      return [];
+    }
+    const group = combatTrackerGroups.get(representativeId);
+    if (!group || !group.size) {
+      return [representativeId];
+    }
+    if (!group.has(representativeId)) {
+      group.add(representativeId);
+    }
+    return Array.from(group);
+  }
+
+  function highlightTrackerToken(combatantId, shouldHighlight) {
+    if (!combatantId || !combatTrackerRoot) {
+      return;
+    }
+    const nodes = Array.from(combatTrackerRoot.querySelectorAll('[data-combatant-id]')).filter(
+      (node) => node instanceof HTMLElement && node.dataset.combatantId === combatantId
+    );
+    nodes.forEach((node) => {
+      node.classList.toggle('is-highlighted', shouldHighlight);
+    });
+  }
+
+  function highlightBoardTokensForCombatant(combatantId, shouldHighlight) {
+    const representativeId = getRepresentativeIdFor(combatantId);
+    if (!representativeId) {
+      return;
+    }
+    const members = getGroupMembers(representativeId);
+    members.forEach((memberId) => {
+      toggleBoardTokenHighlight(memberId, shouldHighlight);
+    });
+  }
+
+  function toggleBoardTokenHighlight(tokenId, shouldHighlight) {
+    if (!tokenLayer || !tokenId) {
+      return;
+    }
+    const token = Array.from(tokenLayer.querySelectorAll('[data-placement-id]')).find(
+      (node) => node instanceof HTMLElement && node.dataset.placementId === tokenId
+    );
+    if (token) {
+      token.classList.toggle('is-hover-highlight', shouldHighlight);
+    }
+  }
+
+  function attachTrackerHoverHandlers(container) {
+    if (!container) {
+      return;
+    }
+    Array.from(container.querySelectorAll('[data-combatant-id]')).forEach((node) => {
+      if (!(node instanceof HTMLElement)) {
+        return;
+      }
+      if (node.dataset.trackerHoverBound === 'true') {
+        return;
+      }
+      node.addEventListener('mouseenter', () => {
+        handleTrackerTokenHover(node.dataset.combatantId, true);
+      });
+      node.addEventListener('mouseleave', () => {
+        handleTrackerTokenHover(node.dataset.combatantId, false);
+      });
+      node.dataset.trackerHoverBound = 'true';
+    });
+  }
+
+  function handleTrackerTokenHover(combatantId, shouldHighlight) {
+    if (!combatantId) {
+      return;
+    }
+    highlightTrackerToken(combatantId, shouldHighlight);
+    highlightBoardTokensForCombatant(combatantId, shouldHighlight);
+  }
+
+  function attachBoardTokenHover(tokenElement, tokenId) {
+    if (!tokenElement || !tokenId) {
+      return;
+    }
+    if (tokenElement.dataset.boardHoverBound === 'true') {
+      return;
+    }
+    tokenElement.addEventListener('mouseenter', () => {
+      handleBoardTokenHover(tokenId, true);
+    });
+    tokenElement.addEventListener('mouseleave', () => {
+      handleBoardTokenHover(tokenId, false);
+    });
+    tokenElement.dataset.boardHoverBound = 'true';
+  }
+
+  function handleBoardTokenHover(tokenId, shouldHighlight) {
+    if (!tokenId) {
+      return;
+    }
+    toggleBoardTokenHighlight(tokenId, shouldHighlight);
+    const representativeId = getRepresentativeIdFor(tokenId);
+    if (representativeId) {
+      highlightTrackerToken(representativeId, shouldHighlight);
+    }
+  }
+
+  function removeTokenFromGroups(tokenId) {
+    if (!tokenId) {
+      return;
+    }
+
+    if (combatTrackerGroups.has(tokenId)) {
+      const groupMembers = combatTrackerGroups.get(tokenId);
+      groupMembers.forEach((memberId) => {
+        if (memberId !== tokenId) {
+          combatantGroupRepresentative.delete(memberId);
+        }
+      });
+      combatTrackerGroups.delete(tokenId);
+    }
+
+    const representativeId = combatantGroupRepresentative.get(tokenId);
+    if (!representativeId) {
+      return;
+    }
+
+    const members = combatTrackerGroups.get(representativeId);
+    if (!members) {
+      combatantGroupRepresentative.delete(tokenId);
+      return;
+    }
+
+    members.delete(tokenId);
+    combatantGroupRepresentative.delete(tokenId);
+
+    if (members.size <= 1) {
+      members.forEach((memberId) => {
+        if (memberId !== representativeId) {
+          combatantGroupRepresentative.delete(memberId);
+        }
+      });
+      combatTrackerGroups.delete(representativeId);
+    }
+  }
+
+  function handleGroupSelectedTokens() {
+    if (selectedTokenIds.size <= 1) {
+      return;
+    }
+
+    const orderedSelection = Array.from(selectedTokenIds);
+    const uniqueSelection = Array.from(new Set(orderedSelection));
+    if (uniqueSelection.length <= 1) {
+      return;
+    }
+
+    const representativeCandidates = new Set(uniqueSelection.map((id) => getRepresentativeIdFor(id)));
+    if (representativeCandidates.size === 1) {
+      const [candidateRep] = representativeCandidates;
+      const currentGroup = combatTrackerGroups.get(candidateRep);
+      if (currentGroup && currentGroup.size === uniqueSelection.length) {
+        const sameMembers = uniqueSelection.every((id) => currentGroup.has(id));
+        if (sameMembers) {
+          currentGroup.forEach((memberId) => {
+            if (memberId !== candidateRep) {
+              combatantGroupRepresentative.delete(memberId);
+            }
+          });
+          combatTrackerGroups.delete(candidateRep);
+          refreshCombatTracker();
+          if (status) {
+            status.textContent = 'Ungrouped selected tokens.';
+          }
+          return;
+        }
+      }
+    }
+
+    const representativeId = uniqueSelection[uniqueSelection.length - 1];
+    uniqueSelection.forEach(removeTokenFromGroups);
+
+    const members = new Set(uniqueSelection);
+    members.add(representativeId);
+    combatTrackerGroups.set(representativeId, members);
+    members.forEach((memberId) => {
+      if (memberId !== representativeId) {
+        combatantGroupRepresentative.set(memberId, representativeId);
+      }
+    });
+
+    refreshCombatTracker();
+    if (status) {
+      const count = members.size;
+      const noun = count === 1 ? 'token' : 'tokens';
+      status.textContent = `Grouped ${count} ${noun} in the combat tracker.`;
+    }
+  }
+
+  function resetCombatGroups() {
+    combatTrackerGroups.clear();
+    combatantGroupRepresentative.clear();
+    lastCombatTrackerEntries = [];
+    refreshCombatTracker();
   }
 
   function deriveTokenInitials(label) {
