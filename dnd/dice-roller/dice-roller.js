@@ -130,14 +130,18 @@ class DashboardDiceRoller {
         const container = document.createElement('div');
         container.className = 'dice-view dice-view--standard';
 
-        const quickRow = document.createElement('div');
-        quickRow.className = 'dice-row dice-row--quick';
-        quickRow.appendChild(this.createQuickButton('Power Roll', '2d10', 'dice-btn--accent'));
-        quickRow.appendChild(this.createQuickButton('Edge', '+2'));
-        quickRow.appendChild(this.createQuickButton('Bane', '-2'));
-        quickRow.appendChild(this.createQuickButton('+1', '+1'));
-        quickRow.appendChild(this.createQuickButton('+2', '+2'));
-        container.appendChild(quickRow);
+        const powerRow = document.createElement('div');
+        powerRow.className = 'dice-row dice-row--quick dice-row--quick-primary';
+        powerRow.appendChild(this.createQuickButton('Power Roll', '2d10', 'dice-btn--accent dice-btn--power'));
+        container.appendChild(powerRow);
+
+        const modifierRow = document.createElement('div');
+        modifierRow.className = 'dice-row dice-row--quick dice-row--quick-secondary';
+        modifierRow.appendChild(this.createQuickButton('Edge', '+2'));
+        modifierRow.appendChild(this.createQuickButton('Bane', '-2'));
+        modifierRow.appendChild(this.createQuickButton('+1', '+1'));
+        modifierRow.appendChild(this.createQuickButton('+2', '+2'));
+        container.appendChild(modifierRow);
 
         container.appendChild(this.createDivider());
 
@@ -148,9 +152,7 @@ class DashboardDiceRoller {
             { label: 'D4', value: '1d4' },
             { label: 'D6', value: '1d6' },
             { label: 'D8', value: '1d8' },
-            { label: 'D10', value: '1d10' },
-            { label: 'D12', value: '1d12' },
-            { label: 'D20', value: '1d20' }
+            { label: 'D10', value: '1d10' }
         ].forEach(({ label, value }) => {
             const btn = this.createQuickButton(label, value);
             diceRow.appendChild(btn);
@@ -291,15 +293,18 @@ class DashboardDiceRoller {
 
         container.appendChild(header);
 
-        const quickRow = document.createElement('div');
-        quickRow.className = 'dice-row dice-row--quick';
-        quickRow.appendChild(this.createQuickButton('Power Roll', '2d10', 'dice-btn--accent'));
-        quickRow.appendChild(this.createQuickButton('D10', '1d10'));
-        quickRow.appendChild(this.createQuickButton('Edge', '+2'));
-        quickRow.appendChild(this.createQuickButton('Bane', '-2'));
-        quickRow.appendChild(this.createQuickButton('+1', '+1'));
-        quickRow.appendChild(this.createQuickButton('+2', '+2'));
-        container.appendChild(quickRow);
+        const projectPowerRow = document.createElement('div');
+        projectPowerRow.className = 'dice-row dice-row--quick dice-row--quick-primary';
+        projectPowerRow.appendChild(this.createQuickButton('Power Roll', '2d10', 'dice-btn--accent dice-btn--power'));
+        container.appendChild(projectPowerRow);
+
+        const projectModifierRow = document.createElement('div');
+        projectModifierRow.className = 'dice-row dice-row--quick dice-row--quick-secondary';
+        projectModifierRow.appendChild(this.createQuickButton('Edge', '+2'));
+        projectModifierRow.appendChild(this.createQuickButton('Bane', '-2'));
+        projectModifierRow.appendChild(this.createQuickButton('+1', '+1'));
+        projectModifierRow.appendChild(this.createQuickButton('+2', '+2'));
+        container.appendChild(projectModifierRow);
 
         container.appendChild(this.createDivider());
 
@@ -432,6 +437,8 @@ class DashboardDiceRoller {
             this.projectReadyView.style.display = mode === 'ready' ? '' : 'none';
         }
 
+        this.updateOverlayAppearance();
+
         if (mode === 'inactive') {
             document.removeEventListener('click', this.handleProjectSelection, true);
             this.projectState.selectedIndex = null;
@@ -448,6 +455,15 @@ class DashboardDiceRoller {
             }
             this.updateProjectStatusMessage('');
         }
+    }
+
+    updateOverlayAppearance() {
+        if (!this.overlay) {
+            return;
+        }
+
+        const selecting = this.projectState.mode === 'selecting';
+        this.overlay.classList.toggle('dice-modal-overlay--project-select', selecting);
     }
 
     startProjectRollFlow() {
