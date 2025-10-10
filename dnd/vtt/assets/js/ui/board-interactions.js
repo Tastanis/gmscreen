@@ -2814,6 +2814,7 @@ function createTemplateTool() {
   let previewShape = null;
   let placementState = null;
   let activeDrag = null;
+  let activeRotation = null;
   let menuController = null;
   let outsideClickHandler = null;
   let colorIndex = 0;
@@ -2873,6 +2874,7 @@ function createTemplateTool() {
     clearPreview();
     placementState = null;
     activeDrag = null;
+    activeRotation = null;
     selectedId = null;
     updateLayerVisibility();
   }
@@ -2930,7 +2932,7 @@ function createTemplateTool() {
     }
 
     if (event.key === 'r' && selectedId) {
-      rotateShape(selectedId, 1);
+      rotateRectangle(selectedId, event.shiftKey ? -45 : 45);
       event.preventDefault();
       return true;
     }
@@ -2955,6 +2957,7 @@ function createTemplateTool() {
     if (!gridPoint) {
       return;
     }
+    const snappedPoint = snapPointToGrid(gridPoint);
 
     event.preventDefault();
     event.stopPropagation();
@@ -2981,14 +2984,14 @@ function createTemplateTool() {
         );
         finalizePlacement({
           type: 'circle',
-          center: gridPoint,
+          center: snappedPoint,
           radius,
         });
         return;
       }
 
       placementState.stage = 'sizing-circle';
-      placementState.start = gridPoint;
+      placementState.start = snappedPoint;
       placementState.pointerId = event.pointerId;
       placementState.hasMoved = false;
 
@@ -2998,11 +3001,12 @@ function createTemplateTool() {
         placementState.fixedRadius ?? MIN_CIRCLE_RADIUS
       );
       previewShape = createShape('circle', {
-        center: gridPoint,
+        center: snappedPoint,
         radius,
       }, { preview: true });
       layer.appendChild(previewShape.elements.root);
-      updateStatus('Drag to set the radius. You can release and move the cursor before clicking to confirm.');
+      placementState.start = { ...previewShape.center };
+      updateStatus('Drag to set the radius. Hold Shift to snap to half-square increments. You can release and move the cursor before clicking to confirm.');
       try {
         mapSurface.setPointerCapture(event.pointerId);
       } catch (error) {
@@ -3019,7 +3023,7 @@ function createTemplateTool() {
           start: { ...previewShape.start },
           length: previewShape.length,
           width: previewShape.width,
-          rotationSteps: previewShape.rotationSteps ?? 0,
+          rotation: previewShape.rotation ?? 0,
         });
         return;
       }
@@ -3030,16 +3034,16 @@ function createTemplateTool() {
       if (!placementState.dynamic && hasLength && hasWidth) {
         finalizePlacement({
           type: 'rectangle',
-          start: gridPoint,
+          start: snappedPoint,
           length: Math.max(MIN_RECT_DIMENSION, placementState.values.length),
           width: Math.max(MIN_RECT_DIMENSION, placementState.values.width),
-          rotationSteps: 0,
+          rotation: 0,
         });
         return;
       }
 
       placementState.stage = 'sizing-rectangle';
-      placementState.start = gridPoint;
+      placementState.start = snappedPoint;
       placementState.pointerId = event.pointerId;
       placementState.hasMoved = false;
 
@@ -3047,12 +3051,13 @@ function createTemplateTool() {
       const baseLength = Math.max(MIN_RECT_DIMENSION, placementState.fixedLength ?? MIN_RECT_DIMENSION);
       const baseWidth = Math.max(MIN_RECT_DIMENSION, placementState.fixedWidth ?? MIN_RECT_DIMENSION);
       previewShape = createShape('rectangle', {
-        start: gridPoint,
+        start: snappedPoint,
         length: baseLength,
         width: baseWidth,
-        rotationSteps: 0,
+        rotation: 0,
       }, { preview: true });
       layer.appendChild(previewShape.elements.root);
+      placementState.start = { ...previewShape.start };
       updateStatus('Drag to define the rectangle. You can release and adjust before clicking to confirm.');
       try {
         mapSurface.setPointerCapture(event.pointerId);
@@ -3064,6 +3069,9 @@ function createTemplateTool() {
   }
 
   function handlePlacementPointerMove(event) {
+    if (activeRotation) {
+      return;
+    }
     if (!placementState) {
       return;
     }
@@ -3094,7 +3102,10 @@ function createTemplateTool() {
       }
       const dx = gridPoint.column - placementState.start.column;
       const dy = gridPoint.row - placementState.start.row;
-      const radius = Math.max(MIN_CIRCLE_RADIUS, Math.sqrt(dx * dx + dy * dy));
+      let radius = Math.max(MIN_CIRCLE_RADIUS, Math.sqrt(dx * dx + dy * dy));
+      if (event.shiftKey) {
+        radius = Math.max(MIN_CIRCLE_RADIUS, snapToHalf(radius));
+      }
       previewShape.center = { ...placementState.start };
       previewShape.radius = radius;
       if (stage === 'sizing-circle' && radius > MIN_CIRCLE_RADIUS + 0.05) {
@@ -3147,13 +3158,16 @@ function createTemplateTool() {
 
       if (placementState.dynamic && !placementState.hasMoved) {
         placementState.stage = 'hover-circle';
-        updateStatus('Move the cursor to set the radius, then click to confirm.');
+        updateStatus('Move the cursor to set the radius, then click to confirm. Hold Shift to snap to half-square increments.');
         return;
       }
 
       const dx = gridPoint.column - placementState.start.column;
       const dy = gridPoint.row - placementState.start.row;
-      const radius = Math.max(MIN_CIRCLE_RADIUS, Math.sqrt(dx * dx + dy * dy));
+      let radius = Math.max(MIN_CIRCLE_RADIUS, Math.sqrt(dx * dx + dy * dy));
+      if (event.shiftKey) {
+        radius = Math.max(MIN_CIRCLE_RADIUS, snapToHalf(radius));
+      }
       finalizePlacement({
         type: 'circle',
         center: placementState.start,
@@ -3180,7 +3194,7 @@ function createTemplateTool() {
           start: { ...previewShape.start },
           length: previewShape.length,
           width: previewShape.width,
-          rotationSteps: previewShape.rotationSteps ?? 0,
+          rotation: previewShape.rotation ?? 0,
         });
         return;
       }
@@ -3193,7 +3207,7 @@ function createTemplateTool() {
         start: fallback.start,
         length: fallback.length,
         width: fallback.width,
-        rotationSteps: 0,
+        rotation: 0,
       });
       return;
     }
@@ -3215,7 +3229,7 @@ function createTemplateTool() {
     updateLayerVisibility();
 
     if (config.type === 'circle') {
-      const center = clampCircleCenter(config.center, config.radius, viewState);
+      const center = resolveCircleCenter(config.center, config.radius, viewState);
       const shape = createShape('circle', {
         center,
         radius: config.radius,
@@ -3235,12 +3249,17 @@ function createTemplateTool() {
       return;
     }
 
-    const start = clampRectanglePosition(config.start, config.length, config.width, config.rotationSteps ?? 0, viewState);
+    const rotation = Number.isFinite(config.rotation)
+      ? config.rotation
+      : Number.isInteger(config.rotationSteps)
+      ? (config.rotationSteps % 4) * 90
+      : 0;
+    const start = resolveRectangleStart(config.start, config.length, config.width, rotation, viewState);
     const shape = createShape('rectangle', {
       start,
       length: config.length,
       width: config.width,
-      rotationSteps: config.rotationSteps ?? 0,
+      rotation,
     });
     addShape(shape);
   }
@@ -3275,41 +3294,38 @@ function createTemplateTool() {
       shapeEl.appendChild(wallTileContainer);
     }
 
-    const node = document.createElement('button');
-    node.type = 'button';
-    node.className = 'vtt-template__node';
-    node.innerHTML = '<span class="vtt-template__node-symbol">◆</span>';
-    node.dataset.templateNode = id;
-    root.appendChild(node);
+    let node;
+    if (type === 'wall') {
+      node = document.createElement('button');
+      node.type = 'button';
+      node.className = 'vtt-wall__hitbox';
+      node.dataset.templateNode = id;
+      node.setAttribute('aria-label', 'Select wall template');
+      root.appendChild(node);
+    } else {
+      node = document.createElement('button');
+      node.type = 'button';
+      node.className = 'vtt-template__node';
+      node.innerHTML = '<span class="vtt-template__node-symbol">◆</span>';
+      node.dataset.templateNode = id;
+      root.appendChild(node);
+    }
 
     const label = document.createElement('div');
     label.className = 'vtt-template__label';
-    node.appendChild(label);
-
-    const actions = document.createElement('div');
-    actions.className = 'vtt-template__actions';
-    node.appendChild(actions);
-
-    let rotateCcw = null;
-    let rotateCw = null;
-    let removeBtn = null;
-    if (!isPreview && type === 'rectangle') {
-      rotateCcw = document.createElement('button');
-      rotateCcw.type = 'button';
-      rotateCcw.className = 'vtt-template__action-btn';
-      rotateCcw.textContent = '⟲';
-      rotateCcw.setAttribute('aria-label', 'Rotate counterclockwise');
-      actions.appendChild(rotateCcw);
-
-      rotateCw = document.createElement('button');
-      rotateCw.type = 'button';
-      rotateCw.className = 'vtt-template__action-btn';
-      rotateCw.textContent = '⟳';
-      rotateCw.setAttribute('aria-label', 'Rotate clockwise');
-      actions.appendChild(rotateCw);
+    if (type === 'wall') {
+      root.appendChild(label);
+    } else {
+      node.appendChild(label);
     }
 
-    if (!isPreview) {
+    let actions = null;
+    let removeBtn = null;
+    if (!isPreview && type === 'circle') {
+      actions = document.createElement('div');
+      actions.className = 'vtt-template__actions';
+      node.appendChild(actions);
+
       removeBtn = document.createElement('button');
       removeBtn.type = 'button';
       removeBtn.className = 'vtt-template__action-btn';
@@ -3318,32 +3334,69 @@ function createTemplateTool() {
       actions.appendChild(removeBtn);
     }
 
-    if (isPreview || type !== 'rectangle') {
-      actions.style.display = 'none';
+    let rotateHandle = null;
+    if (!isPreview && type === 'rectangle') {
+      rotateHandle = document.createElement('button');
+      rotateHandle.type = 'button';
+      rotateHandle.className = 'vtt-template__rotate-handle';
+      rotateHandle.setAttribute('aria-label', 'Rotate rectangle template');
+      rotateHandle.innerHTML = '<span aria-hidden="true">⟳</span>';
+      node.appendChild(rotateHandle);
     }
 
     const shape = {
       id,
       type,
       color,
-      elements: { root, shape: shapeEl, node, label, actions, tileContainer: wallTileContainer, tiles: new Map(), connectors: new Map() },
+      elements: {
+        root,
+        shape: shapeEl,
+        node,
+        label,
+        actions,
+        rotateHandle,
+        tileContainer: wallTileContainer,
+        tiles: new Map(),
+        connectors: new Map(),
+      },
       isPreview,
     };
 
     if (type === 'circle') {
+      const radius = Math.max(MIN_CIRCLE_RADIUS, data.radius ?? MIN_CIRCLE_RADIUS);
+      shape.radius = radius;
+      const rawCenter = {
+        column: Number.isFinite(data.center?.column) ? data.center.column : 0,
+        row: Number.isFinite(data.center?.row) ? data.center.row : 0,
+      };
+      const resolvedCenter = resolveCircleCenter(rawCenter, radius, viewState);
       shape.center = {
-        column: data.center?.column ?? 0,
-        row: data.center?.row ?? 0,
+        column: resolvedCenter.column,
+        row: resolvedCenter.row,
       };
-      shape.radius = Math.max(MIN_CIRCLE_RADIUS, data.radius ?? MIN_CIRCLE_RADIUS);
     } else if (type === 'rectangle') {
-      shape.start = {
-        column: data.start?.column ?? 0,
-        row: data.start?.row ?? 0,
+      const length = Math.max(MIN_RECT_DIMENSION, data.length ?? MIN_RECT_DIMENSION);
+      const width = Math.max(MIN_RECT_DIMENSION, data.width ?? MIN_RECT_DIMENSION);
+      shape.length = length;
+      shape.width = width;
+      let baseStart = {
+        column: Number.isFinite(data.start?.column) ? data.start.column : 0,
+        row: Number.isFinite(data.start?.row) ? data.start.row : 0,
       };
-      shape.length = Math.max(MIN_RECT_DIMENSION, data.length ?? MIN_RECT_DIMENSION);
-      shape.width = Math.max(MIN_RECT_DIMENSION, data.width ?? MIN_RECT_DIMENSION);
-      shape.rotationSteps = Number.isInteger(data.rotationSteps) ? data.rotationSteps % 4 : 0;
+      if (Number.isFinite(data.center?.column) && Number.isFinite(data.center?.row)) {
+        baseStart = rectangleStartFromCenter({ column: data.center.column, row: data.center.row }, length, width);
+      }
+      const initialRotation = Number.isFinite(data.rotation)
+        ? data.rotation
+        : Number.isInteger(data.rotationSteps)
+        ? (data.rotationSteps % 4) * 90
+        : 0;
+      shape.rotation = normalizeAngle(initialRotation);
+      const resolvedStart = resolveRectangleStart(baseStart, length, width, shape.rotation, viewState);
+      shape.start = {
+        column: resolvedStart.column,
+        row: resolvedStart.row,
+      };
     } else if (type === 'wall') {
       shape.squares = sanitizeWallSquares(data.squares);
     }
@@ -3354,20 +3407,11 @@ function createTemplateTool() {
       node.addEventListener('pointerup', handleNodePointerUp);
       node.addEventListener('pointercancel', handleNodePointerCancel);
       node.addEventListener('click', (event) => handleNodeClick(event, shape));
-
-      if (rotateCcw) {
-        rotateCcw.addEventListener('click', (event) => {
-          event.preventDefault();
-          event.stopPropagation();
-          rotateShape(shape.id, -1);
-        });
-      }
-      if (rotateCw) {
-        rotateCw.addEventListener('click', (event) => {
-          event.preventDefault();
-          event.stopPropagation();
-          rotateShape(shape.id, 1);
-        });
+      if (rotateHandle) {
+        rotateHandle.addEventListener('pointerdown', (event) => startRectangleRotation(event, shape));
+        rotateHandle.addEventListener('pointermove', (event) => updateRectangleRotation(event, shape));
+        rotateHandle.addEventListener('pointerup', (event) => endRectangleRotation(event, shape));
+        rotateHandle.addEventListener('pointercancel', (event) => endRectangleRotation(event, shape));
       }
       if (removeBtn) {
         removeBtn.addEventListener('click', (event) => {
@@ -3405,7 +3449,7 @@ function createTemplateTool() {
       }
     });
     if (selectedId) {
-      updateStatus('Template selected. Drag to move, rotate, or press Delete to remove.');
+      updateStatus('Template selected. Drag to move, use the rotate handle or press R to rotate, or press Delete to remove.');
     } else {
       restoreStatus();
     }
@@ -3434,17 +3478,93 @@ function createTemplateTool() {
     updateLayerVisibility();
   }
 
-  function rotateShape(id, direction) {
+  function rotateRectangle(id, deltaDegrees) {
     const shape = shapes.find((item) => item.id === id && item.type === 'rectangle');
     if (!shape) {
       return;
     }
-    const delta = direction >= 0 ? 1 : -1;
-    shape.rotationSteps = (shape.rotationSteps + delta + 4) % 4;
-    const clamped = clampRectanglePosition(shape.start, shape.length, shape.width, shape.rotationSteps, viewState);
+    const nextRotation = normalizeAngle((shape.rotation ?? 0) + deltaDegrees);
+    shape.rotation = nextRotation;
+    const clamped = resolveRectangleStart(shape.start, shape.length, shape.width, shape.rotation, viewState);
     shape.start.column = clamped.column;
     shape.start.row = clamped.row;
     render(viewState);
+  }
+
+  function startRectangleRotation(event, shape) {
+    if (event.button !== 0 || shape.type !== 'rectangle') {
+      return;
+    }
+    event.preventDefault();
+    event.stopPropagation();
+    selectShape(shape.id);
+
+    const localPoint = getLocalMapPoint(event);
+    const center = rectangleCenterToLocal(shape, viewState);
+    if (!localPoint || !center) {
+      return;
+    }
+
+    const pointerAngle = Math.atan2(localPoint.y - center.y, localPoint.x - center.x);
+    activeRotation = {
+      shapeId: shape.id,
+      pointerId: event.pointerId,
+      startRotation: shape.rotation ?? 0,
+      startPointerAngle: pointerAngle,
+    };
+
+    updateStatus('Rotate the rectangle. Hold Shift to snap to 45° increments.');
+    try {
+      event.currentTarget.setPointerCapture(event.pointerId);
+    } catch (error) {
+      // Ignore pointer capture issues on unsupported browsers.
+    }
+  }
+
+  function updateRectangleRotation(event, shape) {
+    if (!activeRotation || activeRotation.shapeId !== shape.id || event.pointerId !== activeRotation.pointerId) {
+      return;
+    }
+    event.preventDefault();
+    event.stopPropagation();
+
+    const localPoint = getLocalMapPoint(event);
+    const center = rectangleCenterToLocal(shape, viewState);
+    if (!localPoint || !center) {
+      return;
+    }
+
+    const pointerAngle = Math.atan2(localPoint.y - center.y, localPoint.x - center.x);
+    const deltaRadians = pointerAngle - activeRotation.startPointerAngle;
+    let nextRotation = normalizeAngle(activeRotation.startRotation + toDegrees(deltaRadians));
+    if (event.shiftKey) {
+      nextRotation = snapAngle(nextRotation, 45);
+    }
+
+    shape.rotation = nextRotation;
+    const clamped = resolveRectangleStart(shape.start, shape.length, shape.width, shape.rotation, viewState);
+    shape.start.column = clamped.column;
+    shape.start.row = clamped.row;
+    render(viewState);
+  }
+
+  function endRectangleRotation(event, shape) {
+    if (!activeRotation || activeRotation.shapeId !== shape.id || event.pointerId !== activeRotation.pointerId) {
+      return;
+    }
+    event.preventDefault();
+    event.stopPropagation();
+    try {
+      event.currentTarget.releasePointerCapture(event.pointerId);
+    } catch (error) {
+      // Ignore release issues.
+    }
+    activeRotation = null;
+    if (selectedId) {
+      updateStatus('Template selected. Drag to move, use the rotate handle or press R to rotate, or press Delete to remove.');
+    } else {
+      restoreStatus();
+    }
   }
 
   function handleNodeClick(event, shape) {
@@ -3454,7 +3574,7 @@ function createTemplateTool() {
   }
 
   function handleNodePointerDown(event, shape) {
-    if (event.button !== 0) {
+    if (event.button !== 0 || activeRotation) {
       return;
     }
     event.preventDefault();
@@ -3514,19 +3634,21 @@ function createTemplateTool() {
     const deltaRow = gridPoint.row - activeDrag.startPointer.row;
 
     if (shape.type === 'circle') {
-      const nextCenter = clampCircleCenter({
+      const proposedCenter = {
         column: activeDrag.origin.column + deltaColumn,
         row: activeDrag.origin.row + deltaRow,
-      }, shape.radius, viewState);
-      shape.center.column = nextCenter.column;
-      shape.center.row = nextCenter.row;
+      };
+      const resolvedCenter = resolveCircleCenter(proposedCenter, shape.radius, viewState);
+      shape.center.column = resolvedCenter.column;
+      shape.center.row = resolvedCenter.row;
     } else if (shape.type === 'rectangle') {
-      const nextStart = clampRectanglePosition({
+      const proposedStart = {
         column: activeDrag.origin.column + deltaColumn,
         row: activeDrag.origin.row + deltaRow,
-      }, shape.length, shape.width, shape.rotationSteps, viewState);
-      shape.start.column = nextStart.column;
-      shape.start.row = nextStart.row;
+      };
+      const resolvedStart = resolveRectangleStart(proposedStart, shape.length, shape.width, shape.rotation, viewState);
+      shape.start.column = resolvedStart.column;
+      shape.start.row = resolvedStart.row;
     } else if (shape.type === 'wall') {
       const originalSquares = Array.isArray(activeDrag.originalSquares) ? activeDrag.originalSquares : [];
       const moveColumn = Math.round(deltaColumn);
@@ -3582,12 +3704,14 @@ function createTemplateTool() {
     const offsetTop = Number.isFinite(offsets.top) ? offsets.top : 0;
     const gridSize = Math.max(8, Number.isFinite(view.gridSize) ? view.gridSize : 64);
 
+    root.style.setProperty('--vtt-grid-size', `${gridSize}px`);
+
     if (shape.type === 'wall') {
       updateWallElement(shape, view);
-      node.style.left = '0px';
-      node.style.top = '0px';
-      node.style.width = `${gridSize}px`;
-      node.style.height = `${gridSize}px`;
+      node.style.left = '0';
+      node.style.top = '0';
+      node.style.width = '100%';
+      node.style.height = '100%';
       return;
     }
 
@@ -3615,28 +3739,35 @@ function createTemplateTool() {
       return;
     }
 
-    const rotationSteps = ((shape.rotationSteps ?? 0) % 4 + 4) % 4;
-    const isVertical = rotationSteps % 2 !== 0;
-    const widthUnits = isVertical ? shape.width : shape.length;
-    const heightUnits = isVertical ? shape.length : shape.width;
+    const lengthUnits = Math.max(MIN_RECT_DIMENSION, shape.length);
+    const widthUnits = Math.max(MIN_RECT_DIMENSION, shape.width);
+    const rotation = normalizeAngle(shape.rotation ?? 0);
+    const centerColumn = shape.start.column + lengthUnits / 2;
+    const centerRow = shape.start.row + widthUnits / 2;
+    const radians = toRadians(rotation);
+    const spanWidth = Math.abs(lengthUnits * Math.cos(radians)) + Math.abs(widthUnits * Math.sin(radians));
+    const spanHeight = Math.abs(lengthUnits * Math.sin(radians)) + Math.abs(widthUnits * Math.cos(radians));
 
-    const left = offsetLeft + shape.start.column * gridSize;
-    const top = offsetTop + shape.start.row * gridSize;
-    const width = Math.max(gridSize, widthUnits * gridSize);
-    const height = Math.max(gridSize, heightUnits * gridSize);
+    const left = offsetLeft + (centerColumn - spanWidth / 2) * gridSize;
+    const top = offsetTop + (centerRow - spanHeight / 2) * gridSize;
+    const width = Math.max(gridSize, spanWidth * gridSize);
+    const height = Math.max(gridSize, spanHeight * gridSize);
 
     root.style.left = `${left}px`;
     root.style.top = `${top}px`;
     root.style.width = `${width}px`;
     root.style.height = `${height}px`;
-    root.style.transform = '';
+    root.style.setProperty('--vtt-rect-width', `${lengthUnits * gridSize}px`);
+    root.style.setProperty('--vtt-rect-height', `${widthUnits * gridSize}px`);
+    root.style.setProperty('--vtt-rect-rotation', `${rotation}deg`);
 
-    node.style.left = '0px';
-    node.style.top = '0px';
-    node.style.width = `${gridSize}px`;
-    node.style.height = `${gridSize}px`;
+    const nodeSize = gridSize;
+    node.style.left = `${width / 2 - nodeSize / 2}px`;
+    node.style.top = `${height / 2 - nodeSize / 2}px`;
+    node.style.width = `${nodeSize}px`;
+    node.style.height = `${nodeSize}px`;
 
-    label.textContent = `${widthUnits.toFixed(1)} × ${heightUnits.toFixed(1)}`;
+    label.textContent = `${lengthUnits.toFixed(1)} × ${widthUnits.toFixed(1)}`;
   }
 
   function updateLayerVisibility(view = viewState) {
@@ -3993,10 +4124,13 @@ function createTemplateTool() {
       startRow = startPoint.row - width;
     }
 
-    previewShape.start = { column: startColumn, row: startRow };
-    previewShape.length = Math.max(MIN_RECT_DIMENSION, length);
-    previewShape.width = Math.max(MIN_RECT_DIMENSION, width);
-    previewShape.rotationSteps = 0;
+    const lengthUnits = Math.max(MIN_RECT_DIMENSION, length);
+    const widthUnits = Math.max(MIN_RECT_DIMENSION, width);
+    const resolvedStart = resolveRectangleStart({ column: startColumn, row: startRow }, lengthUnits, widthUnits, 0, viewState);
+    previewShape.start = { column: resolvedStart.column, row: resolvedStart.row };
+    previewShape.length = lengthUnits;
+    previewShape.width = widthUnits;
+    previewShape.rotation = 0;
     render(viewState);
   }
 
@@ -4027,10 +4161,13 @@ function createTemplateTool() {
       startRow = startPoint.row - width;
     }
 
+    const lengthUnits = Math.max(MIN_RECT_DIMENSION, length);
+    const widthUnits = Math.max(MIN_RECT_DIMENSION, width);
+    const resolvedStart = resolveRectangleStart({ column: startColumn, row: startRow }, lengthUnits, widthUnits, 0, viewState);
     return {
-      start: { column: startColumn, row: startRow },
-      length: Math.max(MIN_RECT_DIMENSION, length),
-      width: Math.max(MIN_RECT_DIMENSION, width),
+      start: resolvedStart,
+      length: lengthUnits,
+      width: widthUnits,
     };
   }
 
@@ -4334,7 +4471,7 @@ function createTemplateTool() {
     const localTop = (midRow - minRow) * bounds.gridSize;
 
     const connectorWidth = bounds.gridSize * Math.SQRT2;
-    const connectorThickness = Math.max(4, bounds.gridSize * 0.35);
+    const connectorThickness = bounds.gridSize;
     connector.style.width = `${connectorWidth}px`;
     connector.style.height = `${connectorThickness}px`;
     connector.style.left = `${localLeft - connectorWidth / 2}px`;
@@ -4375,7 +4512,103 @@ function createTemplateTool() {
     return { column, row };
   }
 
-  function clampRectanglePosition(start, length, width, rotationSteps = 0, view = viewState) {
+  function snapToHalf(value) {
+    if (!Number.isFinite(value)) {
+      return 0;
+    }
+    return Math.round(value * 2) / 2;
+  }
+
+  function snapPointToGrid(point) {
+    if (!point) {
+      return { column: 0, row: 0 };
+    }
+    return {
+      column: snapToHalf(point.column ?? 0),
+      row: snapToHalf(point.row ?? 0),
+    };
+  }
+
+  function normalizeAngle(angle) {
+    if (!Number.isFinite(angle)) {
+      return 0;
+    }
+    let normalized = angle % 360;
+    if (normalized < 0) {
+      normalized += 360;
+    }
+    return normalized;
+  }
+
+  function snapAngle(angle, increment) {
+    if (!Number.isFinite(angle) || !Number.isFinite(increment) || increment <= 0) {
+      return angle;
+    }
+    return Math.round(angle / increment) * increment;
+  }
+
+  function toRadians(angle) {
+    return (angle * Math.PI) / 180;
+  }
+
+  function toDegrees(radians) {
+    return (radians * 180) / Math.PI;
+  }
+
+  function rectangleCenterFromStart(start, length, width) {
+    return {
+      column: (start?.column ?? 0) + length / 2,
+      row: (start?.row ?? 0) + width / 2,
+    };
+  }
+
+  function rectangleStartFromCenter(center, length, width) {
+    return {
+      column: (center?.column ?? 0) - length / 2,
+      row: (center?.row ?? 0) - width / 2,
+    };
+  }
+
+  function resolveRectangleStart(start, length, width, rotation = 0, view = viewState) {
+    const lengthUnits = Math.max(MIN_RECT_DIMENSION, Number.isFinite(length) ? length : MIN_RECT_DIMENSION);
+    const widthUnits = Math.max(MIN_RECT_DIMENSION, Number.isFinite(width) ? width : MIN_RECT_DIMENSION);
+    const normalizedRotation = Number.isFinite(rotation) ? normalizeAngle(rotation) : 0;
+    const snappedStart = snapPointToGrid(start);
+    const clamped = clampRectanglePosition(snappedStart, lengthUnits, widthUnits, normalizedRotation, view);
+    const snappedAgain = snapPointToGrid(clamped);
+    return clampRectanglePosition(snappedAgain, lengthUnits, widthUnits, normalizedRotation, view);
+  }
+
+  function resolveCircleCenter(center, radius, view = viewState) {
+    const radiusUnits = Math.max(MIN_CIRCLE_RADIUS, Number.isFinite(radius) ? radius : MIN_CIRCLE_RADIUS);
+    const snapped = snapPointToGrid(center);
+    const clamped = clampCircleCenter(snapped, radiusUnits, view);
+    const snappedAgain = snapPointToGrid(clamped);
+    return clampCircleCenter(snappedAgain, radiusUnits, view);
+  }
+
+  function gridPointToLocal(column, row, view = viewState) {
+    const offsets = view.gridOffsets ?? {};
+    const offsetLeft = Number.isFinite(offsets.left) ? offsets.left : 0;
+    const offsetTop = Number.isFinite(offsets.top) ? offsets.top : 0;
+    const gridSize = Math.max(8, Number.isFinite(view.gridSize) ? view.gridSize : 64);
+    return {
+      x: offsetLeft + column * gridSize,
+      y: offsetTop + row * gridSize,
+    };
+  }
+
+  function rectangleCenterToLocal(shape, view = viewState) {
+    if (!shape) {
+      return null;
+    }
+    const lengthUnits = Math.max(MIN_RECT_DIMENSION, shape.length ?? MIN_RECT_DIMENSION);
+    const widthUnits = Math.max(MIN_RECT_DIMENSION, shape.width ?? MIN_RECT_DIMENSION);
+    const center = rectangleCenterFromStart(shape.start ?? { column: 0, row: 0 }, lengthUnits, widthUnits);
+    return gridPointToLocal(center.column, center.row, view);
+  }
+
+  function clampRectanglePosition(start, length, width, rotation = 0, view = viewState) {
     const mapWidth = Number.isFinite(view.mapPixelSize?.width) ? view.mapPixelSize.width : 0;
     const mapHeight = Number.isFinite(view.mapPixelSize?.height) ? view.mapPixelSize.height : 0;
     if (mapWidth <= 0 || mapHeight <= 0) {
@@ -4394,15 +4627,53 @@ function createTemplateTool() {
       return { column: start.column, row: start.row };
     }
 
-    const isVertical = rotationSteps % 2 !== 0;
-    const widthUnits = isVertical ? width : length;
-    const heightUnits = isVertical ? length : width;
-    const maxColumn = Math.max(0, innerWidth / gridSize - widthUnits);
-    const maxRow = Math.max(0, innerHeight / gridSize - heightUnits);
+    const lengthUnits = Math.max(MIN_RECT_DIMENSION, Number.isFinite(length) ? length : MIN_RECT_DIMENSION);
+    const widthUnits = Math.max(MIN_RECT_DIMENSION, Number.isFinite(width) ? width : MIN_RECT_DIMENSION);
+    const center = rectangleCenterFromStart(start, lengthUnits, widthUnits);
+    const clampedCenter = clampRectangleCenter(center, lengthUnits, widthUnits, rotation, view);
+    return rectangleStartFromCenter(clampedCenter, lengthUnits, widthUnits);
+  }
+
+  function clampRectangleCenter(center, length, width, rotation = 0, view = viewState) {
+    const mapWidth = Number.isFinite(view.mapPixelSize?.width) ? view.mapPixelSize.width : 0;
+    const mapHeight = Number.isFinite(view.mapPixelSize?.height) ? view.mapPixelSize.height : 0;
+    if (mapWidth <= 0 || mapHeight <= 0) {
+      return { column: center.column, row: center.row };
+    }
+
+    const offsets = view.gridOffsets ?? {};
+    const offsetLeft = Number.isFinite(offsets.left) ? offsets.left : 0;
+    const offsetRight = Number.isFinite(offsets.right) ? offsets.right : 0;
+    const offsetTop = Number.isFinite(offsets.top) ? offsets.top : 0;
+    const offsetBottom = Number.isFinite(offsets.bottom) ? offsets.bottom : 0;
+    const gridSize = Math.max(8, Number.isFinite(view.gridSize) ? view.gridSize : 64);
+
+    const innerWidth = Math.max(0, mapWidth - offsetLeft - offsetRight);
+    const innerHeight = Math.max(0, mapHeight - offsetTop - offsetBottom);
+    if (innerWidth <= 0 || innerHeight <= 0) {
+      return { column: center.column, row: center.row };
+    }
+
+    const availableColumns = innerWidth / gridSize;
+    const availableRows = innerHeight / gridSize;
+    if (!Number.isFinite(availableColumns) || !Number.isFinite(availableRows) || availableColumns <= 0 || availableRows <= 0) {
+      return { column: center.column, row: center.row };
+    }
+
+    const radians = toRadians(rotation);
+    const spanWidth = Math.abs(length * Math.cos(radians)) + Math.abs(width * Math.sin(radians));
+    const spanHeight = Math.abs(length * Math.sin(radians)) + Math.abs(width * Math.cos(radians));
+    const halfWidth = Math.max(0, spanWidth / 2);
+    const halfHeight = Math.max(0, spanHeight / 2);
+
+    const minColumn = halfWidth;
+    const maxColumn = Math.max(halfWidth, availableColumns - halfWidth);
+    const minRow = halfHeight;
+    const maxRow = Math.max(halfHeight, availableRows - halfHeight);
 
     return {
-      column: clamp(start.column, 0, maxColumn),
-      row: clamp(start.row, 0, maxRow),
+      column: clamp(center.column, minColumn, maxColumn),
+      row: clamp(center.row, minRow, maxRow),
     };
   }
 
