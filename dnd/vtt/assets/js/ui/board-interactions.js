@@ -26,6 +26,9 @@ export function mountBoardInteractions(store, routes = {}) {
   const uploadInput = document.getElementById('vtt-map-upload-input');
   const templatesButton = document.querySelector('[data-action="open-templates"]');
   const groupButton = document.querySelector('[data-action="group-combatants"]');
+  const startCombatButton = document.querySelector('[data-action="start-combat"]');
+  const roundTracker = document.querySelector('[data-round-tracker]');
+  const roundValue = roundTracker?.querySelector('[data-round-value]');
   if (!board || !mapSurface || !mapTransform || !mapBackdrop || !mapImage || !templateLayer) return;
 
   const defaultStatusText = status?.textContent ?? '';
@@ -72,6 +75,12 @@ export function mountBoardInteractions(store, routes = {}) {
   let activeTokenSettingsId = null;
   let removeTokenSettingsListeners = null;
   let hitPointsEditSession = null;
+  const completedCombatants = new Set();
+  let combatActive = false;
+  let combatRound = 0;
+  let activeCombatantId = null;
+  let highlightedCombatantId = null;
+  let pendingRoundConfirmation = false;
 
   if (groupButton) {
     groupButton.addEventListener('click', () => {
@@ -82,7 +91,25 @@ export function mountBoardInteractions(store, routes = {}) {
     });
   }
 
+  if (startCombatButton) {
+    startCombatButton.classList.remove('btn--soon');
+    startCombatButton.addEventListener('click', (event) => {
+      event.preventDefault();
+      if (!isGmUser()) {
+        return;
+      }
+      handleStartCombat();
+    });
+  }
+
+  if (combatTrackerRoot) {
+    combatTrackerRoot.addEventListener('click', handleCombatTrackerClick);
+    combatTrackerRoot.addEventListener('keydown', handleCombatTrackerKeydown);
+  }
+
   notifySelectionChanged();
+  updateStartCombatButton();
+  updateCombatModeIndicators();
 
   const persistBoardStateSnapshot = () => {
     if (!routes?.state || typeof boardApi.getState !== 'function') {
@@ -1602,9 +1629,10 @@ export function mountBoardInteractions(store, routes = {}) {
     });
 
     pruneCombatGroups(activeIds);
+    pruneCompletedCombatants(activeIds);
 
     const waitingFragment = document.createDocumentFragment();
-    const seenIds = new Set();
+    const completedFragment = document.createDocumentFragment();
     const renderedRepresentatives = new Set();
 
     entries.forEach((combatant) => {
@@ -1617,7 +1645,6 @@ export function mountBoardInteractions(store, routes = {}) {
         return;
       }
 
-      seenIds.add(id);
       const representativeId = getRepresentativeIdFor(id);
       if (!representativeId || representativeId !== id) {
         return;
@@ -1633,6 +1660,7 @@ export function mountBoardInteractions(store, routes = {}) {
       token.className = 'vtt-combat-token';
       token.dataset.combatantId = representativeId;
       token.setAttribute('role', 'listitem');
+      token.setAttribute('tabindex', isGmUser() ? '0' : '-1');
 
       const groupMembers = getGroupMembers(representativeId);
       const groupSize = groupMembers.length;
@@ -1659,26 +1687,37 @@ export function mountBoardInteractions(store, routes = {}) {
         delete token.dataset.groupSize;
       }
 
-      waitingFragment.appendChild(token);
+      const isCompleted = combatActive && completedCombatants.has(representativeId);
+      token.dataset.combatState = isCompleted ? 'completed' : 'waiting';
+      applyCombatantStateToNode(token, representativeId);
+
+      if (isCompleted) {
+        completedFragment.appendChild(token);
+      } else {
+        waitingFragment.appendChild(token);
+      }
     });
+
+    const representativeSet = renderedRepresentatives;
+    if (activeCombatantId && !representativeSet.has(activeCombatantId)) {
+      setActiveCombatantId(null);
+    }
 
     waitingContainer.innerHTML = '';
     waitingContainer.appendChild(waitingFragment);
     waitingContainer.dataset.empty = waitingContainer.children.length ? 'false' : 'true';
 
-    Array.from(completedContainer.querySelectorAll('[data-combatant-id]')).forEach((node) => {
-      const combatantId = node.getAttribute('data-combatant-id');
-      if (!seenIds.has(combatantId)) {
-        node.remove();
-      }
-    });
-
+    completedContainer.innerHTML = '';
+    completedContainer.appendChild(completedFragment);
     completedContainer.dataset.empty = completedContainer.children.length ? 'false' : 'true';
-    combatTrackerRoot.dataset.hasCombatants =
-      waitingContainer.children.length || completedContainer.children.length ? 'true' : 'false';
+
+    const hasCombatants = waitingContainer.children.length || completedContainer.children.length;
+    combatTrackerRoot.dataset.hasCombatants = hasCombatants ? 'true' : 'false';
 
     attachTrackerHoverHandlers(waitingContainer);
     attachTrackerHoverHandlers(completedContainer);
+    refreshCombatantStateClasses();
+    updateCombatModeIndicators();
   }
 
   function cloneCombatantEntry(entry) {
@@ -1747,6 +1786,31 @@ export function mountBoardInteractions(store, routes = {}) {
         combatantGroupRepresentative.delete(memberId);
       }
     });
+  }
+
+  function pruneCompletedCombatants(activeIds) {
+    const activeSet = activeIds instanceof Set ? activeIds : new Set(activeIds ?? []);
+    const representativeSet = new Set();
+
+    activeSet.forEach((id) => {
+      const representativeId = getRepresentativeIdFor(id);
+      if (representativeId) {
+        representativeSet.add(representativeId);
+      }
+    });
+
+    const toRemove = [];
+    completedCombatants.forEach((id) => {
+      if (!representativeSet.has(id)) {
+        toRemove.push(id);
+      }
+    });
+
+    toRemove.forEach((id) => completedCombatants.delete(id));
+
+    if (activeCombatantId && !representativeSet.has(activeCombatantId)) {
+      setActiveCombatantId(null);
+    }
   }
 
   function getRepresentativeIdFor(combatantId) {
@@ -1832,6 +1896,310 @@ export function mountBoardInteractions(store, routes = {}) {
     }
     highlightTrackerToken(combatantId, shouldHighlight);
     highlightBoardTokensForCombatant(combatantId, shouldHighlight);
+  }
+
+  function applyCombatantStateToNode(node, representativeId) {
+    if (!(node instanceof HTMLElement)) {
+      return;
+    }
+    const isRepresentative = typeof representativeId === 'string' && representativeId !== '';
+    const isActive = combatActive && isRepresentative && representativeId === activeCombatantId;
+    const isCompleted = combatActive && isRepresentative && completedCombatants.has(representativeId);
+
+    node.classList.toggle('is-active', Boolean(isActive));
+    node.classList.toggle('is-completed', Boolean(isCompleted));
+    if (isActive) {
+      node.setAttribute('aria-current', 'true');
+    } else {
+      node.removeAttribute('aria-current');
+    }
+
+    const state = isCompleted ? 'completed' : isActive ? 'active' : 'waiting';
+    node.dataset.combatState = state;
+    node.setAttribute('tabindex', isGmUser() ? '0' : '-1');
+  }
+
+  function refreshCombatantStateClasses() {
+    if (!combatTrackerRoot) {
+      return;
+    }
+    Array.from(combatTrackerRoot.querySelectorAll('[data-combatant-id]')).forEach((node) => {
+      if (!(node instanceof HTMLElement)) {
+        return;
+      }
+      applyCombatantStateToNode(node, node.dataset.combatantId || null);
+    });
+  }
+
+  function setActiveCombatantId(nextId) {
+    const normalized = typeof nextId === 'string' && nextId ? nextId : null;
+    if (highlightedCombatantId && highlightedCombatantId !== normalized) {
+      highlightBoardTokensForCombatant(highlightedCombatantId, false);
+    }
+    highlightedCombatantId = normalized;
+    activeCombatantId = normalized;
+    if (normalized) {
+      highlightBoardTokensForCombatant(normalized, true);
+    }
+    refreshCombatantStateClasses();
+  }
+
+  function handleCombatTrackerClick(event) {
+    if (!combatActive || !isGmUser()) {
+      return;
+    }
+    const target = event.target instanceof HTMLElement ? event.target.closest('[data-combatant-id]') : null;
+    if (!target || !combatTrackerRoot?.contains(target)) {
+      return;
+    }
+    event.preventDefault();
+    processCombatantActivation(target);
+  }
+
+  function handleCombatTrackerKeydown(event) {
+    if (!combatActive || !isGmUser()) {
+      return;
+    }
+    if (event.key !== 'Enter' && event.key !== ' ') {
+      return;
+    }
+    const target = event.target instanceof HTMLElement ? event.target.closest('[data-combatant-id]') : null;
+    if (!target || !combatTrackerRoot?.contains(target)) {
+      return;
+    }
+    event.preventDefault();
+    processCombatantActivation(target);
+  }
+
+  function processCombatantActivation(target) {
+    if (!combatActive || !target) {
+      return;
+    }
+    const combatantId = target.dataset.combatantId || '';
+    if (!combatantId) {
+      return;
+    }
+
+    const isInCompleted = Boolean(target.closest('[data-combat-tracker-completed]'));
+    const state = target.dataset.combatState;
+
+    if (isInCompleted || state === 'completed') {
+      completedCombatants.delete(combatantId);
+      setActiveCombatantId(combatantId);
+      refreshCombatTracker();
+      updateCombatModeIndicators();
+      return;
+    }
+
+    if (activeCombatantId === combatantId) {
+      completeActiveCombatant();
+      return;
+    }
+
+    completedCombatants.delete(combatantId);
+    setActiveCombatantId(combatantId);
+    refreshCombatantStateClasses();
+    updateCombatModeIndicators();
+  }
+
+  function completeActiveCombatant() {
+    if (!activeCombatantId) {
+      return;
+    }
+    const finishedId = activeCombatantId;
+    completedCombatants.add(finishedId);
+    setActiveCombatantId(null);
+    refreshCombatTracker();
+    updateCombatModeIndicators();
+    checkForRoundCompletion();
+  }
+
+  function handleStartCombat() {
+    combatActive = true;
+    combatRound = 1;
+    completedCombatants.clear();
+    pendingRoundConfirmation = false;
+    setActiveCombatantId(null);
+    updateStartCombatButton();
+    updateCombatModeIndicators();
+    refreshCombatTracker();
+    rollForInitiativeAnnouncement();
+  }
+
+  function rollForInitiativeAnnouncement() {
+    const roll = Math.floor(Math.random() * 10) + 1;
+    const playersFirst = roll >= 6;
+    const message = playersFirst ? 'Players go first' : 'Enemies go first';
+    announceToChat(`${message}. (Rolled ${roll} on a d10.)`);
+    if (status) {
+      status.textContent = `${message}.`;
+    }
+  }
+
+  function announceToChat(message) {
+    if (!message || typeof window === 'undefined') {
+      return;
+    }
+    try {
+      const chat = window.dashboardChat;
+      if (!chat || typeof chat.sendMessage !== 'function') {
+        return;
+      }
+      const result = chat.sendMessage({ message });
+      if (result && typeof result.catch === 'function') {
+        result.catch((error) => {
+          console.warn('[VTT] Failed to send chat message', error);
+        });
+      }
+    } catch (error) {
+      console.warn('[VTT] Failed to access chat bridge', error);
+    }
+  }
+
+  function getAllRepresentativeIds() {
+    if (!Array.isArray(lastCombatTrackerEntries)) {
+      return [];
+    }
+    const ids = new Set();
+    lastCombatTrackerEntries.forEach((entry) => {
+      if (!entry || typeof entry.id !== 'string') {
+        return;
+      }
+      const representativeId = getRepresentativeIdFor(entry.id);
+      if (representativeId) {
+        ids.add(representativeId);
+      }
+    });
+    return Array.from(ids);
+  }
+
+  function checkForRoundCompletion() {
+    if (!combatActive || pendingRoundConfirmation || !isGmUser()) {
+      return;
+    }
+    const representatives = getAllRepresentativeIds();
+    if (!representatives.length) {
+      return;
+    }
+    const allCompleted = representatives.every((id) => completedCombatants.has(id));
+    if (!allCompleted) {
+      return;
+    }
+
+    pendingRoundConfirmation = true;
+
+    const promptRoundEnd = () => {
+      let confirmed = false;
+      try {
+        confirmed = typeof window !== 'undefined' && typeof window.confirm === 'function'
+          ? window.confirm('End combat round?')
+          : false;
+      } catch (error) {
+        confirmed = false;
+      }
+
+      if (confirmed) {
+        advanceCombatRound();
+      }
+
+      pendingRoundConfirmation = false;
+    };
+
+    if (typeof window !== 'undefined' && typeof window.setTimeout === 'function') {
+      window.setTimeout(promptRoundEnd, 0);
+    } else {
+      promptRoundEnd();
+    }
+  }
+
+  function advanceCombatRound() {
+    if (!combatActive) {
+      return;
+    }
+    completedCombatants.clear();
+    setActiveCombatantId(null);
+    combatRound = Math.max(1, combatRound + 1);
+    resetTriggeredActionsForActiveScene();
+    updateStartCombatButton();
+    updateCombatModeIndicators();
+    refreshCombatTracker();
+    if (status) {
+      status.textContent = `Round ${combatRound} begins.`;
+    }
+  }
+
+  function resetTriggeredActionsForActiveScene() {
+    if (typeof boardApi.updateState !== 'function') {
+      return;
+    }
+    const state = boardApi.getState?.() ?? {};
+    const activeSceneId = state.boardState?.activeSceneId ?? null;
+    if (!activeSceneId) {
+      return;
+    }
+
+    let mutated = false;
+    boardApi.updateState?.((draft) => {
+      const scenePlacements = ensureScenePlacementDraft(draft, activeSceneId);
+      scenePlacements.forEach((placement) => {
+        if (!placement || typeof placement !== 'object') {
+          return;
+        }
+        if (placement.triggeredActionReady !== true) {
+          placement.triggeredActionReady = true;
+          mutated = true;
+        }
+      });
+    });
+
+    if (mutated) {
+      persistBoardStateSnapshot();
+      refreshTokenSettings();
+    }
+  }
+
+  function updateStartCombatButton() {
+    if (!startCombatButton) {
+      return;
+    }
+    if (!isGmUser()) {
+      startCombatButton.disabled = true;
+      startCombatButton.title = 'Only the GM can start combat.';
+      startCombatButton.setAttribute('aria-pressed', 'false');
+      return;
+    }
+    startCombatButton.disabled = false;
+    startCombatButton.textContent = 'Start Combat';
+    startCombatButton.title = combatActive
+      ? 'Restart combat from round 1.'
+      : 'Start combat sequencing.';
+    startCombatButton.setAttribute('aria-pressed', combatActive ? 'true' : 'false');
+  }
+
+  function updateCombatModeIndicators() {
+    if (combatTrackerRoot) {
+      combatTrackerRoot.dataset.combatActive = combatActive ? 'true' : 'false';
+      combatTrackerRoot.dataset.completedCount = String(completedCombatants.size);
+    }
+    updateRoundTrackerDisplay();
+  }
+
+  function updateRoundTrackerDisplay() {
+    if (!roundTracker || !roundValue) {
+      return;
+    }
+    if (combatActive) {
+      const displayRound = combatRound > 0 ? combatRound : 1;
+      roundTracker.hidden = false;
+      roundValue.textContent = String(displayRound);
+    } else {
+      roundTracker.hidden = true;
+    }
+  }
+
+  function isGmUser() {
+    const state = boardApi.getState?.();
+    return Boolean(state?.user?.isGM);
   }
 
   function attachBoardTokenHover(tokenElement, tokenId) {
