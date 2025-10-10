@@ -28,17 +28,6 @@ export function mountBoardInteractions(store, routes = {}) {
   const groupButton = document.querySelector('[data-action="group-combatants"]');
   if (!board || !mapSurface || !mapTransform || !mapBackdrop || !mapImage || !templateLayer) return;
 
-  if (groupButton) {
-    groupButton.addEventListener('click', () => {
-      if (groupButton.disabled) {
-        return;
-      }
-      handleGroupSelectedTokens();
-    });
-  }
-
-  notifySelectionChanged();
-
   const defaultStatusText = status?.textContent ?? '';
 
   if (uploadButton && !routes.uploads) {
@@ -83,6 +72,17 @@ export function mountBoardInteractions(store, routes = {}) {
   let activeTokenSettingsId = null;
   let removeTokenSettingsListeners = null;
   let hitPointsEditSession = null;
+
+  if (groupButton) {
+    groupButton.addEventListener('click', () => {
+      if (groupButton.disabled) {
+        return;
+      }
+      handleGroupSelectedTokens();
+    });
+  }
+
+  notifySelectionChanged();
 
   const persistBoardStateSnapshot = () => {
     if (!routes?.state || typeof boardApi.getState !== 'function') {
