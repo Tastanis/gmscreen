@@ -461,7 +461,7 @@
 
 .dice-project-actions {
     display: grid;
-    grid-template-columns: auto auto 1fr;
+    grid-template-columns: auto auto auto 1fr;
     gap: 0.85rem;
     align-items: stretch;
 }
