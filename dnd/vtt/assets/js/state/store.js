@@ -296,6 +296,9 @@ function normalizePlacementEntry(entry) {
   );
   const triggeredActionReady =
     entry.triggeredActionReady ?? entry?.overlays?.triggeredAction?.ready ?? true;
+  const condition = normalizePlacementCondition(
+    entry.condition ?? entry.status ?? entry?.overlays?.condition ?? null
+  );
 
   return {
     id,
@@ -311,6 +314,7 @@ function normalizePlacementEntry(entry) {
     showHp,
     showTriggeredAction,
     triggeredActionReady: triggeredActionReady !== false,
+    condition,
   };
 }
 
@@ -379,6 +383,92 @@ function normalizePlacementHitPoints(value, fallbackMax = '') {
 
   if (normalized.current === '' && normalized.max !== '') {
     normalized.current = normalized.max;
+  }
+
+  return normalized;
+}
+
+function normalizeConditionDurationValue(value) {
+  const normalized = typeof value === 'string' ? value.trim().toLowerCase() : '';
+  if (!normalized) {
+    return 'save-ends';
+  }
+  if (normalized.includes('eot') || normalized.includes('end')) {
+    return 'end-of-turn';
+  }
+  return 'save-ends';
+}
+
+function normalizePlacementCondition(value) {
+  if (!value) {
+    return null;
+  }
+
+  if (typeof value === 'string') {
+    const name = value.trim();
+    if (!name) {
+      return null;
+    }
+    return { name, duration: { type: 'save-ends' } };
+  }
+
+  if (typeof value !== 'object') {
+    return null;
+  }
+
+  const name = typeof value.name === 'string' ? value.name.trim() : '';
+  if (!name) {
+    return null;
+  }
+
+  const durationSource =
+    typeof value.duration === 'string' || (value.duration && typeof value.duration === 'object')
+      ? value.duration
+      : value.mode ?? value.type ?? value.persist ?? null;
+
+  const durationType = normalizeConditionDurationValue(
+    typeof durationSource === 'string'
+      ? durationSource
+      : typeof durationSource?.type === 'string'
+      ? durationSource.type
+      : typeof durationSource?.value === 'string'
+      ? durationSource.value
+      : typeof durationSource?.mode === 'string'
+      ? durationSource.mode
+      : ''
+  );
+
+  const normalized = { name, duration: { type: durationType } };
+
+  const targetTokenId =
+    typeof durationSource?.targetTokenId === 'string'
+      ? durationSource.targetTokenId.trim()
+      : typeof durationSource?.tokenId === 'string'
+      ? durationSource.tokenId.trim()
+      : typeof durationSource?.id === 'string'
+      ? durationSource.id.trim()
+      : typeof value.targetTokenId === 'string'
+      ? value.targetTokenId.trim()
+      : null;
+
+  const targetTokenName =
+    typeof durationSource?.targetTokenName === 'string'
+      ? durationSource.targetTokenName.trim()
+      : typeof durationSource?.tokenName === 'string'
+      ? durationSource.tokenName.trim()
+      : typeof value.targetTokenName === 'string'
+      ? value.targetTokenName.trim()
+      : typeof value.tokenName === 'string'
+      ? value.tokenName.trim()
+      : '';
+
+  if (normalized.duration.type === 'end-of-turn') {
+    if (targetTokenId) {
+      normalized.duration.targetTokenId = targetTokenId;
+    }
+    if (targetTokenName) {
+      normalized.duration.targetTokenName = targetTokenName;
+    }
   }
 
   return normalized;
