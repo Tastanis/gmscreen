@@ -9,6 +9,10 @@ function renderVttSceneBoard(): string
         <header class="vtt-board__header">
             <div class="vtt-board__scene-meta">
                 <h1 id="active-scene-name" class="vtt-board__title">No Active Scene</h1>
+                <div class="vtt-board__round-tracker" data-round-tracker hidden>
+                    <span class="vtt-board__round-label">Round</span>
+                    <span class="vtt-board__round-value" data-round-value>1</span>
+                </div>
                 <p
                     id="active-scene-status"
                     class="vtt-board__status visually-hidden"
@@ -59,7 +63,7 @@ function renderVttSceneBoard(): string
                     >
                         Group
                     </button>
-                    <button class="btn btn--soon" type="button" disabled>Coming Soon</button>
+                    <button class="btn" type="button" data-action="start-combat">Start Combat</button>
                 </div>
                 <div class="vtt-board__controls">
                     <button class="btn" type="button" data-action="measure-distance" aria-pressed="false">Measure</button>
