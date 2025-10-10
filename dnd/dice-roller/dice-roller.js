@@ -356,6 +356,18 @@ class DashboardDiceRoller {
         actions.appendChild(rollBtn);
         this.projectReadyRollButton = rollBtn;
 
+        const clearBtn = document.createElement('button');
+        clearBtn.type = 'button';
+        clearBtn.className = 'dice-clear-btn';
+        clearBtn.textContent = 'Clear';
+        clearBtn.addEventListener('click', () => {
+            this.clearQueue();
+            if (!this.projectState.manualActive) {
+                this.updateProjectStatusMessage('Add dice for the project roll.');
+            }
+        });
+        actions.appendChild(clearBtn);
+
         const advantageToggle = document.createElement('button');
         advantageToggle.type = 'button';
         advantageToggle.className = 'dice-advantage-toggle dice-advantage-toggle--project';
