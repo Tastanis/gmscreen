@@ -9,19 +9,50 @@ function renderVttSceneBoard(): string
         <header class="vtt-board__header">
             <div class="vtt-board__scene-meta">
                 <h1 id="active-scene-name" class="vtt-board__title">No Active Scene</h1>
-                <p id="active-scene-status" class="vtt-board__status">Select or create a scene to begin.</p>
-            </div>
-            <div class="vtt-board__controls">
-                <button class="btn" type="button" data-action="measure-distance" aria-pressed="false">Measure</button>
-                <button
-                    class="btn"
-                    type="button"
-                    data-action="open-templates"
-                    aria-haspopup="true"
-                    aria-expanded="false"
+                <p
+                    id="active-scene-status"
+                    class="vtt-board__status visually-hidden"
+                    aria-live="polite"
                 >
-                    Templates
-                </button>
+                    Select or create a scene to begin.
+                </p>
+            </div>
+            <div class="vtt-board__tracker" data-combat-tracker>
+                <div class="vtt-combat-tracker" role="group" aria-label="Scene combat tracker">
+                    <div
+                        class="vtt-combat-tracker__section vtt-combat-tracker__section--completed"
+                        data-combat-tracker-completed
+                        role="list"
+                        aria-label="Turn completed"
+                        data-empty="true"
+                    ></div>
+                    <div class="vtt-combat-tracker__divider" aria-hidden="true"></div>
+                    <div
+                        class="vtt-combat-tracker__section vtt-combat-tracker__section--waiting"
+                        data-combat-tracker-waiting
+                        role="list"
+                        aria-label="Waiting for turn"
+                        data-empty="true"
+                    ></div>
+                </div>
+            </div>
+            <div class="vtt-board__actions">
+                <div class="vtt-board__coming-soon">
+                    <button class="btn btn--soon" type="button" disabled>Coming Soon</button>
+                    <button class="btn btn--soon" type="button" disabled>Coming Soon</button>
+                </div>
+                <div class="vtt-board__controls">
+                    <button class="btn" type="button" data-action="measure-distance" aria-pressed="false">Measure</button>
+                    <button
+                        class="btn"
+                        type="button"
+                        data-action="open-templates"
+                        aria-haspopup="true"
+                        aria-expanded="false"
+                    >
+                        Templates
+                    </button>
+                </div>
             </div>
         </header>
         <div class="vtt-board__canvas-wrapper">

@@ -19,6 +19,9 @@ export function mountBoardInteractions(store, routes = {}) {
   const emptyState = board?.querySelector('.vtt-board__empty');
   const status = document.getElementById('active-scene-status');
   const sceneName = document.getElementById('active-scene-name');
+  const combatTrackerRoot = document.querySelector('[data-combat-tracker]');
+  const combatTrackerWaiting = combatTrackerRoot?.querySelector('[data-combat-tracker-waiting]');
+  const combatTrackerCompleted = combatTrackerRoot?.querySelector('[data-combat-tracker-completed]');
   const uploadButton = document.querySelector('[data-action="upload-map"]');
   const uploadInput = document.getElementById('vtt-map-upload-input');
   const templatesButton = document.querySelector('[data-action="open-templates"]');
@@ -1379,6 +1382,7 @@ export function mountBoardInteractions(store, routes = {}) {
 
   function renderTokens(state = {}, layer, view) {
     if (!layer) {
+      updateCombatTracker([]);
       return;
     }
 
@@ -1398,6 +1402,7 @@ export function mountBoardInteractions(store, routes = {}) {
       renderedPlacements = [];
       selectedTokenIds.clear();
       closeTokenSettings();
+      updateCombatTracker([]);
       return;
     }
 
@@ -1419,12 +1424,15 @@ export function mountBoardInteractions(store, routes = {}) {
     const fragment = document.createDocumentFragment();
     let renderedCount = 0;
     const retainedSelection = new Set();
+    const trackerEntries = [];
 
     placements.forEach((placement) => {
       const normalized = normalizePlacementForRender(placement);
       if (!normalized) {
         return;
       }
+
+      trackerEntries.push(normalized);
 
       let column = normalized.column;
       let row = normalized.row;
@@ -1528,6 +1536,90 @@ export function mountBoardInteractions(store, routes = {}) {
       layer.hidden = true;
       renderedPlacements = [];
     }
+
+    updateCombatTracker(trackerEntries);
+  }
+
+  function updateCombatTracker(combatants = []) {
+    if (!combatTrackerRoot || !combatTrackerWaiting || !combatTrackerCompleted) {
+      return;
+    }
+
+    const waitingContainer = combatTrackerWaiting;
+    const completedContainer = combatTrackerCompleted;
+    const entries = Array.isArray(combatants) ? combatants : [];
+    const waitingFragment = document.createDocumentFragment();
+    const seenIds = new Set();
+
+    entries.forEach((combatant) => {
+      if (!combatant || typeof combatant !== 'object') {
+        return;
+      }
+
+      const id = typeof combatant.id === 'string' ? combatant.id : null;
+      if (!id) {
+        return;
+      }
+
+      seenIds.add(id);
+      const label = typeof combatant.name === 'string' && combatant.name.trim() ? combatant.name.trim() : 'Token';
+
+      const token = document.createElement('div');
+      token.className = 'vtt-combat-token';
+      token.dataset.combatantId = id;
+      token.setAttribute('role', 'listitem');
+      token.setAttribute('aria-label', label);
+      token.title = label;
+
+      const imageUrl = typeof combatant.imageUrl === 'string' ? combatant.imageUrl : '';
+      if (imageUrl) {
+        const img = document.createElement('img');
+        img.src = imageUrl;
+        img.alt = label;
+        token.appendChild(img);
+      } else {
+        const initials = document.createElement('span');
+        initials.className = 'vtt-combat-token__initials';
+        initials.textContent = deriveTokenInitials(label);
+        token.appendChild(initials);
+      }
+
+      waitingFragment.appendChild(token);
+    });
+
+    waitingContainer.innerHTML = '';
+    waitingContainer.appendChild(waitingFragment);
+    waitingContainer.dataset.empty = waitingContainer.children.length ? 'false' : 'true';
+
+    let completedHasTokens = false;
+    Array.from(completedContainer.querySelectorAll('[data-combatant-id]')).forEach((node) => {
+      const combatantId = node.getAttribute('data-combatant-id');
+      if (!seenIds.has(combatantId)) {
+        node.remove();
+      }
+    });
+
+    if (completedContainer.children.length) {
+      completedHasTokens = true;
+    }
+
+    completedContainer.dataset.empty = completedHasTokens ? 'false' : 'true';
+    combatTrackerRoot.dataset.hasCombatants = waitingContainer.children.length || completedContainer.children.length ? 'true' : 'false';
+  }
+
+  function deriveTokenInitials(label) {
+    const trimmed = label.trim();
+    if (!trimmed) {
+      return '?';
+    }
+
+    const words = trimmed.split(/\s+/).slice(0, 2);
+    const initials = words
+      .map((word) => word.charAt(0))
+      .filter(Boolean)
+      .join('')
+      .toUpperCase();
+    return initials || trimmed.charAt(0).toUpperCase();
   }
 
   function applyTokenOverlays(tokenElement, placement) {
