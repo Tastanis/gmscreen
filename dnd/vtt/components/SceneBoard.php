@@ -19,26 +19,46 @@ function renderVttSceneBoard(): string
             </div>
             <div class="vtt-board__tracker" data-combat-tracker>
                 <div class="vtt-combat-tracker" role="group" aria-label="Scene combat tracker">
-                    <div
-                        class="vtt-combat-tracker__section vtt-combat-tracker__section--completed"
-                        data-combat-tracker-completed
-                        role="list"
-                        aria-label="Turn completed"
-                        data-empty="true"
-                    ></div>
+                    <div class="vtt-combat-tracker__segment">
+                        <p id="vtt-combat-tracker-waiting-label" class="vtt-combat-tracker__heading">
+                            Waiting for turn
+                        </p>
+                        <div
+                            class="vtt-combat-tracker__section vtt-combat-tracker__section--waiting"
+                            data-combat-tracker-waiting
+                            role="list"
+                            aria-labelledby="vtt-combat-tracker-waiting-label"
+                            data-empty="true"
+                            data-empty-label="No combatants waiting"
+                        ></div>
+                    </div>
                     <div class="vtt-combat-tracker__divider" aria-hidden="true"></div>
-                    <div
-                        class="vtt-combat-tracker__section vtt-combat-tracker__section--waiting"
-                        data-combat-tracker-waiting
-                        role="list"
-                        aria-label="Waiting for turn"
-                        data-empty="true"
-                    ></div>
+                    <div class="vtt-combat-tracker__segment">
+                        <p id="vtt-combat-tracker-completed-label" class="vtt-combat-tracker__heading">
+                            Turn completed
+                        </p>
+                        <div
+                            class="vtt-combat-tracker__section vtt-combat-tracker__section--completed"
+                            data-combat-tracker-completed
+                            role="list"
+                            aria-labelledby="vtt-combat-tracker-completed-label"
+                            data-empty="true"
+                            data-empty-label="No turns completed"
+                        ></div>
+                    </div>
                 </div>
             </div>
             <div class="vtt-board__actions">
                 <div class="vtt-board__coming-soon">
-                    <button class="btn btn--soon" type="button" disabled>Coming Soon</button>
+                    <button
+                        class="btn"
+                        type="button"
+                        data-action="group-combatants"
+                        disabled
+                        title="Select at least two tokens to enable grouping"
+                    >
+                        Group
+                    </button>
                     <button class="btn btn--soon" type="button" disabled>Coming Soon</button>
                 </div>
                 <div class="vtt-board__controls">
