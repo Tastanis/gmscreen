@@ -75,7 +75,7 @@ If any of these APIs are missing the code fails silently (it guards with `if` ch
    section (via `switchSection('projects')`).
 3. Clicking any `.project-item` inside `#projects-list` captures the project
    index and name, then the modal enters the streamlined project controls:
-   - Quick buttons: Power Roll, D10, Edge, Bane, +1, +2
+   - Quick buttons: Power Roll (full-width), Edge, Bane, +1, +2
    - Manual result toggle + input
    - Roll Project button + advantage toggle + result panel
 4. Submitting the roll (automatic or manual) sends a `type: 'project_roll'`

@@ -5,10 +5,14 @@
     align-items: center;
     justify-content: center;
     background: rgba(15, 23, 42, 0.45);
-    z-index: 1050;
+    z-index: 1600;
     pointer-events: none;
     opacity: 1;
     transition: opacity 0.2s ease, visibility 0.2s ease;
+}
+
+.dice-modal-overlay--project-select {
+    background: transparent;
 }
 
 .dice-modal-overlay.hidden {
@@ -97,7 +101,35 @@
 }
 
 .dice-row--quick {
-    justify-content: space-between;
+    justify-content: flex-start;
+}
+
+.dice-row--quick-primary,
+.dice-row--quick-secondary {
+    width: 100%;
+}
+
+.dice-row--quick-primary {
+    flex-wrap: nowrap;
+}
+
+.dice-row--quick-primary .dice-btn {
+    flex: 1 1 100%;
+}
+
+.dice-row--quick-secondary {
+    flex-wrap: wrap;
+    justify-content: flex-start;
+}
+
+.dice-row--quick-secondary .dice-btn {
+    flex: 1 1 calc(25% - 0.75rem);
+    min-width: 4.25rem;
+}
+
+.dice-btn--power {
+    font-size: 1.1rem;
+    padding: 1.05rem 1.35rem;
 }
 
 .dice-row--grid {
@@ -292,21 +324,30 @@
     box-shadow: 0 12px 22px rgba(168, 85, 247, 0.35);
 }
 
+.dice-view--project-select {
+    align-items: flex-end;
+    text-align: right;
+    gap: 0.75rem;
+}
+
 .dice-project-message {
-    font-size: 1.1rem;
+    font-size: 0.95rem;
     font-weight: 600;
-    text-align: center;
+    max-width: 20rem;
+    text-align: right;
 }
 
 .dice-project-hint {
-    font-size: 0.95rem;
-    text-align: center;
+    font-size: 0.85rem;
+    text-align: right;
     color: #94a3b8;
+    max-width: 20rem;
 }
 
 .dice-project-select-actions {
     display: flex;
-    justify-content: center;
+    justify-content: flex-end;
+    width: 100%;
 }
 
 .dice-project-cancel {
