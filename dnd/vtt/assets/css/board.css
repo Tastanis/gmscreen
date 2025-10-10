@@ -80,13 +80,7 @@
 }
 
 .vtt-combat-tracker__section[data-empty='true']::before {
-  content: attr(data-empty-label);
-  color: rgba(15, 23, 42, 0.55);
-  font-size: 0.75rem;
-  letter-spacing: 0.02em;
-  text-transform: uppercase;
-  align-self: center;
-  justify-self: center;
+  content: "";
 }
 
 .vtt-combat-tracker__section--completed {
