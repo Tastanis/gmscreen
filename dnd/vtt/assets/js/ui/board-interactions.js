@@ -3678,7 +3678,8 @@ function createTemplateTool() {
     if (!gridPoint) {
       return;
     }
-    const snappedPoint = snapPointToGrid(gridPoint);
+    const snapOptions = placementState.type === 'rectangle' ? { step: 1 } : undefined;
+    const snappedPoint = snapPointToGrid(gridPoint, snapOptions);
 
     event.preventDefault();
     event.stopPropagation();
@@ -4040,21 +4041,6 @@ function createTemplateTool() {
       node.appendChild(label);
     }
 
-    let actions = null;
-    let removeBtn = null;
-    if (!isPreview && type === 'circle') {
-      actions = document.createElement('div');
-      actions.className = 'vtt-template__actions';
-      node.appendChild(actions);
-
-      removeBtn = document.createElement('button');
-      removeBtn.type = 'button';
-      removeBtn.className = 'vtt-template__action-btn';
-      removeBtn.textContent = '✕';
-      removeBtn.setAttribute('aria-label', 'Delete template');
-      actions.appendChild(removeBtn);
-    }
-
     let rotateHandle = null;
     if (!isPreview && type === 'rectangle') {
       rotateHandle = document.createElement('button');
@@ -4074,7 +4060,6 @@ function createTemplateTool() {
         shape: shapeEl,
         node,
         label,
-        actions,
         rotateHandle,
         tileContainer: wallTileContainer,
         tiles: new Map(),
@@ -4133,13 +4118,6 @@ function createTemplateTool() {
         rotateHandle.addEventListener('pointermove', (event) => updateRectangleRotation(event, shape));
         rotateHandle.addEventListener('pointerup', (event) => endRectangleRotation(event, shape));
         rotateHandle.addEventListener('pointercancel', (event) => endRectangleRotation(event, shape));
-      }
-      if (removeBtn) {
-        removeBtn.addEventListener('click', (event) => {
-          event.preventDefault();
-          event.stopPropagation();
-          removeShape(shape.id);
-        });
       }
     }
 
@@ -4466,8 +4444,10 @@ function createTemplateTool() {
     const centerColumn = shape.start.column + lengthUnits / 2;
     const centerRow = shape.start.row + widthUnits / 2;
     const radians = toRadians(rotation);
-    const spanWidth = Math.abs(lengthUnits * Math.cos(radians)) + Math.abs(widthUnits * Math.sin(radians));
-    const spanHeight = Math.abs(lengthUnits * Math.sin(radians)) + Math.abs(widthUnits * Math.cos(radians));
+    const cos = Math.cos(radians);
+    const sin = Math.sin(radians);
+    const spanWidth = Math.abs(lengthUnits * cos) + Math.abs(widthUnits * sin);
+    const spanHeight = Math.abs(lengthUnits * sin) + Math.abs(widthUnits * cos);
 
     const left = offsetLeft + (centerColumn - spanWidth / 2) * gridSize;
     const top = offsetTop + (centerRow - spanHeight / 2) * gridSize;
@@ -4483,8 +4463,15 @@ function createTemplateTool() {
     root.style.setProperty('--vtt-rect-rotation', `${rotation}deg`);
 
     const nodeSize = gridSize;
-    node.style.left = `${width / 2 - nodeSize / 2}px`;
-    node.style.top = `${height / 2 - nodeSize / 2}px`;
+    const anchorDistance = widthUnits / 2 + 0.5;
+    const offsetXUnits = 0;
+    const offsetYUnits = -anchorDistance;
+    const rotatedXUnits = offsetXUnits * cos - offsetYUnits * sin;
+    const rotatedYUnits = offsetXUnits * sin + offsetYUnits * cos;
+    const relativeXUnits = spanWidth / 2 + rotatedXUnits;
+    const relativeYUnits = spanHeight / 2 + rotatedYUnits;
+    node.style.left = `${relativeXUnits * gridSize - nodeSize / 2}px`;
+    node.style.top = `${relativeYUnits * gridSize - nodeSize / 2}px`;
     node.style.width = `${nodeSize}px`;
     node.style.height = `${nodeSize}px`;
 
@@ -5233,20 +5220,25 @@ function createTemplateTool() {
     return { column, row };
   }
 
-  function snapToHalf(value) {
+  function snapToStep(value, step) {
     if (!Number.isFinite(value)) {
       return 0;
     }
-    return Math.round(value * 2) / 2;
+    return Math.round(value / step) * step;
   }
 
-  function snapPointToGrid(point) {
+  function snapToHalf(value) {
+    return snapToStep(value, 0.5);
+  }
+
+  function snapPointToGrid(point, options = {}) {
+    const step = Number.isFinite(options.step) && options.step > 0 ? options.step : 0.5;
     if (!point) {
       return { column: 0, row: 0 };
     }
     return {
-      column: snapToHalf(point.column ?? 0),
-      row: snapToHalf(point.row ?? 0),
+      column: snapToStep(point.column ?? 0, step),
+      row: snapToStep(point.row ?? 0, step),
     };
   }
 
@@ -5294,9 +5286,9 @@ function createTemplateTool() {
     const lengthUnits = Math.max(MIN_RECT_DIMENSION, Number.isFinite(length) ? length : MIN_RECT_DIMENSION);
     const widthUnits = Math.max(MIN_RECT_DIMENSION, Number.isFinite(width) ? width : MIN_RECT_DIMENSION);
     const normalizedRotation = Number.isFinite(rotation) ? normalizeAngle(rotation) : 0;
-    const snappedStart = snapPointToGrid(start);
+    const snappedStart = snapPointToGrid(start, { step: 1 });
     const clamped = clampRectanglePosition(snappedStart, lengthUnits, widthUnits, normalizedRotation, view);
-    const snappedAgain = snapPointToGrid(clamped);
+    const snappedAgain = snapPointToGrid(clamped, { step: 1 });
     return clampRectanglePosition(snappedAgain, lengthUnits, widthUnits, normalizedRotation, view);
   }
 
