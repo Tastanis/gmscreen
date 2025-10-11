@@ -296,9 +296,22 @@ function normalizePlacementEntry(entry) {
   );
   const triggeredActionReady =
     entry.triggeredActionReady ?? entry?.overlays?.triggeredAction?.ready ?? true;
-  const condition = normalizePlacementCondition(
-    entry.condition ?? entry.status ?? entry?.overlays?.condition ?? null
-  );
+  const rawConditionSources = [];
+  if (entry.conditions !== undefined) {
+    rawConditionSources.push(entry.conditions);
+  }
+  if (entry?.overlays?.conditions !== undefined) {
+    rawConditionSources.push(entry.overlays.conditions);
+  }
+
+  const legacyConditionSource =
+    entry.condition ?? entry.status ?? entry?.overlays?.condition ?? null;
+  if (legacyConditionSource !== null && legacyConditionSource !== undefined) {
+    rawConditionSources.push(legacyConditionSource);
+  }
+
+  const conditions = normalizePlacementConditions(rawConditionSources);
+  const condition = conditions[0] ?? null;
   const combatTeam = normalizeCombatTeam(
     entry.combatTeam ?? entry.team ?? entry?.tags?.team ?? entry?.faction ?? null
   );
@@ -317,6 +330,7 @@ function normalizePlacementEntry(entry) {
     showHp,
     showTriggeredAction,
     triggeredActionReady: triggeredActionReady !== false,
+    conditions,
     condition,
     combatTeam,
   };
@@ -484,4 +498,55 @@ function normalizePlacementCondition(value) {
   }
 
   return normalized;
+}
+
+function normalizePlacementConditions(value) {
+  if (value === null || value === undefined) {
+    return [];
+  }
+
+  const queue = Array.isArray(value) ? [...value] : [value];
+  const normalized = [];
+  const seen = new Set();
+
+  while (queue.length) {
+    const current = queue.shift();
+    if (current === null || current === undefined) {
+      continue;
+    }
+    if (Array.isArray(current)) {
+      queue.push(...current);
+      continue;
+    }
+
+    const condition = normalizePlacementCondition(current);
+    if (!condition) {
+      continue;
+    }
+
+    const key = buildConditionKey(condition);
+    if (seen.has(key)) {
+      continue;
+    }
+
+    seen.add(key);
+    normalized.push(condition);
+  }
+
+  return normalized;
+}
+
+function buildConditionKey(condition) {
+  const name = typeof condition?.name === 'string' ? condition.name.trim().toLowerCase() : '';
+  const type = condition?.duration?.type ?? 'save-ends';
+  const targetId =
+    typeof condition?.duration?.targetTokenId === 'string'
+      ? condition.duration.targetTokenId.trim().toLowerCase()
+      : '';
+  const targetName =
+    typeof condition?.duration?.targetTokenName === 'string'
+      ? condition.duration.targetTokenName.trim().toLowerCase()
+      : '';
+  const targetKey = type === 'end-of-turn' ? `${targetId}|${targetName}` : '';
+  return `${name}|${type}|${targetKey}`;
 }

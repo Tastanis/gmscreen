@@ -3175,16 +3175,20 @@ export function mountBoardInteractions(store, routes = {}) {
 
   function syncTokenConditionLabel(tokenElement, placement) {
     let label = tokenElement.querySelector('.vtt-token__condition');
-    const condition = ensurePlacementCondition(placement?.condition ?? null);
+    const conditions = ensurePlacementConditions(placement?.conditions ?? placement?.condition ?? null);
 
-    if (!condition) {
+    if (!conditions.length) {
       if (label) {
         label.remove();
       }
       return;
     }
 
-    const text = formatConditionBadge(condition);
+    const text = conditions
+      .map((condition) => (condition && typeof condition.name === 'string' ? condition.name.trim() : ''))
+      .filter(Boolean)
+      .join(' • ');
+
     if (!text) {
       if (label) {
         label.remove();
@@ -3201,6 +3205,8 @@ export function mountBoardInteractions(store, routes = {}) {
     if (label.textContent !== text) {
       label.textContent = text;
     }
+    label.setAttribute('aria-label', text);
+    label.title = text;
   }
 
   function handleTriggerIndicatorPointerDown(event) {
@@ -3368,7 +3374,15 @@ export function mountBoardInteractions(store, routes = {}) {
     );
     const triggeredActionReady =
       placement.triggeredActionReady ?? placement?.overlays?.triggeredAction?.ready ?? true;
-    const condition = ensurePlacementCondition(placement.condition ?? placement?.status ?? null);
+    const conditions = ensurePlacementConditions(
+      placement?.conditions ??
+        placement.condition ??
+        placement?.status ??
+        placement?.overlays?.condition ??
+        placement?.overlays?.conditions ??
+        null
+    );
+    const condition = conditions[0] ?? null;
     const team = normalizeCombatTeam(
       placement.combatTeam ??
         placement.team ??
@@ -3390,6 +3404,7 @@ export function mountBoardInteractions(store, routes = {}) {
       showHp,
       showTriggeredAction,
       triggeredActionReady: triggeredActionReady !== false,
+      conditions,
       condition,
       team,
     };
@@ -4016,32 +4031,77 @@ export function mountBoardInteractions(store, routes = {}) {
     return condition;
   }
 
-  function formatConditionSummary(condition) {
-    if (!condition || typeof condition !== 'object' || !condition.name) {
-      return '';
+  function normalizePlacementConditions(value) {
+    if (value === null || value === undefined) {
+      return [];
     }
 
-    const durationType = condition.duration?.type ?? 'save-ends';
-    if (durationType === 'end-of-turn') {
-      const targetName = condition.duration?.targetTokenName?.trim();
-      return targetName ? `${condition.name} — EOT (${targetName})` : `${condition.name} — EOT`;
+    const queue = Array.isArray(value) ? [...value] : [value];
+    const normalized = [];
+    const seen = new Set();
+
+    while (queue.length) {
+      const current = queue.shift();
+      if (current === null || current === undefined) {
+        continue;
+      }
+      if (Array.isArray(current)) {
+        queue.push(...current);
+        continue;
+      }
+
+      const condition = normalizePlacementCondition(current);
+      if (!condition) {
+        continue;
+      }
+
+      const key = buildConditionKey(condition);
+      if (seen.has(key)) {
+        continue;
+      }
+
+      seen.add(key);
+      normalized.push(condition);
     }
 
-    return `${condition.name} — Save Ends`;
+    return normalized;
   }
 
-  function formatConditionBadge(condition) {
-    if (!condition || typeof condition !== 'object' || !condition.name) {
+  function ensurePlacementConditions(value) {
+    return normalizePlacementConditions(value)
+      .map((condition) => ensurePlacementCondition(condition))
+      .filter(Boolean);
+  }
+
+  function buildConditionKey(condition) {
+    if (!condition || typeof condition !== 'object' || typeof condition.name !== 'string') {
       return '';
     }
 
-    const durationType = condition.duration?.type ?? 'save-ends';
-    if (durationType === 'end-of-turn') {
-      const targetName = condition.duration?.targetTokenName?.trim();
-      return targetName ? `${condition.name} (EOT: ${targetName})` : `${condition.name} (EOT)`;
+    const name = condition.name.trim().toLowerCase();
+    const type = normalizeConditionDurationValue(condition?.duration?.type ?? '');
+    if (type === 'end-of-turn') {
+      const targetId =
+        typeof condition?.duration?.targetTokenId === 'string'
+          ? condition.duration.targetTokenId.trim().toLowerCase()
+          : '';
+      const targetName =
+        typeof condition?.duration?.targetTokenName === 'string'
+          ? condition.duration.targetTokenName.trim().toLowerCase()
+          : '';
+      return `${name}|${type}|${targetId}|${targetName}`;
     }
 
-    return `${condition.name} (Save Ends)`;
+    return `${name}|${type}`;
+  }
+
+  function areConditionsEqual(first, second) {
+    const left = ensurePlacementCondition(first);
+    const right = ensurePlacementCondition(second);
+    if (!left || !right) {
+      return false;
+    }
+    return buildConditionKey(left) === buildConditionKey(right);
   }
 
   function parseHitPointsNumber(value) {
@@ -4113,53 +4173,53 @@ export function mountBoardInteractions(store, routes = {}) {
           <button type="button" class="vtt-token-settings__close" data-token-settings-close aria-label="Close token settings">×</button>
         </header>
         <div class="vtt-token-settings__section vtt-token-settings__section--conditions">
-          <div class="vtt-token-settings__condition-row">
+          <div class="vtt-token-settings__condition-grid">
             <label class="vtt-token-settings__condition-label" for="vtt-token-condition-select">Condition</label>
-            <div class="vtt-token-settings__condition-controls">
-              <select
-                id="vtt-token-condition-select"
-                class="vtt-token-settings__condition-select"
-                data-token-settings-condition-select
-              >
-                ${conditionOptions}
-              </select>
-              <div
-                class="vtt-token-settings__condition-duration"
-                role="radiogroup"
-                aria-label="Condition duration"
-                data-token-settings-condition-duration-group
-              >
-                <label class="vtt-token-settings__duration-option">
-                  <input
-                    type="radio"
-                    name="token-condition-duration"
-                    value="save-ends"
-                    data-token-settings-condition-duration
-                    checked
-                  />
-                  <span>Save Ends</span>
-                </label>
-                <label class="vtt-token-settings__duration-option">
-                  <input
-                    type="radio"
-                    name="token-condition-duration"
-                    value="end-of-turn"
-                    data-token-settings-condition-duration
-                  />
-                  <span>EOT</span>
-                </label>
-              </div>
-              <button
-                type="button"
-                class="vtt-token-settings__condition-apply"
-                data-token-settings-condition-apply
-                aria-label="Apply condition"
-              >
-                <span aria-hidden="true">✔</span>
-              </button>
+            <select
+              id="vtt-token-condition-select"
+              class="vtt-token-settings__condition-select"
+              data-token-settings-condition-select
+            >
+              ${conditionOptions}
+            </select>
+            <div
+              class="vtt-token-settings__condition-duration"
+              role="radiogroup"
+              aria-label="Condition duration"
+              data-token-settings-condition-duration-group
+            >
+              <label class="vtt-token-settings__duration-option">
+                <input
+                  type="radio"
+                  name="token-condition-duration"
+                  value="save-ends"
+                  data-token-settings-condition-duration
+                  aria-label="Save Ends"
+                  checked
+                />
+                <span>SE</span>
+              </label>
+              <label class="vtt-token-settings__duration-option">
+                <input
+                  type="radio"
+                  name="token-condition-duration"
+                  value="end-of-turn"
+                  data-token-settings-condition-duration
+                  aria-label="End of Turn"
+                />
+                <span>EOT</span>
+              </label>
             </div>
+            <button
+              type="button"
+              class="vtt-token-settings__condition-apply"
+              data-token-settings-condition-apply
+              aria-label="Apply condition"
+            >
+              <span aria-hidden="true">✔</span>
+            </button>
           </div>
-          <p class="vtt-token-settings__condition-summary" data-token-settings-condition-summary></p>
+          <ul class="vtt-token-settings__condition-list" data-token-settings-condition-list></ul>
         </div>
         <div class="vtt-token-settings__section">
           <div class="vtt-token-settings__row">
@@ -4211,7 +4271,7 @@ export function mountBoardInteractions(store, routes = {}) {
         element.querySelectorAll('[data-token-settings-condition-duration]')
       ),
       conditionApply: element.querySelector('[data-token-settings-condition-apply]'),
-      conditionSummary: element.querySelector('[data-token-settings-condition-summary]'),
+      conditionList: element.querySelector('[data-token-settings-condition-list]'),
     };
 
     element.addEventListener('contextmenu', (event) => {
@@ -4224,11 +4284,6 @@ export function mountBoardInteractions(store, routes = {}) {
 
     if (menu.conditionSelect) {
       menu.conditionSelect.addEventListener('change', () => {
-        if (menu.conditionSelect.value === '') {
-          Array.from(menu.conditionSelect.options ?? [])
-            .filter((option) => option?.dataset?.dynamicConditionOption === 'true')
-            .forEach((option) => option.remove());
-        }
         updateConditionDurationStyles();
         updateConditionControlState();
       });
@@ -4247,6 +4302,10 @@ export function mountBoardInteractions(store, routes = {}) {
       menu.conditionApply.addEventListener('click', () => {
         handleTokenConditionApply();
       });
+    }
+
+    if (menu.conditionList) {
+      menu.conditionList.addEventListener('click', handleConditionListClick);
     }
 
     if (menu.showHpToggle) {
@@ -4554,75 +4613,59 @@ export function mountBoardInteractions(store, routes = {}) {
       return;
     }
 
-    const condition = ensurePlacementCondition(placement?.condition ?? null);
+    const conditions = ensurePlacementConditions(placement?.conditions ?? placement?.condition ?? null);
     const select = tokenSettingsMenu.conditionSelect;
     if (select) {
-      const nextValue = condition?.name ?? '';
+      const previousValue = typeof select.value === 'string' ? select.value : '';
       const options = Array.from(select.options ?? []);
-      if (nextValue) {
-        const hasStaticOption = options.some(
-          (option) => option.value === nextValue && option?.dataset?.dynamicConditionOption !== 'true'
-        );
-        if (!hasStaticOption) {
-          let dynamicOption = options.find(
-            (option) => option.value === nextValue && option?.dataset?.dynamicConditionOption === 'true'
-          );
-          if (!dynamicOption) {
-            dynamicOption = document.createElement('option');
-            dynamicOption.value = nextValue;
-            dynamicOption.textContent = nextValue;
-            dynamicOption.dataset.dynamicConditionOption = 'true';
-            select.appendChild(dynamicOption);
-          }
-        } else {
-          options
-            .filter((option) => option?.dataset?.dynamicConditionOption === 'true' && option.value !== nextValue)
-            .forEach((option) => option.remove());
-        }
-      } else {
-        options
-          .filter((option) => option?.dataset?.dynamicConditionOption === 'true')
-          .forEach((option) => option.remove());
-      }
-      if (select.value !== nextValue) {
-        select.value = nextValue;
+      options
+        .filter((option) => option?.dataset?.dynamicConditionOption === 'true')
+        .forEach((option) => option.remove());
+
+      const staticNames = new Set(CONDITION_NAMES.map((name) => name.trim()));
+      const dynamicNames = Array.from(
+        new Set(
+          conditions
+            .map((condition) => (condition && typeof condition.name === 'string' ? condition.name.trim() : ''))
+            .filter(Boolean)
+        )
+      );
+
+      dynamicNames
+        .filter((name) => !staticNames.has(name))
+        .forEach((name) => {
+          const option = document.createElement('option');
+          option.value = name;
+          option.textContent = name;
+          option.dataset.dynamicConditionOption = 'true';
+          select.appendChild(option);
+        });
+
+      if (previousValue && !Array.from(select.options ?? []).some((option) => option.value === previousValue)) {
+        select.value = '';
       }
     }
 
-    const durationType = condition?.duration?.type ?? 'save-ends';
-    const radios = tokenSettingsMenu.conditionDurationRadios ?? [];
+    ensureDefaultConditionDuration();
+    renderConditionList(conditions);
+    updateConditionDurationStyles();
+    updateConditionControlState();
+  }
+
+  function ensureDefaultConditionDuration(radios = tokenSettingsMenu?.conditionDurationRadios ?? []) {
     let hasCheckedRadio = false;
     radios.forEach((radio) => {
-      if (!isInputElement(radio)) {
-        return;
-      }
-      const radioValue = normalizeConditionDurationValue(radio.value);
-      const shouldCheck = radioValue === durationType;
-      if (radio.checked !== shouldCheck) {
-        radio.checked = shouldCheck;
-      }
-      if (shouldCheck) {
+      if (isInputElement(radio) && radio.checked) {
         hasCheckedRadio = true;
       }
     });
 
-    if (!hasCheckedRadio && radios.length) {
+    if (!hasCheckedRadio) {
       const firstRadio = radios.find((radio) => isInputElement(radio));
       if (firstRadio && !firstRadio.checked) {
         firstRadio.checked = true;
       }
     }
-
-    updateConditionDurationStyles(radios);
-
-    const summaryElement = tokenSettingsMenu.conditionSummary;
-    if (summaryElement) {
-      const summaryText = formatConditionSummary(condition);
-      summaryElement.textContent = summaryText;
-      summaryElement.hidden = summaryText === '';
-    }
-
-    updateConditionControlState();
   }
 
   function updateConditionDurationStyles(radios = tokenSettingsMenu?.conditionDurationRadios ?? []) {
@@ -4632,6 +4675,43 @@ export function mountBoardInteractions(store, routes = {}) {
         return;
       }
       label.classList.toggle('is-selected', Boolean(radio?.checked));
+    });
+  }
+
+  function renderConditionList(conditions = []) {
+    const list = tokenSettingsMenu?.conditionList;
+    if (!list) {
+      return;
+    }
+
+    list.innerHTML = '';
+
+    conditions.forEach((condition, index) => {
+      if (!condition || typeof condition.name !== 'string') {
+        return;
+      }
+      const name = condition.name.trim();
+      if (!name) {
+        return;
+      }
+
+      const item = document.createElement('li');
+      item.className = 'vtt-token-settings__condition-item';
+
+      const nameSpan = document.createElement('span');
+      nameSpan.className = 'vtt-token-settings__condition-name';
+      nameSpan.textContent = name;
+      item.appendChild(nameSpan);
+
+      const removeButton = document.createElement('button');
+      removeButton.type = 'button';
+      removeButton.className = 'vtt-token-settings__condition-remove';
+      removeButton.dataset.tokenSettingsConditionRemove = String(index);
+      removeButton.setAttribute('aria-label', `Remove ${name}`);
+      removeButton.textContent = '×';
+      item.appendChild(removeButton);
+
+      list.appendChild(item);
     });
   }
 
@@ -4666,7 +4746,8 @@ export function mountBoardInteractions(store, routes = {}) {
     const hasSelection = selection !== '';
 
     const placement = activeTokenSettingsId ? getPlacementFromStore(activeTokenSettingsId) : null;
-    const existingCondition = ensurePlacementCondition(placement?.condition ?? null);
+    const existingConditions = ensurePlacementConditions(placement?.conditions ?? placement?.condition ?? null);
+    const hasExistingConditions = existingConditions.length > 0;
 
     tokenSettingsMenu.conditionDurationRadios?.forEach((radio) => {
       if (isInputElement(radio)) {
@@ -4675,7 +4756,7 @@ export function mountBoardInteractions(store, routes = {}) {
     });
 
     if (tokenSettingsMenu.conditionApply) {
-      tokenSettingsMenu.conditionApply.disabled = !hasSelection && !existingCondition;
+      tokenSettingsMenu.conditionApply.disabled = !hasSelection && !hasExistingConditions;
     }
   }
 
@@ -4711,19 +4792,121 @@ export function mountBoardInteractions(store, routes = {}) {
     }
 
     const normalized = ensurePlacementCondition(condition);
+    let didChange = false;
     const updated = updatePlacementById(placementId, (target) => {
+      const conditions = ensurePlacementConditions(target?.conditions ?? target?.condition ?? null);
+      const hadConditions = conditions.length > 0;
+
       if (normalized) {
-        target.condition = normalized;
-      } else if (target.condition !== undefined) {
-        delete target.condition;
+        const hasDuplicate = conditions.some((existing) => areConditionsEqual(existing, normalized));
+        if (hasDuplicate) {
+          return;
+        }
+        conditions.push(normalized);
+        didChange = true;
+      } else if (hadConditions || target.conditions !== undefined || target.condition !== undefined) {
+        conditions.length = 0;
+        didChange = true;
+      } else {
+        return;
+      }
+
+      if (conditions.length) {
+        target.conditions = conditions;
+        target.condition = conditions[0];
+      } else {
+        if (target.conditions !== undefined) {
+          delete target.conditions;
+        }
+        if (target.condition !== undefined) {
+          delete target.condition;
+        }
       }
     });
 
-    if (updated) {
+    if (updated && didChange) {
       refreshTokenSettings();
+      if (placementId === activeTokenSettingsId) {
+        resetConditionControls();
+      }
     }
 
-    return updated;
+    return updated && didChange;
+  }
+
+  function handleConditionListClick(event) {
+    const button = event.target.closest('[data-token-settings-condition-remove]');
+    if (!button) {
+      return;
+    }
+
+    event.preventDefault();
+
+    if (!activeTokenSettingsId) {
+      return;
+    }
+
+    const indexValue = button.dataset.tokenSettingsConditionRemove;
+    const index = Number.parseInt(indexValue, 10);
+    if (!Number.isInteger(index) || index < 0) {
+      return;
+    }
+
+    removeConditionFromPlacement(activeTokenSettingsId, index);
+  }
+
+  function removeConditionFromPlacement(placementId, index) {
+    if (!placementId || !Number.isInteger(index) || index < 0) {
+      return false;
+    }
+
+    const placement = getPlacementFromStore(placementId);
+    const existingConditions = ensurePlacementConditions(placement?.conditions ?? placement?.condition ?? null);
+    if (index < 0 || index >= existingConditions.length) {
+      return false;
+    }
+
+    let didChange = false;
+    const updated = updatePlacementById(placementId, (target) => {
+      const conditions = ensurePlacementConditions(target?.conditions ?? target?.condition ?? null);
+      conditions.splice(index, 1);
+      didChange = true;
+
+      if (conditions.length) {
+        target.conditions = conditions;
+        target.condition = conditions[0];
+      } else {
+        if (target.conditions !== undefined) {
+          delete target.conditions;
+        }
+        if (target.condition !== undefined) {
+          delete target.condition;
+        }
+      }
+    });
+
+    if (updated && didChange) {
+      refreshTokenSettings();
+      if (placementId === activeTokenSettingsId) {
+        resetConditionControls();
+      }
+    }
+
+    return updated && didChange;
+  }
+
+  function resetConditionControls() {
+    if (!tokenSettingsMenu) {
+      return;
+    }
+
+    if (tokenSettingsMenu.conditionSelect) {
+      tokenSettingsMenu.conditionSelect.value = '';
+    }
+
+    ensureDefaultConditionDuration();
+    updateConditionDurationStyles();
+    updateConditionControlState();
   }
 
   function promptConditionTargetSelection(placementId, conditionName) {
