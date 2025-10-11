@@ -2202,13 +2202,13 @@ export function mountBoardInteractions(store, routes = {}) {
 
     closeTurnPrompt();
 
-    const label = escapeHtml(getCombatantLabel(combatantId));
+    const label = getCombatantLabel(combatantId);
+    const heading = formatTurnPromptHeading(label);
     const overlay = document.createElement('div');
     overlay.className = 'vtt-turn-overlay';
     overlay.innerHTML = `
-      <div class="vtt-turn-dialog" role="dialog" aria-modal="true" data-turn-dialog>
-        <h3 class="vtt-turn-dialog__title">It's Your Turn</h3>
-        <p class="vtt-turn-dialog__message">${label}, it's your turn.</p>
+      <div class="vtt-turn-dialog" role="dialog" data-turn-dialog>
+        <h3 class="vtt-turn-dialog__title">${escapeHtml(heading)}</h3>
         <div class="vtt-turn-dialog__actions">
           <button type="button" class="btn" data-turn-cancel>Cancel</button>
           <button type="button" class="btn btn--primary" data-turn-complete>End Turn</button>
@@ -2217,6 +2217,7 @@ export function mountBoardInteractions(store, routes = {}) {
     `;
 
     document.body.appendChild(overlay);
+    positionTurnPromptOverlay(overlay);
 
     const cancelButton = overlay.querySelector('[data-turn-cancel]');
     const completeButton = overlay.querySelector('[data-turn-complete]');
@@ -2230,12 +2231,6 @@ export function mountBoardInteractions(store, routes = {}) {
       completeActiveCombatant();
     };
 
-    const handleOverlayClick = (event) => {
-      if (event.target === overlay) {
-        handleCancel();
-      }
-    };
-
     const handleKeydown = (event) => {
       if (event.key === 'Escape') {
         event.preventDefault();
@@ -2243,10 +2238,14 @@ export function mountBoardInteractions(store, routes = {}) {
       }
     };
 
+    const handleResize = () => {
+      positionTurnPromptOverlay(overlay);
+    };
+
     cancelButton?.addEventListener('click', handleCancel);
     completeButton?.addEventListener('click', handleComplete);
-    overlay.addEventListener('click', handleOverlayClick);
     document.addEventListener('keydown', handleKeydown);
+    window.addEventListener('resize', handleResize);
 
     activeTurnDialog = {
       overlay,
@@ -2254,8 +2253,8 @@ export function mountBoardInteractions(store, routes = {}) {
       completeButton,
       handleCancel,
       handleComplete,
-      handleOverlayClick,
       handleKeydown,
+      handleResize,
       combatantId,
     };
 
@@ -2270,18 +2269,55 @@ export function mountBoardInteractions(store, routes = {}) {
     }
   }
 
+  function positionTurnPromptOverlay(overlay) {
+    if (!overlay || typeof window === 'undefined' || typeof document === 'undefined') {
+      return;
+    }
+
+    const margin = 12;
+    let top = margin;
+    let right = margin;
+
+    const timer = document.querySelector('.vtt-board__turn-timer:not([hidden])');
+    if (timer instanceof HTMLElement) {
+      const rect = timer.getBoundingClientRect();
+      const viewportWidth = window.innerWidth || document.documentElement.clientWidth || 0;
+      top = rect.bottom + margin;
+      right = Math.max(margin, viewportWidth - rect.right);
+    }
+
+    overlay.style.top = `${Math.max(margin, top)}px`;
+    overlay.style.right = `${Math.max(margin, right)}px`;
+  }
+
+  function formatTurnPromptHeading(label) {
+    const baseLabel = typeof label === 'string' ? label.trim() : '';
+    const safeLabel = baseLabel || 'Token';
+    const normalized = safeLabel.replace(/\s+/g, ' ');
+    const lower = normalized.toLowerCase();
+    if (lower.endsWith("'s") || lower.endsWith('’s')) {
+      return `${normalized} Turn`;
+    }
+    if (/[sS]$/.test(normalized)) {
+      return `${normalized}' Turn`;
+    }
+    return `${normalized}'s Turn`;
+  }
+
   function closeTurnPrompt() {
     if (!activeTurnDialog) {
       return;
     }
 
-    const { overlay, cancelButton, completeButton, handleCancel, handleComplete, handleOverlayClick, handleKeydown } =
+    const { overlay, cancelButton, completeButton, handleCancel, handleComplete, handleKeydown, handleResize } =
       activeTurnDialog;
 
     cancelButton?.removeEventListener('click', handleCancel);
     completeButton?.removeEventListener('click', handleComplete);
-    overlay?.removeEventListener('click', handleOverlayClick);
     document.removeEventListener('keydown', handleKeydown);
+    if (typeof handleResize === 'function') {
+      window.removeEventListener('resize', handleResize);
+    }
     overlay?.remove();
     activeTurnDialog = null;
   }
@@ -3684,6 +3720,23 @@ export function mountBoardInteractions(store, routes = {}) {
       return null;
     }
     return scenePlacements.find((placement) => placement && placement.id === placementId) ?? null;
+  }
+
+  function getPlacementsForActiveScene() {
+    const state = boardApi.getState?.() ?? {};
+    const activeSceneId = state.boardState?.activeSceneId ?? null;
+    if (!activeSceneId) {
+      return [];
+    }
+    const allPlacements = state.boardState?.placements;
+    if (!allPlacements || typeof allPlacements !== 'object') {
+      return [];
+    }
+    const scenePlacements = allPlacements[activeSceneId];
+    if (!Array.isArray(scenePlacements)) {
+      return [];
+    }
+    return scenePlacements.slice();
   }
 
   function tokenLabel(placement) {
