@@ -299,7 +299,6 @@
   left: 0;
   transform-origin: top left;
   will-change: transform;
-  pointer-events: none;
   z-index: 1;
   --vtt-map-scale: 1;
 }
@@ -365,7 +364,6 @@
 .vtt-board__templates {
   position: absolute;
   inset: 0;
-  pointer-events: none;
   z-index: 3;
 }
 
@@ -386,8 +384,11 @@
 
 .vtt-template {
   position: absolute;
-  pointer-events: none;
   --vtt-template-color: rgba(14, 165, 233, 0.9);
+}
+
+.vtt-template--preview {
+  pointer-events: none;
 }
 
 .vtt-template--rectangle {
