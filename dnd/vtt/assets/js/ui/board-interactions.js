@@ -7,6 +7,11 @@ import {
 } from './drag-ruler.js';
 import { persistBoardState } from '../services/board-state-service.js';
 
+const TURN_TIMER_DURATION_MS = 60_000;
+const TURN_TIMER_STAGE_INTERVAL_MS = 20_000;
+const TURN_TIMER_INITIAL_DISPLAY = '1:00';
+const TURN_TIMER_STAGE_FALLBACK = 'full';
+
 export function mountBoardInteractions(store, routes = {}) {
   const board = document.getElementById('vtt-board-canvas');
   const mapSurface = document.getElementById('vtt-map-surface');
@@ -123,11 +128,6 @@ export function mountBoardInteractions(store, routes = {}) {
   let allyTurnTimerExpiresAt = null;
   let currentTurnTimerStage = null;
   let audioContext = null;
-
-  const TURN_TIMER_DURATION_MS = 60_000;
-  const TURN_TIMER_STAGE_INTERVAL_MS = 20_000;
-  const TURN_TIMER_INITIAL_DISPLAY = '1:00';
-  const TURN_TIMER_STAGE_FALLBACK = 'full';
   // Sand timer artwork is resolved via CSS data-stage attributes using
   // assets/images/turn-timer/sand-timer-{stage}.png.
   const SOUND_PROFILES = {
