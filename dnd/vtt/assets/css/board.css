@@ -143,6 +143,16 @@
   transition: box-shadow var(--vtt-transition), border-color var(--vtt-transition), transform var(--vtt-transition);
 }
 
+.vtt-combat-token[data-combat-team='ally'] {
+  border-color: rgba(74, 222, 128, 0.55);
+  box-shadow: 0 4px 10px rgba(22, 101, 52, 0.3);
+}
+
+.vtt-combat-token[data-combat-team='enemy'] {
+  border-color: rgba(248, 113, 113, 0.4);
+  box-shadow: 0 4px 10px rgba(127, 29, 29, 0.32);
+}
+
 .vtt-combat-token img {
   width: 100%;
   height: 100%;
@@ -787,6 +797,16 @@
   will-change: transform;
 }
 
+.vtt-token[data-combat-team='ally'] {
+  border-color: rgba(74, 222, 128, 0.9);
+  box-shadow: 0 10px 24px rgba(22, 101, 52, 0.45);
+}
+
+.vtt-token[data-combat-team='enemy'] {
+  border-color: rgba(248, 113, 113, 0.9);
+  box-shadow: 0 10px 24px rgba(127, 29, 29, 0.55);
+}
+
 .vtt-token.is-selected,
 .vtt-token.is-hover-highlight {
   border-color: rgba(129, 140, 248, 0.95);
@@ -1302,6 +1322,50 @@
 
 .vtt-condition-dialog__actions button:active {
   transform: scale(0.97);
+}
+
+.vtt-turn-overlay {
+  position: fixed;
+  inset: 0;
+  background: rgba(15, 23, 42, 0.55);
+  backdrop-filter: blur(6px);
+  display: grid;
+  place-items: center;
+  padding: 1.5rem;
+  z-index: 65;
+}
+
+.vtt-turn-dialog {
+  width: min(360px, 92vw);
+  background: rgba(15, 23, 42, 0.94);
+  border: 1px solid rgba(148, 163, 184, 0.3);
+  border-radius: calc(var(--vtt-radius) * 1.1);
+  padding: 1.6rem 1.75rem;
+  box-shadow: 0 30px 64px rgba(15, 23, 42, 0.6);
+  text-align: center;
+  color: #f8fafc;
+}
+
+.vtt-turn-dialog__title {
+  margin: 0 0 0.5rem;
+  font-size: 1.25rem;
+  font-weight: 600;
+}
+
+.vtt-turn-dialog__message {
+  margin: 0 0 1.5rem;
+  font-size: 0.95rem;
+  color: rgba(226, 232, 240, 0.88);
+}
+
+.vtt-turn-dialog__actions {
+  display: flex;
+  justify-content: center;
+  gap: 0.75rem;
+}
+
+.vtt-turn-dialog__actions .btn {
+  min-width: 7.5rem;
 }
 
 .vtt-board__map-surface.is-token-drop-active::after {

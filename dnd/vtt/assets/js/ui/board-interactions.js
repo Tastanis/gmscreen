@@ -93,12 +93,16 @@ export function mountBoardInteractions(store, routes = {}) {
   let removeTokenSettingsListeners = null;
   let hitPointsEditSession = null;
   const completedCombatants = new Set();
+  const combatantTeams = new Map();
   let combatActive = false;
   let combatRound = 0;
   let activeCombatantId = null;
   let highlightedCombatantId = null;
   let pendingRoundConfirmation = false;
   let activeConditionPrompt = null;
+  let activeTurnDialog = null;
+  let startingCombatTeam = null;
+  let currentTurnTeam = null;
 
   function escapeHtml(value) {
     if (typeof value !== 'string') {
@@ -154,6 +158,7 @@ export function mountBoardInteractions(store, routes = {}) {
 
   if (combatTrackerRoot) {
     combatTrackerRoot.addEventListener('click', handleCombatTrackerClick);
+    combatTrackerRoot.addEventListener('dblclick', handleCombatTrackerDoubleClick);
     combatTrackerRoot.addEventListener('keydown', handleCombatTrackerKeydown);
   }
 
@@ -1667,6 +1672,19 @@ export function mountBoardInteractions(store, routes = {}) {
     const completedContainer = combatTrackerCompleted;
     const entries = Array.isArray(combatants) ? combatants.filter(Boolean) : [];
 
+    combatantTeams.clear();
+    entries.forEach((entry) => {
+      if (!entry || typeof entry !== 'object') {
+        return;
+      }
+      const id = typeof entry.id === 'string' ? entry.id : null;
+      if (!id) {
+        return;
+      }
+      const team = normalizeCombatTeam(entry.team ?? entry.combatTeam ?? null);
+      combatantTeams.set(id, team);
+    });
+
     if (!options?.skipCache) {
       lastCombatTrackerEntries = entries.map(cloneCombatantEntry).filter(Boolean);
     }
@@ -1736,6 +1754,19 @@ export function mountBoardInteractions(store, routes = {}) {
       } else if ('groupSize' in token.dataset) {
         delete token.dataset.groupSize;
       }
+
+      const team = getCombatantTeam(representativeId);
+      if (team) {
+        token.dataset.combatTeam = team;
+      } else if ('combatTeam' in token.dataset) {
+        delete token.dataset.combatTeam;
+      }
+
+      groupMembers.forEach((memberId) => {
+        if (memberId) {
+          combatantTeams.set(memberId, team);
+        }
+      });
 
       const isCompleted = combatActive && completedCombatants.has(representativeId);
       token.dataset.combatState = isCompleted ? 'completed' : 'waiting';
@@ -2006,6 +2037,22 @@ export function mountBoardInteractions(store, routes = {}) {
     processCombatantActivation(target);
   }
 
+  function handleCombatTrackerDoubleClick(event) {
+    if (!combatActive || !isGmUser()) {
+      return;
+    }
+    const target = event.target instanceof HTMLElement ? event.target.closest('[data-combatant-id]') : null;
+    if (!target || !combatTrackerRoot?.contains(target)) {
+      return;
+    }
+    event.preventDefault();
+    const combatantId = target.dataset.combatantId || '';
+    if (!combatantId) {
+      return;
+    }
+    beginCombatantTurn(combatantId);
+  }
+
   function handleCombatTrackerKeydown(event) {
     if (!combatActive || !isGmUser()) {
       return;
@@ -2042,48 +2089,309 @@ export function mountBoardInteractions(store, routes = {}) {
     }
 
     if (activeCombatantId === combatantId) {
-      completeActiveCombatant();
+      closeTurnPrompt();
+      setActiveCombatantId(null);
+      updateCombatModeIndicators();
       return;
     }
 
     completedCombatants.delete(combatantId);
     setActiveCombatantId(combatantId);
+    currentTurnTeam = getCombatantTeam(combatantId) ?? currentTurnTeam;
     refreshCombatantStateClasses();
     updateCombatModeIndicators();
+  }
+
+  function beginCombatantTurn(combatantId) {
+    if (!combatActive || !combatantId) {
+      return;
+    }
+    completedCombatants.delete(combatantId);
+    setActiveCombatantId(combatantId);
+    currentTurnTeam = getCombatantTeam(combatantId) ?? currentTurnTeam;
+    refreshCombatTracker();
+    updateCombatModeIndicators();
+    openTurnPrompt(combatantId);
   }
 
   function completeActiveCombatant() {
     if (!activeCombatantId) {
       return;
     }
+    closeTurnPrompt();
     const finishedId = activeCombatantId;
     completedCombatants.add(finishedId);
     setActiveCombatantId(null);
     refreshCombatTracker();
+    const finishedTeam = getCombatantTeam(finishedId);
+    const nextId = pickNextCombatantId([
+      finishedTeam === 'ally' ? 'enemy' : 'ally',
+      finishedTeam,
+    ]);
+    if (nextId) {
+      setActiveCombatantId(nextId);
+    }
     updateCombatModeIndicators();
     checkForRoundCompletion();
   }
 
+  function openTurnPrompt(combatantId) {
+    if (!combatantId || typeof document === 'undefined' || !document.body) {
+      return;
+    }
+
+    closeTurnPrompt();
+
+    const label = escapeHtml(getCombatantLabel(combatantId));
+    const overlay = document.createElement('div');
+    overlay.className = 'vtt-turn-overlay';
+    overlay.innerHTML = `
+      <div class="vtt-turn-dialog" role="dialog" aria-modal="true" data-turn-dialog>
+        <h3 class="vtt-turn-dialog__title">It's Your Turn</h3>
+        <p class="vtt-turn-dialog__message">${label}, it's your turn.</p>
+        <div class="vtt-turn-dialog__actions">
+          <button type="button" class="btn" data-turn-cancel>Cancel</button>
+          <button type="button" class="btn btn--primary" data-turn-complete>End Turn</button>
+        </div>
+      </div>
+    `;
+
+    document.body.appendChild(overlay);
+
+    const cancelButton = overlay.querySelector('[data-turn-cancel]');
+    const completeButton = overlay.querySelector('[data-turn-complete]');
+
+    const handleCancel = () => {
+      closeTurnPrompt();
+      updateCombatModeIndicators();
+    };
+
+    const handleComplete = () => {
+      completeActiveCombatant();
+    };
+
+    const handleOverlayClick = (event) => {
+      if (event.target === overlay) {
+        handleCancel();
+      }
+    };
+
+    const handleKeydown = (event) => {
+      if (event.key === 'Escape') {
+        event.preventDefault();
+        handleCancel();
+      }
+    };
+
+    cancelButton?.addEventListener('click', handleCancel);
+    completeButton?.addEventListener('click', handleComplete);
+    overlay.addEventListener('click', handleOverlayClick);
+    document.addEventListener('keydown', handleKeydown);
+
+    activeTurnDialog = {
+      overlay,
+      cancelButton,
+      completeButton,
+      handleCancel,
+      handleComplete,
+      handleOverlayClick,
+      handleKeydown,
+      combatantId,
+    };
+
+    if (completeButton && typeof completeButton.focus === 'function') {
+      if (typeof window !== 'undefined' && typeof window.setTimeout === 'function') {
+        window.setTimeout(() => {
+          completeButton.focus();
+        }, 0);
+      } else {
+        completeButton.focus();
+      }
+    }
+  }
+
+  function closeTurnPrompt() {
+    if (!activeTurnDialog) {
+      return;
+    }
+
+    const { overlay, cancelButton, completeButton, handleCancel, handleComplete, handleOverlayClick, handleKeydown } =
+      activeTurnDialog;
+
+    cancelButton?.removeEventListener('click', handleCancel);
+    completeButton?.removeEventListener('click', handleComplete);
+    overlay?.removeEventListener('click', handleOverlayClick);
+    document.removeEventListener('keydown', handleKeydown);
+    overlay?.remove();
+    activeTurnDialog = null;
+  }
+
+  function getCombatantLabel(combatantId) {
+    if (!combatantId) {
+      return 'Token';
+    }
+
+    const entries = Array.isArray(lastCombatTrackerEntries) ? lastCombatTrackerEntries : [];
+    const match = entries.find((entry) => entry && entry.id === combatantId);
+    if (match && typeof match.name === 'string' && match.name.trim()) {
+      return match.name.trim();
+    }
+
+    const placement = getPlacementFromStore(combatantId);
+    return tokenLabel(placement);
+  }
+
+  function getCombatantTeam(combatantId) {
+    if (!combatantId) {
+      return 'enemy';
+    }
+
+    if (combatantTeams.has(combatantId)) {
+      return normalizeCombatTeam(combatantTeams.get(combatantId));
+    }
+
+    const entries = Array.isArray(lastCombatTrackerEntries) ? lastCombatTrackerEntries : [];
+    const match = entries.find((entry) => entry && entry.id === combatantId);
+    if (match) {
+      const team = normalizeCombatTeam(match.team ?? match.combatTeam ?? null);
+      combatantTeams.set(combatantId, team);
+      return team;
+    }
+
+    const placement = getPlacementFromStore(combatantId);
+    if (placement) {
+      const team = normalizeCombatTeam(placement.combatTeam ?? placement.team ?? null);
+      combatantTeams.set(combatantId, team);
+      return team;
+    }
+
+    return 'enemy';
+  }
+
+  function getWaitingCombatantsByTeam() {
+    const waiting = { ally: [], enemy: [] };
+    const entries = Array.isArray(lastCombatTrackerEntries) ? lastCombatTrackerEntries : [];
+    const seen = new Set();
+
+    entries.forEach((entry) => {
+      if (!entry || typeof entry.id !== 'string') {
+        return;
+      }
+      const representativeId = getRepresentativeIdFor(entry.id);
+      const targetId = representativeId || entry.id;
+      if (seen.has(targetId)) {
+        return;
+      }
+      seen.add(targetId);
+      if (completedCombatants.has(targetId)) {
+        return;
+      }
+      const team = getCombatantTeam(targetId);
+      if (team === 'ally') {
+        waiting.ally.push(targetId);
+      } else {
+        waiting.enemy.push(targetId);
+      }
+    });
+
+    return waiting;
+  }
+
+  function pickNextCombatantId(preferredTeams = []) {
+    const waiting = getWaitingCombatantsByTeam();
+    const order = Array.isArray(preferredTeams) ? preferredTeams : [];
+
+    for (const candidate of order) {
+      const team = normalizeCombatTeam(candidate);
+      const pool = waiting[team];
+      if (pool && pool.length) {
+        currentTurnTeam = team;
+        return pool[0];
+      }
+    }
+
+    if (waiting.ally.length) {
+      currentTurnTeam = 'ally';
+      return waiting.ally[0];
+    }
+
+    if (waiting.enemy.length) {
+      currentTurnTeam = 'enemy';
+      return waiting.enemy[0];
+    }
+
+    currentTurnTeam = null;
+    return null;
+  }
+
+  function focusNextCombatant(preferredTeams = []) {
+    const nextId = pickNextCombatantId(preferredTeams);
+    if (!nextId) {
+      setActiveCombatantId(null);
+      return false;
+    }
+
+    completedCombatants.delete(nextId);
+    setActiveCombatantId(nextId);
+    return true;
+  }
+
   function handleStartCombat() {
+    if (combatActive) {
+      handleEndCombat();
+      return;
+    }
+
     combatActive = true;
     combatRound = 1;
     completedCombatants.clear();
     pendingRoundConfirmation = false;
+    closeTurnPrompt();
     setActiveCombatantId(null);
+    const initialTeam = rollForInitiativeAnnouncement() ?? 'enemy';
+    startingCombatTeam = initialTeam;
+    currentTurnTeam = initialTeam;
     updateStartCombatButton();
-    updateCombatModeIndicators();
     refreshCombatTracker();
-    rollForInitiativeAnnouncement();
+    focusNextCombatant([
+      startingCombatTeam,
+      startingCombatTeam === 'ally' ? 'enemy' : 'ally',
+    ]);
+    updateCombatModeIndicators();
+  }
+
+  function handleEndCombat() {
+    if (!combatActive) {
+      return;
+    }
+
+    combatActive = false;
+    combatRound = 0;
+    completedCombatants.clear();
+    pendingRoundConfirmation = false;
+    closeTurnPrompt();
+    setActiveCombatantId(null);
+    startingCombatTeam = null;
+    currentTurnTeam = null;
+    resetTriggeredActionsForActiveScene();
+    updateStartCombatButton();
+    refreshCombatTracker();
+    updateCombatModeIndicators();
+    if (status) {
+      status.textContent = 'Combat ended.';
+    }
   }
 
   function rollForInitiativeAnnouncement() {
     const roll = Math.floor(Math.random() * 10) + 1;
     const playersFirst = roll >= 6;
+    const team = playersFirst ? 'ally' : 'enemy';
     const message = playersFirst ? 'Players go first' : 'Enemies go first';
     announceToChat(`${message}. (Rolled ${roll} on a d10.)`);
     if (status) {
       status.textContent = `${message}.`;
     }
+    return team;
   }
 
   function announceToChat(message) {
@@ -2170,9 +2478,14 @@ export function mountBoardInteractions(store, routes = {}) {
     setActiveCombatantId(null);
     combatRound = Math.max(1, combatRound + 1);
     resetTriggeredActionsForActiveScene();
+    const preferredTeam = startingCombatTeam ?? currentTurnTeam ?? 'ally';
     updateStartCombatButton();
-    updateCombatModeIndicators();
     refreshCombatTracker();
+    focusNextCombatant([
+      preferredTeam,
+      preferredTeam === 'ally' ? 'enemy' : 'ally',
+    ]);
+    updateCombatModeIndicators();
     if (status) {
       status.textContent = `Round ${combatRound} begins.`;
     }
@@ -2215,13 +2528,15 @@ export function mountBoardInteractions(store, routes = {}) {
     if (!isGmUser()) {
       startCombatButton.disabled = true;
       startCombatButton.title = 'Only the GM can start combat.';
+      startCombatButton.classList.remove('btn--danger');
       startCombatButton.setAttribute('aria-pressed', 'false');
       return;
     }
     startCombatButton.disabled = false;
-    startCombatButton.textContent = 'Start Combat';
+    startCombatButton.classList.toggle('btn--danger', combatActive);
+    startCombatButton.textContent = combatActive ? 'End Combat' : 'Start Combat';
     startCombatButton.title = combatActive
-      ? 'Restart combat from round 1.'
+      ? 'End the current combat encounter.'
       : 'Start combat sequencing.';
     startCombatButton.setAttribute('aria-pressed', combatActive ? 'true' : 'false');
   }
@@ -2230,6 +2545,7 @@ export function mountBoardInteractions(store, routes = {}) {
     if (combatTrackerRoot) {
       combatTrackerRoot.dataset.combatActive = combatActive ? 'true' : 'false';
       combatTrackerRoot.dataset.completedCount = String(completedCombatants.size);
+      combatTrackerRoot.dataset.currentTeam = currentTurnTeam ?? '';
     }
     updateRoundTrackerDisplay();
   }
@@ -2398,9 +2714,19 @@ export function mountBoardInteractions(store, routes = {}) {
       return;
     }
 
+    syncTokenTeamAffiliation(tokenElement, placement);
     syncTokenHitPoints(tokenElement, placement);
     syncTriggeredActionIndicator(tokenElement, placement);
     syncTokenConditionLabel(tokenElement, placement);
+  }
+
+  function syncTokenTeamAffiliation(tokenElement, placement) {
+    const team = normalizeCombatTeam(placement.team ?? placement.combatTeam ?? null);
+    if (team) {
+      tokenElement.dataset.combatTeam = team;
+    } else {
+      delete tokenElement.dataset.combatTeam;
+    }
   }
 
   function syncTokenHitPoints(tokenElement, placement) {
@@ -2684,6 +3010,14 @@ export function mountBoardInteractions(store, routes = {}) {
     const triggeredActionReady =
       placement.triggeredActionReady ?? placement?.overlays?.triggeredAction?.ready ?? true;
     const condition = ensurePlacementCondition(placement.condition ?? placement?.status ?? null);
+    const team = normalizeCombatTeam(
+      placement.combatTeam ??
+        placement.team ??
+        placement?.tags?.team ??
+        placement?.faction ??
+        placement?.alignment ??
+        null
+    );
 
     return {
       id,
@@ -2698,7 +3032,19 @@ export function mountBoardInteractions(store, routes = {}) {
       showTriggeredAction,
       triggeredActionReady: triggeredActionReady !== false,
       condition,
+      team,
     };
+  }
+
+  function normalizeCombatTeam(value) {
+    const raw = typeof value === 'string' ? value.trim().toLowerCase() : '';
+    if (raw === 'ally') {
+      return 'ally';
+    }
+    if (raw === 'enemy') {
+      return 'enemy';
+    }
+    return 'enemy';
   }
 
   function toNonNegativeNumber(value, fallback = 0) {
@@ -2896,6 +3242,7 @@ export function mountBoardInteractions(store, routes = {}) {
       showTriggeredAction: false,
       triggeredActionReady: true,
       condition: null,
+      combatTeam: normalizeCombatTeam(template.combatTeam ?? template.team ?? null),
     };
   }
 
@@ -3446,6 +3793,14 @@ export function mountBoardInteractions(store, routes = {}) {
         <div class="vtt-token-settings__section">
           <div class="vtt-token-settings__row">
             <label class="vtt-token-settings__toggle">
+              <input type="checkbox" data-token-settings-toggle="ally" />
+              <span>Make Ally</span>
+            </label>
+          </div>
+        </div>
+        <div class="vtt-token-settings__section">
+          <div class="vtt-token-settings__row">
+            <label class="vtt-token-settings__toggle">
               <input type="checkbox" data-token-settings-toggle="triggeredAction" />
               <span>Triggered Action</span>
             </label>
@@ -3465,6 +3820,7 @@ export function mountBoardInteractions(store, routes = {}) {
       hpField: element.querySelector('[data-token-settings-field="hitPoints"]'),
       hpCurrentInput: element.querySelector('[data-token-settings-input="hitPointsCurrent"]'),
       hpMaxDisplay: element.querySelector('[data-token-settings-hp-max]'),
+      allyToggle: element.querySelector('[data-token-settings-toggle="ally"]'),
       triggeredToggle: element.querySelector('[data-token-settings-toggle="triggeredAction"]'),
       conditionSelect: element.querySelector('[data-token-settings-condition-select]'),
       conditionDurationRadios: Array.from(
@@ -3602,6 +3958,20 @@ export function mountBoardInteractions(store, routes = {}) {
           }
         });
         refreshTokenSettings();
+      });
+    }
+
+    if (menu.allyToggle) {
+      menu.allyToggle.addEventListener('change', () => {
+        if (!activeTokenSettingsId) {
+          return;
+        }
+        const isAlly = menu.allyToggle.checked;
+        updatePlacementById(activeTokenSettingsId, (target) => {
+          target.combatTeam = isAlly ? 'ally' : 'enemy';
+        });
+        refreshTokenSettings();
+        refreshCombatTracker();
       });
     }
 
@@ -3784,6 +4154,12 @@ export function mountBoardInteractions(store, routes = {}) {
     const showHp = Boolean(placement.showHp);
     if (tokenSettingsMenu.showHpToggle) {
       tokenSettingsMenu.showHpToggle.checked = showHp;
+    }
+
+    if (tokenSettingsMenu.allyToggle) {
+      tokenSettingsMenu.allyToggle.checked = normalizeCombatTeam(
+        placement.combatTeam ?? placement.team ?? null
+      ) === 'ally';
     }
 
     const hitPoints = ensurePlacementHitPoints(placement.hp);
