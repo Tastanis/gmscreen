@@ -105,6 +105,9 @@
   justify-items: center;
   position: relative;
   border-radius: calc(var(--vtt-radius) * 0.8);
+  border: 2px solid transparent;
+  box-shadow: none;
+  transition: border-color var(--vtt-transition), box-shadow var(--vtt-transition);
 }
 
 .vtt-combat-tracker__section[data-empty='true']::before {
@@ -117,6 +120,16 @@
 
 .vtt-combat-tracker__section--waiting {
   background: rgba(254, 249, 195, 0.75);
+}
+
+[data-current-team='ally'] .vtt-combat-tracker__section--waiting {
+  border-color: rgba(34, 197, 94, 0.85);
+  box-shadow: 0 0 0 3px rgba(34, 197, 94, 0.35);
+}
+
+[data-current-team='enemy'] .vtt-combat-tracker__section--waiting {
+  border-color: rgba(239, 68, 68, 0.8);
+  box-shadow: 0 0 0 3px rgba(239, 68, 68, 0.32);
 }
 
 .vtt-combat-tracker__divider {
@@ -177,12 +190,7 @@
 }
 
 .vtt-combat-token.is-active {
-  border-color: rgba(34, 197, 94, 0.9);
-  box-shadow:
-    0 0 0 2px rgba(34, 197, 94, 0.75),
-    0 0 0 7px rgba(16, 185, 129, 0.28),
-    0 12px 20px rgba(15, 23, 42, 0.55);
-  transform: translateZ(0) scale(1.05);
+  transform: none;
 }
 
 .vtt-combat-token.is-completed {

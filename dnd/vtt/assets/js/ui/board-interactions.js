@@ -122,6 +122,7 @@ export function mountBoardInteractions(store, routes = {}) {
   let startingCombatTeam = null;
   let currentTurnTeam = null;
   let activeTeam = null;
+  let lastActingTeam = null;
   let pendingTurnTransition = null;
   let borderFlashTimeoutId = null;
   let allyTurnTimerInterval = null;
@@ -2174,6 +2175,9 @@ export function mountBoardInteractions(store, routes = {}) {
     closeTurnPrompt();
     const finishedId = activeCombatantId;
     const finishedTeam = getCombatantTeam(finishedId);
+    if (finishedTeam) {
+      lastActingTeam = finishedTeam;
+    }
     completedCombatants.add(finishedId);
     setActiveCombatantId(null);
     refreshCombatTracker();
@@ -2406,6 +2410,7 @@ export function mountBoardInteractions(store, routes = {}) {
     combatRound = 1;
     completedCombatants.clear();
     pendingRoundConfirmation = false;
+    lastActingTeam = null;
     closeTurnPrompt();
     setActiveCombatantId(null);
     const initialTeam = rollForInitiativeAnnouncement() ?? 'enemy';
@@ -2434,6 +2439,7 @@ export function mountBoardInteractions(store, routes = {}) {
     startingCombatTeam = null;
     currentTurnTeam = null;
     activeTeam = null;
+    lastActingTeam = null;
     pendingTurnTransition = null;
     stopAllyTurnTimer();
     clearTurnBorderFlash();
@@ -2543,12 +2549,32 @@ export function mountBoardInteractions(store, routes = {}) {
     combatRound = Math.max(1, combatRound + 1);
     resetTriggeredActionsForActiveScene();
     const preferredTeam = startingCombatTeam ?? currentTurnTeam ?? 'ally';
+    const secondaryTeam = preferredTeam === 'ally' ? 'enemy' : 'ally';
     updateStartCombatButton();
     refreshCombatTracker();
-    focusNextCombatant([
-      preferredTeam,
-      preferredTeam === 'ally' ? 'enemy' : 'ally',
-    ]);
+    const nextId = pickNextCombatantId([preferredTeam, secondaryTeam]);
+    if (nextId) {
+      const waitingPools = getWaitingCombatantsByTeam();
+      const nextTeam = getCombatantTeam(nextId) ?? currentTurnTeam ?? preferredTeam;
+      const opposingTeam = nextTeam === 'ally' ? 'enemy' : 'ally';
+      const opposingHasCombatants = Array.isArray(waitingPools[opposingTeam])
+        ? waitingPools[opposingTeam].length > 0
+        : false;
+      const previousTeam = opposingHasCombatants || !lastActingTeam
+        ? opposingTeam
+        : lastActingTeam !== nextTeam
+          ? lastActingTeam
+          : opposingTeam;
+      pendingTurnTransition = {
+        fromTeam: previousTeam ?? null,
+        fromCombatantId: null,
+      };
+      completedCombatants.delete(nextId);
+      setActiveCombatantId(nextId);
+    } else {
+      pendingTurnTransition = null;
+      setActiveCombatantId(null);
+    }
     updateCombatModeIndicators();
     if (status) {
       status.textContent = `Round ${combatRound} begins.`;
