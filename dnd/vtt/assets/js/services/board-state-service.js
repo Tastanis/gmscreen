@@ -72,6 +72,13 @@ function buildPayload(boardState = {}) {
     }
   }
 
+  if ('templates' in boardState) {
+    const rawTemplates = boardState.templates;
+    if (rawTemplates && typeof rawTemplates === 'object') {
+      payload.templates = rawTemplates;
+    }
+  }
+
   return Object.keys(payload).length > 0 ? payload : null;
 }
 

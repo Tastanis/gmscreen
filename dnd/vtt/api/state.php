@@ -154,12 +154,23 @@ function sanitizeBoardStateUpdates(array $raw): array
         }
     }
 
+    if (array_key_exists('templates', $raw)) {
+        $rawTemplates = $raw['templates'];
+        if ($rawTemplates === null) {
+            $updates['templates'] = [];
+        } elseif (is_array($rawTemplates)) {
+            $updates['templates'] = normalizeTemplatesPayload($rawTemplates);
+        } else {
+            throw new InvalidArgumentException('Templates must be an array or object.');
+        }
+    }
+
     return $updates;
 }
 
 /**
  * @param mixed $raw
- * @return array{activeSceneId: ?string, mapUrl: ?string, placements: array, sceneState: array}
+ * @return array{activeSceneId: ?string, mapUrl: ?string, placements: array, sceneState: array, templates: array}
  */
 function normalizeBoardState($raw): array
 {
@@ -168,6 +179,7 @@ function normalizeBoardState($raw): array
         'mapUrl' => null,
         'placements' => [],
         'sceneState' => [],
+        'templates' => [],
     ];
 
     if (!is_array($raw)) {
@@ -202,6 +214,10 @@ function normalizeBoardState($raw): array
         $state['sceneState'] = normalizeSceneStatePayload($raw['sceneState']);
     }
 
+    if (array_key_exists('templates', $raw) && is_array($raw['templates'])) {
+        $state['templates'] = normalizeTemplatesPayload($raw['templates']);
+    }
+
     return $state;
 }
 
@@ -223,6 +239,36 @@ function normalizePlacementsPayload(array $rawPlacements): array
         }
 
         $normalized[$key] = array_values(array_filter($placements, 'is_array'));
+    }
+
+    return $normalized;
+}
+
+/**
+ * @param array<string|int,mixed> $rawTemplates
+ * @return array<string,array<int,array<string,mixed>>>
+ */
+function normalizeTemplatesPayload(array $rawTemplates): array
+{
+    $normalized = [];
+
+    foreach ($rawTemplates as $sceneId => $templates) {
+        if (!is_array($templates)) {
+            continue;
+        }
+
+        $key = is_string($sceneId) ? trim($sceneId) : (string) $sceneId;
+        if ($key === '') {
+            continue;
+        }
+
+        $normalized[$key] = [];
+        foreach ($templates as $entry) {
+            $template = normalizeTemplateEntry($entry);
+            if ($template !== null) {
+                $normalized[$key][] = $template;
+            }
+        }
     }
 
     return $normalized;
@@ -283,6 +329,151 @@ function normalizeGridSettings($grid): array
         'locked' => $locked,
         'visible' => $visible,
     ];
+}
+
+/**
+ * @param mixed $entry
+ */
+function normalizeTemplateEntry($entry): ?array
+{
+    if (!is_array($entry)) {
+        return null;
+    }
+
+    $type = isset($entry['type']) && is_string($entry['type']) ? strtolower(trim($entry['type'])) : '';
+    $id = isset($entry['id']) && is_string($entry['id']) ? trim($entry['id']) : '';
+    if ($id === '' || !in_array($type, ['circle', 'rectangle', 'wall'], true)) {
+        return null;
+    }
+
+    $color = sanitizeTemplateColor($entry['color'] ?? null);
+
+    if ($type === 'circle') {
+        $center = is_array($entry['center'] ?? null) ? $entry['center'] : [];
+        $column = coerceFloat($center['column'] ?? null, 0.0, 4);
+        $row = coerceFloat($center['row'] ?? null, 0.0, 4);
+        $radius = max(0.5, coerceFloat($entry['radius'] ?? null, 0.5, 4));
+
+        $normalized = [
+            'id' => $id,
+            'type' => 'circle',
+            'center' => ['column' => $column, 'row' => $row],
+            'radius' => $radius,
+        ];
+        if ($color !== null) {
+            $normalized['color'] = $color;
+        }
+
+        return $normalized;
+    }
+
+    if ($type === 'rectangle') {
+        $start = is_array($entry['start'] ?? null) ? $entry['start'] : [];
+        $startColumn = max(0.0, coerceFloat($start['column'] ?? null, 0.0, 4));
+        $startRow = max(0.0, coerceFloat($start['row'] ?? null, 0.0, 4));
+        $length = max(1.0, coerceFloat($entry['length'] ?? null, 1.0, 4));
+        $width = max(1.0, coerceFloat($entry['width'] ?? null, 1.0, 4));
+        $rotation = coerceFloat($entry['rotation'] ?? null, 0.0, 2);
+
+        $normalized = [
+            'id' => $id,
+            'type' => 'rectangle',
+            'start' => ['column' => $startColumn, 'row' => $startRow],
+            'length' => $length,
+            'width' => $width,
+            'rotation' => $rotation,
+        ];
+        if ($color !== null) {
+            $normalized['color'] = $color;
+        }
+
+        if (isset($entry['anchor']) && is_array($entry['anchor'])) {
+            $anchorColumn = coerceFloat($entry['anchor']['column'] ?? null, null, 4);
+            $anchorRow = coerceFloat($entry['anchor']['row'] ?? null, null, 4);
+            if ($anchorColumn !== null && $anchorRow !== null) {
+                $normalized['anchor'] = [
+                    'column' => max(0.0, $anchorColumn),
+                    'row' => max(0.0, $anchorRow),
+                ];
+            }
+        }
+
+        if (isset($entry['orientation']) && is_array($entry['orientation'])) {
+            $orientationX = isset($entry['orientation']['x']) && (float) $entry['orientation']['x'] < 0 ? -1 : 1;
+            $orientationY = isset($entry['orientation']['y']) && (float) $entry['orientation']['y'] < 0 ? -1 : 1;
+            $normalized['orientation'] = ['x' => $orientationX, 'y' => $orientationY];
+        }
+
+        return $normalized;
+    }
+
+    if ($type === 'wall') {
+        $squares = [];
+        if (isset($entry['squares']) && is_array($entry['squares'])) {
+            foreach ($entry['squares'] as $square) {
+                if (!is_array($square)) {
+                    continue;
+                }
+
+                $column = isset($square['column']) && is_numeric($square['column'])
+                    ? (int) round((float) $square['column'])
+                    : null;
+                $row = isset($square['row']) && is_numeric($square['row'])
+                    ? (int) round((float) $square['row'])
+                    : null;
+
+                if ($column === null || $row === null) {
+                    continue;
+                }
+
+                $squares[] = ['column' => max(0, $column), 'row' => max(0, $row)];
+            }
+        }
+
+        $normalized = [
+            'id' => $id,
+            'type' => 'wall',
+            'squares' => $squares,
+        ];
+        if ($color !== null) {
+            $normalized['color'] = $color;
+        }
+
+        return $normalized;
+    }
+
+    return null;
+}
+
+/**
+ * @param mixed $value
+ */
+function sanitizeTemplateColor($value): ?string
+{
+    if (!is_string($value)) {
+        return null;
+    }
+
+    $trimmed = trim($value);
+    if ($trimmed === '' || strlen($trimmed) > 64) {
+        return null;
+    }
+
+    if (preg_match('/^#([0-9a-f]{3,8})$/i', $trimmed) || preg_match('/^(rgba?|hsla?)\(/i', $trimmed)) {
+        return $trimmed;
+    }
+
+    return null;
+}
+
+function coerceFloat($value, ?float $fallback, int $precision): ?float
+{
+    if (!is_numeric($value)) {
+        return $fallback;
+    }
+
+    $float = (float) $value;
+    return round($float, $precision);
 }
 
 function respondJson(int $status, array $payload): void
