@@ -5055,6 +5055,8 @@ function createTemplateTool() {
           length: previewShape.length,
           width: previewShape.width,
           rotation: previewShape.rotation ?? 0,
+          anchor: previewShape.anchor ? { ...previewShape.anchor } : undefined,
+          orientation: previewShape.orientation ? { ...previewShape.orientation } : undefined,
         });
         return;
       }
@@ -5069,6 +5071,8 @@ function createTemplateTool() {
           length: Math.max(MIN_RECT_DIMENSION, placementState.values.length),
           width: Math.max(MIN_RECT_DIMENSION, placementState.values.width),
           rotation: 0,
+          anchor: snappedPoint,
+          orientation: { x: 1, y: 1 },
         });
         return;
       }
@@ -5095,6 +5099,8 @@ function createTemplateTool() {
         length: initialRect.length,
         width: initialRect.width,
         rotation: 0,
+        anchor,
+        orientation: initialRect.orientation,
       }, { preview: true });
       layer.appendChild(previewShape.elements.root);
       placementState.lastOrientation = initialRect.orientation ?? { x: 1, y: 1 };
@@ -5181,7 +5187,13 @@ function createTemplateTool() {
         lastOrientation: placementState.lastOrientation,
       });
       placementState.lastOrientation = rectConfig.orientation;
-      updateRectanglePreview(rectConfig);
+      updateRectanglePreview({
+        start: rectConfig.start,
+        length: rectConfig.length,
+        width: rectConfig.width,
+        orientation: rectConfig.orientation,
+        anchor,
+      });
     }
   }
 
@@ -5250,6 +5262,8 @@ function createTemplateTool() {
           length: previewShape.length,
           width: previewShape.width,
           rotation: previewShape.rotation ?? 0,
+          anchor: previewShape.anchor ? { ...previewShape.anchor } : undefined,
+          orientation: previewShape.orientation ? { ...previewShape.orientation } : undefined,
         });
         return;
       }
@@ -5272,6 +5286,8 @@ function createTemplateTool() {
         length: rectConfig.length,
         width: rectConfig.width,
         rotation: 0,
+        anchor: placementState.anchor ? { ...placementState.anchor } : undefined,
+        orientation: rectConfig.orientation ? { ...rectConfig.orientation } : undefined,
       });
       return;
     }
@@ -5319,11 +5335,25 @@ function createTemplateTool() {
       ? (config.rotationSteps % 4) * 90
       : 0;
     const start = resolveRectangleStart(config.start, config.length, config.width, rotation, viewState);
+    const originalStartColumn = Number.isFinite(config.start?.column) ? config.start.column : start.column;
+    const originalStartRow = Number.isFinite(config.start?.row) ? config.start.row : start.row;
+    const deltaStartColumn = start.column - originalStartColumn;
+    const deltaStartRow = start.row - originalStartRow;
+    let anchor = null;
+    if (Number.isFinite(config.anchor?.column) && Number.isFinite(config.anchor?.row)) {
+      anchor = {
+        column: config.anchor.column + deltaStartColumn,
+        row: config.anchor.row + deltaStartRow,
+      };
+    }
+    const orientation = config.orientation ?? null;
     const shape = createShape('rectangle', {
       start,
       length: config.length,
       width: config.width,
       rotation,
+      anchor,
+      orientation,
     });
     addShape(shape);
   }
@@ -5445,6 +5475,18 @@ function createTemplateTool() {
         column: resolvedStart.column,
         row: resolvedStart.row,
       };
+      const orientationX = Number.isFinite(data.orientation?.x) ? (data.orientation.x >= 0 ? 1 : -1) : 1;
+      const orientationY = Number.isFinite(data.orientation?.y) ? (data.orientation.y >= 0 ? 1 : -1) : 1;
+      shape.orientation = { x: orientationX, y: orientationY };
+
+      const deltaStartColumn = resolvedStart.column - baseStart.column;
+      const deltaStartRow = resolvedStart.row - baseStart.row;
+      if (Number.isFinite(data.anchor?.column) && Number.isFinite(data.anchor?.row)) {
+        const anchorColumn = data.anchor.column + deltaStartColumn;
+        const anchorRow = data.anchor.row + deltaStartRow;
+        const clampedAnchor = clampPointToGridBounds({ column: anchorColumn, row: anchorRow }, viewState);
+        shape.anchor = { column: clampedAnchor.column, row: clampedAnchor.row };
+      }
     } else if (type === 'wall') {
       shape.squares = sanitizeWallSquares(data.squares);
     }
@@ -5526,9 +5568,22 @@ function createTemplateTool() {
     }
     const nextRotation = normalizeAngle((shape.rotation ?? 0) + deltaDegrees);
     shape.rotation = nextRotation;
+    const previousStartColumn = shape.start.column;
+    const previousStartRow = shape.start.row;
     const clamped = resolveRectangleStart(shape.start, shape.length, shape.width, shape.rotation, viewState);
+    const deltaStartColumn = clamped.column - previousStartColumn;
+    const deltaStartRow = clamped.row - previousStartRow;
     shape.start.column = clamped.column;
     shape.start.row = clamped.row;
+    if (Number.isFinite(shape.anchor?.column) && Number.isFinite(shape.anchor?.row)) {
+      const nextAnchor = {
+        column: shape.anchor.column + deltaStartColumn,
+        row: shape.anchor.row + deltaStartRow,
+      };
+      const clampedAnchor = clampPointToGridBounds(nextAnchor, viewState);
+      shape.anchor.column = clampedAnchor.column;
+      shape.anchor.row = clampedAnchor.row;
+    }
     render(viewState);
   }
 
@@ -5583,9 +5638,22 @@ function createTemplateTool() {
     }
 
     shape.rotation = nextRotation;
+    const previousStartColumn = shape.start.column;
+    const previousStartRow = shape.start.row;
     const clamped = resolveRectangleStart(shape.start, shape.length, shape.width, shape.rotation, viewState);
+    const deltaStartColumn = clamped.column - previousStartColumn;
+    const deltaStartRow = clamped.row - previousStartRow;
     shape.start.column = clamped.column;
     shape.start.row = clamped.row;
+    if (Number.isFinite(shape.anchor?.column) && Number.isFinite(shape.anchor?.row)) {
+      const nextAnchor = {
+        column: shape.anchor.column + deltaStartColumn,
+        row: shape.anchor.row + deltaStartRow,
+      };
+      const clampedAnchor = clampPointToGridBounds(nextAnchor, viewState);
+      shape.anchor.column = clampedAnchor.column;
+      shape.anchor.row = clampedAnchor.row;
+    }
     render(viewState);
   }
 
@@ -5645,6 +5713,10 @@ function createTemplateTool() {
       originalSquares: shape.type === 'wall'
         ? shape.squares?.map((square) => ({ column: square.column, row: square.row })) ?? []
         : null,
+      anchorOrigin:
+        shape.type === 'rectangle' && Number.isFinite(shape.anchor?.column) && Number.isFinite(shape.anchor?.row)
+          ? { column: shape.anchor.column, row: shape.anchor.row }
+          : null,
     };
 
     updateStatus('Drag to reposition the template.');
@@ -5688,8 +5760,26 @@ function createTemplateTool() {
         row: activeDrag.origin.row + deltaRow,
       };
       const resolvedStart = resolveRectangleStart(proposedStart, shape.length, shape.width, shape.rotation, viewState);
+      const deltaStartColumn = resolvedStart.column - activeDrag.origin.column;
+      const deltaStartRow = resolvedStart.row - activeDrag.origin.row;
       shape.start.column = resolvedStart.column;
       shape.start.row = resolvedStart.row;
+      if (activeDrag.anchorOrigin) {
+        const nextAnchor = {
+          column: activeDrag.anchorOrigin.column + deltaStartColumn,
+          row: activeDrag.anchorOrigin.row + deltaStartRow,
+        };
+        const clampedAnchor = clampPointToGridBounds(nextAnchor, viewState);
+        shape.anchor = { column: clampedAnchor.column, row: clampedAnchor.row };
+      } else if (Number.isFinite(shape.anchor?.column) && Number.isFinite(shape.anchor?.row)) {
+        const nextAnchor = {
+          column: shape.anchor.column + deltaStartColumn,
+          row: shape.anchor.row + deltaStartRow,
+        };
+        const clampedAnchor = clampPointToGridBounds(nextAnchor, viewState);
+        shape.anchor.column = clampedAnchor.column;
+        shape.anchor.row = clampedAnchor.row;
+      }
     } else if (shape.type === 'wall') {
       const originalSquares = Array.isArray(activeDrag.originalSquares) ? activeDrag.originalSquares : [];
       const moveColumn = Math.round(deltaColumn);
@@ -5805,9 +5895,22 @@ function createTemplateTool() {
     root.style.setProperty('--vtt-rect-rotation', `${rotation}deg`);
 
     const nodeSize = gridSize;
-    const anchorDistance = widthUnits / 2 + 0.5;
-    const offsetXUnits = 0;
-    const offsetYUnits = -anchorDistance;
+    const hasAnchorInfo = Number.isFinite(shape.anchor?.column) && Number.isFinite(shape.anchor?.row);
+    let offsetXUnits;
+    let offsetYUnits;
+    if (hasAnchorInfo) {
+      const halfLength = lengthUnits / 2;
+      const halfWidth = widthUnits / 2;
+      const nodeMargin = 0.5;
+      const orientationX = shape.orientation?.x >= 0 ? 1 : -1;
+      const orientationY = shape.orientation?.y >= 0 ? 1 : -1;
+      offsetXUnits = orientationX >= 0 ? -halfLength - nodeMargin : halfLength + nodeMargin;
+      offsetYUnits = orientationY >= 0 ? -halfWidth - nodeMargin : halfWidth + nodeMargin;
+    } else {
+      const anchorDistance = widthUnits / 2 + 0.5;
+      offsetXUnits = 0;
+      offsetYUnits = -anchorDistance;
+    }
     const rotatedXUnits = offsetXUnits * cos - offsetYUnits * sin;
     const rotatedYUnits = offsetXUnits * sin + offsetYUnits * cos;
     const relativeXUnits = spanWidth / 2 + rotatedXUnits;
@@ -6156,6 +6259,23 @@ function createTemplateTool() {
     previewShape.length = Math.max(0, length);
     previewShape.width = Math.max(0, width);
     previewShape.rotation = 0;
+    if (Number.isFinite(rectangle.anchor?.column) && Number.isFinite(rectangle.anchor?.row)) {
+      const clampedAnchor = clampPointToGridBounds(rectangle.anchor, viewState);
+      previewShape.anchor = { column: clampedAnchor.column, row: clampedAnchor.row };
+    }
+    if (Number.isFinite(rectangle.orientation?.x) || Number.isFinite(rectangle.orientation?.y)) {
+      const orientationX = Number.isFinite(rectangle.orientation?.x)
+        ? rectangle.orientation.x >= 0
+          ? 1
+          : -1
+        : previewShape.orientation?.x ?? 1;
+      const orientationY = Number.isFinite(rectangle.orientation?.y)
+        ? rectangle.orientation.y >= 0
+          ? 1
+          : -1
+        : previewShape.orientation?.y ?? 1;
+      previewShape.orientation = { x: orientationX, y: orientationY };
+    }
     render(viewState);
   }
 
