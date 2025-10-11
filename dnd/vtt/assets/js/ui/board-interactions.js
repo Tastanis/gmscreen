@@ -4116,14 +4116,6 @@ export function mountBoardInteractions(store, routes = {}) {
         <div class="vtt-token-settings__section">
           <div class="vtt-token-settings__row">
             <label class="vtt-token-settings__toggle">
-              <input type="checkbox" data-token-settings-toggle="ally" />
-              <span>Make Ally</span>
-            </label>
-          </div>
-        </div>
-        <div class="vtt-token-settings__section">
-          <div class="vtt-token-settings__row">
-            <label class="vtt-token-settings__toggle">
               <input type="checkbox" data-token-settings-toggle="triggeredAction" />
               <span>Triggered Action</span>
             </label>
@@ -4143,7 +4135,6 @@ export function mountBoardInteractions(store, routes = {}) {
       hpField: element.querySelector('[data-token-settings-field="hitPoints"]'),
       hpCurrentInput: element.querySelector('[data-token-settings-input="hitPointsCurrent"]'),
       hpMaxDisplay: element.querySelector('[data-token-settings-hp-max]'),
-      allyToggle: element.querySelector('[data-token-settings-toggle="ally"]'),
       triggeredToggle: element.querySelector('[data-token-settings-toggle="triggeredAction"]'),
       conditionSelect: element.querySelector('[data-token-settings-condition-select]'),
       conditionDurationRadios: Array.from(
@@ -4281,20 +4272,6 @@ export function mountBoardInteractions(store, routes = {}) {
           }
         });
         refreshTokenSettings();
-      });
-    }
-
-    if (menu.allyToggle) {
-      menu.allyToggle.addEventListener('change', () => {
-        if (!activeTokenSettingsId) {
-          return;
-        }
-        const isAlly = menu.allyToggle.checked;
-        updatePlacementById(activeTokenSettingsId, (target) => {
-          target.combatTeam = isAlly ? 'ally' : 'enemy';
-        });
-        refreshTokenSettings();
-        refreshCombatTracker();
       });
     }
 
@@ -4477,12 +4454,6 @@ export function mountBoardInteractions(store, routes = {}) {
     const showHp = Boolean(placement.showHp);
     if (tokenSettingsMenu.showHpToggle) {
       tokenSettingsMenu.showHpToggle.checked = showHp;
-    }
-
-    if (tokenSettingsMenu.allyToggle) {
-      tokenSettingsMenu.allyToggle.checked = normalizeCombatTeam(
-        placement.combatTeam ?? placement.team ?? null
-      ) === 'ally';
     }
 
     const hitPoints = ensurePlacementHitPoints(placement.hp);
@@ -5086,21 +5057,30 @@ function createTemplateTool() {
       }
 
       placementState.stage = 'sizing-rectangle';
-      placementState.start = snappedPoint;
+      const anchor = clampPointToGridBounds(snappedPoint, viewState);
+      placementState.anchor = { ...anchor };
+      placementState.start = { ...anchor };
       placementState.pointerId = event.pointerId;
       placementState.hasMoved = false;
 
       clearPreview();
       const baseLength = Math.max(MIN_RECT_DIMENSION, placementState.fixedLength ?? MIN_RECT_DIMENSION);
       const baseWidth = Math.max(MIN_RECT_DIMENSION, placementState.fixedWidth ?? MIN_RECT_DIMENSION);
+      const initialRect = clampRectangleWithAnchor(
+        anchor,
+        { x: 1, y: 1 },
+        baseLength,
+        baseWidth,
+        getGridBounds(viewState)
+      );
       previewShape = createShape('rectangle', {
-        start: snappedPoint,
-        length: baseLength,
-        width: baseWidth,
+        start: initialRect.start,
+        length: initialRect.length,
+        width: initialRect.width,
         rotation: 0,
       }, { preview: true });
       layer.appendChild(previewShape.elements.root);
-      placementState.start = { ...previewShape.start };
+      placementState.lastOrientation = initialRect.orientation ?? { x: 1, y: 1 };
       updateStatus('Drag to define the rectangle. You can release and adjust before clicking to confirm.');
       try {
         mapSurface.setPointerCapture(event.pointerId);
@@ -5162,14 +5142,29 @@ function createTemplateTool() {
       if (stage !== 'sizing-rectangle' && stage !== 'hover-rectangle') {
         return;
       }
-      const deltaX = gridPoint.column - placementState.start.column;
-      const deltaY = gridPoint.row - placementState.start.row;
+
+      const anchor = placementState.anchor ?? placementState.start ?? { column: 0, row: 0 };
+      const snapStep = event.shiftKey ? 1 : 0.5;
+      const snappedTarget = snapPointToGrid(gridPoint, { step: snapStep });
+      const clampedTarget = clampPointToGridBounds(snappedTarget, viewState);
+      const deltaX = clampedTarget.column - anchor.column;
+      const deltaY = clampedTarget.row - anchor.row;
       if (stage === 'sizing-rectangle') {
         if (Math.abs(deltaX) > 0.05 || Math.abs(deltaY) > 0.05) {
           placementState.hasMoved = true;
         }
       }
-      updateRectanglePreview(gridPoint, deltaX, deltaY);
+
+      const rectConfig = computeRectangleFromAnchor(anchor, clampedTarget, {
+        dynamicLength: placementState.dynamicLength,
+        dynamicWidth: placementState.dynamicWidth,
+        fixedLength: placementState.fixedLength ?? MIN_RECT_DIMENSION,
+        fixedWidth: placementState.fixedWidth ?? MIN_RECT_DIMENSION,
+        view: viewState,
+        lastOrientation: placementState.lastOrientation,
+      });
+      placementState.lastOrientation = rectConfig.orientation;
+      updateRectanglePreview(rectConfig);
     }
   }
 
@@ -5242,14 +5237,23 @@ function createTemplateTool() {
         return;
       }
 
-      const deltaX = gridPoint.column - placementState.start.column;
-      const deltaY = gridPoint.row - placementState.start.row;
-      const fallback = computeRectangleSizingFallback(deltaX, deltaY);
+      const anchor = placementState.anchor ?? placementState.start ?? { column: 0, row: 0 };
+      const snapStep = event.shiftKey ? 1 : 0.5;
+      const snappedPoint = snapPointToGrid(gridPoint, { step: snapStep });
+      const clampedPoint = clampPointToGridBounds(snappedPoint, viewState);
+      const rectConfig = computeRectangleFromAnchor(anchor, clampedPoint, {
+        dynamicLength: placementState.dynamicLength,
+        dynamicWidth: placementState.dynamicWidth,
+        fixedLength: placementState.fixedLength ?? MIN_RECT_DIMENSION,
+        fixedWidth: placementState.fixedWidth ?? MIN_RECT_DIMENSION,
+        view: viewState,
+        lastOrientation: placementState.lastOrientation,
+      });
       finalizePlacement({
         type: 'rectangle',
-        start: fallback.start,
-        length: fallback.length,
-        width: fallback.width,
+        start: rectConfig.start,
+        length: rectConfig.length,
+        width: rectConfig.width,
         rotation: 0,
       });
       return;
@@ -6122,82 +6126,132 @@ function createTemplateTool() {
     return Number.isFinite(parsed) && parsed > 0 ? parsed : null;
   }
 
-  function updateRectanglePreview(gridPoint, deltaX, deltaY) {
-    if (!previewShape || previewShape.type !== 'rectangle' || !placementState?.start) {
+  function updateRectanglePreview(rectangle) {
+    if (!previewShape || previewShape.type !== 'rectangle' || !rectangle) {
       return;
     }
 
-    const startPoint = placementState.start;
-    let startColumn = startPoint.column;
-    let startRow = startPoint.row;
-    let length = placementState.fixedLength ?? MIN_RECT_DIMENSION;
-    let width = placementState.fixedWidth ?? MIN_RECT_DIMENSION;
+    const start = rectangle.start ?? { column: 0, row: 0 };
+    const length = Number.isFinite(rectangle.length) ? rectangle.length : MIN_RECT_DIMENSION;
+    const width = Number.isFinite(rectangle.width) ? rectangle.width : MIN_RECT_DIMENSION;
 
-    if (placementState.dynamicLength) {
-      const absX = Math.max(MIN_RECT_DIMENSION, Math.abs(deltaX));
-      length = absX;
-      if (deltaX < 0) {
-        startColumn = startPoint.column - length;
-      }
-    } else if (deltaX < 0) {
-      startColumn = startPoint.column - length;
-    }
-
-    if (placementState.dynamicWidth) {
-      const absY = Math.max(MIN_RECT_DIMENSION, Math.abs(deltaY));
-      width = absY;
-      if (deltaY < 0) {
-        startRow = startPoint.row - width;
-      }
-    } else if (deltaY < 0) {
-      startRow = startPoint.row - width;
-    }
-
-    const lengthUnits = Math.max(MIN_RECT_DIMENSION, length);
-    const widthUnits = Math.max(MIN_RECT_DIMENSION, width);
-    const resolvedStart = resolveRectangleStart({ column: startColumn, row: startRow }, lengthUnits, widthUnits, 0, viewState);
-    previewShape.start = { column: resolvedStart.column, row: resolvedStart.row };
-    previewShape.length = lengthUnits;
-    previewShape.width = widthUnits;
+    previewShape.start = { column: start.column, row: start.row };
+    previewShape.length = Math.max(0, length);
+    previewShape.width = Math.max(0, width);
     previewShape.rotation = 0;
     render(viewState);
   }
 
-  function computeRectangleSizingFallback(deltaX, deltaY) {
-    const startPoint = placementState?.start ?? { column: 0, row: 0 };
-    let startColumn = startPoint.column;
-    let startRow = startPoint.row;
-    let length = placementState?.fixedLength ?? MIN_RECT_DIMENSION;
-    let width = placementState?.fixedWidth ?? MIN_RECT_DIMENSION;
+  function computeRectangleFromAnchor(anchor, target, options = {}) {
+    const view = options.view ?? viewState;
+    const bounds = getGridBounds(view);
+    const anchorPoint = clampPointToGridBounds(anchor ?? { column: 0, row: 0 }, view);
+    const targetPoint = clampPointToGridBounds(target ?? anchorPoint, view);
 
-    if (placementState?.dynamicLength) {
-      const absX = Math.max(MIN_RECT_DIMENSION, Math.abs(deltaX));
-      length = absX;
-      if (deltaX < 0) {
-        startColumn = startPoint.column - length;
-      }
-    } else if (deltaX < 0) {
-      startColumn = startPoint.column - length;
-    }
+    const deltaColumn = targetPoint.column - anchorPoint.column;
+    const deltaRow = targetPoint.row - anchorPoint.row;
 
-    if (placementState?.dynamicWidth) {
-      const absY = Math.max(MIN_RECT_DIMENSION, Math.abs(deltaY));
-      width = absY;
-      if (deltaY < 0) {
-        startRow = startPoint.row - width;
-      }
-    } else if (deltaY < 0) {
-      startRow = startPoint.row - width;
-    }
+    const lastOrientation = options.lastOrientation ?? { x: 1, y: 1 };
+    const orientationX = Math.abs(deltaColumn) < 0.0001 ? lastOrientation.x ?? 1 : deltaColumn >= 0 ? 1 : -1;
+    const orientationY = Math.abs(deltaRow) < 0.0001 ? lastOrientation.y ?? 1 : deltaRow >= 0 ? 1 : -1;
 
-    const lengthUnits = Math.max(MIN_RECT_DIMENSION, length);
-    const widthUnits = Math.max(MIN_RECT_DIMENSION, width);
-    const resolvedStart = resolveRectangleStart({ column: startColumn, row: startRow }, lengthUnits, widthUnits, 0, viewState);
+    const fixedLength = Number.isFinite(options.fixedLength)
+      ? Math.max(MIN_RECT_DIMENSION, options.fixedLength)
+      : MIN_RECT_DIMENSION;
+    const fixedWidth = Number.isFinite(options.fixedWidth)
+      ? Math.max(MIN_RECT_DIMENSION, options.fixedWidth)
+      : MIN_RECT_DIMENSION;
+
+    const baseLength = options.dynamicLength === false
+      ? fixedLength
+      : Math.max(MIN_RECT_DIMENSION, Math.abs(deltaColumn));
+    const baseWidth = options.dynamicWidth === false
+      ? fixedWidth
+      : Math.max(MIN_RECT_DIMENSION, Math.abs(deltaRow));
+
+    const resolved = clampRectangleWithAnchor(anchorPoint, { x: orientationX, y: orientationY }, baseLength, baseWidth, bounds);
     return {
-      start: resolvedStart,
-      length: lengthUnits,
-      width: widthUnits,
+      start: resolved.start,
+      length: resolved.length,
+      width: resolved.width,
+      orientation: resolved.orientation,
     };
+  }
+
+  function clampRectangleWithAnchor(anchor, orientation, length, width, bounds) {
+    const anchorColumn = Number.isFinite(anchor?.column) ? anchor.column : 0;
+    const anchorRow = Number.isFinite(anchor?.row) ? anchor.row : 0;
+    let dirX = orientation?.x >= 0 ? 1 : -1;
+    let dirY = orientation?.y >= 0 ? 1 : -1;
+
+    const maxPositiveColumns = Math.max(0, bounds.columns - anchorColumn);
+    const maxNegativeColumns = Math.max(0, anchorColumn);
+    if (dirX >= 0 && maxPositiveColumns <= 0) {
+      dirX = -1;
+    }
+    if (dirX < 0 && maxNegativeColumns <= 0) {
+      dirX = 1;
+    }
+
+    const maxPositiveRows = Math.max(0, bounds.rows - anchorRow);
+    const maxNegativeRows = Math.max(0, anchorRow);
+    if (dirY >= 0 && maxPositiveRows <= 0) {
+      dirY = -1;
+    }
+    if (dirY < 0 && maxNegativeRows <= 0) {
+      dirY = 1;
+    }
+
+    const maxLength = dirX >= 0 ? maxPositiveColumns : maxNegativeColumns;
+    const maxWidth = dirY >= 0 ? maxPositiveRows : maxNegativeRows;
+
+    const clampedLength = clamp(length, MIN_RECT_DIMENSION, maxLength);
+    const clampedWidth = clamp(width, MIN_RECT_DIMENSION, maxWidth);
+
+    const startColumn = dirX >= 0 ? anchorColumn : anchorColumn - clampedLength;
+    const startRow = dirY >= 0 ? anchorRow : anchorRow - clampedWidth;
+
+    return {
+      start: { column: startColumn, row: startRow },
+      length: clampedLength,
+      width: clampedWidth,
+      orientation: { x: dirX, y: dirY },
+    };
+  }
+
+  function getGridBounds(view = viewState) {
+    const mapWidth = Number.isFinite(view.mapPixelSize?.width) ? view.mapPixelSize.width : 0;
+    const mapHeight = Number.isFinite(view.mapPixelSize?.height) ? view.mapPixelSize.height : 0;
+    if (mapWidth <= 0 || mapHeight <= 0) {
+      return { columns: 0, rows: 0 };
+    }
+
+    const offsets = view.gridOffsets ?? {};
+    const offsetLeft = Number.isFinite(offsets.left) ? offsets.left : 0;
+    const offsetRight = Number.isFinite(offsets.right) ? offsets.right : 0;
+    const offsetTop = Number.isFinite(offsets.top) ? offsets.top : 0;
+    const offsetBottom = Number.isFinite(offsets.bottom) ? offsets.bottom : 0;
+    const gridSize = Math.max(8, Number.isFinite(view.gridSize) ? view.gridSize : 64);
+
+    const innerWidth = Math.max(0, mapWidth - offsetLeft - offsetRight);
+    const innerHeight = Math.max(0, mapHeight - offsetTop - offsetBottom);
+    if (innerWidth <= 0 || innerHeight <= 0) {
+      return { columns: 0, rows: 0 };
+    }
+
+    const columns = innerWidth / gridSize;
+    const rows = innerHeight / gridSize;
+    return {
+      columns: Number.isFinite(columns) ? columns : 0,
+      rows: Number.isFinite(rows) ? rows : 0,
+    };
+  }
+
+  function clampPointToGridBounds(point, view = viewState) {
+    const bounds = getGridBounds(view);
+    const column = clamp(Number.isFinite(point?.column) ? point.column : 0, 0, bounds.columns);
+    const row = clamp(Number.isFinite(point?.row) ? point.row : 0, 0, bounds.rows);
+    return { column, row };
   }
 
   function handleWallPlacement(gridPoint) {

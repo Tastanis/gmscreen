@@ -11,6 +11,7 @@ export function renderTokenLibrary(routes, store, options = {}) {
   const listContainer = moduleRoot.querySelector('#token-template-list');
   const nameInput = moduleRoot.querySelector('[data-token-name-input]');
   const folderSelect = moduleRoot.querySelector('[data-token-folder-select]');
+  const teamSelect = moduleRoot.querySelector('[data-token-team-select]');
   const feedback = moduleRoot.querySelector('[data-token-feedback]');
   const createButtons = moduleRoot.querySelectorAll('[data-action="create-token"]');
   const folderButtons = moduleRoot.querySelectorAll('[data-action="create-token-folder"]');
@@ -22,6 +23,10 @@ export function renderTokenLibrary(routes, store, options = {}) {
   const isGM = Boolean(options?.isGM ?? initialState?.user?.isGM);
 
   const maker = isGM ? initializeTokenMaker(moduleRoot) : null;
+
+  if (teamSelect) {
+    teamSelect.value = 'enemy';
+  }
 
   const collapseState = new Map();
   const tokenIndex = new Map();
@@ -65,6 +70,10 @@ export function renderTokenLibrary(routes, store, options = {}) {
 
     if (contextMenu.form) {
       contextMenu.form.reset();
+    }
+
+    if (contextMenu.teamSelect) {
+      contextMenu.teamSelect.value = 'enemy';
     }
 
     if (contextMenu.sizeInput) {
@@ -154,6 +163,10 @@ export function renderTokenLibrary(routes, store, options = {}) {
       } else {
         contextMenu.sizeInput.value = '1x1';
       }
+    }
+
+    if (contextMenu.teamSelect) {
+      contextMenu.teamSelect.value = normalizeTokenTeam(token.combatTeam ?? token.team ?? null);
     }
 
     if (contextMenu.hpInput) {
@@ -307,10 +320,12 @@ export function renderTokenLibrary(routes, store, options = {}) {
 
         const name = nameInput?.value?.trim() ?? '';
         const folderId = folderSelect?.value || null;
+        const team = normalizeTokenTeam(teamSelect?.value);
         const token = await createToken(endpoints.tokens, {
           name,
           folderId,
           imageData: exportResult.dataUrl,
+          team,
         });
 
         stateApi.updateState?.((draft) => {
@@ -326,6 +341,9 @@ export function renderTokenLibrary(routes, store, options = {}) {
 
         if (nameInput) {
           nameInput.value = '';
+        }
+        if (teamSelect) {
+          teamSelect.value = 'enemy';
         }
         maker.reset?.();
         showFeedback(feedback, 'Token created.', 'success');
@@ -441,6 +459,7 @@ export function renderTokenLibrary(routes, store, options = {}) {
 
       const sizeValue = contextMenu.sizeInput ? contextMenu.sizeInput.value.trim() : '';
       const hpValue = contextMenu.hpInput ? contextMenu.hpInput.value.trim() : '';
+      const teamValue = normalizeTokenTeam(contextMenu.teamSelect?.value);
 
       try {
         setContextMenuPending(contextMenu, true);
@@ -450,6 +469,7 @@ export function renderTokenLibrary(routes, store, options = {}) {
           id: contextTokenId,
           size: sizeValue,
           hp: hpValue,
+          team: teamValue,
         });
 
         stateApi.updateState?.((draft) => {
@@ -535,6 +555,8 @@ function buildTokenDragData(element, tokenIndex) {
   } else if (typeof elementHp === 'string' && elementHp.trim()) {
     hpValue = elementHp.trim();
   }
+  const elementTeam = element.getAttribute('data-token-team');
+  const team = normalizeTokenTeam(record?.combatTeam ?? record?.team ?? elementTeam);
 
   return {
     id: tokenId,
@@ -543,6 +565,7 @@ function buildTokenDragData(element, tokenIndex) {
     size: sizeValue,
     hp: hpValue,
     source: 'token-library',
+    team,
   };
 }
 
@@ -634,10 +657,11 @@ function renderTokenItem(token) {
     typeof token.hp === 'number' && !Number.isNaN(token.hp)
       ? ` data-token-hp="${escapeHtml(token.hp)}"`
       : '';
+  const teamAttr = ` data-token-team="${normalizeTokenTeam(token.combatTeam ?? token.team ?? null)}"`;
 
   return `
     <li>
-      <article class="token-item" draggable="true" data-token-id="${escapeHtml(token.id)}"${sizeAttr}${hpAttr}>
+      <article class="token-item" draggable="true" data-token-id="${escapeHtml(token.id)}"${sizeAttr}${hpAttr}${teamAttr}>
         ${thumb}
         <div class="token-item__meta">
           <h4>${name}</h4>
@@ -660,6 +684,10 @@ function renderTokenDetails(token) {
   }
   if (typeof token.hp === 'number' && !Number.isNaN(token.hp)) {
     stats.push(`HP: ${escapeHtml(token.hp)}`);
+  }
+  const team = normalizeTokenTeam(token.combatTeam ?? token.team ?? null);
+  if (team) {
+    stats.push(`Team: ${team === 'ally' ? 'Ally' : 'Enemy'}`);
   }
 
   if (stats.length) {
@@ -693,6 +721,14 @@ function escapeHtml(value = '') {
     .replace(/'/g, '&#039;');
 }
 
+function normalizeTokenTeam(value) {
+  if (typeof value !== 'string') {
+    return 'enemy';
+  }
+  const normalized = value.trim().toLowerCase();
+  return normalized === 'ally' ? 'ally' : 'enemy';
+}
+
 function showFeedback(element, message, type = 'info') {
   if (!element) return;
   element.textContent = message;
@@ -717,7 +753,7 @@ function setButtonPending(button, pending) {
 
 function setContextMenuPending(menu, pending) {
   if (!menu) return;
-  const elements = [menu.sizeInput, menu.hpInput, menu.submitButton].filter(Boolean);
+  const elements = [menu.sizeInput, menu.teamSelect, menu.hpInput, menu.submitButton].filter(Boolean);
   elements.forEach((element) => {
     element.disabled = pending;
     if (element.classList?.contains('btn')) {
@@ -778,6 +814,13 @@ function createTokenContextMenu(root) {
         </select>
       </div>
       <div class="token-context-menu__field">
+        <label for="token-context-team">Default Team</label>
+        <select id="token-context-team" data-token-context-team>
+          <option value="enemy">Enemy</option>
+          <option value="ally">Ally</option>
+        </select>
+      </div>
+      <div class="token-context-menu__field">
         <label for="token-context-hp">Max HP</label>
         <input
           id="token-context-hp"
@@ -802,6 +845,7 @@ function createTokenContextMenu(root) {
     element,
     form: element.querySelector('[data-token-context-form]'),
     sizeInput: element.querySelector('[data-token-context-size]'),
+    teamSelect: element.querySelector('[data-token-context-team]'),
     hpInput: element.querySelector('[data-token-context-hp]'),
     feedback: element.querySelector('[data-token-context-feedback]'),
     submitButton: element.querySelector('.token-context-menu__actions .btn'),
