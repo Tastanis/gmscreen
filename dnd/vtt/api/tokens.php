@@ -228,6 +228,10 @@ function createToken(array $payload): array
         $token['hp'] = $hitPoints;
     }
 
+    $team = normalizeTokenCombatTeam($payload['team'] ?? $payload['combatTeam'] ?? null);
+    $token['combatTeam'] = $team;
+    $token['team'] = $team;
+
     $storage['items'][] = $token;
     persistTokens($storage);
 
@@ -268,6 +272,12 @@ function updateToken(array $payload): array
             unset($token['hp']);
         } else {
             $token['hp'] = $hitPoints;
+        }
+
+        if (array_key_exists('team', $payload) || array_key_exists('combatTeam', $payload)) {
+            $team = normalizeTokenCombatTeam($payload['team'] ?? $payload['combatTeam'] ?? null);
+            $token['combatTeam'] = $team;
+            $token['team'] = $team;
         }
 
         $token['updatedAt'] = date(DATE_ATOM);
@@ -391,6 +401,21 @@ function normalizeTokenHitPoints($value): ?int
     }
 
     return (int) $filtered;
+}
+
+function normalizeTokenCombatTeam($value): string
+{
+    if (is_string($value)) {
+        $normalized = strtolower(trim($value));
+        if ($normalized === 'ally') {
+            return 'ally';
+        }
+        if ($normalized === 'enemy') {
+            return 'enemy';
+        }
+    }
+
+    return 'enemy';
 }
 
 function normalizeCollection($collection): array
