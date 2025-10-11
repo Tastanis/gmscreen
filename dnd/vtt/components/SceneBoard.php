@@ -98,6 +98,19 @@ function renderVttSceneBoard(): string
                 </div>
                 <p class="vtt-board__empty">Drag a scene map here or create a scene from the settings panel.</p>
             </div>
+            <div
+                class="vtt-board__turn-timer"
+                data-turn-timer
+                hidden
+            >
+                <div class="vtt-board__turn-timer-image" data-turn-timer-image></div>
+                <span
+                    class="vtt-board__turn-timer-display"
+                    data-turn-timer-display
+                    role="timer"
+                    aria-live="polite"
+                >1:00</span>
+            </div>
             <div id="vtt-distance-ruler" class="vtt-board__ruler" hidden>
                 <span class="vtt-board__ruler-value">0 squares</span>
             </div>

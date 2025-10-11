@@ -19,6 +19,7 @@ export function mountBoardInteractions(store, routes = {}) {
   const emptyState = board?.querySelector('.vtt-board__empty');
   const status = document.getElementById('active-scene-status');
   const sceneName = document.getElementById('active-scene-name');
+  const appMain = document.getElementById('vtt-main');
   const combatTrackerRoot = document.querySelector('[data-combat-tracker]');
   const combatTrackerWaiting = combatTrackerRoot?.querySelector('[data-combat-tracker-waiting]');
   const combatTrackerCompleted = combatTrackerRoot?.querySelector('[data-combat-tracker-completed]');
@@ -29,9 +30,21 @@ export function mountBoardInteractions(store, routes = {}) {
   const startCombatButton = document.querySelector('[data-action="start-combat"]');
   const roundTracker = document.querySelector('[data-round-tracker]');
   const roundValue = roundTracker?.querySelector('[data-round-value]');
+  const turnTimerElement = document.querySelector('[data-turn-timer]');
+  const turnTimerImage = turnTimerElement?.querySelector('[data-turn-timer-image]');
+  const turnTimerDisplay = turnTimerElement?.querySelector('[data-turn-timer-display]');
   if (!board || !mapSurface || !mapTransform || !mapBackdrop || !mapImage || !templateLayer) return;
 
   const defaultStatusText = status?.textContent ?? '';
+  if (turnTimerDisplay) {
+    turnTimerDisplay.textContent = TURN_TIMER_INITIAL_DISPLAY;
+  }
+  if (turnTimerImage) {
+    turnTimerImage.dataset.stage = TURN_TIMER_STAGE_FALLBACK;
+  }
+  if (turnTimerElement) {
+    turnTimerElement.setAttribute('aria-hidden', 'true');
+  }
 
   if (uploadButton && !routes.uploads) {
     uploadButton.disabled = true;
@@ -103,6 +116,31 @@ export function mountBoardInteractions(store, routes = {}) {
   let activeTurnDialog = null;
   let startingCombatTeam = null;
   let currentTurnTeam = null;
+  let activeTeam = null;
+  let pendingTurnTransition = null;
+  let borderFlashTimeoutId = null;
+  let allyTurnTimerInterval = null;
+  let allyTurnTimerExpiresAt = null;
+  let currentTurnTimerStage = null;
+  let audioContext = null;
+
+  const TURN_TIMER_DURATION_MS = 60_000;
+  const TURN_TIMER_STAGE_INTERVAL_MS = 20_000;
+  const TURN_TIMER_INITIAL_DISPLAY = '1:00';
+  const TURN_TIMER_STAGE_FALLBACK = 'full';
+  // Sand timer artwork is resolved via CSS data-stage attributes using
+  // assets/images/turn-timer/sand-timer-{stage}.png.
+  const SOUND_PROFILES = {
+    longDing: [
+      { frequency: 880, type: 'sine', attack: 0.01, decay: 0.35, sustain: 0.6, duration: 1.4, release: 1.1, volume: 0.25 },
+      { frequency: 1320, type: 'sine', attack: 0.04, decay: 0.4, sustain: 0.4, duration: 1.2, release: 1.0, volume: 0.12 },
+    ],
+    softGong: [
+      { frequency: 220, type: 'sine', attack: 0.02, decay: 0.6, sustain: 0.4, duration: 1.8, release: 1.4, volume: 0.28 },
+      { frequency: 330, type: 'sine', attack: 0.03, decay: 0.6, sustain: 0.35, duration: 1.7, release: 1.3, volume: 0.18 },
+      { frequency: 147.5, type: 'sine', attack: 0.02, decay: 0.5, sustain: 0.3, duration: 1.9, release: 1.5, volume: 0.22 },
+    ],
+  };
 
   function escapeHtml(value) {
     if (typeof value !== 'string') {
@@ -2013,16 +2051,31 @@ export function mountBoardInteractions(store, routes = {}) {
   }
 
   function setActiveCombatantId(nextId) {
-    const normalized = typeof nextId === 'string' && nextId ? nextId : null;
-    if (highlightedCombatantId && highlightedCombatantId !== normalized) {
+    const normalizedNextId = typeof nextId === 'string' && nextId ? nextId : null;
+    const transitionHint = pendingTurnTransition;
+    pendingTurnTransition = null;
+
+    const previousCombatantId = transitionHint?.fromCombatantId ?? activeCombatantId ?? null;
+    let previousTeam = transitionHint?.fromTeam ?? null;
+    if (!previousTeam && previousCombatantId) {
+      previousTeam = getCombatantTeam(previousCombatantId);
+    } else if (!previousTeam) {
+      previousTeam = activeTeam;
+    }
+    const nextTeam = normalizedNextId ? getCombatantTeam(normalizedNextId) : null;
+
+    if (highlightedCombatantId && highlightedCombatantId !== normalizedNextId) {
       highlightBoardTokensForCombatant(highlightedCombatantId, false);
     }
-    highlightedCombatantId = normalized;
-    activeCombatantId = normalized;
-    if (normalized) {
-      highlightBoardTokensForCombatant(normalized, true);
+    highlightedCombatantId = normalizedNextId;
+    activeCombatantId = normalizedNextId;
+    activeTeam = nextTeam ?? null;
+
+    if (normalizedNextId) {
+      highlightBoardTokensForCombatant(normalizedNextId, true);
     }
     refreshCombatantStateClasses();
+    handleActiveTeamChanged(previousTeam ?? null, nextTeam ?? null, previousCombatantId, normalizedNextId);
   }
 
   function handleCombatTrackerClick(event) {
@@ -2120,16 +2173,19 @@ export function mountBoardInteractions(store, routes = {}) {
     }
     closeTurnPrompt();
     const finishedId = activeCombatantId;
+    const finishedTeam = getCombatantTeam(finishedId);
     completedCombatants.add(finishedId);
     setActiveCombatantId(null);
     refreshCombatTracker();
-    const finishedTeam = getCombatantTeam(finishedId);
     const nextId = pickNextCombatantId([
       finishedTeam === 'ally' ? 'enemy' : 'ally',
       finishedTeam,
     ]);
     if (nextId) {
+      pendingTurnTransition = { fromTeam: finishedTeam, fromCombatantId: finishedId };
       setActiveCombatantId(nextId);
+    } else {
+      pendingTurnTransition = null;
     }
     updateCombatModeIndicators();
     checkForRoundCompletion();
@@ -2342,6 +2398,10 @@ export function mountBoardInteractions(store, routes = {}) {
       return;
     }
 
+    stopAllyTurnTimer();
+    clearTurnBorderFlash();
+    pendingTurnTransition = null;
+    activeTeam = null;
     combatActive = true;
     combatRound = 1;
     completedCombatants.clear();
@@ -2373,6 +2433,10 @@ export function mountBoardInteractions(store, routes = {}) {
     setActiveCombatantId(null);
     startingCombatTeam = null;
     currentTurnTeam = null;
+    activeTeam = null;
+    pendingTurnTransition = null;
+    stopAllyTurnTimer();
+    clearTurnBorderFlash();
     resetTriggeredActionsForActiveScene();
     updateStartCombatButton();
     refreshCombatTracker();
@@ -2560,6 +2624,239 @@ export function mountBoardInteractions(store, routes = {}) {
       roundValue.textContent = String(displayRound);
     } else {
       roundTracker.hidden = true;
+    }
+  }
+
+  function flashTurnBorder() {
+    if (!appMain) {
+      return;
+    }
+    if (borderFlashTimeoutId && typeof window !== 'undefined' && typeof window.clearTimeout === 'function') {
+      window.clearTimeout(borderFlashTimeoutId);
+      borderFlashTimeoutId = null;
+    }
+    appMain.classList.remove('is-turn-flash');
+    try {
+      void appMain.offsetWidth;
+    } catch (error) {
+      // Ignore reflow errors in non-browser environments.
+    }
+    appMain.classList.add('is-turn-flash');
+    if (typeof window !== 'undefined' && typeof window.setTimeout === 'function') {
+      borderFlashTimeoutId = window.setTimeout(() => {
+        appMain.classList.remove('is-turn-flash');
+        borderFlashTimeoutId = null;
+      }, 3000);
+    }
+  }
+
+  function clearTurnBorderFlash() {
+    if (!appMain) {
+      return;
+    }
+    if (borderFlashTimeoutId && typeof window !== 'undefined' && typeof window.clearTimeout === 'function') {
+      window.clearTimeout(borderFlashTimeoutId);
+      borderFlashTimeoutId = null;
+    }
+    appMain.classList.remove('is-turn-flash');
+  }
+
+  function ensureAudioContextInstance() {
+    if (typeof window === 'undefined') {
+      return null;
+    }
+    const AudioContextClass = window.AudioContext || window.webkitAudioContext;
+    if (!AudioContextClass) {
+      return null;
+    }
+    if (!audioContext) {
+      try {
+        audioContext = new AudioContextClass();
+      } catch (error) {
+        console.warn('[VTT] Unable to initialize turn audio context', error);
+        audioContext = null;
+        return null;
+      }
+    }
+    if (audioContext && audioContext.state === 'suspended' && typeof audioContext.resume === 'function') {
+      audioContext.resume().catch(() => {});
+    }
+    return audioContext;
+  }
+
+  function scheduleTonePartial(context, partial, offset = 0) {
+    if (!context || !partial || typeof partial.frequency !== 'number' || partial.frequency <= 0) {
+      return;
+    }
+    const oscillator = context.createOscillator();
+    const gainNode = context.createGain();
+
+    const startTime = context.currentTime + Math.max(0, offset);
+    const attack = Math.max(0.005, Number(partial.attack) || 0.01);
+    const decay = Math.max(0.05, Number(partial.decay) || 0.25);
+    const sustain = Math.min(Math.max(Number(partial.sustain) || 0.4, 0), 1);
+    const duration = Math.max(0.1, Number(partial.duration) || 1.2);
+    const release = Math.max(0.1, Number(partial.release) || 1.0);
+    const volume = Math.min(Math.max(Number(partial.volume) || 0.2, 0.01), 0.6);
+
+    oscillator.type = partial.type || 'sine';
+    oscillator.frequency.setValueAtTime(partial.frequency, startTime);
+    if (typeof partial.detune === 'number') {
+      oscillator.detune.setValueAtTime(partial.detune, startTime);
+    }
+
+    const peakTime = startTime + attack;
+    const sustainTime = startTime + duration;
+    const endTime = sustainTime + release;
+    const sustainLevel = Math.max(volume * sustain, 0.0001);
+
+    gainNode.gain.setValueAtTime(0.0001, startTime);
+    gainNode.gain.exponentialRampToValueAtTime(volume, peakTime);
+    gainNode.gain.exponentialRampToValueAtTime(sustainLevel, peakTime + Math.max(decay, 0.05));
+    gainNode.gain.setValueAtTime(sustainLevel, sustainTime);
+    gainNode.gain.exponentialRampToValueAtTime(0.0001, endTime);
+
+    oscillator.connect(gainNode);
+    gainNode.connect(context.destination);
+
+    oscillator.start(startTime);
+    oscillator.stop(endTime + 0.1);
+  }
+
+  function playSoundProfile(profileKey) {
+    const profile = SOUND_PROFILES[profileKey];
+    if (!Array.isArray(profile) || !profile.length) {
+      return;
+    }
+    const context = ensureAudioContextInstance();
+    if (!context) {
+      return;
+    }
+    profile.forEach((partial, index) => {
+      scheduleTonePartial(context, partial, index * 0.015);
+    });
+  }
+
+  function formatTimerValue(milliseconds) {
+    const totalSeconds = Math.max(0, Math.ceil(milliseconds / 1000));
+    const minutes = Math.floor(totalSeconds / 60);
+    const seconds = totalSeconds % 60;
+    return `${minutes}:${seconds.toString().padStart(2, '0')}`;
+  }
+
+  function updateTurnTimerStage(remainingMs) {
+    if (!turnTimerImage) {
+      return;
+    }
+    let stage = 'low';
+    if (remainingMs > TURN_TIMER_STAGE_INTERVAL_MS * 2) {
+      stage = 'full';
+    } else if (remainingMs > TURN_TIMER_STAGE_INTERVAL_MS) {
+      stage = 'half';
+    }
+    if (currentTurnTimerStage === stage) {
+      return;
+    }
+    currentTurnTimerStage = stage;
+    turnTimerImage.dataset.stage = stage;
+  }
+
+  function updateAllyTurnTimerDisplay() {
+    if (!turnTimerElement || !allyTurnTimerExpiresAt) {
+      return;
+    }
+    const remaining = Math.max(0, allyTurnTimerExpiresAt - Date.now());
+    if (turnTimerDisplay) {
+      turnTimerDisplay.textContent = formatTimerValue(remaining);
+    }
+    updateTurnTimerStage(remaining);
+    if (remaining <= 0) {
+      stopAllyTurnTimer({ hide: false, holdStage: true });
+    }
+  }
+
+  function startAllyTurnTimer() {
+    if (!turnTimerElement) {
+      return;
+    }
+    allyTurnTimerExpiresAt = Date.now() + TURN_TIMER_DURATION_MS;
+    currentTurnTimerStage = null;
+    updateTurnTimerStage(TURN_TIMER_DURATION_MS);
+    if (turnTimerDisplay) {
+      turnTimerDisplay.textContent = formatTimerValue(TURN_TIMER_DURATION_MS);
+    }
+    turnTimerElement.hidden = false;
+    turnTimerElement.setAttribute('aria-hidden', 'false');
+
+    if (allyTurnTimerInterval && typeof window !== 'undefined' && typeof window.clearInterval === 'function') {
+      window.clearInterval(allyTurnTimerInterval);
+    }
+    if (typeof window !== 'undefined' && typeof window.setInterval === 'function') {
+      allyTurnTimerInterval = window.setInterval(updateAllyTurnTimerDisplay, 500);
+    }
+    updateAllyTurnTimerDisplay();
+  }
+
+  function stopAllyTurnTimer(options = {}) {
+    const { hide = true, holdStage = false } = options;
+    if (allyTurnTimerInterval && typeof window !== 'undefined' && typeof window.clearInterval === 'function') {
+      window.clearInterval(allyTurnTimerInterval);
+    }
+    allyTurnTimerInterval = null;
+    allyTurnTimerExpiresAt = null;
+    if (turnTimerElement && hide) {
+      turnTimerElement.hidden = true;
+      turnTimerElement.setAttribute('aria-hidden', 'true');
+    }
+    if (turnTimerDisplay && !holdStage) {
+      turnTimerDisplay.textContent = TURN_TIMER_INITIAL_DISPLAY;
+    }
+    if (!holdStage && turnTimerImage) {
+      currentTurnTimerStage = TURN_TIMER_STAGE_FALLBACK;
+      turnTimerImage.dataset.stage = TURN_TIMER_STAGE_FALLBACK;
+    }
+  }
+
+  function notifyGmPlayersTurnEnd() {
+    if (isGmUser()) {
+      flashTurnBorder();
+      playSoundProfile('longDing');
+    } else {
+      playSoundProfile('softGong');
+    }
+  }
+
+  function notifyPlayersEnemyTurnEnd() {
+    if (isGmUser()) {
+      playSoundProfile('softGong');
+    } else {
+      flashTurnBorder();
+      playSoundProfile('longDing');
+    }
+  }
+
+  function handleActiveTeamChanged(previousTeam, nextTeam, previousCombatantId, nextCombatantId) {
+    const normalizedPrevious = previousTeam ? normalizeCombatTeam(previousTeam) : null;
+    const normalizedNext = nextTeam ? normalizeCombatTeam(nextTeam) : null;
+    const teamChanged = normalizedPrevious !== normalizedNext;
+    const combatantChanged = Boolean(
+      nextCombatantId && previousCombatantId && nextCombatantId !== previousCombatantId
+    );
+
+    if (normalizedNext === 'ally') {
+      if (teamChanged || combatantChanged || !allyTurnTimerExpiresAt) {
+        startAllyTurnTimer();
+      }
+    } else {
+      stopAllyTurnTimer();
+    }
+
+    if (normalizedPrevious && normalizedNext && teamChanged) {
+      if (normalizedPrevious === 'ally' && normalizedNext === 'enemy') {
+        notifyGmPlayersTurnEnd();
+      } else if (normalizedPrevious === 'enemy' && normalizedNext === 'ally') {
+        notifyPlayersEnemyTurnEnd();
+      }
     }
   }
 
