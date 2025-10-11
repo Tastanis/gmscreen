@@ -11,7 +11,7 @@ export function renderTokenLibrary(routes, store, options = {}) {
   const listContainer = moduleRoot.querySelector('#token-template-list');
   const nameInput = moduleRoot.querySelector('[data-token-name-input]');
   const folderSelect = moduleRoot.querySelector('[data-token-folder-select]');
-  const teamSelect = moduleRoot.querySelector('[data-token-team-select]');
+  const teamToggle = moduleRoot.querySelector('[data-token-team-toggle]');
   const feedback = moduleRoot.querySelector('[data-token-feedback]');
   const createButtons = moduleRoot.querySelectorAll('[data-action="create-token"]');
   const folderButtons = moduleRoot.querySelectorAll('[data-action="create-token-folder"]');
@@ -24,8 +24,8 @@ export function renderTokenLibrary(routes, store, options = {}) {
 
   const maker = isGM ? initializeTokenMaker(moduleRoot) : null;
 
-  if (teamSelect) {
-    teamSelect.value = 'enemy';
+  if (teamToggle) {
+    teamToggle.checked = false;
   }
 
   const collapseState = new Map();
@@ -72,8 +72,8 @@ export function renderTokenLibrary(routes, store, options = {}) {
       contextMenu.form.reset();
     }
 
-    if (contextMenu.teamSelect) {
-      contextMenu.teamSelect.value = 'enemy';
+    if (contextMenu.teamToggle) {
+      contextMenu.teamToggle.checked = false;
     }
 
     if (contextMenu.sizeInput) {
@@ -165,8 +165,9 @@ export function renderTokenLibrary(routes, store, options = {}) {
       }
     }
 
-    if (contextMenu.teamSelect) {
-      contextMenu.teamSelect.value = normalizeTokenTeam(token.combatTeam ?? token.team ?? null);
+    if (contextMenu.teamToggle) {
+      const teamValue = normalizeTokenTeam(token.combatTeam ?? token.team ?? null);
+      contextMenu.teamToggle.checked = teamValue === 'ally';
     }
 
     if (contextMenu.hpInput) {
@@ -320,7 +321,7 @@ export function renderTokenLibrary(routes, store, options = {}) {
 
         const name = nameInput?.value?.trim() ?? '';
         const folderId = folderSelect?.value || null;
-        const team = normalizeTokenTeam(teamSelect?.value);
+        const team = teamToggle?.checked ? 'ally' : 'enemy';
         const token = await createToken(endpoints.tokens, {
           name,
           folderId,
@@ -342,8 +343,8 @@ export function renderTokenLibrary(routes, store, options = {}) {
         if (nameInput) {
           nameInput.value = '';
         }
-        if (teamSelect) {
-          teamSelect.value = 'enemy';
+        if (teamToggle) {
+          teamToggle.checked = false;
         }
         maker.reset?.();
         showFeedback(feedback, 'Token created.', 'success');
@@ -459,7 +460,7 @@ export function renderTokenLibrary(routes, store, options = {}) {
 
       const sizeValue = contextMenu.sizeInput ? contextMenu.sizeInput.value.trim() : '';
       const hpValue = contextMenu.hpInput ? contextMenu.hpInput.value.trim() : '';
-      const teamValue = normalizeTokenTeam(contextMenu.teamSelect?.value);
+      const teamValue = contextMenu.teamToggle?.checked ? 'ally' : 'enemy';
 
       try {
         setContextMenuPending(contextMenu, true);
@@ -753,7 +754,7 @@ function setButtonPending(button, pending) {
 
 function setContextMenuPending(menu, pending) {
   if (!menu) return;
-  const elements = [menu.sizeInput, menu.teamSelect, menu.hpInput, menu.submitButton].filter(Boolean);
+  const elements = [menu.sizeInput, menu.teamToggle, menu.hpInput, menu.submitButton].filter(Boolean);
   elements.forEach((element) => {
     element.disabled = pending;
     if (element.classList?.contains('btn')) {
@@ -813,12 +814,15 @@ function createTokenContextMenu(root) {
           <option value="">No size override</option>
         </select>
       </div>
-      <div class="token-context-menu__field">
-        <label for="token-context-team">Default Team</label>
-        <select id="token-context-team" data-token-context-team>
-          <option value="enemy">Enemy</option>
-          <option value="ally">Ally</option>
-        </select>
+      <div class="token-context-menu__field token-context-menu__field--toggle">
+        <label class="token-context-menu__toggle" for="token-context-ally">
+          <input
+            id="token-context-ally"
+            type="checkbox"
+            data-token-context-ally
+          />
+          <span>Make Ally</span>
+        </label>
       </div>
       <div class="token-context-menu__field">
         <label for="token-context-hp">Max HP</label>
@@ -845,7 +849,7 @@ function createTokenContextMenu(root) {
     element,
     form: element.querySelector('[data-token-context-form]'),
     sizeInput: element.querySelector('[data-token-context-size]'),
-    teamSelect: element.querySelector('[data-token-context-team]'),
+    teamToggle: element.querySelector('[data-token-context-ally]'),
     hpInput: element.querySelector('[data-token-context-hp]'),
     feedback: element.querySelector('[data-token-context-feedback]'),
     submitButton: element.querySelector('.token-context-menu__actions .btn'),

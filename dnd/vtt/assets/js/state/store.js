@@ -299,6 +299,9 @@ function normalizePlacementEntry(entry) {
   const condition = normalizePlacementCondition(
     entry.condition ?? entry.status ?? entry?.overlays?.condition ?? null
   );
+  const combatTeam = normalizeCombatTeam(
+    entry.combatTeam ?? entry.team ?? entry?.tags?.team ?? entry?.faction ?? null
+  );
 
   return {
     id,
@@ -315,6 +318,7 @@ function normalizePlacementEntry(entry) {
     showTriggeredAction,
     triggeredActionReady: triggeredActionReady !== false,
     condition,
+    combatTeam,
   };
 }
 
@@ -386,6 +390,14 @@ function normalizePlacementHitPoints(value, fallbackMax = '') {
   }
 
   return normalized;
+}
+
+function normalizeCombatTeam(value) {
+  if (typeof value !== 'string') {
+    return 'enemy';
+  }
+  const normalized = value.trim().toLowerCase();
+  return normalized === 'ally' ? 'ally' : 'enemy';
 }
 
 function normalizeConditionDurationValue(value) {

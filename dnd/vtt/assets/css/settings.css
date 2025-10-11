@@ -268,6 +268,19 @@
   width: 100%;
 }
 
+.token-maker__checkbox {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.5rem;
+  font-weight: 500;
+  color: var(--vtt-text-primary);
+}
+
+.token-maker__checkbox input {
+  width: auto;
+  height: auto;
+}
+
 .token-maker__field--inline {
   flex-direction: row;
   align-items: flex-end;
@@ -556,6 +569,26 @@
   outline-offset: 2px;
   border-color: transparent;
   box-shadow: 0 0 0 1px rgba(99, 102, 241, 0.4);
+}
+
+.token-context-menu__field--toggle {
+  flex-direction: row;
+  align-items: center;
+}
+
+.token-context-menu__toggle {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.5rem;
+  font-size: 0.85rem;
+  text-transform: none;
+  letter-spacing: normal;
+  color: var(--vtt-text-primary);
+}
+
+.token-context-menu__toggle input {
+  width: auto;
+  height: auto;
 }
 
 .token-context-menu__hint {

@@ -5621,21 +5621,42 @@ function createTemplateTool() {
     }
     const nextRotation = normalizeAngle((shape.rotation ?? 0) + deltaDegrees);
     shape.rotation = nextRotation;
-    const previousStartColumn = shape.start.column;
-    const previousStartRow = shape.start.row;
-    const clamped = resolveRectangleStart(shape.start, shape.length, shape.width, shape.rotation, viewState);
-    const deltaStartColumn = clamped.column - previousStartColumn;
-    const deltaStartRow = clamped.row - previousStartRow;
-    shape.start.column = clamped.column;
-    shape.start.row = clamped.row;
-    if (Number.isFinite(shape.anchor?.column) && Number.isFinite(shape.anchor?.row)) {
-      const nextAnchor = {
-        column: shape.anchor.column + deltaStartColumn,
-        row: shape.anchor.row + deltaStartRow,
+
+    const anchorVector = rectangleAnchorVector(shape);
+    if (anchorVector && Number.isFinite(shape.anchor?.column) && Number.isFinite(shape.anchor?.row)) {
+      const lengthUnits = Math.max(MIN_RECT_DIMENSION, shape.length ?? MIN_RECT_DIMENSION);
+      const widthUnits = Math.max(MIN_RECT_DIMENSION, shape.width ?? MIN_RECT_DIMENSION);
+      const anchorCenter = {
+        column: shape.anchor.column + 0.5,
+        row: shape.anchor.row + 0.5,
       };
-      const clampedAnchor = clampPointToGridBounds(nextAnchor, viewState);
-      shape.anchor.column = clampedAnchor.column;
-      shape.anchor.row = clampedAnchor.row;
+      const radians = toRadians(nextRotation);
+      const cos = Math.cos(radians);
+      const sin = Math.sin(radians);
+      const rotatedX = anchorVector.x * cos - anchorVector.y * sin;
+      const rotatedY = anchorVector.x * sin + anchorVector.y * cos;
+      const centerColumn = anchorCenter.column - rotatedX;
+      const centerRow = anchorCenter.row - rotatedY;
+      const nextStart = rectangleStartFromCenter({ column: centerColumn, row: centerRow }, lengthUnits, widthUnits);
+      shape.start.column = nextStart.column;
+      shape.start.row = nextStart.row;
+    } else {
+      const previousStartColumn = shape.start.column;
+      const previousStartRow = shape.start.row;
+      const clamped = resolveRectangleStart(shape.start, shape.length, shape.width, shape.rotation, viewState);
+      shape.start.column = clamped.column;
+      shape.start.row = clamped.row;
+      if (Number.isFinite(shape.anchor?.column) && Number.isFinite(shape.anchor?.row)) {
+        const deltaStartColumn = clamped.column - previousStartColumn;
+        const deltaStartRow = clamped.row - previousStartRow;
+        const nextAnchor = {
+          column: shape.anchor.column + deltaStartColumn,
+          row: shape.anchor.row + deltaStartRow,
+        };
+        const clampedAnchor = clampPointToGridBounds(nextAnchor, viewState);
+        shape.anchor.column = clampedAnchor.column;
+        shape.anchor.row = clampedAnchor.row;
+      }
     }
     render(viewState);
   }
@@ -5649,17 +5670,18 @@ function createTemplateTool() {
     selectShape(shape.id);
 
     const localPoint = getLocalMapPoint(event);
-    const center = rectangleCenterToLocal(shape, viewState);
-    if (!localPoint || !center) {
+    const pivot = rectangleAnchorToLocal(shape, viewState) ?? rectangleCenterToLocal(shape, viewState);
+    if (!localPoint || !pivot) {
       return;
     }
 
-    const pointerAngle = Math.atan2(localPoint.y - center.y, localPoint.x - center.x);
+    const pointerAngle = Math.atan2(localPoint.y - pivot.y, localPoint.x - pivot.x);
     activeRotation = {
       shapeId: shape.id,
       pointerId: event.pointerId,
       startRotation: shape.rotation ?? 0,
       startPointerAngle: pointerAngle,
+      anchorVector: rectangleAnchorVector(shape),
     };
 
     updateStatus('Rotate the rectangle. Hold Shift to snap to 45° increments.');
@@ -5678,12 +5700,12 @@ function createTemplateTool() {
     event.stopPropagation();
 
     const localPoint = getLocalMapPoint(event);
-    const center = rectangleCenterToLocal(shape, viewState);
-    if (!localPoint || !center) {
+    const pivot = rectangleAnchorToLocal(shape, viewState) ?? rectangleCenterToLocal(shape, viewState);
+    if (!localPoint || !pivot) {
       return;
     }
 
-    const pointerAngle = Math.atan2(localPoint.y - center.y, localPoint.x - center.x);
+    const pointerAngle = Math.atan2(localPoint.y - pivot.y, localPoint.x - pivot.x);
     const deltaRadians = pointerAngle - activeRotation.startPointerAngle;
     let nextRotation = normalizeAngle(activeRotation.startRotation + toDegrees(deltaRadians));
     if (event.shiftKey) {
@@ -5691,21 +5713,41 @@ function createTemplateTool() {
     }
 
     shape.rotation = nextRotation;
-    const previousStartColumn = shape.start.column;
-    const previousStartRow = shape.start.row;
-    const clamped = resolveRectangleStart(shape.start, shape.length, shape.width, shape.rotation, viewState);
-    const deltaStartColumn = clamped.column - previousStartColumn;
-    const deltaStartRow = clamped.row - previousStartRow;
-    shape.start.column = clamped.column;
-    shape.start.row = clamped.row;
-    if (Number.isFinite(shape.anchor?.column) && Number.isFinite(shape.anchor?.row)) {
-      const nextAnchor = {
-        column: shape.anchor.column + deltaStartColumn,
-        row: shape.anchor.row + deltaStartRow,
+    const anchorVector = activeRotation.anchorVector ?? rectangleAnchorVector(shape);
+    if (anchorVector && Number.isFinite(shape.anchor?.column) && Number.isFinite(shape.anchor?.row)) {
+      const lengthUnits = Math.max(MIN_RECT_DIMENSION, shape.length ?? MIN_RECT_DIMENSION);
+      const widthUnits = Math.max(MIN_RECT_DIMENSION, shape.width ?? MIN_RECT_DIMENSION);
+      const anchorCenter = {
+        column: shape.anchor.column + 0.5,
+        row: shape.anchor.row + 0.5,
       };
-      const clampedAnchor = clampPointToGridBounds(nextAnchor, viewState);
-      shape.anchor.column = clampedAnchor.column;
-      shape.anchor.row = clampedAnchor.row;
+      const radians = toRadians(nextRotation);
+      const cos = Math.cos(radians);
+      const sin = Math.sin(radians);
+      const rotatedX = anchorVector.x * cos - anchorVector.y * sin;
+      const rotatedY = anchorVector.x * sin + anchorVector.y * cos;
+      const centerColumn = anchorCenter.column - rotatedX;
+      const centerRow = anchorCenter.row - rotatedY;
+      const nextStart = rectangleStartFromCenter({ column: centerColumn, row: centerRow }, lengthUnits, widthUnits);
+      shape.start.column = nextStart.column;
+      shape.start.row = nextStart.row;
+    } else {
+      const previousStartColumn = shape.start.column;
+      const previousStartRow = shape.start.row;
+      const clamped = resolveRectangleStart(shape.start, shape.length, shape.width, shape.rotation, viewState);
+      const deltaStartColumn = clamped.column - previousStartColumn;
+      const deltaStartRow = clamped.row - previousStartRow;
+      shape.start.column = clamped.column;
+      shape.start.row = clamped.row;
+      if (Number.isFinite(shape.anchor?.column) && Number.isFinite(shape.anchor?.row)) {
+        const nextAnchor = {
+          column: shape.anchor.column + deltaStartColumn,
+          row: shape.anchor.row + deltaStartRow,
+        };
+        const clampedAnchor = clampPointToGridBounds(nextAnchor, viewState);
+        shape.anchor.column = clampedAnchor.column;
+        shape.anchor.row = clampedAnchor.row;
+      }
     }
     render(viewState);
   }
@@ -5949,25 +5991,28 @@ function createTemplateTool() {
 
     const nodeSize = gridSize;
     const hasAnchorInfo = Number.isFinite(shape.anchor?.column) && Number.isFinite(shape.anchor?.row);
-    let offsetXUnits;
-    let offsetYUnits;
+    let relativeXUnits;
+    let relativeYUnits;
     if (hasAnchorInfo) {
-      const halfLength = lengthUnits / 2;
-      const halfWidth = widthUnits / 2;
-      const nodeMargin = 0.5;
-      const orientationX = shape.orientation?.x >= 0 ? 1 : -1;
-      const orientationY = shape.orientation?.y >= 0 ? 1 : -1;
-      offsetXUnits = orientationX >= 0 ? -halfLength - nodeMargin : halfLength + nodeMargin;
-      offsetYUnits = orientationY >= 0 ? -halfWidth - nodeMargin : halfWidth + nodeMargin;
+      const anchorCenterColumn = shape.anchor.column + 0.5;
+      const anchorCenterRow = shape.anchor.row + 0.5;
+      const centerColumn = shape.start.column + lengthUnits / 2;
+      const centerRow = shape.start.row + widthUnits / 2;
+      const offsetXUnits = anchorCenterColumn - centerColumn;
+      const offsetYUnits = anchorCenterRow - centerRow;
+      const rotatedXUnits = offsetXUnits * cos - offsetYUnits * sin;
+      const rotatedYUnits = offsetXUnits * sin + offsetYUnits * cos;
+      relativeXUnits = spanWidth / 2 + rotatedXUnits;
+      relativeYUnits = spanHeight / 2 + rotatedYUnits;
     } else {
       const anchorDistance = widthUnits / 2 + 0.5;
-      offsetXUnits = 0;
-      offsetYUnits = -anchorDistance;
+      const offsetXUnits = 0;
+      const offsetYUnits = -anchorDistance;
+      const rotatedXUnits = offsetXUnits * cos - offsetYUnits * sin;
+      const rotatedYUnits = offsetXUnits * sin + offsetYUnits * cos;
+      relativeXUnits = spanWidth / 2 + rotatedXUnits;
+      relativeYUnits = spanHeight / 2 + rotatedYUnits;
     }
-    const rotatedXUnits = offsetXUnits * cos - offsetYUnits * sin;
-    const rotatedYUnits = offsetXUnits * sin + offsetYUnits * cos;
-    const relativeXUnits = spanWidth / 2 + rotatedXUnits;
-    const relativeYUnits = spanHeight / 2 + rotatedYUnits;
     node.style.left = `${relativeXUnits * gridSize - nodeSize / 2}px`;
     node.style.top = `${relativeYUnits * gridSize - nodeSize / 2}px`;
     node.style.width = `${nodeSize}px`;
@@ -6374,23 +6419,31 @@ function createTemplateTool() {
     let dirX = orientation?.x >= 0 ? 1 : -1;
     let dirY = orientation?.y >= 0 ? 1 : -1;
 
-    const maxPositiveColumns = Math.max(0, bounds.columns - anchorColumn);
-    const maxNegativeColumns = Math.max(0, anchorColumn);
-    if (dirX >= 0 && maxPositiveColumns <= 0) {
+    const totalColumns = Number.isFinite(bounds.columns) ? bounds.columns : 0;
+    const totalRows = Number.isFinite(bounds.rows) ? bounds.rows : 0;
+
+    const rawPositiveColumns = Math.max(0, totalColumns - anchorColumn);
+    const rawNegativeColumns = Math.max(0, anchorColumn);
+    if (dirX >= 0 && rawPositiveColumns <= 0) {
       dirX = -1;
     }
-    if (dirX < 0 && maxNegativeColumns <= 0) {
+    if (dirX < 0 && rawNegativeColumns <= 0) {
       dirX = 1;
     }
 
-    const maxPositiveRows = Math.max(0, bounds.rows - anchorRow);
-    const maxNegativeRows = Math.max(0, anchorRow);
-    if (dirY >= 0 && maxPositiveRows <= 0) {
+    const rawPositiveRows = Math.max(0, totalRows - anchorRow);
+    const rawNegativeRows = Math.max(0, anchorRow);
+    if (dirY >= 0 && rawPositiveRows <= 0) {
       dirY = -1;
     }
-    if (dirY < 0 && maxNegativeRows <= 0) {
+    if (dirY < 0 && rawNegativeRows <= 0) {
       dirY = 1;
     }
+
+    const maxPositiveColumns = Math.max(MIN_RECT_DIMENSION, rawPositiveColumns);
+    const maxNegativeColumns = Math.max(MIN_RECT_DIMENSION, rawNegativeColumns + 1);
+    const maxPositiveRows = Math.max(MIN_RECT_DIMENSION, rawPositiveRows);
+    const maxNegativeRows = Math.max(MIN_RECT_DIMENSION, rawNegativeRows + 1);
 
     const maxLength = dirX >= 0 ? maxPositiveColumns : maxNegativeColumns;
     const maxWidth = dirY >= 0 ? maxPositiveRows : maxNegativeRows;
@@ -6398,8 +6451,8 @@ function createTemplateTool() {
     const clampedLength = clamp(length, MIN_RECT_DIMENSION, maxLength);
     const clampedWidth = clamp(width, MIN_RECT_DIMENSION, maxWidth);
 
-    const startColumn = dirX >= 0 ? anchorColumn : anchorColumn - clampedLength;
-    const startRow = dirY >= 0 ? anchorRow : anchorRow - clampedWidth;
+    const startColumn = dirX >= 0 ? anchorColumn : anchorColumn - (clampedLength - 1);
+    const startRow = dirY >= 0 ? anchorRow : anchorRow - (clampedWidth - 1);
 
     return {
       start: { column: startColumn, row: startRow },
@@ -6884,6 +6937,39 @@ function createTemplateTool() {
     const widthUnits = Math.max(MIN_RECT_DIMENSION, shape.width ?? MIN_RECT_DIMENSION);
     const center = rectangleCenterFromStart(shape.start ?? { column: 0, row: 0 }, lengthUnits, widthUnits);
     return gridPointToLocal(center.column, center.row, view);
+  }
+
+  function rectangleAnchorToLocal(shape, view = viewState) {
+    if (!shape) {
+      return null;
+    }
+    const anchorColumn = Number.isFinite(shape.anchor?.column) ? shape.anchor.column : null;
+    const anchorRow = Number.isFinite(shape.anchor?.row) ? shape.anchor.row : null;
+    if (anchorColumn === null || anchorRow === null) {
+      return null;
+    }
+    return gridPointToLocal(anchorColumn + 0.5, anchorRow + 0.5, view);
+  }
+
+  function rectangleAnchorVector(shape) {
+    if (!shape) {
+      return null;
+    }
+    const anchorColumn = Number.isFinite(shape.anchor?.column) ? shape.anchor.column : null;
+    const anchorRow = Number.isFinite(shape.anchor?.row) ? shape.anchor.row : null;
+    const startColumn = Number.isFinite(shape.start?.column) ? shape.start.column : null;
+    const startRow = Number.isFinite(shape.start?.row) ? shape.start.row : null;
+    if (anchorColumn === null || anchorRow === null || startColumn === null || startRow === null) {
+      return null;
+    }
+    const lengthUnits = Math.max(MIN_RECT_DIMENSION, shape.length ?? MIN_RECT_DIMENSION);
+    const widthUnits = Math.max(MIN_RECT_DIMENSION, shape.width ?? MIN_RECT_DIMENSION);
+    const offsetColumn = anchorColumn - startColumn;
+    const offsetRow = anchorRow - startRow;
+    return {
+      x: offsetColumn + 0.5 - lengthUnits / 2,
+      y: offsetRow + 0.5 - widthUnits / 2,
+    };
   }
 
   function clampRectanglePosition(start, length, width, rotation = 0, view = viewState) {

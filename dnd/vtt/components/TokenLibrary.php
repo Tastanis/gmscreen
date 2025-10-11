@@ -63,11 +63,15 @@ function renderVttTokenLibrary(bool $isGm = false): string
                             <button class="btn" type="button" data-action="create-token-folder">New Folder</button>
                         </div>
                         <div class="token-maker__field">
-                            <label for="token-team-select">Default Team</label>
-                            <select id="token-team-select" name="token-team" data-token-team-select>
-                                <option value="enemy">Enemy</option>
-                                <option value="ally">Ally</option>
-                            </select>
+                            <label class="token-maker__checkbox" for="token-team-toggle">
+                                <input
+                                    id="token-team-toggle"
+                                    type="checkbox"
+                                    name="token-team"
+                                    data-token-team-toggle
+                                />
+                                Make Ally
+                            </label>
                             <p class="token-maker__hint">Tokens dropped on the board use this team automatically.</p>
                         </div>
                         <div class="token-maker__actions">
