@@ -99,6 +99,11 @@ function renderVttSceneBoard(): string
                 <p class="vtt-board__empty">Drag a scene map here or create a scene from the settings panel.</p>
             </div>
             <div
+                class="vtt-board__condition-banner-region"
+                data-condition-banner-region
+                aria-live="polite"
+            ></div>
+            <div
                 class="vtt-board__turn-timer"
                 data-turn-timer
                 hidden

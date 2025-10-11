@@ -38,6 +38,7 @@ export function mountBoardInteractions(store, routes = {}) {
   const turnTimerElement = document.querySelector('[data-turn-timer]');
   const turnTimerImage = turnTimerElement?.querySelector('[data-turn-timer-image]');
   const turnTimerDisplay = turnTimerElement?.querySelector('[data-turn-timer-display]');
+  const conditionBannerRegion = document.querySelector('[data-condition-banner-region]');
   if (!board || !mapSurface || !mapTransform || !mapBackdrop || !mapImage || !templateLayer) return;
 
   const defaultStatusText = status?.textContent ?? '';
@@ -107,6 +108,9 @@ export function mountBoardInteractions(store, routes = {}) {
     'Unconscious',
   ];
   const tokenSettingsMenu = createTokenSettingsMenu();
+  const conditionBannerRegistry = new Map();
+  const MAX_CONDITION_BANNERS = 4;
+  let nextConditionBannerId = 1;
   let activeTokenSettingsId = null;
   let removeTokenSettingsListeners = null;
   let hitPointsEditSession = null;
@@ -173,6 +177,86 @@ export function mountBoardInteractions(store, routes = {}) {
         typeof node.tagName === 'string' &&
         node.tagName.toLowerCase() === 'select'
     );
+  }
+
+  function showConditionBanner(message, options = {}) {
+    if (!conditionBannerRegion || typeof message !== 'string') {
+      return null;
+    }
+
+    const normalized = message.trim();
+    if (!normalized) {
+      return null;
+    }
+
+    const id = `condition-banner-${nextConditionBannerId++}`;
+    const banner = document.createElement('div');
+    banner.className = 'vtt-condition-banner';
+
+    const tone = typeof options.tone === 'string' && options.tone.trim() ? options.tone.trim() : 'reminder';
+    if (tone) {
+      banner.dataset.tone = tone;
+    }
+
+    const messageElement = document.createElement('p');
+    messageElement.className = 'vtt-condition-banner__message';
+    messageElement.textContent = normalized;
+    banner.appendChild(messageElement);
+
+    const closeButton = document.createElement('button');
+    closeButton.type = 'button';
+    closeButton.className = 'vtt-condition-banner__close';
+    closeButton.setAttribute('aria-label', options.closeLabel || 'Dismiss notification');
+    closeButton.textContent = '×';
+    closeButton.addEventListener('click', () => {
+      dismissConditionBanner(id);
+    });
+    banner.appendChild(closeButton);
+
+    banner.dataset.bannerId = id;
+    conditionBannerRegion.appendChild(banner);
+
+    conditionBannerRegistry.set(id, {
+      element: banner,
+      onDismiss: typeof options.onDismiss === 'function' ? options.onDismiss : null,
+    });
+
+    if (conditionBannerRegistry.size > MAX_CONDITION_BANNERS) {
+      for (const [existingId, entry] of conditionBannerRegistry) {
+        if (existingId === id) {
+          continue;
+        }
+        if (!entry?.onDismiss) {
+          dismissConditionBanner(existingId);
+          break;
+        }
+      }
+    }
+
+    return id;
+  }
+
+  function dismissConditionBanner(id, { suppressCallback = false } = {}) {
+    if (!id) {
+      return;
+    }
+
+    const entry = conditionBannerRegistry.get(id);
+    if (!entry) {
+      const fallback = conditionBannerRegion?.querySelector(`[data-banner-id="${id}"]`);
+      fallback?.remove();
+      return;
+    }
+
+    conditionBannerRegistry.delete(id);
+    const { element, onDismiss } = entry;
+    if (element?.parentElement) {
+      element.remove();
+    }
+
+    if (!suppressCallback && typeof onDismiss === 'function') {
+      onDismiss();
+    }
   }
 
   if (groupButton) {
@@ -2167,14 +2251,48 @@ export function mountBoardInteractions(store, routes = {}) {
     refreshCombatTracker();
     updateCombatModeIndicators();
     openTurnPrompt(combatantId);
+    notifyConditionTurnStart(combatantId);
+  }
+
+  function notifyConditionTurnStart(combatantId) {
+    if (!combatantId) {
+      return;
+    }
+
+    const placement = getPlacementFromStore(combatantId);
+    if (!placement) {
+      return;
+    }
+
+    const label = tokenLabel(placement);
+    const conditions = ensurePlacementConditions(placement?.conditions ?? placement?.condition ?? null);
+    if (!conditions.length) {
+      return;
+    }
+
+    conditions.forEach((condition) => {
+      const name = typeof condition?.name === 'string' ? condition.name.trim() : '';
+      if (!name) {
+        return;
+      }
+      const durationType = getConditionDurationType(condition);
+      if (durationType !== 'save-ends' && durationType !== 'end-of-turn') {
+        return;
+      }
+      showConditionBanner(`${label} has ${name}`, { tone: 'reminder' });
+    });
   }
 
   function completeActiveCombatant() {
     if (!activeCombatantId) {
       return;
     }
-    closeTurnPrompt();
     const finishedId = activeCombatantId;
+    const finishingPlacement = getPlacementFromStore(finishedId);
+    const finishingConditions = ensurePlacementConditions(
+      finishingPlacement?.conditions ?? finishingPlacement?.condition ?? null
+    );
+    closeTurnPrompt();
     const finishedTeam = getCombatantTeam(finishedId);
     if (finishedTeam) {
       lastActingTeam = finishedTeam;
@@ -2182,6 +2300,33 @@ export function mountBoardInteractions(store, routes = {}) {
     completedCombatants.add(finishedId);
     setActiveCombatantId(null);
     refreshCombatTracker();
+    if (finishingConditions.length) {
+      finishingConditions.forEach((condition) => {
+        if (getConditionDurationType(condition) !== 'save-ends') {
+          return;
+        }
+        const name = typeof condition?.name === 'string' ? condition.name.trim() : '';
+        if (!name) {
+          return;
+        }
+        showConditionBanner(`${name} Save Ends`, { tone: 'reminder' });
+      });
+    }
+    const clearedEndOfTurn = clearEndOfTurnConditionsForTarget(finishedId);
+    if (clearedEndOfTurn.length) {
+      clearedEndOfTurn.forEach((entry) => {
+        const baseName = entry?.tokenName ?? 'Token';
+        const possessive = formatPossessiveName(baseName);
+        const removedConditions = Array.isArray(entry?.conditions) ? entry.conditions : [];
+        removedConditions.forEach((condition) => {
+          const name = typeof condition?.name === 'string' ? condition.name.trim() : '';
+          if (!name) {
+            return;
+          }
+          showConditionBanner(`${possessive} ${name} has ended.`, { tone: 'reminder' });
+        });
+      });
+    }
     const nextId = pickNextCombatantId([
       finishedTeam === 'ally' ? 'enemy' : 'ally',
       finishedTeam,
@@ -3763,6 +3908,18 @@ export function mountBoardInteractions(store, routes = {}) {
     return rawName || 'Token';
   }
 
+  function formatPossessiveName(name) {
+    const raw = typeof name === 'string' ? name.trim() : '';
+    if (!raw) {
+      return "Token's";
+    }
+    const normalized = raw.replace(/\s+/g, ' ');
+    if (normalized.endsWith("'s") || normalized.endsWith('’s')) {
+      return normalized;
+    }
+    return /s$/i.test(normalized) ? `${normalized}'` : `${normalized}'s`;
+  }
+
   function getActiveHitPointsSnapshot() {
     if (!activeTokenSettingsId) {
       return null;
@@ -4727,6 +4884,20 @@ export function mountBoardInteractions(store, routes = {}) {
     return 'save-ends';
   }
 
+  function getConditionDurationType(condition) {
+    if (!condition || typeof condition !== 'object') {
+      return 'save-ends';
+    }
+    const source = condition.duration ?? condition.mode ?? condition.type ?? null;
+    if (typeof source === 'string') {
+      return normalizeConditionDurationValue(source);
+    }
+    if (source && typeof source.type === 'string') {
+      return normalizeConditionDurationValue(source.type);
+    }
+    return normalizeConditionDurationValue('');
+  }
+
   function getSelectedConditionDuration() {
     if (!tokenSettingsMenu?.conditionDurationRadios?.length) {
       return 'save-ends';
@@ -4835,6 +5006,93 @@ export function mountBoardInteractions(store, routes = {}) {
     return updated && didChange;
   }
 
+  function clearEndOfTurnConditionsForTarget(targetTokenId) {
+    if (!targetTokenId) {
+      return [];
+    }
+
+    const placements = getPlacementsForActiveScene();
+    if (!Array.isArray(placements) || placements.length === 0) {
+      return [];
+    }
+
+    const cleared = [];
+
+    placements.forEach((placement) => {
+      if (!placement || typeof placement !== 'object') {
+        return;
+      }
+
+      const placementId = typeof placement.id === 'string' ? placement.id : '';
+      if (!placementId) {
+        return;
+      }
+
+      const conditions = ensurePlacementConditions(placement?.conditions ?? placement?.condition ?? null);
+      if (!conditions.length) {
+        return;
+      }
+
+      const removed = [];
+      conditions.forEach((condition) => {
+        if (getConditionDurationType(condition) !== 'end-of-turn') {
+          return;
+        }
+        const linkedId =
+          typeof condition?.duration?.targetTokenId === 'string' ? condition.duration.targetTokenId : '';
+        if (linkedId === targetTokenId) {
+          removed.push(condition);
+        }
+      });
+
+      if (!removed.length) {
+        return;
+      }
+
+      const updated = updatePlacementById(placementId, (target) => {
+        const current = ensurePlacementConditions(target?.conditions ?? target?.condition ?? null);
+        const filtered = current.filter((condition) => {
+          if (getConditionDurationType(condition) !== 'end-of-turn') {
+            return true;
+          }
+          const candidateId =
+            typeof condition?.duration?.targetTokenId === 'string' ? condition.duration.targetTokenId : '';
+          return candidateId !== targetTokenId;
+        });
+
+        if (filtered.length) {
+          target.conditions = filtered;
+          target.condition = filtered[0];
+        } else {
+          if (target.conditions !== undefined) {
+            delete target.conditions;
+          }
+          if (target.condition !== undefined) {
+            delete target.condition;
+          }
+        }
+      });
+
+      if (updated) {
+        cleared.push({
+          placementId,
+          tokenName: tokenLabel(placement),
+          conditions: removed,
+        });
+
+        if (placementId === activeTokenSettingsId) {
+          resetConditionControls();
+        }
+      }
+    });
+
+    if (cleared.length) {
+      refreshTokenSettings();
+    }
+
+    return cleared;
+  }
+
   function handleConditionListClick(event) {
     const button = event.target.closest('[data-token-settings-condition-remove]');
     if (!button) {
@@ -4917,133 +5175,108 @@ export function mountBoardInteractions(store, routes = {}) {
 
     dismissConditionPrompt();
 
-    const placements = getPlacementsForActiveScene();
-
-    const overlay = document.createElement('div');
-    overlay.className = 'vtt-condition-overlay';
-    overlay.innerHTML = `
-      <div class="vtt-condition-dialog" role="dialog" aria-modal="true" data-condition-dialog>
-        <h3 class="vtt-condition-dialog__title">Choose Turn Owner</h3>
-        <p class="vtt-condition-dialog__description">
-          Select the token whose turn will end <strong>${escapeHtml(conditionName)}</strong>.
-        </p>
-        <label class="vtt-condition-dialog__field">
-          <span>Token</span>
-          <select data-condition-target>
-            <option value="">Select a token…</option>
-          </select>
-        </label>
-        <div class="vtt-condition-dialog__actions">
-          <button type="button" class="vtt-condition-dialog__cancel" data-condition-cancel>Cancel</button>
-          <button type="button" class="vtt-condition-dialog__confirm" data-condition-confirm>Apply</button>
-        </div>
-      </div>
-    `;
-
-    document.body.appendChild(overlay);
-
-    const select = overlay.querySelector('[data-condition-target]');
-    const confirmButton = overlay.querySelector('[data-condition-confirm]');
-    const cancelButton = overlay.querySelector('[data-condition-cancel]');
-
-    if (isSelectElement(select)) {
-      placements.forEach((placement) => {
-        if (!placement || typeof placement !== 'object') {
-          return;
-        }
-        const id = typeof placement.id === 'string' ? placement.id : '';
-        if (!id) {
-          return;
-        }
-        const option = document.createElement('option');
-        option.value = id;
-        option.textContent = tokenLabel(placement);
-        select.appendChild(option);
-      });
+    const normalizedName = typeof conditionName === 'string' ? conditionName.trim() : '';
+    if (!normalizedName) {
+      return;
     }
 
-    const handleConfirm = () => {
-      if (!isSelectElement(select)) {
+    const placements = getPlacementsForActiveScene();
+    if (!Array.isArray(placements) || placements.length === 0) {
+      return;
+    }
+
+    closeTokenSettings();
+
+    let cleanedUp = false;
+    let bannerId = null;
+
+    const handlePointerDown = (event) => {
+      if (event.button === 2) {
         return;
       }
-      const selectedId = typeof select.value === 'string' ? select.value.trim() : '';
-      if (!selectedId) {
-        if (typeof select.focus === 'function') {
-          select.focus();
-        }
+      if (event.button !== 0) {
         return;
       }
-      const targetPlacement = placements.find((item) => item?.id === selectedId) ?? null;
-      const targetName = targetPlacement ? tokenLabel(targetPlacement) : '';
+
+      const tokenElement = event.target instanceof HTMLElement ? event.target.closest('[data-placement-id]') : null;
+      if (!tokenElement) {
+        return;
+      }
+
+      event.preventDefault();
+      event.stopPropagation();
+
+      const targetId = tokenElement.dataset?.placementId || '';
+      if (!targetId) {
+        return;
+      }
+
+      const targetPlacement =
+        getPlacementFromStore(targetId) ?? placements.find((item) => item?.id === targetId) ?? null;
+      const targetName = targetPlacement ? tokenLabel(targetPlacement) : tokenElement.dataset?.tokenName || '';
+
       applyConditionToPlacement(placementId, {
-        name: conditionName,
+        name: normalizedName,
         duration: {
           type: 'end-of-turn',
-          targetTokenId: selectedId,
+          targetTokenId: targetId,
           targetTokenName: targetName,
         },
       });
-      dismissConditionPrompt();
-    };
 
-    const handleCancel = () => {
-      dismissConditionPrompt();
-    };
-
-    const handleOverlayClick = (event) => {
-      if (event.target === overlay) {
-        dismissConditionPrompt();
+      if (bannerId) {
+        dismissConditionBanner(bannerId);
       }
     };
 
     const handleKeydown = (event) => {
       if (event.key === 'Escape') {
         event.preventDefault();
-        dismissConditionPrompt();
-      } else if (event.key === 'Enter') {
-        if (
-          document.activeElement === confirmButton ||
-          (select && document.activeElement === select)
-        ) {
-          event.preventDefault();
-          handleConfirm();
+        if (bannerId) {
+          dismissConditionBanner(bannerId);
         }
       }
     };
 
-    overlay.addEventListener('click', handleOverlayClick);
-    confirmButton?.addEventListener('click', handleConfirm);
-    cancelButton?.addEventListener('click', handleCancel);
-    document.addEventListener('keydown', handleKeydown);
-
-    activeConditionPrompt = {
-      overlay,
-      handleOverlayClick,
-      handleConfirm,
-      handleCancel,
-      handleKeydown,
+    const cleanup = () => {
+      if (cleanedUp) {
+        return;
+      }
+      cleanedUp = true;
+      mapSurface.removeEventListener('pointerdown', handlePointerDown, true);
+      document.removeEventListener('keydown', handleKeydown, true);
+      if (activeConditionPrompt && activeConditionPrompt.bannerId === bannerId) {
+        activeConditionPrompt = null;
+      }
     };
 
-    window.setTimeout(() => {
-      if (isSelectElement(select) && typeof select.focus === 'function') {
-        select.focus();
-      }
-    }, 0);
+    bannerId = showConditionBanner("Select the token whose turn ends your condition.", {
+      tone: 'prompt',
+      closeLabel: 'Cancel condition targeting',
+      onDismiss: cleanup,
+    });
+
+    if (!bannerId) {
+      cleanup();
+      return;
+    }
+
+    mapSurface.addEventListener('pointerdown', handlePointerDown, true);
+    document.addEventListener('keydown', handleKeydown, true);
+
+    activeConditionPrompt = { bannerId, cleanup };
   }
 
   function dismissConditionPrompt() {
     if (!activeConditionPrompt) {
       return;
     }
-    const { overlay, handleOverlayClick, handleConfirm, handleCancel, handleKeydown } =
-      activeConditionPrompt;
-    if (overlay) {
-      overlay.removeEventListener('click', handleOverlayClick);
-      overlay.querySelector('[data-condition-confirm]')?.removeEventListener('click', handleConfirm);
-      overlay.querySelector('[data-condition-cancel]')?.removeEventListener('click', handleCancel);
-      overlay.remove();
+    const prompt = activeConditionPrompt;
+    if (prompt.bannerId && conditionBannerRegistry.has(prompt.bannerId)) {
+      dismissConditionBanner(prompt.bannerId);
+    } else if (typeof prompt.cleanup === 'function') {
+      prompt.cleanup();
     }
-    document.removeEventListener('keydown', handleKeydown);
     activeConditionPrompt = null;
   }
 
