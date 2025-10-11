@@ -3472,8 +3472,15 @@ export function mountBoardInteractions(store, routes = {}) {
       const rawSize = typeof parsed.size === 'string' ? parsed.size : '';
       const size = rawSize.trim() || '1x1';
       const maxHp = normalizeHitPointsValue(parsed.hp ?? parsed.hitPoints ?? null);
+      const hasTeam = typeof parsed.team === 'string' && parsed.team.trim().length > 0;
+      const hasCombatTeam = typeof parsed.combatTeam === 'string' && parsed.combatTeam.trim().length > 0;
+      const normalizedTeam = hasCombatTeam
+        ? normalizeCombatTeam(parsed.combatTeam)
+        : hasTeam
+          ? normalizeCombatTeam(parsed.team)
+          : null;
 
-      return {
+      const template = {
         id: typeof parsed.id === 'string' ? parsed.id : null,
         name: typeof parsed.name === 'string' ? parsed.name : '',
         imageUrl,
@@ -3481,6 +3488,16 @@ export function mountBoardInteractions(store, routes = {}) {
         maxHp,
         hp: maxHp,
       };
+
+      if (hasTeam && normalizedTeam) {
+        template.team = normalizedTeam;
+      }
+
+      if (hasCombatTeam && normalizedTeam) {
+        template.combatTeam = normalizedTeam;
+      }
+
+      return template;
     } catch (error) {
       console.warn('[VTT] Failed to parse dropped token payload', error);
       return null;
