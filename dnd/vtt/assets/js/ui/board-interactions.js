@@ -629,6 +629,7 @@ export function mountBoardInteractions(store, routes = {}) {
     }
     applyGridState(state.grid ?? {});
     renderTokens(state, tokenLayer, viewState);
+    templateTool.notifyMapState();
 
     if (activeTokenSettingsId) {
       const placementForSettings = resolvePlacementById(state, activeSceneId, activeTokenSettingsId);
@@ -5056,9 +5057,25 @@ export function mountBoardInteractions(store, routes = {}) {
     return boardDraft.placements[sceneId];
   }
 
+  function ensureSceneTemplateDraft(draft, sceneId) {
+    const boardDraft = ensureBoardStateDraft(draft);
+
+    if (!Array.isArray(boardDraft.templates[sceneId])) {
+      boardDraft.templates[sceneId] = [];
+    }
+
+    return boardDraft.templates[sceneId];
+  }
+
   function ensureBoardStateDraft(draft) {
     if (!draft.boardState || typeof draft.boardState !== 'object') {
-      draft.boardState = { activeSceneId: null, mapUrl: null, placements: {}, sceneState: {} };
+      draft.boardState = {
+        activeSceneId: null,
+        mapUrl: null,
+        placements: {},
+        sceneState: {},
+        templates: {},
+      };
     }
 
     if (!draft.boardState.placements || typeof draft.boardState.placements !== 'object') {
@@ -5067,6 +5084,10 @@ export function mountBoardInteractions(store, routes = {}) {
 
     if (!draft.boardState.sceneState || typeof draft.boardState.sceneState !== 'object') {
       draft.boardState.sceneState = {};
+    }
+
+    if (!draft.boardState.templates || typeof draft.boardState.templates !== 'object') {
+      draft.boardState.templates = {};
     }
 
     return draft.boardState;
@@ -5091,8 +5112,10 @@ function createTemplateTool() {
     'rgba(16, 185, 129, 0.95)',
     'rgba(244, 114, 182, 0.95)',
   ];
+  const PREVIEW_COLOR = 'rgba(148, 163, 184, 0.8)';
   const MIN_RECT_DIMENSION = 1;
   const MIN_CIRCLE_RADIUS = 0.5;
+  let lastSyncedSnapshot = null;
 
   if (!layer) {
     return {
@@ -5111,6 +5134,256 @@ function createTemplateTool() {
   }
 
   updateLayerVisibility();
+
+  function sanitizeColorValue(value) {
+    if (typeof value !== 'string') {
+      return null;
+    }
+
+    const trimmed = value.trim();
+    if (!trimmed || trimmed.length > 64) {
+      return null;
+    }
+
+    if (/^#([0-9a-f]{3,8})$/i.test(trimmed)) {
+      return trimmed;
+    }
+
+    if (/^(rgba?|hsla?)\(/i.test(trimmed)) {
+      return trimmed;
+    }
+
+    return null;
+  }
+
+  function toRoundedNumber(value, fallback = 0, precision = 4) {
+    const parsed = Number(value);
+    if (!Number.isFinite(parsed)) {
+      return fallback;
+    }
+    if (!Number.isFinite(precision) || precision <= 0) {
+      return parsed;
+    }
+    const factor = 10 ** precision;
+    return Math.round(parsed * factor) / factor;
+  }
+
+  function snapshotKey(entries) {
+    return JSON.stringify(entries);
+  }
+
+  function serializeShape(shape) {
+    if (!shape || typeof shape !== 'object') {
+      return null;
+    }
+
+    const type = typeof shape.type === 'string' ? shape.type : '';
+    const id = typeof shape.id === 'string' ? shape.id : '';
+    if (!id || !type) {
+      return null;
+    }
+
+    const sanitizedColor = sanitizeColorValue(shape.color);
+    const base = { id, type };
+    if (sanitizedColor) {
+      base.color = sanitizedColor;
+    }
+
+    if (type === 'circle') {
+      const column = toRoundedNumber(shape.center?.column, 0);
+      const row = toRoundedNumber(shape.center?.row, 0);
+      const radius = Math.max(MIN_CIRCLE_RADIUS, toRoundedNumber(shape.radius, MIN_CIRCLE_RADIUS));
+      base.center = { column, row };
+      base.radius = radius;
+      return base;
+    }
+
+    if (type === 'rectangle') {
+      const startColumn = Math.max(0, toRoundedNumber(shape.start?.column, 0));
+      const startRow = Math.max(0, toRoundedNumber(shape.start?.row, 0));
+      const length = Math.max(MIN_RECT_DIMENSION, toRoundedNumber(shape.length, MIN_RECT_DIMENSION));
+      const width = Math.max(MIN_RECT_DIMENSION, toRoundedNumber(shape.width, MIN_RECT_DIMENSION));
+      const rotation = toRoundedNumber(shape.rotation, 0, 2);
+      base.start = { column: startColumn, row: startRow };
+      base.length = length;
+      base.width = width;
+      base.rotation = rotation;
+      if (Number.isFinite(shape.anchor?.column) && Number.isFinite(shape.anchor?.row)) {
+        base.anchor = {
+          column: Math.max(0, toRoundedNumber(shape.anchor.column, 0)),
+          row: Math.max(0, toRoundedNumber(shape.anchor.row, 0)),
+        };
+      }
+      if (Number.isFinite(shape.orientation?.x) || Number.isFinite(shape.orientation?.y)) {
+        base.orientation = {
+          x: shape.orientation?.x >= 0 ? 1 : -1,
+          y: shape.orientation?.y >= 0 ? 1 : -1,
+        };
+      }
+      return base;
+    }
+
+    if (type === 'wall') {
+      const squares = Array.isArray(shape.squares) ? shape.squares : [];
+      base.squares = squares
+        .map((square) => {
+          const column = Math.round(Number(square?.column ?? square?.col ?? square?.x));
+          const row = Math.round(Number(square?.row ?? square?.y));
+          if (!Number.isFinite(column) || !Number.isFinite(row)) {
+            return null;
+          }
+          return { column: Math.max(0, column), row: Math.max(0, row) };
+        })
+        .filter(Boolean);
+      return base;
+    }
+
+    return null;
+  }
+
+  function serializeShapesList(list = shapes) {
+    return list.map((shape) => serializeShape(shape)).filter(Boolean);
+  }
+
+  function normalizeSerializedTemplate(entry) {
+    if (!entry || typeof entry !== 'object') {
+      return null;
+    }
+
+    const type = typeof entry.type === 'string' ? entry.type.trim().toLowerCase() : '';
+    const id = typeof entry.id === 'string' ? entry.id : '';
+    if (!id || (type !== 'circle' && type !== 'rectangle' && type !== 'wall')) {
+      return null;
+    }
+
+    const color = sanitizeColorValue(entry.color);
+
+    if (type === 'circle') {
+      const column = toRoundedNumber(entry.center?.column, 0);
+      const row = toRoundedNumber(entry.center?.row, 0);
+      const radius = Math.max(MIN_CIRCLE_RADIUS, toRoundedNumber(entry.radius, MIN_CIRCLE_RADIUS));
+      return {
+        id,
+        type: 'circle',
+        color,
+        center: { column, row },
+        radius,
+      };
+    }
+
+    if (type === 'rectangle') {
+      const startColumn = Math.max(0, toRoundedNumber(entry.start?.column, 0));
+      const startRow = Math.max(0, toRoundedNumber(entry.start?.row, 0));
+      const length = Math.max(MIN_RECT_DIMENSION, toRoundedNumber(entry.length, MIN_RECT_DIMENSION));
+      const width = Math.max(MIN_RECT_DIMENSION, toRoundedNumber(entry.width, MIN_RECT_DIMENSION));
+      const rotation = toRoundedNumber(entry.rotation, 0, 2);
+      const anchorColumn = Number.isFinite(entry.anchor?.column)
+        ? Math.max(0, toRoundedNumber(entry.anchor.column, 0))
+        : null;
+      const anchorRow = Number.isFinite(entry.anchor?.row)
+        ? Math.max(0, toRoundedNumber(entry.anchor.row, 0))
+        : null;
+      const orientationX = Number.isFinite(entry.orientation?.x)
+        ? entry.orientation.x >= 0
+          ? 1
+          : -1
+        : undefined;
+      const orientationY = Number.isFinite(entry.orientation?.y)
+        ? entry.orientation.y >= 0
+          ? 1
+          : -1
+        : undefined;
+
+      const normalized = {
+        id,
+        type: 'rectangle',
+        color,
+        start: { column: startColumn, row: startRow },
+        length,
+        width,
+        rotation,
+      };
+
+      if (anchorColumn !== null && anchorRow !== null) {
+        normalized.anchor = { column: anchorColumn, row: anchorRow };
+      }
+
+      if (orientationX !== undefined || orientationY !== undefined) {
+        normalized.orientation = {
+          x: orientationX === undefined ? 1 : orientationX,
+          y: orientationY === undefined ? 1 : orientationY,
+        };
+      }
+
+      return normalized;
+    }
+
+    if (type === 'wall') {
+      const rawSquares = Array.isArray(entry.squares) ? entry.squares : [];
+      const squares = rawSquares
+        .map((square) => {
+          const column = Math.round(Number(square?.column ?? square?.col ?? square?.x));
+          const row = Math.round(Number(square?.row ?? square?.y));
+          if (!Number.isFinite(column) || !Number.isFinite(row)) {
+            return null;
+          }
+          return { column: Math.max(0, column), row: Math.max(0, row) };
+        })
+        .filter(Boolean);
+
+      return {
+        id,
+        type: 'wall',
+        color,
+        squares,
+      };
+    }
+
+    return null;
+  }
+
+  function hydrateFromSerializedTemplates(entries) {
+    shapes.splice(0, shapes.length).forEach((shape) => {
+      shape.elements.root.remove();
+    });
+
+    entries.forEach((entry) => {
+      const shape = createShape(entry.type, entry, { id: entry.id, color: entry.color });
+      if (shape) {
+        shapes.push(shape);
+        layer.appendChild(shape.elements.root);
+      }
+    });
+
+    colorIndex = shapes.length;
+    selectedId = null;
+    updateLayerVisibility();
+  }
+
+  function commitShapes() {
+    const serialized = serializeShapesList();
+
+    if (typeof boardApi.updateState !== 'function') {
+      lastSyncedSnapshot = snapshotKey(serialized);
+      return;
+    }
+
+    const state = boardApi.getState?.() ?? {};
+    const activeSceneId = state.boardState?.activeSceneId ?? null;
+    if (!activeSceneId) {
+      lastSyncedSnapshot = snapshotKey(serialized);
+      return;
+    }
+
+    boardApi.updateState?.((draft) => {
+      const templatesDraft = ensureSceneTemplateDraft(draft, activeSceneId);
+      templatesDraft.length = 0;
+      serialized.forEach((entry) => templatesDraft.push(entry));
+    });
+
+    lastSyncedSnapshot = snapshotKey(serialized);
+    persistBoardStateSnapshot();
+  }
 
   if (templatesButton) {
     templatesButton.addEventListener('click', (event) => {
@@ -5142,6 +5415,7 @@ function createTemplateTool() {
     activeDrag = null;
     activeRotation = null;
     selectedId = null;
+    lastSyncedSnapshot = null;
     updateLayerVisibility();
   }
 
@@ -5150,6 +5424,33 @@ function createTemplateTool() {
   }
 
   function notifyMapState() {
+    if (!viewState.mapLoaded) {
+      render(viewState);
+      return;
+    }
+
+    if (placementState) {
+      render(viewState);
+      return;
+    }
+
+    const state = boardApi.getState?.() ?? {};
+    const activeSceneId = state.boardState?.activeSceneId ?? null;
+    const templatesByScene = state.boardState?.templates ?? {};
+    const rawTemplates = activeSceneId && templatesByScene && typeof templatesByScene === 'object'
+      ? templatesByScene[activeSceneId]
+      : [];
+
+    const normalized = Array.isArray(rawTemplates)
+      ? rawTemplates.map((entry) => normalizeSerializedTemplate(entry)).filter(Boolean)
+      : [];
+
+    const nextSnapshot = snapshotKey(normalized);
+    if (nextSnapshot !== lastSyncedSnapshot) {
+      hydrateFromSerializedTemplates(normalized);
+      lastSyncedSnapshot = nextSnapshot;
+    }
+
     render(viewState);
   }
 
@@ -5223,7 +5524,8 @@ function createTemplateTool() {
     if (!gridPoint) {
       return;
     }
-    const snapOptions = placementState.type === 'rectangle' ? { step: 1 } : undefined;
+    const snapOptions =
+      placementState.type === 'rectangle' ? { step: 1, mode: 'floor' } : undefined;
     const snappedPoint = snapPointToGrid(gridPoint, snapOptions);
 
     event.preventDefault();
@@ -5404,7 +5706,8 @@ function createTemplateTool() {
 
       const anchor = placementState.anchor ?? placementState.start ?? { column: 0, row: 0 };
       const snapStep = event.shiftKey ? 1 : 0.5;
-      const snappedTarget = snapPointToGrid(gridPoint, { step: snapStep });
+      const snapMode = snapStep === 1 ? 'floor' : 'round';
+      const snappedTarget = snapPointToGrid(gridPoint, { step: snapStep, mode: snapMode });
       const clampedTarget = clampPointToGridBounds(snappedTarget, viewState);
       const deltaX = clampedTarget.column - anchor.column;
       const deltaY = clampedTarget.row - anchor.row;
@@ -5506,7 +5809,8 @@ function createTemplateTool() {
 
       const anchor = placementState.anchor ?? placementState.start ?? { column: 0, row: 0 };
       const snapStep = event.shiftKey ? 1 : 0.5;
-      const snappedPoint = snapPointToGrid(gridPoint, { step: snapStep });
+      const snapMode = snapStep === 1 ? 'floor' : 'round';
+      const snappedPoint = snapPointToGrid(gridPoint, { step: snapStep, mode: snapMode });
       const clampedPoint = clampPointToGridBounds(snappedPoint, viewState);
       const rectConfig = computeRectangleFromAnchor(anchor, clampedPoint, {
         dynamicLength: placementState.dynamicLength,
@@ -5599,12 +5903,20 @@ function createTemplateTool() {
     layer.appendChild(shape.elements.root);
     selectShape(shape.id);
     render(viewState);
+    commitShapes();
   }
 
   function createShape(type, data, options = {}) {
     const isPreview = Boolean(options.preview);
-    const id = isPreview ? `preview_${Date.now()}` : createPlacementId();
-    const color = isPreview ? 'rgba(148, 163, 184, 0.8)' : nextColor();
+    const providedId =
+      typeof options.id === 'string' && options.id.trim()
+        ? options.id.trim()
+        : typeof data.id === 'string' && data.id.trim()
+        ? data.id.trim()
+        : null;
+    const id = isPreview ? `preview_${Date.now()}` : providedId ?? createPlacementId();
+    const providedColor = sanitizeColorValue(options.color ?? data.color);
+    const color = isPreview ? PREVIEW_COLOR : providedColor ?? nextColor();
     const root = document.createElement('div');
     root.className = `vtt-template vtt-template--${type}${isPreview ? ' vtt-template--preview' : ''}`;
     root.dataset.templateId = id;
@@ -5795,6 +6107,7 @@ function createTemplateTool() {
     render(viewState);
     restoreStatus();
     updateLayerVisibility();
+    commitShapes();
   }
 
   function rotateRectangle(id, deltaDegrees) {
@@ -5842,6 +6155,7 @@ function createTemplateTool() {
       }
     }
     render(viewState);
+    commitShapes();
   }
 
   function startRectangleRotation(event, shape) {
@@ -5952,6 +6266,7 @@ function createTemplateTool() {
     } else {
       restoreStatus();
     }
+    commitShapes();
   }
 
   function handleNodeClick(event, shape) {
@@ -6084,6 +6399,7 @@ function createTemplateTool() {
     }
     activeDrag = null;
     restoreStatus();
+    commitShapes();
   }
 
   function handleNodePointerCancel(event) {
@@ -6098,6 +6414,7 @@ function createTemplateTool() {
     activeDrag = null;
     restoreStatus();
     render(viewState);
+    commitShapes();
   }
 
   function updateShapeElement(shape, view = viewState) {
@@ -6173,31 +6490,25 @@ function createTemplateTool() {
     root.style.setProperty('--vtt-rect-rotation', `${rotation}deg`);
 
     const nodeSize = gridSize;
-    const hasAnchorInfo = Number.isFinite(shape.anchor?.column) && Number.isFinite(shape.anchor?.row);
-    let relativeXUnits;
-    let relativeYUnits;
-    if (hasAnchorInfo) {
-      const anchorCenterColumn = shape.anchor.column + 0.5;
-      const anchorCenterRow = shape.anchor.row + 0.5;
-      const centerColumn = shape.start.column + lengthUnits / 2;
-      const centerRow = shape.start.row + widthUnits / 2;
-      const offsetXUnits = anchorCenterColumn - centerColumn;
-      const offsetYUnits = anchorCenterRow - centerRow;
-      const rotatedXUnits = offsetXUnits * cos - offsetYUnits * sin;
-      const rotatedYUnits = offsetXUnits * sin + offsetYUnits * cos;
-      relativeXUnits = spanWidth / 2 + rotatedXUnits;
-      relativeYUnits = spanHeight / 2 + rotatedYUnits;
+    const anchorColumn = Number.isFinite(shape.anchor?.column) ? shape.anchor.column : null;
+    const anchorRow = Number.isFinite(shape.anchor?.row) ? shape.anchor.row : null;
+    if (anchorColumn !== null && anchorRow !== null) {
+      const anchorLocal = gridPointToLocal(anchorColumn + 0.5, anchorRow + 0.5, view);
+      const nodeLeft = anchorLocal.x - left - nodeSize / 2;
+      const nodeTop = anchorLocal.y - top - nodeSize / 2;
+      node.style.left = `${nodeLeft}px`;
+      node.style.top = `${nodeTop}px`;
     } else {
       const anchorDistance = widthUnits / 2 + 0.5;
       const offsetXUnits = 0;
       const offsetYUnits = -anchorDistance;
       const rotatedXUnits = offsetXUnits * cos - offsetYUnits * sin;
       const rotatedYUnits = offsetXUnits * sin + offsetYUnits * cos;
-      relativeXUnits = spanWidth / 2 + rotatedXUnits;
-      relativeYUnits = spanHeight / 2 + rotatedYUnits;
+      const relativeXUnits = spanWidth / 2 + rotatedXUnits;
+      const relativeYUnits = spanHeight / 2 + rotatedYUnits;
+      node.style.left = `${relativeXUnits * gridSize - nodeSize / 2}px`;
+      node.style.top = `${relativeYUnits * gridSize - nodeSize / 2}px`;
     }
-    node.style.left = `${relativeXUnits * gridSize - nodeSize / 2}px`;
-    node.style.top = `${relativeYUnits * gridSize - nodeSize / 2}px`;
     node.style.width = `${nodeSize}px`;
     node.style.height = `${nodeSize}px`;
 
@@ -7021,9 +7332,15 @@ function createTemplateTool() {
     return { column, row };
   }
 
-  function snapToStep(value, step) {
+  function snapToStep(value, step, mode = 'round') {
     if (!Number.isFinite(value)) {
       return 0;
+    }
+    if (mode === 'floor') {
+      return Math.floor(value / step) * step;
+    }
+    if (mode === 'ceil') {
+      return Math.ceil(value / step) * step;
     }
     return Math.round(value / step) * step;
   }
@@ -7034,12 +7351,13 @@ function createTemplateTool() {
 
   function snapPointToGrid(point, options = {}) {
     const step = Number.isFinite(options.step) && options.step > 0 ? options.step : 0.5;
+    const mode = options.mode === 'floor' ? 'floor' : options.mode === 'ceil' ? 'ceil' : 'round';
     if (!point) {
       return { column: 0, row: 0 };
     }
     return {
-      column: snapToStep(point.column ?? 0, step),
-      row: snapToStep(point.row ?? 0, step),
+      column: snapToStep(point.column ?? 0, step, mode),
+      row: snapToStep(point.row ?? 0, step, mode),
     };
   }
 
@@ -7087,9 +7405,9 @@ function createTemplateTool() {
     const lengthUnits = Math.max(MIN_RECT_DIMENSION, Number.isFinite(length) ? length : MIN_RECT_DIMENSION);
     const widthUnits = Math.max(MIN_RECT_DIMENSION, Number.isFinite(width) ? width : MIN_RECT_DIMENSION);
     const normalizedRotation = Number.isFinite(rotation) ? normalizeAngle(rotation) : 0;
-    const snappedStart = snapPointToGrid(start, { step: 1 });
+    const snappedStart = snapPointToGrid(start, { step: 1, mode: 'floor' });
     const clamped = clampRectanglePosition(snappedStart, lengthUnits, widthUnits, normalizedRotation, view);
-    const snappedAgain = snapPointToGrid(clamped, { step: 1 });
+    const snappedAgain = snapPointToGrid(clamped, { step: 1, mode: 'floor' });
     return clampRectanglePosition(snappedAgain, lengthUnits, widthUnits, normalizedRotation, view);
   }
 
