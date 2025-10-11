@@ -4878,6 +4878,9 @@ export function mountBoardInteractions(store, routes = {}) {
     if (!normalized) {
       return 'save-ends';
     }
+    if (normalized.includes('save') || normalized === 'se') {
+      return 'save-ends';
+    }
     if (normalized.includes('eot') || normalized.includes('end')) {
       return 'end-of-turn';
     }
