@@ -42,10 +42,10 @@ class VttDiceRoller {
 
   buildUI() {
     this.overlay = document.createElement('div');
-    this.overlay.className = 'dice-modal-overlay hidden';
+    this.overlay.className = 'dice-modal-overlay dice-modal-overlay--vtt hidden';
 
     this.modal = document.createElement('div');
-    this.modal.className = 'dice-modal';
+    this.modal.className = 'dice-modal dice-modal--vtt';
     this.modal.setAttribute('role', 'dialog');
     this.modal.setAttribute('aria-modal', 'true');
     this.modal.setAttribute('aria-labelledby', 'dice-roller-title');
@@ -230,7 +230,7 @@ class VttDiceRoller {
       if (this.hasCustomPosition && this.lastPosition) {
         this.applyLastPosition();
       } else {
-        this.centerModal();
+        this.positionModalDefault();
       }
 
       this.modal.focus();
@@ -592,6 +592,23 @@ class VttDiceRoller {
     const rect = this.modal.getBoundingClientRect();
     const desiredLeft = (window.innerWidth - rect.width) / 2;
     const desiredTop = (window.innerHeight - rect.height) / 2;
+    const { left, top } = this.constrainPosition(desiredLeft, desiredTop, rect.width, rect.height);
+
+    this.modal.style.left = `${left}px`;
+    this.modal.style.top = `${top}px`;
+    this.lastPosition = { left, top };
+    this.hasCustomPosition = false;
+  }
+
+  positionModalDefault() {
+    if (!this.modal) {
+      return;
+    }
+
+    const rect = this.modal.getBoundingClientRect();
+    const padding = 24;
+    const desiredLeft = window.innerWidth - rect.width - padding;
+    const desiredTop = padding;
     const { left, top } = this.constrainPosition(desiredLeft, desiredTop, rect.width, rect.height);
 
     this.modal.style.left = `${left}px`;
