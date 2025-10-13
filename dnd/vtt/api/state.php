@@ -29,13 +29,6 @@ try {
             ]);
         }
 
-        if (!($auth['isGM'] ?? false)) {
-            respondJson(403, [
-                'success' => false,
-                'error' => 'Only the GM can update the board state.',
-            ]);
-        }
-
         $payload = readJsonInput();
         $rawState = [];
         if (isset($payload['boardState']) && is_array($payload['boardState'])) {
@@ -55,7 +48,53 @@ try {
         $existing = loadVttJson('board-state.json');
         $nextState = normalizeBoardState($existing);
 
+        $isGm = (bool) ($auth['isGM'] ?? false);
+        if (!$isGm) {
+            $combatUpdates = [];
+            if (isset($updates['sceneState']) && is_array($updates['sceneState'])) {
+                $combatUpdates = extractCombatUpdates($updates['sceneState']);
+            }
+
+            if (empty($combatUpdates)) {
+                respondJson(403, [
+                    'success' => false,
+                    'error' => 'Only combat tracker updates are permitted for players.',
+                ]);
+            }
+
+            foreach ($combatUpdates as $sceneId => $combatState) {
+                if (!isset($nextState['sceneState'][$sceneId]) || !is_array($nextState['sceneState'][$sceneId])) {
+                    $nextState['sceneState'][$sceneId] = [
+                        'grid' => normalizeGridSettings([]),
+                    ];
+                }
+                $nextState['sceneState'][$sceneId]['combat'] = $combatState;
+            }
+
+            if (!saveVttJson('board-state.json', $nextState)) {
+                respondJson(500, [
+                    'success' => false,
+                    'error' => 'Failed to persist board state.',
+                ]);
+            }
+
+            respondJson(200, [
+                'success' => true,
+                'data' => $nextState,
+            ]);
+        }
+
         foreach ($updates as $key => $value) {
+            if ($key === 'sceneState' && is_array($value)) {
+                foreach ($value as $sceneId => $config) {
+                    if (!isset($nextState['sceneState'][$sceneId]) || !is_array($nextState['sceneState'][$sceneId])) {
+                        $nextState['sceneState'][$sceneId] = $config;
+                        continue;
+                    }
+                    $nextState['sceneState'][$sceneId] = array_merge($nextState['sceneState'][$sceneId], $config);
+                }
+                continue;
+            }
             $nextState[$key] = $value;
         }
 
@@ -293,12 +332,151 @@ function normalizeSceneStatePayload(array $rawSceneState): array
         }
 
         $gridSource = $config['grid'] ?? $config;
-        $normalized[$key] = [
+        $entry = [
             'grid' => normalizeGridSettings($gridSource),
         ];
+
+        if (array_key_exists('combat', $config)) {
+            $entry['combat'] = normalizeCombatStatePayload($config['combat']);
+        }
+
+        $normalized[$key] = $entry;
     }
 
     return $normalized;
+}
+
+/**
+ * @param mixed $rawCombat
+ */
+function normalizeCombatStatePayload($rawCombat): array
+{
+    $state = [
+        'active' => false,
+        'round' => 0,
+        'activeCombatantId' => null,
+        'completedCombatantIds' => [],
+        'startingTeam' => null,
+        'currentTeam' => null,
+        'lastTeam' => null,
+        'roundTurnCount' => 0,
+        'updatedAt' => time(),
+        'turnLock' => null,
+    ];
+
+    if (!is_array($rawCombat)) {
+        return $state;
+    }
+
+    $state['active'] = !empty($rawCombat['active']) || !empty($rawCombat['isActive']);
+    if (array_key_exists('round', $rawCombat) && is_numeric($rawCombat['round'])) {
+        $state['round'] = max(0, (int) round((float) $rawCombat['round']));
+    }
+
+    if (isset($rawCombat['activeCombatantId']) && is_string($rawCombat['activeCombatantId'])) {
+        $trimmed = trim($rawCombat['activeCombatantId']);
+        $state['activeCombatantId'] = $trimmed === '' ? null : $trimmed;
+    }
+
+    if (isset($rawCombat['completedCombatantIds']) && is_array($rawCombat['completedCombatantIds'])) {
+        $ids = [];
+        foreach ($rawCombat['completedCombatantIds'] as $candidate) {
+            if (!is_string($candidate)) {
+                continue;
+            }
+            $trimmed = trim($candidate);
+            if ($trimmed === '' || in_array($trimmed, $ids, true)) {
+                continue;
+            }
+            $ids[] = $trimmed;
+        }
+        $state['completedCombatantIds'] = $ids;
+    }
+
+    $state['startingTeam'] = normalizeCombatTeamValue($rawCombat['startingTeam'] ?? $rawCombat['initialTeam'] ?? null);
+    $state['currentTeam'] = normalizeCombatTeamValue($rawCombat['currentTeam'] ?? $rawCombat['activeTeam'] ?? null);
+    $state['lastTeam'] = normalizeCombatTeamValue($rawCombat['lastTeam'] ?? $rawCombat['previousTeam'] ?? null);
+
+    if (isset($rawCombat['roundTurnCount']) && is_numeric($rawCombat['roundTurnCount'])) {
+        $state['roundTurnCount'] = max(0, (int) round((float) $rawCombat['roundTurnCount']));
+    }
+
+    if (isset($rawCombat['updatedAt']) && is_numeric($rawCombat['updatedAt'])) {
+        $state['updatedAt'] = max(0, (int) round((float) $rawCombat['updatedAt']));
+    }
+
+    $state['turnLock'] = normalizeCombatTurnLock($rawCombat['turnLock'] ?? null);
+
+    return $state;
+}
+
+/**
+ * @param mixed $value
+ */
+function normalizeCombatTeamValue($value): ?string
+{
+    if (!is_string($value)) {
+        return null;
+    }
+
+    $normalized = strtolower(trim($value));
+    if ($normalized === 'ally' || $normalized === 'enemy') {
+        return $normalized;
+    }
+
+    return null;
+}
+
+/**
+ * @param mixed $rawLock
+ */
+function normalizeCombatTurnLock($rawLock): ?array
+{
+    if (!is_array($rawLock)) {
+        return null;
+    }
+
+    $holderId = isset($rawLock['holderId']) && is_string($rawLock['holderId']) ? strtolower(trim($rawLock['holderId'])) : '';
+    if ($holderId === '') {
+        return null;
+    }
+
+    $holderName = isset($rawLock['holderName']) && is_string($rawLock['holderName']) ? trim($rawLock['holderName']) : '';
+    $combatantId = isset($rawLock['combatantId']) && is_string($rawLock['combatantId']) ? trim($rawLock['combatantId']) : '';
+    $lockedAt = isset($rawLock['lockedAt']) && is_numeric($rawLock['lockedAt'])
+        ? max(0, (int) round((float) $rawLock['lockedAt']))
+        : time();
+
+    return [
+        'holderId' => $holderId,
+        'holderName' => $holderName,
+        'combatantId' => $combatantId === '' ? null : $combatantId,
+        'lockedAt' => $lockedAt,
+    ];
+}
+
+/**
+ * @param array<string,mixed> $sceneStateUpdates
+ * @return array<string,array<string,mixed>>
+ */
+function extractCombatUpdates(array $sceneStateUpdates): array
+{
+    $updates = [];
+
+    foreach ($sceneStateUpdates as $sceneId => $config) {
+        if (!is_array($config) || !array_key_exists('combat', $config)) {
+            continue;
+        }
+
+        $key = is_string($sceneId) ? trim($sceneId) : (string) $sceneId;
+        if ($key === '') {
+            continue;
+        }
+
+        $updates[$key] = normalizeCombatStatePayload($config['combat']);
+    }
+
+    return $updates;
 }
 
 /**

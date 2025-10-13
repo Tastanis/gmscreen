@@ -5,7 +5,7 @@ import {
   isMeasureModeActive,
   updateExternalMeasurement,
 } from './drag-ruler.js';
-import { persistBoardState } from '../services/board-state-service.js';
+import { persistBoardState, persistCombatState } from '../services/board-state-service.js';
 
 const TURN_TIMER_DURATION_MS = 60_000;
 const TURN_TIMER_STAGE_INTERVAL_MS = 20_000;
@@ -123,6 +123,15 @@ export function mountBoardInteractions(store, routes = {}) {
   let pendingRoundConfirmation = false;
   let activeConditionPrompt = null;
   let activeTurnDialog = null;
+  const turnLockState = {
+    holderId: null,
+    holderName: null,
+    combatantId: null,
+    lockedAt: 0,
+  };
+  let suppressCombatStateSync = false;
+  let combatStateVersion = 0;
+  let lastCombatStateSnapshot = null;
   let startingCombatTeam = null;
   let currentTurnTeam = null;
   let activeTeam = null;
@@ -319,6 +328,93 @@ export function mountBoardInteractions(store, routes = {}) {
 
     persistBoardState(routes.state, boardState);
   };
+
+  function startBoardStatePoller() {
+    if (!routes?.state || typeof window === 'undefined' || typeof window.setInterval !== 'function') {
+      return;
+    }
+
+    const current = boardApi.getState?.() ?? {};
+    if (current?.user?.isGM) {
+      return;
+    }
+
+    let isPolling = false;
+    let lastHash = null;
+    let pollErrorLogged = false;
+
+    const poll = async () => {
+      if (isPolling) {
+        return;
+      }
+      if (typeof document !== 'undefined' && document.visibilityState === 'hidden') {
+        return;
+      }
+
+      isPolling = true;
+      try {
+        const response = await fetch(routes.state, { cache: 'no-store' });
+        if (!response.ok) {
+          throw new Error(`Unexpected status ${response.status}`);
+        }
+        const payload = await response.json().catch(() => ({}));
+        const incoming = payload?.data?.boardState ?? null;
+        if (!incoming || typeof incoming !== 'object') {
+          return;
+        }
+
+        const hash = JSON.stringify(incoming);
+        if (hash === lastHash) {
+          pollErrorLogged = false;
+          return;
+        }
+
+        lastHash = hash;
+        pollErrorLogged = false;
+
+        boardApi.updateState?.((draft) => {
+          draft.boardState = mergeBoardStateSnapshot(draft.boardState, incoming);
+        });
+      } catch (error) {
+        if (!pollErrorLogged) {
+          console.warn('[VTT] Board state poll failed', error);
+          pollErrorLogged = true;
+        }
+      } finally {
+        isPolling = false;
+      }
+    };
+
+    poll();
+    window.setInterval(poll, 2000);
+  }
+
+  function mergeBoardStateSnapshot(existing, incoming) {
+    if (!incoming || typeof incoming !== 'object') {
+      return existing ?? {};
+    }
+
+    const snapshot = {
+      activeSceneId: typeof incoming.activeSceneId === 'string' ? incoming.activeSceneId : null,
+      mapUrl: typeof incoming.mapUrl === 'string' ? incoming.mapUrl : null,
+      placements: cloneBoardSection(incoming.placements),
+      sceneState: cloneBoardSection(incoming.sceneState),
+      templates: cloneBoardSection(incoming.templates),
+    };
+
+    return snapshot;
+  }
+
+  function cloneBoardSection(section) {
+    if (!section || typeof section !== 'object') {
+      return {};
+    }
+    try {
+      return JSON.parse(JSON.stringify(section));
+    } catch (error) {
+      return {};
+    }
+  }
 
   board.addEventListener('keydown', (event) => {
     if (templateTool?.handleKeydown?.(event)) {
@@ -727,6 +823,7 @@ export function mountBoardInteractions(store, routes = {}) {
     applyGridState(state.grid ?? {});
     renderTokens(state, tokenLayer, viewState);
     templateTool.notifyMapState();
+    applyCombatStateFromBoardState(state);
 
     if (activeTokenSettingsId) {
       const placementForSettings = resolvePlacementById(state, activeSceneId, activeTokenSettingsId);
@@ -750,6 +847,7 @@ export function mountBoardInteractions(store, routes = {}) {
   }
 
   applyStateToBoard(boardApi.getState?.() ?? {});
+  startBoardStatePoller();
 
   function focusBoard() {
     if (!board) {
@@ -2248,15 +2346,20 @@ export function mountBoardInteractions(store, routes = {}) {
     if (isInCompleted || state === 'completed') {
       completedCombatants.delete(combatantId);
       setActiveCombatantId(combatantId);
+      currentTurnTeam = getCombatantTeam(combatantId) ?? currentTurnTeam;
       refreshCombatTracker();
+      forceAcquireTurnLockForGm(combatantId);
       updateCombatModeIndicators();
+      syncCombatStateToStore();
       return;
     }
 
     if (activeCombatantId === combatantId) {
       closeTurnPrompt();
       setActiveCombatantId(null);
+      releaseTurnLock(getCurrentUserId());
       updateCombatModeIndicators();
+      syncCombatStateToStore();
       return;
     }
 
@@ -2264,25 +2367,58 @@ export function mountBoardInteractions(store, routes = {}) {
     setActiveCombatantId(combatantId);
     currentTurnTeam = getCombatantTeam(combatantId) ?? currentTurnTeam;
     refreshCombatantStateClasses();
+    forceAcquireTurnLockForGm(combatantId);
     updateCombatModeIndicators();
+    syncCombatStateToStore();
   }
 
   function beginCombatantTurn(combatantId, options = {}) {
     if (!combatActive || !combatantId) {
       return;
     }
+
+    const currentUserId = getCurrentUserId();
+    const initiatorProfileId = normalizeProfileId(options?.initiatorProfileId ?? currentUserId);
+    const fallbackName = getCurrentUserName() || initiatorProfileId || 'GM';
+    const initiatorName =
+      typeof options?.initiatorName === 'string' && options.initiatorName.trim()
+        ? options.initiatorName.trim()
+        : fallbackName;
+
+    if (turnLockState.holderId && turnLockState.holderId !== initiatorProfileId) {
+      if (isGmUser()) {
+        let confirmed = true;
+        try {
+          if (typeof window !== 'undefined' && typeof window.confirm === 'function') {
+            confirmed = window.confirm('Override the active turn lock?');
+          }
+        } catch (error) {
+          confirmed = false;
+        }
+        if (!confirmed) {
+          return;
+        }
+        acquireTurnLock(initiatorProfileId || 'gm', initiatorName, combatantId, { force: true });
+      } else {
+        notifyTurnLocked(turnLockState.holderName);
+        return;
+      }
+    } else {
+      acquireTurnLock(initiatorProfileId || 'gm', initiatorName, combatantId, { force: isGmUser() });
+    }
+
     completedCombatants.delete(combatantId);
     setActiveCombatantId(combatantId);
     currentTurnTeam = getCombatantTeam(combatantId) ?? currentTurnTeam;
     refreshCombatTracker();
     updateCombatModeIndicators();
-    const initiatorProfileId = normalizeProfileId(options?.initiatorProfileId ?? null);
-    const shouldShowPrompt = !initiatorProfileId || initiatorProfileId === getCurrentUserId();
+    const shouldShowPrompt = !initiatorProfileId || initiatorProfileId === currentUserId;
     if (shouldShowPrompt) {
       openTurnPrompt(combatantId);
     }
     notifyConditionTurnStart(combatantId);
     maybeTriggerSpecialTurnEffects(combatantId, options);
+    syncCombatStateToStore();
   }
 
   function notifyConditionTurnStart(combatantId) {
@@ -2359,6 +2495,7 @@ export function mountBoardInteractions(store, routes = {}) {
         });
       });
     }
+    releaseTurnLock(getCurrentUserId());
     const nextId = pickNextCombatantId([
       finishedTeam === 'ally' ? 'enemy' : 'ally',
       finishedTeam,
@@ -2371,6 +2508,7 @@ export function mountBoardInteractions(store, routes = {}) {
     }
     updateCombatModeIndicators();
     checkForRoundCompletion();
+    syncCombatStateToStore();
   }
 
   function openTurnPrompt(combatantId) {
@@ -2637,7 +2775,9 @@ export function mountBoardInteractions(store, routes = {}) {
       startingCombatTeam,
       startingCombatTeam === 'ally' ? 'enemy' : 'ally',
     ]);
+    releaseTurnLock();
     updateCombatModeIndicators();
+    syncCombatStateToStore();
   }
 
   function handleEndCombat() {
@@ -2664,6 +2804,8 @@ export function mountBoardInteractions(store, routes = {}) {
     updateStartCombatButton();
     refreshCombatTracker();
     updateCombatModeIndicators();
+    releaseTurnLock();
+    syncCombatStateToStore();
     if (status) {
       status.textContent = 'Combat ended.';
     }
@@ -2699,6 +2841,272 @@ export function mountBoardInteractions(store, routes = {}) {
     } catch (error) {
       console.warn('[VTT] Failed to access chat bridge', error);
     }
+  }
+
+  function getCurrentUserName() {
+    const state = boardApi.getState?.();
+    return typeof state?.user?.name === 'string' ? state.user.name : '';
+  }
+
+  function applyCombatStateFromBoardState(state = {}) {
+    const boardState = state?.boardState ?? {};
+    const activeSceneId = typeof boardState.activeSceneId === 'string' ? boardState.activeSceneId : null;
+    if (!activeSceneId) {
+      return;
+    }
+
+    const sceneState = boardState.sceneState && typeof boardState.sceneState === 'object' ? boardState.sceneState : {};
+    const combatState = sceneState[activeSceneId]?.combat ?? {};
+    const normalized = normalizeCombatState(combatState);
+
+    if (normalized.updatedAt && normalized.updatedAt <= combatStateVersion) {
+      return;
+    }
+
+    suppressCombatStateSync = true;
+    try {
+      const previousActive = activeCombatantId;
+      combatActive = normalized.active;
+      combatRound = normalized.round;
+      startingCombatTeam = normalized.startingTeam;
+      currentTurnTeam = normalized.currentTeam;
+      lastActingTeam = normalized.lastTeam;
+      roundTurnCount = normalized.roundTurnCount;
+      completedCombatants.clear();
+      normalized.completedCombatantIds.forEach((id) => completedCombatants.add(id));
+      updateTurnLockState(normalized.turnLock);
+
+      if (!combatActive) {
+        stopAllyTurnTimer();
+        clearTurnBorderFlash();
+      }
+
+      if (normalized.activeCombatantId !== previousActive) {
+        setActiveCombatantId(normalized.activeCombatantId);
+      } else {
+        activeCombatantId = normalized.activeCombatantId;
+        refreshCombatantStateClasses();
+      }
+
+      updateStartCombatButton();
+      updateCombatModeIndicators();
+      refreshCombatTracker();
+      const appliedVersion = normalized.updatedAt || Date.now();
+      combatStateVersion = appliedVersion;
+      const snapshot = { ...normalized, updatedAt: appliedVersion };
+      lastCombatStateSnapshot = JSON.stringify(snapshot);
+    } finally {
+      suppressCombatStateSync = false;
+    }
+  }
+
+  function normalizeCombatState(raw = {}) {
+    const active = Boolean(raw?.active ?? raw?.isActive ?? false);
+    const round = Math.max(0, toNonNegativeNumber(raw?.round ?? 0));
+    const activeCombatantId = typeof raw?.activeCombatantId === 'string' ? raw.activeCombatantId.trim() : '';
+    const completedSource = Array.isArray(raw?.completedCombatantIds) ? raw.completedCombatantIds : [];
+    const completedCombatantIds = Array.from(
+      new Set(
+        completedSource
+          .map((id) => (typeof id === 'string' ? id.trim() : ''))
+          .filter((id) => id.length > 0)
+      )
+    );
+    const startingTeam = normalizeCombatTeam(raw?.startingTeam ?? raw?.initialTeam ?? null);
+    const currentTeam = normalizeCombatTeam(raw?.currentTeam ?? raw?.activeTeam ?? null);
+    const lastTeam = normalizeCombatTeam(raw?.lastTeam ?? raw?.previousTeam ?? null);
+    const roundTurnCount = Math.max(0, toNonNegativeNumber(raw?.roundTurnCount ?? 0));
+    const updatedAtRaw = Number(raw?.updatedAt);
+    const updatedAt = Number.isFinite(updatedAtRaw) ? Math.max(0, Math.trunc(updatedAtRaw)) : 0;
+    const turnLock = normalizeTurnLock(raw?.turnLock ?? null);
+
+    return {
+      active,
+      round,
+      activeCombatantId: activeCombatantId || null,
+      completedCombatantIds,
+      startingTeam,
+      currentTeam,
+      lastTeam,
+      roundTurnCount,
+      updatedAt,
+      turnLock,
+    };
+  }
+
+  function normalizeTurnLock(raw) {
+    if (!raw || typeof raw !== 'object') {
+      return null;
+    }
+
+    const holderId = normalizeProfileId(raw.holderId ?? raw.id ?? null);
+    if (!holderId) {
+      return null;
+    }
+
+    const holderName = typeof raw.holderName === 'string' ? raw.holderName.trim() : holderId;
+    const combatantId = typeof raw.combatantId === 'string' ? raw.combatantId.trim() : '';
+    const lockedAtRaw = Number(raw.lockedAt);
+    const lockedAt = Number.isFinite(lockedAtRaw) ? Math.max(0, Math.trunc(lockedAtRaw)) : Date.now();
+
+    return {
+      holderId,
+      holderName,
+      combatantId: combatantId || null,
+      lockedAt,
+    };
+  }
+
+  function updateTurnLockState(lock) {
+    if (!lock || typeof lock !== 'object') {
+      turnLockState.holderId = null;
+      turnLockState.holderName = null;
+      turnLockState.combatantId = null;
+      turnLockState.lockedAt = 0;
+      return;
+    }
+
+    turnLockState.holderId = lock.holderId ?? null;
+    turnLockState.holderName = lock.holderName ?? lock.holderId ?? null;
+    turnLockState.combatantId = lock.combatantId ?? null;
+    turnLockState.lockedAt = Number.isFinite(lock.lockedAt) ? lock.lockedAt : Date.now();
+  }
+
+  function createCombatStateSnapshot() {
+    const completed = Array.from(completedCombatants).filter((id) => typeof id === 'string' && id);
+    const uniqueCompleted = Array.from(new Set(completed));
+    const timestamp = Date.now();
+
+    return {
+      active: Boolean(combatActive),
+      round: Math.max(0, Math.trunc(combatRound)),
+      activeCombatantId: activeCombatantId ?? null,
+      completedCombatantIds: uniqueCompleted,
+      startingTeam: normalizeCombatTeam(startingCombatTeam),
+      currentTeam: normalizeCombatTeam(currentTurnTeam),
+      lastTeam: normalizeCombatTeam(lastActingTeam),
+      roundTurnCount: Math.max(0, Math.trunc(roundTurnCount)),
+      updatedAt: timestamp,
+      turnLock: serializeTurnLockState(),
+    };
+  }
+
+  function serializeTurnLockState() {
+    const holderId = normalizeProfileId(turnLockState.holderId);
+    if (!holderId) {
+      return null;
+    }
+
+    const combatantId =
+      typeof turnLockState.combatantId === 'string' && turnLockState.combatantId
+        ? turnLockState.combatantId
+        : null;
+    const lockedAt = Number.isFinite(turnLockState.lockedAt)
+      ? Math.max(0, Math.trunc(turnLockState.lockedAt))
+      : Date.now();
+
+    return {
+      holderId,
+      holderName:
+        typeof turnLockState.holderName === 'string' && turnLockState.holderName.trim()
+          ? turnLockState.holderName.trim()
+          : holderId,
+      combatantId,
+      lockedAt,
+    };
+  }
+
+  function syncCombatStateToStore() {
+    if (suppressCombatStateSync || typeof boardApi.updateState !== 'function') {
+      return;
+    }
+
+    const state = boardApi.getState?.() ?? {};
+    const activeSceneId = state.boardState?.activeSceneId ?? null;
+    if (!activeSceneId) {
+      return;
+    }
+
+    const snapshot = createCombatStateSnapshot();
+    const serialized = JSON.stringify(snapshot);
+    if (serialized === lastCombatStateSnapshot) {
+      return;
+    }
+
+    boardApi.updateState?.((draft) => {
+      const sceneStateEntry = ensureSceneStateDraftEntry(draft, activeSceneId);
+      sceneStateEntry.combat = {
+        ...snapshot,
+        completedCombatantIds: [...snapshot.completedCombatantIds],
+      };
+    });
+
+    const latest = boardApi.getState?.() ?? state;
+    if (latest?.user?.isGM) {
+      persistBoardStateSnapshot();
+    } else if (routes?.state) {
+      persistCombatState(routes.state, activeSceneId, snapshot);
+    }
+
+    combatStateVersion = snapshot.updatedAt;
+    lastCombatStateSnapshot = serialized;
+  }
+
+  function acquireTurnLock(holderId, holderName, combatantId, options = {}) {
+    const normalizedId = normalizeProfileId(holderId);
+    if (!normalizedId) {
+      return false;
+    }
+
+    const normalizedName =
+      typeof holderName === 'string' && holderName.trim() ? holderName.trim() : normalizedId;
+    const existingHolder = turnLockState.holderId;
+    const wantsForce = options.force === true;
+
+    if (existingHolder && existingHolder !== normalizedId && !wantsForce) {
+      return false;
+    }
+
+    turnLockState.holderId = normalizedId;
+    turnLockState.holderName = normalizedName;
+    turnLockState.combatantId = typeof combatantId === 'string' && combatantId ? combatantId : null;
+    turnLockState.lockedAt = Date.now();
+    return true;
+  }
+
+  function releaseTurnLock(requesterId = null) {
+    if (!turnLockState.holderId) {
+      return false;
+    }
+    const requester = normalizeProfileId(requesterId);
+    if (turnLockState.holderId !== requester && requester && !isGmUser()) {
+      return false;
+    }
+    turnLockState.holderId = null;
+    turnLockState.holderName = null;
+    turnLockState.combatantId = null;
+    turnLockState.lockedAt = 0;
+    return true;
+  }
+
+  function notifyTurnLocked(holderName) {
+    const displayName = holderName && holderName.trim() ? holderName.trim() : 'another player';
+    const message = `${displayName} is currently taking their turn.`;
+    try {
+      if (typeof window !== 'undefined' && typeof window.alert === 'function') {
+        window.alert(message);
+      } else {
+        showConditionBanner(message, { tone: 'warning' });
+      }
+    } catch (error) {
+      showConditionBanner(message, { tone: 'warning' });
+    }
+  }
+
+  function forceAcquireTurnLockForGm(combatantId) {
+    const gmId = getCurrentUserId() ?? 'gm';
+    const gmName = getCurrentUserName() || 'GM';
+    acquireTurnLock(gmId, gmName, combatantId, { force: true });
   }
 
   function getAllRepresentativeIds() {
@@ -2763,6 +3171,7 @@ export function mountBoardInteractions(store, routes = {}) {
     }
     completedCombatants.clear();
     setActiveCombatantId(null);
+    releaseTurnLock();
     combatRound = Math.max(1, combatRound + 1);
     roundTurnCount = 0;
     resetTriggeredActionsForActiveScene();
@@ -2797,6 +3206,7 @@ export function mountBoardInteractions(store, routes = {}) {
     if (status) {
       status.textContent = `Round ${combatRound} begins.`;
     }
+    syncCombatStateToStore();
   }
 
   function resetTriggeredActionsForActiveScene() {
@@ -2854,6 +3264,11 @@ export function mountBoardInteractions(store, routes = {}) {
       combatTrackerRoot.dataset.combatActive = combatActive ? 'true' : 'false';
       combatTrackerRoot.dataset.completedCount = String(completedCombatants.size);
       combatTrackerRoot.dataset.currentTeam = currentTurnTeam ?? '';
+      if (turnLockState.holderId) {
+        combatTrackerRoot.dataset.turnLockHolder = turnLockState.holderName ?? turnLockState.holderId;
+      } else if ('turnLockHolder' in combatTrackerRoot.dataset) {
+        delete combatTrackerRoot.dataset.turnLockHolder;
+      }
     }
     updateRoundTrackerDisplay();
   }
@@ -3094,6 +3509,11 @@ export function mountBoardInteractions(store, routes = {}) {
 
     const ownerProfile = getCombatantProfileId(combatantId);
     if (!ownerProfile || ownerProfile !== userId) {
+      return;
+    }
+
+    if (turnLockState.holderId && turnLockState.holderId !== userId) {
+      notifyTurnLocked(turnLockState.holderName);
       return;
     }
 
@@ -5614,6 +6034,28 @@ export function mountBoardInteractions(store, routes = {}) {
     }
 
     return draft.boardState;
+  }
+
+  function ensureSceneStateDraftEntry(draft, sceneId) {
+    const boardDraft = ensureBoardStateDraft(draft);
+    const key = typeof sceneId === 'string' ? sceneId : String(sceneId ?? '');
+    if (!key) {
+      return boardDraft.sceneState;
+    }
+
+    if (!boardDraft.sceneState[key] || typeof boardDraft.sceneState[key] !== 'object') {
+      boardDraft.sceneState[key] = {};
+    }
+
+    if (!boardDraft.sceneState[key].grid || typeof boardDraft.sceneState[key].grid !== 'object') {
+      boardDraft.sceneState[key].grid = {
+        size: 64,
+        locked: false,
+        visible: true,
+      };
+    }
+
+    return boardDraft.sceneState[key];
   }
 
 
