@@ -53,6 +53,25 @@ function renderVttSceneBoard(): string
                 </div>
             </div>
             <div class="vtt-board__actions">
+                <div class="vtt-board__quick-launch">
+                    <button
+                        class="btn"
+                        type="button"
+                        id="vtt-dice-roller-btn"
+                        aria-haspopup="dialog"
+                        title="Open the dice roller"
+                    >
+                        Dice Roller
+                    </button>
+                    <button
+                        class="btn btn--soon"
+                        type="button"
+                        disabled
+                        title="Feature coming soon"
+                    >
+                        Coming Soon
+                    </button>
+                </div>
                 <div class="vtt-board__coming-soon">
                     <button
                         class="btn"

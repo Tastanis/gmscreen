@@ -18,6 +18,7 @@ $assetVersion = (int) ($config['assetsVersion'] ?? time());
     <link rel="stylesheet" href="assets/css/board.css?v=<?= $assetVersion ?>" />
     <link rel="stylesheet" href="assets/css/chat.css?v=<?= $assetVersion ?>" />
     <link rel="stylesheet" href="assets/css/settings.css?v=<?= $assetVersion ?>" />
+    <link rel="stylesheet" href="../dice-roller/dice-roller.css?v=<?= $assetVersion ?>" />
 </head>
 <body class="vtt-body">
     <div id="vtt-app" class="vtt-app" data-routes='<?= json_encode($routes, JSON_HEX_TAG | JSON_HEX_APOS | JSON_HEX_QUOT | JSON_HEX_AMP) ?>'>
