@@ -206,30 +206,30 @@
 .vtt-board__actions {
   display: flex;
   flex-direction: column;
-  gap: 0.75rem;
-  align-items: stretch;
+  gap: 0.5rem;
+  align-items: flex-end;
   justify-content: flex-end;
   max-width: 100%;
 }
 
 .vtt-board__actions .btn {
-  padding: 0.4rem 0.75rem;
+  padding: 0.35rem 0.75rem;
   font-size: 0.85rem;
+  width: auto;
+  min-width: 0;
+  white-space: nowrap;
+  align-self: flex-start;
 }
 
 .vtt-board__quick-launch,
-.vtt-board__coming-soon {
-  display: flex;
-  flex-direction: column;
-  gap: 0.5rem;
-  align-items: stretch;
-}
-
+.vtt-board__coming-soon,
 .vtt-board__controls {
   display: flex;
-  flex-direction: column;
-  align-items: stretch;
+  flex-direction: row;
+  flex-wrap: wrap;
   gap: 0.5rem;
+  align-items: center;
+  justify-content: flex-end;
 }
 
 .btn--soon {
@@ -262,13 +262,7 @@
   .vtt-board__actions {
     order: 2;
     justify-content: flex-start;
-  }
-
-  .vtt-board__quick-launch,
-  .vtt-board__controls,
-  .vtt-board__coming-soon {
-    flex-direction: row;
-    flex-wrap: wrap;
+    align-items: flex-start;
   }
 
   .vtt-board__actions .btn {
@@ -1520,4 +1514,30 @@
   font-size: 22px;
   font-weight: 800;
   letter-spacing: 0.05em;
+}
+
+.dice-modal-overlay--vtt {
+  background: transparent;
+  align-items: flex-start;
+  justify-content: flex-end;
+  padding: 1.5rem;
+}
+
+.dice-modal-overlay--vtt .dice-modal {
+  pointer-events: auto;
+}
+
+.dice-modal--vtt {
+  width: min(420px, 90vw);
+}
+
+@media (max-width: 768px) {
+  .dice-modal-overlay--vtt {
+    padding: 0.75rem;
+    justify-content: center;
+  }
+
+  .dice-modal--vtt {
+    width: min(460px, 95vw);
+  }
 }
