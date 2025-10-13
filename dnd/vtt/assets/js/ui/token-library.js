@@ -1,5 +1,5 @@
 import { initializeTokenMaker } from './token-maker.js';
-import { createToken, createTokenFolder, updateToken } from '../services/token-service.js';
+import { createToken, createTokenFolder, updateToken, deleteToken } from '../services/token-service.js';
 import { restrictTokensToPlayerView } from '../state/store.js';
 
 const UNSORTED_KEY = '__unsorted';
@@ -445,6 +445,49 @@ export function renderTokenLibrary(routes, store, options = {}) {
     });
   }
 
+  if (contextMenu?.deleteButton) {
+    contextMenu.deleteButton.addEventListener('click', async (event) => {
+      event.preventDefault();
+
+      if (!contextTokenId) {
+        return;
+      }
+
+      if (!endpoints.tokens) {
+        showFeedback(contextMenu.feedback, 'Token editing is unavailable right now.', 'error');
+        return;
+      }
+
+      const confirmed = window.confirm('Delete this token? This cannot be undone.');
+      if (!confirmed) {
+        return;
+      }
+
+      const tokenId = contextTokenId;
+
+      try {
+        setContextMenuPending(contextMenu, true);
+        showFeedback(contextMenu.feedback, 'Deleting…', 'info');
+
+        await deleteToken(endpoints.tokens, tokenId);
+
+        closeContextMenu();
+
+        stateApi.updateState?.((draft) => {
+          ensureTokenDraft(draft);
+          draft.tokens.items = draft.tokens.items.filter((item) => item?.id !== tokenId);
+        });
+
+        showFeedback(feedback, 'Token deleted.', 'success');
+      } catch (error) {
+        console.error('[VTT] Failed to delete token', error);
+        showFeedback(contextMenu.feedback, error?.message || 'Unable to delete token.', 'error');
+      } finally {
+        setContextMenuPending(contextMenu, false);
+      }
+    });
+  }
+
   if (contextMenu?.form) {
     contextMenu.form.addEventListener('submit', async (event) => {
       event.preventDefault();
@@ -754,7 +797,13 @@ function setButtonPending(button, pending) {
 
 function setContextMenuPending(menu, pending) {
   if (!menu) return;
-  const elements = [menu.sizeInput, menu.teamToggle, menu.hpInput, menu.submitButton].filter(Boolean);
+  const elements = [
+    menu.sizeInput,
+    menu.teamToggle,
+    menu.hpInput,
+    menu.submitButton,
+    menu.deleteButton,
+  ].filter(Boolean);
   elements.forEach((element) => {
     element.disabled = pending;
     if (element.classList?.contains('btn')) {
@@ -837,6 +886,7 @@ function createTokenContextMenu(root) {
       </div>
       <p class="token-context-menu__hint">Leave a field empty to clear its value.</p>
       <div class="token-context-menu__actions">
+        <button class="btn btn--danger" type="button" data-token-context-delete>Delete</button>
         <button class="btn btn--primary" type="submit">Save</button>
       </div>
       <p class="token-context-menu__feedback" data-token-context-feedback hidden></p>
@@ -852,7 +902,8 @@ function createTokenContextMenu(root) {
     teamToggle: element.querySelector('[data-token-context-ally]'),
     hpInput: element.querySelector('[data-token-context-hp]'),
     feedback: element.querySelector('[data-token-context-feedback]'),
-    submitButton: element.querySelector('.token-context-menu__actions .btn'),
+    submitButton: element.querySelector('.token-context-menu__actions .btn[type="submit"]'),
+    deleteButton: element.querySelector('[data-token-context-delete]'),
   };
 }
 

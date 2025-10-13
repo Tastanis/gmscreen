@@ -64,6 +64,14 @@ try {
             ]);
         }
 
+        if ($action === 'delete-token') {
+            $result = deleteToken($payload);
+            respondJson(200, [
+                'success' => true,
+                'data' => $result,
+            ]);
+        }
+
         respondJson(400, [
             'success' => false,
             'error' => 'Unsupported action.',
@@ -305,6 +313,60 @@ function updateToken(array $payload): array
     }
 
     return $updated;
+}
+
+function deleteToken(array $payload): array
+{
+    $tokenId = trim((string) ($payload['id'] ?? ''));
+    if ($tokenId === '') {
+        respondJson(422, [
+            'success' => false,
+            'error' => 'Token id is required.',
+        ]);
+    }
+
+    $storage = loadTokensPayload();
+    $items = isset($storage['items']) && is_array($storage['items']) ? $storage['items'] : [];
+
+    $remaining = [];
+    $removed = null;
+
+    foreach ($items as $token) {
+        if (($token['id'] ?? null) === $tokenId) {
+            $removed = $token;
+            continue;
+        }
+
+        $remaining[] = $token;
+    }
+
+    if ($removed === null) {
+        respondJson(404, [
+            'success' => false,
+            'error' => 'Token not found.',
+        ]);
+    }
+
+    $storage['items'] = array_values($remaining);
+    persistTokens($storage);
+
+    $imageUrl = isset($removed['imageUrl']) ? trim((string) $removed['imageUrl']) : '';
+    if ($imageUrl !== '') {
+        $path = parse_url($imageUrl, PHP_URL_PATH) ?: '';
+        $filename = $path !== '' ? basename($path) : '';
+        if ($filename !== '' && preg_match('/^[a-zA-Z0-9_-]+\.(png|jpg|jpeg|webp)$/', $filename)) {
+            $destinationDir = __DIR__ . '/../storage/tokens';
+            $filePath = $destinationDir . '/' . $filename;
+            if (is_file($filePath)) {
+                @unlink($filePath);
+            }
+        }
+    }
+
+    return [
+        'id' => $tokenId,
+        'folderId' => $removed['folderId'] ?? null,
+    ];
 }
 
 function decodeTokenImage(string $dataUrl): ?array

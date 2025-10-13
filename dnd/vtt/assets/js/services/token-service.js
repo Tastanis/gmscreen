@@ -54,3 +54,18 @@ export async function updateToken(endpoint, payload) {
 
   return data.data;
 }
+
+export async function deleteToken(endpoint, tokenId) {
+  const response = await fetch(endpoint, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ action: 'delete-token', id: tokenId }),
+  });
+
+  const data = await response.json().catch(() => ({}));
+  if (!response.ok || !data.success) {
+    throw new Error(data.error || 'Unable to delete token');
+  }
+
+  return data.data;
+}
