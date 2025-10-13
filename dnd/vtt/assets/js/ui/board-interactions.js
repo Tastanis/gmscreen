@@ -147,6 +147,19 @@ export function mountBoardInteractions(store, routes = {}) {
     ],
   };
 
+  const PLAYER_PROFILE_ALIASES = {
+    frunk: ['frunk'],
+    sharon: ['sharon'],
+    indigo: ['indigo'],
+    zepha: ['zepha'],
+  };
+
+  const SHARON_PROFILE_ID = 'sharon';
+
+  let roundTurnCount = 0;
+  let hesitationBannerTimeoutId = null;
+  let hesitationBannerRemoveId = null;
+
   function escapeHtml(value) {
     if (typeof value !== 'string') {
       return '';
@@ -2177,7 +2190,7 @@ export function mountBoardInteractions(store, routes = {}) {
   }
 
   function handleCombatTrackerDoubleClick(event) {
-    if (!combatActive || !isGmUser()) {
+    if (!combatActive) {
       return;
     }
     const target = event.target instanceof HTMLElement ? event.target.closest('[data-combatant-id]') : null;
@@ -2189,7 +2202,20 @@ export function mountBoardInteractions(store, routes = {}) {
     if (!combatantId) {
       return;
     }
-    beginCombatantTurn(combatantId);
+
+    const context = buildTurnContext(combatantId);
+
+    if (isGmUser()) {
+      beginCombatantTurn(combatantId, {
+        initiatorProfileId: getCurrentUserId(),
+        expectedTeam: context.expectedTeam,
+        previousTeam: context.previousTeam,
+        isFirstTurnOfRound: context.isFirstTurnOfRound,
+      });
+      return;
+    }
+
+    handlePlayerInitiatedTurn(combatantId, context);
   }
 
   function handleCombatTrackerKeydown(event) {
@@ -2241,7 +2267,7 @@ export function mountBoardInteractions(store, routes = {}) {
     updateCombatModeIndicators();
   }
 
-  function beginCombatantTurn(combatantId) {
+  function beginCombatantTurn(combatantId, options = {}) {
     if (!combatActive || !combatantId) {
       return;
     }
@@ -2250,8 +2276,13 @@ export function mountBoardInteractions(store, routes = {}) {
     currentTurnTeam = getCombatantTeam(combatantId) ?? currentTurnTeam;
     refreshCombatTracker();
     updateCombatModeIndicators();
-    openTurnPrompt(combatantId);
+    const initiatorProfileId = normalizeProfileId(options?.initiatorProfileId ?? null);
+    const shouldShowPrompt = !initiatorProfileId || initiatorProfileId === getCurrentUserId();
+    if (shouldShowPrompt) {
+      openTurnPrompt(combatantId);
+    }
     notifyConditionTurnStart(combatantId);
+    maybeTriggerSpecialTurnEffects(combatantId, options);
   }
 
   function notifyConditionTurnStart(combatantId) {
@@ -2298,6 +2329,7 @@ export function mountBoardInteractions(store, routes = {}) {
       lastActingTeam = finishedTeam;
     }
     completedCombatants.add(finishedId);
+    roundTurnCount = Math.max(0, roundTurnCount + 1);
     setActiveCombatantId(null);
     refreshCombatTracker();
     if (finishingConditions.length) {
@@ -2593,6 +2625,7 @@ export function mountBoardInteractions(store, routes = {}) {
     completedCombatants.clear();
     pendingRoundConfirmation = false;
     lastActingTeam = null;
+    roundTurnCount = 0;
     closeTurnPrompt();
     setActiveCombatantId(null);
     const initialTeam = rollForInitiativeAnnouncement() ?? 'enemy';
@@ -2623,8 +2656,10 @@ export function mountBoardInteractions(store, routes = {}) {
     activeTeam = null;
     lastActingTeam = null;
     pendingTurnTransition = null;
+    roundTurnCount = 0;
     stopAllyTurnTimer();
     clearTurnBorderFlash();
+    clearHesitationBanner();
     resetTriggeredActionsForActiveScene();
     updateStartCombatButton();
     refreshCombatTracker();
@@ -2729,6 +2764,7 @@ export function mountBoardInteractions(store, routes = {}) {
     completedCombatants.clear();
     setActiveCombatantId(null);
     combatRound = Math.max(1, combatRound + 1);
+    roundTurnCount = 0;
     resetTriggeredActionsForActiveScene();
     const preferredTeam = startingCombatTeam ?? currentTurnTeam ?? 'ally';
     const secondaryTeam = preferredTeam === 'ally' ? 'enemy' : 'ally';
@@ -3043,6 +3079,63 @@ export function mountBoardInteractions(store, routes = {}) {
     }
   }
 
+  function buildTurnContext(combatantId) {
+    const expectedTeam = currentTurnTeam ?? getCombatantTeam(combatantId);
+    const previousTeam = lastActingTeam ?? null;
+    const isFirstTurnOfRound = combatActive ? roundTurnCount === 0 : false;
+    return { expectedTeam, previousTeam, isFirstTurnOfRound };
+  }
+
+  function handlePlayerInitiatedTurn(combatantId, context = {}) {
+    const userId = getCurrentUserId();
+    if (!userId) {
+      return;
+    }
+
+    const ownerProfile = getCombatantProfileId(combatantId);
+    if (!ownerProfile || ownerProfile !== userId) {
+      return;
+    }
+
+    const team = getCombatantTeam(combatantId);
+    if (team !== 'ally') {
+      return;
+    }
+
+    const expectedTeam = context.expectedTeam ?? currentTurnTeam ?? team;
+    const wasEnemyExpected = normalizeCombatTeam(expectedTeam) === 'enemy';
+    const isSharon = ownerProfile === SHARON_PROFILE_ID;
+
+    if (wasEnemyExpected && !isSharon) {
+      if (!confirmPlayerTurnOverride()) {
+        return;
+      }
+    }
+
+    beginCombatantTurn(combatantId, {
+      initiatorProfileId: ownerProfile,
+      expectedTeam,
+      previousTeam: context.previousTeam ?? lastActingTeam ?? null,
+      isFirstTurnOfRound:
+        typeof context.isFirstTurnOfRound === 'boolean'
+          ? context.isFirstTurnOfRound
+          : combatActive
+          ? roundTurnCount === 0
+          : false,
+    });
+  }
+
+  function confirmPlayerTurnOverride() {
+    try {
+      if (typeof window !== 'undefined' && typeof window.confirm === 'function') {
+        return window.confirm("It is not the PC's turn. Would you like to go anyways?");
+      }
+    } catch (error) {
+      return false;
+    }
+    return true;
+  }
+
   function handleActiveTeamChanged(previousTeam, nextTeam, previousCombatantId, nextCombatantId) {
     const normalizedPrevious = previousTeam ? normalizeCombatTeam(previousTeam) : null;
     const normalizedNext = nextTeam ? normalizeCombatTeam(nextTeam) : null;
@@ -3071,6 +3164,200 @@ export function mountBoardInteractions(store, routes = {}) {
   function isGmUser() {
     const state = boardApi.getState?.();
     return Boolean(state?.user?.isGM);
+  }
+
+  function getCurrentUserId() {
+    const state = boardApi.getState?.();
+    const rawName = typeof state?.user?.name === 'string' ? state.user.name : '';
+    const normalized = rawName.trim().toLowerCase();
+    return normalized || null;
+  }
+
+  function normalizeProfileId(value) {
+    if (typeof value !== 'string') {
+      return null;
+    }
+    const normalized = value.trim().toLowerCase();
+    return normalized || null;
+  }
+
+  function getCombatantProfileId(combatantId) {
+    if (!combatantId) {
+      return null;
+    }
+    const placement = getPlacementFromStore(combatantId);
+    const explicitProfile = extractProfileIdFromPlacement(placement);
+    if (explicitProfile) {
+      return explicitProfile;
+    }
+    const label = getCombatantLabel(combatantId);
+    return matchProfileByName(label);
+  }
+
+  function extractProfileIdFromPlacement(placement) {
+    if (!placement || typeof placement !== 'object') {
+      return null;
+    }
+
+    const keys = ['profileId', 'profile', 'playerId', 'player', 'owner', 'controller'];
+    for (const key of keys) {
+      if (typeof placement[key] === 'string') {
+        const normalized = normalizeProfileId(placement[key]);
+        if (normalized) {
+          return normalized;
+        }
+      }
+    }
+
+    const metadata = placement.metadata ?? placement.meta ?? null;
+    if (metadata && typeof metadata === 'object') {
+      for (const key of keys) {
+        if (typeof metadata[key] === 'string') {
+          const normalized = normalizeProfileId(metadata[key]);
+          if (normalized) {
+            return normalized;
+          }
+        }
+      }
+    }
+
+    return matchProfileByName(placement?.name ?? '');
+  }
+
+  function matchProfileByName(name) {
+    const normalizedName = normalizeCombatantName(name);
+    if (!normalizedName) {
+      return null;
+    }
+    for (const [profileId, aliases] of Object.entries(PLAYER_PROFILE_ALIASES)) {
+      if (!Array.isArray(aliases)) {
+        continue;
+      }
+      const matches = aliases.some((alias) => matchesProfileAlias(normalizedName, alias));
+      if (matches) {
+        return profileId;
+      }
+    }
+    return null;
+  }
+
+  function normalizeCombatantName(name) {
+    if (typeof name !== 'string') {
+      return '';
+    }
+    return name.toLowerCase().replace(/[^a-z0-9]+/g, ' ').trim();
+  }
+
+  function matchesProfileAlias(normalizedName, alias) {
+    if (!normalizedName || typeof alias !== 'string') {
+      return false;
+    }
+    const normalizedAlias = alias.trim().toLowerCase();
+    if (!normalizedAlias) {
+      return false;
+    }
+    const pattern = new RegExp(`(^|\s)${escapeRegExp(normalizedAlias)}(\s|$)`);
+    return pattern.test(normalizedName);
+  }
+
+  function escapeRegExp(value) {
+    return String(value).replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+  }
+
+  function clearHesitationBanner() {
+    if (hesitationBannerTimeoutId && typeof window !== 'undefined' && typeof window.clearTimeout === 'function') {
+      window.clearTimeout(hesitationBannerTimeoutId);
+    }
+    if (hesitationBannerRemoveId && typeof window !== 'undefined' && typeof window.clearTimeout === 'function') {
+      window.clearTimeout(hesitationBannerRemoveId);
+    }
+    hesitationBannerTimeoutId = null;
+    hesitationBannerRemoveId = null;
+    if (typeof document !== 'undefined') {
+      const existing = document.querySelector('.vtt-hesitation-banner');
+      if (existing && typeof existing.remove === 'function') {
+        existing.remove();
+      }
+    }
+  }
+
+  function showHesitationPopup() {
+    if (typeof document === 'undefined') {
+      return;
+    }
+    clearHesitationBanner();
+    const banner = document.createElement('div');
+    banner.className = 'vtt-hesitation-banner';
+    banner.textContent = 'HESITATION IS WEAKNESS!';
+    document.body.appendChild(banner);
+
+    if (typeof window !== 'undefined') {
+      try {
+        void banner.offsetWidth;
+      } catch (error) {
+        // Ignore layout thrash errors.
+      }
+      banner.classList.add('is-visible');
+
+      if (typeof window.setTimeout === 'function') {
+        hesitationBannerTimeoutId = window.setTimeout(() => {
+          banner.classList.add('is-fading');
+        }, 1800);
+        hesitationBannerRemoveId = window.setTimeout(() => {
+          if (banner.parentNode) {
+            banner.parentNode.removeChild(banner);
+          }
+          hesitationBannerTimeoutId = null;
+          hesitationBannerRemoveId = null;
+        }, 2100);
+      }
+    }
+  }
+
+  function maybeTriggerSpecialTurnEffects(combatantId, options = {}) {
+    const initiatorProfileId = normalizeProfileId(options?.initiatorProfileId ?? null);
+    const profileId = initiatorProfileId ?? getCombatantProfileId(combatantId);
+    if (profileId !== SHARON_PROFILE_ID) {
+      return;
+    }
+
+    const expectedTeamRaw =
+      typeof options?.expectedTeam === 'string'
+        ? options.expectedTeam
+        : typeof currentTurnTeam === 'string'
+        ? currentTurnTeam
+        : null;
+    if (!expectedTeamRaw) {
+      return;
+    }
+
+    const expectedTeam = normalizeCombatTeam(expectedTeamRaw);
+    if (expectedTeam !== 'enemy') {
+      return;
+    }
+
+    const isFirstTurnOfRound = Boolean(options?.isFirstTurnOfRound);
+    if (isFirstTurnOfRound) {
+      return;
+    }
+
+    const previousTeamRaw =
+      typeof options?.previousTeam === 'string'
+        ? options.previousTeam
+        : typeof lastActingTeam === 'string'
+        ? lastActingTeam
+        : null;
+    if (!previousTeamRaw) {
+      return;
+    }
+
+    const previousTeam = normalizeCombatTeam(previousTeamRaw);
+    if (previousTeam !== 'ally') {
+      return;
+    }
+
+    showHesitationPopup();
+    announceToChat('HESITATION IS WEAKNESS!');
   }
 
   function attachBoardTokenHover(tokenElement, tokenId) {
