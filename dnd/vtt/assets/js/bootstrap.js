@@ -9,6 +9,7 @@ import { mountSettingsPanel } from './ui/settings-panel.js';
 import { mountChatPanel } from './ui/chat-panel.js';
 import { mountBoardInteractions } from './ui/board-interactions.js';
 import { mountDragRuler } from './ui/drag-ruler.js';
+import { mountDiceRoller } from './ui/dice-roller.js';
 import { fetchScenes } from './services/scene-service.js';
 import { fetchTokens } from './services/token-service.js';
 
@@ -33,6 +34,7 @@ async function bootstrap() {
   mountChatPanel(routes, userContext, chatParticipants);
   mountBoardInteractions({ getState, subscribe, updateState }, routes);
   mountDragRuler();
+  mountDiceRoller();
 
   await hydrateFromServer(routes);
 }
