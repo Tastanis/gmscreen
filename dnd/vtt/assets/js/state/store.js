@@ -263,7 +263,14 @@ function normalizeSceneBoardState(raw = {}) {
     }
 
     const grid = normalizeGridState(value.grid ?? value);
-    normalized[key] = { grid };
+    const combat = normalizeCombatStateEntry(value.combat ?? value.combatState ?? null);
+    const entry = { grid };
+
+    if (combat) {
+      entry.combat = combat;
+    }
+
+    normalized[key] = entry;
   });
 
   return normalized;
@@ -279,6 +286,123 @@ function normalizeGridState(raw = {}) {
     locked: Boolean(raw.locked),
     visible: raw.visible === undefined ? true : Boolean(raw.visible),
   };
+}
+
+function normalizeCombatStateEntry(raw = {}) {
+  if (!raw || typeof raw !== 'object') {
+    return null;
+  }
+
+  const active = Boolean(raw.active ?? raw.isActive);
+  const round = Math.max(0, toInt(raw.round, 0));
+  const activeCombatantId = typeof raw.activeCombatantId === 'string' ? raw.activeCombatantId.trim() : '';
+  const completedCombatantIds = uniqueStringList(raw.completedCombatantIds ?? []);
+  const startingTeam = normalizeCombatTeamValue(raw.startingTeam ?? raw.initialTeam ?? null);
+  const currentTeam = normalizeCombatTeamValue(raw.currentTeam ?? raw.activeTeam ?? null);
+  const lastTeam = normalizeCombatTeamValue(raw.lastTeam ?? raw.previousTeam ?? null);
+  const roundTurnCount = Math.max(0, toInt(raw.roundTurnCount, 0));
+  const turnLock = normalizeTurnLockEntry(raw.turnLock ?? null);
+  const hasTimestamp = Number.isFinite(Number(raw.updatedAt));
+  const hasMeaningfulState =
+    active ||
+    round > 0 ||
+    Boolean(activeCombatantId) ||
+    completedCombatantIds.length > 0 ||
+    Boolean(startingTeam) ||
+    Boolean(currentTeam) ||
+    Boolean(lastTeam) ||
+    roundTurnCount > 0 ||
+    Boolean(turnLock);
+
+  if (!hasMeaningfulState && !hasTimestamp) {
+    return null;
+  }
+
+  return {
+    active,
+    round,
+    activeCombatantId: activeCombatantId || null,
+    completedCombatantIds,
+    startingTeam,
+    currentTeam,
+    lastTeam,
+    roundTurnCount,
+    updatedAt: Math.max(0, toInt(raw.updatedAt, Date.now())),
+    turnLock,
+  };
+}
+
+function normalizeCombatTeamValue(value) {
+  if (typeof value !== 'string') {
+    return null;
+  }
+
+  const normalized = value.trim().toLowerCase();
+  if (normalized === 'ally' || normalized === 'enemy') {
+    return normalized;
+  }
+
+  return null;
+}
+
+function normalizeTurnLockEntry(raw) {
+  if (!raw || typeof raw !== 'object') {
+    return null;
+  }
+
+  const holderId = typeof raw.holderId === 'string' ? raw.holderId.trim().toLowerCase() : '';
+  if (!holderId) {
+    return null;
+  }
+
+  const holderName = typeof raw.holderName === 'string' ? raw.holderName.trim() : '';
+  const combatantId = typeof raw.combatantId === 'string' ? raw.combatantId.trim() : '';
+
+  return {
+    holderId,
+    holderName: holderName || holderId,
+    combatantId: combatantId || null,
+    lockedAt: Math.max(0, toInt(raw.lockedAt, Date.now())),
+  };
+}
+
+function uniqueStringList(raw = []) {
+  if (!Array.isArray(raw)) {
+    return [];
+  }
+
+  const seen = new Set();
+  const result = [];
+
+  raw.forEach((value) => {
+    if (typeof value !== 'string') {
+      return;
+    }
+
+    const trimmed = value.trim();
+    if (!trimmed || seen.has(trimmed)) {
+      return;
+    }
+
+    seen.add(trimmed);
+    result.push(trimmed);
+  });
+
+  return result;
+}
+
+function toInt(value, fallback = 0) {
+  const parsed = Number.parseInt(value, 10);
+  if (Number.isFinite(parsed)) {
+    return parsed;
+  }
+
+  const numeric = Number(value);
+  if (Number.isFinite(numeric)) {
+    return Math.trunc(numeric);
+  }
+
+  return Math.trunc(fallback);
 }
 
 function applySceneGridState(state) {
