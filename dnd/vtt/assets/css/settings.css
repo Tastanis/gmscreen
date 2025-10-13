@@ -600,6 +600,7 @@
 .token-context-menu__actions {
   display: flex;
   justify-content: flex-end;
+  gap: 0.5rem;
 }
 
 .token-context-menu__feedback {
