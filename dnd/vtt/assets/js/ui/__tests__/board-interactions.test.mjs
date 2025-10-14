@@ -245,3 +245,74 @@ test('Sharon confirmation is required for other allies but triggers Hesitation b
     dom.window.close();
   }
 });
+
+test('Sharon hesitation broadcast from shared combat state shows banner for observers', () => {
+  const dom = createDom();
+  try {
+    const { window } = dom;
+    const { document } = window;
+
+    const state = {
+      user: { isGM: false, name: 'Indigo' },
+      boardState: {
+        activeSceneId: 'scene-2',
+        mapUrl: 'http://example.com/map.png',
+        placements: {
+          'scene-2': [
+            {
+              id: 'sharon-token',
+              column: 3,
+              row: 4,
+              width: 1,
+              height: 1,
+              name: 'Sharon',
+              combatTeam: 'ally',
+              profileId: 'sharon',
+            },
+          ],
+        },
+        sceneState: {
+          'scene-2': {
+            combat: {
+              active: true,
+              round: 3,
+              activeCombatantId: 'enemy-7',
+              completedCombatantIds: [],
+              startingTeam: 'ally',
+              currentTeam: 'enemy',
+              lastTeam: 'ally',
+              roundTurnCount: 2,
+              updatedAt: 1_700_000_005_000,
+              lastEffect: {
+                type: 'sharon-hesitation',
+                combatantId: 'sharon-token',
+                triggeredAt: 1_700_000_000_000,
+                initiatorId: 'sharon',
+              },
+            },
+          },
+        },
+      },
+      scenes: { items: [{ id: 'scene-2', name: 'Scene Two' }] },
+      grid: { size: 64, visible: true },
+    };
+
+    const store = createMockStore(state);
+
+    mountBoardInteractions(store, { state: '/state' });
+
+    const mapImage = document.getElementById('vtt-map-image');
+    Object.defineProperty(mapImage, 'naturalWidth', { value: 1024, configurable: true });
+    Object.defineProperty(mapImage, 'naturalHeight', { value: 768, configurable: true });
+    mapImage.onload?.();
+
+    const banner = document.querySelector('.vtt-hesitation-banner');
+    assert.ok(
+      banner,
+      'Hesitation banner should appear for observers when combat state broadcasts Sharon’s effect'
+    );
+    assert.equal(banner.textContent, 'HESITATION IS WEAKNESS!');
+  } finally {
+    dom.window.close();
+  }
+});

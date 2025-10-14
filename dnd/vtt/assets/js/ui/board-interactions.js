@@ -145,6 +145,9 @@ export function mountBoardInteractions(store, routes = {}) {
   let allyTurnTimerExpiresAt = null;
   let currentTurnTimerStage = null;
   let audioContext = null;
+  let lastTurnEffect = null;
+  let lastTurnEffectSignature = null;
+  let lastProcessedTurnEffectSignature = null;
   // Sand timer artwork is resolved via CSS data-stage attributes using
   // assets/images/turn-timer/sand-timer-{stage}.png.
   const SOUND_PROFILES = {
@@ -3064,6 +3067,7 @@ export function mountBoardInteractions(store, routes = {}) {
     roundTurnCount = 0;
     closeTurnPrompt();
     setActiveCombatantId(null);
+    resetTurnEffects();
     const initialTeam = rollForInitiativeAnnouncement() ?? 'enemy';
     startingCombatTeam = initialTeam;
     currentTurnTeam = initialTeam;
@@ -3098,6 +3102,7 @@ export function mountBoardInteractions(store, routes = {}) {
     stopAllyTurnTimer();
     clearTurnBorderFlash();
     clearHesitationBanner();
+    resetTurnEffects();
     resetTriggeredActionsForActiveScene();
     updateStartCombatButton();
     refreshCombatTracker();
@@ -3200,6 +3205,11 @@ export function mountBoardInteractions(store, routes = {}) {
       combatStateVersion = appliedVersion;
       const snapshot = { ...normalized, updatedAt: appliedVersion };
       lastCombatStateSnapshot = JSON.stringify(snapshot);
+      if (normalized.lastEffect) {
+        applyTurnEffectFromState(normalized.lastEffect);
+      } else if (lastTurnEffect) {
+        resetTurnEffects();
+      }
     } finally {
       suppressCombatStateSync = false;
     }
@@ -3224,6 +3234,7 @@ export function mountBoardInteractions(store, routes = {}) {
     const updatedAtRaw = Number(raw?.updatedAt);
     const updatedAt = Number.isFinite(updatedAtRaw) ? Math.max(0, Math.trunc(updatedAtRaw)) : 0;
     const turnLock = normalizeTurnLock(raw?.turnLock ?? null);
+    const lastEffect = normalizeTurnEffect(raw?.lastEffect ?? raw?.lastEvent ?? null);
 
     return {
       active,
@@ -3236,7 +3247,93 @@ export function mountBoardInteractions(store, routes = {}) {
       roundTurnCount,
       updatedAt,
       turnLock,
+      lastEffect,
     };
+  }
+
+  function resetTurnEffects() {
+    lastTurnEffect = null;
+    lastTurnEffectSignature = null;
+    lastProcessedTurnEffectSignature = null;
+  }
+
+  function recordTurnEffect(effect) {
+    const normalized = normalizeTurnEffect(effect);
+    if (!normalized) {
+      return;
+    }
+    lastTurnEffect = normalized;
+    lastTurnEffectSignature = getTurnEffectSignature(normalized);
+    lastProcessedTurnEffectSignature = lastTurnEffectSignature;
+  }
+
+  function applyTurnEffectFromState(effect) {
+    const normalized = normalizeTurnEffect(effect);
+    if (!normalized) {
+      return;
+    }
+    const signature = getTurnEffectSignature(normalized);
+    if (signature && signature === lastProcessedTurnEffectSignature) {
+      if (signature !== lastTurnEffectSignature) {
+        lastTurnEffect = normalized;
+        lastTurnEffectSignature = signature;
+      }
+      return;
+    }
+
+    lastTurnEffect = normalized;
+    lastTurnEffectSignature = signature;
+    lastProcessedTurnEffectSignature = signature;
+
+    if (normalized.type === 'sharon-hesitation') {
+      showHesitationPopup();
+    }
+  }
+
+  function normalizeTurnEffect(raw) {
+    if (!raw || typeof raw !== 'object') {
+      return null;
+    }
+
+    const typeRaw = typeof raw.type === 'string' ? raw.type.trim().toLowerCase() : '';
+    if (!typeRaw) {
+      return null;
+    }
+
+    const combatantId = typeof raw.combatantId === 'string' ? raw.combatantId.trim() : '';
+    const triggeredAtSource =
+      raw.triggeredAt ?? raw.timestamp ?? raw.updatedAt ?? raw.time ?? raw.occurredAt ?? null;
+    const triggeredAtRaw = Number(triggeredAtSource);
+    const triggeredAt = Number.isFinite(triggeredAtRaw) ? Math.max(0, Math.trunc(triggeredAtRaw)) : Date.now();
+    const initiatorId = normalizeProfileId(raw.initiatorId ?? raw.profileId ?? null);
+
+    const effect = {
+      type: typeRaw,
+      triggeredAt,
+    };
+
+    if (combatantId) {
+      effect.combatantId = combatantId;
+    }
+
+    if (initiatorId) {
+      effect.initiatorId = initiatorId;
+    }
+
+    return effect;
+  }
+
+  function getTurnEffectSignature(effect) {
+    if (!effect || typeof effect !== 'object') {
+      return '';
+    }
+
+    const type = typeof effect.type === 'string' ? effect.type.trim().toLowerCase() : '';
+    const combatantId = typeof effect.combatantId === 'string' ? effect.combatantId.trim() : '';
+    const triggeredAtRaw = Number(effect.triggeredAt);
+    const triggeredAt = Number.isFinite(triggeredAtRaw) ? Math.max(0, Math.trunc(triggeredAtRaw)) : 0;
+
+    return `${type}:${combatantId}:${triggeredAt}`;
   }
 
   function normalizeTurnLock(raw) {
@@ -3281,6 +3378,7 @@ export function mountBoardInteractions(store, routes = {}) {
     const completed = Array.from(completedCombatants).filter((id) => typeof id === 'string' && id);
     const uniqueCompleted = Array.from(new Set(completed));
     const timestamp = Date.now();
+    const effectSnapshot = lastTurnEffect ? { ...lastTurnEffect } : null;
 
     return {
       active: Boolean(combatActive),
@@ -3293,6 +3391,7 @@ export function mountBoardInteractions(store, routes = {}) {
       roundTurnCount: Math.max(0, Math.trunc(roundTurnCount)),
       updatedAt: timestamp,
       turnLock: serializeTurnLockState(),
+      lastEffect: effectSnapshot,
     };
   }
 
@@ -3343,6 +3442,7 @@ export function mountBoardInteractions(store, routes = {}) {
       sceneStateEntry.combat = {
         ...snapshot,
         completedCombatantIds: [...snapshot.completedCombatantIds],
+        lastEffect: snapshot.lastEffect ? { ...snapshot.lastEffect } : null,
       };
     });
 
@@ -4085,6 +4185,11 @@ export function mountBoardInteractions(store, routes = {}) {
       return;
     }
 
+    recordTurnEffect({
+      type: 'sharon-hesitation',
+      combatantId,
+      triggeredAt: Date.now(),
+    });
     showHesitationPopup();
     announceToChat('HESITATION IS WEAKNESS!');
   }
