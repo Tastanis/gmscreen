@@ -120,6 +120,7 @@ export function mountBoardInteractions(store, routes = {}) {
   let combatRound = 0;
   let activeCombatantId = null;
   let highlightedCombatantId = null;
+  let focusedCombatantId = null;
   let pendingRoundConfirmation = false;
   let activeConditionPrompt = null;
   let activeTurnDialog = null;
@@ -2320,6 +2321,51 @@ export function mountBoardInteractions(store, routes = {}) {
     highlightBoardTokensForCombatant(combatantId, shouldHighlight);
   }
 
+  function setFocusedCombatantId(nextId) {
+    const normalized = typeof nextId === 'string' && nextId ? nextId : null;
+
+    if (focusedCombatantId === normalized) {
+      return;
+    }
+
+    if (focusedCombatantId) {
+      highlightTrackerToken(focusedCombatantId, false);
+      if (focusedCombatantId !== activeCombatantId) {
+        highlightBoardTokensForCombatant(focusedCombatantId, false);
+      }
+    }
+
+    focusedCombatantId = normalized;
+
+    if (normalized) {
+      highlightTrackerToken(normalized, true);
+      if (normalized !== activeCombatantId) {
+        highlightBoardTokensForCombatant(normalized, true);
+      }
+    }
+  }
+
+  function focusCombatTrackerEntry(target) {
+    if (!(target instanceof HTMLElement)) {
+      return;
+    }
+
+    const combatantId = target.dataset.combatantId || '';
+    if (!combatantId) {
+      return;
+    }
+
+    setFocusedCombatantId(combatantId);
+
+    if (typeof target.focus === 'function') {
+      try {
+        target.focus({ preventScroll: true });
+      } catch (error) {
+        target.focus();
+      }
+    }
+  }
+
   function applyCombatantStateToNode(node, representativeId) {
     if (!(node instanceof HTMLElement)) {
       return;
@@ -2367,6 +2413,10 @@ export function mountBoardInteractions(store, routes = {}) {
     }
     const nextTeam = normalizedNextId ? getCombatantTeam(normalizedNextId) : null;
 
+    if (focusedCombatantId) {
+      setFocusedCombatantId(null);
+    }
+
     if (highlightedCombatantId && highlightedCombatantId !== normalizedNextId) {
       highlightBoardTokensForCombatant(highlightedCombatantId, false);
     }
@@ -2390,7 +2440,7 @@ export function mountBoardInteractions(store, routes = {}) {
       return;
     }
     event.preventDefault();
-    processCombatantActivation(target);
+    focusCombatTrackerEntry(target);
   }
 
   function handleCombatTrackerDoubleClick(event) {
@@ -2402,23 +2452,17 @@ export function mountBoardInteractions(store, routes = {}) {
       return;
     }
     event.preventDefault();
+    if (isGmUser()) {
+      processCombatantActivation(target);
+      return;
+    }
+
     const combatantId = target.dataset.combatantId || '';
     if (!combatantId) {
       return;
     }
 
     const context = buildTurnContext(combatantId);
-
-    if (isGmUser()) {
-      beginCombatantTurn(combatantId, {
-        initiatorProfileId: getCurrentUserId(),
-        expectedTeam: context.expectedTeam,
-        previousTeam: context.previousTeam,
-        isFirstTurnOfRound: context.isFirstTurnOfRound,
-      });
-      return;
-    }
-
     handlePlayerInitiatedTurn(combatantId, context);
   }
 
@@ -2441,6 +2485,7 @@ export function mountBoardInteractions(store, routes = {}) {
     if (!combatActive || !target) {
       return;
     }
+    setFocusedCombatantId(null);
     const combatantId = target.dataset.combatantId || '';
     if (!combatantId) {
       return;
