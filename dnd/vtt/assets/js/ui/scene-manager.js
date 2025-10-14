@@ -14,9 +14,12 @@ export function renderSceneList(routes, store) {
   const folderSelect = document.querySelector('[data-scene-folder-select]');
   const feedback = document.querySelector('[data-scene-feedback]');
   const folderButtons = document.querySelectorAll('[data-action="create-folder"]');
+  const overlayInput = document.getElementById('vtt-overlay-upload-input');
 
   const stateApi = store ?? {};
   const endpoints = routes ?? {};
+  let overlayUploadTargetSceneId = null;
+  let overlayUploadPending = false;
 
   if (!endpoints.scenes) {
     folderButtons.forEach((button) => {
@@ -40,7 +43,11 @@ export function renderSceneList(routes, store) {
     container.innerHTML = buildSceneMarkup(
       sceneState,
       state.boardState?.activeSceneId ?? null,
-      boardSceneState
+      boardSceneState,
+      {
+        overlayUploadsEnabled: Boolean(overlayInput && endpoints.uploads),
+        overlayUploadPending,
+      }
     );
   };
 
@@ -105,42 +112,24 @@ export function renderSceneList(routes, store) {
       }
 
       if ((currentState.boardState?.activeSceneId ?? null) !== sceneId) {
-        showFeedback(feedback, 'Activate the scene before duplicating its overlay.', 'error');
+        showFeedback(feedback, 'Activate the scene before uploading an overlay.', 'error');
         return;
       }
 
-      const mapUrl = typeof scene.mapUrl === 'string' ? scene.mapUrl.trim() : '';
-      if (!mapUrl) {
-        showFeedback(feedback, 'Upload a map before creating an overlay.', 'error');
+      if (!overlayInput || !endpoints.uploads) {
+        showFeedback(feedback, 'Overlay uploads are unavailable right now.', 'error');
         return;
       }
 
-      let overlayUpdated = false;
-      stateApi.updateState?.((draft) => {
-        ensureSceneDraft(draft);
-        const boardDraft = ensureBoardStateDraft(draft);
-        const sceneBoardState = ensureSceneBoardStateEntry(
-          boardDraft,
-          scene.id,
-          scene.grid ?? null
-        );
-        if (!sceneBoardState) {
-          return;
-        }
-        const nextOverlay = normalizeOverlayConfig(sceneBoardState.overlay ?? {});
-        if (nextOverlay.mapUrl !== mapUrl) {
-          nextOverlay.mapUrl = mapUrl;
-          overlayUpdated = true;
-        }
-        sceneBoardState.overlay = nextOverlay;
-      });
-
-      if (overlayUpdated) {
-        persistBoardStateSnapshot();
-        showFeedback(feedback, 'Overlay duplicated from the active map.', 'success');
-      } else {
-        showFeedback(feedback, 'Overlay already matches the active map.', 'info');
+      if (overlayUploadPending) {
+        showFeedback(feedback, 'An overlay upload is already in progress.', 'info');
+        return;
       }
+
+      overlayUploadTargetSceneId = sceneId;
+      overlayInput.value = '';
+      overlayInput.click();
+      return;
     }
 
     if (action === 'remove-overlay' && sceneId) {
@@ -203,6 +192,71 @@ export function renderSceneList(routes, store) {
       } finally {
         target.disabled = false;
       }
+    }
+  });
+
+  overlayInput?.addEventListener('change', async () => {
+    const file = overlayInput.files?.[0] ?? null;
+    overlayInput.value = '';
+    const targetSceneId = overlayUploadTargetSceneId;
+    overlayUploadTargetSceneId = null;
+
+    if (!file) {
+      return;
+    }
+
+    if (!endpoints.uploads) {
+      showFeedback(feedback, 'Overlay uploads are unavailable right now.', 'error');
+      return;
+    }
+
+    if (!targetSceneId) {
+      showFeedback(feedback, 'No scene selected for overlay upload.', 'error');
+      return;
+    }
+
+    overlayUploadPending = true;
+    render(stateApi.getState?.());
+
+    try {
+      const url = await uploadOverlayAsset(file, endpoints.uploads);
+      if (!url) {
+        throw new Error('Upload endpoint returned no URL.');
+      }
+
+      let overlayUpdated = false;
+      stateApi.updateState?.((draft) => {
+        ensureSceneDraft(draft);
+        const boardDraft = ensureBoardStateDraft(draft);
+        const sceneBoardState = ensureSceneBoardStateEntry(boardDraft, targetSceneId, null);
+        if (!sceneBoardState) {
+          return;
+        }
+
+        const nextOverlay = normalizeOverlayConfig(sceneBoardState.overlay ?? {});
+        nextOverlay.mapUrl = url;
+        nextOverlay.mask = createEmptyOverlayMask();
+        sceneBoardState.overlay = nextOverlay;
+
+        if (boardDraft.activeSceneId === targetSceneId) {
+          boardDraft.overlay = normalizeOverlayConfig(nextOverlay);
+        }
+
+        overlayUpdated = true;
+      });
+
+      if (!overlayUpdated) {
+        throw new Error('Unable to apply overlay to the selected scene.');
+      }
+
+      persistBoardStateSnapshot();
+      showFeedback(feedback, 'Overlay uploaded successfully.', 'success');
+    } catch (error) {
+      console.error('[VTT] Failed to upload overlay', error);
+      showFeedback(feedback, error?.message || 'Unable to upload overlay.', 'error');
+    } finally {
+      overlayUploadPending = false;
+      render(stateApi.getState?.());
     }
   });
 
@@ -479,7 +533,7 @@ function updateFolderOptions(select, folders = []) {
   select.value = folders.some((folder) => folder.id === current) ? current : '';
 }
 
-function buildSceneMarkup(sceneState, activeSceneId, boardSceneState = {}) {
+function buildSceneMarkup(sceneState, activeSceneId, boardSceneState = {}, options = {}) {
   if (!sceneState.items.length) {
     return '<p class="empty-state">No scenes saved yet. Upload a map and save your first scene.</p>';
   }
@@ -511,7 +565,9 @@ function buildSceneMarkup(sceneState, activeSceneId, boardSceneState = {}) {
         </header>
         <div class="scene-group__body">
           ${group.scenes
-            .map((scene) => renderSceneItem(scene, activeSceneId, boardSceneState[scene.id] ?? {}))
+            .map((scene) =>
+              renderSceneItem(scene, activeSceneId, boardSceneState[scene.id] ?? {}, options)
+            )
             .join('')}
         </div>
       </section>
@@ -521,13 +577,22 @@ function buildSceneMarkup(sceneState, activeSceneId, boardSceneState = {}) {
   return `<div class="scene-list">${markup}</div>`;
 }
 
-function renderSceneItem(scene, activeSceneId, sceneBoardState = {}) {
+function renderSceneItem(scene, activeSceneId, sceneBoardState = {}, options = {}) {
   const isActive = scene.id === activeSceneId;
   const name = escapeHtml(scene.name || 'Untitled Scene');
   const overlayState = normalizeOverlayConfig(sceneBoardState.overlay ?? {});
   const hasOverlay = Boolean(overlayState.mapUrl) || Object.keys(overlayState.mask).length > 0;
-  const isActiveScene = isActive;
-  const hasMap = typeof scene.mapUrl === 'string' && scene.mapUrl.trim() !== '';
+  const overlayUploadsEnabled = Boolean(options.overlayUploadsEnabled);
+  const overlayUploadPending = Boolean(options.overlayUploadPending);
+  const overlayButtonDisabled = !isActive || !overlayUploadsEnabled || overlayUploadPending;
+  let overlayButtonTitle = '';
+  if (!overlayUploadsEnabled) {
+    overlayButtonTitle = 'Overlay uploads are not available right now.';
+  } else if (!isActive) {
+    overlayButtonTitle = 'Activate this scene to upload an overlay.';
+  } else if (overlayUploadPending) {
+    overlayButtonTitle = 'An overlay upload is already in progress.';
+  }
   return `
     <article class="scene-item${isActive ? ' is-active' : ''}" data-scene-id="${scene.id}">
       ${renderScenePreview(scene, scene.name)}
@@ -543,9 +608,10 @@ function renderSceneItem(scene, activeSceneId, sceneBoardState = {}) {
             class="btn"
             data-action="create-overlay"
             data-scene-id="${scene.id}"
-            ${isActiveScene && hasMap ? '' : 'disabled'}
+            ${overlayButtonDisabled ? 'disabled' : ''}
+            ${overlayButtonTitle ? ` title="${escapeHtml(overlayButtonTitle)}"` : ''}
           >
-            Duplicate Overlay
+            Upload Overlay
           </button>
           <button
             type="button"
@@ -604,5 +670,36 @@ function setFormPending(form, isPending) {
   const submit = form.querySelector('[type="submit"]');
   if (submit) {
     submit.disabled = isPending;
+  }
+}
+
+async function uploadOverlayAsset(file, endpoint) {
+  const formData = new FormData();
+  formData.append('map', file, file.name);
+
+  const response = await fetch(endpoint, {
+    method: 'POST',
+    body: formData,
+  });
+
+  if (!response.ok) {
+    const message = await readUploadError(response);
+    throw new Error(message || `Upload failed with status ${response.status}`);
+  }
+
+  const payload = await response.json();
+  if (!payload.success) {
+    throw new Error(payload.error || 'Upload failed');
+  }
+
+  return payload.data?.url ?? null;
+}
+
+async function readUploadError(response) {
+  try {
+    const payload = await response.json();
+    return payload.error ?? '';
+  } catch (error) {
+    return '';
   }
 }
