@@ -43,6 +43,12 @@ function renderVttSettingsPanel(string $tokenLibraryMarkup = '', bool $isGm = fa
                                 type="file"
                                 accept="image/*"
                             />
+                            <input
+                                id="vtt-overlay-upload-input"
+                                class="visually-hidden"
+                                type="file"
+                                accept="image/*"
+                            />
                             <div class="scene-controls__buttons">
                                 <button class="btn btn--primary" type="button" data-action="upload-map">Upload Map</button>
                                 <button class="btn" type="button" data-action="toggle-grid">Toggle Grid</button>
