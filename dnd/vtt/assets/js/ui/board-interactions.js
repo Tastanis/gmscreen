@@ -3148,13 +3148,20 @@ export function mountBoardInteractions(store, routes = {}) {
 
   function applyCombatStateFromBoardState(state = {}) {
     const boardState = state?.boardState ?? {};
-    const activeSceneId = typeof boardState.activeSceneId === 'string' ? boardState.activeSceneId : null;
-    if (!activeSceneId) {
+    const activeSceneIdRaw = boardState.activeSceneId;
+    const activeSceneId =
+      typeof activeSceneIdRaw === 'string'
+        ? activeSceneIdRaw
+        : activeSceneIdRaw != null
+        ? String(activeSceneIdRaw)
+        : '';
+    const activeSceneKey = activeSceneId.trim();
+    if (!activeSceneKey) {
       return;
     }
 
     const sceneState = boardState.sceneState && typeof boardState.sceneState === 'object' ? boardState.sceneState : {};
-    const combatState = sceneState[activeSceneId]?.combat ?? {};
+    const combatState = sceneState[activeSceneKey]?.combat ?? {};
     const normalized = normalizeCombatState(combatState);
 
     if (normalized.updatedAt && normalized.updatedAt <= combatStateVersion) {
