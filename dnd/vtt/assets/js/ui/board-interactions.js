@@ -2672,6 +2672,7 @@ export function mountBoardInteractions(store, routes = {}) {
     overlay.className = 'vtt-turn-overlay';
     overlay.innerHTML = `
       <div class="vtt-turn-dialog" role="dialog" data-turn-dialog>
+        <div class="vtt-turn-dialog__handle" data-turn-drag-handle aria-hidden="true"></div>
         <h3 class="vtt-turn-dialog__title">${escapeHtml(heading)}</h3>
         <div class="vtt-turn-dialog__actions">
           <button type="button" class="btn" data-turn-cancel>Cancel</button>
@@ -2685,6 +2686,16 @@ export function mountBoardInteractions(store, routes = {}) {
 
     const cancelButton = overlay.querySelector('[data-turn-cancel]');
     const completeButton = overlay.querySelector('[data-turn-complete]');
+    const dragHandle = overlay.querySelector('[data-turn-drag-handle]');
+
+    let dragState = null;
+    let hasDragged = false;
+
+    const cleanupDragListeners = () => {
+      window.removeEventListener('pointermove', handlePointerMove);
+      window.removeEventListener('pointerup', handlePointerUp);
+      window.removeEventListener('pointercancel', handlePointerUp);
+    };
 
     const handleCancel = () => {
       closeTurnPrompt();
@@ -2703,13 +2714,110 @@ export function mountBoardInteractions(store, routes = {}) {
     };
 
     const handleResize = () => {
+      if (hasDragged) {
+        const margin = 12;
+        const rect = overlay.getBoundingClientRect();
+        const viewportWidth = window.innerWidth || document.documentElement.clientWidth || 0;
+        const viewportHeight = window.innerHeight || document.documentElement.clientHeight || 0;
+        const maxLeft = viewportWidth ? viewportWidth - rect.width - margin : -margin;
+        const maxTop = viewportHeight ? viewportHeight - rect.height - margin : -margin;
+        const nextLeft = clamp(rect.left, margin, maxLeft);
+        const nextTop = clamp(rect.top, margin, maxTop);
+        overlay.style.left = `${nextLeft}px`;
+        overlay.style.top = `${nextTop}px`;
+        overlay.style.right = 'auto';
+        overlay.style.bottom = 'auto';
+        overlay.style.transform = 'none';
+        return;
+      }
       positionTurnPromptOverlay(overlay);
+    };
+
+    const handlePointerDown = (event) => {
+      if (!dragHandle || !overlay) {
+        return;
+      }
+      if (typeof event?.button === 'number' && event.button !== 0 && event.pointerType !== 'touch') {
+        return;
+      }
+      event.preventDefault();
+      const rect = overlay.getBoundingClientRect();
+      dragState = {
+        pointerId: event.pointerId,
+        offsetX: event.clientX - rect.left,
+        offsetY: event.clientY - rect.top,
+        width: rect.width,
+        height: rect.height,
+      };
+      hasDragged = true;
+      if (activeTurnDialog) {
+        activeTurnDialog.dragPointerId = event.pointerId;
+        activeTurnDialog.hasDragged = true;
+      }
+      overlay.style.left = `${rect.left}px`;
+      overlay.style.top = `${rect.top}px`;
+      overlay.style.right = 'auto';
+      overlay.style.bottom = 'auto';
+      overlay.style.transform = 'none';
+      dragHandle.classList.add('is-dragging');
+      overlay.classList.add('is-dragging');
+      if (typeof dragHandle.setPointerCapture === 'function') {
+        try {
+          dragHandle.setPointerCapture(event.pointerId);
+        } catch (error) {
+          // Ignore pointer capture errors on unsupported devices
+        }
+      }
+      window.addEventListener('pointermove', handlePointerMove);
+      window.addEventListener('pointerup', handlePointerUp);
+      window.addEventListener('pointercancel', handlePointerUp);
+    };
+
+    const handlePointerMove = (event) => {
+      if (!dragState || event.pointerId !== dragState.pointerId) {
+        return;
+      }
+      event.preventDefault();
+      const margin = 12;
+      const viewportWidth = window.innerWidth || document.documentElement.clientWidth || 0;
+      const viewportHeight = window.innerHeight || document.documentElement.clientHeight || 0;
+      const width = overlay.offsetWidth || dragState.width || 0;
+      const height = overlay.offsetHeight || dragState.height || 0;
+      const maxLeft = viewportWidth ? viewportWidth - width - margin : -margin;
+      const maxTop = viewportHeight ? viewportHeight - height - margin : -margin;
+      const nextLeft = clamp(event.clientX - dragState.offsetX, margin, maxLeft);
+      const nextTop = clamp(event.clientY - dragState.offsetY, margin, maxTop);
+      overlay.style.left = `${nextLeft}px`;
+      overlay.style.top = `${nextTop}px`;
+      overlay.style.right = 'auto';
+      overlay.style.bottom = 'auto';
+      overlay.style.transform = 'none';
+    };
+
+    const handlePointerUp = (event) => {
+      if (dragState && event.pointerId === dragState.pointerId) {
+        dragHandle.classList.remove('is-dragging');
+        overlay.classList.remove('is-dragging');
+        if (typeof dragHandle.releasePointerCapture === 'function') {
+          try {
+            dragHandle.releasePointerCapture(event.pointerId);
+          } catch (error) {
+            // Ignore release errors on unsupported devices
+          }
+        }
+        dragState = null;
+        if (activeTurnDialog) {
+          activeTurnDialog.dragPointerId = null;
+        }
+      }
+      cleanupDragListeners();
     };
 
     cancelButton?.addEventListener('click', handleCancel);
     completeButton?.addEventListener('click', handleComplete);
     document.addEventListener('keydown', handleKeydown);
     window.addEventListener('resize', handleResize);
+    dragHandle?.addEventListener('pointerdown', handlePointerDown);
 
     activeTurnDialog = {
       overlay,
@@ -2719,6 +2827,13 @@ export function mountBoardInteractions(store, routes = {}) {
       handleComplete,
       handleKeydown,
       handleResize,
+      dragHandle,
+      handlePointerDown,
+      handlePointerMove,
+      handlePointerUp,
+      cleanupDragListeners,
+      dragPointerId: null,
+      hasDragged,
       combatantId,
     };
 
@@ -2773,7 +2888,21 @@ export function mountBoardInteractions(store, routes = {}) {
       return;
     }
 
-    const { overlay, cancelButton, completeButton, handleCancel, handleComplete, handleKeydown, handleResize } =
+    const {
+      overlay,
+      cancelButton,
+      completeButton,
+      handleCancel,
+      handleComplete,
+      handleKeydown,
+      handleResize,
+      dragHandle,
+      handlePointerDown,
+      handlePointerMove,
+      handlePointerUp,
+      cleanupDragListeners,
+      dragPointerId,
+    } =
       activeTurnDialog;
 
     cancelButton?.removeEventListener('click', handleCancel);
@@ -2782,6 +2911,27 @@ export function mountBoardInteractions(store, routes = {}) {
     if (typeof handleResize === 'function') {
       window.removeEventListener('resize', handleResize);
     }
+    if (dragHandle && typeof handlePointerDown === 'function') {
+      dragHandle.removeEventListener('pointerdown', handlePointerDown);
+    }
+    if (typeof cleanupDragListeners === 'function') {
+      cleanupDragListeners();
+    } else {
+      window.removeEventListener('pointermove', handlePointerMove);
+      window.removeEventListener('pointerup', handlePointerUp);
+      window.removeEventListener('pointercancel', handlePointerUp);
+    }
+    if (dragHandle && typeof dragPointerId === 'number') {
+      if (typeof dragHandle.releasePointerCapture === 'function') {
+        try {
+          dragHandle.releasePointerCapture(dragPointerId);
+        } catch (error) {
+          // Ignore release issues for unsupported devices
+        }
+      }
+      dragHandle.classList.remove('is-dragging');
+    }
+    overlay?.classList.remove('is-dragging');
     overlay?.remove();
     activeTurnDialog = null;
   }
