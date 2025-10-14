@@ -1,5 +1,11 @@
 {
+  "scripts": {
+    "test": "node --test dnd/vtt/assets/js/ui/__tests__/board-interactions.test.mjs"
+  },
   "dependencies": {
     "playwright": "^1.55.0"
+  },
+  "devDependencies": {
+    "jsdom": "^24.0.0"
   }
 }
