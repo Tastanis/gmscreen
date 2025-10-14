@@ -3507,8 +3507,8 @@ export function mountBoardInteractions(store, routes = {}) {
       return;
     }
 
-    const ownerProfile = getCombatantProfileId(combatantId);
-    if (!ownerProfile || ownerProfile !== userId) {
+    const team = getCombatantTeam(combatantId);
+    if (team !== 'ally') {
       return;
     }
 
@@ -3517,14 +3517,10 @@ export function mountBoardInteractions(store, routes = {}) {
       return;
     }
 
-    const team = getCombatantTeam(combatantId);
-    if (team !== 'ally') {
-      return;
-    }
-
     const expectedTeam = context.expectedTeam ?? currentTurnTeam ?? team;
     const wasEnemyExpected = normalizeCombatTeam(expectedTeam) === 'enemy';
-    const isSharon = ownerProfile === SHARON_PROFILE_ID;
+    const isSharon = userId === SHARON_PROFILE_ID;
+    const initiatorName = getCurrentUserName();
 
     if (wasEnemyExpected && !isSharon) {
       if (!confirmPlayerTurnOverride()) {
@@ -3533,7 +3529,8 @@ export function mountBoardInteractions(store, routes = {}) {
     }
 
     beginCombatantTurn(combatantId, {
-      initiatorProfileId: ownerProfile,
+      initiatorProfileId: userId,
+      initiatorName,
       expectedTeam,
       previousTeam: context.previousTeam ?? lastActingTeam ?? null,
       isFirstTurnOfRound:
