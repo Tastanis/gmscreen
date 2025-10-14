@@ -5,7 +5,14 @@ export const PLAYER_VISIBLE_TOKEN_FOLDER = "PC's";
 const state = {
   scenes: { folders: [], items: [] },
   tokens: { folders: [], items: [] },
-  boardState: { activeSceneId: null, placements: {}, mapUrl: null, sceneState: {}, templates: {} },
+  boardState: {
+    activeSceneId: null,
+    placements: {},
+    mapUrl: null,
+    sceneState: {},
+    templates: {},
+    overlay: { mapUrl: null, mask: {} },
+  },
   grid: { size: 64, locked: false, visible: true },
   user: { isGM: false, name: '' },
 };
@@ -27,6 +34,10 @@ export function initializeState(snapshot = {}) {
   state.boardState.templates = normalizeTemplates(
     boardSnapshot.templates ?? state.boardState.templates ?? {}
   );
+  state.boardState.overlay = normalizeOverlayEntry(
+    boardSnapshot.overlay ?? state.boardState.overlay ?? {}
+  );
+  syncBoardOverlayState(state.boardState);
   if (snapshot.grid && typeof snapshot.grid === 'object') {
     state.grid = {
       ...state.grid,
@@ -66,6 +77,7 @@ export function subscribe(listener) {
 
 export function updateState(updater) {
   updater(state);
+  syncBoardOverlayState(state.boardState);
   if (!state.user?.isGM) {
     state.tokens = restrictTokensToPlayerView(state.tokens);
   }
@@ -264,11 +276,14 @@ function normalizeSceneBoardState(raw = {}) {
 
     const grid = normalizeGridState(value.grid ?? value);
     const combat = normalizeCombatStateEntry(value.combat ?? value.combatState ?? null);
+    const overlay = normalizeOverlayEntry(value.overlay ?? null);
     const entry = { grid };
 
     if (combat) {
       entry.combat = combat;
     }
+
+    entry.overlay = overlay;
 
     normalized[key] = entry;
   });
@@ -330,6 +345,68 @@ function normalizeCombatStateEntry(raw = {}) {
     updatedAt: Math.max(0, toInt(raw.updatedAt, Date.now())),
     turnLock,
   };
+}
+
+function normalizeOverlayEntry(raw) {
+  if (!raw || typeof raw !== 'object') {
+    return createEmptyOverlayState();
+  }
+
+  const mapUrl = typeof raw.mapUrl === 'string' ? raw.mapUrl.trim() : '';
+  const mask = clonePlainObject(raw.mask ?? {});
+
+  return {
+    mapUrl: mapUrl ? mapUrl : null,
+    mask,
+  };
+}
+
+function createEmptyOverlayState() {
+  return { mapUrl: null, mask: {} };
+}
+
+function clonePlainObject(value) {
+  if (!value || typeof value !== 'object') {
+    return {};
+  }
+
+  try {
+    return JSON.parse(JSON.stringify(value));
+  } catch (error) {
+    return {};
+  }
+}
+
+function syncBoardOverlayState(boardState) {
+  if (!boardState || typeof boardState !== 'object') {
+    return;
+  }
+
+  if (!boardState.sceneState || typeof boardState.sceneState !== 'object') {
+    boardState.overlay = createEmptyOverlayState();
+    return;
+  }
+
+  Object.keys(boardState.sceneState).forEach((sceneId) => {
+    const entry = boardState.sceneState[sceneId];
+    if (!entry || typeof entry !== 'object') {
+      return;
+    }
+
+    entry.overlay = normalizeOverlayEntry(entry.overlay ?? null);
+  });
+
+  const activeSceneId =
+    typeof boardState.activeSceneId === 'string' ? boardState.activeSceneId.trim() : '';
+
+  if (activeSceneId && boardState.sceneState[activeSceneId]) {
+    boardState.overlay = normalizeOverlayEntry(
+      boardState.sceneState[activeSceneId].overlay ?? boardState.overlay ?? null
+    );
+    return;
+  }
+
+  boardState.overlay = normalizeOverlayEntry(boardState.overlay ?? null);
 }
 
 function normalizeCombatTeamValue(value) {
