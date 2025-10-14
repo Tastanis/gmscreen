@@ -3243,20 +3243,21 @@ export function mountBoardInteractions(store, routes = {}) {
     if (!startCombatButton) {
       return;
     }
-    if (!isGmUser()) {
-      startCombatButton.disabled = true;
-      startCombatButton.title = 'Only the GM can start combat.';
-      startCombatButton.classList.remove('btn--danger');
-      startCombatButton.setAttribute('aria-pressed', 'false');
-      return;
-    }
-    startCombatButton.disabled = false;
+    const gmUser = isGmUser();
     startCombatButton.classList.toggle('btn--danger', combatActive);
     startCombatButton.textContent = combatActive ? 'End Combat' : 'Start Combat';
-    startCombatButton.title = combatActive
-      ? 'End the current combat encounter.'
-      : 'Start combat sequencing.';
     startCombatButton.setAttribute('aria-pressed', combatActive ? 'true' : 'false');
+    if (gmUser) {
+      startCombatButton.disabled = false;
+      startCombatButton.title = combatActive
+        ? 'End the current combat encounter.'
+        : 'Start combat sequencing.';
+    } else {
+      startCombatButton.disabled = true;
+      startCombatButton.title = combatActive
+        ? 'Only the GM can end combat.'
+        : 'Only the GM can start combat.';
+    }
   }
 
   function updateCombatModeIndicators() {
