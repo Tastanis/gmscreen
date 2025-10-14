@@ -2365,11 +2365,8 @@ export function mountBoardInteractions(store, routes = {}) {
 
     completedCombatants.delete(combatantId);
     setActiveCombatantId(combatantId);
-    currentTurnTeam = getCombatantTeam(combatantId) ?? currentTurnTeam;
-    refreshCombatantStateClasses();
     forceAcquireTurnLockForGm(combatantId);
-    updateCombatModeIndicators();
-    syncCombatStateToStore();
+    beginCombatantTurn(combatantId);
   }
 
   function beginCombatantTurn(combatantId, options = {}) {
