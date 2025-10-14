@@ -33,6 +33,7 @@ export function mountBoardInteractions(store, routes = {}) {
   const templatesButton = document.querySelector('[data-action="open-templates"]');
   const groupButton = document.querySelector('[data-action="group-combatants"]');
   const startCombatButton = document.querySelector('[data-action="start-combat"]');
+  const damageHealButton = document.querySelector('[data-action="damage-heal"]');
   const roundTracker = document.querySelector('[data-round-tracker]');
   const roundValue = roundTracker?.querySelector('[data-round-value]');
   const turnTimerElement = document.querySelector('[data-turn-timer]');
@@ -114,6 +115,9 @@ export function mountBoardInteractions(store, routes = {}) {
   let activeTokenSettingsId = null;
   let removeTokenSettingsListeners = null;
   let hitPointsEditSession = null;
+  let damageHealUi = null;
+  let pendingDamageHeal = null;
+  let damageHealStatusTimeoutId = null;
   const completedCombatants = new Set();
   const combatantTeams = new Map();
   let combatActive = false;
@@ -304,6 +308,13 @@ export function mountBoardInteractions(store, routes = {}) {
         return;
       }
       handleStartCombat();
+    });
+  }
+
+  if (damageHealButton) {
+    damageHealButton.addEventListener('click', (event) => {
+      event.preventDefault();
+      toggleDamageHealWidget();
     });
   }
 
@@ -527,6 +538,12 @@ export function mountBoardInteractions(store, routes = {}) {
   }
 
   board.addEventListener('keydown', (event) => {
+    if ((pendingDamageHeal || damageHealUi) && event.key === 'Escape') {
+      event.preventDefault();
+      closeDamageHealWidget();
+      return;
+    }
+
     if (templateTool?.handleKeydown?.(event)) {
       return;
     }
@@ -626,7 +643,43 @@ export function mountBoardInteractions(store, routes = {}) {
   );
 
   mapSurface.addEventListener('pointerdown', (event) => {
+    if (pendingDamageHeal && event.button === 2) {
+      event.preventDefault();
+      closeDamageHealWidget();
+      return;
+    }
+
     if (!viewState.mapLoaded) {
+      return;
+    }
+
+    if (pendingDamageHeal && event.button === 0) {
+      event.preventDefault();
+      const action = pendingDamageHeal;
+      const placement = findRenderedPlacementAtPoint(event);
+      if (!placement) {
+        const noun = action.mode === 'damage' ? 'damage' : 'healing';
+        updateStatus(`Click a token to apply ${action.amount} ${noun}.`);
+        return;
+      }
+
+      const result = applyDamageHealToPlacement(placement.id, action.mode, action.amount);
+      if (!result) {
+        updateStatus('Unable to update hit points for that token.');
+        return;
+      }
+
+      const { name, current, max, change } = result;
+      const effectLabel = action.mode === 'damage' ? 'damage' : 'HP';
+      const verb = action.mode === 'damage' ? 'takes' : 'recovers';
+      const maxDisplay = max !== null ? max : DEFAULT_HP_PLACEHOLDER;
+      const hpDisplay = max !== null ? `${current}/${maxDisplay}` : `${current}`;
+      const suffix = action.mode === 'damage'
+        ? ` (${hpDisplay} HP remaining).`
+        : ` (${hpDisplay} HP).`;
+      updateStatus(`${name} ${verb} ${change} ${effectLabel}${suffix}`);
+      closeDamageHealWidget({ restoreStatus: false });
+      scheduleDamageHealStatusReset();
       return;
     }
 
@@ -4946,6 +4999,475 @@ export function mountBoardInteractions(store, routes = {}) {
 
     refreshTokenSettings();
     return true;
+  }
+
+  function toggleDamageHealWidget() {
+    if (damageHealUi) {
+      closeDamageHealWidget();
+    } else {
+      openDamageHealWidget();
+    }
+  }
+
+  function openDamageHealWidget() {
+    if (damageHealUi || typeof document === 'undefined') {
+      if (damageHealUi?.amountInput) {
+        try {
+          damageHealUi.amountInput.focus();
+          damageHealUi.amountInput.select?.();
+        } catch (error) {
+          // Ignore focus errors
+        }
+      }
+      return damageHealUi;
+    }
+
+    cancelDamageHealTargeting({ restoreMessage: true });
+    clearDamageHealStatusTimeout();
+
+    const container = document.createElement('div');
+    container.className = 'vtt-damage-heal';
+    container.setAttribute('role', 'dialog');
+    container.setAttribute('aria-label', 'Damage or heal tokens');
+    container.style.position = 'fixed';
+    container.style.top = '16px';
+    container.style.left = '16px';
+    container.tabIndex = -1;
+
+    const header = document.createElement('div');
+    header.className = 'vtt-damage-heal__header';
+
+    const title = document.createElement('h2');
+    title.className = 'vtt-damage-heal__title';
+    title.textContent = 'Damage / Heal';
+    header.appendChild(title);
+
+    const closeButton = document.createElement('button');
+    closeButton.type = 'button';
+    closeButton.className = 'vtt-damage-heal__close';
+    closeButton.setAttribute('aria-label', 'Close damage and heal controls');
+    closeButton.textContent = '×';
+    header.appendChild(closeButton);
+    container.appendChild(header);
+
+    const field = document.createElement('label');
+    field.className = 'vtt-damage-heal__field';
+
+    const labelText = document.createElement('span');
+    labelText.className = 'vtt-damage-heal__label';
+    labelText.textContent = 'Amount';
+    field.appendChild(labelText);
+
+    const amountInput = document.createElement('input');
+    amountInput.type = 'number';
+    amountInput.min = '1';
+    amountInput.step = '1';
+    amountInput.inputMode = 'numeric';
+    amountInput.className = 'vtt-damage-heal__input';
+    amountInput.placeholder = 'Enter value';
+    amountInput.autocomplete = 'off';
+    field.appendChild(amountInput);
+
+    container.appendChild(field);
+
+    const actions = document.createElement('div');
+    actions.className = 'vtt-damage-heal__actions';
+
+    const damageButton = document.createElement('button');
+    damageButton.type = 'button';
+    damageButton.className = 'btn btn--danger btn--small';
+    damageButton.textContent = 'Damage';
+    damageButton.disabled = true;
+
+    const healButton = document.createElement('button');
+    healButton.type = 'button';
+    healButton.className = 'btn btn--success btn--small';
+    healButton.textContent = 'Heal';
+    healButton.disabled = true;
+
+    actions.appendChild(damageButton);
+    actions.appendChild(healButton);
+    container.appendChild(actions);
+
+    damageHealUi = {
+      container,
+      amountInput,
+      damageButton,
+      healButton,
+      closeButton,
+      cleanup: null,
+    };
+
+    const handleDamageHealAction = (mode) => {
+      const amount = parseDamageHealAmount(amountInput.value);
+      if (amount === null) {
+        updateDamageHealActionState();
+        return;
+      }
+      beginDamageHealTargeting(mode, amount);
+      setDamageHealMode(mode);
+      focusBoard();
+    };
+
+    const handleDamageClick = (event) => {
+      event.preventDefault();
+      handleDamageHealAction('damage');
+    };
+
+    const handleHealClick = (event) => {
+      event.preventDefault();
+      handleDamageHealAction('heal');
+    };
+
+    const handleInput = () => {
+      if (pendingDamageHeal) {
+        cancelDamageHealTargeting({ restoreMessage: true });
+      }
+      setDamageHealMode(null);
+      updateDamageHealActionState();
+    };
+
+    const handleClose = (event) => {
+      event.preventDefault();
+      closeDamageHealWidget();
+    };
+
+    const stopClosePointerDown = (event) => {
+      event.stopPropagation();
+    };
+
+    const handleContainerKeydown = (event) => {
+      if (event.key === 'Escape') {
+        event.preventDefault();
+        closeDamageHealWidget();
+        return;
+      }
+      if (event.key === 'Enter' && document.activeElement === amountInput) {
+        event.preventDefault();
+        const activeMode = damageHealUi?.container?.dataset?.mode ?? null;
+        if (activeMode === 'damage' || activeMode === 'heal') {
+          handleDamageHealAction(activeMode);
+        }
+      }
+    };
+
+    amountInput.addEventListener('input', handleInput);
+    amountInput.addEventListener('change', handleInput);
+    damageButton.addEventListener('click', handleDamageClick);
+    healButton.addEventListener('click', handleHealClick);
+    closeButton.addEventListener('click', handleClose);
+    closeButton.addEventListener('pointerdown', stopClosePointerDown);
+    container.addEventListener('keydown', handleContainerKeydown);
+
+    const cleanupDrag = setupDamageHealDrag(container, header);
+
+    damageHealUi.cleanup = () => {
+      amountInput.removeEventListener('input', handleInput);
+      amountInput.removeEventListener('change', handleInput);
+      damageButton.removeEventListener('click', handleDamageClick);
+      healButton.removeEventListener('click', handleHealClick);
+      closeButton.removeEventListener('click', handleClose);
+      closeButton.removeEventListener('pointerdown', stopClosePointerDown);
+      container.removeEventListener('keydown', handleContainerKeydown);
+      cleanupDrag();
+    };
+
+    document.body.appendChild(container);
+    setDamageHealMode(null);
+    updateDamageHealActionState();
+
+    if (typeof window !== 'undefined' && typeof window.requestAnimationFrame === 'function') {
+      window.requestAnimationFrame(() => {
+        try {
+          amountInput.focus();
+          amountInput.select?.();
+        } catch (error) {
+          // Ignore focus errors
+        }
+      });
+    } else {
+      try {
+        amountInput.focus();
+      } catch (error) {
+        // Ignore focus errors
+      }
+    }
+
+    return damageHealUi;
+  }
+
+  function closeDamageHealWidget(options = {}) {
+    const { restoreStatus: restoreMessage = true } = options;
+    if (damageHealUi) {
+      damageHealUi.cleanup?.();
+      if (damageHealUi.container?.parentElement) {
+        damageHealUi.container.remove();
+      }
+      damageHealUi = null;
+    }
+    setDamageHealMode(null);
+    clearDamageHealStatusTimeout();
+    cancelDamageHealTargeting({ restoreMessage });
+  }
+
+  function setDamageHealMode(mode) {
+    if (!damageHealUi?.container) {
+      return;
+    }
+
+    if (mode === 'damage' || mode === 'heal') {
+      damageHealUi.container.dataset.mode = mode;
+      damageHealUi.damageButton.classList.toggle('is-active', mode === 'damage');
+      damageHealUi.healButton.classList.toggle('is-active', mode === 'heal');
+    } else {
+      delete damageHealUi.container.dataset.mode;
+      damageHealUi.damageButton.classList.remove('is-active');
+      damageHealUi.healButton.classList.remove('is-active');
+    }
+  }
+
+  function beginDamageHealTargeting(mode, amount) {
+    if (mode !== 'damage' && mode !== 'heal') {
+      return;
+    }
+
+    const normalizedAmount = Number.isFinite(amount)
+      ? Math.max(0, Math.trunc(Math.abs(amount)))
+      : null;
+    if (!normalizedAmount) {
+      return;
+    }
+
+    const previousStatus = status && typeof status.textContent === 'string' && status.textContent.trim()
+      ? status.textContent
+      : defaultStatusText;
+
+    pendingDamageHeal = {
+      mode,
+      amount: normalizedAmount,
+      previousStatus,
+    };
+
+    clearDamageHealStatusTimeout();
+
+    const verb = mode === 'damage' ? 'apply' : 'grant';
+    const noun = mode === 'damage' ? 'damage' : 'healing';
+    updateStatus(`Click a token to ${verb} ${normalizedAmount} ${noun}. Right-click or press Escape to cancel.`);
+  }
+
+  function cancelDamageHealTargeting({ restoreMessage = true } = {}) {
+    if (!pendingDamageHeal) {
+      return;
+    }
+
+    const previousStatus = pendingDamageHeal.previousStatus;
+    pendingDamageHeal = null;
+    clearDamageHealStatusTimeout();
+    setDamageHealMode(null);
+
+    if (restoreMessage) {
+      if (status && typeof previousStatus === 'string' && previousStatus.length) {
+        status.textContent = previousStatus;
+      } else {
+        restoreStatus();
+      }
+    }
+  }
+
+  function clearDamageHealStatusTimeout() {
+    if (damageHealStatusTimeoutId !== null && typeof window !== 'undefined' && typeof window.clearTimeout === 'function') {
+      window.clearTimeout(damageHealStatusTimeoutId);
+      damageHealStatusTimeoutId = null;
+    }
+  }
+
+  function scheduleDamageHealStatusReset(delay = 4000) {
+    clearDamageHealStatusTimeout();
+    if (typeof window === 'undefined' || typeof window.setTimeout !== 'function') {
+      return;
+    }
+    damageHealStatusTimeoutId = window.setTimeout(() => {
+      damageHealStatusTimeoutId = null;
+      if (!pendingDamageHeal) {
+        restoreStatus();
+      }
+    }, Math.max(0, delay));
+  }
+
+  function updateDamageHealActionState() {
+    if (!damageHealUi) {
+      return;
+    }
+    const amount = parseDamageHealAmount(damageHealUi.amountInput.value);
+    const disabled = amount === null;
+    damageHealUi.damageButton.disabled = disabled;
+    damageHealUi.healButton.disabled = disabled;
+  }
+
+  function parseDamageHealAmount(value) {
+    if (typeof value === 'number' && Number.isFinite(value)) {
+      const normalized = Math.trunc(Math.abs(value));
+      return normalized > 0 ? normalized : null;
+    }
+
+    if (typeof value === 'string') {
+      const trimmed = value.trim();
+      if (!trimmed) {
+        return null;
+      }
+      const parsed = Number.parseFloat(trimmed);
+      if (!Number.isFinite(parsed)) {
+        return null;
+      }
+      const normalized = Math.trunc(Math.abs(parsed));
+      return normalized > 0 ? normalized : null;
+    }
+
+    return null;
+  }
+
+  function applyDamageHealToPlacement(placementId, mode, amount) {
+    if (!placementId || (mode !== 'damage' && mode !== 'heal')) {
+      return null;
+    }
+
+    const normalizedAmount = Number.isFinite(amount)
+      ? Math.max(0, Math.trunc(Math.abs(amount)))
+      : null;
+    if (!normalizedAmount) {
+      return null;
+    }
+
+    let result = null;
+    const updated = updatePlacementById(placementId, (target) => {
+      const hp = ensurePlacementHitPoints(target.hp);
+      const currentValue = parseHitPointNumber(hp.current);
+      const maxValue = parseHitPointNumber(hp.max);
+      const baseCurrent = currentValue ?? 0;
+
+      let nextValue = mode === 'damage' ? baseCurrent - normalizedAmount : baseCurrent + normalizedAmount;
+
+      if (mode === 'damage') {
+        nextValue = Math.max(0, nextValue);
+      } else if (maxValue !== null) {
+        nextValue = Math.min(maxValue, nextValue);
+      }
+
+      if (!Number.isFinite(nextValue)) {
+        nextValue = baseCurrent;
+      }
+
+      const finalValue = Math.max(0, Math.trunc(nextValue));
+      const finalString = String(finalValue);
+
+      target.hp = { current: finalString, max: hp.max };
+
+      if (target.overlays && typeof target.overlays === 'object') {
+        if (!target.overlays.hitPoints || typeof target.overlays.hitPoints !== 'object') {
+          target.overlays.hitPoints = {};
+        }
+        target.overlays.hitPoints.value = { current: finalString, max: hp.max };
+      }
+
+      result = {
+        previous: baseCurrent,
+        current: finalValue,
+        max: maxValue,
+        change: Math.abs(finalValue - baseCurrent),
+      };
+    });
+
+    if (!updated || !result) {
+      return null;
+    }
+
+    const placement = getPlacementFromStore(placementId);
+    const name = tokenLabel(placement);
+    return {
+      ...result,
+      name,
+    };
+  }
+
+  function parseHitPointNumber(value) {
+    const normalized = normalizeHitPointsValue(value);
+    if (typeof normalized !== 'string' || !normalized) {
+      return null;
+    }
+    const parsed = Number.parseInt(normalized, 10);
+    return Number.isFinite(parsed) ? parsed : null;
+  }
+
+  function setupDamageHealDrag(container, handle) {
+    if (!container || !handle || typeof document === 'undefined') {
+      return () => {};
+    }
+
+    let dragState = null;
+
+    const handlePointerMove = (event) => {
+      if (!dragState || event.pointerId !== dragState.pointerId) {
+        return;
+      }
+      event.preventDefault();
+
+      const viewportWidth = typeof window !== 'undefined' ? window.innerWidth : document.documentElement.clientWidth;
+      const viewportHeight = typeof window !== 'undefined' ? window.innerHeight : document.documentElement.clientHeight;
+
+      const maxLeft = Math.max(0, viewportWidth - container.offsetWidth);
+      const maxTop = Math.max(0, viewportHeight - container.offsetHeight);
+
+      const nextLeft = Math.max(0, Math.min(maxLeft, event.clientX - dragState.offsetX));
+      const nextTop = Math.max(0, Math.min(maxTop, event.clientY - dragState.offsetY));
+
+      container.style.left = `${nextLeft}px`;
+      container.style.top = `${nextTop}px`;
+    };
+
+    const clearListeners = () => {
+      document.removeEventListener('pointermove', handlePointerMove);
+      document.removeEventListener('pointerup', handlePointerUp);
+      document.removeEventListener('pointercancel', handlePointerUp);
+      container.classList.remove('is-dragging');
+      dragState = null;
+    };
+
+    const handlePointerUp = (event) => {
+      if (!dragState || event.pointerId !== dragState.pointerId) {
+        return;
+      }
+      clearListeners();
+    };
+
+    const handlePointerDown = (event) => {
+      if (event.button !== 0) {
+        return;
+      }
+      if (event.target.closest('.vtt-damage-heal__close')) {
+        return;
+      }
+      event.preventDefault();
+
+      const bounds = container.getBoundingClientRect();
+      dragState = {
+        pointerId: event.pointerId,
+        offsetX: event.clientX - bounds.left,
+        offsetY: event.clientY - bounds.top,
+      };
+
+      container.classList.add('is-dragging');
+
+      document.addEventListener('pointermove', handlePointerMove);
+      document.addEventListener('pointerup', handlePointerUp);
+      document.addEventListener('pointercancel', handlePointerUp);
+    };
+
+    handle.addEventListener('pointerdown', handlePointerDown);
+
+    return () => {
+      handle.removeEventListener('pointerdown', handlePointerDown);
+      clearListeners();
+    };
   }
 
   function updatePlacementById(placementId, mutator) {

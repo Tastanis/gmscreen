@@ -64,12 +64,13 @@ function renderVttSceneBoard(): string
                         Dice Roller
                     </button>
                     <button
-                        class="btn btn--soon"
+                        class="btn"
                         type="button"
-                        disabled
-                        title="Feature coming soon"
+                        id="vtt-damage-heal-btn"
+                        data-action="damage-heal"
+                        title="Adjust token hit points"
                     >
-                        Coming Soon
+                        Damage/Heal
                     </button>
                 </div>
                 <div class="vtt-board__coming-soon">
