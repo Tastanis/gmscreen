@@ -102,6 +102,33 @@ function buildPayload(boardState = {}) {
     }
   }
 
+  if ('metadata' in boardState) {
+    const rawMetadata = boardState.metadata;
+    if (rawMetadata && typeof rawMetadata === 'object') {
+      const metadata = {};
+      if (typeof rawMetadata.authorId === 'string') {
+        const authorId = rawMetadata.authorId.trim().toLowerCase();
+        if (authorId) {
+          metadata.authorId = authorId;
+        }
+      }
+      const updatedAtRaw = Number(rawMetadata.updatedAt ?? rawMetadata.timestamp);
+      if (Number.isFinite(updatedAtRaw)) {
+        const updatedAt = Math.max(0, Math.trunc(updatedAtRaw));
+        metadata.updatedAt = updatedAt;
+      }
+      if (typeof rawMetadata.signature === 'string') {
+        const signature = rawMetadata.signature.trim();
+        if (signature) {
+          metadata.signature = signature;
+        }
+      }
+      if (Object.keys(metadata).length > 0) {
+        payload.metadata = metadata;
+      }
+    }
+  }
+
   return Object.keys(payload).length > 0 ? payload : null;
 }
 

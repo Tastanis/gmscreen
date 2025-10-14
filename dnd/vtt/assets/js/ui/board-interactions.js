@@ -129,6 +129,8 @@ export function mountBoardInteractions(store, routes = {}) {
     combatantId: null,
     lockedAt: 0,
   };
+  let lastPersistedBoardStateSignature = null;
+  let lastPersistedBoardStateHash = null;
   let suppressCombatStateSync = false;
   let combatStateVersion = 0;
   let lastCombatStateSnapshot = null;
@@ -316,7 +318,7 @@ export function mountBoardInteractions(store, routes = {}) {
       return;
     }
 
-    const latest = boardApi.getState();
+    const latest = boardApi.getState?.();
     if (!latest?.user?.isGM) {
       return;
     }
@@ -326,16 +328,33 @@ export function mountBoardInteractions(store, routes = {}) {
       return;
     }
 
-    persistBoardState(routes.state, boardState);
+    const authorId = normalizeProfileId(getCurrentUserId());
+    const timestamp = Date.now();
+    const signatureSeed = Math.random().toString(36).slice(2);
+    const signatureBase = authorId ? `${authorId}:${timestamp}` : `${timestamp}`;
+    const signature = `${signatureBase}:${signatureSeed}`;
+
+    const metadata = {
+      updatedAt: timestamp,
+      signature,
+    };
+    if (authorId) {
+      metadata.authorId = authorId;
+    }
+
+    const snapshot = {
+      ...boardState,
+      metadata,
+    };
+
+    lastPersistedBoardStateSignature = signature;
+    lastPersistedBoardStateHash = hashBoardStateSnapshot(snapshot);
+
+    persistBoardState(routes.state, snapshot);
   };
 
   function startBoardStatePoller() {
     if (!routes?.state || typeof window === 'undefined' || typeof window.setInterval !== 'function') {
-      return;
-    }
-
-    const current = boardApi.getState?.() ?? {};
-    if (current?.user?.isGM) {
       return;
     }
 
@@ -363,8 +382,33 @@ export function mountBoardInteractions(store, routes = {}) {
           return;
         }
 
-        const hash = JSON.stringify(incoming);
+        const hashCandidate = hashBoardStateSnapshot(incoming);
+        const hashFallback = safeJsonStringify(incoming) ?? String(Date.now());
+        const hash = hashCandidate ?? hashFallback;
         if (hash === lastHash) {
+          pollErrorLogged = false;
+          return;
+        }
+
+        const snapshotMetadata = incoming?.metadata ?? incoming?.meta ?? null;
+        const snapshotSignature =
+          typeof snapshotMetadata?.signature === 'string'
+            ? snapshotMetadata.signature.trim()
+            : null;
+        const snapshotAuthorId = normalizeProfileId(
+          snapshotMetadata?.authorId ?? snapshotMetadata?.holderId ?? null
+        );
+        const currentUserId = normalizeProfileId(getCurrentUserId());
+        const incomingHash = hashCandidate;
+
+        const authoredSnapshot = Boolean(
+          (snapshotSignature && snapshotSignature === lastPersistedBoardStateSignature) ||
+            (snapshotAuthorId && currentUserId && snapshotAuthorId === currentUserId) ||
+            (incomingHash && incomingHash === lastPersistedBoardStateHash)
+        );
+
+        if (authoredSnapshot) {
+          lastHash = hash;
           pollErrorLogged = false;
           return;
         }
@@ -402,6 +446,11 @@ export function mountBoardInteractions(store, routes = {}) {
       templates: cloneBoardSection(incoming.templates),
     };
 
+    const metadata = cloneBoardSection(incoming.metadata ?? incoming.meta);
+    if (metadata && typeof metadata === 'object' && Object.keys(metadata).length > 0) {
+      snapshot.metadata = metadata;
+    }
+
     return snapshot;
   }
 
@@ -413,6 +462,63 @@ export function mountBoardInteractions(store, routes = {}) {
       return JSON.parse(JSON.stringify(section));
     } catch (error) {
       return {};
+    }
+  }
+
+  function hashBoardStateSnapshot(snapshot) {
+    if (!snapshot || typeof snapshot !== 'object') {
+      return null;
+    }
+
+    const base = {
+      activeSceneId:
+        typeof snapshot.activeSceneId === 'string' ? snapshot.activeSceneId : snapshot.activeSceneId ?? null,
+      mapUrl: typeof snapshot.mapUrl === 'string' ? snapshot.mapUrl : snapshot.mapUrl ?? null,
+      placements: cloneBoardSection(snapshot.placements),
+      sceneState: cloneBoardSection(snapshot.sceneState),
+      templates: cloneBoardSection(snapshot.templates),
+    };
+
+    return safeStableStringify(base);
+  }
+
+  function safeJsonStringify(value) {
+    try {
+      return JSON.stringify(value);
+    } catch (error) {
+      return null;
+    }
+  }
+
+  function safeStableStringify(value) {
+    const seen = new WeakSet();
+
+    function serialize(input) {
+      if (input === null || typeof input !== 'object') {
+        return input;
+      }
+
+      if (seen.has(input)) {
+        return null;
+      }
+      seen.add(input);
+
+      if (Array.isArray(input)) {
+        return input.map((item) => serialize(item));
+      }
+
+      const result = {};
+      const keys = Object.keys(input).sort();
+      for (const key of keys) {
+        result[key] = serialize(input[key]);
+      }
+      return result;
+    }
+
+    try {
+      return JSON.stringify(serialize(value));
+    } catch (error) {
+      return null;
     }
   }
 
