@@ -11,7 +11,7 @@ const state = {
     mapUrl: null,
     sceneState: {},
     templates: {},
-    overlay: { mapUrl: null, mask: {} },
+    overlay: { mapUrl: null, mask: createEmptyOverlayMask() },
   },
   grid: { size: 64, locked: false, visible: true },
   user: { isGM: false, name: '' },
@@ -353,7 +353,7 @@ function normalizeOverlayEntry(raw) {
   }
 
   const mapUrl = typeof raw.mapUrl === 'string' ? raw.mapUrl.trim() : '';
-  const mask = clonePlainObject(raw.mask ?? {});
+  const mask = normalizeOverlayMaskEntry(raw.mask ?? null);
 
   return {
     mapUrl: mapUrl ? mapUrl : null,
@@ -362,19 +362,71 @@ function normalizeOverlayEntry(raw) {
 }
 
 function createEmptyOverlayState() {
-  return { mapUrl: null, mask: {} };
+  return { mapUrl: null, mask: createEmptyOverlayMask() };
 }
 
-function clonePlainObject(value) {
-  if (!value || typeof value !== 'object') {
-    return {};
+function createEmptyOverlayMask() {
+  return { visible: true, polygons: [] };
+}
+
+function normalizeOverlayMaskEntry(raw) {
+  if (!raw || typeof raw !== 'object') {
+    return createEmptyOverlayMask();
   }
 
-  try {
-    return JSON.parse(JSON.stringify(value));
-  } catch (error) {
-    return {};
+  const normalized = {
+    visible: raw.visible === undefined ? true : Boolean(raw.visible),
+    polygons: [],
+  };
+
+  if (typeof raw.url === 'string') {
+    const trimmed = raw.url.trim();
+    if (trimmed) {
+      normalized.url = trimmed;
+    }
   }
+
+  const polygons = Array.isArray(raw.polygons) ? raw.polygons : [];
+  polygons.forEach((polygon) => {
+    const pointsSource = Array.isArray(polygon?.points) ? polygon.points : Array.isArray(polygon) ? polygon : [];
+    if (!Array.isArray(pointsSource)) {
+      return;
+    }
+
+    const points = pointsSource.map((point) => normalizeOverlayPoint(point)).filter(Boolean);
+    if (points.length >= 3) {
+      normalized.polygons.push({ points });
+    }
+  });
+
+  return normalized;
+}
+
+function normalizeOverlayPoint(point) {
+  if (!point || typeof point !== 'object') {
+    return null;
+  }
+
+  const column = Number(point.column ?? point.x);
+  const row = Number(point.row ?? point.y);
+  if (!Number.isFinite(column) || !Number.isFinite(row)) {
+    return null;
+  }
+
+  return {
+    column: roundToPrecision(column, 4),
+    row: roundToPrecision(row, 4),
+  };
+}
+
+function roundToPrecision(value, precision = 4) {
+  if (!Number.isFinite(value)) {
+    return 0;
+  }
+
+  const places = Number.isFinite(precision) ? Math.max(0, Math.trunc(precision)) : 0;
+  const factor = 10 ** places;
+  return Math.round(value * factor) / factor;
 }
 
 function syncBoardOverlayState(boardState) {

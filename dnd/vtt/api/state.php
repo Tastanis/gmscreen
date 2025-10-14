@@ -503,7 +503,7 @@ function normalizeOverlayPayload($rawOverlay): array
 {
     $overlay = [
         'mapUrl' => null,
-        'mask' => [],
+        'mask' => createEmptyOverlayMask(),
     ];
 
     if (!is_array($rawOverlay)) {
@@ -515,11 +515,88 @@ function normalizeOverlayPayload($rawOverlay): array
         $overlay['mapUrl'] = $trimmed === '' ? null : $trimmed;
     }
 
-    if (array_key_exists('mask', $rawOverlay) && is_array($rawOverlay['mask'])) {
-        $overlay['mask'] = $rawOverlay['mask'];
+    if (array_key_exists('mask', $rawOverlay)) {
+        $overlay['mask'] = normalizeOverlayMaskPayload($rawOverlay['mask']);
     }
 
     return $overlay;
+}
+
+function createEmptyOverlayMask(): array
+{
+    return ['visible' => true, 'polygons' => []];
+}
+
+function normalizeOverlayMaskPayload($rawMask): array
+{
+    $mask = createEmptyOverlayMask();
+
+    if (!is_array($rawMask)) {
+        return $mask;
+    }
+
+    if (array_key_exists('visible', $rawMask)) {
+        $mask['visible'] = (bool) $rawMask['visible'];
+    }
+
+    if (array_key_exists('url', $rawMask) && is_string($rawMask['url'])) {
+        $trimmed = trim($rawMask['url']);
+        if ($trimmed !== '') {
+            $mask['url'] = $trimmed;
+        }
+    }
+
+    $polygons = [];
+    if (array_key_exists('polygons', $rawMask) && is_array($rawMask['polygons'])) {
+        foreach ($rawMask['polygons'] as $polygon) {
+            $pointsSource = null;
+            if (is_array($polygon)) {
+                if (array_key_exists('points', $polygon) && is_array($polygon['points'])) {
+                    $pointsSource = $polygon['points'];
+                } elseif (array_keys($polygon) === range(0, count($polygon) - 1)) {
+                    $pointsSource = $polygon;
+                }
+            }
+
+            if (!is_array($pointsSource)) {
+                continue;
+            }
+
+            $points = [];
+            foreach ($pointsSource as $point) {
+                $normalizedPoint = normalizeOverlayMaskPoint($point);
+                if ($normalizedPoint !== null) {
+                    $points[] = $normalizedPoint;
+                }
+            }
+
+            if (count($points) >= 3) {
+                $polygons[] = ['points' => $points];
+            }
+        }
+    }
+
+    if (!empty($polygons)) {
+        $mask['polygons'] = $polygons;
+    }
+
+    return $mask;
+}
+
+function normalizeOverlayMaskPoint($point): ?array
+{
+    if (!is_array($point)) {
+        return null;
+    }
+
+    $column = coerceFloat($point['column'] ?? ($point['x'] ?? null), null, 4);
+    $row = coerceFloat($point['row'] ?? ($point['y'] ?? null), null, 4);
+
+    if ($column === null || $row === null) {
+        return null;
+    }
+
+    return ['column' => $column, 'row' => $row];
 }
 
 /**

@@ -32,6 +32,7 @@ export function mountBoardInteractions(store, routes = {}) {
   const uploadButton = document.querySelector('[data-action="upload-map"]');
   const uploadInput = document.getElementById('vtt-map-upload-input');
   const templatesButton = document.querySelector('[data-action="open-templates"]');
+  const overlayButton = document.querySelector('[data-action="edit-overlay"]');
   const groupButton = document.querySelector('[data-action="group-combatants"]');
   const startCombatButton = document.querySelector('[data-action="start-combat"]');
   const damageHealButton = document.querySelector('[data-action="damage-heal"]');
@@ -78,6 +79,7 @@ export function mountBoardInteractions(store, routes = {}) {
   };
 
   const boardApi = store ?? {};
+  const overlayTool = createOverlayTool();
   const templateTool = createTemplateTool();
   const TOKEN_DRAG_TYPE = 'application/x-vtt-token-template';
   let tokenDropDepth = 0;
@@ -303,6 +305,16 @@ export function mountBoardInteractions(store, routes = {}) {
     });
   }
 
+  if (overlayButton) {
+    overlayButton.addEventListener('click', (event) => {
+      event.preventDefault();
+      if (!isGmUser()) {
+        return;
+      }
+      overlayTool.toggle();
+    });
+  }
+
   if (startCombatButton) {
     startCombatButton.classList.remove('btn--soon');
     startCombatButton.addEventListener('click', (event) => {
@@ -486,7 +498,7 @@ export function mountBoardInteractions(store, routes = {}) {
 
   function cloneOverlayState(section) {
     if (!section || typeof section !== 'object') {
-      return { mapUrl: null, mask: {} };
+      return { mapUrl: null, mask: createEmptyOverlayMask() };
     }
 
     return normalizeOverlayDraft(section);
@@ -967,6 +979,7 @@ export function mountBoardInteractions(store, routes = {}) {
     grid.classList.toggle('is-visible', Boolean(isVisible));
     viewState.gridSize = Math.max(8, size);
     templateTool.notifyGridChanged();
+    overlayTool.notifyGridChanged();
   };
 
   const applyStateToBoard = (state = {}) => {
@@ -998,9 +1011,11 @@ export function mountBoardInteractions(store, routes = {}) {
     }
     const overlayConfig = resolveSceneOverlayState(state.boardState ?? {}, activeSceneId);
     syncOverlayLayer(overlayConfig);
+    overlayTool.notifyOverlayMaskChange(overlayConfig ?? null);
     applyGridState(state.grid ?? {});
     renderTokens(state, tokenLayer, viewState);
     templateTool.notifyMapState();
+    overlayTool.notifyMapState();
     applyCombatStateFromBoardState(state);
 
     if (activeTokenSettingsId) {
@@ -1729,6 +1744,7 @@ export function mountBoardInteractions(store, routes = {}) {
       resetCombatGroups();
       renderTokens(boardApi.getState?.() ?? {}, tokenLayer, viewState);
       templateTool.reset();
+      overlayTool.reset();
       return;
     }
 
@@ -1772,6 +1788,7 @@ export function mountBoardInteractions(store, routes = {}) {
       viewState.mapPixelSize = { width: 0, height: 0 };
       renderTokens(boardApi.getState?.() ?? {}, tokenLayer, viewState);
       templateTool.reset();
+      overlayTool.reset();
     };
     mapImage.src = url;
   }
@@ -1834,31 +1851,32 @@ export function mountBoardInteractions(store, routes = {}) {
     }
 
     clearOverlayMask();
-    const normalizedMask = clonePlainObject(mask);
-    if (!normalizedMask || Object.keys(normalizedMask).length === 0) {
-      mapOverlay.removeAttribute('data-overlay-mask');
-      return;
-    }
-
+    const normalizedMask = normalizeOverlayMask(mask);
     mapOverlay.dataset.overlayMask = JSON.stringify(normalizedMask);
 
-    const maskUrl =
-      typeof normalizedMask.url === 'string' ? normalizedMask.url.trim() : '';
-    if (!maskUrl) {
+    if (!normalizedMask.visible) {
       return;
     }
 
-    const cssUrl = buildCssUrl(maskUrl);
-    if (!cssUrl) {
+    const maskUrl = typeof normalizedMask.url === 'string' ? normalizedMask.url.trim() : '';
+    if (maskUrl) {
+      const cssUrl = buildCssUrl(maskUrl);
+      if (cssUrl) {
+        mapOverlay.style.maskImage = cssUrl;
+        mapOverlay.style.webkitMaskImage = cssUrl;
+        mapOverlay.style.maskRepeat = 'no-repeat';
+        mapOverlay.style.webkitMaskRepeat = 'no-repeat';
+        mapOverlay.style.maskSize = '100% 100%';
+        mapOverlay.style.webkitMaskSize = '100% 100%';
+      }
       return;
     }
 
-    mapOverlay.style.maskImage = cssUrl;
-    mapOverlay.style.webkitMaskImage = cssUrl;
-    mapOverlay.style.maskRepeat = 'no-repeat';
-    mapOverlay.style.webkitMaskRepeat = 'no-repeat';
-    mapOverlay.style.maskSize = '100% 100%';
-    mapOverlay.style.webkitMaskSize = '100% 100%';
+    const clipPath = buildClipPathFromPolygons(normalizedMask.polygons, viewState);
+    if (clipPath) {
+      mapOverlay.style.clipPath = clipPath;
+      mapOverlay.style.webkitClipPath = clipPath;
+    }
   }
 
   function clearOverlayMask() {
@@ -1872,20 +1890,158 @@ export function mountBoardInteractions(store, routes = {}) {
     mapOverlay.style.removeProperty('-webkit-mask-repeat');
     mapOverlay.style.removeProperty('mask-size');
     mapOverlay.style.removeProperty('-webkit-mask-size');
+    mapOverlay.style.removeProperty('clip-path');
+    mapOverlay.style.removeProperty('-webkit-clip-path');
   }
 
   function normalizeOverlayState(raw = null) {
     if (!raw || typeof raw !== 'object') {
-      return { mapUrl: null, mask: {} };
+      return { mapUrl: null, mask: createEmptyOverlayMask() };
     }
 
     const mapUrl = typeof raw.mapUrl === 'string' ? raw.mapUrl.trim() : '';
-    const mask = clonePlainObject(raw.mask ?? {});
+    const mask = normalizeOverlayMask(raw.mask ?? null);
 
     return {
       mapUrl: mapUrl ? mapUrl : null,
       mask,
     };
+  }
+
+  function createEmptyOverlayMask() {
+    return { visible: true, polygons: [] };
+  }
+
+  function normalizeOverlayMask(raw = null) {
+    if (!raw || typeof raw !== 'object') {
+      return createEmptyOverlayMask();
+    }
+
+    const normalized = {
+      visible: raw.visible === undefined ? true : Boolean(raw.visible),
+      polygons: [],
+    };
+
+    if (typeof raw.url === 'string') {
+      const trimmed = raw.url.trim();
+      if (trimmed) {
+        normalized.url = trimmed;
+      }
+    }
+
+    const sourcePolygons = Array.isArray(raw.polygons) ? raw.polygons : [];
+    sourcePolygons.forEach((entry) => {
+      const rawPoints = Array.isArray(entry?.points) ? entry.points : Array.isArray(entry) ? entry : [];
+      if (!Array.isArray(rawPoints)) {
+        return;
+      }
+
+      const points = rawPoints.map(normalizeOverlayMaskPoint).filter(Boolean);
+      if (points.length >= 3) {
+        normalized.polygons.push({ points });
+      }
+    });
+
+    return normalized;
+  }
+
+  function overlayMaskSignature(mask = null) {
+    return safeStableStringify(normalizeOverlayMask(mask));
+  }
+
+  function normalizeOverlayMaskPoint(point) {
+    if (!point || typeof point !== 'object') {
+      return null;
+    }
+
+    const column = Number(point.column ?? point.x);
+    const row = Number(point.row ?? point.y);
+    if (!Number.isFinite(column) || !Number.isFinite(row)) {
+      return null;
+    }
+
+    return {
+      column: roundToPrecision(column, 4),
+      row: roundToPrecision(row, 4),
+    };
+  }
+
+  function buildClipPathFromPolygons(polygons = [], view = viewState) {
+    if (!Array.isArray(polygons) || polygons.length === 0) {
+      return '';
+    }
+
+    const bounds = resolveGridBounds(view);
+    const totalColumns = Number.isFinite(bounds.columns) ? bounds.columns : 0;
+    const totalRows = Number.isFinite(bounds.rows) ? bounds.rows : 0;
+    if (totalColumns <= 0 || totalRows <= 0) {
+      return '';
+    }
+
+    const commands = [];
+    polygons.forEach((polygon) => {
+      const points = Array.isArray(polygon?.points) ? polygon.points : [];
+      if (points.length < 3) {
+        return;
+      }
+
+      const path = points
+        .map((point, index) => {
+          const xPercent = clamp(((point.column ?? 0) / totalColumns) * 100, 0, 100);
+          const yPercent = clamp(((point.row ?? 0) / totalRows) * 100, 0, 100);
+          if (!Number.isFinite(xPercent) || !Number.isFinite(yPercent)) {
+            return null;
+          }
+          return `${index === 0 ? 'M' : 'L'} ${roundToPrecision(xPercent, 4)}% ${roundToPrecision(yPercent, 4)}%`;
+        })
+        .filter(Boolean);
+
+      if (path.length >= 3) {
+        commands.push(`${path.join(' ')} Z`);
+      }
+    });
+
+    if (!commands.length) {
+      return '';
+    }
+
+    return `path('evenodd ${commands.join(' ')}')`;
+  }
+
+  function resolveGridBounds(view = viewState) {
+    const mapWidth = Number.isFinite(view?.mapPixelSize?.width) ? view.mapPixelSize.width : 0;
+    const mapHeight = Number.isFinite(view?.mapPixelSize?.height) ? view.mapPixelSize.height : 0;
+    if (mapWidth <= 0 || mapHeight <= 0) {
+      return { columns: 0, rows: 0 };
+    }
+
+    const offsets = view.gridOffsets ?? {};
+    const offsetLeft = Number.isFinite(offsets.left) ? offsets.left : 0;
+    const offsetRight = Number.isFinite(offsets.right) ? offsets.right : 0;
+    const offsetTop = Number.isFinite(offsets.top) ? offsets.top : 0;
+    const offsetBottom = Number.isFinite(offsets.bottom) ? offsets.bottom : 0;
+    const gridSize = Math.max(8, Number.isFinite(view.gridSize) ? view.gridSize : 64);
+
+    const innerWidth = Math.max(0, mapWidth - offsetLeft - offsetRight);
+    const innerHeight = Math.max(0, mapHeight - offsetTop - offsetBottom);
+    if (innerWidth <= 0 || innerHeight <= 0) {
+      return { columns: 0, rows: 0 };
+    }
+
+    return {
+      columns: innerWidth / gridSize,
+      rows: innerHeight / gridSize,
+    };
+  }
+
+  function roundToPrecision(value, precision = 4) {
+    if (!Number.isFinite(value)) {
+      return 0;
+    }
+
+    const places = Number.isFinite(precision) ? Math.max(0, Math.trunc(precision)) : 0;
+    const factor = 10 ** places;
+    return Math.round(value * factor) / factor;
   }
 
   function buildCssUrl(value) {
@@ -7091,25 +7247,13 @@ export function mountBoardInteractions(store, routes = {}) {
     activeConditionPrompt = null;
   }
 
-  function clonePlainObject(value) {
-    if (!value || typeof value !== 'object') {
-      return {};
-    }
-
-    try {
-      return JSON.parse(JSON.stringify(value));
-    } catch (error) {
-      return {};
-    }
-  }
-
   function normalizeOverlayDraft(raw = {}) {
     if (!raw || typeof raw !== 'object') {
-      return { mapUrl: null, mask: {} };
+      return { mapUrl: null, mask: createEmptyOverlayMask() };
     }
 
     const mapUrl = typeof raw.mapUrl === 'string' ? raw.mapUrl.trim() : '';
-    const mask = clonePlainObject(raw.mask ?? {});
+    const mask = normalizeOverlayMask(raw.mask ?? null);
 
     return {
       mapUrl: mapUrl ? mapUrl : null,
@@ -7145,7 +7289,7 @@ export function mountBoardInteractions(store, routes = {}) {
         placements: {},
         sceneState: {},
         templates: {},
-        overlay: { mapUrl: null, mask: {} },
+        overlay: { mapUrl: null, mask: createEmptyOverlayMask() },
       };
     }
 
@@ -7162,7 +7306,7 @@ export function mountBoardInteractions(store, routes = {}) {
     }
 
     if (!draft.boardState.overlay || typeof draft.boardState.overlay !== 'object') {
-      draft.boardState.overlay = { mapUrl: null, mask: {} };
+      draft.boardState.overlay = { mapUrl: null, mask: createEmptyOverlayMask() };
     } else {
       draft.boardState.overlay = normalizeOverlayDraft(draft.boardState.overlay);
     }
@@ -7196,6 +7340,579 @@ export function mountBoardInteractions(store, routes = {}) {
     return boardDraft.sceneState[key];
   }
 
+
+function createOverlayTool() {
+  if (!mapOverlay || !mapSurface) {
+    return {
+      toggle() {},
+      reset() {},
+      notifyGridChanged() {},
+      notifyMapState() {},
+      notifyOverlayMaskChange() {},
+    };
+  }
+
+  const editor = document.createElement('div');
+  editor.className = 'vtt-overlay-editor';
+  editor.hidden = true;
+
+  const toolbar = document.createElement('div');
+  toolbar.className = 'vtt-overlay-editor__toolbar';
+
+  const controls = document.createElement('div');
+  controls.className = 'vtt-overlay-editor__controls';
+
+  const closeButton = document.createElement('button');
+  closeButton.type = 'button';
+  closeButton.className = 'vtt-overlay-editor__btn';
+  closeButton.textContent = 'Close Shape';
+
+  const commitButton = document.createElement('button');
+  commitButton.type = 'button';
+  commitButton.className = 'vtt-overlay-editor__btn';
+  commitButton.textContent = 'Apply Mask';
+
+  const resetButton = document.createElement('button');
+  resetButton.type = 'button';
+  resetButton.className = 'vtt-overlay-editor__btn';
+  resetButton.textContent = 'Reset';
+
+  const clearButton = document.createElement('button');
+  clearButton.type = 'button';
+  clearButton.className = 'vtt-overlay-editor__btn vtt-overlay-editor__btn--danger';
+  clearButton.textContent = 'Delete Overlay';
+
+  controls.append(closeButton, commitButton, resetButton, clearButton);
+
+  const statusLabel = document.createElement('p');
+  statusLabel.className = 'vtt-overlay-editor__status';
+  statusLabel.textContent = 'Click the map to add nodes. Drag handles to adjust.';
+
+  toolbar.append(controls, statusLabel);
+  editor.append(toolbar);
+
+  const handlesLayer = document.createElement('div');
+  handlesLayer.className = 'vtt-overlay-editor__handles';
+  editor.append(handlesLayer);
+
+  mapOverlay.append(editor);
+
+  const DEFAULT_STATUS = 'Click the map to add nodes. Drag handles to adjust. Double-click the first node or use Close Shape to finish.';
+  const CLOSED_STATUS = 'Shape closed. Apply the mask to commit your changes.';
+
+  let isActive = false;
+  let nodes = [];
+  let isClosed = false;
+  let dragState = null;
+  let persistedMask = createEmptyOverlayMask();
+  let persistedSignature = overlayMaskSignature(persistedMask);
+  let persistedMapUrl = null;
+
+  function toggle() {
+    if (isActive) {
+      deactivate();
+    } else {
+      activate();
+    }
+  }
+
+  function activate() {
+    if (!isGmUser()) {
+      return;
+    }
+
+    isActive = true;
+    editor.hidden = false;
+    mapOverlay.dataset.overlayEditing = 'true';
+    setButtonState(true);
+    setStatus(DEFAULT_STATUS);
+    renderHandles();
+    applyPreviewMask();
+    updateControls();
+  }
+
+  function deactivate() {
+    isActive = false;
+    editor.hidden = true;
+    delete mapOverlay.dataset.overlayEditing;
+    dragState = null;
+    setButtonState(false);
+    setStatus('');
+    applyOverlayMask(persistedMask);
+    updateControls();
+  }
+
+  function resetTool() {
+    deactivate();
+    nodes = [];
+    isClosed = false;
+    dragState = null;
+    persistedMask = createEmptyOverlayMask();
+    persistedSignature = overlayMaskSignature(persistedMask);
+    persistedMapUrl = null;
+    handlesLayer.innerHTML = '';
+    applyOverlayMask(persistedMask);
+  }
+
+  function notifyGridChanged() {
+    if (!isActive && nodes.length === 0) {
+      return;
+    }
+    renderHandles();
+  }
+
+  function notifyMapState() {
+    const state = boardApi.getState?.();
+    if (!state) {
+      return;
+    }
+
+    const activeSceneId = state.boardState?.activeSceneId ?? null;
+    if (!activeSceneId) {
+      notifyOverlayMaskChange(null);
+      return;
+    }
+
+    const overlayEntry = resolveSceneOverlayState(state.boardState ?? {}, activeSceneId);
+    notifyOverlayMaskChange(overlayEntry ?? null);
+  }
+
+  function notifyOverlayMaskChange(overlayEntry) {
+    const entry = overlayEntry && typeof overlayEntry === 'object' ? overlayEntry : {};
+    const normalizedMask = normalizeOverlayMask(entry.mask ?? entry ?? null);
+    const signature = overlayMaskSignature(normalizedMask);
+    const mapUrl = typeof entry.mapUrl === 'string' ? entry.mapUrl.trim() : '';
+
+    persistedMapUrl = mapUrl || null;
+
+    if (signature === persistedSignature) {
+      if (!isActive && nodes.length === 0) {
+        setNodesFromMask(normalizedMask);
+        renderHandles();
+      }
+      applyPreviewMask();
+      updateControls();
+      return;
+    }
+
+    persistedMask = normalizedMask;
+    persistedSignature = signature;
+
+    if (!isActive || !isDirty()) {
+      setNodesFromMask(persistedMask);
+      renderHandles();
+    }
+    applyPreviewMask();
+    updateControls();
+  }
+
+  function setNodesFromMask(mask) {
+    const normalized = normalizeOverlayMask(mask);
+    const polygon = normalized.polygons.length ? normalized.polygons[0] : null;
+    if (!polygon) {
+      nodes = [];
+      isClosed = false;
+      return;
+    }
+
+    nodes = polygon.points.map((point) => ({ column: point.column, row: point.row }));
+    isClosed = nodes.length >= 3;
+  }
+
+  function renderHandles() {
+    handlesLayer.innerHTML = '';
+
+    if (!isActive) {
+      return;
+    }
+
+    const fragment = document.createDocumentFragment();
+
+    const segmentPairs = [];
+    for (let index = 0; index < nodes.length - 1; index += 1) {
+      segmentPairs.push([nodes[index], nodes[index + 1]]);
+    }
+    if (isClosed && nodes.length >= 3) {
+      segmentPairs.push([nodes[nodes.length - 1], nodes[0]]);
+    }
+
+    segmentPairs.forEach(([start, end]) => {
+      const element = document.createElement('div');
+      element.className = 'vtt-overlay-editor__segment';
+      const startLocal = gridPointToOverlayLocal(start);
+      const endLocal = gridPointToOverlayLocal(end);
+      const dx = endLocal.x - startLocal.x;
+      const dy = endLocal.y - startLocal.y;
+      const length = Math.sqrt(dx * dx + dy * dy);
+      const angle = Math.atan2(dy, dx);
+      element.style.width = `${length}px`;
+      element.style.transform = `translate(${startLocal.x}px, ${startLocal.y}px) rotate(${angle}rad)`;
+      fragment.append(element);
+    });
+
+    nodes.forEach((node, index) => {
+      const element = document.createElement('div');
+      element.className = 'vtt-overlay-editor__node';
+      element.dataset.index = String(index);
+      if (index === 0) {
+        element.classList.add('is-start');
+      }
+      const local = gridPointToOverlayLocal(node);
+      element.style.left = `${local.x}px`;
+      element.style.top = `${local.y}px`;
+      element.addEventListener('pointerdown', handleNodePointerDown);
+      element.addEventListener('pointermove', handleNodePointerMove);
+      element.addEventListener('pointerup', handleNodePointerUp);
+      element.addEventListener('pointercancel', handleNodePointerUp);
+      element.addEventListener('dblclick', handleNodeDoubleClick);
+      fragment.append(element);
+    });
+
+    handlesLayer.append(fragment);
+  }
+
+  function handleNodePointerDown(event) {
+    if (!isActive || event.button !== 0) {
+      return;
+    }
+    const target = event.currentTarget;
+    const index = Number.parseInt(target?.dataset?.index ?? '', 10);
+    if (!Number.isInteger(index)) {
+      return;
+    }
+
+    event.preventDefault();
+    event.stopPropagation();
+
+    dragState = { index, pointerId: event.pointerId };
+    try {
+      target.setPointerCapture?.(event.pointerId);
+    } catch (error) {
+      // Ignore capture errors.
+    }
+  }
+
+  function handleNodePointerMove(event) {
+    if (!dragState || event.pointerId !== dragState.pointerId || !isActive) {
+      return;
+    }
+
+    const localPoint = getLocalMapPoint(event);
+    if (!localPoint) {
+      return;
+    }
+
+    const gridPoint = mapPointToGrid(localPoint, viewState);
+    if (!gridPoint) {
+      return;
+    }
+
+    event.preventDefault();
+    event.stopPropagation();
+
+    const snapped = snapOverlayPoint(gridPoint, event.shiftKey);
+    const clamped = clampOverlayPoint(snapped);
+    nodes[dragState.index] = clamped;
+    renderHandles();
+    applyPreviewMask();
+    updateControls();
+  }
+
+  function handleNodePointerUp(event) {
+    if (!dragState || event.pointerId !== dragState.pointerId) {
+      return;
+    }
+
+    event.preventDefault();
+    event.stopPropagation();
+
+    try {
+      event.currentTarget?.releasePointerCapture?.(event.pointerId);
+    } catch (error) {
+      // ignore
+    }
+
+    dragState = null;
+    applyPreviewMask();
+    updateControls();
+  }
+
+  function handleNodeDoubleClick(event) {
+    if (!isActive) {
+      return;
+    }
+    const index = Number.parseInt(event.currentTarget?.dataset?.index ?? '', 10);
+    if (!Number.isInteger(index) || index !== 0) {
+      return;
+    }
+    event.preventDefault();
+    event.stopPropagation();
+    if (nodes.length >= 3) {
+      isClosed = true;
+      setStatus(CLOSED_STATUS);
+      renderHandles();
+      applyPreviewMask();
+      updateControls();
+    }
+  }
+
+  function handleSurfacePointerDown(event) {
+    if (!isActive || event.button !== 0) {
+      return;
+    }
+    if (event.target && event.target.closest('.vtt-overlay-editor__node')) {
+      return;
+    }
+
+    const localPoint = getLocalMapPoint(event);
+    if (!localPoint) {
+      return;
+    }
+
+    const gridPoint = mapPointToGrid(localPoint, viewState);
+    if (!gridPoint) {
+      return;
+    }
+
+    event.preventDefault();
+    event.stopPropagation();
+
+    const snapped = snapOverlayPoint(gridPoint, event.shiftKey);
+    const clamped = clampOverlayPoint(snapped);
+    nodes.push(clamped);
+    isClosed = false;
+    renderHandles();
+    applyPreviewMask();
+    updateControls();
+  }
+
+  function snapOverlayPoint(point, shiftKey = false) {
+    const step = shiftKey ? 0.5 : 0.25;
+    return {
+      column: roundToPrecision(snapToStep(point.column ?? 0, step), 4),
+      row: roundToPrecision(snapToStep(point.row ?? 0, step), 4),
+    };
+  }
+
+  function clampOverlayPoint(point) {
+    const bounds = resolveGridBounds(viewState);
+    const maxColumn = Math.max(0, Number.isFinite(bounds.columns) ? bounds.columns : 0);
+    const maxRow = Math.max(0, Number.isFinite(bounds.rows) ? bounds.rows : 0);
+    return {
+      column: clamp(Number(point.column ?? 0), 0, maxColumn),
+      row: clamp(Number(point.row ?? 0), 0, maxRow),
+    };
+  }
+
+  function gridPointToOverlayLocal(point) {
+    const gridSize = Math.max(8, Number.isFinite(viewState.gridSize) ? viewState.gridSize : 64);
+    return {
+      x: (point.column ?? 0) * gridSize,
+      y: (point.row ?? 0) * gridSize,
+    };
+  }
+
+  function setButtonState(pressed) {
+    if (!overlayButton) {
+      return;
+    }
+    overlayButton.setAttribute('aria-pressed', pressed ? 'true' : 'false');
+  }
+
+  function setStatus(message) {
+    statusLabel.textContent = message || DEFAULT_STATUS;
+  }
+
+  function isDirty() {
+    if (!isActive) {
+      return false;
+    }
+    const preview = buildPreviewMask();
+    return overlayMaskSignature(preview) !== persistedSignature;
+  }
+
+  function buildPreviewMask() {
+    const base = normalizeOverlayMask(persistedMask);
+    const mask = {
+      visible: base.visible,
+      polygons: Array.isArray(base.polygons) ? base.polygons.slice(1) : [],
+    };
+    if (base.url) {
+      mask.url = base.url;
+    }
+
+    if (isClosed && nodes.length >= 3) {
+      mask.polygons.unshift({
+        points: nodes.map((node) => ({
+          column: roundToPrecision(node.column, 4),
+          row: roundToPrecision(node.row, 4),
+        })),
+      });
+    } else if (base.polygons.length) {
+      mask.polygons.unshift(base.polygons[0]);
+    }
+
+    return mask;
+  }
+
+  function applyPreviewMask() {
+    if (isActive && isClosed && nodes.length >= 3) {
+      const preview = buildPreviewMask();
+      applyOverlayMask(preview);
+    } else {
+      applyOverlayMask(persistedMask);
+    }
+  }
+
+  function updateControls() {
+    const hasNodes = nodes.length >= 3;
+    closeButton.disabled = !hasNodes || isClosed;
+    commitButton.disabled = !isActive || !isClosed || !hasNodes || !isDirty();
+    resetButton.disabled = !isActive || (!isDirty() && !dragState);
+    clearButton.disabled = !hasPersistedOverlay();
+  }
+
+  function hasPersistedOverlay() {
+    if (persistedMapUrl) {
+      return true;
+    }
+    if (persistedMask.url) {
+      return true;
+    }
+    return Array.isArray(persistedMask.polygons) && persistedMask.polygons.length > 0;
+  }
+
+  function commitChanges() {
+    if (!isClosed || nodes.length < 3) {
+      setStatus('Add at least three nodes and close the shape before applying the mask.');
+      return;
+    }
+
+    const preview = buildPreviewMask();
+    const changed = updateSceneOverlay((overlayEntry) => {
+      overlayEntry.mask = normalizeOverlayMask(preview);
+    });
+
+    if (!changed) {
+      setStatus('Unable to update the overlay for this scene.');
+      return;
+    }
+
+    persistedMask = normalizeOverlayMask(preview);
+    persistedSignature = overlayMaskSignature(persistedMask);
+    setStatus('Overlay mask applied.');
+    applyOverlayMask(persistedMask);
+    updateControls();
+    persistBoardStateSnapshot();
+  }
+
+  function restorePersistedMask() {
+    setNodesFromMask(persistedMask);
+    isClosed = nodes.length >= 3;
+    renderHandles();
+    applyOverlayMask(persistedMask);
+    updateControls();
+    setStatus('Overlay reset to the last saved shape.');
+    persistBoardStateSnapshot();
+  }
+
+  function clearOverlay() {
+    const changed = updateSceneOverlay((overlayEntry) => {
+      overlayEntry.mapUrl = null;
+      overlayEntry.mask = createEmptyOverlayMask();
+    });
+
+    if (!changed) {
+      setStatus('Unable to delete the overlay for this scene.');
+      return;
+    }
+
+    persistedMask = createEmptyOverlayMask();
+    persistedSignature = overlayMaskSignature(persistedMask);
+    persistedMapUrl = null;
+    nodes = [];
+    isClosed = false;
+    handlesLayer.innerHTML = '';
+    applyOverlayMask(persistedMask);
+    updateControls();
+    setStatus('Overlay deleted.');
+    persistBoardStateSnapshot();
+  }
+
+  function closePolygon() {
+    if (nodes.length < 3) {
+      setStatus('Add at least three nodes before closing the shape.');
+      return;
+    }
+    isClosed = true;
+    setStatus(CLOSED_STATUS);
+    renderHandles();
+    applyPreviewMask();
+    updateControls();
+  }
+
+  function updateSceneOverlay(mutator) {
+    if (typeof boardApi.updateState !== 'function') {
+      return false;
+    }
+
+    let updated = false;
+    boardApi.updateState?.((draft) => {
+      const boardDraft = ensureBoardStateDraft(draft);
+      const activeSceneId = boardDraft.activeSceneId;
+      if (!activeSceneId) {
+        return;
+      }
+
+      const sceneEntry = ensureSceneStateDraftEntry(draft, activeSceneId);
+      const overlayEntry = normalizeOverlayDraft(sceneEntry.overlay ?? {});
+      const result = mutator(overlayEntry, boardDraft);
+      if (result === false) {
+        return;
+      }
+
+      sceneEntry.overlay = overlayEntry;
+      boardDraft.overlay = { ...overlayEntry };
+      persistedMapUrl = overlayEntry.mapUrl ?? null;
+      updated = true;
+    });
+
+    return updated;
+  }
+
+  mapSurface.addEventListener('pointerdown', handleSurfacePointerDown, true);
+
+  closeButton.addEventListener('click', (event) => {
+    event.preventDefault();
+    if (!isActive) {
+      activate();
+    }
+    closePolygon();
+  });
+
+  commitButton.addEventListener('click', (event) => {
+    event.preventDefault();
+    commitChanges();
+  });
+
+  resetButton.addEventListener('click', (event) => {
+    event.preventDefault();
+    restorePersistedMask();
+  });
+
+  clearButton.addEventListener('click', (event) => {
+    event.preventDefault();
+    clearOverlay();
+  });
+
+  return {
+    toggle,
+    reset: resetTool,
+    notifyGridChanged,
+    notifyMapState,
+    notifyOverlayMaskChange,
+  };
+}
 
 function createTemplateTool() {
   const layer = templateLayer;
