@@ -58,6 +58,43 @@ function createDom() {
   return dom;
 }
 
+function createMockStore(initialState) {
+  let state = initialState;
+  let subscriber = null;
+
+  const clone = (value) => {
+    if (typeof structuredClone === 'function') {
+      return structuredClone(value);
+    }
+    return JSON.parse(JSON.stringify(value));
+  };
+
+  return {
+    getState: () => state,
+    subscribe: (callback) => {
+      subscriber = typeof callback === 'function' ? callback : null;
+      return () => {
+        if (subscriber === callback) {
+          subscriber = null;
+        }
+      };
+    },
+    setState: (nextState) => {
+      state = nextState;
+      subscriber?.(state);
+    },
+    updateState: (updater) => {
+      if (typeof updater !== 'function') {
+        return;
+      }
+      const draft = clone(state);
+      updater(draft);
+      state = draft;
+      subscriber?.(state);
+    },
+  };
+}
+
 test('numeric activeSceneId toggles combat button to End Combat', () => {
   const dom = createDom();
   try {
@@ -93,6 +130,117 @@ test('numeric activeSceneId toggles combat button to End Combat', () => {
     mountBoardInteractions(store);
 
     assert.equal(startCombatButton.textContent, 'End Combat');
+  } finally {
+    dom.window.close();
+  }
+});
+
+test('Sharon confirmation is required for other allies but triggers Hesitation banner on her own token', () => {
+  const dom = createDom();
+  try {
+    const { window } = dom;
+    const { document } = window;
+
+    const messages = [];
+    window.dashboardChat = {
+      sendMessage: ({ message }) => {
+        messages.push(message);
+        return { catch() {} };
+      },
+    };
+
+    const confirmMessages = [];
+    window.confirm = (message) => {
+      confirmMessages.push(message);
+      return false;
+    };
+
+    const state = {
+      user: { isGM: false, name: 'Sharon' },
+      boardState: {
+        activeSceneId: 'scene-1',
+        mapUrl: 'http://example.com/map.png',
+        placements: {
+          'scene-1': [
+            {
+              id: 'ally-1',
+              column: 0,
+              row: 0,
+              width: 1,
+              height: 1,
+              name: 'Frunk',
+              combatTeam: 'ally',
+              profileId: 'frunk',
+            },
+            {
+              id: 'sharon-token',
+              column: 1,
+              row: 0,
+              width: 1,
+              height: 1,
+              name: 'Sharon',
+              combatTeam: 'ally',
+              profileId: 'sharon',
+            },
+          ],
+        },
+        sceneState: {
+          'scene-1': {
+            grid: { size: 64 },
+            combat: {
+              active: true,
+              round: 2,
+              activeCombatantId: 'enemy-1',
+              completedCombatantIds: [],
+              startingTeam: 'ally',
+              currentTeam: 'enemy',
+              lastTeam: 'ally',
+              roundTurnCount: 3,
+              updatedAt: 1,
+            },
+          },
+        },
+      },
+      grid: { size: 64, visible: true },
+      scenes: { items: [{ id: 'scene-1', name: 'Scene One' }] },
+    };
+
+    const store = createMockStore(state);
+
+    mountBoardInteractions(store, { state: '/state' });
+
+    const mapImage = document.getElementById('vtt-map-image');
+    Object.defineProperty(mapImage, 'naturalWidth', { value: 1024, configurable: true });
+    Object.defineProperty(mapImage, 'naturalHeight', { value: 768, configurable: true });
+    mapImage.onload?.();
+
+    const allyToken = document.querySelector('[data-combatant-id="ally-1"]');
+    assert.ok(allyToken, 'ally combatant should render');
+
+    allyToken.dispatchEvent(new window.MouseEvent('dblclick', { bubbles: true }));
+
+    assert.equal(confirmMessages.length, 1);
+    assert.equal(
+      confirmMessages[0],
+      "It is not the PC's turn. Would you like to go anyways?",
+      'standard confirmation dialog should be shown for non-Sharon allies'
+    );
+    assert.equal(document.querySelector('.vtt-hesitation-banner'), null);
+    assert.deepEqual(messages, []);
+
+    window.confirm = () => {
+      throw new Error('Sharon should not be prompted when selecting her own token');
+    };
+
+    const sharonToken = document.querySelector('[data-combatant-id="sharon-token"]');
+    assert.ok(sharonToken, 'Sharon combatant should render');
+
+    sharonToken.dispatchEvent(new window.MouseEvent('dblclick', { bubbles: true }));
+
+    const banner = document.querySelector('.vtt-hesitation-banner');
+    assert.ok(banner, 'Hesitation banner should appear for Sharon overriding her own turn');
+    assert.equal(banner.textContent, 'HESITATION IS WEAKNESS!');
+    assert.deepEqual(messages, ['HESITATION IS WEAKNESS!']);
   } finally {
     dom.window.close();
   }

@@ -3825,10 +3825,12 @@ export function mountBoardInteractions(store, routes = {}) {
 
     const expectedTeam = context.expectedTeam ?? currentTurnTeam ?? team;
     const wasEnemyExpected = normalizeCombatTeam(expectedTeam) === 'enemy';
-    const isSharon = userId === SHARON_PROFILE_ID;
+    const combatantProfileId = normalizeProfileId(getCombatantProfileId(combatantId));
+    const isSharonUser = userId === SHARON_PROFILE_ID;
+    const isSharonCombatant = combatantProfileId === SHARON_PROFILE_ID;
     const initiatorName = getCurrentUserName();
 
-    if (wasEnemyExpected && !isSharon) {
+    if (wasEnemyExpected && !(isSharonUser && isSharonCombatant)) {
       if (!confirmPlayerTurnOverride()) {
         return;
       }
@@ -4039,8 +4041,12 @@ export function mountBoardInteractions(store, routes = {}) {
 
   function maybeTriggerSpecialTurnEffects(combatantId, options = {}) {
     const initiatorProfileId = normalizeProfileId(options?.initiatorProfileId ?? null);
-    const profileId = initiatorProfileId ?? getCombatantProfileId(combatantId);
-    if (profileId !== SHARON_PROFILE_ID) {
+    const combatantProfileId = normalizeProfileId(getCombatantProfileId(combatantId));
+    if (combatantProfileId !== SHARON_PROFILE_ID) {
+      return;
+    }
+
+    if (initiatorProfileId && initiatorProfileId !== SHARON_PROFILE_ID) {
       return;
     }
 
