@@ -96,6 +96,15 @@ function renderVttSceneBoard(): string
                     >
                         Templates
                     </button>
+                    <button
+                        class="btn"
+                        type="button"
+                        data-action="edit-overlay"
+                        aria-pressed="false"
+                        title="Edit the scene overlay cutout"
+                    >
+                        Cutout Tool
+                    </button>
                 </div>
             </div>
         </header>
