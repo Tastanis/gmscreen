@@ -82,7 +82,8 @@ function buildPayload(boardState = {}) {
 
         const grid = normalizeGridPayload(value.grid ?? value);
         const combat = formatCombatState(value.combat ?? value.combatState ?? null);
-        const entry = { grid };
+        const overlay = formatOverlayState(value.overlay ?? null);
+        const entry = { grid, overlay };
         if (combat) {
           entry.combat = combat;
         }
@@ -100,6 +101,10 @@ function buildPayload(boardState = {}) {
     if (rawTemplates && typeof rawTemplates === 'object') {
       payload.templates = rawTemplates;
     }
+  }
+
+  if ('overlay' in boardState) {
+    payload.overlay = formatOverlayState(boardState.overlay ?? null);
   }
 
   if ('metadata' in boardState) {
@@ -188,6 +193,20 @@ function formatCombatState(raw = {}) {
   };
 }
 
+function formatOverlayState(raw) {
+  if (!raw || typeof raw !== 'object') {
+    return { mapUrl: null, mask: {} };
+  }
+
+  const mapUrl = typeof raw.mapUrl === 'string' ? raw.mapUrl.trim() : '';
+  const mask = clonePlainObject(raw.mask ?? {});
+
+  return {
+    mapUrl: mapUrl ? mapUrl : null,
+    mask,
+  };
+}
+
 function normalizeGridPayload(raw = {}) {
   const sizeValue = Number.parseInt(raw.size, 10);
   const size = Number.isFinite(sizeValue) ? sizeValue : Number(raw.size);
@@ -198,6 +217,18 @@ function normalizeGridPayload(raw = {}) {
     locked: Boolean(raw.locked),
     visible: raw.visible === undefined ? true : Boolean(raw.visible),
   };
+}
+
+function clonePlainObject(value) {
+  if (!value || typeof value !== 'object') {
+    return {};
+  }
+
+  try {
+    return JSON.parse(JSON.stringify(value));
+  } catch (error) {
+    return {};
+  }
 }
 
 function sanitizeCombatTeam(value) {

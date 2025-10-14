@@ -16,6 +16,7 @@ export function mountBoardInteractions(store, routes = {}) {
   const board = document.getElementById('vtt-board-canvas');
   const mapSurface = document.getElementById('vtt-map-surface');
   const mapTransform = document.getElementById('vtt-map-transform');
+  const mapOverlay = document.getElementById('vtt-map-overlay');
   const grid = document.getElementById('vtt-grid-overlay');
   const tokenLayer = document.getElementById('vtt-token-layer');
   const templateLayer = document.getElementById('vtt-template-layer');
@@ -41,6 +42,7 @@ export function mountBoardInteractions(store, routes = {}) {
   const turnTimerDisplay = turnTimerElement?.querySelector('[data-turn-timer-display]');
   const conditionBannerRegion = document.querySelector('[data-condition-banner-region]');
   if (!board || !mapSurface || !mapTransform || !mapBackdrop || !mapImage || !templateLayer) return;
+  if (!mapOverlay) return;
 
   const defaultStatusText = status?.textContent ?? '';
   if (turnTimerDisplay) {
@@ -85,6 +87,7 @@ export function mountBoardInteractions(store, routes = {}) {
   let lastCombatTrackerEntries = [];
   let renderedPlacements = [];
   let lastActiveSceneId = null;
+  let lastOverlaySignature = null;
   const movementQueue = [];
   let movementScheduled = false;
   const MAX_QUEUED_MOVEMENTS = 12;
@@ -459,6 +462,7 @@ export function mountBoardInteractions(store, routes = {}) {
       placements: cloneBoardSection(incoming.placements),
       sceneState: cloneBoardSection(incoming.sceneState),
       templates: cloneBoardSection(incoming.templates),
+      overlay: cloneOverlayState(incoming.overlay),
     };
 
     const metadata = cloneBoardSection(incoming.metadata ?? incoming.meta);
@@ -480,6 +484,14 @@ export function mountBoardInteractions(store, routes = {}) {
     }
   }
 
+  function cloneOverlayState(section) {
+    if (!section || typeof section !== 'object') {
+      return { mapUrl: null, mask: {} };
+    }
+
+    return normalizeOverlayDraft(section);
+  }
+
   function hashBoardStateSnapshot(snapshot) {
     if (!snapshot || typeof snapshot !== 'object') {
       return null;
@@ -492,6 +504,7 @@ export function mountBoardInteractions(store, routes = {}) {
       placements: cloneBoardSection(snapshot.placements),
       sceneState: cloneBoardSection(snapshot.sceneState),
       templates: cloneBoardSection(snapshot.templates),
+      overlay: cloneOverlayState(snapshot.overlay),
     };
 
     return safeStableStringify(base);
@@ -983,6 +996,8 @@ export function mountBoardInteractions(store, routes = {}) {
     if (nextUrl !== viewState.activeMapUrl) {
       loadMap(nextUrl);
     }
+    const overlayConfig = resolveSceneOverlayState(state.boardState ?? {}, activeSceneId);
+    syncOverlayLayer(overlayConfig);
     applyGridState(state.grid ?? {});
     renderTokens(state, tokenLayer, viewState);
     templateTool.notifyMapState();
@@ -1680,6 +1695,7 @@ export function mountBoardInteractions(store, routes = {}) {
   function loadMap(url) {
     viewState.activeMapUrl = url || null;
     viewState.mapLoaded = false;
+    lastOverlaySignature = null;
     clearDragCandidate();
     if (viewState.dragState) {
       try {
@@ -1697,6 +1713,9 @@ export function mountBoardInteractions(store, routes = {}) {
     mapTransform.hidden = !url;
     if (grid) {
       grid.hidden = !url;
+    }
+    if (!url) {
+      teardownOverlayLayer();
     }
     resetView();
     applyGridOffsets();
@@ -1724,6 +1743,10 @@ export function mountBoardInteractions(store, routes = {}) {
         grid.hidden = false;
         applyGridState(boardApi.getState?.().grid ?? {});
       }
+      const latestState = boardApi.getState?.() ?? {};
+      const activeSceneId = latestState.boardState?.activeSceneId ?? null;
+      const overlayState = resolveSceneOverlayState(latestState.boardState ?? {}, activeSceneId);
+      syncOverlayLayer(overlayState);
       if (status) {
         status.textContent = 'Right-click and drag to pan. Use the mouse wheel to zoom.';
       }
@@ -1741,6 +1764,7 @@ export function mountBoardInteractions(store, routes = {}) {
       if (grid) {
         grid.hidden = true;
       }
+      teardownOverlayLayer();
       emptyState?.removeAttribute('hidden');
       if (status) {
         status.textContent = 'Unable to display the uploaded map.';
@@ -1750,6 +1774,141 @@ export function mountBoardInteractions(store, routes = {}) {
       templateTool.reset();
     };
     mapImage.src = url;
+  }
+
+  function resolveSceneOverlayState(boardState = {}, sceneId = null) {
+    if (!boardState || typeof boardState !== 'object') {
+      return null;
+    }
+
+    const sceneEntries =
+      boardState.sceneState && typeof boardState.sceneState === 'object'
+        ? boardState.sceneState
+        : {};
+
+    const key = typeof sceneId === 'string' ? sceneId : '';
+    if (key && sceneEntries[key] && typeof sceneEntries[key] === 'object') {
+      return sceneEntries[key].overlay ?? null;
+    }
+
+    return boardState.overlay ?? null;
+  }
+
+  function syncOverlayLayer(rawOverlay) {
+    if (!mapOverlay) {
+      return;
+    }
+
+    const overlay = normalizeOverlayState(rawOverlay);
+    const signature = safeStableStringify(overlay);
+    if (signature === lastOverlaySignature) {
+      return;
+    }
+
+    lastOverlaySignature = signature;
+
+    if (!overlay.mapUrl) {
+      teardownOverlayLayer();
+      return;
+    }
+
+    mapOverlay.hidden = false;
+    mapOverlay.style.backgroundImage = buildCssUrl(overlay.mapUrl);
+    applyOverlayMask(overlay.mask);
+  }
+
+  function teardownOverlayLayer() {
+    if (!mapOverlay) {
+      return;
+    }
+
+    mapOverlay.hidden = true;
+    mapOverlay.style.backgroundImage = '';
+    clearOverlayMask();
+    mapOverlay.removeAttribute('data-overlay-mask');
+  }
+
+  function applyOverlayMask(mask = {}) {
+    if (!mapOverlay) {
+      return;
+    }
+
+    clearOverlayMask();
+    const normalizedMask = clonePlainObject(mask);
+    if (!normalizedMask || Object.keys(normalizedMask).length === 0) {
+      mapOverlay.removeAttribute('data-overlay-mask');
+      return;
+    }
+
+    mapOverlay.dataset.overlayMask = JSON.stringify(normalizedMask);
+
+    const maskUrl =
+      typeof normalizedMask.url === 'string' ? normalizedMask.url.trim() : '';
+    if (!maskUrl) {
+      return;
+    }
+
+    const cssUrl = buildCssUrl(maskUrl);
+    if (!cssUrl) {
+      return;
+    }
+
+    mapOverlay.style.maskImage = cssUrl;
+    mapOverlay.style.webkitMaskImage = cssUrl;
+    mapOverlay.style.maskRepeat = 'no-repeat';
+    mapOverlay.style.webkitMaskRepeat = 'no-repeat';
+    mapOverlay.style.maskSize = '100% 100%';
+    mapOverlay.style.webkitMaskSize = '100% 100%';
+  }
+
+  function clearOverlayMask() {
+    if (!mapOverlay) {
+      return;
+    }
+
+    mapOverlay.style.removeProperty('mask-image');
+    mapOverlay.style.removeProperty('-webkit-mask-image');
+    mapOverlay.style.removeProperty('mask-repeat');
+    mapOverlay.style.removeProperty('-webkit-mask-repeat');
+    mapOverlay.style.removeProperty('mask-size');
+    mapOverlay.style.removeProperty('-webkit-mask-size');
+  }
+
+  function normalizeOverlayState(raw = null) {
+    if (!raw || typeof raw !== 'object') {
+      return { mapUrl: null, mask: {} };
+    }
+
+    const mapUrl = typeof raw.mapUrl === 'string' ? raw.mapUrl.trim() : '';
+    const mask = clonePlainObject(raw.mask ?? {});
+
+    return {
+      mapUrl: mapUrl ? mapUrl : null,
+      mask,
+    };
+  }
+
+  function buildCssUrl(value) {
+    if (typeof value !== 'string') {
+      return '';
+    }
+
+    const trimmed = value.trim();
+    if (!trimmed) {
+      return '';
+    }
+
+    const sanitized = trimmed.replace(/["\\\n\r]/g, (char) => {
+      if (char === '"') {
+        return '\\"';
+      }
+      if (char === '\\') {
+        return '\\\\';
+      }
+      return '';
+    });
+
+    return 'url("' + sanitized + '")';
   }
 
   function calibrateToBoard() {
@@ -1818,6 +1977,12 @@ export function mountBoardInteractions(store, routes = {}) {
       left: sanitize(left),
     };
     viewState.gridOffsets = nextOffsets;
+    if (mapOverlay) {
+      mapOverlay.style.setProperty('--vtt-grid-offset-top', `${nextOffsets.top}px`);
+      mapOverlay.style.setProperty('--vtt-grid-offset-right', `${nextOffsets.right}px`);
+      mapOverlay.style.setProperty('--vtt-grid-offset-bottom', `${nextOffsets.bottom}px`);
+      mapOverlay.style.setProperty('--vtt-grid-offset-left', `${nextOffsets.left}px`);
+    }
     if (!grid) {
       renderTokens(boardApi.getState?.() ?? {}, tokenLayer, viewState);
       return;
@@ -6926,6 +7091,32 @@ export function mountBoardInteractions(store, routes = {}) {
     activeConditionPrompt = null;
   }
 
+  function clonePlainObject(value) {
+    if (!value || typeof value !== 'object') {
+      return {};
+    }
+
+    try {
+      return JSON.parse(JSON.stringify(value));
+    } catch (error) {
+      return {};
+    }
+  }
+
+  function normalizeOverlayDraft(raw = {}) {
+    if (!raw || typeof raw !== 'object') {
+      return { mapUrl: null, mask: {} };
+    }
+
+    const mapUrl = typeof raw.mapUrl === 'string' ? raw.mapUrl.trim() : '';
+    const mask = clonePlainObject(raw.mask ?? {});
+
+    return {
+      mapUrl: mapUrl ? mapUrl : null,
+      mask,
+    };
+  }
+
   function ensureScenePlacementDraft(draft, sceneId) {
     const boardDraft = ensureBoardStateDraft(draft);
 
@@ -6954,6 +7145,7 @@ export function mountBoardInteractions(store, routes = {}) {
         placements: {},
         sceneState: {},
         templates: {},
+        overlay: { mapUrl: null, mask: {} },
       };
     }
 
@@ -6967,6 +7159,12 @@ export function mountBoardInteractions(store, routes = {}) {
 
     if (!draft.boardState.templates || typeof draft.boardState.templates !== 'object') {
       draft.boardState.templates = {};
+    }
+
+    if (!draft.boardState.overlay || typeof draft.boardState.overlay !== 'object') {
+      draft.boardState.overlay = { mapUrl: null, mask: {} };
+    } else {
+      draft.boardState.overlay = normalizeOverlayDraft(draft.boardState.overlay);
     }
 
     return draft.boardState;
@@ -6990,6 +7188,10 @@ export function mountBoardInteractions(store, routes = {}) {
         visible: true,
       };
     }
+
+    boardDraft.sceneState[key].overlay = normalizeOverlayDraft(
+      boardDraft.sceneState[key].overlay ?? {}
+    );
 
     return boardDraft.sceneState[key];
   }

@@ -33,7 +33,15 @@ export function renderSceneList(routes, store) {
   const render = (state = {}) => {
     const sceneState = normalizeSceneState(state.scenes);
     updateFolderOptions(folderSelect, sceneState.folders);
-    container.innerHTML = buildSceneMarkup(sceneState, state.boardState?.activeSceneId ?? null);
+    const boardSceneState =
+      state.boardState && typeof state.boardState.sceneState === 'object'
+        ? state.boardState.sceneState
+        : {};
+    container.innerHTML = buildSceneMarkup(
+      sceneState,
+      state.boardState?.activeSceneId ?? null,
+      boardSceneState
+    );
   };
 
   render(stateApi.getState?.());
@@ -88,6 +96,81 @@ export function renderSceneList(routes, store) {
       persistBoardStateSnapshot();
     }
 
+    if (action === 'create-overlay' && sceneId) {
+      const currentState = stateApi.getState?.() ?? {};
+      const sceneState = normalizeSceneState(currentState.scenes);
+      const scene = sceneState.items.find((item) => item.id === sceneId);
+      if (!scene) {
+        return;
+      }
+
+      if ((currentState.boardState?.activeSceneId ?? null) !== sceneId) {
+        showFeedback(feedback, 'Activate the scene before duplicating its overlay.', 'error');
+        return;
+      }
+
+      const mapUrl = typeof scene.mapUrl === 'string' ? scene.mapUrl.trim() : '';
+      if (!mapUrl) {
+        showFeedback(feedback, 'Upload a map before creating an overlay.', 'error');
+        return;
+      }
+
+      let overlayUpdated = false;
+      stateApi.updateState?.((draft) => {
+        ensureSceneDraft(draft);
+        const boardDraft = ensureBoardStateDraft(draft);
+        const sceneBoardState = ensureSceneBoardStateEntry(
+          boardDraft,
+          scene.id,
+          scene.grid ?? null
+        );
+        if (!sceneBoardState) {
+          return;
+        }
+        const nextOverlay = normalizeOverlayConfig(sceneBoardState.overlay ?? {});
+        if (nextOverlay.mapUrl !== mapUrl) {
+          nextOverlay.mapUrl = mapUrl;
+          overlayUpdated = true;
+        }
+        sceneBoardState.overlay = nextOverlay;
+      });
+
+      if (overlayUpdated) {
+        persistBoardStateSnapshot();
+        showFeedback(feedback, 'Overlay duplicated from the active map.', 'success');
+      } else {
+        showFeedback(feedback, 'Overlay already matches the active map.', 'info');
+      }
+    }
+
+    if (action === 'remove-overlay' && sceneId) {
+      let overlayCleared = false;
+      stateApi.updateState?.((draft) => {
+        ensureSceneDraft(draft);
+        const boardDraft = ensureBoardStateDraft(draft);
+        const sceneBoardState = ensureSceneBoardStateEntry(boardDraft, sceneId, null);
+        if (!sceneBoardState || !sceneBoardState.overlay) {
+          return;
+        }
+
+        const currentOverlay = normalizeOverlayConfig(sceneBoardState.overlay);
+        const hasMask = currentOverlay.mask && Object.keys(currentOverlay.mask).length > 0;
+        if (!currentOverlay.mapUrl && !hasMask) {
+          return;
+        }
+
+        sceneBoardState.overlay = normalizeOverlayConfig({});
+        overlayCleared = true;
+      });
+
+      if (overlayCleared) {
+        persistBoardStateSnapshot();
+        showFeedback(feedback, 'Scene overlay cleared.', 'info');
+      } else {
+        showFeedback(feedback, 'Scene overlay is already empty.', 'info');
+      }
+    }
+
     if (action === 'delete-scene' && sceneId) {
       if (!endpoints.scenes) return;
       const confirmed = window.confirm('Delete this scene? This cannot be undone.');
@@ -103,6 +186,7 @@ export function renderSceneList(routes, store) {
           if (boardDraft.activeSceneId === sceneId) {
             boardDraft.activeSceneId = null;
             boardDraft.mapUrl = null;
+            boardDraft.overlay = normalizeOverlayConfig({});
           }
           if (boardDraft.placements && typeof boardDraft.placements === 'object') {
             delete boardDraft.placements[sceneId];
@@ -253,6 +337,12 @@ function ensureBoardStateDraft(draft) {
     draft.boardState.sceneState = {};
   }
 
+  if (!draft.boardState.overlay || typeof draft.boardState.overlay !== 'object') {
+    draft.boardState.overlay = { mapUrl: null, mask: {} };
+  } else {
+    draft.boardState.overlay = normalizeOverlayConfig(draft.boardState.overlay);
+  }
+
   return draft.boardState;
 }
 
@@ -273,10 +363,14 @@ function ensureSceneBoardStateEntry(boardState, sceneId, fallbackGrid = null) {
   const existing = boardState.sceneState[key];
   if (existing && typeof existing === 'object') {
     existing.grid = normalizeGridConfig(existing.grid ?? fallbackGrid ?? {});
+    existing.overlay = normalizeOverlayConfig(existing.overlay ?? {});
     return existing;
   }
 
-  const entry = { grid: normalizeGridConfig(fallbackGrid ?? {}) };
+  const entry = {
+    grid: normalizeGridConfig(fallbackGrid ?? {}),
+    overlay: normalizeOverlayConfig({}),
+  };
   boardState.sceneState[key] = entry;
   return entry;
 }
@@ -293,6 +387,32 @@ function normalizeGridConfig(raw = {}) {
   };
 }
 
+function normalizeOverlayConfig(raw = {}) {
+  if (!raw || typeof raw !== 'object') {
+    return { mapUrl: null, mask: {} };
+  }
+
+  const mapUrl = typeof raw.mapUrl === 'string' ? raw.mapUrl.trim() : '';
+  const mask = clonePlainObject(raw.mask ?? {});
+
+  return {
+    mapUrl: mapUrl ? mapUrl : null,
+    mask,
+  };
+}
+
+function clonePlainObject(value) {
+  if (!value || typeof value !== 'object') {
+    return {};
+  }
+
+  try {
+    return JSON.parse(JSON.stringify(value));
+  } catch (error) {
+    return {};
+  }
+}
+
 function updateFolderOptions(select, folders = []) {
   if (!select) return;
   const current = select.value;
@@ -307,7 +427,7 @@ function updateFolderOptions(select, folders = []) {
   select.value = folders.some((folder) => folder.id === current) ? current : '';
 }
 
-function buildSceneMarkup(sceneState, activeSceneId) {
+function buildSceneMarkup(sceneState, activeSceneId, boardSceneState = {}) {
   if (!sceneState.items.length) {
     return '<p class="empty-state">No scenes saved yet. Upload a map and save your first scene.</p>';
   }
@@ -338,7 +458,9 @@ function buildSceneMarkup(sceneState, activeSceneId) {
           <h4>${escapeHtml(group.title)}</h4>
         </header>
         <div class="scene-group__body">
-          ${group.scenes.map((scene) => renderSceneItem(scene, activeSceneId)).join('')}
+          ${group.scenes
+            .map((scene) => renderSceneItem(scene, activeSceneId, boardSceneState[scene.id] ?? {}))
+            .join('')}
         </div>
       </section>
     `)
@@ -347,9 +469,13 @@ function buildSceneMarkup(sceneState, activeSceneId) {
   return `<div class="scene-list">${markup}</div>`;
 }
 
-function renderSceneItem(scene, activeSceneId) {
+function renderSceneItem(scene, activeSceneId, sceneBoardState = {}) {
   const isActive = scene.id === activeSceneId;
   const name = escapeHtml(scene.name || 'Untitled Scene');
+  const overlayState = normalizeOverlayConfig(sceneBoardState.overlay ?? {});
+  const hasOverlay = Boolean(overlayState.mapUrl) || Object.keys(overlayState.mask).length > 0;
+  const isActiveScene = isActive;
+  const hasMap = typeof scene.mapUrl === 'string' && scene.mapUrl.trim() !== '';
   return `
     <article class="scene-item${isActive ? ' is-active' : ''}" data-scene-id="${scene.id}">
       ${renderScenePreview(scene, scene.name)}
@@ -360,6 +486,24 @@ function renderSceneItem(scene, activeSceneId) {
         </header>
         <footer class="scene-item__footer">
           <button type="button" class="btn" data-action="activate-scene" data-scene-id="${scene.id}">Activate</button>
+          <button
+            type="button"
+            class="btn"
+            data-action="create-overlay"
+            data-scene-id="${scene.id}"
+            ${isActiveScene && hasMap ? '' : 'disabled'}
+          >
+            Duplicate Overlay
+          </button>
+          <button
+            type="button"
+            class="btn"
+            data-action="remove-overlay"
+            data-scene-id="${scene.id}"
+            ${hasOverlay ? '' : 'disabled'}
+          >
+            Clear Overlay
+          </button>
           <button type="button" class="btn btn--danger" data-action="delete-scene" data-scene-id="${scene.id}">Delete</button>
         </footer>
       </div>

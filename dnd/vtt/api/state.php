@@ -204,6 +204,17 @@ function sanitizeBoardStateUpdates(array $raw): array
         }
     }
 
+    if (array_key_exists('overlay', $raw)) {
+        $rawOverlay = $raw['overlay'];
+        if ($rawOverlay === null) {
+            $updates['overlay'] = normalizeOverlayPayload([]);
+        } elseif (is_array($rawOverlay)) {
+            $updates['overlay'] = normalizeOverlayPayload($rawOverlay);
+        } else {
+            throw new InvalidArgumentException('Overlay must be an array or object.');
+        }
+    }
+
     return $updates;
 }
 
@@ -219,6 +230,7 @@ function normalizeBoardState($raw): array
         'placements' => [],
         'sceneState' => [],
         'templates' => [],
+        'overlay' => normalizeOverlayPayload([]),
     ];
 
     if (!is_array($raw)) {
@@ -255,6 +267,10 @@ function normalizeBoardState($raw): array
 
     if (array_key_exists('templates', $raw) && is_array($raw['templates'])) {
         $state['templates'] = normalizeTemplatesPayload($raw['templates']);
+    }
+
+    if (array_key_exists('overlay', $raw) && is_array($raw['overlay'])) {
+        $state['overlay'] = normalizeOverlayPayload($raw['overlay']);
     }
 
     return $state;
@@ -334,6 +350,7 @@ function normalizeSceneStatePayload(array $rawSceneState): array
         $gridSource = $config['grid'] ?? $config;
         $entry = [
             'grid' => normalizeGridSettings($gridSource),
+            'overlay' => normalizeOverlayPayload($config['overlay'] ?? []),
         ];
 
         if (array_key_exists('combat', $config)) {
@@ -477,6 +494,32 @@ function extractCombatUpdates(array $sceneStateUpdates): array
     }
 
     return $updates;
+}
+
+/**
+ * @param array<string,mixed> $rawOverlay
+ */
+function normalizeOverlayPayload($rawOverlay): array
+{
+    $overlay = [
+        'mapUrl' => null,
+        'mask' => [],
+    ];
+
+    if (!is_array($rawOverlay)) {
+        return $overlay;
+    }
+
+    if (array_key_exists('mapUrl', $rawOverlay) && is_string($rawOverlay['mapUrl'])) {
+        $trimmed = trim($rawOverlay['mapUrl']);
+        $overlay['mapUrl'] = $trimmed === '' ? null : $trimmed;
+    }
+
+    if (array_key_exists('mask', $rawOverlay) && is_array($rawOverlay['mask'])) {
+        $overlay['mask'] = $rawOverlay['mask'];
+    }
+
+    return $overlay;
 }
 
 /**
