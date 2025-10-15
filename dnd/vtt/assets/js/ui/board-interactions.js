@@ -12,6 +12,8 @@ const TURN_TIMER_DURATION_MS = 60_000;
 const TURN_TIMER_STAGE_INTERVAL_MS = 20_000;
 const TURN_TIMER_INITIAL_DISPLAY = '1:00';
 const TURN_TIMER_STAGE_FALLBACK = 'full';
+const INDIGO_ROTATION_INTERVAL_MS = 60_000;
+const INDIGO_ROTATION_INCREMENT_DEGREES = 45;
 
 export function mountBoardInteractions(store, routes = {}) {
   const board = document.getElementById('vtt-board-canvas');
@@ -93,6 +95,7 @@ export function mountBoardInteractions(store, routes = {}) {
   };
 
   const boardApi = store ?? {};
+  ensureIndigoRotationTimer();
   let overlayEditorActive = false;
   const overlayTool = createOverlayTool();
   const templateTool = createTemplateTool();
@@ -148,6 +151,9 @@ export function mountBoardInteractions(store, routes = {}) {
   let pendingRoundConfirmation = false;
   let activeConditionPrompt = null;
   let activeTurnDialog = null;
+  const tokenRotationAngles = new Map();
+  let indigoRotationIntervalId = null;
+  let indigoRotationUnloadRegistered = false;
   const turnLockState = {
     holderId: null,
     holderName: null,
@@ -185,6 +191,72 @@ export function mountBoardInteractions(store, routes = {}) {
       { frequency: 147.5, type: 'sine', attack: 0.02, decay: 0.5, sustain: 0.3, duration: 1.9, release: 1.5, volume: 0.22 },
     ],
   };
+
+  function clearIndigoRotationTimer() {
+    if (indigoRotationIntervalId !== null && typeof window?.clearInterval === 'function') {
+      window.clearInterval(indigoRotationIntervalId);
+      indigoRotationIntervalId = null;
+    }
+  }
+
+  function handleIndigoRotationTeardown() {
+    clearIndigoRotationTimer();
+    tokenRotationAngles.clear();
+  }
+
+  function stepIndigoRotations() {
+    if (!viewState.mapLoaded) {
+      return;
+    }
+
+    const state = boardApi.getState?.() ?? {};
+    const placements = getActiveScenePlacements(state);
+    const activeIds = new Set();
+
+    placements.forEach((placement) => {
+      const normalized = normalizePlacementForRender(placement);
+      if (!normalized) {
+        return;
+      }
+
+      activeIds.add(normalized.id);
+
+      if (normalized.name === 'Indigo') {
+        const previous = tokenRotationAngles.get(normalized.id) ?? 0;
+        const nextAngle = (previous + INDIGO_ROTATION_INCREMENT_DEGREES) % 360;
+        tokenRotationAngles.set(normalized.id, nextAngle);
+      } else if (tokenRotationAngles.has(normalized.id)) {
+        tokenRotationAngles.delete(normalized.id);
+      }
+    });
+
+    tokenRotationAngles.forEach((_, id) => {
+      if (!activeIds.has(id)) {
+        tokenRotationAngles.delete(id);
+      }
+    });
+
+    if (tokenLayer) {
+      renderTokens(state, tokenLayer, viewState);
+    }
+  }
+
+  function ensureIndigoRotationTimer() {
+    if (
+      indigoRotationIntervalId !== null ||
+      typeof window === 'undefined' ||
+      typeof window.setInterval !== 'function'
+    ) {
+      return;
+    }
+
+    indigoRotationIntervalId = window.setInterval(stepIndigoRotations, INDIGO_ROTATION_INTERVAL_MS);
+
+    if (!indigoRotationUnloadRegistered && typeof window.addEventListener === 'function') {
+      window.addEventListener('unload', handleIndigoRotationTeardown, { once: true });
+      indigoRotationUnloadRegistered = true;
+    }
+  }
 
   const PLAYER_PROFILE_ALIASES = {
     frunk: ['frunk'],
@@ -2299,6 +2371,7 @@ export function mountBoardInteractions(store, routes = {}) {
       }
       layer.hidden = true;
       renderedPlacements = [];
+      tokenRotationAngles.clear();
       selectedTokenIds.clear();
       notifySelectionChanged();
       closeTokenSettings();
@@ -2325,6 +2398,7 @@ export function mountBoardInteractions(store, routes = {}) {
     let renderedCount = 0;
     const retainedSelection = new Set();
     const trackerEntries = [];
+    const activeRotationIds = new Set();
 
     placements.forEach((placement) => {
       const normalized = normalizePlacementForRender(placement);
@@ -2337,6 +2411,8 @@ export function mountBoardInteractions(store, routes = {}) {
       }
 
       trackerEntries.push(normalized);
+
+      activeRotationIds.add(normalized.id);
 
       let column = normalized.column;
       let row = normalized.row;
@@ -2366,7 +2442,13 @@ export function mountBoardInteractions(store, routes = {}) {
       token.style.height = `${height * gridSize}px`;
       const left = leftOffset + column * gridSize;
       const top = topOffset + row * gridSize;
-      token.style.transform = `translate3d(${left}px, ${top}px, 0)`;
+      const baseTransform = `translate3d(${left}px, ${top}px, 0)`;
+      const rotation = tokenRotationAngles.get(normalized.id);
+      if (Number.isFinite(rotation)) {
+        token.style.transform = `${baseTransform} rotate(${rotation}deg)`;
+      } else {
+        token.style.transform = baseTransform;
+      }
 
       token.classList.toggle('vtt-token--hidden', Boolean(normalized.hidden));
 
@@ -2428,6 +2510,12 @@ export function mountBoardInteractions(store, routes = {}) {
         notifySelectionChanged();
       }
     }
+
+    tokenRotationAngles.forEach((_, id) => {
+      if (!activeRotationIds.has(id)) {
+        tokenRotationAngles.delete(id);
+      }
+    });
 
     existingNodes.forEach((node) => {
       node.remove();
