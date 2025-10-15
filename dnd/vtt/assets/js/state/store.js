@@ -61,6 +61,7 @@ export function initializeState(snapshot = {}) {
   state.user = { isGM, name };
 
   if (!state.user.isGM) {
+    state.boardState.placements = restrictPlacementsToPlayerView(state.boardState.placements);
     state.tokens = restrictTokensToPlayerView(state.tokens);
   }
   notify();
@@ -79,6 +80,7 @@ export function updateState(updater) {
   updater(state);
   syncBoardOverlayState(state.boardState);
   if (!state.user?.isGM) {
+    state.boardState.placements = restrictPlacementsToPlayerView(state.boardState.placements);
     state.tokens = restrictTokensToPlayerView(state.tokens);
   }
   notify();
@@ -619,6 +621,27 @@ export function restrictTokensToPlayerView(tokenState = {}) {
   };
 }
 
+export function restrictPlacementsToPlayerView(placements = {}) {
+  if (!placements || typeof placements !== 'object') {
+    return {};
+  }
+
+  const filtered = {};
+  Object.keys(placements).forEach((sceneId) => {
+    const entries = Array.isArray(placements[sceneId]) ? placements[sceneId] : [];
+    const visibleEntries = entries.filter((entry) => {
+      if (!entry || typeof entry !== 'object') {
+        return false;
+      }
+      const hidden = toBoolean(entry.hidden ?? entry.isHidden ?? entry?.flags?.hidden ?? false, false);
+      return hidden !== true;
+    });
+    filtered[sceneId] = visibleEntries;
+  });
+
+  return filtered;
+}
+
 function dedupeFoldersById(folders) {
   const seen = new Set();
   const result = [];
@@ -689,6 +712,7 @@ function normalizePlacementEntry(entry) {
   const combatTeam = normalizeCombatTeam(
     entry.combatTeam ?? entry.team ?? entry?.tags?.team ?? entry?.faction ?? null
   );
+  const hidden = toBoolean(entry.hidden ?? entry.isHidden ?? entry?.flags?.hidden ?? false, false);
 
   return {
     id,
@@ -707,6 +731,7 @@ function normalizePlacementEntry(entry) {
     conditions,
     condition,
     combatTeam,
+    hidden,
   };
 }
 
@@ -721,6 +746,39 @@ function toNonNegativeInt(value, fallback = 0) {
   }
 
   return Math.max(0, Math.trunc(fallback));
+}
+
+function toBoolean(value, fallback = false) {
+  if (typeof value === 'boolean') {
+    return value;
+  }
+
+  if (typeof value === 'number') {
+    if (!Number.isFinite(value)) {
+      return fallback;
+    }
+    return value !== 0;
+  }
+
+  if (typeof value === 'string') {
+    const normalized = value.trim().toLowerCase();
+    if (!normalized) {
+      return fallback;
+    }
+    if (normalized === 'true' || normalized === '1' || normalized === 'yes' || normalized === 'on') {
+      return true;
+    }
+    if (normalized === 'false' || normalized === '0' || normalized === 'no' || normalized === 'off') {
+      return false;
+    }
+    return fallback;
+  }
+
+  if (typeof value === 'object' && value !== null) {
+    return toBoolean(value.valueOf(), fallback);
+  }
+
+  return fallback;
 }
 
 function normalizeHitPointsValue(value) {

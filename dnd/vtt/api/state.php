@@ -10,6 +10,10 @@ $method = strtoupper($_SERVER['REQUEST_METHOD'] ?? 'GET');
 try {
     if ($method === 'GET') {
         $config = getVttBootstrapConfig();
+        $auth = getVttUserContext();
+        if (!($auth['isGM'] ?? false)) {
+            $config['boardState'] = filterPlacementsForPlayerView($config['boardState'] ?? []);
+        }
         respondJson(200, [
             'success' => true,
             'data' => [

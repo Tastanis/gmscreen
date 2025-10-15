@@ -102,15 +102,17 @@ function getVttBootstrapConfig(?array $authContext = null): array
 
     $scenes = loadVttScenes();
     $tokens = loadVttTokens();
+    $boardState = loadVttJson('board-state.json');
     if (!$isGm) {
         $tokens = filterTokensForPlayerView($tokens);
+        $boardState = filterPlacementsForPlayerView($boardState);
     }
 
     return [
         'routes' => $routes,
         'scenes' => $scenes,
         'tokens' => $tokens,
-        'boardState' => loadVttJson('board-state.json'),
+        'boardState' => $boardState,
         'assetsVersion' => time(),
         'isGM' => $isGm,
         'currentUser' => $context['user'] ?? '',
@@ -285,4 +287,102 @@ function filterTokensForPlayerView(array $tokens): array
         'folders' => array_values($visibleFolders),
         'items' => array_values($visibleTokens),
     ];
+}
+
+/**
+ * @param array<string,mixed>|mixed $boardState
+ * @return array<string,mixed>
+ */
+function filterPlacementsForPlayerView($boardState): array
+{
+    if (!is_array($boardState)) {
+        return [];
+    }
+
+    $filtered = $boardState;
+    $placements = isset($filtered['placements']) && is_array($filtered['placements'])
+        ? $filtered['placements']
+        : [];
+
+    $visiblePlacements = [];
+    foreach ($placements as $sceneId => $entries) {
+        if (!is_array($entries)) {
+            $visiblePlacements[$sceneId] = [];
+            continue;
+        }
+
+        $visibleEntries = [];
+        foreach ($entries as $placement) {
+            if (!is_array($placement)) {
+                continue;
+            }
+            if (isPlacementHiddenFromPlayers($placement)) {
+                continue;
+            }
+            $visibleEntries[] = $placement;
+        }
+
+        $visiblePlacements[$sceneId] = array_values($visibleEntries);
+    }
+
+    $filtered['placements'] = $visiblePlacements;
+
+    return $filtered;
+}
+
+/**
+ * @param array<string,mixed> $placement
+ */
+function isPlacementHiddenFromPlayers(array $placement): bool
+{
+    if (array_key_exists('hidden', $placement)) {
+        return normalizeBooleanFlag($placement['hidden'], false);
+    }
+
+    if (array_key_exists('isHidden', $placement)) {
+        return normalizeBooleanFlag($placement['isHidden'], false);
+    }
+
+    if (isset($placement['flags']) && is_array($placement['flags']) && array_key_exists('hidden', $placement['flags'])) {
+        return normalizeBooleanFlag($placement['flags']['hidden'], false);
+    }
+
+    return false;
+}
+
+/**
+ * @param mixed $value
+ */
+function normalizeBooleanFlag($value, bool $fallback = false): bool
+{
+    if (is_bool($value)) {
+        return $value;
+    }
+
+    if (is_int($value) || is_float($value)) {
+        return (int) $value !== 0;
+    }
+
+    if (is_string($value)) {
+        $normalized = strtolower(trim($value));
+        if ($normalized === '') {
+            return $fallback;
+        }
+
+        if (in_array($normalized, ['true', '1', 'yes', 'on'], true)) {
+            return true;
+        }
+
+        if (in_array($normalized, ['false', '0', 'no', 'off'], true)) {
+            return false;
+        }
+
+        return $fallback;
+    }
+
+    if (is_object($value) && method_exists($value, '__toString')) {
+        return normalizeBooleanFlag((string) $value, $fallback);
+    }
+
+    return $fallback;
 }
