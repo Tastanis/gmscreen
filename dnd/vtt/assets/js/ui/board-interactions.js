@@ -1882,7 +1882,9 @@ export function mountBoardInteractions(store, routes = {}) {
       return;
     }
 
-    mapOverlay.hidden = true;
+    if (!overlayEditorActive) {
+      mapOverlay.hidden = true;
+    }
     mapOverlay.style.backgroundImage = '';
     clearOverlayMask();
     mapOverlay.removeAttribute('data-overlay-mask');
@@ -7450,6 +7452,7 @@ function createOverlayTool() {
   let persistedMask = createEmptyOverlayMask();
   let persistedSignature = overlayMaskSignature(persistedMask);
   let persistedMapUrl = null;
+  let overlayHiddenSnapshot = null;
 
   function toggle() {
     if (isActive) {
@@ -7464,6 +7467,9 @@ function createOverlayTool() {
       return;
     }
 
+    overlayHiddenSnapshot = mapOverlay.hasAttribute('hidden');
+    mapOverlay.removeAttribute('hidden');
+    mapOverlay.hidden = false;
     isActive = true;
     editor.hidden = false;
     mapOverlay.dataset.overlayEditing = 'true';
@@ -7483,6 +7489,10 @@ function createOverlayTool() {
     setStatus('');
     applyOverlayMask(persistedMask);
     updateControls();
+    if (!hasOverlayMap() && overlayHiddenSnapshot) {
+      mapOverlay.hidden = true;
+    }
+    overlayHiddenSnapshot = null;
   }
 
   function resetTool() {
@@ -7822,6 +7832,10 @@ function createOverlayTool() {
       return true;
     }
     return Array.isArray(persistedMask.polygons) && persistedMask.polygons.length > 0;
+  }
+
+  function hasOverlayMap() {
+    return Boolean(persistedMapUrl);
   }
 
   function commitChanges() {
