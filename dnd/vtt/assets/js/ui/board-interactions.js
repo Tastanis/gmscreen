@@ -32,7 +32,7 @@ export function mountBoardInteractions(store, routes = {}) {
   const uploadButton = document.querySelector('[data-action="upload-map"]');
   const uploadInput = document.getElementById('vtt-map-upload-input');
   const templatesButton = document.querySelector('[data-action="open-templates"]');
-  const overlayButton = document.querySelector('[data-action="edit-overlay"]');
+  const sceneListContainer = document.getElementById('scene-manager');
   const groupButton = document.querySelector('[data-action="group-combatants"]');
   const startCombatButton = document.querySelector('[data-action="start-combat"]');
   const damageHealButton = document.querySelector('[data-action="damage-heal"]');
@@ -79,6 +79,7 @@ export function mountBoardInteractions(store, routes = {}) {
   };
 
   const boardApi = store ?? {};
+  let overlayEditorActive = false;
   const overlayTool = createOverlayTool();
   const templateTool = createTemplateTool();
   const TOKEN_DRAG_TYPE = 'application/x-vtt-token-template';
@@ -196,6 +197,27 @@ export function mountBoardInteractions(store, routes = {}) {
       .replace(/'/g, '&#039;');
   }
 
+  function getActiveSceneId() {
+    const state = boardApi.getState?.();
+    const activeSceneId = state?.boardState?.activeSceneId ?? null;
+    return typeof activeSceneId === 'string' && activeSceneId ? activeSceneId : null;
+  }
+
+  function syncCutoutToggleButtons() {
+    if (!sceneListContainer) {
+      return;
+    }
+
+    const activeSceneId = getActiveSceneId();
+    const buttons = sceneListContainer.querySelectorAll('[data-action="toggle-overlay-editor"]');
+    buttons.forEach((button) => {
+      const sceneId = button.getAttribute('data-scene-id');
+      const pressed =
+        overlayEditorActive && activeSceneId && sceneId === activeSceneId ? 'true' : 'false';
+      button.setAttribute('aria-pressed', pressed);
+    });
+  }
+
   function isInputElement(node) {
     return Boolean(
       node &&
@@ -305,14 +327,35 @@ export function mountBoardInteractions(store, routes = {}) {
     });
   }
 
-  if (overlayButton) {
-    overlayButton.addEventListener('click', (event) => {
+  if (sceneListContainer) {
+    sceneListContainer.addEventListener('click', (event) => {
+      const button = event.target.closest('[data-action="toggle-overlay-editor"]');
+      if (!button || button.disabled) {
+        return;
+      }
+
       event.preventDefault();
       if (!isGmUser()) {
         return;
       }
+
+      const sceneId = button.getAttribute('data-scene-id');
+      const activeSceneId = getActiveSceneId();
+      if (!sceneId || !activeSceneId || sceneId !== activeSceneId) {
+        return;
+      }
+
       overlayTool.toggle();
     });
+
+    if (typeof MutationObserver === 'function') {
+      const observer = new MutationObserver(() => {
+        syncCutoutToggleButtons();
+      });
+      observer.observe(sceneListContainer, { childList: true, subtree: true });
+    }
+
+    syncCutoutToggleButtons();
   }
 
   if (startCombatButton) {
@@ -7475,6 +7518,7 @@ function createOverlayTool() {
 
     const overlayEntry = resolveSceneOverlayState(state.boardState ?? {}, activeSceneId);
     notifyOverlayMaskChange(overlayEntry ?? null);
+    syncCutoutToggleButtons();
   }
 
   function notifyOverlayMaskChange(overlayEntry) {
@@ -7713,10 +7757,8 @@ function createOverlayTool() {
   }
 
   function setButtonState(pressed) {
-    if (!overlayButton) {
-      return;
-    }
-    overlayButton.setAttribute('aria-pressed', pressed ? 'true' : 'false');
+    overlayEditorActive = Boolean(pressed);
+    syncCutoutToggleButtons();
   }
 
   function setStatus(message) {

@@ -593,6 +593,10 @@ function renderSceneItem(scene, activeSceneId, sceneBoardState = {}, options = {
   } else if (overlayUploadPending) {
     overlayButtonTitle = 'An overlay upload is already in progress.';
   }
+  const cutoutButtonDisabled = !isActive;
+  const cutoutButtonTitle = isActive
+    ? 'Edit the scene overlay cutout'
+    : 'Activate this scene to edit the overlay cutout.';
   return `
     <article class="scene-item${isActive ? ' is-active' : ''}" data-scene-id="${scene.id}">
       ${renderScenePreview(scene, scene.name)}
@@ -612,6 +616,17 @@ function renderSceneItem(scene, activeSceneId, sceneBoardState = {}, options = {
             ${overlayButtonTitle ? ` title="${escapeHtml(overlayButtonTitle)}"` : ''}
           >
             Upload Overlay
+          </button>
+          <button
+            type="button"
+            class="btn"
+            data-action="toggle-overlay-editor"
+            data-scene-id="${scene.id}"
+            aria-pressed="false"
+            ${cutoutButtonDisabled ? 'disabled' : ''}
+            ${cutoutButtonTitle ? ` title="${escapeHtml(cutoutButtonTitle)}"` : ''}
+          >
+            Cutout Tool
           </button>
           <button
             type="button"
