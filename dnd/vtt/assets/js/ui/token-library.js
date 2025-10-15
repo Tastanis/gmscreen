@@ -601,6 +601,26 @@ function buildTokenDragData(element, tokenIndex) {
   }
   const elementTeam = element.getAttribute('data-token-team');
   const team = normalizeTokenTeam(record?.combatTeam ?? record?.team ?? elementTeam);
+  let folderId = typeof record?.folderId === 'string' ? record.folderId : '';
+  let folderName = typeof record?.folder?.name === 'string' ? record.folder.name : '';
+
+  const groupElement = element.closest('.token-group');
+  if (!folderId && groupElement) {
+    const groupId = groupElement.getAttribute('data-folder-id');
+    if (typeof groupId === 'string' && groupId.trim()) {
+      folderId = groupId.trim();
+    }
+  }
+
+  if (!folderName && groupElement) {
+    const titleNode = groupElement.querySelector('.token-group__title');
+    if (titleNode && typeof titleNode.textContent === 'string') {
+      folderName = titleNode.textContent.trim();
+    }
+  }
+
+  const sourceFolderId = folderId || null;
+  const sourceFolderName = folderName || '';
 
   return {
     id: tokenId,
@@ -610,6 +630,8 @@ function buildTokenDragData(element, tokenIndex) {
     hp: hpValue,
     source: 'token-library',
     team,
+    sourceFolderId,
+    sourceFolderName,
   };
 }
 

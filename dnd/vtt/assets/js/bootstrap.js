@@ -4,6 +4,7 @@ import {
   subscribe,
   updateState,
   restrictTokensToPlayerView,
+  restrictPlacementsToPlayerView,
 } from './state/store.js';
 import { mountSettingsPanel } from './ui/settings-panel.js';
 import { mountChatPanel } from './ui/chat-panel.js';
@@ -22,10 +23,19 @@ async function bootstrap() {
     name: typeof config.currentUser === 'string' ? config.currentUser : '',
   };
 
+  const rawBoardState =
+    config.boardState && typeof config.boardState === 'object' ? config.boardState : {};
+  const initialBoardState = userContext.isGM
+    ? rawBoardState
+    : {
+        ...rawBoardState,
+        placements: restrictPlacementsToPlayerView(rawBoardState.placements ?? {}),
+      };
+
   initializeState({
     scenes: config.scenes,
     tokens: config.tokens,
-    boardState: config.boardState,
+    boardState: initialBoardState,
     user: userContext,
   });
 

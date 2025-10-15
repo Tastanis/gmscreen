@@ -6,6 +6,7 @@ import {
   updateExternalMeasurement,
 } from './drag-ruler.js';
 import { persistBoardState, persistCombatState } from '../services/board-state-service.js';
+import { PLAYER_VISIBLE_TOKEN_FOLDER } from '../state/store.js';
 
 const TURN_TIMER_DURATION_MS = 60_000;
 const TURN_TIMER_STAGE_INTERVAL_MS = 20_000;
@@ -16,7 +17,7 @@ export function mountBoardInteractions(store, routes = {}) {
   const board = document.getElementById('vtt-board-canvas');
   const mapSurface = document.getElementById('vtt-map-surface');
   const mapTransform = document.getElementById('vtt-map-transform');
-  const mapOverlay = document.getElementById('vtt-map-overlay');
+  let mapOverlay = document.getElementById('vtt-map-overlay');
   const grid = document.getElementById('vtt-grid-overlay');
   const tokenLayer = document.getElementById('vtt-token-layer');
   const templateLayer = document.getElementById('vtt-template-layer');
@@ -43,6 +44,19 @@ export function mountBoardInteractions(store, routes = {}) {
   const turnTimerDisplay = turnTimerElement?.querySelector('[data-turn-timer-display]');
   const conditionBannerRegion = document.querySelector('[data-condition-banner-region]');
   if (!board || !mapSurface || !mapTransform || !mapBackdrop || !mapImage || !templateLayer) return;
+  if (!mapOverlay && mapTransform) {
+    mapOverlay = document.createElement('div');
+    mapOverlay.id = 'vtt-map-overlay';
+    mapOverlay.className = 'vtt-board__map-overlay';
+    mapOverlay.setAttribute('aria-hidden', 'true');
+    mapOverlay.hidden = true;
+    const overlayInsertTarget = grid ?? templateLayer;
+    if (overlayInsertTarget && overlayInsertTarget.parentNode === mapTransform) {
+      mapTransform.insertBefore(mapOverlay, overlayInsertTarget);
+    } else {
+      mapTransform.appendChild(mapOverlay);
+    }
+  }
   if (!mapOverlay) return;
 
   const defaultStatusText = status?.textContent ?? '';
@@ -2271,6 +2285,7 @@ export function mountBoardInteractions(store, routes = {}) {
     }
 
     renderedPlacements = [];
+    const gmViewing = isGmUser();
 
     const gridSize = Math.max(8, Number.isFinite(view?.gridSize) ? view.gridSize : 64);
     const offsets = view?.gridOffsets ?? {};
@@ -2317,6 +2332,10 @@ export function mountBoardInteractions(store, routes = {}) {
         return;
       }
 
+      if (!gmViewing && normalized.hidden) {
+        return;
+      }
+
       trackerEntries.push(normalized);
 
       let column = normalized.column;
@@ -2348,6 +2367,8 @@ export function mountBoardInteractions(store, routes = {}) {
       const left = leftOffset + column * gridSize;
       const top = topOffset + row * gridSize;
       token.style.transform = `translate3d(${left}px, ${top}px, 0)`;
+
+      token.classList.toggle('vtt-token--hidden', Boolean(normalized.hidden));
 
       if (normalized.imageUrl) {
         let img = token.querySelector('img.vtt-token__image');
@@ -2434,7 +2455,12 @@ export function mountBoardInteractions(store, routes = {}) {
 
     const waitingContainer = combatTrackerWaiting;
     const completedContainer = combatTrackerCompleted;
-    const entries = Array.isArray(combatants) ? combatants.filter(Boolean) : [];
+    const gmViewing = isGmUser();
+    const entries = Array.isArray(combatants)
+      ? combatants
+          .filter(Boolean)
+          .filter((entry) => gmViewing || !toBoolean(entry.hidden ?? entry.isHidden ?? false, false))
+      : [];
 
     combatantTeams.clear();
     entries.forEach((entry) => {
@@ -5077,6 +5103,10 @@ export function mountBoardInteractions(store, routes = {}) {
         placement?.alignment ??
         null
     );
+    const hidden = toBoolean(
+      placement.hidden ?? placement.isHidden ?? placement?.flags?.hidden ?? false,
+      false
+    );
 
     return {
       id,
@@ -5093,6 +5123,7 @@ export function mountBoardInteractions(store, routes = {}) {
       conditions,
       condition,
       team,
+      hidden,
     };
   }
 
@@ -5118,6 +5149,39 @@ export function mountBoardInteractions(store, routes = {}) {
     }
 
     return Math.max(0, Math.trunc(fallback));
+  }
+
+  function toBoolean(value, fallback = false) {
+    if (typeof value === 'boolean') {
+      return value;
+    }
+
+    if (typeof value === 'number') {
+      if (!Number.isFinite(value)) {
+        return fallback;
+      }
+      return value !== 0;
+    }
+
+    if (typeof value === 'string') {
+      const normalized = value.trim().toLowerCase();
+      if (!normalized) {
+        return fallback;
+      }
+      if (normalized === 'true' || normalized === '1' || normalized === 'yes' || normalized === 'on') {
+        return true;
+      }
+      if (normalized === 'false' || normalized === '0' || normalized === 'no' || normalized === 'off') {
+        return false;
+      }
+      return fallback;
+    }
+
+    if (typeof value === 'object' && value !== null) {
+      return toBoolean(value.valueOf(), fallback);
+    }
+
+    return fallback;
   }
 
   function measurementPointFromToken(position) {
@@ -5234,11 +5298,58 @@ export function mountBoardInteractions(store, routes = {}) {
         template.combatTeam = normalizedTeam;
       }
 
+      if (Object.prototype.hasOwnProperty.call(parsed, 'sourceFolderId')) {
+        const rawId = parsed.sourceFolderId;
+        if (rawId === null) {
+          template.sourceFolderId = null;
+        } else if (typeof rawId === 'string') {
+          const trimmed = rawId.trim();
+          template.sourceFolderId = trimmed || null;
+        }
+      }
+
+      if (typeof parsed.sourceFolderName === 'string') {
+        template.sourceFolderName = parsed.sourceFolderName.trim();
+      }
+
+      if (typeof parsed.folderName === 'string' && !template.sourceFolderName) {
+        template.folderName = parsed.folderName.trim();
+      }
+
       return template;
     } catch (error) {
       console.warn('[VTT] Failed to parse dropped token payload', error);
       return null;
     }
+  }
+
+  function isTokenSourcePlayerVisible(template = {}) {
+    const playerFolderName = PLAYER_VISIBLE_TOKEN_FOLDER.trim().toLowerCase();
+    if (!playerFolderName) {
+      return false;
+    }
+
+    const candidateNames = [];
+    if (typeof template.sourceFolderName === 'string') {
+      candidateNames.push(template.sourceFolderName);
+    }
+    if (typeof template.sourceFolderId === 'string') {
+      candidateNames.push(template.sourceFolderId);
+    }
+    if (typeof template.folderName === 'string') {
+      candidateNames.push(template.folderName);
+    }
+    if (typeof template.folder?.name === 'string') {
+      candidateNames.push(template.folder.name);
+    }
+
+    return candidateNames.some((value) => {
+      if (typeof value !== 'string') {
+        return false;
+      }
+      const normalized = value.trim().toLowerCase();
+      return normalized === playerFolderName;
+    });
   }
 
   function calculateTokenPlacement(template, event, surface, view) {
@@ -5303,6 +5414,13 @@ export function mountBoardInteractions(store, routes = {}) {
     row = Math.max(0, Math.min(row, maxRow));
 
     const hitPoints = normalizePlacementHitPoints(template.hp ?? template.maxHp ?? null);
+    const playerVisibleSource = isTokenSourcePlayerVisible(template);
+    let hidden = !playerVisibleSource;
+    if (Object.prototype.hasOwnProperty.call(template, 'hidden')) {
+      hidden = toBoolean(template.hidden, hidden);
+    } else if (Object.prototype.hasOwnProperty.call(template, 'isHidden')) {
+      hidden = toBoolean(template.isHidden, hidden);
+    }
 
     return {
       id: createPlacementId(),
@@ -5320,6 +5438,7 @@ export function mountBoardInteractions(store, routes = {}) {
       triggeredActionReady: true,
       condition: null,
       combatTeam: normalizeCombatTeam(template.combatTeam ?? template.team ?? null),
+      hidden,
     };
   }
 
@@ -6333,6 +6452,19 @@ export function mountBoardInteractions(store, routes = {}) {
       }))
       .join('');
 
+    const hiddenToggleMarkup = isGmUser()
+      ? `
+        <div class="vtt-token-settings__section">
+          <div class="vtt-token-settings__row">
+            <label class="vtt-token-settings__toggle">
+              <input type="checkbox" data-token-settings-toggle="hidden" />
+              <span>Hidden from Players</span>
+            </label>
+          </div>
+        </div>
+      `
+      : '';
+
     element.innerHTML = `
       <form class="vtt-token-settings__form" novalidate>
         <header class="vtt-token-settings__header">
@@ -6419,6 +6551,7 @@ export function mountBoardInteractions(store, routes = {}) {
           </div>
           <p class="vtt-token-settings__hint" data-token-settings-hint>Click the on-board indicator to toggle its state.</p>
         </div>
+        ${hiddenToggleMarkup}
       </form>
     `;
     document.body.appendChild(element);
@@ -6439,6 +6572,7 @@ export function mountBoardInteractions(store, routes = {}) {
       ),
       conditionApply: element.querySelector('[data-token-settings-condition-apply]'),
       conditionList: element.querySelector('[data-token-settings-condition-list]'),
+      hiddenToggle: element.querySelector('[data-token-settings-toggle="hidden"]'),
     };
 
     element.addEventListener('contextmenu', (event) => {
@@ -6491,6 +6625,26 @@ export function mountBoardInteractions(store, routes = {}) {
         if (!visible) {
           hitPointsEditSession = null;
         }
+      });
+    }
+
+    if (menu.hiddenToggle) {
+      menu.hiddenToggle.addEventListener('change', () => {
+        if (!activeTokenSettingsId) {
+          return;
+        }
+
+        const hidden = menu.hiddenToggle.checked;
+        const updated = updatePlacementById(activeTokenSettingsId, (target) => {
+          target.hidden = Boolean(hidden);
+        });
+
+        if (!updated) {
+          menu.hiddenToggle.checked = !hidden;
+          return;
+        }
+
+        refreshTokenSettings();
       });
     }
 
@@ -6772,6 +6926,12 @@ export function mountBoardInteractions(store, routes = {}) {
 
     if (tokenSettingsMenu.triggeredToggle) {
       tokenSettingsMenu.triggeredToggle.checked = Boolean(placement.showTriggeredAction);
+    }
+
+    if (tokenSettingsMenu.hiddenToggle) {
+      tokenSettingsMenu.hiddenToggle.checked = Boolean(
+        placement.hidden ?? placement.isHidden ?? false
+      );
     }
   }
 
