@@ -5,30 +5,30 @@ const COMBAT_SAVE_KEY_PREFIX = 'combat-state';
 
 export function persistBoardState(endpoint, boardState = {}) {
   if (!endpoint) {
-    return;
+    return null;
   }
 
   const payload = buildPayload(boardState);
   if (!payload) {
-    return;
+    return null;
   }
 
-  queueSave(SAVE_KEY, { boardState: payload }, endpoint);
+  return queueSave(SAVE_KEY, { boardState: payload }, endpoint);
 }
 
 export function persistCombatState(endpoint, sceneId, combatState = {}) {
   if (!endpoint) {
-    return;
+    return null;
   }
 
   const payload = buildCombatPayload(sceneId, combatState);
   if (!payload) {
-    return;
+    return null;
   }
 
   const key = `${COMBAT_SAVE_KEY_PREFIX}-${payload.sceneId}`;
   const { sceneId: _sceneId, ...rest } = payload;
-  queueSave(key, rest, endpoint);
+  return queueSave(key, rest, endpoint);
 }
 
 function buildPayload(boardState = {}) {
