@@ -96,6 +96,40 @@ export function createBoardStatePoller({
       const snapshotAuthorId = normalizeProfileIdFn(
         snapshotMetadata?.authorId ?? snapshotMetadata?.holderId ?? null
       );
+      const snapshotUpdatedAtRaw = Number(
+        snapshotMetadata?.updatedAt ?? snapshotMetadata?.timestamp
+      );
+      const snapshotUpdatedAt = Number.isFinite(snapshotUpdatedAtRaw)
+        ? snapshotUpdatedAtRaw
+        : 0;
+      const snapshotAuthorRole =
+        typeof snapshotMetadata?.authorRole === 'string'
+          ? snapshotMetadata.authorRole.trim().toLowerCase()
+          : '';
+      const snapshotAuthorIsGm = Boolean(
+        snapshotMetadata?.authorIsGm || snapshotAuthorRole === 'gm'
+      );
+
+      const currentState = boardApi.getState?.() ?? {};
+      const currentMetadata =
+        currentState?.boardState?.metadata ?? currentState?.boardState?.meta ?? null;
+      const currentSignature =
+        typeof currentMetadata?.signature === 'string'
+          ? currentMetadata.signature.trim()
+          : null;
+      const currentAuthorRole =
+        typeof currentMetadata?.authorRole === 'string'
+          ? currentMetadata.authorRole.trim().toLowerCase()
+          : '';
+      const currentAuthorIsGm = Boolean(
+        currentMetadata?.authorIsGm || currentAuthorRole === 'gm'
+      );
+      const currentUpdatedAtRaw = Number(
+        currentMetadata?.updatedAt ?? currentMetadata?.timestamp
+      );
+      const currentUpdatedAt = Number.isFinite(currentUpdatedAtRaw)
+        ? currentUpdatedAtRaw
+        : 0;
       const currentUserId = normalizeProfileIdFn(getCurrentUserIdFn());
       const incomingHash = hashCandidate;
       const lastPersistedHash = getLastPersistedHashFn?.() ?? null;
@@ -108,6 +142,21 @@ export function createBoardStatePoller({
       );
 
       if (authoredSnapshot) {
+        lastHash = hash;
+        pollErrorLogged = false;
+        return;
+      }
+
+      if (
+        currentAuthorIsGm &&
+        currentUpdatedAt > 0 &&
+        (!snapshotAuthorIsGm ||
+          currentUpdatedAt > snapshotUpdatedAt ||
+          (currentUpdatedAt === snapshotUpdatedAt &&
+            currentSignature &&
+            snapshotSignature &&
+            currentSignature === snapshotSignature))
+      ) {
         lastHash = hash;
         pollErrorLogged = false;
         return;
@@ -622,33 +671,38 @@ export function mountBoardInteractions(store, routes = {}) {
     }
 
     const latest = boardApi.getState?.();
-    if (!latest?.user?.isGM) {
-      return;
-    }
-
     const boardState = latest?.boardState ?? null;
     if (!boardState || typeof boardState !== 'object') {
       return;
     }
 
+    const isGmUser = Boolean(latest?.user?.isGM);
+    const snapshot = buildBoardStateSnapshotForPersistence(boardState, { isGm: isGmUser });
+    if (!snapshot) {
+      return;
+    }
+
+    const previousMetadata = cloneBoardSection(boardState.metadata ?? boardState.meta);
     const authorId = normalizeProfileId(getCurrentUserId());
     const timestamp = Date.now();
     const signatureSeed = Math.random().toString(36).slice(2);
     const signatureBase = authorId ? `${authorId}:${timestamp}` : `${timestamp}`;
     const signature = `${signatureBase}:${signatureSeed}`;
 
+    const metadataBase =
+      previousMetadata && typeof previousMetadata === 'object' ? previousMetadata : {};
     const metadata = {
+      ...metadataBase,
       updatedAt: timestamp,
       signature,
+      authorRole: isGmUser ? 'gm' : 'player',
+      authorIsGm: isGmUser,
     };
     if (authorId) {
       metadata.authorId = authorId;
     }
 
-    const snapshot = {
-      ...boardState,
-      metadata,
-    };
+    snapshot.metadata = metadata;
 
     const snapshotHashCandidate = hashBoardStateSnapshot(snapshot);
     const snapshotHash = snapshotHashCandidate ?? safeJsonStringify(snapshot) ?? null;
@@ -678,6 +732,76 @@ export function mountBoardInteractions(store, routes = {}) {
 
     return savePromise ?? null;
   };
+
+  function buildBoardStateSnapshotForPersistence(boardState = {}, { isGm = false } = {}) {
+    if (!boardState || typeof boardState !== 'object') {
+      return null;
+    }
+
+    const snapshot = {};
+
+    if (Object.prototype.hasOwnProperty.call(boardState, 'activeSceneId')) {
+      snapshot.activeSceneId = boardState.activeSceneId ?? null;
+    }
+
+    snapshot.placements = sanitizePlacementsForPersistence(
+      boardState.placements,
+      { includeHidden: isGm }
+    );
+    snapshot.templates = sanitizeTemplatesForPersistence(boardState.templates);
+
+    if (isGm) {
+      snapshot.mapUrl = boardState.mapUrl ?? null;
+      snapshot.sceneState = cloneBoardSection(boardState.sceneState);
+      snapshot.overlay = cloneOverlayState(boardState.overlay);
+    }
+
+    return snapshot;
+  }
+
+  function sanitizePlacementsForPersistence(source, { includeHidden = false } = {}) {
+    const clone = cloneBoardSection(source);
+    if (!clone || typeof clone !== 'object') {
+      return {};
+    }
+
+    Object.keys(clone).forEach((sceneId) => {
+      const entries = Array.isArray(clone[sceneId]) ? clone[sceneId] : [];
+      const filtered = entries.filter((entry) => includeHidden || !isPlacementHiddenForPersistence(entry));
+      clone[sceneId] = filtered;
+    });
+
+    return clone;
+  }
+
+  function sanitizeTemplatesForPersistence(source) {
+    const clone = cloneBoardSection(source);
+    return clone && typeof clone === 'object' ? clone : {};
+  }
+
+  function isPlacementHiddenForPersistence(placement) {
+    if (!placement || typeof placement !== 'object') {
+      return false;
+    }
+
+    if (Object.prototype.hasOwnProperty.call(placement, 'hidden')) {
+      return toBoolean(placement.hidden, false);
+    }
+
+    if (Object.prototype.hasOwnProperty.call(placement, 'isHidden')) {
+      return toBoolean(placement.isHidden, false);
+    }
+
+    if (
+      placement.flags &&
+      typeof placement.flags === 'object' &&
+      Object.prototype.hasOwnProperty.call(placement.flags, 'hidden')
+    ) {
+      return toBoolean(placement.flags.hidden, false);
+    }
+
+    return false;
+  }
 
   function startBoardStatePoller() {
     if (!routes?.state) {
