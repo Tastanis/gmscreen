@@ -128,6 +128,15 @@ function buildPayload(boardState = {}) {
           metadata.signature = signature;
         }
       }
+      if (typeof rawMetadata.authorRole === 'string') {
+        const role = rawMetadata.authorRole.trim().toLowerCase();
+        if (role === 'gm' || role === 'player') {
+          metadata.authorRole = role;
+        }
+      }
+      if (typeof rawMetadata.authorIsGm === 'boolean') {
+        metadata.authorIsGm = rawMetadata.authorIsGm;
+      }
       if (Object.keys(metadata).length > 0) {
         payload.metadata = metadata;
       }

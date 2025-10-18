@@ -2,7 +2,7 @@ import test from 'node:test';
 import assert from 'node:assert/strict';
 import { JSDOM } from 'jsdom';
 
-import { mountBoardInteractions } from '../board-interactions.js';
+import { mountBoardInteractions, createBoardStatePoller } from '../board-interactions.js';
 
 function createDom() {
   const dom = new JSDOM(
@@ -315,4 +315,234 @@ test('Sharon hesitation broadcast from shared combat state shows banner for obse
   } finally {
     dom.window.close();
   }
+});
+
+test('player token removal queues sanitized board persistence payload', async () => {
+  const dom = createDom();
+  const { window } = dom;
+  const { document } = window;
+
+  const originalFetch = globalThis.fetch;
+  const requests = [];
+  globalThis.fetch = async (endpoint, options = {}) => {
+    if ((options?.method ?? 'GET').toUpperCase() === 'POST') {
+      requests.push({ endpoint, options });
+      return { ok: true, json: async () => ({ success: true }) };
+    }
+    return { ok: true, json: async () => ({}) };
+  };
+
+  const originalSetInterval = window.setInterval;
+  const originalClearInterval = window.clearInterval;
+  window.setInterval = () => 0;
+  window.clearInterval = () => {};
+
+  const board = document.getElementById('vtt-board-canvas');
+  board.focus = () => {};
+  const rect = {
+    width: 640,
+    height: 640,
+    top: 0,
+    left: 0,
+    right: 640,
+    bottom: 640,
+    x: 0,
+    y: 0,
+  };
+  board.getBoundingClientRect = () => rect;
+
+  const mapSurface = document.getElementById('vtt-map-surface');
+  mapSurface.getBoundingClientRect = () => rect;
+  mapSurface.setPointerCapture = () => {};
+  mapSurface.releasePointerCapture = () => {};
+
+  if (!window.PointerEvent) {
+    class TestPointerEvent extends window.MouseEvent {
+      constructor(type, init = {}) {
+        super(type, { bubbles: true, cancelable: true, ...init });
+        Object.defineProperty(this, 'pointerId', {
+          configurable: true,
+          value: init.pointerId ?? 1,
+        });
+        Object.defineProperty(this, 'pointerType', {
+          configurable: true,
+          value: init.pointerType ?? 'mouse',
+        });
+        Object.defineProperty(this, 'buttons', {
+          configurable: true,
+          value:
+            init.buttons ?? (typeof init.button === 'number' && init.button === 0 ? 1 : 0),
+        });
+      }
+    }
+    window.PointerEvent = TestPointerEvent;
+    globalThis.PointerEvent = TestPointerEvent;
+  }
+
+  const state = {
+    user: { isGM: false, name: 'Player One' },
+    boardState: {
+      activeSceneId: 'scene-1',
+      mapUrl: 'http://example.com/map.png',
+      placements: {
+        'scene-1': [
+          { id: 'visible-token', column: 0, row: 0, width: 1, height: 1 },
+          { id: 'hidden-token', column: 5, row: 5, width: 1, height: 1, hidden: true },
+        ],
+      },
+      templates: {
+        'scene-1': [
+          {
+            id: 'template-1',
+            type: 'circle',
+            color: '#ffffff',
+            center: { column: 1, row: 1 },
+            radius: 1,
+          },
+        ],
+      },
+      sceneState: { 'scene-1': { grid: { size: 64, visible: true } } },
+      metadata: {
+        updatedAt: 1,
+        signature: 'gm:1',
+        authorRole: 'gm',
+        authorIsGm: true,
+        authorId: 'gm',
+      },
+    },
+    grid: { size: 64, visible: true },
+    scenes: { items: [{ id: 'scene-1', name: 'Scene One' }] },
+  };
+
+  const store = createMockStore(state);
+
+  try {
+    mountBoardInteractions(store, { state: '/state' });
+
+    const mapImage = document.getElementById('vtt-map-image');
+    Object.defineProperty(mapImage, 'naturalWidth', { value: 640, configurable: true });
+    Object.defineProperty(mapImage, 'naturalHeight', { value: 640, configurable: true });
+    mapImage.onload?.();
+
+    const token = document.querySelector('[data-placement-id="visible-token"]');
+    assert.ok(token, 'visible token should render');
+
+    token.dispatchEvent(
+      new window.PointerEvent('pointerdown', {
+        clientX: 32,
+        clientY: 32,
+        button: 0,
+        buttons: 1,
+        pointerId: 1,
+      })
+    );
+    mapSurface.dispatchEvent(
+      new window.PointerEvent('pointerup', {
+        clientX: 32,
+        clientY: 32,
+        button: 0,
+        buttons: 0,
+        pointerId: 1,
+      })
+    );
+
+    board.dispatchEvent(new window.KeyboardEvent('keydown', { key: 'Delete', bubbles: true }));
+
+    await new Promise((resolve) => setTimeout(resolve, 350));
+
+    assert.equal(requests.length, 1, 'player interaction should trigger persistence');
+    const payload = JSON.parse(requests[0].options.body);
+    assert.deepEqual(payload.boardState.placements['scene-1'], []);
+    assert.ok(Array.isArray(payload.boardState.templates['scene-1']));
+    assert.equal(payload.boardState.metadata.authorRole, 'player');
+    assert.strictEqual(payload.boardState.metadata.authorIsGm, false);
+    assert.equal(payload.boardState.metadata.authorId, 'player one');
+    assert.ok(typeof payload.boardState.metadata.signature === 'string');
+    assert.ok(!('mapUrl' in payload.boardState));
+  } finally {
+    globalThis.fetch = originalFetch;
+    window.setInterval = originalSetInterval;
+    window.clearInterval = originalClearInterval;
+    dom.window.close();
+  }
+});
+
+test('board state poller ignores stale player snapshot when newer GM data exists', async () => {
+  let state = {
+    boardState: {
+      activeSceneId: 'scene-1',
+      placements: { 'scene-1': [{ id: 'gm-token', column: 2, row: 2 }] },
+      metadata: {
+        updatedAt: 2_000,
+        signature: 'gm-2',
+        authorRole: 'gm',
+        authorIsGm: true,
+      },
+    },
+  };
+
+  const boardApi = {
+    getState: () => state,
+    updateState: (updater) => {
+      const draft = JSON.parse(JSON.stringify(state));
+      updater(draft);
+      state = draft;
+    },
+  };
+
+  const payloads = [
+    {
+      data: {
+        boardState: {
+          placements: { 'scene-1': [{ id: 'player-token', column: 5, row: 5 }] },
+          metadata: {
+            updatedAt: 1_500,
+            signature: 'player-1',
+            authorRole: 'player',
+            authorIsGm: false,
+          },
+        },
+      },
+    },
+    {
+      data: {
+        boardState: {
+          placements: { 'scene-1': [{ id: 'gm-token', column: 4, row: 5 }] },
+          metadata: {
+            updatedAt: 3_000,
+            signature: 'gm-3',
+            authorRole: 'gm',
+            authorIsGm: true,
+          },
+        },
+      },
+    },
+  ];
+
+  const hashes = ['hash-player', 'hash-gm'];
+
+  const poller = createBoardStatePoller({
+    stateEndpoint: '/state',
+    boardApi,
+    fetchFn: async () => {
+      const payload = payloads.shift() ?? payloads[0];
+      return { ok: true, json: async () => payload };
+    },
+    hashBoardStateSnapshotFn: () => hashes.shift() ?? `hash-${Date.now()}`,
+    safeJsonStringifyFn: (value) => JSON.stringify(value),
+    mergeBoardStateSnapshotFn: (_, incoming) => incoming,
+    getCurrentUserIdFn: () => 'player one',
+    normalizeProfileIdFn: (value) => value,
+    getPendingSaveInfo: () => ({ pending: false }),
+    getLastPersistedHashFn: () => null,
+    getLastPersistedSignatureFn: () => null,
+  });
+
+  await poller.poll();
+  assert.equal(state.boardState.metadata.signature, 'gm-2');
+  assert.deepEqual(state.boardState.placements, { 'scene-1': [{ id: 'gm-token', column: 2, row: 2 }] });
+
+  await poller.poll();
+  assert.equal(state.boardState.metadata.signature, 'gm-3');
+  assert.deepEqual(state.boardState.placements, { 'scene-1': [{ id: 'gm-token', column: 4, row: 5 }] });
 });
