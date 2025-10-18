@@ -8,6 +8,149 @@ import {
 import { persistBoardState, persistCombatState } from '../services/board-state-service.js';
 import { PLAYER_VISIBLE_TOKEN_FOLDER } from '../state/store.js';
 
+export function createBoardStatePoller({
+  routes,
+  stateEndpoint,
+  boardApi = {},
+  fetchFn = typeof fetch === 'function' ? fetch : null,
+  windowRef = typeof window === 'undefined' ? undefined : window,
+  documentRef = typeof document === 'undefined' ? undefined : document,
+  hashBoardStateSnapshotFn = (snapshot) => {
+    try {
+      return JSON.stringify(snapshot);
+    } catch (error) {
+      return null;
+    }
+  },
+  safeJsonStringifyFn = (value) => {
+    try {
+      return JSON.stringify(value);
+    } catch (error) {
+      return null;
+    }
+  },
+  mergeBoardStateSnapshotFn = (existing, incoming) => incoming ?? existing ?? {},
+  getCurrentUserIdFn = () => null,
+  normalizeProfileIdFn = (value) => value,
+  getPendingSaveInfo = () => ({ pending: false }),
+  getLastPersistedHashFn = () => null,
+  getLastPersistedSignatureFn = () => null,
+} = {}) {
+  const endpoint = stateEndpoint ?? routes?.state ?? null;
+
+  let isPolling = false;
+  let lastHash = null;
+  let pollErrorLogged = false;
+
+  async function poll() {
+    if (isPolling) {
+      return;
+    }
+    if (!endpoint || typeof fetchFn !== 'function') {
+      return;
+    }
+    if (documentRef && documentRef.visibilityState === 'hidden') {
+      return;
+    }
+
+    isPolling = true;
+    try {
+      const response = await fetchFn(endpoint, { cache: 'no-store' });
+      if (!response?.ok) {
+        throw new Error(`Unexpected status ${response?.status ?? 'unknown'}`);
+      }
+
+      const payload = (await response.json().catch(() => ({}))) ?? {};
+      const incoming = payload?.data?.boardState ?? null;
+      if (!incoming || typeof incoming !== 'object') {
+        return;
+      }
+
+      const hashCandidate = hashBoardStateSnapshotFn(incoming);
+      const hashFallback = safeJsonStringifyFn(incoming) ?? String(Date.now());
+      const hash = hashCandidate ?? hashFallback;
+      if (hash === lastHash) {
+        pollErrorLogged = false;
+        return;
+      }
+
+      const pendingSaveInfo = getPendingSaveInfo?.() ?? {};
+      const hasPendingSave = Boolean(
+        pendingSaveInfo?.pending ||
+          pendingSaveInfo?.promise ||
+          pendingSaveInfo?.signature ||
+          pendingSaveInfo?.hash
+      );
+
+      if (hasPendingSave) {
+        lastHash = hash;
+        pollErrorLogged = false;
+        return;
+      }
+
+      const snapshotMetadata = incoming?.metadata ?? incoming?.meta ?? null;
+      const snapshotSignature =
+        typeof snapshotMetadata?.signature === 'string'
+          ? snapshotMetadata.signature.trim()
+          : null;
+      const snapshotAuthorId = normalizeProfileIdFn(
+        snapshotMetadata?.authorId ?? snapshotMetadata?.holderId ?? null
+      );
+      const currentUserId = normalizeProfileIdFn(getCurrentUserIdFn());
+      const incomingHash = hashCandidate;
+      const lastPersistedHash = getLastPersistedHashFn?.() ?? null;
+      const lastPersistedSignature = getLastPersistedSignatureFn?.() ?? null;
+
+      const authoredSnapshot = Boolean(
+        (snapshotSignature && snapshotSignature === lastPersistedSignature) ||
+          (snapshotAuthorId && currentUserId && snapshotAuthorId === currentUserId) ||
+          (incomingHash && incomingHash === lastPersistedHash)
+      );
+
+      if (authoredSnapshot) {
+        lastHash = hash;
+        pollErrorLogged = false;
+        return;
+      }
+
+      lastHash = hash;
+      pollErrorLogged = false;
+
+      boardApi.updateState?.((draft) => {
+        draft.boardState = mergeBoardStateSnapshotFn(
+          draft.boardState,
+          incoming
+        );
+      });
+    } catch (error) {
+      if (!pollErrorLogged) {
+        console.warn('[VTT] Board state poll failed', error);
+        pollErrorLogged = true;
+      }
+    } finally {
+      isPolling = false;
+    }
+  }
+
+  function start() {
+    if (!endpoint || typeof windowRef?.setInterval !== 'function' || typeof fetchFn !== 'function') {
+      return { stop() {} };
+    }
+
+    poll();
+    const intervalId = windowRef.setInterval(poll, 2000);
+    return {
+      stop() {
+        if (typeof windowRef?.clearInterval === 'function') {
+          windowRef.clearInterval(intervalId);
+        }
+      },
+    };
+  }
+
+  return { poll, start };
+}
+
 const TURN_TIMER_DURATION_MS = 60_000;
 const TURN_TIMER_STAGE_INTERVAL_MS = 20_000;
 const TURN_TIMER_INITIAL_DISPLAY = '1:00';
@@ -162,6 +305,7 @@ export function mountBoardInteractions(store, routes = {}) {
   };
   let lastPersistedBoardStateSignature = null;
   let lastPersistedBoardStateHash = null;
+  let pendingBoardStateSave = null;
   let suppressCombatStateSync = false;
   let combatStateVersion = 0;
   let lastCombatStateSnapshot = null;
@@ -506,90 +650,70 @@ export function mountBoardInteractions(store, routes = {}) {
       metadata,
     };
 
-    lastPersistedBoardStateSignature = signature;
-    lastPersistedBoardStateHash = hashBoardStateSnapshot(snapshot);
+    const snapshotHashCandidate = hashBoardStateSnapshot(snapshot);
+    const snapshotHash = snapshotHashCandidate ?? safeJsonStringify(snapshot) ?? null;
 
-    persistBoardState(routes.state, snapshot);
+    const savePromise = persistBoardState(routes.state, snapshot);
+    if (savePromise && typeof savePromise.then === 'function') {
+      const pendingEntry = {
+        promise: savePromise,
+        signature,
+        hash: snapshotHash,
+      };
+      pendingBoardStateSave = pendingEntry;
+      savePromise.then((result) => {
+        if (pendingBoardStateSave !== pendingEntry) {
+          return result;
+        }
+
+        pendingBoardStateSave = null;
+        if (result?.success) {
+          lastPersistedBoardStateSignature = signature;
+          lastPersistedBoardStateHash = snapshotHash;
+        }
+        return result;
+      });
+      return savePromise;
+    }
+
+    return savePromise ?? null;
   };
 
   function startBoardStatePoller() {
-    if (!routes?.state || typeof window === 'undefined' || typeof window.setInterval !== 'function') {
+    if (!routes?.state) {
       return;
     }
 
-    let isPolling = false;
-    let lastHash = null;
-    let pollErrorLogged = false;
+    const poller = createBoardStatePoller({
+      routes,
+      boardApi,
+      fetchFn: typeof fetch === 'function' ? fetch : null,
+      windowRef: typeof window === 'undefined' ? undefined : window,
+      documentRef: typeof document === 'undefined' ? undefined : document,
+      hashBoardStateSnapshotFn: hashBoardStateSnapshot,
+      safeJsonStringifyFn: safeJsonStringify,
+      mergeBoardStateSnapshotFn: mergeBoardStateSnapshot,
+      getCurrentUserIdFn: getCurrentUserId,
+      normalizeProfileIdFn: normalizeProfileId,
+      getPendingSaveInfo: getPendingBoardStateSaveInfo,
+      getLastPersistedHashFn: () => lastPersistedBoardStateHash,
+      getLastPersistedSignatureFn: () => lastPersistedBoardStateSignature,
+    });
 
-    const poll = async () => {
-      if (isPolling) {
-        return;
-      }
-      if (typeof document !== 'undefined' && document.visibilityState === 'hidden') {
-        return;
-      }
+    poller.start();
+  }
 
-      isPolling = true;
-      try {
-        const response = await fetch(routes.state, { cache: 'no-store' });
-        if (!response.ok) {
-          throw new Error(`Unexpected status ${response.status}`);
-        }
-        const payload = await response.json().catch(() => ({}));
-        const incoming = payload?.data?.boardState ?? null;
-        if (!incoming || typeof incoming !== 'object') {
-          return;
-        }
+  function getPendingBoardStateSaveInfo() {
+    if (!pendingBoardStateSave?.promise) {
+      return { pending: false, promise: null, signature: null, hash: null };
+    }
 
-        const hashCandidate = hashBoardStateSnapshot(incoming);
-        const hashFallback = safeJsonStringify(incoming) ?? String(Date.now());
-        const hash = hashCandidate ?? hashFallback;
-        if (hash === lastHash) {
-          pollErrorLogged = false;
-          return;
-        }
-
-        const snapshotMetadata = incoming?.metadata ?? incoming?.meta ?? null;
-        const snapshotSignature =
-          typeof snapshotMetadata?.signature === 'string'
-            ? snapshotMetadata.signature.trim()
-            : null;
-        const snapshotAuthorId = normalizeProfileId(
-          snapshotMetadata?.authorId ?? snapshotMetadata?.holderId ?? null
-        );
-        const currentUserId = normalizeProfileId(getCurrentUserId());
-        const incomingHash = hashCandidate;
-
-        const authoredSnapshot = Boolean(
-          (snapshotSignature && snapshotSignature === lastPersistedBoardStateSignature) ||
-            (snapshotAuthorId && currentUserId && snapshotAuthorId === currentUserId) ||
-            (incomingHash && incomingHash === lastPersistedBoardStateHash)
-        );
-
-        if (authoredSnapshot) {
-          lastHash = hash;
-          pollErrorLogged = false;
-          return;
-        }
-
-        lastHash = hash;
-        pollErrorLogged = false;
-
-        boardApi.updateState?.((draft) => {
-          draft.boardState = mergeBoardStateSnapshot(draft.boardState, incoming);
-        });
-      } catch (error) {
-        if (!pollErrorLogged) {
-          console.warn('[VTT] Board state poll failed', error);
-          pollErrorLogged = true;
-        }
-      } finally {
-        isPolling = false;
-      }
+    return {
+      pending: true,
+      promise: pendingBoardStateSave.promise,
+      signature: pendingBoardStateSave.signature ?? null,
+      hash: pendingBoardStateSave.hash ?? null,
     };
-
-    poll();
-    window.setInterval(poll, 2000);
   }
 
   function mergeBoardStateSnapshot(existing, incoming) {
