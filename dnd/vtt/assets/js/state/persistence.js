@@ -16,7 +16,8 @@ export function queueSave(key, payload, endpoint) {
   }, 250);
 }
 
-async function persist(key, { payload, endpoint, controller }) {
+async function persist(key, entry) {
+  const { payload, endpoint, controller } = entry;
   try {
     const response = await fetch(endpoint, {
       method: 'POST',
@@ -31,6 +32,9 @@ async function persist(key, { payload, endpoint, controller }) {
   } catch (error) {
     console.error(`[VTT] Persistence error for ${key}`, error);
   } finally {
-    pending.delete(key);
+    const current = pending.get(key);
+    if (current === entry || current?.controller === controller) {
+      pending.delete(key);
+    }
   }
 }
