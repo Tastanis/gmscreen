@@ -2,6 +2,7 @@
 declare(strict_types=1);
 
 require_once __DIR__ . '/../bootstrap.php';
+require_once __DIR__ . '/state_helpers.php';
 
 header('Content-Type: application/json');
 
@@ -59,20 +60,77 @@ try {
                 $combatUpdates = extractCombatUpdates($updates['sceneState']);
             }
 
-            if (empty($combatUpdates)) {
+            $placementUpdates = isset($updates['placements']) && is_array($updates['placements'])
+                ? $updates['placements']
+                : [];
+            $templateUpdates = isset($updates['templates']) && is_array($updates['templates'])
+                ? $updates['templates']
+                : [];
+
+            $hasCombatUpdates = !empty($combatUpdates);
+            $hasPlacementUpdates = !empty($placementUpdates);
+            $hasTemplateUpdates = !empty($templateUpdates);
+
+            if (!$hasCombatUpdates && !$hasPlacementUpdates && !$hasTemplateUpdates) {
                 respondJson(403, [
                     'success' => false,
-                    'error' => 'Only combat tracker updates are permitted for players.',
+                    'error' => 'Only combat, placement, or template updates are permitted for players.',
                 ]);
             }
 
-            foreach ($combatUpdates as $sceneId => $combatState) {
-                if (!isset($nextState['sceneState'][$sceneId]) || !is_array($nextState['sceneState'][$sceneId])) {
-                    $nextState['sceneState'][$sceneId] = [
-                        'grid' => normalizeGridSettings([]),
-                    ];
+            if ($hasPlacementUpdates) {
+                if (!isset($nextState['placements']) || !is_array($nextState['placements'])) {
+                    $nextState['placements'] = [];
                 }
-                $nextState['sceneState'][$sceneId]['combat'] = $combatState;
+                foreach ($placementUpdates as $sceneId => $placements) {
+                    if (!is_array($placements)) {
+                        continue;
+                    }
+                    $sceneKey = is_string($sceneId) ? trim($sceneId) : (string) $sceneId;
+                    if ($sceneKey === '') {
+                        continue;
+                    }
+                    $existingPlacements = isset($nextState['placements'][$sceneKey]) && is_array($nextState['placements'][$sceneKey])
+                        ? $nextState['placements'][$sceneKey]
+                        : [];
+                    $nextState['placements'][$sceneKey] = mergeSceneEntriesPreservingGmAuthored(
+                        $existingPlacements,
+                        $placements
+                    );
+                }
+            }
+
+            if ($hasTemplateUpdates) {
+                if (!isset($nextState['templates']) || !is_array($nextState['templates'])) {
+                    $nextState['templates'] = [];
+                }
+                foreach ($templateUpdates as $sceneId => $templates) {
+                    if (!is_array($templates)) {
+                        continue;
+                    }
+                    $sceneKey = is_string($sceneId) ? trim($sceneId) : (string) $sceneId;
+                    if ($sceneKey === '') {
+                        continue;
+                    }
+                    $existingTemplates = isset($nextState['templates'][$sceneKey]) && is_array($nextState['templates'][$sceneKey])
+                        ? $nextState['templates'][$sceneKey]
+                        : [];
+                    $nextState['templates'][$sceneKey] = mergeSceneEntriesPreservingGmAuthored(
+                        $existingTemplates,
+                        $templates
+                    );
+                }
+            }
+
+            if ($hasCombatUpdates) {
+                foreach ($combatUpdates as $sceneId => $combatState) {
+                    if (!isset($nextState['sceneState'][$sceneId]) || !is_array($nextState['sceneState'][$sceneId])) {
+                        $nextState['sceneState'][$sceneId] = [
+                            'grid' => normalizeGridSettings([]),
+                        ];
+                    }
+                    $nextState['sceneState'][$sceneId]['combat'] = $combatState;
+                }
             }
 
             if (!saveVttJson('board-state.json', $nextState)) {
@@ -82,9 +140,11 @@ try {
                 ]);
             }
 
+            $responseState = filterPlacementsForPlayerView($nextState);
+
             respondJson(200, [
                 'success' => true,
-                'data' => $nextState,
+                'data' => $responseState,
             ]);
         }
 
