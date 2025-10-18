@@ -95,6 +95,9 @@ export function mountBoardInteractions(store, routes = {}) {
   };
 
   const boardApi = store ?? {};
+  const tokenRotationAngles = new Map();
+  let indigoRotationIntervalId = null;
+  let indigoRotationUnloadRegistered = false;
   ensureIndigoRotationTimer();
   let overlayEditorActive = false;
   const overlayTool = createOverlayTool();
@@ -151,9 +154,6 @@ export function mountBoardInteractions(store, routes = {}) {
   let pendingRoundConfirmation = false;
   let activeConditionPrompt = null;
   let activeTurnDialog = null;
-  const tokenRotationAngles = new Map();
-  let indigoRotationIntervalId = null;
-  let indigoRotationUnloadRegistered = false;
   const turnLockState = {
     holderId: null,
     holderName: null,
