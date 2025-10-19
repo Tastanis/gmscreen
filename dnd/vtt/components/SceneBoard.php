@@ -121,6 +121,7 @@ function renderVttSceneBoard(): string
                             aria-live="off"
                             hidden
                         ></div>
+                        <div id="vtt-ping-layer" class="vtt-board__pings" aria-hidden="true"></div>
                     </div>
                 </div>
                 <p class="vtt-board__empty">Drag a scene map here or create a scene from the settings panel.</p>

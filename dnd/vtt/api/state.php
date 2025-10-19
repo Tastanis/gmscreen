@@ -66,15 +66,19 @@ try {
             $templateUpdates = isset($updates['templates']) && is_array($updates['templates'])
                 ? $updates['templates']
                 : [];
+            $pingUpdates = isset($updates['pings']) && is_array($updates['pings'])
+                ? $updates['pings']
+                : [];
 
             $hasCombatUpdates = !empty($combatUpdates);
             $hasPlacementUpdates = !empty($placementUpdates);
             $hasTemplateUpdates = !empty($templateUpdates);
+            $hasPingUpdates = !empty($pingUpdates);
 
-            if (!$hasCombatUpdates && !$hasPlacementUpdates && !$hasTemplateUpdates) {
+            if (!$hasCombatUpdates && !$hasPlacementUpdates && !$hasTemplateUpdates && !$hasPingUpdates) {
                 respondJson(403, [
                     'success' => false,
-                    'error' => 'Only combat, placement, or template updates are permitted for players.',
+                    'error' => 'Only combat, placement, template, or ping updates are permitted for players.',
                 ]);
             }
 
@@ -131,6 +135,10 @@ try {
                     }
                     $nextState['sceneState'][$sceneId]['combat'] = $combatState;
                 }
+            }
+
+            if ($hasPingUpdates) {
+                $nextState['pings'] = $pingUpdates;
             }
 
             if (!saveVttJson('board-state.json', $nextState)) {
@@ -279,6 +287,17 @@ function sanitizeBoardStateUpdates(array $raw): array
         }
     }
 
+    if (array_key_exists('pings', $raw)) {
+        $rawPings = $raw['pings'];
+        if ($rawPings === null) {
+            $updates['pings'] = [];
+        } elseif (is_array($rawPings)) {
+            $updates['pings'] = normalizePingsPayload($rawPings);
+        } else {
+            throw new InvalidArgumentException('Pings must be an array.');
+        }
+    }
+
     return $updates;
 }
 
@@ -295,6 +314,7 @@ function normalizeBoardState($raw): array
         'sceneState' => [],
         'templates' => [],
         'overlay' => normalizeOverlayPayload([]),
+        'pings' => [],
     ];
 
     if (!is_array($raw)) {
@@ -335,6 +355,10 @@ function normalizeBoardState($raw): array
 
     if (array_key_exists('overlay', $raw) && is_array($raw['overlay'])) {
         $state['overlay'] = normalizeOverlayPayload($raw['overlay']);
+    }
+
+    if (array_key_exists('pings', $raw) && is_array($raw['pings'])) {
+        $state['pings'] = normalizePingsPayload($raw['pings']);
     }
 
     return $state;
@@ -388,6 +412,102 @@ function normalizeTemplatesPayload(array $rawTemplates): array
                 $normalized[$key][] = $template;
             }
         }
+    }
+
+    return $normalized;
+}
+
+/**
+ * @param array<int,mixed> $rawPings
+ * @return array<int,array<string,mixed>>
+ */
+function normalizePingsPayload(array $rawPings): array
+{
+    $byId = [];
+
+    foreach ($rawPings as $entry) {
+        if (!is_array($entry)) {
+            continue;
+        }
+
+        $ping = normalizePingEntry($entry);
+        if ($ping === null) {
+            continue;
+        }
+
+        $id = $ping['id'];
+        if (!isset($byId[$id]) || $ping['createdAt'] >= $byId[$id]['createdAt']) {
+            $byId[$id] = $ping;
+        }
+    }
+
+    if (empty($byId)) {
+        return [];
+    }
+
+    $normalized = array_values($byId);
+    usort($normalized, static function (array $a, array $b): int {
+        return ($a['createdAt'] <=> $b['createdAt']);
+    });
+
+    if (count($normalized) > 8) {
+        $normalized = array_slice($normalized, -8);
+    }
+
+    return array_values($normalized);
+}
+
+function normalizePingEntry(array $entry): ?array
+{
+    $id = isset($entry['id']) && is_string($entry['id']) ? trim($entry['id']) : '';
+    if ($id === '') {
+        return null;
+    }
+
+    $x = isset($entry['x']) && is_numeric($entry['x']) ? (float) $entry['x'] : null;
+    $y = isset($entry['y']) && is_numeric($entry['y']) ? (float) $entry['y'] : null;
+    if ($x === null || $y === null) {
+        return null;
+    }
+
+    $createdAtRaw = null;
+    if (isset($entry['createdAt']) && is_numeric($entry['createdAt'])) {
+        $createdAtRaw = (float) $entry['createdAt'];
+    } elseif (isset($entry['timestamp']) && is_numeric($entry['timestamp'])) {
+        $createdAtRaw = (float) $entry['timestamp'];
+    }
+    if ($createdAtRaw === null) {
+        return null;
+    }
+    $createdAt = (int) round($createdAtRaw);
+    if ($createdAt < 0) {
+        $createdAt = 0;
+    }
+
+    $sceneId = isset($entry['sceneId']) && is_string($entry['sceneId'])
+        ? trim($entry['sceneId'])
+        : '';
+    $scene = $sceneId === '' ? null : $sceneId;
+
+    $typeRaw = isset($entry['type']) && is_string($entry['type']) ? strtolower(trim($entry['type'])) : '';
+    $type = $typeRaw === 'focus' ? 'focus' : 'ping';
+
+    $authorIdRaw = isset($entry['authorId']) && is_string($entry['authorId'])
+        ? strtolower(trim($entry['authorId']))
+        : '';
+    $authorId = $authorIdRaw === '' ? null : $authorIdRaw;
+
+    $normalized = [
+        'id' => $id,
+        'sceneId' => $scene,
+        'x' => max(0, min(1, round($x, 4))),
+        'y' => max(0, min(1, round($y, 4))),
+        'type' => $type,
+        'createdAt' => $createdAt,
+    ];
+
+    if ($authorId !== null) {
+        $normalized['authorId'] = $authorId;
     }
 
     return $normalized;

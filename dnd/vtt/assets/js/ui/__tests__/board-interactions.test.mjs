@@ -16,6 +16,7 @@ function createDom() {
             </div>
             <div id="vtt-grid-overlay"></div>
             <div id="vtt-token-layer"></div>
+            <div id="vtt-ping-layer"></div>
             <div id="vtt-template-layer"></div>
           </div>
         </div>
@@ -455,6 +456,7 @@ test('player token removal queues sanitized board persistence payload', async ()
     const payload = JSON.parse(requests[0].options.body);
     assert.deepEqual(payload.boardState.placements['scene-1'], []);
     assert.ok(Array.isArray(payload.boardState.templates['scene-1']));
+    assert.ok(Array.isArray(payload.boardState.pings));
     assert.equal(payload.boardState.metadata.authorRole, 'player');
     assert.strictEqual(payload.boardState.metadata.authorIsGm, false);
     assert.equal(payload.boardState.metadata.authorId, 'player one');

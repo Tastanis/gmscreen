@@ -107,6 +107,13 @@ function buildPayload(boardState = {}) {
     payload.overlay = formatOverlayState(boardState.overlay ?? null);
   }
 
+  if ('pings' in boardState) {
+    const rawPings = boardState.pings;
+    if (Array.isArray(rawPings)) {
+      payload.pings = rawPings;
+    }
+  }
+
   if ('metadata' in boardState) {
     const rawMetadata = boardState.metadata;
     if (rawMetadata && typeof rawMetadata === 'object') {

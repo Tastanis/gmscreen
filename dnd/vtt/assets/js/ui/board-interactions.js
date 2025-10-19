@@ -217,6 +217,11 @@ const TURN_FLASH_TONE_CLASSES = {
   yellow: 'is-turn-flash-yellow',
   red: 'is-turn-flash-red',
 };
+const MAP_PING_REPEAT_DELAY_MS = 500;
+const MAP_PING_ANIMATION_DURATION_MS = 600;
+const MAP_PING_RETENTION_MS = 10_000;
+const MAP_PING_HISTORY_LIMIT = 8;
+const MAP_PING_PROCESSED_RETENTION_MS = 60_000;
 
 export function mountBoardInteractions(store, routes = {}) {
   const board = document.getElementById('vtt-board-canvas');
@@ -226,6 +231,7 @@ export function mountBoardInteractions(store, routes = {}) {
   const grid = document.getElementById('vtt-grid-overlay');
   const tokenLayer = document.getElementById('vtt-token-layer');
   const templateLayer = document.getElementById('vtt-template-layer');
+  let pingLayer = document.getElementById('vtt-ping-layer');
   const mapBackdrop = document.getElementById('vtt-map-backdrop');
   const mapImage = document.getElementById('vtt-map-image');
   const emptyState = board?.querySelector('.vtt-board__empty');
@@ -261,6 +267,17 @@ export function mountBoardInteractions(store, routes = {}) {
       mapTransform.insertBefore(mapOverlay, overlayInsertTarget);
     } else {
       mapTransform.appendChild(mapOverlay);
+    }
+  }
+  if (!pingLayer && mapTransform) {
+    pingLayer = document.createElement('div');
+    pingLayer.id = 'vtt-ping-layer';
+    pingLayer.className = 'vtt-board__pings';
+    pingLayer.setAttribute('aria-hidden', 'true');
+    if (tokenLayer && tokenLayer.parentNode === mapTransform) {
+      tokenLayer.insertAdjacentElement('afterend', pingLayer);
+    } else {
+      mapTransform.appendChild(pingLayer);
     }
   }
   if (!mapOverlay) return;
@@ -307,6 +324,7 @@ export function mountBoardInteractions(store, routes = {}) {
   let overlayEditorActive = false;
   const overlayTool = createOverlayTool();
   const templateTool = createTemplateTool();
+  const processedPings = new Map();
   const TOKEN_DRAG_TYPE = 'application/x-vtt-token-template';
   let tokenDropDepth = 0;
   const selectedTokenIds = new Set();
@@ -781,6 +799,7 @@ export function mountBoardInteractions(store, routes = {}) {
       { includeHidden: isGm }
     );
     snapshot.templates = sanitizeTemplatesForPersistence(boardState.templates);
+    snapshot.pings = sanitizePingsForPersistence(boardState.pings);
 
     if (isGm) {
       snapshot.mapUrl = boardState.mapUrl ?? null;
@@ -809,6 +828,39 @@ export function mountBoardInteractions(store, routes = {}) {
   function sanitizeTemplatesForPersistence(source) {
     const clone = cloneBoardSection(source);
     return clone && typeof clone === 'object' ? clone : {};
+  }
+
+  function sanitizePingsForPersistence(source) {
+    const entries = Array.isArray(source) ? source : [];
+    const retentionThreshold = Date.now() - MAP_PING_RETENTION_MS;
+    const byId = new Map();
+
+    entries.forEach((entry) => {
+      const normalized = normalizeIncomingPing(entry);
+      if (!normalized) {
+        return;
+      }
+      if (normalized.createdAt < retentionThreshold) {
+        return;
+      }
+      const previous = byId.get(normalized.id);
+      if (!previous || normalized.createdAt >= previous.createdAt) {
+        byId.set(normalized.id, normalized);
+      }
+    });
+
+    if (byId.size === 0) {
+      return [];
+    }
+
+    const sorted = Array.from(byId.values()).sort(
+      (a, b) => (a.createdAt ?? 0) - (b.createdAt ?? 0)
+    );
+    if (sorted.length > MAP_PING_HISTORY_LIMIT) {
+      return sorted.slice(sorted.length - MAP_PING_HISTORY_LIMIT);
+    }
+
+    return sorted;
   }
 
   function isPlacementHiddenForPersistence(placement) {
@@ -884,6 +936,7 @@ export function mountBoardInteractions(store, routes = {}) {
       sceneState: cloneBoardSection(incoming.sceneState),
       templates: cloneBoardSection(incoming.templates),
       overlay: cloneOverlayState(incoming.overlay),
+      pings: clonePingEntries(incoming.pings),
     };
 
     const metadata = cloneBoardSection(incoming.metadata ?? incoming.meta);
@@ -913,6 +966,17 @@ export function mountBoardInteractions(store, routes = {}) {
     return normalizeOverlayDraft(section);
   }
 
+  function clonePingEntries(entries) {
+    if (!Array.isArray(entries)) {
+      return [];
+    }
+    try {
+      return JSON.parse(JSON.stringify(entries));
+    } catch (error) {
+      return [];
+    }
+  }
+
   function hashBoardStateSnapshot(snapshot) {
     if (!snapshot || typeof snapshot !== 'object') {
       return null;
@@ -926,6 +990,7 @@ export function mountBoardInteractions(store, routes = {}) {
       sceneState: cloneBoardSection(snapshot.sceneState),
       templates: cloneBoardSection(snapshot.templates),
       overlay: cloneOverlayState(snapshot.overlay),
+      pings: clonePingEntries(snapshot.pings),
     };
 
     return safeStableStringify(base);
@@ -1077,6 +1142,13 @@ export function mountBoardInteractions(store, routes = {}) {
   );
 
   mapSurface.addEventListener('pointerdown', (event) => {
+    if (event.altKey && (event.button === 0 || event.button === 2)) {
+      const handled = handleMapPing(event, { focus: event.button === 2 });
+      if (handled) {
+        event.preventDefault();
+        return;
+      }
+    }
     if (pendingDamageHeal && event.button === 2) {
       event.preventDefault();
       closeDamageHealWidget();
@@ -1426,6 +1498,7 @@ export function mountBoardInteractions(store, routes = {}) {
     templateTool.notifyMapState();
     overlayTool.notifyMapState();
     applyCombatStateFromBoardState(state);
+    processIncomingPings(state.boardState?.pings ?? [], activeSceneId);
 
     if (activeTokenSettingsId) {
       const placementForSettings = resolvePlacementById(state, activeSceneId, activeTokenSettingsId);
@@ -1897,6 +1970,271 @@ export function mountBoardInteractions(store, routes = {}) {
       return null;
     }
     return { x: localX, y: localY };
+  }
+
+  function handleMapPing(event, { focus = false } = {}) {
+    if (!viewState.mapLoaded) {
+      return false;
+    }
+
+    const pointer = getLocalMapPoint(event);
+    const mapWidth = Number.isFinite(viewState.mapPixelSize?.width) ? viewState.mapPixelSize.width : 0;
+    const mapHeight = Number.isFinite(viewState.mapPixelSize?.height) ? viewState.mapPixelSize.height : 0;
+    if (!pointer || mapWidth <= 0 || mapHeight <= 0) {
+      return false;
+    }
+
+    const normalizedX = Math.min(1, Math.max(0, pointer.x / mapWidth));
+    const normalizedY = Math.min(1, Math.max(0, pointer.y / mapHeight));
+
+    const state = boardApi.getState?.() ?? {};
+    const sceneIdRaw = typeof state?.boardState?.activeSceneId === 'string'
+      ? state.boardState.activeSceneId
+      : null;
+    const sceneId = sceneIdRaw && sceneIdRaw.trim() ? sceneIdRaw : null;
+    const authorId = normalizeProfileId(getCurrentUserId());
+    const now = Date.now();
+    const signatureSeed = Math.random().toString(36).slice(2, 10);
+    const baseId = authorId ? `${authorId}:${now}` : `${now}`;
+    const pingId = `${baseId}:${signatureSeed}`;
+
+    const pingEntry = {
+      id: pingId,
+      sceneId,
+      x: normalizedX,
+      y: normalizedY,
+      type: focus ? 'focus' : 'ping',
+      createdAt: now,
+    };
+    if (authorId) {
+      pingEntry.authorId = authorId;
+    }
+
+    const queued = queuePingForState(pingEntry);
+    recordProcessedPing(pingEntry);
+    renderPing(pingEntry);
+    if (focus) {
+      centerViewOnPing(pingEntry);
+    }
+    if (queued) {
+      persistBoardStateSnapshot();
+    }
+
+    return true;
+  }
+
+  function queuePingForState(pingEntry) {
+    if (typeof boardApi.updateState !== 'function') {
+      return false;
+    }
+
+    let updated = false;
+    const retentionThreshold = Date.now() - MAP_PING_RETENTION_MS;
+    boardApi.updateState((draft) => {
+      if (!draft.boardState || typeof draft.boardState !== 'object') {
+        draft.boardState = { pings: [] };
+      }
+      if (!Array.isArray(draft.boardState.pings)) {
+        draft.boardState.pings = [];
+      }
+
+      draft.boardState.pings = draft.boardState.pings
+        .filter((entry) => {
+          if (!entry || typeof entry !== 'object') {
+            return false;
+          }
+          const createdAt = Number(entry.createdAt ?? entry.timestamp ?? 0);
+          if (!Number.isFinite(createdAt)) {
+            return false;
+          }
+          return createdAt >= retentionThreshold;
+        })
+        .slice(-MAP_PING_HISTORY_LIMIT + 1);
+
+      draft.boardState.pings.push({ ...pingEntry });
+      if (draft.boardState.pings.length > MAP_PING_HISTORY_LIMIT) {
+        draft.boardState.pings = draft.boardState.pings.slice(
+          draft.boardState.pings.length - MAP_PING_HISTORY_LIMIT
+        );
+      }
+      updated = true;
+    });
+
+    return updated;
+  }
+
+  function normalizeIncomingPing(entry) {
+    if (!entry || typeof entry !== 'object') {
+      return null;
+    }
+
+    const id = typeof entry.id === 'string' ? entry.id.trim() : '';
+    if (!id) {
+      return null;
+    }
+
+    const createdAtRaw = Number(entry.createdAt ?? entry.timestamp ?? Date.now());
+    const createdAt = Number.isFinite(createdAtRaw) ? Math.max(0, Math.trunc(createdAtRaw)) : Date.now();
+    const x = Number(entry.x);
+    const y = Number(entry.y);
+    if (!Number.isFinite(x) || !Number.isFinite(y)) {
+      return null;
+    }
+
+    const normalized = {
+      id,
+      sceneId:
+        typeof entry.sceneId === 'string' && entry.sceneId.trim()
+          ? entry.sceneId.trim()
+          : null,
+      x: Math.min(1, Math.max(0, x)),
+      y: Math.min(1, Math.max(0, y)),
+      type:
+        typeof entry.type === 'string' && entry.type.trim().toLowerCase() === 'focus'
+          ? 'focus'
+          : 'ping',
+      createdAt,
+    };
+
+    return normalized;
+  }
+
+  function renderPing(pingEntry) {
+    if (!pingLayer || !viewState.mapLoaded) {
+      return;
+    }
+
+    const mapWidth = Number.isFinite(viewState.mapPixelSize?.width) ? viewState.mapPixelSize.width : 0;
+    const mapHeight = Number.isFinite(viewState.mapPixelSize?.height) ? viewState.mapPixelSize.height : 0;
+    if (mapWidth <= 0 || mapHeight <= 0) {
+      return;
+    }
+
+    const localX = Math.min(1, Math.max(0, pingEntry.x)) * mapWidth;
+    const localY = Math.min(1, Math.max(0, pingEntry.y)) * mapHeight;
+    spawnPingPulse(localX, localY, pingEntry.type, 0);
+
+    scheduleTimeout(() => {
+      spawnPingPulse(localX, localY, pingEntry.type, MAP_PING_REPEAT_DELAY_MS);
+    }, MAP_PING_REPEAT_DELAY_MS);
+  }
+
+  function spawnPingPulse(localX, localY, type, delayMs) {
+    if (!pingLayer) {
+      return;
+    }
+
+    const element = document.createElement('div');
+    element.className = 'vtt-board__ping';
+    if (type === 'focus') {
+      element.classList.add('vtt-board__ping--focus');
+    }
+    element.style.left = `${localX}px`;
+    element.style.top = `${localY}px`;
+    element.style.setProperty('--vtt-ping-delay', `${delayMs}ms`);
+
+    const scale = Number.isFinite(viewState.scale) && viewState.scale !== 0 ? viewState.scale : 1;
+    const baseSize = 160;
+    const size = baseSize / scale;
+    element.style.setProperty('--vtt-ping-size', `${size}px`);
+
+    pingLayer.appendChild(element);
+    const cleanupDelay = MAP_PING_ANIMATION_DURATION_MS + delayMs + 120;
+    scheduleTimeout(() => {
+      element.remove();
+    }, cleanupDelay);
+  }
+
+  function scheduleTimeout(callback, delayMs) {
+    if (typeof callback !== 'function') {
+      return;
+    }
+    const timer =
+      typeof window !== 'undefined' && typeof window.setTimeout === 'function'
+        ? window.setTimeout.bind(window)
+        : typeof setTimeout === 'function'
+        ? setTimeout
+        : null;
+    if (timer) {
+      timer(callback, delayMs);
+    }
+  }
+
+  function recordProcessedPing(pingEntry) {
+    if (!pingEntry || typeof pingEntry.id !== 'string') {
+      return;
+    }
+    const timestamp = Number.isFinite(pingEntry.createdAt)
+      ? pingEntry.createdAt
+      : Date.now();
+    processedPings.set(pingEntry.id, timestamp);
+    pruneProcessedPings();
+  }
+
+  function pruneProcessedPings(now = Date.now()) {
+    processedPings.forEach((timestamp, id) => {
+      if (!Number.isFinite(timestamp) || now - timestamp > MAP_PING_PROCESSED_RETENTION_MS) {
+        processedPings.delete(id);
+      }
+    });
+  }
+
+  function processIncomingPings(entries, activeSceneId) {
+    const list = Array.isArray(entries) ? entries : [];
+    const now = Date.now();
+    pruneProcessedPings(now);
+
+    if (!viewState.mapLoaded) {
+      return;
+    }
+
+    list.forEach((entry) => {
+      const ping = normalizeIncomingPing(entry);
+      if (!ping) {
+        return;
+      }
+      if (ping.sceneId && activeSceneId && ping.sceneId !== activeSceneId) {
+        return;
+      }
+      if (processedPings.has(ping.id)) {
+        return;
+      }
+      recordProcessedPing(ping);
+      renderPing(ping);
+      if (ping.type === 'focus') {
+        centerViewOnPing(ping);
+      }
+    });
+  }
+
+  function centerViewOnPing(pingEntry) {
+    if (!board || !viewState.mapLoaded) {
+      return;
+    }
+
+    const mapWidth = Number.isFinite(viewState.mapPixelSize?.width) ? viewState.mapPixelSize.width : 0;
+    const mapHeight = Number.isFinite(viewState.mapPixelSize?.height) ? viewState.mapPixelSize.height : 0;
+    if (mapWidth <= 0 || mapHeight <= 0) {
+      return;
+    }
+
+    const boardRect = board.getBoundingClientRect();
+    const scale = Number.isFinite(viewState.scale) && viewState.scale !== 0 ? viewState.scale : 1;
+    const localX = Math.min(1, Math.max(0, pingEntry.x)) * mapWidth;
+    const localY = Math.min(1, Math.max(0, pingEntry.y)) * mapHeight;
+    const desiredX = boardRect.width / 2 - localX * scale;
+    const desiredY = boardRect.height / 2 - localY * scale;
+
+    const mapWidthScaled = mapWidth * scale;
+    const mapHeightScaled = mapHeight * scale;
+    const minX = Math.min(0, boardRect.width - mapWidthScaled);
+    const maxX = Math.max(0, boardRect.width - mapWidthScaled);
+    const minY = Math.min(0, boardRect.height - mapHeightScaled);
+    const maxY = Math.max(0, boardRect.height - mapHeightScaled);
+
+    viewState.translation.x = clamp(desiredX, minX, maxX);
+    viewState.translation.y = clamp(desiredY, minY, maxY);
+    applyTransform();
   }
 
   function clampPlacementToBounds(column, row, width, height) {
