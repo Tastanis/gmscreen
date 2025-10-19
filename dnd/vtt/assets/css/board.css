@@ -622,16 +622,18 @@
   left: var(--overlay-toolbar-x);
   display: flex;
   flex-direction: column;
-  align-items: flex-start;
-  gap: calc(0.5rem * var(--vtt-overlay-scale, 1));
-  padding: calc(0.65rem * var(--vtt-overlay-scale, 1));
+  align-items: stretch;
+  gap: calc(0.35rem * var(--vtt-overlay-scale, 1));
+  padding: calc(0.45rem * var(--vtt-overlay-scale, 1));
   border-radius: calc(var(--vtt-radius) * 0.9);
   background: rgba(15, 23, 42, 0.92);
   border: 1px solid rgba(148, 163, 184, 0.4);
-  box-shadow: 0 20px 35px rgba(15, 23, 42, 0.45);
+  box-shadow: 0 14px 24px rgba(15, 23, 42, 0.4);
   pointer-events: auto;
   touch-action: none;
   cursor: grab;
+  width: max-content;
+  max-width: min(16rem, 90vw);
 }
 
 .vtt-overlay-editor__toolbar.is-dragging {
@@ -639,22 +641,26 @@
 }
 
 .vtt-overlay-editor__controls {
-  display: flex;
-  flex-wrap: wrap;
-  gap: calc(0.4rem * var(--vtt-overlay-scale, 1));
+  display: grid;
+  gap: calc(0.35rem * var(--vtt-overlay-scale, 1));
+  grid-template-columns: minmax(0, 1fr);
 }
 
 .vtt-overlay-editor__status {
   margin: 0;
   padding:
-    calc(0.35rem * var(--vtt-overlay-scale, 1))
-    calc(0.5rem * var(--vtt-overlay-scale, 1));
+    calc(0.25rem * var(--vtt-overlay-scale, 1))
+    calc(0.4rem * var(--vtt-overlay-scale, 1));
   border-radius: calc(var(--vtt-radius) * 0.6);
-  background: rgba(30, 41, 59, 0.8);
-  color: rgba(226, 232, 240, 0.9);
-  font-size: calc(0.75rem * var(--vtt-overlay-scale, 1));
+  background: rgba(30, 41, 59, 0.85);
+  color: rgba(226, 232, 240, 0.92);
+  font-size: calc(0.7rem * var(--vtt-overlay-scale, 1));
   letter-spacing: 0.015em;
-  line-height: 1.4;
+  line-height: 1.35;
+}
+
+.vtt-overlay-editor__status[hidden] {
+  display: none;
 }
 
 .vtt-overlay-editor__btn {
@@ -662,16 +668,16 @@
   border-radius: calc(var(--vtt-radius) * 0.6);
   background: rgba(99, 102, 241, 0.16);
   color: var(--vtt-text-primary);
-  font-size: calc(0.78rem * var(--vtt-overlay-scale, 1));
+  font-size: calc(0.72rem * var(--vtt-overlay-scale, 1));
   font-weight: 600;
   padding:
-    calc(0.35rem * var(--vtt-overlay-scale, 1))
-    calc(0.6rem * var(--vtt-overlay-scale, 1));
+    calc(0.3rem * var(--vtt-overlay-scale, 1))
+    calc(0.55rem * var(--vtt-overlay-scale, 1));
   cursor: pointer;
   transition: background var(--vtt-transition), border-color var(--vtt-transition),
     transform var(--vtt-transition);
   text-align: center;
-  flex: 0 0 auto;
+  width: 100%;
 }
 
 .vtt-overlay-editor__btn:hover:not([disabled]) {
@@ -713,7 +719,7 @@
 }
 
 .vtt-overlay-editor__btn--full {
-  flex-basis: 100%;
+  width: 100%;
 }
 
 .vtt-overlay-editor__legend {
