@@ -315,6 +315,42 @@ export function mountBoardInteractions(store, routes = {}) {
     dragState: null,
   };
 
+  function mapPointToGrid(point, view = viewState) {
+    const mapWidth = Number.isFinite(view.mapPixelSize?.width)
+      ? view.mapPixelSize.width
+      : 0;
+    const mapHeight = Number.isFinite(view.mapPixelSize?.height)
+      ? view.mapPixelSize.height
+      : 0;
+    if (mapWidth <= 0 || mapHeight <= 0) {
+      return null;
+    }
+    const offsets = view.gridOffsets ?? {};
+    const offsetLeft = Number.isFinite(offsets.left) ? offsets.left : 0;
+    const offsetRight = Number.isFinite(offsets.right) ? offsets.right : 0;
+    const offsetTop = Number.isFinite(offsets.top) ? offsets.top : 0;
+    const offsetBottom = Number.isFinite(offsets.bottom) ? offsets.bottom : 0;
+    const gridSize = Math.max(8, Number.isFinite(view.gridSize) ? view.gridSize : 64);
+
+    const innerWidth = Math.max(0, mapWidth - offsetLeft - offsetRight);
+    const innerHeight = Math.max(0, mapHeight - offsetTop - offsetBottom);
+    if (innerWidth <= 0 || innerHeight <= 0) {
+      return null;
+    }
+
+    const localX = point.x;
+    const localY = point.y;
+    const withinX = localX >= offsetLeft && localX <= offsetLeft + innerWidth;
+    const withinY = localY >= offsetTop && localY <= offsetTop + innerHeight;
+    if (!withinX || !withinY) {
+      return null;
+    }
+
+    const column = (localX - offsetLeft) / gridSize;
+    const row = (localY - offsetTop) / gridSize;
+    return { column, row };
+  }
+
   const boardApi = store ?? {};
   const combatTimerService = createCombatTimerService();
   const tokenRotationAngles = new Map();
@@ -11316,38 +11352,6 @@ function createTemplateTool() {
     connector.style.top = `${localTop - connectorThickness / 2}px`;
 
     return key;
-  }
-
-  function mapPointToGrid(point, view = viewState) {
-    const mapWidth = Number.isFinite(view.mapPixelSize?.width) ? view.mapPixelSize.width : 0;
-    const mapHeight = Number.isFinite(view.mapPixelSize?.height) ? view.mapPixelSize.height : 0;
-    if (mapWidth <= 0 || mapHeight <= 0) {
-      return null;
-    }
-    const offsets = view.gridOffsets ?? {};
-    const offsetLeft = Number.isFinite(offsets.left) ? offsets.left : 0;
-    const offsetRight = Number.isFinite(offsets.right) ? offsets.right : 0;
-    const offsetTop = Number.isFinite(offsets.top) ? offsets.top : 0;
-    const offsetBottom = Number.isFinite(offsets.bottom) ? offsets.bottom : 0;
-    const gridSize = Math.max(8, Number.isFinite(view.gridSize) ? view.gridSize : 64);
-
-    const innerWidth = Math.max(0, mapWidth - offsetLeft - offsetRight);
-    const innerHeight = Math.max(0, mapHeight - offsetTop - offsetBottom);
-    if (innerWidth <= 0 || innerHeight <= 0) {
-      return null;
-    }
-
-    const localX = point.x;
-    const localY = point.y;
-    const withinX = localX >= offsetLeft && localX <= offsetLeft + innerWidth;
-    const withinY = localY >= offsetTop && localY <= offsetTop + innerHeight;
-    if (!withinX || !withinY) {
-      return null;
-    }
-
-    const column = (localX - offsetLeft) / gridSize;
-    const row = (localY - offsetTop) / gridSize;
-    return { column, row };
   }
 
   function snapToStep(value, step, mode = 'round') {
