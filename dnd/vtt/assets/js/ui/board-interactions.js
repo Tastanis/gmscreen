@@ -2630,16 +2630,19 @@ export function mountBoardInteractions(store, routes = {}) {
     mapOverlay.removeAttribute('data-overlay-mask');
   }
 
-  function applyOverlayMask(mask = {}) {
+  function applyOverlayMask(mask = {}, options = {}) {
     if (!mapOverlay) {
       return;
     }
+
+    const { allowDuringEditing = false } =
+      options && typeof options === 'object' ? options : {};
 
     clearOverlayMask();
     const normalizedMask = normalizeOverlayMask(mask);
     mapOverlay.dataset.overlayMask = JSON.stringify(normalizedMask);
 
-    if (overlayEditorActive) {
+    if (overlayEditorActive && !allowDuringEditing) {
       return;
     }
 
@@ -9207,11 +9210,13 @@ function createOverlayTool() {
   }
 
   function applyPreviewMask() {
+    const maskOptions = overlayEditorActive ? { allowDuringEditing: true } : undefined;
+
     if (isActive && isClosed && nodes.length >= 3) {
       const preview = buildPreviewMask();
-      applyOverlayMask(preview);
+      applyOverlayMask(preview, maskOptions);
     } else {
-      applyOverlayMask(persistedMask);
+      applyOverlayMask(persistedMask, maskOptions);
     }
   }
 

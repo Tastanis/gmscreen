@@ -248,6 +248,82 @@ test('Sharon confirmation is required for other allies but triggers Hesitation b
   }
 });
 
+test('overlay editor preview applies clip path while editing', () => {
+  const dom = createDom();
+  try {
+    const { document, MouseEvent } = dom.window;
+
+    const sceneManager = document.createElement('div');
+    sceneManager.id = 'scene-manager';
+    const toggleButton = document.createElement('button');
+    toggleButton.dataset.action = 'toggle-overlay-editor';
+    toggleButton.setAttribute('data-scene-id', 'scene-1');
+    sceneManager.append(toggleButton);
+    document.body.append(sceneManager);
+
+    const initialState = {
+      user: { isGM: true, name: 'GM' },
+      boardState: {
+        activeSceneId: 'scene-1',
+        mapUrl: 'http://example.com/map.png',
+        sceneState: {
+          'scene-1': {
+            overlay: {
+              mapUrl: 'http://example.com/overlay.png',
+              mask: {
+                visible: true,
+                polygons: [
+                  {
+                    points: [
+                      { column: 1, row: 1 },
+                      { column: 3, row: 1 },
+                      { column: 3, row: 3 },
+                      { column: 1, row: 3 },
+                    ],
+                  },
+                ],
+              },
+            },
+          },
+        },
+      },
+      scenes: { items: [{ id: 'scene-1', name: 'Scene One' }] },
+    };
+
+    const store = createMockStore(initialState);
+    mountBoardInteractions(store);
+
+    const board = document.getElementById('vtt-board-canvas');
+    board.getBoundingClientRect = () => ({
+      width: 512,
+      height: 512,
+      top: 0,
+      right: 512,
+      bottom: 512,
+      left: 0,
+    });
+
+    const mapImage = document.getElementById('vtt-map-image');
+    Object.defineProperty(mapImage, 'naturalWidth', { value: 512, configurable: true });
+    Object.defineProperty(mapImage, 'naturalHeight', { value: 512, configurable: true });
+    mapImage.onload?.();
+
+    toggleButton.dispatchEvent(new MouseEvent('click', { bubbles: true }));
+
+    const overlay = document.getElementById('vtt-map-overlay');
+    assert.equal(
+      overlay.style.clipPath,
+      "path('M 12.5% 12.5% L 37.5% 12.5% L 37.5% 37.5% L 12.5% 37.5% Z')",
+    );
+    assert.equal(
+      overlay.style.webkitClipPath,
+      "path('M 12.5% 12.5% L 37.5% 12.5% L 37.5% 37.5% L 12.5% 37.5% Z')",
+    );
+  } finally {
+    dom.window.close();
+  }
+});
+
 test('overlay clip path uses only provided polygons', () => {
   const dom = createDom();
   try {
