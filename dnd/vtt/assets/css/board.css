@@ -1736,7 +1736,7 @@
   position: fixed;
   top: 1rem;
   right: 1rem;
-  z-index: 65;
+  z-index: 999;
   pointer-events: none;
 }
 
@@ -1806,9 +1806,16 @@
   justify-content: center;
   padding: 0.45rem 0.5rem;
   border-radius: calc(var(--vtt-radius) * 0.75);
-  background: rgba(30, 41, 59, 0.88);
-  border: 1px solid rgba(148, 163, 184, 0.35);
-  box-shadow: inset 0 1px 0 rgba(226, 232, 240, 0.2), 0 0 0 1px rgba(15, 23, 42, 0.4);
+  position: relative;
+  background: linear-gradient(
+    180deg,
+    rgba(51, 65, 85, 0.95),
+    rgba(30, 41, 59, 0.9)
+  );
+  border: 1px solid rgba(148, 163, 184, 0.4);
+  box-shadow: inset 0 1px 0 rgba(226, 232, 240, 0.25),
+    inset 0 -1px 0 rgba(15, 23, 42, 0.6),
+    0 0 0 1px rgba(15, 23, 42, 0.45);
   color: rgba(226, 232, 240, 0.78);
   font-size: 0.58rem;
   font-weight: 600;
@@ -1822,15 +1829,24 @@
 
 .vtt-turn-dialog__handle::before {
   content: '';
-  width: 36px;
-  height: 4px;
+  position: absolute;
+  inset: 0.25rem 0.65rem;
   border-radius: 999px;
-  background: rgba(226, 232, 240, 0.65);
-  box-shadow: 0 6px 0 rgba(148, 163, 184, 0.45), 0 -6px 0 rgba(148, 163, 184, 0.45);
+  background: linear-gradient(
+    180deg,
+    rgba(226, 232, 240, 0.18),
+    rgba(148, 163, 184, 0.12)
+  );
+  box-shadow: inset 0 1px 0 rgba(226, 232, 240, 0.25),
+    inset 0 -1px 0 rgba(51, 65, 85, 0.55);
 }
 
 .vtt-turn-dialog__handle:hover {
-  background: rgba(51, 65, 85, 0.95);
+  background: linear-gradient(
+    180deg,
+    rgba(71, 85, 105, 0.98),
+    rgba(45, 55, 72, 0.92)
+  );
   border-color: rgba(148, 163, 184, 0.5);
   color: rgba(241, 245, 249, 0.85);
 }
@@ -1838,10 +1854,16 @@
 .vtt-turn-dialog__handle.is-dragging,
 .vtt-turn-dialog__handle:active {
   cursor: grabbing;
-  background: rgba(71, 85, 105, 0.95);
+  background: linear-gradient(
+    180deg,
+    rgba(94, 106, 135, 0.98),
+    rgba(51, 65, 85, 0.95)
+  );
   border-color: rgba(148, 163, 184, 0.6);
   color: rgba(241, 245, 249, 0.9);
-  box-shadow: inset 0 1px 0 rgba(226, 232, 240, 0.2), 0 0 0 1px rgba(30, 41, 59, 0.55);
+  box-shadow: inset 0 1px 0 rgba(226, 232, 240, 0.25),
+    inset 0 -1px 0 rgba(30, 41, 59, 0.6),
+    0 0 0 1px rgba(30, 41, 59, 0.55);
 }
 
 .vtt-turn-dialog__title {
