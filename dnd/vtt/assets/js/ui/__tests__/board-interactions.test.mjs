@@ -33,6 +33,7 @@ function createDom() {
         <button data-action="group-combatants"></button>
         <button data-action="start-combat">Start Combat</button>
         <div data-round-tracker><span data-round-value></span></div>
+        <p data-turn-indicator hidden>Waiting for turn</p>
         <div data-turn-timer>
           <div data-turn-timer-image></div>
           <div data-turn-timer-display></div>

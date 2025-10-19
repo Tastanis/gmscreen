@@ -14,6 +14,12 @@ function renderVttSceneBoard(): string
                     <span class="vtt-board__round-value" data-round-value>1</span>
                 </div>
                 <p
+                    class="vtt-board__turn-indicator"
+                    data-turn-indicator
+                    hidden
+                    aria-live="polite"
+                >Waiting for turn</p>
+                <p
                     id="active-scene-status"
                     class="vtt-board__status visually-hidden"
                     aria-live="polite"
