@@ -349,6 +349,7 @@ export function mountBoardInteractions(store, routes = {}) {
   let pendingRoundConfirmation = false;
   let activeConditionPrompt = null;
   let activeTurnDialog = null;
+  let lastTurnPromptAnchorRect = null;
   const turnLockState = {
     holderId: null,
     holderName: null,
@@ -3644,16 +3645,59 @@ export function mountBoardInteractions(store, routes = {}) {
     let top = margin;
     let right = margin;
 
-    const timer = document.querySelector('.vtt-board__turn-timer:not([hidden])');
-    if (timer instanceof HTMLElement) {
-      const rect = timer.getBoundingClientRect();
+    const anchorRect = getTurnPromptAnchorRect();
+    if (anchorRect) {
       const viewportWidth = window.innerWidth || document.documentElement.clientWidth || 0;
-      top = rect.bottom + margin;
-      right = Math.max(margin, viewportWidth - rect.right);
+      top = anchorRect.bottom + margin;
+      right = Math.max(margin, viewportWidth - anchorRect.right);
     }
 
     overlay.style.top = `${Math.max(margin, top)}px`;
     overlay.style.right = `${Math.max(margin, right)}px`;
+  }
+
+  function getTurnPromptAnchorRect() {
+    if (typeof document === 'undefined') {
+      return lastTurnPromptAnchorRect;
+    }
+
+    const timer = document.querySelector('.vtt-board__turn-timer');
+    if (!(timer instanceof HTMLElement)) {
+      return lastTurnPromptAnchorRect;
+    }
+
+    let rect = timer.getBoundingClientRect();
+    if (!rect || (!rect.width && !rect.height)) {
+      const wasHidden = timer.hidden;
+      const previousVisibility = timer.style.visibility;
+      const previousAriaHidden = timer.getAttribute('aria-hidden');
+
+      if (wasHidden) {
+        timer.style.visibility = 'hidden';
+        timer.hidden = false;
+        rect = timer.getBoundingClientRect();
+        timer.hidden = wasHidden;
+        timer.style.visibility = previousVisibility;
+
+        if (previousAriaHidden !== null) {
+          timer.setAttribute('aria-hidden', previousAriaHidden);
+        } else {
+          timer.removeAttribute('aria-hidden');
+        }
+      }
+    }
+
+    if (rect && (rect.width || rect.height)) {
+      lastTurnPromptAnchorRect = {
+        top: rect.top,
+        right: rect.right,
+        bottom: rect.bottom,
+        height: rect.height,
+      };
+      return lastTurnPromptAnchorRect;
+    }
+
+    return lastTurnPromptAnchorRect;
   }
 
   function formatTurnPromptHeading(label) {
