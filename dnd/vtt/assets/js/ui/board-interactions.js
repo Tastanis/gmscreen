@@ -2603,6 +2603,10 @@ export function mountBoardInteractions(store, routes = {}) {
     const normalizedMask = normalizeOverlayMask(mask);
     mapOverlay.dataset.overlayMask = JSON.stringify(normalizedMask);
 
+    if (overlayEditorActive) {
+      return;
+    }
+
     if (!normalizedMask.visible) {
       return;
     }
