@@ -8581,6 +8581,11 @@ function createOverlayTool() {
 
   const toolbar = document.createElement('div');
   toolbar.className = 'vtt-overlay-editor__toolbar';
+  toolbar.addEventListener('pointerdown', handleToolbarPointerDown);
+  toolbar.addEventListener('pointermove', handleToolbarPointerMove);
+  toolbar.addEventListener('pointerup', handleToolbarPointerUp);
+  toolbar.addEventListener('pointercancel', handleToolbarPointerCancel);
+  toolbar.addEventListener('lostpointercapture', handleToolbarPointerCancel);
 
   const controls = document.createElement('div');
   controls.className = 'vtt-overlay-editor__controls';
@@ -8628,10 +8633,199 @@ function createOverlayTool() {
   let nodes = [];
   let isClosed = false;
   let dragState = null;
+  let toolbarPosition = null;
+  let toolbarDragState = null;
+  let toolbarMeasurementFrame = null;
+  let toolbarDimensions = { width: 0, height: 0 };
   let persistedMask = createEmptyOverlayMask();
   let persistedSignature = overlayMaskSignature(persistedMask);
   let persistedMapUrl = null;
   let overlayHiddenSnapshot = null;
+
+  function scheduleToolbarMeasurement() {
+    if (!mapSurface || !toolbar) {
+      return;
+    }
+    const win = typeof window !== 'undefined' ? window : null;
+    if (toolbarMeasurementFrame !== null && typeof win?.cancelAnimationFrame === 'function') {
+      win.cancelAnimationFrame(toolbarMeasurementFrame);
+      toolbarMeasurementFrame = null;
+    }
+
+    const measure = () => {
+      toolbarMeasurementFrame = null;
+      measureToolbarPosition();
+    };
+
+    if (typeof win?.requestAnimationFrame === 'function') {
+      toolbarMeasurementFrame = win.requestAnimationFrame(measure);
+    } else {
+      measure();
+    }
+  }
+
+  function measureToolbarPosition() {
+    if (!mapSurface || !toolbar) {
+      return;
+    }
+
+    const surfaceRect = mapSurface.getBoundingClientRect?.();
+    const toolbarRect = toolbar.getBoundingClientRect?.();
+    if (!surfaceRect || !toolbarRect) {
+      return;
+    }
+
+    const surfaceWidth = Number.isFinite(surfaceRect.width) ? surfaceRect.width : 0;
+    const surfaceHeight = Number.isFinite(surfaceRect.height) ? surfaceRect.height : 0;
+    if (surfaceWidth <= 0 || surfaceHeight <= 0) {
+      return;
+    }
+
+    const toolbarWidth = Number.isFinite(toolbarRect.width)
+      ? toolbarRect.width
+      : toolbarDimensions.width;
+    const toolbarHeight = Number.isFinite(toolbarRect.height)
+      ? toolbarRect.height
+      : toolbarDimensions.height;
+
+    toolbarDimensions = {
+      width: Math.max(0, toolbarWidth),
+      height: Math.max(0, toolbarHeight),
+    };
+
+    let nextX;
+    let nextY;
+
+    if (toolbarPosition) {
+      nextX = toolbarPosition.x;
+      nextY = toolbarPosition.y;
+    } else {
+      nextX = toolbarRect.left - surfaceRect.left;
+      nextY = toolbarRect.top - surfaceRect.top;
+    }
+
+    const maxX = Math.max(0, surfaceWidth - toolbarDimensions.width);
+    const maxY = Math.max(0, surfaceHeight - toolbarDimensions.height);
+
+    nextX = clamp(Number.isFinite(nextX) ? nextX : 0, 0, maxX);
+    nextY = clamp(Number.isFinite(nextY) ? nextY : 0, 0, maxY);
+
+    applyToolbarPosition(nextX, nextY);
+  }
+
+  function applyToolbarPosition(x, y) {
+    const safeX = Number.isFinite(x) ? x : 0;
+    const safeY = Number.isFinite(y) ? y : 0;
+    toolbarPosition = { x: safeX, y: safeY };
+    editor.style.setProperty('--overlay-toolbar-x', `${safeX}px`);
+    editor.style.setProperty('--overlay-toolbar-y', `${safeY}px`);
+  }
+
+  function ensureToolbarPosition() {
+    if (!mapSurface || !toolbar) {
+      return;
+    }
+    scheduleToolbarMeasurement();
+  }
+
+  function handleToolbarPointerDown(event) {
+    if (!isActive) {
+      return;
+    }
+    if (event.button !== undefined && event.button !== 0 && event.pointerType !== 'touch') {
+      return;
+    }
+    if (event.target && event.target.closest('.vtt-overlay-editor__btn')) {
+      return;
+    }
+
+    const surfaceRect = mapSurface.getBoundingClientRect?.();
+    const toolbarRect = toolbar.getBoundingClientRect?.();
+    if (!surfaceRect || !toolbarRect) {
+      return;
+    }
+
+    toolbarDimensions = {
+      width: Number.isFinite(toolbarRect.width) ? toolbarRect.width : toolbarDimensions.width,
+      height: Number.isFinite(toolbarRect.height) ? toolbarRect.height : toolbarDimensions.height,
+    };
+
+    toolbarDragState = {
+      pointerId: event.pointerId,
+      offsetX: event.clientX - toolbarRect.left,
+      offsetY: event.clientY - toolbarRect.top,
+      width: toolbarDimensions.width,
+      height: toolbarDimensions.height,
+    };
+
+    try {
+      toolbar.setPointerCapture?.(event.pointerId);
+    } catch (error) {
+      // Ignore capture errors.
+    }
+
+    toolbar.classList.add('is-dragging');
+    event.preventDefault();
+    event.stopPropagation();
+  }
+
+  function handleToolbarPointerMove(event) {
+    if (!toolbarDragState || event.pointerId !== toolbarDragState.pointerId) {
+      return;
+    }
+
+    const surfaceRect = mapSurface.getBoundingClientRect?.();
+    if (!surfaceRect) {
+      return;
+    }
+
+    const surfaceWidth = Number.isFinite(surfaceRect.width) ? surfaceRect.width : 0;
+    const surfaceHeight = Number.isFinite(surfaceRect.height) ? surfaceRect.height : 0;
+    if (surfaceWidth <= 0 || surfaceHeight <= 0) {
+      return;
+    }
+
+    const maxX = Math.max(0, surfaceWidth - toolbarDragState.width);
+    const maxY = Math.max(0, surfaceHeight - toolbarDragState.height);
+
+    const proposedX = event.clientX - surfaceRect.left - toolbarDragState.offsetX;
+    const proposedY = event.clientY - surfaceRect.top - toolbarDragState.offsetY;
+
+    const nextX = clamp(Number.isFinite(proposedX) ? proposedX : 0, 0, maxX);
+    const nextY = clamp(Number.isFinite(proposedY) ? proposedY : 0, 0, maxY);
+
+    applyToolbarPosition(nextX, nextY);
+    event.preventDefault();
+    event.stopPropagation();
+  }
+
+  function handleToolbarPointerUp(event) {
+    if (!toolbarDragState || event.pointerId !== toolbarDragState.pointerId) {
+      return;
+    }
+
+    endToolbarDrag(event.pointerId);
+    event.preventDefault();
+    event.stopPropagation();
+  }
+
+  function handleToolbarPointerCancel(event) {
+    if (toolbarDragState && event.pointerId === toolbarDragState.pointerId) {
+      endToolbarDrag(event.pointerId);
+    }
+  }
+
+  function endToolbarDrag(pointerId) {
+    try {
+      toolbar.releasePointerCapture?.(pointerId);
+    } catch (error) {
+      // Ignore release errors.
+    }
+
+    toolbarDragState = null;
+    toolbar.classList.remove('is-dragging');
+    scheduleToolbarMeasurement();
+  }
 
   function toggle() {
     if (isActive) {
@@ -8657,6 +8851,7 @@ function createOverlayTool() {
     renderHandles();
     applyPreviewMask();
     updateControls();
+    ensureToolbarPosition();
   }
 
   function deactivate() {
@@ -8684,6 +8879,7 @@ function createOverlayTool() {
     persistedMapUrl = null;
     handlesLayer.innerHTML = '';
     applyOverlayMask(persistedMask);
+    ensureToolbarPosition();
   }
 
   function notifyGridChanged() {
@@ -8691,6 +8887,7 @@ function createOverlayTool() {
       return;
     }
     renderHandles();
+    ensureToolbarPosition();
   }
 
   function notifyMapState() {
@@ -8708,6 +8905,7 @@ function createOverlayTool() {
     const overlayEntry = resolveSceneOverlayState(state.boardState ?? {}, activeSceneId);
     notifyOverlayMaskChange(overlayEntry ?? null);
     syncCutoutToggleButtons();
+    ensureToolbarPosition();
   }
 
   function notifyOverlayMaskChange(overlayEntry) {
@@ -8962,6 +9160,7 @@ function createOverlayTool() {
 
   function setStatus(message) {
     statusLabel.textContent = message || DEFAULT_STATUS;
+    ensureToolbarPosition();
   }
 
   function isDirty() {
@@ -9011,6 +9210,7 @@ function createOverlayTool() {
     commitButton.disabled = !isActive || !isClosed || !hasNodes || !isDirty();
     resetButton.disabled = !isActive || (!isDirty() && !dragState);
     clearButton.disabled = !hasPersistedOverlay();
+    ensureToolbarPosition();
   }
 
   function hasPersistedOverlay() {
