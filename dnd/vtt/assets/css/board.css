@@ -487,6 +487,11 @@
   cursor: grabbing;
 }
 
+.vtt-board__map-surface[data-overlay-editing='true'],
+.vtt-board__map-surface[data-overlay-editing='true'].is-panning {
+  cursor: pointer;
+}
+
 .vtt-board__map-transform {
   position: absolute;
   top: 0;
