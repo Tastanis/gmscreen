@@ -19,6 +19,15 @@
 
 #vtt-main {
   box-shadow: 0 25px 60px rgba(15, 23, 42, 0.45);
+  --turn-flash-color-rgb: 250, 204, 21;
+}
+
+#vtt-main.is-turn-flash-yellow {
+  --turn-flash-color-rgb: 250, 204, 21;
+}
+
+#vtt-main.is-turn-flash-red {
+  --turn-flash-color-rgb: 239, 68, 68;
 }
 
 #vtt-main.is-turn-flash {
@@ -30,12 +39,12 @@
   100% {
     box-shadow:
       0 25px 60px rgba(15, 23, 42, 0.45),
-      0 0 0 0 rgba(250, 204, 21, 0);
+      0 0 0 0 rgba(var(--turn-flash-color-rgb), 0);
   }
   50% {
     box-shadow:
       0 25px 60px rgba(15, 23, 42, 0.45),
-      0 0 0 6px rgba(250, 204, 21, 0.7);
+      0 0 0 6px rgba(var(--turn-flash-color-rgb), 0.7);
   }
 }
 
@@ -44,7 +53,7 @@
     animation: none;
     box-shadow:
       0 25px 60px rgba(15, 23, 42, 0.45),
-      0 0 0 4px rgba(250, 204, 21, 0.4);
+      0 0 0 4px rgba(var(--turn-flash-color-rgb), 0.4);
     transition: box-shadow 0.2s ease;
   }
 }

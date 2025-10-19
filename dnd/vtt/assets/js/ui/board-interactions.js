@@ -203,11 +203,18 @@ export function createBoardStatePoller({
 const TURN_TIMER_DURATION_MS = 60_000;
 const TURN_TIMER_STAGE_INTERVAL_MS = 20_000;
 const TURN_TIMER_INITIAL_DISPLAY = '1:00';
+const TURN_TIMER_COUNTUP_INITIAL_DISPLAY = '0:00';
 const TURN_TIMER_STAGE_FALLBACK = 'full';
+const TURN_TIMER_WARNING_YELLOW_THRESHOLD_MS = 30_000;
+const TURN_TIMER_WARNING_RED_THRESHOLD_MS = 10_000;
 const INDIGO_ROTATION_INTERVAL_MS = 60_000;
 const INDIGO_ROTATION_INCREMENT_DEGREES = 45;
 const TURN_INDICATOR_DEFAULT_TEXT = 'Waiting for turn';
 const TURN_INDICATOR_GM_TEXT = "GM's turn";
+const TURN_FLASH_TONE_CLASSES = {
+  yellow: 'is-turn-flash-yellow',
+  red: 'is-turn-flash-red',
+};
 
 export function mountBoardInteractions(store, routes = {}) {
   const board = document.getElementById('vtt-board-canvas');
@@ -369,7 +376,10 @@ export function mountBoardInteractions(store, routes = {}) {
   let pendingTurnTransition = null;
   let borderFlashTimeoutId = null;
   let allyTurnTimerInterval = null;
+  let allyTurnTimerMode = 'idle';
   let allyTurnTimerExpiresAt = null;
+  let allyTurnTimerStartedAt = null;
+  let allyTurnTimerWarnings = { yellow: false, red: false };
   let currentTurnTimerStage = null;
   let audioContext = null;
   let lastTurnEffect = null;
@@ -4582,24 +4592,29 @@ export function mountBoardInteractions(store, routes = {}) {
     return TURN_INDICATOR_GM_TEXT;
   }
 
-  function flashTurnBorder() {
+  function flashTurnBorder(tone = 'yellow') {
     if (!appMain) {
       return;
     }
+    const toneClass = TURN_FLASH_TONE_CLASSES[tone] ?? TURN_FLASH_TONE_CLASSES.yellow;
+    const toneClassValues = Object.values(TURN_FLASH_TONE_CLASSES);
     if (borderFlashTimeoutId && typeof window !== 'undefined' && typeof window.clearTimeout === 'function') {
       window.clearTimeout(borderFlashTimeoutId);
       borderFlashTimeoutId = null;
     }
-    appMain.classList.remove('is-turn-flash');
+    appMain.classList.remove('is-turn-flash', ...toneClassValues);
     try {
       void appMain.offsetWidth;
     } catch (error) {
       // Ignore reflow errors in non-browser environments.
     }
     appMain.classList.add('is-turn-flash');
+    if (toneClass) {
+      appMain.classList.add(toneClass);
+    }
     if (typeof window !== 'undefined' && typeof window.setTimeout === 'function') {
       borderFlashTimeoutId = window.setTimeout(() => {
-        appMain.classList.remove('is-turn-flash');
+        appMain.classList.remove('is-turn-flash', ...toneClassValues);
         borderFlashTimeoutId = null;
       }, 3000);
     }
@@ -4613,7 +4628,7 @@ export function mountBoardInteractions(store, routes = {}) {
       window.clearTimeout(borderFlashTimeoutId);
       borderFlashTimeoutId = null;
     }
-    appMain.classList.remove('is-turn-flash');
+    appMain.classList.remove('is-turn-flash', ...Object.values(TURN_FLASH_TONE_CLASSES));
   }
 
   function ensureAudioContextInstance() {
@@ -4692,8 +4707,12 @@ export function mountBoardInteractions(store, routes = {}) {
     });
   }
 
-  function formatTimerValue(milliseconds) {
-    const totalSeconds = Math.max(0, Math.ceil(milliseconds / 1000));
+  function formatTimerValue(milliseconds, options = {}) {
+    const direction = options.direction === 'up' ? 'up' : 'down';
+    const totalSeconds =
+      direction === 'up'
+        ? Math.max(0, Math.floor(milliseconds / 1000))
+        : Math.max(0, Math.ceil(milliseconds / 1000));
     const minutes = Math.floor(totalSeconds / 60);
     const seconds = totalSeconds % 60;
     return `${minutes}:${seconds.toString().padStart(2, '0')}`;
@@ -4716,29 +4735,82 @@ export function mountBoardInteractions(store, routes = {}) {
     turnTimerImage.dataset.stage = stage;
   }
 
+  function resetAllyTurnTimerWarnings() {
+    allyTurnTimerWarnings = { yellow: false, red: false };
+  }
+
   function updateAllyTurnTimerDisplay() {
-    if (!turnTimerElement || !allyTurnTimerExpiresAt) {
+    if (!turnTimerElement || allyTurnTimerMode === 'idle') {
       return;
     }
-    const remaining = Math.max(0, allyTurnTimerExpiresAt - Date.now());
-    if (turnTimerDisplay) {
-      turnTimerDisplay.textContent = formatTimerValue(remaining);
+
+    if (allyTurnTimerMode === 'countdown' && allyTurnTimerExpiresAt) {
+      const remaining = Math.max(0, allyTurnTimerExpiresAt - Date.now());
+      if (turnTimerDisplay) {
+        turnTimerDisplay.textContent = formatTimerValue(remaining);
+      }
+      updateTurnTimerStage(remaining);
+
+      if (remaining <= TURN_TIMER_WARNING_YELLOW_THRESHOLD_MS && !allyTurnTimerWarnings.yellow) {
+        allyTurnTimerWarnings.yellow = true;
+        flashTurnBorder('yellow');
+      }
+      if (remaining <= TURN_TIMER_WARNING_RED_THRESHOLD_MS && !allyTurnTimerWarnings.red) {
+        allyTurnTimerWarnings.red = true;
+        flashTurnBorder('red');
+      }
+
+      if (remaining <= 0) {
+        stopAllyTurnTimer({ hide: false, holdStage: true });
+      }
+      return;
     }
-    updateTurnTimerStage(remaining);
-    if (remaining <= 0) {
-      stopAllyTurnTimer({ hide: false, holdStage: true });
+
+    if (allyTurnTimerMode === 'countup' && allyTurnTimerStartedAt) {
+      const elapsed = Math.max(0, Date.now() - allyTurnTimerStartedAt);
+      if (turnTimerDisplay) {
+        turnTimerDisplay.textContent = formatTimerValue(elapsed, { direction: 'up' });
+      }
     }
   }
 
-  function startAllyTurnTimer() {
+  function startAllyTurnCountdown() {
     if (!turnTimerElement) {
       return;
     }
+    allyTurnTimerMode = 'countdown';
     allyTurnTimerExpiresAt = Date.now() + TURN_TIMER_DURATION_MS;
+    allyTurnTimerStartedAt = null;
+    resetAllyTurnTimerWarnings();
     currentTurnTimerStage = null;
     updateTurnTimerStage(TURN_TIMER_DURATION_MS);
     if (turnTimerDisplay) {
       turnTimerDisplay.textContent = formatTimerValue(TURN_TIMER_DURATION_MS);
+    }
+    turnTimerElement.hidden = false;
+    turnTimerElement.setAttribute('aria-hidden', 'false');
+
+    if (allyTurnTimerInterval && typeof window !== 'undefined' && typeof window.clearInterval === 'function') {
+      window.clearInterval(allyTurnTimerInterval);
+    }
+    if (typeof window !== 'undefined' && typeof window.setInterval === 'function') {
+      allyTurnTimerInterval = window.setInterval(updateAllyTurnTimerDisplay, 500);
+    }
+    updateAllyTurnTimerDisplay();
+  }
+
+  function startAllyTurnCountUp() {
+    if (!turnTimerElement) {
+      return;
+    }
+    allyTurnTimerMode = 'countup';
+    allyTurnTimerStartedAt = Date.now();
+    allyTurnTimerExpiresAt = null;
+    resetAllyTurnTimerWarnings();
+    currentTurnTimerStage = null;
+    updateTurnTimerStage(0);
+    if (turnTimerDisplay) {
+      turnTimerDisplay.textContent = TURN_TIMER_COUNTUP_INITIAL_DISPLAY;
     }
     turnTimerElement.hidden = false;
     turnTimerElement.setAttribute('aria-hidden', 'false');
@@ -4758,7 +4830,10 @@ export function mountBoardInteractions(store, routes = {}) {
       window.clearInterval(allyTurnTimerInterval);
     }
     allyTurnTimerInterval = null;
+    allyTurnTimerMode = 'idle';
     allyTurnTimerExpiresAt = null;
+    allyTurnTimerStartedAt = null;
+    resetAllyTurnTimerWarnings();
     if (turnTimerElement && hide) {
       turnTimerElement.hidden = true;
       turnTimerElement.setAttribute('aria-hidden', 'true');
@@ -4860,10 +4935,20 @@ export function mountBoardInteractions(store, routes = {}) {
     );
 
     if (normalizedNext === 'ally') {
-      if (teamChanged || combatantChanged || !allyTurnTimerExpiresAt) {
-        startAllyTurnTimer();
+      const hasTurnLock =
+        typeof nextCombatantId === 'string' &&
+        nextCombatantId &&
+        typeof turnLockState.combatantId === 'string' &&
+        turnLockState.combatantId === nextCombatantId;
+
+      if (hasTurnLock) {
+        if (allyTurnTimerMode !== 'countup') {
+          startAllyTurnCountUp();
+        }
+      } else if (teamChanged || combatantChanged || allyTurnTimerMode !== 'countdown') {
+        startAllyTurnCountdown();
       }
-    } else {
+    } else if (allyTurnTimerMode !== 'idle') {
       stopAllyTurnTimer();
     }
 
