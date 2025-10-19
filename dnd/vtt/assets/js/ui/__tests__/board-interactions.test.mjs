@@ -316,11 +316,9 @@ test('overlay clip path uses only provided polygons', () => {
     const mapOverlay = dom.window.document.getElementById('vtt-map-overlay');
     const clipPath = mapOverlay.style.clipPath || mapOverlay.style.webkitClipPath;
 
-    assert.equal(
-      clipPath,
-      "path('evenodd M 0% 0% L 50% 0% L 50% 50% L 0% 50% Z')",
-      'clip path should only include the provided polygon coordinates'
-    );
+    const expectedClipPath = "path('M 0% 0% L 50% 0% L 50% 50% L 0% 50% Z')";
+    assert.equal(clipPath, expectedClipPath, 'clip path should only include the provided polygon coordinates');
+    assert.ok(!clipPath.includes('evenodd'));
   } finally {
     dom.window.close();
   }
@@ -626,4 +624,83 @@ test('board state poller ignores stale player snapshot when newer GM data exists
   await poller.poll();
   assert.equal(state.boardState.metadata.signature, 'gm-3');
   assert.deepEqual(state.boardState.placements, { 'scene-1': [{ id: 'gm-token', column: 4, row: 5 }] });
+});
+
+test('polygon overlay clip path omits implicit bounding box', () => {
+  const dom = createDom();
+  try {
+    const { window } = dom;
+    const { document } = window;
+
+    const board = document.getElementById('vtt-board-canvas');
+    board.getBoundingClientRect = () => ({
+      width: 640,
+      height: 640,
+      top: 0,
+      right: 640,
+      bottom: 640,
+      left: 0,
+    });
+
+    const overlayPolygon = {
+      points: [
+        { column: 2, row: 3 },
+        { column: 4, row: 3 },
+        { column: 4, row: 6 },
+        { column: 2, row: 6 },
+      ],
+    };
+
+    const store = createMockStore({
+      user: { isGM: true, name: 'GM' },
+      scenes: { items: [{ id: 'scene-1', name: 'Scene 1' }] },
+      boardState: {
+        activeSceneId: 'scene-1',
+        mapUrl: 'http://example.com/map.png',
+        sceneState: {
+          'scene-1': {
+            overlay: {
+              mapUrl: 'http://example.com/overlay.png',
+              mask: { visible: true, polygons: [] },
+            },
+          },
+        },
+        overlay: {
+          mapUrl: 'http://example.com/overlay.png',
+          mask: { visible: true, polygons: [] },
+        },
+      },
+      grid: { size: 64, visible: true },
+    });
+
+    mountBoardInteractions(store);
+
+    const mapImage = document.getElementById('vtt-map-image');
+    Object.defineProperty(mapImage, 'naturalWidth', { value: 640, configurable: true });
+    Object.defineProperty(mapImage, 'naturalHeight', { value: 640, configurable: true });
+
+    mapImage.onload?.();
+
+    store.updateState((draft) => {
+      const sceneOverlay =
+        draft.boardState.sceneState['scene-1'].overlay ?? (draft.boardState.sceneState['scene-1'].overlay = {});
+      sceneOverlay.mapUrl = 'http://example.com/overlay.png';
+      sceneOverlay.mask = { visible: true, polygons: [overlayPolygon] };
+
+      if (!draft.boardState.overlay) {
+        draft.boardState.overlay = { mapUrl: null, mask: { visible: true, polygons: [] } };
+      }
+      draft.boardState.overlay.mapUrl = 'http://example.com/overlay.png';
+      draft.boardState.overlay.mask = { visible: true, polygons: [overlayPolygon] };
+    });
+
+    const mapOverlay = document.getElementById('vtt-map-overlay');
+    const clipPath = mapOverlay.style.clipPath || mapOverlay.style.webkitClipPath;
+    const expectedClipPath = "path('M 20% 30% L 40% 30% L 40% 60% L 20% 60% Z')";
+
+    assert.equal(clipPath, expectedClipPath);
+    assert.ok(!clipPath.includes('evenodd'));
+  } finally {
+    dom.window.close();
+  }
 });
