@@ -1913,3 +1913,226 @@
     width: min(460px, 95vw);
   }
 }
+
+.vtt-combat-report {
+  position: fixed;
+  inset: 0;
+  z-index: 1200;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 2rem;
+}
+
+.vtt-combat-report__backdrop {
+  position: absolute;
+  inset: 0;
+  background: rgba(15, 23, 42, 0.75);
+  backdrop-filter: blur(6px);
+  pointer-events: auto;
+}
+
+.vtt-combat-report__panel {
+  position: relative;
+  pointer-events: auto;
+  width: min(960px, 92vw);
+  max-height: min(90vh, 960px);
+  overflow: hidden auto;
+  padding: 1.75rem 2rem 2rem;
+  border-radius: calc(var(--vtt-radius, 1rem) * 1.1);
+  border: 1px solid rgba(148, 163, 184, 0.35);
+  background: rgba(15, 23, 42, 0.94);
+  box-shadow: 0 30px 80px rgba(15, 23, 42, 0.7);
+  display: flex;
+  flex-direction: column;
+  gap: 1.75rem;
+  color: rgba(226, 232, 240, 0.95);
+}
+
+.vtt-combat-report__header {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 1rem;
+}
+
+.vtt-combat-report__title {
+  margin: 0;
+  font-size: 1.75rem;
+  letter-spacing: 0.02em;
+}
+
+.vtt-combat-report__close {
+  border: none;
+  background: rgba(148, 163, 184, 0.18);
+  color: rgba(226, 232, 240, 0.85);
+  border-radius: 999px;
+  width: 2.25rem;
+  height: 2.25rem;
+  font-size: 1.5rem;
+  line-height: 1;
+  cursor: pointer;
+  transition: background var(--vtt-transition, 0.2s ease), color var(--vtt-transition, 0.2s ease);
+}
+
+.vtt-combat-report__close:hover,
+.vtt-combat-report__close:focus {
+  background: rgba(96, 165, 250, 0.3);
+  color: rgba(255, 255, 255, 0.92);
+  outline: none;
+}
+
+.vtt-combat-report__summary-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(150px, 1fr));
+  gap: 1rem;
+  padding: 1.25rem;
+  border-radius: calc(var(--vtt-radius, 1rem) * 0.9);
+  background: rgba(30, 41, 59, 0.7);
+  border: 1px solid rgba(148, 163, 184, 0.25);
+}
+
+.vtt-combat-report__summary-item {
+  display: flex;
+  flex-direction: column;
+  gap: 0.35rem;
+}
+
+.vtt-combat-report__summary-label {
+  font-size: 0.75rem;
+  letter-spacing: 0.12em;
+  text-transform: uppercase;
+  color: rgba(148, 163, 184, 0.85);
+}
+
+.vtt-combat-report__summary-value {
+  font-size: 1.2rem;
+  font-weight: 700;
+}
+
+.vtt-combat-report__section {
+  display: flex;
+  flex-direction: column;
+  gap: 1rem;
+}
+
+.vtt-combat-report__section-title {
+  margin: 0;
+  font-size: 1.15rem;
+  letter-spacing: 0.03em;
+}
+
+.vtt-combat-report__bar-group {
+  display: flex;
+  flex-direction: column;
+  gap: 0.9rem;
+}
+
+.vtt-combat-report__bar-row {
+  display: grid;
+  grid-template-columns: minmax(0, 160px) minmax(0, 1fr);
+  align-items: center;
+  gap: 1rem;
+}
+
+.vtt-combat-report__bar-label {
+  font-weight: 600;
+  color: rgba(191, 219, 254, 0.85);
+}
+
+.vtt-combat-report__bar {
+  position: relative;
+  min-height: 1.85rem;
+  padding: 0.3rem 0.85rem;
+  border-radius: 999px;
+  background: rgba(148, 163, 184, 0.18);
+  border: 1px solid rgba(148, 163, 184, 0.25);
+  overflow: hidden;
+  display: flex;
+  align-items: center;
+}
+
+.vtt-combat-report__bar-fill {
+  position: absolute;
+  inset: 0;
+  border-radius: inherit;
+  opacity: 0.9;
+  transition: width var(--vtt-transition, 0.25s ease);
+}
+
+.vtt-combat-report__bar-fill--default {
+  background: linear-gradient(90deg, rgba(148, 163, 184, 0.7), rgba(226, 232, 240, 0.45));
+}
+
+.vtt-combat-report__bar-fill--waiting {
+  background: linear-gradient(90deg, rgba(250, 204, 21, 0.85), rgba(253, 230, 138, 0.65));
+}
+
+.vtt-combat-report__bar-fill--player {
+  background: linear-gradient(90deg, rgba(59, 130, 246, 0.85), rgba(96, 165, 250, 0.65));
+}
+
+.vtt-combat-report__bar-fill--gm {
+  background: linear-gradient(90deg, rgba(239, 68, 68, 0.85), rgba(248, 113, 113, 0.6));
+}
+
+.vtt-combat-report__bar-value {
+  position: relative;
+  margin-left: auto;
+  font-weight: 600;
+  color: rgba(226, 232, 240, 0.95);
+  text-shadow: 0 0 4px rgba(15, 23, 42, 0.6);
+}
+
+.vtt-combat-report__bar-subtitle {
+  grid-column: 2 / span 1;
+  font-size: 0.75rem;
+  color: rgba(148, 163, 184, 0.85);
+  padding-left: 0.5rem;
+}
+
+.vtt-combat-report__card-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(240px, 1fr));
+  gap: 1.2rem;
+}
+
+.vtt-combat-report__card {
+  display: flex;
+  flex-direction: column;
+  gap: 1.1rem;
+  padding: 1.25rem;
+  border-radius: calc(var(--vtt-radius, 1rem) * 0.9);
+  background: rgba(30, 41, 59, 0.7);
+  border: 1px solid rgba(148, 163, 184, 0.25);
+  box-shadow: inset 0 0 0 1px rgba(15, 23, 42, 0.35);
+}
+
+.vtt-combat-report__card-header {
+  display: flex;
+  flex-direction: column;
+  gap: 0.4rem;
+}
+
+.vtt-combat-report__card-title {
+  margin: 0;
+  font-size: 1.1rem;
+  letter-spacing: 0.02em;
+}
+
+.vtt-combat-report__card-total {
+  font-weight: 600;
+}
+
+.vtt-combat-report__card-meta {
+  font-size: 0.85rem;
+  color: rgba(148, 163, 184, 0.85);
+}
+
+.vtt-combat-report__subheading {
+  margin: 1.25rem 0 0.35rem;
+  font-size: 0.95rem;
+  text-transform: uppercase;
+  letter-spacing: 0.08em;
+  color: rgba(191, 219, 254, 0.8);
+}
