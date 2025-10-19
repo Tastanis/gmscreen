@@ -8592,7 +8592,7 @@ function createOverlayTool() {
 
   const commitButton = document.createElement('button');
   commitButton.type = 'button';
-  commitButton.className = 'vtt-overlay-editor__btn';
+  commitButton.className = 'vtt-overlay-editor__btn vtt-overlay-editor__btn--primary';
   commitButton.textContent = 'Apply Mask';
 
   const resetButton = document.createElement('button');
@@ -8602,7 +8602,8 @@ function createOverlayTool() {
 
   const clearButton = document.createElement('button');
   clearButton.type = 'button';
-  clearButton.className = 'vtt-overlay-editor__btn vtt-overlay-editor__btn--danger';
+  clearButton.className =
+    'vtt-overlay-editor__btn vtt-overlay-editor__btn--danger vtt-overlay-editor__btn--full';
   clearButton.textContent = 'Delete Overlay';
 
   controls.append(closeButton, commitButton, resetButton, clearButton);
@@ -8893,6 +8894,9 @@ function createOverlayTool() {
       return;
     }
     if (event.target && event.target.closest('.vtt-overlay-editor__node')) {
+      return;
+    }
+    if (event.target && event.target.closest('.vtt-overlay-editor__toolbar')) {
       return;
     }
 
