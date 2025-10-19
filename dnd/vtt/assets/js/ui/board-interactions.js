@@ -8920,9 +8920,16 @@ function createOverlayTool() {
 
   function snapOverlayPoint(point, shiftKey = false) {
     const step = shiftKey ? 0.5 : 0.25;
+    const snapValue = (value) => {
+      const numeric = Number(value ?? 0);
+      if (!Number.isFinite(numeric)) {
+        return 0;
+      }
+      return Math.round(numeric / step) * step;
+    };
     return {
-      column: roundToPrecision(snapToStep(point.column ?? 0, step), 4),
-      row: roundToPrecision(snapToStep(point.row ?? 0, step), 4),
+      column: roundToPrecision(snapValue(point.column), 4),
+      row: roundToPrecision(snapValue(point.row), 4),
     };
   }
 
