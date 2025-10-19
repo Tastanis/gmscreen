@@ -2096,7 +2096,7 @@
 
 .vtt-combat-report__bar-row {
   display: grid;
-  grid-template-columns: minmax(0, 160px) minmax(0, 1fr);
+  grid-template-columns: minmax(0, 190px) minmax(0, 1fr);
   align-items: center;
   gap: 1rem;
 }
@@ -2107,15 +2107,21 @@
 }
 
 .vtt-combat-report__bar {
+  display: flex;
+  align-items: center;
+  gap: 0.85rem;
+}
+
+.vtt-combat-report__bar-track {
   position: relative;
+  display: flex;
+  align-items: stretch;
+  flex: 1 1 auto;
   min-height: 1.85rem;
-  padding: 0.3rem 0.85rem;
   border-radius: 999px;
   background: rgba(148, 163, 184, 0.18);
   border: 1px solid rgba(148, 163, 184, 0.25);
   overflow: hidden;
-  display: flex;
-  align-items: center;
 }
 
 .vtt-combat-report__bar-fill {
@@ -2126,79 +2132,59 @@
   transition: width var(--vtt-transition, 0.25s ease);
 }
 
-.vtt-combat-report__bar-fill--default {
+.vtt-combat-report__bar-fill--default,
+.vtt-combat-report__bar-segment--default {
   background: linear-gradient(90deg, rgba(148, 163, 184, 0.7), rgba(226, 232, 240, 0.45));
 }
 
-.vtt-combat-report__bar-fill--waiting {
+.vtt-combat-report__bar-fill--waiting,
+.vtt-combat-report__bar-segment--waiting {
   background: linear-gradient(90deg, rgba(250, 204, 21, 0.85), rgba(253, 230, 138, 0.65));
 }
 
-.vtt-combat-report__bar-fill--player {
+.vtt-combat-report__bar-fill--player,
+.vtt-combat-report__bar-segment--player {
   background: linear-gradient(90deg, rgba(59, 130, 246, 0.85), rgba(96, 165, 250, 0.65));
 }
 
-.vtt-combat-report__bar-fill--gm {
+.vtt-combat-report__bar-fill--gm,
+.vtt-combat-report__bar-segment--gm {
   background: linear-gradient(90deg, rgba(239, 68, 68, 0.85), rgba(248, 113, 113, 0.6));
 }
 
-.vtt-combat-report__bar-value {
+.vtt-combat-report__bar-segment {
   position: relative;
-  margin-left: auto;
+  height: 100%;
+  flex: 0 0 auto;
+  border-radius: inherit;
+  opacity: 0.92;
+}
+
+.vtt-combat-report__bar-segment--delimited::after {
+  content: '';
+  position: absolute;
+  top: 0;
+  right: 0;
+  width: 2px;
+  height: 100%;
+  background: rgba(15, 23, 42, 0.45);
+  opacity: 0.55;
+}
+
+.vtt-combat-report__bar-value {
   font-weight: 600;
   color: rgba(226, 232, 240, 0.95);
   text-shadow: 0 0 4px rgba(15, 23, 42, 0.6);
+  white-space: nowrap;
+  flex: 0 0 auto;
 }
 
 .vtt-combat-report__bar-subtitle {
   grid-column: 2 / span 1;
-  font-size: 0.75rem;
-  color: rgba(148, 163, 184, 0.85);
+  font-size: 0.8rem;
+  color: rgba(148, 163, 184, 0.88);
   padding-left: 0.5rem;
+  line-height: 1.35;
+  white-space: normal;
 }
 
-.vtt-combat-report__card-grid {
-  display: grid;
-  grid-template-columns: repeat(auto-fit, minmax(240px, 1fr));
-  gap: 1.2rem;
-}
-
-.vtt-combat-report__card {
-  display: flex;
-  flex-direction: column;
-  gap: 1.1rem;
-  padding: 1.25rem;
-  border-radius: calc(var(--vtt-radius, 1rem) * 0.9);
-  background: rgba(30, 41, 59, 0.7);
-  border: 1px solid rgba(148, 163, 184, 0.25);
-  box-shadow: inset 0 0 0 1px rgba(15, 23, 42, 0.35);
-}
-
-.vtt-combat-report__card-header {
-  display: flex;
-  flex-direction: column;
-  gap: 0.4rem;
-}
-
-.vtt-combat-report__card-title {
-  margin: 0;
-  font-size: 1.1rem;
-  letter-spacing: 0.02em;
-}
-
-.vtt-combat-report__card-total {
-  font-weight: 600;
-}
-
-.vtt-combat-report__card-meta {
-  font-size: 0.85rem;
-  color: rgba(148, 163, 184, 0.85);
-}
-
-.vtt-combat-report__subheading {
-  margin: 1.25rem 0 0.35rem;
-  font-size: 0.95rem;
-  text-transform: uppercase;
-  letter-spacing: 0.08em;
-  color: rgba(191, 219, 254, 0.8);
-}

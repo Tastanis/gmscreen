@@ -25,6 +25,15 @@ function formatDuration(ms) {
   return `${fractional >= 10 ? fractional.toFixed(0) : fractional.toFixed(1)}s`;
 }
 
+function formatPercentage(value, total) {
+  if (!Number.isFinite(value) || value <= 0 || !Number.isFinite(total) || total <= 0) {
+    return '0%';
+  }
+  const ratio = value / total;
+  const precision = ratio >= 0.995 ? 0 : 1;
+  return `${(ratio * 100).toFixed(precision)}%`;
+}
+
 function createBarRow(documentRef, {
   label,
   value,
@@ -32,6 +41,8 @@ function createBarRow(documentRef, {
   color = 'default',
   subtitle = '',
   tooltip = '',
+  valueLabel,
+  segments = [],
 }) {
   const row = documentRef.createElement('div');
   row.className = 'vtt-combat-report__bar-row';
@@ -43,19 +54,62 @@ function createBarRow(documentRef, {
 
   const barWrapper = documentRef.createElement('div');
   barWrapper.className = 'vtt-combat-report__bar';
-  const fill = documentRef.createElement('div');
-  fill.className = `vtt-combat-report__bar-fill vtt-combat-report__bar-fill--${color}`;
-  const ratio = max > 0 ? value / max : 0;
-  const widthPercent = ratio > 0 ? Math.max(4, Math.round(ratio * 100)) : 0;
-  fill.style.width = `${Math.min(100, widthPercent)}%`;
+  const track = documentRef.createElement('div');
+  track.className = 'vtt-combat-report__bar-track';
   if (tooltip) {
-    fill.title = tooltip;
+    track.title = tooltip;
   }
-  barWrapper.appendChild(fill);
+
+  const normalizedSegments = Array.isArray(segments)
+    ? segments
+        .map((segment) => ({
+          label: segment.label || '',
+          value: Math.max(0, Number(segment.value) || 0),
+          tooltip: segment.tooltip || '',
+          color: segment.color || color,
+        }))
+        .filter((segment) => segment.value > 0)
+    : [];
+
+  const normalizedMax = Number.isFinite(max) && max > 0 ? max : 0;
+  const fallbackTotal = normalizedSegments.reduce((sum, segment) => sum + segment.value, 0);
+  const totalForWidth = normalizedMax > 0 ? normalizedMax : Math.max(value || 0, fallbackTotal);
+
+  if (normalizedSegments.length) {
+    normalizedSegments.forEach((segment, index) => {
+      const segmentEl = documentRef.createElement('div');
+      segmentEl.className = `vtt-combat-report__bar-segment vtt-combat-report__bar-segment--${segment.color}`;
+      if (segment.tooltip) {
+        segmentEl.title = segment.tooltip;
+      } else if (segment.label) {
+        segmentEl.title = segment.label;
+      }
+      const percent = totalForWidth > 0 ? (segment.value / totalForWidth) * 100 : 0;
+      const clamped = Math.min(100, Math.max(0.75, percent));
+      segmentEl.style.flexBasis = `${clamped}%`;
+      segmentEl.style.width = segmentEl.style.flexBasis;
+      if (index < normalizedSegments.length - 1) {
+        segmentEl.classList.add('vtt-combat-report__bar-segment--delimited');
+      }
+      track.appendChild(segmentEl);
+    });
+  } else {
+    const fill = documentRef.createElement('div');
+    fill.className = `vtt-combat-report__bar-fill vtt-combat-report__bar-fill--${color}`;
+    const ratio = totalForWidth > 0 ? value / totalForWidth : 0;
+    const widthPercent = ratio > 0 ? Math.max(2, Math.round(ratio * 100)) : 0;
+    fill.style.width = `${Math.min(100, widthPercent)}%`;
+    if (tooltip) {
+      fill.title = tooltip;
+    }
+    track.appendChild(fill);
+  }
+
+  barWrapper.appendChild(track);
 
   const valueEl = documentRef.createElement('div');
   valueEl.className = 'vtt-combat-report__bar-value';
-  valueEl.textContent = formatDuration(value);
+  valueEl.textContent = valueLabel || formatDuration(value);
   barWrapper.appendChild(valueEl);
 
   row.appendChild(barWrapper);
@@ -69,12 +123,42 @@ function createBarRow(documentRef, {
 }
 
 function renderSummaryGrid(documentRef, container, summary) {
+  const totalDuration = summary.totalDurationMs || 0;
+  const gmDecisionTotal = summary.enemyWaitingByRound.reduce(
+    (sum, entry) => sum + entry.durationMs,
+    0
+  );
   const stats = [
     { label: 'Total Duration', value: formatDuration(summary.totalDurationMs) },
     { label: 'Rounds', value: summary.highestRound || 1 },
-    { label: 'Decision Time', value: formatDuration(summary.totals.decisionMs) },
-    { label: 'Player Turns', value: formatDuration(summary.totals.playerMs) },
-    { label: 'GM Turns', value: formatDuration(summary.totals.gmMs) },
+    {
+      label: 'Player Decision',
+      value: `${formatDuration(summary.totals.decisionMs)} (${formatPercentage(
+        summary.totals.decisionMs,
+        totalDuration
+      )})`,
+    },
+    {
+      label: 'Player Turns',
+      value: `${formatDuration(summary.totals.playerMs)} (${formatPercentage(
+        summary.totals.playerMs,
+        totalDuration
+      )})`,
+    },
+    {
+      label: 'GM Turns',
+      value: `${formatDuration(summary.totals.gmMs)} (${formatPercentage(
+        summary.totals.gmMs,
+        totalDuration
+      )})`,
+    },
+    {
+      label: 'GM Decision',
+      value: `${formatDuration(gmDecisionTotal)} (${formatPercentage(
+        gmDecisionTotal,
+        totalDuration
+      )})`,
+    },
   ];
   stats.forEach((stat) => {
     const item = documentRef.createElement('div');
@@ -92,86 +176,100 @@ function renderSummaryGrid(documentRef, container, summary) {
 }
 
 function renderWaitingSection(documentRef, panel, summary) {
-  if (!summary.waitingByRound.length) {
+  const rounds = summary.waitingByRound.filter((entry) => entry.durationMs > 0);
+  const totalWaiting = rounds.reduce((sum, entry) => sum + entry.durationMs, 0);
+  if (!rounds.length && totalWaiting <= 0) {
     return;
   }
   const section = documentRef.createElement('section');
   section.className = 'vtt-combat-report__section';
   const heading = documentRef.createElement('h3');
   heading.className = 'vtt-combat-report__section-title';
-  heading.textContent = 'Decision Time by Round';
+  heading.textContent = 'Player Decision Time';
   section.appendChild(heading);
 
   const chart = documentRef.createElement('div');
   chart.className = 'vtt-combat-report__bar-group';
-  const maxDuration = Math.max(...summary.waitingByRound.map((entry) => entry.durationMs));
-  summary.waitingByRound.forEach((entry) => {
-    chart.appendChild(
-      createBarRow(documentRef, {
+  const longest = rounds.reduce(
+    (current, entry) => (!current || entry.durationMs > current.durationMs ? entry : current),
+    null
+  );
+  const subtitleParts = [];
+  if (rounds.length) {
+    subtitleParts.push(
+      rounds
+        .map((entry) => `Round ${entry.round}: ${formatDuration(entry.durationMs)}`)
+        .join(' • ')
+    );
+  }
+  if (longest && longest.durationMs > 0) {
+    subtitleParts.push(
+      `Longest delay: Round ${longest.round} – ${formatDuration(longest.durationMs)}`
+    );
+  }
+  chart.appendChild(
+    createBarRow(documentRef, {
+      label: 'Players Waiting',
+      value: totalWaiting,
+      valueLabel: `${formatDuration(totalWaiting)} • ${formatPercentage(
+        totalWaiting,
+        summary.totalDurationMs
+      )}`,
+      max: summary.totalDurationMs,
+      color: 'waiting',
+      segments: rounds.map((entry) => ({
         label: `Round ${entry.round}`,
         value: entry.durationMs,
-        max: maxDuration,
+        tooltip: `Round ${entry.round}: ${formatDuration(entry.durationMs)}`,
         color: 'waiting',
-      })
-    );
-  });
+      })),
+      subtitle: subtitleParts.filter(Boolean).join(' • '),
+    })
+  );
   section.appendChild(chart);
   panel.appendChild(section);
 }
 
-function renderParticipantCard(documentRef, participant) {
-  const card = documentRef.createElement('section');
-  card.className = 'vtt-combat-report__card';
-
-  const header = documentRef.createElement('header');
-  header.className = 'vtt-combat-report__card-header';
-  const title = documentRef.createElement('h4');
-  title.className = 'vtt-combat-report__card-title';
-  title.textContent = participant.name;
-  header.appendChild(title);
-
-  const total = documentRef.createElement('div');
-  total.className = 'vtt-combat-report__card-total';
-  const pct = `${participant.percentage.toFixed(1)}% of combat`;
-  total.textContent = `${formatDuration(participant.totalMs)} • ${pct}`;
-  header.appendChild(total);
-
+function createParticipantRow(documentRef, participant, totalDurationMs) {
+  const rounds = participant.perRound.filter((entry) => entry.totalMs > 0);
+  const roundSummary = rounds
+    .map((entry) => {
+      const turnCount = entry.turns.length;
+      const turnLabel = turnCount > 1 ? `${turnCount} turns` : turnCount === 1 ? '1 turn' : '0 turns';
+      return `Round ${entry.round}: ${formatDuration(entry.totalMs)} (${turnLabel})`;
+    })
+    .join(' • ');
+  const subtitleParts = [];
+  if (roundSummary) {
+    subtitleParts.push(roundSummary);
+  }
   if (participant.longestTurnMs > 0) {
-    const longest = documentRef.createElement('div');
-    longest.className = 'vtt-combat-report__card-meta';
-    const round = participant.longestTurnRound ? `Round ${participant.longestTurnRound}` : '—';
-    longest.textContent = `Longest turn: ${formatDuration(participant.longestTurnMs)} (${round})`;
-    header.appendChild(longest);
+    const roundLabel = participant.longestTurnRound ? `Round ${participant.longestTurnRound}` : '—';
+    subtitleParts.push(
+      `Longest turn: ${formatDuration(participant.longestTurnMs)} (${roundLabel})`
+    );
   }
 
-  card.appendChild(header);
-
-  if (participant.perRound.length) {
-    const chart = documentRef.createElement('div');
-    chart.className = 'vtt-combat-report__bar-group';
-    const maxRoundDuration = Math.max(...participant.perRound.map((entry) => entry.totalMs));
-    participant.perRound.forEach((entry) => {
-      const tooltip = entry.turns.length > 1
-        ? `${entry.turns.length} turns in this round`
-        : 'Single turn';
-      chart.appendChild(
-        createBarRow(documentRef, {
-          label: `Round ${entry.round}`,
-          value: entry.totalMs,
-          max: maxRoundDuration,
-          color: participant.role === 'gm' ? 'gm' : 'player',
-          subtitle:
-            entry.turns.length > 1
-              ? `${entry.turns.length} turns`
-              : '1 turn',
-          tooltip,
-        })
-      );
-    });
-    card.appendChild(chart);
-  }
-
-  return card;
+  return createBarRow(documentRef, {
+    label: participant.name,
+    value: participant.totalMs,
+    valueLabel: `${formatDuration(participant.totalMs)} • ${formatPercentage(
+      participant.totalMs,
+      totalDurationMs
+    )}`,
+    max: totalDurationMs,
+    color: participant.role === 'gm' ? 'gm' : 'player',
+    segments: rounds.map((entry) => ({
+      label: `Round ${entry.round}`,
+      value: entry.totalMs,
+      tooltip:
+        entry.turns.length > 1
+          ? `Round ${entry.round}: ${formatDuration(entry.totalMs)} across ${entry.turns.length} turns`
+          : `Round ${entry.round}: ${formatDuration(entry.totalMs)}`,
+      color: participant.role === 'gm' ? 'gm' : 'player',
+    })),
+    subtitle: subtitleParts.join(' • '),
+  });
 }
 
 export function showCombatTimerReport(summary, { documentRef = typeof document !== 'undefined' ? document : null } = {}) {
@@ -230,12 +328,14 @@ export function showCombatTimerReport(summary, { documentRef = typeof document !
     playersHeading.textContent = 'Player Turns';
     playersSection.appendChild(playersHeading);
 
-    const grid = documentRef.createElement('div');
-    grid.className = 'vtt-combat-report__card-grid';
+    const group = documentRef.createElement('div');
+    group.className = 'vtt-combat-report__bar-group';
     summary.participants.players.forEach((participant) => {
-      grid.appendChild(renderParticipantCard(documentRef, participant));
+      group.appendChild(
+        createParticipantRow(documentRef, participant, summary.totalDurationMs)
+      );
     });
-    playersSection.appendChild(grid);
+    playersSection.appendChild(group);
     panel.appendChild(playersSection);
   }
 
@@ -246,30 +346,55 @@ export function showCombatTimerReport(summary, { documentRef = typeof document !
     gmHeading.className = 'vtt-combat-report__section-title';
     gmHeading.textContent = 'GM Turns';
     gmSection.appendChild(gmHeading);
-    gmSection.appendChild(renderParticipantCard(documentRef, summary.participants.gm));
+    const gmGroup = documentRef.createElement('div');
+    gmGroup.className = 'vtt-combat-report__bar-group';
+    gmGroup.appendChild(
+      createParticipantRow(documentRef, summary.participants.gm, summary.totalDurationMs)
+    );
 
-    if (summary.enemyWaitingByRound.length) {
-      const gmWaiting = documentRef.createElement('div');
-      gmWaiting.className = 'vtt-combat-report__bar-group';
-      const maxEnemyWaiting = Math.max(
-        ...summary.enemyWaitingByRound.map((entry) => entry.durationMs)
+    const enemyRounds = summary.enemyWaitingByRound.filter((entry) => entry.durationMs > 0);
+    if (enemyRounds.length) {
+      const totalEnemyWaiting = enemyRounds.reduce(
+        (sum, entry) => sum + entry.durationMs,
+        0
       );
-      summary.enemyWaitingByRound.forEach((entry) => {
-        gmWaiting.appendChild(
-          createBarRow(documentRef, {
+      const longestEnemy = enemyRounds.reduce(
+        (current, entry) =>
+          !current || entry.durationMs > current.durationMs ? entry : current,
+        null
+      );
+      const subtitleParts = [
+        enemyRounds
+          .map((entry) => `Round ${entry.round}: ${formatDuration(entry.durationMs)}`)
+          .join(' • '),
+      ];
+      if (longestEnemy && longestEnemy.durationMs > 0) {
+        subtitleParts.push(
+          `Longest delay: Round ${longestEnemy.round} – ${formatDuration(longestEnemy.durationMs)}`
+        );
+      }
+      gmGroup.appendChild(
+        createBarRow(documentRef, {
+          label: 'GM Decision',
+          value: totalEnemyWaiting,
+          valueLabel: `${formatDuration(totalEnemyWaiting)} • ${formatPercentage(
+            totalEnemyWaiting,
+            summary.totalDurationMs
+          )}`,
+          max: summary.totalDurationMs,
+          color: 'gm',
+          segments: enemyRounds.map((entry) => ({
             label: `Round ${entry.round}`,
             value: entry.durationMs,
-            max: maxEnemyWaiting,
+            tooltip: `Round ${entry.round}: ${formatDuration(entry.durationMs)}`,
             color: 'gm',
-          })
-        );
-      });
-      const gmWaitingTitle = documentRef.createElement('h4');
-      gmWaitingTitle.className = 'vtt-combat-report__subheading';
-      gmWaitingTitle.textContent = 'GM Decision Time';
-      gmSection.appendChild(gmWaitingTitle);
-      gmSection.appendChild(gmWaiting);
+          })),
+          subtitle: subtitleParts.filter(Boolean).join(' • '),
+        })
+      );
     }
+
+    gmSection.appendChild(gmGroup);
 
     panel.appendChild(gmSection);
   }
