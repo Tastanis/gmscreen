@@ -2768,6 +2768,9 @@ export function mountBoardInteractions(store, routes = {}) {
     }
 
     const commands = [];
+    const outerBoundary = 'M 0% 0% L 100% 0% L 100% 100% L 0% 100% Z';
+    commands.push(outerBoundary);
+
     polygons.forEach((polygon) => {
       const points = Array.isArray(polygon?.points) ? polygon.points : [];
       if (points.length < 3) {
@@ -2790,7 +2793,7 @@ export function mountBoardInteractions(store, routes = {}) {
       }
     });
 
-    if (!commands.length) {
+    if (commands.length <= 1) {
       return '';
     }
 
@@ -8615,7 +8618,7 @@ function createOverlayTool() {
 
   const statusLabel = document.createElement('p');
   statusLabel.className = 'vtt-overlay-editor__status';
-  statusLabel.textContent = 'Click the map to add nodes. Drag handles to adjust.';
+  statusLabel.hidden = true;
 
   toolbar.append(controls, statusLabel);
   editor.append(toolbar);
@@ -8626,7 +8629,7 @@ function createOverlayTool() {
 
   mapOverlay.append(editor);
 
-  const DEFAULT_STATUS = 'Click the map to add nodes. Drag handles to adjust. Double-click the first node or use Close Shape to finish.';
+  const DEFAULT_STATUS = '';
   const CLOSED_STATUS = 'Shape closed. Apply the mask to commit your changes.';
 
   let isActive = false;
@@ -9165,7 +9168,11 @@ function createOverlayTool() {
   }
 
   function setStatus(message) {
-    statusLabel.textContent = message || DEFAULT_STATUS;
+    const nextMessage = message || DEFAULT_STATUS;
+    if (statusLabel) {
+      statusLabel.textContent = nextMessage;
+      statusLabel.hidden = !nextMessage;
+    }
     ensureToolbarPosition();
   }
 
