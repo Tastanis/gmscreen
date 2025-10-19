@@ -2768,8 +2768,6 @@ export function mountBoardInteractions(store, routes = {}) {
     }
 
     const commands = [];
-    const outerBoundary = 'M 0% 0% L 100% 0% L 100% 100% L 0% 100% Z';
-    commands.push(outerBoundary);
 
     polygons.forEach((polygon) => {
       const points = Array.isArray(polygon?.points) ? polygon.points : [];
@@ -2793,7 +2791,7 @@ export function mountBoardInteractions(store, routes = {}) {
       }
     });
 
-    if (commands.length <= 1) {
+    if (commands.length === 0) {
       return '';
     }
 
