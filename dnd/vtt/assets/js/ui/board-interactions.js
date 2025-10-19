@@ -8843,6 +8843,9 @@ function createOverlayTool() {
     overlayHiddenSnapshot = mapOverlay.hasAttribute('hidden');
     mapOverlay.removeAttribute('hidden');
     mapOverlay.hidden = false;
+    if (mapSurface) {
+      mapSurface.dataset.overlayEditing = 'true';
+    }
     isActive = true;
     editor.hidden = false;
     mapOverlay.dataset.overlayEditing = 'true';
@@ -8857,6 +8860,9 @@ function createOverlayTool() {
   function deactivate() {
     isActive = false;
     editor.hidden = true;
+    if (mapSurface) {
+      delete mapSurface.dataset.overlayEditing;
+    }
     delete mapOverlay.dataset.overlayEditing;
     dragState = null;
     setButtonState(false);
