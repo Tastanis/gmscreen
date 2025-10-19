@@ -4485,6 +4485,9 @@ export function mountBoardInteractions(store, routes = {}) {
       updateStartCombatButton();
       updateCombatModeIndicators();
       refreshCombatTracker();
+      if (combatActive && isGmUser()) {
+        checkForRoundCompletion();
+      }
       const appliedVersion = normalized.updatedAt || Date.now();
       combatStateVersion = appliedVersion;
       const snapshot = { ...normalized, updatedAt: appliedVersion };
