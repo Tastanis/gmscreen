@@ -206,6 +206,8 @@ const TURN_TIMER_INITIAL_DISPLAY = '1:00';
 const TURN_TIMER_STAGE_FALLBACK = 'full';
 const INDIGO_ROTATION_INTERVAL_MS = 60_000;
 const INDIGO_ROTATION_INCREMENT_DEGREES = 45;
+const TURN_INDICATOR_DEFAULT_TEXT = 'Waiting for turn';
+const TURN_INDICATOR_GM_TEXT = "GM's turn";
 
 export function mountBoardInteractions(store, routes = {}) {
   const board = document.getElementById('vtt-board-canvas');
@@ -233,6 +235,7 @@ export function mountBoardInteractions(store, routes = {}) {
   const damageHealButton = document.querySelector('[data-action="damage-heal"]');
   const roundTracker = document.querySelector('[data-round-tracker]');
   const roundValue = roundTracker?.querySelector('[data-round-value]');
+  const turnIndicator = document.querySelector('[data-turn-indicator]');
   const turnTimerElement = document.querySelector('[data-turn-timer]');
   const turnTimerImage = turnTimerElement?.querySelector('[data-turn-timer-image]');
   const turnTimerDisplay = turnTimerElement?.querySelector('[data-turn-timer-display]');
@@ -3720,6 +3723,25 @@ export function mountBoardInteractions(store, routes = {}) {
     activeTurnDialog = null;
   }
 
+  function isCombatantHidden(combatantId) {
+    if (!combatantId) {
+      return false;
+    }
+
+    const placement = getPlacementFromStore(combatantId);
+    if (placement && typeof placement === 'object' && 'hidden' in placement) {
+      return Boolean(placement.hidden);
+    }
+
+    const entries = Array.isArray(lastCombatTrackerEntries) ? lastCombatTrackerEntries : [];
+    const match = entries.find((entry) => entry && entry.id === combatantId);
+    if (match) {
+      return Boolean(match.hidden ?? match.isHidden ?? match?.flags?.hidden ?? false);
+    }
+
+    return false;
+  }
+
   function getCombatantLabel(combatantId) {
     if (!combatantId) {
       return 'Token';
@@ -4462,15 +4484,58 @@ export function mountBoardInteractions(store, routes = {}) {
 
   function updateRoundTrackerDisplay() {
     if (!roundTracker || !roundValue) {
+      if (turnIndicator) {
+        turnIndicator.textContent = TURN_INDICATOR_DEFAULT_TEXT;
+        turnIndicator.hidden = true;
+      }
       return;
     }
+
     if (combatActive) {
       const displayRound = combatRound > 0 ? combatRound : 1;
       roundTracker.hidden = false;
       roundValue.textContent = String(displayRound);
+
+      if (turnIndicator) {
+        const indicatorLabel = getTurnIndicatorLabel();
+        if (indicatorLabel) {
+          turnIndicator.textContent = indicatorLabel;
+          turnIndicator.hidden = false;
+        } else {
+          turnIndicator.textContent = TURN_INDICATOR_DEFAULT_TEXT;
+          turnIndicator.hidden = true;
+        }
+      }
     } else {
       roundTracker.hidden = true;
+      if (turnIndicator) {
+        turnIndicator.textContent = TURN_INDICATOR_DEFAULT_TEXT;
+        turnIndicator.hidden = true;
+      }
     }
+  }
+
+  function getTurnIndicatorLabel() {
+    if (!combatActive || !activeCombatantId) {
+      return null;
+    }
+
+    const hidden = isCombatantHidden(activeCombatantId);
+    const team = normalizeCombatTeam(getCombatantTeam(activeCombatantId));
+
+    if (hidden || team !== 'ally') {
+      return TURN_INDICATOR_GM_TEXT;
+    }
+
+    const label = getCombatantLabel(activeCombatantId);
+    if (typeof label === 'string') {
+      const trimmed = label.trim();
+      if (trimmed) {
+        return trimmed;
+      }
+    }
+
+    return TURN_INDICATOR_GM_TEXT;
   }
 
   function flashTurnBorder() {
