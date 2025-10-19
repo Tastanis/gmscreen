@@ -531,6 +531,7 @@
   right: var(--vtt-grid-offset-right, 0px);
   bottom: var(--vtt-grid-offset-bottom, 0px);
   left: var(--vtt-grid-offset-left, 0px);
+  --vtt-overlay-scale: 1;
   z-index: 2;
   pointer-events: none;
   background-repeat: no-repeat;
@@ -566,10 +567,18 @@
 
 .vtt-overlay-editor__node {
   position: absolute;
-  width: clamp(16px, 1.4vw, 22px);
-  height: clamp(16px, 1.4vw, 22px);
+  width: clamp(
+    calc(16px * var(--vtt-overlay-scale, 1)),
+    calc(1.4vw * var(--vtt-overlay-scale, 1)),
+    calc(22px * var(--vtt-overlay-scale, 1))
+  );
+  height: clamp(
+    calc(16px * var(--vtt-overlay-scale, 1)),
+    calc(1.4vw * var(--vtt-overlay-scale, 1)),
+    calc(22px * var(--vtt-overlay-scale, 1))
+  );
   border-radius: 999px;
-  border: 2px solid rgba(59, 130, 246, 0.9);
+  border: calc(2px * var(--vtt-overlay-scale, 1)) solid rgba(59, 130, 246, 0.9);
   background: rgba(37, 99, 235, 0.75);
   box-shadow: 0 4px 12px rgba(15, 23, 42, 0.45);
   transform: translate(-50%, -50%);
@@ -591,7 +600,7 @@
 
 .vtt-overlay-editor__segment {
   position: absolute;
-  height: 3px;
+  height: calc(3px * var(--vtt-overlay-scale, 1));
   background: rgba(191, 219, 254, 0.85);
   transform-origin: 0 50%;
   pointer-events: none;
@@ -607,7 +616,7 @@
   align-items: center;
   justify-content: flex-start;
   pointer-events: auto;
-  padding: 0.75rem;
+  padding: calc(0.75rem * var(--vtt-overlay-scale, 1));
 }
 
 .vtt-overlay-editor__controls {
@@ -617,11 +626,13 @@
 
 .vtt-overlay-editor__status {
   margin: 0;
-  padding: 0.25rem 0.6rem;
+  padding:
+    calc(0.25rem * var(--vtt-overlay-scale, 1))
+    calc(0.6rem * var(--vtt-overlay-scale, 1));
   border-radius: calc(var(--vtt-radius) * 0.6);
   background: rgba(15, 23, 42, 0.65);
   color: rgba(226, 232, 240, 0.92);
-  font-size: 0.75rem;
+  font-size: calc(0.75rem * var(--vtt-overlay-scale, 1));
   letter-spacing: 0.02em;
 }
 
@@ -630,9 +641,11 @@
   border-radius: calc(var(--vtt-radius) * 0.7);
   background: rgba(59, 130, 246, 0.9);
   color: #fff;
-  font-size: 0.75rem;
+  font-size: calc(0.75rem * var(--vtt-overlay-scale, 1));
   font-weight: 600;
-  padding: 0.35rem 0.7rem;
+  padding:
+    calc(0.35rem * var(--vtt-overlay-scale, 1))
+    calc(0.7rem * var(--vtt-overlay-scale, 1));
   cursor: pointer;
   transition: background var(--vtt-transition), transform var(--vtt-transition);
 }
@@ -666,15 +679,15 @@
 }
 
 .vtt-overlay-editor__legend-swatch {
-  width: 10px;
-  height: 10px;
+  width: calc(10px * var(--vtt-overlay-scale, 1));
+  height: calc(10px * var(--vtt-overlay-scale, 1));
   border-radius: 999px;
   background: rgba(37, 99, 235, 0.8);
   box-shadow: 0 0 0 1px rgba(15, 23, 42, 0.65);
 }
 
 .vtt-overlay-editor__legend-label {
-  font-size: 0.7rem;
+  font-size: calc(0.7rem * var(--vtt-overlay-scale, 1));
   color: rgba(226, 232, 240, 0.9);
   text-shadow: 0 1px 2px rgba(15, 23, 42, 0.75);
 }
