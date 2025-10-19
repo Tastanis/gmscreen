@@ -248,6 +248,84 @@ test('Sharon confirmation is required for other allies but triggers Hesitation b
   }
 });
 
+test('overlay clip path uses only provided polygons', () => {
+  const dom = createDom();
+  try {
+    const polygonPoints = [
+      { column: 0, row: 0 },
+      { column: 5, row: 0 },
+      { column: 5, row: 5 },
+      { column: 0, row: 5 },
+    ];
+
+    const initialState = {
+      user: { isGM: true, name: 'GM' },
+      scenes: { items: [{ id: 'scene-1', name: 'Scene 1' }] },
+      grid: { size: 64, visible: true },
+      boardState: {
+        activeSceneId: 'scene-1',
+        mapUrl: 'http://example.com/map.png',
+        placements: { 'scene-1': [] },
+        sceneState: {
+          'scene-1': {
+            grid: { size: 64, visible: true },
+            overlay: {
+              mapUrl: 'http://example.com/overlay.png',
+              mask: { visible: true, polygons: [] },
+            },
+          },
+        },
+        overlay: {
+          mapUrl: 'http://example.com/overlay.png',
+          mask: { visible: true, polygons: [] },
+        },
+      },
+    };
+
+    const store = createMockStore(initialState);
+    mountBoardInteractions(store);
+
+    const mapImage = dom.window.document.getElementById('vtt-map-image');
+    Object.defineProperty(mapImage, 'naturalWidth', { value: 640, configurable: true });
+    Object.defineProperty(mapImage, 'naturalHeight', { value: 640, configurable: true });
+
+    const boardElement = dom.window.document.getElementById('vtt-board-canvas');
+    boardElement.getBoundingClientRect = () => ({
+      width: 640,
+      height: 640,
+      top: 0,
+      left: 0,
+      right: 640,
+      bottom: 640,
+      x: 0,
+      y: 0,
+    });
+
+    mapImage.onload?.();
+
+    store.updateState((draft) => {
+      const sceneOverlay =
+        draft.boardState.sceneState['scene-1'].overlay ?? (draft.boardState.sceneState['scene-1'].overlay = {});
+      sceneOverlay.mapUrl = 'http://example.com/overlay.png';
+      sceneOverlay.mask = { visible: true, polygons: [{ points: polygonPoints }] };
+
+      draft.boardState.overlay.mapUrl = 'http://example.com/overlay.png';
+      draft.boardState.overlay.mask = { visible: true, polygons: [{ points: polygonPoints }] };
+    });
+
+    const mapOverlay = dom.window.document.getElementById('vtt-map-overlay');
+    const clipPath = mapOverlay.style.clipPath || mapOverlay.style.webkitClipPath;
+
+    assert.equal(
+      clipPath,
+      "path('evenodd M 0% 0% L 50% 0% L 50% 50% L 0% 50% Z')",
+      'clip path should only include the provided polygon coordinates'
+    );
+  } finally {
+    dom.window.close();
+  }
+});
+
 test('Sharon hesitation broadcast from shared combat state shows banner for observers', () => {
   const dom = createDom();
   try {
