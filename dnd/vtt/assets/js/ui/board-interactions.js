@@ -9117,6 +9117,9 @@ function createOverlayTool(uploadsEndpoint) {
       const local = gridPointToOverlayLocal(node);
       element.style.left = `${local.x}px`;
       element.style.top = `${local.y}px`;
+      element.addEventListener('contextmenu', (event) => {
+        event.preventDefault();
+      });
       element.addEventListener('pointerdown', handleNodePointerDown);
       element.addEventListener('pointermove', handleNodePointerMove);
       element.addEventListener('pointerup', handleNodePointerUp);
@@ -9129,12 +9132,29 @@ function createOverlayTool(uploadsEndpoint) {
   }
 
   function handleNodePointerDown(event) {
-    if (!isActive || event.button !== 0) {
+    if (!isActive) {
       return;
     }
     const target = event.currentTarget;
     const index = Number.parseInt(target?.dataset?.index ?? '', 10);
     if (!Number.isInteger(index)) {
+      return;
+    }
+
+    if (event.button === 2) {
+      event.preventDefault();
+      event.stopPropagation();
+      try {
+        target?.releasePointerCapture?.(event.pointerId);
+      } catch (error) {
+        // Ignore capture release issues.
+      }
+      dragState = null;
+      removeNodeAtIndex(index);
+      return;
+    }
+
+    if (event.button !== 0) {
       return;
     }
 
@@ -9190,6 +9210,27 @@ function createOverlayTool(uploadsEndpoint) {
     }
 
     dragState = null;
+    applyPreviewMask();
+    updateControls();
+  }
+
+  function removeNodeAtIndex(index) {
+    if (!Number.isInteger(index) || index < 0 || index >= nodes.length) {
+      return;
+    }
+
+    nodes.splice(index, 1);
+
+    const wasClosed = isClosed;
+    isClosed = wasClosed && nodes.length >= 3;
+
+    if (isClosed) {
+      setStatus(CLOSED_STATUS);
+    } else {
+      setStatus(DEFAULT_STATUS);
+    }
+
+    renderHandles();
     applyPreviewMask();
     updateControls();
   }
