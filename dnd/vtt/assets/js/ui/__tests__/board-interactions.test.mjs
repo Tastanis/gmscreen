@@ -661,6 +661,125 @@ test('overlay cutout falls back to mask when upload fails', async () => {
   }
 });
 
+test('overlay editor keeps closed polygon visible when cloning fails for a new shape', () => {
+  const dom = createDom();
+  try {
+    const { document, MouseEvent } = dom.window;
+
+    const sceneManager = document.createElement('div');
+    sceneManager.id = 'scene-manager';
+    const toggleButton = document.createElement('button');
+    toggleButton.dataset.action = 'toggle-overlay-editor';
+    toggleButton.setAttribute('data-scene-id', 'scene-1');
+    sceneManager.append(toggleButton);
+    document.body.append(sceneManager);
+
+    const initialState = {
+      user: { isGM: true, name: 'GM' },
+      scenes: { items: [{ id: 'scene-1', name: 'Scene 1' }] },
+      boardState: {
+        activeSceneId: 'scene-1',
+        mapUrl: 'http://example.com/map.png',
+        placements: { 'scene-1': [] },
+        sceneState: {
+          'scene-1': {
+            grid: { size: 64, visible: true },
+            overlay: { mapUrl: null, mask: { visible: true, polygons: [] } },
+          },
+        },
+        overlay: { mapUrl: null, mask: { visible: true, polygons: [] } },
+      },
+    };
+
+    const store = createMockStore(initialState);
+    mountBoardInteractions(store);
+
+    const board = document.getElementById('vtt-board-canvas');
+    board.getBoundingClientRect = () => ({
+      width: 512,
+      height: 512,
+      top: 0,
+      left: 0,
+      right: 512,
+      bottom: 512,
+    });
+
+    const surface = document.getElementById('vtt-map-surface');
+    surface.getBoundingClientRect = () => ({
+      width: 512,
+      height: 512,
+      top: 0,
+      left: 0,
+      right: 512,
+      bottom: 512,
+    });
+
+    const mapImage = document.getElementById('vtt-map-image');
+    Object.defineProperty(mapImage, 'naturalWidth', { value: 512, configurable: true });
+    Object.defineProperty(mapImage, 'naturalHeight', { value: 512, configurable: true });
+    mapImage.onload?.();
+
+    toggleButton.dispatchEvent(new MouseEvent('click', { bubbles: true }));
+
+    dispatchPointerEvent(surface, 'pointerdown', { clientX: 64, clientY: 64, pointerId: 1 });
+    dispatchPointerEvent(surface, 'pointerdown', { clientX: 320, clientY: 64, pointerId: 2 });
+    dispatchPointerEvent(surface, 'pointerdown', { clientX: 320, clientY: 320, pointerId: 3 });
+
+    const closeButton = document.querySelector('.vtt-overlay-editor__btn');
+    assert.ok(closeButton, 'close button should render');
+    closeButton.dispatchEvent(new MouseEvent('click', { bubbles: true }));
+
+    const overlay = document.getElementById('vtt-map-overlay');
+    const beforeClipPath = overlay.style.clipPath;
+    const beforeWebkitClipPath = overlay.style.webkitClipPath;
+
+    const statusLabel = document.querySelector('.vtt-overlay-editor__status');
+    assert.ok(statusLabel, 'status label should render');
+    assert.equal(
+      statusLabel.textContent,
+      'Shape closed. Apply the mask to commit your changes.',
+      'status should reflect a closed shape before starting a new one'
+    );
+
+    const originalIsFinite = Number.isFinite;
+    Number.isFinite = (value) => {
+      if (typeof value === 'number' && value === 5) {
+        return false;
+      }
+      return originalIsFinite(value);
+    };
+
+    try {
+      dispatchPointerEvent(surface, 'pointerdown', { clientX: 128, clientY: 128, pointerId: 4 });
+    } finally {
+      Number.isFinite = originalIsFinite;
+    }
+
+    const nodes = document.querySelectorAll('.vtt-overlay-editor__node');
+    assert.equal(nodes.length, 3, 'existing polygon nodes should remain after failed clone');
+
+    assert.equal(
+      overlay.style.clipPath,
+      beforeClipPath,
+      'overlay clip path should remain unchanged when cloning fails'
+    );
+    assert.equal(
+      overlay.style.webkitClipPath,
+      beforeWebkitClipPath,
+      'overlay webkit clip path should remain unchanged when cloning fails'
+    );
+
+    assert.equal(
+      statusLabel.textContent,
+      'A closed shape needs at least three valid points before starting another one.',
+      'status should explain why a new shape cannot start yet'
+    );
+    assert.equal(statusLabel.hidden, false, 'status message should be visible');
+  } finally {
+    dom.window.close();
+  }
+});
+
 test('Sharon hesitation broadcast from shared combat state shows banner for observers', () => {
   const dom = createDom();
   try {

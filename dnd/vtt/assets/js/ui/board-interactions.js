@@ -8751,6 +8751,8 @@ function createOverlayTool(uploadsEndpoint) {
 
   const DEFAULT_STATUS = '';
   const CLOSED_STATUS = 'Shape closed. Apply the mask to commit your changes.';
+  const INSUFFICIENT_POINTS_STATUS =
+    'A closed shape needs at least three valid points before starting another one.';
 
   let isActive = false;
   let nodes = [];
@@ -9382,11 +9384,15 @@ function createOverlayTool(uploadsEndpoint) {
       const completedPolygon = cloneOverlayPolygon({ points: nodes });
       if (completedPolygon) {
         additionalPolygons = [...additionalPolygons, completedPolygon];
+        persistedPrimaryPolygon = null;
+        nodes = [];
+        isClosed = false;
+        setStatus(DEFAULT_STATUS);
+      } else {
+        setStatus(INSUFFICIENT_POINTS_STATUS);
+        updateControls();
+        return;
       }
-      persistedPrimaryPolygon = null;
-      nodes = [];
-      isClosed = false;
-      setStatus(DEFAULT_STATUS);
     }
 
     nodes.push(clamped);
