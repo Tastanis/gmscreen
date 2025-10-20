@@ -202,6 +202,153 @@ export function createBoardStatePoller({
   return { poll, start };
 }
 
+export async function createOverlayCutoutBlob({
+  mapUrl,
+  polygon,
+  view = {},
+  documentRef = typeof document !== 'undefined' ? document : null,
+} = {}) {
+  const url = typeof mapUrl === 'string' ? mapUrl.trim() : '';
+  const points = Array.isArray(polygon?.points) ? polygon.points : [];
+
+  if (!documentRef || !url || points.length < 3) {
+    return null;
+  }
+
+  const image = await loadImageForCutout(url, documentRef).catch(() => null);
+  if (!image) {
+    return null;
+  }
+
+  const mapWidth = Number.isFinite(view?.mapPixelSize?.width)
+    ? view.mapPixelSize.width
+    : image.naturalWidth || image.width || 0;
+  const mapHeight = Number.isFinite(view?.mapPixelSize?.height)
+    ? view.mapPixelSize.height
+    : image.naturalHeight || image.height || 0;
+
+  if (!mapWidth || !mapHeight) {
+    return null;
+  }
+
+  const canvas = documentRef.createElement('canvas');
+  canvas.width = mapWidth;
+  canvas.height = mapHeight;
+
+  const context = canvas.getContext('2d');
+  if (!context) {
+    return null;
+  }
+
+  context.clearRect(0, 0, mapWidth, mapHeight);
+  context.drawImage(image, 0, 0, mapWidth, mapHeight);
+
+  const offsets = view?.gridOffsets ?? {};
+  const offsetLeft = Number.isFinite(offsets.left) ? offsets.left : 0;
+  const offsetTop = Number.isFinite(offsets.top) ? offsets.top : 0;
+  const gridSize = Math.max(8, Number.isFinite(view?.gridSize) ? view.gridSize : 64);
+
+  context.save();
+  context.globalCompositeOperation = 'destination-in';
+  context.beginPath();
+
+  points.forEach((point, index) => {
+    const column = Number(point?.column ?? point?.x ?? 0);
+    const row = Number(point?.row ?? point?.y ?? 0);
+    const x = offsetLeft + column * gridSize;
+    const y = offsetTop + row * gridSize;
+
+    if (index === 0) {
+      context.moveTo(x, y);
+    } else {
+      context.lineTo(x, y);
+    }
+  });
+
+  context.closePath();
+  context.fill();
+  context.restore();
+
+  const blob = await canvasToBlob(canvas, 'image/png');
+  return blob;
+}
+
+export async function uploadMap(file, endpoint, fileName) {
+  if (!endpoint) {
+    throw new Error('Upload endpoint is not defined');
+  }
+
+  const formData = new FormData();
+  const fallbackName = 'map.png';
+  const providedName = typeof fileName === 'string' ? fileName.trim() : '';
+  const inferredName = typeof file?.name === 'string' ? file.name.trim() : '';
+  const resolvedName = providedName || inferredName || fallbackName;
+
+  formData.append('map', file, resolvedName);
+
+  const response = await fetch(endpoint, {
+    method: 'POST',
+    body: formData,
+  });
+
+  if (!response?.ok) {
+    const message = await safeReadError(response);
+    throw new Error(message || `Upload failed with status ${response?.status ?? 'unknown'}`);
+  }
+
+  const payload = await response.json();
+  if (!payload?.success) {
+    throw new Error(payload?.error || 'Upload failed');
+  }
+
+  const url = typeof payload?.data?.url === 'string' ? payload.data.url.trim() : '';
+  return url || null;
+}
+
+export const overlayUploadHelpers = {
+  createOverlayCutoutBlob,
+  uploadMap,
+};
+
+async function canvasToBlob(canvas, type = 'image/png') {
+  if (typeof canvas?.toBlob === 'function') {
+    return new Promise((resolve) => {
+      canvas.toBlob((blob) => {
+        resolve(blob);
+      }, type);
+    });
+  }
+
+  if (typeof canvas?.convertToBlob === 'function') {
+    try {
+      return await canvas.convertToBlob({ type });
+    } catch (error) {
+      return null;
+    }
+  }
+
+  return null;
+}
+
+async function loadImageForCutout(url, documentRef) {
+  return new Promise((resolve, reject) => {
+    const image = documentRef.createElement('img');
+    image.crossOrigin = 'anonymous';
+    image.onload = () => resolve(image);
+    image.onerror = () => reject(new Error('Failed to load image'));
+    image.src = url;
+  });
+}
+
+async function safeReadError(response) {
+  try {
+    const payload = await response.json();
+    return payload?.error ?? '';
+  } catch (error) {
+    return '';
+  }
+}
+
 const TURN_TIMER_DURATION_MS = 60_000;
 const TURN_TIMER_STAGE_INTERVAL_MS = 20_000;
 const TURN_TIMER_INITIAL_DISPLAY = '1:00';
@@ -358,7 +505,7 @@ export function mountBoardInteractions(store, routes = {}) {
   let indigoRotationUnloadRegistered = false;
   ensureIndigoRotationTimer();
   let overlayEditorActive = false;
-  const overlayTool = createOverlayTool();
+  const overlayTool = createOverlayTool(routes?.uploads);
   const templateTool = createTemplateTool();
   const processedPings = new Map();
   const TOKEN_DRAG_TYPE = 'application/x-vtt-token-template';
@@ -1121,7 +1268,7 @@ export function mountBoardInteractions(store, routes = {}) {
 
       try {
         setUploadingState(true);
-        const url = await uploadMap(file, routes.uploads);
+        const url = await overlayUploadHelpers.uploadMap(file, routes.uploads);
         if (!url) {
           throw new Error('Upload endpoint returned no URL.');
         }
@@ -2984,37 +3131,6 @@ export function mountBoardInteractions(store, routes = {}) {
 
   function clamp(value, min, max) {
     return Math.min(Math.max(value, min), max);
-  }
-
-  async function uploadMap(file, endpoint) {
-    const formData = new FormData();
-    formData.append('map', file, file.name);
-
-    const response = await fetch(endpoint, {
-      method: 'POST',
-      body: formData,
-    });
-
-    if (!response.ok) {
-      const message = await safeReadError(response);
-      throw new Error(message || `Upload failed with status ${response.status}`);
-    }
-
-    const payload = await response.json();
-    if (!payload.success) {
-      throw new Error(payload.error || 'Upload failed');
-    }
-
-    return payload.data?.url ?? null;
-  }
-
-  async function safeReadError(response) {
-    try {
-      const payload = await response.json();
-      return payload.error ?? '';
-    } catch (error) {
-      return '';
-    }
   }
 
   function renderTokens(state = {}, layer, view) {
@@ -8568,7 +8684,7 @@ export function mountBoardInteractions(store, routes = {}) {
   }
 
 
-function createOverlayTool() {
+function createOverlayTool(uploadsEndpoint) {
   if (!mapOverlay || !mapSurface) {
     return {
       toggle() {},
@@ -9243,13 +9359,64 @@ function createOverlayTool() {
     return Boolean(persistedMapUrl);
   }
 
-  function commitChanges() {
+  async function commitChanges() {
     if (!isClosed || nodes.length < 3) {
       setStatus('Add at least three nodes and close the shape before applying the mask.');
       return;
     }
 
     const preview = buildPreviewMask();
+    const polygon = Array.isArray(preview?.polygons) ? preview.polygons[0] ?? null : null;
+    const canPersistCutout =
+      Boolean(uploadsEndpoint) &&
+      Boolean(persistedMapUrl) &&
+      polygon &&
+      Array.isArray(polygon.points) &&
+      polygon.points.length >= 3;
+
+    if (canPersistCutout) {
+      try {
+        setStatus('Saving overlay cutout…');
+        const blob = await overlayUploadHelpers.createOverlayCutoutBlob({
+          mapUrl: persistedMapUrl,
+          polygon,
+          view: viewState,
+        });
+
+        if (blob) {
+          const fileName = `overlay-cutout-${Date.now()}.png`;
+          const uploadedUrl = await overlayUploadHelpers.uploadMap(
+            blob,
+            uploadsEndpoint,
+            fileName
+          );
+
+          if (uploadedUrl) {
+            const changed = updateSceneOverlay((overlayEntry) => {
+              overlayEntry.mapUrl = uploadedUrl;
+              overlayEntry.mask = createEmptyOverlayMask();
+            });
+
+            if (changed) {
+              persistedMapUrl = uploadedUrl;
+              persistedMask = createEmptyOverlayMask();
+              persistedSignature = overlayMaskSignature(persistedMask);
+              nodes = [];
+              isClosed = false;
+              renderHandles();
+              applyOverlayMask(persistedMask);
+              updateControls();
+              setStatus('Overlay cutout applied.');
+              persistBoardStateSnapshot();
+              return;
+            }
+          }
+        }
+      } catch (error) {
+        console.warn('[VTT] Failed to persist overlay cutout', error);
+      }
+    }
+
     const changed = updateSceneOverlay((overlayEntry) => {
       overlayEntry.mask = normalizeOverlayMask(preview);
     });

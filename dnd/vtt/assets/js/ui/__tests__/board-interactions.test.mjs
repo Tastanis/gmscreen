@@ -1,8 +1,11 @@
-import test from 'node:test';
+import test, { mock } from 'node:test';
 import assert from 'node:assert/strict';
 import { JSDOM } from 'jsdom';
 
-import { mountBoardInteractions, createBoardStatePoller } from '../board-interactions.js';
+import * as boardInteractionsModule from '../board-interactions.js';
+
+const { mountBoardInteractions, createBoardStatePoller, overlayUploadHelpers } =
+  boardInteractionsModule;
 
 function createDom() {
   const dom = new JSDOM(
@@ -95,6 +98,41 @@ function createMockStore(initialState) {
       subscriber?.(state);
     },
   };
+}
+
+function dispatchPointerEvent(target, type, init = {}) {
+  if (!target) {
+    return;
+  }
+
+  const documentRef = target.ownerDocument;
+  const win = documentRef?.defaultView;
+  const options = {
+    bubbles: true,
+    pointerId: init.pointerId ?? 1,
+    pointerType: init.pointerType || 'mouse',
+    buttons: init.buttons ?? 1,
+    button: init.button ?? 0,
+    clientX: init.clientX ?? 0,
+    clientY: init.clientY ?? 0,
+  };
+
+  let event;
+  if (win && typeof win.PointerEvent === 'function') {
+    event = new win.PointerEvent(type, options);
+  } else if (win) {
+    event = new win.Event(type, { bubbles: true });
+    const assignable = { ...options };
+    delete assignable.bubbles;
+    Object.assign(event, assignable);
+  } else {
+    event = new Event(type, { bubbles: true });
+    const assignable = { ...options };
+    delete assignable.bubbles;
+    Object.assign(event, assignable);
+  }
+
+  target.dispatchEvent(event);
 }
 
 test('numeric activeSceneId toggles combat button to End Combat', () => {
@@ -396,6 +434,229 @@ test('overlay clip path uses only provided polygons', () => {
     assert.equal(clipPath, expectedClipPath, 'clip path should only include the provided polygon coordinates');
     assert.ok(!clipPath.includes('evenodd'));
   } finally {
+    dom.window.close();
+  }
+});
+
+test('overlay cutout upload replaces overlay map when available', async () => {
+  const dom = createDom();
+  const { document, MouseEvent, Blob } = dom.window;
+
+  const sceneManager = document.createElement('div');
+  sceneManager.id = 'scene-manager';
+  const toggleButton = document.createElement('button');
+  toggleButton.dataset.action = 'toggle-overlay-editor';
+  toggleButton.setAttribute('data-scene-id', 'scene-1');
+  sceneManager.append(toggleButton);
+  document.body.append(sceneManager);
+
+  const initialState = {
+    user: { isGM: true, name: 'GM' },
+    scenes: { items: [{ id: 'scene-1', name: 'Scene 1' }] },
+    boardState: {
+      activeSceneId: 'scene-1',
+      mapUrl: 'http://example.com/map.png',
+      placements: { 'scene-1': [] },
+      sceneState: {
+        'scene-1': {
+          grid: { size: 64, visible: true },
+          overlay: {
+            mapUrl: 'http://example.com/overlay.png',
+            mask: { visible: true, polygons: [] },
+          },
+        },
+      },
+      overlay: {
+        mapUrl: 'http://example.com/overlay.png',
+        mask: { visible: true, polygons: [] },
+      },
+    },
+  };
+
+  const store = createMockStore(initialState);
+  const cutoutBlob = new Blob(['cutout'], { type: 'image/png' });
+  const cutoutMock = mock.method(overlayUploadHelpers, 'createOverlayCutoutBlob', async () => cutoutBlob);
+  const uploadMock = mock.method(overlayUploadHelpers, 'uploadMap', async () => 'http://example.com/cropped.png');
+
+  try {
+    mountBoardInteractions(store, { uploads: 'http://example.com/uploads' });
+
+    const board = document.getElementById('vtt-board-canvas');
+    board.getBoundingClientRect = () => ({
+      width: 512,
+      height: 512,
+      top: 0,
+      left: 0,
+      right: 512,
+      bottom: 512,
+    });
+
+    const surface = document.getElementById('vtt-map-surface');
+    surface.getBoundingClientRect = () => ({
+      width: 512,
+      height: 512,
+      top: 0,
+      left: 0,
+      right: 512,
+      bottom: 512,
+    });
+
+    const mapImage = document.getElementById('vtt-map-image');
+    Object.defineProperty(mapImage, 'naturalWidth', { value: 512, configurable: true });
+    Object.defineProperty(mapImage, 'naturalHeight', { value: 512, configurable: true });
+    mapImage.onload?.();
+
+    toggleButton.dispatchEvent(new MouseEvent('click', { bubbles: true }));
+
+    dispatchPointerEvent(surface, 'pointerdown', { clientX: 64, clientY: 64, pointerId: 1 });
+    dispatchPointerEvent(surface, 'pointerdown', { clientX: 320, clientY: 64, pointerId: 2 });
+    dispatchPointerEvent(surface, 'pointerdown', { clientX: 320, clientY: 320, pointerId: 3 });
+
+    const closeButton = document.querySelector('.vtt-overlay-editor__btn');
+    closeButton?.dispatchEvent(new MouseEvent('click', { bubbles: true }));
+
+    const commitButton = document.querySelector('.vtt-overlay-editor__btn--primary');
+    commitButton?.dispatchEvent(new MouseEvent('click', { bubbles: true }));
+
+    await Promise.resolve();
+    await Promise.resolve();
+
+    assert.equal(uploadMock.mock.calls.length, 1, 'upload helper should be called once');
+    assert.equal(cutoutMock.mock.calls.length, 1, 'cutout helper should be called once');
+
+    const state = store.getState();
+    const overlay = state.boardState.sceneState['scene-1'].overlay;
+    assert.equal(overlay.mapUrl, 'http://example.com/cropped.png');
+    assert.deepEqual(overlay.mask, { visible: true, polygons: [] });
+
+    const boardOverlay = state.boardState.overlay;
+    assert.equal(boardOverlay.mapUrl, 'http://example.com/cropped.png');
+    assert.deepEqual(boardOverlay.mask, { visible: true, polygons: [] });
+  } finally {
+    cutoutMock.mock.restore();
+    uploadMock.mock.restore();
+    dom.window.close();
+  }
+});
+
+test('overlay cutout falls back to mask when upload fails', async () => {
+  const dom = createDom();
+  const { document, MouseEvent } = dom.window;
+
+  const sceneManager = document.createElement('div');
+  sceneManager.id = 'scene-manager';
+  const toggleButton = document.createElement('button');
+  toggleButton.dataset.action = 'toggle-overlay-editor';
+  toggleButton.setAttribute('data-scene-id', 'scene-1');
+  sceneManager.append(toggleButton);
+  document.body.append(sceneManager);
+
+  const initialState = {
+    user: { isGM: true, name: 'GM' },
+    scenes: { items: [{ id: 'scene-1', name: 'Scene 1' }] },
+    boardState: {
+      activeSceneId: 'scene-1',
+      mapUrl: 'http://example.com/map.png',
+      placements: { 'scene-1': [] },
+      sceneState: {
+        'scene-1': {
+          grid: { size: 64, visible: true },
+          overlay: {
+            mapUrl: 'http://example.com/overlay.png',
+            mask: { visible: true, polygons: [] },
+          },
+        },
+      },
+      overlay: {
+        mapUrl: 'http://example.com/overlay.png',
+        mask: { visible: true, polygons: [] },
+      },
+    },
+  };
+
+  const store = createMockStore(initialState);
+  const cutoutMock = mock.method(overlayUploadHelpers, 'createOverlayCutoutBlob', async () => null);
+  const uploadMock = mock.method(overlayUploadHelpers, 'uploadMap', async () => {
+    throw new Error('upload should not be called when cutout fails');
+  });
+
+  try {
+    mountBoardInteractions(store, { uploads: 'http://example.com/uploads' });
+
+    const board = document.getElementById('vtt-board-canvas');
+    board.getBoundingClientRect = () => ({
+      width: 512,
+      height: 512,
+      top: 0,
+      left: 0,
+      right: 512,
+      bottom: 512,
+    });
+
+    const surface = document.getElementById('vtt-map-surface');
+    surface.getBoundingClientRect = () => ({
+      width: 512,
+      height: 512,
+      top: 0,
+      left: 0,
+      right: 512,
+      bottom: 512,
+    });
+
+    const mapImage = document.getElementById('vtt-map-image');
+    Object.defineProperty(mapImage, 'naturalWidth', { value: 512, configurable: true });
+    Object.defineProperty(mapImage, 'naturalHeight', { value: 512, configurable: true });
+    mapImage.onload?.();
+
+    toggleButton.dispatchEvent(new MouseEvent('click', { bubbles: true }));
+
+    dispatchPointerEvent(surface, 'pointerdown', { clientX: 64, clientY: 64, pointerId: 1 });
+    dispatchPointerEvent(surface, 'pointerdown', { clientX: 320, clientY: 64, pointerId: 2 });
+    dispatchPointerEvent(surface, 'pointerdown', { clientX: 320, clientY: 320, pointerId: 3 });
+
+    const closeButton = document.querySelector('.vtt-overlay-editor__btn');
+    closeButton?.dispatchEvent(new MouseEvent('click', { bubbles: true }));
+
+    const commitButton = document.querySelector('.vtt-overlay-editor__btn--primary');
+    commitButton?.dispatchEvent(new MouseEvent('click', { bubbles: true }));
+
+    await Promise.resolve();
+    await Promise.resolve();
+
+    assert.equal(uploadMock.mock.calls.length, 0, 'upload helper should not be called when cutout fails');
+    const state = store.getState();
+    const overlay = state.boardState.sceneState['scene-1'].overlay;
+    assert.equal(overlay.mapUrl, 'http://example.com/overlay.png');
+    assert.deepEqual(overlay.mask, {
+      visible: true,
+      polygons: [
+        {
+          points: [
+            { column: 1, row: 1 },
+            { column: 5, row: 1 },
+            { column: 5, row: 5 },
+          ],
+        },
+      ],
+    });
+
+    const boardOverlay = state.boardState.overlay;
+    assert.equal(boardOverlay.mapUrl, 'http://example.com/overlay.png');
+    assert.deepEqual(boardOverlay.mask, {
+      visible: true,
+      polygons: [
+        {
+          points: [
+            { column: 1, row: 1 },
+            { column: 5, row: 1 },
+            { column: 5, row: 5 },
+          ],
+        },
+      ],
+    });
+  } finally {
+    cutoutMock.mock.restore();
+    uploadMock.mock.restore();
     dom.window.close();
   }
 });
