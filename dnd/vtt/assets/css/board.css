@@ -631,13 +631,25 @@
   box-shadow: 0 14px 24px rgba(15, 23, 42, 0.4);
   pointer-events: auto;
   touch-action: none;
-  cursor: grab;
-  width: max-content;
+  min-width: 12rem;
   max-width: min(16rem, 90vw);
 }
 
-.vtt-overlay-editor__toolbar.is-dragging {
+.vtt-overlay-editor__drag-handle {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  height: calc(0.55rem * var(--vtt-overlay-scale, 1));
+  border-radius: 999px;
+  background: rgba(148, 163, 184, 0.45);
+  cursor: grab;
+  touch-action: none;
+  pointer-events: auto;
+}
+
+.vtt-overlay-editor__drag-handle.is-dragging {
   cursor: grabbing;
+  background: rgba(148, 163, 184, 0.6);
 }
 
 .vtt-overlay-editor__controls {
