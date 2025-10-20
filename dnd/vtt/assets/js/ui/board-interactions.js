@@ -8755,6 +8755,8 @@ function createOverlayTool(uploadsEndpoint) {
   let isActive = false;
   let nodes = [];
   let isClosed = false;
+  let additionalPolygons = [];
+  let persistedPrimaryPolygon = null;
   let dragState = null;
   let toolbarPosition = null;
   let toolbarDragState = null;
@@ -8764,6 +8766,34 @@ function createOverlayTool(uploadsEndpoint) {
   let persistedSignature = overlayMaskSignature(persistedMask);
   let persistedMapUrl = null;
   let overlayHiddenSnapshot = null;
+
+  function cloneOverlayPolygon(polygon) {
+    if (!polygon || typeof polygon !== 'object') {
+      return null;
+    }
+
+    const points = Array.isArray(polygon.points)
+      ? polygon.points
+          .map((point) => {
+            const column = Number(point?.column ?? 0);
+            const row = Number(point?.row ?? 0);
+            if (!Number.isFinite(column) || !Number.isFinite(row)) {
+              return null;
+            }
+            return {
+              column: roundToPrecision(column, 4),
+              row: roundToPrecision(row, 4),
+            };
+          })
+          .filter(Boolean)
+      : [];
+
+    if (points.length < 3) {
+      return null;
+    }
+
+    return { points };
+  }
 
   function scheduleToolbarMeasurement() {
     if (!mapOverlay || !toolbar) {
@@ -9051,6 +9081,8 @@ function createOverlayTool(uploadsEndpoint) {
     deactivate();
     nodes = [];
     isClosed = false;
+    additionalPolygons = [];
+    persistedPrimaryPolygon = null;
     dragState = null;
     persistedMask = createEmptyOverlayMask();
     persistedSignature = overlayMaskSignature(persistedMask);
@@ -9095,7 +9127,7 @@ function createOverlayTool(uploadsEndpoint) {
     persistedMapUrl = mapUrl || null;
 
     if (signature === persistedSignature) {
-      if (!isActive && nodes.length === 0) {
+      if (!isActive && nodes.length === 0 && additionalPolygons.length === 0) {
         setNodesFromMask(normalizedMask);
         renderHandles();
       }
@@ -9117,15 +9149,28 @@ function createOverlayTool(uploadsEndpoint) {
 
   function setNodesFromMask(mask) {
     const normalized = normalizeOverlayMask(mask);
-    const polygon = normalized.polygons.length ? normalized.polygons[0] : null;
-    if (!polygon) {
-      nodes = [];
-      isClosed = false;
+    const polygons = Array.isArray(normalized.polygons) ? normalized.polygons : [];
+
+    nodes = [];
+    isClosed = false;
+    persistedPrimaryPolygon = null;
+    additionalPolygons = [];
+
+    if (polygons.length === 0) {
       return;
     }
 
-    nodes = polygon.points.map((point) => ({ column: point.column, row: point.row }));
-    isClosed = nodes.length >= 3;
+    const primaryClone = cloneOverlayPolygon(polygons[0]);
+    if (primaryClone) {
+      persistedPrimaryPolygon = primaryClone;
+      nodes = primaryClone.points.map((point) => ({ column: point.column, row: point.row }));
+      isClosed = nodes.length >= 3;
+    }
+
+    additionalPolygons = polygons
+      .slice(1)
+      .map((polygon) => cloneOverlayPolygon(polygon))
+      .filter(Boolean);
   }
 
   function renderHandles() {
@@ -9332,6 +9377,18 @@ function createOverlayTool(uploadsEndpoint) {
 
     const snapped = snapOverlayPoint(gridPoint, event.shiftKey);
     const clamped = clampOverlayPoint(snapped);
+
+    if (isClosed && nodes.length >= 3) {
+      const completedPolygon = cloneOverlayPolygon({ points: nodes });
+      if (completedPolygon) {
+        additionalPolygons = [...additionalPolygons, completedPolygon];
+      }
+      persistedPrimaryPolygon = null;
+      nodes = [];
+      isClosed = false;
+      setStatus(DEFAULT_STATUS);
+    }
+
     nodes.push(clamped);
     isClosed = false;
     renderHandles();
@@ -9398,7 +9455,12 @@ function createOverlayTool(uploadsEndpoint) {
     const base = normalizeOverlayMask(persistedMask);
     const mask = {
       visible: base.visible,
-      polygons: Array.isArray(base.polygons) ? base.polygons.slice(1) : [],
+      polygons: additionalPolygons.map((polygon) => ({
+        points: polygon.points.map((point) => ({
+          column: roundToPrecision(point.column, 4),
+          row: roundToPrecision(point.row, 4),
+        })),
+      })),
     };
     if (base.url) {
       mask.url = base.url;
@@ -9411,8 +9473,13 @@ function createOverlayTool(uploadsEndpoint) {
           row: roundToPrecision(node.row, 4),
         })),
       });
-    } else if (base.polygons.length) {
-      mask.polygons.unshift(base.polygons[0]);
+    } else if (nodes.length === 0 && persistedPrimaryPolygon) {
+      mask.polygons.unshift({
+        points: persistedPrimaryPolygon.points.map((point) => ({
+          column: roundToPrecision(point.column, 4),
+          row: roundToPrecision(point.row, 4),
+        })),
+      });
     }
 
     return mask;
@@ -9421,7 +9488,7 @@ function createOverlayTool(uploadsEndpoint) {
   function applyPreviewMask() {
     const maskOptions = overlayEditorActive ? { allowDuringEditing: true } : undefined;
 
-    if (isActive && isClosed && nodes.length >= 3) {
+    if (isActive && ((isClosed && nodes.length >= 3) || additionalPolygons.length > 0)) {
       const preview = buildPreviewMask();
       applyOverlayMask(preview, maskOptions);
     } else {
@@ -9494,8 +9561,7 @@ function createOverlayTool(uploadsEndpoint) {
               persistedMapUrl = uploadedUrl;
               persistedMask = createEmptyOverlayMask();
               persistedSignature = overlayMaskSignature(persistedMask);
-              nodes = [];
-              isClosed = false;
+              setNodesFromMask(persistedMask);
               renderHandles();
               applyOverlayMask(persistedMask);
               updateControls();
@@ -9521,15 +9587,16 @@ function createOverlayTool(uploadsEndpoint) {
 
     persistedMask = normalizeOverlayMask(preview);
     persistedSignature = overlayMaskSignature(persistedMask);
-    setStatus('Overlay mask applied.');
+    setNodesFromMask(persistedMask);
+    renderHandles();
     applyOverlayMask(persistedMask);
     updateControls();
+    setStatus('Overlay mask applied.');
     persistBoardStateSnapshot();
   }
 
   function restorePersistedMask() {
     setNodesFromMask(persistedMask);
-    isClosed = nodes.length >= 3;
     renderHandles();
     applyOverlayMask(persistedMask);
     updateControls();
@@ -9553,6 +9620,8 @@ function createOverlayTool(uploadsEndpoint) {
     persistedMapUrl = null;
     nodes = [];
     isClosed = false;
+    additionalPolygons = [];
+    persistedPrimaryPolygon = null;
     handlesLayer.innerHTML = '';
     applyOverlayMask(persistedMask);
     updateControls();
