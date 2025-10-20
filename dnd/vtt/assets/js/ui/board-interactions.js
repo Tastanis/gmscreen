@@ -8707,6 +8707,9 @@ function createOverlayTool(uploadsEndpoint) {
   toolbar.addEventListener('pointercancel', handleToolbarPointerCancel);
   toolbar.addEventListener('lostpointercapture', handleToolbarPointerCancel);
 
+  const dragHandle = document.createElement('div');
+  dragHandle.className = 'vtt-overlay-editor__drag-handle';
+
   const controls = document.createElement('div');
   controls.className = 'vtt-overlay-editor__controls';
 
@@ -8737,7 +8740,7 @@ function createOverlayTool(uploadsEndpoint) {
   statusLabel.className = 'vtt-overlay-editor__status';
   statusLabel.hidden = true;
 
-  toolbar.append(controls, statusLabel);
+  toolbar.append(dragHandle, controls, statusLabel);
   editor.append(toolbar);
 
   const handlesLayer = document.createElement('div');
@@ -8763,7 +8766,7 @@ function createOverlayTool(uploadsEndpoint) {
   let overlayHiddenSnapshot = null;
 
   function scheduleToolbarMeasurement() {
-    if (!mapSurface || !toolbar) {
+    if (!mapOverlay || !toolbar) {
       return;
     }
     const win = typeof window !== 'undefined' ? window : null;
@@ -8785,27 +8788,34 @@ function createOverlayTool(uploadsEndpoint) {
   }
 
   function measureToolbarPosition() {
-    if (!mapSurface || !toolbar) {
+    if (!mapOverlay || !toolbar) {
       return;
     }
 
-    const surfaceRect = mapSurface.getBoundingClientRect?.();
+    const overlayRect = mapOverlay.getBoundingClientRect?.();
     const toolbarRect = toolbar.getBoundingClientRect?.();
-    if (!surfaceRect || !toolbarRect) {
+    if (!overlayRect || !toolbarRect) {
       return;
     }
 
-    const surfaceWidth = Number.isFinite(surfaceRect.width) ? surfaceRect.width : 0;
-    const surfaceHeight = Number.isFinite(surfaceRect.height) ? surfaceRect.height : 0;
-    if (surfaceWidth <= 0 || surfaceHeight <= 0) {
+    const scale =
+      Number.isFinite(viewState.scale) && viewState.scale !== 0 ? viewState.scale : 1;
+
+    const overlayWidth = Number.isFinite(overlayRect.width)
+      ? overlayRect.width / scale
+      : 0;
+    const overlayHeight = Number.isFinite(overlayRect.height)
+      ? overlayRect.height / scale
+      : 0;
+    if (overlayWidth <= 0 || overlayHeight <= 0) {
       return;
     }
 
     const toolbarWidth = Number.isFinite(toolbarRect.width)
-      ? toolbarRect.width
+      ? toolbarRect.width / scale
       : toolbarDimensions.width;
     const toolbarHeight = Number.isFinite(toolbarRect.height)
-      ? toolbarRect.height
+      ? toolbarRect.height / scale
       : toolbarDimensions.height;
 
     toolbarDimensions = {
@@ -8820,12 +8830,14 @@ function createOverlayTool(uploadsEndpoint) {
       nextX = toolbarPosition.x;
       nextY = toolbarPosition.y;
     } else {
-      nextX = toolbarRect.left - surfaceRect.left;
-      nextY = toolbarRect.top - surfaceRect.top;
+      const rawX = toolbarRect.left - overlayRect.left;
+      const rawY = toolbarRect.top - overlayRect.top;
+      nextX = Number.isFinite(rawX) ? rawX / scale : 0;
+      nextY = Number.isFinite(rawY) ? rawY / scale : 0;
     }
 
-    const maxX = Math.max(0, surfaceWidth - toolbarDimensions.width);
-    const maxY = Math.max(0, surfaceHeight - toolbarDimensions.height);
+    const maxX = Math.max(0, overlayWidth - toolbarDimensions.width);
+    const maxY = Math.max(0, overlayHeight - toolbarDimensions.height);
 
     nextX = clamp(Number.isFinite(nextX) ? nextX : 0, 0, maxX);
     nextY = clamp(Number.isFinite(nextY) ? nextY : 0, 0, maxY);
@@ -8842,7 +8854,7 @@ function createOverlayTool(uploadsEndpoint) {
   }
 
   function ensureToolbarPosition() {
-    if (!mapSurface || !toolbar) {
+    if (!mapOverlay || !toolbar) {
       return;
     }
     scheduleToolbarMeasurement();
@@ -8859,23 +8871,40 @@ function createOverlayTool(uploadsEndpoint) {
       return;
     }
 
-    const surfaceRect = mapSurface.getBoundingClientRect?.();
-    const toolbarRect = toolbar.getBoundingClientRect?.();
-    if (!surfaceRect || !toolbarRect) {
+    const handleTarget = event.target?.closest('.vtt-overlay-editor__drag-handle');
+    if (!handleTarget) {
       return;
     }
 
+    if (!mapOverlay) {
+      return;
+    }
+
+    const overlayRect = mapOverlay.getBoundingClientRect?.();
+    const toolbarRect = toolbar.getBoundingClientRect?.();
+    if (!overlayRect || !toolbarRect) {
+      return;
+    }
+
+    const scale =
+      Number.isFinite(viewState.scale) && viewState.scale !== 0 ? viewState.scale : 1;
+
     toolbarDimensions = {
-      width: Number.isFinite(toolbarRect.width) ? toolbarRect.width : toolbarDimensions.width,
-      height: Number.isFinite(toolbarRect.height) ? toolbarRect.height : toolbarDimensions.height,
+      width: Number.isFinite(toolbarRect.width)
+        ? toolbarRect.width / scale
+        : toolbarDimensions.width,
+      height: Number.isFinite(toolbarRect.height)
+        ? toolbarRect.height / scale
+        : toolbarDimensions.height,
     };
 
     toolbarDragState = {
       pointerId: event.pointerId,
-      offsetX: event.clientX - toolbarRect.left,
-      offsetY: event.clientY - toolbarRect.top,
+      offsetX: (event.clientX - toolbarRect.left) / scale,
+      offsetY: (event.clientY - toolbarRect.top) / scale,
       width: toolbarDimensions.width,
       height: toolbarDimensions.height,
+      handle: handleTarget,
     };
 
     try {
@@ -8884,7 +8913,16 @@ function createOverlayTool(uploadsEndpoint) {
       // Ignore capture errors.
     }
 
+    if (handleTarget && typeof handleTarget.setPointerCapture === 'function') {
+      try {
+        handleTarget.setPointerCapture(event.pointerId);
+      } catch (error) {
+        // Ignore capture errors.
+      }
+    }
+
     toolbar.classList.add('is-dragging');
+    handleTarget?.classList.add('is-dragging');
     event.preventDefault();
     event.stopPropagation();
   }
@@ -8894,22 +8932,27 @@ function createOverlayTool(uploadsEndpoint) {
       return;
     }
 
-    const surfaceRect = mapSurface.getBoundingClientRect?.();
-    if (!surfaceRect) {
+    const overlayRect = mapOverlay.getBoundingClientRect?.();
+    if (!overlayRect) {
       return;
     }
 
-    const surfaceWidth = Number.isFinite(surfaceRect.width) ? surfaceRect.width : 0;
-    const surfaceHeight = Number.isFinite(surfaceRect.height) ? surfaceRect.height : 0;
-    if (surfaceWidth <= 0 || surfaceHeight <= 0) {
+    const scale =
+      Number.isFinite(viewState.scale) && viewState.scale !== 0 ? viewState.scale : 1;
+
+    const overlayWidth = Number.isFinite(overlayRect.width) ? overlayRect.width / scale : 0;
+    const overlayHeight = Number.isFinite(overlayRect.height) ? overlayRect.height / scale : 0;
+    if (overlayWidth <= 0 || overlayHeight <= 0) {
       return;
     }
 
-    const maxX = Math.max(0, surfaceWidth - toolbarDragState.width);
-    const maxY = Math.max(0, surfaceHeight - toolbarDragState.height);
+    const maxX = Math.max(0, overlayWidth - toolbarDragState.width);
+    const maxY = Math.max(0, overlayHeight - toolbarDragState.height);
 
-    const proposedX = event.clientX - surfaceRect.left - toolbarDragState.offsetX;
-    const proposedY = event.clientY - surfaceRect.top - toolbarDragState.offsetY;
+    const proposedX =
+      (event.clientX - overlayRect.left) / scale - toolbarDragState.offsetX;
+    const proposedY =
+      (event.clientY - overlayRect.top) / scale - toolbarDragState.offsetY;
 
     const nextX = clamp(Number.isFinite(proposedX) ? proposedX : 0, 0, maxX);
     const nextY = clamp(Number.isFinite(proposedY) ? proposedY : 0, 0, maxY);
@@ -8940,6 +8983,15 @@ function createOverlayTool(uploadsEndpoint) {
       toolbar.releasePointerCapture?.(pointerId);
     } catch (error) {
       // Ignore release errors.
+    }
+
+    if (toolbarDragState?.handle) {
+      try {
+        toolbarDragState.handle.releasePointerCapture?.(pointerId);
+      } catch (error) {
+        // Ignore release errors.
+      }
+      toolbarDragState.handle.classList.remove('is-dragging');
     }
 
     toolbarDragState = null;
