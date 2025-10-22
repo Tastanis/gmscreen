@@ -56,15 +56,26 @@ const uploaderCloseBtn = document.getElementById("reader-uploader-close");
 const AUTO_CLOSE_DELAY_MS = 1200;
 
 const DEFAULT_UPLOADER_JSON = JSON.stringify(
-  {
-    id: "unique-id",
-    paragraph: "Your paragraph text goes here as a single string.",
-    question: {
-      prompt: "Ask one comprehension question about the paragraph.",
-      choices: ["Answer A", "Answer B", "Answer C", "Answer D"],
-      answerIndex: 1,
+  [
+    {
+      id: "unique-id-1",
+      paragraph: "Your paragraph text goes here as a single string.",
+      question: {
+        prompt: "Ask one comprehension question about the paragraph.",
+        choices: ["Answer A", "Answer B", "Answer C", "Answer D"],
+        answerIndex: 1,
+      },
     },
-  },
+    {
+      id: "unique-id-2",
+      paragraph: "Add another paragraph to upload more than one entry at a time.",
+      question: {
+        prompt: "Provide a second comprehension question.",
+        choices: ["Choice 1", "Choice 2", "Choice 3", "Choice 4"],
+        answerIndex: 0,
+      },
+    },
+  ],
   null,
   2,
 );
@@ -536,11 +547,31 @@ function parseUploadedContent(text) {
   try {
     parsed = JSON.parse(text);
   } catch (error) {
-    throw new Error("Invalid JSON");
+    parsed = null;
   }
 
-  const entries = Array.isArray(parsed) ? parsed : [parsed];
-  const normalized = entries
+  let entries;
+  if (parsed !== null) {
+    entries = Array.isArray(parsed) ? parsed : [parsed];
+  } else {
+    entries = parseJsonFragments(text);
+    if (!entries.length) {
+      throw new Error(
+        "Invalid JSON. Provide an array, a single object, or multiple JSON objects separated by blank lines.",
+      );
+    }
+  }
+
+  const flattenedEntries = entries.reduce((list, entry) => {
+    if (Array.isArray(entry)) {
+      list.push(...entry);
+    } else {
+      list.push(entry);
+    }
+    return list;
+  }, []);
+
+  const normalized = flattenedEntries
     .map((entry) => {
       try {
         return normalizeContent(entry);
@@ -551,6 +582,80 @@ function parseUploadedContent(text) {
     })
     .filter(Boolean);
   return normalized;
+}
+
+function parseJsonFragments(text) {
+  const fragments = [];
+  const input = String(text);
+  let depth = 0;
+  let inString = false;
+  let escapeNext = false;
+  let startIndex = -1;
+
+  for (let index = 0; index < input.length; index += 1) {
+    const char = input[index];
+
+    if (startIndex === -1) {
+      if (char === "{" || char === "[") {
+        startIndex = index;
+        depth = 1;
+        inString = false;
+        escapeNext = false;
+      }
+      continue;
+    }
+
+    if (inString) {
+      if (escapeNext) {
+        escapeNext = false;
+      } else if (char === "\\") {
+        escapeNext = true;
+      } else if (char === "\"") {
+        inString = false;
+      }
+      continue;
+    }
+
+    if (char === "\"") {
+      inString = true;
+      continue;
+    }
+
+    if (char === "{" || char === "[") {
+      depth += 1;
+      continue;
+    }
+
+    if (char === "}" || char === "]") {
+      depth -= 1;
+      if (depth < 0) {
+        throw new Error("Invalid JSON fragment detected");
+      }
+      if (depth === 0) {
+        fragments.push(input.slice(startIndex, index + 1));
+        startIndex = -1;
+      }
+      continue;
+    }
+  }
+
+  if (depth !== 0) {
+    throw new Error("Invalid JSON fragment detected");
+  }
+
+  return fragments
+    .map((fragment) => {
+      const trimmed = fragment.trim();
+      if (!trimmed) {
+        return null;
+      }
+      try {
+        return JSON.parse(trimmed);
+      } catch (error) {
+        throw new Error("Invalid JSON fragment detected");
+      }
+    })
+    .filter(Boolean);
 }
 
 function normalizeContent(entry) {
