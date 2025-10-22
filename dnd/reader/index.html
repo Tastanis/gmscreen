@@ -46,7 +46,7 @@
             class="reader__control reader__btn"
             id="reader-add"
           >
-            Upload JSON
+            Add JSON
           </button>
         </div>
       </header>
@@ -80,13 +80,18 @@
           </button>
         </header>
         <p class="reader__uploader-text">
-          Provide JSON that matches the following format. You can upload a single object or an array of objects.
+          Provide JSON that matches the following format. You can paste a single object or an array of objects.
         </p>
-        <pre class="reader__uploader-example" id="reader-uploader-example" aria-label="JSON example"></pre>
-        <label class="reader__uploader-input">
-          <span>Upload JSON file</span>
-          <input type="file" id="reader-uploader-input" accept="application/json" />
-        </label>
+        <label class="reader__uploader-input" for="reader-uploader-textarea">JSON input</label>
+        <textarea
+          class="reader__uploader-textarea"
+          id="reader-uploader-textarea"
+          aria-label="JSON input"
+          spellcheck="false"
+        ></textarea>
+        <button type="button" class="reader__uploader-submit" id="reader-uploader-submit">
+          Add paragraphs
+        </button>
         <p class="reader__uploader-feedback" id="reader-uploader-feedback" role="status" aria-live="polite"></p>
       </div>
     </section>

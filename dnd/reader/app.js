@@ -49,10 +49,24 @@ const questionPromptEl = document.getElementById("reader-question");
 const answersListEl = document.getElementById("reader-answers");
 const feedbackEl = document.getElementById("reader-feedback");
 const uploaderSection = document.getElementById("reader-uploader");
-const uploaderExampleEl = document.getElementById("reader-uploader-example");
-const uploaderInput = document.getElementById("reader-uploader-input");
+const uploaderTextarea = document.getElementById("reader-uploader-textarea");
+const uploaderSubmitBtn = document.getElementById("reader-uploader-submit");
 const uploaderFeedbackEl = document.getElementById("reader-uploader-feedback");
 const uploaderCloseBtn = document.getElementById("reader-uploader-close");
+
+const DEFAULT_UPLOADER_JSON = JSON.stringify(
+  {
+    id: "unique-id",
+    paragraph: "Your paragraph text goes here as a single string.",
+    question: {
+      prompt: "Ask one comprehension question about the paragraph.",
+      choices: ["Answer A", "Answer B", "Answer C", "Answer D"],
+      answerIndex: 1,
+    },
+  },
+  null,
+  2,
+);
 
 let state = {
   tokens: [],
@@ -158,8 +172,11 @@ phoneToggleBtn.addEventListener("click", () => {
 addBtn.addEventListener("click", () => {
   uploaderSection.hidden = false;
   uploaderFeedbackEl.textContent = "";
-  uploaderInput.value = "";
-  uploaderInput.focus();
+  if (!uploaderTextarea.value.trim()) {
+    uploaderTextarea.value = DEFAULT_UPLOADER_JSON;
+  }
+  uploaderTextarea.focus();
+  uploaderTextarea.select();
 });
 
 uploaderCloseBtn.addEventListener("click", closeUploader);
@@ -170,20 +187,24 @@ uploaderSection.addEventListener("click", (event) => {
   }
 });
 
-uploaderInput.addEventListener("change", async (event) => {
-  const file = event.target.files && event.target.files[0];
-  if (!file) return;
+uploaderSubmitBtn.addEventListener("click", () => {
+  const text = uploaderTextarea.value.trim();
+  if (!text) {
+    uploaderFeedbackEl.textContent = "Please provide JSON content to add.";
+    return;
+  }
+
   try {
-    const text = await file.text();
     const parsedEntries = parseUploadedContent(text);
     if (!parsedEntries.length) {
-      uploaderFeedbackEl.textContent = "No valid entries found in the uploaded file.";
+      uploaderFeedbackEl.textContent = "No valid entries found in the provided JSON.";
       return;
     }
     contentSets = contentSets.concat(parsedEntries);
     uploaderFeedbackEl.textContent = `${parsedEntries.length} new paragraph${parsedEntries.length > 1 ? "s" : ""} added.`;
+    uploaderTextarea.value = "";
   } catch (error) {
-    uploaderFeedbackEl.textContent = `Upload failed: ${error.message}`;
+    uploaderFeedbackEl.textContent = `Unable to add content: ${error.message}`;
   }
 });
 
@@ -432,19 +453,7 @@ window.addEventListener("beforeunload", () => {
   }
 });
 
-uploaderExampleEl.textContent = JSON.stringify(
-  {
-    id: "unique-id",
-    paragraph: "Your paragraph text goes here as a single string.",
-    question: {
-      prompt: "Ask one comprehension question about the paragraph.",
-      choices: ["Answer A", "Answer B", "Answer C", "Answer D"],
-      answerIndex: 1,
-    },
-  },
-  null,
-  2,
-);
+uploaderTextarea.value = DEFAULT_UPLOADER_JSON;
 
 function showQuestion() {
   if (!state.currentQuestion) return;
@@ -577,8 +586,8 @@ function normalizeContent(entry) {
 
 function closeUploader() {
   uploaderSection.hidden = true;
-  uploaderInput.value = "";
   uploaderFeedbackEl.textContent = "";
+  uploaderTextarea.value = DEFAULT_UPLOADER_JSON;
 }
 
 function cryptoRandomId() {
