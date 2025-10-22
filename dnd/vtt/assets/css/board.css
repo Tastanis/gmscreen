@@ -594,6 +594,12 @@
   transition: transform var(--vtt-transition), box-shadow var(--vtt-transition);
 }
 
+.vtt-overlay-editor__node--readonly {
+  pointer-events: none;
+  cursor: default;
+  opacity: 0.8;
+}
+
 .vtt-overlay-editor__node:active {
   cursor: grabbing;
   transform: translate(-50%, -50%) scale(1.05);
@@ -613,6 +619,10 @@
   pointer-events: none;
   border-radius: 999px;
   box-shadow: 0 0 0 1px rgba(59, 130, 246, 0.4);
+}
+
+.vtt-overlay-editor__segment--readonly {
+  opacity: 0.65;
 }
 
 .vtt-overlay-editor__toolbar {
