@@ -9184,48 +9184,76 @@ function createOverlayTool(uploadsEndpoint) {
 
     const fragment = document.createDocumentFragment();
 
-    const segmentPairs = [];
-    for (let index = 0; index < nodes.length - 1; index += 1) {
-      segmentPairs.push([nodes[index], nodes[index + 1]]);
-    }
-    if (isClosed && nodes.length >= 3) {
-      segmentPairs.push([nodes[nodes.length - 1], nodes[0]]);
-    }
-
-    segmentPairs.forEach(([start, end]) => {
-      const element = document.createElement('div');
-      element.className = 'vtt-overlay-editor__segment';
-      const startLocal = gridPointToOverlayLocal(start);
-      const endLocal = gridPointToOverlayLocal(end);
-      const dx = endLocal.x - startLocal.x;
-      const dy = endLocal.y - startLocal.y;
-      const length = Math.sqrt(dx * dx + dy * dy);
-      const angle = Math.atan2(dy, dx);
-      element.style.width = `${length}px`;
-      element.style.transform = `translate(${startLocal.x}px, ${startLocal.y}px) rotate(${angle}rad)`;
-      fragment.append(element);
-    });
-
-    nodes.forEach((node, index) => {
-      const element = document.createElement('div');
-      element.className = 'vtt-overlay-editor__node';
-      element.dataset.index = String(index);
-      if (index === 0) {
-        element.classList.add('is-start');
+    const appendPolygonHandles = (points, options = {}) => {
+      const { closed = false, readonly = false } = options;
+      if (!Array.isArray(points) || points.length === 0) {
+        return;
       }
-      const local = gridPointToOverlayLocal(node);
-      element.style.left = `${local.x}px`;
-      element.style.top = `${local.y}px`;
-      element.addEventListener('contextmenu', (event) => {
-        event.preventDefault();
+
+      const createSegment = (start, end) => {
+        const element = document.createElement('div');
+        element.className = 'vtt-overlay-editor__segment';
+        if (readonly) {
+          element.classList.add('vtt-overlay-editor__segment--readonly');
+        }
+        const startLocal = gridPointToOverlayLocal(start);
+        const endLocal = gridPointToOverlayLocal(end);
+        const dx = endLocal.x - startLocal.x;
+        const dy = endLocal.y - startLocal.y;
+        const length = Math.sqrt(dx * dx + dy * dy);
+        const angle = Math.atan2(dy, dx);
+        element.style.width = `${length}px`;
+        element.style.transform = `translate(${startLocal.x}px, ${startLocal.y}px) rotate(${angle}rad)`;
+        fragment.append(element);
+      };
+
+      for (let index = 0; index < points.length - 1; index += 1) {
+        createSegment(points[index], points[index + 1]);
+      }
+
+      if (closed && points.length >= 3) {
+        createSegment(points[points.length - 1], points[0]);
+      }
+
+      points.forEach((point, index) => {
+        const element = document.createElement('div');
+        element.className = 'vtt-overlay-editor__node';
+        if (readonly) {
+          element.classList.add('vtt-overlay-editor__node--readonly');
+        } else {
+          element.dataset.index = String(index);
+          if (index === 0) {
+            element.classList.add('is-start');
+          }
+        }
+
+        const local = gridPointToOverlayLocal(point);
+        element.style.left = `${local.x}px`;
+        element.style.top = `${local.y}px`;
+
+        if (!readonly) {
+          element.addEventListener('contextmenu', (event) => {
+            event.preventDefault();
+          });
+          element.addEventListener('pointerdown', handleNodePointerDown);
+          element.addEventListener('pointermove', handleNodePointerMove);
+          element.addEventListener('pointerup', handleNodePointerUp);
+          element.addEventListener('pointercancel', handleNodePointerUp);
+          element.addEventListener('dblclick', handleNodeDoubleClick);
+        }
+
+        fragment.append(element);
       });
-      element.addEventListener('pointerdown', handleNodePointerDown);
-      element.addEventListener('pointermove', handleNodePointerMove);
-      element.addEventListener('pointerup', handleNodePointerUp);
-      element.addEventListener('pointercancel', handleNodePointerUp);
-      element.addEventListener('dblclick', handleNodeDoubleClick);
-      fragment.append(element);
+    };
+
+    additionalPolygons.forEach((polygon) => {
+      appendPolygonHandles(Array.isArray(polygon?.points) ? polygon.points : [], {
+        closed: true,
+        readonly: true,
+      });
     });
+
+    appendPolygonHandles(nodes, { closed: isClosed && nodes.length >= 3, readonly: false });
 
     handlesLayer.append(fragment);
   }
