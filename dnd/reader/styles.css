@@ -318,20 +318,47 @@ body {
   color: var(--muted);
 }
 
-.reader__uploader-example {
-  margin: 0;
-  padding: 1rem;
-  border-radius: calc(var(--radius) / 1.5);
-  background: rgba(15, 23, 42, 0.06);
-  font-size: 0.9rem;
-  overflow-x: auto;
-}
-
 .reader__uploader-input {
   display: inline-flex;
   flex-direction: column;
   gap: 0.5rem;
   font-weight: 600;
+}
+
+.reader__uploader-textarea {
+  width: 100%;
+  min-height: 16rem;
+  font-family: "Fira Code", "SFMono-Regular", Consolas, "Liberation Mono", Menlo, monospace;
+  font-size: 0.9rem;
+  line-height: 1.4;
+  padding: 1rem;
+  border-radius: calc(var(--radius) / 1.5);
+  border: 1px solid rgba(15, 23, 42, 0.16);
+  background: rgba(15, 23, 42, 0.04);
+  color: inherit;
+  resize: vertical;
+}
+
+.reader__uploader-textarea:focus {
+  outline: 2px solid var(--accent);
+  outline-offset: 2px;
+}
+
+.reader__uploader-submit {
+  align-self: flex-start;
+  border: none;
+  border-radius: calc(var(--radius) / 1.5);
+  background: var(--accent);
+  color: white;
+  font-weight: 600;
+  padding: 0.75rem 1.5rem;
+  cursor: pointer;
+  transition: background 150ms ease-in-out;
+}
+
+.reader__uploader-submit:hover,
+.reader__uploader-submit:focus {
+  background: var(--accent-strong);
 }
 
 .reader__uploader-feedback {
