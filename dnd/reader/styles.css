@@ -278,6 +278,10 @@ body {
   z-index: 10;
 }
 
+.reader__uploader[hidden] {
+  display: none;
+}
+
 .reader__uploader-card {
   background: var(--surface);
   border-radius: calc(var(--radius) * 0.9);
