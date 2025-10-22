@@ -53,6 +53,7 @@ const uploaderTextarea = document.getElementById("reader-uploader-textarea");
 const uploaderSubmitBtn = document.getElementById("reader-uploader-submit");
 const uploaderFeedbackEl = document.getElementById("reader-uploader-feedback");
 const uploaderCloseBtn = document.getElementById("reader-uploader-close");
+const AUTO_CLOSE_DELAY_MS = 1200;
 
 const DEFAULT_UPLOADER_JSON = JSON.stringify(
   {
@@ -81,6 +82,8 @@ let state = {
   currentQuestion: null,
   phoneMode: false,
 };
+
+let uploaderAutoCloseTimer = null;
 
 if (state.reducedMotion) {
   readerEl.dataset.mode = "reduced-motion";
@@ -171,6 +174,10 @@ phoneToggleBtn.addEventListener("click", () => {
 
 addBtn.addEventListener("click", () => {
   uploaderSection.hidden = false;
+  if (uploaderAutoCloseTimer) {
+    clearTimeout(uploaderAutoCloseTimer);
+    uploaderAutoCloseTimer = null;
+  }
   uploaderFeedbackEl.textContent = "";
   if (!uploaderTextarea.value.trim()) {
     uploaderTextarea.value = DEFAULT_UPLOADER_JSON;
@@ -202,7 +209,13 @@ uploaderSubmitBtn.addEventListener("click", () => {
     }
     contentSets = contentSets.concat(parsedEntries);
     uploaderFeedbackEl.textContent = `${parsedEntries.length} new paragraph${parsedEntries.length > 1 ? "s" : ""} added.`;
-    uploaderTextarea.value = "";
+    if (uploaderAutoCloseTimer) {
+      clearTimeout(uploaderAutoCloseTimer);
+    }
+    uploaderAutoCloseTimer = window.setTimeout(() => {
+      closeUploader();
+      uploaderAutoCloseTimer = null;
+    }, AUTO_CLOSE_DELAY_MS);
   } catch (error) {
     uploaderFeedbackEl.textContent = `Unable to add content: ${error.message}`;
   }
@@ -584,10 +597,21 @@ function normalizeContent(entry) {
   };
 }
 
-function closeUploader() {
+function closeUploader(options = {}) {
+  if (typeof Event !== "undefined" && options instanceof Event) {
+    options = {};
+  }
+  if (uploaderAutoCloseTimer) {
+    clearTimeout(uploaderAutoCloseTimer);
+    uploaderAutoCloseTimer = null;
+  }
   uploaderSection.hidden = true;
   uploaderFeedbackEl.textContent = "";
   uploaderTextarea.value = DEFAULT_UPLOADER_JSON;
+  const restoreFocus = options.restoreFocus !== false;
+  if (restoreFocus) {
+    addBtn.focus();
+  }
 }
 
 function cryptoRandomId() {
