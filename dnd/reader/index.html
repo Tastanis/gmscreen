@@ -33,11 +33,35 @@
           <button type="button" class="reader__control reader__btn" id="reader-change">
             Change paragraph
           </button>
+          <button
+            type="button"
+            class="reader__control reader__btn"
+            id="reader-phone-toggle"
+            aria-pressed="false"
+          >
+            Phone layout
+          </button>
+          <button
+            type="button"
+            class="reader__control reader__btn"
+            id="reader-add"
+          >
+            Upload JSON
+          </button>
         </div>
       </header>
 
       <section class="reader__box" aria-live="polite" aria-atomic="true">
         <p class="reader__paragraph" id="reader-paragraph"></p>
+      </section>
+
+      <section class="reader__comprehension" id="reader-comprehension" hidden>
+        <div class="reader__comprehension-card">
+          <h2 class="reader__comprehension-title">Comprehension check</h2>
+          <p class="reader__question" id="reader-question"></p>
+          <ul class="reader__answers" id="reader-answers" role="list"></ul>
+          <p class="reader__feedback" id="reader-feedback" role="status" aria-live="polite"></p>
+        </div>
       </section>
 
       <footer class="reader__actions">
@@ -46,6 +70,26 @@
         </button>
       </footer>
     </main>
+
+    <section class="reader__uploader" id="reader-uploader" hidden>
+      <div class="reader__uploader-card" role="dialog" aria-modal="true" aria-labelledby="reader-uploader-title">
+        <header class="reader__uploader-header">
+          <h2 class="reader__uploader-title" id="reader-uploader-title">Add new paragraph</h2>
+          <button type="button" class="reader__uploader-close" id="reader-uploader-close" aria-label="Close uploader">
+            ×
+          </button>
+        </header>
+        <p class="reader__uploader-text">
+          Provide JSON that matches the following format. You can upload a single object or an array of objects.
+        </p>
+        <pre class="reader__uploader-example" id="reader-uploader-example" aria-label="JSON example"></pre>
+        <label class="reader__uploader-input">
+          <span>Upload JSON file</span>
+          <input type="file" id="reader-uploader-input" accept="application/json" />
+        </label>
+        <p class="reader__uploader-feedback" id="reader-uploader-feedback" role="status" aria-live="polite"></p>
+      </div>
+    </section>
 
     <template id="reader-token-template">
       <span class="tok"></span>

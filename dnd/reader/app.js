@@ -12,11 +12,26 @@ const DEFAULTS = {
   minOff: 60,
 };
 
-const paragraphs = Array.isArray(window.SEED_PARAGRAPHS) && window.SEED_PARAGRAPHS.length
-  ? window.SEED_PARAGRAPHS.slice()
+const seedContent = Array.isArray(window.SEED_CONTENT) && window.SEED_CONTENT.length
+  ? window.SEED_CONTENT.map(normalizeContent)
   : [
-      "Reading is a skill strengthened by practice. In this exercise, each word appears for a brief moment in its original position, training your eyes to track naturally across the page.",
+      normalizeContent({
+        paragraph:
+          "Reading is a skill strengthened by practice. In this exercise, each word appears for a brief moment in its original position, training your eyes to track naturally across the page.",
+        question: {
+          prompt: "What skill does the exercise support?",
+          choices: [
+            "Memorization",
+            "Rhythmic chanting",
+            "Tracking words smoothly",
+            "Taking handwritten notes",
+          ],
+          answerIndex: 2,
+        },
+      }),
     ];
+
+let contentSets = seedContent.slice();
 
 const readerEl = document.querySelector(".reader");
 const paragraphEl = document.getElementById("reader-paragraph");
@@ -25,8 +40,19 @@ const playLabel = playBtn.querySelector(".reader__play-label");
 const speedSlider = document.getElementById("reader-speed");
 const speedOutput = document.getElementById("reader-speed-output");
 const changeBtn = document.getElementById("reader-change");
+const phoneToggleBtn = document.getElementById("reader-phone-toggle");
+const addBtn = document.getElementById("reader-add");
 const tokenTemplate = document.getElementById("reader-token-template");
 const reducedMotionQuery = window.matchMedia("(prefers-reduced-motion: reduce)");
+const comprehensionSection = document.getElementById("reader-comprehension");
+const questionPromptEl = document.getElementById("reader-question");
+const answersListEl = document.getElementById("reader-answers");
+const feedbackEl = document.getElementById("reader-feedback");
+const uploaderSection = document.getElementById("reader-uploader");
+const uploaderExampleEl = document.getElementById("reader-uploader-example");
+const uploaderInput = document.getElementById("reader-uploader-input");
+const uploaderFeedbackEl = document.getElementById("reader-uploader-feedback");
+const uploaderCloseBtn = document.getElementById("reader-uploader-close");
 
 let state = {
   tokens: [],
@@ -38,6 +64,8 @@ let state = {
   playing: false,
   reducedMotion: reducedMotionQuery.matches,
   paragraphIndex: 0,
+  currentQuestion: null,
+  phoneMode: false,
 };
 
 if (state.reducedMotion) {
@@ -82,15 +110,17 @@ if (!Number.isNaN(storedWpm)) {
 
 const storedParagraphIndex = Number.parseInt(localStorage.getItem(STORAGE_KEYS.paragraphIndex), 10);
 if (!Number.isNaN(storedParagraphIndex)) {
-  state.paragraphIndex = ((storedParagraphIndex % paragraphs.length) + paragraphs.length) % paragraphs.length;
+  state.paragraphIndex = ((storedParagraphIndex % contentSets.length) + contentSets.length) % contentSets.length;
 }
 
 speedSlider.value = String(state.wpm);
 updateSpeedOutput(state.wpm);
 
-renderParagraph(paragraphs[state.paragraphIndex]);
+loadContent(state.paragraphIndex);
 setState("idle");
 playBtn.dataset.playing = "false";
+readerEl.dataset.layout = "desktop";
+phoneToggleBtn.setAttribute("aria-pressed", "false");
 
 playBtn.addEventListener("click", handlePlayToggle);
 playBtn.addEventListener("keydown", (event) => {
@@ -111,10 +141,63 @@ changeBtn.addEventListener("click", () => {
   cycleParagraph(1);
 });
 
+phoneToggleBtn.addEventListener("click", () => {
+  state.phoneMode = !state.phoneMode;
+  document.body.classList.toggle("reader-phone-mode", state.phoneMode);
+  if (state.phoneMode) {
+    readerEl.dataset.layout = "mobile";
+    phoneToggleBtn.textContent = "Desktop layout";
+    phoneToggleBtn.setAttribute("aria-pressed", "true");
+  } else {
+    readerEl.dataset.layout = "desktop";
+    phoneToggleBtn.textContent = "Phone layout";
+    phoneToggleBtn.setAttribute("aria-pressed", "false");
+  }
+});
+
+addBtn.addEventListener("click", () => {
+  uploaderSection.hidden = false;
+  uploaderFeedbackEl.textContent = "";
+  uploaderInput.value = "";
+  uploaderInput.focus();
+});
+
+uploaderCloseBtn.addEventListener("click", closeUploader);
+
+uploaderSection.addEventListener("click", (event) => {
+  if (event.target === uploaderSection) {
+    closeUploader();
+  }
+});
+
+uploaderInput.addEventListener("change", async (event) => {
+  const file = event.target.files && event.target.files[0];
+  if (!file) return;
+  try {
+    const text = await file.text();
+    const parsedEntries = parseUploadedContent(text);
+    if (!parsedEntries.length) {
+      uploaderFeedbackEl.textContent = "No valid entries found in the uploaded file.";
+      return;
+    }
+    contentSets = contentSets.concat(parsedEntries);
+    uploaderFeedbackEl.textContent = `${parsedEntries.length} new paragraph${parsedEntries.length > 1 ? "s" : ""} added.`;
+  } catch (error) {
+    uploaderFeedbackEl.textContent = `Upload failed: ${error.message}`;
+  }
+});
+
+document.addEventListener("keydown", (event) => {
+  if (event.key === "Escape" && !uploaderSection.hidden) {
+    closeUploader();
+  }
+});
+
 function handlePlayToggle() {
   if (state.playing) {
     pause();
   } else {
+    resetQuestion();
     play();
   }
 }
@@ -177,7 +260,8 @@ function scheduleShow() {
 
     const nextTokenIndex = state.readableIndexes[state.index];
     const { offMs } = computeTiming(state.wpm, state.tokens[nextTokenIndex]);
-    state.timers.show = window.setTimeout(scheduleShow, offMs);
+    const extraDelay = isLineWrapTransition(tokenIndex, nextTokenIndex) ? onMs : 0;
+    state.timers.show = window.setTimeout(scheduleShow, offMs + extraDelay);
   }, onMs);
 }
 
@@ -268,9 +352,9 @@ function cycleParagraph(step) {
   pause();
   state.index = 0;
   hideAllTokens();
-  state.paragraphIndex = (state.paragraphIndex + step + paragraphs.length) % paragraphs.length;
+  state.paragraphIndex = (state.paragraphIndex + step + contentSets.length) % contentSets.length;
   localStorage.setItem(STORAGE_KEYS.paragraphIndex, String(state.paragraphIndex));
-  renderParagraph(paragraphs[state.paragraphIndex]);
+  loadContent(state.paragraphIndex);
   setState("idle");
 }
 
@@ -313,6 +397,13 @@ function renderParagraph(text) {
   state.index = 0;
 }
 
+function loadContent(index) {
+  const content = contentSets[index];
+  renderParagraph(content.paragraph);
+  state.currentQuestion = content.question || null;
+  resetQuestion();
+}
+
 function setState(nextState) {
   readerEl.dataset.state = nextState;
   if (nextState === "idle") {
@@ -323,6 +414,7 @@ function setState(nextState) {
     playLabel.textContent = "Resume";
   } else if (nextState === "completed") {
     playLabel.textContent = "Replay";
+    showQuestion();
   }
 }
 
@@ -339,3 +431,159 @@ window.addEventListener("beforeunload", () => {
     pause();
   }
 });
+
+uploaderExampleEl.textContent = JSON.stringify(
+  {
+    id: "unique-id",
+    paragraph: "Your paragraph text goes here as a single string.",
+    question: {
+      prompt: "Ask one comprehension question about the paragraph.",
+      choices: ["Answer A", "Answer B", "Answer C", "Answer D"],
+      answerIndex: 1,
+    },
+  },
+  null,
+  2,
+);
+
+function showQuestion() {
+  if (!state.currentQuestion) return;
+  const { prompt, choices } = state.currentQuestion;
+  questionPromptEl.textContent = prompt;
+  feedbackEl.textContent = "";
+  answersListEl.innerHTML = "";
+
+  choices.forEach((choice, index) => {
+    const item = document.createElement("li");
+    const button = document.createElement("button");
+    button.type = "button";
+    button.className = "reader__choice";
+    button.textContent = choice;
+    button.dataset.index = String(index);
+    button.addEventListener("click", handleChoiceSelection);
+    item.appendChild(button);
+    answersListEl.appendChild(item);
+  });
+
+  comprehensionSection.hidden = false;
+}
+
+function resetQuestion() {
+  comprehensionSection.hidden = true;
+  questionPromptEl.textContent = "";
+  answersListEl.innerHTML = "";
+  feedbackEl.textContent = "";
+}
+
+function handleChoiceSelection(event) {
+  if (!state.currentQuestion) return;
+  const target = event.currentTarget;
+  const selectedIndex = Number.parseInt(target.dataset.index || "", 10);
+  const { answerIndex } = state.currentQuestion;
+  const buttons = answersListEl.querySelectorAll(".reader__choice");
+  buttons.forEach((button) => {
+    button.disabled = true;
+    button.setAttribute("aria-disabled", "true");
+  });
+
+  if (selectedIndex === answerIndex) {
+    target.dataset.result = "correct";
+    feedbackEl.textContent = "Correct!";
+  } else {
+    target.dataset.result = "incorrect";
+    const correctButton = buttons[answerIndex];
+    if (correctButton) {
+      correctButton.dataset.result = "correct";
+    }
+    feedbackEl.textContent = "Not quite. Review the paragraph and try again.";
+  }
+}
+
+function isLineWrapTransition(currentIndex, nextIndex) {
+  const currentEl = state.tokenElements[currentIndex];
+  const nextEl = state.tokenElements[nextIndex];
+  if (!currentEl || !nextEl) return false;
+  const currentRect = currentEl.getBoundingClientRect();
+  const nextRect = nextEl.getBoundingClientRect();
+  if (!currentRect || !nextRect) return false;
+  return nextRect.top - currentRect.top > currentRect.height * 0.6;
+}
+
+function parseUploadedContent(text) {
+  let parsed;
+  try {
+    parsed = JSON.parse(text);
+  } catch (error) {
+    throw new Error("Invalid JSON");
+  }
+
+  const entries = Array.isArray(parsed) ? parsed : [parsed];
+  const normalized = entries
+    .map((entry) => {
+      try {
+        return normalizeContent(entry);
+      } catch (error) {
+        console.warn("Skipping invalid entry", error);
+        return null;
+      }
+    })
+    .filter(Boolean);
+  return normalized;
+}
+
+function normalizeContent(entry) {
+  if (!entry || typeof entry !== "object") {
+    throw new Error("Content entry must be an object");
+  }
+  const id = typeof entry.id === "string" && entry.id.trim() ? entry.id.trim() : cryptoRandomId();
+  const paragraph = typeof entry.paragraph === "string" && entry.paragraph.trim()
+    ? entry.paragraph.trim()
+    : null;
+  if (!paragraph) {
+    throw new Error("Paragraph text is required");
+  }
+  const question = entry.question && typeof entry.question === "object" ? entry.question : null;
+  if (!question) {
+    throw new Error("Question is required for each entry");
+  }
+  const prompt = typeof question.prompt === "string" && question.prompt.trim() ? question.prompt.trim() : null;
+  const choices = Array.isArray(question.choices)
+    ? question.choices.map((choice) => String(choice).trim())
+    : null;
+  const answerIndex = Number.isInteger(question.answerIndex) ? question.answerIndex : null;
+  const hasEmptyChoice = choices ? choices.some((choice) => !choice) : true;
+  if (
+    !prompt ||
+    !choices ||
+    choices.length < 2 ||
+    hasEmptyChoice ||
+    answerIndex === null ||
+    answerIndex < 0 ||
+    answerIndex >= choices.length
+  ) {
+    throw new Error("Question must include a prompt, at least two choices, and a valid answerIndex");
+  }
+
+  return {
+    id,
+    paragraph,
+    question: {
+      prompt,
+      choices,
+      answerIndex,
+    },
+  };
+}
+
+function closeUploader() {
+  uploaderSection.hidden = true;
+  uploaderInput.value = "";
+  uploaderFeedbackEl.textContent = "";
+}
+
+function cryptoRandomId() {
+  if (typeof crypto !== "undefined" && crypto.randomUUID) {
+    return crypto.randomUUID();
+  }
+  return `custom-${Date.now()}-${Math.floor(Math.random() * 1000)}`;
+}
