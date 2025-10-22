@@ -1,0 +1,230 @@
+:root {
+  color-scheme: light;
+  --ink: #111827;
+  --muted: #6b7280;
+  --bg: #f9fafb;
+  --surface: #ffffff;
+  --accent: #2563eb;
+  --accent-dark: #1d4ed8;
+  --radius: 18px;
+  --pad: clamp(1rem, 2vw, 1.75rem);
+  --text-size: clamp(1.5rem, 2.4vw, 2rem);
+  --line-height: 1.65;
+  --control-height: 44px;
+  font-family: "Inter", "Segoe UI", system-ui, sans-serif;
+}
+
+* {
+  box-sizing: border-box;
+}
+
+body {
+  margin: 0;
+  min-height: 100vh;
+  background: var(--bg);
+  color: var(--ink);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: clamp(1.5rem, 4vw, 3rem);
+}
+
+.reader {
+  width: min(960px, 100%);
+  background: var(--surface);
+  border-radius: var(--radius);
+  box-shadow: 0 16px 40px rgba(15, 23, 42, 0.12);
+  padding: var(--pad);
+  display: flex;
+  flex-direction: column;
+  gap: clamp(1.25rem, 2.5vw, 2rem);
+}
+
+.reader__top {
+  display: flex;
+  flex-wrap: wrap;
+  gap: clamp(1rem, 2vw, 2rem);
+  justify-content: space-between;
+  align-items: flex-start;
+}
+
+.reader__title {
+  font-size: clamp(1.75rem, 3vw, 2.3rem);
+  margin: 0;
+}
+
+.reader__note {
+  max-width: 28rem;
+  margin: 0.25rem 0 0;
+  color: var(--muted);
+  font-size: 0.95rem;
+  line-height: 1.5;
+}
+
+.reader__controls {
+  display: flex;
+  gap: 1rem;
+  align-items: center;
+  justify-content: flex-end;
+  flex: 1 1 280px;
+}
+
+.reader__control {
+  display: flex;
+  flex-direction: column;
+  gap: 0.4rem;
+  font-size: 0.9rem;
+  color: var(--muted);
+}
+
+.reader__control--slider {
+  flex: 1 1 220px;
+}
+
+.reader__control-label {
+  font-weight: 600;
+  color: var(--ink);
+}
+
+#reader-speed {
+  width: 100%;
+  accent-color: var(--accent);
+}
+
+#reader-speed-output {
+  font-weight: 600;
+  color: var(--ink);
+}
+
+.reader__btn,
+.reader__play {
+  font: inherit;
+  font-weight: 600;
+  border-radius: calc(var(--radius) / 1.5);
+  cursor: pointer;
+  padding: 0.75rem 1.25rem;
+  min-height: var(--control-height);
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 0.5rem;
+  transition: background 120ms ease, color 120ms ease, transform 120ms ease;
+}
+
+.reader__play {
+  border: none;
+  background: var(--accent);
+  color: white;
+}
+
+.reader__play:hover,
+.reader__play:focus-visible {
+  background: var(--accent-dark);
+}
+
+.reader__btn {
+  border: 2px solid var(--accent);
+  background: transparent;
+  color: var(--accent);
+}
+
+.reader__btn:hover,
+.reader__btn:focus-visible {
+  background: var(--accent);
+  color: white;
+}
+
+.reader__btn:focus-visible,
+.reader__play:focus-visible {
+  outline: 3px solid color-mix(in srgb, var(--accent) 70%, white 30%);
+  outline-offset: 2px;
+}
+
+.reader__btn:active,
+.reader__play:active {
+  transform: translateY(1px);
+}
+
+.reader__box {
+  border-radius: calc(var(--radius) * 0.9);
+  border: 1px solid rgba(15, 23, 42, 0.08);
+  padding: clamp(1.5rem, 3vw, 2.5rem);
+  background: linear-gradient(145deg, rgba(248, 250, 252, 0.85), rgba(255, 255, 255, 0.9));
+  min-height: clamp(10rem, 40vh, 18rem);
+  display: flex;
+  align-items: center;
+}
+
+.reader__paragraph {
+  margin: 0;
+  font-size: var(--text-size);
+  line-height: var(--line-height);
+  letter-spacing: 0.01em;
+  white-space: pre-wrap;
+}
+
+.tok {
+  color: transparent;
+  transition: color 60ms ease;
+}
+
+.reader[data-state="playing"] .tok.visible {
+  color: var(--ink);
+}
+
+.reader[data-state="idle"] .tok.visible,
+.reader[data-state="paused"] .tok.visible,
+.reader[data-state="completed"] .tok.visible {
+  color: var(--ink);
+}
+
+.reader__actions {
+  display: flex;
+  justify-content: center;
+}
+
+.reader__play[data-playing="true"] {
+  background: #dc2626;
+}
+
+.reader__play-label {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.5rem;
+}
+
+@media (max-width: 720px) {
+  .reader {
+    padding: clamp(1.25rem, 5vw, 1.75rem);
+  }
+
+  .reader__top {
+    flex-direction: column;
+  }
+
+  .reader__controls {
+    width: 100%;
+    flex-direction: column;
+    align-items: stretch;
+  }
+
+  .reader__btn {
+    width: 100%;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  *,
+  *::before,
+  *::after {
+    animation-duration: 0.001ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.001ms !important;
+    scroll-behavior: auto !important;
+  }
+
+  .reader[data-mode="reduced-motion"] .tok.highlight {
+    background: color-mix(in srgb, var(--accent) 25%, transparent 75%);
+    border-radius: 0.35em;
+  }
+}

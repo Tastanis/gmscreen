@@ -1,0 +1,39 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "Reader Comprehension Set",
+  "type": "object",
+  "properties": {
+    "paragraphId": { "type": "string" },
+    "items": {
+      "type": "array",
+      "items": {
+        "oneOf": [
+          {
+            "type": "object",
+            "required": ["type", "prompt", "choices", "answerIndex"],
+            "properties": {
+              "type": { "const": "mcq" },
+              "prompt": { "type": "string" },
+              "choices": {
+                "type": "array",
+                "items": { "type": "string" },
+                "minItems": 2
+              },
+              "answerIndex": { "type": "integer", "minimum": 0 }
+            }
+          },
+          {
+            "type": "object",
+            "required": ["type", "prompt", "answer"],
+            "properties": {
+              "type": { "const": "short" },
+              "prompt": { "type": "string" },
+              "answer": { "type": "string" }
+            }
+          }
+        ]
+      }
+    }
+  },
+  "required": ["paragraphId", "items"]
+}

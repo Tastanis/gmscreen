@@ -1,0 +1,57 @@
+<!DOCTYPE html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>Rapid Reader</title>
+    <link rel="stylesheet" href="styles.css" />
+  </head>
+  <body>
+    <main class="reader" data-state="idle">
+      <header class="reader__top">
+        <div class="reader__title-block">
+          <h1 class="reader__title">Reader</h1>
+          <p class="reader__note">
+            This tool flashes words briefly to train pacing. Avoid use if you are
+            sensitive to rapid visual changes.
+          </p>
+        </div>
+        <div class="reader__controls" role="group" aria-label="Reader controls">
+          <label class="reader__control reader__control--slider">
+            <span class="reader__control-label">Speed</span>
+            <input
+              id="reader-speed"
+              type="range"
+              min="60"
+              max="420"
+              step="10"
+              value="240"
+              aria-label="Speed (words per minute)"
+            />
+            <output for="reader-speed" id="reader-speed-output">240 WPM</output>
+          </label>
+          <button type="button" class="reader__control reader__btn" id="reader-change">
+            Change paragraph
+          </button>
+        </div>
+      </header>
+
+      <section class="reader__box" aria-live="polite" aria-atomic="true">
+        <p class="reader__paragraph" id="reader-paragraph"></p>
+      </section>
+
+      <footer class="reader__actions">
+        <button type="button" class="reader__play" id="reader-play" aria-pressed="false">
+          <span class="reader__play-label">Play</span>
+        </button>
+      </footer>
+    </main>
+
+    <template id="reader-token-template">
+      <span class="tok"></span>
+    </template>
+
+    <script src="paragraphs.js"></script>
+    <script src="app.js" type="module"></script>
+  </body>
+</html>
