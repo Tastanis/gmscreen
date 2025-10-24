@@ -844,6 +844,21 @@
   animation-delay: var(--vtt-ping-delay, 0ms);
 }
 
+.vtt-board__ping::after {
+  content: "";
+  position: absolute;
+  top: 50%;
+  left: 50%;
+  width: 0.6rem;
+  height: 0.6rem;
+  margin-top: -0.3rem;
+  margin-left: -0.3rem;
+  border-radius: 999px;
+  background: var(--vtt-ping-color);
+  box-shadow: 0 0 0 2px rgba(15, 23, 42, 0.85);
+  opacity: 1;
+}
+
 .vtt-board__ping--focus {
   --vtt-ping-color: #38bdf8;
   background: color-mix(in srgb, var(--vtt-ping-color) 25%, transparent);
