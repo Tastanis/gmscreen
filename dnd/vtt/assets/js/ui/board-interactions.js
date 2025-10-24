@@ -861,6 +861,7 @@ export function mountBoardInteractions(store, routes = {}) {
   let pendingRoundConfirmation = false;
   let activeConditionPrompt = null;
   let activeTurnDialog = null;
+  let activeSaveEndsPrompt = null;
   let lastTurnPromptAnchorRect = null;
   const turnLockState = {
     holderId: null,
@@ -4206,6 +4207,8 @@ export function mountBoardInteractions(store, routes = {}) {
       return;
     }
 
+    closeSaveEndsPrompt();
+
     const currentUserId = getCurrentUserId();
     const initiatorProfileId = normalizeProfileId(options?.initiatorProfileId ?? currentUserId);
     const fallbackName = getCurrentUserName() || initiatorProfileId || 'GM';
@@ -4327,17 +4330,23 @@ export function mountBoardInteractions(store, routes = {}) {
     roundTurnCount = Math.max(0, roundTurnCount + 1);
     setActiveCombatantId(null);
     refreshCombatTracker();
+    const saveEndsConditions = [];
     if (finishingConditions.length) {
       finishingConditions.forEach((condition) => {
         if (getConditionDurationType(condition) !== 'save-ends') {
           return;
         }
-        const name = typeof condition?.name === 'string' ? condition.name.trim() : '';
+        const normalized = ensurePlacementCondition(condition);
+        const name = typeof normalized?.name === 'string' ? normalized.name.trim() : '';
         if (!name) {
           return;
         }
         showConditionBanner(`${name} Save Ends`, { tone: 'reminder' });
+        saveEndsConditions.push(normalized);
       });
+    }
+    if (saveEndsConditions.length) {
+      openSaveEndsPrompt(finishedId, tokenLabel(finishingPlacement), saveEndsConditions);
     }
     const clearedEndOfTurn = clearEndOfTurnConditionsForTarget(finishedId);
     if (clearedEndOfTurn.length) {
@@ -4368,6 +4377,427 @@ export function mountBoardInteractions(store, routes = {}) {
     updateCombatModeIndicators();
     checkForRoundCompletion();
     syncCombatStateToStore();
+  }
+
+  function closeSaveEndsPrompt() {
+    if (!activeSaveEndsPrompt) {
+      return;
+    }
+
+    const state = activeSaveEndsPrompt;
+    if (state.rollButton && state.handleRollButtonClick) {
+      state.rollButton.removeEventListener('click', state.handleRollButtonClick);
+    }
+    if (state.bonusButton && state.handleBonusButtonClick) {
+      state.bonusButton.removeEventListener('click', state.handleBonusButtonClick);
+    }
+    if (state.closeButton && state.handleCloseButtonClick) {
+      state.closeButton.removeEventListener('click', state.handleCloseButtonClick);
+    }
+    if (state.overlay && state.handleOverlayClick) {
+      state.overlay.removeEventListener('click', state.handleOverlayClick);
+    }
+    if (typeof document !== 'undefined' && state.handleKeydown) {
+      document.removeEventListener('keydown', state.handleKeydown);
+    }
+    state.overlay?.remove();
+    activeSaveEndsPrompt = null;
+  }
+
+  function openSaveEndsPrompt(placementId, tokenName, conditions = []) {
+    if (
+      !placementId ||
+      typeof document === 'undefined' ||
+      !document.body ||
+      !Array.isArray(conditions) ||
+      !conditions.length
+    ) {
+      return;
+    }
+
+    const queue = conditions
+      .map((condition) => {
+        const normalized = ensurePlacementCondition(condition);
+        if (!normalized || typeof normalized.name !== 'string') {
+          return null;
+        }
+        const name = normalized.name.trim();
+        if (!name) {
+          return null;
+        }
+        return {
+          condition: normalized,
+          name,
+          successApplied: false,
+        };
+      })
+      .filter(Boolean);
+
+    if (!queue.length) {
+      return;
+    }
+
+    closeSaveEndsPrompt();
+
+    const overlay = document.createElement('div');
+    overlay.className = 'vtt-save-ends-overlay';
+    overlay.innerHTML = `
+      <div class="vtt-save-ends-dialog" role="dialog" aria-modal="true" data-save-ends-dialog>
+        <div class="vtt-save-ends-dialog__header">
+          <h3 class="vtt-save-ends-dialog__title" data-save-ends-title></h3>
+          <button type="button" class="vtt-save-ends-dialog__close" aria-label="Close save prompt" data-save-ends-close>&times;</button>
+        </div>
+        <div class="vtt-save-ends-dialog__body">
+          <div class="vtt-save-ends-dialog__tracker" data-save-ends-tracker hidden></div>
+          <p class="vtt-save-ends-dialog__description" data-save-ends-description></p>
+          <div class="vtt-save-ends-dialog__bonus">
+            <span class="vtt-save-ends-dialog__bonus-label">Bonus</span>
+            <span class="vtt-save-ends-dialog__bonus-value" data-save-ends-bonus>+0</span>
+          </div>
+          <div class="vtt-save-ends-dialog__result" data-save-ends-result aria-live="polite"></div>
+        </div>
+        <div class="vtt-save-ends-dialog__actions">
+          <button type="button" class="btn btn--primary vtt-save-ends-dialog__button" data-save-ends-roll>Make Save</button>
+          <button
+            type="button"
+            class="btn vtt-save-ends-dialog__button vtt-save-ends-dialog__button--bonus"
+            data-save-ends-bonus-button
+          >+1</button>
+        </div>
+      </div>
+    `;
+
+    document.body.appendChild(overlay);
+
+    const rollButton = overlay.querySelector('[data-save-ends-roll]');
+    const bonusButton = overlay.querySelector('[data-save-ends-bonus-button]');
+    const closeButton = overlay.querySelector('[data-save-ends-close]');
+    const titleElement = overlay.querySelector('[data-save-ends-title]');
+    const trackerElement = overlay.querySelector('[data-save-ends-tracker]');
+    const descriptionElement = overlay.querySelector('[data-save-ends-description]');
+    const bonusElement = overlay.querySelector('[data-save-ends-bonus]');
+    const resultElement = overlay.querySelector('[data-save-ends-result]');
+
+    if (!rollButton || !bonusButton || !closeButton || !titleElement || !descriptionElement || !resultElement) {
+      overlay.remove();
+      return;
+    }
+
+    const normalizedTokenName =
+      typeof tokenName === 'string' && tokenName.trim() ? tokenName.trim() : 'This token';
+    const possessiveTokenName = formatPossessiveName(normalizedTokenName);
+
+    const state = {
+      overlay,
+      placementId,
+      tokenName: normalizedTokenName,
+      possessiveTokenName,
+      queue,
+      index: 0,
+      mode: 'roll',
+      modifier: 0,
+      hasRolled: false,
+      roll: null,
+      rollButton,
+      bonusButton,
+      closeButton,
+      titleElement,
+      trackerElement,
+      descriptionElement,
+      bonusElement,
+      resultElement,
+      handleOverlayClick: null,
+      handleRollButtonClick: null,
+      handleBonusButtonClick: null,
+      handleCloseButtonClick: null,
+      handleKeydown: null,
+    };
+
+    const handleOverlayClick = (event) => {
+      if (event.target === overlay) {
+        closeSaveEndsPrompt();
+      }
+    };
+
+    const handleCloseButtonClick = () => {
+      closeSaveEndsPrompt();
+    };
+
+    const handleKeydown = (event) => {
+      if (event.key === 'Escape') {
+        event.preventDefault();
+        closeSaveEndsPrompt();
+      }
+    };
+
+    const handleRollButtonClick = () => {
+      if (!activeSaveEndsPrompt) {
+        return;
+      }
+
+      if (state.mode === 'advance') {
+        advanceSaveEndsPrompt();
+        return;
+      }
+      if (state.mode === 'close') {
+        closeSaveEndsPrompt();
+        return;
+      }
+      if (state.hasRolled) {
+        return;
+      }
+
+      state.roll = Math.floor(Math.random() * 10) + 1;
+      state.hasRolled = true;
+      const entry = state.queue[state.index];
+      if (!entry) {
+        renderSaveEndsPromptResult();
+        return;
+      }
+
+      const total = state.roll + state.modifier;
+      if (total >= 6) {
+        applySaveEndsSuccess(entry);
+      }
+
+      const hasNext = state.index + 1 < state.queue.length;
+      state.mode = hasNext ? 'advance' : 'close';
+      state.rollButton.textContent = hasNext ? 'Next Condition' : 'Close';
+      renderSaveEndsPromptResult();
+    };
+
+    const handleBonusButtonClick = () => {
+      if (!activeSaveEndsPrompt) {
+        return;
+      }
+
+      state.modifier += 1;
+      if (state.bonusElement) {
+        state.bonusElement.textContent = `+${state.modifier}`;
+      }
+
+      const entry = state.queue[state.index];
+      if (state.hasRolled && entry && !entry.successApplied) {
+        const total = state.roll + state.modifier;
+        if (total >= 6) {
+          applySaveEndsSuccess(entry);
+        }
+      }
+
+      renderSaveEndsPromptResult();
+    };
+
+    state.handleOverlayClick = handleOverlayClick;
+    state.handleRollButtonClick = handleRollButtonClick;
+    state.handleBonusButtonClick = handleBonusButtonClick;
+    state.handleCloseButtonClick = handleCloseButtonClick;
+    state.handleKeydown = handleKeydown;
+
+    overlay.addEventListener('click', handleOverlayClick);
+    rollButton.addEventListener('click', handleRollButtonClick);
+    bonusButton.addEventListener('click', handleBonusButtonClick);
+    closeButton.addEventListener('click', handleCloseButtonClick);
+    document.addEventListener('keydown', handleKeydown);
+
+    activeSaveEndsPrompt = state;
+
+    updateSaveEndsPromptView();
+  }
+
+  function updateSaveEndsPromptView() {
+    if (!activeSaveEndsPrompt) {
+      return;
+    }
+
+    const state = activeSaveEndsPrompt;
+    const entry = state.queue[state.index];
+    if (!entry) {
+      closeSaveEndsPrompt();
+      return;
+    }
+
+    state.mode = 'roll';
+    state.modifier = 0;
+    state.hasRolled = false;
+    state.roll = null;
+    entry.successApplied = Boolean(entry.successApplied);
+
+    state.rollButton.disabled = false;
+    state.rollButton.textContent = 'Make Save';
+    state.bonusButton.disabled = false;
+
+    if (state.titleElement) {
+      state.titleElement.textContent = `Save Ends: ${entry.name}`;
+    }
+    if (state.trackerElement) {
+      if (state.queue.length > 1) {
+        state.trackerElement.hidden = false;
+        state.trackerElement.textContent = `Condition ${state.index + 1} of ${state.queue.length}`;
+      } else {
+        state.trackerElement.hidden = true;
+        state.trackerElement.textContent = '';
+      }
+    }
+    if (state.descriptionElement) {
+      state.descriptionElement.textContent = `${state.tokenName} is rolling to end ${entry.name}.`;
+    }
+    if (state.bonusElement) {
+      state.bonusElement.textContent = '+0';
+    }
+    if (state.resultElement) {
+      state.resultElement.classList.remove('is-success', 'is-failure');
+    }
+
+    renderSaveEndsPromptResult();
+
+    if (state.rollButton && typeof state.rollButton.focus === 'function') {
+      if (typeof window !== 'undefined' && typeof window.setTimeout === 'function') {
+        window.setTimeout(() => {
+          try {
+            state.rollButton?.focus();
+          } catch (error) {
+            // Ignore focus errors in non-interactive environments
+          }
+        }, 0);
+      } else {
+        try {
+          state.rollButton.focus();
+        } catch (error) {
+          // Ignore focus errors in non-interactive environments
+        }
+      }
+    }
+  }
+
+  function renderSaveEndsPromptResult() {
+    if (!activeSaveEndsPrompt || !activeSaveEndsPrompt.resultElement) {
+      return;
+    }
+
+    const state = activeSaveEndsPrompt;
+    const element = state.resultElement;
+    element.textContent = '';
+    element.classList.remove('is-success', 'is-failure');
+
+    if (state.roll === null) {
+      const instructions = document.createElement('div');
+      instructions.className = 'vtt-save-ends-dialog__result-summary';
+      let text = 'Roll a d10. A 6 or higher ends the condition.';
+      if (state.modifier > 0) {
+        text += ` Current bonus: +${state.modifier}.`;
+      }
+      instructions.textContent = text;
+      element.appendChild(instructions);
+      return;
+    }
+
+    const total = state.roll + state.modifier;
+    const success = total >= 6;
+    const summary = document.createElement('div');
+    summary.className = 'vtt-save-ends-dialog__result-summary';
+    summary.textContent =
+      state.modifier > 0
+        ? `Result: ${state.roll} + ${state.modifier} = ${total}`
+        : `Result: ${state.roll}`;
+
+    const outcome = document.createElement('div');
+    outcome.className = 'vtt-save-ends-dialog__result-outcome';
+    outcome.textContent = success
+      ? 'Success! The condition ends.'
+      : 'Failure. The condition remains.';
+
+    let instructionText = '';
+    if (success) {
+      instructionText = state.mode === 'advance' ? 'Select Next Condition to continue.' : 'Select Close to finish.';
+    } else if (state.mode === 'advance') {
+      instructionText = 'Press +1 to increase the total or select Next Condition to continue.';
+    } else if (state.mode === 'close') {
+      instructionText = 'Press +1 to increase the total or select Close to finish.';
+    } else {
+      instructionText = 'You can press +1 to increase the total.';
+    }
+
+    element.appendChild(summary);
+    element.appendChild(outcome);
+
+    if (instructionText) {
+      const instruction = document.createElement('div');
+      instruction.className = 'vtt-save-ends-dialog__result-instructions';
+      instruction.textContent = instructionText;
+      element.appendChild(instruction);
+    }
+
+    element.classList.toggle('is-success', success);
+    element.classList.toggle('is-failure', !success);
+  }
+
+  function advanceSaveEndsPrompt() {
+    if (!activeSaveEndsPrompt) {
+      return;
+    }
+
+    const state = activeSaveEndsPrompt;
+    if (state.index + 1 >= state.queue.length) {
+      closeSaveEndsPrompt();
+      return;
+    }
+
+    state.index += 1;
+    updateSaveEndsPromptView();
+  }
+
+  function applySaveEndsSuccess(entry) {
+    if (!activeSaveEndsPrompt || !entry || entry.successApplied) {
+      return;
+    }
+
+    const state = activeSaveEndsPrompt;
+    const removed = removeConditionFromPlacementByCondition(state.placementId, entry.condition);
+    entry.successApplied = true;
+
+    if (removed) {
+      showConditionBanner(`${state.possessiveTokenName} ${entry.name} has ended.`, { tone: 'reminder' });
+    }
+  }
+
+  function removeConditionFromPlacementByCondition(placementId, targetCondition) {
+    if (!placementId) {
+      return false;
+    }
+
+    const normalized = ensurePlacementCondition(targetCondition);
+    if (!normalized) {
+      return false;
+    }
+
+    let didChange = false;
+    const updated = updatePlacementById(placementId, (target) => {
+      const conditions = ensurePlacementConditions(target?.conditions ?? target?.condition ?? null);
+      const filtered = conditions.filter((existing) => !areConditionsEqual(existing, normalized));
+      if (filtered.length !== conditions.length) {
+        didChange = true;
+        if (filtered.length) {
+          target.conditions = filtered;
+          target.condition = filtered[0];
+        } else {
+          if (target.conditions !== undefined) {
+            delete target.conditions;
+          }
+          if (target.condition !== undefined) {
+            delete target.condition;
+          }
+        }
+      }
+    });
+
+    if (updated && didChange) {
+      refreshTokenSettings();
+      if (placementId === activeTokenSettingsId) {
+        resetConditionControls();
+      }
+    }
+
+    return updated && didChange;
   }
 
   function openTurnPrompt(combatantId) {

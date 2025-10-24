@@ -1902,6 +1902,166 @@
   color: rgba(226, 232, 240, 0.95);
 }
 
+.vtt-save-ends-overlay {
+  position: fixed;
+  inset: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 1.5rem;
+  background: rgba(15, 23, 42, 0.68);
+  backdrop-filter: blur(2px);
+  z-index: 1200;
+}
+
+.vtt-save-ends-dialog {
+  width: min(360px, 92vw);
+  background: rgba(15, 23, 42, 0.95);
+  border: 1px solid rgba(148, 163, 184, 0.35);
+  border-radius: calc(var(--vtt-radius) * 1);
+  box-shadow: 0 24px 58px rgba(15, 23, 42, 0.55);
+  color: #f8fafc;
+  display: flex;
+  flex-direction: column;
+  gap: 1rem;
+  padding: 1.25rem 1.5rem 1.35rem;
+}
+
+.vtt-save-ends-dialog__header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 1rem;
+}
+
+.vtt-save-ends-dialog__title {
+  margin: 0;
+  font-size: 1.15rem;
+  font-weight: 700;
+  letter-spacing: 0.01em;
+}
+
+.vtt-save-ends-dialog__close {
+  border: none;
+  background: none;
+  color: rgba(248, 250, 252, 0.7);
+  font-size: 1.6rem;
+  line-height: 1;
+  cursor: pointer;
+  padding: 0.1rem;
+  transition: color var(--vtt-transition, 0.2s ease);
+}
+
+.vtt-save-ends-dialog__close:hover,
+.vtt-save-ends-dialog__close:focus {
+  color: rgba(248, 113, 113, 0.9);
+  outline: none;
+}
+
+.vtt-save-ends-dialog__body {
+  display: flex;
+  flex-direction: column;
+  gap: 0.75rem;
+  font-size: 0.95rem;
+  color: rgba(226, 232, 240, 0.95);
+}
+
+.vtt-save-ends-dialog__tracker {
+  font-size: 0.72rem;
+  letter-spacing: 0.12em;
+  text-transform: uppercase;
+  color: rgba(191, 219, 254, 0.75);
+}
+
+.vtt-save-ends-dialog__description {
+  margin: 0;
+  line-height: 1.45;
+}
+
+.vtt-save-ends-dialog__bonus {
+  display: inline-flex;
+  align-items: baseline;
+  gap: 0.5rem;
+  font-size: 0.9rem;
+  color: rgba(148, 163, 184, 0.95);
+}
+
+.vtt-save-ends-dialog__bonus-label {
+  font-size: 0.7rem;
+  letter-spacing: 0.15em;
+  text-transform: uppercase;
+  color: rgba(148, 163, 184, 0.8);
+}
+
+.vtt-save-ends-dialog__bonus-value {
+  font-weight: 700;
+  font-size: 1rem;
+  color: rgba(248, 250, 252, 0.95);
+}
+
+.vtt-save-ends-dialog__result {
+  display: flex;
+  flex-direction: column;
+  gap: 0.4rem;
+  padding: 0.85rem 0.95rem;
+  border-radius: calc(var(--vtt-radius) * 0.85);
+  background: rgba(30, 41, 59, 0.88);
+  border: 1px solid rgba(148, 163, 184, 0.3);
+  min-height: 96px;
+}
+
+.vtt-save-ends-dialog__result.is-success {
+  border-color: rgba(74, 222, 128, 0.65);
+  box-shadow: 0 0 0 1px rgba(74, 222, 128, 0.25);
+}
+
+.vtt-save-ends-dialog__result.is-failure {
+  border-color: rgba(248, 113, 113, 0.5);
+  box-shadow: 0 0 0 1px rgba(248, 113, 113, 0.18);
+}
+
+.vtt-save-ends-dialog__result-summary {
+  font-weight: 600;
+  color: rgba(226, 232, 240, 0.98);
+}
+
+.vtt-save-ends-dialog__result-outcome {
+  font-size: 0.95rem;
+  color: rgba(226, 232, 240, 0.9);
+}
+
+.vtt-save-ends-dialog__result-instructions {
+  font-size: 0.78rem;
+  color: rgba(148, 163, 184, 0.9);
+}
+
+.vtt-save-ends-dialog__actions {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) minmax(64px, auto);
+  gap: 0.75rem;
+  align-items: center;
+}
+
+.vtt-save-ends-dialog__button {
+  width: 100%;
+}
+
+.vtt-save-ends-dialog__button--bonus {
+  width: auto;
+  padding-inline: 1.1rem;
+  font-weight: 600;
+}
+
+@media (max-width: 480px) {
+  .vtt-save-ends-dialog__actions {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+
+  .vtt-save-ends-dialog__button--bonus {
+    width: 100%;
+  }
+}
+
 .vtt-turn-overlay {
   position: fixed;
   top: 1rem;
