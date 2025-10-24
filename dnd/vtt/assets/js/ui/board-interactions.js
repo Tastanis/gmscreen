@@ -4706,26 +4706,8 @@ export function mountBoardInteractions(store, routes = {}) {
       ? 'Success! The condition ends.'
       : 'Failure. The condition remains.';
 
-    let instructionText = '';
-    if (success) {
-      instructionText = state.mode === 'advance' ? 'Select Next Condition to continue.' : 'Select Close to finish.';
-    } else if (state.mode === 'advance') {
-      instructionText = 'Press +1 to increase the total or select Next Condition to continue.';
-    } else if (state.mode === 'close') {
-      instructionText = 'Press +1 to increase the total or select Close to finish.';
-    } else {
-      instructionText = 'You can press +1 to increase the total.';
-    }
-
     element.appendChild(summary);
     element.appendChild(outcome);
-
-    if (instructionText) {
-      const instruction = document.createElement('div');
-      instruction.className = 'vtt-save-ends-dialog__result-instructions';
-      instruction.textContent = instructionText;
-      element.appendChild(instruction);
-    }
 
     element.classList.toggle('is-success', success);
     element.classList.toggle('is-failure', !success);
