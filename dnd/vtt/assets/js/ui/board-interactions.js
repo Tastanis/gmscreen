@@ -1042,24 +1042,17 @@ export function mountBoardInteractions(store, routes = {}) {
     return typeof activeSceneId === 'string' && activeSceneId ? activeSceneId : null;
   }
 
-  function syncCutoutToggleButtons() {
-    if (!sceneListContainer) {
-      return;
+  function getActiveOverlayLayerId(rawOverlay) {
+    if (!rawOverlay || typeof rawOverlay !== 'object') {
+      return null;
     }
 
-    const activeSceneId = getActiveSceneId();
-    const buttons = sceneListContainer.querySelectorAll('[data-action="toggle-overlay-editor"]');
-    buttons.forEach((button) => {
-      const sceneId = button.getAttribute('data-scene-id');
-      const pressed =
-        overlayEditorActive && activeSceneId && sceneId === activeSceneId ? 'true' : 'false';
-      button.setAttribute('aria-pressed', pressed);
-    });
-
-    syncOverlayVisibilityButtons();
+    const overlay = normalizeOverlayState(rawOverlay);
+    const activeLayerId = overlay?.activeLayerId ?? null;
+    return typeof activeLayerId === 'string' && activeLayerId ? activeLayerId : null;
   }
 
-  function syncOverlayVisibilityButtons() {
+  function syncCutoutToggleButtons() {
     if (!sceneListContainer) {
       return;
     }
@@ -1070,94 +1063,47 @@ export function mountBoardInteractions(store, routes = {}) {
       ? boardState.sceneState
       : {};
     const activeSceneId = typeof boardState.activeSceneId === 'string' ? boardState.activeSceneId : null;
-
-    const buttons = sceneListContainer.querySelectorAll('[data-action="toggle-overlay-visibility"]');
+    const buttons = sceneListContainer.querySelectorAll('[data-action="edit-overlay-layer"]');
+    const activeLayerId = getActiveOverlayLayerId(boardState.overlay ?? null);
     buttons.forEach((button) => {
       const sceneId = button.getAttribute('data-scene-id');
+      const overlayId = button.getAttribute('data-overlay-id');
+      const isActiveScene = activeSceneId && sceneId && sceneId === activeSceneId;
+      const pressed =
+        overlayEditorActive && isActiveScene && overlayId && overlayId === activeLayerId
+          ? 'true'
+          : 'false';
+      button.setAttribute('aria-pressed', pressed);
+    });
+
+    syncOverlayVisibilityButtons(sceneState, activeSceneId);
+  }
+
+  function syncOverlayVisibilityButtons(sceneState = {}, activeSceneId = null) {
+    if (!sceneListContainer) {
+      return;
+    }
+
+    const buttons = sceneListContainer.querySelectorAll('[data-action="toggle-overlay-layer-visibility"]');
+    buttons.forEach((button) => {
+      const sceneId = button.getAttribute('data-scene-id');
+      const overlayId = button.getAttribute('data-overlay-id');
       const sceneEntry = sceneId && sceneState[sceneId] && typeof sceneState[sceneId] === 'object'
         ? sceneState[sceneId]
         : {};
       const overlayEntry = normalizeOverlayDraft(sceneEntry.overlay ?? {});
-      const mask = normalizeOverlayMask(overlayEntry.mask ?? {});
-      const maskVisible = mask.visible !== false;
-      const hasMaskContent = Array.isArray(mask.polygons) ? mask.polygons.length > 0 : false;
-      const hasOverlay = Boolean(overlayEntry.mapUrl) || Boolean(mask.url) || hasMaskContent;
-      const isActiveScene = Boolean(activeSceneId && sceneId && sceneId === activeSceneId);
-      const label = maskVisible ? 'Hide Overlay' : 'Show Overlay';
-      if (button.textContent !== label) {
-        button.textContent = label;
-      }
-      button.setAttribute('aria-pressed', maskVisible ? 'true' : 'false');
-      button.dataset.overlayVisible = maskVisible ? 'true' : 'false';
+      const layer = overlayEntry.layers.find((entry) => entry.id === overlayId);
+      const layerVisible = layer ? layer.visible !== false && normalizeOverlayMask(layer.mask).visible !== false : false;
+      button.setAttribute('aria-pressed', layerVisible ? 'true' : 'false');
+      button.dataset.overlayVisible = layerVisible ? 'true' : 'false';
 
-      const shouldDisable = !isActiveScene || !hasOverlay;
-      if (shouldDisable) {
+      const isActiveScene = Boolean(activeSceneId && sceneId && sceneId === activeSceneId);
+      if (!isActiveScene) {
         button.setAttribute('disabled', 'disabled');
       } else {
         button.removeAttribute('disabled');
       }
-
-      let title = '';
-      if (!hasOverlay) {
-        title = 'Add an overlay before toggling its visibility.';
-      } else if (!isActiveScene) {
-        title = 'Activate this scene to change the overlay visibility.';
-      } else if (!isGmUser()) {
-        title = 'Only the GM can toggle overlay visibility.';
-      }
-
-      if (title) {
-        button.setAttribute('title', title);
-      } else {
-        button.removeAttribute('title');
-      }
     });
-  }
-
-  function handleOverlayVisibilityToggle(button) {
-    if (!button || button.disabled) {
-      return;
-    }
-
-    if (!isGmUser()) {
-      return;
-    }
-
-    const sceneId = button.getAttribute('data-scene-id');
-    const activeSceneId = getActiveSceneId();
-    if (!sceneId || !activeSceneId || sceneId !== activeSceneId) {
-      return;
-    }
-
-    let overlayUpdated = false;
-    boardApi.updateState?.((draft) => {
-      const boardDraft = ensureBoardStateDraft(draft);
-      const sceneEntry = ensureSceneStateDraftEntry(draft, sceneId);
-      const overlayEntry = normalizeOverlayDraft(sceneEntry.overlay ?? {});
-      const mask = normalizeOverlayMask(overlayEntry.mask ?? {});
-      const hasMaskContent = Array.isArray(mask.polygons) ? mask.polygons.length > 0 : false;
-      const hasOverlay = Boolean(overlayEntry.mapUrl) || Boolean(mask.url) || hasMaskContent;
-      if (!hasOverlay) {
-        return;
-      }
-
-      mask.visible = !mask.visible;
-      overlayEntry.mask = mask;
-      sceneEntry.overlay = overlayEntry;
-      boardDraft.overlay = { ...overlayEntry };
-      overlayUpdated = true;
-    });
-
-    if (!overlayUpdated) {
-      return;
-    }
-
-    const latestState = boardApi.getState?.() ?? {};
-    const overlayState = resolveSceneOverlayState(latestState.boardState ?? {}, activeSceneId);
-    syncOverlayLayer(overlayState);
-    overlayTool.notifyOverlayMaskChange(overlayState ?? null);
-    syncOverlayVisibilityButtons();
-    persistBoardStateSnapshot();
   }
 
   function isInputElement(node) {
@@ -1284,14 +1230,25 @@ export function mountBoardInteractions(store, routes = {}) {
 
   if (sceneListContainer) {
     sceneListContainer.addEventListener('click', (event) => {
-      const visibilityButton = event.target.closest('[data-action="toggle-overlay-visibility"]');
-      if (visibilityButton) {
-        if (visibilityButton.disabled) {
+      const editButton = event.target.closest('[data-action="edit-overlay-layer"]');
+      if (editButton) {
+        if (editButton.disabled) {
           return;
         }
 
         event.preventDefault();
-        handleOverlayVisibilityToggle(visibilityButton);
+        if (!isGmUser()) {
+          return;
+        }
+
+        const sceneId = editButton.getAttribute('data-scene-id');
+        const overlayId = editButton.getAttribute('data-overlay-id');
+        const activeSceneId = getActiveSceneId();
+        if (!sceneId || !overlayId || !activeSceneId || sceneId !== activeSceneId) {
+          return;
+        }
+
+        overlayTool.editLayer(overlayId);
         return;
       }
 
@@ -3310,18 +3267,243 @@ export function mountBoardInteractions(store, routes = {}) {
     mapOverlay.style.removeProperty('-webkit-clip-path');
   }
 
+  const OVERLAY_LAYER_PREFIX = 'overlay-layer-';
+  let overlayLayerSeed = Date.now();
+  let overlayLayerSequence = 0;
+
   function normalizeOverlayState(raw = null) {
     if (!raw || typeof raw !== 'object') {
-      return { mapUrl: null, mask: createEmptyOverlayMask() };
+      return createEmptyOverlayState();
     }
 
+    const overlay = createEmptyOverlayState();
     const mapUrl = typeof raw.mapUrl === 'string' ? raw.mapUrl.trim() : '';
-    const mask = normalizeOverlayMask(raw.mask ?? null);
+    if (mapUrl) {
+      overlay.mapUrl = mapUrl;
+    }
+
+    const layerSource = Array.isArray(raw.layers)
+      ? raw.layers
+      : Array.isArray(raw.items)
+      ? raw.items
+      : [];
+
+    overlay.layers = layerSource
+      .map((entry, index) => normalizeOverlayLayer(entry, index))
+      .filter(Boolean);
+
+    const legacyMask = normalizeOverlayMask(raw.mask ?? null);
+    if (!overlay.layers.length && maskHasMeaningfulOverlayContent(legacyMask)) {
+      const legacyLayer = normalizeOverlayLayer(
+        {
+          id: typeof raw.id === 'string' ? raw.id : undefined,
+          name: typeof raw.name === 'string' ? raw.name : undefined,
+          visible: raw.visible,
+          mask: legacyMask,
+        },
+        0
+      );
+      if (legacyLayer) {
+        overlay.layers.push(legacyLayer);
+      }
+    }
+
+    overlay.activeLayerId = resolveOverlayActiveLayerId(
+      raw.activeLayerId ?? raw.activeLayer ?? raw.selectedLayerId,
+      overlay.layers
+    );
+    rebuildOverlayAggregate(overlay);
+    return overlay;
+  }
+
+  function createEmptyOverlayState() {
+    return { mapUrl: null, mask: createEmptyOverlayMask(), layers: [], activeLayerId: null };
+  }
+
+  function createOverlayLayer(name = '', existingLayers = []) {
+    const trimmed = typeof name === 'string' ? name.trim() : '';
+    const safeLayers = Array.isArray(existingLayers) ? existingLayers : [];
+    const resolvedName = ensureUniqueOverlayName(trimmed || 'Overlay', safeLayers);
+    return {
+      id: createOverlayLayerId(),
+      name: resolvedName,
+      visible: true,
+      mask: createEmptyOverlayMask(),
+    };
+  }
+
+  function ensureUniqueOverlayName(baseName, existingLayers = []) {
+    const fallback = typeof baseName === 'string' && baseName.trim() ? baseName.trim() : 'Overlay';
+    const normalizedExisting = new Set();
+    const usedNumbers = new Set();
+
+    existingLayers.forEach((layer) => {
+      if (!layer || typeof layer !== 'object') {
+        return;
+      }
+
+      const candidate = typeof layer.name === 'string' ? layer.name.trim() : '';
+      if (!candidate) {
+        return;
+      }
+
+      normalizedExisting.add(candidate.toLowerCase());
+
+      const prefixMatch = fallbackPrefixMatch(candidate, fallback);
+      if (prefixMatch !== null) {
+        usedNumbers.add(prefixMatch);
+      }
+    });
+
+    if (!normalizedExisting.has(fallback.toLowerCase())) {
+      return fallback;
+    }
+
+    const prefix = deriveNamePrefix(fallback);
+    const prefixPattern = new RegExp(`^${escapeRegExp(prefix)}\s+(\d+)$`, 'i');
+
+    existingLayers.forEach((layer) => {
+      if (!layer || typeof layer !== 'object') {
+        return;
+      }
+
+      const candidate = typeof layer.name === 'string' ? layer.name.trim() : '';
+      if (!candidate) {
+        return;
+      }
+
+      const match = candidate.match(prefixPattern);
+      if (match) {
+        const value = Number.parseInt(match[1], 10);
+        if (Number.isFinite(value)) {
+          usedNumbers.add(value);
+        }
+      }
+    });
+
+    let counter = 1;
+    const fallbackMatch = fallback.match(prefixPattern);
+    if (fallbackMatch) {
+      const preferred = Number.parseInt(fallbackMatch[1], 10);
+      if (Number.isFinite(preferred) && preferred > 0) {
+        counter = preferred;
+      }
+    }
+
+    while (
+      usedNumbers.has(counter) || normalizedExisting.has(`${prefix} ${counter}`.toLowerCase())
+    ) {
+      counter += 1;
+    }
+
+    return `${prefix} ${counter}`;
+  }
+
+  function deriveNamePrefix(name) {
+    const match = name.match(/^(.*?)(?:\s+\d+)?$/);
+    if (match) {
+      const prefix = match[1].trim();
+      if (prefix) {
+        return prefix;
+      }
+    }
+    return 'Overlay';
+  }
+
+  function fallbackPrefixMatch(candidate, fallback) {
+    const prefix = deriveNamePrefix(fallback);
+    const pattern = new RegExp(`^${escapeRegExp(prefix)}\s+(\d+)$`, 'i');
+    const match = candidate.match(pattern);
+    if (!match) {
+      return null;
+    }
+
+    const value = Number.parseInt(match[1], 10);
+    return Number.isFinite(value) && value > 0 ? value : null;
+  }
+
+  function createOverlayLayerId() {
+    overlayLayerSequence += 1;
+    return `${OVERLAY_LAYER_PREFIX}${overlayLayerSeed.toString(36)}-${overlayLayerSequence.toString(36)}`;
+  }
+
+  function normalizeOverlayLayer(raw = {}, index = 0) {
+    if (!raw || typeof raw !== 'object') {
+      return null;
+    }
+
+    const mask = normalizeOverlayMask(raw.mask ?? raw);
+    const idSource = typeof raw.id === 'string' ? raw.id.trim() : '';
+    const nameSource = typeof raw.name === 'string' ? raw.name.trim() : '';
+    const visible = raw.visible === undefined ? true : Boolean(raw.visible);
+    const id = idSource || createOverlayLayerId();
+    const name = nameSource || `Overlay ${index + 1}`;
 
     return {
-      mapUrl: mapUrl ? mapUrl : null,
+      id,
+      name,
+      visible,
       mask,
     };
+  }
+
+  function rebuildOverlayAggregate(overlay) {
+    if (!overlay || typeof overlay !== 'object') {
+      return createEmptyOverlayState();
+    }
+
+    overlay.mask = buildAggregateMask(Array.isArray(overlay.layers) ? overlay.layers : []);
+    overlay.activeLayerId = resolveOverlayActiveLayerId(overlay.activeLayerId, overlay.layers);
+    return overlay;
+  }
+
+  function buildAggregateMask(layers = []) {
+    const aggregate = createEmptyOverlayMask();
+    let hasVisibleLayer = false;
+
+    layers.forEach((layer) => {
+      if (!layer || typeof layer !== 'object' || layer.visible === false) {
+        return;
+      }
+
+      const mask = normalizeOverlayMask(layer.mask ?? {});
+      if (mask.visible === false) {
+        return;
+      }
+
+      hasVisibleLayer = true;
+      if (!aggregate.url && mask.url) {
+        aggregate.url = mask.url;
+      }
+
+      if (Array.isArray(mask.polygons)) {
+        mask.polygons.forEach((polygon) => {
+          const points = Array.isArray(polygon?.points) ? polygon.points : [];
+          if (points.length >= 3) {
+            aggregate.polygons.push({ points: points.map((point) => ({ ...point })) });
+          }
+        });
+      }
+    });
+
+    aggregate.visible = hasVisibleLayer;
+    return aggregate;
+  }
+
+  function resolveOverlayActiveLayerId(preferredId, layers = []) {
+    if (typeof preferredId === 'string') {
+      const trimmed = preferredId.trim();
+      if (trimmed && layers.some((layer) => layer.id === trimmed)) {
+        return trimmed;
+      }
+    }
+
+    if (!layers.length) {
+      return null;
+    }
+
+    const visibleLayer = layers.find((layer) => layer.visible !== false);
+    return visibleLayer ? visibleLayer.id : layers[0].id;
   }
 
   function createEmptyOverlayMask() {
@@ -3359,6 +3541,18 @@ export function mountBoardInteractions(store, routes = {}) {
     });
 
     return normalized;
+  }
+
+  function maskHasMeaningfulOverlayContent(mask = {}) {
+    if (!mask || typeof mask !== 'object') {
+      return false;
+    }
+
+    if (typeof mask.url === 'string' && mask.url.trim()) {
+      return true;
+    }
+
+    return Array.isArray(mask.polygons) ? mask.polygons.length > 0 : false;
   }
 
   function normalizeOverlayMaskVisibility(value) {
@@ -9527,16 +9721,47 @@ export function mountBoardInteractions(store, routes = {}) {
 
   function normalizeOverlayDraft(raw = {}) {
     if (!raw || typeof raw !== 'object') {
-      return { mapUrl: null, mask: createEmptyOverlayMask() };
+      return createEmptyOverlayState();
     }
 
+    const overlay = createEmptyOverlayState();
     const mapUrl = typeof raw.mapUrl === 'string' ? raw.mapUrl.trim() : '';
-    const mask = normalizeOverlayMask(raw.mask ?? null);
+    if (mapUrl) {
+      overlay.mapUrl = mapUrl;
+    }
 
-    return {
-      mapUrl: mapUrl ? mapUrl : null,
-      mask,
-    };
+    const layerSource = Array.isArray(raw.layers)
+      ? raw.layers
+      : Array.isArray(raw.items)
+      ? raw.items
+      : [];
+
+    overlay.layers = layerSource
+      .map((entry, index) => normalizeOverlayLayer(entry, index))
+      .filter(Boolean);
+
+    const legacyMask = normalizeOverlayMask(raw.mask ?? null);
+    if (!overlay.layers.length && maskHasMeaningfulOverlayContent(legacyMask)) {
+      const legacyLayer = normalizeOverlayLayer(
+        {
+          id: typeof raw.id === 'string' ? raw.id : undefined,
+          name: typeof raw.name === 'string' ? raw.name : undefined,
+          visible: raw.visible,
+          mask: legacyMask,
+        },
+        0
+      );
+      if (legacyLayer) {
+        overlay.layers.push(legacyLayer);
+      }
+    }
+
+    overlay.activeLayerId = resolveOverlayActiveLayerId(
+      raw.activeLayerId ?? raw.activeLayer ?? raw.selectedLayerId,
+      overlay.layers
+    );
+    rebuildOverlayAggregate(overlay);
+    return overlay;
   }
 
   function ensureScenePlacementDraft(draft, sceneId) {
@@ -9567,7 +9792,7 @@ export function mountBoardInteractions(store, routes = {}) {
         placements: {},
         sceneState: {},
         templates: {},
-        overlay: { mapUrl: null, mask: createEmptyOverlayMask() },
+        overlay: createEmptyOverlayState(),
       };
     }
 
@@ -9584,7 +9809,7 @@ export function mountBoardInteractions(store, routes = {}) {
     }
 
     if (!draft.boardState.overlay || typeof draft.boardState.overlay !== 'object') {
-      draft.boardState.overlay = { mapUrl: null, mask: createEmptyOverlayMask() };
+      draft.boardState.overlay = createEmptyOverlayState();
     } else {
       draft.boardState.overlay = normalizeOverlayDraft(draft.boardState.overlay);
     }
@@ -9699,10 +9924,73 @@ function createOverlayTool(uploadsEndpoint) {
   let toolbarDragState = null;
   let toolbarMeasurementFrame = null;
   let toolbarDimensions = { width: 0, height: 0 };
+  let persistedOverlay = createEmptyOverlayState();
   let persistedMask = createEmptyOverlayMask();
   let persistedSignature = overlayMaskSignature(persistedMask);
   let persistedMapUrl = null;
   let overlayHiddenSnapshot = null;
+
+  function getPersistedActiveLayer() {
+    const layers = Array.isArray(persistedOverlay.layers) ? persistedOverlay.layers : [];
+    if (!layers.length) {
+      const created = createOverlayLayer(`Overlay ${layers.length + 1}`, layers);
+      persistedOverlay.layers = [created];
+      persistedOverlay.activeLayerId = created.id;
+      return created;
+    }
+
+    const activeId = persistedOverlay.activeLayerId;
+    let layer = layers.find((entry) => entry.id === activeId);
+    if (!layer) {
+      layer = layers[0];
+      persistedOverlay.activeLayerId = layer.id;
+    }
+    return layer;
+  }
+
+  function ensurePersistedActiveLayer() {
+    const layer = getPersistedActiveLayer();
+    if (!persistedOverlay.layers.includes(layer)) {
+      persistedOverlay.layers.push(layer);
+    }
+    return layer;
+  }
+
+  function buildAggregateMaskFromPersisted(activeMaskOverride = null) {
+    const layers = Array.isArray(persistedOverlay.layers) ? persistedOverlay.layers : [];
+    const activeId = persistedOverlay.activeLayerId;
+    const aggregate = createEmptyOverlayMask();
+    let hasVisibleLayer = false;
+
+    layers.forEach((layer) => {
+      if (!layer || typeof layer !== 'object' || layer.visible === false) {
+        return;
+      }
+
+      const baseMask = layer.id === activeId && activeMaskOverride ? activeMaskOverride : layer.mask;
+      const mask = normalizeOverlayMask(baseMask ?? {});
+      if (mask.visible === false) {
+        return;
+      }
+
+      hasVisibleLayer = true;
+      if (!aggregate.url && mask.url) {
+        aggregate.url = mask.url;
+      }
+
+      if (Array.isArray(mask.polygons)) {
+        mask.polygons.forEach((polygon) => {
+          const points = Array.isArray(polygon?.points) ? polygon.points : [];
+          if (points.length >= 3) {
+            aggregate.polygons.push({ points: points.map((point) => ({ ...point })) });
+          }
+        });
+      }
+    });
+
+    aggregate.visible = hasVisibleLayer;
+    return aggregate;
+  }
 
   function cloneOverlayPolygon(polygon) {
     if (!polygon || typeof polygon !== 'object') {
@@ -9974,11 +10262,31 @@ function createOverlayTool(uploadsEndpoint) {
     }
   }
 
+  function editLayer(layerId) {
+    if (typeof layerId === 'string' && layerId.trim()) {
+      persistedOverlay.activeLayerId = layerId.trim();
+      const activeLayer = getPersistedActiveLayer();
+      persistedMask = normalizeOverlayMask(activeLayer?.mask ?? {});
+      persistedSignature = overlayMaskSignature(persistedMask);
+      setNodesFromMask(persistedMask);
+      renderHandles();
+      applyPreviewMask();
+      updateControls();
+    }
+
+    if (!isActive) {
+      activate();
+    }
+
+    syncCutoutToggleButtons();
+  }
+
   function activate() {
     if (!isGmUser()) {
       return;
     }
 
+    ensurePersistedActiveLayer();
     overlayHiddenSnapshot = mapOverlay.hasAttribute('hidden');
     mapOverlay.removeAttribute('hidden');
     mapOverlay.hidden = false;
@@ -10006,7 +10314,7 @@ function createOverlayTool(uploadsEndpoint) {
     dragState = null;
     setButtonState(false);
     setStatus('');
-    applyOverlayMask(persistedMask);
+    applyOverlayMask(buildAggregateMaskFromPersisted());
     updateControls();
     if (!hasOverlayMap() && overlayHiddenSnapshot) {
       mapOverlay.hidden = true;
@@ -10021,11 +10329,12 @@ function createOverlayTool(uploadsEndpoint) {
     additionalPolygons = [];
     persistedPrimaryPolygon = null;
     dragState = null;
+    persistedOverlay = createEmptyOverlayState();
     persistedMask = createEmptyOverlayMask();
     persistedSignature = overlayMaskSignature(persistedMask);
     persistedMapUrl = null;
     handlesLayer.innerHTML = '';
-    applyOverlayMask(persistedMask);
+    applyOverlayMask(buildAggregateMaskFromPersisted());
     ensureToolbarPosition();
   }
 
@@ -10056,12 +10365,13 @@ function createOverlayTool(uploadsEndpoint) {
   }
 
   function notifyOverlayMaskChange(overlayEntry) {
-    const entry = overlayEntry && typeof overlayEntry === 'object' ? overlayEntry : {};
-    const normalizedMask = normalizeOverlayMask(entry.mask ?? entry ?? null);
-    const signature = overlayMaskSignature(normalizedMask);
-    const mapUrl = typeof entry.mapUrl === 'string' ? entry.mapUrl.trim() : '';
+    const normalized = normalizeOverlayDraft(overlayEntry ?? {});
+    persistedOverlay = normalized;
+    persistedMapUrl = normalized.mapUrl ?? null;
 
-    persistedMapUrl = mapUrl || null;
+    const activeLayer = getPersistedActiveLayer();
+    const normalizedMask = normalizeOverlayMask(activeLayer?.mask ?? {});
+    const signature = overlayMaskSignature(normalizedMask);
 
     if (signature === persistedSignature) {
       if (!isActive && nodes.length === 0 && additionalPolygons.length === 0) {
@@ -10070,7 +10380,7 @@ function createOverlayTool(uploadsEndpoint) {
       }
       applyPreviewMask();
       updateControls();
-      syncOverlayVisibilityButtons();
+      syncCutoutToggleButtons();
       return;
     }
 
@@ -10083,7 +10393,7 @@ function createOverlayTool(uploadsEndpoint) {
     }
     applyPreviewMask();
     updateControls();
-    syncOverlayVisibilityButtons();
+    syncCutoutToggleButtons();
   }
 
   function setNodesFromMask(mask) {
@@ -10461,9 +10771,10 @@ function createOverlayTool(uploadsEndpoint) {
 
     if (isActive && ((isClosed && nodes.length >= 3) || additionalPolygons.length > 0)) {
       const preview = buildPreviewMask();
-      applyOverlayMask(preview, maskOptions);
+      const aggregate = buildAggregateMaskFromPersisted(preview);
+      applyOverlayMask(aggregate, maskOptions);
     } else {
-      applyOverlayMask(persistedMask, maskOptions);
+      applyOverlayMask(buildAggregateMaskFromPersisted(), maskOptions);
     }
   }
 
@@ -10480,10 +10791,10 @@ function createOverlayTool(uploadsEndpoint) {
     if (persistedMapUrl) {
       return true;
     }
-    if (persistedMask.url) {
-      return true;
-    }
-    return Array.isArray(persistedMask.polygons) && persistedMask.polygons.length > 0;
+    const layers = Array.isArray(persistedOverlay.layers) ? persistedOverlay.layers : [];
+    return layers.some(
+      (layer) => layer && layer.visible !== false && maskHasMeaningfulOverlayContent(layer.mask)
+    );
   }
 
   function hasOverlayMap() {
@@ -10524,18 +10835,15 @@ function createOverlayTool(uploadsEndpoint) {
           );
 
           if (uploadedUrl) {
-            const changed = updateSceneOverlay((overlayEntry) => {
+            const changed = updateSceneOverlay((overlayEntry, activeLayer) => {
               overlayEntry.mapUrl = uploadedUrl;
-              overlayEntry.mask = createEmptyOverlayMask();
+              activeLayer.mask = createEmptyOverlayMask();
             });
 
             if (changed) {
-              persistedMapUrl = uploadedUrl;
-              persistedMask = createEmptyOverlayMask();
-              persistedSignature = overlayMaskSignature(persistedMask);
               setNodesFromMask(persistedMask);
               renderHandles();
-              applyOverlayMask(persistedMask);
+              applyPreviewMask();
               updateControls();
               setStatus('Overlay cutout applied.');
               persistBoardStateSnapshot();
@@ -10548,8 +10856,8 @@ function createOverlayTool(uploadsEndpoint) {
       }
     }
 
-    const changed = updateSceneOverlay((overlayEntry) => {
-      overlayEntry.mask = normalizeOverlayMask(preview);
+    const changed = updateSceneOverlay((overlayEntry, activeLayer) => {
+      activeLayer.mask = normalizeOverlayMask(preview);
     });
 
     if (!changed) {
@@ -10557,11 +10865,9 @@ function createOverlayTool(uploadsEndpoint) {
       return;
     }
 
-    persistedMask = normalizeOverlayMask(preview);
-    persistedSignature = overlayMaskSignature(persistedMask);
     setNodesFromMask(persistedMask);
     renderHandles();
-    applyOverlayMask(persistedMask);
+    applyPreviewMask();
     updateControls();
     setStatus('Overlay mask applied.');
     persistBoardStateSnapshot();
@@ -10570,16 +10876,22 @@ function createOverlayTool(uploadsEndpoint) {
   function restorePersistedMask() {
     setNodesFromMask(persistedMask);
     renderHandles();
-    applyOverlayMask(persistedMask);
+    applyPreviewMask();
     updateControls();
     setStatus('Overlay reset to the last saved shape.');
     persistBoardStateSnapshot();
   }
 
   function clearOverlay() {
-    const changed = updateSceneOverlay((overlayEntry) => {
-      overlayEntry.mapUrl = null;
-      overlayEntry.mask = createEmptyOverlayMask();
+    const changed = updateSceneOverlay((overlayEntry, activeLayer) => {
+      overlayEntry.layers = overlayEntry.layers.filter((layer) => layer.id !== activeLayer.id);
+      if (overlayEntry.layers.length === 0) {
+        const replacement = createOverlayLayer(`Overlay 1`, overlayEntry.layers);
+        overlayEntry.layers.push(replacement);
+        overlayEntry.activeLayerId = replacement.id;
+      } else {
+        overlayEntry.activeLayerId = overlayEntry.layers[0].id;
+      }
     });
 
     if (!changed) {
@@ -10587,15 +10899,12 @@ function createOverlayTool(uploadsEndpoint) {
       return;
     }
 
-    persistedMask = createEmptyOverlayMask();
-    persistedSignature = overlayMaskSignature(persistedMask);
-    persistedMapUrl = null;
     nodes = [];
     isClosed = false;
     additionalPolygons = [];
     persistedPrimaryPolygon = null;
     handlesLayer.innerHTML = '';
-    applyOverlayMask(persistedMask);
+    applyPreviewMask();
     updateControls();
     setStatus('Overlay deleted.');
     persistBoardStateSnapshot();
@@ -10628,13 +10937,29 @@ function createOverlayTool(uploadsEndpoint) {
 
       const sceneEntry = ensureSceneStateDraftEntry(draft, activeSceneId);
       const overlayEntry = normalizeOverlayDraft(sceneEntry.overlay ?? {});
-      const result = mutator(overlayEntry, boardDraft);
+      if (!Array.isArray(overlayEntry.layers) || overlayEntry.layers.length === 0) {
+        const layer = createOverlayLayer(`Overlay ${overlayEntry.layers.length + 1}`, overlayEntry.layers);
+        overlayEntry.layers.push(layer);
+        overlayEntry.activeLayerId = layer.id;
+      }
+
+      const activeLayer = overlayEntry.layers.find((layer) => layer.id === overlayEntry.activeLayerId);
+      if (!activeLayer) {
+        return;
+      }
+
+      const result = mutator(overlayEntry, activeLayer, boardDraft);
       if (result === false) {
         return;
       }
 
+      rebuildOverlayAggregate(overlayEntry);
       sceneEntry.overlay = overlayEntry;
-      boardDraft.overlay = { ...overlayEntry };
+      boardDraft.overlay = normalizeOverlayDraft(overlayEntry);
+      persistedOverlay = normalizeOverlayDraft(overlayEntry);
+      const persistedLayer = getPersistedActiveLayer();
+      persistedMask = normalizeOverlayMask(persistedLayer.mask ?? {});
+      persistedSignature = overlayMaskSignature(persistedMask);
       persistedMapUrl = overlayEntry.mapUrl ?? null;
       updated = true;
     });
@@ -10669,6 +10994,7 @@ function createOverlayTool(uploadsEndpoint) {
 
   return {
     toggle,
+    editLayer,
     reset: resetTool,
     notifyGridChanged,
     notifyMapState,
