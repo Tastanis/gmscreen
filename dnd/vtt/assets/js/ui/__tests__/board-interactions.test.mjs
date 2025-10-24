@@ -1015,11 +1015,11 @@ test('Sharon hesitation broadcast from shared combat state shows banner for obse
               currentTeam: 'enemy',
               lastTeam: 'ally',
               roundTurnCount: 2,
-              updatedAt: 1_700_000_005_000,
+              updatedAt: 1700000005000,
               lastEffect: {
                 type: 'sharon-hesitation',
                 combatantId: 'sharon-token',
-                triggeredAt: 1_700_000_000_000,
+                triggeredAt: 1700000000000,
                 initiatorId: 'sharon',
               },
             },
@@ -1207,7 +1207,7 @@ test('board state poller ignores stale player snapshot when newer GM data exists
       activeSceneId: 'scene-1',
       placements: { 'scene-1': [{ id: 'gm-token', column: 2, row: 2 }] },
       metadata: {
-        updatedAt: 2_000,
+        updatedAt: 2000,
         signature: 'gm-2',
         authorRole: 'gm',
         authorIsGm: true,
@@ -1230,7 +1230,7 @@ test('board state poller ignores stale player snapshot when newer GM data exists
         boardState: {
           placements: { 'scene-1': [{ id: 'player-token', column: 5, row: 5 }] },
           metadata: {
-            updatedAt: 1_500,
+            updatedAt: 1500,
             signature: 'player-1',
             authorRole: 'player',
             authorIsGm: false,
@@ -1243,7 +1243,7 @@ test('board state poller ignores stale player snapshot when newer GM data exists
         boardState: {
           placements: { 'scene-1': [{ id: 'gm-token', column: 4, row: 5 }] },
           metadata: {
-            updatedAt: 3_000,
+            updatedAt: 3000,
             signature: 'gm-3',
             authorRole: 'gm',
             authorIsGm: true,

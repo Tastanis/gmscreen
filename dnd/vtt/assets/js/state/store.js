@@ -2,7 +2,7 @@ const listeners = new Set();
 
 export const PLAYER_VISIBLE_TOKEN_FOLDER = "PC's";
 const MAX_PERSISTED_PINGS = 8;
-const MAP_PING_RETENTION_MS = 10_000;
+const MAP_PING_RETENTION_MS = 10000;
 
 const state = {
   scenes: { folders: [], items: [] },
@@ -340,7 +340,7 @@ function normalizePingCoordinate(value) {
     return null;
   }
   const clamped = Math.min(1, Math.max(0, numeric));
-  const rounded = Math.round(clamped * 10_000) / 10_000;
+  const rounded = Math.round(clamped * 10000) / 10000;
   return Number.isFinite(rounded) ? rounded : null;
 }
 
