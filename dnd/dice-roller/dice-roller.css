@@ -127,7 +127,8 @@
     min-width: 4.25rem;
 }
 
-.dice-btn--power {
+.dice-btn--power,
+.dice-btn--evening {
     font-size: 1.1rem;
     padding: 1.05rem 1.35rem;
 }
