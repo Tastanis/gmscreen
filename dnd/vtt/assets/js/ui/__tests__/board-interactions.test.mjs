@@ -349,27 +349,31 @@ test('overlay editor preview applies clip path while editing', () => {
     toggleButton.dispatchEvent(new MouseEvent('click', { bubbles: true }));
 
     const overlay = document.getElementById('vtt-map-overlay');
-    assert.equal(
-      overlay.style.clipPath,
-      "path('M 12.5% 12.5% L 37.5% 12.5% L 37.5% 37.5% L 12.5% 37.5% Z')",
-    );
-    assert.equal(
-      overlay.style.webkitClipPath,
-      "path('M 12.5% 12.5% L 37.5% 12.5% L 37.5% 37.5% L 12.5% 37.5% Z')",
-    );
+    const expectedClipPath =
+      "path(evenodd, 'M 12.5% 12.5% L 37.5% 12.5% L 37.5% 37.5% L 12.5% 37.5% Z')";
+
+    assert.equal(overlay.style.clipPath, expectedClipPath);
+    assert.equal(overlay.style.webkitClipPath, expectedClipPath);
   } finally {
     dom.window.close();
   }
 });
 
-test('overlay clip path uses only provided polygons', () => {
+test('overlay clip path uses only provided polygons and keeps both visible', () => {
   const dom = createDom();
   try {
-    const polygonPoints = [
+    const firstPolygonPoints = [
       { column: 0, row: 0 },
       { column: 5, row: 0 },
       { column: 5, row: 5 },
       { column: 0, row: 5 },
+    ];
+    const secondPolygonPoints = [
+      // Reversed winding order to ensure even-odd fill retains visibility
+      { column: 5, row: 5 },
+      { column: 10, row: 5 },
+      { column: 10, row: 0 },
+      { column: 5, row: 0 },
     ];
 
     const initialState = {
@@ -421,18 +425,37 @@ test('overlay clip path uses only provided polygons', () => {
       const sceneOverlay =
         draft.boardState.sceneState['scene-1'].overlay ?? (draft.boardState.sceneState['scene-1'].overlay = {});
       sceneOverlay.mapUrl = 'http://example.com/overlay.png';
-      sceneOverlay.mask = { visible: true, polygons: [{ points: polygonPoints }] };
+      sceneOverlay.mask = {
+        visible: true,
+        polygons: [
+          { points: firstPolygonPoints },
+          { points: secondPolygonPoints },
+        ],
+      };
 
       draft.boardState.overlay.mapUrl = 'http://example.com/overlay.png';
-      draft.boardState.overlay.mask = { visible: true, polygons: [{ points: polygonPoints }] };
+      draft.boardState.overlay.mask = {
+        visible: true,
+        polygons: [
+          { points: firstPolygonPoints },
+          { points: secondPolygonPoints },
+        ],
+      };
     });
 
     const mapOverlay = dom.window.document.getElementById('vtt-map-overlay');
     const clipPath = mapOverlay.style.clipPath || mapOverlay.style.webkitClipPath;
 
-    const expectedClipPath = "path('M 0% 0% L 50% 0% L 50% 50% L 0% 50% Z')";
-    assert.equal(clipPath, expectedClipPath, 'clip path should only include the provided polygon coordinates');
-    assert.ok(!clipPath.includes('evenodd'));
+    const expectedClipPath =
+      "path(evenodd, 'M 0% 0% L 50% 0% L 50% 50% L 0% 50% Z M 50% 50% L 100% 50% L 100% 0% L 50% 0% Z')";
+    assert.equal(
+      clipPath,
+      expectedClipPath,
+      'clip path should include the provided polygons with even-odd fill rule',
+    );
+
+    const segments = clipPath.match(/M /g) ?? [];
+    assert.equal(segments.length, 2, 'clip path should contain both polygon segments');
   } finally {
     dom.window.close();
   }
@@ -1313,10 +1336,10 @@ test('polygon overlay clip path omits implicit bounding box', () => {
 
     const mapOverlay = document.getElementById('vtt-map-overlay');
     const clipPath = mapOverlay.style.clipPath || mapOverlay.style.webkitClipPath;
-    const expectedClipPath = "path('M 20% 30% L 40% 30% L 40% 60% L 20% 60% Z')";
+    const expectedClipPath =
+      "path(evenodd, 'M 20% 30% L 40% 30% L 40% 60% L 20% 60% Z')";
 
     assert.equal(clipPath, expectedClipPath);
-    assert.ok(!clipPath.includes('evenodd'));
   } finally {
     dom.window.close();
   }
