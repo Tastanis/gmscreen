@@ -48,8 +48,31 @@ class DashboardDiceRoller {
         this.handlePointerMove = (event) => this.onPointerMove(event);
         this.handlePointerUp = () => this.onPointerUp();
         this.handleKeyDown = (event) => {
+            if (!this.overlay || this.overlay.classList.contains('hidden')) {
+                return;
+            }
+
             if (event.key === 'Escape') {
                 this.close();
+                return;
+            }
+
+            if (event.key === 'Enter') {
+                const target = event.target;
+                const tagName = target && target.tagName ? target.tagName.toLowerCase() : '';
+                const isButtonLike = tagName === 'button' || (tagName === 'a' && target.hasAttribute('href'));
+
+                if (isButtonLike) {
+                    return;
+                }
+
+                if (this.projectState.mode === 'ready') {
+                    this.completeProjectRoll();
+                } else if (this.projectState.mode !== 'selecting') {
+                    this.calculateRoll();
+                }
+
+                event.preventDefault();
             }
         };
         this.handleResize = () => this.keepModalInBounds();
@@ -295,7 +318,20 @@ class DashboardDiceRoller {
 
         const projectPowerRow = document.createElement('div');
         projectPowerRow.className = 'dice-row dice-row--quick dice-row--quick-primary';
-        projectPowerRow.appendChild(this.createQuickButton('Power Roll', '2d10', 'dice-btn--accent dice-btn--power'));
+
+        const powerBtn = document.createElement('button');
+        powerBtn.type = 'button';
+        powerBtn.className = 'dice-btn dice-btn--accent dice-btn--power';
+        powerBtn.textContent = 'Power Roll';
+        powerBtn.addEventListener('click', () => this.addProjectBaseRoll('2d10'));
+        projectPowerRow.appendChild(powerBtn);
+
+        const eveningBtn = document.createElement('button');
+        eveningBtn.type = 'button';
+        eveningBtn.className = 'dice-btn dice-btn--accent dice-btn--evening';
+        eveningBtn.textContent = 'Evening Project Roll';
+        eveningBtn.addEventListener('click', () => this.addProjectBaseRoll('1d10'));
+        projectPowerRow.appendChild(eveningBtn);
         container.appendChild(projectPowerRow);
 
         const projectModifierRow = document.createElement('div');
@@ -455,16 +491,7 @@ class DashboardDiceRoller {
             document.removeEventListener('click', this.handleProjectSelection, true);
             this.projectState.selectedIndex = null;
             this.projectState.selectedName = '';
-            this.projectState.manualActive = false;
-            if (this.projectManualInput) {
-                this.projectManualInput.value = '';
-                this.projectManualInput.disabled = true;
-            }
-            if (this.projectManualButton) {
-                this.projectManualButton.setAttribute('aria-pressed', 'false');
-                this.projectManualButton.classList.remove('dice-project-manual-btn--active');
-                this.projectManualButton.textContent = 'Manual Result';
-            }
+            this.disableProjectManualEntry();
             this.updateProjectStatusMessage('');
         }
     }
@@ -488,18 +515,9 @@ class DashboardDiceRoller {
 
     restartProjectSelection() {
         this.clearQueue();
-        if (this.projectManualInput) {
-            this.projectManualInput.value = '';
-            this.projectManualInput.disabled = true;
-        }
         this.projectState.selectedIndex = null;
         this.projectState.selectedName = '';
-        this.projectState.manualActive = false;
-        if (this.projectManualButton) {
-            this.projectManualButton.setAttribute('aria-pressed', 'false');
-            this.projectManualButton.classList.remove('dice-project-manual-btn--active');
-            this.projectManualButton.textContent = 'Manual Result';
-        }
+        this.disableProjectManualEntry();
         this.updateProjectStatusMessage('Pick a project to continue.');
         this.setProjectMode('selecting');
         document.addEventListener('click', this.handleProjectSelection, true);
@@ -593,10 +611,49 @@ class DashboardDiceRoller {
         }
     }
 
+    disableProjectManualEntry() {
+        if (!this.projectState.manualActive) {
+            return;
+        }
+
+        this.projectState.manualActive = false;
+
+        if (this.projectManualButton) {
+            this.projectManualButton.setAttribute('aria-pressed', 'false');
+            this.projectManualButton.classList.remove('dice-project-manual-btn--active');
+            this.projectManualButton.textContent = 'Manual Result';
+        }
+
+        if (this.projectManualInput) {
+            this.projectManualInput.value = '';
+            this.projectManualInput.disabled = true;
+        }
+    }
+
     updateProjectStatusMessage(message = '') {
         if (this.projectStatusMessage) {
             this.projectStatusMessage.textContent = message || '';
         }
+    }
+
+    addProjectBaseRoll(diceNotation) {
+        if (this.projectState.mode === 'selecting') {
+            return;
+        }
+
+        this.disableProjectManualEntry();
+
+        const modifiers = this.currentRollQueue.filter((item) => {
+            if (typeof item !== 'string') {
+                return false;
+            }
+
+            const trimmed = item.trim();
+            return /^[+-]\d+$/.test(trimmed);
+        });
+
+        this.currentRollQueue = [diceNotation, ...modifiers];
+        this.updateQueueDisplay();
     }
 
     completeProjectRoll() {
@@ -682,18 +739,7 @@ class DashboardDiceRoller {
             return;
         }
 
-        if (this.projectState.manualActive) {
-            this.projectState.manualActive = false;
-            if (this.projectManualButton) {
-                this.projectManualButton.setAttribute('aria-pressed', 'false');
-                this.projectManualButton.classList.remove('dice-project-manual-btn--active');
-                this.projectManualButton.textContent = 'Manual Result';
-            }
-            if (this.projectManualInput) {
-                this.projectManualInput.value = '';
-                this.projectManualInput.disabled = true;
-            }
-        }
+        this.disableProjectManualEntry();
 
         this.currentRollQueue.push(item);
         this.updateQueueDisplay();
