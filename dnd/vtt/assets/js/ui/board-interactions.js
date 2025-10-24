@@ -3276,7 +3276,7 @@ export function mountBoardInteractions(store, routes = {}) {
       return '';
     }
 
-    return `path('${commands.join(' ')}', 'evenodd')`;
+    return `path(evenodd, '${commands.join(' ')}')`;
   }
 
   function resolveGridBounds(view = viewState) {
