@@ -2,6 +2,7 @@ const listeners = new Set();
 
 export const PLAYER_VISIBLE_TOKEN_FOLDER = "PC's";
 const MAX_PERSISTED_PINGS = 8;
+const MAP_PING_RETENTION_MS = 10_000;
 
 const state = {
   scenes: { folders: [], items: [] },
@@ -259,9 +260,13 @@ function normalizePings(raw = []) {
   }
 
   const byId = new Map();
+  const retentionThreshold = Date.now() - MAP_PING_RETENTION_MS;
   raw.forEach((entry) => {
     const ping = normalizePingEntry(entry);
     if (!ping) {
+      return;
+    }
+    if (ping.createdAt < retentionThreshold) {
       return;
     }
     const previous = byId.get(ping.id);

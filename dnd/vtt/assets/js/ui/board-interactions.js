@@ -2677,15 +2677,35 @@ export function mountBoardInteractions(store, routes = {}) {
     const now = Date.now();
     pruneProcessedPings(now);
 
-    if (!viewState.mapLoaded) {
-      return;
-    }
+    const retentionThreshold = now - MAP_PING_RETENTION_MS;
+    const staleIndexes = [];
+    const pendingPings = [];
 
-    list.forEach((entry) => {
+    list.forEach((entry, index) => {
       const ping = normalizeIncomingPing(entry);
       if (!ping) {
         return;
       }
+
+      if (ping.createdAt < retentionThreshold) {
+        staleIndexes.push(index);
+        return;
+      }
+
+      pendingPings.push(ping);
+    });
+
+    if (staleIndexes.length && Array.isArray(entries)) {
+      for (let i = staleIndexes.length - 1; i >= 0; i -= 1) {
+        entries.splice(staleIndexes[i], 1);
+      }
+    }
+
+    if (!viewState.mapLoaded) {
+      return;
+    }
+
+    pendingPings.forEach((ping) => {
       if (ping.sceneId && activeSceneId && ping.sceneId !== activeSceneId) {
         return;
       }
