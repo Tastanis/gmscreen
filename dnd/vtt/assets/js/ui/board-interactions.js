@@ -3221,11 +3221,13 @@ export function mountBoardInteractions(store, routes = {}) {
       const left = leftOffset + column * gridSize;
       const top = topOffset + row * gridSize;
       const baseTransform = `translate3d(${left}px, ${top}px, 0)`;
+      token.style.transform = baseTransform;
+
       const rotation = tokenRotationAngles.get(normalized.id);
       if (Number.isFinite(rotation)) {
-        token.style.transform = `${baseTransform} rotate(${rotation}deg)`;
+        token.style.setProperty('--vtt-token-rotation', `${rotation}deg`);
       } else {
-        token.style.transform = baseTransform;
+        token.style.removeProperty('--vtt-token-rotation');
       }
 
       token.classList.toggle('vtt-token--hidden', Boolean(normalized.hidden));

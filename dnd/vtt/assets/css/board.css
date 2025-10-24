@@ -1333,6 +1333,8 @@
   object-fit: cover;
   display: block;
   border-radius: 50%;
+  transform: rotate(var(--vtt-token-rotation, 0deg));
+  transition: transform 180ms ease;
 }
 
 .vtt-token--placeholder {
