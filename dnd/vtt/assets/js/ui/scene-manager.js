@@ -103,7 +103,7 @@ export function renderSceneList(routes, store) {
       persistBoardStateSnapshot();
     }
 
-    if (action === 'create-overlay' && sceneId) {
+    if (action === 'upload-overlay-map' && sceneId) {
       const currentState = stateApi.getState?.() ?? {};
       const sceneState = normalizeSceneState(currentState.scenes);
       const scene = sceneState.items.find((item) => item.id === sceneId);
@@ -132,7 +132,7 @@ export function renderSceneList(routes, store) {
       return;
     }
 
-    if (action === 'remove-overlay' && sceneId) {
+    if (action === 'clear-overlay' && sceneId) {
       let overlayCleared = false;
       stateApi.updateState?.((draft) => {
         ensureSceneDraft(draft);
@@ -143,12 +143,16 @@ export function renderSceneList(routes, store) {
         }
 
         const currentOverlay = normalizeOverlayConfig(sceneBoardState.overlay);
+        const hasLayers = Array.isArray(currentOverlay.layers) && currentOverlay.layers.length > 0;
         const hasMask = currentOverlay.mask && Object.keys(currentOverlay.mask).length > 0;
-        if (!currentOverlay.mapUrl && !hasMask) {
+        if (!currentOverlay.mapUrl && !hasMask && !hasLayers) {
           return;
         }
 
-        sceneBoardState.overlay = normalizeOverlayConfig({});
+        sceneBoardState.overlay = createEmptyOverlayConfig();
+        if (boardDraft.activeSceneId === sceneId) {
+          boardDraft.overlay = createEmptyOverlayConfig();
+        }
         overlayCleared = true;
       });
 
@@ -158,6 +162,209 @@ export function renderSceneList(routes, store) {
       } else {
         showFeedback(feedback, 'Scene overlay is already empty.', 'info');
       }
+      return;
+    }
+
+    if (action === 'add-overlay-layer' && sceneId) {
+      let layerAdded = false;
+      stateApi.updateState?.((draft) => {
+        ensureSceneDraft(draft);
+        const boardDraft = ensureBoardStateDraft(draft);
+        const sceneBoardState = ensureSceneBoardStateEntry(boardDraft, sceneId, null);
+        if (!sceneBoardState) {
+          return;
+        }
+
+        const overlayEntry = normalizeOverlayConfig(sceneBoardState.overlay ?? {});
+        if (!overlayEntry.mapUrl) {
+          return;
+        }
+
+        const layer = createOverlayLayer(`Overlay ${overlayEntry.layers.length + 1}`, overlayEntry.layers);
+        overlayEntry.layers.push(layer);
+        overlayEntry.activeLayerId = layer.id;
+        rebuildOverlayAggregate(overlayEntry);
+        sceneBoardState.overlay = overlayEntry;
+        if (boardDraft.activeSceneId === sceneId) {
+          boardDraft.overlay = normalizeOverlayConfig(overlayEntry);
+        }
+        layerAdded = true;
+      });
+
+      if (layerAdded) {
+        persistBoardStateSnapshot();
+        showFeedback(feedback, 'Overlay added.', 'success');
+      } else {
+        showFeedback(feedback, 'Upload an overlay image before adding overlays.', 'error');
+      }
+      return;
+    }
+
+    if (action === 'rename-overlay-layer' && sceneId) {
+      const overlayId = target.getAttribute('data-overlay-id');
+      if (!overlayId) {
+        return;
+      }
+
+      const currentState = stateApi.getState?.() ?? {};
+      const sceneEntry = currentState.boardState?.sceneState?.[sceneId] ?? {};
+      const overlayEntry = normalizeOverlayConfig(sceneEntry.overlay ?? {});
+      const existingLayer = overlayEntry.layers.find((layer) => layer.id === overlayId);
+      const currentName = existingLayer?.name ?? '';
+      const name = window.prompt('Overlay name', currentName);
+      if (name === null) {
+        return;
+      }
+
+      const trimmed = name.trim();
+      if (!trimmed) {
+        showFeedback(feedback, 'Overlay name cannot be empty.', 'error');
+        return;
+      }
+
+      let renamed = false;
+      stateApi.updateState?.((draft) => {
+        ensureSceneDraft(draft);
+        const boardDraft = ensureBoardStateDraft(draft);
+        const sceneBoardState = ensureSceneBoardStateEntry(boardDraft, sceneId, null);
+        if (!sceneBoardState) {
+          return;
+        }
+
+        const overlay = normalizeOverlayConfig(sceneBoardState.overlay ?? {});
+        const layer = overlay.layers.find((entry) => entry.id === overlayId);
+        if (!layer) {
+          return;
+        }
+
+        layer.name = trimmed;
+        rebuildOverlayAggregate(overlay);
+        sceneBoardState.overlay = overlay;
+        if (boardDraft.activeSceneId === sceneId) {
+          boardDraft.overlay = normalizeOverlayConfig(overlay);
+        }
+        renamed = true;
+      });
+
+      if (renamed) {
+        persistBoardStateSnapshot();
+        showFeedback(feedback, 'Overlay renamed.', 'success');
+      } else {
+        showFeedback(feedback, 'Unable to rename overlay.', 'error');
+      }
+      return;
+    }
+
+    if (action === 'delete-overlay-layer' && sceneId) {
+      const overlayId = target.getAttribute('data-overlay-id');
+      if (!overlayId) {
+        return;
+      }
+
+      const confirmed = window.confirm('Delete this overlay? This cannot be undone.');
+      if (!confirmed) {
+        return;
+      }
+
+      let deleted = false;
+      stateApi.updateState?.((draft) => {
+        ensureSceneDraft(draft);
+        const boardDraft = ensureBoardStateDraft(draft);
+        const sceneBoardState = ensureSceneBoardStateEntry(boardDraft, sceneId, null);
+        if (!sceneBoardState) {
+          return;
+        }
+
+        const overlay = normalizeOverlayConfig(sceneBoardState.overlay ?? {});
+        const initialLength = overlay.layers.length;
+        overlay.layers = overlay.layers.filter((layer) => layer.id !== overlayId);
+        if (overlay.layers.length === initialLength) {
+          return;
+        }
+
+        overlay.activeLayerId = resolveActiveLayerId(overlay.activeLayerId, overlay.layers);
+        rebuildOverlayAggregate(overlay);
+        sceneBoardState.overlay = overlay;
+        if (boardDraft.activeSceneId === sceneId) {
+          boardDraft.overlay = normalizeOverlayConfig(overlay);
+        }
+        deleted = true;
+      });
+
+      if (deleted) {
+        persistBoardStateSnapshot();
+        showFeedback(feedback, 'Overlay deleted.', 'info');
+      } else {
+        showFeedback(feedback, 'Unable to delete overlay.', 'error');
+      }
+      return;
+    }
+
+    if (action === 'toggle-overlay-layer-visibility' && sceneId) {
+      const overlayId = target.getAttribute('data-overlay-id');
+      if (!overlayId) {
+        return;
+      }
+
+      let toggled = false;
+      stateApi.updateState?.((draft) => {
+        ensureSceneDraft(draft);
+        const boardDraft = ensureBoardStateDraft(draft);
+        const sceneBoardState = ensureSceneBoardStateEntry(boardDraft, sceneId, null);
+        if (!sceneBoardState) {
+          return;
+        }
+
+        const overlay = normalizeOverlayConfig(sceneBoardState.overlay ?? {});
+        const layer = overlay.layers.find((entry) => entry.id === overlayId);
+        if (!layer) {
+          return;
+        }
+
+        layer.visible = layer.visible === false;
+        rebuildOverlayAggregate(overlay);
+        sceneBoardState.overlay = overlay;
+        if (boardDraft.activeSceneId === sceneId) {
+          boardDraft.overlay = normalizeOverlayConfig(overlay);
+        }
+        toggled = true;
+      });
+
+      if (toggled) {
+        persistBoardStateSnapshot();
+      }
+      return;
+    }
+
+    if (action === 'edit-overlay-layer' && sceneId) {
+      const overlayId = target.getAttribute('data-overlay-id');
+      if (!overlayId) {
+        return;
+      }
+
+      stateApi.updateState?.((draft) => {
+        ensureSceneDraft(draft);
+        const boardDraft = ensureBoardStateDraft(draft);
+        const sceneBoardState = ensureSceneBoardStateEntry(boardDraft, sceneId, null);
+        if (!sceneBoardState) {
+          return;
+        }
+
+        const overlay = normalizeOverlayConfig(sceneBoardState.overlay ?? {});
+        if (!overlay.layers.some((layer) => layer.id === overlayId)) {
+          return;
+        }
+
+        overlay.activeLayerId = overlayId;
+        rebuildOverlayAggregate(overlay);
+        sceneBoardState.overlay = overlay;
+        if (boardDraft.activeSceneId === sceneId) {
+          boardDraft.overlay = normalizeOverlayConfig(overlay);
+        }
+      });
+
+      persistBoardStateSnapshot();
+      return;
     }
 
     if (action === 'delete-scene' && sceneId) {
@@ -175,7 +382,7 @@ export function renderSceneList(routes, store) {
           if (boardDraft.activeSceneId === sceneId) {
             boardDraft.activeSceneId = null;
             boardDraft.mapUrl = null;
-            boardDraft.overlay = normalizeOverlayConfig({});
+            boardDraft.overlay = createEmptyOverlayConfig();
           }
           if (boardDraft.placements && typeof boardDraft.placements === 'object') {
             delete boardDraft.placements[sceneId];
@@ -233,13 +440,25 @@ export function renderSceneList(routes, store) {
           return;
         }
 
-        const nextOverlay = normalizeOverlayConfig(sceneBoardState.overlay ?? {});
-        nextOverlay.mapUrl = url;
-        nextOverlay.mask = createEmptyOverlayMask();
-        sceneBoardState.overlay = nextOverlay;
+        const overlay = normalizeOverlayConfig(sceneBoardState.overlay ?? {});
+        overlay.mapUrl = url;
+        if (!overlay.layers.length) {
+          const layer = createOverlayLayer(`Overlay ${overlay.layers.length + 1}`, overlay.layers);
+          overlay.layers.push(layer);
+          overlay.activeLayerId = layer.id;
+        }
+
+        overlay.layers = overlay.layers.map((layer, index) => ({
+          ...layer,
+          mask: createEmptyOverlayMask(),
+          name: layer.name || `Overlay ${index + 1}`,
+        }));
+
+        rebuildOverlayAggregate(overlay);
+        sceneBoardState.overlay = overlay;
 
         if (boardDraft.activeSceneId === targetSceneId) {
-          boardDraft.overlay = normalizeOverlayConfig(nextOverlay);
+          boardDraft.overlay = normalizeOverlayConfig(overlay);
         }
 
         overlayUpdated = true;
@@ -392,7 +611,7 @@ function ensureBoardStateDraft(draft) {
   }
 
   if (!draft.boardState.overlay || typeof draft.boardState.overlay !== 'object') {
-    draft.boardState.overlay = { mapUrl: null, mask: createEmptyOverlayMask() };
+    draft.boardState.overlay = createEmptyOverlayConfig();
   } else {
     draft.boardState.overlay = normalizeOverlayConfig(draft.boardState.overlay);
   }
@@ -423,7 +642,7 @@ function ensureSceneBoardStateEntry(boardState, sceneId, fallbackGrid = null) {
 
   const entry = {
     grid: normalizeGridConfig(fallbackGrid ?? {}),
-    overlay: normalizeOverlayConfig({}),
+    overlay: createEmptyOverlayConfig(),
   };
   boardState.sceneState[key] = entry;
   return entry;
@@ -441,18 +660,273 @@ function normalizeGridConfig(raw = {}) {
   };
 }
 
+const OVERLAY_LAYER_PREFIX = 'overlay-layer-';
+let overlayLayerSeed = Date.now();
+let overlayLayerSequence = 0;
+
 function normalizeOverlayConfig(raw = {}) {
+  const base = createEmptyOverlayConfig();
   if (!raw || typeof raw !== 'object') {
-    return { mapUrl: null, mask: createEmptyOverlayMask() };
+    return base;
   }
 
-  const mapUrl = typeof raw.mapUrl === 'string' ? raw.mapUrl.trim() : '';
-  const mask = normalizeOverlayMask(raw.mask ?? null);
+  if (typeof raw.mapUrl === 'string') {
+    const trimmed = raw.mapUrl.trim();
+    if (trimmed) {
+      base.mapUrl = trimmed;
+    }
+  }
+
+  const layerSource = Array.isArray(raw.layers)
+    ? raw.layers
+    : Array.isArray(raw.items)
+    ? raw.items
+    : [];
+
+  base.layers = layerSource.map((entry, index) => normalizeOverlayLayer(entry, index)).filter(Boolean);
+
+  const legacyMask = normalizeOverlayMask(raw.mask ?? null);
+  const legacyHasMask = maskHasMeaningfulContent(legacyMask);
+
+  if (!base.layers.length && (legacyHasMask || raw.name || raw.visible !== undefined)) {
+    const legacyLayer = normalizeOverlayLayer(
+      {
+        id: typeof raw.id === 'string' ? raw.id : undefined,
+        name: typeof raw.name === 'string' ? raw.name : undefined,
+        visible: legacyMask.visible,
+        mask: legacyMask,
+      },
+      0
+    );
+    if (legacyLayer) {
+      base.layers.push(legacyLayer);
+    }
+  }
+
+  base.activeLayerId = resolveActiveLayerId(raw.activeLayerId ?? raw.activeLayer ?? raw.selectedLayerId, base.layers);
+  rebuildOverlayAggregate(base);
+
+  return base;
+}
+
+function createEmptyOverlayConfig() {
+  return {
+    mapUrl: null,
+    mask: createEmptyOverlayMask(),
+    layers: [],
+    activeLayerId: null,
+  };
+}
+
+function normalizeOverlayLayer(raw = {}, index = 0) {
+  if (!raw || typeof raw !== 'object') {
+    return null;
+  }
+
+  const mask = normalizeOverlayMask(raw.mask ?? raw);
+  const idSource = typeof raw.id === 'string' ? raw.id.trim() : '';
+  const nameSource = typeof raw.name === 'string' ? raw.name.trim() : '';
+  const visible = raw.visible === undefined ? true : Boolean(raw.visible);
+  const id = idSource || createOverlayLayerId();
+  const name = nameSource || `Overlay ${index + 1}`;
 
   return {
-    mapUrl: mapUrl ? mapUrl : null,
+    id,
+    name,
+    visible,
     mask,
   };
+}
+
+function createOverlayLayerId() {
+  overlayLayerSequence += 1;
+  return `${OVERLAY_LAYER_PREFIX}${overlayLayerSeed.toString(36)}-${overlayLayerSequence.toString(36)}`;
+}
+
+function createOverlayLayer(name = '', existingLayers = []) {
+  const trimmed = typeof name === 'string' ? name.trim() : '';
+  const safeLayers = Array.isArray(existingLayers) ? existingLayers : [];
+  const resolvedName = ensureUniqueOverlayName(trimmed || 'Overlay', safeLayers);
+  return {
+    id: createOverlayLayerId(),
+    name: resolvedName,
+    visible: true,
+    mask: createEmptyOverlayMask(),
+  };
+}
+
+function ensureUniqueOverlayName(baseName, existingLayers = []) {
+  const fallback = typeof baseName === 'string' && baseName.trim() ? baseName.trim() : 'Overlay';
+  const normalizedExisting = new Set();
+  const usedNumbers = new Set();
+
+  existingLayers.forEach((layer) => {
+    if (!layer || typeof layer !== 'object') {
+      return;
+    }
+
+    const candidate = typeof layer.name === 'string' ? layer.name.trim() : '';
+    if (!candidate) {
+      return;
+    }
+
+    normalizedExisting.add(candidate.toLowerCase());
+
+    const prefixMatch = fallbackPrefixMatch(candidate, fallback);
+    if (prefixMatch !== null) {
+      usedNumbers.add(prefixMatch);
+    }
+  });
+
+  if (!normalizedExisting.has(fallback.toLowerCase())) {
+    return fallback;
+  }
+
+  const prefix = deriveNamePrefix(fallback);
+  const prefixPattern = new RegExp(`^${escapeRegExp(prefix)}\s+(\d+)$`, 'i');
+
+  existingLayers.forEach((layer) => {
+    if (!layer || typeof layer !== 'object') {
+      return;
+    }
+
+    const candidate = typeof layer.name === 'string' ? layer.name.trim() : '';
+    if (!candidate) {
+      return;
+    }
+
+    const match = candidate.match(prefixPattern);
+    if (match) {
+      const value = Number.parseInt(match[1], 10);
+      if (Number.isFinite(value)) {
+        usedNumbers.add(value);
+      }
+    }
+  });
+
+  let counter = 1;
+  const fallbackMatch = fallback.match(prefixPattern);
+  if (fallbackMatch) {
+    const preferred = Number.parseInt(fallbackMatch[1], 10);
+    if (Number.isFinite(preferred) && preferred > 0) {
+      counter = preferred;
+    }
+  }
+
+  while (
+    usedNumbers.has(counter) || normalizedExisting.has(`${prefix} ${counter}`.toLowerCase())
+  ) {
+    counter += 1;
+  }
+
+  return `${prefix} ${counter}`;
+}
+
+function deriveNamePrefix(name) {
+  const match = name.match(/^(.*?)(?:\s+\d+)?$/);
+  if (match) {
+    const prefix = match[1].trim();
+    if (prefix) {
+      return prefix;
+    }
+  }
+  return 'Overlay';
+}
+
+function fallbackPrefixMatch(candidate, fallback) {
+  const prefix = deriveNamePrefix(fallback);
+  const pattern = new RegExp(`^${escapeRegExp(prefix)}\s+(\d+)$`, 'i');
+  const match = candidate.match(pattern);
+  if (!match) {
+    return null;
+  }
+
+  const value = Number.parseInt(match[1], 10);
+  return Number.isFinite(value) && value > 0 ? value : null;
+}
+
+function escapeRegExp(value) {
+  return value.replace(/[.*+?^${}()|[\]\]/g, '\$&');
+}
+
+function resolveActiveLayerId(preferredId, layers = []) {
+  if (typeof preferredId === 'string') {
+    const trimmed = preferredId.trim();
+    if (trimmed && layers.some((layer) => layer.id === trimmed)) {
+      return trimmed;
+    }
+  }
+
+  if (!layers.length) {
+    return null;
+  }
+
+  const visibleLayer = layers.find((layer) => layer.visible !== false);
+  if (visibleLayer) {
+    return visibleLayer.id;
+  }
+
+  return layers[0].id;
+}
+
+function rebuildOverlayAggregate(overlay) {
+  if (!overlay || typeof overlay !== 'object') {
+    return createEmptyOverlayConfig();
+  }
+
+  const mask = buildAggregateMask(Array.isArray(overlay.layers) ? overlay.layers : []);
+  overlay.mask = mask;
+  overlay.activeLayerId = resolveActiveLayerId(overlay.activeLayerId, overlay.layers);
+  return overlay;
+}
+
+function buildAggregateMask(layers = []) {
+  const aggregate = createEmptyOverlayMask();
+  let hasVisibleLayer = false;
+
+  layers.forEach((layer) => {
+    if (!layer || typeof layer !== 'object') {
+      return;
+    }
+
+    if (layer.visible === false) {
+      return;
+    }
+
+    const mask = normalizeOverlayMask(layer.mask ?? {});
+    if (mask.visible === false) {
+      return;
+    }
+
+    hasVisibleLayer = true;
+    if (!aggregate.url && mask.url) {
+      aggregate.url = mask.url;
+    }
+
+    if (Array.isArray(mask.polygons)) {
+      mask.polygons.forEach((polygon) => {
+        const points = Array.isArray(polygon?.points) ? polygon.points : [];
+        if (points.length >= 3) {
+          aggregate.polygons.push({ points: points.map((point) => ({ ...point })) });
+        }
+      });
+    }
+  });
+
+  aggregate.visible = hasVisibleLayer;
+  return aggregate;
+}
+
+function maskHasMeaningfulContent(mask = {}) {
+  if (!mask || typeof mask !== 'object') {
+    return false;
+  }
+
+  if (typeof mask.url === 'string' && mask.url.trim()) {
+    return true;
+  }
+
+  return Array.isArray(mask.polygons) ? mask.polygons.length > 0 : false;
 }
 
 function createEmptyOverlayMask() {
@@ -478,7 +952,11 @@ function normalizeOverlayMask(raw) {
 
   const polygons = Array.isArray(raw.polygons) ? raw.polygons : [];
   polygons.forEach((polygon) => {
-    const pointsSource = Array.isArray(polygon?.points) ? polygon.points : Array.isArray(polygon) ? polygon : [];
+    const pointsSource = Array.isArray(polygon?.points)
+      ? polygon.points
+      : Array.isArray(polygon)
+      ? polygon
+      : [];
     if (!Array.isArray(pointsSource)) {
       return;
     }
@@ -610,34 +1088,28 @@ function renderSceneItem(scene, activeSceneId, sceneBoardState = {}, options = {
   const isActive = scene.id === activeSceneId;
   const name = escapeHtml(scene.name || 'Untitled Scene');
   const overlayState = normalizeOverlayConfig(sceneBoardState.overlay ?? {});
-  const overlayMask = overlayState.mask ?? createEmptyOverlayMask();
-  const overlayMaskHasContent = Boolean(overlayMask.url)
-    || (Array.isArray(overlayMask.polygons) ? overlayMask.polygons.length > 0 : false);
-  const overlayMaskVisible = overlayMask.visible !== false;
-  const hasOverlay = Boolean(overlayState.mapUrl) || overlayMaskHasContent;
   const overlayUploadsEnabled = Boolean(options.overlayUploadsEnabled);
   const overlayUploadPending = Boolean(options.overlayUploadPending);
-  const overlayButtonDisabled = !isActive || !overlayUploadsEnabled || overlayUploadPending;
-  let overlayButtonTitle = '';
+  const overlayMapSet = Boolean(overlayState.mapUrl);
+  const hasOverlayContent = overlayMapSet || overlayState.layers.some((layer) => maskHasMeaningfulContent(layer.mask));
+  const uploadDisabled = !isActive || !overlayUploadsEnabled || overlayUploadPending;
+  let uploadTitle = '';
   if (!overlayUploadsEnabled) {
-    overlayButtonTitle = 'Overlay uploads are not available right now.';
+    uploadTitle = 'Overlay uploads are not available right now.';
   } else if (!isActive) {
-    overlayButtonTitle = 'Activate this scene to upload an overlay.';
+    uploadTitle = 'Activate this scene to upload an overlay image.';
   } else if (overlayUploadPending) {
-    overlayButtonTitle = 'An overlay upload is already in progress.';
+    uploadTitle = 'An overlay upload is already in progress.';
   }
-  const overlayVisibilityDisabled = !isActive || !hasOverlay;
-  let overlayVisibilityTitle = '';
-  if (!hasOverlay) {
-    overlayVisibilityTitle = 'Add an overlay before toggling its visibility.';
-  } else if (!isActive) {
-    overlayVisibilityTitle = 'Activate this scene to change the overlay visibility.';
-  }
-  const overlayVisibilityLabel = overlayMaskVisible ? 'Hide Overlay' : 'Show Overlay';
-  const cutoutButtonDisabled = !isActive;
-  const cutoutButtonTitle = isActive
-    ? 'Edit the scene overlay cutout'
-    : 'Activate this scene to edit the overlay cutout.';
+
+  const addOverlayDisabled = !overlayMapSet;
+  const addOverlayTitle = overlayMapSet
+    ? ''
+    : 'Upload an overlay image before adding overlays.';
+
+  const clearOverlayDisabled = !hasOverlayContent;
+  const clearOverlayTitle = hasOverlayContent ? '' : 'No overlay content to clear.';
+
   return `
     <article class="scene-item${isActive ? ' is-active' : ''}" data-scene-id="${scene.id}">
       ${renderScenePreview(scene, scene.name)}
@@ -646,47 +1118,40 @@ function renderSceneItem(scene, activeSceneId, sceneBoardState = {}, options = {
           <h4>${name}</h4>
           <span class="scene-item__status">${isActive ? 'Active' : ''}</span>
         </header>
+        <div class="scene-item__overlays" data-scene-id="${scene.id}">
+          <div class="scene-overlay__actions">
+            <button
+              type="button"
+              class="btn"
+              data-action="upload-overlay-map"
+              data-scene-id="${scene.id}"
+              ${uploadDisabled ? 'disabled' : ''}
+              ${uploadTitle ? ` title="${escapeHtml(uploadTitle)}"` : ''}
+            >
+              ${overlayMapSet ? 'Replace Overlay Image' : 'Upload Overlay Image'}
+            </button>
+            <button
+              type="button"
+              class="btn"
+              data-action="add-overlay-layer"
+              data-scene-id="${scene.id}"
+              ${addOverlayDisabled ? 'disabled' : ''}
+              ${addOverlayTitle ? ` title="${escapeHtml(addOverlayTitle)}"` : ''}
+            >
+              Add Overlay
+            </button>
+          </div>
+          ${renderOverlayList(scene.id, overlayState, { isActiveScene: isActive, overlayMapSet })}
+        </div>
         <footer class="scene-item__footer">
           <button type="button" class="btn" data-action="activate-scene" data-scene-id="${scene.id}">Activate</button>
           <button
             type="button"
             class="btn"
-            data-action="create-overlay"
+            data-action="clear-overlay"
             data-scene-id="${scene.id}"
-            ${overlayButtonDisabled ? 'disabled' : ''}
-            ${overlayButtonTitle ? ` title="${escapeHtml(overlayButtonTitle)}"` : ''}
-          >
-            Upload Overlay
-          </button>
-          <button
-            type="button"
-            class="btn"
-            data-action="toggle-overlay-visibility"
-            data-scene-id="${scene.id}"
-            aria-pressed="${overlayMaskVisible ? 'true' : 'false'}"
-            data-overlay-visible="${overlayMaskVisible ? 'true' : 'false'}"
-            ${overlayVisibilityDisabled ? 'disabled' : ''}
-            ${overlayVisibilityTitle ? ` title="${escapeHtml(overlayVisibilityTitle)}"` : ''}
-          >
-            ${overlayVisibilityLabel}
-          </button>
-          <button
-            type="button"
-            class="btn"
-            data-action="toggle-overlay-editor"
-            data-scene-id="${scene.id}"
-            aria-pressed="false"
-            ${cutoutButtonDisabled ? 'disabled' : ''}
-            ${cutoutButtonTitle ? ` title="${escapeHtml(cutoutButtonTitle)}"` : ''}
-          >
-            Cutout Tool
-          </button>
-          <button
-            type="button"
-            class="btn"
-            data-action="remove-overlay"
-            data-scene-id="${scene.id}"
-            ${hasOverlay ? '' : 'disabled'}
+            ${clearOverlayDisabled ? 'disabled' : ''}
+            ${clearOverlayTitle ? ` title="${escapeHtml(clearOverlayTitle)}"` : ''}
           >
             Clear Overlay
           </button>
@@ -694,6 +1159,90 @@ function renderSceneItem(scene, activeSceneId, sceneBoardState = {}, options = {
         </footer>
       </div>
     </article>
+  `;
+}
+
+function renderOverlayList(sceneId, overlayState, options = {}) {
+  const layers = Array.isArray(overlayState.layers) ? overlayState.layers : [];
+  if (!layers.length) {
+    return '<p class="scene-overlay__empty">No overlays added yet.</p>';
+  }
+
+  return `
+    <ul class="scene-overlay__list">
+      ${layers
+        .map((layer, index) => renderOverlayListItem(sceneId, overlayState, layer, index, options))
+        .join('')}
+    </ul>
+  `;
+}
+
+function renderOverlayListItem(sceneId, overlayState, layer, index, options = {}) {
+  const name = escapeHtml(layer.name || `Overlay ${index + 1}`);
+  const overlayVisible = layer.visible !== false && normalizeOverlayMask(layer.mask ?? {}).visible !== false;
+  const visibilityLabel = overlayVisible ? 'Hide' : 'Show';
+  const visibilityTitle = options.isActiveScene
+    ? ''
+    : 'Activate this scene to toggle overlay visibility.';
+  const editDisabled = !options.isActiveScene || !options.overlayMapSet;
+  let editTitle = '';
+  if (!options.overlayMapSet) {
+    editTitle = 'Upload an overlay image before editing the overlay mask.';
+  } else if (!options.isActiveScene) {
+    editTitle = 'Activate this scene to edit this overlay.';
+  }
+  const isActiveLayer = overlayState.activeLayerId === layer.id;
+
+  return `
+    <li class="scene-overlay__item${isActiveLayer ? ' is-active' : ''}" data-overlay-id="${layer.id}" data-scene-id="${sceneId}" data-overlay-visible="${overlayVisible ? 'true' : 'false'}">
+      <div class="scene-overlay__meta">
+        <span class="scene-overlay__name">${name}</span>
+        <button
+          type="button"
+          class="btn scene-overlay__rename"
+          data-action="rename-overlay-layer"
+          data-scene-id="${sceneId}"
+          data-overlay-id="${layer.id}"
+        >
+          Rename
+        </button>
+      </div>
+      <div class="scene-overlay__controls">
+        <button
+          type="button"
+          class="btn scene-overlay__toggle"
+          data-action="toggle-overlay-layer-visibility"
+          data-scene-id="${sceneId}"
+          data-overlay-id="${layer.id}"
+          aria-pressed="${overlayVisible ? 'true' : 'false'}"
+          ${options.isActiveScene ? '' : 'disabled'}
+          ${visibilityTitle ? ` title="${escapeHtml(visibilityTitle)}"` : ''}
+        >
+          ${visibilityLabel}
+        </button>
+        <button
+          type="button"
+          class="btn scene-overlay__edit"
+          data-action="edit-overlay-layer"
+          data-scene-id="${sceneId}"
+          data-overlay-id="${layer.id}"
+          aria-pressed="false"
+          ${editDisabled ? 'disabled' : ''}
+          ${editTitle ? ` title="${escapeHtml(editTitle)}"` : ''}
+        >
+          Edit
+        </button>
+        <button
+          type="button"
+          class="btn btn--danger scene-overlay__delete"
+          data-action="delete-overlay-layer"
+          data-scene-id="${sceneId}"
+          data-overlay-id="${layer.id}"
+        >
+          Delete
+        </button>
+      </div>
+    </li>
   `;
 }
 

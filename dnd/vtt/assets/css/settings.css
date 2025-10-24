@@ -655,6 +655,70 @@
   font-size: 1rem;
 }
 
+.scene-item__overlays {
+  display: flex;
+  flex-direction: column;
+  gap: 0.5rem;
+  padding: 0.75rem;
+  border-radius: calc(var(--vtt-radius) - 2px);
+  background: rgba(15, 23, 42, 0.55);
+  box-shadow: inset 0 0 0 1px rgba(148, 163, 184, 0.15);
+}
+
+.scene-overlay__actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.5rem;
+  justify-content: flex-start;
+}
+
+.scene-overlay__list {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 0.5rem;
+}
+
+.scene-overlay__item {
+  display: flex;
+  flex-direction: column;
+  gap: 0.5rem;
+  padding: 0.5rem 0.75rem;
+  border-radius: calc(var(--vtt-radius) - 3px);
+  background: rgba(30, 41, 59, 0.45);
+  box-shadow: inset 0 0 0 1px rgba(148, 163, 184, 0.12);
+}
+
+.scene-overlay__item.is-active {
+  box-shadow: inset 0 0 0 1px rgba(99, 102, 241, 0.45);
+}
+
+.scene-overlay__meta {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  gap: 0.5rem;
+}
+
+.scene-overlay__name {
+  font-weight: 600;
+  font-size: 0.95rem;
+}
+
+.scene-overlay__controls {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.5rem;
+}
+
+.scene-overlay__empty {
+  margin: 0;
+  color: var(--vtt-text-muted);
+  font-size: 0.9rem;
+}
+
 .scene-item__status {
   color: var(--vtt-accent);
   font-weight: 600;

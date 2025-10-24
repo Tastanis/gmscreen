@@ -209,18 +209,59 @@ function formatCombatState(raw = {}) {
   };
 }
 
+const OVERLAY_LAYER_PREFIX = 'overlay-layer-';
+let overlayLayerSeed = Date.now();
+let overlayLayerSequence = 0;
+
 function formatOverlayState(raw) {
+  const overlay = createEmptyOverlayState();
   if (!raw || typeof raw !== 'object') {
-    return { mapUrl: null, mask: createEmptyOverlayMask() };
+    return overlay;
   }
 
-  const mapUrl = typeof raw.mapUrl === 'string' ? raw.mapUrl.trim() : '';
-  const mask = formatOverlayMask(raw.mask ?? null);
+  if (typeof raw.mapUrl === 'string') {
+    const trimmed = raw.mapUrl.trim();
+    if (trimmed) {
+      overlay.mapUrl = trimmed;
+    }
+  }
 
-  return {
-    mapUrl: mapUrl ? mapUrl : null,
-    mask,
-  };
+  const layerSource = Array.isArray(raw.layers)
+    ? raw.layers
+    : Array.isArray(raw.items)
+    ? raw.items
+    : [];
+
+  overlay.layers = layerSource
+    .map((entry, index) => formatOverlayLayer(entry, index))
+    .filter(Boolean);
+
+  const legacyMask = formatOverlayMask(raw.mask ?? null);
+  if (
+    !overlay.layers.length &&
+    (maskHasMeaningfulContent(legacyMask) || typeof raw.name === 'string' || raw.visible !== undefined)
+  ) {
+    const legacyLayer = formatOverlayLayer(
+      {
+        id: typeof raw.id === 'string' ? raw.id : undefined,
+        name: typeof raw.name === 'string' ? raw.name : undefined,
+        visible: raw.visible,
+        mask: legacyMask,
+      },
+      0
+    );
+    if (legacyLayer) {
+      overlay.layers.push(legacyLayer);
+    }
+  }
+
+  overlay.activeLayerId = resolveOverlayActiveLayerId(
+    raw.activeLayerId ?? raw.activeLayer ?? raw.selectedLayerId,
+    overlay.layers
+  );
+
+  overlay.mask = buildAggregateMask(overlay.layers);
+  return overlay;
 }
 
 function normalizeGridPayload(raw = {}) {
@@ -235,8 +276,86 @@ function normalizeGridPayload(raw = {}) {
   };
 }
 
+function createEmptyOverlayState() {
+  return { mapUrl: null, mask: createEmptyOverlayMask(), layers: [], activeLayerId: null };
+}
+
 function createEmptyOverlayMask() {
   return { visible: true, polygons: [] };
+}
+
+function formatOverlayLayer(raw = {}, index = 0) {
+  if (!raw || typeof raw !== 'object') {
+    return null;
+  }
+
+  const mask = formatOverlayMask(raw.mask ?? raw);
+  const idSource = typeof raw.id === 'string' ? raw.id.trim() : '';
+  const nameSource = typeof raw.name === 'string' ? raw.name.trim() : '';
+  const visible = raw.visible === undefined ? true : Boolean(raw.visible);
+  const id = idSource || generateOverlayLayerId();
+  const name = nameSource || `Overlay ${index + 1}`;
+
+  return {
+    id,
+    name,
+    visible,
+    mask,
+  };
+}
+
+function generateOverlayLayerId() {
+  overlayLayerSequence += 1;
+  return `${OVERLAY_LAYER_PREFIX}${overlayLayerSeed.toString(36)}-${overlayLayerSequence.toString(36)}`;
+}
+
+function resolveOverlayActiveLayerId(preferredId, layers = []) {
+  if (typeof preferredId === 'string') {
+    const trimmed = preferredId.trim();
+    if (trimmed && layers.some((layer) => layer.id === trimmed)) {
+      return trimmed;
+    }
+  }
+
+  if (!layers.length) {
+    return null;
+  }
+
+  const visibleLayer = layers.find((layer) => layer.visible !== false);
+  return visibleLayer ? visibleLayer.id : layers[0].id;
+}
+
+function buildAggregateMask(layers = []) {
+  const aggregate = createEmptyOverlayMask();
+  let hasVisibleLayer = false;
+
+  layers.forEach((layer) => {
+    if (!layer || typeof layer !== 'object' || layer.visible === false) {
+      return;
+    }
+
+    const mask = formatOverlayMask(layer.mask ?? {});
+    if (mask.visible === false) {
+      return;
+    }
+
+    hasVisibleLayer = true;
+    if (!aggregate.url && mask.url) {
+      aggregate.url = mask.url;
+    }
+
+    if (Array.isArray(mask.polygons)) {
+      mask.polygons.forEach((polygon) => {
+        const points = Array.isArray(polygon?.points) ? polygon.points : [];
+        if (points.length >= 3) {
+          aggregate.polygons.push({ points });
+        }
+      });
+    }
+  });
+
+  aggregate.visible = hasVisibleLayer;
+  return aggregate;
 }
 
 function formatOverlayMask(raw) {
@@ -270,6 +389,18 @@ function formatOverlayMask(raw) {
   });
 
   return normalized;
+}
+
+function maskHasMeaningfulContent(mask = {}) {
+  if (!mask || typeof mask !== 'object') {
+    return false;
+  }
+
+  if (typeof mask.url === 'string' && mask.url.trim()) {
+    return true;
+  }
+
+  return Array.isArray(mask.polygons) ? mask.polygons.length > 0 : false;
 }
 
 function normalizeOverlayMaskVisibility(value) {
