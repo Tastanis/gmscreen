@@ -364,8 +364,7 @@ const TURN_FLASH_TONE_CLASSES = {
   yellow: 'is-turn-flash-yellow',
   red: 'is-turn-flash-red',
 };
-const MAP_PING_REPEAT_DELAY_MS = 500;
-const MAP_PING_ANIMATION_DURATION_MS = 600;
+const MAP_PING_ANIMATION_DURATION_MS = 900;
 const MAP_PING_RETENTION_MS = 10_000;
 const MAP_PING_HISTORY_LIMIT = 8;
 const MAP_PING_PROCESSED_RETENTION_MS = 60_000;
@@ -2296,10 +2295,6 @@ export function mountBoardInteractions(store, routes = {}) {
     const localX = Math.min(1, Math.max(0, pingEntry.x)) * mapWidth;
     const localY = Math.min(1, Math.max(0, pingEntry.y)) * mapHeight;
     spawnPingPulse(localX, localY, pingEntry.type, 0);
-
-    scheduleTimeout(() => {
-      spawnPingPulse(localX, localY, pingEntry.type, MAP_PING_REPEAT_DELAY_MS);
-    }, MAP_PING_REPEAT_DELAY_MS);
   }
 
   function spawnPingPulse(localX, localY, type, delayMs) {
@@ -2322,7 +2317,7 @@ export function mountBoardInteractions(store, routes = {}) {
     element.style.setProperty('--vtt-ping-size', `${size}px`);
 
     pingLayer.appendChild(element);
-    const cleanupDelay = MAP_PING_ANIMATION_DURATION_MS + delayMs + 120;
+    const cleanupDelay = MAP_PING_ANIMATION_DURATION_MS + delayMs + 160;
     scheduleTimeout(() => {
       element.remove();
     }, cleanupDelay);
