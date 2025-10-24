@@ -24,7 +24,7 @@ class DashboardDiceRoller {
         this.projectManualInput = null;
         this.projectStatusMessage = null;
         this.projectSelectedLabel = null;
-        this.projectCancelButtons = [];
+        this.projectHeaderLabel = null;
 
         this.currentRollQueue = [];
         this.advantageEnabled = false;
@@ -58,14 +58,6 @@ class DashboardDiceRoller {
             }
 
             if (event.key === 'Enter') {
-                const target = event.target;
-                const tagName = target && target.tagName ? target.tagName.toLowerCase() : '';
-                const isButtonLike = tagName === 'button' || (tagName === 'a' && target.hasAttribute('href'));
-
-                if (isButtonLike) {
-                    return;
-                }
-
                 if (this.projectState.mode === 'ready') {
                     this.completeProjectRoll();
                 } else if (this.projectState.mode !== 'selecting') {
@@ -103,6 +95,14 @@ class DashboardDiceRoller {
         title.className = 'dice-modal-title';
         title.textContent = 'Dice Roller';
 
+        const projectLabel = document.createElement('div');
+        projectLabel.className = 'dice-modal-project-label';
+        projectLabel.innerHTML = 'Rolling for: <span class="dice-project-name">(none)</span>';
+        projectLabel.setAttribute('aria-live', 'polite');
+        projectLabel.hidden = true;
+        this.projectSelectedLabel = projectLabel.querySelector('.dice-project-name');
+        this.projectHeaderLabel = projectLabel;
+
         const closeBtn = document.createElement('button');
         closeBtn.type = 'button';
         closeBtn.className = 'dice-modal-close';
@@ -110,7 +110,12 @@ class DashboardDiceRoller {
         closeBtn.innerHTML = '&times;';
         closeBtn.addEventListener('click', () => this.close());
 
-        header.appendChild(title);
+        const headingGroup = document.createElement('div');
+        headingGroup.className = 'dice-modal-heading-group';
+        headingGroup.appendChild(title);
+        headingGroup.appendChild(projectLabel);
+
+        header.appendChild(headingGroup);
         header.appendChild(closeBtn);
 
         const content = document.createElement('div');
@@ -280,7 +285,6 @@ class DashboardDiceRoller {
         cancelBtn.textContent = 'Cancel';
         cancelBtn.addEventListener('click', () => this.cancelProjectRoll());
         actions.appendChild(cancelBtn);
-        this.projectCancelButtons.push(cancelBtn);
 
         container.appendChild(actions);
         return container;
@@ -289,32 +293,6 @@ class DashboardDiceRoller {
     createProjectReadyView() {
         const container = document.createElement('div');
         container.className = 'dice-view dice-view--project-ready';
-
-        const header = document.createElement('div');
-        header.className = 'dice-project-header';
-
-        const title = document.createElement('div');
-        title.className = 'dice-project-title';
-        title.innerHTML = 'Rolling for: <span class="dice-project-name">(none)</span>';
-        header.appendChild(title);
-        this.projectSelectedLabel = title.querySelector('.dice-project-name');
-
-        const changeBtn = document.createElement('button');
-        changeBtn.type = 'button';
-        changeBtn.className = 'dice-project-change';
-        changeBtn.textContent = 'Change Project';
-        changeBtn.addEventListener('click', () => this.restartProjectSelection());
-        header.appendChild(changeBtn);
-
-        const cancelBtn = document.createElement('button');
-        cancelBtn.type = 'button';
-        cancelBtn.className = 'dice-project-cancel';
-        cancelBtn.textContent = 'Cancel';
-        cancelBtn.addEventListener('click', () => this.cancelProjectRoll());
-        header.appendChild(cancelBtn);
-        this.projectCancelButtons.push(cancelBtn);
-
-        container.appendChild(header);
 
         const projectPowerRow = document.createElement('div');
         projectPowerRow.className = 'dice-row dice-row--quick dice-row--quick-primary';
@@ -344,18 +322,6 @@ class DashboardDiceRoller {
 
         container.appendChild(this.createDivider());
 
-        const queueSection = document.createElement('div');
-        queueSection.className = 'dice-queue-section dice-queue-section--project';
-        const queueLabel = document.createElement('div');
-        queueLabel.className = 'dice-queue-label';
-        queueLabel.textContent = 'Project Roll';
-        const queueDisplay = document.createElement('div');
-        queueDisplay.className = 'dice-queue-display';
-        queueSection.appendChild(queueLabel);
-        queueSection.appendChild(queueDisplay);
-        container.appendChild(queueSection);
-        this.queueDisplays.push(queueDisplay);
-
         const manualRow = document.createElement('div');
         manualRow.className = 'dice-project-manual';
 
@@ -372,7 +338,10 @@ class DashboardDiceRoller {
         manualInput.type = 'number';
         manualInput.className = 'dice-project-manual-input';
         manualInput.placeholder = 'Enter a result';
-        manualInput.addEventListener('input', () => this.updateProjectStatusMessage());
+        manualInput.addEventListener('input', () => {
+            this.updateProjectStatusMessage();
+            this.updateProjectRollButtonState();
+        });
         manualRow.appendChild(manualInput);
         this.projectManualInput = manualInput;
         if (this.projectManualInput) {
@@ -391,6 +360,7 @@ class DashboardDiceRoller {
         rollBtn.addEventListener('click', () => this.completeProjectRoll());
         actions.appendChild(rollBtn);
         this.projectReadyRollButton = rollBtn;
+        this.updateProjectRollButtonState();
 
         const clearBtn = document.createElement('button');
         clearBtn.type = 'button';
@@ -413,18 +383,35 @@ class DashboardDiceRoller {
         actions.appendChild(advantageToggle);
         this.advantageToggleButtons.push(advantageToggle);
 
+        container.appendChild(actions);
+
+        const summary = document.createElement('div');
+        summary.className = 'dice-project-summary';
+
+        const queueSection = document.createElement('div');
+        queueSection.className = 'dice-queue-section dice-queue-section--project';
+        const queueLabel = document.createElement('div');
+        queueLabel.className = 'dice-queue-label';
+        queueLabel.textContent = 'Project Roll';
+        const queueDisplay = document.createElement('div');
+        queueDisplay.className = 'dice-queue-display';
+        queueSection.appendChild(queueLabel);
+        queueSection.appendChild(queueDisplay);
+        summary.appendChild(queueSection);
+        this.queueDisplays.push(queueDisplay);
+
         const resultContainer = document.createElement('div');
-        resultContainer.className = 'dice-result';
+        resultContainer.className = 'dice-result dice-result--project';
         const resultTotal = document.createElement('div');
         resultTotal.className = 'dice-result-total';
         const resultDetail = document.createElement('div');
         resultDetail.className = 'dice-result-detail';
         resultContainer.appendChild(resultTotal);
         resultContainer.appendChild(resultDetail);
-        actions.appendChild(resultContainer);
+        summary.appendChild(resultContainer);
         this.resultDisplays.push({ total: resultTotal, detail: resultDetail });
 
-        container.appendChild(actions);
+        container.appendChild(summary);
 
         const status = document.createElement('div');
         status.className = 'dice-project-status';
@@ -485,7 +472,22 @@ class DashboardDiceRoller {
             this.projectReadyView.style.display = mode === 'ready' ? '' : 'none';
         }
 
+        if (this.projectHeaderLabel) {
+            if (mode === 'ready') {
+                this.projectHeaderLabel.hidden = false;
+            } else {
+                this.projectHeaderLabel.hidden = true;
+                if (this.projectSelectedLabel) {
+                    this.projectSelectedLabel.textContent = '(none)';
+                }
+            }
+        }
+
         this.updateOverlayAppearance();
+
+        if (mode !== 'ready') {
+            this.updateProjectRollButtonState();
+        }
 
         if (mode === 'inactive') {
             document.removeEventListener('click', this.handleProjectSelection, true);
@@ -609,6 +611,8 @@ class DashboardDiceRoller {
         } else {
             this.updateProjectStatusMessage('Add dice for the project roll.');
         }
+
+        this.updateProjectRollButtonState();
     }
 
     disableProjectManualEntry() {
@@ -628,6 +632,8 @@ class DashboardDiceRoller {
             this.projectManualInput.value = '';
             this.projectManualInput.disabled = true;
         }
+
+        this.updateProjectRollButtonState();
     }
 
     updateProjectStatusMessage(message = '') {
@@ -654,6 +660,7 @@ class DashboardDiceRoller {
 
         this.currentRollQueue = [diceNotation, ...modifiers];
         this.updateQueueDisplay();
+        this.updateProjectRollButtonState();
     }
 
     completeProjectRoll() {
@@ -757,6 +764,8 @@ class DashboardDiceRoller {
             element.textContent = displayText;
             element.classList.toggle('dice-queue-display--empty', this.currentRollQueue.length === 0);
         });
+
+        this.updateProjectRollButtonState();
     }
 
     resetResultDisplays() {
@@ -775,6 +784,20 @@ class DashboardDiceRoller {
         this.currentRollQueue = [];
         this.updateQueueDisplay();
         this.resetResultDisplays();
+    }
+
+    updateProjectRollButtonState() {
+        if (!this.projectReadyRollButton) {
+            return;
+        }
+
+        const manualReady = this.projectState.manualActive
+            && this.projectManualInput
+            && this.projectManualInput.value.trim() !== '';
+
+        this.projectReadyRollButton.classList.toggle('dice-project-roll-btn--manual-ready', manualReady);
+        this.projectReadyRollButton.disabled = false;
+        this.projectReadyRollButton.removeAttribute('aria-disabled');
     }
 
     toggleAdvantage() {
