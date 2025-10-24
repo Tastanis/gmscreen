@@ -478,7 +478,7 @@
   position: absolute;
   inset: 0;
   z-index: 1;
-  cursor: grab;
+  cursor: pointer;
   touch-action: none;
   user-select: none;
 }
@@ -487,9 +487,12 @@
   cursor: grabbing;
 }
 
-.vtt-board__map-surface[data-overlay-editing='true'],
-.vtt-board__map-surface[data-overlay-editing='true'].is-panning {
+.vtt-board__map-surface[data-overlay-editing='true'] {
   cursor: pointer;
+}
+
+.vtt-board__map-surface[data-overlay-editing='true'].is-panning {
+  cursor: grabbing;
 }
 
 .vtt-board__map-transform {
