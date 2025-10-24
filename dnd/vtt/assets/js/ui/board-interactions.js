@@ -374,14 +374,14 @@ async function safeReadError(response) {
   }
 }
 
-const TURN_TIMER_DURATION_MS = 60_000;
-const TURN_TIMER_STAGE_INTERVAL_MS = 20_000;
+const TURN_TIMER_DURATION_MS = 60000;
+const TURN_TIMER_STAGE_INTERVAL_MS = 20000;
 const TURN_TIMER_INITIAL_DISPLAY = '1:00';
 const TURN_TIMER_COUNTUP_INITIAL_DISPLAY = '0:00';
 const TURN_TIMER_STAGE_FALLBACK = 'full';
-const TURN_TIMER_WARNING_YELLOW_THRESHOLD_MS = 30_000;
-const TURN_TIMER_WARNING_RED_THRESHOLD_MS = 10_000;
-const INDIGO_ROTATION_INTERVAL_MS = 60_000;
+const TURN_TIMER_WARNING_YELLOW_THRESHOLD_MS = 30000;
+const TURN_TIMER_WARNING_RED_THRESHOLD_MS = 10000;
+const INDIGO_ROTATION_INTERVAL_MS = 60000;
 const INDIGO_ROTATION_INCREMENT_DEGREES = 45;
 const TURN_INDICATOR_DEFAULT_TEXT = 'Waiting for turn';
 const TURN_INDICATOR_GM_TEXT = "GM's turn";
@@ -390,9 +390,9 @@ const TURN_FLASH_TONE_CLASSES = {
   red: 'is-turn-flash-red',
 };
 const MAP_PING_ANIMATION_DURATION_MS = 900;
-const MAP_PING_RETENTION_MS = 10_000;
+const MAP_PING_RETENTION_MS = 10000;
 const MAP_PING_HISTORY_LIMIT = 8;
-const MAP_PING_PROCESSED_RETENTION_MS = 60_000;
+const MAP_PING_PROCESSED_RETENTION_MS = 60000;
 
 export function mountBoardInteractions(store, routes = {}) {
   const board = document.getElementById('vtt-board-canvas');
@@ -13466,7 +13466,7 @@ function createTemplateTool() {
       return `tpl_${window.crypto.randomUUID()}`;
     }
 
-    const random = Math.floor(Math.random() * 1_000_000);
+    const random = Math.floor(Math.random() * 1000000);
     return `tpl_${Date.now().toString(36)}_${random.toString(36)}`;
   }
 
