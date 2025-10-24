@@ -1055,6 +1055,109 @@ export function mountBoardInteractions(store, routes = {}) {
         overlayEditorActive && activeSceneId && sceneId === activeSceneId ? 'true' : 'false';
       button.setAttribute('aria-pressed', pressed);
     });
+
+    syncOverlayVisibilityButtons();
+  }
+
+  function syncOverlayVisibilityButtons() {
+    if (!sceneListContainer) {
+      return;
+    }
+
+    const state = boardApi.getState?.() ?? {};
+    const boardState = state.boardState && typeof state.boardState === 'object' ? state.boardState : {};
+    const sceneState = boardState.sceneState && typeof boardState.sceneState === 'object'
+      ? boardState.sceneState
+      : {};
+    const activeSceneId = typeof boardState.activeSceneId === 'string' ? boardState.activeSceneId : null;
+
+    const buttons = sceneListContainer.querySelectorAll('[data-action="toggle-overlay-visibility"]');
+    buttons.forEach((button) => {
+      const sceneId = button.getAttribute('data-scene-id');
+      const sceneEntry = sceneId && sceneState[sceneId] && typeof sceneState[sceneId] === 'object'
+        ? sceneState[sceneId]
+        : {};
+      const overlayEntry = normalizeOverlayDraft(sceneEntry.overlay ?? {});
+      const mask = normalizeOverlayMask(overlayEntry.mask ?? {});
+      const maskVisible = mask.visible !== false;
+      const hasMaskContent = Array.isArray(mask.polygons) ? mask.polygons.length > 0 : false;
+      const hasOverlay = Boolean(overlayEntry.mapUrl) || Boolean(mask.url) || hasMaskContent;
+      const isActiveScene = Boolean(activeSceneId && sceneId && sceneId === activeSceneId);
+      const label = maskVisible ? 'Hide Overlay' : 'Show Overlay';
+      if (button.textContent !== label) {
+        button.textContent = label;
+      }
+      button.setAttribute('aria-pressed', maskVisible ? 'true' : 'false');
+      button.dataset.overlayVisible = maskVisible ? 'true' : 'false';
+
+      const shouldDisable = !isActiveScene || !hasOverlay;
+      if (shouldDisable) {
+        button.setAttribute('disabled', 'disabled');
+      } else {
+        button.removeAttribute('disabled');
+      }
+
+      let title = '';
+      if (!hasOverlay) {
+        title = 'Add an overlay before toggling its visibility.';
+      } else if (!isActiveScene) {
+        title = 'Activate this scene to change the overlay visibility.';
+      } else if (!isGmUser()) {
+        title = 'Only the GM can toggle overlay visibility.';
+      }
+
+      if (title) {
+        button.setAttribute('title', title);
+      } else {
+        button.removeAttribute('title');
+      }
+    });
+  }
+
+  function handleOverlayVisibilityToggle(button) {
+    if (!button || button.disabled) {
+      return;
+    }
+
+    if (!isGmUser()) {
+      return;
+    }
+
+    const sceneId = button.getAttribute('data-scene-id');
+    const activeSceneId = getActiveSceneId();
+    if (!sceneId || !activeSceneId || sceneId !== activeSceneId) {
+      return;
+    }
+
+    let overlayUpdated = false;
+    boardApi.updateState?.((draft) => {
+      const boardDraft = ensureBoardStateDraft(draft);
+      const sceneEntry = ensureSceneStateDraftEntry(draft, sceneId);
+      const overlayEntry = normalizeOverlayDraft(sceneEntry.overlay ?? {});
+      const mask = normalizeOverlayMask(overlayEntry.mask ?? {});
+      const hasMaskContent = Array.isArray(mask.polygons) ? mask.polygons.length > 0 : false;
+      const hasOverlay = Boolean(overlayEntry.mapUrl) || Boolean(mask.url) || hasMaskContent;
+      if (!hasOverlay) {
+        return;
+      }
+
+      mask.visible = !mask.visible;
+      overlayEntry.mask = mask;
+      sceneEntry.overlay = overlayEntry;
+      boardDraft.overlay = { ...overlayEntry };
+      overlayUpdated = true;
+    });
+
+    if (!overlayUpdated) {
+      return;
+    }
+
+    const latestState = boardApi.getState?.() ?? {};
+    const overlayState = resolveSceneOverlayState(latestState.boardState ?? {}, activeSceneId);
+    syncOverlayLayer(overlayState);
+    overlayTool.notifyOverlayMaskChange(overlayState ?? null);
+    syncOverlayVisibilityButtons();
+    persistBoardStateSnapshot();
   }
 
   function isInputElement(node) {
@@ -1181,6 +1284,17 @@ export function mountBoardInteractions(store, routes = {}) {
 
   if (sceneListContainer) {
     sceneListContainer.addEventListener('click', (event) => {
+      const visibilityButton = event.target.closest('[data-action="toggle-overlay-visibility"]');
+      if (visibilityButton) {
+        if (visibilityButton.disabled) {
+          return;
+        }
+
+        event.preventDefault();
+        handleOverlayVisibilityToggle(visibilityButton);
+        return;
+      }
+
       const button = event.target.closest('[data-action="toggle-overlay-editor"]');
       if (!button || button.disabled) {
         return;
@@ -3144,14 +3258,21 @@ export function mountBoardInteractions(store, routes = {}) {
     clearOverlayMask();
     const normalizedMask = normalizeOverlayMask(mask);
     mapOverlay.dataset.overlayMask = JSON.stringify(normalizedMask);
+    const maskVisible = normalizedMask.visible !== false;
+    mapOverlay.dataset.overlayMaskVisible = maskVisible ? 'true' : 'false';
+
+    if (!maskVisible && !(overlayEditorActive && allowDuringEditing)) {
+      mapOverlay.hidden = true;
+      mapOverlay.setAttribute('hidden', '');
+      return;
+    }
 
     if (overlayEditorActive && !allowDuringEditing) {
       return;
     }
 
-    if (!normalizedMask.visible) {
-      return;
-    }
+    mapOverlay.hidden = false;
+    mapOverlay.removeAttribute('hidden');
 
     const maskUrl = typeof normalizedMask.url === 'string' ? normalizedMask.url.trim() : '';
     if (maskUrl) {
@@ -3213,7 +3334,7 @@ export function mountBoardInteractions(store, routes = {}) {
     }
 
     const normalized = {
-      visible: raw.visible === undefined ? true : Boolean(raw.visible),
+      visible: normalizeOverlayMaskVisibility(raw.visible),
       polygons: [],
     };
 
@@ -3238,6 +3359,35 @@ export function mountBoardInteractions(store, routes = {}) {
     });
 
     return normalized;
+  }
+
+  function normalizeOverlayMaskVisibility(value) {
+    if (value === undefined) {
+      return true;
+    }
+
+    if (typeof value === 'boolean') {
+      return value;
+    }
+
+    if (typeof value === 'number') {
+      return value !== 0;
+    }
+
+    if (typeof value === 'string') {
+      const normalized = value.trim().toLowerCase();
+      if (!normalized) {
+        return true;
+      }
+      if (normalized === 'false' || normalized === '0' || normalized === 'off' || normalized === 'no') {
+        return false;
+      }
+      if (normalized === 'true' || normalized === '1' || normalized === 'on' || normalized === 'yes') {
+        return true;
+      }
+    }
+
+    return Boolean(value);
   }
 
   function overlayMaskSignature(mask = null) {
@@ -9920,6 +10070,7 @@ function createOverlayTool(uploadsEndpoint) {
       }
       applyPreviewMask();
       updateControls();
+      syncOverlayVisibilityButtons();
       return;
     }
 
@@ -9932,6 +10083,7 @@ function createOverlayTool(uploadsEndpoint) {
     }
     applyPreviewMask();
     updateControls();
+    syncOverlayVisibilityButtons();
   }
 
   function setNodesFromMask(mask) {

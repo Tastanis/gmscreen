@@ -465,7 +465,7 @@ function normalizeOverlayMask(raw) {
   }
 
   const normalized = {
-    visible: raw.visible === undefined ? true : Boolean(raw.visible),
+    visible: normalizeOverlayMaskVisibility(raw.visible),
     polygons: [],
   };
 
@@ -517,6 +517,35 @@ function roundToPrecision(value, precision = 4) {
   const places = Number.isFinite(precision) ? Math.max(0, Math.trunc(precision)) : 0;
   const factor = 10 ** places;
   return Math.round(value * factor) / factor;
+}
+
+function normalizeOverlayMaskVisibility(value) {
+  if (value === undefined) {
+    return true;
+  }
+
+  if (typeof value === 'boolean') {
+    return value;
+  }
+
+  if (typeof value === 'number') {
+    return value !== 0;
+  }
+
+  if (typeof value === 'string') {
+    const normalized = value.trim().toLowerCase();
+    if (!normalized) {
+      return true;
+    }
+    if (normalized === 'false' || normalized === '0' || normalized === 'off' || normalized === 'no') {
+      return false;
+    }
+    if (normalized === 'true' || normalized === '1' || normalized === 'on' || normalized === 'yes') {
+      return true;
+    }
+  }
+
+  return Boolean(value);
 }
 
 function updateFolderOptions(select, folders = []) {
@@ -581,7 +610,11 @@ function renderSceneItem(scene, activeSceneId, sceneBoardState = {}, options = {
   const isActive = scene.id === activeSceneId;
   const name = escapeHtml(scene.name || 'Untitled Scene');
   const overlayState = normalizeOverlayConfig(sceneBoardState.overlay ?? {});
-  const hasOverlay = Boolean(overlayState.mapUrl) || Object.keys(overlayState.mask).length > 0;
+  const overlayMask = overlayState.mask ?? createEmptyOverlayMask();
+  const overlayMaskHasContent = Boolean(overlayMask.url)
+    || (Array.isArray(overlayMask.polygons) ? overlayMask.polygons.length > 0 : false);
+  const overlayMaskVisible = overlayMask.visible !== false;
+  const hasOverlay = Boolean(overlayState.mapUrl) || overlayMaskHasContent;
   const overlayUploadsEnabled = Boolean(options.overlayUploadsEnabled);
   const overlayUploadPending = Boolean(options.overlayUploadPending);
   const overlayButtonDisabled = !isActive || !overlayUploadsEnabled || overlayUploadPending;
@@ -593,6 +626,14 @@ function renderSceneItem(scene, activeSceneId, sceneBoardState = {}, options = {
   } else if (overlayUploadPending) {
     overlayButtonTitle = 'An overlay upload is already in progress.';
   }
+  const overlayVisibilityDisabled = !isActive || !hasOverlay;
+  let overlayVisibilityTitle = '';
+  if (!hasOverlay) {
+    overlayVisibilityTitle = 'Add an overlay before toggling its visibility.';
+  } else if (!isActive) {
+    overlayVisibilityTitle = 'Activate this scene to change the overlay visibility.';
+  }
+  const overlayVisibilityLabel = overlayMaskVisible ? 'Hide Overlay' : 'Show Overlay';
   const cutoutButtonDisabled = !isActive;
   const cutoutButtonTitle = isActive
     ? 'Edit the scene overlay cutout'
@@ -616,6 +657,18 @@ function renderSceneItem(scene, activeSceneId, sceneBoardState = {}, options = {
             ${overlayButtonTitle ? ` title="${escapeHtml(overlayButtonTitle)}"` : ''}
           >
             Upload Overlay
+          </button>
+          <button
+            type="button"
+            class="btn"
+            data-action="toggle-overlay-visibility"
+            data-scene-id="${scene.id}"
+            aria-pressed="${overlayMaskVisible ? 'true' : 'false'}"
+            data-overlay-visible="${overlayMaskVisible ? 'true' : 'false'}"
+            ${overlayVisibilityDisabled ? 'disabled' : ''}
+            ${overlayVisibilityTitle ? ` title="${escapeHtml(overlayVisibilityTitle)}"` : ''}
+          >
+            ${overlayVisibilityLabel}
           </button>
           <button
             type="button"

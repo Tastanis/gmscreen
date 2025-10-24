@@ -245,7 +245,7 @@ function formatOverlayMask(raw) {
   }
 
   const normalized = {
-    visible: raw.visible === undefined ? true : Boolean(raw.visible),
+    visible: normalizeOverlayMaskVisibility(raw.visible),
     polygons: [],
   };
 
@@ -270,6 +270,35 @@ function formatOverlayMask(raw) {
   });
 
   return normalized;
+}
+
+function normalizeOverlayMaskVisibility(value) {
+  if (value === undefined) {
+    return true;
+  }
+
+  if (typeof value === 'boolean') {
+    return value;
+  }
+
+  if (typeof value === 'number') {
+    return value !== 0;
+  }
+
+  if (typeof value === 'string') {
+    const normalized = value.trim().toLowerCase();
+    if (!normalized) {
+      return true;
+    }
+    if (normalized === 'false' || normalized === '0' || normalized === 'off' || normalized === 'no') {
+      return false;
+    }
+    if (normalized === 'true' || normalized === '1' || normalized === 'on' || normalized === 'yes') {
+      return true;
+    }
+  }
+
+  return Boolean(value);
 }
 
 function formatOverlayPoint(point) {
