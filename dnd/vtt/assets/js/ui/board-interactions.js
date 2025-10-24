@@ -204,14 +204,38 @@ export function createBoardStatePoller({
 
 export async function createOverlayCutoutBlob({
   mapUrl,
+  polygons,
   polygon,
   view = {},
   documentRef = typeof document !== 'undefined' ? document : null,
 } = {}) {
   const url = typeof mapUrl === 'string' ? mapUrl.trim() : '';
-  const points = Array.isArray(polygon?.points) ? polygon.points : [];
+  const normalizedPolygons = [];
 
-  if (!documentRef || !url || points.length < 3) {
+  const appendPolygon = (entry) => {
+    const points = Array.isArray(entry?.points) ? entry.points : [];
+    const normalizedPoints = points
+      .map((point) => {
+        const column = Number(point?.column ?? point?.x);
+        const row = Number(point?.row ?? point?.y);
+        return Number.isFinite(column) && Number.isFinite(row)
+          ? { column, row }
+          : null;
+      })
+      .filter(Boolean);
+
+    if (normalizedPoints.length >= 3) {
+      normalizedPolygons.push(normalizedPoints);
+    }
+  };
+
+  if (Array.isArray(polygons)) {
+    polygons.forEach(appendPolygon);
+  } else if (polygon) {
+    appendPolygon(polygon);
+  }
+
+  if (!documentRef || !url || normalizedPolygons.length === 0) {
     return null;
   }
 
@@ -252,20 +276,21 @@ export async function createOverlayCutoutBlob({
   context.globalCompositeOperation = 'destination-in';
   context.beginPath();
 
-  points.forEach((point, index) => {
-    const column = Number(point?.column ?? point?.x ?? 0);
-    const row = Number(point?.row ?? point?.y ?? 0);
-    const x = offsetLeft + column * gridSize;
-    const y = offsetTop + row * gridSize;
+  normalizedPolygons.forEach((points) => {
+    points.forEach((point, index) => {
+      const x = offsetLeft + point.column * gridSize;
+      const y = offsetTop + point.row * gridSize;
 
-    if (index === 0) {
-      context.moveTo(x, y);
-    } else {
-      context.lineTo(x, y);
-    }
+      if (index === 0) {
+        context.moveTo(x, y);
+      } else {
+        context.lineTo(x, y);
+      }
+    });
+
+    context.closePath();
   });
 
-  context.closePath();
   context.fill();
   context.restore();
 
@@ -10320,20 +10345,21 @@ function createOverlayTool(uploadsEndpoint) {
     }
 
     const preview = buildPreviewMask();
-    const polygon = Array.isArray(preview?.polygons) ? preview.polygons[0] ?? null : null;
+    const polygons = Array.isArray(preview?.polygons) ? preview.polygons : [];
+    const validPolygons = polygons.filter(
+      (polygon) => Array.isArray(polygon?.points) && polygon.points.length >= 3
+    );
     const canPersistCutout =
       Boolean(uploadsEndpoint) &&
       Boolean(persistedMapUrl) &&
-      polygon &&
-      Array.isArray(polygon.points) &&
-      polygon.points.length >= 3;
+      validPolygons.length > 0;
 
     if (canPersistCutout) {
       try {
         setStatus('Saving overlay cutout…');
         const blob = await overlayUploadHelpers.createOverlayCutoutBlob({
           mapUrl: persistedMapUrl,
-          polygon,
+          polygons: validPolygons,
           view: viewState,
         });
 

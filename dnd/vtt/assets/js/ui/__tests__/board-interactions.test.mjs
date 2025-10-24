@@ -547,6 +547,21 @@ test('overlay cutout upload replaces overlay map when available', async () => {
     assert.equal(uploadMock.mock.calls.length, 1, 'upload helper should be called once');
     assert.equal(cutoutMock.mock.calls.length, 1, 'cutout helper should be called once');
 
+    const cutoutArgs = cutoutMock.mock.calls[0]?.arguments?.[0] ?? null;
+    assert.deepEqual(
+      cutoutArgs?.polygons,
+      [
+        {
+          points: [
+            { column: 1, row: 1 },
+            { column: 5, row: 1 },
+            { column: 5, row: 5 },
+          ],
+        },
+      ],
+      'cutout helper should receive the closed polygon'
+    );
+
     const state = store.getState();
     const overlay = state.boardState.sceneState['scene-1'].overlay;
     assert.equal(overlay.mapUrl, 'http://example.com/cropped.png');
