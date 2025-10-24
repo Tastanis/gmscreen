@@ -522,23 +522,325 @@ export function mountBoardInteractions(store, routes = {}) {
   const DRAG_ACTIVATION_DISTANCE = 6;
   const DEFAULT_HP_PLACEHOLDER = '—';
   const DEFAULT_HP_DISPLAY = `${DEFAULT_HP_PLACEHOLDER} / ${DEFAULT_HP_PLACEHOLDER}`;
-  const CONDITION_NAMES = [
-    'Blinded',
-    'Charmed',
-    'Deafened',
-    'Exhaustion',
-    'Frightened',
-    'Grappled',
-    'Incapacitated',
-    'Invisible',
-    'Paralyzed',
-    'Petrified',
-    'Poisoned',
-    'Prone',
-    'Restrained',
-    'Stunned',
-    'Unconscious',
+  const CONDITION_DEFINITIONS = [
+    {
+      name: 'Bleeding',
+      description:
+        'While bleeding, whenever you make a test using Might or Agility, make a strike, or use an action, maneuver, or a triggered action, you lose 1d6 Stamina after the test, action, maneuver, or triggered action is resolved. This Stamina loss can’t be prevented in any way.',
+    },
+    {
+      name: 'Dazed',
+      description:
+        'While you are dazed, you can do only one thing on your turn: use a maneuver, use an action, or take a move action. You also can’t use triggered actions, free triggered actions, or free maneuvers.',
+    },
+    {
+      name: 'Frightened',
+      description:
+        'If you are frightened, ability power rolls you make against the source of your fear take a bane. If that source is a creature, their ability power rolls against you gain an edge. You can’t willingly move closer to the source of your fear if you know the location of that source. If you gain the frightened condition from one source while already frightened by a different source, the new condition replaces the old one.',
+    },
+    {
+      name: 'Grabbed',
+      description:
+        'While you are grabbed, your speed is 0, you can’t be force moved, you can’t use the Knockback maneuver, and you take a bane on abilities that don’t target the creature grabbing you. If the creature grabbing you moves, they bring you with them. If the creature’s size is equal to or less than yours, their speed is halved while they have you grabbed. The creature grabbing you can use a maneuver to move you into an unoccupied space adjacent to them. The creature grabbing you can end the grab at any time (no action required). You can also attempt to escape being grabbed using the Escape Grab maneuver (see Maneuvers in Combat). If you teleport or if the creature grabbing you is force moved to a space that isn’t adjacent to you, you are no longer grabbed.',
+    },
+    {
+      name: 'Prone',
+      description:
+        'While you are prone, you are flat on the ground, strikes you make take a bane, and melee abilities made against you gain an edge. You must crawl to move along the ground, which costs you 1 additional square of movement for every square you crawl. You can’t climb, jump, swim, or fly while prone. If you are climbing, flying, or jumping while you are knocked prone, you fall. While prone, you can stand up as a maneuver (see Maneuvers in Combat), unless the ability or effect that imposed the condition says otherwise. You can use a maneuver to make an adjacent prone creature stand up.',
+    },
+    {
+      name: 'Restrained',
+      description:
+        'While you are restrained, your speed is 0, you can’t use the Stand Up maneuver, and you can’t be force moved. Your ability power rolls take a bane, abilities against you gain an edge, and you have a bane on Might and Agility tests. If you teleport while restrained, the condition ends.',
+    },
+    {
+      name: 'Slowed',
+      description: 'While you are slowed, your speed is 2 unless it is already lower, and you can’t shift.',
+    },
+    {
+      name: 'Taunted',
+      description:
+        'If you are taunted, you have a double bane on ability power rolls that don’t target the creature who taunted you while you have line of effect to that creature. If you gain the taunted condition from one creature while already taunted by a different creature, the new condition replaces the old one.',
+    },
+    {
+      name: 'Weakened',
+      description: 'While you are weakened, all your power rolls take a bane.',
+    },
   ];
+  const CONDITION_NAMES = CONDITION_DEFINITIONS.map((definition) => definition.name);
+  const CONDITION_DEFINITION_MAP = new Map(
+    CONDITION_DEFINITIONS.map((definition) => [definition.name.toLowerCase(), definition])
+  );
+  const CONDITION_ALIASES = new Map([
+    ['grappled', 'Grabbed'],
+  ]);
+  const conditionTooltipRegistry = new WeakMap();
+  let conditionTooltipElement = null;
+  let conditionTooltipActiveTarget = null;
+
+  function getConditionDefinition(name) {
+    if (typeof name !== 'string') {
+      return null;
+    }
+
+    const normalized = name.trim().toLowerCase();
+    if (!normalized) {
+      return null;
+    }
+
+    const alias = CONDITION_ALIASES.get(normalized);
+    const lookupKey = alias ? alias.toLowerCase() : normalized;
+    return CONDITION_DEFINITION_MAP.get(lookupKey) ?? null;
+  }
+
+  function normalizeConditionTooltipEntries(source) {
+    if (!source) {
+      return [];
+    }
+
+    const rawEntries = Array.isArray(source) ? source : [source];
+    const entries = [];
+
+    rawEntries.forEach((entry) => {
+      if (!entry) {
+        return;
+      }
+
+      if (typeof entry === 'string') {
+        const definition = getConditionDefinition(entry);
+        if (definition?.description) {
+          entries.push({ name: definition.name, description: definition.description });
+        }
+        return;
+      }
+
+      if (typeof entry === 'object') {
+        const name = typeof entry.name === 'string' ? entry.name.trim() : '';
+        if (!name) {
+          return;
+        }
+
+        const definition = getConditionDefinition(name);
+        if (definition?.description) {
+          entries.push({ name: definition.name, description: definition.description });
+        } else if (typeof entry.description === 'string' && entry.description.trim()) {
+          entries.push({ name, description: entry.description.trim() });
+        }
+      }
+    });
+
+    return entries;
+  }
+
+  function ensureConditionTooltipElement() {
+    if (conditionTooltipElement || typeof document === 'undefined') {
+      return conditionTooltipElement;
+    }
+
+    if (!document?.body) {
+      return null;
+    }
+
+    const element = document.createElement('div');
+    element.id = 'vtt-condition-tooltip';
+    element.className = 'vtt-condition-tooltip';
+    element.setAttribute('role', 'tooltip');
+    element.hidden = true;
+    document.body.appendChild(element);
+    conditionTooltipElement = element;
+    return conditionTooltipElement;
+  }
+
+  function renderConditionTooltip(entries) {
+    const tooltip = ensureConditionTooltipElement();
+    if (!tooltip) {
+      return;
+    }
+
+    tooltip.replaceChildren();
+    tooltip.removeAttribute('aria-label');
+    entries.forEach((entry, index) => {
+      if (!entry?.name || !entry?.description) {
+        return;
+      }
+      const item = document.createElement('div');
+      item.className = 'vtt-condition-tooltip__item';
+
+      const nameElement = document.createElement('div');
+      nameElement.className = 'vtt-condition-tooltip__name';
+      nameElement.textContent = entry.name;
+      item.appendChild(nameElement);
+
+      const descriptionElement = document.createElement('div');
+      descriptionElement.className = 'vtt-condition-tooltip__description';
+      descriptionElement.textContent = entry.description;
+      item.appendChild(descriptionElement);
+
+      tooltip.appendChild(item);
+      if (index === 0) {
+        tooltip.setAttribute('aria-label', `${entry.name}: ${entry.description}`);
+      }
+    });
+  }
+
+  function positionConditionTooltip(target) {
+    const tooltip = ensureConditionTooltipElement();
+    if (!tooltip || !target || typeof target.getBoundingClientRect !== 'function') {
+      return;
+    }
+
+    const { clientWidth: viewportWidth, clientHeight: viewportHeight } =
+      document.documentElement || document.body;
+
+    tooltip.style.left = '0px';
+    tooltip.style.top = '0px';
+    tooltip.hidden = false;
+    tooltip.style.visibility = 'hidden';
+    tooltip.dataset.visible = 'true';
+
+    const targetRect = target.getBoundingClientRect();
+    const tooltipRect = tooltip.getBoundingClientRect();
+
+    let left = targetRect.left + targetRect.width / 2 - tooltipRect.width / 2;
+    let top = targetRect.bottom + 8;
+
+    const margin = 8;
+    if (left + tooltipRect.width > viewportWidth - margin) {
+      left = viewportWidth - tooltipRect.width - margin;
+    }
+    if (left < margin) {
+      left = margin;
+    }
+
+    if (top + tooltipRect.height > viewportHeight - margin) {
+      top = Math.max(margin, targetRect.top - tooltipRect.height - 8);
+    }
+
+    tooltip.style.left = `${Math.round(left)}px`;
+    tooltip.style.top = `${Math.round(top)}px`;
+    tooltip.style.visibility = '';
+  }
+
+  function showConditionTooltip(target, entries) {
+    const tooltipEntries = normalizeConditionTooltipEntries(entries);
+    if (!tooltipEntries.length) {
+      return;
+    }
+
+    const tooltip = ensureConditionTooltipElement();
+    if (!tooltip) {
+      return;
+    }
+
+    renderConditionTooltip(tooltipEntries);
+    positionConditionTooltip(target);
+    conditionTooltipActiveTarget = target;
+    target?.setAttribute('aria-describedby', 'vtt-condition-tooltip');
+  }
+
+  function hideConditionTooltip(target) {
+    if (target && conditionTooltipActiveTarget && target !== conditionTooltipActiveTarget) {
+      return;
+    }
+
+    const tooltip = ensureConditionTooltipElement();
+    if (!tooltip) {
+      return;
+    }
+
+    tooltip.hidden = true;
+    tooltip.removeAttribute('data-visible');
+    tooltip.style.visibility = '';
+    conditionTooltipActiveTarget?.removeAttribute('aria-describedby');
+    conditionTooltipActiveTarget = null;
+  }
+
+  function configureConditionTooltip(target, entries, options = {}) {
+    if (!target) {
+      return;
+    }
+
+    const tooltipEntries = normalizeConditionTooltipEntries(entries);
+    const delay =
+      typeof options.delay === 'number' && options.delay >= 0 ? options.delay : 400;
+
+    if (!tooltipEntries.length) {
+      detachConditionTooltip(target);
+      return;
+    }
+
+    let registryEntry = conditionTooltipRegistry.get(target);
+    if (!registryEntry) {
+      registryEntry = {
+        entries: tooltipEntries,
+        delay,
+        showTimeoutId: null,
+      };
+      conditionTooltipRegistry.set(target, registryEntry);
+
+      registryEntry.handlePointerEnter = () => {
+        window.clearTimeout(registryEntry.showTimeoutId);
+        registryEntry.showTimeoutId = window.setTimeout(() => {
+          showConditionTooltip(target, registryEntry.entries);
+        }, registryEntry.delay);
+      };
+
+      registryEntry.handlePointerLeave = () => {
+        window.clearTimeout(registryEntry.showTimeoutId);
+        hideConditionTooltip(target);
+      };
+
+      registryEntry.handlePointerDown = () => {
+        window.clearTimeout(registryEntry.showTimeoutId);
+        hideConditionTooltip(target);
+      };
+
+      registryEntry.handleFocus = () => {
+        window.clearTimeout(registryEntry.showTimeoutId);
+        registryEntry.showTimeoutId = window.setTimeout(() => {
+          showConditionTooltip(target, registryEntry.entries);
+        }, Math.min(registryEntry.delay, 200));
+      };
+
+      registryEntry.handleBlur = () => {
+        window.clearTimeout(registryEntry.showTimeoutId);
+        hideConditionTooltip(target);
+      };
+
+      target.addEventListener('pointerenter', registryEntry.handlePointerEnter);
+      target.addEventListener('pointerleave', registryEntry.handlePointerLeave);
+      target.addEventListener('pointerdown', registryEntry.handlePointerDown);
+      target.addEventListener('pointercancel', registryEntry.handlePointerLeave);
+      target.addEventListener('focus', registryEntry.handleFocus);
+      target.addEventListener('blur', registryEntry.handleBlur);
+    }
+
+    registryEntry.entries = tooltipEntries;
+    registryEntry.delay = delay;
+  }
+
+  function detachConditionTooltip(target) {
+    if (!target) {
+      return;
+    }
+
+    const registryEntry = conditionTooltipRegistry.get(target);
+    if (!registryEntry) {
+      return;
+    }
+
+    target.removeEventListener('pointerenter', registryEntry.handlePointerEnter);
+    target.removeEventListener('pointerleave', registryEntry.handlePointerLeave);
+    target.removeEventListener('pointerdown', registryEntry.handlePointerDown);
+    target.removeEventListener('pointercancel', registryEntry.handlePointerLeave);
+    target.removeEventListener('focus', registryEntry.handleFocus);
+    target.removeEventListener('blur', registryEntry.handleBlur);
+    window.clearTimeout(registryEntry.showTimeoutId);
+    if (conditionTooltipActiveTarget === target) {
+      hideConditionTooltip(target);
+    }
+    conditionTooltipRegistry.delete(target);
+  }
   const tokenSettingsMenu = createTokenSettingsMenu();
   const conditionBannerRegistry = new Map();
   const MAX_CONDITION_BANNERS = 4;
@@ -768,10 +1070,23 @@ export function mountBoardInteractions(store, routes = {}) {
       banner.dataset.tone = tone;
     }
 
+    const content = document.createElement('div');
+    content.className = 'vtt-condition-banner__content';
+    banner.appendChild(content);
+
     const messageElement = document.createElement('p');
     messageElement.className = 'vtt-condition-banner__message';
     messageElement.textContent = normalized;
-    banner.appendChild(messageElement);
+    content.appendChild(messageElement);
+
+    const descriptionText =
+      typeof options.description === 'string' ? options.description.trim() : '';
+    if (descriptionText) {
+      const descriptionElement = document.createElement('p');
+      descriptionElement.className = 'vtt-condition-banner__description';
+      descriptionElement.textContent = descriptionText;
+      content.appendChild(descriptionElement);
+    }
 
     const closeButton = document.createElement('button');
     closeButton.type = 'button';
@@ -3950,16 +4265,24 @@ export function mountBoardInteractions(store, routes = {}) {
       return;
     }
 
+    const notified = new Set();
     conditions.forEach((condition) => {
       const name = typeof condition?.name === 'string' ? condition.name.trim() : '';
       if (!name) {
         return;
       }
-      const durationType = getConditionDurationType(condition);
-      if (durationType !== 'save-ends' && durationType !== 'end-of-turn') {
+      const definition = getConditionDefinition(name);
+      const displayName = definition?.name ?? name;
+      const description = definition?.description ?? '';
+      const key = displayName.toLowerCase();
+      if (notified.has(key)) {
         return;
       }
-      showConditionBanner(`${label} has ${name}`, { tone: 'reminder' });
+      notified.add(key);
+      showConditionBanner(`${label} has ${displayName}`, {
+        tone: 'reminder',
+        description,
+      });
     });
   }
 
@@ -6026,6 +6349,7 @@ export function mountBoardInteractions(store, routes = {}) {
 
     if (!conditions.length) {
       if (label) {
+        detachConditionTooltip(label);
         label.remove();
       }
       return;
@@ -6038,6 +6362,7 @@ export function mountBoardInteractions(store, routes = {}) {
 
     if (!text) {
       if (label) {
+        detachConditionTooltip(label);
         label.remove();
       }
       return;
@@ -6053,7 +6378,8 @@ export function mountBoardInteractions(store, routes = {}) {
       label.textContent = text;
     }
     label.setAttribute('aria-label', text);
-    label.title = text;
+    label.removeAttribute('title');
+    configureConditionTooltip(label, conditions, { delay: 500 });
   }
 
   function handleTriggerIndicatorPointerDown(event) {
@@ -8146,6 +8472,9 @@ export function mountBoardInteractions(store, routes = {}) {
       return;
     }
 
+    Array.from(list.querySelectorAll('.vtt-token-settings__condition-name')).forEach((node) => {
+      detachConditionTooltip(node);
+    });
     list.innerHTML = '';
 
     conditions.forEach((condition, index) => {
@@ -8163,6 +8492,8 @@ export function mountBoardInteractions(store, routes = {}) {
       const nameSpan = document.createElement('span');
       nameSpan.className = 'vtt-token-settings__condition-name';
       nameSpan.textContent = name;
+      nameSpan.dataset.tokenSettingsConditionName = name;
+      configureConditionTooltip(nameSpan, condition, { delay: 300 });
       item.appendChild(nameSpan);
 
       const removeButton = document.createElement('button');
