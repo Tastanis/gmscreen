@@ -684,8 +684,9 @@
 
 .scene-overlay__item {
   display: flex;
-  align-items: center;
-  gap: 0.75rem;
+  flex-direction: column;
+  align-items: stretch;
+  gap: 0.5rem;
   padding: 0.55rem 0.75rem;
   border-radius: calc(var(--vtt-radius) - 3px);
   background: rgba(30, 41, 59, 0.35);
@@ -704,6 +705,12 @@
 
 .scene-overlay__item[data-overlay-visible='false'] {
   opacity: 0.7;
+}
+
+.scene-overlay__header {
+  display: flex;
+  align-items: center;
+  gap: 0.6rem;
 }
 
 .scene-overlay__visibility {
@@ -758,15 +765,6 @@
   outline-offset: 2px;
 }
 
-.scene-overlay__meta {
-  display: flex;
-  align-items: center;
-  gap: 0.5rem;
-  flex: 1 1 auto;
-  min-width: 0;
-  padding-top: 0.15rem;
-}
-
 .scene-overlay__name {
   flex: 1 1 auto;
   font-weight: 500;
@@ -782,10 +780,8 @@
   display: flex;
   flex-wrap: wrap;
   align-items: center;
-  justify-content: flex-end;
+  justify-content: flex-start;
   gap: 0.3rem;
-  flex: 0 0 auto;
-  margin-left: auto;
   min-width: 0;
 }
 
