@@ -846,7 +846,7 @@ function fallbackPrefixMatch(candidate, fallback) {
 }
 
 function escapeRegExp(value) {
-  return value.replace(/[.*+?^${}()|[\]\]/g, '\$&');
+  return String(value).replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
 }
 
 function resolveActiveLayerId(preferredId, layers = []) {
