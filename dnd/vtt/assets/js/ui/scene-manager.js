@@ -1088,24 +1088,13 @@ function renderSceneItem(scene, activeSceneId, sceneBoardState = {}, options = {
   const isActive = scene.id === activeSceneId;
   const name = escapeHtml(scene.name || 'Untitled Scene');
   const overlayState = normalizeOverlayConfig(sceneBoardState.overlay ?? {});
-  const overlayUploadsEnabled = Boolean(options.overlayUploadsEnabled);
-  const overlayUploadPending = Boolean(options.overlayUploadPending);
   const overlayMapSet = Boolean(overlayState.mapUrl);
   const hasOverlayContent = overlayMapSet || overlayState.layers.some((layer) => maskHasMeaningfulContent(layer.mask));
-  const uploadDisabled = !isActive || !overlayUploadsEnabled || overlayUploadPending;
-  let uploadTitle = '';
-  if (!overlayUploadsEnabled) {
-    uploadTitle = 'Overlay uploads are not available right now.';
-  } else if (!isActive) {
-    uploadTitle = 'Activate this scene to upload an overlay image.';
-  } else if (overlayUploadPending) {
-    uploadTitle = 'An overlay upload is already in progress.';
-  }
 
   const addOverlayDisabled = !overlayMapSet;
   const addOverlayTitle = overlayMapSet
     ? ''
-    : 'Upload an overlay image before adding overlays.';
+    : 'Set an overlay image before adding overlay layers.';
 
   const clearOverlayDisabled = !hasOverlayContent;
   const clearOverlayTitle = hasOverlayContent ? '' : 'No overlay content to clear.';
@@ -1122,17 +1111,7 @@ function renderSceneItem(scene, activeSceneId, sceneBoardState = {}, options = {
           <div class="scene-overlay__actions">
             <button
               type="button"
-              class="btn"
-              data-action="upload-overlay-map"
-              data-scene-id="${scene.id}"
-              ${uploadDisabled ? 'disabled' : ''}
-              ${uploadTitle ? ` title="${escapeHtml(uploadTitle)}"` : ''}
-            >
-              ${overlayMapSet ? 'Replace Overlay Image' : 'Upload Overlay Image'}
-            </button>
-            <button
-              type="button"
-              class="btn"
+              class="btn btn--small"
               data-action="add-overlay-layer"
               data-scene-id="${scene.id}"
               ${addOverlayDisabled ? 'disabled' : ''}
@@ -1180,9 +1159,8 @@ function renderOverlayList(sceneId, overlayState, options = {}) {
 function renderOverlayListItem(sceneId, overlayState, layer, index, options = {}) {
   const name = escapeHtml(layer.name || `Overlay ${index + 1}`);
   const overlayVisible = layer.visible !== false && normalizeOverlayMask(layer.mask ?? {}).visible !== false;
-  const visibilityLabel = overlayVisible ? 'Hide' : 'Show';
   const visibilityTitle = options.isActiveScene
-    ? ''
+    ? 'Toggle overlay visibility.'
     : 'Activate this scene to toggle overlay visibility.';
   const editDisabled = !options.isActiveScene || !options.overlayMapSet;
   let editTitle = '';
@@ -1195,11 +1173,23 @@ function renderOverlayListItem(sceneId, overlayState, layer, index, options = {}
 
   return `
     <li class="scene-overlay__item${isActiveLayer ? ' is-active' : ''}" data-overlay-id="${layer.id}" data-scene-id="${sceneId}" data-overlay-visible="${overlayVisible ? 'true' : 'false'}">
+      <label class="scene-overlay__visibility" ${visibilityTitle ? ` title="${escapeHtml(visibilityTitle)}"` : ''}>
+        <input
+          type="checkbox"
+          class="scene-overlay__checkbox"
+          data-action="toggle-overlay-layer-visibility"
+          data-scene-id="${sceneId}"
+          data-overlay-id="${layer.id}"
+          aria-label="${overlayVisible ? 'Hide overlay' : 'Show overlay'}"
+          ${overlayVisible ? 'checked' : ''}
+          ${options.isActiveScene ? '' : 'disabled'}
+        />
+      </label>
       <div class="scene-overlay__meta">
-        <span class="scene-overlay__name">${name}</span>
+        <span class="scene-overlay__name" title="${name}">${name}</span>
         <button
           type="button"
-          class="btn scene-overlay__rename"
+          class="btn btn--ghost btn--tiny scene-overlay__rename"
           data-action="rename-overlay-layer"
           data-scene-id="${sceneId}"
           data-overlay-id="${layer.id}"
@@ -1210,19 +1200,7 @@ function renderOverlayListItem(sceneId, overlayState, layer, index, options = {}
       <div class="scene-overlay__controls">
         <button
           type="button"
-          class="btn scene-overlay__toggle"
-          data-action="toggle-overlay-layer-visibility"
-          data-scene-id="${sceneId}"
-          data-overlay-id="${layer.id}"
-          aria-pressed="${overlayVisible ? 'true' : 'false'}"
-          ${options.isActiveScene ? '' : 'disabled'}
-          ${visibilityTitle ? ` title="${escapeHtml(visibilityTitle)}"` : ''}
-        >
-          ${visibilityLabel}
-        </button>
-        <button
-          type="button"
-          class="btn scene-overlay__edit"
+          class="btn btn--ghost btn--tiny scene-overlay__edit"
           data-action="edit-overlay-layer"
           data-scene-id="${sceneId}"
           data-overlay-id="${layer.id}"
@@ -1234,7 +1212,7 @@ function renderOverlayListItem(sceneId, overlayState, layer, index, options = {}
         </button>
         <button
           type="button"
-          class="btn btn--danger scene-overlay__delete"
+          class="btn btn--ghost btn--tiny btn--danger scene-overlay__delete"
           data-action="delete-overlay-layer"
           data-scene-id="${sceneId}"
           data-overlay-id="${layer.id}"

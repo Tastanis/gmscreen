@@ -658,8 +658,8 @@
 .scene-item__overlays {
   display: flex;
   flex-direction: column;
-  gap: 0.5rem;
-  padding: 0.75rem;
+  gap: 0.65rem;
+  padding: 0.65rem;
   border-radius: calc(var(--vtt-radius) - 2px);
   background: rgba(15, 23, 42, 0.55);
   box-shadow: inset 0 0 0 1px rgba(148, 163, 184, 0.15);
@@ -668,8 +668,9 @@
 .scene-overlay__actions {
   display: flex;
   flex-wrap: wrap;
+  align-items: center;
+  justify-content: space-between;
   gap: 0.5rem;
-  justify-content: flex-start;
 }
 
 .scene-overlay__list {
@@ -678,39 +679,107 @@
   padding: 0;
   display: flex;
   flex-direction: column;
-  gap: 0.5rem;
+  gap: 0.35rem;
 }
 
 .scene-overlay__item {
   display: flex;
-  flex-direction: column;
-  gap: 0.5rem;
-  padding: 0.5rem 0.75rem;
+  align-items: center;
+  gap: 0.75rem;
+  padding: 0.45rem 0.6rem;
   border-radius: calc(var(--vtt-radius) - 3px);
-  background: rgba(30, 41, 59, 0.45);
+  background: rgba(30, 41, 59, 0.35);
   box-shadow: inset 0 0 0 1px rgba(148, 163, 184, 0.12);
+  transition: box-shadow var(--vtt-transition), background var(--vtt-transition);
+}
+
+.scene-overlay__item:hover {
+  background: rgba(30, 41, 59, 0.45);
 }
 
 .scene-overlay__item.is-active {
-  box-shadow: inset 0 0 0 1px rgba(99, 102, 241, 0.45);
+  box-shadow: inset 0 0 0 1px rgba(99, 102, 241, 0.5);
+  background: rgba(76, 29, 149, 0.28);
+}
+
+.scene-overlay__item[data-overlay-visible='false'] {
+  opacity: 0.7;
+}
+
+.scene-overlay__visibility {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  flex: 0 0 auto;
+  padding-right: 0.2rem;
+}
+
+.scene-overlay__checkbox {
+  appearance: none;
+  width: 34px;
+  height: 18px;
+  border-radius: 999px;
+  background: rgba(99, 102, 241, 0.15);
+  border: 1px solid rgba(99, 102, 241, 0.35);
+  position: relative;
+  cursor: pointer;
+  transition: background var(--vtt-transition), border-color var(--vtt-transition);
+}
+
+.scene-overlay__checkbox::after {
+  content: '';
+  position: absolute;
+  top: 2px;
+  left: 2px;
+  width: 12px;
+  height: 12px;
+  border-radius: 50%;
+  background: var(--vtt-text-primary);
+  transition: transform var(--vtt-transition), background var(--vtt-transition);
+}
+
+.scene-overlay__checkbox:checked {
+  background: rgba(99, 102, 241, 0.75);
+  border-color: rgba(99, 102, 241, 0.9);
+}
+
+.scene-overlay__checkbox:checked::after {
+  transform: translateX(16px);
+  background: #fff;
+}
+
+.scene-overlay__checkbox:disabled {
+  cursor: not-allowed;
+  opacity: 0.4;
+}
+
+.scene-overlay__checkbox:focus-visible {
+  outline: 2px solid rgba(148, 163, 184, 0.9);
+  outline-offset: 2px;
 }
 
 .scene-overlay__meta {
   display: flex;
-  justify-content: space-between;
   align-items: center;
   gap: 0.5rem;
+  flex: 1 1 auto;
+  min-width: 0;
 }
 
 .scene-overlay__name {
+  flex: 1 1 auto;
   font-weight: 600;
-  font-size: 0.95rem;
+  font-size: 0.9rem;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
 }
 
 .scene-overlay__controls {
   display: flex;
-  flex-wrap: wrap;
-  gap: 0.5rem;
+  align-items: center;
+  gap: 0.35rem;
+  flex: 0 0 auto;
 }
 
 .scene-overlay__empty {

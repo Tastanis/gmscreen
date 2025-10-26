@@ -103,6 +103,34 @@ body.vtt-body {
   border-radius: calc(var(--vtt-radius) * 0.75);
 }
 
+.btn--tiny {
+  padding: 0.25rem 0.5rem;
+  font-size: 0.75rem;
+  border-radius: calc(var(--vtt-radius) * 0.6);
+  font-weight: 600;
+}
+
+.btn--ghost {
+  background: transparent;
+  border-color: transparent;
+  color: var(--vtt-text-muted);
+}
+
+.btn--ghost:hover {
+  background: rgba(148, 163, 184, 0.12);
+  color: var(--vtt-text-primary);
+}
+
+.btn--ghost.btn--danger {
+  color: var(--vtt-danger);
+  border-color: transparent;
+}
+
+.btn--ghost.btn--danger:hover {
+  background: rgba(244, 63, 94, 0.18);
+  color: var(--vtt-danger);
+}
+
 .btn[disabled],
 .btn:disabled,
 .btn.is-loading {
