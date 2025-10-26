@@ -19,6 +19,7 @@ export function renderSceneList(routes, store) {
   const stateApi = store ?? {};
   const endpoints = routes ?? {};
   let overlayUploadTargetSceneId = null;
+  let overlayUploadTargetLayerId = null;
   let overlayUploadPending = false;
 
   if (!endpoints.scenes) {
@@ -104,6 +105,7 @@ export function renderSceneList(routes, store) {
     }
 
     if (action === 'upload-overlay-map' && sceneId) {
+      const overlayId = target.getAttribute('data-overlay-id');
       const currentState = stateApi.getState?.() ?? {};
       const sceneState = normalizeSceneState(currentState.scenes);
       const scene = sceneState.items.find((item) => item.id === sceneId);
@@ -127,6 +129,7 @@ export function renderSceneList(routes, store) {
       }
 
       overlayUploadTargetSceneId = sceneId;
+      overlayUploadTargetLayerId = overlayId ?? null;
       overlayInput.value = '';
       overlayInput.click();
       return;
@@ -176,10 +179,6 @@ export function renderSceneList(routes, store) {
         }
 
         const overlayEntry = normalizeOverlayConfig(sceneBoardState.overlay ?? {});
-        if (!overlayEntry.mapUrl) {
-          return;
-        }
-
         const layer = createOverlayLayer(`Overlay ${overlayEntry.layers.length + 1}`, overlayEntry.layers);
         overlayEntry.layers.push(layer);
         overlayEntry.activeLayerId = layer.id;
@@ -195,7 +194,7 @@ export function renderSceneList(routes, store) {
         persistBoardStateSnapshot();
         showFeedback(feedback, 'Overlay added.', 'success');
       } else {
-        showFeedback(feedback, 'Upload an overlay image before adding overlays.', 'error');
+        showFeedback(feedback, 'Unable to add overlay.', 'error');
       }
       return;
     }
@@ -407,6 +406,8 @@ export function renderSceneList(routes, store) {
     overlayInput.value = '';
     const targetSceneId = overlayUploadTargetSceneId;
     overlayUploadTargetSceneId = null;
+    const targetLayerId = overlayUploadTargetLayerId;
+    overlayUploadTargetLayerId = null;
 
     if (!file) {
       return;
@@ -453,6 +454,10 @@ export function renderSceneList(routes, store) {
           mask: createEmptyOverlayMask(),
           name: layer.name || `Overlay ${index + 1}`,
         }));
+
+        if (targetLayerId && overlay.layers.some((layer) => layer.id === targetLayerId)) {
+          overlay.activeLayerId = targetLayerId;
+        }
 
         rebuildOverlayAggregate(overlay);
         sceneBoardState.overlay = overlay;
@@ -1100,10 +1105,10 @@ function renderSceneItem(scene, activeSceneId, sceneBoardState = {}, options = {
       : options.overlayUploadPending
         ? 'An overlay upload is already in progress.'
         : '';
-  const addOverlayDisabled = !overlayMapSet;
-  const addOverlayTitle = overlayMapSet
-    ? ''
-    : 'Set an overlay image before adding overlay layers.';
+  const addOverlayDisabled = Boolean(options.overlayUploadPending);
+  const addOverlayTitle = options.overlayUploadPending
+    ? 'Wait for the current overlay upload to finish before adding another overlay.'
+    : '';
 
   const clearOverlayDisabled = !hasOverlayContent;
   const clearOverlayTitle = hasOverlayContent ? '' : 'No overlay content to clear.';
@@ -1121,16 +1126,6 @@ function renderSceneItem(scene, activeSceneId, sceneBoardState = {}, options = {
             <button
               type="button"
               class="btn btn--small"
-              data-action="upload-overlay-map"
-              data-scene-id="${scene.id}"
-              ${overlayUploadDisabled ? 'disabled' : ''}
-              ${overlayUploadTitle ? ` title="${escapeHtml(overlayUploadTitle)}"` : ''}
-            >
-              Upload Overlay Image
-            </button>
-            <button
-              type="button"
-              class="btn btn--small"
               data-action="add-overlay-layer"
               data-scene-id="${scene.id}"
               ${addOverlayDisabled ? 'disabled' : ''}
@@ -1142,7 +1137,12 @@ function renderSceneItem(scene, activeSceneId, sceneBoardState = {}, options = {
               ? '<span class="scene-overlay__status" role="status">Uploading overlay…</span>'
               : ''}
           </div>
-          ${renderOverlayList(scene.id, overlayState, { isActiveScene: isActive, overlayMapSet })}
+          ${renderOverlayList(scene.id, overlayState, {
+            isActiveScene: isActive,
+            overlayMapSet,
+            overlayUploadDisabled,
+            overlayUploadTitle,
+          })}
         </div>
         <footer class="scene-item__footer">
           <button type="button" class="btn" data-action="activate-scene" data-scene-id="${scene.id}">Activate</button>
@@ -1192,25 +1192,43 @@ function renderOverlayListItem(sceneId, overlayState, layer, index, options = {}
     editTitle = 'Activate this scene to edit this overlay.';
   }
   const isActiveLayer = overlayState.activeLayerId === layer.id;
+  const uploadDisabled = options.overlayUploadDisabled;
+  const uploadTitle = options.overlayUploadTitle || '';
 
   return `
-    <li class="scene-overlay__item${isActiveLayer ? ' is-active' : ''}" data-overlay-id="${layer.id}" data-scene-id="${sceneId}" data-overlay-visible="${overlayVisible ? 'true' : 'false'}">
-      <label class="scene-overlay__visibility" ${visibilityTitle ? ` title="${escapeHtml(visibilityTitle)}"` : ''}>
-        <input
-          type="checkbox"
-          class="scene-overlay__checkbox"
-          data-action="toggle-overlay-layer-visibility"
-          data-scene-id="${sceneId}"
-          data-overlay-id="${layer.id}"
-          aria-label="${overlayVisible ? 'Hide overlay' : 'Show overlay'}"
-          ${overlayVisible ? 'checked' : ''}
-          ${options.isActiveScene ? '' : 'disabled'}
-        />
-      </label>
-      <div class="scene-overlay__meta">
+    <li
+      class="scene-overlay__item${isActiveLayer ? ' is-active' : ''}"
+      data-overlay-id="${layer.id}"
+      data-scene-id="${sceneId}"
+      data-overlay-visible="${overlayVisible ? 'true' : 'false'}"
+    >
+      <div class="scene-overlay__header">
+        <label class="scene-overlay__visibility" ${visibilityTitle ? ` title="${escapeHtml(visibilityTitle)}"` : ''}>
+          <input
+            type="checkbox"
+            class="scene-overlay__checkbox"
+            data-action="toggle-overlay-layer-visibility"
+            data-scene-id="${sceneId}"
+            data-overlay-id="${layer.id}"
+            aria-label="${overlayVisible ? 'Hide overlay' : 'Show overlay'}"
+            ${overlayVisible ? 'checked' : ''}
+            ${options.isActiveScene ? '' : 'disabled'}
+          />
+        </label>
         <span class="scene-overlay__name" title="${name}">${name}</span>
       </div>
       <div class="scene-overlay__controls">
+        <button
+          type="button"
+          class="btn btn--ghost btn--tiny scene-overlay__upload"
+          data-action="upload-overlay-map"
+          data-scene-id="${sceneId}"
+          data-overlay-id="${layer.id}"
+          ${uploadDisabled ? 'disabled' : ''}
+          ${uploadTitle ? ` title="${escapeHtml(uploadTitle)}"` : ''}
+        >
+          New Over
+        </button>
         <button
           type="button"
           class="btn btn--ghost btn--tiny scene-overlay__rename"
