@@ -1091,6 +1091,15 @@ function renderSceneItem(scene, activeSceneId, sceneBoardState = {}, options = {
   const overlayMapSet = Boolean(overlayState.mapUrl);
   const hasOverlayContent = overlayMapSet || overlayState.layers.some((layer) => maskHasMeaningfulContent(layer.mask));
 
+  const overlayUploadDisabled =
+    !options.overlayUploadsEnabled || options.overlayUploadPending || !isActive;
+  const overlayUploadTitle = !options.overlayUploadsEnabled
+    ? 'Overlay uploads are unavailable right now.'
+    : !isActive
+      ? 'Activate the scene before uploading an overlay.'
+      : options.overlayUploadPending
+        ? 'An overlay upload is already in progress.'
+        : '';
   const addOverlayDisabled = !overlayMapSet;
   const addOverlayTitle = overlayMapSet
     ? ''
@@ -1112,6 +1121,16 @@ function renderSceneItem(scene, activeSceneId, sceneBoardState = {}, options = {
             <button
               type="button"
               class="btn btn--small"
+              data-action="upload-overlay-map"
+              data-scene-id="${scene.id}"
+              ${overlayUploadDisabled ? 'disabled' : ''}
+              ${overlayUploadTitle ? ` title="${escapeHtml(overlayUploadTitle)}"` : ''}
+            >
+              Upload Overlay Image
+            </button>
+            <button
+              type="button"
+              class="btn btn--small"
               data-action="add-overlay-layer"
               data-scene-id="${scene.id}"
               ${addOverlayDisabled ? 'disabled' : ''}
@@ -1119,6 +1138,9 @@ function renderSceneItem(scene, activeSceneId, sceneBoardState = {}, options = {
             >
               Add Overlay
             </button>
+            ${options.overlayUploadPending && isActive
+              ? '<span class="scene-overlay__status" role="status">Uploading overlay…</span>'
+              : ''}
           </div>
           ${renderOverlayList(scene.id, overlayState, { isActiveScene: isActive, overlayMapSet })}
         </div>

@@ -669,7 +669,7 @@
   display: flex;
   flex-wrap: wrap;
   align-items: center;
-  justify-content: space-between;
+  justify-content: flex-start;
   gap: 0.5rem;
 }
 
@@ -684,7 +684,7 @@
 
 .scene-overlay__item {
   display: flex;
-  align-items: flex-start;
+  align-items: center;
   gap: 0.75rem;
   padding: 0.55rem 0.75rem;
   border-radius: calc(var(--vtt-radius) - 3px);
@@ -772,7 +772,7 @@
   font-weight: 500;
   font-size: 0.75rem;
   line-height: 1.2;
-  color: var(--vtt-text-muted);
+  color: var(--vtt-text-primary);
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
@@ -780,18 +780,26 @@
 
 .scene-overlay__controls {
   display: flex;
-  flex-direction: column;
-  align-items: stretch;
+  flex-wrap: wrap;
+  align-items: center;
   justify-content: flex-end;
   gap: 0.3rem;
   flex: 0 0 auto;
   margin-left: auto;
-  min-width: 6.25rem;
+  min-width: 0;
 }
 
 .scene-overlay__controls .btn {
-  flex: 1 1 auto;
-  width: 100%;
+  flex: 0 0 auto;
+  width: auto;
+  padding: 0.25rem 0.5rem;
+}
+
+.scene-overlay__status {
+  margin-left: auto;
+  font-size: 0.75rem;
+  color: var(--vtt-text-muted);
+  white-space: nowrap;
 }
 
 .scene-overlay__empty {
