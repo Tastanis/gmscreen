@@ -778,7 +778,14 @@
 .scene-overlay__controls {
   display: flex;
   align-items: center;
-  gap: 0.35rem;
+  justify-content: flex-end;
+  flex-wrap: wrap;
+  gap: 0.4rem;
+  flex: 0 0 auto;
+  margin-left: auto;
+}
+
+.scene-overlay__controls .btn {
   flex: 0 0 auto;
 }
 
