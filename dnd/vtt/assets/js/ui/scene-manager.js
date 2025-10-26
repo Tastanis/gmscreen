@@ -449,11 +449,15 @@ export function renderSceneList(routes, store) {
           overlay.activeLayerId = layer.id;
         }
 
-        overlay.layers = overlay.layers.map((layer, index) => ({
-          ...layer,
-          mask: createEmptyOverlayMask(),
-          name: layer.name || `Overlay ${index + 1}`,
-        }));
+        const resetAllLayers = !targetLayerId;
+        overlay.layers = overlay.layers.map((layer, index) => {
+          const shouldResetMask = resetAllLayers || layer.id === targetLayerId;
+          return {
+            ...layer,
+            mask: shouldResetMask ? createEmptyOverlayMask() : normalizeOverlayMask(layer.mask ?? {}),
+            name: layer.name || `Overlay ${index + 1}`,
+          };
+        });
 
         if (targetLayerId && overlay.layers.some((layer) => layer.id === targetLayerId)) {
           overlay.activeLayerId = targetLayerId;
