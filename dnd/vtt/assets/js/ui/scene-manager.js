@@ -1187,6 +1187,8 @@ function renderOverlayListItem(sceneId, overlayState, layer, index, options = {}
       </label>
       <div class="scene-overlay__meta">
         <span class="scene-overlay__name" title="${name}">${name}</span>
+      </div>
+      <div class="scene-overlay__controls">
         <button
           type="button"
           class="btn btn--ghost btn--tiny scene-overlay__rename"
@@ -1196,8 +1198,6 @@ function renderOverlayListItem(sceneId, overlayState, layer, index, options = {}
         >
           Rename
         </button>
-      </div>
-      <div class="scene-overlay__controls">
         <button
           type="button"
           class="btn btn--ghost btn--tiny scene-overlay__edit"
