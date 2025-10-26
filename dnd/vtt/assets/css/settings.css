@@ -777,16 +777,18 @@
 
 .scene-overlay__controls {
   display: flex;
-  align-items: center;
+  flex-direction: column;
+  align-items: stretch;
   justify-content: flex-end;
-  flex-wrap: wrap;
-  gap: 0.4rem;
+  gap: 0.35rem;
   flex: 0 0 auto;
   margin-left: auto;
+  min-width: 5.5rem;
 }
 
 .scene-overlay__controls .btn {
-  flex: 0 0 auto;
+  flex: 1 1 auto;
+  width: 100%;
 }
 
 .scene-overlay__empty {
