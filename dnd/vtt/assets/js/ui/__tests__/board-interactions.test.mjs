@@ -350,7 +350,7 @@ test('overlay editor preview applies clip path while editing', () => {
 
     const overlay = document.getElementById('vtt-map-overlay');
     const expectedClipPath =
-      "path(evenodd, 'M 12.5% 12.5% L 37.5% 12.5% L 37.5% 37.5% L 12.5% 37.5% Z')";
+      "path('M 12.5% 12.5% L 37.5% 12.5% L 37.5% 37.5% L 12.5% 37.5% Z')";
 
     assert.equal(overlay.style.clipPath, expectedClipPath);
     assert.equal(overlay.style.webkitClipPath, expectedClipPath);
@@ -369,7 +369,7 @@ test('overlay clip path uses only provided polygons and keeps both visible', () 
       { column: 0, row: 5 },
     ];
     const secondPolygonPoints = [
-      // Reversed winding order to ensure even-odd fill retains visibility
+      // Winding order should no longer affect visibility when combining overlays
       { column: 5, row: 5 },
       { column: 10, row: 5 },
       { column: 10, row: 0 },
@@ -447,7 +447,7 @@ test('overlay clip path uses only provided polygons and keeps both visible', () 
     const clipPath = mapOverlay.style.clipPath || mapOverlay.style.webkitClipPath;
 
     const expectedClipPath =
-      "path(evenodd, 'M 0% 0% L 50% 0% L 50% 50% L 0% 50% Z M 50% 50% L 100% 50% L 100% 0% L 50% 0% Z')";
+      "path('M 0% 0% L 50% 0% L 50% 50% L 0% 50% Z M 50% 50% L 100% 50% L 100% 0% L 50% 0% Z')";
     assert.equal(
       clipPath,
       expectedClipPath,
@@ -1352,7 +1352,7 @@ test('polygon overlay clip path omits implicit bounding box', () => {
     const mapOverlay = document.getElementById('vtt-map-overlay');
     const clipPath = mapOverlay.style.clipPath || mapOverlay.style.webkitClipPath;
     const expectedClipPath =
-      "path(evenodd, 'M 20% 30% L 40% 30% L 40% 60% L 20% 60% Z')";
+      "path('M 20% 30% L 40% 30% L 40% 60% L 20% 60% Z')";
 
     assert.equal(clipPath, expectedClipPath);
   } finally {

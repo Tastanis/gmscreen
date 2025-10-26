@@ -10,6 +10,10 @@ import { PLAYER_VISIBLE_TOKEN_FOLDER } from '../state/store.js';
 import { createCombatTimerService } from '../services/combat-timer-service.js';
 import { showCombatTimerReport } from './combat-timer-report.js';
 
+const OVERLAY_LAYER_PREFIX = 'overlay-layer-';
+let overlayLayerSeed = Date.now();
+let overlayLayerSequence = 0;
+
 export function createBoardStatePoller({
   routes,
   stateEndpoint,
@@ -1245,6 +1249,11 @@ export function mountBoardInteractions(store, routes = {}) {
         const overlayId = editButton.getAttribute('data-overlay-id');
         const activeSceneId = getActiveSceneId();
         if (!sceneId || !overlayId || !activeSceneId || sceneId !== activeSceneId) {
+          return;
+        }
+
+        if (typeof overlayTool.isEditingLayer === 'function' && overlayTool.isEditingLayer(overlayId)) {
+          overlayTool.toggle();
           return;
         }
 
@@ -3267,10 +3276,6 @@ export function mountBoardInteractions(store, routes = {}) {
     mapOverlay.style.removeProperty('-webkit-clip-path');
   }
 
-  const OVERLAY_LAYER_PREFIX = 'overlay-layer-';
-  let overlayLayerSeed = Date.now();
-  let overlayLayerSequence = 0;
-
   function normalizeOverlayState(raw = null) {
     if (!raw || typeof raw !== 'object') {
       return createEmptyOverlayState();
@@ -3645,7 +3650,7 @@ export function mountBoardInteractions(store, routes = {}) {
       return '';
     }
 
-    return `path(evenodd, '${commands.join(' ')}')`;
+    return `path('${commands.join(' ')}')`;
   }
 
   function resolveGridBounds(view = viewState) {
@@ -10262,6 +10267,23 @@ function createOverlayTool(uploadsEndpoint) {
     }
   }
 
+  function isEditingLayer(layerId = null) {
+    if (!isActive) {
+      return false;
+    }
+
+    const activeLayer = getPersistedActiveLayer();
+    if (!activeLayer) {
+      return false;
+    }
+
+    if (typeof layerId === 'string' && layerId.trim()) {
+      return activeLayer.id === layerId.trim();
+    }
+
+    return true;
+  }
+
   function editLayer(layerId) {
     if (typeof layerId === 'string' && layerId.trim()) {
       persistedOverlay.activeLayerId = layerId.trim();
@@ -10999,6 +11021,7 @@ function createOverlayTool(uploadsEndpoint) {
     notifyGridChanged,
     notifyMapState,
     notifyOverlayMaskChange,
+    isEditingLayer,
   };
 }
 
