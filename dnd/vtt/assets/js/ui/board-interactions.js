@@ -6,7 +6,7 @@ import {
   updateExternalMeasurement,
 } from './drag-ruler.js';
 import { persistBoardState, persistCombatState } from '../services/board-state-service.js';
-import { PLAYER_VISIBLE_TOKEN_FOLDER } from '../state/store.js';
+import { PLAYER_VISIBLE_TOKEN_FOLDER, normalizePlayerTokenFolderName } from '../state/store.js';
 import { createCombatTimerService } from '../services/combat-timer-service.js';
 import { showCombatTimerReport } from './combat-timer-report.js';
 
@@ -7591,8 +7591,8 @@ export function mountBoardInteractions(store, routes = {}) {
   }
 
   function isTokenSourcePlayerVisible(template = {}) {
-    const playerFolderName = PLAYER_VISIBLE_TOKEN_FOLDER.trim().toLowerCase();
-    if (!playerFolderName) {
+    const playerFolderKey = normalizePlayerTokenFolderName(PLAYER_VISIBLE_TOKEN_FOLDER);
+    if (!playerFolderKey) {
       return false;
     }
 
@@ -7610,13 +7610,7 @@ export function mountBoardInteractions(store, routes = {}) {
       candidateNames.push(template.folder.name);
     }
 
-    return candidateNames.some((value) => {
-      if (typeof value !== 'string') {
-        return false;
-      }
-      const normalized = value.trim().toLowerCase();
-      return normalized === playerFolderName;
-    });
+    return candidateNames.some((value) => normalizePlayerTokenFolderName(value) === playerFolderKey);
   }
 
   function calculateTokenPlacement(template, event, surface, view) {

@@ -10,6 +10,21 @@ require_once __DIR__ . '/components/TokenLibrary.php';
 
 const VTT_PLAYER_TOKEN_FOLDER = "PC's";
 
+function normalizeTokenFolderKey($value): string
+{
+    if (!is_string($value)) {
+        return '';
+    }
+
+    $normalized = strtolower(trim($value));
+    if ($normalized === '') {
+        return '';
+    }
+
+    $sanitized = preg_replace('/[^a-z0-9]/', '', $normalized);
+    return is_string($sanitized) ? $sanitized : '';
+}
+
 function ensureVttSession(): void
 {
     if (session_status() !== PHP_SESSION_ACTIVE) {
@@ -230,6 +245,11 @@ function loadChatParticipants(): array
  */
 function filterTokensForPlayerView(array $tokens): array
 {
+    $playerFolderKey = normalizeTokenFolderKey(VTT_PLAYER_TOKEN_FOLDER);
+    if ($playerFolderKey === '') {
+        return ['folders' => [], 'items' => []];
+    }
+
     $visibleFolders = [];
     $folderIndex = [];
 
@@ -238,8 +258,8 @@ function filterTokensForPlayerView(array $tokens): array
             continue;
         }
 
-        $name = isset($folder['name']) ? trim((string) $folder['name']) : '';
-        if ($name !== VTT_PLAYER_TOKEN_FOLDER) {
+        $name = isset($folder['name']) ? (string) $folder['name'] : '';
+        if (normalizeTokenFolderKey($name) !== $playerFolderKey) {
             continue;
         }
 
@@ -270,8 +290,8 @@ function filterTokensForPlayerView(array $tokens): array
 
         $folderMeta = $token['folder'] ?? null;
         if (is_array($folderMeta)) {
-            $name = isset($folderMeta['name']) ? trim((string) $folderMeta['name']) : '';
-            if ($name === VTT_PLAYER_TOKEN_FOLDER) {
+            $name = isset($folderMeta['name']) ? (string) $folderMeta['name'] : '';
+            if (normalizeTokenFolderKey($name) === $playerFolderKey) {
                 if ($folderId !== '') {
                     $visibleFolders[$folderId] = [
                         'id' => $folderId,
