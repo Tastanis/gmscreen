@@ -486,6 +486,23 @@ function normalizeOverlayEntry(raw) {
     .map((entry, index) => normalizeOverlayLayerEntry(entry, index))
     .filter(Boolean);
 
+  if (overlay.mapUrl) {
+    const preferredId = raw.activeLayerId ?? raw.activeLayer ?? raw.selectedLayerId ?? null;
+    let assigned = false;
+    overlay.layers = overlay.layers.map((layer, index) => {
+      if (layer.mapUrl) {
+        return layer;
+      }
+
+      if (!assigned && (layer.id === preferredId || index === 0)) {
+        assigned = true;
+        return { ...layer, mapUrl: overlay.mapUrl };
+      }
+
+      return layer;
+    });
+  }
+
   const legacyMask = normalizeOverlayMaskEntry(raw.mask ?? null);
   if (
     !overlay.layers.length &&
@@ -523,6 +540,7 @@ function normalizeOverlayLayerEntry(raw = {}, index = 0) {
   const idSource = typeof raw.id === 'string' ? raw.id.trim() : '';
   const nameSource = typeof raw.name === 'string' ? raw.name.trim() : '';
   const visible = raw.visible === undefined ? true : Boolean(raw.visible);
+  const mapUrlSource = typeof raw.mapUrl === 'string' ? raw.mapUrl.trim() : '';
   const id = idSource || createOverlayLayerId();
   const name = nameSource || `Overlay ${index + 1}`;
 
@@ -531,6 +549,7 @@ function normalizeOverlayLayerEntry(raw = {}, index = 0) {
     name,
     visible,
     mask,
+    mapUrl: mapUrlSource || null,
   };
 }
 
@@ -554,7 +573,29 @@ function rebuildOverlayAggregate(overlay) {
 
   overlay.mask = buildAggregateMask(Array.isArray(overlay.layers) ? overlay.layers : []);
   overlay.activeLayerId = resolveOverlayActiveLayerId(overlay.activeLayerId, overlay.layers);
+  overlay.mapUrl = resolveOverlayMapUrl(overlay.layers, overlay.activeLayerId);
   return overlay;
+}
+
+function resolveOverlayMapUrl(layers = [], activeLayerId = null) {
+  if (!Array.isArray(layers) || layers.length === 0) {
+    return null;
+  }
+
+  if (activeLayerId) {
+    const activeLayer = layers.find((layer) => layer && layer.id === activeLayerId);
+    if (activeLayer?.mapUrl) {
+      return activeLayer.mapUrl;
+    }
+  }
+
+  const visibleLayer = layers.find((layer) => layer && layer.visible !== false && layer.mapUrl);
+  if (visibleLayer?.mapUrl) {
+    return visibleLayer.mapUrl;
+  }
+
+  const firstWithMap = layers.find((layer) => layer?.mapUrl);
+  return firstWithMap?.mapUrl ?? null;
 }
 
 function buildAggregateMask(layers = []) {

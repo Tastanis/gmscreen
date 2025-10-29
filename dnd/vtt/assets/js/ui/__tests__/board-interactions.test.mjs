@@ -135,6 +135,21 @@ function dispatchPointerEvent(target, type, init = {}) {
   target.dispatchEvent(event);
 }
 
+function buildOverlayState(mapUrl, mask = { visible: true, polygons: [] }) {
+  return {
+    layers: [
+      {
+        id: 'layer-1',
+        name: 'Overlay 1',
+        visible: true,
+        mapUrl,
+        mask,
+      },
+    ],
+    activeLayerId: 'layer-1',
+  };
+}
+
 test('numeric activeSceneId toggles combat button to End Combat', () => {
   const dom = createDom();
   try {
@@ -306,22 +321,19 @@ test('overlay editor preview applies clip path while editing', () => {
         mapUrl: 'http://example.com/map.png',
         sceneState: {
           'scene-1': {
-            overlay: {
-              mapUrl: 'http://example.com/overlay.png',
-              mask: {
-                visible: true,
-                polygons: [
-                  {
-                    points: [
-                      { column: 1, row: 1 },
-                      { column: 3, row: 1 },
-                      { column: 3, row: 3 },
-                      { column: 1, row: 3 },
-                    ],
-                  },
-                ],
-              },
-            },
+            overlay: buildOverlayState('http://example.com/overlay.png', {
+              visible: true,
+              polygons: [
+                {
+                  points: [
+                    { column: 1, row: 1 },
+                    { column: 3, row: 1 },
+                    { column: 3, row: 3 },
+                    { column: 1, row: 3 },
+                  ],
+                },
+              ],
+            }),
           },
         },
       },
@@ -348,12 +360,14 @@ test('overlay editor preview applies clip path while editing', () => {
 
     toggleButton.dispatchEvent(new MouseEvent('click', { bubbles: true }));
 
-    const overlay = document.getElementById('vtt-map-overlay');
+    const mapOverlay = document.getElementById('vtt-map-overlay');
+    const overlayLayer = mapOverlay.querySelector('.vtt-board__map-overlay-layer');
+    assert.ok(overlayLayer, 'overlay layer element should render');
     const expectedClipPath =
       "path('M 12.5% 12.5% L 37.5% 12.5% L 37.5% 37.5% L 12.5% 37.5% Z')";
 
-    assert.equal(overlay.style.clipPath, expectedClipPath);
-    assert.equal(overlay.style.webkitClipPath, expectedClipPath);
+    assert.equal(overlayLayer.style.clipPath, expectedClipPath);
+    assert.equal(overlayLayer.style.webkitClipPath, expectedClipPath);
   } finally {
     dom.window.close();
   }
@@ -387,16 +401,10 @@ test('overlay clip path uses only provided polygons and keeps both visible', () 
         sceneState: {
           'scene-1': {
             grid: { size: 64, visible: true },
-            overlay: {
-              mapUrl: 'http://example.com/overlay.png',
-              mask: { visible: true, polygons: [] },
-            },
+            overlay: buildOverlayState('http://example.com/overlay.png'),
           },
         },
-        overlay: {
-          mapUrl: 'http://example.com/overlay.png',
-          mask: { visible: true, polygons: [] },
-        },
+        overlay: buildOverlayState('http://example.com/overlay.png'),
       },
     };
 
@@ -422,29 +430,24 @@ test('overlay clip path uses only provided polygons and keeps both visible', () 
     mapImage.onload?.();
 
     store.updateState((draft) => {
-      const sceneOverlay =
-        draft.boardState.sceneState['scene-1'].overlay ?? (draft.boardState.sceneState['scene-1'].overlay = {});
-      sceneOverlay.mapUrl = 'http://example.com/overlay.png';
-      sceneOverlay.mask = {
+      const mask = {
         visible: true,
         polygons: [
           { points: firstPolygonPoints },
           { points: secondPolygonPoints },
         ],
       };
-
-      draft.boardState.overlay.mapUrl = 'http://example.com/overlay.png';
-      draft.boardState.overlay.mask = {
-        visible: true,
-        polygons: [
-          { points: firstPolygonPoints },
-          { points: secondPolygonPoints },
-        ],
-      };
+      draft.boardState.sceneState['scene-1'].overlay = buildOverlayState(
+        'http://example.com/overlay.png',
+        mask
+      );
+      draft.boardState.overlay = buildOverlayState('http://example.com/overlay.png', mask);
     });
 
     const mapOverlay = dom.window.document.getElementById('vtt-map-overlay');
-    const clipPath = mapOverlay.style.clipPath || mapOverlay.style.webkitClipPath;
+    const overlayLayer = mapOverlay.querySelector('.vtt-board__map-overlay-layer');
+    assert.ok(overlayLayer, 'overlay layer element should render');
+    const clipPath = overlayLayer.style.clipPath || overlayLayer.style.webkitClipPath;
 
     const expectedClipPath =
       "path('M 0% 0% L 50% 0% L 50% 50% L 0% 50% Z M 50% 50% L 100% 50% L 100% 0% L 50% 0% Z')";
@@ -483,16 +486,10 @@ test('overlay cutout upload replaces overlay map when available', async () => {
       sceneState: {
         'scene-1': {
           grid: { size: 64, visible: true },
-          overlay: {
-            mapUrl: 'http://example.com/overlay.png',
-            mask: { visible: true, polygons: [] },
-          },
+          overlay: buildOverlayState('http://example.com/overlay.png'),
         },
       },
-      overlay: {
-        mapUrl: 'http://example.com/overlay.png',
-        mask: { visible: true, polygons: [] },
-      },
+      overlay: buildOverlayState('http://example.com/overlay.png'),
     },
   };
 
@@ -565,10 +562,12 @@ test('overlay cutout upload replaces overlay map when available', async () => {
     const state = store.getState();
     const overlay = state.boardState.sceneState['scene-1'].overlay;
     assert.equal(overlay.mapUrl, 'http://example.com/cropped.png');
+    assert.equal(overlay.layers?.[0]?.mapUrl, 'http://example.com/cropped.png');
     assert.deepEqual(overlay.mask, { visible: true, polygons: [] });
 
     const boardOverlay = state.boardState.overlay;
     assert.equal(boardOverlay.mapUrl, 'http://example.com/cropped.png');
+    assert.equal(boardOverlay.layers?.[0]?.mapUrl, 'http://example.com/cropped.png');
     assert.deepEqual(boardOverlay.mask, { visible: true, polygons: [] });
   } finally {
     cutoutMock.mock.restore();
@@ -599,16 +598,10 @@ test('overlay cutout falls back to mask when upload fails', async () => {
       sceneState: {
         'scene-1': {
           grid: { size: 64, visible: true },
-          overlay: {
-            mapUrl: 'http://example.com/overlay.png',
-            mask: { visible: true, polygons: [] },
-          },
+          overlay: buildOverlayState('http://example.com/overlay.png'),
         },
       },
-      overlay: {
-        mapUrl: 'http://example.com/overlay.png',
-        mask: { visible: true, polygons: [] },
-      },
+      overlay: buildOverlayState('http://example.com/overlay.png'),
     },
   };
 
@@ -665,6 +658,7 @@ test('overlay cutout falls back to mask when upload fails', async () => {
     const state = store.getState();
     const overlay = state.boardState.sceneState['scene-1'].overlay;
     assert.equal(overlay.mapUrl, 'http://example.com/overlay.png');
+    assert.equal(overlay.layers?.[0]?.mapUrl, 'http://example.com/overlay.png');
     assert.deepEqual(overlay.mask, {
       visible: true,
       polygons: [
@@ -680,6 +674,7 @@ test('overlay cutout falls back to mask when upload fails', async () => {
 
     const boardOverlay = state.boardState.overlay;
     assert.equal(boardOverlay.mapUrl, 'http://example.com/overlay.png');
+    assert.equal(boardOverlay.layers?.[0]?.mapUrl, 'http://example.com/overlay.png');
     assert.deepEqual(boardOverlay.mask, {
       visible: true,
       polygons: [
@@ -722,10 +717,10 @@ test('overlay editor keeps closed polygon visible when cloning fails for a new s
         sceneState: {
           'scene-1': {
             grid: { size: 64, visible: true },
-            overlay: { mapUrl: null, mask: { visible: true, polygons: [] } },
+            overlay: buildOverlayState(null),
           },
         },
-        overlay: { mapUrl: null, mask: { visible: true, polygons: [] } },
+        overlay: buildOverlayState(null),
       },
     };
 
@@ -768,6 +763,11 @@ test('overlay editor keeps closed polygon visible when cloning fails for a new s
     closeButton.dispatchEvent(new MouseEvent('click', { bubbles: true }));
 
     const overlay = document.getElementById('vtt-map-overlay');
+    assert.ok(overlay, 'overlay host should exist');
+    const maskHost = overlay.querySelector(
+      '.vtt-board__map-overlay-layer[data-overlay-layer-id="layer-1"]'
+    );
+    assert.ok(maskHost, 'overlay layer element should exist');
     const beforeClipPath = overlay.style.clipPath;
     const beforeWebkitClipPath = overlay.style.webkitClipPath;
 
@@ -841,10 +841,10 @@ test('overlay editor keeps previously closed polygons when drawing additional sh
         sceneState: {
           'scene-1': {
             grid: { size: 64, visible: true },
-            overlay: { mapUrl: null, mask: { visible: true, polygons: [] } },
+            overlay: buildOverlayState(null),
           },
         },
-        overlay: { mapUrl: null, mask: { visible: true, polygons: [] } },
+        overlay: buildOverlayState(null),
       },
     };
 
@@ -887,6 +887,11 @@ test('overlay editor keeps previously closed polygons when drawing additional sh
     closeButton.dispatchEvent(new MouseEvent('click', { bubbles: true }));
 
     const overlay = document.getElementById('vtt-map-overlay');
+    assert.ok(overlay, 'overlay host should exist');
+    const maskHost = overlay.querySelector(
+      '.vtt-board__map-overlay-layer[data-overlay-layer-id="layer-1"]'
+    );
+    assert.ok(maskHost, 'overlay layer element should exist');
     const readonlyNodesBeforeSecondShape = document.querySelectorAll(
       '.vtt-overlay-editor__node--readonly'
     );
@@ -896,7 +901,7 @@ test('overlay editor keeps previously closed polygons when drawing additional sh
       'no read-only nodes should render before starting a second shape'
     );
 
-    const persistedMaskBeforeSecondShape = JSON.parse(overlay.dataset.overlayMask ?? '{}');
+    const persistedMaskBeforeSecondShape = JSON.parse(maskHost.dataset.overlayMask ?? '{}');
     assert.deepEqual(
       persistedMaskBeforeSecondShape,
       {
@@ -916,7 +921,7 @@ test('overlay editor keeps previously closed polygons when drawing additional sh
 
     dispatchPointerEvent(surface, 'pointerdown', { clientX: 128, clientY: 128, pointerId: 4 });
 
-    const maskAfterStartingSecondShape = JSON.parse(overlay.dataset.overlayMask ?? '{}');
+    const maskAfterStartingSecondShape = JSON.parse(maskHost.dataset.overlayMask ?? '{}');
     assert.equal(maskAfterStartingSecondShape.polygons?.length, 1);
     assert.deepEqual(
       maskAfterStartingSecondShape.polygons?.[0]?.points,
@@ -1314,16 +1319,10 @@ test('polygon overlay clip path omits implicit bounding box', () => {
         mapUrl: 'http://example.com/map.png',
         sceneState: {
           'scene-1': {
-            overlay: {
-              mapUrl: 'http://example.com/overlay.png',
-              mask: { visible: true, polygons: [] },
-            },
+            overlay: buildOverlayState('http://example.com/overlay.png'),
           },
         },
-        overlay: {
-          mapUrl: 'http://example.com/overlay.png',
-          mask: { visible: true, polygons: [] },
-        },
+        overlay: buildOverlayState('http://example.com/overlay.png'),
       },
       grid: { size: 64, visible: true },
     });
@@ -1337,20 +1336,18 @@ test('polygon overlay clip path omits implicit bounding box', () => {
     mapImage.onload?.();
 
     store.updateState((draft) => {
-      const sceneOverlay =
-        draft.boardState.sceneState['scene-1'].overlay ?? (draft.boardState.sceneState['scene-1'].overlay = {});
-      sceneOverlay.mapUrl = 'http://example.com/overlay.png';
-      sceneOverlay.mask = { visible: true, polygons: [overlayPolygon] };
-
-      if (!draft.boardState.overlay) {
-        draft.boardState.overlay = { mapUrl: null, mask: { visible: true, polygons: [] } };
-      }
-      draft.boardState.overlay.mapUrl = 'http://example.com/overlay.png';
-      draft.boardState.overlay.mask = { visible: true, polygons: [overlayPolygon] };
+      const mask = { visible: true, polygons: [overlayPolygon] };
+      draft.boardState.sceneState['scene-1'].overlay = buildOverlayState(
+        'http://example.com/overlay.png',
+        mask
+      );
+      draft.boardState.overlay = buildOverlayState('http://example.com/overlay.png', mask);
     });
 
     const mapOverlay = document.getElementById('vtt-map-overlay');
-    const clipPath = mapOverlay.style.clipPath || mapOverlay.style.webkitClipPath;
+    const overlayLayer = mapOverlay.querySelector('.vtt-board__map-overlay-layer');
+    assert.ok(overlayLayer, 'overlay layer element should render');
+    const clipPath = overlayLayer.style.clipPath || overlayLayer.style.webkitClipPath;
     const expectedClipPath =
       "path('M 20% 30% L 40% 30% L 40% 60% L 20% 60% Z')";
 

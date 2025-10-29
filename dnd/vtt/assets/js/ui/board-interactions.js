@@ -403,6 +403,8 @@ export function mountBoardInteractions(store, routes = {}) {
   const mapSurface = document.getElementById('vtt-map-surface');
   const mapTransform = document.getElementById('vtt-map-transform');
   let mapOverlay = document.getElementById('vtt-map-overlay');
+  let overlayStack = mapOverlay?.querySelector('.vtt-board__map-overlay-stack') ?? null;
+  const overlayLayerElements = new Map();
   const grid = document.getElementById('vtt-grid-overlay');
   const tokenLayer = document.getElementById('vtt-token-layer');
   const templateLayer = document.getElementById('vtt-template-layer');
@@ -443,6 +445,11 @@ export function mountBoardInteractions(store, routes = {}) {
     } else {
       mapTransform.appendChild(mapOverlay);
     }
+  }
+  if (mapOverlay && !overlayStack) {
+    overlayStack = document.createElement('div');
+    overlayStack.className = 'vtt-board__map-overlay-stack';
+    mapOverlay.prepend(overlayStack);
   }
   if (!pingLayer && mapTransform) {
     pingLayer = document.createElement('div');
@@ -3190,7 +3197,7 @@ export function mountBoardInteractions(store, routes = {}) {
   }
 
   function syncOverlayLayer(rawOverlay) {
-    if (!mapOverlay) {
+    if (!mapOverlay || !overlayStack) {
       return;
     }
 
@@ -3202,90 +3209,204 @@ export function mountBoardInteractions(store, routes = {}) {
 
     lastOverlaySignature = signature;
 
-    if (!overlay.mapUrl) {
+    const layers = Array.isArray(overlay.layers)
+      ? overlay.layers.filter((layer) => {
+          if (!layer || typeof layer !== 'object') {
+            return false;
+          }
+          const url = typeof layer.mapUrl === 'string' ? layer.mapUrl.trim() : '';
+          if (url) {
+            return true;
+          }
+          const mask = layer.mask && typeof layer.mask === 'object' ? layer.mask : null;
+          const hasMaskPolygons = Array.isArray(mask?.polygons)
+            ? mask.polygons.some((polygon) => Array.isArray(polygon?.points) && polygon.points.length)
+            : false;
+          if (hasMaskPolygons) {
+            return true;
+          }
+          return overlayEditorActive && overlay.activeLayerId === layer.id;
+        })
+      : [];
+
+    if (!layers.length) {
       teardownOverlayLayer();
       return;
     }
 
-    mapOverlay.hidden = false;
-    mapOverlay.style.backgroundImage = buildCssUrl(overlay.mapUrl);
-    applyOverlayMask(overlay.mask);
+    mapOverlay.dataset.activeOverlayLayerId = overlay.activeLayerId ?? '';
+
+    const fragment = document.createDocumentFragment();
+    const retained = new Set();
+    let hasVisibleLayer = false;
+
+    layers.forEach((layer, index) => {
+      const mapUrl = typeof layer.mapUrl === 'string' ? layer.mapUrl.trim() : '';
+      const baseVisible = layer.visible !== false;
+      const hasMap = Boolean(mapUrl);
+
+      let element = overlayLayerElements.get(layer.id);
+      if (!element || element.parentNode !== overlayStack) {
+        element = document.createElement('div');
+        element.className = 'vtt-board__map-overlay-layer';
+        element.dataset.overlayLayerId = layer.id;
+        overlayLayerElements.set(layer.id, element);
+      }
+
+      retained.add(layer.id);
+      element.dataset.overlayLayerIndex = String(index);
+      element.dataset.overlayLayerBaseVisible = baseVisible ? 'true' : 'false';
+      element.dataset.overlayHasMap = hasMap ? 'true' : 'false';
+      element.style.backgroundImage = hasMap ? buildCssUrl(mapUrl) || '' : '';
+
+      const maskAllowsDisplay = applyMaskToOverlayElement(element, layer.mask, {
+        allowDuringEditing: overlayEditorActive && overlay.activeLayerId === layer.id,
+      });
+
+      const finalVisible = baseVisible && hasMap && maskAllowsDisplay;
+      setOverlayLayerVisibility(element, finalVisible);
+      if (finalVisible) {
+        hasVisibleLayer = true;
+      }
+
+      fragment.append(element);
+    });
+
+    overlayLayerElements.forEach((element, id) => {
+      if (!retained.has(id)) {
+        if (element.parentNode === overlayStack) {
+          element.remove();
+        }
+        overlayLayerElements.delete(id);
+      }
+    });
+
+    overlayStack.replaceChildren(fragment);
+
+    if (!hasVisibleLayer && !overlayEditorActive) {
+      mapOverlay.hidden = true;
+      mapOverlay.setAttribute('hidden', '');
+    } else {
+      mapOverlay.hidden = false;
+      mapOverlay.removeAttribute('hidden');
+    }
   }
 
   function teardownOverlayLayer() {
-    if (!mapOverlay) {
+    if (!mapOverlay || !overlayStack) {
       return;
     }
 
     if (!overlayEditorActive) {
       mapOverlay.hidden = true;
+      mapOverlay.setAttribute('hidden', '');
     }
-    mapOverlay.style.backgroundImage = '';
-    clearOverlayMask();
-    mapOverlay.removeAttribute('data-overlay-mask');
+
+    mapOverlay.dataset.activeOverlayLayerId = '';
+    overlayLayerElements.forEach((element) => {
+      clearOverlayMask(element);
+      element.style.backgroundImage = '';
+      setOverlayLayerVisibility(element, false);
+      if (element.parentNode === overlayStack) {
+        element.remove();
+      }
+    });
+    overlayLayerElements.clear();
   }
 
-  function applyOverlayMask(mask = {}, options = {}) {
-    if (!mapOverlay) {
-      return;
+  function applyMaskToOverlayElement(element, mask = {}, options = {}) {
+    if (!element) {
+      return false;
     }
 
     const { allowDuringEditing = false } =
       options && typeof options === 'object' ? options : {};
 
-    clearOverlayMask();
+    clearOverlayMask(element);
     const normalizedMask = normalizeOverlayMask(mask);
-    mapOverlay.dataset.overlayMask = JSON.stringify(normalizedMask);
+    element.dataset.overlayMask = JSON.stringify(normalizedMask);
     const maskVisible = normalizedMask.visible !== false;
-    mapOverlay.dataset.overlayMaskVisible = maskVisible ? 'true' : 'false';
+    element.dataset.overlayMaskVisible = maskVisible ? 'true' : 'false';
 
-    if (!maskVisible && !(overlayEditorActive && allowDuringEditing)) {
-      mapOverlay.hidden = true;
-      mapOverlay.setAttribute('hidden', '');
-      return;
+    if (!maskVisible && !allowDuringEditing) {
+      element.setAttribute('data-overlay-mask-hidden', 'true');
+      return false;
     }
 
-    if (overlayEditorActive && !allowDuringEditing) {
-      return;
-    }
-
-    mapOverlay.hidden = false;
-    mapOverlay.removeAttribute('hidden');
+    element.removeAttribute('data-overlay-mask-hidden');
 
     const maskUrl = typeof normalizedMask.url === 'string' ? normalizedMask.url.trim() : '';
     if (maskUrl) {
       const cssUrl = buildCssUrl(maskUrl);
       if (cssUrl) {
-        mapOverlay.style.maskImage = cssUrl;
-        mapOverlay.style.webkitMaskImage = cssUrl;
-        mapOverlay.style.maskRepeat = 'no-repeat';
-        mapOverlay.style.webkitMaskRepeat = 'no-repeat';
-        mapOverlay.style.maskSize = '100% 100%';
-        mapOverlay.style.webkitMaskSize = '100% 100%';
+        element.style.maskImage = cssUrl;
+        element.style.webkitMaskImage = cssUrl;
+        element.style.maskRepeat = 'no-repeat';
+        element.style.webkitMaskRepeat = 'no-repeat';
+        element.style.maskSize = '100% 100%';
+        element.style.webkitMaskSize = '100% 100%';
       }
-      return;
+      return true;
     }
 
     const clipPath = buildClipPathFromPolygons(normalizedMask.polygons, viewState);
     if (clipPath) {
-      mapOverlay.style.clipPath = clipPath;
-      mapOverlay.style.webkitClipPath = clipPath;
+      element.style.clipPath = clipPath;
+      element.style.webkitClipPath = clipPath;
     }
+
+    return true;
   }
 
-  function clearOverlayMask() {
-    if (!mapOverlay) {
+  function clearOverlayMask(element) {
+    if (!element) {
       return;
     }
 
-    mapOverlay.style.removeProperty('mask-image');
-    mapOverlay.style.removeProperty('-webkit-mask-image');
-    mapOverlay.style.removeProperty('mask-repeat');
-    mapOverlay.style.removeProperty('-webkit-mask-repeat');
-    mapOverlay.style.removeProperty('mask-size');
-    mapOverlay.style.removeProperty('-webkit-mask-size');
-    mapOverlay.style.removeProperty('clip-path');
-    mapOverlay.style.removeProperty('-webkit-clip-path');
+    element.style.removeProperty('mask-image');
+    element.style.removeProperty('-webkit-mask-image');
+    element.style.removeProperty('mask-repeat');
+    element.style.removeProperty('-webkit-mask-repeat');
+    element.style.removeProperty('mask-size');
+    element.style.removeProperty('-webkit-mask-size');
+    element.style.removeProperty('clip-path');
+    element.style.removeProperty('-webkit-clip-path');
+    delete element.dataset.overlayMask;
+    delete element.dataset.overlayMaskVisible;
+    element.removeAttribute('data-overlay-mask-hidden');
+  }
+
+  function setOverlayLayerVisibility(element, visible) {
+    if (!element) {
+      return;
+    }
+
+    element.dataset.overlayVisible = visible ? 'true' : 'false';
+    if (visible) {
+      element.hidden = false;
+      element.removeAttribute('hidden');
+    } else {
+      element.hidden = true;
+      element.setAttribute('hidden', '');
+    }
+  }
+
+  function applyOverlayMaskToLayer(layerId, mask, options = {}) {
+    if (!layerId) {
+      return false;
+    }
+
+    const element = overlayLayerElements.get(layerId);
+    if (!element || element.parentNode !== overlayStack) {
+      return false;
+    }
+
+    const baseVisible = element.dataset.overlayLayerBaseVisible !== 'false';
+    const hasMap = element.dataset.overlayHasMap === 'true';
+    const maskAllowsDisplay = applyMaskToOverlayElement(element, mask, options);
+    const finalVisible = baseVisible && hasMap && maskAllowsDisplay;
+    setOverlayLayerVisibility(element, finalVisible);
+    return true;
   }
 
   function normalizeOverlayState(raw = null) {
@@ -3308,6 +3429,23 @@ export function mountBoardInteractions(store, routes = {}) {
     overlay.layers = layerSource
       .map((entry, index) => normalizeOverlayLayer(entry, index))
       .filter(Boolean);
+
+    if (overlay.mapUrl) {
+      const preferredId = raw.activeLayerId ?? raw.activeLayer ?? raw.selectedLayerId ?? null;
+      let assigned = false;
+      overlay.layers = overlay.layers.map((layer, index) => {
+        if (layer.mapUrl) {
+          return layer;
+        }
+
+        if (!assigned && (layer.id === preferredId || index === 0)) {
+          assigned = true;
+          return { ...layer, mapUrl: overlay.mapUrl };
+        }
+
+        return layer;
+      });
+    }
 
     const legacyMask = normalizeOverlayMask(raw.mask ?? null);
     if (!overlay.layers.length && maskHasMeaningfulOverlayContent(legacyMask)) {
@@ -3346,6 +3484,7 @@ export function mountBoardInteractions(store, routes = {}) {
       name: resolvedName,
       visible: true,
       mask: createEmptyOverlayMask(),
+      mapUrl: null,
     };
   }
 
@@ -3453,6 +3592,7 @@ export function mountBoardInteractions(store, routes = {}) {
     const idSource = typeof raw.id === 'string' ? raw.id.trim() : '';
     const nameSource = typeof raw.name === 'string' ? raw.name.trim() : '';
     const visible = raw.visible === undefined ? true : Boolean(raw.visible);
+    const mapUrlSource = typeof raw.mapUrl === 'string' ? raw.mapUrl.trim() : '';
     const id = idSource || createOverlayLayerId();
     const name = nameSource || `Overlay ${index + 1}`;
 
@@ -3461,6 +3601,7 @@ export function mountBoardInteractions(store, routes = {}) {
       name,
       visible,
       mask,
+      mapUrl: mapUrlSource || null,
     };
   }
 
@@ -3471,7 +3612,29 @@ export function mountBoardInteractions(store, routes = {}) {
 
     overlay.mask = buildAggregateMask(Array.isArray(overlay.layers) ? overlay.layers : []);
     overlay.activeLayerId = resolveOverlayActiveLayerId(overlay.activeLayerId, overlay.layers);
+    overlay.mapUrl = resolveOverlayMapUrl(overlay.layers, overlay.activeLayerId);
     return overlay;
+  }
+
+  function resolveOverlayMapUrl(layers = [], activeLayerId = null) {
+    if (!Array.isArray(layers) || layers.length === 0) {
+      return null;
+    }
+
+    if (activeLayerId) {
+      const activeLayer = layers.find((layer) => layer && layer.id === activeLayerId);
+      if (activeLayer?.mapUrl) {
+        return activeLayer.mapUrl;
+      }
+    }
+
+    const visibleLayer = layers.find((layer) => layer && layer.visible !== false && layer.mapUrl);
+    if (visibleLayer?.mapUrl) {
+      return visibleLayer.mapUrl;
+    }
+
+    const firstWithMap = layers.find((layer) => layer?.mapUrl);
+    return firstWithMap?.mapUrl ?? null;
   }
 
   function buildAggregateMask(layers = []) {
@@ -9751,6 +9914,23 @@ export function mountBoardInteractions(store, routes = {}) {
       .map((entry, index) => normalizeOverlayLayer(entry, index))
       .filter(Boolean);
 
+    if (overlay.mapUrl) {
+      const preferredId = raw.activeLayerId ?? raw.activeLayer ?? raw.selectedLayerId ?? null;
+      let assigned = false;
+      overlay.layers = overlay.layers.map((layer, index) => {
+        if (layer.mapUrl) {
+          return layer;
+        }
+
+        if (!assigned && (layer.id === preferredId || index === 0)) {
+          assigned = true;
+          return { ...layer, mapUrl: overlay.mapUrl };
+        }
+
+        return layer;
+      });
+    }
+
     const legacyMask = normalizeOverlayMask(raw.mask ?? null);
     if (!overlay.layers.length && maskHasMeaningfulOverlayContent(legacyMask)) {
       const legacyLayer = normalizeOverlayLayer(
@@ -9967,40 +10147,20 @@ function createOverlayTool(uploadsEndpoint) {
     return layer;
   }
 
-  function buildAggregateMaskFromPersisted(activeMaskOverride = null) {
+  function applyOverlayDraftToDom(activeMaskOverride = null, options = {}) {
+    syncOverlayLayer(persistedOverlay);
     const layers = Array.isArray(persistedOverlay.layers) ? persistedOverlay.layers : [];
     const activeId = persistedOverlay.activeLayerId;
-    const aggregate = createEmptyOverlayMask();
-    let hasVisibleLayer = false;
-
     layers.forEach((layer) => {
-      if (!layer || typeof layer !== 'object' || layer.visible === false) {
+      if (!layer || typeof layer !== 'object') {
         return;
       }
 
       const baseMask = layer.id === activeId && activeMaskOverride ? activeMaskOverride : layer.mask;
-      const mask = normalizeOverlayMask(baseMask ?? {});
-      if (mask.visible === false) {
-        return;
-      }
-
-      hasVisibleLayer = true;
-      if (!aggregate.url && mask.url) {
-        aggregate.url = mask.url;
-      }
-
-      if (Array.isArray(mask.polygons)) {
-        mask.polygons.forEach((polygon) => {
-          const points = Array.isArray(polygon?.points) ? polygon.points : [];
-          if (points.length >= 3) {
-            aggregate.polygons.push({ points: points.map((point) => ({ ...point })) });
-          }
-        });
-      }
+      const allowDuringEditing =
+        options?.allowDuringEditing === true && layer.id === activeId;
+      applyOverlayMaskToLayer(layer.id, baseMask ?? {}, { allowDuringEditing });
     });
-
-    aggregate.visible = hasVisibleLayer;
-    return aggregate;
   }
 
   function cloneOverlayPolygon(polygon) {
@@ -10342,7 +10502,7 @@ function createOverlayTool(uploadsEndpoint) {
     dragState = null;
     setButtonState(false);
     setStatus('');
-    applyOverlayMask(buildAggregateMaskFromPersisted());
+    applyOverlayDraftToDom();
     updateControls();
     if (!hasOverlayMap() && overlayHiddenSnapshot) {
       mapOverlay.hidden = true;
@@ -10362,7 +10522,7 @@ function createOverlayTool(uploadsEndpoint) {
     persistedSignature = overlayMaskSignature(persistedMask);
     persistedMapUrl = null;
     handlesLayer.innerHTML = '';
-    applyOverlayMask(buildAggregateMaskFromPersisted());
+    applyOverlayDraftToDom();
     ensureToolbarPosition();
   }
 
@@ -10395,9 +10555,9 @@ function createOverlayTool(uploadsEndpoint) {
   function notifyOverlayMaskChange(overlayEntry) {
     const normalized = normalizeOverlayDraft(overlayEntry ?? {});
     persistedOverlay = normalized;
-    persistedMapUrl = normalized.mapUrl ?? null;
 
     const activeLayer = getPersistedActiveLayer();
+    persistedMapUrl = activeLayer?.mapUrl ?? null;
     const normalizedMask = normalizeOverlayMask(activeLayer?.mask ?? {});
     const signature = overlayMaskSignature(normalizedMask);
 
@@ -10740,6 +10900,8 @@ function createOverlayTool(uploadsEndpoint) {
 
   function setButtonState(pressed) {
     overlayEditorActive = Boolean(pressed);
+    lastOverlaySignature = null;
+    syncOverlayLayer(persistedOverlay);
     syncCutoutToggleButtons();
   }
 
@@ -10795,14 +10957,13 @@ function createOverlayTool(uploadsEndpoint) {
   }
 
   function applyPreviewMask() {
-    const maskOptions = overlayEditorActive ? { allowDuringEditing: true } : undefined;
+    const allowDuringEditing = overlayEditorActive;
 
     if (isActive && ((isClosed && nodes.length >= 3) || additionalPolygons.length > 0)) {
       const preview = buildPreviewMask();
-      const aggregate = buildAggregateMaskFromPersisted(preview);
-      applyOverlayMask(aggregate, maskOptions);
+      applyOverlayDraftToDom(preview, { allowDuringEditing });
     } else {
-      applyOverlayMask(buildAggregateMaskFromPersisted(), maskOptions);
+      applyOverlayDraftToDom(null, { allowDuringEditing });
     }
   }
 
@@ -10864,7 +11025,7 @@ function createOverlayTool(uploadsEndpoint) {
 
           if (uploadedUrl) {
             const changed = updateSceneOverlay((overlayEntry, activeLayer) => {
-              overlayEntry.mapUrl = uploadedUrl;
+              activeLayer.mapUrl = uploadedUrl;
               activeLayer.mask = createEmptyOverlayMask();
             });
 
@@ -10988,7 +11149,7 @@ function createOverlayTool(uploadsEndpoint) {
       const persistedLayer = getPersistedActiveLayer();
       persistedMask = normalizeOverlayMask(persistedLayer.mask ?? {});
       persistedSignature = overlayMaskSignature(persistedMask);
-      persistedMapUrl = overlayEntry.mapUrl ?? null;
+      persistedMapUrl = persistedLayer?.mapUrl ?? null;
       updated = true;
     });
 

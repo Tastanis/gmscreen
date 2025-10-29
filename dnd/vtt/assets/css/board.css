@@ -553,6 +553,25 @@
   pointer-events: auto;
 }
 
+.vtt-board__map-overlay-stack {
+  position: absolute;
+  inset: 0;
+}
+
+.vtt-board__map-overlay-layer {
+  position: absolute;
+  inset: 0;
+  background-repeat: no-repeat;
+  background-size: 100% 100%;
+  background-position: center;
+  pointer-events: none;
+  border-radius: inherit;
+}
+
+.vtt-board__map-overlay-layer[hidden] {
+  display: none;
+}
+
 .vtt-overlay-editor {
   position: absolute;
   inset: 0;
