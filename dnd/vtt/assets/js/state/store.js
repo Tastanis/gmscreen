@@ -1,6 +1,19 @@
 const listeners = new Set();
 
 export const PLAYER_VISIBLE_TOKEN_FOLDER = "PC's";
+
+export function normalizePlayerTokenFolderName(value) {
+  if (typeof value !== 'string') {
+    return '';
+  }
+
+  const normalized = value.trim().toLowerCase();
+  if (!normalized) {
+    return '';
+  }
+
+  return normalized.replace(/[^a-z0-9]/g, '');
+}
 const MAX_PERSISTED_PINGS = 8;
 const MAP_PING_RETENTION_MS = 10000;
 
@@ -812,14 +825,19 @@ export function restrictTokensToPlayerView(tokenState = {}) {
 
   const visibleFolders = [];
   const allowedIds = new Set();
+  const playerFolderKey = normalizePlayerTokenFolderName(PLAYER_VISIBLE_TOKEN_FOLDER);
+
+  if (!playerFolderKey) {
+    return { folders: [], items: [] };
+  }
 
   folders.forEach((folder) => {
     if (!folder || typeof folder !== 'object') {
       return;
     }
 
-    const name = typeof folder.name === 'string' ? folder.name.trim() : '';
-    if (name !== PLAYER_VISIBLE_TOKEN_FOLDER) {
+    const nameKey = normalizePlayerTokenFolderName(folder.name);
+    if (!nameKey || nameKey !== playerFolderKey) {
       return;
     }
 
@@ -847,9 +865,8 @@ export function restrictTokensToPlayerView(tokenState = {}) {
       return;
     }
 
-    const folderName =
-      typeof token.folder?.name === 'string' ? token.folder.name.trim() : '';
-    if (folderName === PLAYER_VISIBLE_TOKEN_FOLDER) {
+    const folderName = typeof token.folder?.name === 'string' ? token.folder.name : '';
+    if (normalizePlayerTokenFolderName(folderName) === playerFolderKey) {
       if (folderId && !allowedIds.has(folderId)) {
         allowedIds.add(folderId);
         visibleFolders.push({ id: folderId, name: PLAYER_VISIBLE_TOKEN_FOLDER });
