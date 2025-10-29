@@ -79,8 +79,20 @@ test('uploading an overlay map for a single layer preserves other layer masks', 
     mask: { visible: true, polygons: [polygon] },
     activeLayerId: 'layer-1',
     layers: [
-      { id: 'layer-1', name: 'Overlay 1', visible: true, mask: firstMask },
-      { id: 'layer-2', name: 'Overlay 2', visible: true, mask: { visible: true, polygons: [] } },
+      {
+        id: 'layer-1',
+        name: 'Overlay 1',
+        visible: true,
+        mapUrl: 'https://example.com/overlay-1.png',
+        mask: firstMask,
+      },
+      {
+        id: 'layer-2',
+        name: 'Overlay 2',
+        visible: true,
+        mapUrl: 'https://example.com/overlay-2.png',
+        mask: { visible: true, polygons: [] },
+      },
     ],
   };
 
