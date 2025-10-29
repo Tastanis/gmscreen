@@ -517,7 +517,7 @@
   box-shadow: 0 45px 95px rgba(15, 23, 42, 0.5);
   background: rgba(15, 23, 42, 0.55);
   box-sizing: border-box;
-  pointer-events: none;
+  pointer-events: auto;
 }
 
 .vtt-board__map-backdrop[hidden] {

@@ -1950,31 +1950,44 @@ export function mountBoardInteractions(store, routes = {}) {
   mapSurface.addEventListener('pointercancel', handlePointerCancel);
   mapSurface.addEventListener('pointerleave', handlePointerLeave);
 
-  mapSurface.addEventListener('dragenter', (event) => {
+  const isTokenDragEvent = (event) => {
     if (!viewState.mapLoaded) {
+      return false;
+    }
+
+    const { dataTransfer } = event;
+    if (!dataTransfer) {
+      return false;
+    }
+
+    return hasTokenData(dataTransfer, TOKEN_DRAG_TYPE);
+  };
+
+  const isWithinMapSurface = (target) =>
+    target instanceof Node && mapSurface.contains(target);
+
+  const handleTokenDragEnter = (event) => {
+    if (!isTokenDragEvent(event)) {
       return;
     }
 
-    if (!hasTokenData(event.dataTransfer, TOKEN_DRAG_TYPE)) {
+    const previousTarget = event.relatedTarget;
+    if (isWithinMapSurface(previousTarget)) {
       return;
     }
 
     event.preventDefault();
     tokenDropDepth += 1;
     mapSurface.classList.add('is-token-drop-active');
-  });
+  };
 
-  mapSurface.addEventListener('dragleave', (event) => {
-    if (!viewState.mapLoaded) {
+  const handleTokenDragLeave = (event) => {
+    if (!isTokenDragEvent(event)) {
       return;
     }
 
-    if (!hasTokenData(event.dataTransfer, TOKEN_DRAG_TYPE)) {
-      return;
-    }
-
-    const related = event.relatedTarget;
-    if (related && mapSurface.contains(related)) {
+    const nextTarget = event.relatedTarget;
+    if (isWithinMapSurface(nextTarget)) {
       return;
     }
 
@@ -1982,14 +1995,10 @@ export function mountBoardInteractions(store, routes = {}) {
     if (tokenDropDepth === 0) {
       mapSurface.classList.remove('is-token-drop-active');
     }
-  });
+  };
 
-  mapSurface.addEventListener('dragover', (event) => {
-    if (!viewState.mapLoaded) {
-      return;
-    }
-
-    if (!hasTokenData(event.dataTransfer, TOKEN_DRAG_TYPE)) {
+  const handleTokenDragOver = (event) => {
+    if (!isTokenDragEvent(event)) {
       return;
     }
 
@@ -1997,14 +2006,10 @@ export function mountBoardInteractions(store, routes = {}) {
     if (event.dataTransfer) {
       event.dataTransfer.dropEffect = 'copy';
     }
-  });
+  };
 
-  mapSurface.addEventListener('drop', (event) => {
-    if (!viewState.mapLoaded) {
-      return;
-    }
-
-    if (!hasTokenData(event.dataTransfer, TOKEN_DRAG_TYPE)) {
+  const handleTokenDrop = (event) => {
+    if (!isTokenDragEvent(event)) {
       return;
     }
 
@@ -2045,7 +2050,14 @@ export function mountBoardInteractions(store, routes = {}) {
       const label = template.name ? `"${template.name}"` : 'Token';
       status.textContent = `Placed ${label} on the scene.`;
     }
-  });
+  };
+
+  const tokenDragListenerOptions = { capture: true };
+
+  mapSurface.addEventListener('dragenter', handleTokenDragEnter, tokenDragListenerOptions);
+  mapSurface.addEventListener('dragleave', handleTokenDragLeave, tokenDragListenerOptions);
+  mapSurface.addEventListener('dragover', handleTokenDragOver, tokenDragListenerOptions);
+  mapSurface.addEventListener('drop', handleTokenDrop, tokenDragListenerOptions);
 
   document.addEventListener('dragend', () => {
     tokenDropDepth = 0;
