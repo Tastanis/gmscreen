@@ -830,28 +830,46 @@ function generateOverlayLayerId(): string
  */
 function resolveOverlayActiveLayerId($preferred, array $layers): ?string
 {
-    if (is_string($preferred)) {
-        $trimmed = trim($preferred);
-        if ($trimmed !== '') {
-            foreach ($layers as $layer) {
-                if (isset($layer['id']) && $layer['id'] === $trimmed) {
-                    return $trimmed;
-                }
-            }
-        }
-    }
-
     if (count($layers) === 0) {
         return null;
     }
 
-    foreach ($layers as $layer) {
-        if (!array_key_exists('visible', $layer) || (bool) $layer['visible'] === true) {
-            return isset($layer['id']) ? (string) $layer['id'] : null;
+    if (is_string($preferred)) {
+        $trimmed = trim($preferred);
+        if ($trimmed !== '') {
+            foreach ($layers as $layer) {
+                if (!is_array($layer) || !isset($layer['id']) || $layer['id'] !== $trimmed) {
+                    continue;
+                }
+
+                $visible = !array_key_exists('visible', $layer) || (bool) $layer['visible'] === true;
+                if ($visible) {
+                    return $trimmed;
+                }
+
+                break;
+            }
         }
     }
 
-    return isset($layers[0]['id']) ? (string) $layers[0]['id'] : null;
+    foreach ($layers as $layer) {
+        if (!is_array($layer)) {
+            continue;
+        }
+
+        $visible = !array_key_exists('visible', $layer) || (bool) $layer['visible'] === true;
+        if ($visible && isset($layer['id'])) {
+            return (string) $layer['id'];
+        }
+    }
+
+    foreach ($layers as $layer) {
+        if (is_array($layer) && isset($layer['id'])) {
+            return (string) $layer['id'];
+        }
+    }
+
+    return null;
 }
 
 /**
