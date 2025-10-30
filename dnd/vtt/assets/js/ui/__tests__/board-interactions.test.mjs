@@ -4,8 +4,12 @@ import { JSDOM } from 'jsdom';
 
 import * as boardInteractionsModule from '../board-interactions.js';
 
-const { mountBoardInteractions, createBoardStatePoller, overlayUploadHelpers } =
-  boardInteractionsModule;
+const {
+  mountBoardInteractions,
+  createBoardStatePoller,
+  overlayUploadHelpers,
+  createOverlayCutoutBlob,
+} = boardInteractionsModule;
 
 function createDom() {
   const dom = new JSDOM(
@@ -149,6 +153,258 @@ function buildOverlayState(mapUrl, mask = { visible: true, polygons: [] }) {
     activeLayerId: 'layer-1',
   };
 }
+
+test('createOverlayCutoutBlob keeps only masked polygon pixels opaque', async () => {
+  class FakeImage {
+    constructor(width, height) {
+      this.width = width;
+      this.height = height;
+      this.naturalWidth = width;
+      this.naturalHeight = height;
+      this.onload = null;
+      this.onerror = null;
+      this.crossOrigin = null;
+    }
+
+    set src(value) {
+      this._src = value;
+      queueMicrotask(() => {
+        if (typeof this.onload === 'function') {
+          this.onload();
+        }
+      });
+    }
+  }
+
+  class FakeContext {
+    constructor(canvas) {
+      this.canvas = canvas;
+      this.globalCompositeOperation = 'source-over';
+      this.fillStyle = '#000';
+      this._path = [];
+      this._stack = [];
+      this.fillCount = 0;
+      this.lastCompositeOperation = '';
+    }
+
+    clearRect() {
+      this.canvas._pixels.fill(0);
+    }
+
+    drawImage() {
+      const length = this.canvas._width * this.canvas._height;
+      this.canvas._pixels = new Array(length).fill(1);
+    }
+
+    save() {
+      this._stack.push({
+        globalCompositeOperation: this.globalCompositeOperation,
+        fillStyle: this.fillStyle,
+      });
+    }
+
+    restore() {
+      const state = this._stack.pop();
+      if (state) {
+        this.globalCompositeOperation = state.globalCompositeOperation;
+        this.fillStyle = state.fillStyle;
+      }
+    }
+
+    beginPath() {
+      this._path = [];
+    }
+
+    moveTo(x, y) {
+      this._path.push([{ x, y }]);
+    }
+
+    lineTo(x, y) {
+      const current = this._path[this._path.length - 1];
+      if (current) {
+        current.push({ x, y });
+      }
+    }
+
+    closePath() {
+      const current = this._path[this._path.length - 1];
+      if (current && current.length > 0) {
+        current.push({ ...current[0] });
+      }
+    }
+
+    fill() {
+      this.fillCount += 1;
+      this.lastCompositeOperation = this.globalCompositeOperation;
+
+      const width = this.canvas._width;
+      const height = this.canvas._height;
+      if (!width || !height) {
+        return;
+      }
+
+      const mask = new Array(width * height).fill(false);
+
+      const pointInPolygon = (x, y, polygon) => {
+        let inside = false;
+        for (let i = 0, j = polygon.length - 1; i < polygon.length; j = i++) {
+          const xi = polygon[i].x;
+          const yi = polygon[i].y;
+          const xj = polygon[j].x;
+          const yj = polygon[j].y;
+          const intersects =
+            yi > y !== yj > y &&
+            x < ((xj - xi) * (y - yi)) / (yj - yi || Number.EPSILON) + xi;
+          if (intersects) {
+            inside = !inside;
+          }
+        }
+        return inside;
+      };
+
+      this._path.forEach((subPath) => {
+        const polygon = subPath.filter(Boolean);
+        if (polygon.length < 3) {
+          return;
+        }
+
+        for (let y = 0; y < height; y += 1) {
+          for (let x = 0; x < width; x += 1) {
+            if (pointInPolygon(x + 0.5, y + 0.5, polygon)) {
+              mask[y * width + x] = true;
+            }
+          }
+        }
+      });
+
+      const existing = this.canvas._pixels.slice();
+
+      if (this.globalCompositeOperation === 'destination-in') {
+        for (let index = 0; index < existing.length; index += 1) {
+          this.canvas._pixels[index] = existing[index] && mask[index] ? 1 : 0;
+        }
+      } else if (this.globalCompositeOperation === 'destination-out') {
+        for (let index = 0; index < existing.length; index += 1) {
+          this.canvas._pixels[index] = mask[index] ? 0 : existing[index];
+        }
+      }
+    }
+  }
+
+  class FakeCanvas {
+    constructor() {
+      this._width = 0;
+      this._height = 0;
+      this._pixels = [];
+      this.context = new FakeContext(this);
+    }
+
+    get width() {
+      return this._width;
+    }
+
+    set width(value) {
+      this._width = value;
+      this._resize();
+    }
+
+    get height() {
+      return this._height;
+    }
+
+    set height(value) {
+      this._height = value;
+      this._resize();
+    }
+
+    _resize() {
+      const length = Math.max(0, this._width * this._height);
+      this._pixels = new Array(length).fill(0);
+    }
+
+    getContext(type) {
+      if (type === '2d') {
+        return this.context;
+      }
+      return null;
+    }
+
+    toBlob(callback) {
+      callback({
+        opaquePixels: this._pixels.slice(),
+        width: this._width,
+        height: this._height,
+      });
+    }
+  }
+
+  class FakeDocument {
+    constructor() {
+      this.createdCanvases = [];
+    }
+
+    createElement(tagName) {
+      if (tagName === 'canvas') {
+        const canvas = new FakeCanvas();
+        this.createdCanvases.push(canvas);
+        return canvas;
+      }
+
+      if (tagName === 'img') {
+        return new FakeImage(80, 80);
+      }
+
+      throw new Error(`Unsupported element: ${tagName}`);
+    }
+  }
+
+  const documentRef = new FakeDocument();
+  const blob = await createOverlayCutoutBlob({
+    mapUrl: 'http://example.com/map.png',
+    polygons: [
+      {
+        points: [
+          { column: 0, row: 0 },
+          { column: 1, row: 0 },
+          { column: 1, row: 1 },
+          { column: 0, row: 1 },
+        ],
+      },
+    ],
+    view: {
+      mapPixelSize: { width: 80, height: 80 },
+      gridSize: 8,
+    },
+    documentRef,
+  });
+
+  assert.ok(blob, 'expected a blob to be produced');
+
+  const canvas = documentRef.createdCanvases.at(0);
+  assert.ok(canvas, 'canvas should be created');
+
+  const { context } = canvas;
+  assert.equal(context.fillCount, 1, 'polygons should be filled in a single operation');
+  assert.equal(
+    context.lastCompositeOperation,
+    'destination-in',
+    'fill should use destination-in compositing'
+  );
+
+  const { opaquePixels, width, height } = blob;
+  const index = (x, y) => y * width + x;
+
+  assert.equal(
+    opaquePixels[index(4, 4)],
+    1,
+    'pixel inside polygon should remain opaque'
+  );
+  assert.equal(
+    opaquePixels[index(60, 60)],
+    0,
+    'pixel outside polygon should become transparent'
+  );
+});
 
 test('numeric activeSceneId toggles combat button to End Combat', () => {
   const dom = createDom();
