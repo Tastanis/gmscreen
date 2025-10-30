@@ -890,23 +890,28 @@ function escapeRegExp(value) {
 }
 
 function resolveActiveLayerId(preferredId, layers = []) {
-  if (typeof preferredId === 'string') {
-    const trimmed = preferredId.trim();
-    if (trimmed && layers.some((layer) => layer.id === trimmed)) {
-      return trimmed;
-    }
-  }
-
-  if (!layers.length) {
+  const entries = Array.isArray(layers) ? layers : [];
+  if (!entries.length) {
     return null;
   }
 
-  const visibleLayer = layers.find((layer) => layer.visible !== false);
+  if (typeof preferredId === 'string') {
+    const trimmed = preferredId.trim();
+    if (trimmed) {
+      const preferredLayer = entries.find((layer) => layer && layer.id === trimmed);
+      if (preferredLayer && preferredLayer.visible !== false) {
+        return preferredLayer.id;
+      }
+    }
+  }
+
+  const visibleLayer = entries.find((layer) => layer && layer.visible !== false && layer.id);
   if (visibleLayer) {
     return visibleLayer.id;
   }
 
-  return layers[0].id;
+  const fallback = entries.find((layer) => layer && layer.id);
+  return fallback ? fallback.id : null;
 }
 
 function rebuildOverlayAggregate(overlay) {

@@ -720,6 +720,147 @@ test('overlay clip path uses only provided polygons and keeps both visible', () 
   }
 });
 
+test('hiding one overlay layer preserves other visible layers', async () => {
+  const dom = createDom();
+  const { document } = dom.window;
+
+  const initialOverlay = {
+    mapUrl: 'http://example.com/overlay-2.png',
+    mask: {
+      visible: true,
+      polygons: [
+        {
+          points: [
+            { column: 1, row: 1 },
+            { column: 3, row: 1 },
+            { column: 3, row: 3 },
+          ],
+        },
+        {
+          points: [
+            { column: 5, row: 5 },
+            { column: 7, row: 5 },
+            { column: 7, row: 7 },
+          ],
+        },
+      ],
+    },
+    layers: [
+      {
+        id: 'layer-1',
+        name: 'Overlay 1',
+        visible: true,
+        mapUrl: 'http://example.com/overlay-1.png',
+        mask: {
+          visible: true,
+          polygons: [
+            {
+              points: [
+                { column: 1, row: 1 },
+                { column: 3, row: 1 },
+                { column: 3, row: 3 },
+              ],
+            },
+          ],
+        },
+      },
+      {
+        id: 'layer-2',
+        name: 'Overlay 2',
+        visible: true,
+        mapUrl: 'http://example.com/overlay-2.png',
+        mask: {
+          visible: true,
+          polygons: [
+            {
+              points: [
+                { column: 5, row: 5 },
+                { column: 7, row: 5 },
+                { column: 7, row: 7 },
+              ],
+            },
+          ],
+        },
+      },
+    ],
+    activeLayerId: 'layer-2',
+  };
+
+  const initialState = {
+    user: { isGM: true, name: 'GM' },
+    scenes: { items: [{ id: 'scene-1', name: 'Scene 1' }] },
+    boardState: {
+      activeSceneId: 'scene-1',
+      mapUrl: 'http://example.com/map.png',
+      placements: { 'scene-1': [] },
+      sceneState: {
+        'scene-1': {
+          grid: { size: 64, visible: true },
+          overlay: JSON.parse(JSON.stringify(initialOverlay)),
+        },
+      },
+      overlay: JSON.parse(JSON.stringify(initialOverlay)),
+    },
+  };
+
+  const store = createMockStore(initialState);
+  mountBoardInteractions(store);
+
+  const mapImage = document.getElementById('vtt-map-image');
+  Object.defineProperty(mapImage, 'naturalWidth', { value: 512, configurable: true });
+  Object.defineProperty(mapImage, 'naturalHeight', { value: 512, configurable: true });
+  mapImage.onload?.();
+
+  await Promise.resolve();
+
+  const firstLayer = document.querySelector(
+    '.vtt-board__map-overlay-layer[data-overlay-layer-id="layer-1"]'
+  );
+  const secondLayer = document.querySelector(
+    '.vtt-board__map-overlay-layer[data-overlay-layer-id="layer-2"]'
+  );
+  const mapOverlay = document.getElementById('vtt-map-overlay');
+
+  assert.ok(firstLayer, 'expected first overlay layer to render');
+  assert.ok(secondLayer, 'expected second overlay layer to render');
+  assert.equal(firstLayer.hidden, false, 'first overlay layer should be visible initially');
+  assert.equal(secondLayer.hidden, false, 'second overlay layer should be visible initially');
+
+  store.updateState((draft) => {
+    const overlay = draft.boardState.overlay;
+    overlay.layers = overlay.layers.map((layer) =>
+      layer.id === 'layer-2' ? { ...layer, visible: false } : layer
+    );
+    overlay.mask = {
+      visible: true,
+      polygons: overlay.layers[0].mask.polygons,
+    };
+    overlay.mapUrl = overlay.layers[0].mapUrl;
+
+    const sceneOverlay = draft.boardState.sceneState['scene-1'].overlay;
+    sceneOverlay.layers = sceneOverlay.layers.map((layer) =>
+      layer.id === 'layer-2' ? { ...layer, visible: false } : layer
+    );
+    sceneOverlay.mask = {
+      visible: true,
+      polygons: sceneOverlay.layers[0].mask.polygons,
+    };
+    sceneOverlay.mapUrl = sceneOverlay.layers[0].mapUrl;
+  });
+
+  await Promise.resolve();
+
+  assert.equal(firstLayer.hidden, false, 'first overlay layer should remain visible');
+  assert.equal(secondLayer.hidden, true, 'second overlay layer should be hidden');
+  assert.equal(
+    mapOverlay?.dataset.activeOverlayLayerId,
+    'layer-1',
+    'active overlay layer should switch to the next visible layer'
+  );
+
+  dom.window.close();
+});
+
 test('overlay cutout upload replaces overlay map when available', async () => {
   const dom = createDom();
   const { document, MouseEvent, Blob } = dom.window;
