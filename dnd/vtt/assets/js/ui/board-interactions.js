@@ -3790,15 +3790,13 @@ export function mountBoardInteractions(store, routes = {}) {
     }
 
     const bounds = resolveGridBounds(view);
-    const totalColumns = Number.isFinite(bounds.columns) ? bounds.columns : 0;
-    const totalRows = Number.isFinite(bounds.rows) ? bounds.rows : 0;
+    const totalColumns = Number.isFinite(bounds?.columns) ? bounds.columns : 0;
+    const totalRows = Number.isFinite(bounds?.rows) ? bounds.rows : 0;
     if (totalColumns <= 0 || totalRows <= 0) {
       return '';
     }
 
     const commands = [];
-
-    commands.push('M 0% 0% L 100% 0% L 100% 100% L 0% 100% Z');
 
     polygons.forEach((polygon) => {
       const points = Array.isArray(polygon?.points) ? polygon.points : [];
@@ -3822,11 +3820,11 @@ export function mountBoardInteractions(store, routes = {}) {
       }
     });
 
-    if (commands.length <= 1) {
+    if (!commands.length) {
       return '';
     }
 
-    return `path('evenodd ${commands.join(' ')}')`;
+    return `path('${commands.join(' ')}')`;
   }
 
   function resolveGridBounds(view = viewState) {
