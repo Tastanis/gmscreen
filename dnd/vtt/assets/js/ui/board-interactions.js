@@ -277,10 +277,13 @@ export async function createOverlayCutoutBlob({
   const gridSize = Math.max(8, Number.isFinite(view?.gridSize) ? view.gridSize : 64);
 
   context.save();
-  context.globalCompositeOperation = 'destination-out';
-  normalizedPolygons.forEach((points) => {
-    context.beginPath();
+  context.globalCompositeOperation = 'destination-in';
+  context.fillStyle = '#fff';
+  context.beginPath();
 
+  let hasPath = false;
+
+  normalizedPolygons.forEach((points) => {
     points.forEach((point, index) => {
       const x = offsetLeft + point.column * gridSize;
       const y = offsetTop + point.row * gridSize;
@@ -293,8 +296,13 @@ export async function createOverlayCutoutBlob({
     });
 
     context.closePath();
-    context.fill();
+    hasPath = true;
   });
+
+  if (hasPath) {
+    context.fill();
+  }
+
   context.restore();
 
   const blob = await canvasToBlob(canvas, 'image/png');
