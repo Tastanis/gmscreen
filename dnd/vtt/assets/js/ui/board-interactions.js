@@ -10484,6 +10484,7 @@ function createOverlayTool(uploadsEndpoint) {
     }
     isActive = true;
     editor.hidden = false;
+    editor.dataset.interactive = 'true';
     mapOverlay.dataset.overlayEditing = 'true';
     setButtonState(true);
     setStatus(DEFAULT_STATUS);
@@ -10496,6 +10497,7 @@ function createOverlayTool(uploadsEndpoint) {
   function deactivate() {
     isActive = false;
     editor.hidden = true;
+    delete editor.dataset.interactive;
     if (mapSurface) {
       delete mapSurface.dataset.overlayEditing;
     }
@@ -10826,6 +10828,23 @@ function createOverlayTool(uploadsEndpoint) {
     }
     if (event.target && event.target.closest('.vtt-overlay-editor__toolbar')) {
       return;
+    }
+
+    if (toolbar && typeof toolbar.getBoundingClientRect === 'function') {
+      const rect = toolbar.getBoundingClientRect();
+      const pointerX = Number.isFinite(event.clientX) ? event.clientX : null;
+      const pointerY = Number.isFinite(event.clientY) ? event.clientY : null;
+      if (
+        rect &&
+        pointerX !== null &&
+        pointerY !== null &&
+        pointerX >= rect.left &&
+        pointerX <= rect.right &&
+        pointerY >= rect.top &&
+        pointerY <= rect.bottom
+      ) {
+        return;
+      }
     }
 
     const localPoint = getLocalMapPoint(event);
