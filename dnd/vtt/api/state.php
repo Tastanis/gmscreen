@@ -4,141 +4,171 @@ declare(strict_types=1);
 require_once __DIR__ . '/../bootstrap.php';
 require_once __DIR__ . '/state_helpers.php';
 
-header('Content-Type: application/json');
+if (!defined('VTT_STATE_API_INCLUDE_ONLY')) {
+    header('Content-Type: application/json');
 
-$method = strtoupper($_SERVER['REQUEST_METHOD'] ?? 'GET');
+    $method = strtoupper($_SERVER['REQUEST_METHOD'] ?? 'GET');
 
-try {
-    if ($method === 'GET') {
-        $config = getVttBootstrapConfig();
-        $auth = getVttUserContext();
-        if (!($auth['isGM'] ?? false)) {
-            $config['boardState'] = filterPlacementsForPlayerView($config['boardState'] ?? []);
-        }
-        respondJson(200, [
-            'success' => true,
-            'data' => [
-                'scenes' => $config['scenes'],
-                'tokens' => $config['tokens'],
-                'boardState' => $config['boardState'],
-            ],
-        ]);
-    }
-
-    if ($method === 'POST') {
-        $auth = getVttUserContext();
-        if (!($auth['isLoggedIn'] ?? false)) {
-            respondJson(401, [
-                'success' => false,
-                'error' => 'Authentication required.',
-            ]);
-        }
-
-        $payload = readJsonInput();
-        $rawState = [];
-        if (isset($payload['boardState']) && is_array($payload['boardState'])) {
-            $rawState = $payload['boardState'];
-        } elseif (is_array($payload)) {
-            $rawState = $payload;
-        }
-
-        $updates = sanitizeBoardStateUpdates($rawState);
-        if (empty($updates)) {
-            respondJson(422, [
-                'success' => false,
-                'error' => 'No board state changes were provided.',
-            ]);
-        }
-
-        $existing = loadVttJson('board-state.json');
-        $nextState = normalizeBoardState($existing);
-
-        $isGm = (bool) ($auth['isGM'] ?? false);
-        if (!$isGm) {
-            $combatUpdates = [];
-            if (isset($updates['sceneState']) && is_array($updates['sceneState'])) {
-                $combatUpdates = extractCombatUpdates($updates['sceneState']);
+    try {
+        if ($method === 'GET') {
+            $config = getVttBootstrapConfig();
+            $auth = getVttUserContext();
+            if (!($auth['isGM'] ?? false)) {
+                $config['boardState'] = filterPlacementsForPlayerView($config['boardState'] ?? []);
             }
+            respondJson(200, [
+                'success' => true,
+                'data' => [
+                    'scenes' => $config['scenes'],
+                    'tokens' => $config['tokens'],
+                    'boardState' => $config['boardState'],
+                ],
+            ]);
+        }
 
-            $placementUpdates = isset($updates['placements']) && is_array($updates['placements'])
-                ? $updates['placements']
-                : [];
-            $templateUpdates = isset($updates['templates']) && is_array($updates['templates'])
-                ? $updates['templates']
-                : [];
-            $pingUpdates = isset($updates['pings']) && is_array($updates['pings'])
-                ? $updates['pings']
-                : [];
-
-            $hasCombatUpdates = !empty($combatUpdates);
-            $hasPlacementUpdates = !empty($placementUpdates);
-            $hasTemplateUpdates = !empty($templateUpdates);
-            $hasPingUpdates = !empty($pingUpdates);
-
-            if (!$hasCombatUpdates && !$hasPlacementUpdates && !$hasTemplateUpdates && !$hasPingUpdates) {
-                respondJson(403, [
+        if ($method === 'POST') {
+            $auth = getVttUserContext();
+            if (!($auth['isLoggedIn'] ?? false)) {
+                respondJson(401, [
                     'success' => false,
-                    'error' => 'Only combat, placement, template, or ping updates are permitted for players.',
+                    'error' => 'Authentication required.',
                 ]);
             }
 
-            if ($hasPlacementUpdates) {
-                if (!isset($nextState['placements']) || !is_array($nextState['placements'])) {
-                    $nextState['placements'] = [];
-                }
-                foreach ($placementUpdates as $sceneId => $placements) {
-                    if (!is_array($placements)) {
-                        continue;
-                    }
-                    $sceneKey = is_string($sceneId) ? trim($sceneId) : (string) $sceneId;
-                    if ($sceneKey === '') {
-                        continue;
-                    }
-                    $existingPlacements = isset($nextState['placements'][$sceneKey]) && is_array($nextState['placements'][$sceneKey])
-                        ? $nextState['placements'][$sceneKey]
-                        : [];
-                    $nextState['placements'][$sceneKey] = mergeSceneEntriesPreservingGmAuthored(
-                        $existingPlacements,
-                        $placements
-                    );
-                }
+            $payload = readJsonInput();
+            $rawState = [];
+            if (isset($payload['boardState']) && is_array($payload['boardState'])) {
+                $rawState = $payload['boardState'];
+            } elseif (is_array($payload)) {
+                $rawState = $payload;
             }
 
-            if ($hasTemplateUpdates) {
-                if (!isset($nextState['templates']) || !is_array($nextState['templates'])) {
-                    $nextState['templates'] = [];
-                }
-                foreach ($templateUpdates as $sceneId => $templates) {
-                    if (!is_array($templates)) {
-                        continue;
-                    }
-                    $sceneKey = is_string($sceneId) ? trim($sceneId) : (string) $sceneId;
-                    if ($sceneKey === '') {
-                        continue;
-                    }
-                    $existingTemplates = isset($nextState['templates'][$sceneKey]) && is_array($nextState['templates'][$sceneKey])
-                        ? $nextState['templates'][$sceneKey]
-                        : [];
-                    $nextState['templates'][$sceneKey] = mergeSceneEntriesPreservingGmAuthored(
-                        $existingTemplates,
-                        $templates
-                    );
-                }
+            $updates = sanitizeBoardStateUpdates($rawState);
+            if (empty($updates)) {
+                respondJson(422, [
+                    'success' => false,
+                    'error' => 'No board state changes were provided.',
+                ]);
             }
 
-            if ($hasCombatUpdates) {
-                foreach ($combatUpdates as $sceneId => $combatState) {
-                    if (!isset($nextState['sceneState'][$sceneId]) || !is_array($nextState['sceneState'][$sceneId])) {
-                        $nextState['sceneState'][$sceneId] = [
-                            'grid' => normalizeGridSettings([]),
-                        ];
-                    }
-                    $nextState['sceneState'][$sceneId]['combat'] = $combatState;
+            $existing = loadVttJson('board-state.json');
+            $nextState = normalizeBoardState($existing);
+
+            $isGm = (bool) ($auth['isGM'] ?? false);
+            if (!$isGm) {
+                $combatUpdates = [];
+                if (isset($updates['sceneState']) && is_array($updates['sceneState'])) {
+                    $combatUpdates = extractCombatUpdates($updates['sceneState']);
                 }
+
+                $placementUpdates = isset($updates['placements']) && is_array($updates['placements'])
+                    ? $updates['placements']
+                    : [];
+                $templateUpdates = isset($updates['templates']) && is_array($updates['templates'])
+                    ? $updates['templates']
+                    : [];
+                $pingUpdates = isset($updates['pings']) && is_array($updates['pings'])
+                    ? $updates['pings']
+                    : [];
+
+                $hasCombatUpdates = !empty($combatUpdates);
+                $hasPlacementUpdates = !empty($placementUpdates);
+                $hasTemplateUpdates = !empty($templateUpdates);
+                $hasPingUpdates = !empty($pingUpdates);
+
+                if (!$hasCombatUpdates && !$hasPlacementUpdates && !$hasTemplateUpdates && !$hasPingUpdates) {
+                    respondJson(403, [
+                        'success' => false,
+                        'error' => 'Only combat, placement, template, or ping updates are permitted for players.',
+                    ]);
+                }
+
+                if ($hasPlacementUpdates) {
+                    if (!isset($nextState['placements']) || !is_array($nextState['placements'])) {
+                        $nextState['placements'] = [];
+                    }
+                    foreach ($placementUpdates as $sceneId => $placements) {
+                        if (!is_array($placements)) {
+                            continue;
+                        }
+                        $sceneKey = is_string($sceneId) ? trim($sceneId) : (string) $sceneId;
+                        if ($sceneKey === '') {
+                            continue;
+                        }
+                        $existingPlacements = isset($nextState['placements'][$sceneKey]) && is_array($nextState['placements'][$sceneKey])
+                            ? $nextState['placements'][$sceneKey]
+                            : [];
+                        $nextState['placements'][$sceneKey] = mergeSceneEntriesPreservingGmAuthored(
+                            $existingPlacements,
+                            $placements
+                        );
+                    }
+                }
+
+                if ($hasTemplateUpdates) {
+                    if (!isset($nextState['templates']) || !is_array($nextState['templates'])) {
+                        $nextState['templates'] = [];
+                    }
+                    foreach ($templateUpdates as $sceneId => $templates) {
+                        if (!is_array($templates)) {
+                            continue;
+                        }
+                        $sceneKey = is_string($sceneId) ? trim($sceneId) : (string) $sceneId;
+                        if ($sceneKey === '') {
+                            continue;
+                        }
+                        $existingTemplates = isset($nextState['templates'][$sceneKey]) && is_array($nextState['templates'][$sceneKey])
+                            ? $nextState['templates'][$sceneKey]
+                            : [];
+                        $nextState['templates'][$sceneKey] = mergeSceneEntriesPreservingGmAuthored(
+                            $existingTemplates,
+                            $templates
+                        );
+                    }
+                }
+
+                if ($hasCombatUpdates) {
+                    foreach ($combatUpdates as $sceneId => $combatState) {
+                        if (!isset($nextState['sceneState'][$sceneId]) || !is_array($nextState['sceneState'][$sceneId])) {
+                            $nextState['sceneState'][$sceneId] = [
+                                'grid' => normalizeGridSettings([]),
+                            ];
+                        }
+                        $nextState['sceneState'][$sceneId]['combat'] = $combatState;
+                    }
+                }
+
+                if ($hasPingUpdates) {
+                    $nextState['pings'] = $pingUpdates;
+                }
+
+                if (!saveVttJson('board-state.json', $nextState)) {
+                    respondJson(500, [
+                        'success' => false,
+                        'error' => 'Failed to persist board state.',
+                    ]);
+                }
+
+                $responseState = filterPlacementsForPlayerView($nextState);
+
+                respondJson(200, [
+                    'success' => true,
+                    'data' => $responseState,
+                ]);
             }
 
-            if ($hasPingUpdates) {
-                $nextState['pings'] = $pingUpdates;
+            foreach ($updates as $key => $value) {
+                if ($key === 'sceneState' && is_array($value)) {
+                    foreach ($value as $sceneId => $config) {
+                        if (!isset($nextState['sceneState'][$sceneId]) || !is_array($nextState['sceneState'][$sceneId])) {
+                            $nextState['sceneState'][$sceneId] = $config;
+                            continue;
+                        }
+                        $nextState['sceneState'][$sceneId] = array_merge($nextState['sceneState'][$sceneId], $config);
+                    }
+                    continue;
+                }
+                $nextState[$key] = $value;
             }
 
             if (!saveVttJson('board-state.json', $nextState)) {
@@ -148,56 +178,28 @@ try {
                 ]);
             }
 
-            $responseState = filterPlacementsForPlayerView($nextState);
-
             respondJson(200, [
                 'success' => true,
-                'data' => $responseState,
+                'data' => $nextState,
             ]);
         }
 
-        foreach ($updates as $key => $value) {
-            if ($key === 'sceneState' && is_array($value)) {
-                foreach ($value as $sceneId => $config) {
-                    if (!isset($nextState['sceneState'][$sceneId]) || !is_array($nextState['sceneState'][$sceneId])) {
-                        $nextState['sceneState'][$sceneId] = $config;
-                        continue;
-                    }
-                    $nextState['sceneState'][$sceneId] = array_merge($nextState['sceneState'][$sceneId], $config);
-                }
-                continue;
-            }
-            $nextState[$key] = $value;
-        }
-
-        if (!saveVttJson('board-state.json', $nextState)) {
-            respondJson(500, [
-                'success' => false,
-                'error' => 'Failed to persist board state.',
-            ]);
-        }
-
-        respondJson(200, [
-            'success' => true,
-            'data' => $nextState,
+        respondJson(405, [
+            'success' => false,
+            'error' => 'Method not allowed.',
+        ]);
+    } catch (InvalidArgumentException $exception) {
+        respondJson(422, [
+            'success' => false,
+            'error' => $exception->getMessage() ?: 'Invalid board state payload.',
+        ]);
+    } catch (Throwable $exception) {
+        error_log('[VTT] State API error: ' . $exception->getMessage());
+        respondJson(500, [
+            'success' => false,
+            'error' => 'Failed to process board state.',
         ]);
     }
-
-    respondJson(405, [
-        'success' => false,
-        'error' => 'Method not allowed.',
-    ]);
-} catch (InvalidArgumentException $exception) {
-    respondJson(422, [
-        'success' => false,
-        'error' => $exception->getMessage() ?: 'Invalid board state payload.',
-    ]);
-} catch (Throwable $exception) {
-    error_log('[VTT] State API error: ' . $exception->getMessage());
-    respondJson(500, [
-        'success' => false,
-        'error' => 'Failed to process board state.',
-    ]);
 }
 
 function readJsonInput(): array
@@ -766,6 +768,7 @@ function createEmptyOverlayLayer(int $index = 0): array
         'name' => 'Overlay ' . ($index + 1),
         'visible' => true,
         'mask' => createEmptyOverlayMask(),
+        'mapUrl' => null,
     ];
 }
 
@@ -793,6 +796,14 @@ function normalizeOverlayLayerPayload($rawLayer, int $index = 0): ?array
         $visible = (bool) $rawLayer['visible'];
     }
 
+    $mapUrl = null;
+    if (array_key_exists('mapUrl', $rawLayer) && is_string($rawLayer['mapUrl'])) {
+        $trimmedMap = trim($rawLayer['mapUrl']);
+        if ($trimmedMap !== '') {
+            $mapUrl = $trimmedMap;
+        }
+    }
+
     $mask = array_key_exists('mask', $rawLayer)
         ? normalizeOverlayMaskPayload($rawLayer['mask'])
         : normalizeOverlayMaskPayload($rawLayer);
@@ -805,6 +816,7 @@ function normalizeOverlayLayerPayload($rawLayer, int $index = 0): ?array
         'name' => $layerName,
         'visible' => $visible,
         'mask' => $mask,
+        'mapUrl' => $mapUrl,
     ];
 }
 
