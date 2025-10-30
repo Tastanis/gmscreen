@@ -277,10 +277,10 @@ export async function createOverlayCutoutBlob({
   const gridSize = Math.max(8, Number.isFinite(view?.gridSize) ? view.gridSize : 64);
 
   context.save();
-  context.globalCompositeOperation = 'destination-in';
-  context.beginPath();
-
+  context.globalCompositeOperation = 'destination-out';
   normalizedPolygons.forEach((points) => {
+    context.beginPath();
+
     points.forEach((point, index) => {
       const x = offsetLeft + point.column * gridSize;
       const y = offsetTop + point.row * gridSize;
@@ -293,9 +293,8 @@ export async function createOverlayCutoutBlob({
     });
 
     context.closePath();
+    context.fill();
   });
-
-  context.fill();
   context.restore();
 
   const blob = await canvasToBlob(canvas, 'image/png');
@@ -3799,6 +3798,8 @@ export function mountBoardInteractions(store, routes = {}) {
 
     const commands = [];
 
+    commands.push('M 0% 0% L 100% 0% L 100% 100% L 0% 100% Z');
+
     polygons.forEach((polygon) => {
       const points = Array.isArray(polygon?.points) ? polygon.points : [];
       if (points.length < 3) {
@@ -3821,11 +3822,11 @@ export function mountBoardInteractions(store, routes = {}) {
       }
     });
 
-    if (commands.length === 0) {
+    if (commands.length <= 1) {
       return '';
     }
 
-    return `path('${commands.join(' ')}')`;
+    return `path('evenodd ${commands.join(' ')}')`;
   }
 
   function resolveGridBounds(view = viewState) {
