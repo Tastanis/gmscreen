@@ -964,6 +964,84 @@ export function mountBoardInteractions(store, routes = {}) {
     combatantId: null,
     lockedAt: 0,
   };
+  const activeTurnTimerContext = {
+    combatantId: null,
+    holderId: null,
+  };
+
+  function clearActiveTurnTimerContext() {
+    activeTurnTimerContext.combatantId = null;
+    activeTurnTimerContext.holderId = null;
+  }
+
+  function setActiveTurnTimerContext(combatantId, holderId) {
+    activeTurnTimerContext.combatantId =
+      typeof combatantId === 'string' && combatantId ? combatantId : null;
+    activeTurnTimerContext.holderId =
+      typeof holderId === 'string' && holderId ? holderId : null;
+  }
+
+  function isActiveTurnTimerContext(combatantId, holderId) {
+    const normalizedCombatantId =
+      typeof combatantId === 'string' && combatantId ? combatantId : null;
+    const normalizedHolderId = typeof holderId === 'string' && holderId ? holderId : null;
+    return (
+      activeTurnTimerContext.combatantId === normalizedCombatantId &&
+      activeTurnTimerContext.holderId === normalizedHolderId
+    );
+  }
+
+  function endTurnTimerForContext() {
+    if (!activeTurnTimerContext.combatantId && !activeTurnTimerContext.holderId) {
+      return;
+    }
+    combatTimerService.endTurn();
+    clearActiveTurnTimerContext();
+  }
+
+  function handleTurnLockTimerChange() {
+    if (!isGmUser()) {
+      return;
+    }
+
+    const activeId = typeof activeCombatantId === 'string' && activeCombatantId ? activeCombatantId : null;
+    const lockCombatantId =
+      typeof turnLockState.combatantId === 'string' && turnLockState.combatantId
+        ? turnLockState.combatantId
+        : null;
+    const holderId = normalizeProfileId(turnLockState.holderId);
+    const team = lockCombatantId ? getCombatantTeam(lockCombatantId) : null;
+    const normalizedTeam = team === 'ally' || team === 'enemy' ? team : null;
+    const roundForTurn = combatRound > 0 ? combatRound : 1;
+    const shouldTrackTimer =
+      combatActive && activeId && lockCombatantId === activeId && normalizedTeam && holderId;
+
+    if (!shouldTrackTimer) {
+      if (activeTurnTimerContext.combatantId || activeTurnTimerContext.holderId) {
+        endTurnTimerForContext();
+      }
+      return;
+    }
+
+    if (isActiveTurnTimerContext(activeId, holderId)) {
+      return;
+    }
+
+    const displayName =
+      typeof turnLockState.holderName === 'string' && turnLockState.holderName.trim()
+        ? turnLockState.holderName.trim()
+        : formatProfileDisplayName(holderId);
+
+    combatTimerService.stopWaiting(normalizedTeam);
+    combatTimerService.startTurn({
+      userId: holderId,
+      displayName,
+      team: normalizedTeam,
+      round: roundForTurn,
+      combatantId: activeId,
+    });
+    setActiveTurnTimerContext(activeId, holderId);
+  }
   let lastPersistedBoardStateSignature = null;
   let lastPersistedBoardStateHash = null;
   let pendingBoardStateSave = null;
@@ -5015,6 +5093,7 @@ export function mountBoardInteractions(store, routes = {}) {
 
     if (!combatActive || !normalizedNextId) {
       combatTimerService.endTurn();
+      clearActiveTurnTimerContext();
       combatTimerService.clearWaiting();
       return;
     }
@@ -5025,14 +5104,34 @@ export function mountBoardInteractions(store, routes = {}) {
 
     if (!waitingTeam) {
       combatTimerService.clearWaiting();
+      endTurnTimerForContext();
       return;
     }
 
     if (hasTurnLock) {
+      const holderId = normalizeProfileId(turnLockState.holderId) ?? 'gm';
+      const displayName =
+        typeof turnLockState.holderName === 'string' && turnLockState.holderName.trim()
+          ? turnLockState.holderName.trim()
+          : formatProfileDisplayName(holderId);
+      const roundForTurn = combatRound > 0 ? combatRound : 1;
+
       combatTimerService.stopWaiting(waitingTeam);
+
+      if (!isActiveTurnTimerContext(normalizedNextId, holderId)) {
+        combatTimerService.startTurn({
+          userId: holderId,
+          displayName,
+          team: waitingTeam,
+          round: roundForTurn,
+          combatantId: normalizedNextId,
+        });
+        setActiveTurnTimerContext(normalizedNextId, holderId);
+      }
       return;
     }
 
+    endTurnTimerForContext();
     combatTimerService.startWaiting({
       team: waitingTeam,
       round: combatRound > 0 ? combatRound : 1,
@@ -5179,13 +5278,16 @@ export function mountBoardInteractions(store, routes = {}) {
     completedCombatants.delete(combatantId);
     setActiveCombatantId(combatantId);
     if (isGmUser()) {
+      const timerHolderId =
+        normalizeProfileId(turnLockState.holderId) || normalizeProfileId(participantId) || 'gm';
       combatTimerService.startTurn({
-        userId: participantId || undefined,
+        userId: participantId || timerHolderId || undefined,
         displayName: participantName,
         team: turnTeam ?? 'ally',
         round: roundForTurn,
         combatantId,
       });
+      setActiveTurnTimerContext(combatantId, timerHolderId);
     }
     currentTurnTeam = getCombatantTeam(combatantId) ?? currentTurnTeam;
     refreshCombatTracker();
@@ -5243,6 +5345,7 @@ export function mountBoardInteractions(store, routes = {}) {
     const finishedId = activeCombatantId;
     if (isGmUser()) {
       combatTimerService.endTurn();
+      clearActiveTurnTimerContext();
     }
     const finishingPlacement = getPlacementFromStore(finishedId);
     const finishingConditions = ensurePlacementConditions(
@@ -6566,6 +6669,7 @@ export function mountBoardInteractions(store, routes = {}) {
       turnLockState.holderName = null;
       turnLockState.combatantId = null;
       turnLockState.lockedAt = 0;
+      handleTurnLockTimerChange();
       return;
     }
 
@@ -6573,6 +6677,7 @@ export function mountBoardInteractions(store, routes = {}) {
     turnLockState.holderName = lock.holderName ?? lock.holderId ?? null;
     turnLockState.combatantId = lock.combatantId ?? null;
     turnLockState.lockedAt = Number.isFinite(lock.lockedAt) ? lock.lockedAt : Date.now();
+    handleTurnLockTimerChange();
   }
 
   function createCombatStateSnapshot() {
@@ -6724,6 +6829,7 @@ export function mountBoardInteractions(store, routes = {}) {
     turnLockState.holderName = null;
     turnLockState.combatantId = null;
     turnLockState.lockedAt = 0;
+    handleTurnLockTimerChange();
     return true;
   }
 
