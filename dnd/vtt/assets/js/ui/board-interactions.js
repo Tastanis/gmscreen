@@ -4479,8 +4479,12 @@ export function mountBoardInteractions(store, routes = {}) {
       }
     });
 
-    pruneCombatGroups(activeIds);
+    const groupsPruned = pruneCombatGroups(activeIds);
     pruneCompletedCombatants(activeIds);
+
+    if (groupsPruned && isGmUser() && !suppressCombatStateSync) {
+      syncCombatStateToStore();
+    }
 
     const waitingFragment = document.createDocumentFragment();
     const completedFragment = document.createDocumentFragment();
@@ -4607,6 +4611,7 @@ export function mountBoardInteractions(store, routes = {}) {
     const activeSet = activeIds instanceof Set ? activeIds : new Set(activeIds ?? []);
 
     const representativesToDelete = [];
+    let mutated = false;
     combatTrackerGroups.forEach((members, representativeId) => {
       if (!activeSet.has(representativeId)) {
         members.forEach((memberId) => {
@@ -4615,6 +4620,7 @@ export function mountBoardInteractions(store, routes = {}) {
           }
         });
         representativesToDelete.push(representativeId);
+        mutated = true;
         return;
       }
 
@@ -4624,6 +4630,7 @@ export function mountBoardInteractions(store, routes = {}) {
           filtered.add(memberId);
         } else if (memberId !== representativeId) {
           combatantGroupRepresentative.delete(memberId);
+          mutated = true;
         }
       });
 
@@ -4636,20 +4643,36 @@ export function mountBoardInteractions(store, routes = {}) {
           }
         });
         representativesToDelete.push(representativeId);
+        mutated = true;
       } else {
-        combatTrackerGroups.set(representativeId, filtered);
+        let changedForRep = filtered.size !== members.size;
+        if (!changedForRep) {
+          members.forEach((memberId) => {
+            if (!filtered.has(memberId)) {
+              changedForRep = true;
+            }
+          });
+        }
+        if (changedForRep) {
+          combatTrackerGroups.set(representativeId, filtered);
+          mutated = true;
+        }
       }
     });
 
     representativesToDelete.forEach((repId) => {
       combatTrackerGroups.delete(repId);
+      mutated = true;
     });
 
     Array.from(combatantGroupRepresentative.keys()).forEach((memberId) => {
       if (!activeSet.has(memberId)) {
         combatantGroupRepresentative.delete(memberId);
+        mutated = true;
       }
     });
+
+    return mutated;
   }
 
   function pruneCompletedCombatants(activeIds) {
@@ -4675,6 +4698,121 @@ export function mountBoardInteractions(store, routes = {}) {
     if (activeCombatantId && !representativeSet.has(activeCombatantId)) {
       setActiveCombatantId(null);
     }
+  }
+
+  function applyCombatGroupsFromState(groups) {
+    const source = Array.isArray(groups)
+      ? groups
+      : groups && typeof groups === 'object'
+      ? Object.entries(groups).map(([representativeId, memberIds]) => ({
+          representativeId,
+          memberIds: Array.isArray(memberIds) ? memberIds : [],
+        }))
+      : [];
+
+    const prepared = [];
+
+    source.forEach((entry) => {
+      if (!entry || typeof entry !== 'object') {
+        return;
+      }
+
+      const representativeSource =
+        typeof entry.representativeId === 'string'
+          ? entry.representativeId
+          : typeof entry.id === 'string'
+          ? entry.id
+          : null;
+      const representativeId = representativeSource ? representativeSource.trim() : '';
+      if (!representativeId) {
+        return;
+      }
+
+      const membersSource = Array.isArray(entry.memberIds)
+        ? entry.memberIds
+        : Array.isArray(entry.members)
+        ? entry.members
+        : Array.isArray(entry.ids)
+        ? entry.ids
+        : [];
+
+      const normalizedMembers = membersSource
+        .map((memberId) => (typeof memberId === 'string' ? memberId.trim() : ''))
+        .filter((memberId) => memberId.length > 0);
+
+      if (!normalizedMembers.includes(representativeId)) {
+        normalizedMembers.push(representativeId);
+      }
+
+      const uniqueMembers = Array.from(new Set(normalizedMembers));
+      if (uniqueMembers.length <= 1) {
+        return;
+      }
+
+      prepared.push({ representativeId, members: new Set(uniqueMembers) });
+    });
+
+    let changed = combatTrackerGroups.size !== prepared.length;
+
+    if (!changed) {
+      for (const { representativeId, members } of prepared) {
+        const existing = combatTrackerGroups.get(representativeId);
+        if (!existing || existing.size !== members.size) {
+          changed = true;
+          break;
+        }
+        for (const memberId of members) {
+          if (!existing.has(memberId)) {
+            changed = true;
+            break;
+          }
+        }
+        if (changed) {
+          break;
+        }
+      }
+    }
+
+    if (!changed) {
+      const expectedRepresentatives = new Map();
+      prepared.forEach(({ representativeId, members }) => {
+        members.forEach((memberId) => {
+          if (memberId !== representativeId) {
+            expectedRepresentatives.set(memberId, representativeId);
+          }
+        });
+      });
+
+      if (combatantGroupRepresentative.size !== expectedRepresentatives.size) {
+        changed = true;
+      } else {
+        for (const [memberId, repId] of expectedRepresentatives) {
+          if (combatantGroupRepresentative.get(memberId) !== repId) {
+            changed = true;
+            break;
+          }
+        }
+      }
+    }
+
+    if (!changed) {
+      return false;
+    }
+
+    combatTrackerGroups.clear();
+    combatantGroupRepresentative.clear();
+
+    prepared.forEach(({ representativeId, members }) => {
+      const memberSet = new Set(members);
+      combatTrackerGroups.set(representativeId, memberSet);
+      memberSet.forEach((memberId) => {
+        if (memberId !== representativeId) {
+          combatantGroupRepresentative.set(memberId, representativeId);
+        }
+      });
+    });
+
+    return true;
   }
 
   function getRepresentativeIdFor(combatantId) {
@@ -6174,6 +6312,7 @@ export function mountBoardInteractions(store, routes = {}) {
       roundTurnCount = normalized.roundTurnCount;
       completedCombatants.clear();
       normalized.completedCombatantIds.forEach((id) => completedCombatants.add(id));
+      applyCombatGroupsFromState(normalized.groups);
       updateTurnLockState(normalized.turnLock);
 
       if (!combatActive) {
@@ -6238,6 +6377,9 @@ export function mountBoardInteractions(store, routes = {}) {
     const updatedAt = Number.isFinite(updatedAtRaw) ? Math.max(0, Math.trunc(updatedAtRaw)) : 0;
     const turnLock = normalizeTurnLock(raw?.turnLock ?? null);
     const lastEffect = normalizeTurnEffect(raw?.lastEffect ?? raw?.lastEvent ?? null);
+    const groups = normalizeCombatGroups(
+      raw?.groups ?? raw?.groupings ?? raw?.combatGroups ?? raw?.combatantGroups ?? null
+    );
 
     return {
       active,
@@ -6251,7 +6393,63 @@ export function mountBoardInteractions(store, routes = {}) {
       updatedAt,
       turnLock,
       lastEffect,
+      groups,
     };
+  }
+
+  function normalizeCombatGroups(rawGroups) {
+    const source = Array.isArray(rawGroups)
+      ? rawGroups
+      : rawGroups && typeof rawGroups === 'object'
+      ? Object.entries(rawGroups).map(([representativeId, memberIds]) => ({
+          representativeId,
+          memberIds: Array.isArray(memberIds) ? memberIds : [],
+        }))
+      : [];
+
+    const groups = [];
+
+    source.forEach((entry) => {
+      if (!entry || typeof entry !== 'object') {
+        return;
+      }
+
+      const representativeSource =
+        typeof entry.representativeId === 'string'
+          ? entry.representativeId
+          : typeof entry.id === 'string'
+          ? entry.id
+          : null;
+      const representativeId = representativeSource ? representativeSource.trim() : '';
+      if (!representativeId) {
+        return;
+      }
+
+      const membersSource = Array.isArray(entry.memberIds)
+        ? entry.memberIds
+        : Array.isArray(entry.members)
+        ? entry.members
+        : Array.isArray(entry.ids)
+        ? entry.ids
+        : [];
+
+      const normalizedMembers = membersSource
+        .map((memberId) => (typeof memberId === 'string' ? memberId.trim() : ''))
+        .filter((memberId) => memberId.length > 0);
+
+      if (!normalizedMembers.includes(representativeId)) {
+        normalizedMembers.push(representativeId);
+      }
+
+      const uniqueMembers = Array.from(new Set(normalizedMembers));
+      if (uniqueMembers.length <= 1) {
+        return;
+      }
+
+      groups.push({ representativeId, memberIds: uniqueMembers });
+    });
+
+    return groups;
   }
 
   function resetTurnEffects() {
@@ -6395,7 +6593,39 @@ export function mountBoardInteractions(store, routes = {}) {
       updatedAt: timestamp,
       turnLock: serializeTurnLockState(),
       lastEffect: effectSnapshot,
+      groups: serializeCombatGroups(),
     };
+  }
+
+  function serializeCombatGroups() {
+    if (!combatTrackerGroups.size) {
+      return [];
+    }
+
+    const entries = [];
+    combatTrackerGroups.forEach((members, representativeId) => {
+      if (typeof representativeId !== 'string' || representativeId.trim() === '') {
+        return;
+      }
+
+      const normalizedRep = representativeId.trim();
+      const normalizedMembers = Array.from(members)
+        .filter((id) => typeof id === 'string' && id.trim() !== '')
+        .map((id) => id.trim());
+
+      if (!normalizedMembers.includes(normalizedRep)) {
+        normalizedMembers.push(normalizedRep);
+      }
+
+      const uniqueMembers = Array.from(new Set(normalizedMembers));
+      if (uniqueMembers.length <= 1) {
+        return;
+      }
+
+      entries.push({ representativeId: normalizedRep, memberIds: uniqueMembers });
+    });
+
+    return entries;
   }
 
   function serializeTurnLockState() {
@@ -7345,6 +7575,27 @@ export function mountBoardInteractions(store, routes = {}) {
     }
   }
 
+  function pickRepresentativeIdForGroup(memberIds) {
+    if (!Array.isArray(memberIds) || memberIds.length === 0) {
+      return null;
+    }
+
+    for (let index = memberIds.length - 1; index >= 0; index -= 1) {
+      const candidate = typeof memberIds[index] === 'string' ? memberIds[index] : null;
+      if (!candidate) {
+        continue;
+      }
+
+      const placement = getPlacementFromStore(candidate);
+      if (!isPlacementHiddenForPersistence(placement)) {
+        return candidate;
+      }
+    }
+
+    const fallback = memberIds[memberIds.length - 1];
+    return typeof fallback === 'string' && fallback ? fallback : null;
+  }
+
   function removeTokenFromGroups(tokenId) {
     if (!tokenId) {
       return;
@@ -7409,6 +7660,7 @@ export function mountBoardInteractions(store, routes = {}) {
           });
           combatTrackerGroups.delete(candidateRep);
           refreshCombatTracker();
+          syncCombatStateToStore();
           if (status) {
             status.textContent = 'Ungrouped selected tokens.';
           }
@@ -7417,7 +7669,8 @@ export function mountBoardInteractions(store, routes = {}) {
       }
     }
 
-    const representativeId = uniqueSelection[uniqueSelection.length - 1];
+    const representativeId =
+      pickRepresentativeIdForGroup(uniqueSelection) ?? uniqueSelection[uniqueSelection.length - 1];
     uniqueSelection.forEach(removeTokenFromGroups);
 
     const members = new Set(uniqueSelection);
@@ -7430,6 +7683,7 @@ export function mountBoardInteractions(store, routes = {}) {
     });
 
     refreshCombatTracker();
+    syncCombatStateToStore();
     if (status) {
       const count = members.size;
       const noun = count === 1 ? 'token' : 'tokens';

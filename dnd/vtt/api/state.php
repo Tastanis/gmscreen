@@ -565,6 +565,7 @@ function normalizeCombatStatePayload($rawCombat): array
         'roundTurnCount' => 0,
         'updatedAt' => time(),
         'turnLock' => null,
+        'groups' => [],
     ];
 
     if (!is_array($rawCombat)) {
@@ -609,6 +610,9 @@ function normalizeCombatStatePayload($rawCombat): array
     }
 
     $state['turnLock'] = normalizeCombatTurnLock($rawCombat['turnLock'] ?? null);
+    $state['groups'] = normalizeCombatGroups(
+        $rawCombat['groups'] ?? $rawCombat['groupings'] ?? $rawCombat['combatGroups'] ?? $rawCombat['combatantGroups'] ?? []
+    );
 
     return $state;
 }
@@ -656,6 +660,77 @@ function normalizeCombatTurnLock($rawLock): ?array
         'combatantId' => $combatantId === '' ? null : $combatantId,
         'lockedAt' => $lockedAt,
     ];
+}
+
+/**
+ * @param mixed $rawGroups
+ * @return array<int,array<string,mixed>>
+ */
+function normalizeCombatGroups($rawGroups): array
+{
+    $entries = [];
+
+    if (is_array($rawGroups)) {
+        $entries = $rawGroups;
+    } elseif (is_object($rawGroups)) {
+        $entries = (array) $rawGroups;
+    }
+
+    $groups = [];
+
+    foreach ($entries as $key => $entry) {
+        $representativeId = '';
+        $membersSource = [];
+
+        if (is_array($entry) && array_key_exists('representativeId', $entry)) {
+            if (is_string($entry['representativeId'])) {
+                $representativeId = trim($entry['representativeId']);
+            }
+            if (isset($entry['memberIds']) && is_array($entry['memberIds'])) {
+                $membersSource = $entry['memberIds'];
+            } elseif (isset($entry['members']) && is_array($entry['members'])) {
+                $membersSource = $entry['members'];
+            } elseif (isset($entry['ids']) && is_array($entry['ids'])) {
+                $membersSource = $entry['ids'];
+            }
+        } elseif (is_string($key)) {
+            $representativeId = trim($key);
+            if (is_array($entry)) {
+                $membersSource = $entry;
+            }
+        }
+
+        if ($representativeId === '') {
+            continue;
+        }
+
+        $members = [];
+        foreach ($membersSource as $member) {
+            if (!is_string($member)) {
+                continue;
+            }
+            $trimmed = trim($member);
+            if ($trimmed === '' || in_array($trimmed, $members, true)) {
+                continue;
+            }
+            $members[] = $trimmed;
+        }
+
+        if (!in_array($representativeId, $members, true)) {
+            $members[] = $representativeId;
+        }
+
+        if (count($members) <= 1) {
+            continue;
+        }
+
+        $groups[] = [
+            'representativeId' => $representativeId,
+            'memberIds' => $members,
+        ];
+    }
+
+    return $groups;
 }
 
 /**
