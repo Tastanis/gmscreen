@@ -194,6 +194,9 @@ function formatCombatState(raw = {}) {
   const roundTurnCount = toInt(raw.roundTurnCount, 0);
   const updatedAt = toInt(raw.updatedAt, Date.now());
   const turnLock = sanitizeTurnLock(raw.turnLock ?? null);
+  const groups = sanitizeCombatGroups(
+    raw.groups ?? raw.groupings ?? raw.combatGroups ?? raw.combatantGroups ?? null
+  );
 
   return {
     active,
@@ -206,6 +209,7 @@ function formatCombatState(raw = {}) {
     roundTurnCount,
     updatedAt,
     turnLock,
+    groups,
   };
 }
 
@@ -540,6 +544,68 @@ function sanitizeTurnLock(raw) {
     combatantId: combatantId || null,
     lockedAt,
   };
+}
+
+function sanitizeCombatGroups(raw) {
+  const source = Array.isArray(raw)
+    ? raw
+    : raw && typeof raw === 'object'
+    ? Object.entries(raw).map(([representativeId, memberIds]) => ({
+        representativeId,
+        memberIds: Array.isArray(memberIds) ? memberIds : [],
+      }))
+    : [];
+
+  const groups = [];
+
+  source.forEach((entry) => {
+    if (!entry || typeof entry !== 'object') {
+      return;
+    }
+
+    const representativeSource =
+      typeof entry.representativeId === 'string'
+        ? entry.representativeId
+        : typeof entry.id === 'string'
+        ? entry.id
+        : null;
+    const representativeId = representativeSource ? representativeSource.trim() : '';
+    if (!representativeId) {
+      return;
+    }
+
+    const membersSource = Array.isArray(entry.memberIds)
+      ? entry.memberIds
+      : Array.isArray(entry.members)
+      ? entry.members
+      : Array.isArray(entry.ids)
+      ? entry.ids
+      : [];
+
+    const normalizedMembers = [];
+    membersSource.forEach((memberId) => {
+      if (typeof memberId !== 'string') {
+        return;
+      }
+      const trimmed = memberId.trim();
+      if (!trimmed || normalizedMembers.includes(trimmed)) {
+        return;
+      }
+      normalizedMembers.push(trimmed);
+    });
+
+    if (!normalizedMembers.includes(representativeId)) {
+      normalizedMembers.push(representativeId);
+    }
+
+    if (normalizedMembers.length <= 1) {
+      return;
+    }
+
+    groups.push({ representativeId, memberIds: normalizedMembers });
+  });
+
+  return groups;
 }
 
 function toInt(value, fallback = 0) {
