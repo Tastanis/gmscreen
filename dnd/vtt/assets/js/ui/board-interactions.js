@@ -3183,6 +3183,9 @@ export function mountBoardInteractions(store, routes = {}) {
       overlayTool.reset();
     };
     mapImage.src = url;
+    if (mapImage.complete && mapImage.naturalWidth > 0 && mapImage.naturalHeight > 0) {
+      mapImage.onload?.();
+    }
   }
 
   function resolveSceneOverlayState(boardState = {}, sceneId = null) {
@@ -7874,7 +7877,7 @@ export function mountBoardInteractions(store, routes = {}) {
       hidden = toBoolean(template.isHidden, hidden);
     }
 
-    return {
+    const placement = {
       id: createPlacementId(),
       tokenId: template.id,
       name: template.name ?? '',
@@ -7892,6 +7895,10 @@ export function mountBoardInteractions(store, routes = {}) {
       combatTeam: normalizeCombatTeam(template.combatTeam ?? template.team ?? null),
       hidden,
     };
+
+    markPlacementAsGmAuthored(placement);
+
+    return placement;
   }
 
   function toggleTriggeredActionState(placementId) {
@@ -7905,6 +7912,7 @@ export function mountBoardInteractions(store, routes = {}) {
       return false;
     }
 
+    const gmUser = Boolean(state?.user?.isGM);
     let updated = false;
     let nextReady = true;
     boardApi.updateState?.((draft) => {
@@ -7916,6 +7924,9 @@ export function mountBoardInteractions(store, routes = {}) {
       const current = target.triggeredActionReady !== false;
       nextReady = !current;
       target.triggeredActionReady = nextReady;
+      if (gmUser) {
+        markPlacementAsGmAuthored(target, { isGm: gmUser });
+      }
       updated = true;
     });
 
@@ -8407,6 +8418,31 @@ export function mountBoardInteractions(store, routes = {}) {
     };
   }
 
+  function markPlacementAsGmAuthored(target, { isGm } = {}) {
+    const gmUser = typeof isGm === 'boolean' ? isGm : isGmUser();
+    if (!gmUser || !target || typeof target !== 'object') {
+      return;
+    }
+
+    target.authorIsGm = true;
+    target.authorRole = 'gm';
+
+    const flags = target.flags && typeof target.flags === 'object' ? target.flags : {};
+    flags.gmAuthored = true;
+    if (typeof target.hidden === 'boolean') {
+      flags.hidden = target.hidden;
+    }
+    target.flags = flags;
+
+    const metadataBase =
+      target.metadata && typeof target.metadata === 'object' ? target.metadata : {};
+    target.metadata = {
+      ...metadataBase,
+      authorRole: 'gm',
+      authorIsGm: true,
+    };
+  }
+
   function updatePlacementById(placementId, mutator) {
     if (!placementId || typeof mutator !== 'function' || typeof boardApi.updateState !== 'function') {
       return false;
@@ -8418,6 +8454,7 @@ export function mountBoardInteractions(store, routes = {}) {
       return false;
     }
 
+    const gmUser = Boolean(state?.user?.isGM);
     let updated = false;
     boardApi.updateState?.((draft) => {
       const scenePlacements = ensureScenePlacementDraft(draft, activeSceneId);
@@ -8426,6 +8463,9 @@ export function mountBoardInteractions(store, routes = {}) {
         return;
       }
       mutator(target);
+      if (gmUser) {
+        markPlacementAsGmAuthored(target, { isGm: gmUser });
+      }
       updated = true;
     });
 
