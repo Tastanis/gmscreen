@@ -557,6 +557,7 @@ export function mountBoardInteractions(store, routes = {}) {
   const combatantGroupRepresentative = new Map();
   let lastCombatTrackerEntries = [];
   let renderedPlacements = [];
+  let mapLoadSequence = 0;
   let lastActiveSceneId = null;
   let lastOverlaySignature = null;
   const movementQueue = [];
@@ -3100,6 +3101,7 @@ export function mountBoardInteractions(store, routes = {}) {
   }
 
   function loadMap(url) {
+    const loadToken = ++mapLoadSequence;
     viewState.activeMapUrl = url || null;
     viewState.mapLoaded = false;
     lastOverlaySignature = null;
@@ -3141,7 +3143,14 @@ export function mountBoardInteractions(store, routes = {}) {
     }
 
     emptyState?.setAttribute('hidden', 'hidden');
-    mapImage.onload = () => {
+
+    let loadHandled = false;
+
+    const handleMapImageLoad = () => {
+      if (loadHandled || loadToken !== mapLoadSequence) {
+        return;
+      }
+      loadHandled = true;
       viewState.mapLoaded = true;
       calibrateToBoard();
       mapImage.hidden = false;
@@ -3162,7 +3171,11 @@ export function mountBoardInteractions(store, routes = {}) {
       renderTokens(boardApi.getState?.() ?? {}, tokenLayer, viewState);
       templateTool.notifyMapState();
     };
-    mapImage.onerror = () => {
+    const handleMapImageError = () => {
+      if (loadHandled || loadToken !== mapLoadSequence) {
+        return;
+      }
+      loadHandled = true;
       viewState.mapLoaded = false;
       mapImage.hidden = true;
       mapBackdrop.hidden = true;
@@ -3182,10 +3195,86 @@ export function mountBoardInteractions(store, routes = {}) {
       templateTool.reset();
       overlayTool.reset();
     };
+    mapImage.onload = handleMapImageLoad;
+    mapImage.onerror = handleMapImageError;
     mapImage.src = url;
+
+    const scheduleMicrotask =
+      typeof queueMicrotask === 'function'
+        ? queueMicrotask
+        : (callback) => Promise.resolve().then(callback);
+
+    const waitForIntrinsicDimensions = () =>
+      new Promise((resolve) => {
+        const schedule = (callback) => {
+          if (typeof window !== 'undefined' && typeof window.requestAnimationFrame === 'function') {
+            window.requestAnimationFrame(callback);
+            return;
+          }
+          if (typeof requestAnimationFrame === 'function') {
+            requestAnimationFrame(callback);
+            return;
+          }
+          setTimeout(callback, 16);
+        };
+
+        const checkDimensions = () => {
+          if (loadHandled || loadToken !== mapLoadSequence) {
+            resolve();
+            return;
+          }
+          if (mapImage.naturalWidth > 0 && mapImage.naturalHeight > 0) {
+            resolve();
+            return;
+          }
+          if (!mapImage.complete) {
+            schedule(checkDimensions);
+            return;
+          }
+          schedule(checkDimensions);
+        };
+
+        checkDimensions();
+      });
+
+    const ensureImageReady = async () => {
+      if (loadHandled || loadToken !== mapLoadSequence) {
+        return;
+      }
+
+      if (mapImage.complete && mapImage.naturalWidth > 0 && mapImage.naturalHeight > 0) {
+        handleMapImageLoad();
+        return;
+      }
+
+      try {
+        if (typeof mapImage.decode === 'function') {
+          await mapImage.decode();
+        } else {
+          await waitForIntrinsicDimensions();
+        }
+      } catch (error) {
+        if (loadHandled || loadToken !== mapLoadSequence) {
+          return;
+        }
+        await waitForIntrinsicDimensions();
+      }
+
+      if (loadHandled || loadToken !== mapLoadSequence) {
+        return;
+      }
+      if (mapImage.naturalWidth > 0 && mapImage.naturalHeight > 0) {
+        handleMapImageLoad();
+      }
+    };
+
     if (mapImage.complete && mapImage.naturalWidth > 0 && mapImage.naturalHeight > 0) {
-      mapImage.onload?.();
+      handleMapImageLoad();
     }
+
+    scheduleMicrotask(() => {
+      ensureImageReady().catch(() => {});
+    });
   }
 
   function resolveSceneOverlayState(boardState = {}, sceneId = null) {
@@ -13750,6 +13839,10 @@ function createTemplateTool() {
     const height = Math.max(1, Number.parseInt(match[2], 10));
     return { width, height, formatted: `${width}x${height}` };
   }
+
+  return {
+    getViewState: () => viewState,
+  };
 }
 
 function normalizeSceneState(raw = {}) {

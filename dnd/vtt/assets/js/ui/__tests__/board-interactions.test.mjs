@@ -720,6 +720,117 @@ test('overlay clip path uses only provided polygons and keeps both visible', () 
   }
 });
 
+test('cached map images mark the board as loaded and allow GM drops', async () => {
+  const dom = createDom();
+  try {
+    const { document } = dom.window;
+    const board = document.getElementById('vtt-board-canvas');
+    board.getBoundingClientRect = () => ({
+      width: 512,
+      height: 512,
+      top: 0,
+      left: 0,
+      right: 512,
+      bottom: 512,
+    });
+
+    const mapSurface = document.getElementById('vtt-map-surface');
+    mapSurface.getBoundingClientRect = () => ({
+      width: 512,
+      height: 512,
+      top: 0,
+      left: 0,
+      right: 512,
+      bottom: 512,
+    });
+
+    const mapImage = document.getElementById('vtt-map-image');
+    let intrinsicWidth = 0;
+    let intrinsicHeight = 0;
+    let isComplete = false;
+    Object.defineProperty(mapImage, 'naturalWidth', {
+      get: () => intrinsicWidth,
+      configurable: true,
+    });
+    Object.defineProperty(mapImage, 'naturalHeight', {
+      get: () => intrinsicHeight,
+      configurable: true,
+    });
+    Object.defineProperty(mapImage, 'complete', {
+      get: () => isComplete,
+      configurable: true,
+    });
+    Object.defineProperty(mapImage, 'decode', {
+      value: undefined,
+      configurable: true,
+      writable: true,
+    });
+
+    const initialState = {
+      user: { isGM: true, name: 'GM' },
+      scenes: { items: [{ id: 'scene-1', name: 'Scene 1' }] },
+      grid: { size: 64, visible: true },
+      boardState: {
+        activeSceneId: 'scene-1',
+        mapUrl: 'http://example.com/map.png',
+        placements: { 'scene-1': [] },
+        sceneState: {
+          'scene-1': {
+            grid: { size: 64, visible: true },
+          },
+        },
+      },
+    };
+
+    const store = createMockStore(initialState);
+    const interactions = mountBoardInteractions(store) ?? {};
+    const viewState = interactions.getViewState?.();
+    assert.ok(viewState, 'view state handle should be exposed for tests');
+
+    intrinsicWidth = 512;
+    intrinsicHeight = 512;
+    isComplete = true;
+
+    await Promise.resolve();
+    await new Promise((resolve) => setTimeout(resolve, 0));
+
+    assert.equal(viewState.mapLoaded, true, 'cached images should flag the map as loaded without relying on load events');
+
+    const dataTransferPayload = JSON.stringify({
+      id: 'token-1',
+      name: 'Goblin',
+      imageUrl: 'http://example.com/token.png',
+      size: '1x1',
+    });
+
+    let dropEffect = 'none';
+    const dataTransfer = {
+      types: ['application/x-vtt-token-template'],
+      getData: (type) => (type === 'application/x-vtt-token-template' ? dataTransferPayload : ''),
+    };
+    Object.defineProperty(dataTransfer, 'dropEffect', {
+      get: () => dropEffect,
+      set: (value) => {
+        dropEffect = value;
+      },
+      configurable: true,
+    });
+
+    const dropEvent = new dom.window.Event('drop', { bubbles: true, cancelable: true });
+    Object.defineProperty(dropEvent, 'dataTransfer', { value: dataTransfer });
+    Object.defineProperty(dropEvent, 'clientX', { value: 256 });
+    Object.defineProperty(dropEvent, 'clientY', { value: 256 });
+
+    mapSurface.dispatchEvent(dropEvent);
+
+    const placements =
+      store.getState().boardState?.placements?.['scene-1'] ?? [];
+    assert.equal(placements.length, 1, 'GM token drops should be accepted once the map is marked as loaded');
+  } finally {
+    dom.window.close();
+  }
+});
+
 test('hiding one overlay layer preserves other visible layers', async () => {
   const dom = createDom();
   const { document } = dom.window;
