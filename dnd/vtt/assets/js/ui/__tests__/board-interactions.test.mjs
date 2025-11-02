@@ -1864,3 +1864,92 @@ test('polygon overlay clip path omits implicit bounding box', () => {
     dom.window.close();
   }
 });
+
+test('token drags that only expose fallback payload still enable drops', () => {
+  const dom = createDom();
+  try {
+    const { window } = dom;
+    const { document } = window;
+
+    const store = createMockStore({
+      user: { isGM: true, name: 'GM' },
+      scenes: { items: [{ id: 'scene-1', name: 'Scene 1' }] },
+      boardState: {
+        activeSceneId: 'scene-1',
+        scenes: [{ id: 'scene-1', name: 'Scene 1' }],
+        placements: { 'scene-1': [] },
+      },
+    });
+
+    const interactions = mountBoardInteractions(store) ?? {};
+    const viewState = interactions.getViewState?.();
+    if (viewState) {
+      viewState.mapLoaded = true;
+    }
+
+    const tokenItem = document.createElement('article');
+    tokenItem.className = 'token-item';
+    tokenItem.dataset.tokenId = 'token-1';
+    document.body.appendChild(tokenItem);
+
+    const dragStartDataTransfer = {
+      types: ['text/plain'],
+      getData: (type) => (type === 'text/plain' ? 'Fallback Token' : ''),
+    };
+
+    const dragStartEvent = new window.Event('dragstart', { bubbles: true });
+    Object.defineProperty(dragStartEvent, 'dataTransfer', {
+      value: dragStartDataTransfer,
+    });
+    tokenItem.dispatchEvent(dragStartEvent);
+
+    const fallbackDataTransfer = {
+      types: ['text/plain'],
+      dropEffect: 'none',
+      effectAllowed: 'copy',
+      getData: (type) => {
+        if (type === 'text/plain') {
+          return 'Fallback Token';
+        }
+        return '';
+      },
+    };
+
+    const mapSurface = document.getElementById('vtt-map-surface');
+    const dragEnterEvent = new window.Event('dragenter', {
+      bubbles: true,
+      cancelable: true,
+    });
+    Object.defineProperty(dragEnterEvent, 'dataTransfer', {
+      value: fallbackDataTransfer,
+    });
+    mapSurface.dispatchEvent(dragEnterEvent);
+
+    assert.equal(dragEnterEvent.defaultPrevented, true);
+    assert.equal(
+      mapSurface.classList.contains('is-token-drop-active'),
+      true,
+      'map surface should enter drop active state'
+    );
+
+    const dragOverEvent = new window.Event('dragover', {
+      bubbles: true,
+      cancelable: true,
+    });
+    Object.defineProperty(dragOverEvent, 'dataTransfer', {
+      value: fallbackDataTransfer,
+    });
+    mapSurface.dispatchEvent(dragOverEvent);
+
+    assert.equal(dragOverEvent.defaultPrevented, true);
+    assert.equal(fallbackDataTransfer.dropEffect, 'copy');
+
+    const dragEndEvent = new window.Event('dragend', { bubbles: true });
+    Object.defineProperty(dragEndEvent, 'dataTransfer', {
+      value: fallbackDataTransfer,
+    });
+    tokenItem.dispatchEvent(dragEndEvent);
+  } finally {
+    dom.window.close();
+  }
+});

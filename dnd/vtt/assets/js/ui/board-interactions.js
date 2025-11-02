@@ -504,6 +504,51 @@ export function mountBoardInteractions(store, routes = {}) {
     dragState: null,
   };
 
+  const tokenLibraryDragState = {
+    active: false,
+    usesFallbackPayload: false,
+  };
+
+  function handleTokenLibraryDragStart(event) {
+    const tokenItem = event?.target?.closest?.('.token-item');
+    if (!tokenItem) {
+      return;
+    }
+
+    tokenLibraryDragState.active = true;
+    tokenLibraryDragState.usesFallbackPayload = false;
+
+    const dataTransfer = event?.dataTransfer;
+    if (!dataTransfer) {
+      return;
+    }
+
+    try {
+      const types = Array.from(dataTransfer.types || []);
+      if (types.includes(TOKEN_DRAG_TYPE)) {
+        return;
+      }
+    } catch (error) {
+      // Ignore DOMStringList conversion issues when checking drag types
+    }
+
+    try {
+      const fallbackPayload = dataTransfer.getData(TOKEN_DRAG_FALLBACK_TYPE);
+      tokenLibraryDragState.usesFallbackPayload = Boolean(fallbackPayload);
+    } catch (error) {
+      tokenLibraryDragState.usesFallbackPayload = false;
+    }
+  }
+
+  function handleTokenLibraryDragEnd() {
+    tokenLibraryDragState.active = false;
+    tokenLibraryDragState.usesFallbackPayload = false;
+  }
+
+  document.addEventListener('dragstart', handleTokenLibraryDragStart, true);
+  document.addEventListener('dragend', handleTokenLibraryDragEnd, true);
+  document.addEventListener('drop', handleTokenLibraryDragEnd, true);
+
   function mapPointToGrid(point, view = viewState) {
     const mapWidth = Number.isFinite(view.mapPixelSize?.width)
       ? view.mapPixelSize.width
@@ -551,6 +596,7 @@ export function mountBoardInteractions(store, routes = {}) {
   const templateTool = createTemplateTool();
   const processedPings = new Map();
   const TOKEN_DRAG_TYPE = 'application/x-vtt-token-template';
+  const TOKEN_DRAG_FALLBACK_TYPE = 'text/plain';
   let tokenDropDepth = 0;
   const selectedTokenIds = new Set();
   const combatTrackerGroups = new Map();
@@ -7776,9 +7822,14 @@ export function mountBoardInteractions(store, routes = {}) {
       return false;
     }
 
+    let types = [];
     try {
-      const types = Array.from(dataTransfer.types || []);
+      types = Array.from(dataTransfer.types || []);
       if (types.includes(type)) {
+        return true;
+      }
+      if (tokenLibraryDragState.active && types.includes(TOKEN_DRAG_FALLBACK_TYPE)) {
+        tokenLibraryDragState.usesFallbackPayload = true;
         return true;
       }
     } catch (error) {
@@ -7788,6 +7839,29 @@ export function mountBoardInteractions(store, routes = {}) {
     try {
       const payload = dataTransfer.getData(type);
       return Boolean(payload);
+    } catch (error) {
+      // Some browsers restrict access to custom types during dragover/dragenter
+    }
+
+    if (tokenLibraryDragState.active) {
+      if (!tokenLibraryDragState.usesFallbackPayload) {
+        try {
+          const fallbackPayload = dataTransfer.getData(TOKEN_DRAG_FALLBACK_TYPE);
+          if (fallbackPayload) {
+            tokenLibraryDragState.usesFallbackPayload = true;
+            return true;
+          }
+        } catch (error) {
+          // Ignore fallback access errors
+        }
+      }
+
+      return true;
+    }
+
+    try {
+      const fallbackPayload = dataTransfer.getData(TOKEN_DRAG_FALLBACK_TYPE);
+      return Boolean(fallbackPayload);
     } catch (error) {
       return false;
     }
