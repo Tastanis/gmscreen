@@ -510,6 +510,9 @@ export function mountBoardInteractions(store, routes = {}) {
   };
 
   let overlayDropProxyActive = false;
+  let lastBoardStateHeartbeatSignature = null;
+  let lastBoardStateHeartbeatAt = 0;
+  const BOARD_STATE_HEARTBEAT_DEBOUNCE_MS = 2000;
 
   function handleTokenLibraryDragStart(event) {
     const tokenItem = event?.target?.closest?.('.token-item');
@@ -1448,6 +1451,49 @@ export function mountBoardInteractions(store, routes = {}) {
 
     return savePromise ?? null;
   };
+
+  function maybeNudgeBoardState(reason = 'heartbeat') {
+    if (typeof boardApi.updateState !== 'function') {
+      return;
+    }
+
+    if (!isGmUser()) {
+      return;
+    }
+
+    const state = boardApi.getState?.() ?? {};
+    const activeSceneId = state.boardState?.activeSceneId ?? null;
+    if (!activeSceneId) {
+      return;
+    }
+
+    const placements = getActiveScenePlacements(state);
+    if (Array.isArray(placements) && placements.length > 0) {
+      return;
+    }
+
+    const signature = `${activeSceneId}:${reason}`;
+    const now = Date.now();
+    if (
+      lastBoardStateHeartbeatSignature === signature &&
+      now - lastBoardStateHeartbeatAt < BOARD_STATE_HEARTBEAT_DEBOUNCE_MS
+    ) {
+      return;
+    }
+
+    lastBoardStateHeartbeatSignature = signature;
+    lastBoardStateHeartbeatAt = now;
+
+    boardApi.updateState?.((draft) => {
+      const boardDraft = ensureBoardStateDraft(draft);
+      const metadata = ensureBoardMetadataDraft(boardDraft);
+      metadata.syncHeartbeat = now;
+      metadata.syncHeartbeatScene = activeSceneId;
+      metadata.syncHeartbeatReason = reason;
+    });
+
+    persistBoardStateSnapshot();
+  }
 
   function buildBoardStateSnapshotForPersistence(boardState = {}, { isGm = false } = {}) {
     if (!boardState || typeof boardState !== 'object') {
@@ -3255,6 +3301,7 @@ export function mountBoardInteractions(store, routes = {}) {
       updateSceneMeta(activeSceneFromState());
       renderTokens(boardApi.getState?.() ?? {}, tokenLayer, viewState);
       templateTool.notifyMapState();
+      maybeNudgeBoardState('map-ready');
     };
     const handleMapImageError = () => {
       if (loadHandled || loadToken !== mapLoadSequence) {
@@ -10264,6 +10311,27 @@ export function mountBoardInteractions(store, routes = {}) {
     }
 
     return draft.boardState;
+  }
+
+  function ensureBoardMetadataDraft(boardDraft) {
+    if (!boardDraft || typeof boardDraft !== 'object') {
+      return {};
+    }
+
+    if (!boardDraft.metadata || typeof boardDraft.metadata !== 'object') {
+      boardDraft.metadata = {};
+    }
+
+    if (
+      boardDraft.meta &&
+      typeof boardDraft.meta === 'object' &&
+      boardDraft.meta !== boardDraft.metadata
+    ) {
+      Object.assign(boardDraft.metadata, boardDraft.meta);
+    }
+
+    boardDraft.meta = boardDraft.metadata;
+    return boardDraft.metadata;
   }
 
   function ensureSceneStateDraftEntry(draft, sceneId) {
