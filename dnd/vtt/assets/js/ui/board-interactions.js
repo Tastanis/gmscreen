@@ -509,6 +509,8 @@ export function mountBoardInteractions(store, routes = {}) {
     usesFallbackPayload: false,
   };
 
+  let overlayDropProxyActive = false;
+
   function handleTokenLibraryDragStart(event) {
     const tokenItem = event?.target?.closest?.('.token-item');
     if (!tokenItem) {
@@ -2025,7 +2027,8 @@ export function mountBoardInteractions(store, routes = {}) {
   };
 
   const isWithinMapSurface = (target) =>
-    target instanceof Node && mapSurface.contains(target);
+    target instanceof Node &&
+    (mapSurface.contains(target) || (overlayDropProxyActive && mapOverlay?.contains(target)));
 
   const handleTokenDragEnter = (event) => {
     if (!isTokenDragEvent(event)) {
@@ -2114,6 +2117,42 @@ export function mountBoardInteractions(store, routes = {}) {
   };
 
   const tokenDragListenerOptions = { capture: true };
+
+  let overlayDropProxyListenersAttached = false;
+
+  function attachOverlayDropProxies() {
+    if (!mapOverlay) {
+      overlayDropProxyActive = false;
+      overlayDropProxyListenersAttached = false;
+      return;
+    }
+    if (overlayDropProxyListenersAttached) {
+      overlayDropProxyActive = true;
+      return;
+    }
+
+    mapOverlay.addEventListener('dragenter', handleTokenDragEnter, tokenDragListenerOptions);
+    mapOverlay.addEventListener('dragleave', handleTokenDragLeave, tokenDragListenerOptions);
+    mapOverlay.addEventListener('dragover', handleTokenDragOver, tokenDragListenerOptions);
+    mapOverlay.addEventListener('drop', handleTokenDrop, tokenDragListenerOptions);
+    overlayDropProxyActive = true;
+    overlayDropProxyListenersAttached = true;
+  }
+
+  function detachOverlayDropProxies() {
+    if (!overlayDropProxyListenersAttached || !mapOverlay) {
+      overlayDropProxyActive = false;
+      overlayDropProxyListenersAttached = false;
+      return;
+    }
+
+    mapOverlay.removeEventListener('dragenter', handleTokenDragEnter, tokenDragListenerOptions);
+    mapOverlay.removeEventListener('dragleave', handleTokenDragLeave, tokenDragListenerOptions);
+    mapOverlay.removeEventListener('dragover', handleTokenDragOver, tokenDragListenerOptions);
+    mapOverlay.removeEventListener('drop', handleTokenDrop, tokenDragListenerOptions);
+    overlayDropProxyActive = false;
+    overlayDropProxyListenersAttached = false;
+  }
 
   mapSurface.addEventListener('dragenter', handleTokenDragEnter, tokenDragListenerOptions);
   mapSurface.addEventListener('dragleave', handleTokenDragLeave, tokenDragListenerOptions);
@@ -10704,6 +10743,7 @@ function createOverlayTool(uploadsEndpoint) {
     editor.hidden = false;
     editor.dataset.interactive = 'true';
     mapOverlay.dataset.overlayEditing = 'true';
+    attachOverlayDropProxies();
     setButtonState(true);
     setStatus(DEFAULT_STATUS);
     renderHandles();
@@ -10720,6 +10760,7 @@ function createOverlayTool(uploadsEndpoint) {
       delete mapSurface.dataset.overlayEditing;
     }
     delete mapOverlay.dataset.overlayEditing;
+    detachOverlayDropProxies();
     dragState = null;
     setButtonState(false);
     setStatus('');
