@@ -414,7 +414,9 @@
   font-size: 1.1rem;
   font-variant-numeric: tabular-nums;
   letter-spacing: 0.04em;
-  z-index: 15;
+  /* Ensure the turn timer stays visible on the board while sitting behind
+     interactive popouts like the templates menu. */
+  z-index: 2;
   pointer-events: none;
 }
 
