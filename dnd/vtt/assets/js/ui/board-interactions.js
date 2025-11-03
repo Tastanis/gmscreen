@@ -13273,13 +13273,13 @@ function createTemplateTool() {
     form.className = 'vtt-template-menu__form is-visible';
     menu.appendChild(form);
 
-    const circleField = createNumberField('Radius (squares)', 'radius', { step: '0.5', min: '0' });
+    const circleField = createNumberField('Radius (squares)', 'radius', { step: '1', min: '0' });
     circleField.input.placeholder = 'Optional';
 
-    const lengthField = createNumberField('Length (squares)', 'length', { step: '0.5', min: '0' });
+    const lengthField = createNumberField('Length (squares)', 'length', { step: '1', min: '0' });
     lengthField.input.placeholder = 'Optional';
 
-    const widthField = createNumberField('Width (squares)', 'width', { step: '0.5', min: '0' });
+    const widthField = createNumberField('Width (squares)', 'width', { step: '1', min: '0' });
     widthField.input.placeholder = 'Optional';
 
     const wallField = createNumberField('Wall squares', 'squares', { step: '1', min: '1' });
