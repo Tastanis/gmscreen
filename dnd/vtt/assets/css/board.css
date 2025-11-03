@@ -9,7 +9,7 @@
   grid-template-columns: minmax(0, 260px) minmax(0, 1fr) minmax(0, 220px);
   align-items: start;
   gap: 1.25rem;
-  padding: 1rem 1.75rem 1.25rem;
+  padding: 0.35rem 1.75rem 1.25rem;
   border-bottom: 1px solid var(--vtt-panel-border);
   background: rgba(15, 23, 42, 0.35);
   min-height: 6.5rem;
@@ -95,14 +95,14 @@
   width: 100%;
   min-height: 6rem;
   background: rgba(15, 23, 42, 0.3);
-  padding: 0.2rem 0 0.25rem;
+  padding: 0 0 0.25rem;
 }
 
 .vtt-combat-tracker__segment {
   display: flex;
   flex-direction: column;
   gap: 0.5rem;
-  padding: 0.75rem;
+  padding: 0.3rem 0.75rem 0.75rem;
 }
 
 .vtt-combat-tracker__heading {
