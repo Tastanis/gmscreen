@@ -4480,7 +4480,9 @@ export function mountBoardInteractions(store, routes = {}) {
     });
 
     const groupsPruned = pruneCombatGroups(activeIds);
-    pruneCompletedCombatants(activeIds);
+    if (gmViewing) {
+      pruneCompletedCombatants(activeIds);
+    }
 
     if (groupsPruned && isGmUser() && !suppressCombatStateSync) {
       syncCombatStateToStore();
