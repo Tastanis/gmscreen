@@ -7,6 +7,7 @@
 .vtt-board__header {
   display: grid;
   grid-template-columns: minmax(0, 260px) minmax(0, 1fr) minmax(0, 220px);
+  grid-template-areas: "actions tracker meta";
   align-items: start;
   gap: 1.25rem;
   padding: 0 1.75rem 1.25rem;
@@ -20,8 +21,9 @@
   flex-direction: column;
   justify-content: flex-start;
   gap: 0.25rem;
-  grid-column: 3 / 4;
+  grid-area: meta;
   align-items: flex-end;
+  align-self: start;
   text-align: right;
 }
 
@@ -81,7 +83,7 @@
   display: flex;
   align-items: flex-start;
   justify-content: center;
-  grid-column: 2 / 3;
+  grid-area: tracker;
   align-self: flex-start;
 }
 
@@ -229,7 +231,8 @@
   align-items: flex-start;
   justify-content: flex-start;
   max-width: 100%;
-  grid-column: 1 / 2;
+  grid-area: actions;
+  align-self: flex-start;
 }
 
 .vtt-board__actions .btn {
@@ -376,18 +379,15 @@
 @media (max-width: 1280px) {
   .vtt-board__header {
     grid-template-columns: minmax(0, 1fr);
-  }
-
-  .vtt-board__tracker {
-    order: 3;
-    grid-column: auto;
+    grid-template-areas:
+      "meta"
+      "actions"
+      "tracker";
   }
 
   .vtt-board__actions {
-    order: 2;
     justify-content: flex-start;
     align-items: flex-start;
-    grid-column: auto;
   }
 
   .vtt-board__actions .btn {
@@ -395,7 +395,6 @@
   }
 
   .vtt-board__scene-meta {
-    grid-column: auto;
     align-items: flex-start;
     text-align: left;
   }
