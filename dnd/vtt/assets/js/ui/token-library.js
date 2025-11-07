@@ -1123,7 +1123,7 @@ function buildMonsterMetadata(monster) {
     metadata.monsterId = monsterId;
   }
 
-  const size = extractMonsterSize(sanitized);
+  const size = deriveMonsterTokenSize(sanitized);
   if (size) {
     metadata.size = size;
   }
@@ -1231,6 +1231,188 @@ function extractMonsterSize(monster) {
   }
 
   return '';
+}
+
+function deriveMonsterTokenSize(monster) {
+  if (!monster || typeof monster !== 'object') {
+    return '';
+  }
+
+  const seen = new Set();
+  const candidates = [];
+
+  const addCandidate = (value) => {
+    if (value == null) {
+      return;
+    }
+
+    if (typeof value === 'string') {
+      const trimmed = value.trim();
+      if (!trimmed || seen.has(trimmed)) {
+        return;
+      }
+      seen.add(trimmed);
+      candidates.push(trimmed);
+      return;
+    }
+
+    if (typeof value === 'number' && Number.isFinite(value)) {
+      const key = `#${value}`;
+      if (seen.has(key)) {
+        return;
+      }
+      seen.add(key);
+      candidates.push(value);
+      return;
+    }
+
+    if (typeof value === 'object') {
+      addCandidate(value.value);
+      addCandidate(value.size);
+      addCandidate(value.space);
+      addCandidate(value.width);
+      addCandidate(value.length);
+    }
+  };
+
+  addCandidate(monster.token?.size);
+  addCandidate(monster.token?.space);
+  addCandidate(monster.token?.dimensions?.space);
+  addCandidate(monster.token?.dimensions?.width);
+  addCandidate(monster.token?.dimensions?.length);
+  addCandidate(monster.dimensions?.space);
+  addCandidate(monster.dimensions?.width);
+  addCandidate(monster.dimensions?.length);
+  addCandidate(monster.space);
+  addCandidate(monster.traits?.space);
+  addCandidate(monster.traits?.size);
+  addCandidate(monster.attributes?.space);
+  addCandidate(monster.attributes?.size);
+  addCandidate(extractMonsterSize(monster));
+
+  for (const candidate of candidates) {
+    const normalized = normalizeMonsterSizeForToken(candidate);
+    if (normalized) {
+      return normalized;
+    }
+  }
+
+  return '';
+}
+
+function normalizeMonsterSizeForToken(value) {
+  if (value == null) {
+    return '';
+  }
+
+  if (typeof value === 'number' && Number.isFinite(value)) {
+    return formatSizeFromNumeric(value);
+  }
+
+  if (typeof value !== 'string') {
+    return '';
+  }
+
+  const trimmed = value.trim();
+  if (!trimmed) {
+    return '';
+  }
+
+  const normalized = trimmed.toLowerCase();
+
+  const gridPattern = normalized.match(/([0-9]+(?:\.[0-9]+)?)\s*[x×]\s*([0-9]+(?:\.[0-9]+)?)/);
+  if (gridPattern) {
+    const width = Number.parseFloat(gridPattern[1]);
+    const height = Number.parseFloat(gridPattern[2]);
+    if (Number.isFinite(width) && Number.isFinite(height)) {
+      return formatSizeFromDimensions(width, height);
+    }
+  }
+
+  const rectanglePattern = normalized.match(
+    /([0-9]+(?:\.[0-9]+)?)\s*(?:ft|feet|foot|')\s*(?:by|x|×)\s*([0-9]+(?:\.[0-9]+)?)\s*(?:ft|feet|foot|')/
+  );
+  if (rectanglePattern) {
+    const widthFeet = Number.parseFloat(rectanglePattern[1]);
+    const heightFeet = Number.parseFloat(rectanglePattern[2]);
+    if (Number.isFinite(widthFeet) && Number.isFinite(heightFeet)) {
+      return formatSizeFromFeet(widthFeet, heightFeet);
+    }
+  }
+
+  const feetMatch = normalized.match(/([0-9]+(?:\.[0-9]+)?)\s*(?:ft|feet|foot|')/);
+  if (feetMatch) {
+    const feet = Number.parseFloat(feetMatch[1]);
+    if (Number.isFinite(feet)) {
+      return formatSizeFromFeet(feet, feet);
+    }
+  }
+
+  const numberMatch = normalized.match(/^[0-9]+(?:\.[0-9]+)?$/);
+  if (numberMatch) {
+    const numeric = Number.parseFloat(numberMatch[0]);
+    return formatSizeFromNumeric(numeric);
+  }
+
+  const keywordMap = [
+    ['tiny', 1],
+    ['small', 1],
+    ['medium', 1],
+    ['average', 1],
+    ['standard', 1],
+    ['large', 2],
+    ['huge', 3],
+    ['gargantuan', 4],
+    ['colossal', 6],
+  ];
+
+  for (const [keyword, squares] of keywordMap) {
+    if (normalized.includes(keyword)) {
+      return `${squares}x${squares}`;
+    }
+  }
+
+  return '';
+}
+
+function formatSizeFromNumeric(value) {
+  if (!Number.isFinite(value) || value <= 0) {
+    return '';
+  }
+
+  if (value <= 4) {
+    const squares = Math.max(1, Math.round(value));
+    return `${squares}x${squares}`;
+  }
+
+  return formatSizeFromFeet(value, value);
+}
+
+function formatSizeFromFeet(widthFeet, heightFeet) {
+  const widthSquares = feetToSquares(widthFeet);
+  const heightSquares = feetToSquares(heightFeet);
+  if (!widthSquares || !heightSquares) {
+    return '';
+  }
+  return `${widthSquares}x${heightSquares}`;
+}
+
+function formatSizeFromDimensions(width, height) {
+  if (!Number.isFinite(width) || !Number.isFinite(height)) {
+    return '';
+  }
+  const w = Math.max(1, Math.round(width));
+  const h = Math.max(1, Math.round(height));
+  return `${w}x${h}`;
+}
+
+function feetToSquares(feet) {
+  if (!Number.isFinite(feet) || feet <= 0) {
+    return 0;
+  }
+
+  const squares = Math.round(feet / 5);
+  return Math.max(1, squares);
 }
 
 function extractMonsterHp(monster) {
