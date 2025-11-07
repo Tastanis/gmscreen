@@ -784,6 +784,7 @@
   left: 50%;
   transform: translate(-50%, -50%);
   color: var(--vtt-text-muted);
+  pointer-events: none;
   z-index: 2;
 }
 
