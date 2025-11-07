@@ -9927,7 +9927,7 @@ export function mountBoardInteractions(store, routes = {}) {
     };
 
     const handleResize = () => {
-      closeTokenSettings();
+      closeTokenSettings({ preserveMonsterStatBlock: true });
     };
 
     document.addEventListener('pointerdown', handlePointerDown, true);

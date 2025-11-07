@@ -481,6 +481,15 @@ function createDragHandlers(container, handle) {
       return;
     }
 
+    const target = event.target ?? null;
+    if (
+      target &&
+      typeof target.closest === 'function' &&
+      target.closest('button, a, input, select, textarea, [data-prevent-drag]')
+    ) {
+      return;
+    }
+
     dragState.active = true;
     dragState.pointerId = event.pointerId;
 
