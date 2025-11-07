@@ -429,6 +429,10 @@ function normalizeCombatStateEntry(raw = {}) {
   const lastTeam = normalizeCombatTeamValue(raw.lastTeam ?? raw.previousTeam ?? null);
   const roundTurnCount = Math.max(0, toInt(raw.roundTurnCount, 0));
   const turnLock = normalizeTurnLockEntry(raw.turnLock ?? null);
+  const lastEffect = normalizeTurnEffectEntry(raw.lastEffect ?? raw.lastEvent ?? null);
+  const groups = normalizeCombatGroupsEntry(
+    raw.groups ?? raw.groupings ?? raw.combatGroups ?? raw.combatantGroups ?? []
+  );
   const hasTimestamp = Number.isFinite(Number(raw.updatedAt));
   const hasMeaningfulState =
     active ||
@@ -439,7 +443,9 @@ function normalizeCombatStateEntry(raw = {}) {
     Boolean(currentTeam) ||
     Boolean(lastTeam) ||
     roundTurnCount > 0 ||
-    Boolean(turnLock);
+    Boolean(turnLock) ||
+    Boolean(lastEffect) ||
+    groups.length > 0;
 
   if (!hasMeaningfulState && !hasTimestamp) {
     return null;
@@ -456,7 +462,108 @@ function normalizeCombatStateEntry(raw = {}) {
     roundTurnCount,
     updatedAt: Math.max(0, toInt(raw.updatedAt, Date.now())),
     turnLock,
+    lastEffect,
+    groups,
   };
+}
+
+function normalizeTurnEffectEntry(raw) {
+  if (!raw || typeof raw !== 'object') {
+    return null;
+  }
+
+  const type = typeof raw.type === 'string' ? raw.type.trim() : '';
+  const combatantId = typeof raw.combatantId === 'string' ? raw.combatantId.trim() : '';
+  const initiatorId = typeof raw.initiatorId === 'string' ? raw.initiatorId.trim() : '';
+  const triggeredAtRaw = Number(raw.triggeredAt ?? raw.timestamp ?? raw.at);
+  const triggeredAt = Number.isFinite(triggeredAtRaw) ? Math.max(0, Math.trunc(triggeredAtRaw)) : Date.now();
+  const payload = raw.payload && typeof raw.payload === 'object' ? raw.payload : null;
+
+  if (!type && !combatantId && !initiatorId && !payload) {
+    return null;
+  }
+
+  const effect = { triggeredAt };
+  if (type) {
+    effect.type = type;
+  }
+  if (combatantId) {
+    effect.combatantId = combatantId;
+  }
+  if (initiatorId) {
+    effect.initiatorId = initiatorId;
+  }
+  if (payload) {
+    effect.payload = payload;
+  }
+
+  return effect;
+}
+
+function normalizeCombatGroupsEntry(rawGroups) {
+  const source = Array.isArray(rawGroups)
+    ? rawGroups
+    : rawGroups && typeof rawGroups === 'object'
+    ? Object.entries(rawGroups).map(([representativeId, memberIds]) => ({
+        representativeId,
+        memberIds: Array.isArray(memberIds) ? memberIds : [],
+      }))
+    : [];
+
+  if (source.length === 0) {
+    return [];
+  }
+
+  const groups = [];
+
+  source.forEach((entry) => {
+    if (!entry || typeof entry !== 'object') {
+      return;
+    }
+
+    const representativeSource =
+      typeof entry.representativeId === 'string'
+        ? entry.representativeId
+        : typeof entry.id === 'string'
+        ? entry.id
+        : null;
+    const representativeId = representativeSource ? representativeSource.trim() : '';
+    if (!representativeId) {
+      return;
+    }
+
+    const membersSource = Array.isArray(entry.memberIds)
+      ? entry.memberIds
+      : Array.isArray(entry.members)
+      ? entry.members
+      : Array.isArray(entry.ids)
+      ? entry.ids
+      : [];
+
+    const normalizedMembers = [];
+    membersSource.forEach((memberId) => {
+      if (typeof memberId !== 'string') {
+        return;
+      }
+      const trimmed = memberId.trim();
+      if (!trimmed || normalizedMembers.includes(trimmed)) {
+        return;
+      }
+      normalizedMembers.push(trimmed);
+    });
+
+    if (!normalizedMembers.includes(representativeId)) {
+      normalizedMembers.push(representativeId);
+    }
+
+    if (normalizedMembers.length <= 1) {
+      return;
+    }
+
+    groups.push({ representativeId, memberIds: normalizedMembers });
+  });
+
+  return groups;
 }
 
 const OVERLAY_LAYER_PREFIX = 'overlay-layer-';
