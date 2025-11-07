@@ -1,4 +1,5 @@
 import { initializeTokenMaker } from './token-maker.js';
+import { createMonsterImporter } from './monster-import.js';
 import { createToken, createTokenFolder, updateToken, deleteToken } from '../services/token-service.js';
 import { restrictTokensToPlayerView } from '../state/store.js';
 
@@ -15,7 +16,10 @@ export function renderTokenLibrary(routes, store, options = {}) {
   const feedback = moduleRoot.querySelector('[data-token-feedback]');
   const createButtons = moduleRoot.querySelectorAll('[data-action="create-token"]');
   const folderButtons = moduleRoot.querySelectorAll('[data-action="create-token-folder"]');
+  const importMonsterButton = moduleRoot.querySelector('[data-action="import-monster"]');
   if (!listContainer) return;
+
+  const documentRef = moduleRoot.ownerDocument ?? (typeof document !== 'undefined' ? document : null);
 
   const stateApi = store ?? {};
   const endpoints = routes ?? {};
@@ -23,6 +27,46 @@ export function renderTokenLibrary(routes, store, options = {}) {
   const isGM = Boolean(options?.isGM ?? initialState?.user?.isGM);
 
   const maker = isGM ? initializeTokenMaker(moduleRoot) : null;
+  const tokenMetadata = new Map();
+  let selectedMonsterSnapshot = null;
+  let monsterImporter = null;
+  const monsterRoutes = endpoints.monsters ?? null;
+
+  const disableImportButton = (message) => {
+    if (!importMonsterButton) return;
+    importMonsterButton.disabled = true;
+    if (message) {
+      importMonsterButton.title = message;
+    }
+  };
+
+  const enableImportButton = () => {
+    if (!importMonsterButton) return;
+    importMonsterButton.disabled = false;
+    importMonsterButton.removeAttribute('title');
+  };
+
+  const handleImporterStatus = (status) => {
+    if (!feedback || !status || typeof status.message !== 'string') {
+      return;
+    }
+
+    if (!status.message) {
+      showFeedback(feedback, '', 'info');
+      return;
+    }
+
+    const variant = status.variant || 'info';
+    showFeedback(feedback, status.message, variant);
+  };
+
+  if (maker && typeof maker.reset === 'function') {
+    const originalReset = maker.reset.bind(maker);
+    maker.reset = () => {
+      selectedMonsterSnapshot = null;
+      originalReset();
+    };
+  }
 
   if (teamToggle) {
     teamToggle.checked = false;
@@ -44,6 +88,70 @@ export function renderTokenLibrary(routes, store, options = {}) {
       button.disabled = true;
       button.title = 'Token folders are unavailable right now.';
     });
+  }
+
+  if (importMonsterButton) {
+    if (!isGM) {
+      disableImportButton('Only the GM can import monsters.');
+    } else if (!monsterRoutes || !documentRef) {
+      disableImportButton('Monster importing is unavailable right now.');
+    } else {
+      monsterImporter = createMonsterImporter({
+        routes: monsterRoutes,
+        documentRef,
+        credentials: 'include',
+        onStatusChange: handleImporterStatus,
+        onSelect: async (monster) => {
+          if (!maker || typeof maker.loadImageFromUrl !== 'function') {
+            throw new Error('Token maker is unavailable.');
+          }
+
+          const sanitized = sanitizeMonsterSnapshot(monster);
+          if (!sanitized) {
+            throw new Error('Monster data is unavailable.');
+          }
+
+          const imageUrl = extractMonsterImageUrl(sanitized);
+          if (!imageUrl) {
+            throw new Error('Selected monster does not include an image.');
+          }
+
+          await maker.loadImageFromUrl(imageUrl, { credentials: 'include' });
+
+          selectedMonsterSnapshot = sanitized;
+
+          if (nameInput && typeof sanitized.name === 'string' && sanitized.name.trim()) {
+            nameInput.value = sanitized.name.trim();
+          }
+
+          const monsterName = sanitized.name || 'Monster';
+          const monsterType = extractMonsterType(sanitized);
+          const successMessage = monsterType
+            ? `Loaded ${monsterName} (${monsterType}) into the token maker.`
+            : `Loaded ${monsterName} into the token maker.`;
+          showFeedback(feedback, successMessage, 'success');
+        },
+      });
+
+      if (!monsterImporter) {
+        disableImportButton('Monster importing is unavailable right now.');
+      } else {
+        enableImportButton();
+        importMonsterButton.addEventListener('click', async (event) => {
+          event.preventDefault();
+          try {
+            await monsterImporter.open();
+          } catch (error) {
+            console.error('[VTT] Unable to open monster importer', error);
+            showFeedback(
+              feedback,
+              error?.message || 'Unable to open monster importer.',
+              'error'
+            );
+          }
+        });
+      }
+    }
   }
 
   function closeContextMenu() {
@@ -213,6 +321,18 @@ export function renderTokenLibrary(routes, store, options = {}) {
     if (!isGM) {
       tokensState = restrictTokensToPlayerView(tokensState);
     }
+    tokensState.items = tokensState.items.map((token) => syncTokenMetadata(tokenMetadata, token));
+
+    const validTokenIds = new Set(
+      tokensState.items
+        .map((token) => (token && typeof token.id === 'string' ? token.id : null))
+        .filter(Boolean)
+    );
+    Array.from(tokenMetadata.keys()).forEach((key) => {
+      if (!validTokenIds.has(key)) {
+        tokenMetadata.delete(key);
+      }
+    });
     updateFolderOptions(folderSelect, tokensState.folders);
 
     tokenIndex.clear();
@@ -322,23 +442,48 @@ export function renderTokenLibrary(routes, store, options = {}) {
         const name = nameInput?.value?.trim() ?? '';
         const folderId = folderSelect?.value || null;
         const team = teamToggle?.checked ? 'ally' : 'enemy';
-        const token = await createToken(endpoints.tokens, {
+        const monsterMeta = selectedMonsterSnapshot
+          ? buildMonsterMetadata(selectedMonsterSnapshot)
+          : null;
+
+        const payload = {
           name,
           folderId,
           imageData: exportResult.dataUrl,
           team,
-        });
+        };
+
+        if (monsterMeta?.size) {
+          payload.size = monsterMeta.size;
+        }
+        if (typeof monsterMeta?.hp === 'number' && Number.isFinite(monsterMeta.hp)) {
+          payload.hp = monsterMeta.hp;
+        }
+        if (monsterMeta?.type) {
+          payload.type = monsterMeta.type;
+        }
+        if (monsterMeta?.monsterId) {
+          payload.monsterId = monsterMeta.monsterId;
+        }
+        if (monsterMeta?.monster) {
+          payload.monster = monsterMeta.monster;
+        }
+
+        const token = await createToken(endpoints.tokens, payload);
+        const enrichedToken = applyMonsterMetadataToToken(token, monsterMeta);
 
         stateApi.updateState?.((draft) => {
           ensureTokenDraft(draft);
-          draft.tokens.items.push(token);
-          if (token.folderId) {
-            const hasFolder = draft.tokens.folders.some((item) => item.id === token.folderId);
-            if (!hasFolder && token.folder) {
-              draft.tokens.folders.push(token.folder);
+          draft.tokens.items.push(enrichedToken);
+          if (enrichedToken.folderId) {
+            const hasFolder = draft.tokens.folders.some((item) => item.id === enrichedToken.folderId);
+            if (!hasFolder && enrichedToken.folder) {
+              draft.tokens.folders.push(enrichedToken.folder);
             }
           }
         });
+
+        cacheTokenMetadataFromToken(tokenMetadata, enrichedToken);
 
         if (nameInput) {
           nameInput.value = '';
@@ -478,6 +623,8 @@ export function renderTokenLibrary(routes, store, options = {}) {
           draft.tokens.items = draft.tokens.items.filter((item) => item?.id !== tokenId);
         });
 
+        tokenMetadata.delete(tokenId);
+
         showFeedback(feedback, 'Token deleted.', 'success');
       } catch (error) {
         console.error('[VTT] Failed to delete token', error);
@@ -533,6 +680,7 @@ export function renderTokenLibrary(routes, store, options = {}) {
             }
 
             draft.tokens.items[index] = nextToken;
+            cacheTokenMetadataFromToken(tokenMetadata, nextToken);
           }
         });
 
@@ -853,6 +1001,333 @@ function focusElement(element) {
   } catch (error) {
     element.focus();
   }
+}
+
+const TOKEN_METADATA_FIELDS = ['size', 'hp', 'type', 'monster', 'monsterId'];
+
+function syncTokenMetadata(cache, token) {
+  if (!token || typeof token.id !== 'string') {
+    return token;
+  }
+
+  const current = cache.get(token.id) || {};
+  const nextMetadata = { ...current };
+
+  TOKEN_METADATA_FIELDS.forEach((field) => {
+    if (Object.prototype.hasOwnProperty.call(token, field)) {
+      const value = field === 'monster'
+        ? sanitizeMonsterSnapshot(token[field])
+        : token[field];
+      if (value === undefined) {
+        delete nextMetadata[field];
+      } else {
+        nextMetadata[field] = value;
+      }
+    }
+  });
+
+  if (Object.keys(nextMetadata).length) {
+    cache.set(token.id, nextMetadata);
+  } else {
+    cache.delete(token.id);
+  }
+
+  const needsMerge = TOKEN_METADATA_FIELDS.some(
+    (field) =>
+      !Object.prototype.hasOwnProperty.call(token, field) &&
+      Object.prototype.hasOwnProperty.call(nextMetadata, field)
+  );
+
+  if (!needsMerge) {
+    return token;
+  }
+
+  const merged = { ...token };
+  TOKEN_METADATA_FIELDS.forEach((field) => {
+    if (!Object.prototype.hasOwnProperty.call(token, field) && Object.prototype.hasOwnProperty.call(nextMetadata, field)) {
+      merged[field] = nextMetadata[field];
+    }
+  });
+  return merged;
+}
+
+function cacheTokenMetadataFromToken(cache, token) {
+  if (!token || typeof token.id !== 'string') {
+    return;
+  }
+  const record = buildTokenMetadataRecord(token);
+  if (record) {
+    cache.set(token.id, record);
+  } else {
+    cache.delete(token.id);
+  }
+}
+
+function buildTokenMetadataRecord(token) {
+  if (!token || typeof token !== 'object') {
+    return null;
+  }
+
+  const record = {};
+  TOKEN_METADATA_FIELDS.forEach((field) => {
+    if (Object.prototype.hasOwnProperty.call(token, field) && token[field] !== undefined) {
+      record[field] = field === 'monster' ? sanitizeMonsterSnapshot(token[field]) : token[field];
+    }
+  });
+
+  return Object.keys(record).length ? record : null;
+}
+
+function applyMonsterMetadataToToken(token, metadata) {
+  if (!metadata || !token) {
+    return token;
+  }
+
+  const next = { ...token };
+  if (metadata.size) {
+    next.size = metadata.size;
+  }
+  if (typeof metadata.hp === 'number' && Number.isFinite(metadata.hp)) {
+    next.hp = metadata.hp;
+  }
+  if (metadata.type) {
+    next.type = metadata.type;
+  }
+  if (metadata.monsterId) {
+    next.monsterId = metadata.monsterId;
+  }
+  if (metadata.monster) {
+    next.monster = metadata.monster;
+  }
+  return next;
+}
+
+function buildMonsterMetadata(monster) {
+  if (!monster || typeof monster !== 'object') {
+    return null;
+  }
+
+  const sanitized = sanitizeMonsterSnapshot(monster);
+  if (!sanitized) {
+    return null;
+  }
+
+  const metadata = { monster: sanitized };
+  const monsterId = getMonsterIdentifier(sanitized);
+  if (monsterId) {
+    metadata.monsterId = monsterId;
+  }
+
+  const size = extractMonsterSize(sanitized);
+  if (size) {
+    metadata.size = size;
+  }
+
+  const hp = extractMonsterHp(sanitized);
+  if (typeof hp === 'number' && Number.isFinite(hp)) {
+    metadata.hp = hp;
+  }
+
+  const type = extractMonsterType(sanitized);
+  if (type) {
+    metadata.type = type;
+  }
+
+  return metadata;
+}
+
+function extractMonsterImageUrl(monster) {
+  if (!monster || typeof monster !== 'object') {
+    return '';
+  }
+
+  const candidates = [
+    typeof monster.image === 'string' ? monster.image : null,
+    typeof monster.image?.url === 'string' ? monster.image.url : null,
+    typeof monster.image?.src === 'string' ? monster.image.src : null,
+    typeof monster.imageUrl === 'string' ? monster.imageUrl : null,
+    typeof monster.portrait === 'string' ? monster.portrait : null,
+    typeof monster.portrait?.url === 'string' ? monster.portrait.url : null,
+    typeof monster.avatar === 'string' ? monster.avatar : null,
+    typeof monster.avatar?.url === 'string' ? monster.avatar.url : null,
+  ];
+
+  const match = candidates.find((value) => typeof value === 'string' && value.trim());
+  return match ? match.trim() : '';
+}
+
+function extractMonsterType(monster) {
+  if (!monster || typeof monster !== 'object') {
+    return '';
+  }
+
+  const role = monster.role;
+  if (typeof role === 'string' && role.trim()) {
+    return role.trim();
+  }
+  if (role && typeof role.label === 'string' && role.label.trim()) {
+    return role.label.trim();
+  }
+  if (role && typeof role.name === 'string' && role.name.trim()) {
+    return role.name.trim();
+  }
+  if (Array.isArray(monster.roles)) {
+    const labeledRole = monster.roles.find((entry) => typeof entry?.label === 'string' && entry.label.trim());
+    if (labeledRole) {
+      return labeledRole.label.trim();
+    }
+    const namedRole = monster.roles.find((entry) => typeof entry === 'string' && entry.trim());
+    if (namedRole) {
+      return namedRole.trim();
+    }
+  }
+
+  const typeFields = [monster.type, monster.creatureType, monster.classification];
+  for (const field of typeFields) {
+    if (typeof field === 'string' && field.trim()) {
+      return field.trim();
+    }
+    if (field && typeof field.label === 'string' && field.label.trim()) {
+      return field.label.trim();
+    }
+  }
+
+  if (Array.isArray(monster.tags)) {
+    const tag = monster.tags.find((entry) => typeof entry === 'string' && entry.trim());
+    if (tag) {
+      return tag.trim();
+    }
+  }
+
+  return '';
+}
+
+function extractMonsterSize(monster) {
+  if (!monster || typeof monster !== 'object') {
+    return '';
+  }
+
+  const size = monster.size;
+  if (typeof size === 'string' && size.trim()) {
+    return size.trim();
+  }
+  if (size && typeof size.label === 'string' && size.label.trim()) {
+    return size.label.trim();
+  }
+  if (size && typeof size.name === 'string' && size.name.trim()) {
+    return size.name.trim();
+  }
+
+  const sizeFields = [monster.dimensions?.space, monster.space, monster.traits?.size];
+  for (const field of sizeFields) {
+    if (typeof field === 'string' && field.trim()) {
+      return field.trim();
+    }
+  }
+
+  return '';
+}
+
+function extractMonsterHp(monster) {
+  if (!monster || typeof monster !== 'object') {
+    return null;
+  }
+
+  const stamina = monster.stamina;
+  const staminaValue = stamina && typeof stamina === 'object' ? stamina.value : stamina;
+  const candidates = [
+    staminaValue,
+    monster.stats?.stamina,
+    monster.defenses?.stamina,
+    monster.attributes?.hp,
+    monster.hp,
+  ];
+
+  for (const candidate of candidates) {
+    const numeric = toNumericValue(candidate);
+    if (numeric !== null) {
+      return numeric;
+    }
+  }
+
+  return null;
+}
+
+function getMonsterIdentifier(monster) {
+  const candidates = [monster.id, monster.uuid, monster.slug, monster.name];
+  for (const candidate of candidates) {
+    if (typeof candidate === 'string' && candidate.trim()) {
+      return candidate.trim();
+    }
+    if (typeof candidate === 'number' && Number.isFinite(candidate)) {
+      return String(candidate);
+    }
+  }
+  return null;
+}
+
+function toNumericValue(value) {
+  if (typeof value === 'number' && Number.isFinite(value)) {
+    return Math.round(value);
+  }
+  if (typeof value === 'string') {
+    const numeric = Number.parseInt(value.replace(/[^0-9-]/g, ''), 10);
+    return Number.isNaN(numeric) ? null : numeric;
+  }
+  return null;
+}
+
+function sanitizeMonsterSnapshot(monster) {
+  if (!monster || typeof monster !== 'object') {
+    return null;
+  }
+
+  if (typeof structuredClone === 'function') {
+    try {
+      return structuredClone(monster);
+    } catch (error) {
+      // Fallback to JSON/recursive clone.
+    }
+  }
+
+  try {
+    return JSON.parse(JSON.stringify(monster));
+  } catch (error) {
+    return clonePlain(monster);
+  }
+}
+
+function clonePlain(value, seen = new WeakSet()) {
+  if (value === null || typeof value !== 'object') {
+    if (typeof value === 'bigint') {
+      const asNumber = Number(value);
+      return Number.isSafeInteger(asNumber) ? asNumber : value.toString();
+    }
+    return value;
+  }
+
+  if (seen.has(value)) {
+    return null;
+  }
+  seen.add(value);
+
+  if (Array.isArray(value)) {
+    return value.map((item) => clonePlain(item, seen));
+  }
+
+  if (value instanceof Date) {
+    return value.toISOString();
+  }
+
+  const output = {};
+  Object.keys(value).forEach((key) => {
+    const item = value[key];
+    if (typeof item === 'function' || typeof item === 'symbol' || item === undefined) {
+      return;
+    }
+    output[key] = clonePlain(item, seen);
+  });
+  return output;
 }
 
 function createTokenContextMenu(root) {

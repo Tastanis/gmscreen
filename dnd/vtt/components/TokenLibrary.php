@@ -76,6 +76,7 @@ function renderVttTokenLibrary(bool $isGm = false): string
                         </div>
                         <div class="token-maker__actions">
                             <button class="btn btn--primary" type="button" data-action="create-token">Create Token</button>
+                            <button class="btn" type="button" data-action="import-monster">Import Monster</button>
                             <p class="token-maker__feedback" data-token-feedback hidden></p>
                         </div>
                     </div>
