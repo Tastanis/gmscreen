@@ -284,7 +284,7 @@ function filterTokensForPlayerView(array $tokens): array
 
         $folderId = isset($token['folderId']) ? (string) $token['folderId'] : '';
         if ($folderId !== '' && isset($folderIndex[$folderId])) {
-            $visibleTokens[] = $token;
+            $visibleTokens[] = sanitizeTokenForPlayerView($token);
             continue;
         }
 
@@ -298,7 +298,7 @@ function filterTokensForPlayerView(array $tokens): array
                         'name' => VTT_PLAYER_TOKEN_FOLDER,
                     ];
                 }
-                $visibleTokens[] = $token;
+                $visibleTokens[] = sanitizeTokenForPlayerView($token);
             }
         }
     }
@@ -339,7 +339,7 @@ function filterPlacementsForPlayerView($boardState): array
             if (isPlacementHiddenFromPlayers($placement)) {
                 continue;
             }
-            $visibleEntries[] = $placement;
+            $visibleEntries[] = sanitizePlacementForPlayerView($placement);
         }
 
         $visiblePlacements[$sceneId] = array_values($visibleEntries);
@@ -368,6 +368,28 @@ function isPlacementHiddenFromPlayers(array $placement): bool
     }
 
     return false;
+}
+
+/**
+ * @param array<string,mixed> $token
+ * @return array<string,mixed>
+ */
+function sanitizeTokenForPlayerView(array $token): array
+{
+    $sanitized = $token;
+    unset($sanitized['monster'], $sanitized['monsterId']);
+    return $sanitized;
+}
+
+/**
+ * @param array<string,mixed> $placement
+ * @return array<string,mixed>
+ */
+function sanitizePlacementForPlayerView(array $placement): array
+{
+    $sanitized = $placement;
+    unset($sanitized['monster'], $sanitized['monsterId']);
+    return $sanitized;
 }
 
 /**
