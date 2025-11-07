@@ -2,6 +2,7 @@
 declare(strict_types=1);
 
 require_once __DIR__ . '/../bootstrap.php';
+require_once __DIR__ . '/monster_helpers.php';
 
 header('Content-Type: application/json');
 
@@ -239,6 +240,32 @@ function createToken(array $payload): array
     $team = normalizeTokenCombatTeam($payload['team'] ?? $payload['combatTeam'] ?? null);
     $token['combatTeam'] = $team;
     $token['team'] = $team;
+
+    $tokenType = sanitizeMonsterTokenType($payload['type'] ?? null);
+    $monsterId = sanitizeMonsterReferenceId($payload['monsterId'] ?? null);
+    $monsterSnapshot = null;
+
+    if (array_key_exists('monster', $payload)) {
+        $monsterSnapshot = sanitizeMonsterSnapshot($payload['monster']);
+    }
+
+    if ($monsterSnapshot === null && $monsterId !== null) {
+        $monsterSnapshot = findMonsterById($monsterId);
+    }
+
+    if ($tokenType !== null) {
+        $token['type'] = $tokenType;
+    } elseif ($monsterSnapshot !== null) {
+        $token['type'] = 'monster';
+    }
+
+    if ($monsterId !== null) {
+        $token['monsterId'] = $monsterId;
+    }
+
+    if ($monsterSnapshot !== null) {
+        $token['monster'] = $monsterSnapshot;
+    }
 
     $storage['items'][] = $token;
     persistTokens($storage);
