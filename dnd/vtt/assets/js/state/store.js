@@ -989,8 +989,23 @@ function normalizePlacementEntry(entry) {
   const width = Math.max(1, toNonNegativeInt(entry.width ?? entry.columns ?? entry.w ?? 1));
   const height = Math.max(1, toNonNegativeInt(entry.height ?? entry.rows ?? entry.h ?? 1));
   const size = typeof entry.size === 'string' && entry.size ? entry.size : `${width}x${height}`;
-  const monsterId = typeof entry.monsterId === 'string' ? entry.monsterId.trim() : '';
-  const monster = normalizeMonsterSnapshot(entry.monster);
+
+  const metadataSource =
+    (entry.metadata && typeof entry.metadata === 'object' ? entry.metadata : null) ||
+    (entry.meta && typeof entry.meta === 'object' ? entry.meta : null);
+  const metadata = normalizePlacementMetadata(metadataSource);
+
+  let monsterId = typeof entry.monsterId === 'string' ? entry.monsterId.trim() : '';
+  if (!monsterId && typeof metadata?.monsterId === 'string') {
+    monsterId = metadata.monsterId.trim();
+  }
+
+  const monsterSource =
+    entry.monster ?? metadata?.monster ?? metadataSource?.monster ?? metadataSource?.monsterSnapshot ?? null;
+  const monster = normalizeMonsterSnapshot(monsterSource);
+  if (!monsterId && monster?.id) {
+    monsterId = monster.id;
+  }
   const hp = normalizePlacementHitPoints(
     entry.hp ??
       entry.hitPoints ??
@@ -1054,6 +1069,30 @@ function normalizePlacementEntry(entry) {
 
   if (monster) {
     normalized.monster = monster;
+  }
+
+  if (metadata) {
+    const sanitizedMetadata = { ...metadata };
+    if (monster) {
+      sanitizedMetadata.monster = monster;
+    } else {
+      delete sanitizedMetadata.monster;
+    }
+    if (monsterId) {
+      sanitizedMetadata.monsterId = monsterId;
+    } else {
+      delete sanitizedMetadata.monsterId;
+    }
+    normalized.metadata = sanitizedMetadata;
+  } else if (monster || monsterId) {
+    const normalizedMetadata = {};
+    if (monster) {
+      normalizedMetadata.monster = monster;
+    }
+    if (monsterId) {
+      normalizedMetadata.monsterId = monsterId;
+    }
+    normalized.metadata = normalizedMetadata;
   }
 
   return normalized;
@@ -1306,6 +1345,38 @@ function buildConditionKey(condition) {
   const targetKey = type === 'end-of-turn' ? `${targetId}|${targetName}` : '';
   return `${name}|${type}|${targetKey}`;
 }
+function normalizePlacementMetadata(entry) {
+  if (!entry || typeof entry !== 'object') {
+    return null;
+  }
+
+  const metadata = {};
+  Object.keys(entry).forEach((key) => {
+    if (key === 'monster') {
+      const monster = normalizeMonsterSnapshot(entry.monster);
+      if (monster) {
+        metadata.monster = monster;
+      }
+      return;
+    }
+
+    if (key === 'monsterId') {
+      const id = typeof entry.monsterId === 'string' ? entry.monsterId.trim() : '';
+      if (id) {
+        metadata.monsterId = id;
+      }
+      return;
+    }
+
+    const cloned = cloneMetadataValue(entry[key]);
+    if (cloned !== undefined) {
+      metadata[key] = cloned;
+    }
+  });
+
+  return Object.keys(metadata).length > 0 ? metadata : null;
+}
+
 function stripMonsterSnapshot(entity) {
   if (!entity || typeof entity !== 'object') {
     return entity;
@@ -1319,10 +1390,30 @@ function stripMonsterSnapshot(entity) {
     delete sanitized.monsterId;
   }
 
+  if (sanitized.metadata && typeof sanitized.metadata === 'object') {
+    const metadata = { ...sanitized.metadata };
+    let mutated = false;
+    if ('monster' in metadata) {
+      delete metadata.monster;
+      mutated = true;
+    }
+    if ('monsterId' in metadata) {
+      delete metadata.monsterId;
+      mutated = true;
+    }
+    if (mutated) {
+      if (Object.keys(metadata).length > 0) {
+        sanitized.metadata = metadata;
+      } else {
+        delete sanitized.metadata;
+      }
+    }
+  }
+
   return sanitized;
 }
 
-function normalizeMonsterSnapshot(entry) {
+export function normalizeMonsterSnapshot(entry) {
   if (!entry || typeof entry !== 'object') {
     return null;
   }
@@ -1622,6 +1713,45 @@ function normalizeMonsterAbilityTest(raw) {
   });
 
   return normalized;
+}
+
+function cloneMetadataValue(value, seen = new WeakSet()) {
+  if (value === null || typeof value !== 'object') {
+    if (typeof value === 'function' || typeof value === 'symbol' || value === undefined) {
+      return undefined;
+    }
+    if (typeof value === 'bigint') {
+      const asNumber = Number(value);
+      return Number.isSafeInteger(asNumber) ? asNumber : value.toString();
+    }
+    return value;
+  }
+
+  if (seen.has(value)) {
+    return undefined;
+  }
+
+  seen.add(value);
+
+  if (Array.isArray(value)) {
+    return value
+      .map((item) => cloneMetadataValue(item, seen))
+      .filter((item) => item !== undefined);
+  }
+
+  if (value instanceof Date) {
+    return value.toISOString();
+  }
+
+  const output = {};
+  Object.keys(value).forEach((key) => {
+    const cloned = cloneMetadataValue(value[key], seen);
+    if (cloned !== undefined) {
+      output[key] = cloned;
+    }
+  });
+
+  return output;
 }
 
 function sanitizeMonsterString(value) {
