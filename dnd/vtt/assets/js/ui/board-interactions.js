@@ -607,6 +607,7 @@ export function mountBoardInteractions(store, routes = {}) {
   const processedPings = new Map();
   const TOKEN_DRAG_TYPE = 'application/x-vtt-token-template';
   const TOKEN_DRAG_FALLBACK_TYPE = 'text/plain';
+  const MAP_LOAD_WATCHDOG_DELAY_MS = 5000;
   let tokenDropDepth = 0;
   const selectedTokenIds = new Set();
   const combatTrackerGroups = new Map();
@@ -614,6 +615,7 @@ export function mountBoardInteractions(store, routes = {}) {
   let lastCombatTrackerEntries = [];
   let renderedPlacements = [];
   let mapLoadSequence = 0;
+  let mapLoadWatchdogId = null;
   let lastActiveSceneId = null;
   let lastOverlaySignature = null;
   const movementQueue = [];
@@ -2066,16 +2068,31 @@ export function mountBoardInteractions(store, routes = {}) {
   mapSurface.addEventListener('pointerleave', handlePointerLeave);
 
   const isTokenDragEvent = (event) => {
-    if (!viewState.mapLoaded) {
-      return false;
-    }
-
-    const { dataTransfer } = event;
+    const { dataTransfer } = event ?? {};
     if (!dataTransfer) {
       return false;
     }
 
-    return hasTokenData(dataTransfer, TOKEN_DRAG_TYPE);
+    const hasTokenPayload = hasTokenData(dataTransfer, TOKEN_DRAG_TYPE);
+    if (!hasTokenPayload) {
+      return false;
+    }
+
+    if (!viewState.mapLoaded) {
+      if (event) {
+        event._vttTokenDropBlockedReason = 'map-not-loaded';
+      }
+      if (event?.type === 'drop') {
+        console.warn('[VTT] Token drop ignored: the scene map is still loading.');
+        if (status) {
+          status.textContent =
+            'The scene map is still loading. Wait for it to finish before placing tokens.';
+        }
+      }
+      return false;
+    }
+
+    return true;
   };
 
   const isWithinMapSurface = (target) =>
@@ -2126,6 +2143,14 @@ export function mountBoardInteractions(store, routes = {}) {
 
   const handleTokenDrop = (event) => {
     if (!isTokenDragEvent(event)) {
+      if (
+        event?._vttTokenDropBlockedReason === 'map-not-loaded' &&
+        event?.type === 'drop' &&
+        status
+      ) {
+        status.textContent =
+          'The scene map is still loading. Wait for it to finish before placing tokens.';
+      }
       return;
     }
 
@@ -2141,6 +2166,7 @@ export function mountBoardInteractions(store, routes = {}) {
     const state = boardApi.getState?.() ?? {};
     const activeSceneId = state.boardState?.activeSceneId ?? null;
     if (!activeSceneId) {
+      console.warn('[VTT] Token drop ignored: no active scene is currently selected.');
       if (status) {
         status.textContent = 'Activate a scene before placing tokens.';
       }
@@ -3239,6 +3265,10 @@ export function mountBoardInteractions(store, routes = {}) {
 
   function loadMap(url) {
     const loadToken = ++mapLoadSequence;
+    if (mapLoadWatchdogId) {
+      clearTimeout(mapLoadWatchdogId);
+      mapLoadWatchdogId = null;
+    }
     viewState.activeMapUrl = url || null;
     viewState.mapLoaded = false;
     lastOverlaySignature = null;
@@ -3282,12 +3312,19 @@ export function mountBoardInteractions(store, routes = {}) {
     emptyState?.setAttribute('hidden', 'hidden');
 
     let loadHandled = false;
+    const cancelMapLoadWatchdog = () => {
+      if (mapLoadWatchdogId) {
+        clearTimeout(mapLoadWatchdogId);
+        mapLoadWatchdogId = null;
+      }
+    };
 
     const handleMapImageLoad = () => {
       if (loadHandled || loadToken !== mapLoadSequence) {
         return;
       }
       loadHandled = true;
+      cancelMapLoadWatchdog();
       viewState.mapLoaded = true;
       calibrateToBoard();
       mapImage.hidden = false;
@@ -3314,6 +3351,7 @@ export function mountBoardInteractions(store, routes = {}) {
         return;
       }
       loadHandled = true;
+      cancelMapLoadWatchdog();
       viewState.mapLoaded = false;
       mapImage.hidden = true;
       mapBackdrop.hidden = true;
@@ -3336,6 +3374,23 @@ export function mountBoardInteractions(store, routes = {}) {
     mapImage.onload = handleMapImageLoad;
     mapImage.onerror = handleMapImageError;
     mapImage.src = url;
+    if (!loadHandled) {
+      mapLoadWatchdogId = setTimeout(() => {
+        if (loadHandled || loadToken !== mapLoadSequence) {
+          mapLoadWatchdogId = null;
+          return;
+        }
+        mapLoadWatchdogId = null;
+        const urlLabel = url ? ` for "${url}"` : '';
+        console.warn(
+          `[VTT] Map image load has not completed after ${MAP_LOAD_WATCHDOG_DELAY_MS}ms${urlLabel}.`
+        );
+        if (status) {
+          status.textContent =
+            'Still waiting for the map image to load. Verify the upload or try refreshing.';
+        }
+      }, MAP_LOAD_WATCHDOG_DELAY_MS);
+    }
 
     const scheduleMicrotask =
       typeof queueMicrotask === 'function'
