@@ -10,9 +10,21 @@ declare(strict_types=1);
 function mergeSceneEntriesPreservingGmAuthored(array $existingEntries, array $incomingEntries): array
 {
     $normalizedExisting = [];
+    $gmEntryIdentifiers = [];
     foreach ($existingEntries as $entry) {
-        if (is_array($entry)) {
-            $normalizedExisting[] = $entry;
+        if (!is_array($entry)) {
+            continue;
+        }
+
+        $normalizedExisting[] = $entry;
+
+        if (!isGmAuthoredBoardEntry($entry)) {
+            continue;
+        }
+
+        $identifier = extractBoardEntryIdentifier($entry);
+        if ($identifier !== null) {
+            $gmEntryIdentifiers[$identifier] = true;
         }
     }
 
@@ -23,12 +35,20 @@ function mergeSceneEntriesPreservingGmAuthored(array $existingEntries, array $in
             continue;
         }
 
+        $identifier = extractBoardEntryIdentifier($entry);
+
         if (isGmAuthoredBoardEntry($entry)) {
-            // Never allow player payloads to replace GM-authored data.
-            continue;
+            if ($identifier === null) {
+                // Brand-new GM-authored entries from players are ignored.
+                continue;
+            }
+
+            if (!array_key_exists($identifier, $gmEntryIdentifiers)) {
+                // Players cannot create new GM-authored entries even if an id is supplied.
+                continue;
+            }
         }
 
-        $identifier = extractBoardEntryIdentifier($entry);
         if ($identifier === null) {
             $incomingWithoutId[] = $entry;
             continue;
@@ -42,9 +62,14 @@ function mergeSceneEntriesPreservingGmAuthored(array $existingEntries, array $in
         $identifier = extractBoardEntryIdentifier($entry);
 
         if (isGmAuthoredBoardEntry($entry)) {
-            $merged[] = $entry;
-            if ($identifier !== null) {
+            if ($identifier !== null && array_key_exists($identifier, $incomingById)) {
+                $merged[] = mergeGmAuthoredEntry($entry, $incomingById[$identifier]);
                 unset($incomingById[$identifier]);
+            } else {
+                $merged[] = $entry;
+                if ($identifier !== null) {
+                    unset($incomingById[$identifier]);
+                }
             }
             continue;
         }
@@ -73,6 +98,60 @@ function mergeSceneEntriesPreservingGmAuthored(array $existingEntries, array $in
     }
 
     return array_values($merged);
+}
+
+/**
+ * @param array<string,mixed> $existingEntry
+ * @param array<string,mixed> $incomingEntry
+ * @return array<string,mixed>
+ */
+function mergeGmAuthoredEntry(array $existingEntry, array $incomingEntry): array
+{
+    $merged = array_replace_recursive($existingEntry, $incomingEntry);
+
+    return restoreGmMarkers($existingEntry, $merged, 0);
+}
+
+/**
+ * @param array<string,mixed> $gmSource
+ * @param array<string,mixed> $merged
+ * @return array<string,mixed>
+ */
+function restoreGmMarkers(array $gmSource, array $merged, int $depth): array
+{
+    if ($depth > 5) {
+        return $merged;
+    }
+
+    $booleanKeys = ['authorIsGm', 'gm', 'isGm', 'gmOnly', 'gm_only', 'gmAuthored', 'gm_authored', 'hidden'];
+    foreach ($booleanKeys as $key) {
+        if (array_key_exists($key, $gmSource)) {
+            $merged[$key] = $gmSource[$key];
+        }
+    }
+
+    $stringKeys = ['authorRole', 'role', 'createdByRole', 'source', 'ownerRole'];
+    foreach ($stringKeys as $key) {
+        if (array_key_exists($key, $gmSource)) {
+            $merged[$key] = $gmSource[$key];
+        }
+    }
+
+    $nestedKeys = ['metadata', 'meta', 'flags'];
+    foreach ($nestedKeys as $nestedKey) {
+        if (!isset($gmSource[$nestedKey]) || !is_array($gmSource[$nestedKey])) {
+            continue;
+        }
+
+        $target = isset($merged[$nestedKey]) && is_array($merged[$nestedKey])
+            ? $merged[$nestedKey]
+            : [];
+
+        $target = array_replace_recursive($gmSource[$nestedKey], $target);
+        $merged[$nestedKey] = restoreGmMarkers($gmSource[$nestedKey], $target, $depth + 1);
+    }
+
+    return $merged;
 }
 
 /**
