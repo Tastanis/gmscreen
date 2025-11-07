@@ -3,6 +3,7 @@ import assert from 'node:assert/strict';
 import { JSDOM } from 'jsdom';
 
 import * as boardInteractionsModule from '../board-interactions.js';
+import { restrictPlacementsToPlayerView } from '../../state/store.js';
 
 const {
   mountBoardInteractions,
@@ -801,6 +802,27 @@ test('cached map images mark the board as loaded and allow GM drops', async () =
       name: 'Goblin',
       imageUrl: 'http://example.com/token.png',
       size: '1x1',
+      folderName: "PC's",
+      monsterId: '  monster-1  ',
+      monster: {
+        id: 'monster-1',
+        name: ' Goblin Raider ',
+        size: ' medium ',
+        footprint: ' 1x1 ',
+        abilities: {
+          action: [
+            {
+              name: ' Slash ',
+              range: ' Melee ',
+              effect: ' Deal 4 damage ',
+            },
+            {
+              name: '   ',
+              effect: 'Ignored',
+            },
+          ],
+        },
+      },
     });
 
     let dropEffect = 'none';
@@ -826,9 +848,368 @@ test('cached map images mark the board as loaded and allow GM drops', async () =
     const placements =
       store.getState().boardState?.placements?.['scene-1'] ?? [];
     assert.equal(placements.length, 1, 'GM token drops should be accepted once the map is marked as loaded');
+
+    const placement = placements[0];
+    assert.equal(placement.monsterId, 'monster-1', 'sanitized monster id should be preserved on the placement');
+    assert.ok(placement.metadata?.monster, 'GM metadata should include a monster snapshot');
+    assert.ok(placement.monster, 'placement should retain the monster snapshot for GM interactions');
+
+    const expectedMonsterSnapshot = {
+      id: 'monster-1',
+      name: 'Goblin Raider',
+      size: 'medium',
+      footprint: '1x1',
+      abilities: {
+        action: [
+          {
+            name: 'Slash',
+            range: 'Melee',
+            effect: 'Deal 4 damage',
+          },
+        ],
+      },
+    };
+
+    assert.deepEqual(
+      placement.monster,
+      expectedMonsterSnapshot,
+      'readTokenTemplate should sanitize and retain monster snapshots for the GM view',
+    );
+    assert.deepEqual(
+      placement.metadata.monster,
+      expectedMonsterSnapshot,
+      'calculateTokenPlacement should clone sanitized monster metadata for persistence',
+    );
+    assert.notStrictEqual(
+      placement.metadata.monster,
+      placement.monster,
+      'metadata and placement monster snapshots should be cloned separately',
+    );
+
+    const playerViewPlacements = restrictPlacementsToPlayerView({ 'scene-1': placements });
+    const playerPlacement = playerViewPlacements['scene-1']?.[0] ?? null;
+    assert.ok(playerPlacement, 'player filtered placements should keep visible tokens');
+    assert.equal(playerPlacement.monster, undefined, 'player payload should strip monster snapshots');
+    assert.equal(playerPlacement.monsterId, undefined, 'player payload should omit monster ids');
+    assert.equal(
+      playerPlacement.metadata?.monster,
+      undefined,
+      'player payload metadata should not leak monster snapshots',
+    );
   } finally {
     dom.window.close();
   }
+});
+
+test('token settings stat block button is GM only and enabled by monster metadata', async () => {
+  const openTokenContextMenu = async (tokenElement) => {
+    const rect = tokenElement.getBoundingClientRect();
+    const clientX = rect.left + rect.width / 2;
+    const clientY = rect.top + rect.height / 2;
+    dispatchPointerEvent(tokenElement, 'pointerdown', {
+      button: 2,
+      buttons: 2,
+      clientX,
+      clientY,
+    });
+    const contextMenuEvent = new dom.window.Event('contextmenu', { bubbles: true, cancelable: true });
+    Object.defineProperty(contextMenuEvent, 'clientX', { value: clientX });
+    Object.defineProperty(contextMenuEvent, 'clientY', { value: clientY });
+    tokenElement.dispatchEvent(contextMenuEvent);
+    await Promise.resolve();
+    await new Promise((resolve) => setTimeout(resolve, 0));
+  };
+
+  await (async () => {
+    const dom = createDom();
+    try {
+      const { document } = dom.window;
+      const board = document.getElementById('vtt-board-canvas');
+      board.getBoundingClientRect = () => ({
+        width: 512,
+        height: 512,
+        top: 0,
+        left: 0,
+        right: 512,
+        bottom: 512,
+      });
+
+      const mapSurface = document.getElementById('vtt-map-surface');
+      mapSurface.getBoundingClientRect = () => ({
+        width: 512,
+        height: 512,
+        top: 0,
+        left: 0,
+        right: 512,
+        bottom: 512,
+      });
+
+      const mapImage = document.getElementById('vtt-map-image');
+      let intrinsicWidth = 0;
+      let intrinsicHeight = 0;
+      let isComplete = false;
+      Object.defineProperty(mapImage, 'naturalWidth', {
+        get: () => intrinsicWidth,
+        configurable: true,
+      });
+      Object.defineProperty(mapImage, 'naturalHeight', {
+        get: () => intrinsicHeight,
+        configurable: true,
+      });
+      Object.defineProperty(mapImage, 'complete', {
+        get: () => isComplete,
+        configurable: true,
+      });
+      Object.defineProperty(mapImage, 'decode', {
+        value: undefined,
+        configurable: true,
+        writable: true,
+      });
+
+      const store = createMockStore({
+        user: { isGM: false, name: 'Player' },
+        scenes: { items: [{ id: 'scene-1', name: 'Scene 1' }] },
+        grid: { size: 64, visible: true },
+        boardState: {
+          activeSceneId: 'scene-1',
+          mapUrl: 'http://example.com/map.png',
+          placements: { 'scene-1': [] },
+          sceneState: {
+            'scene-1': {
+              grid: { size: 64, visible: true },
+            },
+          },
+        },
+      });
+
+      const interactions = mountBoardInteractions(store) ?? {};
+      const viewState = interactions.getViewState?.();
+      assert.ok(viewState, 'view state handle should be available for the player scenario');
+
+      intrinsicWidth = 512;
+      intrinsicHeight = 512;
+      isComplete = true;
+
+      await Promise.resolve();
+      await new Promise((resolve) => setTimeout(resolve, 0));
+
+      assert.equal(viewState.mapLoaded, true, 'player scenario should mark the map as loaded');
+
+      store.updateState((draft) => {
+        draft.boardState.placements['scene-1'] = [
+          {
+            id: 'plain-token',
+            tokenId: 'plain-token',
+            name: 'Guard',
+            column: 1,
+            row: 1,
+            width: 1,
+            height: 1,
+          },
+        ];
+      });
+
+      await Promise.resolve();
+      await new Promise((resolve) => setTimeout(resolve, 0));
+
+      const testingHooks = interactions.__testing ?? {};
+      const opened = testingHooks.openTokenSettingsById?.('plain-token', 256, 256);
+      assert.equal(opened, true, 'players should be able to open the token menu');
+
+      await Promise.resolve();
+      await new Promise((resolve) => setTimeout(resolve, 0));
+
+      const playerMenu = testingHooks.getTokenSettingsMenu?.();
+      assert.ok(playerMenu?.element, 'player token menu should exist');
+      assert.equal(
+        playerMenu.statBlockButton,
+        null,
+        'players should not see the stat block button',
+      );
+    } finally {
+      dom.window.close();
+    }
+  })();
+
+  await (async () => {
+    const dom = createDom();
+    try {
+      const { document } = dom.window;
+      const board = document.getElementById('vtt-board-canvas');
+      board.getBoundingClientRect = () => ({
+        width: 512,
+        height: 512,
+        top: 0,
+        left: 0,
+        right: 512,
+        bottom: 512,
+      });
+
+      const mapSurface = document.getElementById('vtt-map-surface');
+      mapSurface.getBoundingClientRect = () => ({
+        width: 512,
+        height: 512,
+        top: 0,
+        left: 0,
+        right: 512,
+        bottom: 512,
+      });
+
+      const mapImage = document.getElementById('vtt-map-image');
+      let intrinsicWidth = 0;
+      let intrinsicHeight = 0;
+      let isComplete = false;
+      Object.defineProperty(mapImage, 'naturalWidth', {
+        get: () => intrinsicWidth,
+        configurable: true,
+      });
+      Object.defineProperty(mapImage, 'naturalHeight', {
+        get: () => intrinsicHeight,
+        configurable: true,
+      });
+      Object.defineProperty(mapImage, 'complete', {
+        get: () => isComplete,
+        configurable: true,
+      });
+      Object.defineProperty(mapImage, 'decode', {
+        value: undefined,
+        configurable: true,
+        writable: true,
+      });
+
+      const store = createMockStore({
+        user: { isGM: true, name: 'GM' },
+        scenes: { items: [{ id: 'scene-1', name: 'Scene 1' }] },
+        grid: { size: 64, visible: true },
+        boardState: {
+          activeSceneId: 'scene-1',
+          mapUrl: 'http://example.com/map.png',
+          placements: { 'scene-1': [] },
+          sceneState: {
+            'scene-1': {
+              grid: { size: 64, visible: true },
+            },
+          },
+        },
+      });
+
+      const interactions = mountBoardInteractions(store) ?? {};
+      const viewState = interactions.getViewState?.();
+      assert.ok(viewState, 'view state handle should be available for the GM scenario');
+
+      intrinsicWidth = 512;
+      intrinsicHeight = 512;
+      isComplete = true;
+
+      await Promise.resolve();
+      await new Promise((resolve) => setTimeout(resolve, 0));
+
+      assert.equal(viewState.mapLoaded, true, 'GM scenario should mark the map as loaded');
+
+      const dropToken = async (template) => {
+        const dataTransferPayload = JSON.stringify(template);
+        let dropEffect = 'none';
+        const dataTransfer = {
+          types: ['application/x-vtt-token-template'],
+          getData: (type) => (type === 'application/x-vtt-token-template' ? dataTransferPayload : ''),
+        };
+        Object.defineProperty(dataTransfer, 'dropEffect', {
+          get: () => dropEffect,
+          set: (value) => {
+            dropEffect = value;
+          },
+          configurable: true,
+        });
+
+        const dropEvent = new dom.window.Event('drop', { bubbles: true, cancelable: true });
+        Object.defineProperty(dropEvent, 'dataTransfer', { value: dataTransfer });
+        Object.defineProperty(dropEvent, 'clientX', { value: 256 });
+        Object.defineProperty(dropEvent, 'clientY', { value: 256 });
+
+        mapSurface.dispatchEvent(dropEvent);
+
+        await Promise.resolve();
+        await new Promise((resolve) => setTimeout(resolve, 0));
+
+        const placements = store.getState().boardState?.placements?.['scene-1'] ?? [];
+        return placements[placements.length - 1] ?? null;
+      };
+
+      const plainPlacement = await dropToken({
+        id: 'plain-template',
+        name: 'Guard',
+        imageUrl: 'http://example.com/plain.png',
+        size: '1x1',
+        folderName: "PC's",
+      });
+      const monsterPlacement = await dropToken({
+        id: 'monster-template',
+        name: 'Ogre',
+        imageUrl: 'http://example.com/ogre.png',
+        size: '2x2',
+        folderName: "PC's",
+        monsterId: 'ogre-1',
+        monster: {
+          id: 'ogre-1',
+          name: 'Ogre Brute',
+          size: 'large',
+          footprint: '2x2',
+        },
+      });
+
+      assert.ok(plainPlacement, 'plain token placement should be created via drop');
+      assert.ok(monsterPlacement, 'monster token placement should be created via drop');
+      assert.ok(monsterPlacement.monster, 'monster placement should retain a monster snapshot');
+
+      const testingHooks = interactions.__testing ?? {};
+      const gmMenu = testingHooks.getTokenSettingsMenu?.();
+      assert.ok(gmMenu?.element, 'GM token menu should exist for inspection');
+      const statBlockButton = gmMenu.statBlockButton;
+      assert.ok(statBlockButton, 'GMs should see the stat block button');
+
+      const openedPlain = testingHooks.openTokenSettingsById?.(plainPlacement.id, 256, 256);
+      assert.equal(openedPlain, true, 'GM menu should open for the plain token');
+      await Promise.resolve();
+      await new Promise((resolve) => setTimeout(resolve, 0));
+      assert.equal(
+        gmMenu.element.dataset.open,
+        'true',
+        'token settings menu should be shown for GM interactions',
+      );
+      assert.equal(
+        gmMenu.element.dataset.placementId,
+        plainPlacement.id,
+        'plain token should own the active token settings menu',
+      );
+      assert.equal(statBlockButton.disabled, true, 'button should be disabled without monster metadata');
+      assert.equal(statBlockButton.getAttribute('aria-disabled'), 'true');
+
+      const openedMonster = testingHooks.openTokenSettingsById?.(monsterPlacement.id, 256, 256);
+      assert.equal(openedMonster, true, 'GM menu should open for the monster token');
+      await Promise.resolve();
+      await new Promise((resolve) => setTimeout(resolve, 0));
+
+      const gmState = store.getState();
+      assert.ok(
+        gmState.boardState?.placements?.['scene-1']?.find((entry) => entry?.id === monsterPlacement.id)?.monster,
+        'GM state should retain monster metadata for the active placement',
+      );
+      assert.equal(
+        gmMenu.element.dataset.open,
+        'true',
+        'menu should remain open after selecting the monster token',
+      );
+      assert.equal(
+        gmMenu.element.dataset.placementId,
+        monsterPlacement.id,
+        'monster token should become the active menu target',
+      );
+      assert.equal(statBlockButton.disabled, false, 'button should enable when monster metadata is present');
+      assert.equal(statBlockButton.getAttribute('aria-disabled'), 'false');
+    } finally {
+      dom.window.close();
+    }
+  })();
 });
 
 test('hiding one overlay layer preserves other visible layers', async () => {
