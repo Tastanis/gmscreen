@@ -9664,7 +9664,9 @@ export function mountBoardInteractions(store, routes = {}) {
 
     if (menu.statBlockButton) {
       menu.statBlockButton.addEventListener('click', handleStatBlockButtonClick);
-      setStatBlockButtonEnabled(false);
+      menu.statBlockButton.disabled = true;
+      menu.statBlockButton.setAttribute('aria-disabled', 'true');
+      menu.statBlockButton.classList.add('is-disabled');
     }
 
     if (menu.conditionSelect) {
@@ -14494,6 +14496,10 @@ function createTemplateTool() {
 
   return {
     getViewState: () => viewState,
+    __testing: {
+      openTokenSettingsById,
+      getTokenSettingsMenu: () => tokenSettingsMenu,
+    },
   };
 }
 
