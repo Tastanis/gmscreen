@@ -68,44 +68,55 @@ export function initializeTokenMaker(moduleRoot) {
     }
   };
 
-  const loadFile = (file) => {
-    if (!file || !file.type?.startsWith('image/')) {
-      return;
+  const applyImageBlob = (blob) => {
+    if (!blob || !blob.type?.startsWith('image/')) {
+      return Promise.reject(new Error('Only image blobs are supported.'));
     }
 
-    const nextUrl = URL.createObjectURL(file);
-    const handleLoad = () => {
-      const bounds = getPreviewBounds(preview);
-      const naturalWidth = image.naturalWidth || 1;
-      const naturalHeight = image.naturalHeight || 1;
-      const coverScale = Math.max(
-        bounds.width / naturalWidth,
-        bounds.height / naturalHeight,
-      );
+    const nextUrl = URL.createObjectURL(blob);
 
-      resetPosition(Number.isFinite(coverScale) && coverScale > 0 ? coverScale : 1);
-      setHasImage(true);
+    return new Promise((resolve, reject) => {
+      const handleLoad = () => {
+        const bounds = getPreviewBounds(preview);
+        const naturalWidth = image.naturalWidth || 1;
+        const naturalHeight = image.naturalHeight || 1;
+        const coverScale = Math.max(
+          bounds.width / naturalWidth,
+          bounds.height / naturalHeight,
+        );
 
-      if (objectUrl && objectUrl !== nextUrl) {
-        cleanupObjectUrl(objectUrl);
-      }
+        resetPosition(Number.isFinite(coverScale) && coverScale > 0 ? coverScale : 1);
+        setHasImage(true);
 
-      objectUrl = nextUrl;
-    };
+        if (objectUrl && objectUrl !== nextUrl) {
+          cleanupObjectUrl(objectUrl);
+        }
 
-    image.addEventListener('load', handleLoad, { once: true });
-    image.addEventListener(
-      'error',
-      () => {
+        objectUrl = nextUrl;
+        resolve(true);
+      };
+
+      const handleError = () => {
         if (objectUrl && objectUrl !== nextUrl) {
           cleanupObjectUrl(objectUrl);
         }
         cleanupObjectUrl(nextUrl);
         setHasImage(false);
-      },
-      { once: true },
-    );
-    image.src = nextUrl;
+        reject(new Error('Unable to load image.'));
+      };
+
+      image.addEventListener('load', handleLoad, { once: true });
+      image.addEventListener('error', handleError, { once: true });
+      image.src = nextUrl;
+    });
+  };
+
+  const loadFile = (file) => {
+    if (!file || !file.type?.startsWith('image/')) {
+      return;
+    }
+
+    applyImageBlob(file).catch(() => {});
   };
 
   const handleWheel = (event) => {
@@ -261,6 +272,26 @@ export function initializeTokenMaker(moduleRoot) {
         dataUrl: canvas.toDataURL('image/png'),
         size,
       };
+    },
+    async loadImageFromUrl(url, { credentials = 'same-origin' } = {}) {
+      if (!url) {
+        throw new Error('An image URL is required.');
+      }
+
+      const baseHref = typeof window !== 'undefined' ? window.location.href : 'http://localhost';
+      const resolvedUrl = new URL(url, baseHref);
+
+      if (typeof window !== 'undefined' && resolvedUrl.origin !== window.location.origin) {
+        throw new Error('Only same-origin images can be imported.');
+      }
+
+      const response = await fetch(resolvedUrl.toString(), { credentials });
+      if (!response.ok) {
+        throw new Error('Unable to load image from URL.');
+      }
+
+      const blob = await response.blob();
+      return applyImageBlob(blob);
     },
     reset() {
       cleanupObjectUrl(objectUrl);
