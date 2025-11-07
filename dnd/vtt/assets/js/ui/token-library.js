@@ -770,6 +770,9 @@ function buildTokenDragData(element, tokenIndex) {
   const sourceFolderId = folderId || null;
   const sourceFolderName = folderName || '';
 
+  const monsterId = typeof record?.monsterId === 'string' ? record.monsterId.trim() : '';
+  const monsterSnapshot = record?.monster ? sanitizeMonsterSnapshot(record.monster) : null;
+
   return {
     id: tokenId,
     name,
@@ -780,6 +783,8 @@ function buildTokenDragData(element, tokenIndex) {
     team,
     sourceFolderId,
     sourceFolderName,
+    monsterId: monsterId || undefined,
+    monster: monsterSnapshot || undefined,
   };
 }
 

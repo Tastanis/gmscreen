@@ -6,7 +6,12 @@ import {
   updateExternalMeasurement,
 } from './drag-ruler.js';
 import { persistBoardState, persistCombatState } from '../services/board-state-service.js';
-import { PLAYER_VISIBLE_TOKEN_FOLDER, normalizePlayerTokenFolderName } from '../state/store.js';
+import {
+  PLAYER_VISIBLE_TOKEN_FOLDER,
+  normalizeMonsterSnapshot,
+  normalizePlayerTokenFolderName,
+} from '../state/store.js';
+import { close as closeMonsterStatBlock, open as openMonsterStatBlock } from './monster-stat-block.js';
 import { createCombatTimerService } from '../services/combat-timer-service.js';
 import { showCombatTimerReport } from './combat-timer-report.js';
 
@@ -941,6 +946,7 @@ export function mountBoardInteractions(store, routes = {}) {
   const MAX_CONDITION_BANNERS = 4;
   let nextConditionBannerId = 1;
   let activeTokenSettingsId = null;
+  let activeMonsterStatBlockPlacementId = null;
   let removeTokenSettingsListeners = null;
   let hitPointsEditSession = null;
   let damageHealUi = null;
@@ -8282,6 +8288,21 @@ export function mountBoardInteractions(store, routes = {}) {
         template.folderName = parsed.folderName.trim();
       }
 
+      const rawMonsterId = typeof parsed.monsterId === 'string' ? parsed.monsterId.trim() : '';
+      if (rawMonsterId) {
+        template.monsterId = rawMonsterId;
+      }
+
+      if (parsed.monster) {
+        const sanitizedMonster = normalizeMonsterSnapshot(parsed.monster);
+        if (sanitizedMonster) {
+          template.monster = sanitizedMonster;
+          if (!template.monsterId && sanitizedMonster.id) {
+            template.monsterId = sanitizedMonster.id;
+          }
+        }
+      }
+
       return template;
     } catch (error) {
       console.warn('[VTT] Failed to parse dropped token payload', error);
@@ -8401,9 +8422,55 @@ export function mountBoardInteractions(store, routes = {}) {
       hidden,
     };
 
+    const placementMetadata = {};
+
+    if (template.monsterId) {
+      const trimmedId = typeof template.monsterId === 'string' ? template.monsterId.trim() : '';
+      if (trimmedId) {
+        placement.monsterId = trimmedId;
+        placementMetadata.monsterId = trimmedId;
+      }
+    }
+
+    if (template.monster) {
+      const monsterSnapshot = cloneMonsterSnapshot(template.monster);
+      if (monsterSnapshot) {
+        placement.monster = monsterSnapshot;
+        placementMetadata.monster = cloneMonsterSnapshot(template.monster);
+        if (!placement.monsterId && monsterSnapshot.id) {
+          placement.monsterId = monsterSnapshot.id;
+          placementMetadata.monsterId = monsterSnapshot.id;
+        }
+      }
+    }
+
+    if (Object.keys(placementMetadata).length > 0) {
+      placement.metadata = placementMetadata;
+    }
+
     markPlacementAsGmAuthored(placement);
 
     return placement;
+  }
+
+  function cloneMonsterSnapshot(monster) {
+    if (!monster || typeof monster !== 'object') {
+      return null;
+    }
+
+    if (typeof structuredClone === 'function') {
+      try {
+        return structuredClone(monster);
+      } catch (error) {
+        // Fallback to JSON clone below.
+      }
+    }
+
+    try {
+      return JSON.parse(JSON.stringify(monster));
+    } catch (error) {
+      return null;
+    }
   }
 
   function toggleTriggeredActionState(placementId) {
@@ -9449,6 +9516,19 @@ export function mountBoardInteractions(store, routes = {}) {
       }))
       .join('');
 
+    const statBlockButtonMarkup = isGmUser()
+      ? `
+          <button
+            type="button"
+            class="vtt-token-settings__stat-block"
+            data-token-settings-stat-block
+            aria-pressed="false"
+          >
+            Stat Block
+          </button>
+        `
+      : '';
+
     const hiddenToggleMarkup = isGmUser()
       ? `
         <div class="vtt-token-settings__section">
@@ -9466,6 +9546,7 @@ export function mountBoardInteractions(store, routes = {}) {
       <form class="vtt-token-settings__form" novalidate>
         <header class="vtt-token-settings__header">
           <h2 class="vtt-token-settings__title" data-token-settings-title>Token Settings</h2>
+          ${statBlockButtonMarkup}
           <button type="button" class="vtt-token-settings__close" data-token-settings-close aria-label="Close token settings">×</button>
         </header>
         <div class="vtt-token-settings__section vtt-token-settings__section--conditions">
@@ -9557,6 +9638,7 @@ export function mountBoardInteractions(store, routes = {}) {
       element,
       form: element.querySelector('form'),
       title: element.querySelector('[data-token-settings-title]'),
+      statBlockButton: element.querySelector('[data-token-settings-stat-block]'),
       closeButton: element.querySelector('[data-token-settings-close]'),
       showHpToggle: element.querySelector('[data-token-settings-toggle="hitPoints"]'),
       hpField: element.querySelector('[data-token-settings-field="hitPoints"]'),
@@ -9579,6 +9661,11 @@ export function mountBoardInteractions(store, routes = {}) {
     menu.closeButton?.addEventListener('click', () => {
       closeTokenSettings();
     });
+
+    if (menu.statBlockButton) {
+      menu.statBlockButton.addEventListener('click', handleStatBlockButtonClick);
+      setStatBlockButtonEnabled(false);
+    }
 
     if (menu.conditionSelect) {
       menu.conditionSelect.addEventListener('change', () => {
@@ -9775,6 +9862,8 @@ export function mountBoardInteractions(store, routes = {}) {
       tokenSettingsMenu.element.dataset.placementId = '';
     }
 
+    closeMonsterStatBlockViewer({ reason: 'settings-closed' });
+
     activeTokenSettingsId = null;
     hitPointsEditSession = null;
   }
@@ -9896,6 +9985,8 @@ export function mountBoardInteractions(store, routes = {}) {
     }
     tokenSettingsMenu.element.setAttribute('aria-label', `${label} settings`);
 
+    syncMonsterStatBlockControls(placement);
+
     syncConditionControls(placement);
 
     const showHp = Boolean(placement.showHp);
@@ -9930,6 +10021,128 @@ export function mountBoardInteractions(store, routes = {}) {
         placement.hidden ?? placement.isHidden ?? false
       );
     }
+  }
+
+  function handleStatBlockButtonClick() {
+    if (!activeTokenSettingsId) {
+      return;
+    }
+
+    const placement = getPlacementFromStore(activeTokenSettingsId);
+    if (!placement?.monster) {
+      closeMonsterStatBlockViewer({ placementId: placement?.id ?? null, reason: 'no-monster' });
+      return;
+    }
+
+    if (activeMonsterStatBlockPlacementId === placement.id) {
+      closeMonsterStatBlockViewer({ placementId: placement.id, reason: 'toggle' });
+    } else {
+      openMonsterStatBlockViewer(placement);
+    }
+  }
+
+  function openMonsterStatBlockViewer(placement, { refresh = false } = {}) {
+    if (!placement?.monster) {
+      closeMonsterStatBlockViewer({ placementId: placement?.id ?? null, reason: 'missing-monster' });
+      return;
+    }
+
+    const label = tokenLabel(placement);
+    openMonsterStatBlock(placement.monster, {
+      placementId: placement.id,
+      tokenName: label,
+      onClose: () => handleMonsterStatBlockClosed(placement.id),
+      refresh,
+    });
+
+    activeMonsterStatBlockPlacementId = placement.id;
+    if (!refresh) {
+      setStatBlockButtonActive(true);
+    }
+  }
+
+  function closeMonsterStatBlockViewer({ placementId, reason } = {}) {
+    const targetId = placementId ?? activeMonsterStatBlockPlacementId ?? null;
+    if (targetId && activeMonsterStatBlockPlacementId === targetId) {
+      activeMonsterStatBlockPlacementId = null;
+    }
+
+    closeMonsterStatBlock();
+
+    if (activeTokenSettingsId) {
+      const placement = getPlacementFromStore(activeTokenSettingsId);
+      if (placement) {
+        const hasMonster = Boolean(placement.monster);
+        setStatBlockButtonEnabled(hasMonster);
+        const isActive = hasMonster && activeMonsterStatBlockPlacementId === placement.id;
+        setStatBlockButtonActive(isActive);
+        return;
+      }
+    }
+
+    setStatBlockButtonActive(false);
+    setStatBlockButtonEnabled(false);
+  }
+
+  function handleMonsterStatBlockClosed(placementId) {
+    if (placementId && placementId !== activeMonsterStatBlockPlacementId) {
+      return;
+    }
+
+    if (placementId && activeMonsterStatBlockPlacementId === placementId) {
+      activeMonsterStatBlockPlacementId = null;
+    }
+
+    if (activeTokenSettingsId) {
+      const placement = getPlacementFromStore(activeTokenSettingsId);
+      if (placement) {
+        setStatBlockButtonEnabled(Boolean(placement.monster));
+        const isActive = Boolean(
+          placement.monster && activeMonsterStatBlockPlacementId === placement.id
+        );
+        setStatBlockButtonActive(isActive);
+        return;
+      }
+    }
+
+    setStatBlockButtonActive(false);
+  }
+
+  function syncMonsterStatBlockControls(placement) {
+    if (!tokenSettingsMenu?.statBlockButton) {
+      return;
+    }
+
+    const hasMonster = Boolean(placement?.monster);
+    setStatBlockButtonEnabled(hasMonster);
+
+    const isActive = hasMonster && activeMonsterStatBlockPlacementId === placement?.id;
+    setStatBlockButtonActive(isActive);
+
+    if (isActive && placement) {
+      openMonsterStatBlockViewer(placement, { refresh: true });
+    } else if (!hasMonster && activeMonsterStatBlockPlacementId === placement?.id) {
+      closeMonsterStatBlockViewer({ placementId: placement.id, reason: 'missing-monster' });
+    }
+  }
+
+  function setStatBlockButtonEnabled(enabled) {
+    if (!tokenSettingsMenu?.statBlockButton) {
+      return;
+    }
+
+    tokenSettingsMenu.statBlockButton.disabled = !enabled;
+    tokenSettingsMenu.statBlockButton.setAttribute('aria-disabled', enabled ? 'false' : 'true');
+    tokenSettingsMenu.statBlockButton.classList.toggle('is-disabled', !enabled);
+  }
+
+  function setStatBlockButtonActive(active) {
+    if (!tokenSettingsMenu?.statBlockButton) {
+      return;
+    }
+
+    tokenSettingsMenu.statBlockButton.classList.toggle('is-active', Boolean(active));
+    tokenSettingsMenu.statBlockButton.setAttribute('aria-pressed', active ? 'true' : 'false');
   }
 
   function syncConditionControls(placement) {
