@@ -1908,7 +1908,7 @@ export function mountBoardInteractions(store, routes = {}) {
     }
 
     if (event.button === 0) {
-      closeTokenSettings();
+      closeTokenSettings({ preserveMonsterStatBlock: true });
       const placement = findRenderedPlacementAtPoint(event);
       if (placement) {
         const selectionChanged = updateSelection(placement.id, {
@@ -1957,7 +1957,7 @@ export function mountBoardInteractions(store, routes = {}) {
         }
       }
 
-      closeTokenSettings();
+      closeTokenSettings({ preserveMonsterStatBlock: true });
       event.preventDefault();
       focusBoard();
       viewState.isPanning = true;
@@ -1972,7 +1972,7 @@ export function mountBoardInteractions(store, routes = {}) {
       return;
     }
 
-    closeTokenSettings();
+    closeTokenSettings({ preserveMonsterStatBlock: true });
     return;
   });
 
@@ -9659,7 +9659,7 @@ export function mountBoardInteractions(store, routes = {}) {
     });
 
     menu.closeButton?.addEventListener('click', () => {
-      closeTokenSettings();
+      closeTokenSettings({ preserveMonsterStatBlock: true });
     });
 
     if (menu.statBlockButton) {
@@ -9850,7 +9850,7 @@ export function mountBoardInteractions(store, routes = {}) {
     return true;
   }
 
-  function closeTokenSettings() {
+  function closeTokenSettings({ preserveMonsterStatBlock = false } = {}) {
     if (typeof removeTokenSettingsListeners === 'function') {
       removeTokenSettingsListeners();
       removeTokenSettingsListeners = null;
@@ -9864,7 +9864,9 @@ export function mountBoardInteractions(store, routes = {}) {
       tokenSettingsMenu.element.dataset.placementId = '';
     }
 
-    closeMonsterStatBlockViewer({ reason: 'settings-closed' });
+    if (!preserveMonsterStatBlock) {
+      closeMonsterStatBlockViewer({ reason: 'settings-closed' });
+    }
 
     activeTokenSettingsId = null;
     hitPointsEditSession = null;
@@ -9903,10 +9905,18 @@ export function mountBoardInteractions(store, routes = {}) {
 
   function attachTokenSettingsListeners() {
     const handlePointerDown = (event) => {
-      if (tokenSettingsMenu?.element?.contains(event.target)) {
+      const target = event?.target ?? null;
+      if (tokenSettingsMenu?.element?.contains(target)) {
         return;
       }
-      closeTokenSettings();
+      if (
+        target &&
+        typeof target.closest === 'function' &&
+        target.closest('.vtt-monster-stat-block[data-open="true"]')
+      ) {
+        return;
+      }
+      closeTokenSettings({ preserveMonsterStatBlock: true });
     };
 
     const handleKeydown = (event) => {
