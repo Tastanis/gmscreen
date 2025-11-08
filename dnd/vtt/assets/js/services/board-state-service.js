@@ -3,7 +3,7 @@ import { queueSave } from '../state/persistence.js';
 const SAVE_KEY = 'board-state';
 const COMBAT_SAVE_KEY_PREFIX = 'combat-state';
 
-export function persistBoardState(endpoint, boardState = {}) {
+export function persistBoardState(endpoint, boardState = {}, options = {}) {
   if (!endpoint) {
     return null;
   }
@@ -13,10 +13,10 @@ export function persistBoardState(endpoint, boardState = {}) {
     return null;
   }
 
-  return queueSave(SAVE_KEY, { boardState: payload }, endpoint);
+  return queueSave(SAVE_KEY, { boardState: payload }, endpoint, options);
 }
 
-export function persistCombatState(endpoint, sceneId, combatState = {}) {
+export function persistCombatState(endpoint, sceneId, combatState = {}, options = {}) {
   if (!endpoint) {
     return null;
   }
@@ -28,7 +28,7 @@ export function persistCombatState(endpoint, sceneId, combatState = {}) {
 
   const key = `${COMBAT_SAVE_KEY_PREFIX}-${payload.sceneId}`;
   const { sceneId: _sceneId, ...rest } = payload;
-  return queueSave(key, rest, endpoint);
+  return queueSave(key, rest, endpoint, options);
 }
 
 function buildPayload(boardState = {}) {
