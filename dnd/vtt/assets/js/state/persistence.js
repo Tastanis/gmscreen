@@ -1,14 +1,52 @@
 const pending = new Map();
+const globalWindow = typeof window === 'undefined' ? null : window;
+const globalDocument = typeof document === 'undefined' ? null : document;
+const globalNavigator = typeof navigator === 'undefined' ? null : navigator;
+
+let pageVisibilityState = globalDocument?.visibilityState ?? 'visible';
+let pageIsUnloading = false;
+
+const updatePageVisibility = () => {
+  pageVisibilityState = globalDocument?.visibilityState ?? pageVisibilityState;
+};
+
+const markPageUnloading = () => {
+  pageIsUnloading = true;
+};
+
+if (globalDocument?.addEventListener) {
+  globalDocument.addEventListener('visibilitychange', updatePageVisibility, {
+    capture: true,
+  });
+}
+
+if (globalWindow?.addEventListener) {
+  globalWindow.addEventListener('pagehide', markPageUnloading, { capture: true });
+  globalWindow.addEventListener('beforeunload', markPageUnloading, { capture: true });
+}
+
+function isDocumentHidden() {
+  if (!globalDocument) {
+    return false;
+  }
+  return (globalDocument.visibilityState ?? pageVisibilityState) === 'hidden';
+}
+
+function shouldUseKeepalive(entryKeepalive = false) {
+  return Boolean(entryKeepalive || pageIsUnloading || isDocumentHidden());
+}
 
 export function queueSave(key, payload, endpoint, options = {}) {
   const controller = new AbortController();
-  const { onComplete } =
+  const normalizedOptions =
     typeof options === 'function' ? { onComplete: options } : options ?? {};
+  const { onComplete, keepalive = false } = normalizedOptions;
 
   const entry = {
     payload,
     endpoint,
     controller,
+    keepalive: Boolean(keepalive),
     callbacks: [],
     resolvers: [],
     promise: null,
@@ -55,14 +93,34 @@ export function queueSave(key, payload, endpoint, options = {}) {
 }
 
 async function persist(key, entry) {
-  const { payload, endpoint, controller } = entry;
+  const { payload, endpoint, controller, keepalive } = entry;
   let result = null;
   try {
+    const requestBody = JSON.stringify(payload);
+    const useKeepalive = shouldUseKeepalive(keepalive);
+
+    if (useKeepalive && typeof globalNavigator?.sendBeacon === 'function') {
+      try {
+        const beaconBody =
+          typeof Blob === 'function'
+            ? new Blob([requestBody ?? ''], { type: 'application/json' })
+            : requestBody ?? '';
+        const beaconSent = globalNavigator.sendBeacon(endpoint, beaconBody);
+        if (beaconSent) {
+          result = createResult(true);
+          return;
+        }
+      } catch (beaconError) {
+        console.warn('[VTT] sendBeacon failed, falling back to fetch', beaconError);
+      }
+    }
+
     const response = await fetch(endpoint, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify(payload),
+      body: requestBody,
       signal: controller.signal,
+      ...(useKeepalive ? { keepalive: true } : null),
     });
 
     if (!response?.ok) {

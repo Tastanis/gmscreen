@@ -1392,7 +1392,7 @@ export function mountBoardInteractions(store, routes = {}) {
   updateStartCombatButton();
   updateCombatModeIndicators();
 
-  const persistBoardStateSnapshot = () => {
+  const persistBoardStateSnapshot = (options = {}) => {
     if (!routes?.state || typeof boardApi.getState !== 'function') {
       return;
     }
@@ -1434,7 +1434,7 @@ export function mountBoardInteractions(store, routes = {}) {
     const snapshotHashCandidate = hashBoardStateSnapshot(snapshot);
     const snapshotHash = snapshotHashCandidate ?? safeJsonStringify(snapshot) ?? null;
 
-    const savePromise = persistBoardState(routes.state, snapshot);
+    const savePromise = persistBoardState(routes.state, snapshot, options);
     if (savePromise && typeof savePromise.then === 'function') {
       const pendingEntry = {
         promise: savePromise,
@@ -1459,6 +1459,77 @@ export function mountBoardInteractions(store, routes = {}) {
 
     return savePromise ?? null;
   };
+
+  let keepaliveFlushScheduled = false;
+  const flushBoardStateWithKeepalive = () => {
+    if (keepaliveFlushScheduled) {
+      return null;
+    }
+
+    keepaliveFlushScheduled = true;
+
+    const tasks = [];
+    const boardPromise = persistBoardStateSnapshot({ keepalive: true });
+    if (boardPromise && typeof boardPromise.then === 'function') {
+      tasks.push(boardPromise);
+    }
+
+    const latestState = typeof boardApi.getState === 'function' ? boardApi.getState() : null;
+    const isGmUser = Boolean(latestState?.user?.isGM);
+    const activeSceneId = latestState?.boardState?.activeSceneId ?? null;
+
+    if (!isGmUser && routes?.state && activeSceneId) {
+      const combatSnapshot = createCombatStateSnapshot();
+      const combatPromise = persistCombatState(routes.state, activeSceneId, combatSnapshot, {
+        keepalive: true,
+      });
+      if (combatPromise && typeof combatPromise.then === 'function') {
+        tasks.push(combatPromise);
+      }
+    }
+
+    const finalize = () => {
+      keepaliveFlushScheduled = false;
+    };
+
+    if (tasks.length > 0) {
+      const aggregate =
+        tasks.length === 1
+          ? tasks[0]
+          : Promise.all(
+              tasks.map((task) =>
+                task && typeof task.catch === 'function' ? task.catch(() => null) : task
+              )
+            );
+      if (aggregate && typeof aggregate.finally === 'function') {
+        return aggregate.finally(finalize);
+      }
+      finalize();
+      return aggregate;
+    }
+
+    finalize();
+    return null;
+  };
+
+  if (typeof document !== 'undefined' && typeof document.addEventListener === 'function') {
+    const handleVisibilityChange = () => {
+      if (document.visibilityState === 'hidden') {
+        flushBoardStateWithKeepalive();
+      }
+    };
+    document.addEventListener('visibilitychange', handleVisibilityChange, {
+      capture: true,
+      passive: true,
+    });
+  }
+
+  if (typeof window !== 'undefined' && typeof window.addEventListener === 'function') {
+    window.addEventListener('pagehide', flushBoardStateWithKeepalive, {
+      capture: true,
+      passive: true,
+    });
+  }
 
   function maybeNudgeBoardState(reason = 'heartbeat') {
     if (typeof boardApi.updateState !== 'function') {
