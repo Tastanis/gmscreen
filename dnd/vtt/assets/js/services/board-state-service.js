@@ -3,6 +3,39 @@ import { queueSave } from '../state/persistence.js';
 const SAVE_KEY = 'board-state';
 const COMBAT_SAVE_KEY_PREFIX = 'combat-state';
 
+export async function fetchBoardState(endpoint, { fetchFn = typeof fetch === 'function' ? fetch : null } = {}) {
+  if (!endpoint || typeof fetchFn !== 'function') {
+    return null;
+  }
+
+  try {
+    const response = await fetchFn(endpoint, {
+      method: 'GET',
+      headers: { Accept: 'application/json' },
+      cache: 'no-store',
+    });
+
+    if (!response?.ok) {
+      throw new Error(`Unexpected status ${response?.status ?? 'unknown'}`);
+    }
+
+    const payload = (await response.json().catch(() => null)) ?? null;
+    if (!payload || typeof payload !== 'object') {
+      return null;
+    }
+
+    const data = payload.data && typeof payload.data === 'object' ? payload.data : payload;
+    const boardState = data.boardState && typeof data.boardState === 'object' ? data.boardState : null;
+    const scenes = data.scenes && typeof data.scenes === 'object' ? data.scenes : null;
+    const tokens = data.tokens && typeof data.tokens === 'object' ? data.tokens : null;
+
+    return { boardState, scenes, tokens };
+  } catch (error) {
+    console.warn('[VTT] Failed to fetch board state', error);
+    return null;
+  }
+}
+
 export function persistBoardState(endpoint, boardState = {}, options = {}) {
   if (!endpoint) {
     return null;
