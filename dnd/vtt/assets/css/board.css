@@ -593,6 +593,31 @@
   margin: 0;
   font-size: 0.75rem;
   color: rgba(226, 232, 240, 0.7);
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 0.35rem;
+}
+
+.vtt-monster-stat-block__ability-meta-item {
+  display: inline-flex;
+  align-items: baseline;
+  gap: 0.25rem;
+}
+
+.vtt-monster-stat-block__ability-meta-label {
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+  font-size: 0.7rem;
+  color: rgba(148, 163, 184, 0.85);
+}
+
+.vtt-monster-stat-block__ability-meta-value {
+  color: rgba(226, 232, 240, 0.85);
+}
+
+.vtt-monster-stat-block__ability-meta-separator {
+  color: rgba(148, 163, 184, 0.6);
 }
 
 .vtt-monster-stat-block__ability-text,

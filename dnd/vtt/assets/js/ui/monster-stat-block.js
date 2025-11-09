@@ -363,9 +363,43 @@ function renderAbility(ability, category) {
   const resourceCost =
     typeof ability.resource_cost === 'string' ? ability.resource_cost.trim() : '';
 
-  const metaParts = [keywords, range, targets].filter(Boolean);
+  const metaParts = [];
+  if (keywords) {
+    metaParts.push(
+      `<span class="vtt-monster-stat-block__ability-meta-item">${escapeHtml(keywords)}</span>`
+    );
+  }
+
+  if (range) {
+    metaParts.push(
+      `
+        <span class="vtt-monster-stat-block__ability-meta-item">
+          <span class="vtt-monster-stat-block__ability-meta-label">Range</span>
+          <span class="vtt-monster-stat-block__ability-meta-value">${escapeHtml(range)}</span>
+        </span>
+      `.replace(/\s*\n\s*/g, ' ').trim()
+    );
+  }
+
+  if (targets) {
+    metaParts.push(
+      `
+        <span class="vtt-monster-stat-block__ability-meta-item">
+          <span class="vtt-monster-stat-block__ability-meta-label">Targets</span>
+          <span class="vtt-monster-stat-block__ability-meta-value">${escapeHtml(targets)}</span>
+        </span>
+      `.replace(/\s*\n\s*/g, ' ').trim()
+    );
+  }
+
   const metaMarkup = metaParts.length
-    ? `<p class="vtt-monster-stat-block__ability-meta">${escapeHtml(metaParts.join(' • '))}</p>`
+    ? `
+        <p class="vtt-monster-stat-block__ability-meta">
+          ${metaParts.join(
+            '<span class="vtt-monster-stat-block__ability-meta-separator" aria-hidden="true">•</span>'
+          )}
+        </p>
+      `.replace(/\s*\n\s*/g, ' ').trim()
     : '';
 
   const sections = [];
