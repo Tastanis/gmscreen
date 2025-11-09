@@ -13,6 +13,7 @@ import { mountDragRuler } from './ui/drag-ruler.js';
 import { mountDiceRoller } from './ui/dice-roller.js';
 import { fetchScenes } from './services/scene-service.js';
 import { fetchTokens } from './services/token-service.js';
+import { fetchBoardState } from './services/board-state-service.js';
 
 async function bootstrap() {
   const config = window.vttConfig ?? {};
@@ -51,10 +52,15 @@ async function bootstrap() {
 
 async function hydrateFromServer(routes) {
   try {
-    const [scenes, tokens] = await Promise.all([
+    const [scenesResult, tokensResult, boardStateResult] = await Promise.all([
       routes.scenes ? fetchScenes(routes.scenes) : [],
       routes.tokens ? fetchTokens(routes.tokens) : [],
+      routes.state ? fetchBoardState(routes.state) : null,
     ]);
+
+    const scenes = boardStateResult?.scenes ?? scenesResult;
+    const tokens = boardStateResult?.tokens ?? tokensResult;
+    const boardStateSnapshot = boardStateResult?.boardState ?? null;
 
     const currentState = getState();
     const isGM = Boolean(currentState?.user?.isGM);
@@ -67,6 +73,21 @@ async function hydrateFromServer(routes) {
         const normalized = normalizeTokenState(tokens);
         draft.tokens = isGM ? normalized : restrictTokensToPlayerView(normalized);
       }
+      if (boardStateSnapshot && typeof boardStateSnapshot === 'object') {
+        const normalizedBoard = normalizeBoardStateSnapshot(boardStateSnapshot);
+        if (normalizedBoard && Object.keys(normalizedBoard).length > 0) {
+          const nextBoardState = {
+            ...draft.boardState,
+            ...normalizedBoard,
+          };
+          if (!isGM) {
+            nextBoardState.placements = restrictPlacementsToPlayerView(
+              nextBoardState.placements ?? {}
+            );
+          }
+          draft.boardState = nextBoardState;
+        }
+      }
     });
   } catch (error) {
     console.warn('[VTT] Failed to hydrate data', error);
@@ -74,6 +95,76 @@ async function hydrateFromServer(routes) {
 }
 
 document.addEventListener('DOMContentLoaded', bootstrap);
+
+function normalizeBoardStateSnapshot(raw = {}) {
+  if (!raw || typeof raw !== 'object') {
+    return null;
+  }
+
+  const snapshot = {};
+
+  if (Object.prototype.hasOwnProperty.call(raw, 'activeSceneId')) {
+    const rawId = raw.activeSceneId;
+    snapshot.activeSceneId =
+      typeof rawId === 'string'
+        ? rawId
+        : rawId == null
+        ? null
+        : String(rawId);
+  }
+
+  if (Object.prototype.hasOwnProperty.call(raw, 'mapUrl')) {
+    const mapUrl = raw.mapUrl;
+    if (typeof mapUrl === 'string') {
+      snapshot.mapUrl = mapUrl;
+    } else if (mapUrl === null) {
+      snapshot.mapUrl = null;
+    }
+  }
+
+  if (Object.prototype.hasOwnProperty.call(raw, 'placements')) {
+    snapshot.placements = cloneBoardSection(raw.placements);
+  }
+
+  if (Object.prototype.hasOwnProperty.call(raw, 'sceneState')) {
+    snapshot.sceneState = cloneBoardSection(raw.sceneState);
+  }
+
+  if (Object.prototype.hasOwnProperty.call(raw, 'templates')) {
+    snapshot.templates = cloneBoardSection(raw.templates);
+  }
+
+  if (Object.prototype.hasOwnProperty.call(raw, 'overlay')) {
+    const overlay = cloneBoardSection(raw.overlay);
+    snapshot.overlay = overlay && typeof overlay === 'object' ? overlay : {};
+  }
+
+  if (Object.prototype.hasOwnProperty.call(raw, 'pings')) {
+    snapshot.pings = Array.isArray(raw.pings) ? [...raw.pings] : [];
+  }
+
+  if (Object.prototype.hasOwnProperty.call(raw, 'metadata')) {
+    const metadata = cloneBoardSection(raw.metadata);
+    if (metadata && typeof metadata === 'object') {
+      snapshot.metadata = metadata;
+    } else if (raw.metadata === null) {
+      snapshot.metadata = null;
+    }
+  }
+
+  return snapshot;
+}
+
+function cloneBoardSection(section) {
+  if (!section || typeof section !== 'object') {
+    return {};
+  }
+  try {
+    return JSON.parse(JSON.stringify(section));
+  } catch (error) {
+    return {};
+  }
+}
 
 function normalizeSceneState(raw = {}) {
   if (Array.isArray(raw)) {
