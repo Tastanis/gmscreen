@@ -4,6 +4,8 @@ declare(strict_types=1);
 require_once __DIR__ . '/../bootstrap.php';
 require_once __DIR__ . '/state_helpers.php';
 
+const VTT_PING_RETENTION_MS = 10000;
+
 if (!defined('VTT_STATE_API_INCLUDE_ONLY')) {
     header('Content-Type: application/json');
 
@@ -427,6 +429,9 @@ function normalizePingsPayload(array $rawPings): array
 {
     $byId = [];
 
+    $nowMs = (int) round(microtime(true) * 1000);
+    $retentionThreshold = max(0, $nowMs - VTT_PING_RETENTION_MS);
+
     foreach ($rawPings as $entry) {
         if (!is_array($entry)) {
             continue;
@@ -434,6 +439,10 @@ function normalizePingsPayload(array $rawPings): array
 
         $ping = normalizePingEntry($entry);
         if ($ping === null) {
+            continue;
+        }
+
+        if ($ping['createdAt'] < $retentionThreshold) {
             continue;
         }
 
