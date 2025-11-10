@@ -18,7 +18,6 @@ let isDeleteModeActive = false;
 // Print mode state
 let isPrintMode = false;
 let selectedForPrint = new Set();
-const MAX_PRINT_SELECTION = 2;
 
 let currentMainTab = 'default';
 let currentSubTab = 'default-sub';
@@ -3535,13 +3534,9 @@ function toggleMonsterPrintSelection(monsterId) {
     if (selectedForPrint.has(monsterId)) {
         // Deselect
         selectedForPrint.delete(monsterId);
-    } else if (selectedForPrint.size < MAX_PRINT_SELECTION) {
-        // Select if under limit
-        selectedForPrint.add(monsterId);
     } else {
-        // Show message that max selection reached
-        alert('You can select a maximum of 2 monsters for printing');
-        return;
+        // Select
+        selectedForPrint.add(monsterId);
     }
     
     // Update visual state
@@ -3568,7 +3563,7 @@ function updateMonsterSelectionVisual(monsterId) {
 function updateSelectionCount() {
     const countElement = document.getElementById('selectionCount');
     if (countElement) {
-        countElement.textContent = `${selectedForPrint.size}/${MAX_PRINT_SELECTION} selected`;
+        countElement.textContent = `${selectedForPrint.size} selected`;
     }
 }
 
