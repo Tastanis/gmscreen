@@ -2508,6 +2508,11 @@ body.delete-mode-active .sub-tab:hover {
 }
 
 /* Print Styles */
+@page {
+    size: auto;
+    margin: 0;
+}
+
 @media print {
     body {
         margin: 0;
@@ -2550,17 +2555,22 @@ body.delete-mode-active .sub-tab:hover {
         padding: 0 !important;
         top: 0 !important;
         left: 0 !important;
+        width: 100vw !important;
+        min-height: 100vh !important;
+        height: auto !important;
+        max-width: none !important;
     }
-    
+
     .print-preview-content {
-        width: 100%;
+        width: 100vw;
         max-width: none;
         height: auto;
+        min-height: 100vh;
         border-radius: 0;
         margin: 0 !important;
         padding: 0 !important;
     }
-    
+
     .print-preview-body {
         padding: 0;
         background: white;
@@ -2573,6 +2583,10 @@ body.delete-mode-active .sub-tab:hover {
         flex-direction: column;
         page-break-before: avoid !important;
         margin-top: 0 !important;
+        width: 100vw;
+        max-width: none;
+        min-height: 100vh;
+        height: auto;
     }
 
     .print-preview-layout .print-page {
