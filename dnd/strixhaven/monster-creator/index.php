@@ -65,7 +65,7 @@ require_once '../../version.php';
                 
                 <!-- Print Controls (shown only in print mode) -->
                 <div class="print-controls" id="printControls" style="display: none;">
-                    <span class="selection-count" id="selectionCount">0/2 selected</span>
+                    <span class="selection-count" id="selectionCount">0 selected</span>
                     <button class="btn-print-preview" onclick="showPrintPreview()">Preview</button>
                     <button class="btn-print" onclick="printMonsters()">Print</button>
                     <button class="btn-clear-selection" onclick="clearPrintSelection()">Clear</button>
