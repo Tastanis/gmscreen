@@ -476,6 +476,15 @@ export function mountBoardInteractions(store, routes = {}) {
   }
   if (!mapOverlay) return;
 
+  if (
+    !trackerOverflowResizeListenerAttached &&
+    typeof window !== 'undefined' &&
+    typeof window.addEventListener === 'function'
+  ) {
+    window.addEventListener('resize', scheduleTrackerOverflowRefresh, { passive: true });
+    trackerOverflowResizeListenerAttached = true;
+  }
+
   const defaultStatusText = status?.textContent ?? '';
   if (turnTimerDisplay) {
     turnTimerDisplay.textContent = TURN_TIMER_INITIAL_DISPLAY;
@@ -956,6 +965,8 @@ export function mountBoardInteractions(store, routes = {}) {
   let damageHealStatusTimeoutId = null;
   const completedCombatants = new Set();
   const combatantTeams = new Map();
+  let trackerOverflowAnimationFrame = null;
+  let trackerOverflowResizeListenerAttached = false;
   let combatActive = false;
   let combatRound = 0;
   let activeCombatantId = null;
@@ -4587,6 +4598,20 @@ export function mountBoardInteractions(store, routes = {}) {
           .filter((entry) => gmViewing || !toBoolean(entry.hidden ?? entry.isHidden ?? false, false))
       : [];
 
+    combatTrackerRoot.dataset.viewerRole = gmViewing ? 'gm' : 'player';
+
+    const originalOrder = new Map();
+    entries.forEach((entry, index) => {
+      if (!entry || typeof entry !== 'object') {
+        return;
+      }
+      const id = typeof entry.id === 'string' ? entry.id : null;
+      if (!id) {
+        return;
+      }
+      originalOrder.set(id, index);
+    });
+
     combatantTeams.clear();
     entries.forEach((entry) => {
       if (!entry || typeof entry !== 'object') {
@@ -4599,6 +4624,42 @@ export function mountBoardInteractions(store, routes = {}) {
       const team = normalizeCombatTeam(entry.team ?? entry.combatTeam ?? null);
       combatantTeams.set(id, team);
     });
+
+    if (!gmViewing) {
+      const playerProfileIds = new Map();
+      const prioritizedPcIds = [];
+      entries.forEach((entry) => {
+        if (!entry || typeof entry !== 'object') {
+          return;
+        }
+        const id = typeof entry.id === 'string' ? entry.id : null;
+        if (!id) {
+          return;
+        }
+        const profileId = getCombatantProfileId(id);
+        if (profileId && !playerProfileIds.has(id)) {
+          playerProfileIds.set(id, profileId);
+          if (prioritizedPcIds.length < 4) {
+            prioritizedPcIds.push(id);
+          }
+        }
+      });
+
+      const prioritizedPcSet = new Set(prioritizedPcIds);
+
+      entries.sort((a, b) => {
+        const aId = typeof a?.id === 'string' ? a.id : '';
+        const bId = typeof b?.id === 'string' ? b.id : '';
+        const aCategory = getPlayerTrackerSortCategory(aId, playerProfileIds, prioritizedPcSet);
+        const bCategory = getPlayerTrackerSortCategory(bId, playerProfileIds, prioritizedPcSet);
+        if (aCategory !== bCategory) {
+          return aCategory - bCategory;
+        }
+        const aIndex = originalOrder.get(aId) ?? 0;
+        const bIndex = originalOrder.get(bId) ?? 0;
+        return aIndex - bIndex;
+      });
+    }
 
     if (!options?.skipCache) {
       lastCombatTrackerEntries = entries.map(cloneCombatantEntry).filter(Boolean);
@@ -4720,6 +4781,85 @@ export function mountBoardInteractions(store, routes = {}) {
     attachTrackerHoverHandlers(completedContainer);
     refreshCombatantStateClasses();
     updateCombatModeIndicators();
+
+    if (gmViewing) {
+      cancelTrackerOverflowRefresh();
+      refreshTrackerOverflowIndicators();
+    } else {
+      setSectionOverflowState(waitingContainer, false);
+      setSectionOverflowState(completedContainer, false);
+      scheduleTrackerOverflowRefresh();
+    }
+  }
+
+  function getPlayerTrackerSortCategory(combatantId, playerProfileIds, prioritizedPcSet) {
+    if (typeof combatantId !== 'string' || !combatantId) {
+      return 3;
+    }
+    if (prioritizedPcSet?.has(combatantId)) {
+      return 0;
+    }
+    if (playerProfileIds?.has(combatantId)) {
+      return 1;
+    }
+    const team = combatantTeams.get(combatantId);
+    if (team === 'ally') {
+      return 1;
+    }
+    if (team === 'enemy') {
+      return 2;
+    }
+    return 3;
+  }
+
+  function setSectionOverflowState(section, overflowed) {
+    if (!section) {
+      return;
+    }
+    section.dataset.overflow = overflowed ? 'true' : 'false';
+  }
+
+  function cancelTrackerOverflowRefresh() {
+    if (
+      trackerOverflowAnimationFrame !== null &&
+      typeof window !== 'undefined' &&
+      typeof window.cancelAnimationFrame === 'function'
+    ) {
+      window.cancelAnimationFrame(trackerOverflowAnimationFrame);
+    }
+    trackerOverflowAnimationFrame = null;
+  }
+
+  function refreshTrackerOverflowIndicators() {
+    if (!combatTrackerRoot || !combatTrackerWaiting || !combatTrackerCompleted) {
+      return;
+    }
+    const viewerRole = combatTrackerRoot.dataset.viewerRole ?? 'gm';
+    if (viewerRole !== 'player') {
+      setSectionOverflowState(combatTrackerWaiting, false);
+      setSectionOverflowState(combatTrackerCompleted, false);
+      return;
+    }
+    const sections = [combatTrackerWaiting, combatTrackerCompleted];
+    sections.forEach((section) => {
+      if (!section) {
+        return;
+      }
+      const overflowed = section.scrollHeight > section.clientHeight + 1;
+      setSectionOverflowState(section, overflowed);
+    });
+  }
+
+  function scheduleTrackerOverflowRefresh() {
+    cancelTrackerOverflowRefresh();
+    if (typeof window === 'undefined' || typeof window.requestAnimationFrame !== 'function') {
+      refreshTrackerOverflowIndicators();
+      return;
+    }
+    trackerOverflowAnimationFrame = window.requestAnimationFrame(() => {
+      trackerOverflowAnimationFrame = null;
+      refreshTrackerOverflowIndicators();
+    });
   }
 
   function cloneCombatantEntry(entry) {
