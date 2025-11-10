@@ -3589,48 +3589,156 @@ function showPrintPreview() {
         alert('Please select at least one monster to print');
         return;
     }
-    
+
     const modal = document.getElementById('printPreviewModal');
     const previewBody = document.getElementById('printPreviewBody');
-    
-    // Generate print preview content
-    let previewHtml = '<div class="print-preview-layout">';
-    
+
     const selectedMonsters = Array.from(selectedForPrint);
-    
-    // Create two-column layout
-    if (selectedMonsters.length === 1) {
-        // Single monster - one column
-        const monsterId = selectedMonsters[0];
-        const monster = monsterData.monsters[monsterId];
-        previewHtml += '<div class="print-column print-column-single">';
-        previewHtml += renderMonsterForPrint(monsterId, monster);
-        previewHtml += '</div>';
-    } else {
-        // Two monsters - two columns
-        previewHtml += '<div class="print-column print-column-left">';
-        previewHtml += renderMonsterForPrint(selectedMonsters[0], monsterData.monsters[selectedMonsters[0]]);
-        previewHtml += '</div>';
-        
-        previewHtml += '<div class="print-column print-column-right">';
-        previewHtml += renderMonsterForPrint(selectedMonsters[1], monsterData.monsters[selectedMonsters[1]]);
-        previewHtml += '</div>';
-    }
-    
+    const measurementContainer = getPrintMeasurementContainer();
+    const SINGLE_COLUMN_MAX_HEIGHT = getSingleColumnHeightLimit(measurementContainer);
+
+    const measuredMonsters = selectedMonsters
+        .map(monsterId => {
+            const monster = monsterData.monsters[monsterId];
+            if (!monster) {
+                return null;
+            }
+
+            const rawHtml = renderMonsterForPrint(monsterId, monster);
+            const height = measureMonsterHeight(rawHtml, measurementContainer);
+            const isFullPage = height > SINGLE_COLUMN_MAX_HEIGHT;
+            const finalHtml = renderMonsterForPrint(monsterId, monster, { isFullPage });
+
+            return {
+                id: monsterId,
+                html: finalHtml,
+                height,
+                isFullPage
+            };
+        })
+        .filter(Boolean);
+
+    measurementContainer.innerHTML = '';
+
+    const pages = buildPrintPages(measuredMonsters, SINGLE_COLUMN_MAX_HEIGHT);
+
+    let previewHtml = '<div class="print-preview-layout">';
+
+    pages.forEach(page => {
+        if (page.type === 'full') {
+            previewHtml += '<div class="print-page print-page-full">';
+            previewHtml += `<div class="print-full-width">${page.monsters[0].html}</div>`;
+            previewHtml += '</div>';
+        } else {
+            const columnContent = [[], []];
+            page.monsters.forEach(monster => {
+                columnContent[monster.columnIndex].push(monster.html);
+            });
+
+            previewHtml += '<div class="print-page">';
+            previewHtml += '<div class="print-columns">';
+            previewHtml += `<div class="print-column print-column-left">${columnContent[0].join('')}</div>`;
+            previewHtml += `<div class="print-column print-column-right">${columnContent[1].join('')}</div>`;
+            previewHtml += '</div>';
+            previewHtml += '</div>';
+        }
+    });
+
     previewHtml += '</div>';
-    
+
     previewBody.innerHTML = previewHtml;
     modal.style.display = 'flex';
+}
+
+function getPrintMeasurementContainer() {
+    let container = document.getElementById('printMeasurementContainer');
+    if (!container) {
+        container = document.createElement('div');
+        container.id = 'printMeasurementContainer';
+        document.body.appendChild(container);
+    }
+    return container;
+}
+
+function getSingleColumnHeightLimit(container) {
+    const height = container ? container.clientHeight : 0;
+    if (height && height > 0) {
+        return height;
+    }
+    // Fallback to approximately 10.5 inches at 96 DPI if container is not measurable yet
+    return Math.round(10.5 * 96);
+}
+
+function measureMonsterHeight(monsterHtml, container) {
+    const wrapper = document.createElement('div');
+    wrapper.className = 'print-measure-wrapper';
+    wrapper.innerHTML = `<div class="print-column print-column-measure">${monsterHtml}</div>`;
+    container.appendChild(wrapper);
+    const height = wrapper.scrollHeight;
+    container.removeChild(wrapper);
+    return height;
+}
+
+function buildPrintPages(monsters, maxColumnHeight) {
+    const pages = [];
+    let currentPage = createNormalPrintPage();
+
+    monsters.forEach(monster => {
+        if (monster.isFullPage) {
+            if (currentPage.monsters.length > 0) {
+                pages.push(currentPage);
+                currentPage = createNormalPrintPage();
+            }
+            pages.push({
+                type: 'full',
+                monsters: [monster]
+            });
+            return;
+        }
+
+        if (!currentPage) {
+            currentPage = createNormalPrintPage();
+        }
+
+        let targetColumn = currentPage.columnHeights[0] <= currentPage.columnHeights[1] ? 0 : 1;
+
+        if (currentPage.columnHeights[targetColumn] + monster.height > maxColumnHeight) {
+            pages.push(currentPage);
+            currentPage = createNormalPrintPage();
+            targetColumn = 0;
+        }
+
+        monster.columnIndex = targetColumn;
+        currentPage.monsters.push(monster);
+        currentPage.columnHeights[targetColumn] += monster.height;
+    });
+
+    if (currentPage && currentPage.monsters.length > 0) {
+        pages.push(currentPage);
+    }
+
+    return pages;
+}
+
+function createNormalPrintPage() {
+    return {
+        type: 'normal',
+        monsters: [],
+        columnHeights: [0, 0]
+    };
 }
 
 function closePrintPreview() {
     document.getElementById('printPreviewModal').style.display = 'none';
 }
 
-function renderMonsterForPrint(monsterId, monsterData) {
+function renderMonsterForPrint(monsterId, monsterData, options = {}) {
     if (!monsterData) return '<div class="print-monster">Monster not found</div>';
-    
-    let html = '<div class="print-monster">';
+
+    const { isFullPage = false } = options;
+    const classes = ['print-monster', isFullPage ? 'print-monster-full' : 'print-monster-normal'];
+
+    let html = `<div class="${classes.join(' ')}" data-monster-id="${monsterId}" data-print-size="${isFullPage ? 'full' : 'normal'}">`;
     
     // Add image if available
     if (monsterData.image) {
