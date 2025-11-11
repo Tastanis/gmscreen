@@ -18,6 +18,7 @@ import { showCombatTimerReport } from './combat-timer-report.js';
 const OVERLAY_LAYER_PREFIX = 'overlay-layer-';
 let overlayLayerSeed = Date.now();
 let overlayLayerSequence = 0;
+let trackerOverflowResizeListenerAttached = false;
 
 export function createBoardStatePoller({
   routes,
@@ -966,7 +967,6 @@ export function mountBoardInteractions(store, routes = {}) {
   const completedCombatants = new Set();
   const combatantTeams = new Map();
   let trackerOverflowAnimationFrame = null;
-  let trackerOverflowResizeListenerAttached = false;
   let combatActive = false;
   let combatRound = 0;
   let activeCombatantId = null;
