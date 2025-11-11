@@ -121,6 +121,7 @@ class VttDiceRoller {
     modifierRow.className = 'dice-row dice-row--quick dice-row--quick-secondary';
     modifierRow.appendChild(this.createQuickButton('Edge', '+2'));
     modifierRow.appendChild(this.createQuickButton('Bane', '-2'));
+    modifierRow.appendChild(this.createQuickButton('-1', '-1'));
     modifierRow.appendChild(this.createQuickButton('+1', '+1'));
     modifierRow.appendChild(this.createQuickButton('+2', '+2'));
     container.appendChild(modifierRow);
