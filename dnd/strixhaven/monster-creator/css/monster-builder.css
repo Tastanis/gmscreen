@@ -2509,13 +2509,13 @@ body.delete-mode-active .sub-tab:hover {
         margin-top: 0 !important;
         width: 100vw;
         max-width: none;
-        min-height: 100vh;
         height: auto;
     }
 
     .print-columns-flow {
         column-count: 2;
         column-gap: 18px;
+        column-fill: auto;
         width: 100%;
         margin: 0;
         padding: 0 10px;
