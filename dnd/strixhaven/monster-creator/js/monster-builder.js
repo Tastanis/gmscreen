@@ -3595,7 +3595,8 @@ function showPrintPreview() {
 
     const selectedMonsters = Array.from(selectedForPrint);
     const measurementContainer = getPrintMeasurementContainer();
-    const SINGLE_COLUMN_MAX_HEIGHT = getSingleColumnHeightLimit(measurementContainer);
+    const columnLayoutMetrics = getColumnLayoutMetrics(measurementContainer);
+    const SINGLE_COLUMN_MAX_HEIGHT = getSingleColumnHeightLimit(measurementContainer, columnLayoutMetrics);
 
     const measuredMonsters = selectedMonsters
         .map(monsterId => {
@@ -3620,7 +3621,7 @@ function showPrintPreview() {
 
     measurementContainer.innerHTML = '';
 
-    const pages = buildPrintPages(measuredMonsters, SINGLE_COLUMN_MAX_HEIGHT);
+    const pages = buildPrintPages(measuredMonsters, SINGLE_COLUMN_MAX_HEIGHT, columnLayoutMetrics);
 
     let previewHtml = '<div class="print-preview-layout">';
 
@@ -3660,13 +3661,12 @@ function getPrintMeasurementContainer() {
     return container;
 }
 
-function getSingleColumnHeightLimit(container) {
+function getSingleColumnHeightLimit(container, metrics = {}) {
     const height = container ? container.clientHeight : 0;
-    if (height && height > 0) {
-        return height;
-    }
-    // Fallback to approximately 10.5 inches at 96 DPI if container is not measurable yet
-    return Math.round(10.5 * 96);
+    const baseHeight = (height && height > 0) ? height : Math.round(10.5 * 96);
+    const paddingTop = metrics.paddingTop || 0;
+    const paddingBottom = metrics.paddingBottom || 0;
+    return Math.max(baseHeight - paddingTop - paddingBottom, 0);
 }
 
 function measureMonsterHeight(monsterHtml, container) {
@@ -3674,14 +3674,16 @@ function measureMonsterHeight(monsterHtml, container) {
     wrapper.className = 'print-measure-wrapper';
     wrapper.innerHTML = `<div class="print-column print-column-measure">${monsterHtml}</div>`;
     container.appendChild(wrapper);
-    const height = wrapper.scrollHeight;
+    const monsterEl = wrapper.querySelector('.print-monster');
+    const height = monsterEl ? monsterEl.getBoundingClientRect().height : wrapper.scrollHeight;
     container.removeChild(wrapper);
-    return height;
+    return Math.ceil(height);
 }
 
-function buildPrintPages(monsters, maxColumnHeight) {
+function buildPrintPages(monsters, maxColumnHeight, metrics = {}) {
     const pages = [];
     let currentPage = createNormalPrintPage();
+    const columnGap = metrics.columnGap || 0;
 
     monsters.forEach(monster => {
         if (monster.isFullPage) {
@@ -3701,16 +3703,26 @@ function buildPrintPages(monsters, maxColumnHeight) {
         }
 
         let targetColumn = currentPage.columnHeights[0] <= currentPage.columnHeights[1] ? 0 : 1;
+        let gapForTarget = currentPage.columnHeights[targetColumn] > 0 ? columnGap : 0;
 
-        if (currentPage.columnHeights[targetColumn] + monster.height > maxColumnHeight) {
-            pages.push(currentPage);
-            currentPage = createNormalPrintPage();
-            targetColumn = 0;
+        if (currentPage.columnHeights[targetColumn] + gapForTarget + monster.height > maxColumnHeight) {
+            const otherColumn = targetColumn === 0 ? 1 : 0;
+            const gapForOther = currentPage.columnHeights[otherColumn] > 0 ? columnGap : 0;
+
+            if (currentPage.columnHeights[otherColumn] + gapForOther + monster.height <= maxColumnHeight) {
+                targetColumn = otherColumn;
+                gapForTarget = gapForOther;
+            } else {
+                pages.push(currentPage);
+                currentPage = createNormalPrintPage();
+                targetColumn = 0;
+                gapForTarget = 0;
+            }
         }
 
         monster.columnIndex = targetColumn;
         currentPage.monsters.push(monster);
-        currentPage.columnHeights[targetColumn] += monster.height;
+        currentPage.columnHeights[targetColumn] += monster.height + gapForTarget;
     });
 
     if (currentPage && currentPage.monsters.length > 0) {
@@ -3718,6 +3730,25 @@ function buildPrintPages(monsters, maxColumnHeight) {
     }
 
     return pages;
+}
+
+function getColumnLayoutMetrics(container) {
+    const column = document.createElement('div');
+    column.className = 'print-column print-column-measure';
+    container.appendChild(column);
+
+    const styles = window.getComputedStyle(column);
+    const paddingTop = parseFloat(styles.paddingTop) || 0;
+    const paddingBottom = parseFloat(styles.paddingBottom) || 0;
+    const gap = parseFloat(styles.rowGap || styles.gap || '0') || 0;
+
+    container.removeChild(column);
+
+    return {
+        paddingTop,
+        paddingBottom,
+        columnGap: gap
+    };
 }
 
 function createNormalPrintPage() {
