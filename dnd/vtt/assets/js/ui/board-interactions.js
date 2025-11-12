@@ -10261,6 +10261,24 @@ export function mountBoardInteractions(store, routes = {}) {
   function attachTokenSettingsListeners() {
     const handlePointerDown = (event) => {
       const target = event?.target ?? null;
+      const customConditionOverlay = activeCustomConditionDialog?.overlay ?? null;
+
+      if (
+        customConditionOverlay &&
+        typeof customConditionOverlay.contains === 'function' &&
+        customConditionOverlay.contains(target)
+      ) {
+        return;
+      }
+
+      if (
+        !customConditionOverlay &&
+        target &&
+        typeof target.closest === 'function' &&
+        target.closest('.vtt-custom-condition-overlay')
+      ) {
+        return;
+      }
       if (tokenSettingsMenu?.element?.contains(target)) {
         return;
       }
