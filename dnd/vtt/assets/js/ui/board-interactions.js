@@ -634,6 +634,11 @@ export function mountBoardInteractions(store, routes = {}) {
   const DRAG_ACTIVATION_DISTANCE = 6;
   const DEFAULT_HP_PLACEHOLDER = '—';
   const DEFAULT_HP_DISPLAY = `${DEFAULT_HP_PLACEHOLDER} / ${DEFAULT_HP_PLACEHOLDER}`;
+  const CUSTOM_CONDITION_DEFINITION = {
+    name: 'Other',
+    description: '',
+    isCustom: true,
+  };
   const CONDITION_DEFINITIONS = [
     {
       name: 'Bleeding',
@@ -678,17 +683,20 @@ export function mountBoardInteractions(store, routes = {}) {
       name: 'Weakened',
       description: 'While you are weakened, all your power rolls take a bane.',
     },
+    CUSTOM_CONDITION_DEFINITION,
   ];
   const CONDITION_NAMES = CONDITION_DEFINITIONS.map((definition) => definition.name);
   const CONDITION_DEFINITION_MAP = new Map(
     CONDITION_DEFINITIONS.map((definition) => [definition.name.toLowerCase(), definition])
   );
+  const CUSTOM_CONDITION_NAME = CUSTOM_CONDITION_DEFINITION.name;
   const CONDITION_ALIASES = new Map([
     ['grappled', 'Grabbed'],
   ]);
   const conditionTooltipRegistry = new WeakMap();
   let conditionTooltipElement = null;
   let conditionTooltipActiveTarget = null;
+  let activeCustomConditionDialog = null;
 
   function getConditionDefinition(name) {
     if (typeof name !== 'string') {
@@ -9560,7 +9568,7 @@ export function mountBoardInteractions(store, routes = {}) {
       if (!name) {
         return null;
       }
-      return { name, duration: { type: 'save-ends' } };
+      return { name, description: '', duration: { type: 'save-ends' } };
     }
 
     if (typeof value !== 'object') {
@@ -9590,6 +9598,13 @@ export function mountBoardInteractions(store, routes = {}) {
     );
 
     const duration = { type: durationType };
+
+    const description =
+      typeof value.description === 'string'
+        ? value.description.trim()
+        : typeof value.text === 'string'
+        ? value.text.trim()
+        : '';
 
     const targetTokenId =
       typeof durationSource?.targetTokenId === 'string'
@@ -9622,7 +9637,7 @@ export function mountBoardInteractions(store, routes = {}) {
       }
     }
 
-    return { name, duration };
+    return { name, description, duration };
   }
 
   function ensurePlacementCondition(value) {
@@ -9632,6 +9647,9 @@ export function mountBoardInteractions(store, routes = {}) {
     }
 
     const condition = { name: normalized.name };
+    if (typeof normalized.description === 'string' && normalized.description.trim()) {
+      condition.description = normalized.description.trim();
+    }
     if (normalized.duration && typeof normalized.duration === 'object') {
       condition.duration = { type: normalized.duration.type };
       if (normalized.duration.targetTokenId) {
@@ -9687,6 +9705,68 @@ export function mountBoardInteractions(store, routes = {}) {
     return normalizePlacementConditions(value)
       .map((condition) => ensurePlacementCondition(condition))
       .filter(Boolean);
+  }
+
+  function findExistingConditionDescription(name, options = {}) {
+    const normalizedName =
+      typeof name === 'string' ? name.trim().toLowerCase() : '';
+    if (!normalizedName) {
+      return '';
+    }
+
+    const excludePlacementId =
+      typeof options.excludePlacementId === 'string'
+        ? options.excludePlacementId
+        : null;
+
+    const placements = getPlacementsForActiveScene();
+    if (!Array.isArray(placements) || placements.length === 0) {
+      return '';
+    }
+
+    for (const placement of placements) {
+      if (!placement || typeof placement !== 'object') {
+        continue;
+      }
+
+      const placementId = typeof placement.id === 'string' ? placement.id : '';
+      if (excludePlacementId && placementId === excludePlacementId) {
+        continue;
+      }
+
+      const conditions = ensurePlacementConditions(
+        placement?.conditions ?? placement?.condition ?? null
+      );
+
+      if (!conditions.length) {
+        continue;
+      }
+
+      for (const condition of conditions) {
+        const candidateName =
+          typeof condition?.name === 'string'
+            ? condition.name.trim().toLowerCase()
+            : '';
+        if (candidateName !== normalizedName) {
+          continue;
+        }
+
+        const description =
+          typeof condition?.description === 'string'
+            ? condition.description.trim()
+            : '';
+        if (description) {
+          return description;
+        }
+
+        const definition = getConditionDefinition(condition?.name ?? '');
+        if (definition?.description) {
+          return definition.description;
+        }
+      }
+    }
+
+    return '';
   }
 
   function buildConditionKey(condition) {
@@ -9946,6 +10026,7 @@ export function mountBoardInteractions(store, routes = {}) {
       menu.conditionSelect.addEventListener('change', () => {
         updateConditionDurationStyles();
         updateConditionControlState();
+        handleConditionSelectionChange(menu.conditionSelect.value);
       });
     }
 
@@ -10130,6 +10211,7 @@ export function mountBoardInteractions(store, routes = {}) {
     }
 
     dismissConditionPrompt();
+    closeCustomConditionDialog();
 
     if (tokenSettingsMenu?.element) {
       tokenSettingsMenu.element.hidden = true;
@@ -10651,6 +10733,31 @@ export function mountBoardInteractions(store, routes = {}) {
     }
   }
 
+  function handleConditionSelectionChange(rawValue) {
+    if (!activeTokenSettingsId) {
+      return;
+    }
+
+    const selection = typeof rawValue === 'string' ? rawValue.trim() : '';
+    if (!selection) {
+      return;
+    }
+
+    if (selection.toLowerCase() !== CUSTOM_CONDITION_NAME.toLowerCase()) {
+      return;
+    }
+
+    if (tokenSettingsMenu?.conditionSelect) {
+      tokenSettingsMenu.conditionSelect.value = '';
+    }
+
+    ensureDefaultConditionDuration();
+    updateConditionDurationStyles();
+    updateConditionControlState();
+
+    handleCustomConditionRequest();
+  }
+
   function handleTokenConditionApply() {
     if (!activeTokenSettingsId) {
       return;
@@ -10665,6 +10772,11 @@ export function mountBoardInteractions(store, routes = {}) {
       return;
     }
 
+    if (conditionName.toLowerCase() === CUSTOM_CONDITION_NAME.toLowerCase()) {
+      handleCustomConditionRequest();
+      return;
+    }
+
     const duration = getSelectedConditionDuration();
     if (duration === 'save-ends') {
       applyConditionToPlacement(activeTokenSettingsId, {
@@ -10674,7 +10786,345 @@ export function mountBoardInteractions(store, routes = {}) {
       return;
     }
 
-    promptConditionTargetSelection(activeTokenSettingsId, conditionName);
+    promptConditionTargetSelection(activeTokenSettingsId, { name: conditionName });
+  }
+
+  function handleCustomConditionRequest() {
+    if (!activeTokenSettingsId) {
+      return;
+    }
+
+    const duration = getSelectedConditionDuration();
+    openCustomConditionDialog({
+      placementId: activeTokenSettingsId,
+      initialDuration: duration,
+    });
+  }
+
+  function openCustomConditionDialog(options = {}) {
+    const placementId =
+      typeof options.placementId === 'string' ? options.placementId.trim() : '';
+    if (!placementId || !document?.body) {
+      return;
+    }
+
+    closeCustomConditionDialog();
+
+    const initialName =
+      typeof options.initialName === 'string' ? options.initialName.trim() : '';
+    const initialDescription =
+      typeof options.initialDescription === 'string'
+        ? options.initialDescription.trim()
+        : '';
+    const initialDuration = normalizeConditionDurationValue(
+      options.initialDuration
+    );
+
+    const overlay = document.createElement('div');
+    overlay.className = 'vtt-custom-condition-overlay';
+    overlay.innerHTML = `
+      <div
+        class="vtt-custom-condition-dialog"
+        role="dialog"
+        aria-modal="true"
+        data-custom-condition-dialog
+      >
+        <form class="vtt-custom-condition-dialog__form" data-custom-condition-form novalidate>
+          <header class="vtt-custom-condition-dialog__header">
+            <h3 class="vtt-custom-condition-dialog__title">Add Custom Condition</h3>
+            <button
+              type="button"
+              class="vtt-custom-condition-dialog__close"
+              data-custom-condition-cancel
+              aria-label="Cancel custom condition"
+            >&times;</button>
+          </header>
+          <div class="vtt-custom-condition-dialog__body">
+            <label class="vtt-custom-condition-dialog__label" for="vtt-custom-condition-name">Condition name</label>
+            <input
+              id="vtt-custom-condition-name"
+              class="vtt-custom-condition-dialog__input"
+              type="text"
+              data-custom-condition-name
+              autocomplete="off"
+              autocapitalize="none"
+              spellcheck="false"
+              required
+            />
+            <p class="vtt-custom-condition-dialog__error" data-custom-condition-error hidden></p>
+            <label class="vtt-custom-condition-dialog__label" for="vtt-custom-condition-description">Rules (optional)</label>
+            <textarea
+              id="vtt-custom-condition-description"
+              class="vtt-custom-condition-dialog__textarea"
+              data-custom-condition-description
+              rows="5"
+              placeholder=""
+            ></textarea>
+            <p class="vtt-custom-condition-dialog__hint">
+              Leave the rules blank to reuse the most recent text for the same name.
+            </p>
+            <fieldset class="vtt-custom-condition-dialog__duration" data-custom-condition-duration-group>
+              <legend class="vtt-custom-condition-dialog__duration-legend">Duration</legend>
+              <label class="vtt-custom-condition-dialog__duration-option">
+                <input
+                  type="radio"
+                  name="vtt-custom-condition-duration"
+                  value="save-ends"
+                  data-custom-condition-duration
+                />
+                <span>Save Ends</span>
+              </label>
+              <label class="vtt-custom-condition-dialog__duration-option">
+                <input
+                  type="radio"
+                  name="vtt-custom-condition-duration"
+                  value="end-of-turn"
+                  data-custom-condition-duration
+                />
+                <span>End of Turn</span>
+              </label>
+            </fieldset>
+          </div>
+          <footer class="vtt-custom-condition-dialog__footer">
+            <button type="button" class="btn vtt-custom-condition-dialog__button" data-custom-condition-cancel>Cancel</button>
+            <button type="submit" class="btn btn--primary vtt-custom-condition-dialog__button" data-custom-condition-confirm>Apply</button>
+          </footer>
+        </form>
+      </div>
+    `;
+
+    document.body.appendChild(overlay);
+
+    const form = overlay.querySelector('[data-custom-condition-form]');
+    const nameInput = overlay.querySelector('[data-custom-condition-name]');
+    const descriptionInput = overlay.querySelector('[data-custom-condition-description]');
+    const errorElement = overlay.querySelector('[data-custom-condition-error]');
+    const durationRadios = Array.from(
+      overlay.querySelectorAll('[data-custom-condition-duration]')
+    );
+    const cancelButtons = Array.from(
+      overlay.querySelectorAll('[data-custom-condition-cancel]')
+    );
+
+    if (!form || !nameInput || !descriptionInput || durationRadios.length === 0) {
+      overlay.remove();
+      return;
+    }
+
+    nameInput.value = initialName;
+    descriptionInput.value = initialDescription;
+
+    const state = {
+      overlay,
+      placementId,
+      form,
+      nameInput,
+      descriptionInput,
+      errorElement,
+      durationRadios,
+      onSubmit: typeof options.onSubmit === 'function' ? options.onSubmit : null,
+      onCancel: typeof options.onCancel === 'function' ? options.onCancel : null,
+      handleOverlayPointerDown: null,
+      handleKeydown: null,
+    };
+
+    const synchronizeDurationSelection = (value) => {
+      const normalized = normalizeConditionDurationValue(value);
+      state.durationRadios.forEach((radio) => {
+        if (!isInputElement(radio)) {
+          return;
+        }
+        radio.checked = normalizeConditionDurationValue(radio.value) === normalized;
+        const label = radio.closest('label');
+        if (label) {
+          label.classList.toggle('is-selected', Boolean(radio.checked));
+        }
+      });
+    };
+
+    synchronizeDurationSelection(initialDuration);
+
+    const clearError = () => {
+      if (state.errorElement) {
+        state.errorElement.hidden = true;
+        state.errorElement.textContent = '';
+      }
+    };
+
+    const showError = (message) => {
+      if (!state.errorElement) {
+        return;
+      }
+      state.errorElement.textContent = message;
+      state.errorElement.hidden = false;
+    };
+
+    const updateDescriptionPlaceholder = () => {
+      const existing = findExistingConditionDescription(state.nameInput.value, {
+        excludePlacementId: placementId,
+      });
+      if (existing) {
+        state.descriptionInput.placeholder = existing;
+      } else {
+        state.descriptionInput.placeholder = '';
+      }
+    };
+
+    const getSelectedDuration = () => {
+      const checked = state.durationRadios.find((radio) => isInputElement(radio) && radio.checked);
+      return normalizeConditionDurationValue(checked?.value ?? '');
+    };
+
+    const handleSubmit = (event) => {
+      event.preventDefault();
+      clearError();
+
+      const name = state.nameInput.value.trim();
+      if (!name) {
+        showError('Enter a name for the condition.');
+        state.nameInput.focus();
+        return;
+      }
+
+      let description = state.descriptionInput.value.trim();
+      if (!description) {
+        const fallback = findExistingConditionDescription(name, {
+          excludePlacementId: placementId,
+        });
+        if (fallback) {
+          description = fallback;
+        } else if (state.descriptionInput.placeholder) {
+          description = state.descriptionInput.placeholder.trim();
+        }
+      }
+
+      const payload = {
+        name,
+        description,
+        duration: getSelectedDuration(),
+      };
+
+      const submitCallback = state.onSubmit;
+      closeCustomConditionDialog();
+      if (submitCallback) {
+        submitCallback(payload);
+      } else {
+        applyCustomConditionPayload(state.placementId, payload);
+      }
+    };
+
+    const handleCancel = (event) => {
+      if (event) {
+        event.preventDefault();
+      }
+      const cancelCallback = state.onCancel;
+      closeCustomConditionDialog();
+      if (cancelCallback) {
+        cancelCallback();
+      } else {
+        if (tokenSettingsMenu?.conditionSelect) {
+          tokenSettingsMenu.conditionSelect.value = '';
+        }
+        ensureDefaultConditionDuration();
+        updateConditionDurationStyles();
+        updateConditionControlState();
+      }
+    };
+
+    form.addEventListener('submit', handleSubmit);
+    cancelButtons.forEach((button) => {
+      button.addEventListener('click', handleCancel);
+    });
+
+    state.handleOverlayPointerDown = (event) => {
+      if (event.target === overlay) {
+        handleCancel(event);
+      }
+    };
+
+    overlay.addEventListener('pointerdown', state.handleOverlayPointerDown);
+
+    state.handleKeydown = (event) => {
+      if (event.key === 'Escape') {
+        event.preventDefault();
+        handleCancel(event);
+      }
+    };
+
+    document.addEventListener('keydown', state.handleKeydown, true);
+
+    state.nameInput.addEventListener('input', () => {
+      clearError();
+      updateDescriptionPlaceholder();
+    });
+
+    activeCustomConditionDialog = {
+      ...state,
+      handleSubmit,
+      handleCancel,
+    };
+
+    window.setTimeout(() => {
+      state.nameInput.focus();
+      if (initialName) {
+        state.nameInput.select();
+      }
+      updateDescriptionPlaceholder();
+    }, 0);
+  }
+
+  function closeCustomConditionDialog() {
+    if (!activeCustomConditionDialog) {
+      return;
+    }
+
+    const state = activeCustomConditionDialog;
+    activeCustomConditionDialog = null;
+
+    if (state.overlay && state.handleOverlayPointerDown) {
+      state.overlay.removeEventListener('pointerdown', state.handleOverlayPointerDown);
+    }
+
+    if (state.overlay?.parentNode) {
+      state.overlay.remove();
+    }
+
+    if (state.handleKeydown) {
+      document.removeEventListener('keydown', state.handleKeydown, true);
+    }
+  }
+
+  function applyCustomConditionPayload(placementId, payload) {
+    const normalizedName =
+      typeof payload?.name === 'string' ? payload.name.trim() : '';
+    if (!placementId || !normalizedName) {
+      return;
+    }
+
+    const description =
+      typeof payload?.description === 'string' ? payload.description.trim() : '';
+    const duration = normalizeConditionDurationValue(payload?.duration ?? '');
+
+    if (duration === 'end-of-turn') {
+      resetConditionControls();
+      promptConditionTargetSelection(placementId, {
+        name: normalizedName,
+        description,
+      });
+      return;
+    }
+
+    const condition = {
+      name: normalizedName,
+      duration: { type: 'save-ends' },
+    };
+
+    if (description) {
+      condition.description = description;
+    }
+
+    applyConditionToPlacement(placementId, condition);
+    resetConditionControls();
   }
 
   function applyConditionToPlacement(placementId, condition) {
@@ -10887,14 +11337,23 @@ export function mountBoardInteractions(store, routes = {}) {
     updateConditionControlState();
   }
 
-  function promptConditionTargetSelection(placementId, conditionName) {
-    if (!placementId || !conditionName) {
+  function promptConditionTargetSelection(placementId, condition) {
+    const normalizedCondition = ensurePlacementCondition({
+      name: condition?.name,
+      description:
+        typeof condition?.description === 'string'
+          ? condition.description.trim()
+          : '',
+      duration: { type: 'save-ends' },
+    });
+
+    if (!placementId || !normalizedCondition) {
       return;
     }
 
     dismissConditionPrompt();
 
-    const normalizedName = typeof conditionName === 'string' ? conditionName.trim() : '';
+    const normalizedName = normalizedCondition.name.trim();
     if (!normalizedName) {
       return;
     }
@@ -10934,14 +11393,20 @@ export function mountBoardInteractions(store, routes = {}) {
         getPlacementFromStore(targetId) ?? placements.find((item) => item?.id === targetId) ?? null;
       const targetName = targetPlacement ? tokenLabel(targetPlacement) : tokenElement.dataset?.tokenName || '';
 
-      applyConditionToPlacement(placementId, {
+      const appliedCondition = {
         name: normalizedName,
         duration: {
           type: 'end-of-turn',
           targetTokenId: targetId,
           targetTokenName: targetName,
         },
-      });
+      };
+
+      if (normalizedCondition.description) {
+        appliedCondition.description = normalizedCondition.description;
+      }
+
+      applyConditionToPlacement(placementId, appliedCondition);
 
       if (bannerId) {
         dismissConditionBanner(bannerId);
