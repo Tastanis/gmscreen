@@ -208,14 +208,18 @@ body.delete-mode-active .sub-tab:hover {
     min-height: 100%;
 }
 
-.print-columns-flow {
+#printPreviewBody .print-columns-flow {
     column-count: 2;
     column-gap: 24px;
+    column-fill: balance;
+}
+
+.print-columns-flow {
     width: 100%;
 }
 
 .print-columns-flow .print-monster {
-    display: inline-block;
+    display: block;
     width: 100%;
     margin: 0 0 20px;
     break-inside: avoid;
