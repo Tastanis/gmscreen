@@ -3593,170 +3593,33 @@ function showPrintPreview() {
     const modal = document.getElementById('printPreviewModal');
     const previewBody = document.getElementById('printPreviewBody');
 
-    const selectedMonsters = Array.from(selectedForPrint);
-    const measurementContainer = getPrintMeasurementContainer();
-    const columnLayoutMetrics = getColumnLayoutMetrics(measurementContainer);
-    const SINGLE_COLUMN_MAX_HEIGHT = getSingleColumnHeightLimit(measurementContainer, columnLayoutMetrics);
-
-    const measuredMonsters = selectedMonsters
+    const selectedMonsters = Array.from(selectedForPrint)
         .map(monsterId => {
             const monster = monsterData.monsters[monsterId];
             if (!monster) {
                 return null;
             }
 
-            const rawHtml = renderMonsterForPrint(monsterId, monster);
-            const height = measureMonsterHeight(rawHtml, measurementContainer);
-            const isFullPage = height > SINGLE_COLUMN_MAX_HEIGHT;
-            const finalHtml = renderMonsterForPrint(monsterId, monster, { isFullPage });
-
-            return {
-                id: monsterId,
-                html: finalHtml,
-                height,
-                isFullPage
-            };
+            return renderMonsterForPrint(monsterId, monster);
         })
         .filter(Boolean);
 
-    measurementContainer.innerHTML = '';
+    if (selectedMonsters.length === 0) {
+        previewBody.innerHTML = '<p>No monsters available for print.</p>';
+        modal.style.display = 'flex';
+        return;
+    }
 
-    const pages = buildPrintPages(measuredMonsters, SINGLE_COLUMN_MAX_HEIGHT, columnLayoutMetrics);
-
-    let previewHtml = '<div class="print-preview-layout">';
-
-    pages.forEach(page => {
-        if (page.type === 'full') {
-            previewHtml += '<div class="print-page print-page-full">';
-            previewHtml += `<div class="print-full-width">${page.monsters[0].html}</div>`;
-            previewHtml += '</div>';
-        } else {
-            const columnContent = [[], []];
-            page.monsters.forEach(monster => {
-                columnContent[monster.columnIndex].push(monster.html);
-            });
-
-            previewHtml += '<div class="print-page">';
-            previewHtml += '<div class="print-columns">';
-            previewHtml += `<div class="print-column print-column-left">${columnContent[0].join('')}</div>`;
-            previewHtml += `<div class="print-column print-column-right">${columnContent[1].join('')}</div>`;
-            previewHtml += '</div>';
-            previewHtml += '</div>';
-        }
-    });
-
-    previewHtml += '</div>';
+    const previewHtml = `
+        <div class="print-preview-layout">
+            <div class="print-columns-flow">
+                ${selectedMonsters.join('')}
+            </div>
+        </div>
+    `;
 
     previewBody.innerHTML = previewHtml;
     modal.style.display = 'flex';
-}
-
-function getPrintMeasurementContainer() {
-    let container = document.getElementById('printMeasurementContainer');
-    if (!container) {
-        container = document.createElement('div');
-        container.id = 'printMeasurementContainer';
-        document.body.appendChild(container);
-    }
-    return container;
-}
-
-function getSingleColumnHeightLimit(container, metrics = {}) {
-    const height = container ? container.clientHeight : 0;
-    const baseHeight = (height && height > 0) ? height : Math.round(10.5 * 96);
-    const paddingTop = metrics.paddingTop || 0;
-    const paddingBottom = metrics.paddingBottom || 0;
-    return Math.max(baseHeight - paddingTop - paddingBottom, 0);
-}
-
-function measureMonsterHeight(monsterHtml, container) {
-    const wrapper = document.createElement('div');
-    wrapper.className = 'print-measure-wrapper';
-    wrapper.innerHTML = `<div class="print-column print-column-measure">${monsterHtml}</div>`;
-    container.appendChild(wrapper);
-    const monsterEl = wrapper.querySelector('.print-monster');
-    const height = monsterEl ? monsterEl.getBoundingClientRect().height : wrapper.scrollHeight;
-    container.removeChild(wrapper);
-    return Math.ceil(height);
-}
-
-function buildPrintPages(monsters, maxColumnHeight, metrics = {}) {
-    const pages = [];
-    let currentPage = createNormalPrintPage();
-    const columnGap = metrics.columnGap || 0;
-
-    monsters.forEach(monster => {
-        if (monster.isFullPage) {
-            if (currentPage.monsters.length > 0) {
-                pages.push(currentPage);
-                currentPage = createNormalPrintPage();
-            }
-            pages.push({
-                type: 'full',
-                monsters: [monster]
-            });
-            return;
-        }
-
-        if (!currentPage) {
-            currentPage = createNormalPrintPage();
-        }
-
-        let targetColumn = currentPage.columnHeights[0] <= currentPage.columnHeights[1] ? 0 : 1;
-        let gapForTarget = currentPage.columnHeights[targetColumn] > 0 ? columnGap : 0;
-
-        if (currentPage.columnHeights[targetColumn] + gapForTarget + monster.height > maxColumnHeight) {
-            const otherColumn = targetColumn === 0 ? 1 : 0;
-            const gapForOther = currentPage.columnHeights[otherColumn] > 0 ? columnGap : 0;
-
-            if (currentPage.columnHeights[otherColumn] + gapForOther + monster.height <= maxColumnHeight) {
-                targetColumn = otherColumn;
-                gapForTarget = gapForOther;
-            } else {
-                pages.push(currentPage);
-                currentPage = createNormalPrintPage();
-                targetColumn = 0;
-                gapForTarget = 0;
-            }
-        }
-
-        monster.columnIndex = targetColumn;
-        currentPage.monsters.push(monster);
-        currentPage.columnHeights[targetColumn] += monster.height + gapForTarget;
-    });
-
-    if (currentPage && currentPage.monsters.length > 0) {
-        pages.push(currentPage);
-    }
-
-    return pages;
-}
-
-function getColumnLayoutMetrics(container) {
-    const column = document.createElement('div');
-    column.className = 'print-column print-column-measure';
-    container.appendChild(column);
-
-    const styles = window.getComputedStyle(column);
-    const paddingTop = parseFloat(styles.paddingTop) || 0;
-    const paddingBottom = parseFloat(styles.paddingBottom) || 0;
-    const gap = parseFloat(styles.rowGap || styles.gap || '0') || 0;
-
-    container.removeChild(column);
-
-    return {
-        paddingTop,
-        paddingBottom,
-        columnGap: gap
-    };
-}
-
-function createNormalPrintPage() {
-    return {
-        type: 'normal',
-        monsters: [],
-        columnHeights: [0, 0]
-    };
 }
 
 function closePrintPreview() {
