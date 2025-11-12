@@ -10924,7 +10924,6 @@ export function mountBoardInteractions(store, routes = {}) {
       durationRadios,
       onSubmit: typeof options.onSubmit === 'function' ? options.onSubmit : null,
       onCancel: typeof options.onCancel === 'function' ? options.onCancel : null,
-      handleOverlayPointerDown: null,
       handleKeydown: null,
     };
 
@@ -11036,14 +11035,6 @@ export function mountBoardInteractions(store, routes = {}) {
       button.addEventListener('click', handleCancel);
     });
 
-    state.handleOverlayPointerDown = (event) => {
-      if (event.target === overlay) {
-        handleCancel(event);
-      }
-    };
-
-    overlay.addEventListener('pointerdown', state.handleOverlayPointerDown);
-
     state.handleKeydown = (event) => {
       if (event.key === 'Escape') {
         event.preventDefault();
@@ -11080,10 +11071,6 @@ export function mountBoardInteractions(store, routes = {}) {
 
     const state = activeCustomConditionDialog;
     activeCustomConditionDialog = null;
-
-    if (state.overlay && state.handleOverlayPointerDown) {
-      state.overlay.removeEventListener('pointerdown', state.handleOverlayPointerDown);
-    }
 
     if (state.overlay?.parentNode) {
       state.overlay.remove();
