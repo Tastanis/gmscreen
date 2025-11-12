@@ -242,6 +242,16 @@ body.delete-mode-active .sub-tab:hover {
     gap: 20px;
 }
 
+.print-columns-flow {
+    column-count: 2;
+    column-gap: 20px;
+}
+
+.print-columns-flow .print-monster {
+    break-inside: avoid;
+    margin-bottom: 20px;
+}
+
 .print-column {
     display: flex;
     flex-direction: column;
@@ -298,6 +308,10 @@ body.delete-mode-active .sub-tab:hover {
 
     .print-columns {
         gap: 12px;
+    }
+
+    .print-columns-flow {
+        column-gap: 12px;
     }
 
     .print-column-left,

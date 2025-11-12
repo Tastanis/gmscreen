@@ -3593,139 +3593,35 @@ function showPrintPreview() {
     const modal = document.getElementById('printPreviewModal');
     const previewBody = document.getElementById('printPreviewBody');
 
-    const selectedMonsters = Array.from(selectedForPrint);
-    const measurementContainer = getPrintMeasurementContainer();
-    const SINGLE_COLUMN_MAX_HEIGHT = getSingleColumnHeightLimit(measurementContainer);
-
-    const measuredMonsters = selectedMonsters
+    const selectedMonsters = Array.from(selectedForPrint)
         .map(monsterId => {
             const monster = monsterData.monsters[monsterId];
             if (!monster) {
                 return null;
             }
 
-            const rawHtml = renderMonsterForPrint(monsterId, monster);
-            const height = measureMonsterHeight(rawHtml, measurementContainer);
-            const isFullPage = height > SINGLE_COLUMN_MAX_HEIGHT;
-            const finalHtml = renderMonsterForPrint(monsterId, monster, { isFullPage });
-
-            return {
-                id: monsterId,
-                html: finalHtml,
-                height,
-                isFullPage
-            };
+            return renderMonsterForPrint(monsterId, monster);
         })
         .filter(Boolean);
 
-    measurementContainer.innerHTML = '';
+    if (selectedMonsters.length === 0) {
+        previewBody.innerHTML = '<p>No monsters available for print preview.</p>';
+        modal.style.display = 'flex';
+        return;
+    }
 
-    const pages = buildPrintPages(measuredMonsters, SINGLE_COLUMN_MAX_HEIGHT);
-
-    let previewHtml = '<div class="print-preview-layout">';
-
-    pages.forEach(page => {
-        if (page.type === 'full') {
-            previewHtml += '<div class="print-page print-page-full">';
-            previewHtml += `<div class="print-full-width">${page.monsters[0].html}</div>`;
-            previewHtml += '</div>';
-        } else {
-            const columnContent = [[], []];
-            page.monsters.forEach(monster => {
-                columnContent[monster.columnIndex].push(monster.html);
-            });
-
-            previewHtml += '<div class="print-page">';
-            previewHtml += '<div class="print-columns">';
-            previewHtml += `<div class="print-column print-column-left">${columnContent[0].join('')}</div>`;
-            previewHtml += `<div class="print-column print-column-right">${columnContent[1].join('')}</div>`;
-            previewHtml += '</div>';
-            previewHtml += '</div>';
-        }
-    });
-
-    previewHtml += '</div>';
+    const previewHtml = `
+        <div class="print-preview-layout">
+            <div class="print-page">
+                <div class="print-columns-flow">
+                    ${selectedMonsters.join('')}
+                </div>
+            </div>
+        </div>
+    `;
 
     previewBody.innerHTML = previewHtml;
     modal.style.display = 'flex';
-}
-
-function getPrintMeasurementContainer() {
-    let container = document.getElementById('printMeasurementContainer');
-    if (!container) {
-        container = document.createElement('div');
-        container.id = 'printMeasurementContainer';
-        document.body.appendChild(container);
-    }
-    return container;
-}
-
-function getSingleColumnHeightLimit(container) {
-    const height = container ? container.clientHeight : 0;
-    if (height && height > 0) {
-        return height;
-    }
-    // Fallback to approximately 10.5 inches at 96 DPI if container is not measurable yet
-    return Math.round(10.5 * 96);
-}
-
-function measureMonsterHeight(monsterHtml, container) {
-    const wrapper = document.createElement('div');
-    wrapper.className = 'print-measure-wrapper';
-    wrapper.innerHTML = `<div class="print-column print-column-measure">${monsterHtml}</div>`;
-    container.appendChild(wrapper);
-    const height = wrapper.scrollHeight;
-    container.removeChild(wrapper);
-    return height;
-}
-
-function buildPrintPages(monsters, maxColumnHeight) {
-    const pages = [];
-    let currentPage = createNormalPrintPage();
-
-    monsters.forEach(monster => {
-        if (monster.isFullPage) {
-            if (currentPage.monsters.length > 0) {
-                pages.push(currentPage);
-                currentPage = createNormalPrintPage();
-            }
-            pages.push({
-                type: 'full',
-                monsters: [monster]
-            });
-            return;
-        }
-
-        if (!currentPage) {
-            currentPage = createNormalPrintPage();
-        }
-
-        let targetColumn = currentPage.columnHeights[0] <= currentPage.columnHeights[1] ? 0 : 1;
-
-        if (currentPage.columnHeights[targetColumn] + monster.height > maxColumnHeight) {
-            pages.push(currentPage);
-            currentPage = createNormalPrintPage();
-            targetColumn = 0;
-        }
-
-        monster.columnIndex = targetColumn;
-        currentPage.monsters.push(monster);
-        currentPage.columnHeights[targetColumn] += monster.height;
-    });
-
-    if (currentPage && currentPage.monsters.length > 0) {
-        pages.push(currentPage);
-    }
-
-    return pages;
-}
-
-function createNormalPrintPage() {
-    return {
-        type: 'normal',
-        monsters: [],
-        columnHeights: [0, 0]
-    };
 }
 
 function closePrintPreview() {
