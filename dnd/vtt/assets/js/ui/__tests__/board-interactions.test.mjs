@@ -886,15 +886,54 @@ test('cached map images mark the board as loaded and allow GM drops', async () =
       'metadata and placement monster snapshots should be cloned separately',
     );
 
-    const playerViewPlacements = restrictPlacementsToPlayerView({ 'scene-1': placements });
-    const playerPlacement = playerViewPlacements['scene-1']?.[0] ?? null;
-    assert.ok(playerPlacement, 'player filtered placements should keep visible tokens');
-    assert.equal(playerPlacement.monster, undefined, 'player payload should strip monster snapshots');
-    assert.equal(playerPlacement.monsterId, undefined, 'player payload should omit monster ids');
+    const enemySource = JSON.parse(JSON.stringify(placement));
+    enemySource.id = 'enemy-token';
+    enemySource.combatTeam = 'enemy';
+
+    const allySource = JSON.parse(JSON.stringify(placement));
+    allySource.id = 'ally-token';
+    allySource.combatTeam = 'ally';
+
+    const playerViewPlacements = restrictPlacementsToPlayerView({
+      'scene-1': [enemySource, allySource],
+    });
+
+    const scenePlacements = playerViewPlacements['scene-1'] ?? [];
+    const playerEnemyPlacement = scenePlacements.find((entry) => entry?.id === 'enemy-token') ?? null;
+    const playerAllyPlacement = scenePlacements.find((entry) => entry?.id === 'ally-token') ?? null;
+
+    assert.ok(playerEnemyPlacement, 'player payload should keep visible enemy tokens');
     assert.equal(
-      playerPlacement.metadata?.monster,
+      playerEnemyPlacement.monster,
       undefined,
-      'player payload metadata should not leak monster snapshots',
+      'enemy tokens should not leak monster snapshots to players',
+    );
+    assert.equal(
+      playerEnemyPlacement.monsterId,
+      undefined,
+      'enemy tokens should omit monster ids for players',
+    );
+    assert.equal(
+      playerEnemyPlacement.metadata?.monster,
+      undefined,
+      'enemy token metadata should not leak monster snapshots to players',
+    );
+
+    assert.ok(playerAllyPlacement, 'player payload should keep visible ally tokens');
+    assert.deepEqual(
+      playerAllyPlacement.monster,
+      expectedMonsterSnapshot,
+      'ally tokens should retain monster snapshots for players',
+    );
+    assert.equal(
+      playerAllyPlacement.monsterId,
+      'monster-1',
+      'ally tokens should include monster ids for players',
+    );
+    assert.deepEqual(
+      playerAllyPlacement.metadata?.monster,
+      expectedMonsterSnapshot,
+      'ally token metadata should retain monster snapshots for players',
     );
   } finally {
     dom.window.close();
@@ -1021,11 +1060,53 @@ test('token settings stat block button is GM only and enabled by monster metadat
 
       const playerMenu = testingHooks.getTokenSettingsMenu?.();
       assert.ok(playerMenu?.element, 'player token menu should exist');
+      assert.ok(playerMenu.statBlockButton, 'players should have access to the stat block button element');
       assert.equal(
-        playerMenu.statBlockButton,
-        null,
-        'players should not see the stat block button',
+        playerMenu.statBlockButton.hidden,
+        true,
+        'players should not see the stat block button for non-ally tokens',
       );
+
+      store.updateState((draft) => {
+        draft.boardState.placements['scene-1'].push({
+          id: 'ally-monster',
+          tokenId: 'ally-monster',
+          name: 'Friendly Ogre',
+          column: 2,
+          row: 2,
+          width: 1,
+          height: 1,
+          combatTeam: 'ally',
+          monsterId: 'ogre-1',
+          monster: {
+            id: 'ogre-1',
+            name: 'Ogre Brute',
+            size: 'large',
+            footprint: '2x2',
+          },
+        });
+      });
+
+      await Promise.resolve();
+      await new Promise((resolve) => setTimeout(resolve, 0));
+
+      const openedAlly = testingHooks.openTokenSettingsById?.('ally-monster', 256, 256);
+      assert.equal(openedAlly, true, 'players should open the token menu for allied monsters');
+
+      await Promise.resolve();
+      await new Promise((resolve) => setTimeout(resolve, 0));
+
+      assert.equal(
+        playerMenu.statBlockButton.hidden,
+        false,
+        'players should see the stat block button for allied monsters with metadata',
+      );
+      assert.equal(
+        playerMenu.statBlockButton.disabled,
+        false,
+        'ally monster stat block button should be enabled for players',
+      );
+      assert.equal(playerMenu.statBlockButton.getAttribute('aria-disabled'), 'false');
     } finally {
       dom.window.close();
     }

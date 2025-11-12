@@ -9767,6 +9767,8 @@ export function mountBoardInteractions(store, routes = {}) {
       return null;
     }
 
+    const gmUser = isGmUser();
+
     const element = document.createElement('div');
     element.className = 'vtt-token-settings';
     element.hidden = true;
@@ -9782,8 +9784,7 @@ export function mountBoardInteractions(store, routes = {}) {
       }))
       .join('');
 
-    const statBlockButtonMarkup = isGmUser()
-      ? `
+    const statBlockButtonMarkup = `
           <button
             type="button"
             class="vtt-token-settings__stat-block"
@@ -9792,10 +9793,9 @@ export function mountBoardInteractions(store, routes = {}) {
           >
             Stat Block
           </button>
-        `
-      : '';
+        `;
 
-    const hiddenToggleMarkup = isGmUser()
+    const hiddenToggleMarkup = gmUser
       ? `
         <div class="vtt-token-settings__section">
           <div class="vtt-token-settings__row">
@@ -9933,6 +9933,13 @@ export function mountBoardInteractions(store, routes = {}) {
       menu.statBlockButton.disabled = true;
       menu.statBlockButton.setAttribute('aria-disabled', 'true');
       menu.statBlockButton.classList.add('is-disabled');
+      if (!gmUser) {
+        menu.statBlockButton.hidden = true;
+        menu.statBlockButton.setAttribute('aria-hidden', 'true');
+      } else {
+        menu.statBlockButton.hidden = false;
+        menu.statBlockButton.setAttribute('aria-hidden', 'false');
+      }
     }
 
     if (menu.conditionSelect) {
@@ -10307,6 +10314,10 @@ export function mountBoardInteractions(store, routes = {}) {
     }
 
     const placement = getPlacementFromStore(activeTokenSettingsId);
+    if (!canCurrentUserViewMonsterStatBlock(placement)) {
+      return;
+    }
+
     if (!placement?.monster) {
       closeMonsterStatBlockViewer({ placementId: placement?.id ?? null, reason: 'no-monster' });
       return;
@@ -10322,6 +10333,11 @@ export function mountBoardInteractions(store, routes = {}) {
   function openMonsterStatBlockViewer(placement, { refresh = false } = {}) {
     if (!placement?.monster) {
       closeMonsterStatBlockViewer({ placementId: placement?.id ?? null, reason: 'missing-monster' });
+      return;
+    }
+
+    if (!canCurrentUserViewMonsterStatBlock(placement)) {
+      closeMonsterStatBlockViewer({ placementId: placement?.id ?? null, reason: 'forbidden' });
       return;
     }
 
@@ -10350,16 +10366,14 @@ export function mountBoardInteractions(store, routes = {}) {
     if (activeTokenSettingsId) {
       const placement = getPlacementFromStore(activeTokenSettingsId);
       if (placement) {
-        const hasMonster = Boolean(placement.monster);
-        setStatBlockButtonEnabled(hasMonster);
-        const isActive = hasMonster && activeMonsterStatBlockPlacementId === placement.id;
-        setStatBlockButtonActive(isActive);
+        syncMonsterStatBlockControls(placement);
         return;
       }
     }
 
     setStatBlockButtonActive(false);
     setStatBlockButtonEnabled(false);
+    setStatBlockButtonVisibility(isGmUser());
   }
 
   function handleMonsterStatBlockClosed(placementId) {
@@ -10374,20 +10388,30 @@ export function mountBoardInteractions(store, routes = {}) {
     if (activeTokenSettingsId) {
       const placement = getPlacementFromStore(activeTokenSettingsId);
       if (placement) {
-        setStatBlockButtonEnabled(Boolean(placement.monster));
-        const isActive = Boolean(
-          placement.monster && activeMonsterStatBlockPlacementId === placement.id
-        );
-        setStatBlockButtonActive(isActive);
+        syncMonsterStatBlockControls(placement);
         return;
       }
     }
 
     setStatBlockButtonActive(false);
+    setStatBlockButtonVisibility(isGmUser());
   }
 
   function syncMonsterStatBlockControls(placement) {
     if (!tokenSettingsMenu?.statBlockButton) {
+      return;
+    }
+
+    const canView = canCurrentUserViewMonsterStatBlock(placement);
+    setStatBlockButtonVisibility(canView);
+
+    if (!canView) {
+      if (placement?.id && activeMonsterStatBlockPlacementId === placement.id) {
+        activeMonsterStatBlockPlacementId = null;
+        closeMonsterStatBlock();
+      }
+      setStatBlockButtonEnabled(false);
+      setStatBlockButtonActive(false);
       return;
     }
 
@@ -10404,14 +10428,32 @@ export function mountBoardInteractions(store, routes = {}) {
     }
   }
 
+  function setStatBlockButtonVisibility(visible) {
+    if (!tokenSettingsMenu?.statBlockButton) {
+      return;
+    }
+
+    const isVisible = Boolean(visible);
+    tokenSettingsMenu.statBlockButton.hidden = !isVisible;
+    tokenSettingsMenu.statBlockButton.setAttribute('aria-hidden', isVisible ? 'false' : 'true');
+
+    if (!isVisible) {
+      tokenSettingsMenu.statBlockButton.classList.remove('is-active');
+      tokenSettingsMenu.statBlockButton.setAttribute('aria-pressed', 'false');
+    }
+  }
+
   function setStatBlockButtonEnabled(enabled) {
     if (!tokenSettingsMenu?.statBlockButton) {
       return;
     }
 
-    tokenSettingsMenu.statBlockButton.disabled = !enabled;
-    tokenSettingsMenu.statBlockButton.setAttribute('aria-disabled', enabled ? 'false' : 'true');
-    tokenSettingsMenu.statBlockButton.classList.toggle('is-disabled', !enabled);
+    const isVisible = tokenSettingsMenu.statBlockButton.hidden !== true;
+    const shouldEnable = Boolean(enabled) && isVisible;
+
+    tokenSettingsMenu.statBlockButton.disabled = !shouldEnable;
+    tokenSettingsMenu.statBlockButton.setAttribute('aria-disabled', shouldEnable ? 'false' : 'true');
+    tokenSettingsMenu.statBlockButton.classList.toggle('is-disabled', !shouldEnable);
   }
 
   function setStatBlockButtonActive(active) {
@@ -10419,8 +10461,20 @@ export function mountBoardInteractions(store, routes = {}) {
       return;
     }
 
-    tokenSettingsMenu.statBlockButton.classList.toggle('is-active', Boolean(active));
-    tokenSettingsMenu.statBlockButton.setAttribute('aria-pressed', active ? 'true' : 'false');
+    const isVisible = tokenSettingsMenu.statBlockButton.hidden !== true;
+    const shouldActivate = Boolean(active) && isVisible;
+
+    tokenSettingsMenu.statBlockButton.classList.toggle('is-active', shouldActivate);
+    tokenSettingsMenu.statBlockButton.setAttribute('aria-pressed', shouldActivate ? 'true' : 'false');
+  }
+
+  function canCurrentUserViewMonsterStatBlock(placement) {
+    if (isGmUser()) {
+      return true;
+    }
+
+    const team = normalizeCombatTeam(placement?.team ?? placement?.combatTeam ?? null);
+    return team === 'ally';
   }
 
   function syncConditionControls(placement) {
