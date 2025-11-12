@@ -378,6 +378,16 @@ function sanitizeTokenForPlayerView(array $token): array
 {
     $sanitized = $token;
     unset($sanitized['monster'], $sanitized['monsterId']);
+
+    if (isset($sanitized['metadata']) && is_array($sanitized['metadata'])) {
+        $metadata = $sanitized['metadata'];
+        unset($metadata['monster'], $metadata['monsterId']);
+        $sanitized['metadata'] = $metadata === [] ? [] : $metadata;
+        if ($sanitized['metadata'] === []) {
+            unset($sanitized['metadata']);
+        }
+    }
+
     return $sanitized;
 }
 
@@ -388,8 +398,51 @@ function sanitizeTokenForPlayerView(array $token): array
 function sanitizePlacementForPlayerView(array $placement): array
 {
     $sanitized = $placement;
-    unset($sanitized['monster'], $sanitized['monsterId']);
+
+    if (!canPlayersViewPlacementMonster($placement)) {
+        unset($sanitized['monster'], $sanitized['monsterId']);
+
+        if (isset($sanitized['metadata']) && is_array($sanitized['metadata'])) {
+            $metadata = $sanitized['metadata'];
+            unset($metadata['monster'], $metadata['monsterId']);
+            $sanitized['metadata'] = $metadata === [] ? [] : $metadata;
+            if ($sanitized['metadata'] === []) {
+                unset($sanitized['metadata']);
+            }
+        }
+    }
+
     return $sanitized;
+}
+
+/**
+ * @param array<string,mixed> $placement
+ */
+function canPlayersViewPlacementMonster(array $placement): bool
+{
+    $team = normalizeCombatTeamFlag($placement['combatTeam'] ?? ($placement['team'] ?? null));
+    return $team === 'ally';
+}
+
+/**
+ * @param mixed $value
+ */
+function normalizeCombatTeamFlag($value): ?string
+{
+    if (!is_string($value)) {
+        return null;
+    }
+
+    $normalized = strtolower(trim($value));
+    if ($normalized === 'ally') {
+        return 'ally';
+    }
+
+    if ($normalized === 'enemy') {
+        return 'enemy';
+    }
+
+    return null;
 }
 
 /**

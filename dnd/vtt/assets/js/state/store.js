@@ -1054,7 +1054,7 @@ export function restrictPlacementsToPlayerView(placements = {}) {
         const hidden = toBoolean(entry.hidden ?? entry.isHidden ?? entry?.flags?.hidden ?? false, false);
         return hidden !== true;
       })
-      .map((entry) => stripMonsterSnapshot(entry));
+      .map((entry) => stripMonsterSnapshot(entry, { allowAllyMonster: true }));
     filtered[sceneId] = visibleEntries;
   });
 
@@ -1484,40 +1484,72 @@ function normalizePlacementMetadata(entry) {
   return Object.keys(metadata).length > 0 ? metadata : null;
 }
 
-function stripMonsterSnapshot(entity) {
+function stripMonsterSnapshot(entity, options = {}) {
   if (!entity || typeof entity !== 'object') {
     return entity;
   }
 
+  const allowAllyMonster = Boolean(options?.allowAllyMonster);
   const sanitized = { ...entity };
-  if ('monster' in sanitized) {
-    delete sanitized.monster;
-  }
-  if ('monsterId' in sanitized) {
-    delete sanitized.monsterId;
-  }
+  const canView = allowAllyMonster && canPlayersViewMonsterSnapshot(entity);
 
-  if (sanitized.metadata && typeof sanitized.metadata === 'object') {
-    const metadata = { ...sanitized.metadata };
-    let mutated = false;
-    if ('monster' in metadata) {
-      delete metadata.monster;
-      mutated = true;
+  if (!canView) {
+    if ('monster' in sanitized) {
+      delete sanitized.monster;
     }
-    if ('monsterId' in metadata) {
-      delete metadata.monsterId;
-      mutated = true;
+    if ('monsterId' in sanitized) {
+      delete sanitized.monsterId;
     }
-    if (mutated) {
-      if (Object.keys(metadata).length > 0) {
-        sanitized.metadata = metadata;
-      } else {
-        delete sanitized.metadata;
+
+    if (sanitized.metadata && typeof sanitized.metadata === 'object') {
+      const metadata = { ...sanitized.metadata };
+      let mutated = false;
+      if ('monster' in metadata) {
+        delete metadata.monster;
+        mutated = true;
+      }
+      if ('monsterId' in metadata) {
+        delete metadata.monsterId;
+        mutated = true;
+      }
+      if (mutated) {
+        if (Object.keys(metadata).length > 0) {
+          sanitized.metadata = metadata;
+        } else {
+          delete sanitized.metadata;
+        }
       }
     }
   }
 
   return sanitized;
+}
+
+function canPlayersViewMonsterSnapshot(entity) {
+  return normalizePlacementCombatTeam(entity) === 'ally';
+}
+
+function normalizePlacementCombatTeam(entity) {
+  if (!entity || typeof entity !== 'object') {
+    return null;
+  }
+
+  const teamValue =
+    (typeof entity.combatTeam === 'string' ? entity.combatTeam : null) ??
+    (typeof entity.team === 'string' ? entity.team : null);
+
+  if (!teamValue) {
+    return null;
+  }
+
+  const normalized = teamValue.trim().toLowerCase();
+  if (normalized === 'ally') {
+    return 'ally';
+  }
+  if (normalized === 'enemy') {
+    return 'enemy';
+  }
+  return null;
 }
 
 export function normalizeMonsterSnapshot(entry) {
