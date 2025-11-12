@@ -2495,11 +2495,16 @@ body.delete-mode-active .sub-tab:hover {
         border-radius: 0;
         margin: 0 !important;
         padding: 0 !important;
+        overflow: visible;
+        max-height: none;
     }
 
     .print-preview-body {
         padding: 0;
         background: white;
+        overflow: visible;
+        max-height: none;
+        height: auto;
     }
 
     .print-preview-layout {
