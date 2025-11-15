@@ -69,7 +69,9 @@ class BingoStudentApp {
         }
         this.pollHandle = window.setInterval(() => {
             this.loadState(true);
+            this.checkClaimStatus();
         }, interval);
+        this.checkClaimStatus();
     }
 
     async loadState(isPoll = false) {
@@ -115,6 +117,36 @@ class BingoStudentApp {
             if (!isPoll) {
                 this.setFeedback('Unable to sync with your teacher right now. We will keep trying...', 'error');
             }
+        }
+    }
+
+    async checkClaimStatus() {
+        if (!this.config.claimStatusEndpoint) {
+            return;
+        }
+        try {
+            const response = await fetch(this.config.claimStatusEndpoint, {
+                credentials: 'same-origin',
+                headers: { 'Accept': 'application/json' }
+            });
+            if (!response.ok) {
+                return;
+            }
+            const data = await response.json();
+            if (!data || !data.status) {
+                return;
+            }
+            if (data.status === 'pending') {
+                this.sessionStatus = 'review';
+                this.updateStatusBanner();
+                return;
+            }
+            if ((data.status === 'accepted' || data.status === 'rejected') && data.review) {
+                const status = data.review.status || (data.status === 'accepted' ? 'approved' : 'rejected');
+                this.handleReviewState({ ...data.review, status });
+            }
+        } catch (error) {
+            // Ignore transient polling failures
         }
     }
 
