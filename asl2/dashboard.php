@@ -110,7 +110,7 @@ try {
                 <button class="sidebar-button" onclick="showContent('skills')">Skills</button>
                 <button class="sidebar-button" onclick="window.open('scrollergame/index.html', '_blank')">Scroller Game</button>
                 <button class="sidebar-button" onclick="openGoals()">Goals</button>
-                <button class="sidebar-button" onclick="showContent('coming-soon')">Coming Soon</button>
+                <button class="sidebar-button" onclick="window.location.href='bingo.php'">Bingo</button>
                 <button class="sidebar-button" onclick="showContent('coming-soon')">Coming Soon</button>
                 <button class="sidebar-button" onclick="showContent('coming-soon')">Coming Soon</button>
             </div>
