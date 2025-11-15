@@ -89,7 +89,8 @@ $student_name = trim(($_SESSION['user_first_name'] ?? '') . ' ' . ($_SESSION['us
             level: 1,
             studentStateEndpoint: 'bingo/api/student-state.php',
             updateCardEndpoint: 'bingo/api/update-card.php',
-            requestBingoEndpoint: 'bingo/api/request-bingo.php'
+            requestBingoEndpoint: 'bingo/api/request-bingo.php',
+            claimStatusEndpoint: 'bingo/api/claim-status.php'
         };
     </script>
     <script src="js/bingo-student.js" defer></script>
