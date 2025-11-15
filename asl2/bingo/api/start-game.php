@@ -6,26 +6,41 @@ if (session_status() === PHP_SESSION_NONE) {
 define('BINGO_LEVEL', 2);
 
 require_once __DIR__ . '/../../config.php';
-require_once __DIR__ . '/../lib/custom_lists.php';
-require_once __DIR__ . '/../../../common/bingo/api/helpers.php';
+require_once __DIR__ . '/../lib/bingo_helpers.php';
 
 header('Content-Type: application/json');
 
 try {
-    if (!isset($_SESSION['is_teacher']) || !$_SESSION['is_teacher']) {
+    if (empty($_SESSION['is_teacher'])) {
         http_response_code(403);
         echo json_encode(['success' => false, 'message' => 'Teacher access required.']);
         exit;
     }
 
+    $teacherId = (int) $_SESSION['user_id'];
     $raw = file_get_contents('php://input');
-    $payload = json_decode($raw, true);
-    $action = $payload['action'] ?? 'start';
+    $payload = json_decode($raw, true) ?: [];
+    $action = strtolower($payload['action'] ?? 'start');
 
     if ($action === 'stop') {
-        $state = bingo_api_default_global_state();
-        bingo_api_save_global_state(BINGO_LEVEL, $state);
-        echo json_encode(['success' => true, 'session' => $state]);
+        $session = asl2_bingo_get_teacher_session($pdo, $teacherId, BINGO_LEVEL);
+        if ($session) {
+            $stmt = $pdo->prepare("UPDATE bingo_sessions SET status = 'closed', ended_at = NOW() WHERE id = ?");
+            $stmt->execute([(int) $session['id']]);
+        }
+        echo json_encode([
+            'success' => true,
+            'session' => [
+                'status' => 'idle',
+                'sessionId' => null,
+                'activeLists' => [],
+                'calledWords' => [],
+                'remainingCount' => 0,
+                'totalWords' => 0,
+                'claims' => [],
+                'wordPool' => [],
+            ],
+        ]);
         return;
     }
 
@@ -34,82 +49,17 @@ try {
         throw new InvalidArgumentException('Select at least one word list.');
     }
 
-    $scrollerIds = [];
-    $customIds = [];
-    foreach ($lists as $listRef) {
-        if (!is_string($listRef)) {
-            continue;
-        }
-        if (strpos($listRef, 'scroller:') === 0) {
-            $scrollerIds[] = (int) substr($listRef, 9);
-        } elseif (strpos($listRef, 'custom-') === 0) {
-            $customIds[] = $listRef;
-        }
+    [$wordPool, $activeLists] = asl2_bingo_merge_word_sources($pdo, $teacherId, $lists);
+    if (count($wordPool) < 25) {
+        throw new InvalidArgumentException('Each session requires at least 25 unique words so every square has an assignment.');
     }
 
-    $wordPool = [];
-    $activeLists = [];
-    if ($scrollerIds) {
-        $placeholders = implode(',', array_fill(0, count($scrollerIds), '?'));
-        $sql = "SELECT id, name, words FROM scroller_wordlists WHERE teacher_id = ? AND id IN ($placeholders)";
-        $params = array_merge([(int) $_SESSION['user_id']], $scrollerIds);
-        $stmt = $pdo->prepare($sql);
-        $stmt->execute($params);
-        while ($row = $stmt->fetch(PDO::FETCH_ASSOC)) {
-            $words = json_decode($row['words'], true);
-            if (!is_array($words)) {
-                $words = preg_split('/[,\r\n]+/', (string) $row['words']);
-            }
-            $filtered = bingo_filter_words($words);
-            $wordPool = array_merge($wordPool, $filtered);
-            $activeLists[] = [
-                'id' => 'scroller:' . $row['id'],
-                'name' => $row['name'],
-                'count' => count($filtered),
-            ];
-        }
-    }
-
-    if ($customIds) {
-        foreach ($customIds as $customId) {
-            $entry = bingo_find_custom_list($customId, (int) $_SESSION['user_id']);
-            if (!$entry) {
-                continue;
-            }
-            $filtered = bingo_filter_words($entry['words'] ?? []);
-            $wordPool = array_merge($wordPool, $filtered);
-            $activeLists[] = [
-                'id' => $entry['id'],
-                'name' => $entry['name'] ?? 'Custom List',
-                'count' => count($filtered),
-            ];
-        }
-    }
-
-    $wordPool = array_values(array_unique(array_filter(array_map('trim', $wordPool))));
-    if (count($wordPool) < 5) {
-        throw new InvalidArgumentException('Each session requires at least five unique words.');
-    }
-
-    shuffle($wordPool);
-
-    $state = bingo_api_load_global_state(BINGO_LEVEL);
-    $state['status'] = 'ready';
-    $state['sessionId'] = 'session_' . time() . '_' . bin2hex(random_bytes(3));
-    $state['activeLists'] = $activeLists;
-    $state['wordPool'] = $wordPool;
-    $state['remainingWords'] = $wordPool;
-    $state['calledWords'] = [];
-    $state['claims'] = [];
-    $state['players'] = [];
-    $state['lastDrawnWord'] = null;
-    $state['gameStartedAt'] = time();
-
-    bingo_api_save_global_state(BINGO_LEVEL, $state);
+    $session = asl2_bingo_create_session($pdo, $teacherId, BINGO_LEVEL, $activeLists, $wordPool);
+    $sessionPayload = asl2_bingo_format_session_payload($session, [], []);
 
     echo json_encode([
         'success' => true,
-        'session' => $state,
+        'session' => $sessionPayload,
     ]);
 } catch (InvalidArgumentException $exception) {
     http_response_code(422);

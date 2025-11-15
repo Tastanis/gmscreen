@@ -247,6 +247,7 @@ $teacherName = htmlspecialchars(($_SESSION['user_first_name'] ?? '') . ' ' . ($_
             teacherStateEndpoint: 'bingo/api/teacher-state.php',
             drawWordEndpoint: 'bingo/api/draw-word.php',
             resolveClaimEndpoint: 'bingo/api/resolve-claim.php',
+            restartGameEndpoint: 'bingo/api/restart-game.php',
             pollInterval: 4000
         };
     </script>

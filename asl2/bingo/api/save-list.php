@@ -4,7 +4,7 @@ if (session_status() === PHP_SESSION_NONE) {
 }
 
 require_once __DIR__ . '/../../config.php';
-require_once __DIR__ . '/../lib/custom_lists.php';
+require_once __DIR__ . '/../lib/bingo_helpers.php';
 
 header('Content-Type: application/json');
 
@@ -24,12 +24,12 @@ try {
         throw new InvalidArgumentException('A list name is required.');
     }
 
-    $cleanWords = bingo_filter_words($words);
+    $cleanWords = asl2_bingo_filter_words($words);
     if (count($cleanWords) < 5) {
         throw new InvalidArgumentException('Please provide at least five unique words.');
     }
 
-    $entry = bingo_add_custom_list((int) $_SESSION['user_id'], $name, $cleanWords);
+    $entry = asl2_bingo_add_custom_list((int) $_SESSION['user_id'], $name, $cleanWords);
 
     echo json_encode([
         'success' => true,

@@ -5,46 +5,60 @@ if (session_status() === PHP_SESSION_NONE) {
 
 define('BINGO_LEVEL', 2);
 
-require_once __DIR__ . '/../../../common/bingo/api/helpers.php';
+require_once __DIR__ . '/../../config.php';
+require_once __DIR__ . '/../lib/bingo_helpers.php';
 
 header('Content-Type: application/json');
 
 try {
-    if (!isset($_SESSION['is_teacher']) || !$_SESSION['is_teacher']) {
+    if (empty($_SESSION['is_teacher'])) {
         http_response_code(403);
         echo json_encode(['success' => false, 'message' => 'Teacher access required.']);
         exit;
     }
 
-    $state = bingo_api_load_global_state(BINGO_LEVEL);
+    $teacherId = (int) $_SESSION['user_id'];
+    $session = asl2_bingo_get_teacher_session($pdo, $teacherId, BINGO_LEVEL);
+
+    if (!$session) {
+        echo json_encode([
+            'success' => true,
+            'session' => [
+                'status' => 'idle',
+                'sessionId' => null,
+                'activeLists' => [],
+                'calledWords' => [],
+                'remainingCount' => 0,
+                'totalWords' => 0,
+                'claims' => [],
+                'startedAt' => null,
+                'wordPool' => [],
+            ],
+        ]);
+        return;
+    }
+
+    $calledWords = asl2_bingo_fetch_called_words($pdo, (int) $session['id']);
+
+    $stmt = $pdo->prepare("SELECT * FROM bingo_claims WHERE session_id = ? AND status = 'pending' ORDER BY created_at ASC");
+    $stmt->execute([(int) $session['id']]);
     $claims = [];
-    foreach ($state['claims'] as $claim) {
-        if (($claim['status'] ?? 'pending') !== 'pending') {
-            continue;
-        }
+    while ($row = $stmt->fetch(PDO::FETCH_ASSOC)) {
         $claims[] = [
-            'id' => $claim['id'],
-            'studentName' => $claim['studentName'] ?? 'Student',
-            'submittedAt' => $claim['submittedAt'] ?? time(),
-            'card' => $claim['card'] ?? [],
-            'marks' => $claim['marks'] ?? [],
-            'review' => $claim['review'] ?? [],
+            'id' => (int) $row['id'],
+            'studentName' => $row['student_name'],
+            'submittedAt' => $row['created_at'] ? strtotime($row['created_at']) : time(),
+            'card' => asl2_bingo_decode_json($row['card_snapshot'], []),
+            'marks' => asl2_bingo_decode_json($row['marks_snapshot'], []),
+            'review' => asl2_bingo_decode_json($row['evaluation_payload'], []),
         ];
     }
 
+    $payload = asl2_bingo_format_session_payload($session, $calledWords, $claims);
+
     echo json_encode([
         'success' => true,
-        'session' => [
-            'status' => $state['status'],
-            'sessionId' => $state['sessionId'],
-            'activeLists' => $state['activeLists'],
-            'calledWords' => $state['calledWords'],
-            'lastDrawnWord' => $state['lastDrawnWord'],
-            'remainingCount' => count($state['remainingWords']),
-            'totalWords' => count($state['wordPool']),
-            'claims' => $claims,
-            'startedAt' => $state['gameStartedAt'],
-        ],
+        'session' => $payload,
     ]);
 } catch (Throwable $exception) {
     http_response_code(500);

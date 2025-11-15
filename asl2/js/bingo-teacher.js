@@ -231,6 +231,10 @@ class BingoTeacherApp {
     }
 
     async stopGame() {
+        if (this.config.restartGameEndpoint) {
+            await this.restartGame();
+            return;
+        }
         if (!this.config.startGameEndpoint) {
             return;
         }
@@ -249,6 +253,26 @@ class BingoTeacherApp {
             this.renderSession();
         } catch (error) {
             alert(error.message || 'Unable to stop the session.');
+        }
+    }
+
+    async restartGame() {
+        if (!this.config.restartGameEndpoint) {
+            return;
+        }
+        try {
+            const response = await fetch(this.config.restartGameEndpoint, {
+                method: 'POST',
+                credentials: 'same-origin'
+            });
+            const data = await response.json();
+            if (!response.ok || !data.success) {
+                throw new Error(data.message || 'Unable to restart session');
+            }
+            this.sessionState = null;
+            this.fetchSessionState();
+        } catch (error) {
+            alert(error.message || 'Unable to restart the session.');
         }
     }
 
@@ -464,6 +488,14 @@ class BingoTeacherApp {
                 throw new Error(data.message || 'Unable to resolve claim');
             }
             alert(data.message || 'Claim updated.');
+            if (data.promptRestart && this.config.restartGameEndpoint) {
+                const restartNow = window.confirm('Accepted bingo! Restart the game now?');
+                if (restartNow) {
+                    await this.restartGame();
+                    this.hideClaimModal();
+                    return;
+                }
+            }
             this.hideClaimModal();
             this.fetchSessionState();
         } catch (error) {

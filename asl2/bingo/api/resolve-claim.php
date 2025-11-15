@@ -5,81 +5,77 @@ if (session_status() === PHP_SESSION_NONE) {
 
 define('BINGO_LEVEL', 2);
 
-require_once __DIR__ . '/../../../common/bingo/api/helpers.php';
+require_once __DIR__ . '/../../config.php';
+require_once __DIR__ . '/../lib/bingo_helpers.php';
 
 header('Content-Type: application/json');
 
 try {
-    if (!isset($_SESSION['is_teacher']) || !$_SESSION['is_teacher']) {
+    if (empty($_SESSION['is_teacher'])) {
         http_response_code(403);
         echo json_encode(['success' => false, 'message' => 'Teacher access required.']);
         exit;
     }
 
     $raw = file_get_contents('php://input');
-    $payload = json_decode($raw, true);
-    $claimId = $payload['claimId'] ?? '';
-    $action = $payload['action'] ?? 'continue';
+    $payload = json_decode($raw, true) ?: [];
+    $claimId = isset($payload['claimId']) ? (int) $payload['claimId'] : 0;
+    $action = strtolower($payload['action'] ?? 'continue');
 
-    if ($claimId === '') {
+    if ($claimId <= 0) {
         throw new InvalidArgumentException('Missing claim reference.');
     }
 
-    $state = bingo_api_load_global_state(BINGO_LEVEL);
-    $claimIndex = null;
-    foreach ($state['claims'] as $index => $claim) {
-        if (($claim['id'] ?? '') === $claimId) {
-            $claimIndex = $index;
-            break;
-        }
+    if (!in_array($action, ['accept', 'continue'], true)) {
+        throw new InvalidArgumentException('Unknown action.');
     }
 
-    if ($claimIndex === null) {
-        throw new RuntimeException('Claim not found.');
+    $teacherId = (int) $_SESSION['user_id'];
+    $session = asl2_bingo_get_teacher_session($pdo, $teacherId, BINGO_LEVEL);
+    if (!$session) {
+        throw new RuntimeException('No active session available.');
     }
 
-    $claim = $state['claims'][$claimIndex];
-    $playerKey = $claim['playerKey'] ?? null;
-    if (!$playerKey || !isset($state['players'][$playerKey])) {
-        throw new RuntimeException('Player state unavailable.');
+    $stmt = $pdo->prepare("SELECT * FROM bingo_claims WHERE id = ? AND session_id = ? AND status = 'pending'");
+    $stmt->execute([$claimId, (int) $session['id']]);
+    $claim = $stmt->fetch(PDO::FETCH_ASSOC);
+    if (!$claim) {
+        throw new RuntimeException('Claim not found or already resolved.');
     }
 
-    $player = $state['players'][$playerKey];
-    $review = $claim['review'] ?? [];
+    $card = asl2_bingo_decode_json($claim['card_snapshot'], []);
+    $marks = asl2_bingo_decode_json($claim['marks_snapshot'], []);
+    $calledWords = asl2_bingo_fetch_called_words($pdo, (int) $session['id']);
+    $overlay = asl2_bingo_evaluate_claim($card, $marks, $calledWords);
 
-    if ($action === 'accept') {
-        $state['status'] = 'won';
-        $player['pendingReview'] = true;
-        $player['pendingReviewData'] = [
-            'status' => 'approved',
-            'message' => 'Your teacher accepted this bingo! Great job!',
-            'matchedWords' => $review['matchedWords'] ?? [],
-            'unmatchedWords' => $review['unmatchedWords'] ?? [],
-        ];
-        $player['status'] = 'complete';
-        $responseMessage = 'Bingo accepted. Ready to restart or keep going?';
-    } else {
-        $player['pendingReview'] = true;
-        $player['pendingReviewData'] = [
-            'status' => 'rejected',
-            'message' => 'Keep playing! That card is not ready yet.',
-            'matchedWords' => $review['matchedWords'] ?? [],
-            'unmatchedWords' => $review['unmatchedWords'] ?? [],
-        ];
-        $player['status'] = 'active';
-        $responseMessage = 'Claim dismissed.';
+    $status = $action === 'accept' ? 'accepted' : 'rejected';
+    $message = $status === 'accepted'
+        ? 'Bingo accepted. You can restart for a new game when ready.'
+        : 'Claim reviewed. Keep the game running.';
+
+    $resolution = [
+        'status' => $status === 'accepted' ? 'approved' : 'rejected',
+        'message' => $status === 'accepted'
+            ? 'Your teacher accepted this bingo! Great job!'
+            : 'Keep playing! That card is not ready yet.',
+        'matchedWords' => $overlay['matchedWords'],
+        'unmatchedWords' => $overlay['unmatchedWords'],
+    ];
+
+    $stmt = $pdo->prepare("UPDATE bingo_claims SET status = ?, resolution_payload = ?, resolved_at = NOW(), student_acknowledged = 0 WHERE id = ?");
+    $stmt->execute([$status, json_encode($resolution), $claimId]);
+
+    if ($status === 'accepted') {
+        $stmt = $pdo->prepare("UPDATE bingo_sessions SET status = 'won' WHERE id = ?");
+        $stmt->execute([(int) $session['id']]);
     }
-
-    unset($player['currentClaimId']);
-    $state['players'][$playerKey] = $player;
-    array_splice($state['claims'], $claimIndex, 1);
-
-    bingo_api_save_global_state(BINGO_LEVEL, $state);
 
     echo json_encode([
         'success' => true,
-        'action' => $action,
-        'message' => $responseMessage,
+        'claimStatus' => $status,
+        'message' => $message,
+        'overlay' => $resolution,
+        'promptRestart' => $status === 'accepted',
     ]);
 } catch (InvalidArgumentException $exception) {
     http_response_code(422);
