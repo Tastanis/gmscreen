@@ -98,6 +98,7 @@ try {
                     <button class="form-button" onclick="showSection('skills')" id="skills-btn">Skills Overview</button>
                     <button class="form-button" onclick="showSection('manage')" id="manage-btn">Manage Skills</button>
                     <button class="form-button" onclick="showSection('scroller')" id="scroller-btn">Scroller Game</button>
+                    <button class="form-button" onclick="window.location.href='bingo_dashboard.php'" id="bingo-btn">Bingo</button>
                 </div>
                 
                 <!-- Students Section -->
