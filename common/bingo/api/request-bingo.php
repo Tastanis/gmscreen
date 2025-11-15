@@ -7,6 +7,10 @@ try {
     bingo_api_require_login();
     $level = bingo_api_level();
     $state = bingo_api_get_state($level);
+    $playerKey = $state['__playerKey'] ?? null;
+    if (!$playerKey) {
+        throw new RuntimeException('Unable to resolve bingo participant.');
+    }
 
     $raw = file_get_contents('php://input');
     $payload = json_decode($raw, true);
@@ -20,12 +24,32 @@ try {
         return;
     }
 
-    $state['marks'] = $marks;
-    $state['pendingReview'] = true;
-    $state['pendingReviewData'] = bingo_api_build_review($state['card'], $marks, $state['calledWords']);
-    $state['status'] = 'review';
+    $global = bingo_api_load_global_state($level);
+    $player = $global['players'][$playerKey] ?? [];
+    $player['card'] = $state['card'];
+    $player['marks'] = $marks;
+    $player['status'] = 'review';
 
-    bingo_api_save_state($level, $state);
+    $review = bingo_api_build_review($state['card'], $marks, $state['calledWords']);
+    $claimId = 'claim_' . bin2hex(random_bytes(5));
+    $studentName = trim(($_SESSION['user_first_name'] ?? '') . ' ' . ($_SESSION['user_last_name'] ?? ''));
+
+    $claim = [
+        'id' => $claimId,
+        'playerKey' => $playerKey,
+        'userId' => $_SESSION['user_id'],
+        'studentName' => $studentName !== '' ? $studentName : 'Student',
+        'submittedAt' => time(),
+        'card' => $state['card'],
+        'marks' => $marks,
+        'review' => $review,
+        'status' => 'pending',
+    ];
+
+    $player['currentClaimId'] = $claimId;
+    $global['players'][$playerKey] = $player;
+    $global['claims'][] = $claim;
+    bingo_api_save_global_state($level, $global);
 
     echo json_encode([
         'success' => true,

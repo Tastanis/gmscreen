@@ -25,87 +25,233 @@ function bingo_api_level(): int
     return (int) ($_SESSION['user_level'] ?? 1);
 }
 
-function bingo_api_storage_key(int $level): string
+function bingo_api_storage_dir(): string
 {
-    return 'bingo_state_level_' . $level;
+    $dir = __DIR__ . '/../data';
+    if (!is_dir($dir)) {
+        mkdir($dir, 0775, true);
+    }
+    return $dir;
 }
 
-function bingo_api_get_state(int $level): array
+function bingo_api_storage_file(int $level): string
 {
-    $key = bingo_api_storage_key($level);
+    return bingo_api_storage_dir() . '/level_' . $level . '_state.json';
+}
 
-    if (!isset($_SESSION[$key])) {
-        $_SESSION[$key] = bingo_api_default_state();
+function bingo_api_player_key(): string
+{
+    $userId = $_SESSION['user_id'] ?? null;
+    if (!$userId) {
+        throw new RuntimeException('Missing user context for bingo state.');
     }
 
-    $state = $_SESSION[$key];
+    return 'user_' . $userId;
+}
 
-    if (empty($state['card']) || count($state['card']) !== 25) {
-        $state['card'] = bingo_api_generate_card();
+function bingo_api_default_global_state(): array
+{
+    return [
+        'status' => 'idle',
+        'sessionId' => null,
+        'activeLists' => [],
+        'wordPool' => [],
+        'remainingWords' => [],
+        'calledWords' => [],
+        'claims' => [],
+        'players' => [],
+        'lastDrawnWord' => null,
+        'gameStartedAt' => null,
+        'updatedAt' => time(),
+    ];
+}
+
+function bingo_api_load_global_state(int $level): array
+{
+    $file = bingo_api_storage_file($level);
+    if (!file_exists($file)) {
+        return bingo_api_default_global_state();
     }
 
-    if (!isset($state['marks']) || !is_array($state['marks'])) {
-        $state['marks'] = [];
+    $contents = file_get_contents($file);
+    $decoded = json_decode($contents, true);
+    if (!is_array($decoded)) {
+        return bingo_api_default_global_state();
     }
 
+    $state = array_merge(bingo_api_default_global_state(), $decoded);
+    if (!isset($state['players']) || !is_array($state['players'])) {
+        $state['players'] = [];
+    }
+    if (!isset($state['claims']) || !is_array($state['claims'])) {
+        $state['claims'] = [];
+    }
     if (!isset($state['calledWords']) || !is_array($state['calledWords'])) {
         $state['calledWords'] = [];
     }
-
-    if (isset($state['pendingReview']) && $state['pendingReview'] === true && isset($state['pendingReviewData'])) {
-        $state['review'] = $state['pendingReviewData'];
-        $state['pendingReview'] = false;
-        unset($state['pendingReviewData']);
-        $state['status'] = 'connected';
+    if (!isset($state['remainingWords']) || !is_array($state['remainingWords'])) {
+        $state['remainingWords'] = [];
     }
-
-    $_SESSION[$key] = $state;
+    if (!isset($state['wordPool']) || !is_array($state['wordPool'])) {
+        $state['wordPool'] = [];
+    }
 
     return $state;
 }
 
-function bingo_api_save_state(int $level, array $state): void
+function bingo_api_save_global_state(int $level, array $state): void
 {
-    $_SESSION[bingo_api_storage_key($level)] = $state;
+    $state['updatedAt'] = time();
+    file_put_contents(
+        bingo_api_storage_file($level),
+        json_encode($state, JSON_PRETTY_PRINT),
+        LOCK_EX
+    );
+}
+
+function bingo_api_generate_card(?array $wordPool = null): array
+{
+    $words = $wordPool;
+    if (!is_array($words) || count($words) < 25) {
+        $words = [
+            'Alphabet', 'Numbers', 'School', 'Friend', 'Family', 'Teacher', 'Homework', 'Weekend',
+            'Music', 'Dance', 'Practice', 'Sign', 'Interpret', 'Story', 'Question', 'Answer',
+            'Movie', 'Library', 'Lunch', 'Breakfast', 'Notebook', 'Travel', 'Culture',
+            'Celebrate', 'Community', 'Sports', 'Science', 'History', 'Technology', 'Language', 'Project',
+            'Challenge', 'Create', 'Share', 'Support', 'Respect', 'Learn', 'Grow', 'Inspire'
+        ];
+    }
+
+    $uniqueWords = array_values(array_unique(array_map('trim', $words)));
+    shuffle($uniqueWords);
+    $card = array_slice($uniqueWords, 0, 25);
+
+    while (count($card) < 25) {
+        $card[] = 'Word ' . (count($card) + 1);
+    }
+
+    return $card;
 }
 
 function bingo_api_default_state(): array
 {
     $card = bingo_api_generate_card();
-
     return [
         'card' => $card,
         'marks' => [],
-        'calledWords' => array_slice($card, 0, 5),
-        'status' => 'connected',
+        'calledWords' => [],
+        'status' => 'waiting',
         'review' => null,
         'pendingReview' => false,
+        '__playerKey' => bingo_api_player_key(),
     ];
 }
 
-function bingo_api_generate_card(): array
+function bingo_api_get_state(int $level): array
 {
-    $words = [
-        'Alphabet', 'Numbers', 'School', 'Friend', 'Family', 'Teacher', 'Homework', 'Weekend',
-        'Music', 'Dance', 'Practice', 'Sign', 'Interpret', 'Story', 'Question', 'Answer',
-        'Movie', 'Library', 'Lunch', 'Breakfast', 'Homework', 'Notebook', 'Travel', 'Culture',
-        'Celebrate', 'Community', 'Sports', 'Science', 'History', 'Technology', 'Language', 'Project',
-        'Challenge', 'Create', 'Share', 'Support', 'Respect', 'Learn', 'Grow', 'Inspire'
+    $global = bingo_api_load_global_state($level);
+    $playerKey = bingo_api_player_key();
+    $wordPool = $global['wordPool'];
+
+    if (!isset($global['players'][$playerKey])) {
+        $global['players'][$playerKey] = [
+            'card' => bingo_api_generate_card($wordPool),
+            'marks' => [],
+            'status' => 'waiting',
+        ];
+    }
+
+    $player = $global['players'][$playerKey];
+    $dirty = false;
+
+    if (empty($player['card']) || count($player['card']) !== 25) {
+        $player['card'] = bingo_api_generate_card($wordPool);
+        $dirty = true;
+    }
+
+    if (!isset($player['marks']) || !is_array($player['marks'])) {
+        $player['marks'] = [];
+        $dirty = true;
+    }
+
+    if (isset($player['pendingReview']) && $player['pendingReview'] === true && isset($player['pendingReviewData'])) {
+        $player['review'] = $player['pendingReviewData'];
+        $player['pendingReview'] = false;
+        unset($player['pendingReviewData']);
+        $player['status'] = $global['status'] === 'active' ? 'connected' : $global['status'];
+        $dirty = true;
+    }
+
+    $review = $player['review'] ?? null;
+    if ($review !== null) {
+        $player['review'] = null;
+        $dirty = true;
+    }
+
+    if ($dirty) {
+        $global['players'][$playerKey] = $player;
+        bingo_api_save_global_state($level, $global);
+    }
+
+    return [
+        'card' => $player['card'],
+        'marks' => $player['marks'],
+        'calledWords' => $global['calledWords'],
+        'status' => $player['status'] ?? $global['status'] ?? 'waiting',
+        'sessionStatus' => $player['status'] ?? $global['status'] ?? 'waiting',
+        'review' => $review,
+        '__playerKey' => $playerKey,
     ];
+}
 
-    $uniqueWords = array_values(array_unique($words));
-    shuffle($uniqueWords);
+function bingo_api_save_state(int $level, array $state): void
+{
+    $playerKey = $state['__playerKey'] ?? null;
+    if (!$playerKey) {
+        return;
+    }
 
-    $card = array_slice($uniqueWords, 0, 25);
+    $global = bingo_api_load_global_state($level);
+    if (!isset($global['players'][$playerKey])) {
+        $global['players'][$playerKey] = [];
+    }
 
-    if (count($card) < 25) {
-        $needed = 25 - count($card);
-        for ($i = 0; $i < $needed; $i += 1) {
-            $card[] = 'Word ' . ($i + 1);
+    $player = $global['players'][$playerKey];
+
+    if (isset($state['card']) && is_array($state['card']) && count($state['card']) === 25) {
+        $player['card'] = array_values($state['card']);
+    }
+
+    if (isset($state['marks']) && is_array($state['marks'])) {
+        $player['marks'] = array_values($state['marks']);
+    }
+
+    if (isset($state['status'])) {
+        $player['status'] = $state['status'];
+    }
+
+    if (array_key_exists('pendingReview', $state)) {
+        $player['pendingReview'] = (bool) $state['pendingReview'];
+    }
+
+    if (array_key_exists('pendingReviewData', $state)) {
+        if ($state['pendingReviewData'] === null) {
+            unset($player['pendingReviewData']);
+        } else {
+            $player['pendingReviewData'] = $state['pendingReviewData'];
         }
     }
 
-    return $card;
+    if (array_key_exists('review', $state)) {
+        if ($state['review'] === null) {
+            unset($player['review']);
+        } else {
+            $player['review'] = $state['review'];
+        }
+    }
+
+    $global['players'][$playerKey] = $player;
+    bingo_api_save_global_state($level, $global);
 }
 
 function bingo_api_sanitize_marks($marks): array
