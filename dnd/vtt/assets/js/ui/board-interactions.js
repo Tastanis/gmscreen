@@ -698,6 +698,26 @@ export function mountBoardInteractions(store, routes = {}) {
   let conditionTooltipActiveTarget = null;
   let activeCustomConditionDialog = null;
 
+  function getCustomConditionOverlayElement() {
+    const overlay = activeCustomConditionDialog?.overlay ?? null;
+    if (overlay?.isConnected) {
+      return overlay;
+    }
+
+    if (typeof document?.querySelector === 'function') {
+      const fallback = document.querySelector('.vtt-custom-condition-overlay');
+      if (fallback instanceof Element) {
+        return fallback;
+      }
+    }
+
+    return null;
+  }
+
+  function isCustomConditionDialogOpen() {
+    return Boolean(getCustomConditionOverlayElement());
+  }
+
   function getConditionDefinition(name) {
     if (typeof name !== 'string') {
       return null;
@@ -1952,6 +1972,10 @@ export function mountBoardInteractions(store, routes = {}) {
   );
 
   mapSurface.addEventListener('pointerdown', (event) => {
+    if (isCustomConditionDialogOpen()) {
+      return;
+    }
+
     if (event.altKey && (event.button === 0 || event.button === 2)) {
       const handled = handleMapPing(event, { focus: event.button === 2 });
       if (handled) {
@@ -2069,6 +2093,10 @@ export function mountBoardInteractions(store, routes = {}) {
   });
 
   mapSurface.addEventListener('pointermove', (event) => {
+    if (isCustomConditionDialogOpen()) {
+      return;
+    }
+
     if (!viewState.mapLoaded) {
       return;
     }
@@ -2125,6 +2153,10 @@ export function mountBoardInteractions(store, routes = {}) {
   };
 
   const handlePointerUp = (event) => {
+    if (isCustomConditionDialogOpen()) {
+      return;
+    }
+
     if (viewState.dragState && event.pointerId === viewState.dragState.pointerId) {
       const isPrimaryButton = event.button === 0 || event.button === -1;
       endTokenDrag({ commit: isPrimaryButton, pointerId: event.pointerId });
@@ -2138,6 +2170,10 @@ export function mountBoardInteractions(store, routes = {}) {
   };
 
   const handlePointerCancel = (event) => {
+    if (isCustomConditionDialogOpen()) {
+      return;
+    }
+
     if (viewState.dragState && event.pointerId === viewState.dragState.pointerId) {
       endTokenDrag({ commit: false, pointerId: event.pointerId });
     }
@@ -2146,6 +2182,10 @@ export function mountBoardInteractions(store, routes = {}) {
   };
 
   const handlePointerLeave = (event) => {
+    if (isCustomConditionDialogOpen()) {
+      return;
+    }
+
     if (viewState.dragState && event.pointerId === viewState.dragState.pointerId) {
       endTokenDrag({ commit: false, pointerId: event.pointerId });
     }
@@ -10276,7 +10316,7 @@ export function mountBoardInteractions(store, routes = {}) {
   function attachTokenSettingsListeners() {
     const handlePointerDown = (event) => {
       const target = event?.target ?? null;
-      const customConditionOverlay = activeCustomConditionDialog?.overlay ?? null;
+      const customConditionOverlay = getCustomConditionOverlayElement();
 
       if (
         customConditionOverlay &&
@@ -10958,7 +10998,11 @@ export function mountBoardInteractions(store, routes = {}) {
       onSubmit: typeof options.onSubmit === 'function' ? options.onSubmit : null,
       onCancel: typeof options.onCancel === 'function' ? options.onCancel : null,
       handleKeydown: null,
+      handleSubmit: null,
+      handleCancel: null,
     };
+
+    activeCustomConditionDialog = state;
 
     const synchronizeDurationSelection = (value) => {
       const normalized = normalizeConditionDurationValue(value);
@@ -11082,11 +11126,8 @@ export function mountBoardInteractions(store, routes = {}) {
       updateDescriptionPlaceholder();
     });
 
-    activeCustomConditionDialog = {
-      ...state,
-      handleSubmit,
-      handleCancel,
-    };
+    state.handleSubmit = handleSubmit;
+    state.handleCancel = handleCancel;
 
     window.setTimeout(() => {
       state.nameInput.focus();
