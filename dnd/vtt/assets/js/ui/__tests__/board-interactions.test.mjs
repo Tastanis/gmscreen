@@ -447,6 +447,106 @@ test('numeric activeSceneId toggles combat button to End Combat', () => {
   }
 });
 
+test('condition changes persist and propagate between clients', async () => {
+  const dom = createDom();
+  const fetchCalls = [];
+  const originalSetTimeout = globalThis.setTimeout;
+  const originalWindowSetTimeout = dom.window.setTimeout;
+  const fetchMock = mock.method(globalThis, 'fetch', async (...args) => {
+    fetchCalls.push({ args });
+    return { ok: true, json: async () => ({}) };
+  });
+
+  globalThis.setTimeout = dom.window.setTimeout = (callback) => {
+    if (typeof callback === 'function') {
+      callback();
+    }
+    return 0;
+  };
+
+  try {
+    const gmStore = createMockStore({
+      user: { isGM: true, name: 'GM' },
+      scenes: { items: [{ id: 'scene-1', name: 'Scene 1' }] },
+      grid: { size: 64, visible: true },
+      boardState: {
+        activeSceneId: 'scene-1',
+        placements: {
+          'scene-1': [
+            {
+              id: 'hero',
+              tokenId: 'hero',
+              name: 'Hero',
+              column: 0,
+              row: 0,
+              width: 1,
+              height: 1,
+            },
+          ],
+        },
+        sceneState: { 'scene-1': { grid: { size: 64, visible: true } } },
+      },
+    });
+
+    const interactions = mountBoardInteractions(gmStore, { state: '/state' }) ?? {};
+    const hooks = interactions.__testing ?? {};
+
+    const applied = hooks.applyConditionToPlacement?.('hero', {
+      name: 'Slowed',
+      duration: { type: 'save-ends' },
+    });
+    assert.equal(applied, true, 'GM should apply a condition to the placement');
+
+    await Promise.resolve();
+    const appliedPayload = fetchCalls.at(-1)?.args?.[1]?.body
+      ? JSON.parse(fetchCalls.at(-1).args[1].body)
+      : null;
+
+    assert.ok(appliedPayload?.boardState, 'board state payload should be persisted for condition add');
+    const persistedPlacement =
+      appliedPayload?.boardState?.placements?.['scene-1']?.find((entry) => entry?.id === 'hero') ?? null;
+    assert.equal(persistedPlacement?.conditions?.length, 1, 'persisted state should include the applied condition');
+
+    const playerStore = createMockStore({
+      user: { isGM: false, name: 'Player' },
+      scenes: { items: [{ id: 'scene-1', name: 'Scene 1' }] },
+      grid: { size: 64, visible: true },
+      boardState: {
+        activeSceneId: 'scene-1',
+        placements: { 'scene-1': [] },
+        sceneState: { 'scene-1': { grid: { size: 64, visible: true } } },
+      },
+    });
+
+    playerStore.setState({ ...playerStore.getState(), boardState: appliedPayload.boardState });
+    const playerPlacement =
+      playerStore.getState().boardState?.placements?.['scene-1']?.find((entry) => entry?.id === 'hero') ?? null;
+    assert.equal(playerPlacement?.conditions?.length, 1, 'player should see the applied condition');
+
+    const removed = hooks.removeConditionFromPlacement?.('hero', 0);
+    assert.equal(removed, true, 'GM should remove the condition for resolution');
+
+    await Promise.resolve();
+    const removalPayload = fetchCalls.at(-1)?.args?.[1]?.body
+      ? JSON.parse(fetchCalls.at(-1).args[1].body)
+      : null;
+
+    assert.ok(removalPayload?.boardState, 'board state payload should be persisted for condition removal');
+    playerStore.setState({ ...playerStore.getState(), boardState: removalPayload.boardState });
+
+    const clearedPlacement =
+      playerStore.getState().boardState?.placements?.['scene-1']?.find((entry) => entry?.id === 'hero') ?? null;
+    assert.equal(clearedPlacement?.conditions?.length ?? 0, 0, 'player should see the condition cleared');
+
+    assert.equal(fetchCalls.length >= 2, true, 'condition add and remove should each trigger persistence');
+  } finally {
+    fetchMock.mock.restore();
+    globalThis.setTimeout = originalSetTimeout;
+    dom.window.setTimeout = originalWindowSetTimeout;
+    dom.window.close();
+  }
+});
+
 test('Sharon confirmation is required for other allies but triggers Hesitation banner on her own token', () => {
   const dom = createDom();
   try {

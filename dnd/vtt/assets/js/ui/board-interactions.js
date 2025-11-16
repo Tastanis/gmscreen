@@ -5979,13 +5979,15 @@ export function mountBoardInteractions(store, routes = {}) {
           }
         }
       }
-    });
+    }, { syncBoard: false });
 
     if (updated && didChange) {
       refreshTokenSettings();
       if (placementId === activeTokenSettingsId) {
         resetConditionControls();
       }
+
+      syncConditionsAfterMutation(true);
     }
 
     return updated && didChange;
@@ -9289,7 +9291,7 @@ export function mountBoardInteractions(store, routes = {}) {
     };
   }
 
-  function updatePlacementById(placementId, mutator) {
+  function updatePlacementById(placementId, mutator, { syncBoard = true } = {}) {
     if (!placementId || typeof mutator !== 'function' || typeof boardApi.updateState !== 'function') {
       return false;
     }
@@ -9315,11 +9317,24 @@ export function mountBoardInteractions(store, routes = {}) {
       updated = true;
     });
 
-    if (updated) {
+    if (updated && syncBoard) {
       persistBoardStateSnapshot();
     }
 
     return updated;
+  }
+
+  function syncConditionsAfterMutation(didMutate) {
+    if (!didMutate) {
+      return false;
+    }
+
+    if (typeof boardApi?.emitStateUpdate === 'function') {
+      boardApi.emitStateUpdate();
+    }
+
+    persistBoardStateSnapshot();
+    return true;
   }
 
   function getPlacementFromStore(placementId) {
@@ -11168,13 +11183,15 @@ export function mountBoardInteractions(store, routes = {}) {
           delete target.condition;
         }
       }
-    });
+    }, { syncBoard: false });
 
     if (updated && didChange) {
       refreshTokenSettings();
       if (placementId === activeTokenSettingsId) {
         resetConditionControls();
       }
+
+      syncConditionsAfterMutation(true);
     }
 
     return updated && didChange;
@@ -11245,7 +11262,7 @@ export function mountBoardInteractions(store, routes = {}) {
             delete target.condition;
           }
         }
-      });
+      }, { syncBoard: false });
 
       if (updated) {
         cleared.push({
@@ -11262,6 +11279,7 @@ export function mountBoardInteractions(store, routes = {}) {
 
     if (cleared.length) {
       refreshTokenSettings();
+      syncConditionsAfterMutation(true);
     }
 
     return cleared;
@@ -11316,13 +11334,15 @@ export function mountBoardInteractions(store, routes = {}) {
           delete target.condition;
         }
       }
-    });
+    }, { syncBoard: false });
 
     if (updated && didChange) {
       refreshTokenSettings();
       if (placementId === activeTokenSettingsId) {
         resetConditionControls();
       }
+
+      syncConditionsAfterMutation(true);
     }
 
     return updated && didChange;
@@ -15299,6 +15319,11 @@ function createTemplateTool() {
     __testing: {
       openTokenSettingsById,
       getTokenSettingsMenu: () => tokenSettingsMenu,
+      applyConditionToPlacement,
+      removeConditionFromPlacement,
+      removeConditionFromPlacementByCondition,
+      clearEndOfTurnConditionsForTarget,
+      syncConditionsAfterMutation,
     },
   };
 }
