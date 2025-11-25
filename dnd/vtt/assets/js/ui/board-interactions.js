@@ -7553,7 +7553,7 @@ export function mountBoardInteractions(store, routes = {}) {
   function notifyGmPlayersTurnEnd() {
     if (isGmUser()) {
       flashTurnBorder();
-      playSoundProfile('longDing');
+      playSoundProfile('softGong');
     } else {
       playSoundProfile('softGong');
     }
@@ -7564,7 +7564,7 @@ export function mountBoardInteractions(store, routes = {}) {
       playSoundProfile('softGong');
     } else {
       flashTurnBorder();
-      playSoundProfile('longDing');
+      playSoundProfile('softGong');
     }
   }
 
