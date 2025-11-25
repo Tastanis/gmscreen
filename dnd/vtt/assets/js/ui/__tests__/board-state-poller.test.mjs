@@ -113,3 +113,57 @@ test('board state poller applies remote snapshots when no save is pending', asyn
 
   assert.deepEqual(appliedSnapshot, remoteSnapshot);
 });
+
+test('gm clients accept newer player-authored snapshots when theirs is older', async () => {
+  const { createBoardStatePoller } = await modulePromise;
+
+  const boardStateContainer = {
+    boardState: {
+      placements: { token: { x: 0 } },
+      metadata: {
+        authorIsGm: true,
+        updatedAt: 100,
+        signature: 'current-sig',
+      },
+    },
+  };
+
+  let appliedSnapshot = null;
+
+  const boardApi = {
+    getState: () => boardStateContainer,
+    updateState: (mutator) => {
+      mutator(boardStateContainer);
+      appliedSnapshot = boardStateContainer.boardState;
+    },
+  };
+
+  const remoteSnapshot = {
+    placements: { token: { x: 5 } },
+    metadata: {
+      authorIsGm: false,
+      updatedAt: 101,
+      signature: 'incoming-sig',
+    },
+  };
+
+  const poller = createBoardStatePoller({
+    stateEndpoint: '/state',
+    boardApi,
+    fetchFn: async () => ({ ok: true, json: async () => ({ data: { boardState: remoteSnapshot } }) }),
+    windowRef: { setInterval: () => 0, clearInterval: () => {} },
+    documentRef: { visibilityState: 'visible' },
+    hashBoardStateSnapshotFn: (snapshot) => JSON.stringify(snapshot),
+    safeJsonStringifyFn: (value) => JSON.stringify(value),
+    mergeBoardStateSnapshotFn: () => remoteSnapshot,
+    getCurrentUserIdFn: () => 'gm user',
+    normalizeProfileIdFn: (value) => (typeof value === 'string' ? value.trim().toLowerCase() : null),
+    getPendingSaveInfo: () => ({ pending: false }),
+    getLastPersistedHashFn: () => null,
+    getLastPersistedSignatureFn: () => null,
+  });
+
+  await poller.poll();
+
+  assert.deepEqual(appliedSnapshot, remoteSnapshot);
+});

@@ -159,16 +159,16 @@ export function createBoardStatePoller({
         return;
       }
 
-      if (
+      const gmHasAuthoritativeSnapshot =
         currentAuthorIsGm &&
         currentUpdatedAt > 0 &&
-        (!snapshotAuthorIsGm ||
-          currentUpdatedAt > snapshotUpdatedAt ||
+        (currentUpdatedAt > snapshotUpdatedAt ||
           (currentUpdatedAt === snapshotUpdatedAt &&
             currentSignature &&
             snapshotSignature &&
-            currentSignature === snapshotSignature))
-      ) {
+            currentSignature === snapshotSignature));
+
+      if (gmHasAuthoritativeSnapshot) {
         lastHash = hash;
         pollErrorLogged = false;
         return;
