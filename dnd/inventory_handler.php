@@ -303,26 +303,35 @@ switch ($inventory_action) {
             $data[$to_tab]['items'] = array();
         }
         
-        // Add to target folder
-        $data[$to_tab]['items'][] = $new_item;
-        
-        // Remove from original location
-        array_splice($data[$from_tab]['items'], $index, 1);
-        
-        // Delete the original image file after successful copy
-        if (!empty($original_item['image']) && file_exists($original_item['image']) && !empty($new_item['image'])) {
-            unlink($original_item['image']);
+        // Add to target folder and save before mutating source
+        $data_with_new_item = $data;
+        $data_with_new_item[$to_tab]['items'][] = $new_item;
+
+        if (!saveInventoryData($data_with_new_item)) {
+            echo json_encode(array('success' => false, 'error' => 'Failed to save data when adding shared item'));
+            break;
         }
-        
+
+        // Remove from original location only after the new item has been persisted
+        $final_data = $data_with_new_item;
+        array_splice($final_data[$from_tab]['items'], $index, 1);
+
         // Save to file
-        if (saveInventoryData($data)) {
+        if (saveInventoryData($final_data)) {
+            // Delete the original image file after successful copy
+            if (!empty($original_item['image']) && file_exists($original_item['image']) && !empty($new_item['image'])) {
+                unlink($original_item['image']);
+            }
+
             echo json_encode(array(
                 'success' => true,
                 'new_item' => $new_item,
                 'to_tab' => $to_tab
             ));
         } else {
-            echo json_encode(array('success' => false, 'error' => 'Failed to save data'));
+            // Attempt to rollback to the state where both items are present to prevent data loss
+            saveInventoryData($data_with_new_item);
+            echo json_encode(array('success' => false, 'error' => 'Failed to remove item from original tab after sharing'));
         }
         break;
         
@@ -403,26 +412,35 @@ switch ($inventory_action) {
             $data[$to_tab]['items'] = array();
         }
         
-        // Add to player's inventory
-        $data[$to_tab]['items'][] = $new_item;
-        
-        // Remove from original location
-        array_splice($data[$from_tab]['items'], $index, 1);
-        
-        // Delete the original image file after successful copy
-        if (!empty($original_item['image']) && file_exists($original_item['image']) && !empty($new_item['image'])) {
-            unlink($original_item['image']);
+        // Add to player's inventory and save before mutating source
+        $data_with_new_item = $data;
+        $data_with_new_item[$to_tab]['items'][] = $new_item;
+
+        if (!saveInventoryData($data_with_new_item)) {
+            echo json_encode(array('success' => false, 'error' => 'Failed to save data when adding taken item'));
+            break;
         }
-        
+
+        // Remove from original location only after the new item has been persisted
+        $final_data = $data_with_new_item;
+        array_splice($final_data[$from_tab]['items'], $index, 1);
+
         // Save to file
-        if (saveInventoryData($data)) {
+        if (saveInventoryData($final_data)) {
+            // Delete the original image file after successful copy
+            if (!empty($original_item['image']) && file_exists($original_item['image']) && !empty($new_item['image'])) {
+                unlink($original_item['image']);
+            }
+
             echo json_encode(array(
                 'success' => true,
                 'new_item' => $new_item,
                 'to_tab' => $to_tab
             ));
         } else {
-            echo json_encode(array('success' => false, 'error' => 'Failed to save data'));
+            // Attempt to rollback to the state where both items are present to prevent data loss
+            saveInventoryData($data_with_new_item);
+            echo json_encode(array('success' => false, 'error' => 'Failed to remove item from source tab after taking'));
         }
         break;
         
