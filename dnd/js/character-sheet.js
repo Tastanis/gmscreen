@@ -48,6 +48,12 @@ let isProcessingQueue = false;
 // Debounce timers for different operations
 const debounceTimers = new Map();
 
+// Buffer saves that happen while we're mid-switch so they can be replayed
+const switchingSaveBuffer = new Map();
+
+// Track temporary UI locks during save drains
+let uiLockState = { locked: false, tabs: [], inputs: [] };
+
 // Track local modification state even without a Save button
 let hasUnsavedChanges = false;
 
@@ -125,6 +131,63 @@ async function waitForPendingSaves() {
     if (attempts >= 50) {
         console.warn('Timeout waiting for saves to complete');
     }
+}
+
+// Temporarily disable tabs and inputs while saves complete
+function lockTabsAndInputs(message = 'Saving...') {
+    if (!isGM || uiLockState.locked) {
+        return () => {};
+    }
+
+    uiLockState.locked = true;
+    uiLockState.tabs = [];
+    uiLockState.inputs = [];
+
+    document.querySelectorAll('.character-tab, .section-tab').forEach(tab => {
+        uiLockState.tabs.push({ tab, text: tab.textContent, disabled: tab.disabled });
+        if (message) {
+            tab.textContent = message;
+        }
+        tab.disabled = true;
+        tab.classList.add('loading');
+    });
+
+    document.querySelectorAll('input, textarea, select').forEach(input => {
+        uiLockState.inputs.push({ element: input, disabled: input.disabled });
+        input.disabled = true;
+    });
+
+    return () => {
+        uiLockState.tabs.forEach(({ tab, text, disabled }) => {
+            tab.textContent = text;
+            tab.disabled = disabled;
+            tab.classList.remove('loading');
+        });
+
+        uiLockState.inputs.forEach(({ element, disabled }) => {
+            element.disabled = disabled;
+        });
+
+        uiLockState = { locked: false, tabs: [], inputs: [] };
+    };
+}
+
+// Move any buffered saves created during character switches into the main queue
+function flushSwitchingSaves() {
+    if (switchingSaveBuffer.size === 0) {
+        return;
+    }
+
+    switchingSaveBuffer.forEach(saveRequest => {
+        saveQueue.push({
+            ...saveRequest,
+            requestId: generateRequestId(),
+            queuedDuringSwitch: true
+        });
+    });
+
+    switchingSaveBuffer.clear();
+    processSaveQueue();
 }
 
 // Process save queue sequentially
@@ -319,7 +382,10 @@ async function switchCharacter(character) {
     
     // Set flag to prevent new saves during switch
     isSwitchingCharacter = true;
-    
+
+    // Briefly lock the UI while we wait for saves to settle
+    const unlockUI = lockTabsAndInputs('Saving...');
+
     try {
         // Show loading state
         if (clickedTab) {
@@ -363,21 +429,25 @@ async function switchCharacter(character) {
         
         // Load new character data
         await loadCharacterData(character);
-        
+
     } catch (error) {
         console.error('Error switching character:', error);
         showSaveStatus('Error switching character', 'error');
-        
+
         // Restore tab state on error
         if (clickedTab) {
             clickedTab.textContent = originalText;
             clickedTab.disabled = false;
         }
     } finally {
-        // Re-enable saves after character data is loaded
-        setTimeout(function() {
-            isSwitchingCharacter = false;
-        }, 200);
+        // Allow saves again and flush anything buffered during the switch
+        isSwitchingCharacter = false;
+        flushSwitchingSaves();
+        await waitForPendingSaves();
+
+        if (unlockUI) {
+            unlockUI();
+        }
     }
 }
 
@@ -386,7 +456,9 @@ async function switchSection(section) {
     // Find the clicked tab to show loading state
     const clickedTab = document.querySelector(`[data-section="${section}"]`);
     const originalText = clickedTab ? clickedTab.textContent : '';
-    
+
+    const unlockUI = lockTabsAndInputs('Saving...');
+
     try {
         // Show loading state and disable tab if there are pending saves
         if (isGM) {
@@ -438,10 +510,14 @@ async function switchSection(section) {
                 expandedInventoryCard = null;
             }
         }
-        
+
         // Load section-specific data
         loadSectionData(section);
-        
+
+        // Flush any buffered saves created during the switch
+        flushSwitchingSaves();
+        await waitForPendingSaves();
+
     } catch (error) {
         console.error('Error switching section:', error);
         showSaveStatus('Error switching section', 'error');
@@ -450,6 +526,10 @@ async function switchSection(section) {
         if (clickedTab) {
             clickedTab.textContent = originalText;
             clickedTab.disabled = false;
+        }
+    } finally {
+        if (unlockUI) {
+            unlockUI();
         }
     }
 }
@@ -1631,14 +1711,15 @@ function saveFieldData(character, section, field, value, index = null, debounceD
         return;
     }
     
-    // Prevent saving if currently switching characters
-    if (isSwitchingCharacter) {
-        console.log('Skipping save during character switch');
-        return;
-    }
-    
     // Create a unique key for this field
     const fieldKey = `${character}-${section}-${field}-${index || 'none'}`;
+
+    // If we're switching characters, buffer the save to replay after the switch
+    if (isSwitchingCharacter) {
+        switchingSaveBuffer.set(fieldKey, { character, section, field, value, index });
+        console.log('Buffered save during switch for:', fieldKey);
+        return;
+    }
     
     // Check if this exact save is already pending
     const pendingSave = pendingSaves.get(fieldKey);
