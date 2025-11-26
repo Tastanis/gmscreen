@@ -1,4 +1,5 @@
 const SVG_NS = 'http://www.w3.org/2000/svg';
+const MAX_MEASUREMENT_POINTS = 21; // 20 segments
 
 let sharedState = null;
 
@@ -74,7 +75,11 @@ export function mountDragRuler() {
       event.preventDefault();
       event.stopPropagation();
 
-      beginMeasurement(state, event.pointerId, snapPoint);
+      if (canExtendExistingMeasurement(state, snapPoint)) {
+        resumeMeasurement(state, event.pointerId, snapPoint);
+      } else {
+        beginMeasurement(state, event.pointerId, snapPoint);
+      }
       try {
         mapSurface.setPointerCapture(event.pointerId);
       } catch (error) {
@@ -167,6 +172,14 @@ function beginMeasurement(state, pointerId, startPoint) {
   updateOverlay(state);
 }
 
+function resumeMeasurement(state, pointerId, snapPoint) {
+  state.measuring = true;
+  state.pointerId = pointerId;
+  state.hoverPoint = snapPoint;
+  state.mode = 'pointer';
+  updateOverlay(state);
+}
+
 function updateHoverPoint(state, hoverPoint) {
   state.hoverPoint = hoverPoint;
   updateOverlay(state);
@@ -177,7 +190,10 @@ function commitHoverPoint(state, snapPoint) {
     state.points = [snapPoint];
   } else {
     const lastPoint = state.points[state.points.length - 1];
-    if (lastPoint.column !== snapPoint.column || lastPoint.row !== snapPoint.row) {
+    if (
+      (lastPoint.column !== snapPoint.column || lastPoint.row !== snapPoint.row) &&
+      state.points.length < MAX_MEASUREMENT_POINTS
+    ) {
       state.points.push(snapPoint);
     }
   }
@@ -223,10 +239,31 @@ function handleShiftKey(state) {
   const duplicate = state.points.find(
     (point) => point.column === snapshot.column && point.row === snapshot.row
   );
-  if (!duplicate) {
+  if (!duplicate && state.points.length < MAX_MEASUREMENT_POINTS) {
     state.points.push({ ...snapshot });
     updateOverlay(state);
   }
+}
+
+function canExtendExistingMeasurement(state, snapPoint) {
+  if (!state.points.length) {
+    return false;
+  }
+
+  const lastPoint = state.points[state.points.length - 1];
+  if (!lastPoint) {
+    return false;
+  }
+
+  return pointsShareCell(lastPoint, snapPoint) && state.points.length < MAX_MEASUREMENT_POINTS;
+}
+
+function pointsShareCell(a, b) {
+  if (!a || !b) {
+    return false;
+  }
+
+  return a.column === b.column && a.row === b.row;
 }
 
 function isPointerOverToken(event) {
