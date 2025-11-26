@@ -41,6 +41,9 @@ function setupAutoSave() {
 // Track pending saves to avoid multiple saves of the same field
 const pendingSaves = new Map();
 
+// Track fields the GM has actually modified so we only flush what changed
+const dirtyFieldValues = new Map();
+
 // Save queue to prevent server overload
 const saveQueue = [];
 let isProcessingQueue = false;
@@ -64,6 +67,53 @@ let pendingSaveCount = 0;
 // Track failed saves so they can be retried/resumed
 const failedSaveRequests = new Map();
 let hasShownSaveFailureAlert = false;
+
+function makeFieldKey(character, section, field, index = null) {
+    const indexKey = index === null || index === undefined ? 'none' : index;
+    return `${character}::${section}::${field}::${indexKey}`;
+}
+
+function markFieldDirty(character, section, field, value, index = null) {
+    if (!character || !section || !field) return;
+    const key = makeFieldKey(character, section, field, index);
+    dirtyFieldValues.set(key, value);
+    markAsModified();
+}
+
+function clearDirtyFieldIfMatching(character, section, field, value, index = null) {
+    const key = makeFieldKey(character, section, field, index);
+    const currentDirtyValue = dirtyFieldValues.get(key);
+    if (currentDirtyValue !== undefined && currentDirtyValue === value) {
+        dirtyFieldValues.delete(key);
+        if (!hasPendingChanges()) {
+            clearModifiedFlag();
+        }
+    }
+}
+
+function clearDirtyFieldsForCharacter(character) {
+    dirtyFieldValues.forEach((_, key) => {
+        if (key.startsWith(`${character}::`)) {
+            dirtyFieldValues.delete(key);
+        }
+    });
+}
+
+function getDirtyFieldUpdatesForCharacter(character) {
+    const updates = [];
+    dirtyFieldValues.forEach((value, key) => {
+        const [keyCharacter, section, field, indexKey] = key.split('::');
+        if (keyCharacter === character) {
+            updates.push({
+                section,
+                field,
+                value,
+                index: indexKey === 'none' ? null : parseInt(indexKey)
+            });
+        }
+    });
+    return updates;
+}
 
 // Create a stable key for a save request regardless of request ID
 function getFailedSaveKey({ character, section, field, index }) {
@@ -348,10 +398,11 @@ async function performSave(saveRequest, retryCount = 0) {
             console.error('Failed to save field:', field, 'Error:', data.error);
             throw new Error(data.error || 'Save failed');
         }
-        
+
         console.log(`Successfully saved ${field} (${requestId})`);
+        clearDirtyFieldIfMatching(character, section, field, value, index);
         return data;
-        
+
     } catch (error) {
         if (retryCount < 3 && !error.message.includes('Client Error')) {
             console.warn(`Error saving field ${field}, retrying... (attempt ${retryCount + 1}/3)`, error);
@@ -375,14 +426,15 @@ function setupEventListeners() {
             if ((target.tagName === 'INPUT' || target.tagName === 'TEXTAREA') && 
                 target.hasAttribute && target.hasAttribute('data-field')) {
                 
-                // Mark that we have unsaved changes
-                markAsModified();
-                
                 // Update local data immediately for UI consistency
                 const field = target.getAttribute('data-field');
                 const section = target.getAttribute('data-section');
                 const value = target.value;
-                
+                const index = target.getAttribute('data-index');
+
+                // Track the specific field as dirty so we only flush what changed
+                markFieldDirty(currentCharacter, section, field, value, index === null ? null : parseInt(index));
+
                 if (field && section && value !== undefined && value !== null && !isSwitchingCharacter) {
                     // Update local characterData object
                     if (section === 'character' || section === 'current_classes' || section === 'job') {
@@ -450,11 +502,12 @@ async function switchCharacter(character) {
         // CRITICAL FIX: Store the character we're saving FROM before switching
         const characterToSaveFrom = currentCharacter;
         
-        // Check if there are unsaved changes and save them
+        // Check if there are unsaved changes and save only the fields that changed
         if (hasPendingChanges()) {
-            saveAllDataForCharacter(characterToSaveFrom, true);
+            await saveDirtyFieldsForCharacter(characterToSaveFrom, true);
             clearModifiedFlag();
-            
+            clearDirtyFieldsForCharacter(characterToSaveFrom);
+
             // Wait a bit for the save to process
             await new Promise(resolve => setTimeout(resolve, 300));
         }
@@ -1062,8 +1115,8 @@ function updateRelationshipField(index, field, value) {
     
     characterData.relationships[index][field] = value;
     
-    // Mark as modified
-    markAsModified();
+    // Mark as modified and track the exact field that changed
+    markFieldDirty(currentCharacter, 'relationships', field, value, index);
     
     // Save this specific field to server with longer debounce
     saveFieldData(currentCharacter, 'relationships', field, value, index, 2000);
@@ -1381,17 +1434,18 @@ function saveProjectData(index) {
     // Save all project fields
     Object.keys(project).forEach(field => {
         let value = project[field];
-        
+
         // Convert arrays to JSON strings for transmission
         if (Array.isArray(value)) {
             value = JSON.stringify(value);
         }
-        
+
         // Save each field with debounce
         saveFieldData(currentCharacter, 'projects', field, value, index, 2000);
+
+        // Track dirty state so only changed project fields flush on navigation
+        markFieldDirty(currentCharacter, 'projects', field, value, index);
     });
-    
-    markAsModified();
 }
 
 // Update project history display
@@ -1466,7 +1520,7 @@ function updateProjectField(index, field, value) {
     characterData.projects[index][field] = value;
     
     // Mark as modified
-    markAsModified();
+    markFieldDirty(currentCharacter, 'projects', field, value, index);
     
     // Save this specific field to server with longer debounce
     saveFieldData(currentCharacter, 'projects', field, value, index, 2000);
@@ -1598,7 +1652,7 @@ function updateClubField(index, field, value, character) {
     characterData.clubs[index][field] = value;
     
     // 2. Mark as modified instead of auto-saving
-    markAsModified();
+    markFieldDirty(targetCharacter, 'clubs', field, value, index);
 }
 
 // Load clubs - UPDATED FOR READ-ONLY MODE
@@ -1655,9 +1709,10 @@ async function navigateClub(direction) {
         // Wait for any pending saves to complete
         await waitForPendingSaves();
         
-        // Save current data if there are changes
+        // Save current data if there are changes (only flush the dirty fields)
         if (hasPendingChanges()) {
-            saveAllData(true);
+            await saveDirtyFieldsForCharacter(currentCharacter, true);
+            clearDirtyFieldsForCharacter(currentCharacter);
             // Small delay to let save process
             await new Promise(resolve => setTimeout(resolve, 200));
         }
@@ -1809,6 +1864,54 @@ function saveFieldData(character, section, field, value, index = null, debounceD
     }, debounceDelay);
     
     debounceTimers.set(fieldKey, timerId);
+}
+
+// Save only the fields that were actually modified for a specific character (GM only)
+async function saveDirtyFieldsForCharacter(targetCharacter, silent = true) {
+    if (!isGM) return;
+
+    const updates = getDirtyFieldUpdatesForCharacter(targetCharacter);
+    if (updates.length === 0) {
+        return;
+    }
+
+    if (!silent) {
+        showSaveStatus('Saving changes...', 'loading');
+    }
+
+    const formData = new FormData();
+    formData.append('action', 'batch_save');
+    formData.append('character', targetCharacter);
+    formData.append('updates', JSON.stringify(updates));
+
+    try {
+        const response = await fetch('dashboard.php', {
+            method: 'POST',
+            body: formData
+        });
+
+        if (!response.ok) {
+            throw new Error(`HTTP ${response.status}`);
+        }
+
+        const data = await response.json();
+
+        if (data.success) {
+            updates.forEach(update => {
+                clearDirtyFieldIfMatching(targetCharacter, update.section, update.field, update.value, update.index);
+            });
+            if (!silent) {
+                showSaveStatus(`Saved ${updates.length} pending change${updates.length === 1 ? '' : 's'}`, 'success');
+            }
+        } else if (!silent) {
+            showSaveStatus('Failed to save pending changes', 'error');
+        }
+    } catch (error) {
+        console.error('Error saving dirty fields:', error);
+        if (!silent) {
+            showSaveStatus('Error saving pending changes', 'error');
+        }
+    }
 }
 
 // Save all data for a specific character (GM only) - FIXED VERSION
@@ -2020,7 +2123,9 @@ async function batchSaveAllData() {
 // Clear all form data to prevent contamination
 function clearAllFormData() {
     if (!isGM) return;
-    
+
+    clearDirtyFieldsForCharacter(currentCharacter);
+
     // Clear all input and textarea elements
     const allInputs = document.querySelectorAll('input[data-section], textarea[data-section]');
     allInputs.forEach(input => {
@@ -2306,7 +2411,7 @@ async function initRelationshipAutocomplete() {
 
 // Check if there are pending changes
 function hasPendingChanges() {
-    return hasUnsavedChanges || pendingSaves.size > 0 || debounceTimers.size > 0 || saveQueue.length > 0 || pendingSaveCount > 0;
+    return hasUnsavedChanges || dirtyFieldValues.size > 0 || pendingSaves.size > 0 || debounceTimers.size > 0 || saveQueue.length > 0 || pendingSaveCount > 0;
 }
 
 // Mark that we have unsaved changes
