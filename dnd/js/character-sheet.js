@@ -44,6 +44,9 @@ const pendingSaves = new Map();
 // Track fields the GM has actually modified so we only flush what changed
 const dirtyFieldValues = new Map();
 
+// Lightweight inline placeholder to avoid external fetches for default portraits
+const DEFAULT_PORTRAIT_SRC = 'data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mP8/x8AAwMCAO1N+1cAAAAASUVORK5CYII=';
+
 // Save queue to prevent server overload
 const saveQueue = [];
 let isProcessingQueue = false;
@@ -483,9 +486,6 @@ async function switchCharacter(character) {
     const clickedTab = document.querySelector(`[data-character="${character}"]`);
     const originalText = clickedTab ? clickedTab.textContent : '';
     
-    // Set flag to prevent new saves during switch
-    isSwitchingCharacter = true;
-
     // Briefly lock the UI while we wait for saves to settle
     const unlockUI = lockTabsAndInputs('Saving...');
 
@@ -498,7 +498,7 @@ async function switchCharacter(character) {
         
         // Wait for all pending saves to complete (including debounced ones)
         await waitForPendingSaves();
-        
+
         // CRITICAL FIX: Store the character we're saving FROM before switching
         const characterToSaveFrom = currentCharacter;
         
@@ -511,7 +511,10 @@ async function switchCharacter(character) {
             // Wait a bit for the save to process
             await new Promise(resolve => setTimeout(resolve, 300));
         }
-        
+
+        // Block new saves while performing the actual switch
+        isSwitchingCharacter = true;
+
         // Update current character AFTER saving the previous one
         currentCharacter = character;
         window.currentCharacter = currentCharacter;
@@ -2137,7 +2140,7 @@ function clearAllFormData() {
     // Clear any dynamically populated elements
     const portraitImg = document.getElementById('character-portrait');
     if (portraitImg) {
-        portraitImg.src = 'portraits/default.png';
+        portraitImg.src = DEFAULT_PORTRAIT_SRC;
     }
 }
 
