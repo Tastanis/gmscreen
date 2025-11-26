@@ -48,6 +48,9 @@ let isProcessingQueue = false;
 // Debounce timers for different operations
 const debounceTimers = new Map();
 
+// Track local modification state even without a Save button
+let hasUnsavedChanges = false;
+
 // Global save mutex to prevent concurrent saves
 let activeSavePromise = null;
 let pendingSaveCount = 0;
@@ -161,6 +164,9 @@ async function processSaveQueue() {
     } finally {
         isProcessingQueue = false;
         activeSavePromise = null;
+        if (pendingSaves.size === 0 && debounceTimers.size === 0 && saveQueue.length === 0 && pendingSaveCount === 0) {
+            clearModifiedFlag();
+        }
     }
 }
 
@@ -284,6 +290,14 @@ function setupEventListeners() {
                         if (!characterData.clubs) characterData.clubs = [];
                         if (!characterData.clubs[currentClubIndex]) characterData.clubs[currentClubIndex] = {};
                         characterData.clubs[currentClubIndex][field] = value;
+                    }
+
+                    // Automatically save common sections with a modest debounce
+                    const debounceDelay = 1200;
+                    if (section === 'character' || section === 'current_classes' || section === 'job') {
+                        saveFieldData(currentCharacter, section, field, value, null, debounceDelay);
+                    } else if (section === 'clubs') {
+                        saveFieldData(currentCharacter, section, field, value, currentClubIndex, debounceDelay);
                     }
                 }
             }
@@ -2160,12 +2174,12 @@ async function initRelationshipAutocomplete() {
 
 // Check if there are pending changes
 function hasPendingChanges() {
-    const saveBtn = document.getElementById('save-all-btn');
-    return saveBtn && saveBtn.classList.contains('has-changes');
+    return hasUnsavedChanges || pendingSaves.size > 0 || debounceTimers.size > 0 || saveQueue.length > 0 || pendingSaveCount > 0;
 }
 
 // Mark that we have unsaved changes
 function markAsModified() {
+    hasUnsavedChanges = true;
     const saveBtn = document.getElementById('save-all-btn');
     if (saveBtn && !saveBtn.classList.contains('has-changes')) {
         saveBtn.classList.add('has-changes');
@@ -2175,6 +2189,7 @@ function markAsModified() {
 
 // Clear the modified flag after saving
 function clearModifiedFlag() {
+    hasUnsavedChanges = false;
     const saveBtn = document.getElementById('save-all-btn');
     if (saveBtn) {
         saveBtn.classList.remove('has-changes');

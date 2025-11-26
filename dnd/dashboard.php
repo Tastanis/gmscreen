@@ -1346,10 +1346,9 @@ $defaultInventoryTab = $is_gm ? 'frunk' : $user;
             </div>
         </div>
 
-        <!-- Save Button (GM Only) -->
+        <!-- Save Status (GM Only) -->
         <?php if ($is_gm): ?>
             <div class="save-container">
-                <button id="save-all-btn" class="btn-save" onclick="batchSaveAllData()">Save All Data</button>
                 <div id="save-status" class="save-status"></div>
             </div>
         <?php endif; ?>
