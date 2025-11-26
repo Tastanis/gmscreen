@@ -17,6 +17,49 @@ function saveInventoryData($data) {
     return file_put_contents($dataFile, $jsonData);
 }
 
+// Generate a unique inventory item ID
+function generateInventoryItemId() {
+    return 'item_' . time() . '_' . substr(str_shuffle('abcdefghijklmnopqrstuvwxyz0123456789'), 0, 9);
+}
+
+// Build a map of image usage counts across all inventory items
+function getInventoryImageUsage($data) {
+    $usage = array();
+
+    foreach ($data as $tab) {
+        if (!isset($tab['items']) || !is_array($tab['items'])) {
+            continue;
+        }
+
+        foreach ($tab['items'] as $item) {
+            if (!empty($item['image'])) {
+                $path = $item['image'];
+                if (!isset($usage[$path])) {
+                    $usage[$path] = 0;
+                }
+                $usage[$path]++;
+            }
+        }
+    }
+
+    return $usage;
+}
+
+// Delete an inventory image file if no items reference it
+function deleteInventoryImageIfUnused($data, $imagePath) {
+    if (empty($imagePath)) {
+        return;
+    }
+
+    $usage = getInventoryImageUsage($data);
+
+    if (!isset($usage[$imagePath]) || $usage[$imagePath] === 0) {
+        if (file_exists($imagePath)) {
+            unlink($imagePath);
+        }
+    }
+}
+
 // Function to check if user can edit a specific inventory tab
 function canEditInventoryTab($tab, $user, $is_gm) {
     if ($is_gm) return true;
@@ -145,19 +188,81 @@ switch ($inventory_action) {
         // Get item data for cleanup
         $item = $data[$tab]['items'][$index];
         
-        // Delete associated image file if it exists
-        if (!empty($item['image']) && file_exists($item['image'])) {
-            unlink($item['image']);
-        }
-        
         // Remove item from array
         array_splice($data[$tab]['items'], $index, 1);
         
         // Save to file
         if (saveInventoryData($data)) {
+            deleteInventoryImageIfUnused($data, $item['image']);
             echo json_encode(array('success' => true));
         } else {
             echo json_encode(array('success' => false, 'error' => 'Failed to save data'));
+        }
+        break;
+
+    case 'duplicate_item':
+        $tab = isset($_POST['tab']) ? $_POST['tab'] : '';
+        $index = isset($_POST['index']) ? intval($_POST['index']) : -1;
+
+        if (!$is_gm) {
+            echo json_encode(array('success' => false, 'error' => 'Only GM can duplicate items'));
+            break;
+        }
+
+        if (!in_array($tab, array('frunk', 'sharon', 'indigo', 'zepha', 'shared', 'gm'))) {
+            echo json_encode(array('success' => false, 'error' => 'Invalid tab'));
+            break;
+        }
+
+        if ($index < 0) {
+            echo json_encode(array('success' => false, 'error' => 'Invalid index'));
+            break;
+        }
+
+        $data = loadInventoryData();
+
+        if (!isset($data[$tab]['items'][$index])) {
+            echo json_encode(array('success' => false, 'error' => 'Item not found'));
+            break;
+        }
+
+        $original_item = $data[$tab]['items'][$index];
+
+        $new_item = $original_item;
+        $new_item['id'] = generateInventoryItemId();
+
+        // Ensure required fields exist
+        $field_defaults = array(
+            'name' => '',
+            'description' => '',
+            'keywords' => '',
+            'effect' => '',
+            'image' => '',
+            'grid_x' => 0,
+            'grid_y' => 0,
+            'visible' => true
+        );
+        foreach ($field_defaults as $field => $default) {
+            if (!isset($new_item[$field])) {
+                $new_item[$field] = $default;
+            }
+        }
+        $new_item['visible'] = isset($new_item['visible']) ? (bool)$new_item['visible'] : true;
+
+        if (!isset($data[$tab]['items']) || !is_array($data[$tab]['items'])) {
+            $data[$tab]['items'] = array();
+        }
+
+        $data[$tab]['items'][] = $new_item;
+
+        if (saveInventoryData($data)) {
+            echo json_encode(array(
+                'success' => true,
+                'new_item' => $new_item,
+                'tab' => $tab
+            ));
+        } else {
+            echo json_encode(array('success' => false, 'error' => 'Failed to duplicate item'));
         }
         break;
         
@@ -268,32 +373,10 @@ switch ($inventory_action) {
         
         // Create a copy with new ID
         $new_item = $original_item;
-        $new_item['id'] = 'item_' . time() . '_' . substr(str_shuffle('abcdefghijklmnopqrstuvwxyz0123456789'), 0, 9);
+        $new_item['id'] = generateInventoryItemId();
         $new_item['grid_x'] = 0;
         $new_item['grid_y'] = 0;
-        
-        // Handle image file - copy the image if it exists
-        if (!empty($original_item['image']) && file_exists($original_item['image'])) {
-            $old_path = $original_item['image'];
-            $path_info = pathinfo($old_path);
-            $new_filename = $new_item['id'] . '_' . time() . '.' . $path_info['extension'];
-            $new_path = 'images/' . $new_filename;
-            
-            // Ensure images directory exists
-            if (!is_dir('images')) {
-                mkdir('images', 0755, true);
-            }
-            
-            if (copy($old_path, $new_path)) {
-                $new_item['image'] = $new_path;
-            } else {
-                // If copy fails, remove image reference
-                $new_item['image'] = '';
-            }
-        } else {
-            // No image or file doesn't exist
-            $new_item['image'] = '';
-        }
+        $new_item['image'] = (!empty($original_item['image']) && file_exists($original_item['image'])) ? $original_item['image'] : '';
         
         // Ensure target tab structure exists
         if (!isset($data[$to_tab])) {
@@ -318,10 +401,7 @@ switch ($inventory_action) {
 
         // Save to file
         if (saveInventoryData($final_data)) {
-            // Delete the original image file after successful copy
-            if (!empty($original_item['image']) && file_exists($original_item['image']) && !empty($new_item['image'])) {
-                unlink($original_item['image']);
-            }
+            deleteInventoryImageIfUnused($final_data, $original_item['image']);
 
             echo json_encode(array(
                 'success' => true,
@@ -377,32 +457,10 @@ switch ($inventory_action) {
         
         // Create a copy with new ID
         $new_item = $original_item;
-        $new_item['id'] = 'item_' . time() . '_' . substr(str_shuffle('abcdefghijklmnopqrstuvwxyz0123456789'), 0, 9);
+        $new_item['id'] = generateInventoryItemId();
         $new_item['grid_x'] = 0;
         $new_item['grid_y'] = 0;
-        
-        // Handle image file - copy the image if it exists
-        if (!empty($original_item['image']) && file_exists($original_item['image'])) {
-            $old_path = $original_item['image'];
-            $path_info = pathinfo($old_path);
-            $new_filename = $new_item['id'] . '_' . time() . '.' . $path_info['extension'];
-            $new_path = 'images/' . $new_filename;
-            
-            // Ensure images directory exists
-            if (!is_dir('images')) {
-                mkdir('images', 0755, true);
-            }
-            
-            if (copy($old_path, $new_path)) {
-                $new_item['image'] = $new_path;
-            } else {
-                // If copy fails, remove image reference
-                $new_item['image'] = '';
-            }
-        } else {
-            // No image or file doesn't exist
-            $new_item['image'] = '';
-        }
+        $new_item['image'] = (!empty($original_item['image']) && file_exists($original_item['image'])) ? $original_item['image'] : '';
         
         // Ensure target tab structure exists
         if (!isset($data[$to_tab])) {
@@ -427,10 +485,7 @@ switch ($inventory_action) {
 
         // Save to file
         if (saveInventoryData($final_data)) {
-            // Delete the original image file after successful copy
-            if (!empty($original_item['image']) && file_exists($original_item['image']) && !empty($new_item['image'])) {
-                unlink($original_item['image']);
-            }
+            deleteInventoryImageIfUnused($final_data, $original_item['image']);
 
             echo json_encode(array(
                 'success' => true,
@@ -516,12 +571,9 @@ switch ($inventory_action) {
                                 echo json_encode(array('success' => false, 'error' => "Permission denied for tab: $tab"));
                                 exit;
                             }
-                            
-                            // Remove old image file if it exists
-                            if (!empty($item['image']) && file_exists($item['image'])) {
-                                unlink($item['image']);
-                            }
-                            
+
+                            $oldImagePath = !empty($item['image']) ? $item['image'] : '';
+
                             // Update item with new image path
                             $data[$tab]['items'][$index]['image'] = $filePath;
                             $itemFound = true;
@@ -537,11 +589,12 @@ switch ($inventory_action) {
                 echo json_encode(array('success' => false, 'error' => 'Item not found in any tab'));
                 break;
             }
-            
+
             // Save updated data
             if (saveInventoryData($data)) {
+                deleteInventoryImageIfUnused($data, isset($oldImagePath) ? $oldImagePath : '');
                 echo json_encode(array(
-                    'success' => true, 
+                    'success' => true,
                     'image_path' => $filePath,
                     'item_id' => $item_id,
                     'tab' => $itemTab,
