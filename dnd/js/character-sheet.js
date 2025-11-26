@@ -65,6 +65,12 @@ let pendingSaveCount = 0;
 const failedSaveRequests = new Map();
 let hasShownSaveFailureAlert = false;
 
+// Create a stable key for a save request regardless of request ID
+function getFailedSaveKey({ character, section, field, index }) {
+    const indexKey = index === null || index === undefined ? 'none' : index;
+    return `${character}::${section}::${field}::${indexKey}`;
+}
+
 // Wait for all pending saves to complete before navigation
 async function waitForPendingSaves() {
     // Wait for any active save promise to complete
@@ -222,7 +228,7 @@ async function processSaveQueue() {
 
             try {
                 await performSave(requestWithId);
-                failedSaveRequests.delete(requestWithId.requestId);
+                failedSaveRequests.delete(getFailedSaveKey(requestWithId));
                 // Small delay between saves to prevent server overload
                 await new Promise(resolve => setTimeout(resolve, 100));
             } catch (error) {
@@ -246,7 +252,7 @@ async function processSaveQueue() {
 
         if (failuresThisRun.length > 0) {
             failuresThisRun.forEach(request => {
-                failedSaveRequests.set(request.requestId, request);
+                failedSaveRequests.set(getFailedSaveKey(request), request);
             });
 
             // Automatically retry failed saves once more after a short delay
