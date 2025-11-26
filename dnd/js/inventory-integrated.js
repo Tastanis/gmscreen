@@ -158,6 +158,7 @@ function createInventoryItemCard(item, index, tab) {
                         <button class="btn-inventory-visibility" onclick="toggleInventoryItemVisibility('${tab}', ${index})">
                             ${item.visible ? 'Hide' : 'Show'}
                         </button>
+                        <button class="btn-inventory-duplicate" onclick="duplicateInventoryItem('${tab}', ${index})">Copy Item</button>
                     ` : ''}
                     ${(tab === currentUser) ? `
                         <button class="btn-inventory-share" onclick="shareInventoryItem('${tab}', ${index})">
@@ -430,6 +431,54 @@ function deleteInventoryItem(tab, index) {
     .catch(error => {
         console.error('Error:', error);
         showInventoryStatus('Network error deleting item', 'error');
+    });
+}
+
+// Duplicate an inventory item (GM only)
+function duplicateInventoryItem(tab, index) {
+    if (!isGM) {
+        showInventoryStatus('Only the GM can duplicate items', 'error');
+        return;
+    }
+
+    showInventoryStatus('Duplicating item...', 'loading');
+
+    fetch('dashboard.php', {
+        method: 'POST',
+        headers: {
+            'Content-Type': 'application/x-www-form-urlencoded',
+        },
+        body: `action=inventory_duplicate_item&tab=${encodeURIComponent(tab)}&index=${index}`
+    })
+    .then(response => response.json())
+    .then(data => {
+        if (data.success) {
+            const newItem = data.new_item;
+            if (!inventoryData[tab]) {
+                inventoryData[tab] = { items: [] };
+            }
+            if (!inventoryData[tab].items) {
+                inventoryData[tab].items = [];
+            }
+
+            inventoryData[tab].items.push(newItem);
+
+            showInventoryStatus('Item duplicated successfully', 'success');
+            renderInventoryGrid(tab);
+
+            setTimeout(() => {
+                const newCard = document.querySelector(`[data-item-id="${newItem.id}"]`);
+                if (newCard) {
+                    expandInventoryCard(newCard);
+                }
+            }, 100);
+        } else {
+            showInventoryStatus('Error duplicating item: ' + data.error, 'error');
+        }
+    })
+    .catch(error => {
+        console.error('Error:', error);
+        showInventoryStatus('Network error duplicating item', 'error');
     });
 }
 
