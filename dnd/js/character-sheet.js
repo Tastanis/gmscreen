@@ -61,6 +61,10 @@ let hasUnsavedChanges = false;
 let activeSavePromise = null;
 let pendingSaveCount = 0;
 
+// Track failed saves so they can be retried/resumed
+const failedSaveRequests = new Map();
+let hasShownSaveFailureAlert = false;
+
 // Wait for all pending saves to complete before navigation
 async function waitForPendingSaves() {
     // Wait for any active save promise to complete
@@ -192,6 +196,11 @@ function flushSwitchingSaves() {
 
 // Process save queue sequentially
 async function processSaveQueue() {
+    if (saveQueue.length === 0 && failedSaveRequests.size > 0) {
+        failedSaveRequests.forEach(request => saveQueue.push(request));
+        failedSaveRequests.clear();
+    }
+
     if (isProcessingQueue || saveQueue.length === 0) {
         return;
     }
@@ -202,32 +211,68 @@ async function processSaveQueue() {
     }
     
     isProcessingQueue = true;
-    
+
     // Create a new promise for this batch of saves
     activeSavePromise = (async () => {
+        const failuresThisRun = [];
         while (saveQueue.length > 0 && !isSwitchingCharacter) {
             const saveRequest = saveQueue.shift();
+            const requestWithId = { ...saveRequest, requestId: saveRequest.requestId || generateRequestId() };
             pendingSaveCount++;
-            
+
             try {
-                await performSave(saveRequest);
+                await performSave(requestWithId);
+                failedSaveRequests.delete(requestWithId.requestId);
                 // Small delay between saves to prevent server overload
                 await new Promise(resolve => setTimeout(resolve, 100));
             } catch (error) {
                 console.error('Error processing save:', error);
+
+                const failedRequest = {
+                    ...requestWithId,
+                    failedAttempts: (requestWithId.failedAttempts || 0) + 1
+                };
+
+                failuresThisRun.push(failedRequest);
+
+                // Keep the save button flagged so the GM can retry
+                markAsModified();
+
                 // Continue processing queue even if one save fails
             } finally {
                 pendingSaveCount--;
             }
         }
+
+        if (failuresThisRun.length > 0) {
+            failuresThisRun.forEach(request => {
+                failedSaveRequests.set(request.requestId, request);
+            });
+
+            // Automatically retry failed saves once more after a short delay
+            const retryable = failuresThisRun.filter(request => (request.failedAttempts || 1) < 2);
+            if (retryable.length > 0) {
+                setTimeout(() => {
+                    retryable.forEach(request => saveQueue.push(request));
+                    processSaveQueue();
+                }, 1500);
+            }
+
+            showSaveStatus('Some changes failed to save. Please retry Save All to prevent data loss.', 'error');
+            if (!hasShownSaveFailureAlert) {
+                alert('Some changes failed to save. Please click "Save All" to retry and keep this page open.');
+                hasShownSaveFailureAlert = true;
+            }
+        }
     })();
-    
+
     try {
         await activeSavePromise;
     } finally {
         isProcessingQueue = false;
         activeSavePromise = null;
-        if (pendingSaves.size === 0 && debounceTimers.size === 0 && saveQueue.length === 0 && pendingSaveCount === 0) {
+        if (pendingSaves.size === 0 && debounceTimers.size === 0 && saveQueue.length === 0 && pendingSaveCount === 0 && failedSaveRequests.size === 0) {
+            hasShownSaveFailureAlert = false;
             clearModifiedFlag();
         }
     }
