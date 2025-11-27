@@ -6392,7 +6392,7 @@ export function mountBoardInteractions(store, routes = {}) {
 
   function getCombatantTeam(combatantId) {
     if (!combatantId) {
-      return 'enemy';
+      return 'ally';
     }
 
     if (combatantTeams.has(combatantId)) {
@@ -6414,7 +6414,13 @@ export function mountBoardInteractions(store, routes = {}) {
       return team;
     }
 
-    return 'enemy';
+    const profileId = normalizeProfileId(getCombatantProfileId(combatantId));
+    if (profileId && profileId !== 'gm') {
+      combatantTeams.set(combatantId, 'ally');
+      return 'ally';
+    }
+
+    return 'ally';
   }
 
   function getWaitingCombatantsByTeam() {
@@ -8398,7 +8404,7 @@ export function mountBoardInteractions(store, routes = {}) {
     if (raw === 'enemy') {
       return 'enemy';
     }
-    return 'enemy';
+    return 'ally';
   }
 
   function toNonNegativeNumber(value, fallback = 0) {
