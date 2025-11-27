@@ -132,16 +132,23 @@ function renderSummaryGrid(documentRef, container, summary) {
     { label: 'Total Duration', value: formatDuration(summary.totalDurationMs) },
     { label: 'Rounds', value: summary.highestRound || 1 },
     {
-      label: 'Player Decision',
+      label: 'PC Decision',
       value: `${formatDuration(summary.totals.decisionMs)} (${formatPercentage(
         summary.totals.decisionMs,
         totalDuration
       )})`,
     },
     {
-      label: 'Player Turns',
+      label: 'PC Turns',
       value: `${formatDuration(summary.totals.playerMs)} (${formatPercentage(
         summary.totals.playerMs,
+        totalDuration
+      )})`,
+    },
+    {
+      label: 'Allies',
+      value: `${formatDuration(summary.totals.allyMs)} (${formatPercentage(
+        summary.totals.allyMs,
         totalDuration
       )})`,
     },
@@ -185,7 +192,7 @@ function renderWaitingSection(documentRef, panel, summary) {
   section.className = 'vtt-combat-report__section';
   const heading = documentRef.createElement('h3');
   heading.className = 'vtt-combat-report__section-title';
-  heading.textContent = 'Player Decision Time';
+  heading.textContent = 'PC Decision Making';
   section.appendChild(heading);
 
   const chart = documentRef.createElement('div');
@@ -209,7 +216,7 @@ function renderWaitingSection(documentRef, panel, summary) {
   }
   chart.appendChild(
     createBarRow(documentRef, {
-      label: 'Players Waiting',
+      label: 'PC Decision',
       value: totalWaiting,
       valueLabel: `${formatDuration(totalWaiting)} • ${formatPercentage(
         totalWaiting,
@@ -228,6 +235,50 @@ function renderWaitingSection(documentRef, panel, summary) {
   );
   section.appendChild(chart);
   panel.appendChild(section);
+}
+
+function aggregateParticipants(participants, { label, role }) {
+  const perRoundMap = new Map();
+  let totalMs = 0;
+  let longestTurnMs = 0;
+  let longestTurnRound = null;
+
+  participants.forEach((participant) => {
+    totalMs += participant.totalMs;
+    if (participant.longestTurnMs > longestTurnMs) {
+      longestTurnMs = participant.longestTurnMs;
+      longestTurnRound = participant.longestTurnRound;
+    }
+
+    participant.perRound.forEach((round) => {
+      const existing = perRoundMap.get(round.round) || {
+        totalMs: 0,
+        longestTurnMs: 0,
+        turns: [],
+      };
+      existing.totalMs += round.totalMs;
+      existing.longestTurnMs = Math.max(existing.longestTurnMs, round.longestTurnMs);
+      existing.turns = existing.turns.concat(round.turns);
+      perRoundMap.set(round.round, existing);
+    });
+  });
+
+  return {
+    id: `aggregate-${role}-${label}`,
+    name: label,
+    role,
+    totalMs,
+    longestTurnMs,
+    longestTurnRound,
+    perRound: Array.from(perRoundMap.entries())
+      .map(([round, entry]) => ({
+        round: Number(round),
+        totalMs: entry.totalMs,
+        longestTurnMs: entry.longestTurnMs,
+        turns: entry.turns.slice(),
+      }))
+      .sort((a, b) => a.round - b.round),
+  };
 }
 
 function createParticipantRow(documentRef, participant, totalDurationMs) {
@@ -320,7 +371,7 @@ export function showCombatTimerReport(summary, { documentRef = typeof document !
 
   renderWaitingSection(documentRef, panel, summary);
 
-  if (summary.participants.players.length) {
+  if (summary.participants.pcs.length) {
     const playersSection = documentRef.createElement('section');
     playersSection.className = 'vtt-combat-report__section';
     const playersHeading = documentRef.createElement('h3');
@@ -330,13 +381,37 @@ export function showCombatTimerReport(summary, { documentRef = typeof document !
 
     const group = documentRef.createElement('div');
     group.className = 'vtt-combat-report__bar-group';
-    summary.participants.players.forEach((participant) => {
+    summary.participants.pcs.forEach((participant) => {
       group.appendChild(
         createParticipantRow(documentRef, participant, summary.totalDurationMs)
       );
     });
     playersSection.appendChild(group);
     panel.appendChild(playersSection);
+  }
+
+  if (summary.participants.allies.length) {
+    const alliesSection = documentRef.createElement('section');
+    alliesSection.className = 'vtt-combat-report__section';
+    const alliesHeading = documentRef.createElement('h3');
+    alliesHeading.className = 'vtt-combat-report__section-title';
+    alliesHeading.textContent = 'Allied NPC Turns';
+    alliesSection.appendChild(alliesHeading);
+
+    const group = documentRef.createElement('div');
+    group.className = 'vtt-combat-report__bar-group';
+
+    const aggregate = aggregateParticipants(summary.participants.allies, {
+      label: 'Allies',
+      role: 'ally',
+    });
+
+    group.appendChild(
+      createParticipantRow(documentRef, aggregate, summary.totalDurationMs)
+    );
+
+    alliesSection.appendChild(group);
+    panel.appendChild(alliesSection);
   }
 
   if (summary.participants.gm) {

@@ -19,11 +19,26 @@ function formatDisplayName(name) {
     .join(' ');
 }
 
+const VALID_ROLES = new Set(['gm', 'player', 'pc', 'ally']);
+
+function normalizeRole(role) {
+  if (role === 'gm') {
+    return 'gm';
+  }
+  if (role === 'pc') {
+    return 'pc';
+  }
+  if (role === 'ally') {
+    return 'ally';
+  }
+  return 'player';
+}
+
 function createParticipant(id, { name = DEFAULT_UNKNOWN_PLAYER_LABEL, role = 'player' } = {}) {
   return {
     id,
     name: formatDisplayName(name),
-    role,
+    role: normalizeRole(role),
     totalMs: 0,
     longestTurnMs: 0,
     longestTurnRound: null,
@@ -87,7 +102,7 @@ export function createCombatTimerService({ now = () => Date.now() } = {}) {
 
   function ensureParticipant(id, { name, role } = {}) {
     const key = typeof id === 'string' && id ? id : 'unknown';
-    const normalizedRole = role === 'gm' ? 'gm' : 'player';
+    const normalizedRole = normalizeRole(role);
     if (!state.participants.has(key)) {
       state.participants.set(key, createParticipant(key, { name, role: normalizedRole }));
     }
@@ -95,8 +110,8 @@ export function createCombatTimerService({ now = () => Date.now() } = {}) {
     if (name && name.trim() && participant.name !== name) {
       participant.name = formatDisplayName(name);
     }
-    if (normalizedRole === 'gm') {
-      participant.role = 'gm';
+    if (VALID_ROLES.has(normalizedRole)) {
+      participant.role = normalizedRole;
     }
     return participant;
   }
@@ -182,6 +197,7 @@ export function createCombatTimerService({ now = () => Date.now() } = {}) {
     team,
     round = state.currentRound,
     combatantId = null,
+    role = 'player',
     startedAt,
   } = {}) {
     if (!state.combatActive) {
@@ -194,11 +210,11 @@ export function createCombatTimerService({ now = () => Date.now() } = {}) {
     if (state.activeTurn) {
       endTurn({ timestamp });
     }
-    const participantId = normalizedTeam === 'enemy' ? 'gm' : userId || 'unknown';
-    const role = normalizedTeam === 'enemy' ? 'gm' : 'player';
+    const participantId = normalizedTeam === 'enemy' ? 'gm' : userId || combatantId || 'unknown';
+    const participantRole = normalizedTeam === 'enemy' ? 'gm' : role || 'player';
     const participant = ensureParticipant(participantId, {
       name: displayName,
-      role,
+      role: participantRole,
     });
     state.activeTurn = {
       userId: participant.id,
@@ -255,8 +271,11 @@ export function createCombatTimerService({ now = () => Date.now() } = {}) {
     const participants = Array.from(state.participants.values()).map((participant) =>
       cloneParticipantSummary(participant, totalDurationMs)
     );
-    const players = participants
-      .filter((participant) => participant.role !== 'gm')
+    const pcs = participants
+      .filter((participant) => participant.role === 'pc' || participant.role === 'player')
+      .sort((a, b) => b.totalMs - a.totalMs);
+    const allies = participants
+      .filter((participant) => participant.role === 'ally')
       .sort((a, b) => b.totalMs - a.totalMs);
     const gm = participants.find((participant) => participant.role === 'gm') || null;
     const highestRound = Math.max(
@@ -266,7 +285,8 @@ export function createCombatTimerService({ now = () => Date.now() } = {}) {
       ...participants.flatMap((participant) => participant.perRound.map((round) => round.round))
     );
     const decisionTotalMs = waitingByRound.reduce((sum, entry) => sum + entry.durationMs, 0);
-    const playerTotalMs = players.reduce((sum, participant) => sum + participant.totalMs, 0);
+    const playerTotalMs = pcs.reduce((sum, participant) => sum + participant.totalMs, 0);
+    const allyTotalMs = allies.reduce((sum, participant) => sum + participant.totalMs, 0);
     const gmTotalMs = gm?.totalMs ?? 0;
 
     return {
@@ -277,12 +297,15 @@ export function createCombatTimerService({ now = () => Date.now() } = {}) {
       waitingByRound,
       enemyWaitingByRound,
       participants: {
-        players,
+        pcs,
+        allies,
         gm,
+        all: participants,
       },
       totals: {
         decisionMs: decisionTotalMs,
         playerMs: playerTotalMs,
+        allyMs: allyTotalMs,
         gmMs: gmTotalMs,
       },
     };

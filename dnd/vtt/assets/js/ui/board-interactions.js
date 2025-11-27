@@ -5467,14 +5467,16 @@ export function mountBoardInteractions(store, routes = {}) {
         : fallbackName;
     const turnTeam = getCombatantTeam(combatantId) ?? null;
     const roundForTurn = combatRound > 0 ? combatRound : 1;
+    const combatantProfileId = normalizeProfileId(getCombatantProfileId(combatantId));
     const participantId =
       turnTeam === 'enemy'
         ? 'gm'
-        : initiatorProfileId || normalizeProfileId(currentUserId) || null;
-    const participantName =
-      turnTeam === 'enemy'
+        : combatantProfileId || initiatorProfileId || normalizeProfileId(currentUserId) || combatantId || null;
+    const participantRole = turnTeam === 'enemy' ? 'gm' : combatantProfileId ? 'pc' : 'ally';
+    const participantName = getCombatantLabel(combatantId) ||
+      (turnTeam === 'enemy'
         ? initiatorName || getCurrentUserName() || 'GM'
-        : initiatorName || formatProfileDisplayName(participantId);
+        : initiatorName || formatProfileDisplayName(participantId));
 
     if (turnLockState.holderId && turnLockState.holderId !== initiatorProfileId) {
       if (isGmUser()) {
@@ -5507,6 +5509,7 @@ export function mountBoardInteractions(store, routes = {}) {
         team: turnTeam ?? 'ally',
         round: roundForTurn,
         combatantId,
+        role: participantRole,
       });
     }
     currentTurnTeam = getCombatantTeam(combatantId) ?? currentTurnTeam;
