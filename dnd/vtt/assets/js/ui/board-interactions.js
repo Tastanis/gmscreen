@@ -5468,15 +5468,34 @@ export function mountBoardInteractions(store, routes = {}) {
     const turnTeam = getCombatantTeam(combatantId) ?? null;
     const roundForTurn = combatRound > 0 ? combatRound : 1;
     const combatantProfileId = normalizeProfileId(getCombatantProfileId(combatantId));
+    const tokenIdentifier =
+      normalizeProfileId(combatantId) ||
+      normalizeProfileId(getCombatantLabel(combatantId));
     const participantId =
       turnTeam === 'enemy'
         ? 'gm'
-        : combatantProfileId || initiatorProfileId || normalizeProfileId(currentUserId) || combatantId || null;
+        : combatantProfileId || tokenIdentifier || initiatorProfileId || normalizeProfileId(currentUserId) || null;
     const participantRole = turnTeam === 'enemy' ? 'gm' : combatantProfileId ? 'pc' : 'ally';
-    const participantName = getCombatantLabel(combatantId) ||
-      (turnTeam === 'enemy'
-        ? initiatorName || getCurrentUserName() || 'GM'
-        : initiatorName || formatProfileDisplayName(participantId));
+    const participantName = (() => {
+      const combatantLabel = getCombatantLabel(combatantId);
+      if (combatantLabel) {
+        return combatantLabel;
+      }
+
+      if (turnTeam === 'enemy') {
+        return initiatorName || getCurrentUserName() || 'GM';
+      }
+
+      if (combatantProfileId) {
+        return formatProfileDisplayName(combatantProfileId);
+      }
+
+      if (tokenIdentifier) {
+        return formatProfileDisplayName(tokenIdentifier) || initiatorName || 'Ally';
+      }
+
+      return initiatorName || formatProfileDisplayName(participantId);
+    })();
 
     if (turnLockState.holderId && turnLockState.holderId !== initiatorProfileId) {
       if (isGmUser()) {
