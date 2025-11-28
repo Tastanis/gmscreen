@@ -53,95 +53,120 @@ if (!defined('VTT_STATE_API_INCLUDE_ONLY')) {
                 ]);
             }
 
-            $existing = loadVttJson('board-state.json');
-            $nextState = normalizeBoardState($existing);
+            $responseState = withVttBoardStateLock(function () use ($updates, $auth) {
+                $existing = loadVttJson('board-state.json');
+                $nextState = normalizeBoardState($existing);
 
-            $isGm = (bool) ($auth['isGM'] ?? false);
-            if (!$isGm) {
-                $combatUpdates = [];
-                if (isset($updates['sceneState']) && is_array($updates['sceneState'])) {
-                    $combatUpdates = extractCombatUpdates($updates['sceneState']);
+                $isGm = (bool) ($auth['isGM'] ?? false);
+                if (!$isGm) {
+                    $combatUpdates = [];
+                    if (isset($updates['sceneState']) && is_array($updates['sceneState'])) {
+                        $combatUpdates = extractCombatUpdates($updates['sceneState']);
+                    }
+
+                    $placementUpdates = isset($updates['placements']) && is_array($updates['placements'])
+                        ? $updates['placements']
+                        : [];
+                    $templateUpdates = isset($updates['templates']) && is_array($updates['templates'])
+                        ? $updates['templates']
+                        : [];
+                    $pingUpdates = isset($updates['pings']) && is_array($updates['pings'])
+                        ? $updates['pings']
+                        : [];
+
+                    $hasCombatUpdates = !empty($combatUpdates);
+                    $hasPlacementUpdates = !empty($placementUpdates);
+                    $hasTemplateUpdates = !empty($templateUpdates);
+                    $hasPingUpdates = !empty($pingUpdates);
+
+                    if (!$hasCombatUpdates && !$hasPlacementUpdates && !$hasTemplateUpdates && !$hasPingUpdates) {
+                        respondJson(403, [
+                            'success' => false,
+                            'error' => 'Only combat, placement, template, or ping updates are permitted for players.',
+                        ]);
+                    }
+
+                    if ($hasPlacementUpdates) {
+                        if (!isset($nextState['placements']) || !is_array($nextState['placements'])) {
+                            $nextState['placements'] = [];
+                        }
+                        foreach ($placementUpdates as $sceneId => $placements) {
+                            if (!is_array($placements)) {
+                                continue;
+                            }
+                            $sceneKey = is_string($sceneId) ? trim($sceneId) : (string) $sceneId;
+                            if ($sceneKey === '') {
+                                continue;
+                            }
+                            $existingPlacements = isset($nextState['placements'][$sceneKey]) && is_array($nextState['placements'][$sceneKey])
+                                ? $nextState['placements'][$sceneKey]
+                                : [];
+                            $nextState['placements'][$sceneKey] = mergeSceneEntriesPreservingGmAuthored(
+                                $existingPlacements,
+                                $placements
+                            );
+                        }
+                    }
+
+                    if ($hasTemplateUpdates) {
+                        if (!isset($nextState['templates']) || !is_array($nextState['templates'])) {
+                            $nextState['templates'] = [];
+                        }
+                        foreach ($templateUpdates as $sceneId => $templates) {
+                            if (!is_array($templates)) {
+                                continue;
+                            }
+                            $sceneKey = is_string($sceneId) ? trim($sceneId) : (string) $sceneId;
+                            if ($sceneKey === '') {
+                                continue;
+                            }
+                            $existingTemplates = isset($nextState['templates'][$sceneKey]) && is_array($nextState['templates'][$sceneKey])
+                                ? $nextState['templates'][$sceneKey]
+                                : [];
+                            $nextState['templates'][$sceneKey] = mergeSceneEntriesPreservingGmAuthored(
+                                $existingTemplates,
+                                $templates
+                            );
+                        }
+                    }
+
+                    if ($hasCombatUpdates) {
+                        foreach ($combatUpdates as $sceneId => $combatState) {
+                            if (!isset($nextState['sceneState'][$sceneId]) || !is_array($nextState['sceneState'][$sceneId])) {
+                                $nextState['sceneState'][$sceneId] = [
+                                    'grid' => normalizeGridSettings([]),
+                                ];
+                            }
+                            $nextState['sceneState'][$sceneId]['combat'] = $combatState;
+                        }
+                    }
+
+                    if ($hasPingUpdates) {
+                        $nextState['pings'] = $pingUpdates;
+                    }
+
+                    if (!saveVttJson('board-state.json', $nextState)) {
+                        respondJson(500, [
+                            'success' => false,
+                            'error' => 'Failed to persist board state.',
+                        ]);
+                    }
+
+                    return filterPlacementsForPlayerView($nextState);
                 }
 
-                $placementUpdates = isset($updates['placements']) && is_array($updates['placements'])
-                    ? $updates['placements']
-                    : [];
-                $templateUpdates = isset($updates['templates']) && is_array($updates['templates'])
-                    ? $updates['templates']
-                    : [];
-                $pingUpdates = isset($updates['pings']) && is_array($updates['pings'])
-                    ? $updates['pings']
-                    : [];
-
-                $hasCombatUpdates = !empty($combatUpdates);
-                $hasPlacementUpdates = !empty($placementUpdates);
-                $hasTemplateUpdates = !empty($templateUpdates);
-                $hasPingUpdates = !empty($pingUpdates);
-
-                if (!$hasCombatUpdates && !$hasPlacementUpdates && !$hasTemplateUpdates && !$hasPingUpdates) {
-                    respondJson(403, [
-                        'success' => false,
-                        'error' => 'Only combat, placement, template, or ping updates are permitted for players.',
-                    ]);
-                }
-
-                if ($hasPlacementUpdates) {
-                    if (!isset($nextState['placements']) || !is_array($nextState['placements'])) {
-                        $nextState['placements'] = [];
-                    }
-                    foreach ($placementUpdates as $sceneId => $placements) {
-                        if (!is_array($placements)) {
-                            continue;
+                foreach ($updates as $key => $value) {
+                    if ($key === 'sceneState' && is_array($value)) {
+                        foreach ($value as $sceneId => $config) {
+                            if (!isset($nextState['sceneState'][$sceneId]) || !is_array($nextState['sceneState'][$sceneId])) {
+                                $nextState['sceneState'][$sceneId] = $config;
+                                continue;
+                            }
+                            $nextState['sceneState'][$sceneId] = array_merge($nextState['sceneState'][$sceneId], $config);
                         }
-                        $sceneKey = is_string($sceneId) ? trim($sceneId) : (string) $sceneId;
-                        if ($sceneKey === '') {
-                            continue;
-                        }
-                        $existingPlacements = isset($nextState['placements'][$sceneKey]) && is_array($nextState['placements'][$sceneKey])
-                            ? $nextState['placements'][$sceneKey]
-                            : [];
-                        $nextState['placements'][$sceneKey] = mergeSceneEntriesPreservingGmAuthored(
-                            $existingPlacements,
-                            $placements
-                        );
+                        continue;
                     }
-                }
-
-                if ($hasTemplateUpdates) {
-                    if (!isset($nextState['templates']) || !is_array($nextState['templates'])) {
-                        $nextState['templates'] = [];
-                    }
-                    foreach ($templateUpdates as $sceneId => $templates) {
-                        if (!is_array($templates)) {
-                            continue;
-                        }
-                        $sceneKey = is_string($sceneId) ? trim($sceneId) : (string) $sceneId;
-                        if ($sceneKey === '') {
-                            continue;
-                        }
-                        $existingTemplates = isset($nextState['templates'][$sceneKey]) && is_array($nextState['templates'][$sceneKey])
-                            ? $nextState['templates'][$sceneKey]
-                            : [];
-                        $nextState['templates'][$sceneKey] = mergeSceneEntriesPreservingGmAuthored(
-                            $existingTemplates,
-                            $templates
-                        );
-                    }
-                }
-
-                if ($hasCombatUpdates) {
-                    foreach ($combatUpdates as $sceneId => $combatState) {
-                        if (!isset($nextState['sceneState'][$sceneId]) || !is_array($nextState['sceneState'][$sceneId])) {
-                            $nextState['sceneState'][$sceneId] = [
-                                'grid' => normalizeGridSettings([]),
-                            ];
-                        }
-                        $nextState['sceneState'][$sceneId]['combat'] = $combatState;
-                    }
-                }
-
-                if ($hasPingUpdates) {
-                    $nextState['pings'] = $pingUpdates;
+                    $nextState[$key] = $value;
                 }
 
                 if (!saveVttJson('board-state.json', $nextState)) {
@@ -151,38 +176,12 @@ if (!defined('VTT_STATE_API_INCLUDE_ONLY')) {
                     ]);
                 }
 
-                $responseState = filterPlacementsForPlayerView($nextState);
-
-                respondJson(200, [
-                    'success' => true,
-                    'data' => $responseState,
-                ]);
-            }
-
-            foreach ($updates as $key => $value) {
-                if ($key === 'sceneState' && is_array($value)) {
-                    foreach ($value as $sceneId => $config) {
-                        if (!isset($nextState['sceneState'][$sceneId]) || !is_array($nextState['sceneState'][$sceneId])) {
-                            $nextState['sceneState'][$sceneId] = $config;
-                            continue;
-                        }
-                        $nextState['sceneState'][$sceneId] = array_merge($nextState['sceneState'][$sceneId], $config);
-                    }
-                    continue;
-                }
-                $nextState[$key] = $value;
-            }
-
-            if (!saveVttJson('board-state.json', $nextState)) {
-                respondJson(500, [
-                    'success' => false,
-                    'error' => 'Failed to persist board state.',
-                ]);
-            }
+                return $nextState;
+            });
 
             respondJson(200, [
                 'success' => true,
-                'data' => $nextState,
+                'data' => $responseState,
             ]);
         }
 

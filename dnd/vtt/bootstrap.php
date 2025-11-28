@@ -106,6 +106,38 @@ function saveVttJson(string $filename, $data): bool
 }
 
 /**
+ * Provides an exclusive lock file for board-state operations to avoid clobbered writes.
+ *
+ * @template T
+ * @param callable():T $callback
+ * @return T
+ */
+function withVttBoardStateLock(callable $callback)
+{
+    $lockDir = __DIR__ . '/storage';
+    if (!is_dir($lockDir) && !mkdir($lockDir, 0775, true) && !is_dir($lockDir)) {
+        throw new RuntimeException('Unable to prepare VTT storage directory.');
+    }
+
+    $lockPath = $lockDir . '/board-state.lock';
+    $handle = fopen($lockPath, 'c');
+    if ($handle === false) {
+        throw new RuntimeException('Unable to open board state lock file.');
+    }
+
+    try {
+        if (!flock($handle, LOCK_EX)) {
+            throw new RuntimeException('Unable to acquire the board state lock.');
+        }
+
+        return $callback();
+    } finally {
+        flock($handle, LOCK_UN);
+        fclose($handle);
+    }
+}
+
+/**
  * Provides a configuration snapshot for bootstrapping the front end.
  */
 function getVttBootstrapConfig(?array $authContext = null): array
