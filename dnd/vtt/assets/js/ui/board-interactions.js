@@ -7722,7 +7722,18 @@ export function mountBoardInteractions(store, routes = {}) {
       return explicitProfile;
     }
     const label = getCombatantLabel(combatantId);
-    return matchProfileByName(label);
+    const aliasProfile = matchProfileByName(label);
+    if (aliasProfile) {
+      return aliasProfile;
+    }
+    const inferredProfile = inferPlayerProfileFromPlacement(placement, {
+      combatantId,
+      label,
+    });
+    if (inferredProfile) {
+      return inferredProfile;
+    }
+    return null;
   }
 
   function extractProfileIdFromPlacement(placement) {
@@ -7753,6 +7764,148 @@ export function mountBoardInteractions(store, routes = {}) {
     }
 
     return matchProfileByName(placement?.name ?? '');
+  }
+
+  function inferPlayerProfileFromPlacement(placement, context = {}) {
+    if (!placement || typeof placement !== 'object') {
+      return null;
+    }
+
+    const metadata = extractPlacementMetadata(placement);
+    const playerOwned = isPlacementPlayerOwned(placement, metadata);
+    const inPlayerFolder = isPlacementInPlayerFolder(placement, metadata);
+
+    if (!playerOwned && !inPlayerFolder) {
+      return null;
+    }
+
+    const profileFromAlias = matchProfileByName(context.label ?? placement.name ?? '');
+    if (profileFromAlias) {
+      return profileFromAlias;
+    }
+
+    return (
+      normalizeProfileId(context.label) ??
+      normalizeProfileId(placement?.name) ??
+      normalizeProfileId(placement?.tokenId) ??
+      normalizeProfileId(context.combatantId)
+    );
+  }
+
+  function extractPlacementMetadata(placement) {
+    if (!placement || typeof placement !== 'object') {
+      return null;
+    }
+    const metadata = placement.metadata ?? placement.meta ?? null;
+    return metadata && typeof metadata === 'object' ? metadata : null;
+  }
+
+  function isPlacementPlayerOwned(placement, metadata = null) {
+    const sources = [placement, metadata].filter(Boolean);
+    const flagKeys = [
+      'playerOwned',
+      'playerCharacter',
+      'isPlayerCharacter',
+      'isPc',
+      'pc',
+      'player',
+      'controlledByPlayer',
+      'isPlayerControlled',
+    ];
+
+    for (const source of sources) {
+      for (const key of flagKeys) {
+        if (key in source && toBoolean(source[key], false)) {
+          return true;
+        }
+      }
+
+      const ownerType = typeof source.ownerType === 'string' ? source.ownerType.trim().toLowerCase() : '';
+      if (ownerType === 'player') {
+        return true;
+      }
+
+      const role = typeof source.ownerRole === 'string' ? source.ownerRole.trim().toLowerCase() : '';
+      if (role === 'player') {
+        return true;
+      }
+
+      const controller = typeof source.controllerType === 'string' ? source.controllerType.trim().toLowerCase() : '';
+      if (controller === 'player') {
+        return true;
+      }
+    }
+
+    return false;
+  }
+
+  function isPlacementInPlayerFolder(placement, metadata = null) {
+    const playerFolderKey = normalizePlayerTokenFolderName(PLAYER_VISIBLE_TOKEN_FOLDER);
+    if (!playerFolderKey) {
+      return false;
+    }
+
+    const folderCandidates = [];
+    const candidateSources = [placement, metadata].filter(Boolean);
+    candidateSources.forEach((source) => {
+      ['sourceFolderName', 'folderName'].forEach((key) => {
+        if (typeof source[key] === 'string') {
+          folderCandidates.push(source[key]);
+        }
+      });
+
+      if (source.folder && typeof source.folder === 'object' && typeof source.folder.name === 'string') {
+        folderCandidates.push(source.folder.name);
+      }
+
+      if (typeof source.sourceFolderId === 'string') {
+        folderCandidates.push(source.sourceFolderId);
+      }
+    });
+
+    const tokenFolderName = resolveTokenFolderName(placement?.tokenId ?? null);
+    if (tokenFolderName) {
+      folderCandidates.push(tokenFolderName);
+    }
+
+    return folderCandidates.some(
+      (candidate) => normalizePlayerTokenFolderName(candidate) === playerFolderKey
+    );
+  }
+
+  function resolveTokenFolderName(tokenId) {
+    const normalizedId = typeof tokenId === 'string' ? tokenId.trim() : '';
+    if (!normalizedId) {
+      return '';
+    }
+
+    const tokenState = boardApi.getState?.()?.tokens ?? null;
+    if (!tokenState || typeof tokenState !== 'object') {
+      return '';
+    }
+
+    const token = Array.isArray(tokenState.items)
+      ? tokenState.items.find((item) => item && item.id === normalizedId)
+      : null;
+    if (!token || typeof token !== 'object') {
+      return '';
+    }
+
+    if (token.folder && typeof token.folder.name === 'string') {
+      return token.folder.name;
+    }
+
+    if (typeof token.folderId === 'string') {
+      const folder = Array.isArray(tokenState.folders)
+        ? tokenState.folders.find((entry) => entry && entry.id === token.folderId)
+        : null;
+      if (folder && typeof folder.name === 'string') {
+        return folder.name;
+      }
+      return token.folderId;
+    }
+
+    return '';
   }
 
   function matchProfileByName(name) {
