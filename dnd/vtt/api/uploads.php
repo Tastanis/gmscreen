@@ -150,15 +150,17 @@ if (!move_uploaded_file($tmpPath, $destinationPath)) {
 
 $publicUrl = '/dnd/vtt/storage/uploads/' . $filename;
 
-$boardState = loadVttJson('board-state.json');
-if (!is_array($boardState) || array_values($boardState) === $boardState) {
-    $boardState = [];
-}
-$boardState['mapUrl'] = $publicUrl;
-if (!saveVttJson('board-state.json', $boardState)) {
-    // Do not fail the upload if the board state cannot be persisted.
-    error_log('[VTT] Unable to persist board-state.json after map upload.');
-}
+withVttBoardStateLock(function () use ($publicUrl) {
+    $boardState = loadVttJson('board-state.json');
+    if (!is_array($boardState) || array_values($boardState) === $boardState) {
+        $boardState = [];
+    }
+    $boardState['mapUrl'] = $publicUrl;
+    if (!saveVttJson('board-state.json', $boardState)) {
+        // Do not fail the upload if the board state cannot be persisted.
+        error_log('[VTT] Unable to persist board-state.json after map upload.');
+    }
+});
 
 echo json_encode([
     'success' => true,
