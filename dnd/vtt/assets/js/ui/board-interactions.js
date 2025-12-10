@@ -7581,18 +7581,12 @@ export function mountBoardInteractions(store, routes = {}) {
   function notifyGmPlayersTurnEnd() {
     if (isGmUser()) {
       flashTurnBorder();
-      playSoundProfile('softGong');
-    } else {
-      playSoundProfile('softGong');
     }
   }
 
   function notifyPlayersEnemyTurnEnd() {
-    if (isGmUser()) {
-      playSoundProfile('softGong');
-    } else {
+    if (!isGmUser()) {
       flashTurnBorder();
-      playSoundProfile('softGong');
     }
   }
 
