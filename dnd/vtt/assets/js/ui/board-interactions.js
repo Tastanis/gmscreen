@@ -624,6 +624,8 @@ export function mountBoardInteractions(store, routes = {}) {
   const selectedTokenIds = new Set();
   const combatTrackerGroups = new Map();
   const combatantGroupRepresentative = new Map();
+  const combatGroupMissingCounts = new Map();
+  const MAX_COMBAT_GROUP_MISSING_TICKS = 2;
   let lastCombatTrackerEntries = [];
   let renderedPlacements = [];
   let mapLoadSequence = 0;
@@ -4951,37 +4953,70 @@ export function mountBoardInteractions(store, routes = {}) {
 
     const representativesToDelete = [];
     let mutated = false;
-    combatTrackerGroups.forEach((members, representativeId) => {
-      if (!activeSet.has(representativeId)) {
-        members.forEach((memberId) => {
-          if (memberId !== representativeId) {
-            combatantGroupRepresentative.delete(memberId);
-          }
-        });
-        representativesToDelete.push(representativeId);
-        mutated = true;
+    const resetMissingCount = (id) => {
+      if (!id) {
         return;
       }
+      combatGroupMissingCounts.delete(id);
+    };
+
+    const incrementMissingCount = (id) => {
+      if (!id) {
+        return 0;
+      }
+      const next = (combatGroupMissingCounts.get(id) ?? 0) + 1;
+      combatGroupMissingCounts.set(id, next);
+      return next;
+    };
+
+    combatTrackerGroups.forEach((members, representativeId) => {
+      const representativeActive = activeSet.has(representativeId);
+      const representativeMissingCount = representativeActive
+        ? 0
+        : incrementMissingCount(representativeId);
+      const representativeExpired = representativeMissingCount > MAX_COMBAT_GROUP_MISSING_TICKS;
 
       const filtered = new Set();
+
       members.forEach((memberId) => {
+        if (memberId === representativeId) {
+          return;
+        }
+
         if (activeSet.has(memberId)) {
+          resetMissingCount(memberId);
           filtered.add(memberId);
-        } else if (memberId !== representativeId) {
+          return;
+        }
+
+        const missingCount = incrementMissingCount(memberId);
+        if (missingCount <= MAX_COMBAT_GROUP_MISSING_TICKS) {
+          filtered.add(memberId);
+        } else {
           combatantGroupRepresentative.delete(memberId);
+          combatGroupMissingCounts.delete(memberId);
           mutated = true;
         }
       });
 
-      filtered.add(representativeId);
+      if (representativeActive) {
+        resetMissingCount(representativeId);
+        filtered.add(representativeId);
+      } else if (!representativeExpired) {
+        filtered.add(representativeId);
+      }
 
-      if (filtered.size <= 1) {
+      if (filtered.size <= 1 || representativeExpired) {
         filtered.forEach((memberId) => {
           if (memberId !== representativeId) {
             combatantGroupRepresentative.delete(memberId);
           }
         });
-        representativesToDelete.push(representativeId);
+        combatGroupMissingCounts.delete(representativeId);
+        representativesToDelete.push({
+          representativeId,
+          members: new Set(members),
+        });
         mutated = true;
       } else {
         let changedForRep = filtered.size !== members.size;
@@ -4999,14 +5034,17 @@ export function mountBoardInteractions(store, routes = {}) {
       }
     });
 
-    representativesToDelete.forEach((repId) => {
-      combatTrackerGroups.delete(repId);
+    representativesToDelete.forEach(({ representativeId, members }) => {
+      combatTrackerGroups.delete(representativeId);
+      combatGroupMissingCounts.delete(representativeId);
+      members?.forEach((memberId) => combatGroupMissingCounts.delete(memberId));
       mutated = true;
     });
 
     Array.from(combatantGroupRepresentative.keys()).forEach((memberId) => {
       if (!activeSet.has(memberId)) {
         combatantGroupRepresentative.delete(memberId);
+        combatGroupMissingCounts.delete(memberId);
         mutated = true;
       }
     });
@@ -5140,6 +5178,7 @@ export function mountBoardInteractions(store, routes = {}) {
 
     combatTrackerGroups.clear();
     combatantGroupRepresentative.clear();
+    combatGroupMissingCounts.clear();
 
     prepared.forEach(({ representativeId, members }) => {
       const memberSet = new Set(members);
@@ -8168,14 +8207,18 @@ export function mountBoardInteractions(store, routes = {}) {
       return;
     }
 
+    combatGroupMissingCounts.delete(tokenId);
+
     if (combatTrackerGroups.has(tokenId)) {
       const groupMembers = combatTrackerGroups.get(tokenId);
       groupMembers.forEach((memberId) => {
         if (memberId !== tokenId) {
           combatantGroupRepresentative.delete(memberId);
+          combatGroupMissingCounts.delete(memberId);
         }
       });
       combatTrackerGroups.delete(tokenId);
+      combatGroupMissingCounts.delete(tokenId);
     }
 
     const representativeId = combatantGroupRepresentative.get(tokenId);
@@ -8196,9 +8239,11 @@ export function mountBoardInteractions(store, routes = {}) {
       members.forEach((memberId) => {
         if (memberId !== representativeId) {
           combatantGroupRepresentative.delete(memberId);
+          combatGroupMissingCounts.delete(memberId);
         }
       });
       combatTrackerGroups.delete(representativeId);
+      combatGroupMissingCounts.delete(representativeId);
     }
   }
 
@@ -8261,6 +8306,7 @@ export function mountBoardInteractions(store, routes = {}) {
   function resetCombatGroups() {
     combatTrackerGroups.clear();
     combatantGroupRepresentative.clear();
+    combatGroupMissingCounts.clear();
     lastCombatTrackerEntries = [];
     refreshCombatTracker();
   }
