@@ -5514,27 +5514,49 @@ export function mountBoardInteractions(store, routes = {}) {
       return initiatorName || formatProfileDisplayName(participantId);
     })();
 
-    if (turnLockState.holderId && turnLockState.holderId !== initiatorProfileId) {
-      if (isGmUser()) {
-        let confirmed = true;
-        try {
-          if (typeof window !== 'undefined' && typeof window.confirm === 'function') {
-            confirmed = window.confirm('Override the active turn lock?');
-          }
-        } catch (error) {
-          confirmed = false;
-        }
-        if (!confirmed) {
-          return;
-        }
-        acquireTurnLock(initiatorProfileId || 'gm', initiatorName, combatantId, { force: true });
-      } else {
+    const latestState = boardApi.getState?.() ?? {};
+    const activeSceneId = latestState.boardState?.activeSceneId ?? null;
+    if (activeSceneId) {
+      const sceneCombatState = latestState.boardState?.sceneState?.[activeSceneId]?.combat ?? null;
+      const normalizedCombatState = normalizeCombatState(sceneCombatState ?? {});
+      updateTurnLockState(normalizedCombatState.turnLock);
+    }
+
+    const existingLockHolder = normalizeProfileId(turnLockState.holderId);
+    const initiatorId = normalizeProfileId(initiatorProfileId || getCurrentUserId());
+    const lockHeldByAnotherUser = existingLockHolder && existingLockHolder !== initiatorId;
+
+    if (lockHeldByAnotherUser) {
+      if (!isGmUser()) {
         notifyTurnLocked(turnLockState.holderName);
         return;
       }
-    } else {
-      acquireTurnLock(initiatorProfileId || 'gm', initiatorName, combatantId, { force: isGmUser() });
+
+      let confirmed = true;
+      try {
+        if (typeof window !== 'undefined' && typeof window.confirm === 'function') {
+          confirmed = window.confirm('Override the active turn lock?');
+        }
+      } catch (error) {
+        confirmed = false;
+      }
+      if (!confirmed) {
+        return;
+      }
     }
+
+    const lockAcquired = acquireTurnLock(initiatorId || 'gm', initiatorName, combatantId, {
+      force: isGmUser() || lockHeldByAnotherUser,
+    });
+
+    if (!lockAcquired) {
+      if (!isGmUser()) {
+        notifyTurnLocked(turnLockState.holderName);
+      }
+      return;
+    }
+
+    syncCombatStateToStore();
 
     completedCombatants.delete(combatantId);
     setActiveCombatantId(combatantId);
