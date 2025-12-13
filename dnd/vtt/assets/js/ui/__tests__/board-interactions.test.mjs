@@ -547,6 +547,77 @@ test('condition changes persist and propagate between clients', async () => {
   }
 });
 
+test('save-ends success removes overlay conditions and keeps them cleared after reload', () => {
+  const dom = createDom();
+
+  try {
+    const condition = { name: 'Slowed', duration: { type: 'save-ends' } };
+    const store = createMockStore({
+      user: { isGM: true, name: 'GM' },
+      scenes: { items: [{ id: 'scene-1', name: 'Scene 1' }] },
+      grid: { size: 64, visible: true },
+      boardState: {
+        activeSceneId: 'scene-1',
+        placements: {
+          'scene-1': [
+            {
+              id: 'hero',
+              name: 'Hero',
+              column: 0,
+              row: 0,
+              width: 1,
+              height: 1,
+              overlays: { conditions: [condition], condition },
+            },
+          ],
+        },
+        sceneState: { 'scene-1': { grid: { size: 64, visible: true } } },
+      },
+    });
+
+    const interactions = mountBoardInteractions(store) ?? {};
+    const hooks = interactions.__testing ?? {};
+
+    hooks.openSaveEndsPrompt?.('hero', 'Hero', [condition]);
+
+    const prompt = hooks.getActiveSaveEndsPrompt?.();
+    assert.ok(prompt, 'save-ends prompt should be active');
+
+    const entry = prompt?.queue?.[0];
+    assert.ok(entry, 'save-ends prompt should include the overlay condition');
+
+    hooks.applySaveEndsSuccess?.(entry);
+
+    const placement =
+      store.getState().boardState?.placements?.['scene-1']?.find((item) => item?.id === 'hero') ??
+      null;
+
+    assert.equal(placement?.conditions?.length ?? 0, 0, 'main conditions should be cleared');
+    assert.equal(placement?.overlays?.conditions?.length ?? 0, 0, 'overlay conditions should be cleared');
+    assert.equal(placement?.overlays?.condition ?? null, null, 'legacy overlay condition should be cleared');
+
+    const persistedBoardState = JSON.parse(JSON.stringify(store.getState().boardState));
+    store.setState({ ...store.getState(), boardState: persistedBoardState });
+
+    const rehydratedPlacement =
+      store.getState().boardState?.placements?.['scene-1']?.find((item) => item?.id === 'hero') ??
+      null;
+
+    assert.equal(
+      rehydratedPlacement?.overlays?.conditions?.length ?? 0,
+      0,
+      'overlay conditions should stay cleared after reload'
+    );
+    assert.equal(
+      rehydratedPlacement?.overlays?.condition ?? null,
+      null,
+      'legacy overlay condition should stay cleared after reload'
+    );
+  } finally {
+    dom.window.close();
+  }
+});
+
 test('Sharon confirmation is required for other allies but triggers Hesitation banner on her own token', () => {
   const dom = createDom();
   try {
