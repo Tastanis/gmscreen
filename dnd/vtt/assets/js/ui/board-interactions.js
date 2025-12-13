@@ -6126,6 +6126,32 @@ export function mountBoardInteractions(store, routes = {}) {
           }
         }
       }
+
+      const overlays = target.overlays && typeof target.overlays === 'object' ? target.overlays : null;
+      if (overlays) {
+        const overlayConditions = ensurePlacementConditions(
+          overlays?.conditions ?? overlays?.condition ?? null
+        );
+        const filteredOverlays = overlayConditions.filter(
+          (existing) => !areConditionsEqual(existing, normalized)
+        );
+
+        if (filteredOverlays.length !== overlayConditions.length) {
+          didChange = true;
+
+          if (filteredOverlays.length) {
+            overlays.conditions = filteredOverlays;
+            overlays.condition = filteredOverlays[0];
+          } else {
+            if (overlays.conditions !== undefined) {
+              delete overlays.conditions;
+            }
+            if (overlays.condition !== undefined) {
+              delete overlays.condition;
+            }
+          }
+        }
+      }
     }, { syncBoard: false });
 
     if (updated && didChange) {
@@ -15654,6 +15680,9 @@ function createTemplateTool() {
       openTokenSettingsById,
       getTokenSettingsMenu: () => tokenSettingsMenu,
       applyConditionToPlacement,
+      applySaveEndsSuccess,
+      getActiveSaveEndsPrompt: () => activeSaveEndsPrompt,
+      openSaveEndsPrompt,
       removeConditionFromPlacement,
       removeConditionFromPlacementByCondition,
       clearEndOfTurnConditionsForTarget,
