@@ -403,6 +403,7 @@ const INDIGO_ROTATION_INTERVAL_MS = 60000;
 const INDIGO_ROTATION_INCREMENT_DEGREES = 45;
 const TURN_INDICATOR_DEFAULT_TEXT = 'Waiting for turn';
 const TURN_INDICATOR_GM_TEXT = "GM's turn";
+const TURN_INDICATOR_ALLIES_TEXT = "Allies' turn";
 const TURN_FLASH_TONE_CLASSES = {
   yellow: 'is-turn-flash-yellow',
   red: 'is-turn-flash-red',
@@ -7073,10 +7074,18 @@ export function mountBoardInteractions(store, routes = {}) {
       return false;
     }
 
+    const previousHolder = turnLockState.holderId;
+    const previousCombatantId = turnLockState.combatantId;
     turnLockState.holderId = normalizedId;
     turnLockState.holderName = normalizedName;
     turnLockState.combatantId = typeof combatantId === 'string' && combatantId ? combatantId : null;
     turnLockState.lockedAt = Date.now();
+    if (
+      turnLockState.holderId !== previousHolder ||
+      turnLockState.combatantId !== previousCombatantId
+    ) {
+      updateCombatModeIndicators();
+    }
     return true;
   }
 
@@ -7088,10 +7097,14 @@ export function mountBoardInteractions(store, routes = {}) {
     if (turnLockState.holderId !== requester && requester && !isGmUser()) {
       return false;
     }
+    const previousHolder = turnLockState.holderId;
     turnLockState.holderId = null;
     turnLockState.holderName = null;
     turnLockState.combatantId = null;
     turnLockState.lockedAt = 0;
+    if (previousHolder) {
+      updateCombatModeIndicators();
+    }
     return true;
   }
 
@@ -7326,6 +7339,16 @@ export function mountBoardInteractions(store, routes = {}) {
 
     if (hidden || team !== 'ally') {
       return TURN_INDICATOR_GM_TEXT;
+    }
+
+    const hasActiveTurnLock =
+      typeof turnLockState.holderId === 'string' &&
+      turnLockState.holderId &&
+      typeof turnLockState.combatantId === 'string' &&
+      turnLockState.combatantId === activeCombatantId;
+
+    if (!hasActiveTurnLock) {
+      return TURN_INDICATOR_ALLIES_TEXT;
     }
 
     const label = getCombatantLabel(activeCombatantId);
