@@ -5435,7 +5435,8 @@ export function mountBoardInteractions(store, routes = {}) {
     }
     setFocusedCombatantId(null);
     const combatantId = target.dataset.combatantId || '';
-    if (!combatantId) {
+    const representativeId = getRepresentativeIdFor(combatantId) || combatantId;
+    if (!representativeId) {
       return;
     }
 
@@ -5443,17 +5444,17 @@ export function mountBoardInteractions(store, routes = {}) {
     const state = target.dataset.combatState;
 
     if (isInCompleted || state === 'completed') {
-      completedCombatants.delete(combatantId);
-      setActiveCombatantId(combatantId);
-      currentTurnTeam = getCombatantTeam(combatantId) ?? currentTurnTeam;
+      completedCombatants.delete(representativeId);
+      setActiveCombatantId(representativeId);
+      currentTurnTeam = getCombatantTeam(representativeId) ?? currentTurnTeam;
       refreshCombatTracker();
-      forceAcquireTurnLockForGm(combatantId);
+      forceAcquireTurnLockForGm(representativeId);
       updateCombatModeIndicators();
       syncCombatStateToStore();
       return;
     }
 
-    if (activeCombatantId === combatantId) {
+    if (activeCombatantId === representativeId) {
       closeTurnPrompt();
       setActiveCombatantId(null);
       releaseTurnLock(getCurrentUserId());
@@ -5462,15 +5463,21 @@ export function mountBoardInteractions(store, routes = {}) {
       return;
     }
 
-    completedCombatants.delete(combatantId);
-    setActiveCombatantId(combatantId);
-    forceAcquireTurnLockForGm(combatantId);
-    beginCombatantTurn(combatantId);
+    completedCombatants.delete(representativeId);
+    setActiveCombatantId(representativeId);
+    forceAcquireTurnLockForGm(representativeId);
+    beginCombatantTurn(representativeId);
   }
 
   function beginCombatantTurn(combatantId, options = {}) {
-    if (!combatActive || !combatantId) {
+    const representativeId = getRepresentativeIdFor(combatantId) || combatantId;
+
+    if (!combatActive || !representativeId) {
       return;
+    }
+
+    if (activeCombatantId !== representativeId) {
+      setActiveCombatantId(representativeId);
     }
 
     closeSaveEndsPrompt();
@@ -5482,12 +5489,12 @@ export function mountBoardInteractions(store, routes = {}) {
       typeof options?.initiatorName === 'string' && options.initiatorName.trim()
         ? options.initiatorName.trim()
         : fallbackName;
-    const turnTeam = getCombatantTeam(combatantId) ?? null;
+    const turnTeam = getCombatantTeam(representativeId) ?? null;
     const roundForTurn = combatRound > 0 ? combatRound : 1;
-    const combatantProfileId = normalizeProfileId(getCombatantProfileId(combatantId));
+    const combatantProfileId = normalizeProfileId(getCombatantProfileId(representativeId));
     const tokenIdentifier =
-      normalizeProfileId(combatantId) ||
-      normalizeProfileId(getCombatantLabel(combatantId));
+      normalizeProfileId(representativeId) ||
+      normalizeProfileId(getCombatantLabel(representativeId));
     const participantId =
       turnTeam === 'enemy'
         ? 'gm'
@@ -5545,7 +5552,7 @@ export function mountBoardInteractions(store, routes = {}) {
       }
     }
 
-    const lockAcquired = acquireTurnLock(initiatorId || 'gm', initiatorName, combatantId, {
+    const lockAcquired = acquireTurnLock(initiatorId || 'gm', initiatorName, representativeId, {
       force: isGmUser() || lockHeldByAnotherUser,
     });
 
@@ -5558,27 +5565,27 @@ export function mountBoardInteractions(store, routes = {}) {
 
     syncCombatStateToStore();
 
-    completedCombatants.delete(combatantId);
-    setActiveCombatantId(combatantId);
+    completedCombatants.delete(representativeId);
+    setActiveCombatantId(representativeId);
     if (isGmUser()) {
       combatTimerService.startTurn({
         userId: participantId || undefined,
         displayName: participantName,
         team: turnTeam ?? 'ally',
         round: roundForTurn,
-        combatantId,
+        combatantId: representativeId,
         role: participantRole,
       });
     }
-    currentTurnTeam = getCombatantTeam(combatantId) ?? currentTurnTeam;
+    currentTurnTeam = getCombatantTeam(representativeId) ?? currentTurnTeam;
     refreshCombatTracker();
     updateCombatModeIndicators();
     const shouldShowPrompt = !initiatorProfileId || initiatorProfileId === currentUserId;
     if (shouldShowPrompt) {
-      openTurnPrompt(combatantId);
+      openTurnPrompt(representativeId);
     }
-    notifyConditionTurnStart(combatantId);
-    maybeTriggerSpecialTurnEffects(combatantId, options);
+    notifyConditionTurnStart(representativeId);
+    maybeTriggerSpecialTurnEffects(representativeId, options);
     syncCombatStateToStore();
   }
 
@@ -5623,7 +5630,7 @@ export function mountBoardInteractions(store, routes = {}) {
     if (!activeCombatantId) {
       return;
     }
-    const finishedId = activeCombatantId;
+    const finishedId = getRepresentativeIdFor(activeCombatantId) || activeCombatantId;
     if (isGmUser()) {
       combatTimerService.endTurn();
     }
