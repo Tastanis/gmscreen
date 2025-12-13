@@ -40,7 +40,8 @@ export function queueSave(key, payload, endpoint, options = {}) {
   const controller = new AbortController();
   const normalizedOptions =
     typeof options === 'function' ? { onComplete: options } : options ?? {};
-  const { onComplete, keepalive = false } = normalizedOptions;
+  const { onComplete, keepalive = false, retryLimit = 3, retryBackoffMs = 500 } =
+    normalizedOptions;
 
   const entry = {
     payload,
@@ -51,6 +52,11 @@ export function queueSave(key, payload, endpoint, options = {}) {
     resolvers: [],
     promise: null,
     finalized: false,
+    attempts: 0,
+    retryLimit: Math.max(1, Math.trunc(retryLimit) || 1),
+    retryBackoffMs: Math.max(0, Math.trunc(retryBackoffMs) || 0),
+    blocked: false,
+    lastResult: null,
   };
 
   if (typeof onComplete === 'function') {
@@ -93,6 +99,7 @@ export function queueSave(key, payload, endpoint, options = {}) {
 }
 
 async function persist(key, entry) {
+  entry.attempts += 1;
   const { payload, endpoint, controller, keepalive } = entry;
   let result = null;
   try {
@@ -136,11 +143,45 @@ async function persist(key, entry) {
     result = createResult(false, { aborted, error });
   } finally {
     const current = pending.get(key);
-    if (current === entry || current?.controller === controller) {
+    const stillPending = current === entry || current?.controller === controller;
+    entry.lastResult = result ?? createResult(false, { aborted: controller.signal.aborted });
+    entry.blocked = !entry.lastResult.success;
+
+    if (entry.lastResult.success || !stillPending) {
+      if (stillPending) {
+        pending.delete(key);
+      }
+      finalizeEntry(entry, entry.lastResult);
+      return;
+    }
+
+    const shouldRetry =
+      !entry.lastResult.success &&
+      !entry.lastResult.aborted &&
+      entry.attempts < entry.retryLimit;
+
+    if (shouldRetry) {
+      const delayMs = entry.retryBackoffMs * Math.max(1, 2 ** (entry.attempts - 1));
+      const setTimeoutFn = globalThis?.window?.setTimeout ?? globalThis.setTimeout;
+      if (typeof setTimeoutFn === 'function') {
+        setTimeoutFn(() => {
+          const latest = pending.get(key);
+          if (!latest || latest !== entry) {
+            return;
+          }
+          persist(key, entry);
+        }, delayMs);
+      } else {
+        persist(key, entry);
+      }
+      return;
+    }
+
+    if (stillPending) {
       pending.delete(key);
     }
 
-    finalizeEntry(entry, result ?? createResult(false, { aborted: controller.signal.aborted }));
+    finalizeEntry(entry, entry.lastResult);
   }
 }
 

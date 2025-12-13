@@ -91,7 +91,8 @@ export function createBoardStatePoller({
         pendingSaveInfo?.pending ||
           pendingSaveInfo?.promise ||
           pendingSaveInfo?.signature ||
-          pendingSaveInfo?.hash
+          pendingSaveInfo?.hash ||
+          pendingSaveInfo?.blocking
       );
 
       if (hasPendingSave) {
@@ -1479,6 +1480,8 @@ export function mountBoardInteractions(store, routes = {}) {
         promise: savePromise,
         signature,
         hash: snapshotHash,
+        blocking: true,
+        lastResult: null,
       };
       pendingBoardStateSave = pendingEntry;
       savePromise.then((result) => {
@@ -1486,10 +1489,14 @@ export function mountBoardInteractions(store, routes = {}) {
           return result;
         }
 
-        pendingBoardStateSave = null;
+        pendingEntry.promise = null;
+        pendingEntry.lastResult = result ?? null;
+        pendingEntry.blocking = !result?.success;
+
         if (result?.success) {
           lastPersistedBoardStateSignature = signature;
           lastPersistedBoardStateHash = snapshotHash;
+          pendingBoardStateSave = null;
         }
         return result;
       });
@@ -1743,7 +1750,14 @@ export function mountBoardInteractions(store, routes = {}) {
 
   function getPendingBoardStateSaveInfo() {
     if (!pendingBoardStateSave?.promise) {
-      return { pending: false, promise: null, signature: null, hash: null };
+      return {
+        pending: Boolean(pendingBoardStateSave?.blocking),
+        promise: pendingBoardStateSave?.promise ?? null,
+        signature: pendingBoardStateSave?.signature ?? null,
+        hash: pendingBoardStateSave?.hash ?? null,
+        blocking: Boolean(pendingBoardStateSave?.blocking),
+        result: pendingBoardStateSave?.lastResult ?? null,
+      };
     }
 
     return {
@@ -1751,6 +1765,8 @@ export function mountBoardInteractions(store, routes = {}) {
       promise: pendingBoardStateSave.promise,
       signature: pendingBoardStateSave.signature ?? null,
       hash: pendingBoardStateSave.hash ?? null,
+      blocking: Boolean(pendingBoardStateSave.blocking),
+      result: pendingBoardStateSave.lastResult ?? null,
     };
   }
 
@@ -10801,6 +10817,10 @@ export function mountBoardInteractions(store, routes = {}) {
   function canCurrentUserViewMonsterStatBlock(placement) {
     if (isGmUser()) {
       return true;
+    }
+
+    if (!placement?.monster) {
+      return false;
     }
 
     const team = normalizeCombatTeam(placement?.team ?? placement?.combatTeam ?? null);
