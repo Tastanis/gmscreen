@@ -132,6 +132,63 @@
     flex: 1 1 100%;
 }
 
+.dice-day-counter {
+    display: grid;
+    grid-template-columns: auto;
+    gap: 0.35rem;
+    align-items: center;
+    padding: 0.35rem 0.6rem;
+    background: rgba(15, 23, 42, 0.7);
+    border: 1px solid rgba(148, 163, 184, 0.35);
+    border-radius: 12px;
+    min-width: 120px;
+}
+
+.dice-day-counter__label {
+    font-size: 0.75rem;
+    letter-spacing: 0.08em;
+    text-transform: uppercase;
+    color: #94a3b8;
+    font-weight: 700;
+}
+
+.dice-day-counter__controls {
+    display: grid;
+    grid-template-columns: 1fr auto 1fr;
+    align-items: center;
+    gap: 0.3rem;
+}
+
+.dice-day-counter__btn {
+    border: 1px solid rgba(148, 163, 184, 0.35);
+    background: rgba(51, 65, 85, 0.8);
+    color: #e2e8f0;
+    font-size: 1.3rem;
+    font-weight: 800;
+    border-radius: 10px;
+    padding: 0.45rem 0.65rem;
+    cursor: pointer;
+    line-height: 1;
+    transition: transform 0.1s ease, background 0.15s ease;
+}
+
+.dice-day-counter__btn:hover,
+.dice-day-counter__btn:focus {
+    background: rgba(59, 130, 246, 0.25);
+    transform: translateY(-1px);
+}
+
+.dice-day-counter__value {
+    text-align: center;
+    font-size: 1.35rem;
+    font-weight: 800;
+    color: #f8fafc;
+    padding: 0.35rem 0.5rem;
+    border-radius: 10px;
+    background: rgba(148, 163, 184, 0.15);
+    min-width: 2.8rem;
+}
+
 .dice-row--quick-secondary {
     flex-wrap: wrap;
     justify-content: flex-start;
@@ -348,6 +405,87 @@
     background: linear-gradient(135deg, #c084fc 0%, #a855f7 100%);
     color: #0f172a;
     box-shadow: 0 12px 22px rgba(168, 85, 247, 0.35);
+}
+
+.dice-project-type-dialog {
+    position: absolute;
+    right: 1rem;
+    top: 1rem;
+    z-index: 1700;
+    pointer-events: auto;
+}
+
+.dice-project-type-dialog.hidden {
+    display: none;
+}
+
+.dice-project-type-dialog__card {
+    pointer-events: auto;
+    background: rgba(15, 23, 42, 0.95);
+    border: 1px solid rgba(148, 163, 184, 0.3);
+    border-radius: 14px;
+    min-width: 260px;
+    box-shadow: 0 16px 38px rgba(15, 23, 42, 0.5);
+}
+
+.dice-project-type-dialog__header {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    padding: 0.85rem 1rem;
+    border-bottom: 1px solid rgba(148, 163, 184, 0.25);
+}
+
+.dice-project-type-dialog__header h3 {
+    margin: 0;
+    font-size: 1rem;
+    letter-spacing: 0.05em;
+}
+
+.dice-project-type-dialog__close {
+    background: transparent;
+    border: none;
+    color: #cbd5f5;
+    font-size: 1.5rem;
+    cursor: pointer;
+    line-height: 1;
+}
+
+.dice-project-type-dialog__body {
+    display: flex;
+    flex-direction: column;
+    gap: 0.65rem;
+    padding: 0.9rem 1rem 1rem;
+}
+
+.dice-project-type-dialog__option {
+    border-radius: 12px;
+    border: 1px solid rgba(59, 130, 246, 0.45);
+    background: rgba(59, 130, 246, 0.12);
+    color: #bfdbfe;
+    font-weight: 800;
+    letter-spacing: 0.08em;
+    text-transform: uppercase;
+    padding: 0.85rem 1rem;
+    cursor: pointer;
+    transition: background 0.2s ease, transform 0.15s ease;
+}
+
+.dice-project-type-dialog__option:hover,
+.dice-project-type-dialog__option:focus {
+    background: rgba(59, 130, 246, 0.25);
+    transform: translateY(-2px);
+}
+
+.dice-project-type-dialog__option--normal {
+    border-color: rgba(52, 211, 153, 0.45);
+    background: rgba(16, 185, 129, 0.12);
+    color: #bbf7d0;
+}
+
+.dice-project-type-dialog__option--normal:hover,
+.dice-project-type-dialog__option--normal:focus {
+    background: rgba(16, 185, 129, 0.22);
 }
 
 .dice-view--project-select {

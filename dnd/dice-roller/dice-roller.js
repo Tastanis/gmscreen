@@ -15,6 +15,7 @@ class DashboardDiceRoller {
         this.queueDisplays = [];
         this.resultDisplays = [];
         this.advantageToggleButtons = [];
+        this.resultContainers = [];
 
         this.rollButton = null;
         this.clearButton = null;
@@ -25,6 +26,13 @@ class DashboardDiceRoller {
         this.projectStatusMessage = null;
         this.projectSelectedLabel = null;
         this.projectHeaderLabel = null;
+
+        this.dayCounterValue = 1;
+        this.dayCounterDisplays = [];
+        this.projectTypeDialog = null;
+        this.projectVariant = null;
+        this.projectBaseQueue = [];
+        this.projectExtraQueue = [];
 
         this.currentRollQueue = [];
         this.advantageEnabled = false;
@@ -132,6 +140,10 @@ class DashboardDiceRoller {
         this.modal.appendChild(header);
         this.modal.appendChild(content);
         this.overlay.appendChild(this.modal);
+        this.projectTypeDialog = this.createProjectTypeDialog();
+        if (this.projectTypeDialog) {
+            this.overlay.appendChild(this.projectTypeDialog);
+        }
         document.body.appendChild(this.overlay);
 
         this.setProjectMode('inactive');
@@ -143,6 +155,145 @@ class DashboardDiceRoller {
         const divider = document.createElement('div');
         divider.className = 'dice-divider';
         return divider;
+    }
+
+    createDayCounterControl() {
+        const wrapper = document.createElement('div');
+        wrapper.className = 'dice-day-counter';
+
+        const label = document.createElement('div');
+        label.className = 'dice-day-counter__label';
+        label.textContent = 'Day Counter';
+        wrapper.appendChild(label);
+
+        const controls = document.createElement('div');
+        controls.className = 'dice-day-counter__controls';
+
+        const downBtn = document.createElement('button');
+        downBtn.type = 'button';
+        downBtn.className = 'dice-day-counter__btn dice-day-counter__btn--down';
+        downBtn.textContent = '▼';
+        downBtn.addEventListener('click', () => this.changeDayCounter(-1));
+        controls.appendChild(downBtn);
+
+        const display = document.createElement('div');
+        display.className = 'dice-day-counter__value';
+        controls.appendChild(display);
+        this.dayCounterDisplays.push(display);
+
+        const upBtn = document.createElement('button');
+        upBtn.type = 'button';
+        upBtn.className = 'dice-day-counter__btn dice-day-counter__btn--up';
+        upBtn.textContent = '▲';
+        upBtn.addEventListener('click', () => this.changeDayCounter(1));
+        controls.appendChild(upBtn);
+
+        wrapper.appendChild(controls);
+        this.updateDayCounterDisplays();
+
+        return wrapper;
+    }
+
+    createProjectTypeDialog() {
+        const dialog = document.createElement('div');
+        dialog.className = 'dice-project-type-dialog hidden';
+
+        const card = document.createElement('div');
+        card.className = 'dice-project-type-dialog__card';
+
+        const header = document.createElement('div');
+        header.className = 'dice-project-type-dialog__header';
+        const title = document.createElement('h3');
+        title.textContent = 'Pick a project type';
+        header.appendChild(title);
+
+        const closeBtn = document.createElement('button');
+        closeBtn.type = 'button';
+        closeBtn.className = 'dice-project-type-dialog__close';
+        closeBtn.innerHTML = '&times;';
+        closeBtn.addEventListener('click', () => this.close());
+        header.appendChild(closeBtn);
+        card.appendChild(header);
+
+        const body = document.createElement('div');
+        body.className = 'dice-project-type-dialog__body';
+
+        const schoolBtn = document.createElement('button');
+        schoolBtn.type = 'button';
+        schoolBtn.className = 'dice-project-type-dialog__option';
+        schoolBtn.textContent = 'School Project +2';
+        schoolBtn.addEventListener('click', () => this.selectProjectVariant('school'));
+        body.appendChild(schoolBtn);
+
+        const normalBtn = document.createElement('button');
+        normalBtn.type = 'button';
+        normalBtn.className = 'dice-project-type-dialog__option dice-project-type-dialog__option--normal';
+        normalBtn.textContent = 'Normal Project +4';
+        normalBtn.addEventListener('click', () => this.selectProjectVariant('normal'));
+        body.appendChild(normalBtn);
+
+        card.appendChild(body);
+        dialog.appendChild(card);
+        return dialog;
+    }
+
+    changeDayCounter(delta) {
+        const nextValue = Math.max(1, this.dayCounterValue + delta);
+        this.dayCounterValue = nextValue;
+        this.updateDayCounterDisplays();
+
+        if (this.projectState.mode === 'ready' && this.projectVariant) {
+            this.applyProjectBaseQueue(false);
+        }
+    }
+
+    updateDayCounterDisplays() {
+        this.dayCounterDisplays.forEach((display) => {
+            if (display) {
+                display.textContent = this.dayCounterValue.toString();
+            }
+        });
+    }
+
+    computeProjectBaseQueue() {
+        const dayCount = Math.max(1, this.dayCounterValue);
+        const diceCount = 5 * dayCount;
+        const modifierPerDay = this.projectVariant === 'school' ? 6 : 12;
+        const modifier = modifierPerDay * dayCount;
+        const modifierText = modifier >= 0 ? `+${modifier}` : `${modifier}`;
+        return [`${diceCount}d10`, modifierText];
+    }
+
+    applyProjectBaseQueue(resetExtras = false) {
+        if (!this.projectVariant) {
+            return;
+        }
+
+        this.projectBaseQueue = this.computeProjectBaseQueue();
+        if (resetExtras) {
+            this.projectExtraQueue = [];
+        }
+
+        this.currentRollQueue = [...this.projectBaseQueue, ...this.projectExtraQueue];
+        this.updateQueueDisplay();
+    }
+
+    selectProjectVariant(variant) {
+        this.projectVariant = variant;
+        this.hideProjectTypeDialog();
+        this.finalizeProjectSetup();
+    }
+
+    showProjectTypeDialog() {
+        if (this.projectTypeDialog) {
+            this.projectTypeDialog.classList.remove('hidden');
+        }
+    }
+
+    hideProjectTypeDialog() {
+        if (this.projectTypeDialog) {
+            this.projectTypeDialog.classList.add('hidden');
+        }
     }
 
     createQuickButton(text, value, extraClass = '') {
@@ -161,6 +312,7 @@ class DashboardDiceRoller {
         const powerRow = document.createElement('div');
         powerRow.className = 'dice-row dice-row--quick dice-row--quick-primary';
         powerRow.appendChild(this.createQuickButton('Power Roll', '2d10', 'dice-btn--accent dice-btn--power'));
+        powerRow.appendChild(this.createDayCounterControl());
         container.appendChild(powerRow);
 
         const modifierRow = document.createElement('div');
@@ -234,6 +386,7 @@ class DashboardDiceRoller {
         resultContainer.appendChild(resultDetail);
         controls.appendChild(resultContainer);
         this.resultDisplays.push({ total: resultTotal, detail: resultDetail });
+        this.resultContainers.push(resultContainer);
 
         actionRow.appendChild(controls);
 
@@ -311,6 +464,7 @@ class DashboardDiceRoller {
         eveningBtn.textContent = 'Evening Project Roll';
         eveningBtn.addEventListener('click', () => this.addProjectBaseRoll('1d10'));
         projectPowerRow.appendChild(eveningBtn);
+        projectPowerRow.appendChild(this.createDayCounterControl());
         container.appendChild(projectPowerRow);
 
         const projectModifierRow = document.createElement('div');
@@ -411,6 +565,7 @@ class DashboardDiceRoller {
         resultContainer.appendChild(resultDetail);
         summary.appendChild(resultContainer);
         this.resultDisplays.push({ total: resultTotal, detail: resultDetail });
+        this.resultContainers.push(resultContainer);
 
         container.appendChild(summary);
 
@@ -494,8 +649,12 @@ class DashboardDiceRoller {
             document.removeEventListener('click', this.handleProjectSelection, true);
             this.projectState.selectedIndex = null;
             this.projectState.selectedName = '';
+            this.projectVariant = null;
+            this.projectBaseQueue = [];
+            this.projectExtraQueue = [];
             this.disableProjectManualEntry();
             this.updateProjectStatusMessage('');
+            this.hideProjectTypeDialog();
         }
     }
 
@@ -511,8 +670,14 @@ class DashboardDiceRoller {
     startProjectRollFlow() {
         this.focusProjectsSection();
         this.positionDiceModalForProjectRoll();
+        this.projectVariant = null;
+        this.projectBaseQueue = [];
+        this.projectExtraQueue = [];
         this.clearQueue();
+        this.projectState.manualActive = false;
+        this.disableProjectManualEntry();
         this.setProjectMode('selecting');
+        this.showProjectTypeDialog();
         document.addEventListener('click', this.handleProjectSelection, true);
     }
 
@@ -520,9 +685,13 @@ class DashboardDiceRoller {
         this.clearQueue();
         this.projectState.selectedIndex = null;
         this.projectState.selectedName = '';
+        this.projectVariant = null;
+        this.projectBaseQueue = [];
+        this.projectExtraQueue = [];
         this.disableProjectManualEntry();
         this.updateProjectStatusMessage('Pick a project to continue.');
         this.setProjectMode('selecting');
+        this.showProjectTypeDialog();
         document.addEventListener('click', this.handleProjectSelection, true);
     }
 
@@ -532,6 +701,10 @@ class DashboardDiceRoller {
         }
 
         document.removeEventListener('click', this.handleProjectSelection, true);
+        this.projectVariant = null;
+        this.projectBaseQueue = [];
+        this.projectExtraQueue = [];
+        this.hideProjectTypeDialog();
         this.setProjectMode('inactive');
         this.clearQueue();
     }
@@ -568,19 +741,28 @@ class DashboardDiceRoller {
         }
 
         this.clearQueue();
-        if (this.projectManualInput) {
-            this.projectManualInput.value = '';
-            this.projectManualInput.disabled = true;
-        }
+        this.disableProjectManualEntry();
         this.projectState.manualActive = false;
-        if (this.projectManualButton) {
-            this.projectManualButton.setAttribute('aria-pressed', 'false');
-            this.projectManualButton.classList.remove('dice-project-manual-btn--active');
-            this.projectManualButton.textContent = 'Manual Result';
+
+        this.finalizeProjectSetup();
+    }
+
+    finalizeProjectSetup() {
+        const hasProject = this.projectState.selectedIndex !== null && !Number.isNaN(this.projectState.selectedIndex);
+
+        if (!hasProject) {
+            this.updateProjectStatusMessage('Pick a project to continue.');
+            return;
+        }
+
+        if (!this.projectVariant) {
+            this.updateProjectStatusMessage('Select School Project +2 or Normal Project +4 to continue.');
+            return;
         }
 
         this.setProjectMode('ready');
-        this.updateProjectStatusMessage('Add dice or enter a manual result, then roll the project.');
+        this.applyProjectBaseQueue(true);
+        this.updateProjectStatusMessage('Project base roll queued. Add modifiers or roll when ready.');
     }
 
     toggleProjectManual() {
@@ -610,6 +792,7 @@ class DashboardDiceRoller {
             this.clearQueue();
             this.updateProjectStatusMessage('Enter the manual result you want to submit.');
         } else {
+            this.applyProjectBaseQueue(true);
             this.updateProjectStatusMessage('Add dice for the project roll.');
         }
 
@@ -649,19 +832,7 @@ class DashboardDiceRoller {
         }
 
         this.disableProjectManualEntry();
-
-        const modifiers = this.currentRollQueue.filter((item) => {
-            if (typeof item !== 'string') {
-                return false;
-            }
-
-            const trimmed = item.trim();
-            return /^[+-]\d+$/.test(trimmed);
-        });
-
-        this.currentRollQueue = [diceNotation, ...modifiers];
-        this.updateQueueDisplay();
-        this.updateProjectRollButtonState();
+        this.addToQueue(diceNotation);
     }
 
     completeProjectRoll() {
@@ -749,7 +920,12 @@ class DashboardDiceRoller {
 
         this.disableProjectManualEntry();
 
-        this.currentRollQueue.push(item);
+        if (this.projectState.mode === 'ready' && this.projectBaseQueue.length > 0) {
+            this.projectExtraQueue.push(item);
+            this.currentRollQueue = [...this.projectBaseQueue, ...this.projectExtraQueue];
+        } else {
+            this.currentRollQueue.push(item);
+        }
         this.updateQueueDisplay();
     }
 
@@ -779,10 +955,21 @@ class DashboardDiceRoller {
                 detail.style.display = 'none';
             }
         });
+        this.resultContainers.forEach((container) => {
+            if (container) {
+                container.style.display = 'none';
+            }
+        });
     }
 
     clearQueue() {
-        this.currentRollQueue = [];
+        this.projectExtraQueue = [];
+        if (this.projectState.mode === 'ready' && this.projectBaseQueue.length > 0 && !this.projectState.manualActive) {
+            this.currentRollQueue = [...this.projectBaseQueue];
+        } else {
+            this.projectBaseQueue = [];
+            this.currentRollQueue = [];
+        }
         this.updateQueueDisplay();
         this.resetResultDisplays();
     }
@@ -1032,6 +1219,12 @@ class DashboardDiceRoller {
                     detail.textContent = '';
                     detail.style.display = 'none';
                 }
+            }
+        });
+
+        this.resultContainers.forEach((container) => {
+            if (container) {
+                container.style.display = '';
             }
         });
     }
