@@ -27,7 +27,7 @@ class DashboardDiceRoller {
         this.projectSelectedLabel = null;
         this.projectHeaderLabel = null;
 
-        this.dayCounterValue = 1;
+        this.dayCounterValue = 0;
         this.dayCounterDisplays = [];
         this.projectTypeDialog = null;
         this.projectVariant = null;
@@ -239,7 +239,7 @@ class DashboardDiceRoller {
     }
 
     changeDayCounter(delta) {
-        const nextValue = Math.max(1, this.dayCounterValue + delta);
+        const nextValue = Math.max(0, this.dayCounterValue + delta);
         this.dayCounterValue = nextValue;
         this.updateDayCounterDisplays();
 
@@ -257,7 +257,10 @@ class DashboardDiceRoller {
     }
 
     computeProjectBaseQueue() {
-        const dayCount = Math.max(1, this.dayCounterValue);
+        const dayCount = Math.max(0, this.dayCounterValue);
+        if (dayCount === 0) {
+            return [];
+        }
         const diceCount = 5 * dayCount;
         const modifierPerDay = this.projectVariant === 'school' ? 6 : 12;
         const modifier = modifierPerDay * dayCount;
@@ -769,8 +772,13 @@ class DashboardDiceRoller {
 
         this.setProjectMode('ready');
         this.applyProjectBaseQueue(true);
-        this.updateProjectStatusMessage('Project base roll queued. Add modifiers or roll when ready.');
-        this.flashProjectQueue();
+        const hasBaseQueue = this.projectBaseQueue.length > 0;
+        if (hasBaseQueue) {
+            this.updateProjectStatusMessage('Project base roll queued. Add modifiers or roll when ready.');
+            this.flashProjectQueue();
+        } else {
+            this.updateProjectStatusMessage('Set the day counter above 0 to queue the base roll, or add modifiers manually.');
+        }
     }
 
     flashProjectQueue() {
@@ -985,11 +993,18 @@ class DashboardDiceRoller {
     }
 
     clearQueue() {
-        this.projectExtraQueue = [];
         if (this.projectState.mode === 'ready' && this.projectBaseQueue.length > 0 && !this.projectState.manualActive) {
-            this.currentRollQueue = [...this.projectBaseQueue];
+            if (this.projectExtraQueue.length > 0) {
+                this.projectExtraQueue = [];
+                this.currentRollQueue = [...this.projectBaseQueue];
+            } else {
+                this.projectBaseQueue = [];
+                this.projectExtraQueue = [];
+                this.currentRollQueue = [];
+            }
         } else {
             this.projectBaseQueue = [];
+            this.projectExtraQueue = [];
             this.currentRollQueue = [];
         }
         this.updateQueueDisplay();
