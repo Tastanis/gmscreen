@@ -33,6 +33,7 @@ class DashboardDiceRoller {
         this.projectVariant = null;
         this.projectBaseQueue = [];
         this.projectExtraQueue = [];
+        this.projectQueueDisplay = null;
 
         this.currentRollQueue = [];
         this.advantageEnabled = false;
@@ -288,11 +289,17 @@ class DashboardDiceRoller {
         if (this.projectTypeDialog) {
             this.projectTypeDialog.classList.remove('hidden');
         }
+        if (this.modal) {
+            this.modal.classList.add('dice-modal--hidden');
+        }
     }
 
     hideProjectTypeDialog() {
         if (this.projectTypeDialog) {
             this.projectTypeDialog.classList.add('hidden');
+        }
+        if (this.modal) {
+            this.modal.classList.remove('dice-modal--hidden');
         }
     }
 
@@ -312,7 +319,6 @@ class DashboardDiceRoller {
         const powerRow = document.createElement('div');
         powerRow.className = 'dice-row dice-row--quick dice-row--quick-primary';
         powerRow.appendChild(this.createQuickButton('Power Roll', '2d10', 'dice-btn--accent dice-btn--power'));
-        powerRow.appendChild(this.createDayCounterControl());
         container.appendChild(powerRow);
 
         const modifierRow = document.createElement('div');
@@ -401,6 +407,8 @@ class DashboardDiceRoller {
         bottomRow.appendChild(projectBtn);
         this.projectRollButton = projectBtn;
 
+        bottomRow.appendChild(this.createDayCounterControl());
+
         const advantageToggle = document.createElement('button');
         advantageToggle.type = 'button';
         advantageToggle.className = 'dice-advantage-toggle';
@@ -464,7 +472,6 @@ class DashboardDiceRoller {
         eveningBtn.textContent = 'Evening Project Roll';
         eveningBtn.addEventListener('click', () => this.addProjectBaseRoll('1d10'));
         projectPowerRow.appendChild(eveningBtn);
-        projectPowerRow.appendChild(this.createDayCounterControl());
         container.appendChild(projectPowerRow);
 
         const projectModifierRow = document.createElement('div');
@@ -554,6 +561,7 @@ class DashboardDiceRoller {
         queueSection.appendChild(queueDisplay);
         summary.appendChild(queueSection);
         this.queueDisplays.push(queueDisplay);
+        this.projectQueueDisplay = queueDisplay;
 
         const resultContainer = document.createElement('div');
         resultContainer.className = 'dice-result dice-result--project';
@@ -677,7 +685,6 @@ class DashboardDiceRoller {
         this.projectState.manualActive = false;
         this.disableProjectManualEntry();
         this.setProjectMode('selecting');
-        this.showProjectTypeDialog();
         document.addEventListener('click', this.handleProjectSelection, true);
     }
 
@@ -691,7 +698,6 @@ class DashboardDiceRoller {
         this.disableProjectManualEntry();
         this.updateProjectStatusMessage('Pick a project to continue.');
         this.setProjectMode('selecting');
-        this.showProjectTypeDialog();
         document.addEventListener('click', this.handleProjectSelection, true);
     }
 
@@ -744,7 +750,8 @@ class DashboardDiceRoller {
         this.disableProjectManualEntry();
         this.projectState.manualActive = false;
 
-        this.finalizeProjectSetup();
+        this.updateProjectStatusMessage('Choose School Project +2 or Normal Project +4.');
+        this.showProjectTypeDialog();
     }
 
     finalizeProjectSetup() {
@@ -763,6 +770,21 @@ class DashboardDiceRoller {
         this.setProjectMode('ready');
         this.applyProjectBaseQueue(true);
         this.updateProjectStatusMessage('Project base roll queued. Add modifiers or roll when ready.');
+        this.flashProjectQueue();
+    }
+
+    flashProjectQueue() {
+        if (!this.projectQueueDisplay) {
+            return;
+        }
+
+        const element = this.projectQueueDisplay;
+        element.classList.remove('dice-queue-display--flash');
+        void element.offsetWidth;
+        element.classList.add('dice-queue-display--flash');
+
+        const removeClass = () => element.classList.remove('dice-queue-display--flash');
+        element.addEventListener('animationend', removeClass, { once: true });
     }
 
     toggleProjectManual() {
