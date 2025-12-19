@@ -243,7 +243,21 @@ class DashboardDiceRoller {
         this.dayCounterValue = nextValue;
         this.updateDayCounterDisplays();
 
-        if (this.projectState.mode === 'ready' && this.projectVariant) {
+        if (this.projectState.mode === 'ready') {
+            if (this.dayCounterValue === 0) {
+                this.projectBaseQueue = [];
+                this.currentRollQueue = [...this.projectExtraQueue];
+                this.updateQueueDisplay();
+                this.updateProjectStatusMessage('Set the day counter above 0 to queue the base roll, or add modifiers manually.');
+                return;
+            }
+
+            if (!this.projectVariant) {
+                this.updateProjectStatusMessage('Select School Project +2 or Normal Project +4 to continue.');
+                this.showProjectTypeDialog();
+                return;
+            }
+
             this.applyProjectBaseQueue(false);
         }
     }
@@ -258,7 +272,7 @@ class DashboardDiceRoller {
 
     computeProjectBaseQueue() {
         const dayCount = Math.max(0, this.dayCounterValue);
-        if (dayCount === 0) {
+        if (dayCount === 0 || !this.projectVariant) {
             return [];
         }
         const diceCount = 5 * dayCount;
@@ -753,6 +767,12 @@ class DashboardDiceRoller {
         this.disableProjectManualEntry();
         this.projectState.manualActive = false;
 
+        if (this.dayCounterValue === 0) {
+            this.projectVariant = null;
+            this.finalizeProjectSetup();
+            return;
+        }
+
         this.updateProjectStatusMessage('Choose School Project +2 or Normal Project +4.');
         this.showProjectTypeDialog();
     }
@@ -765,7 +785,7 @@ class DashboardDiceRoller {
             return;
         }
 
-        if (!this.projectVariant) {
+        if (!this.projectVariant && this.dayCounterValue > 0) {
             this.updateProjectStatusMessage('Select School Project +2 or Normal Project +4 to continue.');
             return;
         }
