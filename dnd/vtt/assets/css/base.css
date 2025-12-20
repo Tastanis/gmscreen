@@ -9,7 +9,7 @@
   --vtt-accent-soft: rgba(213, 155, 90, 0.16);
   --vtt-danger: #f43f5e;
   --vtt-success: #22c55e;
-  --vtt-radius: 6px;
+  --vtt-radius: 4px;
   --vtt-transition: 180ms ease;
 }
 
@@ -46,8 +46,8 @@ body.vtt-body {
   border-radius: var(--vtt-radius);
   background: rgba(213, 155, 90, 0.12);
   color: var(--vtt-text-primary);
-  padding: 0.4rem 0.75rem;
-  font-size: 0.9rem;
+  padding: 0.35rem 0.7rem;
+  font-size: 0.88rem;
   font-weight: 600;
   cursor: pointer;
   transition: background var(--vtt-transition), transform var(--vtt-transition);
