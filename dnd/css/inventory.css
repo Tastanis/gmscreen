@@ -145,7 +145,7 @@
 }
 
 @media (min-width: 900px) {
-    .inventory-item-card.expanded {
+    .inventory-item-card {
         grid-column: span 2;
     }
 }
