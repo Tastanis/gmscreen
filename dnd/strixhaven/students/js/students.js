@@ -219,10 +219,17 @@ function setupEventListeners() {
     // Modal close on background click
     const modal = document.getElementById('student-modal');
     if (modal) {
-        modal.addEventListener('click', function(e) {
-            if (e.target === modal) {
+        let backgroundPointerDown = false;
+
+        modal.addEventListener('mousedown', function(e) {
+            backgroundPointerDown = e.target === modal;
+        });
+
+        modal.addEventListener('mouseup', function(e) {
+            if (backgroundPointerDown && e.target === modal) {
                 closeStudentModal();
             }
+            backgroundPointerDown = false;
         });
     }
 }

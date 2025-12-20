@@ -2,96 +2,100 @@
 
 /* Main Layout */
 .main-container {
-    max-width: 1400px;
-    margin: 0 auto;
-    padding: 20px;
+    max-width: none;
+    width: 100%;
+    margin: 0;
+    padding: 12px 14px;
+    background: #f7f1e8;
 }
 
 /* Control Panel */
 .control-panel {
-    background: white;
-    border-radius: 10px;
-    padding: 20px;
-    margin-bottom: 20px;
-    box-shadow: 0 2px 10px rgba(0, 0, 0, 0.1);
-    border: 1px solid #e1e8ed;
+    background: #fdf9f3;
+    border-radius: 6px;
+    padding: 14px 16px;
+    margin-bottom: 12px;
+    box-shadow: 0 2px 6px rgba(0, 0, 0, 0.05);
+    border: 1px solid #d2c2aa;
 }
 
 .search-section {
-    margin-bottom: 20px;
+    margin-bottom: 12px;
 }
 
 .search-input {
     width: 100%;
     max-width: 400px;
-    padding: 12px 16px;
-    border: 2px solid #e1e8ed;
-    border-radius: 8px;
-    font-size: 16px;
-    transition: border-color 0.3s ease, box-shadow 0.3s ease;
+    padding: 10px 12px;
+    border: 1px solid #c2b39a;
+    border-radius: 5px;
+    font-size: 15px;
+    background: #fffdf7;
+    color: #2f261b;
+    transition: border-color 0.2s ease, box-shadow 0.2s ease;
 }
 
 .search-input:focus {
     outline: none;
-    border-color: #667eea;
-    box-shadow: 0 0 0 3px rgba(102, 126, 234, 0.1);
+    border-color: #8b5e3c;
+    box-shadow: 0 0 0 2px rgba(139, 94, 60, 0.15);
 }
 
 .filter-section {
     display: flex;
     flex-wrap: wrap;
-    gap: 20px;
+    gap: 12px;
     align-items: center;
 }
 
 .filter-group {
     display: flex;
     align-items: center;
-    gap: 10px;
+    gap: 8px;
 }
 
 .filter-group label {
     font-weight: 600;
-    color: #2c3e50;
-    margin-right: 5px;
+    color: #2f261b;
+    margin-right: 4px;
 }
 
 .filter-btn {
-    padding: 8px 16px;
-    border: 2px solid #e1e8ed;
-    background: white;
-    border-radius: 6px;
+    padding: 8px 12px;
+    border: 1px solid #c2b39a;
+    background: #f4ede3;
+    border-radius: 5px;
     cursor: pointer;
     font-size: 14px;
     font-weight: 500;
-    transition: all 0.3s ease;
-    color: #555;
+    transition: all 0.2s ease;
+    color: #3d3123;
 }
 
 .filter-btn:hover {
-    border-color: #667eea;
-    color: #667eea;
+    border-color: #8b5e3c;
+    color: #8b5e3c;
 }
 
 .filter-btn.active {
-    background: #667eea;
-    border-color: #667eea;
-    color: white;
+    background: #8b5e3c;
+    border-color: #7a4f31;
+    color: #fdfaf5;
 }
 
 .filter-select {
-    padding: 8px 12px;
-    border: 2px solid #e1e8ed;
-    border-radius: 6px;
-    background: white;
+    padding: 8px 10px;
+    border: 1px solid #c2b39a;
+    border-radius: 5px;
+    background: #fffdf7;
     font-size: 14px;
     cursor: pointer;
-    transition: border-color 0.3s ease;
+    transition: border-color 0.2s ease;
 }
 
 .filter-select:focus {
     outline: none;
-    border-color: #667eea;
+    border-color: #8b5e3c;
 }
 
 .admin-controls {
@@ -99,175 +103,172 @@
 }
 
 .btn-add {
-    background: #27ae60;
-    color: white;
-    border: none;
-    padding: 10px 20px;
-    border-radius: 6px;
+    background: #7a4f31;
+    color: #fdfaf5;
+    border: 1px solid #6c452c;
+    padding: 9px 16px;
+    border-radius: 5px;
     cursor: pointer;
     font-size: 14px;
     font-weight: 600;
-    transition: all 0.3s ease;
+    transition: background-color 0.2s ease, transform 0.2s ease;
 }
 
 .btn-add:hover {
-    background: #229954;
+    background: #8b5e3c;
     transform: translateY(-1px);
-    box-shadow: 0 4px 12px rgba(39, 174, 96, 0.3);
 }
 
 .btn-import {
-    background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
-    color: white;
-    border: none;
-    padding: 10px 20px;
-    border-radius: 6px;
+    background: #8b5e3c;
+    color: #fdfaf5;
+    border: 1px solid #7a4f31;
+    padding: 9px 16px;
+    border-radius: 5px;
     cursor: pointer;
     font-size: 14px;
     font-weight: 600;
-    transition: all 0.3s ease;
-    margin-left: 10px;
+    transition: background-color 0.2s ease, transform 0.2s ease;
+    margin-left: 8px;
 }
 
 .btn-import:hover {
-    background: linear-gradient(135deg, #5a67d8 0%, #6b4794 100%);
+    background: #9c6b45;
     transform: translateY(-1px);
-    box-shadow: 0 4px 12px rgba(102, 126, 234, 0.4);
 }
 
 .btn-export {
-    background: linear-gradient(135deg, #48bb78 0%, #38a169 100%);
-    color: white;
-    border: none;
-    padding: 10px 20px;
-    border-radius: 6px;
+    background: #6f7a3a;
+    color: #fdfaf5;
+    border: 1px solid #5f692f;
+    padding: 9px 16px;
+    border-radius: 5px;
     cursor: pointer;
     font-size: 14px;
     font-weight: 600;
-    transition: all 0.3s ease;
-    margin-left: 10px;
+    transition: background-color 0.2s ease, transform 0.2s ease;
+    margin-left: 8px;
 }
 
 .btn-export:hover {
-    background: linear-gradient(135deg, #38a169 0%, #2f855a 100%);
+    background: #7d8745;
     transform: translateY(-1px);
-    box-shadow: 0 4px 12px rgba(72, 187, 120, 0.4);
 }
 
 .btn-copy {
-    background: linear-gradient(135deg, #4299e1 0%, #3182ce 100%);
-    color: white;
-    border: none;
-    padding: 8px 16px;
-    border-radius: 4px;
+    background: #435764;
+    color: #fdfaf5;
+    border: 1px solid #3a4b55;
+    padding: 8px 14px;
+    border-radius: 5px;
     cursor: pointer;
     font-size: 14px;
     font-weight: 500;
-    transition: all 0.3s ease;
+    transition: background-color 0.2s ease, transform 0.2s ease;
 }
 
 .btn-copy:hover {
-    background: linear-gradient(135deg, #3182ce 0%, #2c5282 100%);
+    background: #516775;
     transform: translateY(-1px);
 }
 
 /* Students Grid */
 .students-container {
-    background: white;
-    border-radius: 10px;
-    padding: 20px;
-    box-shadow: 0 2px 10px rgba(0, 0, 0, 0.1);
-    border: 1px solid #e1e8ed;
+    background: #fdf9f3;
+    border-radius: 6px;
+    padding: 14px;
+    box-shadow: 0 2px 6px rgba(0, 0, 0, 0.05);
+    border: 1px solid #d2c2aa;
     min-height: 400px;
 }
 
 .students-grid {
     display: grid;
     grid-template-columns: repeat(auto-fill, minmax(280px, 1fr));
-    gap: 20px;
-    margin-bottom: 30px;
+    gap: 12px;
+    margin-bottom: 18px;
 }
 
 .student-card {
-    background: #f8f9fa;
-    border: 2px solid #e1e8ed;
-    border-radius: 12px;
-    padding: 16px;
+    background: #f4ede3;
+    border: 1px solid #c2b39a;
+    border-radius: 6px;
+    padding: 12px;
     cursor: pointer;
-    transition: all 0.3s ease;
+    transition: all 0.2s ease;
     position: relative;
     overflow: hidden;
 }
 
 .student-card:hover {
-    transform: translateY(-2px);
-    box-shadow: 0 8px 25px rgba(0, 0, 0, 0.15);
-    border-color: #667eea;
+    transform: translateY(-1px);
+    box-shadow: 0 4px 10px rgba(0, 0, 0, 0.08);
+    border-color: #8b5e3c;
 }
 
 .student-card.expanded {
-    border-color: #667eea;
-    background: #f0f2ff;
+    border-color: #8b5e3c;
+    background: #f0e7dc;
 }
 
 .student-thumbnail {
     width: 80px;
     height: 80px;
-    border-radius: 50%;
+    border-radius: 6px;
     object-fit: cover;
-    border: 3px solid #e1e8ed;
-    margin: 0 auto 12px;
+    border: 2px solid #c2b39a;
+    margin: 0 auto 10px;
     display: block;
-    transition: border-color 0.3s ease;
+    transition: border-color 0.2s ease;
 }
 
 .student-card:hover .student-thumbnail {
-    border-color: #667eea;
+    border-color: #8b5e3c;
 }
 
 .student-placeholder {
     width: 80px;
     height: 80px;
-    border-radius: 50%;
-    background: #e1e8ed;
-    margin: 0 auto 12px;
+    border-radius: 6px;
+    background: #e9decc;
+    margin: 0 auto 10px;
     display: flex;
     align-items: center;
     justify-content: center;
     font-size: 14px;
-    color: #777;
-    border: 3px solid #e1e8ed;
-    transition: all 0.3s ease;
+    color: #5b4a3a;
+    border: 2px solid #c2b39a;
+    transition: all 0.2s ease;
 }
 
 .student-card:hover .student-placeholder {
-    border-color: #667eea;
-    background: #f0f2ff;
+    border-color: #8b5e3c;
+    background: #f0e7dc;
 }
 
 .student-name {
     font-size: 18px;
     font-weight: 600;
-    color: #2c3e50;
+    color: #2f261b;
     text-align: center;
-    margin-bottom: 8px;
+    margin-bottom: 6px;
     line-height: 1.3;
 }
 
 .student-info {
     text-align: center;
-    font-size: 14px;
-    color: #666;
-    line-height: 1.4;
+    font-size: 13px;
+    color: #5b4a3a;
+    line-height: 1.35;
 }
 
 .student-grade {
-    color: #667eea;
+    color: #8b5e3c;
     font-weight: 500;
 }
 
 .student-college {
-    color: #e74c3c;
+    color: #7a3a2a;
     font-weight: 500;
 }
 
@@ -306,33 +307,33 @@
     display: flex;
     justify-content: center;
     align-items: center;
-    gap: 10px;
-    margin-top: 20px;
-    padding-top: 20px;
-    border-top: 1px solid #e1e8ed;
+    gap: 8px;
+    margin-top: 14px;
+    padding-top: 14px;
+    border-top: 1px solid #d2c2aa;
 }
 
 .pagination-btn {
-    padding: 8px 12px;
-    border: 2px solid #e1e8ed;
-    background: white;
-    border-radius: 6px;
+    padding: 7px 10px;
+    border: 1px solid #c2b39a;
+    background: #f4ede3;
+    border-radius: 5px;
     cursor: pointer;
     font-size: 14px;
-    transition: all 0.3s ease;
+    transition: all 0.2s ease;
     min-width: 40px;
     text-align: center;
 }
 
 .pagination-btn:hover:not(:disabled) {
-    border-color: #667eea;
-    color: #667eea;
+    border-color: #8b5e3c;
+    color: #8b5e3c;
 }
 
 .pagination-btn.active {
-    background: #667eea;
-    border-color: #667eea;
-    color: white;
+    background: #8b5e3c;
+    border-color: #7a4f31;
+    color: #fdfaf5;
 }
 
 .pagination-btn:disabled {
@@ -408,15 +409,16 @@
 }
 
 .modal-content {
-    background: white;
+    background: #fdf9f3;
     margin: 2% auto;
-    border-radius: 12px;
+    border-radius: 8px;
     width: 90%;
     max-width: 800px;
     max-height: 90vh;
     overflow-y: auto;
-    box-shadow: 0 20px 60px rgba(0, 0, 0, 0.3);
-    animation: modalSlideIn 0.3s ease-out;
+    border: 1px solid #c2b39a;
+    box-shadow: 0 10px 30px rgba(0, 0, 0, 0.18);
+    animation: modalSlideIn 0.25s ease-out;
 }
 
 @keyframes modalSlideIn {
@@ -434,16 +436,16 @@
     display: flex;
     justify-content: space-between;
     align-items: center;
-    padding: 20px 30px;
-    border-bottom: 1px solid #e1e8ed;
-    background: #f8f9fa;
-    border-radius: 12px 12px 0 0;
+    padding: 14px 20px;
+    border-bottom: 1px solid #d2c2aa;
+    background: #f4ede3;
+    border-radius: 8px 8px 0 0;
 }
 
 .modal-header h2 {
     margin: 0;
-    color: #2c3e50;
-    font-size: 24px;
+    color: #2f261b;
+    font-size: 22px;
 }
 
 .modal-controls {
@@ -453,73 +455,73 @@
 }
 
 .btn-favorite {
-    background: #f39c12;
-    color: white;
-    border: none;
-    padding: 8px 12px;
-    border-radius: 6px;
+    background: #c07a2d;
+    color: #fdfaf5;
+    border: 1px solid #a86522;
+    padding: 7px 10px;
+    border-radius: 5px;
     cursor: pointer;
-    font-size: 16px;
-    transition: all 0.3s ease;
+    font-size: 15px;
+    transition: background-color 0.2s ease, transform 0.2s ease;
 }
 
 .btn-favorite:hover {
-    background: #e67e22;
-    transform: scale(1.1);
+    background: #d18633;
+    transform: translateY(-1px);
 }
 
 .btn-favorite.active {
-    background: #f39c12;
-    box-shadow: 0 0 15px rgba(243, 156, 18, 0.5);
+    background: #d18633;
+    box-shadow: 0 0 10px rgba(193, 122, 45, 0.35);
 }
 
 .btn-expand {
-    background: #3498db;
-    color: white;
-    border: none;
-    padding: 8px 12px;
-    border-radius: 6px;
+    background: #5a7080;
+    color: #fdfaf5;
+    border: 1px solid #4b5f6c;
+    padding: 7px 10px;
+    border-radius: 5px;
     cursor: pointer;
-    font-size: 16px;
-    transition: all 0.3s ease;
+    font-size: 15px;
+    transition: background-color 0.2s ease, transform 0.2s ease;
 }
 
 .btn-expand:hover {
-    background: #2980b9;
-    transform: scale(1.05);
+    background: #6a8292;
+    transform: translateY(-1px);
 }
 
 .btn-danger {
-    background: #e74c3c;
-    color: white;
-    border: none;
-    padding: 8px 12px;
-    border-radius: 6px;
+    background: #9b3b2f;
+    color: #fdfaf5;
+    border: 1px solid #833126;
+    padding: 7px 10px;
+    border-radius: 5px;
     cursor: pointer;
-    font-size: 16px;
-    transition: all 0.3s ease;
+    font-size: 15px;
+    transition: background-color 0.2s ease, transform 0.2s ease;
 }
 
 .btn-danger:hover {
-    background: #c0392b;
-    transform: scale(1.05);
+    background: #a84335;
+    transform: translateY(-1px);
 }
 
 .close {
-    font-size: 28px;
+    font-size: 26px;
     font-weight: bold;
     cursor: pointer;
-    color: #666;
-    transition: color 0.3s ease;
-    margin-left: 15px;
+    color: #5b4a3a;
+    transition: color 0.2s ease;
+    margin-left: 12px;
 }
 
 .close:hover {
-    color: #e74c3c;
+    color: #9b3b2f;
 }
 
 .modal-body {
-    padding: 30px;
+    padding: 20px 22px;
 }
 
 .student-details {
