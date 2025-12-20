@@ -1,15 +1,15 @@
 :root {
-  --vtt-bg-gradient-start: #1e1b4b;
-  --vtt-bg-gradient-end: #3b0764;
-  --vtt-panel-bg: rgba(15, 23, 42, 0.85);
-  --vtt-panel-border: rgba(148, 163, 184, 0.2);
-  --vtt-text-primary: #e2e8f0;
-  --vtt-text-muted: #94a3b8;
-  --vtt-accent: #6366f1;
-  --vtt-accent-soft: rgba(99, 102, 241, 0.12);
+  --vtt-bg-gradient-start: #2b1a16;
+  --vtt-bg-gradient-end: #4b3026;
+  --vtt-panel-bg: rgba(39, 26, 21, 0.9);
+  --vtt-panel-border: rgba(191, 166, 139, 0.3);
+  --vtt-text-primary: #f4e8d5;
+  --vtt-text-muted: #c7b59a;
+  --vtt-accent: #d59b5a;
+  --vtt-accent-soft: rgba(213, 155, 90, 0.16);
   --vtt-danger: #f43f5e;
   --vtt-success: #22c55e;
-  --vtt-radius: 12px;
+  --vtt-radius: 6px;
   --vtt-transition: 180ms ease;
 }
 
@@ -42,24 +42,24 @@ body.vtt-body {
 
 .btn {
   appearance: none;
-  border: 1px solid transparent;
+  border: 1px solid rgba(213, 155, 90, 0.45);
   border-radius: var(--vtt-radius);
-  background: var(--vtt-accent-soft);
+  background: rgba(213, 155, 90, 0.12);
   color: var(--vtt-text-primary);
-  padding: 0.5rem 1rem;
-  font-size: 0.95rem;
+  padding: 0.4rem 0.75rem;
+  font-size: 0.9rem;
   font-weight: 600;
   cursor: pointer;
   transition: background var(--vtt-transition), transform var(--vtt-transition);
 }
 
 .btn:hover {
-  background: rgba(99, 102, 241, 0.25);
+  background: rgba(213, 155, 90, 0.25);
 }
 
 .btn.is-active {
-  background: rgba(99, 102, 241, 0.35);
-  border-color: rgba(99, 102, 241, 0.65);
+  background: rgba(213, 155, 90, 0.35);
+  border-color: rgba(213, 155, 90, 0.65);
   color: #fff;
 }
 
@@ -74,7 +74,7 @@ body.vtt-body {
 }
 
 .btn--primary:hover {
-  background: #4f46e5;
+  background: #c88447;
 }
 
 .btn--danger {
