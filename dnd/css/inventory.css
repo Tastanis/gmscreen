@@ -52,7 +52,7 @@
     background: #fdf8f1;
     border-radius: 0 0 6px 6px;
     min-height: 520px;
-    padding: 14px;
+    padding: 12px;
 }
 
 /* Inventory tab content */
@@ -102,15 +102,14 @@
     overflow: auto;
     border-radius: 6px;
     background: #f2e6d7;
-    padding: 12px;
-    max-width: 1250px;
-    margin: 0 auto;
+    padding: 10px;
+    width: 100%;
 }
 
 .inventory-grid {
     display: grid;
-    grid-template-columns: repeat(auto-fit, minmax(260px, 1fr));
-    gap: 12px;
+    grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+    gap: 10px;
     min-width: 100%;
     position: relative;
     align-content: flex-start;
@@ -121,12 +120,12 @@
     background: #fffaf2;
     border: 1px solid #c7b393;
     border-radius: 6px;
-    padding: 10px;
+    padding: 9px;
     cursor: pointer;
     transition: border-color 0.2s ease, box-shadow 0.2s ease;
     box-shadow: 0 1px 3px rgba(0, 0, 0, 0.08);
     position: relative;
-    min-height: 120px;
+    min-height: 100px;
     display: flex;
     flex-direction: column;
     overflow: hidden;
@@ -155,7 +154,8 @@
     display: flex;
     flex-direction: row;
     align-items: center;
-    justify-content: space-between;
+    justify-content: flex-start;
+    gap: 10px;
     text-align: left;
     margin-bottom: 6px;
 }
@@ -174,10 +174,11 @@
 }
 
 .inventory-item-image-small {
-    width: 56px;
-    height: 56px;
+    width: 72px;
+    height: 72px;
     object-fit: cover;
     border-radius: 4px;
+    order: -1;
 }
 
 .inventory-item-image-large {
@@ -205,8 +206,8 @@
 
 .inventory-item-content {
     display: grid;
-    grid-template-columns: minmax(110px, 180px) 1fr;
-    gap: 12px;
+    grid-template-columns: minmax(120px, 180px) 1fr;
+    gap: 10px;
     align-items: flex-start;
     margin-bottom: 8px;
 }
@@ -236,9 +237,9 @@
 }
 
 .inventory-item-meta {
-    display: grid;
-    grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
-    gap: 8px;
+    display: flex;
+    flex-direction: column;
+    gap: 6px;
 }
 
 .inventory-item-field {
@@ -308,7 +309,7 @@
 
 .btn-inventory-save, .btn-inventory-delete, .btn-inventory-close,
 .btn-inventory-upload, .btn-inventory-take, .btn-inventory-share,
-.btn-inventory-visibility {
+.btn-inventory-visibility, .btn-inventory-duplicate {
     padding: 7px 12px;
     border: 1px solid #8a602e;
     border-radius: 4px;
@@ -379,6 +380,15 @@
 
 .btn-inventory-visibility:hover {
     background: #946631;
+}
+
+.btn-inventory-duplicate {
+    background: #8d6730;
+    color: #fdf8f1;
+}
+
+.btn-inventory-duplicate:hover {
+    background: #765528;
 }
 
 /* Hidden item styling (GM only) */
