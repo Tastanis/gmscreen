@@ -1,58 +1,58 @@
 /* Inventory Section Styles */
 .inventory-section {
-    padding: 20px;
+    padding: 10px 12px;
 }
 
 .inventory-container {
-    background: rgba(255, 255, 255, 0.95);
-    border-radius: 15px;
-    box-shadow: 0 4px 20px rgba(0, 0, 0, 0.1);
-    backdrop-filter: blur(10px);
+    background: #f6efe5;
+    border-radius: 6px;
+    border: 1px solid #c7b393;
+    box-shadow: 0 1px 4px rgba(0, 0, 0, 0.08);
     overflow: hidden;
 }
 
 /* Inventory Tab system */
 .inventory-tabs {
     display: flex;
-    background: rgba(255, 255, 255, 0.9);
-    border-radius: 15px 15px 0 0;
+    background: #e9ddcd;
+    border-radius: 6px 6px 0 0;
     margin-bottom: 0;
-    box-shadow: 0 2px 10px rgba(0, 0, 0, 0.1);
+    box-shadow: inset 0 -1px 0 #c7b393;
     overflow-x: auto;
 }
 
 .inventory-tab {
     flex: 1;
-    min-width: 120px;
-    padding: 15px 20px;
+    min-width: 110px;
+    padding: 10px 12px;
     background: transparent;
     border: none;
     cursor: pointer;
-    font-size: 1.1em;
+    font-size: 1em;
     font-weight: 600;
-    color: #666;
-    transition: all 0.3s ease;
+    color: #4f3b2b;
+    transition: background 0.2s ease, color 0.2s ease;
     border-bottom: 3px solid transparent;
     text-transform: capitalize;
 }
 
 .inventory-tab:hover {
-    background: rgba(103, 126, 234, 0.1);
-    color: #333;
+    background: #d9c7af;
+    color: #2f2319;
 }
 
 .inventory-tab.active {
-    background: rgba(103, 126, 234, 0.2);
-    color: #2c3e50;
-    border-bottom-color: #667eea;
+    background: #d2b793;
+    color: #2f2319;
+    border-bottom-color: #9b6b34;
 }
 
 /* Inventory content wrapper */
 .inventory-content-wrapper {
-    background: rgba(255, 255, 255, 0.95);
-    border-radius: 0 0 15px 15px;
-    min-height: 600px;
-    padding: 20px;
+    background: #fdf8f1;
+    border-radius: 0 0 6px 6px;
+    min-height: 520px;
+    padding: 14px;
 }
 
 /* Inventory tab content */
@@ -66,123 +66,117 @@
 
 /* Add item section */
 .add-item-section {
-    margin-bottom: 20px;
+    margin-bottom: 12px;
     display: flex;
-    gap: 10px;
+    gap: 8px;
     align-items: center;
 }
 
 .btn-add-item {
-    background: #28a745;
-    color: white;
-    border: none;
-    padding: 12px 24px;
-    border-radius: 8px;
+    background: #9b6b34;
+    color: #fdf8f1;
+    border: 1px solid #8a602e;
+    padding: 9px 16px;
+    border-radius: 4px;
     cursor: pointer;
     font-size: 14px;
     font-weight: 500;
-    transition: all 0.3s ease;
-    box-shadow: 0 2px 5px rgba(0, 0, 0, 0.1);
+    transition: background 0.2s ease, transform 0.1s ease;
+    box-shadow: none;
 }
 
 .btn-add-item:hover {
-    background: #218838;
+    background: #855a2a;
     transform: translateY(-1px);
 }
 
 .btn-add-item:disabled {
-    background: #6c757d;
+    background: #b6a38a;
     cursor: not-allowed;
     transform: none;
 }
 
 /* Grid container */
 .inventory-grid-container {
-    height: 600px;
+    height: 560px;
     overflow: auto;
-    border-radius: 8px;
-    background: rgba(240, 240, 240, 0.3);
-    padding: 20px;
+    border-radius: 6px;
+    background: #f2e6d7;
+    padding: 12px;
 }
 
 .inventory-grid {
-    display: flex;
-    flex-wrap: wrap;
-    gap: 20px;
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));
+    gap: 12px;
     min-width: 100%;
     position: relative;
     align-content: flex-start;
-    justify-content: flex-start;
 }
 
 /* Item cards - Made wider for 3 per row */
 .inventory-item-card {
-    background: white;
-    border: 2px solid #e0e0e0;
-    border-radius: 8px;
-    padding: 15px;
+    background: #fffaf2;
+    border: 1px solid #c7b393;
+    border-radius: 6px;
+    padding: 10px;
     cursor: pointer;
-    transition: all 0.3s ease;
-    box-shadow: 0 2px 5px rgba(0, 0, 0, 0.1);
+    transition: border-color 0.2s ease, box-shadow 0.2s ease;
+    box-shadow: 0 1px 3px rgba(0, 0, 0, 0.08);
     position: relative;
-    width: calc(33.333% - 14px);
-    min-width: 350px;
-    min-height: 140px;
+    min-height: 120px;
     display: flex;
     flex-direction: column;
     overflow: hidden;
 }
 
 .inventory-item-card:hover {
-    border-color: #667eea;
-    transform: translateY(-2px);
-    box-shadow: 0 4px 12px rgba(0, 0, 0, 0.15);
+    border-color: #9b6b34;
+    box-shadow: 0 2px 6px rgba(0, 0, 0, 0.12);
 }
 
 .inventory-item-card.expanded {
     min-height: auto;
     height: auto;
     z-index: 100;
-    box-shadow: 0 8px 25px rgba(0, 0, 0, 0.2);
-    border-color: #667eea;
+    box-shadow: 0 3px 10px rgba(0, 0, 0, 0.15);
+    border-color: #9b6b34;
 }
 
 .inventory-item-card-header {
     display: flex;
-    flex-direction: column;
+    flex-direction: row;
     align-items: center;
-    text-align: center;
-    margin-bottom: 10px;
+    justify-content: space-between;
+    text-align: left;
+    margin-bottom: 8px;
 }
 
 .inventory-item-name {
     font-weight: 600;
-    color: #2c3e50;
-    font-size: 16px;
-    margin-bottom: 10px;
-    text-align: center;
+    color: #3f2f23;
+    font-size: 15px;
+    margin-bottom: 0;
+    text-align: left;
     word-wrap: break-word;
 }
 
 .inventory-item-card.expanded .inventory-item-name {
-    font-size: 18px;
-    margin-bottom: 15px;
+    font-size: 16px;
 }
 
 .inventory-item-image-small {
-    width: 80px;
-    height: 80px;
+    width: 56px;
+    height: 56px;
     object-fit: cover;
-    border-radius: 6px;
-    margin-bottom: 8px;
+    border-radius: 4px;
 }
 
 .inventory-item-image-large {
-    width: 100%;
-    max-height: 180px;
-    object-fit: contain;
-    border-radius: 8px;
-    margin-bottom: 15px;
+    width: 120px;
+    height: 120px;
+    object-fit: cover;
+    border-radius: 4px;
 }
 
 .inventory-item-details {
@@ -198,153 +192,183 @@
     display: none;
 }
 
+.inventory-item-content {
+    display: flex;
+    gap: 12px;
+    align-items: flex-start;
+    margin-bottom: 10px;
+}
+
+.inventory-item-image-wrapper {
+    flex-shrink: 0;
+}
+
+.inventory-item-main {
+    flex: 1;
+    display: flex;
+    flex-direction: column;
+    gap: 8px;
+}
+
+.inventory-item-meta {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+    gap: 10px;
+}
+
+.description-field textarea,
+.inventory-item-meta textarea {
+    min-height: 60px;
+}
+
 .inventory-item-field {
-    margin-bottom: 15px;
+    margin-bottom: 10px;
 }
 
 .inventory-item-field label {
     display: block;
     font-weight: 600;
-    color: #34495e;
-    margin-bottom: 6px;
-    font-size: 14px;
+    color: #4f3b2b;
+    margin-bottom: 4px;
+    font-size: 13px;
 }
 
 .inventory-item-field input,
 .inventory-item-field textarea {
     width: 100%;
-    padding: 8px 12px;
-    border: 2px solid #ecf0f1;
-    border-radius: 6px;
-    font-size: 14px;
+    padding: 7px 10px;
+    border: 1px solid #d8c7ad;
+    border-radius: 4px;
+    font-size: 13px;
     font-family: inherit;
-    transition: border-color 0.3s ease;
+    transition: border-color 0.2s ease, box-shadow 0.2s ease;
 }
 
 .inventory-item-field input:focus,
 .inventory-item-field textarea:focus {
     outline: none;
-    border-color: #667eea;
+    border-color: #9b6b34;
+    box-shadow: 0 0 0 2px rgba(155, 107, 52, 0.15);
 }
 
 .inventory-item-field textarea {
     resize: vertical;
-    min-height: 50px;
+    min-height: 48px;
 }
 
 .inventory-readonly-field {
-    padding: 8px 12px;
-    border: 2px solid #e8e8e8;
-    border-radius: 6px;
-    background: #f8f9fa;
-    color: #495057;
-    min-height: 24px;
-    font-size: 14px;
+    padding: 7px 10px;
+    border: 1px solid #d8c7ad;
+    border-radius: 4px;
+    background: #f7f0e4;
+    color: #3f2f23;
+    min-height: 22px;
+    font-size: 13px;
 }
 
 .inventory-readonly-field.readonly-textarea {
-    min-height: 50px;
+    min-height: 48px;
     white-space: pre-wrap;
 }
 
 /* Card actions */
 .inventory-card-actions {
     display: flex;
-    gap: 10px;
-    margin-top: 15px;
+    gap: 8px;
+    margin-top: 10px;
     justify-content: flex-end;
     flex-wrap: wrap;
 }
 
-.btn-inventory-save, .btn-inventory-delete, .btn-inventory-close, 
+.btn-inventory-save, .btn-inventory-delete, .btn-inventory-close,
 .btn-inventory-upload, .btn-inventory-take, .btn-inventory-share,
 .btn-inventory-visibility {
-    padding: 8px 16px;
-    border: none;
-    border-radius: 6px;
+    padding: 7px 12px;
+    border: 1px solid #8a602e;
+    border-radius: 4px;
     cursor: pointer;
-    font-size: 14px;
+    font-size: 13px;
     font-weight: 500;
-    transition: all 0.3s ease;
+    transition: background 0.2s ease, transform 0.1s ease;
 }
 
 .btn-inventory-save {
-    background: #28a745;
-    color: white;
+    background: #9b6b34;
+    color: #fdf8f1;
 }
 
 .btn-inventory-save:hover {
-    background: #218838;
+    background: #855a2a;
 }
 
 .btn-inventory-delete {
-    background: #e74c3c;
-    color: white;
+    background: #b35036;
+    color: #fffaf2;
 }
 
 .btn-inventory-delete:hover {
-    background: #c0392b;
+    background: #9c462f;
 }
 
 .btn-inventory-close {
-    background: #6c757d;
-    color: white;
+    background: #b6a38a;
+    color: #2f2319;
 }
 
 .btn-inventory-close:hover {
-    background: #545b62;
+    background: #a08d74;
 }
 
 .btn-inventory-upload {
-    background: #667eea;
-    color: white;
+    background: #8d6730;
+    color: #fdf8f1;
 }
 
 .btn-inventory-upload:hover {
-    background: #5a67d8;
+    background: #765528;
 }
 
 .btn-inventory-take {
-    background: #17a2b8;
-    color: white;
+    background: #6f5330;
+    color: #fdf8f1;
 }
 
 .btn-inventory-take:hover {
-    background: #138496;
+    background: #5b4427;
 }
 
 .btn-inventory-share {
-    background: #6f42c1;
-    color: white;
+    background: #765f46;
+    color: #fdf8f1;
 }
 
 .btn-inventory-share:hover {
-    background: #5a32a3;
+    background: #624e3a;
 }
 
 .btn-inventory-visibility {
-    background: #f39c12;
-    color: white;
+    background: #b07a3a;
+    color: #fdf8f1;
 }
 
 .btn-inventory-visibility:hover {
-    background: #e67e22;
+    background: #946631;
 }
 
 /* Hidden item styling (GM only) */
 .inventory-item-card.item-hidden {
     opacity: 0.6;
-    border: 2px dashed #e74c3c;
-    background: rgba(231, 76, 60, 0.05);
+    border: 1px dashed #b35036;
+    background: rgba(179, 80, 54, 0.08);
 }
 
 .inventory-item-card.item-hidden:hover {
-    opacity: 0.8;
-    border-color: #c0392b;
+    opacity: 0.85;
+    border-color: #9c462f;
 }
 
 .inventory-item-card.item-hidden .inventory-item-name {
-    color: #e74c3c;
+    color: #9c462f;
     font-style: italic;
 }
 
@@ -380,16 +404,14 @@
 
 /* Responsive design for inventory */
 @media (max-width: 1200px) {
-    .inventory-item-card {
-        width: calc(50% - 10px);
-        min-width: 300px;
+    .inventory-grid {
+        grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
     }
 }
 
 @media (max-width: 768px) {
-    .inventory-item-card {
-        width: 100%;
-        min-width: 280px;
+    .inventory-grid {
+        grid-template-columns: repeat(auto-fit, minmax(180px, 1fr));
     }
     
     .inventory-tabs {
@@ -403,9 +425,8 @@
         align-items: flex-start;
         gap: 5px;
     }
-    
+
     .inventory-item-card {
-        min-width: 250px;
         padding: 12px;
     }
 }

@@ -1439,6 +1439,7 @@ $defaultInventoryTab = $is_gm ? 'frunk' : $user;
         let currentInventoryTab = '<?php echo $defaultInventoryTab; ?>';
         let inventoryData = {};
         let expandedInventoryCard = null;
+        let expandedInventoryRowTop = null;
         let inventorySaveTimeout = null;
         let currentUploadItemId = null;
         
