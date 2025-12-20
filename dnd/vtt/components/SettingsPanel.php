@@ -13,7 +13,9 @@ function renderVttSettingsPanel(string $tokenLibraryMarkup = '', bool $isGm = fa
         aria-hidden="true"
     >
         <header class="vtt-settings-panel__header">
-            <h2 class="vtt-settings-panel__title">Settings</h2>
+            <h2 class="vtt-settings-panel__title" data-settings-title>
+                <?= $defaultTab === 'scenes' ? 'Scenes' : 'Tokens' ?>
+            </h2>
             <button
                 type="button"
                 class="vtt-settings-panel__close"
@@ -22,13 +24,6 @@ function renderVttSettingsPanel(string $tokenLibraryMarkup = '', bool $isGm = fa
             >&times;</button>
         </header>
         <div class="vtt-settings-panel__body">
-            <nav class="settings-tabs" aria-label="Settings">
-                <?php if ($isGm): ?>
-                    <button class="settings-tab <?= $defaultTab === 'scenes' ? 'is-active' : '' ?>" data-settings-tab="scenes" type="button">Scenes</button>
-                <?php endif; ?>
-                <button class="settings-tab <?= $defaultTab === 'tokens' ? 'is-active' : '' ?>" data-settings-tab="tokens" type="button">Tokens</button>
-                <button class="settings-tab" data-settings-tab="preferences" type="button">Preferences</button>
-            </nav>
             <?php if ($isGm): ?>
                 <section class="settings-view settings-view--scenes" data-settings-view="scenes" <?= $defaultTab === 'scenes' ? '' : 'hidden' ?>>
                     <header class="settings-view__header">
@@ -117,26 +112,32 @@ function renderVttSettingsPanel(string $tokenLibraryMarkup = '', bool $isGm = fa
                     <?= $tokenLibraryMarkup ?>
                 </div>
             </section>
-            <section class="settings-view settings-view--preferences" data-settings-view="preferences" hidden>
-                <header class="settings-view__header">
-                    <h3>Preferences</h3>
-                </header>
-                <div class="settings-view__content" id="vtt-preferences">
-                    <p class="empty-state">Preferences configuration coming soon.</p>
-                </div>
-            </section>
         </div>
     </aside>
-    <button
-        id="vtt-settings-toggle"
-        class="vtt-settings-toggle"
-        type="button"
-        aria-controls="vtt-settings-panel"
-        aria-expanded="false"
-        data-action="toggle-settings"
-    >
-        Settings
-    </button>
+    <div class="vtt-settings-launchers" aria-label="Open settings panels">
+        <?php if ($isGm): ?>
+            <button
+                type="button"
+                class="vtt-settings-launcher vtt-settings-launcher--scenes"
+                data-settings-launch="scenes"
+                aria-controls="vtt-settings-panel"
+                aria-label="Open scenes"
+            >
+                <span class="vtt-settings-launcher__icon" aria-hidden="true"></span>
+                <span class="visually-hidden">Open Scenes</span>
+            </button>
+        <?php endif; ?>
+        <button
+            type="button"
+            class="vtt-settings-launcher vtt-settings-launcher--tokens"
+            data-settings-launch="tokens"
+            aria-controls="vtt-settings-panel"
+            aria-label="Open tokens"
+        >
+            <span class="vtt-settings-launcher__icon" aria-hidden="true"></span>
+            <span class="visually-hidden">Open Tokens</span>
+        </button>
+    </div>
     <?php
     return trim((string) ob_get_clean());
 }

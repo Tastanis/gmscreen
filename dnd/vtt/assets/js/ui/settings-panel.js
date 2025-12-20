@@ -6,14 +6,25 @@ export function mountSettingsPanel(routes, store, user = {}) {
   const panel = document.getElementById('vtt-settings-panel');
   if (!panel) return;
 
-  const toggle = document.getElementById('vtt-settings-toggle');
+  const title = panel.querySelector('[data-settings-title]');
   const closeButton = panel.querySelector('[data-action="close-settings"]');
   const toggleGridButton = panel.querySelector('[data-action="toggle-grid"]');
   const lockGridButton = panel.querySelector('[data-action="lock-grid"]');
   const gridSizeInput = panel.querySelector('[data-grid-size-input]');
   const gridSizeDisplay = panel.querySelector('[data-grid-size-display]');
+  const launchers = Array.from(document.querySelectorAll('[data-settings-launch]'));
 
   let isOpen = false;
+  let activeViewId =
+    panel.querySelector('[data-settings-view]:not([hidden])')?.getAttribute('data-settings-view') ?? 'tokens';
+
+  const updateLauncherState = (activeView, open) => {
+    launchers.forEach((launcher) => {
+      const matches = launcher.getAttribute('data-settings-launch') === activeView;
+      launcher.classList.toggle('is-active', open && matches);
+      launcher.setAttribute('aria-pressed', String(open && matches));
+    });
+  };
 
   const setOpen = (open) => {
     if (isOpen === open) return;
@@ -22,15 +33,8 @@ export function mountSettingsPanel(routes, store, user = {}) {
     panel.classList.toggle('vtt-settings-panel--open', open);
     panel.classList.toggle('vtt-settings-panel--closed', !open);
     panel.setAttribute('aria-hidden', open ? 'false' : 'true');
-
-    if (toggle) {
-      toggle.setAttribute('aria-expanded', String(open));
-    }
+    updateLauncherState(activeViewId, open);
   };
-
-  if (toggle) {
-    toggle.addEventListener('click', () => setOpen(!isOpen));
-  }
 
   if (closeButton) {
     closeButton.addEventListener('click', () => setOpen(false));
@@ -42,14 +46,31 @@ export function mountSettingsPanel(routes, store, user = {}) {
     }
   });
 
+  const setPanelTitle = (viewId) => {
+    if (!title) return;
+
+    if (viewId === 'scenes') {
+      title.textContent = 'Scenes';
+    } else {
+      title.textContent = 'Tokens';
+    }
+  };
+
+  setPanelTitle(activeViewId);
   setOpen(false);
 
-  panel.addEventListener('click', (event) => {
-    const tab = event.target.closest('[data-settings-tab]');
-    if (!tab) return;
+  const openView = (viewId) => {
+    activeViewId = viewId || activeViewId;
+    setActiveView(panel, activeViewId);
+    setPanelTitle(activeViewId);
+    setOpen(true);
+  };
 
-    const tabId = tab.getAttribute('data-settings-tab');
-    setActiveTab(panel, tabId);
+  launchers.forEach((launcher) => {
+    launcher.addEventListener('click', () => {
+      const tabId = launcher.getAttribute('data-settings-launch');
+      openView(tabId);
+    });
   });
 
   const storeApi = store ?? {};
@@ -183,14 +204,8 @@ export function mountSettingsPanel(routes, store, user = {}) {
   renderTokenLibrary(routes, storeApi, { isGM });
 }
 
-function setActiveTab(panel, tabId) {
-  const tabs = panel.querySelectorAll('.settings-tab');
+function setActiveView(panel, tabId) {
   const views = panel.querySelectorAll('[data-settings-view]');
-
-  tabs.forEach((tab) => {
-    const isActive = tab.getAttribute('data-settings-tab') === tabId;
-    tab.classList.toggle('is-active', isActive);
-  });
 
   views.forEach((view) => {
     const isActive = view.getAttribute('data-settings-view') === tabId;
