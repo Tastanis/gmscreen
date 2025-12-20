@@ -103,11 +103,13 @@
     border-radius: 6px;
     background: #f2e6d7;
     padding: 12px;
+    max-width: 1250px;
+    margin: 0 auto;
 }
 
 .inventory-grid {
     display: grid;
-    grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));
+    grid-template-columns: repeat(auto-fit, minmax(260px, 1fr));
     gap: 12px;
     min-width: 100%;
     position: relative;
@@ -141,6 +143,12 @@
     z-index: 100;
     box-shadow: 0 3px 10px rgba(0, 0, 0, 0.15);
     border-color: #9b6b34;
+}
+
+@media (min-width: 900px) {
+    .inventory-item-card.expanded {
+        grid-column: span 2;
+    }
 }
 
 .inventory-item-card-header {
@@ -405,13 +413,13 @@
 /* Responsive design for inventory */
 @media (max-width: 1200px) {
     .inventory-grid {
-        grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+        grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));
     }
 }
 
 @media (max-width: 768px) {
     .inventory-grid {
-        grid-template-columns: repeat(auto-fit, minmax(180px, 1fr));
+        grid-template-columns: repeat(auto-fit, minmax(190px, 1fr));
     }
     
     .inventory-tabs {
