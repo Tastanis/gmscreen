@@ -892,28 +892,11 @@ function renderTokenItem(token) {
 }
 
 function renderTokenDetails(token) {
-  const lines = [];
-  if (token.type) {
-    lines.push(`<p class="token-item__subtext">${escapeHtml(token.type)}</p>`);
+  if (!token.size) {
+    return '';
   }
 
-  const stats = [];
-  if (token.size) {
-    stats.push(`Size: ${escapeHtml(token.size)}`);
-  }
-  if (typeof token.hp === 'number' && !Number.isNaN(token.hp)) {
-    stats.push(`HP: ${escapeHtml(token.hp)}`);
-  }
-  const team = normalizeTokenTeam(token.combatTeam ?? token.team ?? null);
-  if (team) {
-    stats.push(`Team: ${team === 'ally' ? 'Ally' : 'Enemy'}`);
-  }
-
-  if (stats.length) {
-    lines.push(`<p class="token-item__details">${stats.join(' · ')}</p>`);
-  }
-
-  return lines.join('');
+  return `<p class="token-item__details">Size: ${escapeHtml(token.size)}</p>`;
 }
 
 function renderTokenThumb(token) {

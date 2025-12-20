@@ -655,6 +655,7 @@
   padding: 0;
   display: grid;
   gap: 0.75rem;
+  grid-template-columns: repeat(auto-fill, minmax(230px, 1fr));
 }
 
 .token-group.is-collapsed .token-group__chevron {
@@ -667,9 +668,9 @@
 
 .token-item {
   display: flex;
-  gap: 0.75rem;
+  gap: 0.65rem;
   align-items: center;
-  padding: 0.75rem;
+  padding: 0.65rem 0.75rem;
   border: 1px solid rgba(148, 163, 184, 0.2);
   border-radius: var(--vtt-radius);
   background: rgba(15, 23, 42, 0.45);
@@ -687,8 +688,8 @@
 }
 
 .token-item__thumb {
-  width: 48px;
-  height: 48px;
+  width: 52px;
+  height: 52px;
   border-radius: 50%;
   background: rgba(99, 102, 241, 0.25);
   overflow: hidden;
@@ -702,9 +703,15 @@
   display: block;
 }
 
+.token-item__meta {
+  display: flex;
+  flex-direction: column;
+  gap: 0.2rem;
+}
+
 .token-item__meta h4 {
   margin: 0;
-  font-size: 1rem;
+  font-size: 0.95rem;
 }
 
 .token-item__meta p {
