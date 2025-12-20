@@ -157,7 +157,7 @@
     align-items: center;
     justify-content: space-between;
     text-align: left;
-    margin-bottom: 8px;
+    margin-bottom: 6px;
 }
 
 .inventory-item-name {
@@ -202,9 +202,9 @@
 
 .inventory-item-content {
     display: flex;
-    gap: 12px;
+    gap: 10px;
     align-items: flex-start;
-    margin-bottom: 10px;
+    margin-bottom: 8px;
 }
 
 .inventory-item-image-wrapper {
@@ -215,22 +215,17 @@
     flex: 1;
     display: flex;
     flex-direction: column;
-    gap: 8px;
+    gap: 6px;
 }
 
 .inventory-item-meta {
     display: grid;
     grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
-    gap: 10px;
-}
-
-.description-field textarea,
-.inventory-item-meta textarea {
-    min-height: 60px;
+    gap: 8px;
 }
 
 .inventory-item-field {
-    margin-bottom: 10px;
+    margin-bottom: 8px;
 }
 
 .inventory-item-field label {
@@ -244,7 +239,8 @@
 .inventory-item-field input,
 .inventory-item-field textarea {
     width: 100%;
-    padding: 7px 10px;
+    padding: 6px 10px;
+    line-height: 1.35;
     border: 1px solid #d8c7ad;
     border-radius: 4px;
     font-size: 13px;
@@ -261,21 +257,26 @@
 
 .inventory-item-field textarea {
     resize: vertical;
-    min-height: 48px;
+    min-height: 88px;
+    max-height: 120px;
+    overflow: auto;
 }
 
 .inventory-readonly-field {
-    padding: 7px 10px;
+    padding: 6px 10px;
     border: 1px solid #d8c7ad;
     border-radius: 4px;
     background: #f7f0e4;
     color: #3f2f23;
     min-height: 22px;
     font-size: 13px;
+    line-height: 1.35;
 }
 
 .inventory-readonly-field.readonly-textarea {
-    min-height: 48px;
+    min-height: 88px;
+    max-height: 120px;
+    overflow: auto;
     white-space: pre-wrap;
 }
 
