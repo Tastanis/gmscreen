@@ -113,42 +113,47 @@ function createInventoryItemCard(item, index, tab) {
             <div class="inventory-item-name">${escapeHtml(item.name || 'Unnamed Item')}</div>
             ${item.image ? `<img src="${item.image}" alt="${escapeHtml(item.name)}" class="inventory-item-image-small" draggable="true">` : ''}
         </div>
-        
+
         <div class="inventory-item-details">
-            ${item.image ? `<img src="${item.image}" alt="${escapeHtml(item.name)}" class="inventory-item-image-large" draggable="true">` : ''}
-            
-            <div class="inventory-item-field">
-                <label>Name:</label>
-                ${canEditInventoryTab(tab) ? 
-                    `<input type="text" value="${escapeHtml(item.name || '')}" onchange="updateInventoryItemField('${tab}', ${index}, 'name', this.value)">` :
-                    `<div class="inventory-readonly-field">${escapeHtml(item.name || '')}</div>`
-                }
+            <div class="inventory-item-content">
+                ${item.image ? `<div class="inventory-item-image-wrapper"><img src="${item.image}" alt="${escapeHtml(item.name)}" class="inventory-item-image-large" draggable="true"></div>` : ''}
+                <div class="inventory-item-main">
+                    <div class="inventory-item-field">
+                        <label>Name:</label>
+                        ${canEditInventoryTab(tab) ?
+                            `<input type="text" value="${escapeHtml(item.name || '')}" onchange="updateInventoryItemField('${tab}', ${index}, 'name', this.value)">` :
+                            `<div class="inventory-readonly-field">${escapeHtml(item.name || '')}</div>`
+                        }
+                    </div>
+
+                    <div class="inventory-item-field description-field">
+                        <label>Description:</label>
+                        ${canEditInventoryTab(tab) ?
+                            `<textarea onchange="updateInventoryItemField('${tab}', ${index}, 'description', this.value)">${escapeHtml(item.description || '')}</textarea>` :
+                            `<div class="inventory-readonly-field readonly-textarea">${escapeHtml(item.description || '')}</div>`
+                        }
+                    </div>
+                </div>
             </div>
-            
-            <div class="inventory-item-field">
-                <label>Description:</label>
-                ${canEditInventoryTab(tab) ? 
-                    `<textarea onchange="updateInventoryItemField('${tab}', ${index}, 'description', this.value)">${escapeHtml(item.description || '')}</textarea>` :
-                    `<div class="inventory-readonly-field readonly-textarea">${escapeHtml(item.description || '')}</div>`
-                }
+
+            <div class="inventory-item-meta">
+                <div class="inventory-item-field">
+                    <label>Keywords:</label>
+                    ${canEditInventoryTab(tab) ?
+                        `<input type="text" value="${escapeHtml(item.keywords || '')}" onchange="updateInventoryItemField('${tab}', ${index}, 'keywords', this.value)">` :
+                        `<div class="inventory-readonly-field">${escapeHtml(item.keywords || '')}</div>`
+                    }
+                </div>
+
+                <div class="inventory-item-field">
+                    <label>Effect:</label>
+                    ${canEditInventoryTab(tab) ?
+                        `<textarea onchange="updateInventoryItemField('${tab}', ${index}, 'effect', this.value)">${escapeHtml(item.effect || '')}</textarea>` :
+                        `<div class="inventory-readonly-field readonly-textarea">${escapeHtml(item.effect || '')}</div>`
+                    }
+                </div>
             </div>
-            
-            <div class="inventory-item-field">
-                <label>Keywords:</label>
-                ${canEditInventoryTab(tab) ? 
-                    `<input type="text" value="${escapeHtml(item.keywords || '')}" onchange="updateInventoryItemField('${tab}', ${index}, 'keywords', this.value)">` :
-                    `<div class="inventory-readonly-field">${escapeHtml(item.keywords || '')}</div>`
-                }
-            </div>
-            
-            <div class="inventory-item-field">
-                <label>Effect:</label>
-                ${canEditInventoryTab(tab) ? 
-                    `<textarea onchange="updateInventoryItemField('${tab}', ${index}, 'effect', this.value)">${escapeHtml(item.effect || '')}</textarea>` :
-                    `<div class="inventory-readonly-field readonly-textarea">${escapeHtml(item.effect || '')}</div>`
-                }
-            </div>
-            
+
             <div class="inventory-card-actions">
                 ${canEditInventoryTab(tab) ? `
                     <button class="btn-inventory-upload" onclick="uploadInventoryImage('${item.id}')">
@@ -170,7 +175,6 @@ function createInventoryItemCard(item, index, tab) {
                 ${!isGM && (tab === 'gm' || tab === 'shared') ? `
                     <button class="btn-inventory-take" onclick="takeInventoryItem('${tab}', ${index})">Take Item</button>
                 ` : ''}
-                <button class="btn-inventory-close" onclick="collapseInventoryCard(this)">Collapse</button>
             </div>
         </div>
     `;
@@ -178,11 +182,25 @@ function createInventoryItemCard(item, index, tab) {
     // Add click handler to expand card
     card.addEventListener('click', function(e) {
         // Don't expand if clicking on an input/button
-        if (e.target.tagName === 'INPUT' || e.target.tagName === 'TEXTAREA' || e.target.tagName === 'BUTTON') {
+        if (e.target.tagName === 'INPUT' || e.target.tagName === 'TEXTAREA' || e.target.tagName === 'BUTTON' || e.target.tagName === 'LABEL') {
             return;
         }
-        expandInventoryCard(this);
+        if (!this.classList.contains('expanded')) {
+            expandInventoryCard(this);
+        }
     });
+
+    const header = card.querySelector('.inventory-item-card-header');
+    if (header) {
+        header.addEventListener('click', function(e) {
+            e.stopPropagation();
+            if (card.classList.contains('expanded')) {
+                collapseInventoryCard(card);
+            } else {
+                expandInventoryCard(card);
+            }
+        });
+    }
 
     const dragImages = card.querySelectorAll('.inventory-item-image-small, .inventory-item-image-large');
     dragImages.forEach((img) => {
@@ -225,27 +243,56 @@ function canEditInventoryTab(tab) {
     return false; // GM tab is read-only for players
 }
 
-// Expand an inventory card to show details
+// Expand an inventory card (and its row) to show details
 function expandInventoryCard(card) {
-    // Collapse any currently expanded card
-    if (expandedInventoryCard && expandedInventoryCard !== card) {
-        expandedInventoryCard.classList.remove('expanded');
+    const targetRowTop = card.offsetTop;
+
+    // Collapse any currently expanded row if it's different
+    if (expandedInventoryCard && expandedInventoryCard !== card && expandedInventoryRowTop !== targetRowTop) {
+        document.querySelectorAll('.inventory-item-card').forEach(rowCard => {
+            if (expandedInventoryRowTop !== null && Math.abs(rowCard.offsetTop - expandedInventoryRowTop) < 2) {
+                rowCard.classList.remove('expanded');
+            }
+        });
     }
-    
-    card.classList.add('expanded');
+
+    document.querySelectorAll('.inventory-item-card').forEach(rowCard => {
+        if (Math.abs(rowCard.offsetTop - targetRowTop) < 2) {
+            rowCard.classList.add('expanded');
+        } else {
+            rowCard.classList.remove('expanded');
+        }
+    });
+
     expandedInventoryCard = card;
-    
+    expandedInventoryRowTop = targetRowTop;
+
     // Scroll the card into view
     card.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
 }
 
-// Collapse an inventory card
-function collapseInventoryCard(button) {
-    const card = button.closest('.inventory-item-card');
-    card.classList.remove('expanded');
-    if (expandedInventoryCard === card) {
+// Collapse an inventory card row
+function collapseInventoryCard(element) {
+    const card = element.classList.contains('inventory-item-card') ? element : element.closest('.inventory-item-card');
+    if (!card) return;
+
+    const targetRowTop = card.offsetTop;
+    document.querySelectorAll('.inventory-item-card').forEach(rowCard => {
+        if (Math.abs(rowCard.offsetTop - targetRowTop) < 2) {
+            rowCard.classList.remove('expanded');
+        }
+    });
+
+    if (expandedInventoryCard && Math.abs(expandedInventoryCard.offsetTop - targetRowTop) < 2) {
         expandedInventoryCard = null;
+        expandedInventoryRowTop = null;
     }
+}
+
+function clearExpandedInventoryState() {
+    expandedInventoryCard = null;
+    expandedInventoryRowTop = null;
+    document.querySelectorAll('.inventory-item-card.expanded').forEach(card => card.classList.remove('expanded'));
 }
 
 // Switch between inventory tabs
@@ -263,12 +310,9 @@ function switchInventoryTab(tab) {
         content.classList.remove('active');
     });
     document.getElementById(`inventory-tab-${tab}`).classList.add('active');
-    
+
     // Collapse any expanded card when switching tabs
-    if (expandedInventoryCard) {
-        expandedInventoryCard.classList.remove('expanded');
-        expandedInventoryCard = null;
-    }
+    clearExpandedInventoryState();
     
     updateInventoryPermissions();
 }
@@ -422,7 +466,7 @@ function deleteInventoryItem(tab, index) {
             
             // Clear expanded card if it was the deleted one
             if (expandedInventoryCard) {
-                expandedInventoryCard = null;
+                clearExpandedInventoryState();
             }
         } else {
             showInventoryStatus('Error deleting item: ' + data.error, 'error');
@@ -558,7 +602,7 @@ function shareInventoryItem(fromTab, index) {
             
             // Clear expanded card if it was the shared item
             if (expandedInventoryCard) {
-                expandedInventoryCard = null;
+                clearExpandedInventoryState();
             }
         } else {
             showInventoryStatus('Error sharing item: ' + data.error, 'error');
@@ -643,7 +687,7 @@ function takeInventoryItem(fromTab, index) {
             
             // Clear expanded card if it was the taken item
             if (expandedInventoryCard) {
-                expandedInventoryCard = null;
+                clearExpandedInventoryState();
             }
         } else {
             showInventoryStatus('Error taking item: ' + data.error, 'error');
