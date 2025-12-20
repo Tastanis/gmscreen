@@ -244,16 +244,52 @@ function canEditInventoryTab(tab) {
 }
 
 // Expand an inventory card (and its row) to show details
+function getInventoryRowCards(rowTop) {
+    return Array.from(document.querySelectorAll('.inventory-item-card')).filter(rowCard => {
+        return Math.abs(rowCard.offsetTop - rowTop) < 2;
+    });
+}
+
+function resetInventoryRowHeights(rowCards) {
+    rowCards.forEach(rowCard => {
+        rowCard.style.height = '';
+        rowCard.style.minHeight = '';
+    });
+}
+
+function syncInventoryRowHeights(rowTop) {
+    const rowCards = getInventoryRowCards(rowTop);
+    if (!rowCards.length) return;
+
+    resetInventoryRowHeights(rowCards);
+
+    requestAnimationFrame(() => {
+        let maxHeight = 0;
+
+        rowCards.forEach(rowCard => {
+            const cardHeight = rowCard.scrollHeight;
+            if (cardHeight > maxHeight) {
+                maxHeight = cardHeight;
+            }
+        });
+
+        if (!maxHeight) return;
+
+        rowCards.forEach(rowCard => {
+            rowCard.style.height = `${maxHeight}px`;
+            rowCard.style.minHeight = `${maxHeight}px`;
+        });
+    });
+}
+
 function expandInventoryCard(card) {
     const targetRowTop = card.offsetTop;
 
     // Collapse any currently expanded row if it's different
     if (expandedInventoryCard && expandedInventoryCard !== card && expandedInventoryRowTop !== targetRowTop) {
-        document.querySelectorAll('.inventory-item-card').forEach(rowCard => {
-            if (expandedInventoryRowTop !== null && Math.abs(rowCard.offsetTop - expandedInventoryRowTop) < 2) {
-                rowCard.classList.remove('expanded');
-            }
-        });
+        const previousRowCards = getInventoryRowCards(expandedInventoryRowTop);
+        previousRowCards.forEach(rowCard => rowCard.classList.remove('expanded'));
+        resetInventoryRowHeights(previousRowCards);
     }
 
     document.querySelectorAll('.inventory-item-card').forEach(rowCard => {
@@ -267,6 +303,8 @@ function expandInventoryCard(card) {
     expandedInventoryCard = card;
     expandedInventoryRowTop = targetRowTop;
 
+    syncInventoryRowHeights(targetRowTop);
+
     // Scroll the card into view
     card.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
 }
@@ -277,11 +315,13 @@ function collapseInventoryCard(element) {
     if (!card) return;
 
     const targetRowTop = card.offsetTop;
-    document.querySelectorAll('.inventory-item-card').forEach(rowCard => {
-        if (Math.abs(rowCard.offsetTop - targetRowTop) < 2) {
-            rowCard.classList.remove('expanded');
-        }
+    const rowCards = getInventoryRowCards(targetRowTop);
+
+    rowCards.forEach(rowCard => {
+        rowCard.classList.remove('expanded');
     });
+
+    resetInventoryRowHeights(rowCards);
 
     if (expandedInventoryCard && Math.abs(expandedInventoryCard.offsetTop - targetRowTop) < 2) {
         expandedInventoryCard = null;
@@ -292,7 +332,12 @@ function collapseInventoryCard(element) {
 function clearExpandedInventoryState() {
     expandedInventoryCard = null;
     expandedInventoryRowTop = null;
-    document.querySelectorAll('.inventory-item-card.expanded').forEach(card => card.classList.remove('expanded'));
+    const cards = Array.from(document.querySelectorAll('.inventory-item-card'));
+    cards.forEach(card => {
+        card.classList.remove('expanded');
+        card.style.height = '';
+        card.style.minHeight = '';
+    });
 }
 
 // Switch between inventory tabs
