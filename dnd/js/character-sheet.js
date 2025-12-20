@@ -605,17 +605,9 @@ async function switchSection(section) {
             if (typeof inventoryData !== 'undefined' && Object.keys(inventoryData).length === 0) {
                 loadInventoryData();
             }
-            // Collapse any expanded inventory card when switching to inventory
-            if (typeof expandedInventoryCard !== 'undefined' && expandedInventoryCard) {
-                expandedInventoryCard.classList.remove('expanded');
-                expandedInventoryCard = null;
-            }
+            clearExpandedInventoryState();
         } else {
-            // Collapse any expanded inventory card when switching away from inventory
-            if (typeof expandedInventoryCard !== 'undefined' && expandedInventoryCard) {
-                expandedInventoryCard.classList.remove('expanded');
-                expandedInventoryCard = null;
-            }
+            clearExpandedInventoryState();
         }
 
         // Load section-specific data
