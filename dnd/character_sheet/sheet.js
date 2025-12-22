@@ -128,12 +128,90 @@ const ACTION_CONTAINER_IDS = {
   freeStrikes: "free-strikes-pane",
 };
 
+const TEST_TIERS = [
+  { key: "low", label: "(\u2264 11)" },
+  { key: "mid", label: "(12-16)" },
+  { key: "high", label: "(17+)" },
+];
+
+const ATTRIBUTES = ["Might", "Agility", "Reason", "Intuition", "Presence"];
+
 function deepClone(obj) {
   return JSON.parse(JSON.stringify(obj));
 }
 
 function createId(prefix = "id") {
   return `${prefix}_${Date.now()}_${Math.random().toString(16).slice(2)}`;
+}
+
+function defaultTestTier() {
+  return {
+    damage: "",
+    damageType: "",
+    notes: "",
+    attributeCheck: {
+      enabled: false,
+      attribute: "",
+      threshold: "",
+      effect: "",
+    },
+  };
+}
+
+function defaultTest() {
+  return {
+    id: createId("test"),
+    label: "",
+    rollMod: "",
+    tiers: {
+      low: defaultTestTier(),
+      mid: defaultTestTier(),
+      high: defaultTestTier(),
+    },
+    additionalEffect: "",
+  };
+}
+
+function normalizeTestTier(tier = {}) {
+  return {
+    damage: tier.damage || "",
+    damageType: tier.damageType || "",
+    notes: tier.notes || "",
+    attributeCheck: {
+      enabled: Boolean(tier.attributeCheck?.enabled),
+      attribute: tier.attributeCheck?.attribute || "",
+      threshold: tier.attributeCheck?.threshold || "",
+      effect: tier.attributeCheck?.effect || "",
+    },
+  };
+}
+
+function normalizeTestTiers(tiers = {}) {
+  const isArray = Array.isArray(tiers);
+  return {
+    low: normalizeTestTier(isArray ? tiers[0] : tiers.low),
+    mid: normalizeTestTier(isArray ? tiers[1] : tiers.mid),
+    high: normalizeTestTier(isArray ? tiers[2] : tiers.high),
+  };
+}
+
+function normalizeTest(test = {}) {
+  return {
+    id: test.id || createId("test"),
+    label: test.label || "",
+    rollMod: test.rollMod ?? "",
+    tiers: normalizeTestTiers(test.tiers || {}),
+    additionalEffect: test.additionalEffect || "",
+  };
+}
+
+function convertLegacyEffectsToTests(effects = []) {
+  return effects.map((effect) => {
+    const test = defaultTest();
+    test.label = effect?.label || "";
+    test.additionalEffect = effect?.text || "";
+    return test;
+  });
 }
 
 let sheetState = deepClone(defaultSheet);
@@ -173,9 +251,9 @@ function mergeWithDefaults(data) {
       speed: action.speed || "",
       cost: action.cost || "",
       description: action.description || "",
-      effects: Array.isArray(action.effects) && action.effects.length > 0
-        ? action.effects
-        : [{ label: "", text: "" }],
+      tests: Array.isArray(action.tests)
+        ? action.tests.map(normalizeTest)
+        : convertLegacyEffectsToTests(action.effects).map(normalizeTest),
     }));
   });
 
@@ -488,8 +566,108 @@ function actionDefaults(type) {
     speed: "",
     cost: "",
     description: "",
-    effects: [{ label: "", text: "" }],
+    tests: [],
   };
+}
+
+function formatRoll(rollMod) {
+  if (rollMod === "" || rollMod === null || rollMod === undefined) return "2d10+__";
+  const mod = rollMod.toString();
+  const needsPlus = !mod.startsWith("-");
+  return `2d10${needsPlus ? "+" : ""}${mod}`;
+}
+
+function renderTierDisplay(tier) {
+  const parts = [];
+  if (tier.damage || tier.damageType) {
+    const damageText = [tier.damage || "-", tier.damageType ? `(${tier.damageType})` : ""].filter(Boolean).join(" ");
+    parts.push(`<div class="tier-line"><strong>Damage:</strong> ${damageText}</div>`);
+  }
+  if (tier.notes) {
+    parts.push(`<div class="tier-line tier-line--muted">${tier.notes}</div>`);
+  }
+  if (tier.attributeCheck?.enabled) {
+    const attribute = tier.attributeCheck.attribute || "Attribute";
+    const threshold = tier.attributeCheck.threshold || "-";
+    const effect = tier.attributeCheck.effect || "";
+    parts.push(`<div class="tier-line"><strong>${attribute} \u2264 ${threshold}:</strong> ${effect}</div>`);
+  }
+  return parts.join("") || '<div class="tier-line tier-line--muted">No details set.</div>';
+}
+
+function renderTierSection(label, tier, key) {
+  const attribute = tier.attributeCheck || {};
+  return `
+    <div class="test-tier" data-tier="${key}">
+      <div class="test-tier__label">${label}</div>
+      <div class="test-tier__body">
+        <div class="display-value">${renderTierDisplay(tier)}</div>
+        <div class="test-tier__inputs edit-field">
+          <div class="tier-grid">
+            <label class="tier-grid__cell">
+              <span>Damage</span>
+              <input type="text" class="edit-field" data-tier-field="damage" value="${tier.damage || ""}" />
+            </label>
+            <label class="tier-grid__cell">
+              <span>Damage Type</span>
+              <input type="text" class="edit-field" data-tier-field="damageType" value="${tier.damageType || ""}" />
+            </label>
+            <label class="tier-grid__cell tier-grid__cell--wide">
+              <span>Other Info</span>
+              <input type="text" class="edit-field" data-tier-field="notes" value="${tier.notes || ""}" />
+            </label>
+          </div>
+          <div class="attribute-check ${attribute.enabled ? "is-active" : ""}">
+            <label class="attribute-check__toggle">
+              <input type="checkbox" class="edit-field" data-tier-field="attr-enabled" ${attribute.enabled ? "checked" : ""} />
+              Attribute Check
+            </label>
+            <div class="attribute-check__fields ${attribute.enabled ? "" : "is-hidden"}">
+              <select class="edit-field" data-tier-field="attribute">
+                <option value="">Select attribute</option>
+                ${ATTRIBUTES.map(
+                  (attr) => `<option value="${attr}" ${attribute.attribute === attr ? "selected" : ""}>${attr}</option>`
+                ).join("")}
+              </select>
+              <span class="attribute-check__symbol">\u2264</span>
+              <input type="number" class="edit-field" data-tier-field="threshold" value="${attribute.threshold || ""}" />
+              <input type="text" class="edit-field" data-tier-field="attr-effect" value="${attribute.effect || ""}" placeholder="Effect" />
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+  `;
+}
+
+function renderTest(test) {
+  return `
+    <div class="test" data-test-id="${test.id}">
+      <header class="test__header">
+        <div>
+          <div class="display-value action-name">${test.label || "Test"}</div>
+          <input class="edit-field" type="text" data-test-field="label" value="${test.label || ""}" placeholder="Test name" />
+        </div>
+        <button class="icon-btn edit-only" data-remove-test="${test.id}" aria-label="Remove test">✕</button>
+      </header>
+      <div class="test__roll">
+        <div class="display-value">${formatRoll(test.rollMod)}</div>
+        <div class="test__roll-editor edit-field">
+          <span class="test__dice">2d10 +</span>
+          <input type="number" class="edit-field" data-test-field="rollMod" value="${test.rollMod}" />
+        </div>
+      </div>
+      <div class="test__tiers">
+        ${TEST_TIERS.map(({ key, label }) => renderTierSection(label, test.tiers?.[key] || defaultTestTier(), key)).join("")}
+      </div>
+      <div class="test__additional">
+        <p class="display-value">${test.additionalEffect || ""}</p>
+        <textarea class="edit-field" rows="2" data-test-field="additionalEffect" placeholder="Additional effects after the test">${
+          test.additionalEffect || ""
+        }</textarea>
+      </div>
+    </div>
+  `;
 }
 
 function renderActionSection(type, containerId) {
@@ -547,25 +725,14 @@ function renderActionSection(type, containerId) {
                   <input class="edit-field" type="text" data-field="cost" value="${action.cost || ""}" />
                 </div>
               </div>
-              <div class="effect-list">
-                ${(action.effects || [])
-                  .map(
-                    (effect, index) => `
-                      <div class="effect" data-effect-index="${index}">
-                        <div class="effect__label">
-                          <span class="display-value">${effect.label || ""}</span>
-                          <input class="edit-field" type="text" data-effect="label" value="${effect.label || ""}" placeholder="Tier or trigger" />
-                        </div>
-                        <div class="effect__body">
-                          <p class="display-value">${effect.text || ""}</p>
-                          <textarea class="edit-field" rows="3" data-effect="text" placeholder="Effect details">${effect.text || ""}</textarea>
-                        </div>
-                      </div>
-                    `
-                  )
-                  .join("")}
+              <div class="test-list">
+                ${
+                  (action.tests || []).length
+                    ? (action.tests || []).map((test) => renderTest(test)).join("")
+                    : '<div class="placeholder">No tests yet. Switch to edit mode to add one.</div>'
+                }
               </div>
-              <button class="text-btn edit-only" data-add-effect="${action.id}">+ Add Effect</button>
+              <button class="text-btn edit-only" data-add-test="${action.id}">+ Add Test</button>
               <div class="action-notes">
                 <p class="display-value">${action.description || ""}</p>
                 <textarea class="edit-field" rows="3" data-field="description" placeholder="Additional notes">${action.description || ""}</textarea>
@@ -580,7 +747,9 @@ function renderActionSection(type, containerId) {
 
   bindActionAdds();
   bindActionRemovals();
-  bindEffectAdds();
+  bindTestAdds();
+  bindTestRemovals();
+  bindAttributeToggles();
 }
 
 function renderSidebarLists() {
@@ -689,16 +858,47 @@ function bindActionRemovals() {
   });
 }
 
-function bindEffectAdds() {
-  document.querySelectorAll("[data-add-effect]").forEach((btn) => {
+function bindTestAdds() {
+  document.querySelectorAll("[data-add-test]").forEach((btn) => {
     btn.onclick = () => {
-      const id = btn.getAttribute("data-add-effect");
+      const actionId = btn.getAttribute("data-add-test");
       const type = btn.closest(".action-card")?.dataset.actionType;
       if (!type) return;
-      const action = (sheetState.actions[type] || []).find((a) => a.id === id);
+      const action = (sheetState.actions[type] || []).find((a) => a.id === actionId);
       if (!action) return;
-      action.effects.push({ label: "", text: "" });
+      action.tests = action.tests || [];
+      action.tests.push(defaultTest());
       renderActionSection(type, ACTION_CONTAINER_IDS[type] || `${type}-pane`);
+    };
+  });
+}
+
+function bindTestRemovals() {
+  document.querySelectorAll("[data-remove-test]").forEach((btn) => {
+    btn.onclick = () => {
+      const testId = btn.getAttribute("data-remove-test");
+      const card = btn.closest(".action-card");
+      const type = card?.dataset.actionType;
+      const actionId = card?.dataset.actionId;
+      if (!type || !actionId) return;
+      const action = (sheetState.actions[type] || []).find((a) => a.id === actionId);
+      if (!action) return;
+      action.tests = (action.tests || []).filter((test) => test.id !== testId);
+      renderActionSection(type, ACTION_CONTAINER_IDS[type] || `${type}-pane`);
+    };
+  });
+}
+
+function bindAttributeToggles() {
+  document.querySelectorAll('[data-tier-field="attr-enabled"]').forEach((checkbox) => {
+    checkbox.onchange = () => {
+      const container = checkbox.closest(".attribute-check");
+      if (!container) return;
+      container.classList.toggle("is-active", checkbox.checked);
+      const fields = container.querySelector(".attribute-check__fields");
+      if (fields) {
+        fields.classList.toggle("is-hidden", !checkbox.checked);
+      }
     };
   });
 }
@@ -758,10 +958,32 @@ function captureActions() {
     cards.forEach((card) => {
       const id = card.getAttribute("data-action-id") || createId("action");
       const getField = (field) => card.querySelector(`[data-field="${field}"]`);
-      const effects = Array.from(card.querySelectorAll(".effect")).map((row) => ({
-        label: row.querySelector('[data-effect="label"]').value,
-        text: row.querySelector('[data-effect="text"]').value,
-      }));
+      const tests = Array.from(card.querySelectorAll(".test")).map((testEl) => {
+        const tiers = {};
+        TEST_TIERS.forEach(({ key }) => {
+          const tierEl = testEl.querySelector(`.test-tier[data-tier="${key}"]`);
+          const getTierField = (field) => tierEl?.querySelector(`[data-tier-field="${field}"]`);
+          tiers[key] = {
+            damage: getTierField("damage")?.value || "",
+            damageType: getTierField("damageType")?.value || "",
+            notes: getTierField("notes")?.value || "",
+            attributeCheck: {
+              enabled: Boolean(getTierField("attr-enabled")?.checked),
+              attribute: getTierField("attribute")?.value || "",
+              threshold: getTierField("threshold")?.value || "",
+              effect: getTierField("attr-effect")?.value || "",
+            },
+          };
+        });
+
+        return {
+          id: testEl.getAttribute("data-test-id") || createId("test"),
+          label: testEl.querySelector('[data-test-field="label"]')?.value || "",
+          rollMod: testEl.querySelector('[data-test-field="rollMod"]')?.value || "",
+          additionalEffect: testEl.querySelector('[data-test-field="additionalEffect"]')?.value || "",
+          tiers,
+        };
+      });
       updated.push({
         id,
         name: getField("name")?.value || "",
@@ -775,7 +997,7 @@ function captureActions() {
         speed: getField("speed")?.value || "",
         cost: getField("cost")?.value || "",
         description: getField("description")?.value || "",
-        effects: effects.length ? effects : [{ label: "", text: "" }],
+        tests,
       });
     });
     sheetState.actions[type] = updated;
