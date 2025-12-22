@@ -76,6 +76,13 @@ const SORTED_SKILL_GROUPS = Object.fromEntries(
 
 const ALL_SKILLS = Object.values(SORTED_SKILL_GROUPS).flat();
 
+function getSkillGroup(skill) {
+  return (
+    Object.entries(SKILL_GROUPS).find(([, skills]) => skills.includes(skill))?.[0] ||
+    "Other"
+  );
+}
+
 const DEFAULT_CULTURE_FIELDS = {
   culture: "",
   environment: "",
@@ -651,34 +658,63 @@ function renderSkills() {
   const skills = normalizeSkillsState(sheetState.sidebar.skills);
   sheetState.sidebar.skills = skills;
   const skillEntries = Object.entries(skills);
+  const isEditMode = document.body.classList.contains("edit-mode");
 
   skillEntries.forEach(([skill, data]) => {
     const row = document.createElement("div");
-    row.classList.add("skill-row", "skill-row--compact");
+    row.classList.add("skill-row", "skill-row--chips");
     row.setAttribute("data-skill-row", skill);
-    row.innerHTML = `
-      <span class="skill-row__label">${skill}</span>
-      <div class="skill-row__level">
-        <span class="display-value">${data.level || "Untrained"}</span>
-        <select class="skill-select edit-field" data-skill="${skill}">
-          <option${data.level === "Untrained" ? " selected" : ""}>Untrained</option>
-          <option${data.level === "Trained" ? " selected" : ""}>Trained</option>
-          <option${data.level === "Expert" ? " selected" : ""}>Expert</option>
-          <option${data.level === "Master" ? " selected" : ""}>Master</option>
-        </select>
-      </div>
-      <div class="skill-row__bonus">
-        <span class="skill-row__meta">Bonus</span>
-        <span class="display-value">${formatBonusValue(data.bonus)}</span>
-        <input class="edit-field skill-bonus-input" type="text" data-skill-bonus="${skill}" value="${data.bonus || ""}" placeholder="+0" />
-      </div>
-      <div class="skill-row__bonus">
-        <span class="skill-row__meta">Additional</span>
-        <span class="display-value">${formatBonusValue(data.additional)}</span>
-        <input class="edit-field skill-bonus-input" type="text" data-skill-additional="${skill}" value="${data.additional || ""}" placeholder="+0" />
-      </div>
-      <button class="icon-btn icon-btn--danger edit-only" data-remove-skill="${skill}">Remove</button>
+
+    const chip = document.createElement("div");
+    chip.classList.add("chip", "skill-chip");
+    chip.innerHTML = `
+      <span class="skill-chip__name">${skill}</span>
+      <span class="skill-chip__group">${getSkillGroup(skill)}</span>
     `;
+    row.appendChild(chip);
+
+    if (isEditMode) {
+      const controls = document.createElement("div");
+      controls.classList.add("skill-row__controls");
+
+      const levelSelect = document.createElement("select");
+      levelSelect.classList.add("skill-select", "edit-field");
+      levelSelect.setAttribute("data-skill", skill);
+      ["Untrained", "Trained", "Expert", "Master"].forEach((level) => {
+        const option = document.createElement("option");
+        option.textContent = level;
+        option.selected = data.level === level;
+        levelSelect.appendChild(option);
+      });
+      controls.appendChild(levelSelect);
+
+      const bonusInput = document.createElement("input");
+      bonusInput.classList.add("edit-field", "skill-bonus-input");
+      bonusInput.type = "text";
+      bonusInput.placeholder = "+0";
+      bonusInput.setAttribute("data-skill-bonus", skill);
+      bonusInput.value = data.bonus || "";
+      bonusInput.setAttribute("aria-label", `${skill} bonus`);
+      controls.appendChild(bonusInput);
+
+      const additionalInput = document.createElement("input");
+      additionalInput.classList.add("edit-field", "skill-bonus-input", "skill-additional-input");
+      additionalInput.type = "text";
+      additionalInput.placeholder = "Additional bonus";
+      additionalInput.setAttribute("data-skill-additional", skill);
+      additionalInput.value = data.additional || "";
+      additionalInput.setAttribute("aria-label", `${skill} additional bonus`);
+      controls.appendChild(additionalInput);
+
+      const removeBtn = document.createElement("button");
+      removeBtn.classList.add("icon-btn", "icon-btn--danger");
+      removeBtn.setAttribute("data-remove-skill", skill);
+      removeBtn.textContent = "Remove";
+      controls.appendChild(removeBtn);
+
+      row.appendChild(controls);
+    }
+
     content.appendChild(row);
   });
 
