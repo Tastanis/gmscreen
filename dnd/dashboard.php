@@ -1501,7 +1501,7 @@ $defaultInventoryTab = $is_gm ? 'frunk' : $user;
             if (!characterName) return;
 
             const sheetUrl = new URL('character_sheet/index.php', window.location.href);
-            sheetUrl.searchParams.set('user', characterName);
+            sheetUrl.searchParams.set('character', characterName.toLowerCase());
             window.open(sheetUrl.toString(), '_blank');
         }
 
