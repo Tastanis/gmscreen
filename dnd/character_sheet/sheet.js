@@ -1017,17 +1017,21 @@ function bindFeatureAdd() {
   const addBtn = document.getElementById("add-feature");
   if (!addBtn) return;
   addBtn.addEventListener("click", () => {
+    captureFeatures();
     sheetState.features.push({ id: createId("feature"), title: "", tags: [], text: "" });
     renderFeatures();
+    queueAutoSave();
   });
 }
 
 function bindFeatureRemovals() {
   document.querySelectorAll("[data-remove-feature]").forEach((btn) => {
     btn.addEventListener("click", () => {
+      captureFeatures();
       const id = btn.getAttribute("data-remove-feature");
       sheetState.features = sheetState.features.filter((f) => f.id !== id);
       renderFeatures();
+      queueAutoSave();
     });
   });
 }
@@ -1211,6 +1215,37 @@ function captureActions() {
   });
 }
 
+function captureAllSections() {
+  captureCoreFields();
+  captureFeatures();
+  captureActions();
+}
+
+const AUTOSAVE_DELAY_MS = 500;
+let autoSaveTimeout;
+
+function queueAutoSave() {
+  if (!document.body.classList.contains("edit-mode")) return;
+  clearTimeout(autoSaveTimeout);
+  autoSaveTimeout = setTimeout(() => {
+    captureAllSections();
+    saveSheet();
+  }, AUTOSAVE_DELAY_MS);
+}
+
+function bindAutoSave() {
+  const handler = (event) => {
+    const target = event.target;
+    if (!(target instanceof Element)) return;
+    if (target.classList.contains("edit-field") || target.classList.contains("skill-select")) {
+      queueAutoSave();
+    }
+  };
+
+  document.addEventListener("input", handler, true);
+  document.addEventListener("change", handler, true);
+}
+
 function updateHeading() {
   const heading = document.getElementById("hero-name-heading");
   if (!heading) return;
@@ -1246,9 +1281,7 @@ function bindEditToggle() {
   toggle.addEventListener("change", (event) => {
     const enabled = event.target.checked;
     if (!enabled) {
-      captureCoreFields();
-      captureFeatures();
-      captureActions();
+      captureAllSections();
       renderAll();
       saveSheet();
     }
@@ -1314,6 +1347,7 @@ async function ready() {
   activeCharacter = document.body.dataset.character || "";
   setupTabbing();
   bindEditToggle();
+  bindAutoSave();
   await loadSheet();
 }
 
