@@ -101,7 +101,7 @@ body {
 }
 
 .dot--spent {
-  background: var(--danger);
+  background: #0b0b0b;
 }
 
 .legend__label {
@@ -292,7 +292,7 @@ body {
 }
 
 .token-dot.is-spent {
-  background: var(--danger);
+  background: #0b0b0b;
 }
 
 .token-dot.is-ready {
@@ -335,6 +335,10 @@ body {
   display: flex;
   flex-direction: column;
   gap: 6px;
+}
+
+.token-sidebar .token-row {
+  justify-content: flex-start;
 }
 
 .sub-section {
@@ -416,6 +420,12 @@ body {
 
 .meter__value {
   justify-self: end;
+}
+
+.meter__max-note {
+  grid-column: 1 / -1;
+  font-size: 12px;
+  color: var(--muted);
 }
 
 .card-grid {
@@ -728,6 +738,11 @@ body {
   gap: 6px;
 }
 
+.skill-row--compact {
+  grid-template-columns: 1fr 130px 120px auto;
+  align-items: center;
+}
+
 .skill-select {
   width: 100%;
   background: #20130d;
@@ -735,6 +750,42 @@ body {
   color: var(--text);
   padding: 5px;
   border-radius: 3px;
+}
+
+.skill-row__level,
+.skill-row__bonus {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+
+.skill-row__bonus input {
+  width: 100%;
+}
+
+.skill-add {
+  display: flex;
+  gap: 6px;
+  align-items: center;
+}
+
+.icon-btn--danger {
+  border-color: var(--danger);
+  color: var(--danger);
+}
+
+.detail-card {
+  grid-column: span 2;
+}
+
+.detail-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(140px, 1fr));
+  gap: 6px;
+}
+
+.detail-item__label {
+  font-weight: 700;
 }
 
 .skill-select:disabled,
@@ -754,6 +805,10 @@ body.edit-mode .display-list {
 body:not(.edit-mode) .edit-field,
 body:not(.edit-mode) .edit-only {
   display: none;
+}
+
+body:not(.edit-mode) .tracker-input {
+  display: block;
 }
 
 body.edit-mode .edit-only {
