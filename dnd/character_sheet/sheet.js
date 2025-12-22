@@ -1404,6 +1404,9 @@ function bindEditToggle() {
   toggle.addEventListener("change", (event) => {
     const enabled = event.target.checked;
     toggleEditMode(enabled);
+    if (enabled) {
+      renderAll();
+    }
     if (!enabled) {
       captureAllSections();
       renderAll();
