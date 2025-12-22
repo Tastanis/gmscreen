@@ -294,17 +294,17 @@ function normalizeSkillsState(skills = {}) {
   if (!skills || typeof skills !== "object") return normalized;
 
   Object.entries(skills).forEach(([skill, value]) => {
+    const entry = { bonus: "" };
+
     if (typeof value === "string") {
-      normalized[skill] = { level: value, bonus: "", additional: "" };
-      return;
+      entry.level = value;
+    } else if (value && typeof value === "object") {
+      entry.level = value.level || "Trained";
+      entry.bonus = value.bonus ?? "";
     }
 
-    if (value && typeof value === "object") {
-      normalized[skill] = {
-        level: value.level || "Untrained",
-        bonus: value.bonus ?? "",
-        additional: value.additional ?? "",
-      };
+    if (entry.level && entry.level !== "Untrained") {
+      normalized[skill] = entry;
     }
   });
 
@@ -710,7 +710,7 @@ function openSkillPickerModal(availableSkills) {
     btn.addEventListener("click", () => {
       const skill = btn.getAttribute("data-pick-skill");
       if (!skill) return;
-      sheetState.sidebar.skills[skill] = { level: "Untrained", bonus: "", additional: "" };
+      sheetState.sidebar.skills[skill] = { level: "Trained", bonus: "" };
       closeSkillPickerModal();
       renderSkills();
     });
@@ -739,9 +739,7 @@ function renderSkills() {
                 ([skill, data]) => `
                   <li class="skill-display" data-skill-row="${skill}">
                     <div class="skill-display__name">${skill}</div>
-                    <div class="skill-display__meta">${data.level || "Untrained"}${
-                  data.bonus ? ` • ${data.bonus}` : ""
-                }${data.additional ? ` • ${data.additional}` : ""}</div>
+                    <div class="skill-display__meta">${getSkillGroup(skill)} • ${formatBonusValue(data.bonus)}</div>
                   </li>
                 `
               )
@@ -750,52 +748,32 @@ function renderSkills() {
         `
       : "";
 
-  const editorList = isEditMode
-    ? skillEntries.length
-      ? `
-          <div class="skill-edit-list">
-            ${skillEntries
-              .map(
-                ([skill, data]) => `
-                  <div class="skill-edit-row" data-skill-row="${skill}">
-                    <div class="skill-edit-row__label">
+  const editorList = isEditMode && skillEntries.length
+    ? `
+        <div class="skill-edit-list">
+          ${skillEntries
+            .map(
+              ([skill, data]) => `
+                <div class="skill-edit-row" data-skill-row="${skill}">
+                  <div class="skill-edit-row__label">
+                    <div>
                       <div class="skill-edit-row__name">${skill}</div>
                       <div class="skill-edit-row__group">${getSkillGroup(skill)}</div>
                     </div>
-                    <div class="skill-edit-row__fields">
-                      <label class="input-stack">
-                        <span>Level</span>
-                        <select class="skill-select edit-field" data-skill="${skill}">
-                          ${["Untrained", "Trained", "Expert", "Master"]
-                            .map(
-                              (level) => `
-                                <option value="${level}" ${data.level === level ? "selected" : ""}>${level}</option>
-                              `
-                            )
-                            .join("")}
-                        </select>
-                      </label>
-                      <label class="input-stack">
-                        <span>Bonus</span>
-                        <input class="edit-field" type="text" data-skill-bonus="${skill}" value="${
-                          data.bonus || ""
-                        }" placeholder="+0" />
-                      </label>
-                      <label class="input-stack">
-                        <span>Additional</span>
-                        <input class="edit-field" type="text" data-skill-additional="${skill}" value="${
-                          data.additional || ""
-                        }" placeholder="Additional bonus" />
-                      </label>
-                    </div>
                     <button class="text-btn text-btn--danger" type="button" data-remove-skill="${skill}">Remove</button>
                   </div>
-                `
-              )
-              .join("")}
-          </div>
-        `
-      : `<div class="placeholder">No skills selected yet.</div>`
+                  <label class="input-stack">
+                    <span>Bonus</span>
+                    <input class="edit-field" type="text" data-skill-bonus="${skill}" value="${
+                      data.bonus || ""
+                    }" placeholder="+0" />
+                  </label>
+                </div>
+              `
+            )
+            .join("")}
+        </div>
+      `
     : "";
 
   container.innerHTML = `
@@ -1252,13 +1230,10 @@ function captureCoreFields() {
   document.querySelectorAll("[data-skill-row]").forEach((row) => {
     const skill = row.getAttribute("data-skill-row");
     if (!skill) return;
-    const levelSelect = row.querySelector(".skill-select");
     const bonusInput = row.querySelector("[data-skill-bonus]");
-    const additionalInput = row.querySelector("[data-skill-additional]");
     updatedSkills[skill] = {
-      level: levelSelect?.value || "Untrained",
+      level: "Trained",
       bonus: bonusInput?.value || "",
-      additional: additionalInput?.value || "",
     };
   });
   sheetState.sidebar.skills = updatedSkills;
@@ -1360,7 +1335,7 @@ function bindAutoSave() {
   const handler = (event) => {
     const target = event.target;
     if (!(target instanceof Element)) return;
-    if (target.classList.contains("edit-field") || target.classList.contains("skill-select")) {
+    if (target.classList.contains("edit-field")) {
       queueAutoSave();
     }
   };
@@ -1381,9 +1356,6 @@ function toggleEditMode(enabled) {
   document.querySelectorAll(".edit-field").forEach((input) => {
     if (input.dataset.liveEdit === "true") return;
     input.disabled = !enabled;
-  });
-  document.querySelectorAll(".skill-select").forEach((select) => {
-    select.disabled = !enabled;
   });
 }
 
