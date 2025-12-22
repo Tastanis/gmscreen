@@ -530,6 +530,11 @@ export function mountBoardInteractions(store, routes = {}) {
   let lastBoardStateHeartbeatSignature = null;
   let lastBoardStateHeartbeatAt = 0;
   const BOARD_STATE_HEARTBEAT_DEBOUNCE_MS = 2000;
+  let combatStateRefreshIntervalId = null;
+  const COMBAT_STATE_REFRESH_INTERVAL_MS = 5000;
+  let suppressNextTrackerDoubleClick = false;
+  let lastTrackerActivationAt = 0;
+  const TRACKER_ACTIVATION_DEBOUNCE_MS = 250;
 
   function handleTokenLibraryDragStart(event) {
     const tokenItem = event?.target?.closest?.('.token-item');
@@ -1751,6 +1756,25 @@ export function mountBoardInteractions(store, routes = {}) {
     poller.start();
   }
 
+  function startCombatStateRefreshLoop() {
+    if (
+      combatStateRefreshIntervalId !== null ||
+      typeof window === 'undefined' ||
+      typeof window.setInterval !== 'function'
+    ) {
+      return;
+    }
+
+    combatStateRefreshIntervalId = window.setInterval(() => {
+      const state = boardApi.getState?.();
+      if (!state) {
+        return;
+      }
+      applyCombatStateFromBoardState(state);
+      refreshCombatTracker();
+    }, COMBAT_STATE_REFRESH_INTERVAL_MS);
+  }
+
   function getPendingBoardStateSaveInfo() {
     if (!pendingBoardStateSave?.promise) {
       return {
@@ -2465,6 +2489,7 @@ export function mountBoardInteractions(store, routes = {}) {
 
   applyStateToBoard(boardApi.getState?.() ?? {});
   startBoardStatePoller();
+  startCombatStateRefreshLoop();
 
   function focusBoard() {
     if (!board) {
@@ -5418,19 +5443,54 @@ export function mountBoardInteractions(store, routes = {}) {
     });
   }
 
-  function handleCombatTrackerClick(event) {
-    if (!combatActive || !isGmUser()) {
-      return;
+  function activateCombatTrackerTarget(target) {
+    if (!combatActive || !target || !combatTrackerRoot?.contains(target)) {
+      return false;
     }
+
+    if (isGmUser()) {
+      processCombatantActivation(target);
+      return true;
+    }
+
+    const combatantId = target.dataset.combatantId || '';
+    if (!combatantId) {
+      return false;
+    }
+
+    const context = buildTurnContext(combatantId);
+    handlePlayerInitiatedTurn(combatantId, context);
+    return true;
+  }
+
+  function handleCombatTrackerClick(event) {
     const target = event.target instanceof HTMLElement ? event.target.closest('[data-combatant-id]') : null;
     if (!target || !combatTrackerRoot?.contains(target)) {
       return;
     }
+
+    if (event.detail >= 2 && combatActive) {
+      const now = Date.now();
+      if (now - lastTrackerActivationAt > TRACKER_ACTIVATION_DEBOUNCE_MS) {
+        lastTrackerActivationAt = now;
+        suppressNextTrackerDoubleClick = activateCombatTrackerTarget(target);
+      }
+      return;
+    }
+
+    if (!combatActive || !isGmUser()) {
+      return;
+    }
+
     event.preventDefault();
     focusCombatTrackerEntry(target);
   }
 
   function handleCombatTrackerDoubleClick(event) {
+    if (suppressNextTrackerDoubleClick) {
+      suppressNextTrackerDoubleClick = false;
+      return;
+    }
     if (!combatActive) {
       return;
     }
@@ -5438,19 +5498,13 @@ export function mountBoardInteractions(store, routes = {}) {
     if (!target || !combatTrackerRoot?.contains(target)) {
       return;
     }
+    const now = Date.now();
+    if (now - lastTrackerActivationAt <= TRACKER_ACTIVATION_DEBOUNCE_MS) {
+      return;
+    }
+    lastTrackerActivationAt = now;
     event.preventDefault();
-    if (isGmUser()) {
-      processCombatantActivation(target);
-      return;
-    }
-
-    const combatantId = target.dataset.combatantId || '';
-    if (!combatantId) {
-      return;
-    }
-
-    const context = buildTurnContext(combatantId);
-    handlePlayerInitiatedTurn(combatantId, context);
+    activateCombatTrackerTarget(target);
   }
 
   function handleCombatTrackerKeydown(event) {
@@ -6662,6 +6716,19 @@ export function mountBoardInteractions(store, routes = {}) {
   function handleEndCombat() {
     if (!combatActive) {
       return;
+    }
+
+    if (isGmUser()) {
+      try {
+        if (typeof window !== 'undefined' && typeof window.confirm === 'function') {
+          const confirmed = window.confirm('End combat and reset the tracker?');
+          if (!confirmed) {
+            return;
+          }
+        }
+      } catch (error) {
+        return;
+      }
     }
 
     let timerSummary = null;
