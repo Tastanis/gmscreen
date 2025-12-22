@@ -952,6 +952,18 @@ $defaultInventoryTab = $is_gm ? 'frunk' : $user;
             <button class="nav-btn" onclick="openVTT()">VTT</button>
             <button type="button" class="nav-btn" id="theme-toggle-btn" title="Switch theme">Theme</button>
             <button type="button" class="nav-btn" id="dice-roller-btn" title="Open dice roller">Dice Roller</button>
+            <?php if ($is_gm): ?>
+                <div class="dropdown">
+                    <button type="button" class="nav-btn dropdown-btn" id="character-sheet-btn" title="Open a character sheet">Character Sheets</button>
+                    <div class="dropdown-content" id="character-sheet-dropdown">
+                        <?php foreach ($characters as $character): ?>
+                            <a href="#" data-character="<?php echo $character; ?>"><?php echo ucfirst($character); ?></a>
+                        <?php endforeach; ?>
+                    </div>
+                </div>
+            <?php else: ?>
+                <button type="button" class="nav-btn" id="character-sheet-btn" title="Open your character sheet">Character Sheet</button>
+            <?php endif; ?>
             <button class="nav-btn logout-btn" onclick="window.location.href='logout.php'">Logout</button>
         </div>
         <h1 class="nav-title"><?php echo $is_gm ? 'GM Dashboard' : ucfirst($user) . '\'s Character Sheet'; ?></h1>
@@ -1459,7 +1471,39 @@ $defaultInventoryTab = $is_gm ? 'frunk' : $user;
             updateInventoryPermissions();
 
             initChatPanel(isGM, currentUser);
+            setupCharacterSheetNav();
         });
+
+        function setupCharacterSheetNav() {
+            const characterSheetBtn = document.getElementById('character-sheet-btn');
+            if (!characterSheetBtn) return;
+
+            if (!isGM) {
+                characterSheetBtn.addEventListener('click', () => {
+                    openCharacterSheet(currentUser);
+                });
+                return;
+            }
+
+            const characterSheetDropdown = document.getElementById('character-sheet-dropdown');
+            if (!characterSheetDropdown) return;
+
+            const sheetLinks = characterSheetDropdown.querySelectorAll('a[data-character]');
+            sheetLinks.forEach((link) => {
+                link.addEventListener('click', (event) => {
+                    event.preventDefault();
+                    openCharacterSheet(link.getAttribute('data-character'));
+                });
+            });
+        }
+
+        function openCharacterSheet(characterName) {
+            if (!characterName) return;
+
+            const sheetUrl = new URL('character_sheet/index.php', window.location.href);
+            sheetUrl.searchParams.set('user', characterName);
+            window.open(sheetUrl.toString(), '_blank');
+        }
 
         // Session backup functionality for Dashboard
         function setupSessionBackup() {
