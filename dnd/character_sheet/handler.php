@@ -20,30 +20,53 @@ function getDefaultCharacterEntry() {
             'culture' => '',
             'career' => '',
             'classTrack' => '',
-            'resourceValue' => '',
-            'stamina' => 0,
-            'recovery' => 0,
+            'wealth' => '',
+            'renown' => '',
+            'xp' => '',
+            'victories' => '',
+            'surges' => '',
+            'resource' => array(
+                'title' => 'Resource',
+                'value' => '',
+            ),
+            'heroTokens' => array(false, false),
+            'stats' => array(
+                'might' => 0,
+                'agility' => 0,
+                'reason' => 0,
+                'intuition' => 0,
+                'presence' => 0,
+            ),
+            'vitals' => array(
+                'size' => '',
+                'speed' => '',
+                'stability' => '',
+                'disengage' => '',
+                'save' => '',
+                'stamina' => 0,
+                'recoveries' => 0,
+                'recoveryValue' => '',
+            ),
         ),
-        'resourceLabel' => '',
         'sidebar' => array(
             'lists' => array(
                 'common' => array(),
                 'weaknesses' => array(),
+                'vulnerabilities' => array(),
                 'languages' => array(),
             ),
             'skills' => array(),
+            'resource' => array(
+                'title' => 'Resource',
+                'text' => '',
+            ),
         ),
-        'tokens' => array(
-            'heroic' => false,
-            'legendary' => false,
-        ),
-        'tabs' => array(
-            'hero' => '',
-            'features' => '',
-            'mains' => '',
-            'maneuvers' => '',
-            'triggers' => '',
-            'free-strikes' => '',
+        'features' => array(),
+        'actions' => array(
+            'mains' => array(),
+            'maneuvers' => array(),
+            'triggers' => array(),
+            'freeStrikes' => array(),
         ),
     );
 }
@@ -75,10 +98,34 @@ function mergeCharacterDefaults($entry, $defaults) {
 
     if (isset($entry['hero']) && is_array($entry['hero'])) {
         $normalized['hero'] = array_merge($defaults['hero'], $entry['hero']);
+
+        if (isset($entry['hero']['resource']) && is_array($entry['hero']['resource'])) {
+            $normalized['hero']['resource'] = array_merge($defaults['hero']['resource'], $entry['hero']['resource']);
+        }
+
+        if (isset($entry['hero']['stats']) && is_array($entry['hero']['stats'])) {
+            $normalized['hero']['stats'] = array_merge($defaults['hero']['stats'], $entry['hero']['stats']);
+        }
+
+        if (isset($entry['hero']['vitals']) && is_array($entry['hero']['vitals'])) {
+            $normalized['hero']['vitals'] = array_merge($defaults['hero']['vitals'], $entry['hero']['vitals']);
+        }
+
+        if (isset($entry['hero']['heroTokens']) && is_array($entry['hero']['heroTokens'])) {
+            $normalized['hero']['heroTokens'] = array(
+                isset($entry['hero']['heroTokens'][0]) ? (bool)$entry['hero']['heroTokens'][0] : false,
+                isset($entry['hero']['heroTokens'][1]) ? (bool)$entry['hero']['heroTokens'][1] : false,
+            );
+        }
     }
 
+    // Migrate legacy resource label/value
     if (isset($entry['resourceLabel'])) {
-        $normalized['resourceLabel'] = $entry['resourceLabel'];
+        $normalized['hero']['resource']['title'] = $entry['resourceLabel'];
+        $normalized['sidebar']['resource']['title'] = $entry['resourceLabel'];
+    }
+    if (isset($entry['hero']['resourceValue'])) {
+        $normalized['hero']['resource']['value'] = $entry['hero']['resourceValue'];
     }
 
     if (isset($entry['sidebar']) && is_array($entry['sidebar'])) {
@@ -92,18 +139,22 @@ function mergeCharacterDefaults($entry, $defaults) {
         if (isset($entry['sidebar']['skills']) && is_array($entry['sidebar']['skills'])) {
             $normalized['sidebar']['skills'] = $entry['sidebar']['skills'];
         }
-    }
 
-    if (isset($entry['tokens']) && is_array($entry['tokens'])) {
-        foreach ($defaults['tokens'] as $token => $defaultValue) {
-            $normalized['tokens'][$token] = isset($entry['tokens'][$token])
-                ? (bool)$entry['tokens'][$token]
-                : $defaultValue;
+        if (isset($entry['sidebar']['resource']) && is_array($entry['sidebar']['resource'])) {
+            $normalized['sidebar']['resource'] = array_merge($defaults['sidebar']['resource'], $entry['sidebar']['resource']);
         }
     }
 
-    if (isset($entry['tabs']) && is_array($entry['tabs'])) {
-        $normalized['tabs'] = array_merge($defaults['tabs'], $entry['tabs']);
+    if (isset($entry['features']) && is_array($entry['features'])) {
+        $normalized['features'] = $entry['features'];
+    }
+
+    if (isset($entry['actions']) && is_array($entry['actions'])) {
+        foreach ($defaults['actions'] as $type => $defaultActions) {
+            if (isset($entry['actions'][$type]) && is_array($entry['actions'][$type])) {
+                $normalized['actions'][$type] = $entry['actions'][$type];
+            }
+        }
     }
 
     return $normalized;
