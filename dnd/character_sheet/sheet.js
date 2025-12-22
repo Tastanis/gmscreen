@@ -168,6 +168,8 @@ const TEST_TIERS = [
 
 const ATTRIBUTES = ["Might", "Agility", "Reason", "Intuition", "Presence"];
 
+const SKILL_MODAL_ID = "skill-picker-modal";
+
 function deepClone(obj) {
   return JSON.parse(JSON.stringify(obj));
 }
@@ -649,126 +651,176 @@ function renderBars() {
   });
 }
 
+function closeSkillPickerModal() {
+  const modal = document.getElementById(SKILL_MODAL_ID);
+  if (modal) {
+    modal.remove();
+  }
+}
+
+function openSkillPickerModal(availableSkills) {
+  closeSkillPickerModal();
+  const modal = document.createElement("div");
+  modal.id = SKILL_MODAL_ID;
+  modal.classList.add("modal-overlay");
+
+  const modalBody = availableSkills.length
+    ? Object.entries(SORTED_SKILL_GROUPS)
+        .map(([group, skillsInGroup]) => {
+          const options = skillsInGroup
+            .filter((skill) => availableSkills.includes(skill))
+            .map((skill) => `<button type="button" class="skill-picker__option" data-pick-skill="${skill}">${skill}</button>`)
+            .join("");
+
+          if (!options) return "";
+
+          return `
+            <section class="skill-picker__group">
+              <div class="skill-picker__title">${group}</div>
+              <div class="skill-picker__grid">${options}</div>
+            </section>
+          `;
+        })
+        .join("")
+    : `<p class="placeholder">All skills are already selected.</p>`;
+
+  modal.innerHTML = `
+    <div class="modal" role="dialog" aria-modal="true">
+      <header class="modal__header">
+        <h2 class="modal__title">Select a Skill</h2>
+        <button class="icon-btn" type="button" data-close-skill-modal aria-label="Close skill picker">✕</button>
+      </header>
+      <div class="modal__body">${modalBody}</div>
+    </div>
+  `;
+
+  document.body.appendChild(modal);
+
+  modal.addEventListener("click", (event) => {
+    if (event.target === modal) {
+      closeSkillPickerModal();
+    }
+  });
+
+  modal.querySelectorAll("[data-close-skill-modal]").forEach((btn) => {
+    btn.addEventListener("click", closeSkillPickerModal);
+  });
+
+  modal.querySelectorAll("[data-pick-skill]").forEach((btn) => {
+    btn.addEventListener("click", () => {
+      const skill = btn.getAttribute("data-pick-skill");
+      if (!skill) return;
+      sheetState.sidebar.skills[skill] = { level: "Untrained", bonus: "", additional: "" };
+      closeSkillPickerModal();
+      renderSkills();
+    });
+  });
+}
+
 function renderSkills() {
   const container = document.getElementById("sidebar-skills");
-  container.innerHTML = `<div class="sidebar__header">Skills</div>`;
-  const content = document.createElement("div");
-  content.classList.add("sidebar__content", "skills-list");
+  if (!container) return;
 
   const skills = normalizeSkillsState(sheetState.sidebar.skills);
   sheetState.sidebar.skills = skills;
   const skillEntries = Object.entries(skills);
   const isEditMode = document.body.classList.contains("edit-mode");
 
-  skillEntries.forEach(([skill, data]) => {
-    const row = document.createElement("div");
-    row.classList.add("skill-row", "skill-row--chips");
-    row.setAttribute("data-skill-row", skill);
+  if (!isEditMode) {
+    closeSkillPickerModal();
+  }
 
-    const chip = document.createElement("div");
-    chip.classList.add("chip", "skill-chip");
-    chip.innerHTML = `
-      <span class="skill-chip__name">${skill}</span>
-      <span class="skill-chip__group">${getSkillGroup(skill)}</span>
-    `;
-    row.appendChild(chip);
+  const displayList =
+    !isEditMode && skillEntries.length
+      ? `
+          <ul class="skill-display-list">
+            ${skillEntries
+              .map(
+                ([skill, data]) => `
+                  <li class="skill-display" data-skill-row="${skill}">
+                    <div class="skill-display__name">${skill}</div>
+                    <div class="skill-display__meta">${data.level || "Untrained"}${
+                  data.bonus ? ` • ${data.bonus}` : ""
+                }${data.additional ? ` • ${data.additional}` : ""}</div>
+                  </li>
+                `
+              )
+              .join("")}
+          </ul>
+        `
+      : "";
 
-    if (isEditMode) {
-      const controls = document.createElement("div");
-      controls.classList.add("skill-row__controls");
+  const editorList = isEditMode
+    ? skillEntries.length
+      ? `
+          <div class="skill-edit-list">
+            ${skillEntries
+              .map(
+                ([skill, data]) => `
+                  <div class="skill-edit-row" data-skill-row="${skill}">
+                    <div class="skill-edit-row__label">
+                      <div class="skill-edit-row__name">${skill}</div>
+                      <div class="skill-edit-row__group">${getSkillGroup(skill)}</div>
+                    </div>
+                    <div class="skill-edit-row__fields">
+                      <label class="input-stack">
+                        <span>Level</span>
+                        <select class="skill-select edit-field" data-skill="${skill}">
+                          ${["Untrained", "Trained", "Expert", "Master"]
+                            .map(
+                              (level) => `
+                                <option value="${level}" ${data.level === level ? "selected" : ""}>${level}</option>
+                              `
+                            )
+                            .join("")}
+                        </select>
+                      </label>
+                      <label class="input-stack">
+                        <span>Bonus</span>
+                        <input class="edit-field" type="text" data-skill-bonus="${skill}" value="${
+                          data.bonus || ""
+                        }" placeholder="+0" />
+                      </label>
+                      <label class="input-stack">
+                        <span>Additional</span>
+                        <input class="edit-field" type="text" data-skill-additional="${skill}" value="${
+                          data.additional || ""
+                        }" placeholder="Additional bonus" />
+                      </label>
+                    </div>
+                    <button class="text-btn text-btn--danger" type="button" data-remove-skill="${skill}">Remove</button>
+                  </div>
+                `
+              )
+              .join("")}
+          </div>
+        `
+      : `<div class="placeholder">No skills selected yet.</div>`
+    : "";
 
-      const levelSelect = document.createElement("select");
-      levelSelect.classList.add("skill-select", "edit-field");
-      levelSelect.setAttribute("data-skill", skill);
-      ["Untrained", "Trained", "Expert", "Master"].forEach((level) => {
-        const option = document.createElement("option");
-        option.textContent = level;
-        option.selected = data.level === level;
-        levelSelect.appendChild(option);
-      });
-      controls.appendChild(levelSelect);
-
-      const bonusInput = document.createElement("input");
-      bonusInput.classList.add("edit-field", "skill-bonus-input");
-      bonusInput.type = "text";
-      bonusInput.placeholder = "+0";
-      bonusInput.setAttribute("data-skill-bonus", skill);
-      bonusInput.value = data.bonus || "";
-      bonusInput.setAttribute("aria-label", `${skill} bonus`);
-      controls.appendChild(bonusInput);
-
-      const additionalInput = document.createElement("input");
-      additionalInput.classList.add("edit-field", "skill-bonus-input", "skill-additional-input");
-      additionalInput.type = "text";
-      additionalInput.placeholder = "Additional bonus";
-      additionalInput.setAttribute("data-skill-additional", skill);
-      additionalInput.value = data.additional || "";
-      additionalInput.setAttribute("aria-label", `${skill} additional bonus`);
-      controls.appendChild(additionalInput);
-
-      const removeBtn = document.createElement("button");
-      removeBtn.classList.add("icon-btn", "icon-btn--danger");
-      removeBtn.setAttribute("data-remove-skill", skill);
-      removeBtn.textContent = "Remove";
-      controls.appendChild(removeBtn);
-
-      row.appendChild(controls);
-    }
-
-    content.appendChild(row);
-  });
-
-  const availableSkills = ALL_SKILLS.filter((skill) => !skills[skill]);
-  const addRow = document.createElement("div");
-  addRow.classList.add("skill-add", "edit-only");
-  addRow.innerHTML = `
-    <button class="icon-btn" id="add-skill-btn" ${availableSkills.length ? "" : "disabled"}>+ Add Skill</button>
-    <div class="skill-add__picker${availableSkills.length ? " is-collapsed" : ""}">
-      <select class="edit-field" id="add-skill-select" ${availableSkills.length ? "" : "disabled"}>
-        <option value="" disabled selected>Select a skill</option>
-        ${Object.entries(SORTED_SKILL_GROUPS)
-          .map(([group, skillsInGroup]) => {
-            const options = skillsInGroup
-              .filter((skill) => availableSkills.includes(skill))
-              .map((skill) => `<option value="${skill}">${skill}</option>`)
-              .join("");
-            return options ? `<optgroup label="${group}">${options}</optgroup>` : "";
-          })
-          .join("")}
-      </select>
+  container.innerHTML = `
+    <div class="sidebar__header">Skills</div>
+    <div class="sidebar__content skills-panel">
+      ${isEditMode ? editorList : displayList}
+      ${isEditMode ? '<button class="text-btn" type="button" id="open-skill-picker">+ Add New Skill</button>' : ""}
     </div>
   `;
-  content.appendChild(addRow);
 
-  container.appendChild(content);
-
-  container.querySelectorAll("[data-remove-skill]").forEach((btn) => {
-    btn.addEventListener("click", () => {
-      const skill = btn.getAttribute("data-remove-skill");
-      delete sheetState.sidebar.skills[skill];
-      renderSkills();
-    });
-  });
-
-  const addBtn = container.querySelector("#add-skill-btn");
-  const addSelect = container.querySelector("#add-skill-select");
-  const picker = container.querySelector(".skill-add__picker");
-
-  if (addBtn && addSelect && picker) {
-    addBtn.addEventListener("click", () => {
-      if (addSelect.disabled) return;
-      picker.classList.toggle("is-collapsed");
-      if (!picker.classList.contains("is-collapsed")) {
-        addSelect.focus();
-      }
+  if (isEditMode) {
+    container.querySelectorAll("[data-remove-skill]").forEach((btn) => {
+      btn.addEventListener("click", () => {
+        const skill = btn.getAttribute("data-remove-skill");
+        if (!skill) return;
+        delete sheetState.sidebar.skills[skill];
+        renderSkills();
+      });
     });
 
-    addSelect.addEventListener("change", () => {
-      const selected = addSelect.value;
-      if (!selected) return;
-      sheetState.sidebar.skills[selected] = { level: "Untrained", bonus: "", additional: "" };
-      renderSkills();
-    });
+    const addBtn = container.querySelector("#open-skill-picker");
+    const availableSkills = ALL_SKILLS.filter((skill) => !skills[skill]);
+    if (addBtn) {
+      addBtn.addEventListener("click", () => openSkillPickerModal(availableSkills));
+    }
   }
 }
 
@@ -1351,12 +1403,12 @@ function bindEditToggle() {
   const toggle = document.getElementById("edit-toggle");
   toggle.addEventListener("change", (event) => {
     const enabled = event.target.checked;
+    toggleEditMode(enabled);
     if (!enabled) {
       captureAllSections();
       renderAll();
       saveSheet();
     }
-    toggleEditMode(enabled);
   });
 }
 
