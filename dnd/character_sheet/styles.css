@@ -739,7 +739,7 @@ body {
 }
 
 .skill-row--compact {
-  grid-template-columns: 1fr 130px 120px auto;
+  grid-template-columns: 1fr 130px 120px 120px auto;
   align-items: center;
 }
 
@@ -759,6 +759,11 @@ body {
   gap: 4px;
 }
 
+.skill-row__meta {
+  color: var(--muted);
+  font-size: 12px;
+}
+
 .skill-row__bonus input {
   width: 100%;
 }
@@ -767,6 +772,14 @@ body {
   display: flex;
   gap: 6px;
   align-items: center;
+}
+
+.skill-add__picker {
+  flex: 1;
+}
+
+.skill-add__picker.is-collapsed {
+  display: none;
 }
 
 .icon-btn--danger {

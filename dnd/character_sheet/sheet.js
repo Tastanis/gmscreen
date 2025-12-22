@@ -67,7 +67,14 @@ const SKILL_GROUPS = {
   ],
 };
 
-const ALL_SKILLS = Object.values(SKILL_GROUPS).flat();
+const SORTED_SKILL_GROUPS = Object.fromEntries(
+  Object.entries(SKILL_GROUPS).map(([group, skills]) => [
+    group,
+    [...skills].sort((a, b) => a.localeCompare(b)),
+  ])
+);
+
+const ALL_SKILLS = Object.values(SORTED_SKILL_GROUPS).flat();
 
 const DEFAULT_CULTURE_FIELDS = {
   culture: "",
@@ -160,6 +167,12 @@ function deepClone(obj) {
 
 function createId(prefix = "id") {
   return `${prefix}_${Date.now()}_${Math.random().toString(16).slice(2)}`;
+}
+
+function formatBonusValue(value) {
+  if (value === null || value === undefined) return "—";
+  const trimmed = String(value).trim();
+  return trimmed === "" ? "—" : trimmed;
 }
 
 function defaultTestTier() {
@@ -273,7 +286,7 @@ function normalizeSkillsState(skills = {}) {
 
   Object.entries(skills).forEach(([skill, value]) => {
     if (typeof value === "string") {
-      normalized[skill] = { level: value, bonus: "" };
+      normalized[skill] = { level: value, bonus: "", additional: "" };
       return;
     }
 
@@ -281,6 +294,7 @@ function normalizeSkillsState(skills = {}) {
       normalized[skill] = {
         level: value.level || "Untrained",
         bonus: value.bonus ?? "",
+        additional: value.additional ?? "",
       };
     }
   });
@@ -638,46 +652,55 @@ function renderSkills() {
   sheetState.sidebar.skills = skills;
   const skillEntries = Object.entries(skills);
 
-  if (skillEntries.length === 0) {
-    const empty = document.createElement("div");
-    empty.classList.add("muted");
-    empty.textContent = "Add skills to track them here.";
-    content.appendChild(empty);
-  } else {
-    skillEntries.forEach(([skill, data]) => {
-      const row = document.createElement("div");
-      row.classList.add("skill-row", "skill-row--compact");
-      row.setAttribute("data-skill-row", skill);
-      row.innerHTML = `
-        <span class="skill-row__label">${skill}</span>
-        <div class="skill-row__level">
-          <span class="display-value">${data.level || "Untrained"}</span>
-          <select class="skill-select edit-field" data-skill="${skill}">
-            <option${data.level === "Untrained" ? " selected" : ""}>Untrained</option>
-            <option${data.level === "Trained" ? " selected" : ""}>Trained</option>
-            <option${data.level === "Expert" ? " selected" : ""}>Expert</option>
-            <option${data.level === "Master" ? " selected" : ""}>Master</option>
-          </select>
-        </div>
-        <div class="skill-row__bonus">
-          <span class="display-value">${data.bonus || "—"}</span>
-          <input class="edit-field skill-bonus-input" type="text" data-skill-bonus="${skill}" value="${data.bonus || ""}" placeholder="+0" />
-        </div>
-        <button class="icon-btn icon-btn--danger edit-only" data-remove-skill="${skill}">Remove</button>
-      `;
-      content.appendChild(row);
-    });
-  }
+  skillEntries.forEach(([skill, data]) => {
+    const row = document.createElement("div");
+    row.classList.add("skill-row", "skill-row--compact");
+    row.setAttribute("data-skill-row", skill);
+    row.innerHTML = `
+      <span class="skill-row__label">${skill}</span>
+      <div class="skill-row__level">
+        <span class="display-value">${data.level || "Untrained"}</span>
+        <select class="skill-select edit-field" data-skill="${skill}">
+          <option${data.level === "Untrained" ? " selected" : ""}>Untrained</option>
+          <option${data.level === "Trained" ? " selected" : ""}>Trained</option>
+          <option${data.level === "Expert" ? " selected" : ""}>Expert</option>
+          <option${data.level === "Master" ? " selected" : ""}>Master</option>
+        </select>
+      </div>
+      <div class="skill-row__bonus">
+        <span class="skill-row__meta">Bonus</span>
+        <span class="display-value">${formatBonusValue(data.bonus)}</span>
+        <input class="edit-field skill-bonus-input" type="text" data-skill-bonus="${skill}" value="${data.bonus || ""}" placeholder="+0" />
+      </div>
+      <div class="skill-row__bonus">
+        <span class="skill-row__meta">Additional</span>
+        <span class="display-value">${formatBonusValue(data.additional)}</span>
+        <input class="edit-field skill-bonus-input" type="text" data-skill-additional="${skill}" value="${data.additional || ""}" placeholder="+0" />
+      </div>
+      <button class="icon-btn icon-btn--danger edit-only" data-remove-skill="${skill}">Remove</button>
+    `;
+    content.appendChild(row);
+  });
 
   const availableSkills = ALL_SKILLS.filter((skill) => !skills[skill]);
   const addRow = document.createElement("div");
   addRow.classList.add("skill-add", "edit-only");
   addRow.innerHTML = `
-    <select class="edit-field" id="add-skill-select">
-      <option value="" disabled selected>${availableSkills.length ? "Select a skill" : "All skills added"}</option>
-      ${availableSkills.map((skill) => `<option value="${skill}">${skill}</option>`).join("")}
-    </select>
     <button class="icon-btn" id="add-skill-btn" ${availableSkills.length ? "" : "disabled"}>+ Add Skill</button>
+    <div class="skill-add__picker${availableSkills.length ? " is-collapsed" : ""}">
+      <select class="edit-field" id="add-skill-select" ${availableSkills.length ? "" : "disabled"}>
+        <option value="" disabled selected>Select a skill</option>
+        ${Object.entries(SORTED_SKILL_GROUPS)
+          .map(([group, skillsInGroup]) => {
+            const options = skillsInGroup
+              .filter((skill) => availableSkills.includes(skill))
+              .map((skill) => `<option value="${skill}">${skill}</option>`)
+              .join("");
+            return options ? `<optgroup label="${group}">${options}</optgroup>` : "";
+          })
+          .join("")}
+      </select>
+    </div>
   `;
   content.appendChild(addRow);
 
@@ -693,11 +716,21 @@ function renderSkills() {
 
   const addBtn = container.querySelector("#add-skill-btn");
   const addSelect = container.querySelector("#add-skill-select");
-  if (addBtn && addSelect) {
+  const picker = container.querySelector(".skill-add__picker");
+
+  if (addBtn && addSelect && picker) {
     addBtn.addEventListener("click", () => {
+      if (addSelect.disabled) return;
+      picker.classList.toggle("is-collapsed");
+      if (!picker.classList.contains("is-collapsed")) {
+        addSelect.focus();
+      }
+    });
+
+    addSelect.addEventListener("change", () => {
       const selected = addSelect.value;
       if (!selected) return;
-      sheetState.sidebar.skills[selected] = { level: "Untrained", bonus: "" };
+      sheetState.sidebar.skills[selected] = { level: "Untrained", bonus: "", additional: "" };
       renderSkills();
     });
   }
@@ -1133,9 +1166,11 @@ function captureCoreFields() {
     if (!skill) return;
     const levelSelect = row.querySelector(".skill-select");
     const bonusInput = row.querySelector("[data-skill-bonus]");
+    const additionalInput = row.querySelector("[data-skill-additional]");
     updatedSkills[skill] = {
       level: levelSelect?.value || "Untrained",
       bonus: bonusInput?.value || "",
+      additional: additionalInput?.value || "",
     };
   });
   sheetState.sidebar.skills = updatedSkills;
