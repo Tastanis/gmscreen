@@ -881,11 +881,11 @@ function renderTokenItem(token) {
   return `
     <li>
       <article class="token-item" draggable="true" data-token-id="${escapeHtml(token.id)}"${sizeAttr}${hpAttr}${teamAttr}>
-        ${thumb}
         <div class="token-item__meta">
           <h4>${name}</h4>
-          ${renderTokenDetails(token)}
         </div>
+        ${thumb}
+        ${renderTokenDetails(token)}
       </article>
     </li>
   `;
