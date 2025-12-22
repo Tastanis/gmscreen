@@ -149,11 +149,12 @@ function normalize_skills($skills) {
 
     foreach ($skills as $skill => $data) {
         if (is_string($data)) {
-            $normalized[$skill] = array('level' => $data, 'bonus' => '');
+            $normalized[$skill] = array('level' => $data, 'bonus' => '', 'additional' => '');
         } elseif (is_array($data)) {
             $normalized[$skill] = array(
                 'level' => isset($data['level']) ? $data['level'] : 'Untrained',
                 'bonus' => isset($data['bonus']) ? $data['bonus'] : '',
+                'additional' => isset($data['additional']) ? $data['additional'] : '',
             );
         }
     }
