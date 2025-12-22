@@ -1,3 +1,12 @@
+<?php
+if (session_status() === PHP_SESSION_NONE) {
+  session_start();
+}
+
+$sessionUser = isset($_SESSION['user']) ? strtolower($_SESSION['user']) : '';
+$requestedCharacter = isset($_GET['character']) ? strtolower(trim($_GET['character'])) : '';
+$activeCharacter = $requestedCharacter !== '' ? $requestedCharacter : $sessionUser;
+?>
 <!DOCTYPE html>
 <html lang="en">
 <head>
@@ -7,7 +16,7 @@
   <link rel="stylesheet" href="styles.css" />
   <script type="module" src="sheet.js"></script>
 </head>
-<body>
+<body data-character="<?php echo htmlspecialchars($activeCharacter); ?>">
   <div class="sheet">
     <header class="sheet__header">
       <div class="header__title">
