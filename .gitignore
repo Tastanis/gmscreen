@@ -67,6 +67,9 @@ pnpm-lock.yaml
 # Templates data
 /dnd/strixhaven/templates/data/
 
+# Character sheet data
+/dnd/character_sheet/data/character_sheets.json
+
 # Arcane Construction data
 /dnd/strixhaven/arcaneconstruction/data/
 
