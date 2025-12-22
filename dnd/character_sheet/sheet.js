@@ -67,6 +67,33 @@ const SKILL_GROUPS = {
   ],
 };
 
+const ALL_SKILLS = Object.values(SKILL_GROUPS).flat();
+
+const DEFAULT_CULTURE_FIELDS = {
+  culture: "",
+  environment: "",
+  organization: "",
+  upbringing: "",
+};
+
+const DEFAULT_CAREER_FIELDS = {
+  career: "",
+  incitingIncident: "",
+};
+
+const DEFAULT_VITALS = {
+  size: "",
+  speed: "",
+  stability: "",
+  disengage: "",
+  save: "",
+  staminaMax: 0,
+  recoveriesMax: 0,
+  currentStamina: 0,
+  currentRecoveries: 0,
+  recoveryValue: "",
+};
+
 const defaultSheet = {
   hero: {
     name: "",
@@ -74,8 +101,8 @@ const defaultSheet = {
     class: "",
     complication: "",
     ancestry: "",
-    culture: "",
-    career: "",
+    culture: { ...DEFAULT_CULTURE_FIELDS },
+    career: { ...DEFAULT_CAREER_FIELDS },
     classTrack: "",
     wealth: "",
     renown: "",
@@ -91,16 +118,7 @@ const defaultSheet = {
       intuition: 0,
       presence: 0,
     },
-    vitals: {
-      size: "",
-      speed: "",
-      stability: "",
-      disengage: "",
-      save: "",
-      stamina: 0,
-      recoveries: 0,
-      recoveryValue: "",
-    },
+    vitals: { ...DEFAULT_VITALS },
   },
   sidebar: {
     lists: {
@@ -205,6 +223,71 @@ function normalizeTest(test = {}) {
   };
 }
 
+function normalizeIdentityGroup(value, defaults) {
+  if (typeof value === "string") {
+    const primaryKey = Object.keys(defaults)[0];
+    return { ...defaults, [primaryKey]: value };
+  }
+
+  if (!value || typeof value !== "object") {
+    return { ...defaults };
+  }
+
+  return { ...defaults, ...value };
+}
+
+function normalizeVitals(vitals = {}) {
+  const normalized = { ...DEFAULT_VITALS };
+  if (!vitals || typeof vitals !== "object") return normalized;
+
+  const legacyStamina = vitals.stamina;
+  const legacyRecoveries = vitals.recoveries;
+
+  normalized.size = vitals.size ?? normalized.size;
+  normalized.speed = vitals.speed ?? normalized.speed;
+  normalized.stability = vitals.stability ?? normalized.stability;
+  normalized.disengage = vitals.disengage ?? normalized.disengage;
+  normalized.save = vitals.save ?? normalized.save;
+  normalized.recoveryValue = vitals.recoveryValue ?? normalized.recoveryValue;
+
+  const staminaMax = vitals.staminaMax ?? legacyStamina;
+  const recoveriesMax = vitals.recoveriesMax ?? legacyRecoveries;
+
+  normalized.staminaMax = staminaMax === "" ? "" : Number(staminaMax || 0);
+  normalized.recoveriesMax = recoveriesMax === "" ? "" : Number(recoveriesMax || 0);
+  normalized.currentStamina =
+    vitals.currentStamina === ""
+      ? ""
+      : Number(vitals.currentStamina ?? legacyStamina ?? 0);
+  normalized.currentRecoveries =
+    vitals.currentRecoveries === ""
+      ? ""
+      : Number(vitals.currentRecoveries ?? legacyRecoveries ?? 0);
+
+  return normalized;
+}
+
+function normalizeSkillsState(skills = {}) {
+  const normalized = {};
+  if (!skills || typeof skills !== "object") return normalized;
+
+  Object.entries(skills).forEach(([skill, value]) => {
+    if (typeof value === "string") {
+      normalized[skill] = { level: value, bonus: "" };
+      return;
+    }
+
+    if (value && typeof value === "object") {
+      normalized[skill] = {
+        level: value.level || "Untrained",
+        bonus: value.bonus ?? "",
+      };
+    }
+  });
+
+  return normalized;
+}
+
 function convertLegacyEffectsToTests(effects = []) {
   return effects.map((effect) => {
     const test = defaultTest();
@@ -221,18 +304,21 @@ function mergeWithDefaults(data) {
   const merged = deepClone(defaultSheet);
   if (!data || typeof data !== "object") return merged;
 
-  merged.hero = { ...merged.hero, ...(data.hero || {}) };
-  merged.hero.resource = { ...merged.hero.resource, ...(data.hero?.resource || {}) };
-  merged.hero.stats = { ...merged.hero.stats, ...(data.hero?.stats || {}) };
-  merged.hero.vitals = { ...merged.hero.vitals, ...(data.hero?.vitals || {}) };
+  const inputHero = data.hero || {};
+  merged.hero = { ...merged.hero, ...inputHero };
+  merged.hero.resource = { ...merged.hero.resource, ...(inputHero.resource || {}) };
+  merged.hero.stats = { ...merged.hero.stats, ...(inputHero.stats || {}) };
+  merged.hero.vitals = normalizeVitals(inputHero.vitals);
+  merged.hero.culture = normalizeIdentityGroup(inputHero.culture, DEFAULT_CULTURE_FIELDS);
+  merged.hero.career = normalizeIdentityGroup(inputHero.career, DEFAULT_CAREER_FIELDS);
   merged.hero.heroTokens = [
-    Boolean(data.hero?.heroTokens?.[0]),
-    Boolean(data.hero?.heroTokens?.[1]),
+    Boolean(inputHero.heroTokens?.[0]),
+    Boolean(inputHero.heroTokens?.[1]),
   ];
 
   merged.sidebar = { ...merged.sidebar, ...(data.sidebar || {}) };
   merged.sidebar.lists = { ...merged.sidebar.lists, ...(data.sidebar?.lists || {}) };
-  merged.sidebar.skills = { ...merged.sidebar.skills, ...(data.sidebar?.skills || {}) };
+  merged.sidebar.skills = normalizeSkillsState(data.sidebar?.skills);
   merged.sidebar.resource = {
     ...merged.sidebar.resource,
     ...(data.sidebar?.resource || {}),
@@ -302,13 +388,16 @@ function renderHeroPane() {
     </div>
   `;
 
-  const vitalField = (label, key, type = "text") => `
+  const vitalField = (label, path, type = "text") => {
+    const value = getValue(path);
+    return `
     <div class="field-card">
       <label>${label}</label>
-      <div class="display-value">${hero.vitals[key] ?? ""}</div>
-      <input class="edit-field" type="${type}" data-model="hero.vitals.${key}" value="${hero.vitals[key] ?? ""}" />
+      <div class="display-value">${value ?? ""}</div>
+      <input class="edit-field" type="${type}" data-model="${path}" value="${value ?? ""}" />
     </div>
   `;
+  };
 
   const identityField = (label, path) => {
     const value = getValue(path);
@@ -320,6 +409,27 @@ function renderHeroPane() {
       </div>
     `;
   };
+
+  const detailGroup = (title, entries, basePath) => `
+    <div class="field-card detail-card">
+      <label>${title}</label>
+      <div class="detail-grid">
+        ${entries
+          .map(({ label, key }) => {
+            const path = `${basePath}.${key}`;
+            const value = getValue(path);
+            return `
+              <div class="detail-item">
+                <div class="detail-item__label">${label}</div>
+                <div class="display-value">${value || ""}</div>
+                <input class="edit-field" type="text" data-model="${path}" value="${value || ""}" />
+              </div>
+            `;
+          })
+          .join("")}
+      </div>
+    </div>
+  `;
 
   pane.innerHTML = `
     <section class="hero-grid">
@@ -361,21 +471,6 @@ function renderHeroPane() {
         ${identityField("Victories", "hero.victories")}
         ${identityField("Surges", "hero.surges")}
         <div class="field-card">
-          <label>Hero Tokens</label>
-          <div class="token-row">
-            ${hero.heroTokens
-              .map(
-                (state, index) => `
-                  <button class="token-dot ${state ? "is-spent" : "is-ready"}" data-token-index="${index}" aria-label="Toggle hero token ${
-                  index + 1
-                }"></button>
-                `
-              )
-              .join("")}
-          </div>
-          <div class="token-hint">Green = ready, Red = spent</div>
-        </div>
-        <div class="field-card">
           <label>${hero.resource.title || "Resource"}</label>
           <div class="display-value">${hero.resource.value || ""}</div>
           <input class="edit-field" type="text" data-model="hero.resource.value" value="${hero.resource.value || ""}" />
@@ -384,20 +479,36 @@ function renderHeroPane() {
       </div>
 
       <div class="vital-grid">
-        ${vitalField("Size", "size")}
-        ${vitalField("Speed", "speed")}
-        ${vitalField("Stability", "stability")}
-        ${vitalField("Disengage", "disengage")}
-        ${vitalField("Save", "save")}
-        ${vitalField("Stamina", "stamina", "number")}
-        ${vitalField("Recoveries", "recoveries", "number")}
-        ${vitalField("Recovery Value", "recoveryValue")}
+        ${vitalField("Size", "hero.vitals.size")}
+        ${vitalField("Speed", "hero.vitals.speed")}
+        ${vitalField("Stability", "hero.vitals.stability")}
+        ${vitalField("Disengage", "hero.vitals.disengage")}
+        ${vitalField("Save", "hero.vitals.save")}
+        ${vitalField("Stamina (Full)", "hero.vitals.staminaMax", "number")}
+        ${vitalField("Recoveries (Full)", "hero.vitals.recoveriesMax", "number")}
+        ${vitalField("Recovery Value", "hero.vitals.recoveryValue")}
       </div>
 
       <div class="identity identity--secondary">
         ${identityField("Ancestry", "hero.ancestry")}
-        ${identityField("Culture", "hero.culture")}
-        ${identityField("Career", "hero.career")}
+        ${detailGroup(
+          "Culture",
+          [
+            { label: "Culture", key: "culture" },
+            { label: "Environment", key: "environment" },
+            { label: "Organization", key: "organization" },
+            { label: "Upbringing", key: "upbringing" },
+          ],
+          "hero.culture"
+        )}
+        ${detailGroup(
+          "Career",
+          [
+            { label: "Career", key: "career" },
+            { label: "Inciting Incident", key: "incitingIncident" },
+          ],
+          "hero.career"
+        )}
         ${identityField("Complication", "hero.complication")}
       </div>
     </section>
@@ -433,13 +544,48 @@ function renderSidebarResource() {
   `;
 }
 
+function renderHeroTokens() {
+  const container = document.getElementById("sidebar-hero-tokens");
+  if (!container) return;
+
+  container.innerHTML = `
+    <div class="sidebar__header">Hero Tokens</div>
+    <div class="sidebar__content token-sidebar">
+      <div class="token-row">
+        ${sheetState.hero.heroTokens
+          .map(
+            (state, index) => `
+              <button class="token-dot ${state ? "is-spent" : "is-ready"}" data-token-index="${index}" aria-label="Toggle hero token ${
+              index + 1
+            }"></button>
+            `
+          )
+          .join("")}
+      </div>
+    </div>
+  `;
+}
+
 function renderBars() {
   const container = document.getElementById("sidebar-bars");
-  const stamina = Number(sheetState.hero.vitals.stamina) || 0;
-  const recoveries = Number(sheetState.hero.vitals.recoveries) || 0;
-  const recoveryValue = sheetState.hero.vitals.recoveryValue || "";
-  const staminaWidth = Math.max(0, Math.min(100, stamina));
-  const recoveryWidth = Math.max(0, Math.min(100, recoveries));
+  const vitals = normalizeVitals(sheetState.hero.vitals);
+  sheetState.hero.vitals = vitals;
+  const staminaMax = Number(vitals.staminaMax) || 0;
+  const recoveriesMax = Number(vitals.recoveriesMax) || 0;
+  const currentStamina = Number(vitals.currentStamina) || 0;
+  const currentRecoveries = Number(vitals.currentRecoveries) || 0;
+  const recoveryValue = vitals.recoveryValue || "";
+  const staminaMaxDisplay = vitals.staminaMax === "" ? "—" : staminaMax;
+  const recoveriesMaxDisplay = vitals.recoveriesMax === "" ? "—" : recoveriesMax;
+  const currentStaminaDisplay = vitals.currentStamina === "" ? 0 : currentStamina;
+  const currentRecoveriesDisplay = vitals.currentRecoveries === "" ? 0 : currentRecoveries;
+
+  const staminaWidth =
+    staminaMax > 0 ? Math.max(0, Math.min(100, (currentStamina / staminaMax) * 100)) : 0;
+  const recoveryWidth =
+    recoveriesMax > 0
+      ? Math.max(0, Math.min(100, (currentRecoveries / recoveriesMax) * 100))
+      : 0;
 
   container.innerHTML = `
     <div class="sidebar__header">Vitals</div>
@@ -449,16 +595,18 @@ function renderBars() {
         <div class="meter__track">
           <div class="meter__fill meter__fill--stamina" style="width:${staminaWidth}%;"></div>
         </div>
-        <div class="meter__value display-value">${stamina}</div>
-        <input class="edit-field" type="number" min="0" data-model="hero.vitals.stamina" value="${stamina}" />
+        <div class="meter__value display-value">${currentStaminaDisplay} / ${staminaMaxDisplay}</div>
+        <input class="edit-field tracker-input" data-live-edit="true" type="number" min="0" data-model="hero.vitals.currentStamina" value="${vitals.currentStamina}" />
+        <div class="meter__max-note">Full: ${staminaMaxDisplay}</div>
       </div>
       <div class="meter">
         <div class="meter__label">Recoveries</div>
         <div class="meter__track">
           <div class="meter__fill meter__fill--recovery" style="width:${recoveryWidth}%;"></div>
         </div>
-        <div class="meter__value display-value">${recoveries}</div>
-        <input class="edit-field" type="number" min="0" data-model="hero.vitals.recoveries" value="${recoveries}" />
+        <div class="meter__value display-value">${currentRecoveriesDisplay} / ${recoveriesMaxDisplay}</div>
+        <input class="edit-field tracker-input" data-live-edit="true" type="number" min="0" data-model="hero.vitals.currentRecoveries" value="${vitals.currentRecoveries}" />
+        <div class="meter__max-note">Full: ${recoveriesMaxDisplay}</div>
       </div>
       <div class="field-card compact">
         <label>Recovery Value</label>
@@ -467,42 +615,92 @@ function renderBars() {
       </div>
     </div>
   `;
+
+  container.querySelectorAll('[data-live-edit="true"]').forEach((input) => {
+    input.addEventListener("input", () => {
+      const path = input.getAttribute("data-model");
+      if (!path) return;
+      const value = input.type === "number" ? Number(input.value || 0) : input.value;
+      setByPath(path, value);
+      renderBars();
+      saveSheet();
+    });
+  });
 }
 
 function renderSkills() {
   const container = document.getElementById("sidebar-skills");
   container.innerHTML = `<div class="sidebar__header">Skills</div>`;
   const content = document.createElement("div");
-  content.classList.add("sidebar__content", "skills-grid");
+  content.classList.add("sidebar__content", "skills-list");
 
-  Object.entries(SKILL_GROUPS).forEach(([group, skills]) => {
-    const groupBlock = document.createElement("div");
-    groupBlock.classList.add("skill-group");
-    const heading = document.createElement("div");
-    heading.classList.add("skill-group__title");
-    heading.textContent = group;
-    groupBlock.appendChild(heading);
+  const skills = normalizeSkillsState(sheetState.sidebar.skills);
+  sheetState.sidebar.skills = skills;
+  const skillEntries = Object.entries(skills);
 
-    skills.forEach((skill) => {
-      const level = sheetState.sidebar.skills[skill] || "Untrained";
+  if (skillEntries.length === 0) {
+    const empty = document.createElement("div");
+    empty.classList.add("muted");
+    empty.textContent = "Add skills to track them here.";
+    content.appendChild(empty);
+  } else {
+    skillEntries.forEach(([skill, data]) => {
       const row = document.createElement("div");
-      row.classList.add("skill-row");
+      row.classList.add("skill-row", "skill-row--compact");
+      row.setAttribute("data-skill-row", skill);
       row.innerHTML = `
         <span class="skill-row__label">${skill}</span>
-        <select class="skill-select" data-skill="${skill}">
-          <option${level === "Untrained" ? " selected" : ""}>Untrained</option>
-          <option${level === "Trained" ? " selected" : ""}>Trained</option>
-          <option${level === "Expert" ? " selected" : ""}>Expert</option>
-          <option${level === "Master" ? " selected" : ""}>Master</option>
-        </select>
+        <div class="skill-row__level">
+          <span class="display-value">${data.level || "Untrained"}</span>
+          <select class="skill-select edit-field" data-skill="${skill}">
+            <option${data.level === "Untrained" ? " selected" : ""}>Untrained</option>
+            <option${data.level === "Trained" ? " selected" : ""}>Trained</option>
+            <option${data.level === "Expert" ? " selected" : ""}>Expert</option>
+            <option${data.level === "Master" ? " selected" : ""}>Master</option>
+          </select>
+        </div>
+        <div class="skill-row__bonus">
+          <span class="display-value">${data.bonus || "—"}</span>
+          <input class="edit-field skill-bonus-input" type="text" data-skill-bonus="${skill}" value="${data.bonus || ""}" placeholder="+0" />
+        </div>
+        <button class="icon-btn icon-btn--danger edit-only" data-remove-skill="${skill}">Remove</button>
       `;
-      groupBlock.appendChild(row);
+      content.appendChild(row);
     });
+  }
 
-    content.appendChild(groupBlock);
-  });
+  const availableSkills = ALL_SKILLS.filter((skill) => !skills[skill]);
+  const addRow = document.createElement("div");
+  addRow.classList.add("skill-add", "edit-only");
+  addRow.innerHTML = `
+    <select class="edit-field" id="add-skill-select">
+      <option value="" disabled selected>${availableSkills.length ? "Select a skill" : "All skills added"}</option>
+      ${availableSkills.map((skill) => `<option value="${skill}">${skill}</option>`).join("")}
+    </select>
+    <button class="icon-btn" id="add-skill-btn" ${availableSkills.length ? "" : "disabled"}>+ Add Skill</button>
+  `;
+  content.appendChild(addRow);
 
   container.appendChild(content);
+
+  container.querySelectorAll("[data-remove-skill]").forEach((btn) => {
+    btn.addEventListener("click", () => {
+      const skill = btn.getAttribute("data-remove-skill");
+      delete sheetState.sidebar.skills[skill];
+      renderSkills();
+    });
+  });
+
+  const addBtn = container.querySelector("#add-skill-btn");
+  const addSelect = container.querySelector("#add-skill-select");
+  if (addBtn && addSelect) {
+    addBtn.addEventListener("click", () => {
+      const selected = addSelect.value;
+      if (!selected) return;
+      sheetState.sidebar.skills[selected] = { level: "Untrained", bonus: "" };
+      renderSkills();
+    });
+  }
 }
 
 function renderFeatures() {
@@ -790,6 +988,7 @@ function renderAll() {
   renderHeroPane();
   renderBars();
   renderSidebarResource();
+  renderHeroTokens();
   renderSidebarLists();
   renderSkills();
   renderFeatures();
@@ -924,10 +1123,18 @@ function captureCoreFields() {
       .filter(Boolean);
   });
 
-  document.querySelectorAll(".skill-select").forEach((select) => {
-    const skill = select.getAttribute("data-skill");
-    sheetState.sidebar.skills[skill] = select.value;
+  const updatedSkills = {};
+  document.querySelectorAll("[data-skill-row]").forEach((row) => {
+    const skill = row.getAttribute("data-skill-row");
+    if (!skill) return;
+    const levelSelect = row.querySelector(".skill-select");
+    const bonusInput = row.querySelector("[data-skill-bonus]");
+    updatedSkills[skill] = {
+      level: levelSelect?.value || "Untrained",
+      bonus: bonusInput?.value || "",
+    };
   });
+  sheetState.sidebar.skills = updatedSkills;
 }
 
 function captureFeatures() {
@@ -1014,6 +1221,7 @@ function updateHeading() {
 function toggleEditMode(enabled) {
   document.body.classList.toggle("edit-mode", enabled);
   document.querySelectorAll(".edit-field").forEach((input) => {
+    if (input.dataset.liveEdit === "true") return;
     input.disabled = !enabled;
   });
   document.querySelectorAll(".skill-select").forEach((select) => {

@@ -17,8 +17,16 @@ function getDefaultCharacterEntry() {
             'class' => '',
             'complication' => '',
             'ancestry' => '',
-            'culture' => '',
-            'career' => '',
+            'culture' => array(
+                'culture' => '',
+                'environment' => '',
+                'organization' => '',
+                'upbringing' => '',
+            ),
+            'career' => array(
+                'career' => '',
+                'incitingIncident' => '',
+            ),
             'classTrack' => '',
             'wealth' => '',
             'renown' => '',
@@ -43,8 +51,10 @@ function getDefaultCharacterEntry() {
                 'stability' => '',
                 'disengage' => '',
                 'save' => '',
-                'stamina' => 0,
-                'recoveries' => 0,
+                'staminaMax' => 0,
+                'recoveriesMax' => 0,
+                'currentStamina' => 0,
+                'currentRecoveries' => 0,
                 'recoveryValue' => '',
             ),
         ),
@@ -93,28 +103,87 @@ function ensureCharacterSheetStorage($dataDir, $dataFile, $characters) {
     }
 }
 
+function normalize_identity_group($value, $defaults) {
+    if (is_string($value)) {
+        $keys = array_keys($defaults);
+        $defaults[$keys[0]] = $value;
+        return $defaults;
+    }
+
+    if (!is_array($value)) {
+        return $defaults;
+    }
+
+    return array_merge($defaults, $value);
+}
+
+function normalize_vitals($vitals, $defaults) {
+    if (!is_array($vitals)) {
+        $vitals = array();
+    }
+
+    $legacyStamina = isset($vitals['stamina']) ? $vitals['stamina'] : null;
+    $legacyRecoveries = isset($vitals['recoveries']) ? $vitals['recoveries'] : null;
+
+    $normalized = $defaults;
+    $normalized['size'] = isset($vitals['size']) ? $vitals['size'] : $defaults['size'];
+    $normalized['speed'] = isset($vitals['speed']) ? $vitals['speed'] : $defaults['speed'];
+    $normalized['stability'] = isset($vitals['stability']) ? $vitals['stability'] : $defaults['stability'];
+    $normalized['disengage'] = isset($vitals['disengage']) ? $vitals['disengage'] : $defaults['disengage'];
+    $normalized['save'] = isset($vitals['save']) ? $vitals['save'] : $defaults['save'];
+    $normalized['recoveryValue'] = isset($vitals['recoveryValue']) ? $vitals['recoveryValue'] : $defaults['recoveryValue'];
+
+    $normalized['staminaMax'] = isset($vitals['staminaMax']) ? $vitals['staminaMax'] : ($legacyStamina !== null ? $legacyStamina : $defaults['staminaMax']);
+    $normalized['recoveriesMax'] = isset($vitals['recoveriesMax']) ? $vitals['recoveriesMax'] : ($legacyRecoveries !== null ? $legacyRecoveries : $defaults['recoveriesMax']);
+    $normalized['currentStamina'] = isset($vitals['currentStamina']) ? $vitals['currentStamina'] : ($legacyStamina !== null ? $legacyStamina : $defaults['currentStamina']);
+    $normalized['currentRecoveries'] = isset($vitals['currentRecoveries']) ? $vitals['currentRecoveries'] : ($legacyRecoveries !== null ? $legacyRecoveries : $defaults['currentRecoveries']);
+
+    return $normalized;
+}
+
+function normalize_skills($skills) {
+    $normalized = array();
+    if (!is_array($skills)) {
+        return $normalized;
+    }
+
+    foreach ($skills as $skill => $data) {
+        if (is_string($data)) {
+            $normalized[$skill] = array('level' => $data, 'bonus' => '');
+        } elseif (is_array($data)) {
+            $normalized[$skill] = array(
+                'level' => isset($data['level']) ? $data['level'] : 'Untrained',
+                'bonus' => isset($data['bonus']) ? $data['bonus'] : '',
+            );
+        }
+    }
+
+    return $normalized;
+}
+
 function mergeCharacterDefaults($entry, $defaults) {
     $normalized = $defaults;
 
     if (isset($entry['hero']) && is_array($entry['hero'])) {
-        $normalized['hero'] = array_merge($defaults['hero'], $entry['hero']);
+        $heroInput = $entry['hero'];
+        $normalized['hero'] = array_merge($defaults['hero'], $heroInput);
 
-        if (isset($entry['hero']['resource']) && is_array($entry['hero']['resource'])) {
-            $normalized['hero']['resource'] = array_merge($defaults['hero']['resource'], $entry['hero']['resource']);
+        if (isset($heroInput['resource']) && is_array($heroInput['resource'])) {
+            $normalized['hero']['resource'] = array_merge($defaults['hero']['resource'], $heroInput['resource']);
         }
 
-        if (isset($entry['hero']['stats']) && is_array($entry['hero']['stats'])) {
-            $normalized['hero']['stats'] = array_merge($defaults['hero']['stats'], $entry['hero']['stats']);
+        if (isset($heroInput['stats']) && is_array($heroInput['stats'])) {
+            $normalized['hero']['stats'] = array_merge($defaults['hero']['stats'], $heroInput['stats']);
         }
 
-        if (isset($entry['hero']['vitals']) && is_array($entry['hero']['vitals'])) {
-            $normalized['hero']['vitals'] = array_merge($defaults['hero']['vitals'], $entry['hero']['vitals']);
-        }
+        $normalized['hero']['vitals'] = normalize_vitals(isset($heroInput['vitals']) ? $heroInput['vitals'] : array(), $defaults['hero']['vitals']);
+        $normalized['hero']['culture'] = normalize_identity_group(isset($heroInput['culture']) ? $heroInput['culture'] : null, $defaults['hero']['culture']);
+        $normalized['hero']['career'] = normalize_identity_group(isset($heroInput['career']) ? $heroInput['career'] : null, $defaults['hero']['career']);
 
-        if (isset($entry['hero']['heroTokens']) && is_array($entry['hero']['heroTokens'])) {
+        if (isset($heroInput['heroTokens']) && is_array($heroInput['heroTokens'])) {
             $normalized['hero']['heroTokens'] = array(
-                isset($entry['hero']['heroTokens'][0]) ? (bool)$entry['hero']['heroTokens'][0] : false,
-                isset($entry['hero']['heroTokens'][1]) ? (bool)$entry['hero']['heroTokens'][1] : false,
+                isset($heroInput['heroTokens'][0]) ? (bool)$heroInput['heroTokens'][0] : false,
+                isset($heroInput['heroTokens'][1]) ? (bool)$heroInput['heroTokens'][1] : false,
             );
         }
     }
@@ -137,7 +206,7 @@ function mergeCharacterDefaults($entry, $defaults) {
         }
 
         if (isset($entry['sidebar']['skills']) && is_array($entry['sidebar']['skills'])) {
-            $normalized['sidebar']['skills'] = $entry['sidebar']['skills'];
+            $normalized['sidebar']['skills'] = normalize_skills($entry['sidebar']['skills']);
         }
 
         if (isset($entry['sidebar']['resource']) && is_array($entry['sidebar']['resource'])) {
