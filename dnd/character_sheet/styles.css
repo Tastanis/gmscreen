@@ -284,17 +284,29 @@ body {
 
 .vital-grid {
   display: grid;
-  grid-template-columns: repeat(auto-fit, minmax(150px, 1fr));
-  gap: 10px;
+  grid-template-columns: repeat(8, minmax(90px, 1fr));
+  gap: 6px;
 }
 
 .vital-grid .field-card {
   min-height: auto;
-  gap: 4px;
+  padding: 8px;
+  gap: 3px;
 }
 
 .vital-grid .field-card label {
-  margin-bottom: 2px;
+  margin-bottom: 0;
+  font-size: 10px;
+  letter-spacing: 0.06em;
+}
+
+.vital-grid .display-value {
+  font-size: 14px;
+}
+
+.vital-grid .edit-field {
+  padding: 4px;
+  font-size: 13px;
 }
 
 .field-card,
@@ -330,32 +342,6 @@ body {
 .display-value {
   font-weight: 700;
   font-size: 15px;
-}
-
-.vitals-stamina-card {
-  grid-column: span 2;
-}
-
-.vitals-stamina-row {
-  display: flex;
-  flex-wrap: wrap;
-  gap: 10px;
-}
-
-.vitals-stamina-item {
-  flex: 1 1 160px;
-  display: flex;
-  flex-direction: column;
-  gap: 4px;
-}
-
-.vitals-stamina-item .card__label {
-  letter-spacing: 0.06em;
-  font-size: 11px;
-}
-
-.vitals-stamina-item .display-value {
-  font-size: 16px;
 }
 
 .marip-block .card__label {

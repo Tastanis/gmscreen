@@ -414,23 +414,12 @@ function renderHeroPane() {
   const vitalField = (label, path, type = "text") => {
     const value = getValue(path);
     return `
-    <div class="field-card">
+    <div class="field-card vital-card compact">
       <label>${label}</label>
       <div class="display-value">${value ?? ""}</div>
       <input class="edit-field" type="${type}" data-model="${path}" value="${value ?? ""}" />
     </div>
   `;
-  };
-
-  const vitalsInlineField = (label, path, type = "text") => {
-    const value = getValue(path);
-    return `
-      <div class="vitals-stamina-item">
-        <span class="card__label">${label}</span>
-        <div class="display-value">${value ?? ""}</div>
-        <input class="edit-field" type="${type}" data-model="${path}" value="${value ?? ""}" />
-      </div>
-    `;
   };
 
   const identityField = (label, path) => {
@@ -522,13 +511,9 @@ function renderHeroPane() {
         ${vitalField("Stability", "hero.vitals.stability")}
         ${vitalField("Disengage", "hero.vitals.disengage")}
         ${vitalField("Save", "hero.vitals.save")}
-        <div class="field-card vitals-stamina-card">
-          <div class="vitals-stamina-row">
-            ${vitalsInlineField("Stamina", "hero.vitals.staminaMax", "number")}
-            ${vitalsInlineField("Recoveries", "hero.vitals.recoveriesMax", "number")}
-            ${vitalsInlineField("Recovery Value", "hero.vitals.recoveryValue")}
-          </div>
-        </div>
+        ${vitalField("Stamina", "hero.vitals.staminaMax", "number")}
+        ${vitalField("Recoveries", "hero.vitals.recoveriesMax", "number")}
+        ${vitalField("Recovery Value", "hero.vitals.recoveryValue")}
       </div>
 
       <div class="bottom-details">
