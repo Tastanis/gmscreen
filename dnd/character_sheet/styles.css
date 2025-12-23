@@ -519,7 +519,10 @@ body {
 }
 
 .resource-value-display {
-  min-width: 64px;
+  width: 88px;
+  max-width: 88px;
+  flex: 0 0 auto;
+  align-self: center;
   text-align: center;
   font-size: 26px;
   font-weight: 850;
