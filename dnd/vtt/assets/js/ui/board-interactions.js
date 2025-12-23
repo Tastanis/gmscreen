@@ -9443,7 +9443,7 @@ export function mountBoardInteractions(store, routes = {}) {
 
     const handleDamageHealAction = (mode) => {
       const amount = parseDamageHealAmount(amountInput.value);
-      if (amount === null) {
+      if (amount === null || amount <= 0) {
         updateDamageHealActionState();
         return;
       }
@@ -9500,6 +9500,7 @@ export function mountBoardInteractions(store, routes = {}) {
       event.preventDefault();
       cancelDamageHealTargeting({ restoreMessage: true });
       setDamageHealMode(null);
+      amountInput.value = '0';
       updateDamageHealActionState();
     };
 
@@ -9684,7 +9685,7 @@ export function mountBoardInteractions(store, routes = {}) {
       return;
     }
     const amount = parseDamageHealAmount(damageHealUi.amountInput.value);
-    const disabled = amount === null;
+    const disabled = amount === null || amount <= 0;
     damageHealUi.damageButton.disabled = disabled;
     damageHealUi.healButton.disabled = disabled;
   }
@@ -9692,7 +9693,7 @@ export function mountBoardInteractions(store, routes = {}) {
   function parseDamageHealAmount(value) {
     if (typeof value === 'number' && Number.isFinite(value)) {
       const normalized = Math.trunc(Math.abs(value));
-      return normalized > 0 ? normalized : null;
+      return normalized >= 0 ? normalized : null;
     }
 
     if (typeof value === 'string') {
@@ -9705,7 +9706,7 @@ export function mountBoardInteractions(store, routes = {}) {
         return null;
       }
       const normalized = Math.trunc(Math.abs(parsed));
-      return normalized > 0 ? normalized : null;
+      return normalized >= 0 ? normalized : null;
     }
 
     return null;
