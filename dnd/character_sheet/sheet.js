@@ -1367,6 +1367,10 @@ function renderTierSection(label, tier, key) {
 }
 
 function renderTest(test) {
+  const isEditMode = document.body.classList.contains("edit-mode");
+  const showBeforeEffect = isEditMode || Boolean(test.beforeEffect);
+  const showAfterEffect = isEditMode || Boolean(test.additionalEffect);
+
   return `
     <div class="test" data-test-id="${test.id}">
       <header class="test__header">
@@ -1374,15 +1378,21 @@ function renderTest(test) {
         <input class="edit-field" type="hidden" data-test-field="label" value="${test.label || ""}" />
         <button class="icon-btn edit-only" data-remove-test="${test.id}" aria-label="Remove test">✕</button>
       </header>
-      <div class="test__effects">
-        <div class="effect-block">
-          <div class="effect-block__title">Effects before the test</div>
-          <p class="display-value">${formatMultiline(test.beforeEffect)}</p>
-          <textarea class="edit-field" rows="2" data-test-field="beforeEffect" placeholder="Effects before the test">${
-            test.beforeEffect || ""
-          }</textarea>
-        </div>
-      </div>
+      ${
+        showBeforeEffect
+          ? `
+              <div class="test__effects">
+                <div class="effect-block">
+                  <div class="effect-block__title">Effects</div>
+                  <p class="display-value">${formatMultiline(test.beforeEffect)}</p>
+                  <textarea class="edit-field" rows="2" data-test-field="beforeEffect" placeholder="Effects before the test">${
+                    test.beforeEffect || ""
+                  }</textarea>
+                </div>
+              </div>
+            `
+          : ""
+      }
       <div class="test__roll">
         <div class="display-value">${formatRoll(test.rollMod)}</div>
         <div class="test__roll-editor edit-field">
@@ -1393,15 +1403,21 @@ function renderTest(test) {
       <div class="test__tiers">
         ${TEST_TIERS.map(({ key, label }) => renderTierSection(label, test.tiers?.[key] || defaultTestTier(), key)).join("")}
       </div>
-      <div class="test__effects">
-        <div class="effect-block">
-          <div class="effect-block__title">Effects after the test</div>
-          <p class="display-value">${formatMultiline(test.additionalEffect)}</p>
-          <textarea class="edit-field" rows="2" data-test-field="additionalEffect" placeholder="Additional effects after the test">${
-            test.additionalEffect || ""
-          }</textarea>
-        </div>
-      </div>
+      ${
+        showAfterEffect
+          ? `
+              <div class="test__effects">
+                <div class="effect-block">
+                  <div class="effect-block__title">Effects</div>
+                  <p class="display-value">${formatMultiline(test.additionalEffect)}</p>
+                  <textarea class="edit-field" rows="2" data-test-field="additionalEffect" placeholder="Additional effects after the test">${
+                    test.additionalEffect || ""
+                  }</textarea>
+                </div>
+              </div>
+            `
+          : ""
+      }
     </div>
   `;
 }
@@ -1409,6 +1425,7 @@ function renderTest(test) {
 function renderActionSection(type, containerId) {
   const actions = sheetState.actions[type] || [];
   const container = document.getElementById(containerId);
+  const isEditMode = document.body.classList.contains("edit-mode");
   if (!container) return;
 
   if (actions.length === 0) {
@@ -1466,11 +1483,13 @@ function renderActionSection(type, containerId) {
                 ${
                   (action.tests || []).length
                     ? (action.tests || []).map((test) => renderTest(test)).join("")
-                    : '<div class="placeholder">No tests yet. Switch to edit mode to add one.</div>'
+                    : isEditMode
+                      ? '<div class="placeholder">No tests yet. Switch to edit mode to add one.</div>'
+                      : ""
                 }
               </div>
               ${
-                (action.tests || []).length
+                (action.tests || []).length || !isEditMode
                   ? ""
                   : `<button class="text-btn edit-only" data-add-test="${action.id}">+ Add Test</button>`
               }

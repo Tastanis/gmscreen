@@ -23,7 +23,6 @@ $activeCharacter = $requestedCharacter !== '' ? $requestedCharacter : $sessionUs
         <div class="header__title">
           <p class="title__eyebrow">Character Sheet</p>
           <h1 id="hero-name-heading">Tableside Hero View</h1>
-          <p class="title__lede">Compact edge-to-edge layout for quick reference.</p>
         </div>
         <div class="header__actions">
           <label class="toggle">
