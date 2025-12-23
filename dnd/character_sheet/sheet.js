@@ -106,6 +106,7 @@ const DEFAULT_VITALS = {
   currentStamina: 0,
   currentRecoveries: 0,
   recoveryValue: "",
+  staminaHistory: [],
 };
 
 const defaultSheet = {
@@ -286,6 +287,16 @@ function normalizeVitals(vitals = {}) {
       ? ""
       : Number(vitals.currentRecoveries ?? legacyRecoveries ?? 0);
 
+  const history = Array.isArray(vitals.staminaHistory)
+    ? vitals.staminaHistory
+        .map((entry) => Number(entry))
+        .filter((entry) => Number.isFinite(entry))
+    : [];
+  if (history.length === 0 && Number.isFinite(normalized.currentStamina)) {
+    history.push(normalized.currentStamina);
+  }
+  normalized.staminaHistory = history.slice(-4);
+
   return normalized;
 }
 
@@ -398,6 +409,100 @@ function getValue(path) {
     }
   }
   return current ?? "";
+}
+
+let tempStaminaFlashUntil = 0;
+let tempStaminaFlashTimeout;
+let tempStaminaFlashId = 0;
+
+function triggerTempStaminaFlash() {
+  tempStaminaFlashId = Date.now();
+  tempStaminaFlashUntil = tempStaminaFlashId + 1500;
+  clearTimeout(tempStaminaFlashTimeout);
+  tempStaminaFlashTimeout = setTimeout(() => {
+    if (Date.now() >= tempStaminaFlashUntil) {
+      renderBars();
+    }
+  }, 1600);
+}
+
+function isTempStaminaFlashing() {
+  return Date.now() < tempStaminaFlashUntil;
+}
+
+function updateStaminaHistory(newValue) {
+  const history = Array.isArray(sheetState.hero.vitals.staminaHistory)
+    ? [...sheetState.hero.vitals.staminaHistory]
+    : [];
+  const numericValue = Number(newValue);
+  if (!Number.isFinite(numericValue)) return;
+  history.push(numericValue);
+  sheetState.hero.vitals.staminaHistory = history.slice(-4);
+}
+
+function parseTrackerInput(rawValue) {
+  const trimmed = String(rawValue ?? "").trim();
+  if (trimmed === "") return null;
+
+  const deltaMatch = trimmed.match(/^([+-])\s*(\d+(?:\.\d+)?)$/);
+  if (deltaMatch) {
+    const amount = Number(deltaMatch[2]);
+    if (!Number.isFinite(amount)) return null;
+    return {
+      type: "delta",
+      delta: deltaMatch[1] === "-" ? -amount : amount,
+    };
+  }
+
+  const absoluteValue = Number(trimmed);
+  if (!Number.isFinite(absoluteValue)) return null;
+  return {
+    type: "set",
+    value: absoluteValue,
+  };
+}
+
+function applyTrackerChange(path, rawValue) {
+  const parsed = parseTrackerInput(rawValue);
+  if (!parsed) {
+    renderBars();
+    return;
+  }
+
+  const isStamina = path.endsWith("currentStamina");
+  const vitals = sheetState.hero.vitals;
+  const currentValue = Number(getValue(path)) || 0;
+  const maxValue = isStamina ? Number(vitals.staminaMax) || 0 : Number(vitals.recoveriesMax) || 0;
+
+  let newValue = currentValue;
+
+  if (parsed.type === "delta") {
+    newValue = currentValue + parsed.delta;
+    if (isStamina) {
+      const ceiling = Math.max(maxValue, currentValue);
+      newValue = Math.min(newValue, ceiling);
+    }
+  } else {
+    newValue = parsed.value;
+  }
+
+  newValue = Math.max(0, newValue);
+
+  if (isStamina) {
+    const overflow = Math.max(0, newValue - maxValue);
+    if (parsed.type === "set" && overflow > 0) {
+      triggerTempStaminaFlash();
+    }
+  }
+
+  setByPath(path, newValue);
+
+  if (isStamina) {
+    updateStaminaHistory(newValue);
+  }
+
+  renderBars();
+  saveSheet();
 }
 
 function renderHeroPane() {
@@ -604,6 +709,7 @@ function renderBars() {
   const currentStamina = Number(vitals.currentStamina) || 0;
   const currentRecoveries = Number(vitals.currentRecoveries) || 0;
   const recoveryValue = vitals.recoveryValue || "";
+  const staminaHistory = Array.isArray(vitals.staminaHistory) ? vitals.staminaHistory : [];
   const staminaMaxDisplay = vitals.staminaMax === "" ? "—" : staminaMax;
   const recoveriesMaxDisplay = vitals.recoveriesMax === "" ? "—" : recoveriesMax;
   const currentStaminaDisplay = vitals.currentStamina === "" ? 0 : currentStamina;
@@ -615,27 +721,55 @@ function renderBars() {
     recoveriesMax > 0
       ? Math.max(0, Math.min(100, (currentRecoveries / recoveriesMax) * 100))
       : 0;
+  const staminaOverflow = Math.max(0, currentStamina - staminaMax);
+  const staminaOverflowWidth =
+    staminaMax > 0
+      ? Math.max(0, Math.min(100, (staminaOverflow / staminaMax) * 100))
+      : staminaOverflow > 0
+        ? 100
+        : 0;
+  const shouldFlashTemp = staminaOverflow > 0 && isTempStaminaFlashing();
+  const staminaHistoryDisplay = staminaHistory.slice(-4).join(" -> ");
 
   container.innerHTML = `
     <div class="sidebar__header">Vitals</div>
     <div class="sidebar__content bars">
-      <div class="meter">
-        <div class="meter__label">Stamina</div>
+      <div class="meter meter--stamina">
         <div class="meter__track">
           <div class="meter__fill meter__fill--stamina" style="width:${staminaWidth}%;"></div>
+          ${staminaOverflowWidth > 0
+            ? `<div class="meter__overflow" style="width:${staminaOverflowWidth}%;"></div>`
+            : ""}
         </div>
-        <div class="meter__value display-value">${currentStaminaDisplay} / ${staminaMaxDisplay}</div>
-        <input class="edit-field tracker-input" data-live-edit="true" type="number" min="0" data-model="hero.vitals.currentStamina" value="${vitals.currentStamina}" />
-        <div class="meter__max-note">Full: ${staminaMaxDisplay}</div>
+        <div class="meter__row">
+          <div class="meter__value display-value">${currentStaminaDisplay} / ${staminaMaxDisplay}</div>
+          <div class="tracker-input-wrapper">
+            <input class="edit-field tracker-input" data-live-edit="true" type="text" data-model="hero.vitals.currentStamina" value="${vitals.currentStamina}" />
+            <div class="tracker-label-row">
+              <span class="tracker-label tracker-label--stamina">Stamina</span>
+              ${shouldFlashTemp
+                ? `<span class="tracker-label tracker-label--temp" data-flash-id="${tempStaminaFlashId}">TEMP STAMINA</span>`
+                : ""}
+            </div>
+          </div>
+        </div>
+        ${staminaHistoryDisplay
+          ? `<div class="meter__history">${staminaHistoryDisplay}</div>`
+          : ""}
       </div>
-      <div class="meter">
-        <div class="meter__label">Recoveries</div>
+      <div class="meter meter--recovery">
         <div class="meter__track">
           <div class="meter__fill meter__fill--recovery" style="width:${recoveryWidth}%;"></div>
         </div>
-        <div class="meter__value display-value">${currentRecoveriesDisplay} / ${recoveriesMaxDisplay}</div>
-        <input class="edit-field tracker-input" data-live-edit="true" type="number" min="0" data-model="hero.vitals.currentRecoveries" value="${vitals.currentRecoveries}" />
-        <div class="meter__max-note">Full: ${recoveriesMaxDisplay}</div>
+        <div class="meter__row">
+          <div class="meter__value display-value">${currentRecoveriesDisplay} / ${recoveriesMaxDisplay}</div>
+          <div class="tracker-input-wrapper">
+            <input class="edit-field tracker-input" data-live-edit="true" type="text" data-model="hero.vitals.currentRecoveries" value="${vitals.currentRecoveries}" />
+            <div class="tracker-label-row">
+              <span class="tracker-label tracker-label--recovery">Recoveries</span>
+            </div>
+          </div>
+        </div>
       </div>
       <div class="field-card compact">
         <label>Recovery Value</label>
@@ -645,15 +779,17 @@ function renderBars() {
     </div>
   `;
 
-  container.querySelectorAll('[data-live-edit="true"]').forEach((input) => {
-    input.addEventListener("input", () => {
-      const path = input.getAttribute("data-model");
-      if (!path) return;
-      const value = input.type === "number" ? Number(input.value || 0) : input.value;
-      setByPath(path, value);
-      renderBars();
-      saveSheet();
+  container.querySelectorAll('.tracker-input').forEach((input) => {
+    const path = input.getAttribute("data-model");
+    if (!path) return;
+    const apply = () => applyTrackerChange(path, input.value);
+    input.addEventListener("keydown", (event) => {
+      if (event.key === "Enter") {
+        event.preventDefault();
+        apply();
+      }
     });
+    input.addEventListener("change", apply);
   });
 }
 
@@ -1217,6 +1353,16 @@ function captureCoreFields() {
     let value = el.value;
     if (el.type === "number") {
       value = el.value === "" ? "" : Number(el.value);
+    }
+    if (["hero.vitals.currentStamina", "hero.vitals.currentRecoveries"].includes(path)) {
+      value = value === "" ? "" : Number(value);
+      if (path === "hero.vitals.currentStamina" && value !== "") {
+        updateStaminaHistory(value);
+        const staminaMax = Number(sheetState.hero.vitals.staminaMax) || 0;
+        if (value > staminaMax) {
+          triggerTempStaminaFlash();
+        }
+      }
     }
     setByPath(path, value);
   });
