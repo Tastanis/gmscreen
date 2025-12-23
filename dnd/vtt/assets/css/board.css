@@ -498,10 +498,28 @@
 
 .vtt-damage-heal[data-mode='damage'] {
   animation: vtt-damage-heal-pulse-damage 1.4s ease-in-out infinite;
+  --vtt-damage-heal-amount-color: #f87171;
+}
+
+.vtt-damage-heal[data-mode='damage'] .vtt-damage-heal__input-row {
+  color: var(--vtt-damage-heal-amount-color);
+}
+
+.vtt-damage-heal[data-mode='damage'] .vtt-damage-heal__input-row::before {
+  color: currentColor;
 }
 
 .vtt-damage-heal[data-mode='heal'] {
   animation: vtt-damage-heal-pulse-heal 1.4s ease-in-out infinite;
+  --vtt-damage-heal-amount-color: #4ade80;
+}
+
+.vtt-damage-heal[data-mode='heal'] .vtt-damage-heal__input-row {
+  color: var(--vtt-damage-heal-amount-color);
+}
+
+.vtt-damage-heal[data-mode='heal'] .vtt-damage-heal__input-row::before {
+  color: currentColor;
 }
 
 @keyframes vtt-damage-heal-pulse-damage {
