@@ -103,6 +103,24 @@ async function persist(key, entry) {
   const { payload, endpoint, controller, keepalive } = entry;
   let result = null;
   try {
+    if (!endpoint) {
+      console.warn(`[VTT] Persistence endpoint missing for ${key}, skipping save.`);
+      result = createResult(false, {
+        aborted: true,
+        error: new Error(`Missing persistence endpoint for ${key}`),
+      });
+      return;
+    }
+
+    if (globalNavigator && globalNavigator.onLine === false) {
+      console.warn(`[VTT] Offline detected, skipping save for ${key}.`);
+      result = createResult(false, {
+        aborted: true,
+        error: new Error(`Offline during persistence for ${key}`),
+      });
+      return;
+    }
+
     const requestBody = JSON.stringify(payload);
     const useKeepalive = shouldUseKeepalive(keepalive);
 
@@ -126,11 +144,19 @@ async function persist(key, entry) {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: requestBody,
+      credentials: 'include',
       signal: controller.signal,
       ...(useKeepalive ? { keepalive: true } : null),
     });
 
     if (!response?.ok) {
+      const responseText = await response
+        .text()
+        .catch(() => '[VTT] Unable to read persistence response body');
+      console.error(
+        `[VTT] Persistence error for ${key}: ${response?.status ?? 'unknown status'}`,
+        responseText
+      );
       throw new Error(`Failed to save ${key}`);
     }
 
