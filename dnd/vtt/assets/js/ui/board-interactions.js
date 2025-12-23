@@ -2107,8 +2107,14 @@ export function mountBoardInteractions(store, routes = {}) {
         ? ` (${hpDisplay} HP remaining).`
         : ` (${hpDisplay} HP).`;
       updateStatus(`${name} ${verb} ${change} ${effectLabel}${suffix}`);
-      closeDamageHealWidget({ restoreStatus: false });
-      scheduleDamageHealStatusReset();
+      if (typeof window !== 'undefined' && typeof window.setTimeout === 'function') {
+        const noun = action.mode === 'damage' ? 'damage' : 'healing';
+        window.setTimeout(() => {
+          if (pendingDamageHeal) {
+            updateStatus(`Click a token to apply ${action.amount} ${noun}.`);
+          }
+        }, 1400);
+      }
       return;
     }
 
@@ -9327,6 +9333,14 @@ export function mountBoardInteractions(store, routes = {}) {
     labelText.textContent = 'Amount';
     field.appendChild(labelText);
 
+    const inputRow = document.createElement('div');
+    inputRow.className = 'vtt-damage-heal__input-row';
+
+    const amountPrefix = document.createElement('span');
+    amountPrefix.className = 'vtt-damage-heal__prefix';
+    amountPrefix.textContent = '';
+    inputRow.appendChild(amountPrefix);
+
     const amountInput = document.createElement('input');
     amountInput.type = 'number';
     amountInput.min = '1';
@@ -9335,9 +9349,54 @@ export function mountBoardInteractions(store, routes = {}) {
     amountInput.className = 'vtt-damage-heal__input';
     amountInput.placeholder = 'Enter value';
     amountInput.autocomplete = 'off';
-    field.appendChild(amountInput);
+    amountInput.value = '5';
+    inputRow.appendChild(amountInput);
+
+    const stepper = document.createElement('div');
+    stepper.className = 'vtt-damage-heal__stepper';
+
+    const stepUp = document.createElement('button');
+    stepUp.type = 'button';
+    stepUp.className = 'vtt-damage-heal__step';
+    stepUp.setAttribute('aria-label', 'Increase amount');
+    stepUp.textContent = '▲';
+
+    const stepDown = document.createElement('button');
+    stepDown.type = 'button';
+    stepDown.className = 'vtt-damage-heal__step';
+    stepDown.setAttribute('aria-label', 'Decrease amount');
+    stepDown.textContent = '▼';
+
+    stepper.appendChild(stepUp);
+    stepper.appendChild(stepDown);
+    inputRow.appendChild(stepper);
+    field.appendChild(inputRow);
 
     container.appendChild(field);
+
+    const presetContainer = document.createElement('div');
+    presetContainer.className = 'vtt-damage-heal__presets';
+
+    const presetLabel = document.createElement('span');
+    presetLabel.className = 'vtt-damage-heal__label';
+    presetLabel.textContent = 'Set to';
+    presetContainer.appendChild(presetLabel);
+
+    const presetButtons = document.createElement('div');
+    presetButtons.className = 'vtt-damage-heal__preset-actions';
+
+    const presets = [5, 10, 15];
+    const presetElements = presets.map((value) => {
+      const presetButton = document.createElement('button');
+      presetButton.type = 'button';
+      presetButton.className = 'btn btn--small vtt-damage-heal__preset';
+      presetButton.textContent = String(value);
+      presetButtons.appendChild(presetButton);
+      return { button: presetButton, value };
+    });
+
+    presetContainer.appendChild(presetButtons);
+    container.appendChild(presetContainer);
 
     const actions = document.createElement('div');
     actions.className = 'vtt-damage-heal__actions';
@@ -9358,13 +9417,33 @@ export function mountBoardInteractions(store, routes = {}) {
     actions.appendChild(healButton);
     container.appendChild(actions);
 
+    const resetButton = document.createElement('button');
+    resetButton.type = 'button';
+    resetButton.className = 'btn btn--small vtt-damage-heal__reset';
+    resetButton.textContent = 'Reset';
+    container.appendChild(resetButton);
+
     damageHealUi = {
       container,
       amountInput,
+      amountPrefix,
       damageButton,
       healButton,
       closeButton,
+      resetButton,
       cleanup: null,
+    };
+
+    const setAmount = (nextValue) => {
+      const normalized = Number.isFinite(nextValue)
+        ? Math.max(1, Math.trunc(Math.abs(nextValue)))
+        : null;
+      if (!normalized) {
+        amountInput.value = '';
+      } else {
+        amountInput.value = String(normalized);
+      }
+      handleInput();
     };
 
     const handleDamageHealAction = (mode) => {
@@ -9405,6 +9484,30 @@ export function mountBoardInteractions(store, routes = {}) {
       event.stopPropagation();
     };
 
+    const handleStepper = (delta) => {
+      const currentAmount = parseDamageHealAmount(amountInput.value) ?? 5;
+      setAmount(currentAmount + delta);
+    };
+
+    const handlePresetClick = (value, event) => {
+      event.preventDefault();
+      setAmount(value);
+    };
+
+    const handleStepUp = () => handleStepper(1);
+    const handleStepDown = () => handleStepper(-1);
+    const presetHandlers = presetElements.map(({ value }) => {
+      const handler = (event) => handlePresetClick(value, event);
+      return handler;
+    });
+
+    const handleReset = (event) => {
+      event.preventDefault();
+      cancelDamageHealTargeting({ restoreMessage: true });
+      setDamageHealMode(null);
+      updateDamageHealActionState();
+    };
+
     const handleContainerKeydown = (event) => {
       if (event.key === 'Escape') {
         event.preventDefault();
@@ -9422,10 +9525,16 @@ export function mountBoardInteractions(store, routes = {}) {
 
     amountInput.addEventListener('input', handleInput);
     amountInput.addEventListener('change', handleInput);
+    stepUp.addEventListener('click', handleStepUp);
+    stepDown.addEventListener('click', handleStepDown);
+    presetElements.forEach(({ button }, index) => {
+      button.addEventListener('click', presetHandlers[index]);
+    });
     damageButton.addEventListener('click', handleDamageClick);
     healButton.addEventListener('click', handleHealClick);
     closeButton.addEventListener('click', handleClose);
     closeButton.addEventListener('pointerdown', stopClosePointerDown);
+    resetButton.addEventListener('click', handleReset);
     container.addEventListener('keydown', handleContainerKeydown);
 
     const cleanupDrag = setupDamageHealDrag(container, header);
@@ -9433,10 +9542,16 @@ export function mountBoardInteractions(store, routes = {}) {
     damageHealUi.cleanup = () => {
       amountInput.removeEventListener('input', handleInput);
       amountInput.removeEventListener('change', handleInput);
+      stepUp.removeEventListener('click', handleStepUp);
+      stepDown.removeEventListener('click', handleStepDown);
+      presetElements.forEach(({ button }, index) => {
+        button.removeEventListener('click', presetHandlers[index]);
+      });
       damageButton.removeEventListener('click', handleDamageClick);
       healButton.removeEventListener('click', handleHealClick);
       closeButton.removeEventListener('click', handleClose);
       closeButton.removeEventListener('pointerdown', stopClosePointerDown);
+      resetButton.removeEventListener('click', handleReset);
       container.removeEventListener('keydown', handleContainerKeydown);
       cleanupDrag();
     };
@@ -9488,10 +9603,16 @@ export function mountBoardInteractions(store, routes = {}) {
       damageHealUi.container.dataset.mode = mode;
       damageHealUi.damageButton.classList.toggle('is-active', mode === 'damage');
       damageHealUi.healButton.classList.toggle('is-active', mode === 'heal');
+      if (damageHealUi.amountPrefix) {
+        damageHealUi.amountPrefix.textContent = mode === 'damage' ? '-' : '+';
+      }
     } else {
       delete damageHealUi.container.dataset.mode;
       damageHealUi.damageButton.classList.remove('is-active');
       damageHealUi.healButton.classList.remove('is-active');
+      if (damageHealUi.amountPrefix) {
+        damageHealUi.amountPrefix.textContent = '';
+      }
     }
   }
 
