@@ -405,7 +405,7 @@ function renderHeroPane() {
   const pane = document.getElementById("hero-pane");
   const statCard = (label, key) => `
     <div class="stat-card">
-      <div class="card__label">${label}</div>
+      <label class="card__label">${label}</label>
       <div class="card__value display-value">${hero.stats[key] ?? 0}</div>
       <input class="edit-field" type="number" data-model="hero.stats.${key}" value="${hero.stats[key] ?? 0}" />
     </div>
@@ -481,12 +481,14 @@ function renderHeroPane() {
         </div>
       </div>
 
-      <div class="stat-grid">
-        ${statCard("Might", "might")}
-        ${statCard("Agility", "agility")}
-        ${statCard("Reason", "reason")}
-        ${statCard("Intuition", "intuition")}
-        ${statCard("Presence", "presence")}
+      <div class="marip-block">
+        <div class="stat-grid">
+          ${statCard("Might", "might")}
+          ${statCard("Agility", "agility")}
+          ${statCard("Reason", "reason")}
+          ${statCard("Intuition", "intuition")}
+          ${statCard("Presence", "presence")}
+        </div>
       </div>
 
       <div class="quick-resources">

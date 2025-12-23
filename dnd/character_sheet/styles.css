@@ -230,6 +230,17 @@ body {
   gap: 8px;
 }
 
+.marip-block {
+  background: linear-gradient(135deg, #2a1a12, #301d14);
+  border: 1px solid var(--accent);
+  border-radius: 4px;
+  padding: 10px;
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.04);
+}
+
 .quick-resources {
   display: grid;
   grid-template-columns: repeat(auto-fit, minmax(160px, 1fr));
@@ -266,10 +277,23 @@ body {
   color: var(--muted);
 }
 
+.stat-card .card__label::first-letter {
+  font-size: 120%;
+  font-weight: 800;
+}
+
 .card__value,
 .display-value {
   font-weight: 700;
   font-size: 15px;
+}
+
+.marip-block .card__label {
+  font-size: 12px;
+}
+
+.marip-block .card__value {
+  font-size: 20px;
 }
 
 .edit-field {
