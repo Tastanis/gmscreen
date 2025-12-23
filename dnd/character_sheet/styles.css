@@ -519,8 +519,8 @@ body {
 }
 
 .resource-value-display {
-  width: 88px;
-  max-width: 88px;
+  width: 64px;
+  max-width: 64px;
   flex: 0 0 auto;
   align-self: center;
   text-align: center;
