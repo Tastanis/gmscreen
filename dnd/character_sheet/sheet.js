@@ -518,27 +518,29 @@ function renderHeroPane() {
         </div>
       </div>
 
-      <div class="identity identity--secondary">
-        ${identityField("Ancestry", "hero.ancestry")}
-        ${detailGroup(
-          "Culture",
-          [
-            { label: "Culture", key: "culture" },
-            { label: "Environment", key: "environment" },
-            { label: "Organization", key: "organization" },
-            { label: "Upbringing", key: "upbringing" },
-          ],
-          "hero.culture"
-        )}
-        ${detailGroup(
-          "Career",
-          [
-            { label: "Career", key: "career" },
-            { label: "Inciting Incident", key: "incitingIncident" },
-          ],
-          "hero.career"
-        )}
-        ${identityField("Complication", "hero.complication")}
+      <div class="bottom-details">
+        <div class="identity identity--secondary">
+          ${identityField("Ancestry", "hero.ancestry")}
+          ${detailGroup(
+            "Culture",
+            [
+              { label: "Culture", key: "culture" },
+              { label: "Environment", key: "environment" },
+              { label: "Organization", key: "organization" },
+              { label: "Upbringing", key: "upbringing" },
+            ],
+            "hero.culture"
+          )}
+          ${detailGroup(
+            "Career",
+            [
+              { label: "Career", key: "career" },
+              { label: "Inciting Incident", key: "incitingIncident" },
+            ],
+            "hero.career"
+          )}
+          ${identityField("Complication", "hero.complication")}
+        </div>
       </div>
     </section>
   `;
