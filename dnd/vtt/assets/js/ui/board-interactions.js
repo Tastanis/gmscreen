@@ -10111,7 +10111,7 @@ export function mountBoardInteractions(store, routes = {}) {
         postHitPointsToSheet({
           character: name,
           currentStamina: currentValue,
-          ...(maxValue ? { staminaMax: maxValue } : {}),
+          staminaMax: maxValue,
         });
 
       if (pendingSavePromise && typeof pendingSavePromise.then === 'function') {
@@ -10146,7 +10146,7 @@ export function mountBoardInteractions(store, routes = {}) {
         payload: {
           character: name,
           currentStamina: currentValue,
-          ...(maxValue ? { staminaMax: maxValue } : {}),
+          staminaMax: maxValue,
         },
         savePromise: pendingSavePromise,
       });
