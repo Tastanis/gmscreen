@@ -661,16 +661,21 @@ export function renderTokenLibrary(routes, store, options = {}) {
     openContextMenu(token, event.clientX, event.clientY, tokenElement);
   });
 
-  moduleRoot.addEventListener('dragstart', (event) => {
+  moduleRoot.addEventListener('dragstart', async (event) => {
     const tokenElement = event.target.closest('.token-item');
     if (!tokenElement) {
       return;
     }
 
-    const dragData = buildTokenDragData(tokenElement, tokenIndex, {
-      getState: stateApi.getState,
-      routes: endpoints,
-    });
+    const dragData = await buildTokenDragDataWithStamina(
+      tokenElement,
+      tokenIndex,
+      {
+        getState: stateApi.getState,
+        routes: endpoints,
+      },
+      { staminaTimeoutMs: 200 }
+    );
     const dataTransfer = event.dataTransfer;
     if (!dragData || !dataTransfer) {
       event.preventDefault();
@@ -835,7 +840,7 @@ function normalizeTokenState(raw = {}) {
   };
 }
 
-function buildTokenDragData(element, tokenIndex, context = {}) {
+function buildTokenTemplateFromElement(element, tokenIndex) {
   if (!element) {
     return null;
   }
@@ -897,7 +902,7 @@ function buildTokenDragData(element, tokenIndex, context = {}) {
   const monsterId = typeof record?.monsterId === 'string' ? record.monsterId.trim() : '';
   const monsterSnapshot = record?.monster ? sanitizeMonsterSnapshot(record.monster) : null;
 
-  const template = {
+  return {
     id: tokenId,
     name,
     imageUrl,
@@ -910,11 +915,30 @@ function buildTokenDragData(element, tokenIndex, context = {}) {
     monsterId: monsterId || undefined,
     monster: monsterSnapshot || undefined,
   };
+}
+
+function buildTokenDragData(element, tokenIndex, context = {}) {
+  const template = buildTokenTemplateFromElement(element, tokenIndex);
+  if (!template) {
+    return null;
+  }
 
   return hydratePlacementTemplateFromElement(template, {
     getState: typeof context.getState === 'function' ? context.getState : null,
     routes: context.routes ?? null,
   });
+}
+
+async function buildTokenDragDataWithStamina(element, tokenIndex, context = {}, options = {}) {
+  const template = buildTokenTemplateFromElement(element, tokenIndex);
+  if (!template) {
+    return null;
+  }
+
+  return hydratePlacementTemplateWithStamina(template, {
+    getState: typeof context.getState === 'function' ? context.getState : null,
+    routes: context.routes ?? null,
+  }, options);
 }
 
 function hydratePlacementTemplateFromElement(template, context = {}) {
@@ -937,6 +961,61 @@ function hydratePlacementTemplateFromElement(template, context = {}) {
   const cachedSheet = getCachedSheetStamina(name);
   if (!cachedSheet) {
     fetchSheetStamina(context.routes, name);
+    return template;
+  }
+
+  return applyCachedSheetStaminaToTemplate(template, cachedSheet);
+}
+
+async function hydratePlacementTemplateWithStamina(template, context = {}, options = {}) {
+  if (!template || typeof template !== 'object') {
+    return null;
+  }
+
+  const getState = typeof context.getState === 'function' ? context.getState : null;
+  const state = getState ? getState() ?? {} : {};
+  const activeSceneId = state.boardState?.activeSceneId ?? null;
+  if (!activeSceneId) {
+    return template;
+  }
+
+  const name = typeof template.name === 'string' ? template.name.trim() : '';
+  if (!name) {
+    return template;
+  }
+
+  let cachedSheet = getCachedSheetStamina(name);
+  if (!cachedSheet) {
+    const request = fetchSheetStamina(context.routes, name);
+    if (request) {
+      const timeoutMs = Number.isFinite(options?.staminaTimeoutMs)
+        ? options.staminaTimeoutMs
+        : 0;
+      try {
+        if (timeoutMs > 0) {
+          await Promise.race([
+            request.catch(() => null),
+            new Promise((resolve) => setTimeout(resolve, timeoutMs)),
+          ]);
+        } else {
+          await request;
+        }
+      } catch (error) {
+        // Ignore fetch errors; drag can continue without stamina data.
+      }
+    }
+    cachedSheet = getCachedSheetStamina(name);
+  }
+
+  if (!cachedSheet) {
+    return template;
+  }
+
+  return applyCachedSheetStaminaToTemplate(template, cachedSheet);
+}
+
+function applyCachedSheetStaminaToTemplate(template, cachedSheet) {
+  if (!cachedSheet) {
     return template;
   }
 
