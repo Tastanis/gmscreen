@@ -1069,6 +1069,7 @@ export function mountBoardInteractions(store, routes = {}) {
   let lastPersistedBoardStateHash = null;
   let pendingBoardStateSave = null;
   let suppressCombatStateSync = false;
+  let pendingCombatStateSync = false;
   let combatStateVersion = 0;
   let lastCombatStateSnapshot = null;
   let startingCombatTeam = null;
@@ -2558,15 +2559,29 @@ export function mountBoardInteractions(store, routes = {}) {
   }
 
   function notifySelectionChanged() {
-    if (!groupButton) {
+    if (groupButton) {
+      const canGroup = selectedTokenIds.size > 1;
+      groupButton.disabled = !canGroup;
+      groupButton.title = canGroup
+        ? 'Group selected tokens in the combat tracker'
+        : 'Select at least two tokens to enable grouping';
+    }
+    refreshTokenSelectionState();
+  }
+
+  function refreshTokenSelectionState() {
+    if (!tokenLayer) {
       return;
     }
 
-    const canGroup = selectedTokenIds.size > 1;
-    groupButton.disabled = !canGroup;
-    groupButton.title = canGroup
-      ? 'Group selected tokens in the combat tracker'
-      : 'Select at least two tokens to enable grouping';
+    Array.from(tokenLayer.querySelectorAll('[data-placement-id]')).forEach((node) => {
+      if (!(node instanceof HTMLElement)) {
+        return;
+      }
+      const id = node.dataset.placementId;
+      const isSelected = Boolean(id && selectedTokenIds.has(id));
+      node.classList.toggle('is-selected', isSelected);
+    });
   }
 
   function updateSelection(id, { additive = false, toggle = false } = {}) {
@@ -4736,11 +4751,10 @@ export function mountBoardInteractions(store, routes = {}) {
     const waitingContainer = combatTrackerWaiting;
     const completedContainer = combatTrackerCompleted;
     const gmViewing = isGmUser();
-    const entries = Array.isArray(combatants)
-      ? combatants
-          .filter(Boolean)
-          .filter((entry) => gmViewing || !toBoolean(entry.hidden ?? entry.isHidden ?? false, false))
-      : [];
+    const rawEntries = Array.isArray(combatants) ? combatants.filter(Boolean) : [];
+    const entries = rawEntries.filter(
+      (entry) => gmViewing || !toBoolean(entry.hidden ?? entry.isHidden ?? false, false)
+    );
 
     combatTrackerRoot.dataset.viewerRole = gmViewing ? 'gm' : 'player';
 
@@ -4810,9 +4824,16 @@ export function mountBoardInteractions(store, routes = {}) {
     }
 
     const activeIds = new Set();
-    entries.forEach((entry) => {
+    rawEntries.forEach((entry) => {
       if (entry && typeof entry.id === 'string') {
         activeIds.add(entry.id);
+      }
+    });
+
+    const visibleEntryIds = new Set();
+    entries.forEach((entry) => {
+      if (entry && typeof entry.id === 'string') {
+        visibleEntryIds.add(entry.id);
       }
     });
 
@@ -4856,7 +4877,9 @@ export function mountBoardInteractions(store, routes = {}) {
       token.setAttribute('role', 'listitem');
       token.setAttribute('tabindex', isGmUser() ? '0' : '-1');
 
-      const groupMembers = getGroupMembers(representativeId);
+      const groupMembers = gmViewing
+        ? getGroupMembers(representativeId)
+        : getVisibleGroupMembers(representativeId, visibleEntryIds);
       const groupSize = groupMembers.length;
       const accessibleLabel = groupSize > 1 ? `${label} (group of ${groupSize})` : label;
       token.setAttribute('aria-label', accessibleLabel);
@@ -5291,6 +5314,14 @@ export function mountBoardInteractions(store, routes = {}) {
     return Array.from(group);
   }
 
+  function getVisibleGroupMembers(representativeId, visibleIds) {
+    const members = getGroupMembers(representativeId);
+    if (!visibleIds || !members.length) {
+      return members;
+    }
+    return members.filter((memberId) => visibleIds.has(memberId));
+  }
+
   function highlightTrackerToken(combatantId, shouldHighlight) {
     if (!combatantId || !combatTrackerRoot) {
       return;
@@ -5679,20 +5710,9 @@ export function mountBoardInteractions(store, routes = {}) {
     const lockHeldByAnotherUser = existingLockHolder && existingLockHolder !== initiatorId;
 
     if (lockHeldByAnotherUser) {
-      if (!isGmUser()) {
-        notifyTurnLocked(turnLockState.holderName);
-        return;
-      }
-
-      let confirmed = true;
-      try {
-        if (typeof window !== 'undefined' && typeof window.confirm === 'function') {
-          confirmed = window.confirm('Override the active turn lock?');
-        }
-      } catch (error) {
-        confirmed = false;
-      }
+      const confirmed = confirmTurnLockOverride(turnLockState.holderName);
       if (!confirmed) {
+        notifyTurnLocked(turnLockState.holderName);
         return;
       }
     }
@@ -5769,6 +5789,52 @@ export function mountBoardInteractions(store, routes = {}) {
         description,
       });
     });
+  }
+
+  function cancelActiveCombatantTurn() {
+    if (!combatActive) {
+      closeTurnPrompt();
+      updateCombatModeIndicators();
+      return;
+    }
+
+    const canceledId = activeCombatantId
+      ? getRepresentativeIdFor(activeCombatantId) || activeCombatantId
+      : null;
+    const canceledTeam = canceledId ? getCombatantTeam(canceledId) : null;
+    const nextTeam = canceledTeam === 'ally' ? 'enemy' : canceledTeam === 'enemy' ? 'ally' : currentTurnTeam;
+
+    closeTurnPrompt();
+
+    if (isGmUser()) {
+      combatTimerService.endTurn();
+      combatTimerService.clearWaiting();
+    }
+
+    releaseTurnLock(getCurrentUserId());
+
+    if (canceledId) {
+      pendingTurnTransition = { fromTeam: canceledTeam, fromCombatantId: canceledId };
+    } else {
+      pendingTurnTransition = null;
+    }
+
+    setActiveCombatantId(null);
+
+    if (nextTeam) {
+      currentTurnTeam = nextTeam;
+      if (isGmUser()) {
+        combatTimerService.startWaiting({
+          team: nextTeam,
+          round: combatRound > 0 ? combatRound : 1,
+          combatantId: null,
+        });
+      }
+    }
+
+    updateCombatModeIndicators();
+    refreshCombatTracker();
+    syncCombatStateToStore();
   }
 
   function completeActiveCombatant() {
@@ -6311,8 +6377,7 @@ export function mountBoardInteractions(store, routes = {}) {
     };
 
     const handleCancel = () => {
-      closeTurnPrompt();
-      updateCombatModeIndicators();
+      cancelActiveCombatantTurn();
     };
 
     const handleComplete = () => {
@@ -6936,6 +7001,10 @@ export function mountBoardInteractions(store, routes = {}) {
       }
     } finally {
       suppressCombatStateSync = false;
+      if (pendingCombatStateSync) {
+        pendingCombatStateSync = false;
+        syncCombatStateToStore();
+      }
     }
   }
 
@@ -7237,8 +7306,13 @@ export function mountBoardInteractions(store, routes = {}) {
 
   function syncCombatStateToStore() {
     if (suppressCombatStateSync || typeof boardApi.updateState !== 'function') {
+      if (suppressCombatStateSync) {
+        pendingCombatStateSync = true;
+      }
       return;
     }
+
+    pendingCombatStateSync = false;
 
     const state = boardApi.getState?.() ?? {};
     const activeSceneId = state.boardState?.activeSceneId ?? null;
@@ -7333,6 +7407,19 @@ export function mountBoardInteractions(store, routes = {}) {
     } catch (error) {
       showConditionBanner(message, { tone: 'warning' });
     }
+  }
+
+  function confirmTurnLockOverride(holderName) {
+    const displayName = holderName && holderName.trim() ? holderName.trim() : 'another player';
+    const message = `${displayName} is currently taking their turn. Override anyway?`;
+    try {
+      if (typeof window !== 'undefined' && typeof window.confirm === 'function') {
+        return window.confirm(message);
+      }
+    } catch (error) {
+      return false;
+    }
+    return false;
   }
 
   function forceAcquireTurnLockForGm(combatantId) {
@@ -7861,8 +7948,10 @@ export function mountBoardInteractions(store, routes = {}) {
     }
 
     if (turnLockState.holderId && turnLockState.holderId !== userId) {
-      notifyTurnLocked(turnLockState.holderName);
-      return;
+      if (!confirmTurnLockOverride(turnLockState.holderName)) {
+        notifyTurnLocked(turnLockState.holderName);
+        return;
+      }
     }
 
     const expectedTeam = context.expectedTeam ?? currentTurnTeam ?? team;
