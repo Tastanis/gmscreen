@@ -271,12 +271,20 @@ function sendJsonResponse($payload) {
     exit;
 }
 
-if ($_SERVER['REQUEST_METHOD'] !== 'POST') {
+$requestMethod = $_SERVER['REQUEST_METHOD'];
+
+if ($requestMethod !== 'POST' && $requestMethod !== 'GET') {
     sendJsonResponse(array('success' => false, 'error' => 'Invalid request method'));
 }
 
-$action = isset($_POST['action']) ? $_POST['action'] : '';
-$requestedCharacter = isset($_POST['character']) ? strtolower(trim($_POST['character'])) : '';
+$requestData = $requestMethod === 'POST' ? $_POST : $_GET;
+$action = isset($requestData['action']) ? $requestData['action'] : '';
+
+if ($action !== 'sync-stamina' && $requestMethod !== 'POST') {
+    sendJsonResponse(array('success' => false, 'error' => 'Invalid request method'));
+}
+
+$requestedCharacter = isset($requestData['character']) ? strtolower(trim($requestData['character'])) : '';
 
 if (!$requestedCharacter && !$is_gm && $currentUser) {
     $requestedCharacter = strtolower($currentUser);
@@ -310,6 +318,37 @@ switch ($action) {
         } else {
             sendJsonResponse(array('success' => false, 'error' => 'Failed to save sheet'));
         }
+        break;
+
+    case 'sync-stamina':
+        $allSheets = loadCharacterSheetData($dataDir, $dataFile, $characters);
+        $sheet = $allSheets[$requestedCharacter];
+
+        if ($requestMethod === 'POST') {
+            $staminaMax = isset($requestData['staminaMax']) ? (int)$requestData['staminaMax'] : null;
+            $currentStamina = isset($requestData['currentStamina']) ? (int)$requestData['currentStamina'] : null;
+
+            if ($staminaMax === null || $currentStamina === null) {
+                sendJsonResponse(array('success' => false, 'error' => 'Missing stamina values'));
+            }
+
+            $sheet['hero']['vitals']['staminaMax'] = $staminaMax;
+            $sheet['hero']['vitals']['currentStamina'] = $currentStamina;
+
+            $allSheets[$requestedCharacter] = $sheet;
+
+            if (!saveCharacterSheetData($dataDir, $dataFile, $allSheets)) {
+                sendJsonResponse(array('success' => false, 'error' => 'Failed to save stamina values'));
+            }
+        }
+
+        $response = array(
+            'name' => isset($sheet['hero']['name']) && $sheet['hero']['name'] !== '' ? $sheet['hero']['name'] : $requestedCharacter,
+            'staminaMax' => isset($sheet['hero']['vitals']['staminaMax']) ? $sheet['hero']['vitals']['staminaMax'] : 0,
+            'currentStamina' => isset($sheet['hero']['vitals']['currentStamina']) ? $sheet['hero']['vitals']['currentStamina'] : 0,
+        );
+
+        sendJsonResponse($response);
         break;
 
     default:
