@@ -546,7 +546,9 @@ export function renderTokenLibrary(routes, store, options = {}) {
       return;
     }
 
-    const dragData = buildTokenDragData(tokenElement, tokenIndex);
+    const dragData = buildTokenDragData(tokenElement, tokenIndex, {
+      getState: stateApi.getState,
+    });
     const dataTransfer = event.dataTransfer;
     if (!dragData || !dataTransfer) {
       event.preventDefault();
@@ -711,7 +713,7 @@ function normalizeTokenState(raw = {}) {
   };
 }
 
-function buildTokenDragData(element, tokenIndex) {
+function buildTokenDragData(element, tokenIndex, context = {}) {
   if (!element) {
     return null;
   }
@@ -773,7 +775,7 @@ function buildTokenDragData(element, tokenIndex) {
   const monsterId = typeof record?.monsterId === 'string' ? record.monsterId.trim() : '';
   const monsterSnapshot = record?.monster ? sanitizeMonsterSnapshot(record.monster) : null;
 
-  return {
+  const template = {
     id: tokenId,
     name,
     imageUrl,
@@ -786,6 +788,97 @@ function buildTokenDragData(element, tokenIndex) {
     monsterId: monsterId || undefined,
     monster: monsterSnapshot || undefined,
   };
+
+  return hydratePlacementTemplateFromElement(template, {
+    getState: typeof context.getState === 'function' ? context.getState : null,
+  });
+}
+
+function hydratePlacementTemplateFromElement(template, context = {}) {
+  if (!template || typeof template !== 'object') {
+    return null;
+  }
+
+  const getState = typeof context.getState === 'function' ? context.getState : null;
+  const state = getState ? getState() ?? {} : {};
+  const activeSceneId = state.boardState?.activeSceneId ?? null;
+  if (!activeSceneId) {
+    return template;
+  }
+
+  const name = typeof template.name === 'string' ? template.name.trim() : '';
+  if (!name) {
+    return template;
+  }
+
+  const sheetEntry = findSheetMatchByName(state.boardState?.sceneState?.[activeSceneId], name);
+  if (!sheetEntry) {
+    return template;
+  }
+
+  const current = toFiniteOrNull(
+    sheetEntry.currentStamina ?? sheetEntry.stamina ?? sheetEntry.hp ?? null
+  );
+  const max = toFiniteOrNull(
+    sheetEntry.staminaMax ?? sheetEntry.maxStamina ?? sheetEntry.maxHp ?? sheetEntry.hpMax ?? null
+  );
+
+  if (current === null && max === null) {
+    return template;
+  }
+
+  const existingHp = template.hp;
+  const existingCurrent =
+    existingHp && typeof existingHp === 'object'
+      ? existingHp.current ?? existingHp.value ?? existingHp.hp ?? ''
+      : existingHp ?? '';
+  const existingMax =
+    existingHp && typeof existingHp === 'object'
+      ? existingHp.max ?? existingHp.total ?? existingHp.maximum ?? existingHp.hp ?? ''
+      : existingHp ?? '';
+
+  return {
+    ...template,
+    hp: {
+      current: current ?? existingCurrent,
+      max: max ?? current ?? existingMax,
+    },
+  };
+}
+
+function findSheetMatchByName(sceneEntry, tokenName) {
+  if (!sceneEntry || typeof sceneEntry !== 'object') {
+    return null;
+  }
+
+  const sheets = Array.isArray(sceneEntry.sheets)
+    ? sceneEntry.sheets
+    : Array.isArray(sceneEntry.sheet)
+    ? sceneEntry.sheet
+    : [];
+
+  if (!sheets.length) {
+    return null;
+  }
+
+  const normalizedTarget = tokenName.trim().toLowerCase();
+  return (
+    sheets.find((entry) => {
+      const name = typeof entry?.name === 'string' ? entry.name.trim().toLowerCase() : '';
+      return name && name === normalizedTarget;
+    }) ?? null
+  );
+}
+
+function toFiniteOrNull(value) {
+  if (typeof value === 'number' && Number.isFinite(value)) {
+    return Math.trunc(value);
+  }
+  if (typeof value === 'string' && value.trim()) {
+    const parsed = Number.parseFloat(value.replace(/[^0-9.-]/g, ''));
+    return Number.isFinite(parsed) ? Math.trunc(parsed) : null;
+  }
+  return null;
 }
 
 function updateFolderOptions(select, folders = []) {
