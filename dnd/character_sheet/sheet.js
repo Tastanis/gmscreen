@@ -970,14 +970,21 @@ function renderBars() {
   container.querySelectorAll('.tracker-input').forEach((input) => {
     const path = input.getAttribute("data-model");
     if (!path) return;
-    const apply = () => applyTrackerChange(path, input.value);
+
+    const apply = () => {
+      applyTrackerChange(path, input.value);
+      const latestValue = getValue(path);
+      input.value = latestValue === null || latestValue === undefined ? "" : latestValue;
+    };
+
     input.addEventListener("keydown", (event) => {
       if (event.key === "Enter") {
         event.preventDefault();
-        apply();
+        input.blur();
       }
     });
-    input.addEventListener("change", apply);
+
+    input.addEventListener("blur", apply);
   });
 }
 
