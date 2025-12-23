@@ -229,6 +229,7 @@ function defaultTest() {
     id: createId("test"),
     label: "",
     rollMod: "",
+    beforeEffect: "",
     tiers: {
       low: defaultTestTier(),
       mid: defaultTestTier(),
@@ -266,6 +267,7 @@ function normalizeTest(test = {}) {
     id: test.id || createId("test"),
     label: test.label || "",
     rollMod: test.rollMod ?? "",
+    beforeEffect: test.beforeEffect || "",
     tiers: normalizeTestTiers(test.tiers || {}),
     additionalEffect: test.additionalEffect || "",
   };
@@ -1289,6 +1291,16 @@ function formatRoll(rollMod) {
   return `2d10${needsPlus ? "+" : ""}${mod}`;
 }
 
+function formatMultiline(text) {
+  if (!text) return "";
+  return String(text)
+    .split("\n")
+    .map((line) => line.trim())
+    .filter((line, index, arr) => line !== "" || index < arr.length - 1)
+    .map((line) => line || "\u00a0")
+    .join("<br>");
+}
+
 function renderTierDisplay(tier) {
   const parts = [];
   if (tier.damage || tier.damageType) {
@@ -1330,10 +1342,12 @@ function renderTierSection(label, tier, key) {
             </label>
           </div>
           <div class="attribute-check ${attribute.enabled ? "is-active" : ""}">
-            <label class="attribute-check__toggle">
-              <input type="checkbox" class="edit-field" data-tier-field="attr-enabled" ${attribute.enabled ? "checked" : ""} />
-              Attribute Check
-            </label>
+            <div class="attribute-check__header">
+              <label class="attribute-check__toggle">
+                <input type="checkbox" class="edit-field" data-tier-field="attr-enabled" ${attribute.enabled ? "checked" : ""} />
+                <span>Attribute Check</span>
+              </label>
+            </div>
             <div class="attribute-check__fields ${attribute.enabled ? "" : "is-hidden"}">
               <select class="edit-field" data-tier-field="attribute">
                 <option value="">Select attribute</option>
@@ -1356,12 +1370,19 @@ function renderTest(test) {
   return `
     <div class="test" data-test-id="${test.id}">
       <header class="test__header">
-        <div>
-          <div class="display-value action-name">${test.label || "Test"}</div>
-          <input class="edit-field" type="text" data-test-field="label" value="${test.label || ""}" placeholder="Test name" />
-        </div>
+        <div class="display-value action-name">${test.label || "Test"}</div>
+        <input class="edit-field" type="hidden" data-test-field="label" value="${test.label || ""}" />
         <button class="icon-btn edit-only" data-remove-test="${test.id}" aria-label="Remove test">✕</button>
       </header>
+      <div class="test__effects">
+        <div class="effect-block">
+          <div class="effect-block__title">Effects before the test</div>
+          <p class="display-value">${formatMultiline(test.beforeEffect)}</p>
+          <textarea class="edit-field" rows="2" data-test-field="beforeEffect" placeholder="Effects before the test">${
+            test.beforeEffect || ""
+          }</textarea>
+        </div>
+      </div>
       <div class="test__roll">
         <div class="display-value">${formatRoll(test.rollMod)}</div>
         <div class="test__roll-editor edit-field">
@@ -1372,11 +1393,14 @@ function renderTest(test) {
       <div class="test__tiers">
         ${TEST_TIERS.map(({ key, label }) => renderTierSection(label, test.tiers?.[key] || defaultTestTier(), key)).join("")}
       </div>
-      <div class="test__additional">
-        <p class="display-value">${test.additionalEffect || ""}</p>
-        <textarea class="edit-field" rows="2" data-test-field="additionalEffect" placeholder="Additional effects after the test">${
-          test.additionalEffect || ""
-        }</textarea>
+      <div class="test__effects">
+        <div class="effect-block">
+          <div class="effect-block__title">Effects after the test</div>
+          <p class="display-value">${formatMultiline(test.additionalEffect)}</p>
+          <textarea class="edit-field" rows="2" data-test-field="additionalEffect" placeholder="Additional effects after the test">${
+            test.additionalEffect || ""
+          }</textarea>
+        </div>
       </div>
     </div>
   `;
@@ -1415,6 +1439,7 @@ function renderActionSection(type, containerId) {
                 </div>
                 <button class="icon-btn edit-only" data-remove-action="${action.id}" aria-label="Remove action">✕</button>
               </header>
+              <div class="action-label display-value">${action.actionLabel || "Action"}</div>
               <div class="action-meta">
                 <div class="meta-field">
                   <span class="meta-label">Range</span>
@@ -1444,7 +1469,11 @@ function renderActionSection(type, containerId) {
                     : '<div class="placeholder">No tests yet. Switch to edit mode to add one.</div>'
                 }
               </div>
-              <button class="text-btn edit-only" data-add-test="${action.id}">+ Add Test</button>
+              ${
+                (action.tests || []).length
+                  ? ""
+                  : `<button class="text-btn edit-only" data-add-test="${action.id}">+ Add Test</button>`
+              }
               <div class="action-notes">
                 <p class="display-value">${action.description || ""}</p>
                 <textarea class="edit-field" rows="3" data-field="description" placeholder="Additional notes">${action.description || ""}</textarea>
@@ -1756,6 +1785,7 @@ function captureActions() {
           id: testEl.getAttribute("data-test-id") || createId("test"),
           label: testEl.querySelector('[data-test-field="label"]')?.value || "",
           rollMod: testEl.querySelector('[data-test-field="rollMod"]')?.value || "",
+          beforeEffect: testEl.querySelector('[data-test-field="beforeEffect"]')?.value || "",
           additionalEffect: testEl.querySelector('[data-test-field="additionalEffect"]')?.value || "",
           tiers,
         };
