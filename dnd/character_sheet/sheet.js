@@ -141,7 +141,7 @@ const defaultSheet = {
     xp: "",
     victories: "",
     surges: "",
-    resource: { title: "Resource", value: "" },
+    resource: { title: "Resource", value: 0, autoDice: "" },
     heroTokens: [false, false],
     stats: {
       might: 0,
@@ -358,6 +358,9 @@ function mergeWithDefaults(data) {
   const inputHero = data.hero || {};
   merged.hero = { ...merged.hero, ...inputHero };
   merged.hero.resource = { ...merged.hero.resource, ...(inputHero.resource || {}) };
+  merged.hero.resource.value = normalizeResourceValue(
+    inputHero.resource?.value ?? merged.hero.resource.value
+  );
   merged.hero.stats = { ...merged.hero.stats, ...(inputHero.stats || {}) };
   merged.hero.vitals = normalizeVitals(inputHero.vitals);
   merged.hero.culture = normalizeIdentityGroup(inputHero.culture, DEFAULT_CULTURE_FIELDS);
@@ -426,6 +429,59 @@ function getValue(path) {
     }
   }
   return current ?? "";
+}
+
+function normalizeResourceValue(value) {
+  if (value === "" || value === null || value === undefined) return 0;
+  const numeric = Number(value);
+  return Number.isFinite(numeric) ? numeric : 0;
+}
+
+function getResourceValue() {
+  return normalizeResourceValue(sheetState.hero.resource?.value);
+}
+
+function formatResourceValue() {
+  const value = getResourceValue();
+  return Number.isFinite(value) ? value : 0;
+}
+
+function persistResourceValue() {
+  if (document.body.classList.contains("edit-mode")) {
+    queueAutoSave();
+  } else {
+    saveSheet();
+  }
+}
+
+function updateResourceDisplays() {
+  const value = formatResourceValue();
+  document.querySelectorAll("[data-resource-display]").forEach((el) => {
+    el.textContent = value;
+  });
+  document.querySelectorAll("[data-resource-number-input]").forEach((input) => {
+    input.value = value;
+  });
+}
+
+function setResourceValue(value) {
+  sheetState.hero.resource.value = normalizeResourceValue(value);
+  updateResourceDisplays();
+  persistResourceValue();
+}
+
+function parseAutoDice(die) {
+  if (!die) return null;
+  const match = /^d?(\d+)$/i.exec(die.trim());
+  if (!match) return null;
+  const sides = Number(match[1]);
+  return Number.isFinite(sides) && sides > 0 ? sides : null;
+}
+
+function rollAutoDice() {
+  const sides = parseAutoDice(sheetState.hero.resource?.autoDice || "");
+  if (!sides) return null;
+  return Math.floor(Math.random() * sides) + 1;
 }
 
 function getLabelClass(label) {
@@ -623,11 +679,37 @@ function renderHeroPane() {
         ${identityField("XP", "hero.xp")}
         ${identityField("Victories", "hero.victories")}
         ${identityField("Surges", "hero.surges")}
-        <div class="field-card">
-          <label class="${getLabelClass(hero.resource.title || "Resource")}">${hero.resource.title || "Resource"}</label>
-          <div class="display-value">${hero.resource.value || ""}</div>
-          <input class="edit-field" type="text" data-model="hero.resource.value" value="${hero.resource.value || ""}" />
-          <input class="edit-field subtle" type="text" data-model="hero.resource.title" value="${hero.resource.title || "Resource"}" placeholder="Resource Title" />
+        <div class="field-card resource-card">
+          <label class="${getLabelClass(hero.resource.title || "Resource")}">${
+            hero.resource.title || "Resource"
+          }</label>
+          <div class="resource-display-row">
+            <div class="display-value resource-display-value" data-resource-display>${formatResourceValue()}</div>
+            ${
+              parseAutoDice(hero.resource.autoDice || "")
+                ? `<button class="auto-dice-button" data-auto-dice-roll>${(hero.resource.autoDice || "").trim()}</button>`
+                : ""
+            }
+          </div>
+          <div class="resource-editor">
+            <input
+              class="edit-field resource-name-input"
+              type="text"
+              data-model="hero.resource.title"
+              value="${hero.resource.title || "Resource"}"
+              placeholder="Resource Title"
+            />
+            <div class="auto-dice-input-row edit-only">
+              <span class="auto-dice-label">Auto Dice</span>
+              <input
+                class="edit-field resource-auto-dice-input"
+                type="text"
+                data-model="hero.resource.autoDice"
+                value="${hero.resource.autoDice || ""}"
+                placeholder="e.g. d6"
+              />
+            </div>
+          </div>
         </div>
       </div>
 
@@ -687,14 +769,45 @@ function renderListSection(containerId, title, key, placeholder) {
 function renderSidebarResource() {
   const container = document.getElementById("sidebar-resource");
   const resource = sheetState.sidebar.resource;
+  const title = resource.title || sheetState.hero.resource.title || "Resource";
+  const resourceValue = formatResourceValue();
+  const autoDice = (sheetState.hero.resource.autoDice || "").trim();
+  const showAutoDice = Boolean(parseAutoDice(autoDice));
+
   container.innerHTML = `
-    <div class="sidebar__header">
-      <div class="display-value">${resource.title || "Resource"}</div>
-      <input class="edit-field" type="text" data-model="sidebar.resource.title" value="${resource.title || "Resource"}" />
+    <div class="sidebar__header sidebar-resource-header">
+      <div class="resource-title-stack">
+        <div class="resource-title-text">${title}</div>
+        <input
+          class="edit-field resource-name-input"
+          type="text"
+          data-model="sidebar.resource.title"
+          value="${title}"
+        />
+      </div>
+      <div class="resource-value-wrapper">
+        <button class="resource-step" data-resource-delta="1" aria-label="Increase resource">▲</button>
+        <div class="resource-value-display" data-resource-value-display tabindex="0">${resourceValue}</div>
+        <input
+          class="resource-number-input"
+          data-resource-number-input
+          type="number"
+          value="${resourceValue}"
+          aria-label="Resource value"
+        />
+        <button class="resource-step" data-resource-delta="-1" aria-label="Decrease resource">▼</button>
+        ${
+          showAutoDice
+            ? `<button class="auto-dice-button" data-auto-dice-roll aria-label="Roll ${autoDice}">${autoDice}</button>`
+            : ""
+        }
+      </div>
     </div>
-    <div class="sidebar__content">
-      <p class="display-value">${resource.text || ""}</p>
-      <textarea class="edit-field" rows="4" data-model="sidebar.resource.text" placeholder="Describe the resource...">${resource.text || ""}</textarea>
+    <div class="sidebar__content sidebar-resource-content">
+      <p class="resource-text">${resource.text || ""}</p>
+      <textarea class="edit-field" rows="4" data-model="sidebar.resource.text" placeholder="Describe the resource...">${
+        resource.text || ""
+      }</textarea>
     </div>
   `;
 }
@@ -719,6 +832,60 @@ function renderHeroTokens() {
       </div>
     </div>
   `;
+}
+
+function bindResourceControls() {
+  document.querySelectorAll("[data-resource-delta]").forEach((btn) => {
+    btn.addEventListener("click", () => {
+      const delta = Number(btn.dataset.resourceDelta) || 0;
+      setResourceValue(getResourceValue() + delta);
+    });
+  });
+
+  const wrapper = document.querySelector(".resource-value-wrapper");
+  const input = wrapper?.querySelector("[data-resource-number-input]");
+  const display = wrapper?.querySelector("[data-resource-value-display]");
+  if (wrapper && input && display) {
+    const openEditor = () => {
+      wrapper.classList.add("is-editing");
+      input.value = formatResourceValue();
+      input.focus();
+      input.select();
+    };
+
+    display.addEventListener("click", openEditor);
+    display.addEventListener("keydown", (event) => {
+      if (event.key === "Enter" || event.key === " ") {
+        event.preventDefault();
+        openEditor();
+      }
+    });
+
+    input.addEventListener("blur", () => {
+      setResourceValue(input.value);
+      wrapper.classList.remove("is-editing");
+    });
+
+    input.addEventListener("keydown", (event) => {
+      if (event.key === "Enter") {
+        event.preventDefault();
+        input.blur();
+      }
+      if (event.key === "Escape") {
+        input.value = formatResourceValue();
+        wrapper.classList.remove("is-editing");
+        input.blur();
+      }
+    });
+  }
+
+  document.querySelectorAll("[data-auto-dice-roll]").forEach((btn) => {
+    btn.addEventListener("click", () => {
+      const result = rollAutoDice();
+      if (result === null) return;
+      setResourceValue(getResourceValue() + result);
+    });
+  });
 }
 
 function renderBars() {
@@ -1259,7 +1426,9 @@ function renderAll() {
   renderActionSection("triggers", "triggers-pane");
   renderActionSection("freeStrikes", "free-strikes-pane");
   updateHeading();
+  updateResourceDisplays();
   bindTokenButtons();
+  bindResourceControls();
 }
 
 function bindTokenButtons() {
