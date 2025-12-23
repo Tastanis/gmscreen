@@ -490,6 +490,22 @@ export function mountBoardInteractions(store, routes = {}) {
   }
 
   const defaultStatusText = status?.textContent ?? '';
+  function updateStatus(message) {
+    if (!status) {
+      return;
+    }
+    status.textContent = message || defaultStatusText;
+  }
+
+  function restoreStatus(shouldRestore = () => true) {
+    if (!status) {
+      return;
+    }
+    if (typeof shouldRestore === 'function' && !shouldRestore()) {
+      return;
+    }
+    status.textContent = defaultStatusText;
+  }
   if (turnTimerDisplay) {
     turnTimerDisplay.textContent = TURN_TIMER_INITIAL_DISPLAY;
   }
@@ -13428,6 +13444,8 @@ function createTemplateTool() {
   const MIN_RECT_DIMENSION = 1;
   const MIN_CIRCLE_RADIUS = 0.5;
   let lastSyncedSnapshot = null;
+  const canRestoreStatus = () => !placementState && !activeDrag && !selectedId;
+  const restoreTemplateStatus = () => restoreStatus(canRestoreStatus);
 
   if (!layer) {
     return {
@@ -13779,7 +13797,7 @@ function createTemplateTool() {
     }
     placementState = null;
     clearPreview();
-    restoreStatus();
+    restoreTemplateStatus();
     updateLayerVisibility();
     return true;
   }
@@ -14156,7 +14174,7 @@ function createTemplateTool() {
 
   function finalizePlacement(config) {
     clearPreview();
-    restoreStatus();
+    restoreTemplateStatus();
     placementState = null;
     updateLayerVisibility();
 
@@ -14394,7 +14412,7 @@ function createTemplateTool() {
     if (selectedId) {
       updateStatus('Template selected. Drag to move, use the rotate handle or press R to rotate, or press Delete to remove.');
     } else {
-      restoreStatus();
+      restoreTemplateStatus();
     }
   }
 
@@ -14403,7 +14421,7 @@ function createTemplateTool() {
     shapes.forEach((shape) => {
       shape.elements.root.classList.remove('is-selected');
     });
-    restoreStatus();
+    restoreTemplateStatus();
   }
 
   function removeShape(id) {
@@ -14417,7 +14435,7 @@ function createTemplateTool() {
       selectedId = null;
     }
     render(viewState);
-    restoreStatus();
+    restoreTemplateStatus();
     updateLayerVisibility();
     commitShapes();
   }
@@ -14576,7 +14594,7 @@ function createTemplateTool() {
     if (selectedId) {
       updateStatus('Template selected. Drag to move, use the rotate handle or press R to rotate, or press Delete to remove.');
     } else {
-      restoreStatus();
+      restoreTemplateStatus();
     }
     commitShapes();
   }
@@ -14710,7 +14728,7 @@ function createTemplateTool() {
       // Ignore release issues.
     }
     activeDrag = null;
-    restoreStatus();
+    restoreTemplateStatus();
     commitShapes();
   }
 
@@ -14724,7 +14742,7 @@ function createTemplateTool() {
       // Ignore release issues.
     }
     activeDrag = null;
-    restoreStatus();
+    restoreTemplateStatus();
     render(viewState);
     commitShapes();
   }
@@ -15097,22 +15115,6 @@ function createTemplateTool() {
         updateStatus('Click to set the rectangle start, then drag or move the cursor to size it.');
       }
       updateLayerVisibility();
-    }
-  }
-
-  function updateStatus(message) {
-    if (!status) {
-      return;
-    }
-    status.textContent = message || defaultStatusText;
-  }
-
-  function restoreStatus() {
-    if (!status) {
-      return;
-    }
-    if (!placementState && !activeDrag && !selectedId) {
-      status.textContent = defaultStatusText;
     }
   }
 
