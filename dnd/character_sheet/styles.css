@@ -499,7 +499,7 @@ body {
   display: flex;
   align-items: center;
   gap: 6px;
-  flex-wrap: wrap;
+  flex-wrap: nowrap;
 }
 
 .resource-step {
@@ -527,27 +527,10 @@ body {
   border: 1px solid var(--border);
   border-radius: 4px;
   background: var(--panel);
-  cursor: pointer;
-}
-
-.resource-number-input {
-  display: none;
-  min-width: 80px;
-  padding: 6px 10px;
-  font-size: 20px;
-  border-radius: 4px;
-  border: 1px solid var(--border);
-  background: var(--panel);
   color: var(--text);
-  text-align: center;
-}
-
-.resource-value-wrapper.is-editing .resource-number-input {
-  display: block;
-}
-
-.resource-value-wrapper.is-editing .resource-value-display {
-  display: none;
+  height: 44px;
+  line-height: 1;
+  outline: none;
 }
 
 .sidebar-resource-content {

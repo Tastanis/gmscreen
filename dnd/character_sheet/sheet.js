@@ -459,14 +459,15 @@ function updateResourceDisplays() {
   const targets = [
     ...document.querySelectorAll("[data-resource-display]"),
     ...document.querySelectorAll("[data-resource-value-display]"),
+    ...document.querySelectorAll("[data-resource-value-input]"),
   ];
 
   targets.forEach((el) => {
-    el.textContent = value;
-  });
-
-  document.querySelectorAll("[data-resource-number-input]").forEach((input) => {
-    input.value = value;
+    if (el instanceof HTMLInputElement || el instanceof HTMLTextAreaElement) {
+      el.value = value;
+    } else {
+      el.textContent = value;
+    }
   });
 }
 
@@ -793,11 +794,11 @@ function renderSidebarResource() {
       </div>
       <div class="resource-value-wrapper">
         <button class="resource-step" data-resource-delta="1" aria-label="Increase resource">▲</button>
-        <div class="resource-value-display" data-resource-value-display tabindex="0">${resourceValue}</div>
         <input
-          class="resource-number-input"
-          data-resource-number-input
-          type="number"
+          class="resource-value-display"
+          data-resource-value-input
+          type="text"
+          inputmode="numeric"
           value="${resourceValue}"
           aria-label="Resource value"
         />
@@ -848,39 +849,25 @@ function bindResourceControls() {
     });
   });
 
-  const wrapper = document.querySelector(".resource-value-wrapper");
-  const input = wrapper?.querySelector("[data-resource-number-input]");
-  const display = wrapper?.querySelector("[data-resource-value-display]");
-  if (wrapper && input && display) {
-    const openEditor = () => {
-      wrapper.classList.add("is-editing");
-      input.value = formatResourceValue();
-      input.focus();
-      input.select();
-    };
+  const inlineInput = document.querySelector("[data-resource-value-input]");
+  if (inlineInput) {
+    const commitValue = () => setResourceValue(inlineInput.value);
 
-    display.addEventListener("click", openEditor);
-    display.addEventListener("keydown", (event) => {
-      if (event.key === "Enter" || event.key === " ") {
-        event.preventDefault();
-        openEditor();
-      }
+    inlineInput.addEventListener("focus", () => {
+      inlineInput.select();
     });
 
-    input.addEventListener("blur", () => {
-      setResourceValue(input.value);
-      wrapper.classList.remove("is-editing");
-    });
+    inlineInput.addEventListener("blur", commitValue);
 
-    input.addEventListener("keydown", (event) => {
+    inlineInput.addEventListener("keydown", (event) => {
       if (event.key === "Enter") {
         event.preventDefault();
-        input.blur();
+        commitValue();
+        inlineInput.blur();
       }
       if (event.key === "Escape") {
-        input.value = formatResourceValue();
-        wrapper.classList.remove("is-editing");
-        input.blur();
+        inlineInput.value = formatResourceValue();
+        inlineInput.blur();
       }
     });
   }
