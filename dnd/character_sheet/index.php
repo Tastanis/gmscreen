@@ -57,8 +57,8 @@ $activeCharacter = $requestedCharacter !== '' ? $requestedCharacter : $sessionUs
       <div class="sidebar__section" id="sidebar-bars"></div>
       <div class="sidebar__section" id="sidebar-resource"></div>
       <div class="sidebar__section" id="sidebar-hero-tokens"></div>
-      <div class="sidebar__section" id="sidebar-skills"></div>
       <div class="sidebar__section" id="sidebar-common"></div>
+      <div class="sidebar__section" id="sidebar-skills"></div>
       <div class="sidebar__section" id="sidebar-weaknesses"></div>
       <div class="sidebar__section" id="sidebar-languages"></div>
     </aside>

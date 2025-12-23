@@ -319,6 +319,20 @@ body {
   font-size: 15px;
 }
 
+.label--emphasis {
+  font-size: 13px;
+  font-weight: 800;
+  letter-spacing: 0.08em;
+}
+
+.field-card label.label--emphasis,
+.vital-grid .field-card label.label--emphasis {
+  font-size: 13px;
+  font-weight: 850;
+  letter-spacing: 0.08em;
+  color: var(--text);
+}
+
 .marip-block .card__label {
   font-size: 13px;
 }
@@ -407,7 +421,15 @@ body {
   gap: 6px;
 }
 
-.token-sidebar .token-row {
+.token-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+}
+
+.token-sidebar .token-row,
+.token-header .token-row {
   justify-content: flex-start;
 }
 
@@ -464,6 +486,15 @@ body {
   gap: 8px;
 }
 
+.bars .field-card {
+  min-height: auto;
+  padding: 8px 10px;
+}
+
+.bars .field-card .display-value {
+  font-size: 18px;
+}
+
 .meter__track {
   position: relative;
   height: 18px;
@@ -499,12 +530,13 @@ body {
 .meter__row {
   display: flex;
   justify-content: space-between;
-  align-items: center;
+  align-items: flex-end;
   gap: 10px;
 }
 
 .meter__value {
   font-size: 16px;
+  white-space: nowrap;
 }
 
 .tracker-input-wrapper {
@@ -512,27 +544,38 @@ body {
   flex-direction: column;
   align-items: flex-end;
   gap: 4px;
+  width: 100%;
 }
 
 .tracker-input {
-  min-width: 140px;
-  padding: 10px 12px;
-  height: 44px;
-  font-size: 18px;
+  min-width: 110px;
+  padding: 6px 10px;
+  height: 38px;
+  font-size: 20px;
   border-radius: 6px;
+  text-align: right;
 }
 
-.tracker-label-row {
+.meter__label-row {
   display: flex;
-  gap: 6px;
+  gap: 8px;
+  align-items: center;
 }
 
 .tracker-label {
-  font-size: 12px;
-  padding: 4px 8px;
-  border-radius: 4px;
+  font-size: 13px;
+  padding: 6px 10px;
+  border-radius: 6px;
   display: inline-block;
   color: #fff;
+  font-weight: 800;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+}
+
+.tracker-label--prominent {
+  padding: 7px 12px;
+  font-size: 14px;
 }
 
 .tracker-label--stamina {
@@ -557,6 +600,7 @@ body {
 .meter__history {
   font-size: 12px;
   color: var(--muted);
+  margin-top: -2px;
 }
 
 @keyframes temp-stamina-flash {
@@ -869,7 +913,7 @@ body {
 .skills-panel {
   display: flex;
   flex-direction: column;
-  gap: 8px;
+  gap: 6px;
 }
 
 .skill-display-list {
@@ -878,13 +922,16 @@ body {
   margin: 0;
   display: flex;
   flex-direction: column;
-  gap: 6px;
+  gap: 2px;
 }
 
 .skill-display {
-  border: 1px solid var(--border);
+  border: none;
   border-radius: 3px;
-  padding: 6px 8px;
+  padding: 2px 0;
+  display: flex;
+  justify-content: space-between;
+  gap: 8px;
 }
 
 .skill-display__name {
@@ -899,16 +946,15 @@ body {
 .skill-edit-list {
   display: flex;
   flex-direction: column;
-  gap: 8px;
+  gap: 4px;
 }
 
 .skill-edit-row {
-  border: 1px solid var(--border);
-  border-radius: 4px;
-  padding: 8px;
+  border: none;
+  padding: 4px 0;
   display: flex;
   flex-direction: column;
-  gap: 8px;
+  gap: 6px;
 }
 
 .skill-edit-row__label {

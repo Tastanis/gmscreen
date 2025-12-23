@@ -109,6 +109,23 @@ const DEFAULT_VITALS = {
   staminaHistory: [],
 };
 
+const EMPHASIZED_LABELS = new Set([
+  "wealth",
+  "renown",
+  "xp",
+  "victories",
+  "surges",
+  "resource",
+  "size",
+  "speed",
+  "stability",
+  "disengage",
+  "save",
+  "stamina",
+  "recoveries",
+  "recovery value",
+]);
+
 const defaultSheet = {
   hero: {
     name: "",
@@ -411,6 +428,10 @@ function getValue(path) {
   return current ?? "";
 }
 
+function getLabelClass(label) {
+  return EMPHASIZED_LABELS.has(label.toLowerCase()) ? "label--emphasis" : "";
+}
+
 let tempStaminaFlashUntil = 0;
 let tempStaminaFlashTimeout;
 let tempStaminaFlashId = 0;
@@ -520,7 +541,7 @@ function renderHeroPane() {
     const value = getValue(path);
     return `
     <div class="field-card vital-card compact">
-      <label>${label}</label>
+      <label class="${getLabelClass(label)}">${label}</label>
       <div class="display-value">${value ?? ""}</div>
       <input class="edit-field" type="${type}" data-model="${path}" value="${value ?? ""}" />
     </div>
@@ -531,7 +552,7 @@ function renderHeroPane() {
     const value = getValue(path);
     return `
       <div class="field-card">
-        <label>${label}</label>
+        <label class="${getLabelClass(label)}">${label}</label>
         <div class="display-value">${value || ""}</div>
         <input class="edit-field" type="text" data-model="${path}" value="${value || ""}" />
       </div>
@@ -603,7 +624,7 @@ function renderHeroPane() {
         ${identityField("Victories", "hero.victories")}
         ${identityField("Surges", "hero.surges")}
         <div class="field-card">
-          <label>${hero.resource.title || "Resource"}</label>
+          <label class="${getLabelClass(hero.resource.title || "Resource")}">${hero.resource.title || "Resource"}</label>
           <div class="display-value">${hero.resource.value || ""}</div>
           <input class="edit-field" type="text" data-model="hero.resource.value" value="${hero.resource.value || ""}" />
           <input class="edit-field subtle" type="text" data-model="hero.resource.title" value="${hero.resource.title || "Resource"}" placeholder="Resource Title" />
@@ -683,8 +704,8 @@ function renderHeroTokens() {
   if (!container) return;
 
   container.innerHTML = `
-    <div class="sidebar__header">Hero Tokens</div>
-    <div class="sidebar__content token-sidebar">
+    <div class="sidebar__header token-header">
+      <span>Hero Tokens</span>
       <div class="token-row">
         ${sheetState.hero.heroTokens
           .map(
@@ -735,29 +756,32 @@ function renderBars() {
     <div class="sidebar__header">Vitals</div>
     <div class="sidebar__content bars">
       <div class="meter meter--stamina">
+        <div class="meter__label-row">
+          <span class="tracker-label tracker-label--stamina tracker-label--prominent">Stamina</span>
+          ${shouldFlashTemp
+            ? `<span class="tracker-label tracker-label--temp tracker-label--prominent" data-flash-id="${tempStaminaFlashId}">TEMP STAMINA</span>`
+            : ""}
+        </div>
         <div class="meter__track">
           <div class="meter__fill meter__fill--stamina" style="width:${staminaWidth}%;"></div>
           ${staminaOverflowWidth > 0
             ? `<div class="meter__overflow" style="width:${staminaOverflowWidth}%;"></div>`
             : ""}
         </div>
+        ${staminaHistoryDisplay
+          ? `<div class="meter__history">${staminaHistoryDisplay}</div>`
+          : ""}
         <div class="meter__row">
           <div class="meter__value display-value">${currentStaminaDisplay} / ${staminaMaxDisplay}</div>
           <div class="tracker-input-wrapper">
             <input class="edit-field tracker-input" data-live-edit="true" type="text" data-model="hero.vitals.currentStamina" value="${vitals.currentStamina}" />
-            <div class="tracker-label-row">
-              <span class="tracker-label tracker-label--stamina">Stamina</span>
-              ${shouldFlashTemp
-                ? `<span class="tracker-label tracker-label--temp" data-flash-id="${tempStaminaFlashId}">TEMP STAMINA</span>`
-                : ""}
-            </div>
           </div>
         </div>
-        ${staminaHistoryDisplay
-          ? `<div class="meter__history">${staminaHistoryDisplay}</div>`
-          : ""}
       </div>
       <div class="meter meter--recovery">
+        <div class="meter__label-row">
+          <span class="tracker-label tracker-label--recovery tracker-label--prominent">Recoveries</span>
+        </div>
         <div class="meter__track">
           <div class="meter__fill meter__fill--recovery" style="width:${recoveryWidth}%;"></div>
         </div>
@@ -765,9 +789,6 @@ function renderBars() {
           <div class="meter__value display-value">${currentRecoveriesDisplay} / ${recoveriesMaxDisplay}</div>
           <div class="tracker-input-wrapper">
             <input class="edit-field tracker-input" data-live-edit="true" type="text" data-model="hero.vitals.currentRecoveries" value="${vitals.currentRecoveries}" />
-            <div class="tracker-label-row">
-              <span class="tracker-label tracker-label--recovery">Recoveries</span>
-            </div>
           </div>
         </div>
       </div>
