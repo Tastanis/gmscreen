@@ -10057,11 +10057,23 @@ export function mountBoardInteractions(store, routes = {}) {
       return null;
     }
 
+    const bodyParams = new URLSearchParams();
+    bodyParams.set('action', 'sync-stamina');
+    if (payload?.character) {
+      bodyParams.set('character', payload.character);
+    }
+    if (payload?.currentStamina !== undefined && payload?.currentStamina !== null) {
+      bodyParams.set('currentStamina', payload.currentStamina);
+    }
+    if (payload?.staminaMax !== undefined && payload?.staminaMax !== null) {
+      bodyParams.set('staminaMax', payload.staminaMax);
+    }
+
     try {
       const response = await fetch(endpoint, {
         method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify(payload ?? {}),
+        headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
+        body: bodyParams.toString(),
       });
 
       if (!response?.ok) {
@@ -10083,6 +10095,7 @@ export function mountBoardInteractions(store, routes = {}) {
     }
 
     const currentValue = normalizeHitPointsValue(payload.currentStamina);
+    const maxValue = normalizeHitPointsValue(payload.staminaMax);
     const sceneKey = typeof sceneId === 'string' && sceneId ? sceneId : '';
     const key = `${sceneKey}::${name.toLowerCase()}`;
     const existing = sheetSyncQueue.get(key);
@@ -10094,7 +10107,12 @@ export function mountBoardInteractions(store, routes = {}) {
     }
 
     const dispatchUpdate = () => {
-      const sendUpdate = () => postHitPointsToSheet({ character: name, currentStamina: currentValue });
+      const sendUpdate = () =>
+        postHitPointsToSheet({
+          character: name,
+          currentStamina: currentValue,
+          ...(maxValue ? { staminaMax: maxValue } : {}),
+        });
 
       if (pendingSavePromise && typeof pendingSavePromise.then === 'function') {
         pendingSavePromise
@@ -10125,7 +10143,11 @@ export function mountBoardInteractions(store, routes = {}) {
       const timerId = setTimeoutFn(dispatchUpdate, SHEET_SYNC_DEBOUNCE_MS);
       sheetSyncQueue.set(key, {
         timerId,
-        payload: { character: name, currentStamina: currentValue },
+        payload: {
+          character: name,
+          currentStamina: currentValue,
+          ...(maxValue ? { staminaMax: maxValue } : {}),
+        },
         savePromise: pendingSavePromise,
       });
     } else {
@@ -10155,6 +10177,7 @@ export function mountBoardInteractions(store, routes = {}) {
       {
         character: name,
         currentStamina: snapshot.current,
+        staminaMax: snapshot.max,
       },
       { savePromise, sceneId: activeSceneId }
     );

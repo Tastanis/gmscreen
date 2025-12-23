@@ -325,14 +325,20 @@ switch ($action) {
         $sheet = $allSheets[$requestedCharacter];
 
         if ($requestMethod === 'POST') {
-            $staminaMax = isset($requestData['staminaMax']) ? (int)$requestData['staminaMax'] : null;
-            $currentStamina = isset($requestData['currentStamina']) ? (int)$requestData['currentStamina'] : null;
+            $staminaMax = isset($requestData['staminaMax']) && $requestData['staminaMax'] !== ''
+                ? (int)$requestData['staminaMax']
+                : null;
+            $currentStamina = isset($requestData['currentStamina']) && $requestData['currentStamina'] !== ''
+                ? (int)$requestData['currentStamina']
+                : null;
 
-            if ($staminaMax === null || $currentStamina === null) {
+            if ($currentStamina === null) {
                 sendJsonResponse(array('success' => false, 'error' => 'Missing stamina values'));
             }
 
-            $sheet['hero']['vitals']['staminaMax'] = $staminaMax;
+            if ($staminaMax !== null) {
+                $sheet['hero']['vitals']['staminaMax'] = $staminaMax;
+            }
             $sheet['hero']['vitals']['currentStamina'] = $currentStamina;
 
             $allSheets[$requestedCharacter] = $sheet;
