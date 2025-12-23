@@ -457,25 +457,27 @@ function renderHeroPane() {
   pane.innerHTML = `
     <section class="hero-grid">
       <div class="identity">
-        <div class="field-card large">
-          <label>Name</label>
-          <div class="display-value">${hero.name || "Unnamed Hero"}</div>
-          <input class="edit-field" type="text" data-model="hero.name" value="${hero.name || ""}" />
-        </div>
-        <div class="field-card">
-          <label>Level</label>
-          <div class="display-value">${hero.level || ""}</div>
-          <input class="edit-field" type="number" min="1" data-model="hero.level" value="${hero.level || ""}" />
-        </div>
-        <div class="field-card">
-          <label>Class</label>
-          <div class="display-value">${hero.class || ""}</div>
-          <input class="edit-field" type="text" data-model="hero.class" value="${hero.class || ""}" />
-        </div>
-        <div class="field-card">
-          <label>Class Track</label>
-          <div class="display-value">${hero.classTrack || ""}</div>
-          <input class="edit-field" type="text" data-model="hero.classTrack" value="${hero.classTrack || ""}" />
+        <div class="identity-group">
+          <div class="field-card large identity-group__name">
+            <label>Name</label>
+            <div class="display-value">${hero.name || "Unnamed Hero"}</div>
+            <input class="edit-field" type="text" data-model="hero.name" value="${hero.name || ""}" />
+          </div>
+          <div class="field-card">
+            <label>Level</label>
+            <div class="display-value">${hero.level || ""}</div>
+            <input class="edit-field" type="number" min="1" data-model="hero.level" value="${hero.level || ""}" />
+          </div>
+          <div class="field-card">
+            <label>Class</label>
+            <div class="display-value">${hero.class || ""}</div>
+            <input class="edit-field" type="text" data-model="hero.class" value="${hero.class || ""}" />
+          </div>
+          <div class="field-card">
+            <label>Class Track</label>
+            <div class="display-value">${hero.classTrack || ""}</div>
+            <input class="edit-field" type="text" data-model="hero.classTrack" value="${hero.classTrack || ""}" />
+          </div>
         </div>
       </div>
 

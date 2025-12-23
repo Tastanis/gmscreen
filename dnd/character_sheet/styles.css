@@ -209,6 +209,21 @@ body {
   gap: 8px;
 }
 
+.identity-group {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 4px;
+  margin: 4px 0 6px;
+}
+
+.identity-group .field-card {
+  flex: 1 1 140px;
+}
+
+.identity-group__name {
+  flex: 2 1 220px;
+}
+
 .stat-grid {
   display: grid;
   grid-template-columns: repeat(auto-fit, minmax(140px, 1fr));
