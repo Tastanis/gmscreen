@@ -26,11 +26,6 @@ $activeCharacter = $requestedCharacter !== '' ? $requestedCharacter : $sessionUs
           <p class="title__lede">Compact edge-to-edge layout for quick reference.</p>
         </div>
         <div class="header__actions">
-          <div class="token-legend">
-            <span class="dot dot--ready"></span>
-            <span class="dot dot--spent"></span>
-            <span class="legend__label">Hero Tokens</span>
-          </div>
           <label class="toggle">
             <input type="checkbox" id="edit-toggle" />
             <span class="toggle__slider"></span>
