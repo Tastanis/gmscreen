@@ -20,7 +20,12 @@
 body {
   margin: 0;
   font-family: "Inter", "Segoe UI", sans-serif;
-  background: var(--bg);
+  background-color: var(--bg);
+  background-image: url("./images/stone.jpg");
+  background-size: cover;
+  background-repeat: no-repeat;
+  background-attachment: fixed;
+  background-position: center;
   color: var(--text);
   min-height: 100vh;
 }
@@ -203,10 +208,24 @@ body {
 }
 
 .identity,
-.identity--secondary {
+.identity--secondary,
+.identity--primary {
   display: grid;
   grid-template-columns: repeat(auto-fit, minmax(180px, 1fr));
   gap: 8px;
+}
+
+.identity--primary .field-card label {
+  font-size: 12px;
+}
+
+.identity--primary .field-card .display-value {
+  font-size: 18px;
+}
+
+.identity--primary .identity-group__name .display-value {
+  font-size: 28px;
+  line-height: 1.1;
 }
 
 .bottom-details {
@@ -239,17 +258,18 @@ body {
   flex: 2 1 220px;
 }
 
+
 .stat-grid {
   display: grid;
-  grid-template-columns: repeat(auto-fit, minmax(140px, 1fr));
-  gap: 8px;
+  grid-template-columns: repeat(auto-fit, minmax(170px, 1fr));
+  gap: 12px;
 }
 
 .marip-block {
   background: linear-gradient(135deg, #2a1a12, #301d14);
   border: 1px solid var(--accent);
   border-radius: 4px;
-  padding: 10px;
+  padding: 14px;
   display: flex;
   flex-direction: column;
   gap: 6px;
@@ -265,15 +285,16 @@ body {
 .vital-grid {
   display: grid;
   grid-template-columns: repeat(auto-fit, minmax(150px, 1fr));
-  gap: 8px;
+  gap: 10px;
 }
 
-.vitals-stamina-group {
-  display: flex;
-  flex-direction: column;
-  gap: 6px;
-  border-top: 1px solid var(--border);
-  padding-top: 6px;
+.vital-grid .field-card {
+  min-height: auto;
+  gap: 4px;
+}
+
+.vital-grid .field-card label {
+  margin-bottom: 2px;
 }
 
 .field-card,
@@ -281,11 +302,11 @@ body {
   background: var(--panel-alt);
   border: 1px solid var(--border);
   border-radius: 3px;
-  padding: 8px;
+  padding: 12px;
   display: flex;
   flex-direction: column;
   gap: 6px;
-  min-height: 64px;
+  min-height: 72px;
 }
 
 .field-card.large {
@@ -311,12 +332,38 @@ body {
   font-size: 15px;
 }
 
+.vitals-stamina-card {
+  grid-column: span 2;
+}
+
+.vitals-stamina-row {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 10px;
+}
+
+.vitals-stamina-item {
+  flex: 1 1 160px;
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+
+.vitals-stamina-item .card__label {
+  letter-spacing: 0.06em;
+  font-size: 11px;
+}
+
+.vitals-stamina-item .display-value {
+  font-size: 16px;
+}
+
 .marip-block .card__label {
-  font-size: 12px;
+  font-size: 13px;
 }
 
 .marip-block .card__value {
-  font-size: 20px;
+  font-size: 26px;
 }
 
 .edit-field {
@@ -1056,6 +1103,10 @@ body {
 
 .detail-item__label {
   font-weight: 700;
+}
+
+.detail-card .display-value {
+  font-weight: 500;
 }
 
 .skill-select:disabled,
