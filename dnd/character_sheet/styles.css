@@ -608,6 +608,54 @@ body {
   font-style: italic;
 }
 
+.common-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+}
+
+.common-content {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.common-card {
+  border: 1px solid var(--border);
+  border-radius: 4px;
+  padding: 8px;
+  background: #24160f;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.common-card__header {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 10px;
+}
+
+.common-card__title-group {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  flex: 1;
+}
+
+.common-card__title {
+  font-weight: 750;
+  letter-spacing: 0.03em;
+}
+
+.common-card__body {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
 .sidebar .edit-field {
   background: #20130d;
 }
