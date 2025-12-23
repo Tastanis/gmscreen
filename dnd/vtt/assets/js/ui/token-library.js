@@ -6,6 +6,7 @@ import { restrictTokensToPlayerView } from '../state/store.js';
 const UNSORTED_KEY = '__unsorted';
 const sheetStaminaCache = new Map();
 const sheetStaminaRequests = new Map();
+const STAMINA_REFRESH_INTERVAL_MS = 60000;
 
 export function renderTokenLibrary(routes, store, options = {}) {
   const moduleRoot = document.querySelector('[data-module="vtt-token-library"]');
@@ -33,6 +34,122 @@ export function renderTokenLibrary(routes, store, options = {}) {
   let selectedMonsterSnapshot = null;
   let monsterImporter = null;
   const monsterRoutes = endpoints.monsters ?? null;
+  let staminaPrefetchInitialized = false;
+  let staminaRefreshInterval = null;
+  let staminaPrefetchNames = new Set();
+
+  const notifyStaminaCacheUpdated = (names, reason) => {
+    if (!moduleRoot || !names.length) {
+      return;
+    }
+
+    moduleRoot.dispatchEvent(
+      new CustomEvent('sheet-stamina-cache-updated', {
+        detail: {
+          names: [...names],
+          reason,
+        },
+      })
+    );
+
+    if (typeof options?.onSheetStaminaCacheUpdated === 'function') {
+      options.onSheetStaminaCacheUpdated({ names: [...names], reason });
+    }
+  };
+
+  const getActiveSceneId = () => {
+    const state = typeof stateApi.getState === 'function' ? stateApi.getState() : {};
+    return state?.boardState?.activeSceneId ?? null;
+  };
+
+  const isTokenLibraryVisible = () => {
+    if (!moduleRoot?.isConnected) {
+      return false;
+    }
+    if (typeof moduleRoot.getClientRects === 'function' && moduleRoot.getClientRects().length === 0) {
+      return false;
+    }
+    return true;
+  };
+
+  const shouldPrefetchStamina = () =>
+    Boolean(endpoints?.sheet) && isTokenLibraryVisible() && Boolean(getActiveSceneId());
+
+  const collectTokenNamesFromLibrary = () => {
+    if (!listContainer) {
+      return [];
+    }
+
+    const names = new Set();
+    listContainer.querySelectorAll('.token-item h4').forEach((node) => {
+      if (node && typeof node.textContent === 'string') {
+        const name = node.textContent.trim();
+        if (name) {
+          names.add(name);
+        }
+      }
+    });
+    return [...names];
+  };
+
+  const refreshStaminaCache = () => {
+    const names = [...staminaPrefetchNames];
+    if (!names.length || !shouldPrefetchStamina()) {
+      return;
+    }
+
+    const requests = names
+      .map((name) => fetchSheetStamina(endpoints, name))
+      .filter(Boolean);
+
+    if (!requests.length) {
+      return;
+    }
+
+    Promise.allSettled(requests).then(() => {
+      notifyStaminaCacheUpdated(names, 'refresh');
+    });
+  };
+
+  const updateStaminaPrefetchNames = () => {
+    const names = collectTokenNamesFromLibrary();
+    const previousNames = staminaPrefetchNames;
+    staminaPrefetchNames = new Set(names);
+
+    if (!names.length || !shouldPrefetchStamina()) {
+      return;
+    }
+
+    if (!staminaPrefetchInitialized) {
+      staminaPrefetchInitialized = true;
+      const startupRequests = names
+        .map((name) => fetchSheetStamina(endpoints, name))
+        .filter(Boolean);
+      Promise.allSettled(startupRequests).then(() => {
+        notifyStaminaCacheUpdated(names, 'startup');
+      });
+
+      if (!staminaRefreshInterval && typeof window !== 'undefined') {
+        staminaRefreshInterval = window.setInterval(
+          refreshStaminaCache,
+          STAMINA_REFRESH_INTERVAL_MS
+        );
+      }
+      return;
+    }
+
+    const newNames = names.filter((name) => !previousNames.has(name));
+    if (!newNames.length) {
+      return;
+    }
+
+    const newRequests = newNames
+      .map((name) => fetchSheetStamina(endpoints, name))
+      .filter(Boolean);
+    Promise.allSettled(newRequests).then(() => {
+      notifyStaminaCacheUpdated(newNames, 'new');
+    });
+  };
 
   const disableImportButton = (message) => {
     if (!importMonsterButton) return;
@@ -346,6 +463,7 @@ export function renderTokenLibrary(routes, store, options = {}) {
 
     if (!tokensState.items.length) {
       listContainer.innerHTML = '<li class="token-template-list__empty">No tokens saved yet.</li>';
+      updateStaminaPrefetchNames();
       return;
     }
 
@@ -357,6 +475,7 @@ export function renderTokenLibrary(routes, store, options = {}) {
     });
 
     listContainer.innerHTML = markup;
+    updateStaminaPrefetchNames();
   };
 
   render(stateApi.getState?.() ?? {});
