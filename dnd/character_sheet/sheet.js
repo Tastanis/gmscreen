@@ -117,6 +117,9 @@ const DEFAULT_VITALS = {
   staminaHistory: [],
 };
 
+const STAMINA_SYNC_INTERVAL_MS = 4000;
+const STAMINA_SYNC_CHANNEL = "vtt-stamina-sync";
+
 const EMPHASIZED_LABELS = new Set([
   "wealth",
   "renown",
@@ -527,6 +530,10 @@ function getLabelClass(label) {
 let tempStaminaFlashUntil = 0;
 let tempStaminaFlashTimeout;
 let tempStaminaFlashId = 0;
+let staminaSyncIntervalId = null;
+let staminaSyncInFlight = false;
+let staminaSyncChannel = null;
+let staminaVisibilityHandler = null;
 
 function triggerTempStaminaFlash() {
   tempStaminaFlashId = Date.now();
@@ -551,6 +558,128 @@ function updateStaminaHistory(newValue) {
   if (!Number.isFinite(numericValue)) return;
   history.push(numericValue);
   sheetState.hero.vitals.staminaHistory = history.slice(-4);
+}
+
+function getStaminaSyncChannel() {
+  if (typeof BroadcastChannel !== "function") return null;
+  if (!staminaSyncChannel) {
+    staminaSyncChannel = new BroadcastChannel(STAMINA_SYNC_CHANNEL);
+  }
+  return staminaSyncChannel;
+}
+
+function applyStaminaSync({ currentStamina, staminaMax }) {
+  const normalizedVitals = normalizeVitals(sheetState.hero.vitals);
+  const nextCurrent = Number.isFinite(Number(currentStamina))
+    ? Number(currentStamina)
+    : normalizedVitals.currentStamina;
+  const nextMax = Number.isFinite(Number(staminaMax))
+    ? Number(staminaMax)
+    : normalizedVitals.staminaMax;
+  const hasChanges =
+    normalizedVitals.currentStamina !== nextCurrent || normalizedVitals.staminaMax !== nextMax;
+
+  if (!hasChanges) {
+    return;
+  }
+
+  sheetState.hero.vitals = {
+    ...sheetState.hero.vitals,
+    currentStamina: nextCurrent,
+    staminaMax: nextMax,
+  };
+
+  if (Number.isFinite(nextCurrent)) {
+    updateStaminaHistory(nextCurrent);
+    if (Number.isFinite(nextMax) && nextCurrent > nextMax) {
+      triggerTempStaminaFlash();
+    }
+  }
+
+  if (document.body.classList.contains("edit-mode")) {
+    renderBars();
+  } else {
+    renderAll();
+  }
+}
+
+function handleStaminaBroadcast(event) {
+  const payload = event?.data;
+  if (!payload || payload.type !== "stamina-sync") return;
+  const payloadCharacter =
+    typeof payload.character === "string" ? payload.character.trim().toLowerCase() : "";
+  const activeKey = typeof activeCharacter === "string" ? activeCharacter.trim().toLowerCase() : "";
+
+  if (!activeKey || (payloadCharacter && payloadCharacter !== activeKey)) {
+    return;
+  }
+
+  applyStaminaSync({
+    currentStamina: payload.currentStamina,
+    staminaMax: payload.staminaMax,
+  });
+}
+
+async function pollStaminaSync() {
+  if (!activeCharacter) return;
+  if (document.visibilityState === "hidden") return;
+  if (staminaSyncInFlight) return;
+
+  staminaSyncInFlight = true;
+  try {
+    const response = await fetch(
+      `handler.php?action=sync-stamina&character=${encodeURIComponent(activeCharacter)}`,
+      { credentials: "same-origin", cache: "no-store" }
+    );
+    if (!response.ok) {
+      throw new Error(`Stamina sync failed (${response.status})`);
+    }
+    const data = await response.json();
+    if (!data || data.error) return;
+    applyStaminaSync({
+      currentStamina: data.currentStamina,
+      staminaMax: data.staminaMax,
+    });
+  } catch (error) {
+    console.warn("Failed to sync stamina", error);
+  } finally {
+    staminaSyncInFlight = false;
+  }
+}
+
+function startStaminaSync() {
+  if (staminaSyncIntervalId || !activeCharacter) return;
+  const channel = getStaminaSyncChannel();
+  if (channel) {
+    channel.addEventListener("message", handleStaminaBroadcast);
+  }
+
+  staminaVisibilityHandler = () => {
+    if (document.visibilityState === "visible") {
+      pollStaminaSync();
+    }
+  };
+  document.addEventListener("visibilitychange", staminaVisibilityHandler);
+
+  pollStaminaSync();
+  staminaSyncIntervalId = window.setInterval(pollStaminaSync, STAMINA_SYNC_INTERVAL_MS);
+}
+
+function stopStaminaSync() {
+  if (staminaSyncIntervalId && typeof window?.clearInterval === "function") {
+    window.clearInterval(staminaSyncIntervalId);
+  }
+  staminaSyncIntervalId = null;
+
+  if (staminaVisibilityHandler) {
+    document.removeEventListener("visibilitychange", staminaVisibilityHandler);
+  }
+  staminaVisibilityHandler = null;
+
+  if (staminaSyncChannel) {
+    staminaSyncChannel.close();
+    staminaSyncChannel = null;
+  }
 }
 
 function parseTrackerInput(rawValue) {
@@ -1964,6 +2093,8 @@ async function ready() {
   bindEditToggle();
   bindAutoSave();
   await loadSheet();
+  startStaminaSync();
+  window.addEventListener("pagehide", stopStaminaSync);
 }
 
 document.addEventListener("DOMContentLoaded", ready);

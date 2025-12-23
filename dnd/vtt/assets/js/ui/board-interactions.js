@@ -19,6 +19,34 @@ const OVERLAY_LAYER_PREFIX = 'overlay-layer-';
 let overlayLayerSeed = Date.now();
 let overlayLayerSequence = 0;
 let trackerOverflowResizeListenerAttached = false;
+const STAMINA_SYNC_CHANNEL = 'vtt-stamina-sync';
+let staminaSyncChannel = null;
+
+function getStaminaSyncChannel() {
+  if (typeof BroadcastChannel !== 'function') {
+    return null;
+  }
+
+  if (!staminaSyncChannel) {
+    staminaSyncChannel = new BroadcastChannel(STAMINA_SYNC_CHANNEL);
+  }
+
+  return staminaSyncChannel;
+}
+
+function broadcastStaminaSync(payload = {}) {
+  const channel = getStaminaSyncChannel();
+  if (!channel) {
+    return;
+  }
+
+  channel.postMessage({
+    type: 'stamina-sync',
+    character: payload.character,
+    currentStamina: payload.currentStamina,
+    staminaMax: payload.staminaMax,
+  });
+}
 
 export function createBoardStatePoller({
   routes,
@@ -10079,6 +10107,12 @@ export function mountBoardInteractions(store, routes = {}) {
       if (!response?.ok) {
         throw new Error(`Sheet sync failed with status ${response?.status ?? 'unknown'}`);
       }
+
+      broadcastStaminaSync({
+        character: payload?.character,
+        currentStamina: payload?.currentStamina,
+        staminaMax: payload?.staminaMax,
+      });
 
       return response;
     } catch (error) {
