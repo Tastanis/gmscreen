@@ -4,6 +4,8 @@ import { createToken, createTokenFolder, updateToken, deleteToken } from '../ser
 import { restrictTokensToPlayerView } from '../state/store.js';
 
 const UNSORTED_KEY = '__unsorted';
+const sheetStaminaCache = new Map();
+const sheetStaminaRequests = new Map();
 
 export function renderTokenLibrary(routes, store, options = {}) {
   const moduleRoot = document.querySelector('[data-module="vtt-token-library"]');
@@ -548,6 +550,7 @@ export function renderTokenLibrary(routes, store, options = {}) {
 
     const dragData = buildTokenDragData(tokenElement, tokenIndex, {
       getState: stateApi.getState,
+      routes: endpoints,
     });
     const dataTransfer = event.dataTransfer;
     if (!dragData || !dataTransfer) {
@@ -791,6 +794,7 @@ function buildTokenDragData(element, tokenIndex, context = {}) {
 
   return hydratePlacementTemplateFromElement(template, {
     getState: typeof context.getState === 'function' ? context.getState : null,
+    routes: context.routes ?? null,
   });
 }
 
@@ -811,16 +815,17 @@ function hydratePlacementTemplateFromElement(template, context = {}) {
     return template;
   }
 
-  const sheetEntry = findSheetMatchByName(state.boardState?.sceneState?.[activeSceneId], name);
-  if (!sheetEntry) {
+  const cachedSheet = getCachedSheetStamina(name);
+  if (!cachedSheet) {
+    fetchSheetStamina(context.routes, name);
     return template;
   }
 
   const current = toFiniteOrNull(
-    sheetEntry.currentStamina ?? sheetEntry.stamina ?? sheetEntry.hp ?? null
+    cachedSheet.currentStamina ?? cachedSheet.stamina ?? cachedSheet.hp ?? null
   );
   const max = toFiniteOrNull(
-    sheetEntry.staminaMax ?? sheetEntry.maxStamina ?? sheetEntry.maxHp ?? sheetEntry.hpMax ?? null
+    cachedSheet.staminaMax ?? cachedSheet.maxStamina ?? cachedSheet.maxHp ?? cachedSheet.hpMax ?? null
   );
 
   if (current === null && max === null) {
@@ -846,28 +851,78 @@ function hydratePlacementTemplateFromElement(template, context = {}) {
   };
 }
 
-function findSheetMatchByName(sceneEntry, tokenName) {
-  if (!sceneEntry || typeof sceneEntry !== 'object') {
+function getCachedSheetStamina(tokenName) {
+  if (typeof tokenName !== 'string') {
     return null;
   }
 
-  const sheets = Array.isArray(sceneEntry.sheets)
-    ? sceneEntry.sheets
-    : Array.isArray(sceneEntry.sheet)
-    ? sceneEntry.sheet
-    : [];
-
-  if (!sheets.length) {
+  const key = tokenName.trim().toLowerCase();
+  if (!key) {
     return null;
   }
 
-  const normalizedTarget = tokenName.trim().toLowerCase();
-  return (
-    sheets.find((entry) => {
-      const name = typeof entry?.name === 'string' ? entry.name.trim().toLowerCase() : '';
-      return name && name === normalizedTarget;
-    }) ?? null
-  );
+  return sheetStaminaCache.get(key) ?? null;
+}
+
+function fetchSheetStamina(routes, tokenName) {
+  if (typeof tokenName !== 'string') {
+    return null;
+  }
+
+  const key = tokenName.trim().toLowerCase();
+  if (!key) {
+    return null;
+  }
+
+  const endpoint = typeof routes?.sheet === 'string' ? routes.sheet : null;
+  if (!endpoint || typeof fetch !== 'function') {
+    return null;
+  }
+
+  const existingRequest = sheetStaminaRequests.get(key);
+  if (existingRequest) {
+    return existingRequest;
+  }
+
+  const request = (async () => {
+    try {
+      let url = null;
+      if (typeof window !== 'undefined' && window?.location?.href) {
+        url = new URL(endpoint, window.location.href);
+      } else {
+        url = new URL(endpoint);
+      }
+
+      url.searchParams.set('action', 'sync-stamina');
+      url.searchParams.set('character', tokenName);
+
+      const response = await fetch(url.toString(), { method: 'GET' });
+      if (!response?.ok) {
+        throw new Error(`Sheet fetch failed with status ${response?.status ?? 'unknown'}`);
+      }
+
+      const data = await response.json();
+      if (!data || typeof data !== 'object') {
+        return null;
+      }
+
+      if (data.success === false) {
+        sheetStaminaCache.set(key, { currentStamina: null, staminaMax: null, missing: true });
+        return null;
+      }
+
+      sheetStaminaCache.set(key, data);
+      return data;
+    } catch (error) {
+      console.warn('[VTT] Failed to fetch sheet stamina', error);
+      return null;
+    } finally {
+      sheetStaminaRequests.delete(key);
+    }
+  })();
+
+  sheetStaminaRequests.set(key, request);
+  return request;
 }
 
 function toFiniteOrNull(value) {
