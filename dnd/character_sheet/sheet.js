@@ -511,9 +511,11 @@ function renderHeroPane() {
         ${vitalField("Stability", "hero.vitals.stability")}
         ${vitalField("Disengage", "hero.vitals.disengage")}
         ${vitalField("Save", "hero.vitals.save")}
-        ${vitalField("Stamina (Full)", "hero.vitals.staminaMax", "number")}
-        ${vitalField("Recoveries (Full)", "hero.vitals.recoveriesMax", "number")}
-        ${vitalField("Recovery Value", "hero.vitals.recoveryValue")}
+        <div class="vitals-stamina-group">
+          ${vitalField("Stamina (Full)", "hero.vitals.staminaMax", "number")}
+          ${vitalField("Recoveries (Full)", "hero.vitals.recoveriesMax", "number")}
+          ${vitalField("Recovery Value", "hero.vitals.recoveryValue")}
+        </div>
       </div>
 
       <div class="identity identity--secondary">
