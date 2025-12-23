@@ -456,9 +456,15 @@ function persistResourceValue() {
 
 function updateResourceDisplays() {
   const value = formatResourceValue();
-  document.querySelectorAll("[data-resource-display]").forEach((el) => {
+  const targets = [
+    ...document.querySelectorAll("[data-resource-display]"),
+    ...document.querySelectorAll("[data-resource-value-display]"),
+  ];
+
+  targets.forEach((el) => {
     el.textContent = value;
   });
+
   document.querySelectorAll("[data-resource-number-input]").forEach((input) => {
     input.value = value;
   });
