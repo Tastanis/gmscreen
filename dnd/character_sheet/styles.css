@@ -453,25 +453,23 @@ body {
   background: #20130d;
 }
 
-.bars .meter {
+.bars {
   display: grid;
-  grid-template-columns: 1fr 60px;
-  grid-template-rows: auto auto;
-  gap: 4px 8px;
-  align-items: center;
+  gap: 14px;
 }
 
-.meter__label {
-  font-size: 12px;
-  color: var(--muted);
+.bars .meter {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
 }
 
 .meter__track {
-  grid-column: 1 / 2;
-  height: 12px;
+  position: relative;
+  height: 18px;
   background: #1e120c;
   border: 1px solid var(--border);
-  border-radius: 3px;
+  border-radius: 5px;
   overflow: hidden;
 }
 
@@ -488,14 +486,95 @@ body {
   background: linear-gradient(90deg, #4a90e2, #6fb5ff);
 }
 
-.meter__value {
-  justify-self: end;
+.meter__overflow {
+  position: absolute;
+  left: 0;
+  top: -6px;
+  height: 10px;
+  background: linear-gradient(90deg, #ff4d4f, #ff9f9f);
+  border-radius: 5px;
+  box-shadow: 0 2px 6px rgba(255, 77, 79, 0.45);
 }
 
-.meter__max-note {
-  grid-column: 1 / -1;
+.meter__row {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  gap: 10px;
+}
+
+.meter__value {
+  font-size: 16px;
+}
+
+.tracker-input-wrapper {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-end;
+  gap: 4px;
+}
+
+.tracker-input {
+  min-width: 140px;
+  padding: 10px 12px;
+  height: 44px;
+  font-size: 18px;
+  border-radius: 6px;
+}
+
+.tracker-label-row {
+  display: flex;
+  gap: 6px;
+}
+
+.tracker-label {
+  font-size: 12px;
+  padding: 4px 8px;
+  border-radius: 4px;
+  display: inline-block;
+  color: #fff;
+}
+
+.tracker-label--stamina {
+  background: rgba(76, 175, 80, 0.25);
+  border: 1px solid rgba(76, 175, 80, 0.5);
+  color: #d7f7d9;
+}
+
+.tracker-label--recovery {
+  background: rgba(74, 144, 226, 0.22);
+  border: 1px solid rgba(111, 181, 255, 0.45);
+  color: #d8e9ff;
+}
+
+.tracker-label--temp {
+  background: rgba(255, 77, 79, 0.25);
+  border: 1px solid rgba(255, 77, 79, 0.5);
+  color: #ffe4e4;
+  animation: temp-stamina-flash 0.75s ease-in-out 2;
+}
+
+.meter__history {
   font-size: 12px;
   color: var(--muted);
+}
+
+@keyframes temp-stamina-flash {
+  0% {
+    opacity: 0;
+  }
+  25% {
+    opacity: 1;
+  }
+  50% {
+    opacity: 0.25;
+  }
+  75% {
+    opacity: 1;
+  }
+  100% {
+    opacity: 0;
+  }
 }
 
 .card-grid {
