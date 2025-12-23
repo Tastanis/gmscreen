@@ -9336,11 +9336,6 @@ export function mountBoardInteractions(store, routes = {}) {
     const inputRow = document.createElement('div');
     inputRow.className = 'vtt-damage-heal__input-row';
 
-    const amountPrefix = document.createElement('span');
-    amountPrefix.className = 'vtt-damage-heal__prefix';
-    amountPrefix.textContent = '';
-    inputRow.appendChild(amountPrefix);
-
     const amountInput = document.createElement('input');
     amountInput.type = 'number';
     amountInput.min = '1';
@@ -9425,8 +9420,8 @@ export function mountBoardInteractions(store, routes = {}) {
 
     damageHealUi = {
       container,
+      inputRow,
       amountInput,
-      amountPrefix,
       damageButton,
       healButton,
       closeButton,
@@ -9603,15 +9598,15 @@ export function mountBoardInteractions(store, routes = {}) {
       damageHealUi.container.dataset.mode = mode;
       damageHealUi.damageButton.classList.toggle('is-active', mode === 'damage');
       damageHealUi.healButton.classList.toggle('is-active', mode === 'heal');
-      if (damageHealUi.amountPrefix) {
-        damageHealUi.amountPrefix.textContent = mode === 'damage' ? '-' : '+';
+      if (damageHealUi.inputRow) {
+        damageHealUi.inputRow.dataset.sign = mode === 'damage' ? '-' : '+';
       }
     } else {
       delete damageHealUi.container.dataset.mode;
       damageHealUi.damageButton.classList.remove('is-active');
       damageHealUi.healButton.classList.remove('is-active');
-      if (damageHealUi.amountPrefix) {
-        damageHealUi.amountPrefix.textContent = '';
+      if (damageHealUi.inputRow) {
+        delete damageHealUi.inputRow.dataset.sign;
       }
     }
   }
