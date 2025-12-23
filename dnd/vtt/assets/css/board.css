@@ -470,6 +470,26 @@
   font-weight: 700;
 }
 
+.vtt-damage-heal__actions .btn.btn--danger.is-active {
+  background: rgba(190, 24, 93, 0.72);
+  border-color: rgba(244, 63, 94, 0.85);
+  color: #fff;
+  box-shadow:
+    0 0 0 1px rgba(244, 63, 94, 0.35),
+    0 6px 12px rgba(12, 7, 4, 0.35);
+  animation: vtt-damage-heal-action-pulse-damage 1.4s ease-in-out infinite;
+}
+
+.vtt-damage-heal__actions .btn.btn--success.is-active {
+  background: rgba(22, 101, 52, 0.75);
+  border-color: rgba(34, 197, 94, 0.85);
+  color: #fff;
+  box-shadow:
+    0 0 0 1px rgba(34, 197, 94, 0.35),
+    0 6px 12px rgba(12, 7, 4, 0.35);
+  animation: vtt-damage-heal-action-pulse-heal 1.4s ease-in-out infinite;
+}
+
 .vtt-damage-heal__reset {
   align-self: center;
   padding: 0.35rem 0.75rem;
@@ -517,6 +537,42 @@
     box-shadow:
       0 12px 26px rgba(10, 6, 4, 0.45),
       0 0 0 2px rgba(34, 197, 94, 0.35);
+  }
+}
+
+@keyframes vtt-damage-heal-action-pulse-damage {
+  0% {
+    box-shadow:
+      0 0 0 1px rgba(244, 63, 94, 0.35),
+      0 6px 12px rgba(12, 7, 4, 0.35);
+  }
+  50% {
+    box-shadow:
+      0 0 0 4px rgba(248, 113, 113, 0.55),
+      0 8px 14px rgba(12, 7, 4, 0.45);
+  }
+  100% {
+    box-shadow:
+      0 0 0 1px rgba(244, 63, 94, 0.35),
+      0 6px 12px rgba(12, 7, 4, 0.35);
+  }
+}
+
+@keyframes vtt-damage-heal-action-pulse-heal {
+  0% {
+    box-shadow:
+      0 0 0 1px rgba(34, 197, 94, 0.35),
+      0 6px 12px rgba(12, 7, 4, 0.35);
+  }
+  50% {
+    box-shadow:
+      0 0 0 4px rgba(74, 222, 128, 0.55),
+      0 8px 14px rgba(12, 7, 4, 0.45);
+  }
+  100% {
+    box-shadow:
+      0 0 0 1px rgba(34, 197, 94, 0.35),
+      0 6px 12px rgba(12, 7, 4, 0.35);
   }
 }
 
