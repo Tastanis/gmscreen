@@ -8942,7 +8942,12 @@ export function mountBoardInteractions(store, routes = {}) {
 
       const rawSize = typeof parsed.size === 'string' ? parsed.size : '';
       const size = rawSize.trim() || '1x1';
-      const maxHp = normalizeHitPointsValue(parsed.hp ?? parsed.hitPoints ?? null);
+      const rawHp = parsed.hp ?? parsed.hitPoints ?? null;
+      const maxHp = normalizeHitPointsValue(rawHp);
+      const hydratedHp =
+        rawHp && typeof rawHp === 'object'
+          ? normalizePlacementHitPoints(rawHp)
+          : null;
       const hasTeam = typeof parsed.team === 'string' && parsed.team.trim().length > 0;
       const hasCombatTeam = typeof parsed.combatTeam === 'string' && parsed.combatTeam.trim().length > 0;
       const normalizedTeam = hasCombatTeam
@@ -8957,7 +8962,7 @@ export function mountBoardInteractions(store, routes = {}) {
         imageUrl,
         size,
         maxHp,
-        hp: maxHp,
+        hp: hydratedHp ?? maxHp,
       };
 
       if (hasTeam && normalizedTeam) {
