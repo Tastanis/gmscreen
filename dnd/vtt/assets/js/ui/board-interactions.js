@@ -412,6 +412,7 @@ const MAP_PING_ANIMATION_DURATION_MS = 900;
 const MAP_PING_RETENTION_MS = 10000;
 const MAP_PING_HISTORY_LIMIT = 8;
 const MAP_PING_PROCESSED_RETENTION_MS = 60000;
+const SHEET_SYNC_DEBOUNCE_MS = 400;
 
 export function mountBoardInteractions(store, routes = {}) {
   const board = document.getElementById('vtt-board-canvas');
@@ -1042,6 +1043,7 @@ export function mountBoardInteractions(store, routes = {}) {
   let lastTurnEffect = null;
   let lastTurnEffectSignature = null;
   let lastProcessedTurnEffectSignature = null;
+  const sheetSyncQueue = new Map();
   // Sand timer artwork is resolved via CSS data-stage attributes using
   // assets/images/turn-timer/sand-timer-{stage}.png.
   const SOUND_PROFILES = {
@@ -9562,7 +9564,9 @@ export function mountBoardInteractions(store, routes = {}) {
     }
 
     let result = null;
-    const updated = updatePlacementById(placementId, (target) => {
+    const updateResult = updatePlacementById(
+      placementId,
+      (target) => {
       const hp = ensurePlacementHitPoints(target.hp);
       const currentValue = parseHitPointNumber(hp.current);
       const maxValue = parseHitPointNumber(hp.max);
@@ -9598,11 +9602,21 @@ export function mountBoardInteractions(store, routes = {}) {
         max: maxValue,
         change: Math.abs(finalValue - baseCurrent),
       };
-    });
+      },
+      { returnSavePromise: true }
+    );
 
-    if (!updated || !result) {
+    if (!updateResult?.updated || !result) {
       return null;
     }
+
+    syncPlacementHitPointsToSheet(
+      placementId,
+      { current: String(result.current), max: result.max },
+      {
+        savePromise: updateResult.savePromise,
+      }
+    );
 
     const placement = getPlacementFromStore(placementId);
     const name = tokenLabel(placement);
@@ -9718,7 +9732,11 @@ export function mountBoardInteractions(store, routes = {}) {
     };
   }
 
-  function updatePlacementById(placementId, mutator, { syncBoard = true } = {}) {
+  function updatePlacementById(
+    placementId,
+    mutator,
+    { syncBoard = true, returnSavePromise = false } = {}
+  ) {
     if (!placementId || typeof mutator !== 'function' || typeof boardApi.updateState !== 'function') {
       return false;
     }
@@ -9731,6 +9749,7 @@ export function mountBoardInteractions(store, routes = {}) {
 
     const gmUser = Boolean(state?.user?.isGM);
     let updated = false;
+    let savePromise = null;
     boardApi.updateState?.((draft) => {
       const scenePlacements = ensureScenePlacementDraft(draft, activeSceneId);
       const target = scenePlacements.find((item) => item && item.id === placementId);
@@ -9745,7 +9764,11 @@ export function mountBoardInteractions(store, routes = {}) {
     });
 
     if (updated && syncBoard) {
-      persistBoardStateSnapshot();
+      savePromise = persistBoardStateSnapshot();
+    }
+
+    if (returnSavePromise) {
+      return { updated, savePromise: savePromise ?? null };
     }
 
     return updated;
@@ -9905,17 +9928,29 @@ export function mountBoardInteractions(store, routes = {}) {
 
     hitPointsEditSession = null;
 
-    updatePlacementById(activeTokenSettingsId, (target) => {
-      const hitPoints = ensurePlacementHitPoints(target.hp, baseSnapshot.max);
-      hitPoints.current = nextValue;
-      if (hitPoints.max === '' && nextValue !== '') {
-        hitPoints.max = nextValue;
-      }
-      target.hp = hitPoints;
-    });
+    const updateResult = updatePlacementById(
+      activeTokenSettingsId,
+      (target) => {
+        const hitPoints = ensurePlacementHitPoints(target.hp, baseSnapshot.max);
+        hitPoints.current = nextValue;
+        if (hitPoints.max === '' && nextValue !== '') {
+          hitPoints.max = nextValue;
+        }
+        target.hp = hitPoints;
+      },
+      { returnSavePromise: true }
+    );
 
     const latestPlacement = getPlacementFromStore(activeTokenSettingsId);
     const latestSnapshot = latestPlacement ? ensurePlacementHitPoints(latestPlacement.hp) : null;
+
+    if (updateResult?.updated && latestSnapshot) {
+      syncPlacementHitPointsToSheet(
+        activeTokenSettingsId,
+        latestSnapshot,
+        { savePromise: updateResult.savePromise }
+      );
+    }
 
     if (tokenSettingsMenu?.hpCurrentInput && latestSnapshot) {
       tokenSettingsMenu.hpCurrentInput.value = latestSnapshot.current;
@@ -9998,6 +10033,115 @@ export function mountBoardInteractions(store, routes = {}) {
   function ensurePlacementHitPoints(value, fallbackMax = '') {
     const normalized = normalizePlacementHitPoints(value, fallbackMax);
     return { current: normalized.current, max: normalized.max };
+  }
+
+  async function postHitPointsToSheet(payload) {
+    const endpoint = typeof routes?.sheet === 'string' ? routes.sheet : null;
+    if (!endpoint || typeof fetch !== 'function') {
+      return null;
+    }
+
+    try {
+      const response = await fetch(endpoint, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(payload ?? {}),
+      });
+
+      if (!response?.ok) {
+        throw new Error(`Sheet sync failed with status ${response?.status ?? 'unknown'}`);
+      }
+
+      return response;
+    } catch (error) {
+      console.warn('[VTT] Failed to sync hit points to sheet', error);
+      return null;
+    }
+  }
+
+  function scheduleSheetHitPointSync(payload = {}, { savePromise = null, sceneId = null } = {}) {
+    const endpoint = typeof routes?.sheet === 'string' ? routes.sheet : null;
+    const name = typeof payload.character === 'string' ? payload.character.trim() : '';
+    if (!endpoint || !name) {
+      return;
+    }
+
+    const currentValue = normalizeHitPointsValue(payload.currentStamina);
+    const sceneKey = typeof sceneId === 'string' && sceneId ? sceneId : '';
+    const key = `${sceneKey}::${name.toLowerCase()}`;
+    const existing = sheetSyncQueue.get(key);
+    const pendingSavePromise = savePromise ?? existing?.savePromise ?? null;
+    const setTimeoutFn = typeof window?.setTimeout === 'function' ? window.setTimeout : setTimeout;
+
+    if (existing?.timerId && typeof clearTimeout === 'function') {
+      clearTimeout(existing.timerId);
+    }
+
+    const dispatchUpdate = () => {
+      const sendUpdate = () => postHitPointsToSheet({ character: name, currentStamina: currentValue });
+
+      if (pendingSavePromise && typeof pendingSavePromise.then === 'function') {
+        pendingSavePromise
+          .then((result) => {
+            if (result?.success === false) {
+              sheetSyncQueue.delete(key);
+              return null;
+            }
+            return sendUpdate();
+          })
+          .catch(() => {
+            sheetSyncQueue.delete(key);
+          })
+          .finally(() => {
+            sheetSyncQueue.delete(key);
+          });
+        return;
+      }
+
+      Promise.resolve(sendUpdate())
+        .catch(() => {})
+        .finally(() => {
+          sheetSyncQueue.delete(key);
+        });
+    };
+
+    if (typeof setTimeoutFn === 'function') {
+      const timerId = setTimeoutFn(dispatchUpdate, SHEET_SYNC_DEBOUNCE_MS);
+      sheetSyncQueue.set(key, {
+        timerId,
+        payload: { character: name, currentStamina: currentValue },
+        savePromise: pendingSavePromise,
+      });
+    } else {
+      dispatchUpdate();
+    }
+  }
+
+  function syncPlacementHitPointsToSheet(placementId, hitPoints, { savePromise = null } = {}) {
+    if (!placementId) {
+      return;
+    }
+
+    const placement = getPlacementFromStore(placementId);
+    if (!placement) {
+      return;
+    }
+
+    const name = typeof placement.name === 'string' ? placement.name.trim() : '';
+    if (!name) {
+      return;
+    }
+
+    const activeSceneId = getActiveSceneId();
+    const snapshot = ensurePlacementHitPoints(hitPoints);
+
+    scheduleSheetHitPointSync(
+      {
+        character: name,
+        currentStamina: snapshot.current,
+      },
+      { savePromise, sceneId: activeSceneId }
+    );
   }
 
   function normalizePlacementCondition(value) {
