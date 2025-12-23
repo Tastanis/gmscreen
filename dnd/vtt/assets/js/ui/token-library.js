@@ -1,7 +1,7 @@
 import { initializeTokenMaker } from './token-maker.js';
 import { createMonsterImporter } from './monster-import.js';
 import { createToken, createTokenFolder, updateToken, deleteToken } from '../services/token-service.js';
-import { restrictTokensToPlayerView } from '../state/store.js';
+import { PLAYER_VISIBLE_TOKEN_FOLDER, normalizePlayerTokenFolderName, restrictTokensToPlayerView } from '../state/store.js';
 
 const UNSORTED_KEY = '__unsorted';
 const sheetStaminaCache = new Map();
@@ -80,13 +80,27 @@ export function renderTokenLibrary(routes, store, options = {}) {
       return [];
     }
 
+    const playerFolderKey = normalizePlayerTokenFolderName(PLAYER_VISIBLE_TOKEN_FOLDER);
+    if (!playerFolderKey) {
+      return [];
+    }
+
     const names = new Set();
-    listContainer.querySelectorAll('.token-item h4').forEach((node) => {
-      if (node && typeof node.textContent === 'string') {
-        const name = node.textContent.trim();
-        if (name) {
-          names.add(name);
-        }
+    listContainer.querySelectorAll('.token-item').forEach((item) => {
+      const folderName =
+        typeof item?.dataset?.folderName === 'string' ? item.dataset.folderName : '';
+      if (normalizePlayerTokenFolderName(folderName) !== playerFolderKey) {
+        return;
+      }
+
+      const nameNode = item.querySelector('h4');
+      if (!nameNode || typeof nameNode.textContent !== 'string') {
+        return;
+      }
+
+      const name = nameNode.textContent.trim();
+      if (name) {
+        names.add(name);
       }
     });
     return [...names];
@@ -1201,7 +1215,7 @@ function buildTokenMarkup(groups, options = {}) {
             </button>
           </div>
           <ul class="token-group__list" id="${listId}">
-            ${group.items.map((token) => renderTokenItem(token)).join('')}
+            ${group.items.map((token) => renderTokenItem(token, { folderName: group.title })).join('')}
           </ul>
         </li>
       `;
@@ -1214,7 +1228,7 @@ function buildGroupListId(groupId) {
   return `token-group-list-${base.replace(/[^a-zA-Z0-9_-]/g, '-') || 'unsorted'}`;
 }
 
-function renderTokenItem(token) {
+function renderTokenItem(token, options = {}) {
   const name = escapeHtml(token.name || 'Untitled Token');
   const thumb = renderTokenThumb(token);
   const sizeAttr = typeof token.size === 'string' ? ` data-token-size="${escapeHtml(token.size)}"` : '';
@@ -1223,10 +1237,13 @@ function renderTokenItem(token) {
       ? ` data-token-hp="${escapeHtml(token.hp)}"`
       : '';
   const teamAttr = ` data-token-team="${normalizeTokenTeam(token.combatTeam ?? token.team ?? null)}"`;
+  const folderName =
+    typeof options.folderName === 'string' && options.folderName.trim() ? options.folderName.trim() : '';
+  const folderAttr = folderName ? ` data-folder-name="${escapeHtml(folderName)}"` : '';
 
   return `
     <li>
-      <article class="token-item" draggable="true" data-token-id="${escapeHtml(token.id)}"${sizeAttr}${hpAttr}${teamAttr}>
+      <article class="token-item" draggable="true" data-token-id="${escapeHtml(token.id)}"${sizeAttr}${hpAttr}${teamAttr}${folderAttr}>
         <div class="token-item__meta">
           <h4>${name}</h4>
         </div>
