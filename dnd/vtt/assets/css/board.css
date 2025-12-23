@@ -380,10 +380,10 @@
 .vtt-damage-heal__input-row::before {
   content: attr(data-sign);
   position: absolute;
-  left: 0.85rem;
+  left: 0.75rem;
   top: 50%;
   transform: translateY(-50%);
-  font-size: 1.3rem;
+  font-size: 2rem;
   font-weight: 700;
   color: rgba(226, 232, 240, 0.9);
   pointer-events: none;
@@ -391,13 +391,14 @@
 
 .vtt-damage-heal__input {
   width: 100%;
-  padding: 0.65rem 0.75rem 0.65rem 1.8rem;
+  padding: 0.3rem 0.6rem 0.3rem 1.6rem;
   border-radius: var(--vtt-radius);
-  border: 1px solid rgba(191, 166, 139, 0.4);
+  border: 2px solid rgba(191, 166, 139, 0.4);
   background: rgba(32, 22, 18, 0.65);
   color: inherit;
   font-weight: 700;
-  font-size: 1.3rem;
+  font-size: 2.6rem;
+  line-height: 1.1;
   text-align: left;
 }
 
