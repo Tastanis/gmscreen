@@ -95,6 +95,14 @@ const DEFAULT_CAREER_FIELDS = {
   incitingIncident: "",
 };
 
+function defaultCommonThing() {
+  return {
+    id: createId("common"),
+    title: "",
+    details: "",
+  };
+}
+
 const DEFAULT_VITALS = {
   size: "",
   speed: "",
@@ -348,6 +356,24 @@ function convertLegacyEffectsToTests(effects = []) {
   });
 }
 
+function normalizeCommonThings(list) {
+  if (!Array.isArray(list)) return [];
+
+  return list.map((item) => {
+    if (typeof item === "string") {
+      return { ...defaultCommonThing(), title: item };
+    }
+
+    return {
+      ...defaultCommonThing(),
+      ...(item || {}),
+      id: item?.id || createId("common"),
+      title: item?.title || "",
+      details: item?.details || item?.text || "",
+    };
+  });
+}
+
 let sheetState = deepClone(defaultSheet);
 let activeCharacter = "";
 
@@ -372,6 +398,7 @@ function mergeWithDefaults(data) {
 
   merged.sidebar = { ...merged.sidebar, ...(data.sidebar || {}) };
   merged.sidebar.lists = { ...merged.sidebar.lists, ...(data.sidebar?.lists || {}) };
+  merged.sidebar.lists.common = normalizeCommonThings(data.sidebar?.lists?.common || []);
   merged.sidebar.skills = normalizeSkillsState(data.sidebar?.skills);
   merged.sidebar.resource = {
     ...merged.sidebar.resource,
@@ -771,6 +798,64 @@ function renderListSection(containerId, title, key, placeholder) {
       <textarea class="edit-field" rows="4" data-list="${key}" placeholder="${placeholder}">${values.join("\n")}</textarea>
     </div>
   `;
+}
+
+function renderCommonThingCard(thing) {
+  const displayTitle = thing.title || "Common Thing";
+  const displayDetails = thing.details || "";
+
+  return `
+    <article class="common-card" data-common-id="${thing.id}">
+      <header class="common-card__header">
+        <div class="common-card__title-group">
+          <div class="display-value common-card__title">${displayTitle}</div>
+          <input
+            class="edit-field"
+            type="text"
+            data-common-field="title"
+            value="${thing.title || ""}"
+            placeholder="Common thing title"
+          />
+        </div>
+        <button class="icon-btn edit-only" data-remove-common="${thing.id}" aria-label="Remove common thing">✕</button>
+      </header>
+      <div class="common-card__body">
+        <p class="display-value">${displayDetails || ""}</p>
+        <textarea
+          class="edit-field"
+          rows="3"
+          data-common-field="details"
+          placeholder="Details or reminders"
+        >${thing.details || ""}</textarea>
+      </div>
+    </article>
+  `;
+}
+
+function renderCommonThings() {
+  const container = document.getElementById("sidebar-common");
+  if (!container) return;
+
+  const commonThings = normalizeCommonThings(sheetState.sidebar.lists.common || []);
+  sheetState.sidebar.lists.common = commonThings;
+  const hasItems = commonThings.length > 0;
+
+  container.innerHTML = `
+    <div class="sidebar__header common-header">
+      <span>Common Things</span>
+      <button class="text-btn edit-only" data-add-common>+ Add Common Thing</button>
+    </div>
+    <div class="sidebar__content common-content">
+      ${
+        hasItems
+          ? commonThings.map((thing) => renderCommonThingCard(thing)).join("")
+          : '<div class="muted">Quick reminders go here.</div>'
+      }
+    </div>
+  `;
+
+  bindCommonAdds();
+  bindCommonRemovals();
 }
 
 function renderSidebarResource() {
@@ -1380,7 +1465,7 @@ function renderActionSection(type, containerId) {
 }
 
 function renderSidebarLists() {
-  renderListSection("sidebar-common", "Common Things", "common", "Quick reminders go here.");
+  renderCommonThings();
   const weakContainer = document.getElementById("sidebar-weaknesses");
   if (weakContainer) {
     const weaknesses = sheetState.sidebar.lists.weaknesses || [];
@@ -1464,6 +1549,31 @@ function bindFeatureRemovals() {
       renderFeatures();
       queueAutoSave();
     });
+  });
+}
+
+function bindCommonAdds() {
+  document.querySelectorAll("[data-add-common]").forEach((btn) => {
+    btn.onclick = () => {
+      captureCommonThings();
+      sheetState.sidebar.lists.common.push(defaultCommonThing());
+      renderCommonThings();
+      queueAutoSave();
+    };
+  });
+}
+
+function bindCommonRemovals() {
+  document.querySelectorAll("[data-remove-common]").forEach((btn) => {
+    btn.onclick = () => {
+      const id = btn.getAttribute("data-remove-common");
+      captureCommonThings();
+      sheetState.sidebar.lists.common = (sheetState.sidebar.lists.common || []).filter(
+        (thing) => thing.id !== id
+      );
+      renderCommonThings();
+      queueAutoSave();
+    };
   });
 }
 
@@ -1562,6 +1672,7 @@ function captureCoreFields() {
 
   document.querySelectorAll("[data-list]").forEach((textarea) => {
     const key = textarea.getAttribute("data-list");
+    if (key === "common") return;
     sheetState.sidebar.lists[key] = textarea.value
       .split("\n")
       .map((line) => line.trim())
@@ -1579,6 +1690,20 @@ function captureCoreFields() {
     };
   });
   sheetState.sidebar.skills = updatedSkills;
+}
+
+function captureCommonThings() {
+  const cards = document.querySelectorAll(".common-card");
+  const updated = [];
+
+  cards.forEach((card) => {
+    const id = card.getAttribute("data-common-id") || createId("common");
+    const title = card.querySelector('[data-common-field="title"]')?.value || "";
+    const details = card.querySelector('[data-common-field="details"]')?.value || "";
+    updated.push({ id, title, details });
+  });
+
+  sheetState.sidebar.lists.common = updated;
 }
 
 function captureFeatures() {
@@ -1657,6 +1782,7 @@ function captureActions() {
 
 function captureAllSections() {
   captureCoreFields();
+  captureCommonThings();
   captureFeatures();
   captureActions();
 }
