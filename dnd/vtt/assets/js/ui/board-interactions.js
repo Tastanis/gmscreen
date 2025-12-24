@@ -677,6 +677,7 @@ export function mountBoardInteractions(store, routes = {}) {
   const combatGroupMissingCounts = new Map();
   const MAX_COMBAT_GROUP_MISSING_TICKS = 2;
   let lastCombatTrackerEntries = [];
+  let lastCombatTrackerActiveIds = new Set();
   let renderedPlacements = [];
   let mapLoadSequence = 0;
   let mapLoadWatchdogId = null;
@@ -4557,7 +4558,7 @@ export function mountBoardInteractions(store, routes = {}) {
 
   function renderTokens(state = {}, layer, view) {
     if (!layer) {
-      updateCombatTracker([]);
+      updateCombatTracker([], { activeIds: [] });
       return;
     }
 
@@ -4580,7 +4581,7 @@ export function mountBoardInteractions(store, routes = {}) {
       selectedTokenIds.clear();
       notifySelectionChanged();
       closeTokenSettings();
-      updateCombatTracker([]);
+      updateCombatTracker([], { activeIds: [] });
       return;
     }
 
@@ -4603,6 +4604,7 @@ export function mountBoardInteractions(store, routes = {}) {
     let renderedCount = 0;
     const retainedSelection = new Set();
     const trackerEntries = [];
+    const activeCombatantIds = new Set();
     const activeRotationIds = new Set();
 
     placements.forEach((placement) => {
@@ -4610,6 +4612,8 @@ export function mountBoardInteractions(store, routes = {}) {
       if (!normalized) {
         return;
       }
+
+      activeCombatantIds.add(normalized.id);
 
       if (!gmViewing && normalized.hidden) {
         return;
@@ -4740,7 +4744,7 @@ export function mountBoardInteractions(store, routes = {}) {
       renderedPlacements = [];
     }
 
-    updateCombatTracker(trackerEntries);
+    updateCombatTracker(trackerEntries, { activeIds: activeCombatantIds });
   }
 
   function updateCombatTracker(combatants = [], options = {}) {
@@ -4819,16 +4823,23 @@ export function mountBoardInteractions(store, routes = {}) {
       });
     }
 
-    if (!options?.skipCache) {
-      lastCombatTrackerEntries = entries.map(cloneCombatantEntry).filter(Boolean);
+    const activeIds = new Set(
+      options?.activeIds instanceof Set ? Array.from(options.activeIds) : options?.activeIds ?? []
+    );
+    if (!activeIds.size) {
+      rawEntries.forEach((entry) => {
+        if (entry && typeof entry.id === 'string') {
+          activeIds.add(entry.id);
+        }
+      });
     }
 
-    const activeIds = new Set();
-    rawEntries.forEach((entry) => {
-      if (entry && typeof entry.id === 'string') {
-        activeIds.add(entry.id);
-      }
-    });
+    if (!options?.skipCache) {
+      lastCombatTrackerEntries = entries.map(cloneCombatantEntry).filter(Boolean);
+      lastCombatTrackerActiveIds = new Set(activeIds);
+    } else if (options?.activeIds) {
+      lastCombatTrackerActiveIds = new Set(activeIds);
+    }
 
     const visibleEntryIds = new Set();
     entries.forEach((entry) => {
@@ -5045,7 +5056,10 @@ export function mountBoardInteractions(store, routes = {}) {
     if (!combatTrackerRoot || !combatTrackerWaiting || !combatTrackerCompleted) {
       return;
     }
-    updateCombatTracker(lastCombatTrackerEntries, { skipCache: true });
+    updateCombatTracker(lastCombatTrackerEntries, {
+      skipCache: true,
+      activeIds: lastCombatTrackerActiveIds,
+    });
   }
 
   function pruneCombatGroups(activeIds) {
