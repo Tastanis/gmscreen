@@ -1534,8 +1534,23 @@ function renderFeatures() {
                 ${(feature.tags || []).map((tag) => `<span class="chip">${tag}</span>`).join("")}
               </div>
               <input class="edit-field" type="text" data-field="tags" value="${(feature.tags || []).join(", ")}" placeholder="Tags" />
-              <div class="feature-body display-value">${feature.text || ""}</div>
-              <textarea class="edit-field" rows="4" data-field="text" placeholder="Describe the feature">${feature.text || ""}</textarea>
+              <div class="feature-body display-value rich-text-display">${renderRichText(feature.text || "")}</div>
+              <div class="rich-text-wrapper">
+                <div class="rich-toolbar edit-only" role="toolbar" aria-label="Feature formatting">
+                  <button class="icon-btn rich-toolbar__btn" type="button" data-rich-command="bold" aria-label="Bold">
+                    <strong>B</strong>
+                  </button>
+                  <button class="icon-btn rich-toolbar__btn" type="button" data-rich-command="underline" aria-label="Underline">
+                    <span class="rich-toolbar__underline">U</span>
+                  </button>
+                </div>
+                <div
+                  class="rich-text-editor edit-field"
+                  data-field="text"
+                  contenteditable="true"
+                  data-placeholder="Describe the feature"
+                >${renderRichText(feature.text || "")}</div>
+              </div>
             </article>
           `
         )
@@ -1546,6 +1561,7 @@ function renderFeatures() {
 
   bindFeatureAdd();
   bindFeatureRemovals();
+  bindRichTextToolbars();
 }
 
 function actionDefaults(type) {
@@ -1584,6 +1600,57 @@ function formatMultiline(text) {
     .filter((line, index, arr) => line !== "" || index < arr.length - 1)
     .map((line) => line || "\u00a0")
     .join("<br>");
+}
+
+function normalizeRichText(value) {
+  if (!value) return "";
+  const text = String(value);
+  if (/<[a-z][\s\S]*>/i.test(text)) {
+    return text;
+  }
+  return formatMultiline(text);
+}
+
+function sanitizeRichText(html) {
+  if (!html) return "";
+  const allowedTags = new Set(["B", "STRONG", "U", "BR", "P", "DIV", "UL", "OL", "LI", "EM", "SPAN"]);
+  const parser = new DOMParser();
+  const doc = parser.parseFromString(`<div>${html}</div>`, "text/html");
+  const root = doc.body.firstElementChild;
+
+  const sanitizeNode = (node) => {
+    if (node.nodeType === Node.TEXT_NODE) {
+      return document.createTextNode(node.textContent || "");
+    }
+    if (node.nodeType !== Node.ELEMENT_NODE) {
+      return document.createTextNode("");
+    }
+    const tagName = node.tagName.toUpperCase();
+    if (!allowedTags.has(tagName)) {
+      const fragment = document.createDocumentFragment();
+      Array.from(node.childNodes).forEach((child) => {
+        fragment.appendChild(sanitizeNode(child));
+      });
+      return fragment;
+    }
+    const clean = document.createElement(tagName.toLowerCase());
+    Array.from(node.childNodes).forEach((child) => {
+      clean.appendChild(sanitizeNode(child));
+    });
+    return clean;
+  };
+
+  const fragment = document.createDocumentFragment();
+  Array.from(root.childNodes).forEach((child) => {
+    fragment.appendChild(sanitizeNode(child));
+  });
+  const container = document.createElement("div");
+  container.appendChild(fragment);
+  return container.innerHTML;
+}
+
+function renderRichText(value) {
+  return sanitizeRichText(normalizeRichText(value));
 }
 
 function renderTierDisplay(tier) {
@@ -1779,8 +1846,23 @@ function renderActionSection(type, containerId) {
                   : `<button class="text-btn edit-only" data-add-test="${action.id}">+ Add Test</button>`
               }
               <div class="action-notes">
-                <p class="display-value">${action.description || ""}</p>
-                <textarea class="edit-field" rows="3" data-field="description" placeholder="Additional notes">${action.description || ""}</textarea>
+                <div class="display-value rich-text-display">${renderRichText(action.description || "")}</div>
+                <div class="rich-text-wrapper">
+                  <div class="rich-toolbar edit-only" role="toolbar" aria-label="Action notes formatting">
+                    <button class="icon-btn rich-toolbar__btn" type="button" data-rich-command="bold" aria-label="Bold">
+                      <strong>B</strong>
+                    </button>
+                    <button class="icon-btn rich-toolbar__btn" type="button" data-rich-command="underline" aria-label="Underline">
+                      <span class="rich-toolbar__underline">U</span>
+                    </button>
+                  </div>
+                  <div
+                    class="rich-text-editor edit-field"
+                    data-field="description"
+                    contenteditable="true"
+                    data-placeholder="Additional notes"
+                  >${renderRichText(action.description || "")}</div>
+                </div>
               </div>
             </article>
           `
@@ -1795,6 +1877,7 @@ function renderActionSection(type, containerId) {
   bindTestAdds();
   bindTestRemovals();
   bindAttributeToggles();
+  bindRichTextToolbars();
 }
 
 function renderSidebarLists() {
@@ -1976,6 +2059,20 @@ function bindAttributeToggles() {
   });
 }
 
+function bindRichTextToolbars() {
+  document.querySelectorAll("[data-rich-command]").forEach((button) => {
+    button.onclick = (event) => {
+      event.preventDefault();
+      const command = button.getAttribute("data-rich-command");
+      if (!command) return;
+      const editor = button.closest(".rich-text-wrapper")?.querySelector(".rich-text-editor");
+      if (!editor) return;
+      editor.focus();
+      document.execCommand(command, false, null);
+    };
+  });
+}
+
 function captureCoreFields() {
   document.querySelectorAll("[data-model]").forEach((el) => {
     const path = el.getAttribute("data-model");
@@ -2042,7 +2139,7 @@ function captureFeatures() {
     const id = card.getAttribute("data-feature-id") || createId("feature");
     const title = card.querySelector('[data-field="title"]').value;
     const tagsValue = card.querySelector('[data-field="tags"]').value;
-    const text = card.querySelector('[data-field="text"]').value;
+    const text = card.querySelector('[data-field="text"]')?.innerHTML || "";
     updated.push({
       id,
       title,
@@ -2050,7 +2147,7 @@ function captureFeatures() {
         .split(",")
         .map((tag) => tag.trim())
         .filter(Boolean),
-      text,
+      text: sanitizeRichText(normalizeRichText(text)),
     });
   });
   sheetState.features = updated;
@@ -2102,7 +2199,7 @@ function captureActions() {
         target: getField("target")?.value || "",
         speed: getField("speed")?.value || "",
         cost: getField("cost")?.value || "",
-        description: getField("description")?.value || "",
+        description: sanitizeRichText(normalizeRichText(getField("description")?.innerHTML || "")),
         tests,
       });
     });
@@ -2154,6 +2251,9 @@ function toggleEditMode(enabled) {
   document.querySelectorAll(".edit-field").forEach((input) => {
     if (input.dataset.liveEdit === "true") return;
     input.disabled = !enabled;
+  });
+  document.querySelectorAll(".rich-text-editor").forEach((editor) => {
+    editor.contentEditable = enabled ? "true" : "false";
   });
 }
 

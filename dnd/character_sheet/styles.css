@@ -885,11 +885,54 @@ body {
 }
 
 .feature-body,
-.action-notes p,
-.effect__body p {
+.action-notes .rich-text-display,
+.effect__body p,
+.rich-text-display {
   margin: 0;
   line-height: 1.4;
   color: var(--text);
+}
+
+.rich-text-wrapper {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+.rich-toolbar {
+  display: inline-flex;
+  gap: 6px;
+}
+
+.rich-toolbar__btn {
+  min-width: 32px;
+  justify-content: center;
+}
+
+.rich-toolbar__underline {
+  text-decoration: underline;
+  font-weight: 700;
+}
+
+.rich-text-editor {
+  min-height: 80px;
+  background: #20130d;
+  border: 1px solid var(--border);
+  color: var(--text);
+  border-radius: 3px;
+  font-size: 14px;
+  padding: 6px;
+  line-height: 1.4;
+}
+
+.rich-text-editor:focus {
+  outline: 2px solid var(--accent);
+  outline-offset: 0;
+}
+
+.rich-text-editor:empty::before {
+  content: attr(data-placeholder);
+  color: var(--muted);
 }
 
 .action-meta {
