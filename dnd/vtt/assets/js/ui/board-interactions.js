@@ -171,6 +171,28 @@ export function createBoardStatePoller({
       const currentUpdatedAt = Number.isFinite(currentUpdatedAtRaw)
         ? currentUpdatedAtRaw
         : 0;
+      const activeSceneId =
+        typeof incoming?.activeSceneId === 'string'
+          ? incoming.activeSceneId
+          : typeof currentState?.boardState?.activeSceneId === 'string'
+          ? currentState.boardState.activeSceneId
+          : null;
+      const normalizedSceneId = typeof activeSceneId === 'string' ? activeSceneId.trim() : '';
+      const incomingCombatUpdatedAtRaw =
+        normalizedSceneId && incoming?.sceneState?.[normalizedSceneId]?.combat
+          ? Number(incoming.sceneState[normalizedSceneId].combat.updatedAt)
+          : 0;
+      const incomingCombatUpdatedAt = Number.isFinite(incomingCombatUpdatedAtRaw)
+        ? incomingCombatUpdatedAtRaw
+        : 0;
+      const currentCombatUpdatedAtRaw =
+        normalizedSceneId && currentState?.boardState?.sceneState?.[normalizedSceneId]?.combat
+          ? Number(currentState.boardState.sceneState[normalizedSceneId].combat.updatedAt)
+          : 0;
+      const currentCombatUpdatedAt = Number.isFinite(currentCombatUpdatedAtRaw)
+        ? currentCombatUpdatedAtRaw
+        : 0;
+      const hasNewerCombatUpdate = incomingCombatUpdatedAt > currentCombatUpdatedAt;
       const currentUserId = normalizeProfileIdFn(getCurrentUserIdFn());
       const incomingHash = hashCandidate;
       const lastPersistedHash = getLastPersistedHashFn?.() ?? null;
@@ -197,7 +219,7 @@ export function createBoardStatePoller({
             snapshotSignature &&
             currentSignature === snapshotSignature));
 
-      if (gmHasAuthoritativeSnapshot) {
+      if (gmHasAuthoritativeSnapshot && !hasNewerCombatUpdate) {
         lastHash = hash;
         pollErrorLogged = false;
         return;
