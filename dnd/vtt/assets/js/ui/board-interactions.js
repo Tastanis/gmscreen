@@ -5764,8 +5764,6 @@ export function mountBoardInteractions(store, routes = {}) {
       return;
     }
 
-    syncCombatStateToStore();
-
     completedCombatants.delete(representativeId);
     setActiveCombatantId(representativeId);
     if (isGmUser()) {
@@ -7356,7 +7354,22 @@ export function mountBoardInteractions(store, routes = {}) {
       return;
     }
 
+    const existingCombatState = state.boardState?.sceneState?.[activeSceneId]?.combat ?? null;
+    const existingNormalized = normalizeCombatState(existingCombatState ?? {});
+
     const snapshot = createCombatStateSnapshot();
+    if (existingNormalized.updatedAt && existingNormalized.updatedAt > combatStateVersion) {
+      snapshot.active = existingNormalized.active;
+      snapshot.round = existingNormalized.round;
+      snapshot.activeCombatantId = existingNormalized.activeCombatantId;
+      snapshot.completedCombatantIds = [...existingNormalized.completedCombatantIds];
+      snapshot.startingTeam = existingNormalized.startingTeam;
+      snapshot.currentTeam = existingNormalized.currentTeam;
+      snapshot.lastTeam = existingNormalized.lastTeam;
+      snapshot.roundTurnCount = existingNormalized.roundTurnCount;
+      snapshot.turnLock = existingNormalized.turnLock;
+      snapshot.lastEffect = existingNormalized.lastEffect;
+    }
     const serialized = JSON.stringify(snapshot);
     if (serialized === lastCombatStateSnapshot) {
       return;
