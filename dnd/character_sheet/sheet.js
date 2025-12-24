@@ -422,20 +422,25 @@ function mergeWithDefaults(data) {
   merged.features = Array.isArray(data.features) ? data.features : [];
   merged.actions = { ...merged.actions, ...(data.actions || {}) };
   ["mains", "maneuvers", "triggers", "freeStrikes"].forEach((key) => {
-    merged.actions[key] = (merged.actions[key] || []).map((action) => ({
-      id: action.id || createId("action"),
-      name: action.name || "",
-      actionLabel: action.actionLabel || "",
-      tags: Array.isArray(action.tags) ? action.tags : [],
-      range: action.range || "",
-      target: action.target || "",
-      speed: action.speed || "",
-      cost: action.cost || "",
-      description: action.description || "",
-      tests: Array.isArray(action.tests)
-        ? action.tests.map(normalizeTest)
-        : convertLegacyEffectsToTests(action.effects).map(normalizeTest),
-    }));
+    merged.actions[key] = (merged.actions[key] || []).map((action) => {
+      const normalizedAction = {
+        id: action.id || createId("action"),
+        name: action.name || "",
+        actionLabel: action.actionLabel || "",
+        tags: Array.isArray(action.tags) ? action.tags : [],
+        range: action.range || "",
+        target: action.target || "",
+        cost: action.cost || "",
+        description: action.description || "",
+        tests: Array.isArray(action.tests)
+          ? action.tests.map(normalizeTest)
+          : convertLegacyEffectsToTests(action.effects).map(normalizeTest),
+      };
+      if (key === "triggers") {
+        normalizedAction.trigger = action.trigger || "";
+      }
+      return normalizedAction;
+    });
   });
 
   merged.features = merged.features.map((feature) => ({
@@ -1571,18 +1576,21 @@ function actionDefaults(type) {
     triggers: "Triggered Action",
     freeStrikes: "Free Strike",
   };
-  return {
+  const defaults = {
     id: createId("action"),
     name: "",
     actionLabel: labelMap[type] || "Action",
     tags: [],
     range: "",
     target: "",
-    speed: "",
     cost: "",
     description: "",
     tests: [],
   };
+  if (type === "triggers") {
+    defaults.trigger = "";
+  }
+  return defaults;
 }
 
 function formatRoll(rollMod) {
@@ -1820,11 +1828,17 @@ function renderActionSection(type, containerId) {
                   <span class="display-value">${action.target || "-"}</span>
                   <input class="edit-field" type="text" data-field="target" value="${action.target || ""}" />
                 </div>
+                ${
+                  type === "triggers"
+                    ? `
                 <div class="meta-field">
-                  <span class="meta-label">Speed</span>
-                  <span class="display-value">${action.speed || "-"}</span>
-                  <input class="edit-field" type="text" data-field="speed" value="${action.speed || ""}" />
+                  <span class="meta-label">Trigger</span>
+                  <span class="display-value">${action.trigger || "-"}</span>
+                  <input class="edit-field" type="text" data-field="trigger" value="${action.trigger || ""}" />
                 </div>
+                `
+                    : ""
+                }
                 <div class="meta-field">
                   <span class="meta-label">Cost</span>
                   <span class="display-value">${action.cost || "-"}</span>
@@ -2197,10 +2211,14 @@ function captureActions() {
           .filter(Boolean),
         range: getField("range")?.value || "",
         target: getField("target")?.value || "",
-        speed: getField("speed")?.value || "",
         cost: getField("cost")?.value || "",
         description: sanitizeRichText(normalizeRichText(getField("description")?.innerHTML || "")),
         tests,
+        ...(type === "triggers"
+          ? {
+              trigger: getField("trigger")?.value || "",
+            }
+          : {}),
       });
     });
     sheetState.actions[type] = updated;
