@@ -40,7 +40,13 @@ export function queueSave(key, payload, endpoint, options = {}) {
   const controller = new AbortController();
   const normalizedOptions =
     typeof options === 'function' ? { onComplete: options } : options ?? {};
-  const { onComplete, keepalive = false, retryLimit = 3, retryBackoffMs = 500 } =
+  const {
+    onComplete,
+    keepalive = false,
+    retryLimit = 3,
+    retryBackoffMs = 500,
+    coalesce = true,
+  } =
     normalizedOptions;
 
   const entry = {
@@ -68,34 +74,53 @@ export function queueSave(key, payload, endpoint, options = {}) {
   });
 
   if (pending.has(key)) {
-    const existing = pending.get(key);
-    pending.delete(key);
-    existing.controller.abort();
-    finalizeEntry(
-      existing,
-      createResult(false, {
-        aborted: true,
-        error: createAbortError(key),
-      })
-    );
+    const slot = pending.get(key);
+    if (coalesce) {
+      if (slot?.current) {
+        slot.current.controller.abort();
+        finalizeEntry(
+          slot.current,
+          createResult(false, {
+            aborted: true,
+            error: createAbortError(key),
+          })
+        );
+      }
+      if (slot) {
+        slot.queue = [];
+        slot.current = entry;
+      } else {
+        pending.set(key, { current: entry, queue: [] });
+      }
+      schedulePersist(key, entry);
+      return entry.promise;
+    }
+
+    if (slot) {
+      slot.queue.push(entry);
+      return entry.promise;
+    }
   }
 
-  pending.set(key, entry);
+  pending.set(key, { current: entry, queue: [] });
+  schedulePersist(key, entry);
 
+  return entry.promise;
+}
+
+function schedulePersist(key, entry) {
   const setTimeoutFn = globalThis?.window?.setTimeout ?? globalThis.setTimeout;
   if (typeof setTimeoutFn === 'function') {
     setTimeoutFn(() => {
-      const current = pending.get(key);
-      if (!current || current !== entry) {
+      const slot = pending.get(key);
+      if (!slot || slot.current !== entry) {
         return;
       }
-      persist(key, current);
+      persist(key, entry);
     }, 250);
   } else {
     persist(key, entry);
   }
-
-  return entry.promise;
 }
 
 async function persist(key, entry) {
@@ -168,14 +193,20 @@ async function persist(key, entry) {
     }
     result = createResult(false, { aborted, error });
   } finally {
-    const current = pending.get(key);
-    const stillPending = current === entry || current?.controller === controller;
+    const slot = pending.get(key);
+    const stillPending = slot?.current === entry || slot?.current?.controller === controller;
     entry.lastResult = result ?? createResult(false, { aborted: controller.signal.aborted });
     entry.blocked = !entry.lastResult.success;
 
     if (entry.lastResult.success || !stillPending) {
-      if (stillPending) {
-        pending.delete(key);
+      if (stillPending && slot) {
+        const next = slot.queue.shift() ?? null;
+        if (next) {
+          slot.current = next;
+          schedulePersist(key, next);
+        } else {
+          pending.delete(key);
+        }
       }
       finalizeEntry(entry, entry.lastResult);
       return;
@@ -191,8 +222,8 @@ async function persist(key, entry) {
       const setTimeoutFn = globalThis?.window?.setTimeout ?? globalThis.setTimeout;
       if (typeof setTimeoutFn === 'function') {
         setTimeoutFn(() => {
-          const latest = pending.get(key);
-          if (!latest || latest !== entry) {
+          const slot = pending.get(key);
+          if (!slot || slot.current !== entry) {
             return;
           }
           persist(key, entry);
@@ -203,8 +234,14 @@ async function persist(key, entry) {
       return;
     }
 
-    if (stillPending) {
-      pending.delete(key);
+    if (stillPending && slot) {
+      const next = slot.queue.shift() ?? null;
+      if (next) {
+        slot.current = next;
+        schedulePersist(key, next);
+      } else {
+        pending.delete(key);
+      }
     }
 
     finalizeEntry(entry, entry.lastResult);
