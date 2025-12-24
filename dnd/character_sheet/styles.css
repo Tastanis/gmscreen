@@ -841,9 +841,8 @@ body {
 }
 
 .action-grid {
-  grid-template-columns: repeat(auto-fit, minmax(280px, 1fr));
-  max-width: 1200px;
-  margin: 0 auto;
+  grid-template-columns: repeat(auto-fit, minmax(320px, 1fr));
+  gap: 8px;
 }
 
 .feature-card,
@@ -1012,24 +1011,19 @@ body {
   padding: 6px;
   border-radius: 3px;
   display: flex;
-  justify-content: space-between;
+  justify-content: flex-start;
   align-items: center;
   gap: 8px;
 }
 
-.test__roll-editor {
-  display: flex;
-  gap: 6px;
-  align-items: center;
-}
-
-.test__roll-editor input {
+.test__roll input {
   width: 70px;
 }
 
 .test__dice {
   min-width: 64px;
   text-align: right;
+  margin-left: auto;
 }
 
 .test__tiers {
@@ -1120,7 +1114,7 @@ body {
 
 .attribute-check__fields {
   display: grid;
-  grid-template-columns: minmax(140px, 1fr) auto 70px 1fr;
+  grid-template-columns: minmax(120px, 1fr) auto minmax(60px, 80px) minmax(160px, 2fr);
   gap: 8px;
   align-items: center;
 }
@@ -1131,6 +1125,16 @@ body {
 
 .attribute-check__symbol {
   text-align: center;
+}
+
+@media (max-width: 720px) {
+  .attribute-check__fields {
+    grid-template-columns: minmax(120px, 1fr) auto minmax(60px, 80px);
+  }
+
+  .attribute-check__fields [data-tier-field="attr-effect"] {
+    grid-column: 1 / -1;
+  }
 }
 
 .action-label {
