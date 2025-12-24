@@ -664,7 +664,8 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['action'])) {
         if (($is_gm && in_array($character, $characters)) || (!$is_gm && $character === $user)) {
             $data = loadCharacterData();
             $characterData = isset($data[$character]) ? $data[$character] : array();
-            echo json_encode(array('success' => true, 'data' => $characterData));
+            $lastModified = file_exists('data/characters.json') ? filemtime('data/characters.json') : null;
+            echo json_encode(array('success' => true, 'data' => $characterData, 'last_modified' => $lastModified));
         } else {
             echo json_encode(array('success' => false, 'error' => 'Access denied'));
         }
@@ -1454,6 +1455,10 @@ $defaultInventoryTab = $is_gm ? 'frunk' : $user;
         let expandedInventoryRowTop = null;
         let inventorySaveTimeout = null;
         let currentUploadItemId = null;
+        let lastCharacterDataModified = null;
+        let lastInventoryModified = null;
+        let characterSyncInterval = null;
+        let inventorySyncInterval = null;
         
         // Initialize the application
         document.addEventListener('DOMContentLoaded', function() {
@@ -1469,6 +1474,8 @@ $defaultInventoryTab = $is_gm ? 'frunk' : $user;
             loadInventoryData();
             setupInventoryAutoSave();
             updateInventoryPermissions();
+            setupRealtimeCharacterSync();
+            setupRealtimeInventorySync();
 
             initChatPanel(isGM, currentUser);
             setupCharacterSheetNav();

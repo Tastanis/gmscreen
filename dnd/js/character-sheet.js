@@ -743,8 +743,12 @@ function gpaToLetter(gpa) {
 }
 
 // Load character data from server
-function loadCharacterData(character) {
-    showSaveStatus('Loading...', 'loading');
+function loadCharacterData(character, options = {}) {
+    const { silent = false, onlyIfModified = false } = options;
+
+    if (!silent) {
+        showSaveStatus('Loading...', 'loading');
+    }
     
     const formData = new FormData();
     formData.append('action', 'load');
@@ -763,22 +767,52 @@ function loadCharacterData(character) {
     })
     .then(data => {
         if (data.success) {
+            const incomingModified = data.last_modified ?? null;
+            if (onlyIfModified && incomingModified && lastCharacterDataModified === incomingModified) {
+                return;
+            }
+
+            lastCharacterDataModified = incomingModified;
             characterData = data.data;
             populateCharacterData();
-            showSaveStatus('Data loaded', 'success');
+            if (!silent) {
+                showSaveStatus('Data loaded', 'success');
+            }
         } else {
-            showSaveStatus('Failed to load data', 'error');
+            if (!silent) {
+                showSaveStatus('Failed to load data', 'error');
+            }
             console.error('Server error loading character:', data.error);
         }
     })
     .catch(error => {
         console.error('Error loading data:', error);
-        showSaveStatus('Error loading data', 'error');
+        if (!silent) {
+            showSaveStatus('Error loading data', 'error');
+        }
         // Log additional details for network errors
         if (error.name === 'TypeError' && error.message.includes('Failed to fetch')) {
             console.error('Network error loading character - server may be overloaded');
         }
     });
+}
+
+function setupRealtimeCharacterSync() {
+    if (isGM) {
+        return;
+    }
+
+    if (characterSyncInterval) {
+        clearInterval(characterSyncInterval);
+    }
+
+    characterSyncInterval = setInterval(() => {
+        if (document.hidden || isSwitchingCharacter) {
+            return;
+        }
+
+        loadCharacterData(currentCharacter, { silent: true, onlyIfModified: true });
+    }, 3000);
 }
 
 // Populate form fields with character data - UPDATED FOR READ-ONLY MODE
