@@ -5829,6 +5829,7 @@ export function mountBoardInteractions(store, routes = {}) {
     if (!combatActive) {
       closeTurnPrompt();
       updateCombatModeIndicators();
+      syncCombatStateToStore();
       return;
     }
 
