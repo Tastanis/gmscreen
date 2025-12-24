@@ -1741,24 +1741,20 @@ function renderTest(test) {
       ${
         showBeforeEffect
           ? `
-              <div class="test__effects">
-                <div class="effect-block">
-                  <div class="effect-block__title">Effects</div>
-                  <p class="display-value">${formatMultiline(test.beforeEffect)}</p>
-                  <textarea class="edit-field" rows="2" data-test-field="beforeEffect" placeholder="Effects before the test">${
-                    test.beforeEffect || ""
-                  }</textarea>
-                </div>
+              <div class="effect-block test__effects">
+                <div class="effect-block__title">Effects</div>
+                <p class="display-value">${formatMultiline(test.beforeEffect)}</p>
+                <textarea class="edit-field" rows="2" data-test-field="beforeEffect" placeholder="Effects before the test">${
+                  test.beforeEffect || ""
+                }</textarea>
               </div>
             `
           : ""
       }
       <div class="test__roll">
         <div class="display-value">${formatRoll(test.rollMod)}</div>
-        <div class="test__roll-editor edit-field">
-          <span class="test__dice">2d10 +</span>
-          <input type="number" class="edit-field" data-test-field="rollMod" value="${test.rollMod}" />
-        </div>
+        <span class="test__dice edit-only">2d10 +</span>
+        <input type="number" class="edit-field" data-test-field="rollMod" value="${test.rollMod}" />
       </div>
       <div class="test__tiers">
         ${TEST_TIERS.map(({ key, label }) => renderTierSection(label, test.tiers?.[key] || defaultTestTier(), key)).join("")}
@@ -1766,14 +1762,12 @@ function renderTest(test) {
       ${
         showAfterEffect
           ? `
-              <div class="test__effects">
-                <div class="effect-block">
-                  <div class="effect-block__title">Effects</div>
-                  <p class="display-value">${formatMultiline(test.additionalEffect)}</p>
-                  <textarea class="edit-field" rows="2" data-test-field="additionalEffect" placeholder="Additional effects after the test">${
-                    test.additionalEffect || ""
-                  }</textarea>
-                </div>
+              <div class="effect-block test__effects">
+                <div class="effect-block__title">Effects</div>
+                <p class="display-value">${formatMultiline(test.additionalEffect)}</p>
+                <textarea class="edit-field" rows="2" data-test-field="additionalEffect" placeholder="Additional effects after the test">${
+                  test.additionalEffect || ""
+                }</textarea>
               </div>
             `
           : ""
