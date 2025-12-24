@@ -16,8 +16,12 @@ function escapeHtml(text) {
 }
 
 // Load inventory data from server
-function loadInventoryData() {
-    showInventoryStatus('Loading inventory...', 'loading');
+function loadInventoryData(options = {}) {
+    const { silent = false, onlyIfModified = false } = options;
+
+    if (!silent) {
+        showInventoryStatus('Loading inventory...', 'loading');
+    }
     
     fetch('dashboard.php', {
         method: 'POST',
@@ -29,17 +33,49 @@ function loadInventoryData() {
     .then(response => response.json())
     .then(data => {
         if (data.success) {
+            const incomingModified = data.last_modified ?? null;
+            if (onlyIfModified && incomingModified && lastInventoryModified === incomingModified) {
+                return;
+            }
+
+            lastInventoryModified = incomingModified;
             inventoryData = data.data;
             renderAllInventoryTabs();
-            hideInventoryStatus();
+            if (!silent) {
+                hideInventoryStatus();
+            }
         } else {
-            showInventoryStatus('Error loading inventory: ' + data.error, 'error');
+            if (!silent) {
+                showInventoryStatus('Error loading inventory: ' + data.error, 'error');
+            } else {
+                console.error('Error loading inventory:', data.error);
+            }
         }
     })
     .catch(error => {
         console.error('Error:', error);
-        showInventoryStatus('Network error loading inventory', 'error');
+        if (!silent) {
+            showInventoryStatus('Network error loading inventory', 'error');
+        }
     });
+}
+
+function setupRealtimeInventorySync() {
+    if (isGM) {
+        return;
+    }
+
+    if (inventorySyncInterval) {
+        clearInterval(inventorySyncInterval);
+    }
+
+    inventorySyncInterval = setInterval(() => {
+        if (document.hidden) {
+            return;
+        }
+
+        loadInventoryData({ silent: true, onlyIfModified: true });
+    }, 3000);
 }
 
 // Render all inventory tabs

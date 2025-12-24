@@ -74,7 +74,8 @@ $inventory_action = substr($_POST['action'], 10); // Remove "inventory_" prefix
 switch ($inventory_action) {
     case 'load':
         $data = loadInventoryData();
-        echo json_encode(array('success' => true, 'data' => $data));
+        $lastModified = file_exists('data/inventory.json') ? filemtime('data/inventory.json') : null;
+        echo json_encode(array('success' => true, 'data' => $data, 'last_modified' => $lastModified));
         break;
         
     case 'save_item':
