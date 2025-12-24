@@ -157,16 +157,16 @@ function createInventoryItemCard(item, index, tab) {
                     <div class="inventory-item-field">
                         <label>Name:</label>
                         ${canEditInventoryTab(tab) ?
-                            `<input type="text" value="${escapeHtml(item.name || '')}" onchange="updateInventoryItemField('${tab}', ${index}, 'name', this.value)">` :
-                            `<div class="inventory-readonly-field">${escapeHtml(item.name || '')}</div>`
+                            `<input type="text" data-field="name" value="${escapeHtml(item.name || '')}" onchange="updateInventoryItemField('${tab}', ${index}, 'name', this.value)">` :
+                            `<div class="inventory-readonly-field" data-field="name">${escapeHtml(item.name || '')}</div>`
                         }
                     </div>
 
                     <div class="inventory-item-field description-field">
                         <label>Description:</label>
                         ${canEditInventoryTab(tab) ?
-                            `<textarea onchange="updateInventoryItemField('${tab}', ${index}, 'description', this.value)">${escapeHtml(item.description || '')}</textarea>` :
-                            `<div class="inventory-readonly-field readonly-textarea">${escapeHtml(item.description || '')}</div>`
+                            `<textarea data-field="description" onchange="updateInventoryItemField('${tab}', ${index}, 'description', this.value)">${escapeHtml(item.description || '')}</textarea>` :
+                            `<div class="inventory-readonly-field readonly-textarea" data-field="description">${escapeHtml(item.description || '')}</div>`
                         }
                     </div>
                 </div>
@@ -176,16 +176,16 @@ function createInventoryItemCard(item, index, tab) {
                 <div class="inventory-item-field">
                     <label>Keywords:</label>
                     ${canEditInventoryTab(tab) ?
-                        `<input type="text" value="${escapeHtml(item.keywords || '')}" onchange="updateInventoryItemField('${tab}', ${index}, 'keywords', this.value)">` :
-                        `<div class="inventory-readonly-field">${escapeHtml(item.keywords || '')}</div>`
+                        `<input type="text" data-field="keywords" value="${escapeHtml(item.keywords || '')}" onchange="updateInventoryItemField('${tab}', ${index}, 'keywords', this.value)">` :
+                        `<div class="inventory-readonly-field" data-field="keywords">${escapeHtml(item.keywords || '')}</div>`
                     }
                 </div>
 
                 <div class="inventory-item-field">
                     <label>Effect:</label>
                     ${canEditInventoryTab(tab) ?
-                        `<textarea onchange="updateInventoryItemField('${tab}', ${index}, 'effect', this.value)">${escapeHtml(item.effect || '')}</textarea>` :
-                        `<div class="inventory-readonly-field readonly-textarea">${escapeHtml(item.effect || '')}</div>`
+                        `<textarea data-field="effect" onchange="updateInventoryItemField('${tab}', ${index}, 'effect', this.value)">${escapeHtml(item.effect || '')}</textarea>` :
+                        `<div class="inventory-readonly-field readonly-textarea" data-field="effect">${escapeHtml(item.effect || '')}</div>`
                     }
                 </div>
             </div>
@@ -350,6 +350,13 @@ function collapseInventoryCard(element) {
     const card = element.classList.contains('inventory-item-card') ? element : element.closest('.inventory-item-card');
     if (!card) return;
 
+    const tab = card.getAttribute('data-tab');
+    const index = parseInt(card.getAttribute('data-index'), 10);
+    if (tab && Number.isInteger(index)) {
+        flushInventoryItemSaves(tab, index);
+        refreshInventoryItemCardDisplay(tab, index);
+    }
+
     const targetRowTop = card.offsetTop;
     const rowCards = getInventoryRowCards(targetRowTop);
 
@@ -373,6 +380,61 @@ function clearExpandedInventoryState() {
         card.classList.remove('expanded');
         card.style.height = '';
         card.style.minHeight = '';
+    });
+}
+
+function refreshInventoryItemCardDisplay(tab, index) {
+    if (!inventoryData[tab] || !inventoryData[tab].items[index]) {
+        return;
+    }
+
+    const item = inventoryData[tab].items[index];
+    const card = document.querySelector(`.inventory-item-card[data-item-id="${item.id}"]`);
+    if (!card) {
+        return;
+    }
+
+    const nameElement = card.querySelector('.inventory-item-name');
+    if (nameElement) {
+        nameElement.textContent = item.name || 'Unnamed Item';
+    }
+
+    const imageElements = card.querySelectorAll('.inventory-item-image-small, .inventory-item-image-large');
+    imageElements.forEach((img) => {
+        img.setAttribute('alt', item.name || 'Item image');
+    });
+
+    card.querySelectorAll('[data-field]').forEach((fieldElement) => {
+        const field = fieldElement.dataset.field;
+        if (!field || !(field in item)) {
+            return;
+        }
+
+        const value = item[field] || '';
+        if (fieldElement.tagName === 'INPUT' || fieldElement.tagName === 'TEXTAREA') {
+            if (document.activeElement !== fieldElement) {
+                fieldElement.value = value;
+            }
+        } else {
+            fieldElement.textContent = value;
+        }
+    });
+}
+
+function flushInventoryItemSaves(tab, index) {
+    if (!inventoryData[tab] || !inventoryData[tab].items[index]) {
+        return;
+    }
+
+    const item = inventoryData[tab].items[index];
+    const fields = ['name', 'description', 'keywords', 'effect'];
+    fields.forEach((field) => {
+        const timeoutKey = `${tab}:${index}:${field}`;
+        if (inventorySaveTimeouts[timeoutKey]) {
+            clearTimeout(inventorySaveTimeouts[timeoutKey]);
+            delete inventorySaveTimeouts[timeoutKey];
+            updateInventoryItemFieldOnServer(tab, index, field, item[field] || '');
+        }
     });
 }
 
@@ -448,19 +510,22 @@ function updateInventoryItemField(tab, index, field, value) {
         showInventoryStatus('Permission denied', 'error');
         return;
     }
-    
-    // Clear any existing timeout
-    if (inventorySaveTimeout) {
-        clearTimeout(inventorySaveTimeout);
-    }
-    
+
     // Update local data
     if (inventoryData[tab] && inventoryData[tab].items[index]) {
         inventoryData[tab].items[index][field] = value;
-        
+
+        refreshInventoryItemCardDisplay(tab, index);
+
+        const timeoutKey = `${tab}:${index}:${field}`;
+        if (inventorySaveTimeouts[timeoutKey]) {
+            clearTimeout(inventorySaveTimeouts[timeoutKey]);
+        }
+
         // Auto-save after a short delay
-        inventorySaveTimeout = setTimeout(() => {
+        inventorySaveTimeouts[timeoutKey] = setTimeout(() => {
             updateInventoryItemFieldOnServer(tab, index, field, value);
+            delete inventorySaveTimeouts[timeoutKey];
         }, 1000);
     }
 }
