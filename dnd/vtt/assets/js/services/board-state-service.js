@@ -61,7 +61,13 @@ export function persistCombatState(endpoint, sceneId, combatState = {}, options 
 
   const key = `${COMBAT_SAVE_KEY_PREFIX}-${payload.sceneId}`;
   const { sceneId: _sceneId, ...rest } = payload;
-  return queueSave(key, rest, endpoint, options);
+  const normalizedOptions = options ?? {};
+  return queueSave(
+    key,
+    rest,
+    endpoint,
+    { ...normalizedOptions, coalesce: normalizedOptions.coalesce ?? false }
+  );
 }
 
 function buildPayload(boardState = {}) {
