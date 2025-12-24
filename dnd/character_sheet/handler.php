@@ -6,6 +6,7 @@ if (session_status() === PHP_SESSION_NONE) {
 $characters = array('frunk', 'sharon', 'indigo', 'zepha');
 $dataDir = __DIR__ . '/data';
 $dataFile = $dataDir . '/character_sheets.json';
+$heroTokenFile = $dataDir . '/hero_tokens.json';
 $currentUser = isset($_SESSION['user']) ? $_SESSION['user'] : '';
 $is_gm = ($currentUser === 'GM');
 
@@ -61,8 +62,8 @@ function getDefaultCharacterEntry() {
         'sidebar' => array(
             'lists' => array(
                 'common' => array(),
-                'weaknesses' => array(),
-                'vulnerabilities' => array(),
+                'vulnerability' => array(),
+                'immunity' => array(),
                 'languages' => array(),
             ),
             'skills' => array(),
@@ -101,6 +102,31 @@ function ensureCharacterSheetStorage($dataDir, $dataFile, $characters) {
         $defaultSheets = buildDefaultCharacterSheets($characters);
         file_put_contents($dataFile, json_encode($defaultSheets, JSON_PRETTY_PRINT));
     }
+}
+
+function loadHeroTokens($dataDir, $heroTokenFile) {
+    if (!is_dir($dataDir)) {
+        mkdir($dataDir, 0755, true);
+    }
+
+    if (!file_exists($heroTokenFile)) {
+        $defaultTokens = array(false, false);
+        file_put_contents($heroTokenFile, json_encode($defaultTokens, JSON_PRETTY_PRINT));
+        return $defaultTokens;
+    }
+
+    $content = file_get_contents($heroTokenFile);
+    $tokens = json_decode($content, true);
+    if (!is_array($tokens) || count($tokens) < 2) {
+        return array(false, false);
+    }
+
+    return array((bool)$tokens[0], (bool)$tokens[1]);
+}
+
+function saveHeroTokens($heroTokenFile, $tokens) {
+    $normalized = array((bool)($tokens[0] ?? false), (bool)($tokens[1] ?? false));
+    return file_put_contents($heroTokenFile, json_encode($normalized, JSON_PRETTY_PRINT)) !== false;
 }
 
 function normalize_identity_group($value, $defaults) {
@@ -204,10 +230,14 @@ function mergeCharacterDefaults($entry, $defaults) {
 
     if (isset($entry['sidebar']) && is_array($entry['sidebar'])) {
         if (isset($entry['sidebar']['lists']) && is_array($entry['sidebar']['lists'])) {
-            $normalized['sidebar']['lists'] = array_merge(
-                $defaults['sidebar']['lists'],
-                $entry['sidebar']['lists']
-            );
+            $lists = array_merge($defaults['sidebar']['lists'], $entry['sidebar']['lists']);
+            if (isset($entry['sidebar']['lists']['weaknesses']) && !isset($entry['sidebar']['lists']['vulnerability'])) {
+                $lists['vulnerability'] = $entry['sidebar']['lists']['weaknesses'];
+            }
+            if (isset($entry['sidebar']['lists']['vulnerabilities']) && !isset($entry['sidebar']['lists']['immunity'])) {
+                $lists['immunity'] = $entry['sidebar']['lists']['vulnerabilities'];
+            }
+            $normalized['sidebar']['lists'] = $lists;
         }
 
         if (isset($entry['sidebar']['skills']) && is_array($entry['sidebar']['skills'])) {
@@ -280,7 +310,7 @@ if ($requestMethod !== 'POST' && $requestMethod !== 'GET') {
 $requestData = $requestMethod === 'POST' ? $_POST : $_GET;
 $action = isset($requestData['action']) ? $requestData['action'] : '';
 
-if ($action !== 'sync-stamina' && $requestMethod !== 'POST') {
+if (!in_array($action, array('sync-stamina', 'sync-hero-tokens'), true) && $requestMethod !== 'POST') {
     sendJsonResponse(array('success' => false, 'error' => 'Invalid request method'));
 }
 
@@ -301,7 +331,10 @@ if (!$is_gm && $requestedCharacter !== strtolower($currentUser)) {
 switch ($action) {
     case 'load':
         $allSheets = loadCharacterSheetData($dataDir, $dataFile, $characters);
-        sendJsonResponse(array('success' => true, 'data' => $allSheets[$requestedCharacter]));
+        $heroTokens = loadHeroTokens($dataDir, $heroTokenFile);
+        $sheet = $allSheets[$requestedCharacter];
+        $sheet['hero']['heroTokens'] = $heroTokens;
+        sendJsonResponse(array('success' => true, 'data' => $sheet));
         break;
 
     case 'save':
@@ -311,6 +344,11 @@ switch ($action) {
         }
 
         $allSheets = loadCharacterSheetData($dataDir, $dataFile, $characters);
+        $heroTokens = loadHeroTokens($dataDir, $heroTokenFile);
+        if (!isset($sheetData['hero']) || !is_array($sheetData['hero'])) {
+            $sheetData['hero'] = array();
+        }
+        $sheetData['hero']['heroTokens'] = $heroTokens;
         $allSheets[$requestedCharacter] = mergeCharacterDefaults($sheetData, getDefaultCharacterEntry());
 
         if (saveCharacterSheetData($dataDir, $dataFile, $allSheets)) {
@@ -355,6 +393,27 @@ switch ($action) {
         );
 
         sendJsonResponse($response);
+        break;
+
+    case 'sync-hero-tokens':
+        $heroTokens = loadHeroTokens($dataDir, $heroTokenFile);
+
+        if ($requestMethod === 'POST') {
+            $index = isset($requestData['tokenIndex']) ? (int)$requestData['tokenIndex'] : null;
+            $state = isset($requestData['tokenState']) ? (int)$requestData['tokenState'] : null;
+            if ($index === null || $index < 0 || $index > 1) {
+                sendJsonResponse(array('success' => false, 'error' => 'Invalid token index'));
+            }
+            if ($state === null) {
+                sendJsonResponse(array('success' => false, 'error' => 'Missing token state'));
+            }
+            $heroTokens[$index] = $state === 1;
+            if (!saveHeroTokens($heroTokenFile, $heroTokens)) {
+                sendJsonResponse(array('success' => false, 'error' => 'Failed to save hero tokens'));
+            }
+        }
+
+        sendJsonResponse(array('success' => true, 'heroTokens' => $heroTokens));
         break;
 
     default:

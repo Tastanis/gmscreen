@@ -50,6 +50,7 @@ const SKILL_GROUPS = {
     "Pick Pocket",
     "Sabotage",
     "Search",
+    "Sneek",
   ],
   "Lore Skills": [
     "Culture",
@@ -119,6 +120,8 @@ const DEFAULT_VITALS = {
 
 const STAMINA_SYNC_INTERVAL_MS = 4000;
 const STAMINA_SYNC_CHANNEL = "vtt-stamina-sync";
+const HERO_TOKEN_SYNC_INTERVAL_MS = 4000;
+const HERO_TOKEN_SYNC_CHANNEL = "vtt-hero-token-sync";
 
 const EMPHASIZED_LABELS = new Set([
   "wealth",
@@ -166,8 +169,8 @@ const defaultSheet = {
   sidebar: {
     lists: {
       common: [],
-      weaknesses: [],
-      vulnerabilities: [],
+      vulnerability: [],
+      immunity: [],
       languages: [],
     },
     skills: {},
@@ -404,6 +407,12 @@ function mergeWithDefaults(data) {
   merged.sidebar = { ...merged.sidebar, ...(data.sidebar || {}) };
   merged.sidebar.lists = { ...merged.sidebar.lists, ...(data.sidebar?.lists || {}) };
   merged.sidebar.lists.common = normalizeCommonThings(data.sidebar?.lists?.common || []);
+  if (data.sidebar?.lists?.weaknesses && !data.sidebar?.lists?.vulnerability) {
+    merged.sidebar.lists.vulnerability = data.sidebar.lists.weaknesses;
+  }
+  if (data.sidebar?.lists?.vulnerabilities && !data.sidebar?.lists?.immunity) {
+    merged.sidebar.lists.immunity = data.sidebar.lists.vulnerabilities;
+  }
   merged.sidebar.skills = normalizeSkillsState(data.sidebar?.skills);
   merged.sidebar.resource = {
     ...merged.sidebar.resource,
@@ -534,6 +543,10 @@ let staminaSyncIntervalId = null;
 let staminaSyncInFlight = false;
 let staminaSyncChannel = null;
 let staminaVisibilityHandler = null;
+let heroTokenSyncIntervalId = null;
+let heroTokenSyncInFlight = false;
+let heroTokenSyncChannel = null;
+let heroTokenVisibilityHandler = null;
 
 function triggerTempStaminaFlash() {
   tempStaminaFlashId = Date.now();
@@ -682,6 +695,92 @@ function stopStaminaSync() {
   }
 }
 
+function getHeroTokenSyncChannel() {
+  if (typeof BroadcastChannel !== "function") return null;
+  if (!heroTokenSyncChannel) {
+    heroTokenSyncChannel = new BroadcastChannel(HERO_TOKEN_SYNC_CHANNEL);
+  }
+  return heroTokenSyncChannel;
+}
+
+function normalizeHeroTokens(tokens) {
+  return [Boolean(tokens?.[0]), Boolean(tokens?.[1])];
+}
+
+function applyHeroTokenSync(tokens) {
+  const normalized = normalizeHeroTokens(tokens);
+  const current = normalizeHeroTokens(sheetState.hero.heroTokens);
+  if (normalized[0] === current[0] && normalized[1] === current[1]) return;
+  sheetState.hero.heroTokens = normalized;
+  renderHeroTokens();
+  bindTokenButtons();
+}
+
+function handleHeroTokenBroadcast(event) {
+  const payload = event?.data;
+  if (!payload || payload.type !== "hero-token-sync") return;
+  applyHeroTokenSync(payload.heroTokens);
+}
+
+async function pollHeroTokenSync() {
+  if (!activeCharacter) return;
+  if (document.visibilityState === "hidden") return;
+  if (heroTokenSyncInFlight) return;
+
+  heroTokenSyncInFlight = true;
+  try {
+    const response = await fetch(
+      `handler.php?action=sync-hero-tokens&character=${encodeURIComponent(activeCharacter)}`,
+      { credentials: "same-origin", cache: "no-store" }
+    );
+    if (!response.ok) {
+      throw new Error(`Hero token sync failed (${response.status})`);
+    }
+    const data = await response.json();
+    if (!data || data.error) return;
+    applyHeroTokenSync(data.heroTokens);
+  } catch (error) {
+    console.warn("Failed to sync hero tokens", error);
+  } finally {
+    heroTokenSyncInFlight = false;
+  }
+}
+
+function startHeroTokenSync() {
+  if (heroTokenSyncIntervalId || !activeCharacter) return;
+  const channel = getHeroTokenSyncChannel();
+  if (channel) {
+    channel.addEventListener("message", handleHeroTokenBroadcast);
+  }
+
+  heroTokenVisibilityHandler = () => {
+    if (document.visibilityState === "visible") {
+      pollHeroTokenSync();
+    }
+  };
+  document.addEventListener("visibilitychange", heroTokenVisibilityHandler);
+
+  pollHeroTokenSync();
+  heroTokenSyncIntervalId = window.setInterval(pollHeroTokenSync, HERO_TOKEN_SYNC_INTERVAL_MS);
+}
+
+function stopHeroTokenSync() {
+  if (heroTokenSyncIntervalId && typeof window?.clearInterval === "function") {
+    window.clearInterval(heroTokenSyncIntervalId);
+  }
+  heroTokenSyncIntervalId = null;
+
+  if (heroTokenVisibilityHandler) {
+    document.removeEventListener("visibilitychange", heroTokenVisibilityHandler);
+  }
+  heroTokenVisibilityHandler = null;
+
+  if (heroTokenSyncChannel) {
+    heroTokenSyncChannel.close();
+    heroTokenSyncChannel = null;
+  }
+}
+
 function parseTrackerInput(rawValue) {
   const trimmed = String(rawValue ?? "").trim();
   if (trimmed === "") return null;
@@ -750,6 +849,7 @@ function applyTrackerChange(path, rawValue) {
 function renderHeroPane() {
   const hero = sheetState.hero;
   const pane = document.getElementById("hero-pane");
+  const isEditMode = document.body.classList.contains("edit-mode");
   const statCard = (label, key) => `
     <div class="stat-card">
       <label class="card__label">${label}</label>
@@ -844,38 +944,31 @@ function renderHeroPane() {
         ${identityField("XP", "hero.xp")}
         ${identityField("Victories", "hero.victories")}
         ${identityField("Surges", "hero.surges")}
-        <div class="field-card resource-card">
-          <label class="${getLabelClass(hero.resource.title || "Resource")}">${
-            hero.resource.title || "Resource"
-          }</label>
-          <div class="resource-display-row">
-            <div class="display-value resource-display-value" data-resource-display>${formatResourceValue()}</div>
-            ${
-              parseAutoDice(hero.resource.autoDice || "")
-                ? `<button class="auto-dice-button" data-auto-dice-roll>${(hero.resource.autoDice || "").trim()}</button>`
-                : ""
-            }
-          </div>
-          <div class="resource-editor">
-            <input
-              class="edit-field resource-name-input"
-              type="text"
-              data-model="hero.resource.title"
-              value="${hero.resource.title || "Resource"}"
-              placeholder="Resource Title"
-            />
-            <div class="auto-dice-input-row edit-only">
-              <span class="auto-dice-label">Auto Dice</span>
-              <input
-                class="edit-field resource-auto-dice-input"
-                type="text"
-                data-model="hero.resource.autoDice"
-                value="${hero.resource.autoDice || ""}"
-                placeholder="e.g. d6"
-              />
-            </div>
-          </div>
-        </div>
+        ${
+          isEditMode
+            ? `<div class="field-card resource-card edit-only">
+                <div class="resource-editor">
+                  <input
+                    class="edit-field resource-name-input"
+                    type="text"
+                    data-model="hero.resource.title"
+                    value="${hero.resource.title || "Resource"}"
+                    placeholder="Resource Name"
+                  />
+                  <div class="auto-dice-input-row">
+                    <span class="auto-dice-label">Auto Dice</span>
+                    <input
+                      class="edit-field resource-auto-dice-input"
+                      type="text"
+                      data-model="hero.resource.autoDice"
+                      value="${hero.resource.autoDice || ""}"
+                      placeholder="e.g. d6"
+                    />
+                  </div>
+                </div>
+              </div>`
+            : ""
+        }
       </div>
 
       <div class="vital-grid">
@@ -1046,15 +1139,78 @@ function renderHeroTokens() {
         ${sheetState.hero.heroTokens
           .map(
             (state, index) => `
-              <button class="token-dot ${state ? "is-spent" : "is-ready"}" data-token-index="${index}" aria-label="Toggle hero token ${
+              <span class="token-button-wrap">
+                <button class="token-dot ${state ? "is-spent" : "is-ready"}" data-token-index="${index}" aria-label="Toggle hero token ${
               index + 1
             }"></button>
+              </span>
             `
           )
           .join("")}
       </div>
     </div>
   `;
+}
+
+function clearHeroTokenConfirmations() {
+  document.querySelectorAll(".token-confirmation").forEach((el) => el.remove());
+}
+
+function showHeroTokenConfirmation(btn, index) {
+  clearHeroTokenConfirmations();
+  const wrapper = btn.closest(".token-button-wrap");
+  if (!wrapper) return;
+
+  const confirm = document.createElement("div");
+  confirm.className = "token-confirmation";
+  confirm.innerHTML = `
+    <div class="token-confirmation__text">Does everyone agree to use a hero token?</div>
+    <div class="token-confirmation__actions">
+      <button class="text-btn" data-confirm-hero-token>Yes</button>
+      <button class="text-btn" data-cancel-hero-token>Cancel</button>
+    </div>
+  `;
+  wrapper.appendChild(confirm);
+
+  confirm.querySelector("[data-cancel-hero-token]")?.addEventListener("click", () => {
+    confirm.remove();
+  });
+
+  confirm.querySelector("[data-confirm-hero-token]")?.addEventListener("click", async () => {
+    confirm.remove();
+    await toggleHeroToken(index);
+  });
+}
+
+async function toggleHeroToken(index) {
+  const current = sheetState.hero.heroTokens[index];
+  const nextState = !current;
+  try {
+    const payload = new URLSearchParams();
+    payload.append("action", "sync-hero-tokens");
+    if (activeCharacter) {
+      payload.append("character", activeCharacter);
+    }
+    payload.append("tokenIndex", String(index));
+    payload.append("tokenState", nextState ? "1" : "0");
+
+    const response = await fetch("handler.php", {
+      method: "POST",
+      body: payload,
+      credentials: "same-origin",
+    });
+    const result = await response.json();
+    if (!result || result.error) {
+      throw new Error(result?.error || "Failed to sync hero token");
+    }
+    applyHeroTokenSync(result.heroTokens);
+    const channel = getHeroTokenSyncChannel();
+    if (channel) {
+      channel.postMessage({ type: "hero-token-sync", heroTokens: result.heroTokens });
+    }
+  } catch (error) {
+    console.warn("Failed to toggle hero token", error);
+  }
 }
 
 function bindResourceControls() {
@@ -1645,26 +1801,26 @@ function renderSidebarLists() {
   renderCommonThings();
   const weakContainer = document.getElementById("sidebar-weaknesses");
   if (weakContainer) {
-    const weaknesses = sheetState.sidebar.lists.weaknesses || [];
-    const vulnerabilities = sheetState.sidebar.lists.vulnerabilities || [];
+    const vulnerabilities = sheetState.sidebar.lists.vulnerability || [];
+    const immunities = sheetState.sidebar.lists.immunity || [];
     weakContainer.innerHTML = `
-      <div class="sidebar__header">Weaknesses &amp; Vulnerabilities</div>
+      <div class="sidebar__header">Vulnerability &amp; Immunity</div>
       <div class="sidebar__content">
         <div class="sub-section">
-          <div class="sub-section__title">Weaknesses</div>
-          <ul class="display-list">${weaknesses
+          <div class="sub-section__title">Vulnerability</div>
+          <ul class="display-list">${vulnerabilities
             .map((item) => `<li>${item}</li>`)
-            .join("") || '<li class="muted">List weaknesses here.</li>'}</ul>
-          <textarea class="edit-field" rows="3" data-list="weaknesses" placeholder="List weaknesses">${weaknesses.join(
+            .join("") || '<li class="muted">List vulnerabilities here.</li>'}</ul>
+          <textarea class="edit-field" rows="3" data-list="vulnerability" placeholder="List vulnerabilities">${vulnerabilities.join(
             "\n"
           )}</textarea>
         </div>
         <div class="sub-section">
-          <div class="sub-section__title">Vulnerabilities</div>
-          <ul class="display-list">${vulnerabilities
+          <div class="sub-section__title">Immunity</div>
+          <ul class="display-list">${immunities
             .map((item) => `<li>${item}</li>`)
-            .join("") || '<li class="muted">List vulnerabilities here.</li>'}</ul>
-          <textarea class="edit-field" rows="3" data-list="vulnerabilities" placeholder="List vulnerabilities">${vulnerabilities.join(
+            .join("") || '<li class="muted">List immunities here.</li>'}</ul>
+          <textarea class="edit-field" rows="3" data-list="immunity" placeholder="List immunities">${immunities.join(
             "\n"
           )}</textarea>
         </div>
@@ -1697,11 +1853,7 @@ function bindTokenButtons() {
   document.querySelectorAll(".token-dot").forEach((btn) => {
     btn.addEventListener("click", () => {
       const index = Number(btn.dataset.tokenIndex);
-      const current = sheetState.hero.heroTokens[index];
-      sheetState.hero.heroTokens[index] = !current;
-      btn.classList.toggle("is-spent", sheetState.hero.heroTokens[index]);
-      btn.classList.toggle("is-ready", !sheetState.hero.heroTokens[index]);
-      saveSheet();
+      showHeroTokenConfirmation(btn, index);
     });
   });
 }
@@ -2094,7 +2246,9 @@ async function ready() {
   bindAutoSave();
   await loadSheet();
   startStaminaSync();
+  startHeroTokenSync();
   window.addEventListener("pagehide", stopStaminaSync);
+  window.addEventListener("pagehide", stopHeroTokenSync);
 }
 
 document.addEventListener("DOMContentLoaded", ready);
