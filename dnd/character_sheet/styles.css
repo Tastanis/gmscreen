@@ -427,6 +427,10 @@ body {
   gap: 6px;
 }
 
+.token-button-wrap {
+  position: relative;
+}
+
 .token-dot {
   width: 20px;
   height: 20px;
@@ -447,6 +451,30 @@ body {
 .token-hint {
   font-size: 12px;
   color: var(--muted);
+}
+
+.token-confirmation {
+  position: absolute;
+  top: -6px;
+  left: 26px;
+  min-width: 180px;
+  background: var(--panel);
+  border: 1px solid var(--border);
+  border-radius: 4px;
+  padding: 6px;
+  box-shadow: 0 6px 16px rgba(0, 0, 0, 0.2);
+  z-index: 20;
+}
+
+.token-confirmation__text {
+  font-size: 12px;
+  color: var(--text);
+  margin-bottom: 6px;
+}
+
+.token-confirmation__actions {
+  display: flex;
+  gap: 6px;
 }
 
 .sidebar {
