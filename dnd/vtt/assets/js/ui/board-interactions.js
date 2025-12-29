@@ -4949,7 +4949,7 @@ export function mountBoardInteractions(store, routes = {}) {
     });
 
     if (!options?.skipPrune) {
-      const groupsPruned = pruneCombatGroups(activeIds);
+      const groupsPruned = gmViewing ? pruneCombatGroups(activeIds) : false;
       if (gmViewing) {
         pruneCompletedCombatants(activeIds);
       }
@@ -7560,6 +7560,10 @@ export function mountBoardInteractions(store, routes = {}) {
       snapshot.malice = existingNormalized.malice;
       snapshot.turnLock = existingNormalized.turnLock;
       snapshot.lastEffect = existingNormalized.lastEffect;
+      snapshot.groups = existingNormalized.groups;
+    }
+    if (!isGmUser()) {
+      snapshot.malice = existingNormalized.malice;
       snapshot.groups = existingNormalized.groups;
     }
     const serialized = JSON.stringify(snapshot);
