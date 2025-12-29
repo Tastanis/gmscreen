@@ -1685,8 +1685,20 @@ export function mountBoardInteractions(store, routes = {}) {
       const existingCombatState =
         latestState?.boardState?.sceneState?.[activeSceneId]?.combat ?? null;
       const existingNormalized = normalizeCombatState(existingCombatState ?? {});
+      const existingHasMaliceValue =
+        existingCombatState &&
+        typeof existingCombatState === 'object' &&
+        (Object.prototype.hasOwnProperty.call(existingCombatState, 'malice') ||
+          Object.prototype.hasOwnProperty.call(existingCombatState, 'maliceCount'));
       if (existingNormalized) {
-        combatSnapshot.malice = existingNormalized.malice;
+        if (existingHasMaliceValue) {
+          combatSnapshot.malice = existingNormalized.malice;
+        } else {
+          const fallbackMalice = getCombatStateMaliceSnapshot(lastCombatStateSnapshot);
+          if (fallbackMalice !== null) {
+            combatSnapshot.malice = fallbackMalice;
+          }
+        }
         combatSnapshot.groups = existingNormalized.groups;
       }
       const combatPromise = persistCombatState(routes.state, activeSceneId, combatSnapshot, {
@@ -7159,6 +7171,11 @@ export function mountBoardInteractions(store, routes = {}) {
 
     const sceneState = boardState.sceneState && typeof boardState.sceneState === 'object' ? boardState.sceneState : {};
     const combatState = sceneState[activeSceneKey]?.combat ?? {};
+    const hasMaliceValue =
+      combatState &&
+      typeof combatState === 'object' &&
+      (Object.prototype.hasOwnProperty.call(combatState, 'malice') ||
+        Object.prototype.hasOwnProperty.call(combatState, 'maliceCount'));
     const normalized = normalizeCombatState(combatState);
 
     if (normalized.updatedAt && normalized.updatedAt <= combatStateVersion) {
@@ -7178,7 +7195,11 @@ export function mountBoardInteractions(store, routes = {}) {
       currentTurnTeam = normalized.currentTeam;
       lastActingTeam = normalized.lastTeam;
       roundTurnCount = normalized.roundTurnCount;
-      maliceCount = combatActive ? normalized.malice : 0;
+      if (!combatActive) {
+        maliceCount = 0;
+      } else if (hasMaliceValue) {
+        maliceCount = normalized.malice;
+      }
       completedCombatants.clear();
       normalized.completedCombatantIds.forEach((id) => completedCombatants.add(id));
       applyCombatGroupsFromState(normalized.groups);
@@ -7276,6 +7297,22 @@ export function mountBoardInteractions(store, routes = {}) {
       lastEffect,
       groups,
     };
+  }
+
+  function getCombatStateMaliceSnapshot(snapshot) {
+    if (!snapshot || typeof snapshot !== 'string') {
+      return null;
+    }
+    try {
+      const parsed = JSON.parse(snapshot);
+      if (!parsed || typeof parsed !== 'object') {
+        return null;
+      }
+      const maliceValue = Number(parsed.malice);
+      return Number.isFinite(maliceValue) ? Math.max(0, Math.trunc(maliceValue)) : null;
+    } catch (error) {
+      return null;
+    }
   }
 
   function normalizeCombatGroups(rawGroups) {
@@ -7553,6 +7590,11 @@ export function mountBoardInteractions(store, routes = {}) {
 
     const existingCombatState = state.boardState?.sceneState?.[activeSceneId]?.combat ?? null;
     const existingNormalized = normalizeCombatState(existingCombatState ?? {});
+    const existingHasMaliceValue =
+      existingCombatState &&
+      typeof existingCombatState === 'object' &&
+      (Object.prototype.hasOwnProperty.call(existingCombatState, 'malice') ||
+        Object.prototype.hasOwnProperty.call(existingCombatState, 'maliceCount'));
 
     const snapshot = createCombatStateSnapshot();
     if (existingNormalized.updatedAt && existingNormalized.updatedAt > combatStateVersion) {
@@ -7570,7 +7612,14 @@ export function mountBoardInteractions(store, routes = {}) {
       snapshot.groups = existingNormalized.groups;
     }
     if (!isGmUser()) {
-      snapshot.malice = existingNormalized.malice;
+      if (existingHasMaliceValue) {
+        snapshot.malice = existingNormalized.malice;
+      } else {
+        const fallbackMalice = getCombatStateMaliceSnapshot(lastCombatStateSnapshot);
+        if (fallbackMalice !== null) {
+          snapshot.malice = fallbackMalice;
+        }
+      }
       snapshot.groups = existingNormalized.groups;
     }
     const serialized = JSON.stringify(snapshot);
