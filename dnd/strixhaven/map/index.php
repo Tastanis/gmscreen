@@ -633,6 +633,9 @@ $isGM = ($user === 'GM');
                     <button onclick="resetHexData()" class="reset-btn" style="background: #e74c3c; color: white; border: none; padding: 8px 16px; border-radius: 6px; cursor: pointer; font-weight: 500;">
                         Reset Hex Data
                     </button>
+                    <button onclick="showPlayersFromGm()" class="show-players-btn" style="background: #667eea; color: white; border: none; padding: 8px 16px; border-radius: 6px; cursor: pointer; font-weight: 500; margin-left: 10px;">
+                        Show Players
+                    </button>
                 </div>
             </div>
             

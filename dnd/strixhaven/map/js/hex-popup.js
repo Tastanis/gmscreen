@@ -242,6 +242,39 @@ async function useGmImagesForPlayers() {
 }
 
 /**
+ * Copy GM title and images into the player section
+ */
+async function showPlayersFromGm() {
+    if (!isGM) {
+        alert('Only the GM can share details with the players.');
+        return;
+    }
+
+    const gmTitleInput = document.getElementById('gm-title');
+    const playerTitleInput = document.getElementById('player-title');
+    const gmTitle = gmTitleInput ? gmTitleInput.value : '';
+
+    if (playerTitleInput) {
+        playerTitleInput.value = gmTitle;
+    }
+
+    if (!currentHexData.player) {
+        currentHexData.player = { title: '', images: [], notes: '' };
+    }
+    currentHexData.player.title = gmTitle;
+
+    await saveTitle('player');
+
+    const gmImages = (currentHexData && currentHexData.gm && Array.isArray(currentHexData.gm.images))
+        ? currentHexData.gm.images
+        : [];
+
+    if (gmImages.length > 0) {
+        await useGmImagesForPlayers();
+    }
+}
+
+/**
  * Handle image upload
  */
 async function handleImageUpload(event, section) {
