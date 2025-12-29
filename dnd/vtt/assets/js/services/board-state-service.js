@@ -231,6 +231,7 @@ function formatCombatState(raw = {}) {
   const currentTeam = sanitizeCombatTeam(raw.currentTeam ?? raw.activeTeam ?? null);
   const lastTeam = sanitizeCombatTeam(raw.lastTeam ?? raw.previousTeam ?? null);
   const roundTurnCount = toInt(raw.roundTurnCount, 0);
+  const malice = Math.max(0, toInt(raw.malice ?? raw.maliceCount ?? 0, 0));
   const updatedAt = toInt(raw.updatedAt, Date.now());
   const turnLock = sanitizeTurnLock(raw.turnLock ?? null);
   const groups = sanitizeCombatGroups(
@@ -246,6 +247,7 @@ function formatCombatState(raw = {}) {
     currentTeam,
     lastTeam,
     roundTurnCount,
+    malice,
     updatedAt,
     turnLock,
     groups,
