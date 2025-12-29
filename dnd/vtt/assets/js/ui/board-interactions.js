@@ -7014,7 +7014,7 @@ export function mountBoardInteractions(store, routes = {}) {
 
     const values = await Promise.all(profiles.map((profileId) => fetchCharacterVictories(profileId)));
     const total = values.reduce((sum, value) => sum + parseVictoryValue(value), 0);
-    return Math.round(total / profiles.length);
+    return Math.floor(total / profiles.length);
   }
 
   function handleStartCombat() {
