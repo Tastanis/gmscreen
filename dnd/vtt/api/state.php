@@ -571,6 +571,7 @@ function normalizeCombatStatePayload($rawCombat): array
         'currentTeam' => null,
         'lastTeam' => null,
         'roundTurnCount' => 0,
+        'malice' => 0,
         'updatedAt' => time(),
         'turnLock' => null,
         'groups' => [],
@@ -611,6 +612,13 @@ function normalizeCombatStatePayload($rawCombat): array
 
     if (isset($rawCombat['roundTurnCount']) && is_numeric($rawCombat['roundTurnCount'])) {
         $state['roundTurnCount'] = max(0, (int) round((float) $rawCombat['roundTurnCount']));
+    }
+
+    if (array_key_exists('malice', $rawCombat) || array_key_exists('maliceCount', $rawCombat)) {
+        $rawMalice = $rawCombat['malice'] ?? $rawCombat['maliceCount'];
+        if (is_numeric($rawMalice)) {
+            $state['malice'] = max(0, (int) round((float) $rawMalice));
+        }
     }
 
     if (isset($rawCombat['updatedAt']) && is_numeric($rawCombat['updatedAt'])) {
