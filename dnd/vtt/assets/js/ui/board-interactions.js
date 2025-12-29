@@ -1682,6 +1682,13 @@ export function mountBoardInteractions(store, routes = {}) {
 
     if (!isGmUser && routes?.state && activeSceneId) {
       const combatSnapshot = createCombatStateSnapshot();
+      const existingCombatState =
+        latestState?.boardState?.sceneState?.[activeSceneId]?.combat ?? null;
+      const existingNormalized = normalizeCombatState(existingCombatState ?? {});
+      if (existingNormalized) {
+        combatSnapshot.malice = existingNormalized.malice;
+        combatSnapshot.groups = existingNormalized.groups;
+      }
       const combatPromise = persistCombatState(routes.state, activeSceneId, combatSnapshot, {
         keepalive: true,
       });
