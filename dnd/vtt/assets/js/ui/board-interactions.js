@@ -10343,6 +10343,7 @@ export function mountBoardInteractions(store, routes = {}) {
 
     const bodyParams = new URLSearchParams();
     bodyParams.set('action', 'sync-stamina');
+    bodyParams.set('source', 'vtt');
     if (payload?.character) {
       bodyParams.set('character', payload.character);
     }
