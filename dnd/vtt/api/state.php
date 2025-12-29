@@ -617,7 +617,7 @@ function normalizeCombatStatePayload($rawCombat): array
     if (array_key_exists('malice', $rawCombat) || array_key_exists('maliceCount', $rawCombat)) {
         $rawMalice = $rawCombat['malice'] ?? $rawCombat['maliceCount'];
         if (is_numeric($rawMalice)) {
-            $state['malice'] = max(0, (int) round((float) $rawMalice));
+            $state['malice'] = max(0, (int) floor((float) $rawMalice));
         }
     }
 
