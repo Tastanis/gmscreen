@@ -50,7 +50,7 @@ const SKILL_GROUPS = {
     "Pick Pocket",
     "Sabotage",
     "Search",
-    "Sneek",
+    "Sneak",
   ],
   "Lore Skills": [
     "Culture",
@@ -1839,7 +1839,60 @@ function renderActionSection(type, containerId) {
     <div class="card-grid action-grid">
       ${actions
         .map(
-          (action) => `
+          (action) => {
+            const rangeValue = (action.range || "").trim();
+            const targetValue = (action.target || "").trim();
+            const triggerValue = (action.trigger || "").trim();
+            const costValue = (action.cost || "").trim();
+            const metaFields = [
+              {
+                key: "range",
+                label: "Range",
+                symbol: "\uD83C\uDFF9",
+                value: rangeValue,
+                inputValue: action.range || "",
+              },
+              {
+                key: "target",
+                label: "Target",
+                symbol: "\uD83C\uDFAF",
+                value: targetValue,
+                inputValue: action.target || "",
+              },
+              ...(type === "triggers"
+                ? [
+                    {
+                      key: "trigger",
+                      label: "Trigger",
+                      symbol: "\uD83D\uDD2B",
+                      value: triggerValue,
+                      inputValue: action.trigger || "",
+                    },
+                  ]
+                : []),
+              {
+                key: "cost",
+                label: "Cost",
+                symbol: "\u2728",
+                value: costValue,
+                inputValue: action.cost || "",
+              },
+            ];
+
+            const metaMarkup = metaFields
+              .filter((field) => isEditMode || field.value)
+              .map(
+                (field) => `
+                <div class="meta-field">
+                  <span class="meta-label">${field.label} ${field.symbol}</span>
+                  <span class="display-value">${field.value || "-"}</span>
+                  <input class="edit-field" type="text" data-field="${field.key}" value="${field.inputValue}" />
+                </div>
+              `
+              )
+              .join("");
+
+            return `
             <article class="action-card" data-action-id="${action.id}" data-action-type="${type}">
               <header class="card-head">
                 <div class="card-head__left">
@@ -1856,32 +1909,7 @@ function renderActionSection(type, containerId) {
               </header>
               <div class="action-label display-value">${action.actionLabel || "Action"}</div>
               <div class="action-meta">
-                <div class="meta-field">
-                  <span class="meta-label">Range</span>
-                  <span class="display-value">${action.range || "-"}</span>
-                  <input class="edit-field" type="text" data-field="range" value="${action.range || ""}" />
-                </div>
-                <div class="meta-field">
-                  <span class="meta-label">Target</span>
-                  <span class="display-value">${action.target || "-"}</span>
-                  <input class="edit-field" type="text" data-field="target" value="${action.target || ""}" />
-                </div>
-                ${
-                  type === "triggers"
-                    ? `
-                <div class="meta-field">
-                  <span class="meta-label">Trigger</span>
-                  <span class="display-value">${action.trigger || "-"}</span>
-                  <input class="edit-field" type="text" data-field="trigger" value="${action.trigger || ""}" />
-                </div>
-                `
-                    : ""
-                }
-                <div class="meta-field">
-                  <span class="meta-label">Cost</span>
-                  <span class="display-value">${action.cost || "-"}</span>
-                  <input class="edit-field" type="text" data-field="cost" value="${action.cost || ""}" />
-                </div>
+                ${metaMarkup}
               </div>
               <div class="test-list">
                 ${
@@ -1917,7 +1945,8 @@ function renderActionSection(type, containerId) {
                 </div>
               </div>
             </article>
-          `
+          `;
+          }
         )
         .join("")}
     </div>
