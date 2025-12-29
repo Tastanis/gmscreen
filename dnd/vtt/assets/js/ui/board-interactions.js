@@ -4658,7 +4658,7 @@ export function mountBoardInteractions(store, routes = {}) {
 
   function renderTokens(state = {}, layer, view) {
     if (!layer) {
-      updateCombatTracker([], { activeIds: [] });
+      updateCombatTracker([], { activeIds: [], skipCache: true, skipPrune: true });
       return;
     }
 
@@ -4681,7 +4681,7 @@ export function mountBoardInteractions(store, routes = {}) {
       selectedTokenIds.clear();
       notifySelectionChanged();
       closeTokenSettings();
-      updateCombatTracker([], { activeIds: [] });
+      updateCombatTracker([], { activeIds: [], skipCache: true, skipPrune: true });
       return;
     }
 
@@ -4948,13 +4948,15 @@ export function mountBoardInteractions(store, routes = {}) {
       }
     });
 
-    const groupsPruned = pruneCombatGroups(activeIds);
-    if (gmViewing) {
-      pruneCompletedCombatants(activeIds);
-    }
+    if (!options?.skipPrune) {
+      const groupsPruned = pruneCombatGroups(activeIds);
+      if (gmViewing) {
+        pruneCompletedCombatants(activeIds);
+      }
 
-    if (groupsPruned && isGmUser() && !suppressCombatStateSync) {
-      syncCombatStateToStore();
+      if (groupsPruned && isGmUser() && !suppressCombatStateSync) {
+        syncCombatStateToStore();
+      }
     }
 
     const waitingFragment = document.createDocumentFragment();
@@ -7558,6 +7560,7 @@ export function mountBoardInteractions(store, routes = {}) {
       snapshot.malice = existingNormalized.malice;
       snapshot.turnLock = existingNormalized.turnLock;
       snapshot.lastEffect = existingNormalized.lastEffect;
+      snapshot.groups = existingNormalized.groups;
     }
     const serialized = JSON.stringify(snapshot);
     if (serialized === lastCombatStateSnapshot) {
