@@ -324,7 +324,14 @@ if (!in_array($requestedCharacter, $characters, true)) {
     sendJsonResponse(array('success' => false, 'error' => 'Unknown character'));
 }
 
-if (!$is_gm && $requestedCharacter !== strtolower($currentUser)) {
+$allowVttStaminaSync =
+    $action === 'sync-stamina'
+    && $requestMethod === 'POST'
+    && isset($requestData['source'])
+    && $requestData['source'] === 'vtt'
+    && $currentUser !== '';
+
+if (!$is_gm && $requestedCharacter !== strtolower($currentUser) && !$allowVttStaminaSync) {
     sendJsonResponse(array('success' => false, 'error' => 'Permission denied'));
 }
 
