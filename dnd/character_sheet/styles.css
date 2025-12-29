@@ -856,6 +856,21 @@ body {
   gap: 8px;
 }
 
+.feature-card--wide {
+  grid-column: span 2;
+}
+
+.feature-title {
+  font-size: 1.8em;
+  font-weight: 800;
+}
+
+.feature-controls {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+
 .card-head {
   display: flex;
   justify-content: space-between;
@@ -1029,20 +1044,20 @@ body {
 .test__tiers {
   display: flex;
   flex-direction: column;
-  gap: 8px;
-}
-
-.test-tier {
+  gap: 0;
   border: 1px solid var(--border);
   border-radius: 3px;
   overflow: hidden;
 }
 
+.test-tier {
+  overflow: hidden;
+}
+
 .test-tier__label {
-  background: #1c120d;
   padding: 6px 8px;
   font-weight: 700;
-  color: var(--accent-strong);
+  color: #f2f5f9;
 }
 
 .test-tier__body {
@@ -1050,6 +1065,34 @@ body {
   grid-template-columns: 1fr;
   gap: 6px;
   padding: 8px;
+}
+
+.test-tier + .test-tier {
+  border-top: 1px solid var(--border);
+}
+
+.test-tier[data-tier="low"] .test-tier__label {
+  background: #1c355f;
+}
+
+.test-tier[data-tier="low"] .test-tier__body {
+  background: #23416e;
+}
+
+.test-tier[data-tier="mid"] .test-tier__label {
+  background: #1f4a2b;
+}
+
+.test-tier[data-tier="mid"] .test-tier__body {
+  background: #285c35;
+}
+
+.test-tier[data-tier="high"] .test-tier__label {
+  background: #5a1d1d;
+}
+
+.test-tier[data-tier="high"] .test-tier__body {
+  background: #6f2626;
 }
 
 .test-tier__inputs {
