@@ -463,6 +463,7 @@ const MAP_PING_RETENTION_MS = 10000;
 const MAP_PING_HISTORY_LIMIT = 8;
 const MAP_PING_PROCESSED_RETENTION_MS = 60000;
 const SHEET_SYNC_DEBOUNCE_MS = 400;
+const MALICE_VICTORIES_ACTION = 'fetch-victories';
 
 export function mountBoardInteractions(store, routes = {}) {
   const board = document.getElementById('vtt-board-canvas');
@@ -498,6 +499,16 @@ export function mountBoardInteractions(store, routes = {}) {
   const turnTimerImage = turnTimerElement?.querySelector('[data-turn-timer-image]');
   const turnTimerDisplay = turnTimerElement?.querySelector('[data-turn-timer-display]');
   const conditionBannerRegion = document.querySelector('[data-condition-banner-region]');
+  const maliceContainer = document.querySelector('[data-malice]');
+  const maliceButton = maliceContainer?.querySelector('[data-malice-button]');
+  const malicePips = maliceContainer?.querySelector('[data-malice-pips]');
+  const malicePanel = document.querySelector('[data-malice-panel]');
+  const malicePanelBackdrop = malicePanel?.querySelector('[data-malice-panel-backdrop]');
+  const malicePanelPips = malicePanel?.querySelector('[data-malice-panel-pips]');
+  const malicePanelClose = malicePanel?.querySelector('[data-malice-close]');
+  const malicePanelAdd = malicePanel?.querySelector('[data-malice-add]');
+  const maliceRemoveCount = malicePanel?.querySelector('[data-malice-remove-count]');
+  const maliceAddCount = malicePanel?.querySelector('[data-malice-add-count]');
   if (!board || !mapSurface || !mapTransform || !mapBackdrop || !mapImage || !templateLayer) return;
   if (!mapOverlay && mapTransform) {
     mapOverlay = document.createElement('div');
@@ -1107,11 +1118,16 @@ export function mountBoardInteractions(store, routes = {}) {
   let allyTurnTimerStartedAt = null;
   let allyTurnTimerWarnings = { yellow: false, red: false };
   let currentTurnTimerStage = null;
+  let maliceCount = 0;
+  let malicePanelOpen = false;
+  let malicePanelRemoved = new Set();
+  let malicePanelAddCount = 0;
   let audioContext = null;
   let lastTurnEffect = null;
   let lastTurnEffectSignature = null;
   let lastProcessedTurnEffectSignature = null;
   const sheetSyncQueue = new Map();
+  const maliceVictoriesCache = new Map();
   // Sand timer artwork is resolved via CSS data-stage attributes using
   // assets/images/turn-timer/sand-timer-{stage}.png.
   const SOUND_PROFILES = {
@@ -1497,6 +1513,68 @@ export function mountBoardInteractions(store, routes = {}) {
     damageHealButton.addEventListener('click', (event) => {
       event.preventDefault();
       toggleDamageHealWidget();
+    });
+  }
+
+  if (maliceButton) {
+    maliceButton.addEventListener('click', (event) => {
+      event.preventDefault();
+      openMalicePanel();
+    });
+  }
+
+  if (malicePanelBackdrop) {
+    malicePanelBackdrop.addEventListener('click', () => {
+      closeMalicePanel({ applyChanges: true });
+    });
+  }
+
+  if (malicePanelClose) {
+    malicePanelClose.addEventListener('click', () => {
+      closeMalicePanel({ applyChanges: true });
+    });
+  }
+
+  if (malicePanelAdd) {
+    malicePanelAdd.addEventListener('click', () => {
+      if (!malicePanelOpen) {
+        return;
+      }
+      malicePanelAddCount += 1;
+      renderMalicePanel();
+    });
+  }
+
+  if (malicePanelPips) {
+    malicePanelPips.addEventListener('click', (event) => {
+      if (!malicePanelOpen) {
+        return;
+      }
+      const target = event.target instanceof HTMLElement
+        ? event.target.closest('.vtt-malice-panel__pip')
+        : null;
+      if (!target || !malicePanelPips.contains(target)) {
+        return;
+      }
+      const index = Number(target.dataset.index);
+      if (!Number.isFinite(index)) {
+        return;
+      }
+      if (malicePanelRemoved.has(index)) {
+        malicePanelRemoved.delete(index);
+      } else {
+        malicePanelRemoved.add(index);
+      }
+      renderMalicePanel();
+    });
+  }
+
+  if (typeof document !== 'undefined') {
+    document.addEventListener('keydown', (event) => {
+      if (event.key !== 'Escape' || !malicePanelOpen) {
+        return;
+      }
+      closeMalicePanel({ applyChanges: true });
     });
   }
 
@@ -6827,6 +6905,97 @@ export function mountBoardInteractions(store, routes = {}) {
     return true;
   }
 
+  function isPlacementPlayerCombatant(placement) {
+    if (!placement || typeof placement !== 'object') {
+      return false;
+    }
+    const placementId = typeof placement.id === 'string' ? placement.id : null;
+    const team = placementId ? getCombatantTeam(placementId) : null;
+    if (team === 'ally') {
+      return true;
+    }
+    const metadata = extractPlacementMetadata(placement);
+    return isPlacementPlayerOwned(placement, metadata) || isPlacementInPlayerFolder(placement, metadata);
+  }
+
+  function getUniquePlayerProfiles(state = {}) {
+    const placements = getActiveScenePlacements(state);
+    const profiles = new Set();
+    placements.forEach((placement) => {
+      if (!isPlacementPlayerCombatant(placement)) {
+        return;
+      }
+      const placementId = typeof placement?.id === 'string' ? placement.id : null;
+      if (!placementId) {
+        return;
+      }
+      const profileId = normalizeProfileId(getCombatantProfileId(placementId));
+      if (profileId && profileId !== 'gm') {
+        profiles.add(profileId);
+      }
+    });
+    return Array.from(profiles);
+  }
+
+  function parseVictoryValue(value) {
+    const parsed = Number(value);
+    if (!Number.isFinite(parsed)) {
+      return 0;
+    }
+    return Math.max(0, Math.trunc(parsed));
+  }
+
+  async function fetchCharacterVictories(profileId) {
+    const normalized = normalizeProfileId(profileId);
+    if (!normalized) {
+      return 0;
+    }
+
+    if (maliceVictoriesCache.has(normalized)) {
+      return maliceVictoriesCache.get(normalized) ?? 0;
+    }
+
+    const endpoint = typeof routes?.sheet === 'string' ? routes.sheet : null;
+    if (!endpoint || typeof fetch !== 'function') {
+      return 0;
+    }
+
+    try {
+      const baseUrl =
+        typeof window !== 'undefined' && window?.location?.href ? window.location.href : undefined;
+      const url = baseUrl ? new URL(endpoint, baseUrl) : new URL(endpoint);
+      url.searchParams.set('action', MALICE_VICTORIES_ACTION);
+      url.searchParams.set('character', normalized);
+      const response = await fetch(url.toString(), { method: 'GET' });
+      if (!response?.ok) {
+        throw new Error(`Failed to load victories for ${normalized}`);
+      }
+      const payload = await response.json();
+      if (!payload || typeof payload !== 'object' || payload.success === false) {
+        maliceVictoriesCache.set(normalized, 0);
+        return 0;
+      }
+      const victories = parseVictoryValue(payload.victories ?? payload.data?.victories ?? 0);
+      maliceVictoriesCache.set(normalized, victories);
+      return victories;
+    } catch (error) {
+      console.warn('[VTT] Failed to fetch victories', error);
+      return 0;
+    }
+  }
+
+  async function computeInitialMalice() {
+    const state = boardApi.getState?.() ?? {};
+    const profiles = getUniquePlayerProfiles(state);
+    if (!profiles.length) {
+      return 0;
+    }
+
+    const values = await Promise.all(profiles.map((profileId) => fetchCharacterVictories(profileId)));
+    const total = values.reduce((sum, value) => sum + parseVictoryValue(value), 0);
+    return Math.round(total / profiles.length);
+  }
+
   function handleStartCombat() {
     if (combatActive) {
       handleEndCombat();
@@ -6839,6 +7008,7 @@ export function mountBoardInteractions(store, routes = {}) {
     activeTeam = null;
     combatActive = true;
     combatRound = 1;
+    setMaliceCount(0, { sync: false });
     if (isGmUser()) {
       combatTimerService.startCombat({ round: combatRound });
     } else {
@@ -6863,6 +7033,12 @@ export function mountBoardInteractions(store, routes = {}) {
     releaseTurnLock();
     updateCombatModeIndicators();
     syncCombatStateToStore();
+
+    if (isGmUser()) {
+      computeInitialMalice().then((initialMalice) => {
+        setMaliceCount(initialMalice);
+      });
+    }
   }
 
   function handleEndCombat() {
@@ -6907,6 +7083,7 @@ export function mountBoardInteractions(store, routes = {}) {
     clearHesitationBanner();
     resetTurnEffects();
     resetTriggeredActionsForActiveScene();
+    setMaliceCount(0, { sync: false });
     updateStartCombatButton();
     refreshCombatTracker();
     updateCombatModeIndicators();
@@ -6992,6 +7169,7 @@ export function mountBoardInteractions(store, routes = {}) {
       currentTurnTeam = normalized.currentTeam;
       lastActingTeam = normalized.lastTeam;
       roundTurnCount = normalized.roundTurnCount;
+      maliceCount = combatActive ? normalized.malice : 0;
       completedCombatants.clear();
       normalized.completedCombatantIds.forEach((id) => completedCombatants.add(id));
       applyCombatGroupsFromState(normalized.groups);
@@ -7012,6 +7190,12 @@ export function mountBoardInteractions(store, routes = {}) {
       updateStartCombatButton();
       updateCombatModeIndicators();
       refreshCombatTracker();
+      if (malicePanelOpen) {
+        renderMalicePanel();
+      }
+      if (!combatActive && malicePanelOpen) {
+        closeMalicePanel({ applyChanges: false });
+      }
       if (combatActive && isGmUser()) {
         checkForRoundCompletion();
       }
@@ -7059,6 +7243,7 @@ export function mountBoardInteractions(store, routes = {}) {
     const currentTeam = normalizeCombatTeam(raw?.currentTeam ?? raw?.activeTeam ?? null);
     const lastTeam = normalizeCombatTeam(raw?.lastTeam ?? raw?.previousTeam ?? null);
     const roundTurnCount = Math.max(0, toNonNegativeNumber(raw?.roundTurnCount ?? 0));
+    const malice = Math.max(0, toNonNegativeNumber(raw?.malice ?? raw?.maliceCount ?? 0));
     const updatedAtRaw = Number(raw?.updatedAt);
     const updatedAt = Number.isFinite(updatedAtRaw) ? Math.max(0, Math.trunc(updatedAtRaw)) : 0;
     const turnLock = normalizeTurnLock(raw?.turnLock ?? null);
@@ -7076,6 +7261,7 @@ export function mountBoardInteractions(store, routes = {}) {
       currentTeam,
       lastTeam,
       roundTurnCount,
+      malice,
       updatedAt,
       turnLock,
       lastEffect,
@@ -7276,6 +7462,7 @@ export function mountBoardInteractions(store, routes = {}) {
       currentTeam: normalizeCombatTeam(currentTurnTeam),
       lastTeam: normalizeCombatTeam(lastActingTeam),
       roundTurnCount: Math.max(0, Math.trunc(roundTurnCount)),
+      malice: Math.max(0, Math.trunc(maliceCount)),
       updatedAt: timestamp,
       turnLock: serializeTurnLockState(),
       lastEffect: effectSnapshot,
@@ -7368,6 +7555,7 @@ export function mountBoardInteractions(store, routes = {}) {
       snapshot.currentTeam = existingNormalized.currentTeam;
       snapshot.lastTeam = existingNormalized.lastTeam;
       snapshot.roundTurnCount = existingNormalized.roundTurnCount;
+      snapshot.malice = existingNormalized.malice;
       snapshot.turnLock = existingNormalized.turnLock;
       snapshot.lastEffect = existingNormalized.lastEffect;
     }
@@ -7546,6 +7734,11 @@ export function mountBoardInteractions(store, routes = {}) {
       combatTimerService.updateRound(combatRound);
     }
     roundTurnCount = 0;
+    if (isGmUser()) {
+      const profiles = getUniquePlayerProfiles(boardApi.getState?.() ?? {});
+      const maliceIncrease = profiles.length + combatRound;
+      setMaliceCount(maliceCount + maliceIncrease);
+    }
     resetTriggeredActionsForActiveScene();
     const preferredTeam = startingCombatTeam ?? currentTurnTeam ?? 'ally';
     const secondaryTeam = preferredTeam === 'ally' ? 'enemy' : 'ally';
@@ -7644,6 +7837,7 @@ export function mountBoardInteractions(store, routes = {}) {
       }
     }
     updateRoundTrackerDisplay();
+    updateMaliceDisplay();
   }
 
   function updateRoundTrackerDisplay() {
@@ -7676,6 +7870,118 @@ export function mountBoardInteractions(store, routes = {}) {
         turnIndicator.textContent = TURN_INDICATOR_DEFAULT_TEXT;
         turnIndicator.hidden = true;
       }
+    }
+  }
+
+  function updateMaliceDisplay() {
+    if (!maliceContainer || !malicePips) {
+      return;
+    }
+
+    maliceContainer.hidden = !combatActive;
+
+    if (!combatActive) {
+      return;
+    }
+
+    renderMalicePips(malicePips, maliceCount, 'vtt-malice__pip');
+
+    if (maliceButton) {
+      maliceButton.disabled = !isGmUser();
+    }
+  }
+
+  function renderMalicePips(container, count, className) {
+    if (!container) {
+      return;
+    }
+
+    const safeCount = Math.max(0, Math.trunc(Number(count) || 0));
+    container.innerHTML = '';
+
+    for (let index = 0; index < safeCount; index += 1) {
+      const pip = document.createElement('span');
+      pip.className = className;
+      container.appendChild(pip);
+    }
+  }
+
+  function setMaliceCount(nextValue, options = {}) {
+    const normalized = Math.max(0, Math.trunc(Number(nextValue) || 0));
+    if (normalized === maliceCount) {
+      updateMaliceDisplay();
+      return;
+    }
+
+    maliceCount = normalized;
+    updateMaliceDisplay();
+
+    if (malicePanelOpen) {
+      renderMalicePanel();
+    }
+
+    if (options.sync === false) {
+      return;
+    }
+
+    if (combatActive && isGmUser()) {
+      syncCombatStateToStore();
+    }
+  }
+
+  function openMalicePanel() {
+    if (!malicePanel || !isGmUser() || !combatActive) {
+      return;
+    }
+
+    malicePanelOpen = true;
+    malicePanelRemoved = new Set();
+    malicePanelAddCount = 0;
+    renderMalicePanel();
+    malicePanel.hidden = false;
+    malicePanel.setAttribute('aria-hidden', 'false');
+  }
+
+  function closeMalicePanel({ applyChanges = true } = {}) {
+    if (!malicePanel) {
+      return;
+    }
+
+    if (applyChanges) {
+      const removedCount = malicePanelRemoved.size;
+      const nextCount = Math.max(0, maliceCount - removedCount + malicePanelAddCount);
+      setMaliceCount(nextCount);
+    }
+
+    malicePanelOpen = false;
+    malicePanelRemoved = new Set();
+    malicePanelAddCount = 0;
+    malicePanel.hidden = true;
+    malicePanel.setAttribute('aria-hidden', 'true');
+  }
+
+  function renderMalicePanel() {
+    if (!malicePanelPips) {
+      return;
+    }
+
+    malicePanelPips.innerHTML = '';
+
+    for (let index = 0; index < maliceCount; index += 1) {
+      const pip = document.createElement('span');
+      pip.className = 'vtt-malice-panel__pip';
+      pip.dataset.index = String(index);
+      if (malicePanelRemoved.has(index)) {
+        pip.classList.add('is-disabled');
+      }
+      malicePanelPips.appendChild(pip);
+    }
+
+    if (maliceRemoveCount) {
+      maliceRemoveCount.textContent = String(malicePanelRemoved.size);
+    }
+    if (maliceAddCount) {
+      maliceAddCount.textContent = String(malicePanelAddCount);
     }
   }
 

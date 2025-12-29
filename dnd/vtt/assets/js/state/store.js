@@ -428,6 +428,7 @@ function normalizeCombatStateEntry(raw = {}) {
   const currentTeam = normalizeCombatTeamValue(raw.currentTeam ?? raw.activeTeam ?? null);
   const lastTeam = normalizeCombatTeamValue(raw.lastTeam ?? raw.previousTeam ?? null);
   const roundTurnCount = Math.max(0, toInt(raw.roundTurnCount, 0));
+  const malice = Math.max(0, toInt(raw.malice ?? raw.maliceCount ?? 0, 0));
   const turnLock = normalizeTurnLockEntry(raw.turnLock ?? null);
   const lastEffect = normalizeTurnEffectEntry(raw.lastEffect ?? raw.lastEvent ?? null);
   const groups = normalizeCombatGroupsEntry(
@@ -443,6 +444,7 @@ function normalizeCombatStateEntry(raw = {}) {
     Boolean(currentTeam) ||
     Boolean(lastTeam) ||
     roundTurnCount > 0 ||
+    malice > 0 ||
     Boolean(turnLock) ||
     Boolean(lastEffect) ||
     groups.length > 0;
@@ -460,6 +462,7 @@ function normalizeCombatStateEntry(raw = {}) {
     currentTeam,
     lastTeam,
     roundTurnCount,
+    malice,
     updatedAt: Math.max(0, toInt(raw.updatedAt, Date.now())),
     turnLock,
     lastEffect,

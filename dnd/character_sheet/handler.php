@@ -310,7 +310,7 @@ if ($requestMethod !== 'POST' && $requestMethod !== 'GET') {
 $requestData = $requestMethod === 'POST' ? $_POST : $_GET;
 $action = isset($requestData['action']) ? $requestData['action'] : '';
 
-if (!in_array($action, array('sync-stamina', 'sync-hero-tokens'), true) && $requestMethod !== 'POST') {
+if (!in_array($action, array('sync-stamina', 'sync-hero-tokens', 'fetch-victories'), true) && $requestMethod !== 'POST') {
     sendJsonResponse(array('success' => false, 'error' => 'Invalid request method'));
 }
 
@@ -421,6 +421,22 @@ switch ($action) {
         }
 
         sendJsonResponse(array('success' => true, 'heroTokens' => $heroTokens));
+        break;
+
+    case 'fetch-victories':
+        $allSheets = loadCharacterSheetData($dataDir, $dataFile, $characters);
+        $sheet = $allSheets[$requestedCharacter];
+        $victories = 0;
+
+        if (isset($sheet['hero']['victories']) && $sheet['hero']['victories'] !== '') {
+            $victories = (int)$sheet['hero']['victories'];
+        }
+
+        sendJsonResponse(array(
+            'success' => true,
+            'name' => isset($sheet['hero']['name']) && $sheet['hero']['name'] !== '' ? $sheet['hero']['name'] : $requestedCharacter,
+            'victories' => $victories,
+        ));
         break;
 
     default:
