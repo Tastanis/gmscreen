@@ -1016,6 +1016,161 @@
   text-shadow: 0 0.35rem 0.95rem rgba(10, 6, 4, 0.55);
 }
 
+.vtt-board__malice {
+  position: absolute;
+  bottom: 0.8rem;
+  left: 50%;
+  transform: translateX(-50%);
+  z-index: 4;
+  pointer-events: none;
+}
+
+.vtt-board__malice[hidden] {
+  display: none !important;
+}
+
+.vtt-malice {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 0.4rem;
+  padding: 0.3rem 0.7rem;
+  border-radius: 999px;
+  border: 1px solid rgba(15, 23, 42, 0.65);
+  background: rgba(10, 6, 14, 0.6);
+  box-shadow: 0 10px 22px rgba(10, 6, 14, 0.4);
+  cursor: pointer;
+  pointer-events: auto;
+  transition: transform var(--vtt-transition), box-shadow var(--vtt-transition);
+}
+
+.vtt-malice:disabled {
+  cursor: default;
+  opacity: 0.75;
+}
+
+.vtt-malice:not(:disabled):hover {
+  transform: translateY(-1px);
+  box-shadow: 0 12px 26px rgba(10, 6, 14, 0.55);
+}
+
+.vtt-malice__pips {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 0.35rem;
+}
+
+.vtt-malice__pip {
+  width: 18px;
+  height: 18px;
+  border-radius: 50%;
+  background: radial-gradient(circle at 30% 30%, #f0e6ff 0%, #c084fc 40%, #6d28d9 100%);
+  border: 2px solid rgba(5, 5, 10, 0.95);
+  box-shadow: inset 0 0 6px rgba(15, 23, 42, 0.45), 0 4px 8px rgba(10, 6, 14, 0.45);
+}
+
+.vtt-malice-panel {
+  position: fixed;
+  inset: 0;
+  z-index: 40;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.vtt-malice-panel[hidden] {
+  display: none !important;
+}
+
+.vtt-malice-panel__backdrop {
+  position: absolute;
+  inset: 0;
+  background: rgba(8, 6, 12, 0.65);
+  backdrop-filter: blur(4px);
+}
+
+.vtt-malice-panel__content {
+  position: relative;
+  z-index: 1;
+  min-width: min(520px, 92vw);
+  padding: 1.5rem;
+  border-radius: calc(var(--vtt-radius) * 1.2);
+  background: rgba(20, 14, 26, 0.95);
+  border: 1px solid rgba(148, 163, 184, 0.25);
+  box-shadow: 0 25px 45px rgba(10, 6, 14, 0.55);
+  display: flex;
+  flex-direction: column;
+  gap: 1rem;
+  color: rgba(226, 232, 240, 0.95);
+}
+
+.vtt-malice-panel__header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 1rem;
+}
+
+.vtt-malice-panel__title {
+  margin: 0;
+  font-size: 1.3rem;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+}
+
+.vtt-malice-panel__pips {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: center;
+  gap: 0.6rem;
+  padding: 0.5rem 0;
+}
+
+.vtt-malice-panel__pip {
+  width: 30px;
+  height: 30px;
+  border-radius: 50%;
+  background: radial-gradient(circle at 30% 30%, #f4ebff 0%, #c084fc 45%, #6d28d9 100%);
+  border: 2px solid rgba(5, 5, 10, 0.95);
+  box-shadow: inset 0 0 8px rgba(15, 23, 42, 0.5), 0 6px 12px rgba(10, 6, 14, 0.45);
+  cursor: pointer;
+  transition: transform var(--vtt-transition), opacity var(--vtt-transition);
+}
+
+.vtt-malice-panel__pip:hover {
+  transform: translateY(-1px);
+}
+
+.vtt-malice-panel__pip.is-disabled {
+  opacity: 0.35;
+  filter: grayscale(0.65);
+}
+
+.vtt-malice-panel__controls {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 1rem;
+}
+
+.vtt-malice-panel__add {
+  background: rgba(124, 58, 237, 0.25);
+  color: rgba(226, 232, 240, 0.95);
+}
+
+.vtt-malice-panel__counts {
+  font-weight: 600;
+  letter-spacing: 0.02em;
+  display: inline-flex;
+  align-items: center;
+  gap: 0.4rem;
+}
+
+.vtt-malice-panel__divider {
+  opacity: 0.5;
+}
+
 .vtt-board__canvas::before {
   content: "";
   position: absolute;

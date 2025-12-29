@@ -147,6 +147,36 @@ function renderVttSceneBoard(): string
             <div id="vtt-distance-ruler" class="vtt-board__ruler" hidden>
                 <span class="vtt-board__ruler-value">0 squares</span>
             </div>
+            <div class="vtt-board__malice" data-malice hidden>
+                <button
+                    class="vtt-malice"
+                    type="button"
+                    data-malice-button
+                    aria-label="Adjust Malice"
+                >
+                    <span class="vtt-malice__pips" data-malice-pips></span>
+                </button>
+            </div>
+            <div class="vtt-malice-panel" data-malice-panel hidden aria-hidden="true">
+                <div class="vtt-malice-panel__backdrop" data-malice-panel-backdrop></div>
+                <div class="vtt-malice-panel__content" role="dialog" aria-modal="true" aria-label="Adjust Malice">
+                    <div class="vtt-malice-panel__header">
+                        <h2 class="vtt-malice-panel__title">Malice</h2>
+                        <button class="btn" type="button" data-malice-close>Done</button>
+                    </div>
+                    <div class="vtt-malice-panel__pips" data-malice-panel-pips></div>
+                    <div class="vtt-malice-panel__controls">
+                        <button class="btn vtt-malice-panel__add" type="button" data-malice-add>
+                            + Add
+                        </button>
+                        <div class="vtt-malice-panel__counts">
+                            <span data-malice-remove-count>0</span> off
+                            <span class="vtt-malice-panel__divider">•</span>
+                            <span data-malice-add-count>0</span> to add
+                        </div>
+                    </div>
+                </div>
+            </div>
         </div>
     </section>
     <?php
