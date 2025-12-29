@@ -193,9 +193,9 @@ const ACTION_CONTAINER_IDS = {
 };
 
 const TEST_TIERS = [
-  { key: "low", label: "(\u2264 11)" },
-  { key: "mid", label: "(12-16)" },
-  { key: "high", label: "(17+)" },
+  { key: "low", label: "\u2264 11" },
+  { key: "mid", label: "12-16" },
+  { key: "high", label: "17+" },
 ];
 
 const ATTRIBUTES = ["Might", "Agility", "Reason", "Intuition", "Presence"];
@@ -448,6 +448,7 @@ function mergeWithDefaults(data) {
     title: feature.title || "",
     tags: Array.isArray(feature.tags) ? feature.tags : [],
     text: feature.text || "",
+    isWide: Boolean(feature.isWide),
   }));
 
   return merged;
@@ -1049,13 +1050,20 @@ function renderCommonThingCard(thing) {
         <button class="icon-btn edit-only" data-remove-common="${thing.id}" aria-label="Remove common thing">✕</button>
       </header>
       <div class="common-card__body">
-        <p class="display-value">${displayDetails || ""}</p>
-        <textarea
-          class="edit-field"
-          rows="3"
-          data-common-field="details"
-          placeholder="Details or reminders"
-        >${thing.details || ""}</textarea>
+        <div class="display-value rich-text-display">${renderRichText(displayDetails || "")}</div>
+        <div class="rich-text-wrapper">
+          <div class="rich-toolbar edit-only" role="toolbar" aria-label="Common thing formatting">
+            <button class="icon-btn rich-toolbar__btn" type="button" data-rich-command="bold" aria-label="Bold">
+              <strong>B</strong>
+            </button>
+          </div>
+          <div
+            class="rich-text-editor edit-field"
+            data-common-field="details"
+            contenteditable="true"
+            data-placeholder="Details or reminders"
+          >${renderRichText(displayDetails || "")}</div>
+        </div>
       </div>
     </article>
   `;
@@ -1085,6 +1093,7 @@ function renderCommonThings() {
 
   bindCommonAdds();
   bindCommonRemovals();
+  bindRichTextToolbars();
 }
 
 function renderSidebarResource() {
@@ -1125,10 +1134,20 @@ function renderSidebarResource() {
       </div>
     </div>
     <div class="sidebar__content sidebar-resource-content">
-      <p class="resource-text">${resource.text || ""}</p>
-      <textarea class="edit-field" rows="4" data-model="sidebar.resource.text" placeholder="Describe the resource...">${
-        resource.text || ""
-      }</textarea>
+      <div class="resource-text display-value rich-text-display">${renderRichText(resource.text || "")}</div>
+      <div class="rich-text-wrapper">
+        <div class="rich-toolbar edit-only" role="toolbar" aria-label="Resource formatting">
+          <button class="icon-btn rich-toolbar__btn" type="button" data-rich-command="bold" aria-label="Bold">
+            <strong>B</strong>
+          </button>
+        </div>
+        <div
+          class="rich-text-editor edit-field"
+          data-model="sidebar.resource.text"
+          contenteditable="true"
+          data-placeholder="Describe the resource"
+        >${renderRichText(resource.text || "")}</div>
+      </div>
     </div>
   `;
 }
@@ -1526,14 +1545,37 @@ function renderFeatures() {
     <div class="card-grid">
       ${sheetState.features
         .map(
-          (feature) => `
-            <article class="feature-card" data-feature-id="${feature.id}">
+          (feature, index) => `
+            <article class="feature-card ${feature.isWide ? "feature-card--wide" : ""}" data-feature-id="${feature.id}">
               <header class="card-head">
                 <div>
                   <div class="display-value feature-title">${feature.title || "Untitled Feature"}</div>
                   <input class="edit-field" type="text" data-field="title" value="${feature.title || ""}" />
                 </div>
-                <button class="icon-btn edit-only" data-remove-feature="${feature.id}" aria-label="Remove feature">✕</button>
+                <div class="feature-controls">
+                  <button
+                    class="icon-btn edit-only"
+                    data-move-feature="up"
+                    data-feature-id="${feature.id}"
+                    aria-label="Move feature up"
+                    ${index === 0 ? "disabled" : ""}
+                  >▲</button>
+                  <button
+                    class="icon-btn edit-only"
+                    data-move-feature="down"
+                    data-feature-id="${feature.id}"
+                    aria-label="Move feature down"
+                    ${index === sheetState.features.length - 1 ? "disabled" : ""}
+                  >▼</button>
+                  <button
+                    class="icon-btn edit-only"
+                    data-toggle-feature-width
+                    data-feature-id="${feature.id}"
+                    aria-label="Toggle feature width"
+                    aria-pressed="${feature.isWide ? "true" : "false"}"
+                  >2×</button>
+                  <button class="icon-btn edit-only" data-remove-feature="${feature.id}" aria-label="Remove feature">✕</button>
+                </div>
               </header>
               <div class="chip-row display-value">
                 ${(feature.tags || []).map((tag) => `<span class="chip">${tag}</span>`).join("")}
@@ -1566,6 +1608,8 @@ function renderFeatures() {
 
   bindFeatureAdd();
   bindFeatureRemovals();
+  bindFeatureMoves();
+  bindFeatureWidthToggles();
   bindRichTextToolbars();
 }
 
@@ -1664,7 +1708,7 @@ function renderRichText(value) {
 function renderTierDisplay(tier) {
   const parts = [];
   if (tier.damage || tier.damageType) {
-    const damageText = [tier.damage || "-", tier.damageType ? `(${tier.damageType})` : ""].filter(Boolean).join(" ");
+    const damageText = [tier.damage || "-", tier.damageType || ""].filter(Boolean).join(" ");
     parts.push(`<div class="tier-line"><strong>Damage:</strong> ${damageText}</div>`);
   }
   if (tier.notes) {
@@ -1938,6 +1982,7 @@ function renderAll() {
   updateResourceDisplays();
   bindTokenButtons();
   bindResourceControls();
+  bindRichTextToolbars();
 }
 
 function bindTokenButtons() {
@@ -1954,7 +1999,7 @@ function bindFeatureAdd() {
   if (!addBtn) return;
   addBtn.addEventListener("click", () => {
     captureFeatures();
-    sheetState.features.push({ id: createId("feature"), title: "", tags: [], text: "" });
+    sheetState.features.push({ id: createId("feature"), title: "", tags: [], text: "", isWide: false });
     renderFeatures();
     queueAutoSave();
   });
@@ -1966,6 +2011,41 @@ function bindFeatureRemovals() {
       captureFeatures();
       const id = btn.getAttribute("data-remove-feature");
       sheetState.features = sheetState.features.filter((f) => f.id !== id);
+      renderFeatures();
+      queueAutoSave();
+    });
+  });
+}
+
+function bindFeatureMoves() {
+  document.querySelectorAll("[data-move-feature]").forEach((btn) => {
+    btn.addEventListener("click", () => {
+      const id = btn.getAttribute("data-feature-id");
+      const direction = btn.getAttribute("data-move-feature");
+      if (!id || !direction) return;
+      captureFeatures();
+      const index = sheetState.features.findIndex((feature) => feature.id === id);
+      if (index === -1) return;
+      const swapIndex = direction === "up" ? index - 1 : index + 1;
+      if (swapIndex < 0 || swapIndex >= sheetState.features.length) return;
+      const updated = [...sheetState.features];
+      [updated[index], updated[swapIndex]] = [updated[swapIndex], updated[index]];
+      sheetState.features = updated;
+      renderFeatures();
+      queueAutoSave();
+    });
+  });
+}
+
+function bindFeatureWidthToggles() {
+  document.querySelectorAll("[data-toggle-feature-width]").forEach((btn) => {
+    btn.addEventListener("click", () => {
+      const id = btn.getAttribute("data-feature-id");
+      if (!id) return;
+      captureFeatures();
+      const feature = sheetState.features.find((item) => item.id === id);
+      if (!feature) return;
+      feature.isWide = !feature.isWide;
       renderFeatures();
       queueAutoSave();
     });
@@ -2085,6 +2165,9 @@ function captureCoreFields() {
   document.querySelectorAll("[data-model]").forEach((el) => {
     const path = el.getAttribute("data-model");
     let value = el.value;
+    if (el.classList.contains("rich-text-editor")) {
+      value = sanitizeRichText(normalizeRichText(el.innerHTML));
+    }
     if (el.type === "number") {
       value = el.value === "" ? "" : Number(el.value);
     }
@@ -2133,8 +2216,8 @@ function captureCommonThings() {
   cards.forEach((card) => {
     const id = card.getAttribute("data-common-id") || createId("common");
     const title = card.querySelector('[data-common-field="title"]')?.value || "";
-    const details = card.querySelector('[data-common-field="details"]')?.value || "";
-    updated.push({ id, title, details });
+    const details = card.querySelector('[data-common-field="details"]')?.innerHTML || "";
+    updated.push({ id, title, details: sanitizeRichText(normalizeRichText(details)) });
   });
 
   sheetState.sidebar.lists.common = updated;
@@ -2156,6 +2239,7 @@ function captureFeatures() {
         .map((tag) => tag.trim())
         .filter(Boolean),
       text: sanitizeRichText(normalizeRichText(text)),
+      isWide: card.classList.contains("feature-card--wide"),
     });
   });
   sheetState.features = updated;
