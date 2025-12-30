@@ -705,6 +705,9 @@ export function mountBoardInteractions(store, routes = {}) {
   const MAP_LOAD_WATCHDOG_DELAY_MS = 5000;
   let tokenDropDepth = 0;
   const selectedTokenIds = new Set();
+  const boardHoverTokenIds = new Set();
+  const trackerHoverTokenIds = new Set();
+  let hoveredTokenId = null;
   const combatTrackerGroups = new Map();
   const combatantGroupRepresentative = new Map();
   const combatGroupMissingCounts = new Map();
@@ -2243,10 +2246,14 @@ export function mountBoardInteractions(store, routes = {}) {
       closeTokenSettings({ preserveMonsterStatBlock: true });
       const placement = findRenderedPlacementAtPoint(event);
       if (placement) {
-        const selectionChanged = updateSelection(placement.id, {
-          additive: event.shiftKey,
-          toggle: event.ctrlKey || event.metaKey,
-        });
+        const hasModifier = event.shiftKey || event.ctrlKey || event.metaKey;
+        const isSelected = selectedTokenIds.has(placement.id);
+        const selectionChanged = hasModifier || !isSelected
+          ? updateSelection(placement.id, {
+              additive: event.shiftKey,
+              toggle: event.ctrlKey || event.metaKey,
+            })
+          : false;
         if (selectionChanged) {
           renderTokens(boardApi.getState?.() ?? {}, tokenLayer, viewState);
         }
@@ -2274,7 +2281,10 @@ export function mountBoardInteractions(store, routes = {}) {
       if (placement) {
         const opened = openTokenSettingsById(placement.id, event.clientX, event.clientY);
         if (opened) {
-          const selectionChanged = updateSelection(placement.id, { additive: false });
+          const isSelected = selectedTokenIds.has(placement.id);
+          const selectionChanged = !isSelected
+            ? updateSelection(placement.id, { additive: false })
+            : false;
           if (selectionChanged) {
             renderTokens(boardApi.getState?.() ?? {}, tokenLayer, viewState);
           }
@@ -2307,6 +2317,24 @@ export function mountBoardInteractions(store, routes = {}) {
     closeTokenSettings({ preserveMonsterStatBlock: true });
     return;
   });
+
+  function updateHoverFromPointer(event) {
+    if (!viewState.mapLoaded) {
+      return;
+    }
+    const placement = findRenderedPlacementAtPoint(event);
+    const nextId = placement?.id ?? null;
+    if (nextId === hoveredTokenId) {
+      return;
+    }
+    if (hoveredTokenId) {
+      setBoardTokenHover(hoveredTokenId, false);
+    }
+    hoveredTokenId = nextId;
+    if (hoveredTokenId) {
+      setBoardTokenHover(hoveredTokenId, true);
+    }
+  }
 
   mapSurface.addEventListener('pointermove', (event) => {
     if (isCustomConditionDialogOpen()) {
@@ -2342,6 +2370,7 @@ export function mountBoardInteractions(store, routes = {}) {
     }
 
     if (!viewState.isPanning || event.pointerId !== viewState.pointerId) {
+      updateHoverFromPointer(event);
       return;
     }
 
@@ -2407,6 +2436,11 @@ export function mountBoardInteractions(store, routes = {}) {
     }
     clearDragCandidate(event.pointerId);
     endPan(event);
+
+    if (hoveredTokenId) {
+      setBoardTokenHover(hoveredTokenId, false);
+      hoveredTokenId = null;
+    }
   };
 
   mapSurface.addEventListener('pointerup', handlePointerUp);
@@ -4722,6 +4756,7 @@ export function mountBoardInteractions(store, routes = {}) {
     const fragment = document.createDocumentFragment();
     let renderedCount = 0;
     const retainedSelection = new Set();
+    const renderedIds = new Set();
     const trackerEntries = [];
     const activeCombatantIds = new Set();
     const activeRotationIds = new Set();
@@ -4741,6 +4776,7 @@ export function mountBoardInteractions(store, routes = {}) {
       trackerEntries.push(normalized);
 
       activeRotationIds.add(normalized.id);
+      renderedIds.add(normalized.id);
 
       let column = normalized.column;
       let row = normalized.row;
@@ -4811,6 +4847,10 @@ export function mountBoardInteractions(store, routes = {}) {
       } else {
         token.classList.remove('is-selected');
       }
+      token.classList.toggle(
+        'is-hover-highlight',
+        boardHoverTokenIds.has(normalized.id) || trackerHoverTokenIds.has(normalized.id)
+      );
 
       if (previewPositions && previewPositions.has(normalized.id)) {
         token.classList.add('is-dragging');
@@ -4822,7 +4862,6 @@ export function mountBoardInteractions(store, routes = {}) {
 
       token.dataset.tokenName = normalized.name || '';
       applyTokenOverlays(token, normalized);
-      attachBoardTokenHover(token, normalized.id);
 
       fragment.appendChild(token);
       renderedCount += 1;
@@ -4839,6 +4878,22 @@ export function mountBoardInteractions(store, routes = {}) {
         missing.forEach((id) => selectedTokenIds.delete(id));
         notifySelectionChanged();
       }
+    }
+
+    boardHoverTokenIds.forEach((id) => {
+      if (!renderedIds.has(id)) {
+        boardHoverTokenIds.delete(id);
+      }
+    });
+
+    trackerHoverTokenIds.forEach((id) => {
+      if (!renderedIds.has(id)) {
+        trackerHoverTokenIds.delete(id);
+      }
+    });
+
+    if (hoveredTokenId && !renderedIds.has(hoveredTokenId)) {
+      hoveredTokenId = null;
     }
 
     tokenRotationAngles.forEach((_, id) => {
@@ -5469,18 +5524,7 @@ export function mountBoardInteractions(store, routes = {}) {
     });
   }
 
-  function highlightBoardTokensForCombatant(combatantId, shouldHighlight) {
-    const representativeId = getRepresentativeIdFor(combatantId);
-    if (!representativeId) {
-      return;
-    }
-    const members = getGroupMembers(representativeId);
-    members.forEach((memberId) => {
-      toggleBoardTokenHighlight(memberId, shouldHighlight);
-    });
-  }
-
-  function toggleBoardTokenHighlight(tokenId, shouldHighlight) {
+  function updateBoardTokenHighlight(tokenId) {
     if (!tokenLayer || !tokenId) {
       return;
     }
@@ -5488,8 +5532,44 @@ export function mountBoardInteractions(store, routes = {}) {
       (node) => node instanceof HTMLElement && node.dataset.placementId === tokenId
     );
     if (token) {
+      const shouldHighlight = boardHoverTokenIds.has(tokenId) || trackerHoverTokenIds.has(tokenId);
       token.classList.toggle('is-hover-highlight', shouldHighlight);
     }
+  }
+
+  function setBoardTokenHover(tokenId, shouldHighlight) {
+    if (!tokenId) {
+      return;
+    }
+    if (shouldHighlight) {
+      boardHoverTokenIds.add(tokenId);
+    } else {
+      boardHoverTokenIds.delete(tokenId);
+    }
+    updateBoardTokenHighlight(tokenId);
+  }
+
+  function setTrackerTokenHover(tokenId, shouldHighlight) {
+    if (!tokenId) {
+      return;
+    }
+    if (shouldHighlight) {
+      trackerHoverTokenIds.add(tokenId);
+    } else {
+      trackerHoverTokenIds.delete(tokenId);
+    }
+    updateBoardTokenHighlight(tokenId);
+  }
+
+  function highlightBoardTokensForCombatant(combatantId, shouldHighlight) {
+    const representativeId = getRepresentativeIdFor(combatantId);
+    if (!representativeId) {
+      return;
+    }
+    const members = getGroupMembers(representativeId);
+    members.forEach((memberId) => {
+      setTrackerTokenHover(memberId, shouldHighlight);
+    });
   }
 
   function attachTrackerHoverHandlers(container) {
@@ -8815,10 +8895,10 @@ export function mountBoardInteractions(store, routes = {}) {
       return;
     }
     tokenElement.addEventListener('mouseenter', () => {
-      handleBoardTokenHover(tokenId, true);
+      setBoardTokenHover(tokenId, true);
     });
     tokenElement.addEventListener('mouseleave', () => {
-      handleBoardTokenHover(tokenId, false);
+      setBoardTokenHover(tokenId, false);
     });
     tokenElement.dataset.boardHoverBound = 'true';
   }
@@ -8827,7 +8907,7 @@ export function mountBoardInteractions(store, routes = {}) {
     if (!tokenId) {
       return;
     }
-    toggleBoardTokenHighlight(tokenId, shouldHighlight);
+    setBoardTokenHover(tokenId, shouldHighlight);
     const representativeId = getRepresentativeIdFor(tokenId);
     if (representativeId) {
       highlightTrackerToken(representativeId, shouldHighlight);
@@ -10443,6 +10523,87 @@ export function mountBoardInteractions(store, routes = {}) {
     return updated;
   }
 
+  function updatePlacementsByIds(
+    placementIds,
+    mutator,
+    { syncBoard = true, returnSavePromise = false } = {}
+  ) {
+    if (!Array.isArray(placementIds) || placementIds.length === 0 || typeof mutator !== 'function') {
+      return false;
+    }
+
+    const uniqueIds = new Set(
+      placementIds
+        .map((id) => (typeof id === 'string' ? id.trim() : ''))
+        .filter(Boolean)
+    );
+    if (!uniqueIds.size || typeof boardApi.updateState !== 'function') {
+      return false;
+    }
+
+    const state = boardApi.getState?.() ?? {};
+    const activeSceneId = state.boardState?.activeSceneId ?? null;
+    if (!activeSceneId) {
+      return false;
+    }
+
+    const gmUser = Boolean(state?.user?.isGM);
+    let updatedIds = [];
+    let savePromise = null;
+    boardApi.updateState?.((draft) => {
+      const scenePlacements = ensureScenePlacementDraft(draft, activeSceneId);
+      if (!Array.isArray(scenePlacements) || !scenePlacements.length) {
+        return;
+      }
+      scenePlacements.forEach((placement) => {
+        if (!placement || typeof placement !== 'object') {
+          return;
+        }
+        if (!uniqueIds.has(placement.id)) {
+          return;
+        }
+        mutator(placement);
+        if (gmUser) {
+          markPlacementAsGmAuthored(placement, { isGm: gmUser });
+        }
+        updatedIds.push(placement.id);
+      });
+    });
+
+    if (updatedIds.length && syncBoard) {
+      savePromise = persistBoardStateSnapshot();
+    }
+
+    if (returnSavePromise) {
+      return { updated: updatedIds.length > 0, updatedIds, savePromise: savePromise ?? null };
+    }
+
+    return updatedIds.length > 0;
+  }
+
+  function normalizePlacementIds(value) {
+    if (Array.isArray(value)) {
+      return value
+        .map((entry) => (typeof entry === 'string' ? entry.trim() : ''))
+        .filter(Boolean);
+    }
+    if (typeof value === 'string') {
+      const trimmed = value.trim();
+      return trimmed ? [trimmed] : [];
+    }
+    return [];
+  }
+
+  function getTokenSettingsTargetIds(placementId = activeTokenSettingsId) {
+    if (!placementId) {
+      return [];
+    }
+    if (selectedTokenIds.size && selectedTokenIds.has(placementId)) {
+      return Array.from(selectedTokenIds);
+    }
+    return [placementId];
+  }
+
   function syncConditionsAfterMutation(didMutate) {
     if (!didMutate) {
       return false;
@@ -11340,12 +11501,17 @@ export function mountBoardInteractions(store, routes = {}) {
           return;
         }
         const visible = menu.showHpToggle.checked;
-        updatePlacementById(activeTokenSettingsId, (target) => {
+        const targetIds = getTokenSettingsTargetIds(activeTokenSettingsId);
+        const updated = updatePlacementsByIds(targetIds, (target) => {
           target.showHp = Boolean(visible);
           if (visible) {
             target.hp = ensurePlacementHitPoints(target.hp);
           }
         });
+        if (!updated) {
+          menu.showHpToggle.checked = !visible;
+          return;
+        }
         refreshTokenSettings();
         if (!visible) {
           hitPointsEditSession = null;
@@ -11360,7 +11526,8 @@ export function mountBoardInteractions(store, routes = {}) {
         }
 
         const hidden = menu.hiddenToggle.checked;
-        const updated = updatePlacementById(activeTokenSettingsId, (target) => {
+        const targetIds = getTokenSettingsTargetIds(activeTokenSettingsId);
+        const updated = updatePlacementsByIds(targetIds, (target) => {
           target.hidden = Boolean(hidden);
         });
 
@@ -12070,48 +12237,52 @@ export function mountBoardInteractions(store, routes = {}) {
       return;
     }
 
+    const targetIds = getTokenSettingsTargetIds(activeTokenSettingsId);
     const select = tokenSettingsMenu?.conditionSelect ?? null;
     const rawValue = typeof select?.value === 'string' ? select.value : '';
     const conditionName = rawValue.trim();
 
     if (!conditionName) {
-      applyConditionToPlacement(activeTokenSettingsId, null);
+      applyConditionToPlacements(targetIds, null);
       return;
     }
 
     if (conditionName.toLowerCase() === CUSTOM_CONDITION_NAME.toLowerCase()) {
-      handleCustomConditionRequest();
+      handleCustomConditionRequest(targetIds);
       return;
     }
 
     const duration = getSelectedConditionDuration();
     if (duration === 'save-ends') {
-      applyConditionToPlacement(activeTokenSettingsId, {
+      applyConditionToPlacements(targetIds, {
         name: conditionName,
         duration: { type: 'save-ends' },
       });
       return;
     }
 
-    promptConditionTargetSelection(activeTokenSettingsId, { name: conditionName });
+    promptConditionTargetSelection(targetIds, { name: conditionName });
   }
 
-  function handleCustomConditionRequest() {
-    if (!activeTokenSettingsId) {
+  function handleCustomConditionRequest(placementIds = null) {
+    const targetIds = placementIds ?? getTokenSettingsTargetIds(activeTokenSettingsId);
+    if (!targetIds.length) {
       return;
     }
 
     const duration = getSelectedConditionDuration();
     openCustomConditionDialog({
-      placementId: activeTokenSettingsId,
+      placementIds: targetIds,
       initialDuration: duration,
     });
   }
 
   function openCustomConditionDialog(options = {}) {
-    const placementId =
-      typeof options.placementId === 'string' ? options.placementId.trim() : '';
-    if (!placementId || !document?.body) {
+    const placementIds = normalizePlacementIds(
+      Array.isArray(options.placementIds) ? options.placementIds : options.placementId
+    );
+    const placementId = placementIds[0] ?? '';
+    if (!placementIds.length || !document?.body) {
       return;
     }
 
@@ -12223,7 +12394,7 @@ export function mountBoardInteractions(store, routes = {}) {
 
     const state = {
       overlay,
-      placementId,
+      placementIds,
       form,
       nameInput,
       descriptionInput,
@@ -12299,7 +12470,7 @@ export function mountBoardInteractions(store, routes = {}) {
       let description = state.descriptionInput.value.trim();
       if (!description) {
         const fallback = findExistingConditionDescription(name, {
-          excludePlacementId: placementId,
+          excludePlacementId: placementId || null,
         });
         if (fallback) {
           description = fallback;
@@ -12319,7 +12490,7 @@ export function mountBoardInteractions(store, routes = {}) {
       if (submitCallback) {
         submitCallback(payload);
       } else {
-        applyCustomConditionPayload(state.placementId, payload);
+        applyCustomConditionPayload(state.placementIds, payload);
       }
     };
 
@@ -12389,10 +12560,11 @@ export function mountBoardInteractions(store, routes = {}) {
     }
   }
 
-  function applyCustomConditionPayload(placementId, payload) {
+  function applyCustomConditionPayload(placementIds, payload) {
+    const targetIds = normalizePlacementIds(placementIds);
     const normalizedName =
       typeof payload?.name === 'string' ? payload.name.trim() : '';
-    if (!placementId || !normalizedName) {
+    if (!targetIds.length || !normalizedName) {
       return;
     }
 
@@ -12402,7 +12574,7 @@ export function mountBoardInteractions(store, routes = {}) {
 
     if (duration === 'end-of-turn') {
       resetConditionControls();
-      promptConditionTargetSelection(placementId, {
+      promptConditionTargetSelection(targetIds, {
         name: normalizedName,
         description,
       });
@@ -12418,7 +12590,7 @@ export function mountBoardInteractions(store, routes = {}) {
       condition.description = description;
     }
 
-    applyConditionToPlacement(placementId, condition);
+    applyConditionToPlacements(targetIds, condition);
     resetConditionControls();
   }
 
@@ -12463,6 +12635,57 @@ export function mountBoardInteractions(store, routes = {}) {
     if (updated && didChange) {
       refreshTokenSettings();
       if (placementId === activeTokenSettingsId) {
+        resetConditionControls();
+      }
+
+      syncConditionsAfterMutation(true);
+    }
+
+    return updated && didChange;
+  }
+
+  function applyConditionToPlacements(placementIds, condition) {
+    const targetIds = normalizePlacementIds(placementIds);
+    if (!targetIds.length) {
+      return false;
+    }
+
+    const normalized = ensurePlacementCondition(condition);
+    let didChange = false;
+    const updated = updatePlacementsByIds(targetIds, (target) => {
+      const conditions = ensurePlacementConditions(target?.conditions ?? target?.condition ?? null);
+      const hadConditions = conditions.length > 0;
+
+      if (normalized) {
+        const hasDuplicate = conditions.some((existing) => areConditionsEqual(existing, normalized));
+        if (hasDuplicate) {
+          return;
+        }
+        conditions.push(normalized);
+        didChange = true;
+      } else if (hadConditions || target.conditions !== undefined || target.condition !== undefined) {
+        conditions.length = 0;
+        didChange = true;
+      } else {
+        return;
+      }
+
+      if (conditions.length) {
+        target.conditions = conditions;
+        target.condition = conditions[0];
+      } else {
+        if (target.conditions !== undefined) {
+          delete target.conditions;
+        }
+        if (target.condition !== undefined) {
+          delete target.condition;
+        }
+      }
+    }, { syncBoard: false });
+
+    if (updated && didChange) {
+      refreshTokenSettings();
+      if (activeTokenSettingsId && targetIds.includes(activeTokenSettingsId)) {
         resetConditionControls();
       }
 
@@ -12637,7 +12860,8 @@ export function mountBoardInteractions(store, routes = {}) {
     updateConditionControlState();
   }
 
-  function promptConditionTargetSelection(placementId, condition) {
+  function promptConditionTargetSelection(placementIds, condition) {
+    const targetIds = normalizePlacementIds(placementIds);
     const normalizedCondition = ensurePlacementCondition({
       name: condition?.name,
       description:
@@ -12647,7 +12871,7 @@ export function mountBoardInteractions(store, routes = {}) {
       duration: { type: 'save-ends' },
     });
 
-    if (!placementId || !normalizedCondition) {
+    if (!targetIds.length || !normalizedCondition) {
       return;
     }
 
@@ -12706,7 +12930,7 @@ export function mountBoardInteractions(store, routes = {}) {
         appliedCondition.description = normalizedCondition.description;
       }
 
-      applyConditionToPlacement(placementId, appliedCondition);
+      applyConditionToPlacements(targetIds, appliedCondition);
 
       if (bannerId) {
         dismissConditionBanner(bannerId);
