@@ -3741,16 +3741,28 @@ function renderAbilityForPrint(ability, category) {
     html += `<div class="print-ability-name"><strong>${ability.name}</strong></div>`;
     
     // Keywords, range, targets - only if present
-    let details = [];
-    if (ability.keywords) details.push(`Keywords: ${ability.keywords}`);
-    if (ability.range) details.push(`Range: ${ability.range}`);
-    if (ability.targets) details.push(`Targets: ${ability.targets}`);
+    const metaItems = [];
+    if (ability.keywords) metaItems.push({ label: 'Keywords', symbol: '🏷️', value: ability.keywords });
+    if (ability.range) metaItems.push({ label: 'Range', symbol: '🏹', value: ability.range });
+    if (ability.targets) metaItems.push({ label: 'Targets', symbol: '🎯', value: ability.targets });
     if ((category === 'villain_action' || category === 'malice') && ability.resource_cost) {
-        details.push(`Cost: ${ability.resource_cost}`);
+        metaItems.push({ label: 'Cost', symbol: '✨', value: ability.resource_cost });
     }
     
-    if (details.length > 0) {
-        html += `<div class="print-ability-details">${details.join(' • ')}</div>`;
+    if (metaItems.length > 0) {
+        html += '<div class="print-ability-meta">';
+        html += metaItems
+            .map(
+                (item) => `
+                <div class="print-ability-meta-item">
+                    <span class="print-ability-meta-symbol" aria-hidden="true">${item.symbol}</span>
+                    <span class="print-ability-meta-label">${item.label}</span>
+                    <span class="print-ability-meta-value">${item.value}</span>
+                </div>
+            `
+            )
+            .join('');
+        html += '</div>';
     }
     
     // Trigger for triggered actions
@@ -3781,51 +3793,61 @@ function renderTestForPrint(test) {
     if (!test) return '';
     
     const tiers = [
-        { key: 'tier1', label: '≤11' },
-        { key: 'tier2', label: '12-16' },
-        { key: 'tier3', label: '17+' }
+        { key: 'tier1', label: '≤11', tier: 'low' },
+        { key: 'tier2', label: '12-16', tier: 'mid' },
+        { key: 'tier3', label: '17+', tier: 'high' }
     ];
     
     let hasAnyTest = false;
-    let testHtml = '<div class="print-test"><strong>Test:</strong><ul class="print-test-list">';
+    let testHtml = '<div class="print-test"><div class="print-test-title">Test</div><div class="print-test-tiers">';
     
     tiers.forEach(tier => {
         const tierData = test[tier.key];
         if (tierData && (tierData.damage_amount || tierData.damage_type || tierData.has_attribute_check)) {
             hasAnyTest = true;
-            let tierText = `<li>(${tier.label}): `;
+            const lines = [];
             
             // Add damage info
             if (tierData.damage_amount || tierData.damage_type) {
                 const damage = tierData.damage_amount || '';
                 const type = tierData.damage_type || '';
                 if (damage) {
-                    tierText += damage;
+                    let damageText = damage;
                     if (type) {
-                        tierText += ` ${type} damage`;
+                        damageText += ` ${type} damage`;
                     } else {
-                        tierText += ' damage';
+                        damageText += ' damage';
                     }
+                    lines.push(`Damage: ${damageText}`);
                 } else if (type) {
-                    tierText += type;
+                    lines.push(`Damage: ${type}`);
                 }
             }
             
             // Add attribute check info
             if (tierData.has_attribute_check && tierData.attribute && tierData.attribute_threshold) {
                 const attributeName = tierData.attribute.charAt(0).toUpperCase() + tierData.attribute.slice(1);
-                tierText += `; ${attributeName} ≤${tierData.attribute_threshold}`;
+                let checkText = `${attributeName} ≤${tierData.attribute_threshold}`;
                 if (tierData.attribute_effect) {
-                    tierText += `: ${tierData.attribute_effect}`;
+                    checkText += `: ${tierData.attribute_effect}`;
                 }
+                lines.push(`Check: ${checkText}`);
             }
             
-            tierText += '</li>';
-            testHtml += tierText;
+            if (lines.length > 0) {
+                testHtml += `
+                    <div class="print-test-tier" data-tier="${tier.tier}">
+                        <div class="print-test-tier-label">${tier.label}</div>
+                        <div class="print-test-tier-body">
+                            ${lines.map(line => `<div class="print-test-tier-line">${line}</div>`).join('')}
+                        </div>
+                    </div>
+                `;
+            }
         }
     });
     
-    testHtml += '</ul></div>';
+    testHtml += '</div></div>';
     
     return hasAnyTest ? testHtml : '';
 }
