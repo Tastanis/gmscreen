@@ -537,7 +537,12 @@ $staffData = loadStaffData();
                 <?php if ($is_gm): ?>
                 <div class="admin-controls">
                     <button class="btn-add" id="add-staff-btn">+ Add Staff Member</button>
-                    <button class="btn-export" id="export-staff-btn">📤 Export All Staff</button>
+                    <button class="btn-export" id="export-staff-btn">📤 Export Staff</button>
+                    <div class="export-selection-actions" id="export-selection-actions" style="display: none;">
+                        <span class="export-selection-count" id="export-selection-count">0 selected</span>
+                        <button class="btn-export" id="export-selected-staff-btn" disabled>📤 Export Selected</button>
+                        <button class="btn-cancel" id="cancel-export-selection-btn">Cancel</button>
+                    </div>
                 </div>
                 <?php endif; ?>
             </div>

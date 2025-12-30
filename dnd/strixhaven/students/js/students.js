@@ -6,6 +6,8 @@ const studentsEndpoint = (typeof STUDENTS_ENDPOINT !== 'undefined' && STUDENTS_E
 
 // Store rich text editor instances
 let modalRichTextEditors = new Map();
+let exportSelectionActive = false;
+const selectedExportStudents = new Set();
 
 // Initialize character lookup when ready
 function initializeCharacterLookup() {
@@ -194,7 +196,17 @@ function setupEventListeners() {
         // Export button (GM only)
         const exportBtn = document.getElementById('export-students-btn');
         if (exportBtn) {
-            exportBtn.addEventListener('click', exportStudents);
+            exportBtn.addEventListener('click', () => toggleExportSelectionMode());
+        }
+
+        const exportSelectedBtn = document.getElementById('export-selected-students-btn');
+        if (exportSelectedBtn) {
+            exportSelectedBtn.addEventListener('click', exportSelectedStudents);
+        }
+
+        const cancelExportBtn = document.getElementById('cancel-export-selection-btn');
+        if (cancelExportBtn) {
+            cancelExportBtn.addEventListener('click', () => toggleExportSelectionMode(false));
         }
         
         // Delete button (GM only)
@@ -292,9 +304,16 @@ function displayStudents(students) {
         card.addEventListener('click', function() {
             const studentId = this.getAttribute('data-student-id');
             const student = students.find(s => s.student_id === studentId);
-            if (student) {
-                openStudentModal(student);
+            if (!student) {
+                return;
             }
+            
+            if (exportSelectionActive) {
+                toggleStudentExportSelection(studentId);
+                return;
+            }
+            
+            openStudentModal(student);
         });
     });
 }
@@ -303,6 +322,8 @@ function displayStudents(students) {
 function createStudentCard(student) {
     const isFavorite = student.favorites && student.favorites[currentUser];
     const favoriteIcon = isFavorite ? '<div class="student-favorite">★</div>' : '';
+    const isSelectedForExport = selectedExportStudents.has(student.student_id);
+    const exportClass = isSelectedForExport ? ' is-selected' : '';
     
     // Handle both old image_path and new images array for backward compatibility
     let thumbnailImage = '';
@@ -317,8 +338,9 @@ function createStudentCard(student) {
         `<div class="student-placeholder">No Photo</div>`;
     
     return `
-        <div class="student-card" data-student-id="${escapeHtml(student.student_id)}">
+        <div class="student-card${exportClass}" data-student-id="${escapeHtml(student.student_id)}">
             ${favoriteIcon}
+            <div class="export-select-indicator" aria-hidden="true">✓</div>
             ${imageHtml}
             <div class="student-name">${escapeHtml(student.name)}</div>
             <div class="student-info">
@@ -1770,7 +1792,12 @@ function setupFormEventListeners(container) {
 }
 
 // Export functionality
-function exportStudents() {
+function exportSelectedStudents() {
+    if (selectedExportStudents.size === 0) {
+        alert('Select at least one student to export.');
+        return;
+    }
+
     const formData = new FormData();
     formData.append('action', 'export_students');
     
@@ -1781,7 +1808,15 @@ function exportStudents() {
     .then(response => response.json())
     .then(data => {
         if (data.success) {
-            showExportModal(data.data);
+            const selectedData = Array.isArray(data.data.students)
+                ? data.data.students.filter(student => selectedExportStudents.has(student.student_id))
+                : [];
+            const exportPayload = buildStudentExportPayload({
+                ...data.data,
+                students: selectedData.map(cleanStudentExportSections)
+            });
+
+            showExportModal(exportPayload);
         } else {
             alert('Failed to export data: ' + (data.error || 'Unknown error'));
         }
@@ -1790,6 +1825,113 @@ function exportStudents() {
         console.error('Error exporting data:', error);
         alert('Error exporting data');
     });
+}
+
+function buildStudentExportPayload(payload) {
+    if (!payload.metadata || typeof payload.metadata !== 'object') {
+        payload.metadata = {};
+    }
+    payload.metadata.total_students = payload.students.length;
+    return payload;
+}
+
+function cleanStudentExportSections(student) {
+    const cleanedStudent = { ...student };
+    ['character_info', 'relationships', 'details'].forEach(sectionKey => {
+        const cleanedSection = cleanEmptySection(cleanedStudent[sectionKey]);
+        if (cleanedSection) {
+            cleanedStudent[sectionKey] = cleanedSection;
+        } else {
+            delete cleanedStudent[sectionKey];
+        }
+    });
+
+    return cleanedStudent;
+}
+
+function cleanEmptySection(section) {
+    if (!section || typeof section !== 'object' || Array.isArray(section)) {
+        return null;
+    }
+
+    const cleaned = {};
+    Object.entries(section).forEach(([key, value]) => {
+        if (!isValueEmpty(value)) {
+            cleaned[key] = value;
+        }
+    });
+
+    return Object.keys(cleaned).length > 0 ? cleaned : null;
+}
+
+function isValueEmpty(value) {
+    if (value === null || value === undefined) {
+        return true;
+    }
+    if (typeof value === 'string') {
+        const normalized = value.replace(/<[^>]*>/g, '').replace(/&nbsp;/g, ' ').trim();
+        return normalized === '';
+    }
+    if (Array.isArray(value)) {
+        return value.length === 0;
+    }
+    return false;
+}
+
+function toggleExportSelectionMode(forceState) {
+    const nextState = typeof forceState === 'boolean' ? forceState : !exportSelectionActive;
+    exportSelectionActive = nextState;
+    document.body.classList.toggle('export-selection-active', exportSelectionActive);
+
+    const selectionActions = document.getElementById('export-selection-actions');
+    if (selectionActions) {
+        selectionActions.style.display = exportSelectionActive ? 'flex' : 'none';
+    }
+
+    const exportBtn = document.getElementById('export-students-btn');
+    if (exportBtn) {
+        exportBtn.textContent = exportSelectionActive ? '✖ Cancel Export' : '📤 Export Students';
+    }
+
+    if (!exportSelectionActive) {
+        selectedExportStudents.clear();
+        updateExportSelectionCount();
+        loadStudents();
+    } else {
+        updateExportSelectionCount();
+    }
+}
+
+function toggleStudentExportSelection(studentId) {
+    if (!exportSelectionActive) {
+        return;
+    }
+
+    if (selectedExportStudents.has(studentId)) {
+        selectedExportStudents.delete(studentId);
+    } else {
+        selectedExportStudents.add(studentId);
+    }
+
+    const card = document.querySelector(`.student-card[data-student-id="${CSS.escape(studentId)}"]`);
+    if (card) {
+        card.classList.toggle('is-selected', selectedExportStudents.has(studentId));
+    }
+
+    updateExportSelectionCount();
+}
+
+function updateExportSelectionCount() {
+    const count = selectedExportStudents.size;
+    const countLabel = document.getElementById('export-selection-count');
+    if (countLabel) {
+        countLabel.textContent = `${count} selected`;
+    }
+
+    const exportSelectedBtn = document.getElementById('export-selected-students-btn');
+    if (exportSelectedBtn) {
+        exportSelectedBtn.disabled = count === 0;
+    }
 }
 
 function showExportModal(data) {
