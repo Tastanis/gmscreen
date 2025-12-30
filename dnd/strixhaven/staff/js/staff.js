@@ -2,6 +2,8 @@
 
 // Store rich text editor instances
 let modalRichTextEditors = new Map();
+let exportSelectionActive = false;
+const selectedExportStaff = new Set();
 
 // Initialize character lookup when ready
 function initializeCharacterLookup() {
@@ -198,7 +200,17 @@ function setupEventListeners() {
         // Export button (GM only)
         const exportBtn = document.getElementById('export-staff-btn');
         if (exportBtn) {
-            exportBtn.addEventListener('click', exportStaff);
+            exportBtn.addEventListener('click', () => toggleExportSelectionMode());
+        }
+
+        const exportSelectedBtn = document.getElementById('export-selected-staff-btn');
+        if (exportSelectedBtn) {
+            exportSelectedBtn.addEventListener('click', exportSelectedStaff);
+        }
+
+        const cancelExportBtn = document.getElementById('cancel-export-selection-btn');
+        if (cancelExportBtn) {
+            cancelExportBtn.addEventListener('click', () => toggleExportSelectionMode(false));
         }
         
         // Delete button (GM only)
@@ -294,9 +306,16 @@ function displayStaff(staff) {
         card.addEventListener('click', function() {
             const staffId = this.getAttribute('data-staff-id');
             const member = staff.find(s => s.staff_id === staffId);
-            if (member) {
-                openStaffModal(member);
+            if (!member) {
+                return;
             }
+
+            if (exportSelectionActive) {
+                toggleStaffExportSelection(staffId);
+                return;
+            }
+
+            openStaffModal(member);
         });
     });
 }
@@ -305,6 +324,8 @@ function displayStaff(staff) {
 function createStaffCard(member) {
     const isFavorite = member.favorites && member.favorites[currentUser];
     const favoriteIcon = isFavorite ? '<div class="staff-favorite">★</div>' : '';
+    const isSelectedForExport = selectedExportStaff.has(member.staff_id);
+    const exportClass = isSelectedForExport ? ' is-selected' : '';
     
     // Handle both old image_path and new images array for backward compatibility
     let thumbnailImage = '';
@@ -319,8 +340,9 @@ function createStaffCard(member) {
         `<div class="staff-placeholder">No Photo</div>`;
     
     return `
-        <div class="staff-card" data-staff-id="${escapeHtml(member.staff_id)}">
+        <div class="staff-card${exportClass}" data-staff-id="${escapeHtml(member.staff_id)}">
             ${favoriteIcon}
+            <div class="export-select-indicator" aria-hidden="true">✓</div>
             ${imageHtml}
             <div class="staff-name">${escapeHtml(member.name)}</div>
             <div class="staff-info">
@@ -1309,7 +1331,12 @@ function deleteImage(itemId, imagePath, itemType) {
 }
 
 // Export functionality
-function exportStaff() {
+function exportSelectedStaff() {
+    if (selectedExportStaff.size === 0) {
+        alert('Select at least one staff member to export.');
+        return;
+    }
+
     const formData = new FormData();
     formData.append('action', 'export_staff');
     
@@ -1320,7 +1347,15 @@ function exportStaff() {
     .then(response => response.json())
     .then(data => {
         if (data.success) {
-            showExportModal(data.data);
+            const selectedData = Array.isArray(data.data.staff)
+                ? data.data.staff.filter(member => selectedExportStaff.has(member.staff_id))
+                : [];
+            const exportPayload = buildStaffExportPayload({
+                ...data.data,
+                staff: selectedData.map(cleanStaffExportSections)
+            });
+
+            showExportModal(exportPayload);
         } else {
             alert('Failed to export data: ' + (data.error || 'Unknown error'));
         }
@@ -1329,6 +1364,113 @@ function exportStaff() {
         console.error('Error exporting data:', error);
         alert('Error exporting data');
     });
+}
+
+function buildStaffExportPayload(payload) {
+    if (!payload.metadata || typeof payload.metadata !== 'object') {
+        payload.metadata = {};
+    }
+    payload.metadata.total_staff = payload.staff.length;
+    return payload;
+}
+
+function cleanStaffExportSections(member) {
+    const cleanedMember = { ...member };
+    ['character_info', 'gm_only'].forEach(sectionKey => {
+        const cleanedSection = cleanEmptySection(cleanedMember[sectionKey]);
+        if (cleanedSection) {
+            cleanedMember[sectionKey] = cleanedSection;
+        } else {
+            delete cleanedMember[sectionKey];
+        }
+    });
+
+    return cleanedMember;
+}
+
+function cleanEmptySection(section) {
+    if (!section || typeof section !== 'object' || Array.isArray(section)) {
+        return null;
+    }
+
+    const cleaned = {};
+    Object.entries(section).forEach(([key, value]) => {
+        if (!isValueEmpty(value)) {
+            cleaned[key] = value;
+        }
+    });
+
+    return Object.keys(cleaned).length > 0 ? cleaned : null;
+}
+
+function isValueEmpty(value) {
+    if (value === null || value === undefined) {
+        return true;
+    }
+    if (typeof value === 'string') {
+        const normalized = value.replace(/<[^>]*>/g, '').replace(/&nbsp;/g, ' ').trim();
+        return normalized === '';
+    }
+    if (Array.isArray(value)) {
+        return value.length === 0;
+    }
+    return false;
+}
+
+function toggleExportSelectionMode(forceState) {
+    const nextState = typeof forceState === 'boolean' ? forceState : !exportSelectionActive;
+    exportSelectionActive = nextState;
+    document.body.classList.toggle('export-selection-active', exportSelectionActive);
+
+    const selectionActions = document.getElementById('export-selection-actions');
+    if (selectionActions) {
+        selectionActions.style.display = exportSelectionActive ? 'flex' : 'none';
+    }
+
+    const exportBtn = document.getElementById('export-staff-btn');
+    if (exportBtn) {
+        exportBtn.textContent = exportSelectionActive ? '✖ Cancel Export' : '📤 Export Staff';
+    }
+
+    if (!exportSelectionActive) {
+        selectedExportStaff.clear();
+        updateExportSelectionCount();
+        loadStaff();
+    } else {
+        updateExportSelectionCount();
+    }
+}
+
+function toggleStaffExportSelection(staffId) {
+    if (!exportSelectionActive) {
+        return;
+    }
+
+    if (selectedExportStaff.has(staffId)) {
+        selectedExportStaff.delete(staffId);
+    } else {
+        selectedExportStaff.add(staffId);
+    }
+
+    const card = document.querySelector(`.staff-card[data-staff-id="${CSS.escape(staffId)}"]`);
+    if (card) {
+        card.classList.toggle('is-selected', selectedExportStaff.has(staffId));
+    }
+
+    updateExportSelectionCount();
+}
+
+function updateExportSelectionCount() {
+    const count = selectedExportStaff.size;
+    const countLabel = document.getElementById('export-selection-count');
+    if (countLabel) {
+        countLabel.textContent = `${count} selected`;
+    }
+
+    const exportSelectedBtn = document.getElementById('export-selected-staff-btn');
+    if (exportSelectedBtn) {
+        exportSelectedBtn.disabled = count === 0;
+    }
 }
 
 function showExportModal(data) {

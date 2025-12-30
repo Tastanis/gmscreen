@@ -653,7 +653,12 @@ $studentData = loadStudentData();
                 <div class="admin-controls">
                     <button class="btn-add" id="add-student-btn">+ Add Student</button>
                     <button class="btn-import" onclick="window.location.href='student-import.php'">📥 Import Student</button>
-                    <button class="btn-export" id="export-students-btn">📤 Export All Students</button>
+                    <button class="btn-export" id="export-students-btn">📤 Export Students</button>
+                    <div class="export-selection-actions" id="export-selection-actions" style="display: none;">
+                        <span class="export-selection-count" id="export-selection-count">0 selected</span>
+                        <button class="btn-export" id="export-selected-students-btn" disabled>📤 Export Selected</button>
+                        <button class="btn-cancel" id="cancel-export-selection-btn">Cancel</button>
+                    </div>
                 </div>
                 
                 <?php endif; ?>
