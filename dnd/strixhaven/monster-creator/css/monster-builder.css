@@ -2351,6 +2351,13 @@ body.delete-mode-active .sub-tab:hover {
     font-family: Georgia, serif;
     line-height: 1.6;
     position: relative;
+    border: 2px solid #d1d5db;
+    border-radius: 8px;
+    padding: 16px;
+    background: #ffffff;
+    box-shadow: 0 1px 3px rgba(15, 23, 42, 0.08);
+    break-inside: avoid;
+    page-break-inside: avoid;
 }
 
 .print-monster-image {
@@ -2432,6 +2439,36 @@ body.delete-mode-active .sub-tab:hover {
     margin: 5px 0;
 }
 
+.print-ability-meta {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 8px 12px;
+    margin: 6px 0;
+    font-size: 13px;
+    color: #374151;
+}
+
+.print-ability-meta-item {
+    display: inline-flex;
+    align-items: center;
+    gap: 6px;
+    padding: 2px 6px;
+    border-radius: 999px;
+    background: #f3f4f6;
+}
+
+.print-ability-meta-symbol {
+    font-size: 14px;
+}
+
+.print-ability-meta-label {
+    font-weight: 600;
+}
+
+.print-ability-meta-value {
+    font-weight: 500;
+}
+
 .print-test {
     margin: 10px 0;
     padding: 8px;
@@ -2439,14 +2476,72 @@ body.delete-mode-active .sub-tab:hover {
     border-radius: 4px;
 }
 
-.print-test-list {
-    margin: 5px 0 0 20px;
-    padding: 0;
+.print-test-title {
+    font-weight: 700;
+    margin-bottom: 6px;
+    color: #7f1d1d;
 }
 
-.print-test-list li {
-    margin: 3px 0;
+.print-test-tiers {
+    display: flex;
+    flex-direction: column;
+    gap: 0;
+    border: 1px solid #e5e7eb;
+    border-radius: 6px;
+    overflow: hidden;
+}
+
+.print-test-tier {
+    overflow: hidden;
+}
+
+.print-test-tier + .print-test-tier {
+    border-top: 1px solid #e5e7eb;
+}
+
+.print-test-tier-label {
+    padding: 6px 8px;
+    font-weight: 700;
+    color: #f8fafc;
+}
+
+.print-test-tier-body {
+    padding: 8px;
+    display: flex;
+    flex-direction: column;
+    gap: 6px;
     font-size: 13px;
+}
+
+.print-test-tier-line {
+    color: inherit;
+}
+
+.print-test-tier[data-tier="low"] .print-test-tier-label {
+    background: #1c355f;
+}
+
+.print-test-tier[data-tier="low"] .print-test-tier-body {
+    background: #23416e;
+    color: #e2e8f0;
+}
+
+.print-test-tier[data-tier="mid"] .print-test-tier-label {
+    background: #1f4a2b;
+}
+
+.print-test-tier[data-tier="mid"] .print-test-tier-body {
+    background: #285c35;
+    color: #e2e8f0;
+}
+
+.print-test-tier[data-tier="high"] .print-test-tier-label {
+    background: #5a1d1d;
+}
+
+.print-test-tier[data-tier="high"] .print-test-tier-body {
+    background: #6f2626;
+    color: #fde2e2;
 }
 
 /* Print Styles */
@@ -2569,7 +2664,9 @@ body.delete-mode-active .sub-tab:hover {
     }
 
     .print-test {
-        background: #f0f0f0;
+        background: #f8fafc;
+        print-color-adjust: exact;
+        -webkit-print-color-adjust: exact;
     }
 
     .print-ability-category {
