@@ -196,6 +196,41 @@
   );
 }
 
+.vtt-token[data-group-color='1'],
+.vtt-combat-token[data-group-color='1'] {
+  --vtt-group-color: #f97316;
+}
+
+.vtt-token[data-group-color='2'],
+.vtt-combat-token[data-group-color='2'] {
+  --vtt-group-color: #facc15;
+}
+
+.vtt-token[data-group-color='3'],
+.vtt-combat-token[data-group-color='3'] {
+  --vtt-group-color: #22c55e;
+}
+
+.vtt-token[data-group-color='4'],
+.vtt-combat-token[data-group-color='4'] {
+  --vtt-group-color: #38bdf8;
+}
+
+.vtt-token[data-group-color='5'],
+.vtt-combat-token[data-group-color='5'] {
+  --vtt-group-color: #6366f1;
+}
+
+.vtt-token[data-group-color='6'],
+.vtt-combat-token[data-group-color='6'] {
+  --vtt-group-color: #a855f7;
+}
+
+.vtt-token[data-group-color='7'],
+.vtt-combat-token[data-group-color='7'] {
+  --vtt-group-color: #f43f5e;
+}
+
 .vtt-combat-token {
   width: 100%;
   height: 100%;
@@ -208,6 +243,20 @@
   background: rgba(32, 22, 18, 0.3);
   cursor: pointer;
   transition: box-shadow var(--vtt-transition), border-color var(--vtt-transition), transform var(--vtt-transition);
+  position: relative;
+}
+
+.vtt-combat-token[data-group-color]::before {
+  content: '';
+  position: absolute;
+  top: 0;
+  left: 0;
+  right: 0;
+  height: 4px;
+  background: var(--vtt-group-color);
+  border-top-left-radius: inherit;
+  border-top-right-radius: inherit;
+  pointer-events: none;
 }
 
 .vtt-combat-token[data-combat-team='ally'] {
@@ -2038,6 +2087,20 @@
   transform: translate3d(0, 0, 0);
   transition: transform 180ms ease, width 180ms ease, height 180ms ease;
   will-change: transform;
+  z-index: 0;
+}
+
+.vtt-token[data-group-color]::before {
+  content: '';
+  position: absolute;
+  inset: -6px;
+  border-radius: 50%;
+  box-shadow:
+    0 0 0 2px var(--vtt-group-color),
+    0 0 18px 6px var(--vtt-group-color);
+  opacity: 0.6;
+  pointer-events: none;
+  z-index: -1;
 }
 
 .vtt-token[data-combat-team='ally'] {

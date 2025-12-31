@@ -712,6 +712,7 @@ export function mountBoardInteractions(store, routes = {}) {
   const combatantGroupRepresentative = new Map();
   const combatGroupMissingCounts = new Map();
   const MAX_COMBAT_GROUP_MISSING_TICKS = 2;
+  const MAX_COMBAT_GROUP_COLORS = 7;
   let lastCombatTrackerEntries = [];
   let lastCombatTrackerActiveIds = new Set();
   let renderedPlacements = [];
@@ -4760,6 +4761,7 @@ export function mountBoardInteractions(store, routes = {}) {
     const trackerEntries = [];
     const activeCombatantIds = new Set();
     const activeRotationIds = new Set();
+    const groupColorAssignments = getCombatGroupColorAssignments();
 
     placements.forEach((placement) => {
       const normalized = normalizePlacementForRender(placement);
@@ -4861,6 +4863,13 @@ export function mountBoardInteractions(store, routes = {}) {
       }
 
       token.dataset.tokenName = normalized.name || '';
+      const representativeId = getRepresentativeIdFor(normalized.id);
+      const groupColorIndex = representativeId ? groupColorAssignments.get(representativeId) : null;
+      if (groupColorIndex) {
+        token.dataset.groupColor = String(groupColorIndex);
+      } else if ('groupColor' in token.dataset) {
+        delete token.dataset.groupColor;
+      }
       applyTokenOverlays(token, normalized);
 
       fragment.appendChild(token);
@@ -5033,6 +5042,8 @@ export function mountBoardInteractions(store, routes = {}) {
       }
     }
 
+    const groupColorAssignments = getCombatGroupColorAssignments();
+
     const waitingFragment = document.createDocumentFragment();
     const completedFragment = document.createDocumentFragment();
     const renderedRepresentatives = new Set();
@@ -5089,6 +5100,13 @@ export function mountBoardInteractions(store, routes = {}) {
         token.dataset.groupSize = String(groupSize);
       } else if ('groupSize' in token.dataset) {
         delete token.dataset.groupSize;
+      }
+
+      const groupColorIndex = groupSize > 1 ? groupColorAssignments.get(representativeId) : null;
+      if (groupColorIndex) {
+        token.dataset.groupColor = String(groupColorIndex);
+      } else if ('groupColor' in token.dataset) {
+        delete token.dataset.groupColor;
       }
 
       const team = getCombatantTeam(representativeId);
@@ -5502,6 +5520,20 @@ export function mountBoardInteractions(store, routes = {}) {
       group.add(representativeId);
     }
     return Array.from(group);
+  }
+
+  function getCombatGroupColorAssignments() {
+    const assignments = new Map();
+    let index = 0;
+    combatTrackerGroups.forEach((members, representativeId) => {
+      if (!members || members.size <= 1) {
+        return;
+      }
+      const colorIndex = (index % MAX_COMBAT_GROUP_COLORS) + 1;
+      assignments.set(representativeId, colorIndex);
+      index += 1;
+    });
+    return assignments;
   }
 
   function getVisibleGroupMembers(representativeId, visibleIds) {
