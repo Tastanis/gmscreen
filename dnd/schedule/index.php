@@ -86,7 +86,7 @@ $current_week = 1; // Default fallback
 if (file_exists($schedules_file)) {
     $json_content = file_get_contents($schedules_file);
     $schedules = json_decode($json_content, true);
-    
+
     if ($schedules !== null && isset($schedules['_current_week'][$user])) {
         $current_week = intval($schedules['_current_week'][$user]);
         if ($current_week < 1) {
@@ -94,6 +94,9 @@ if (file_exists($schedules_file)) {
         }
     }
 }
+
+// Include navigation bar
+require_once '../includes/strix-nav.php';
 ?>
 <!DOCTYPE html>
 <html lang="en">
@@ -104,6 +107,7 @@ if (file_exists($schedules_file)) {
     <link rel="stylesheet" href="schedule.css">
 </head>
 <body>
+    <?php renderStrixNav('schedule'); ?>
     <div class="container">
         <header>
             <h1>📅 Strixhaven Academic Schedule</h1>

@@ -13,6 +13,9 @@ require_once '../../version.php';
 
 $user = $_SESSION['user'] ?? 'unknown';
 $isGM = ($user === 'GM');
+
+// Include navigation bar
+require_once '../../includes/strix-nav.php';
 ?>
 
 <!DOCTYPE html>
@@ -477,6 +480,7 @@ $isGM = ($user === 'GM');
     </style>
 </head>
 <body>
+    <?php renderStrixNav('map'); ?>
     <div class="map-container">
         <!-- Main canvas for hex grid -->
         <canvas id="hex-canvas"></canvas>

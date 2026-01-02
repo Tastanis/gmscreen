@@ -948,7 +948,6 @@ $defaultInventoryTab = $is_gm ? 'frunk' : $user;
                     <a href="#" onclick="openStrixhavenSection('gm')" class="<?php echo $is_gm ? 'gm-allowed' : 'gm-restricted'; ?>">GM</a>
                 </div>
             </div>
-            <button class="nav-btn" onclick="openCombatTracker()">Combat Tracker</button>
             <button class="nav-btn" onclick="openSchedule()">Schedule</button>
             <button class="nav-btn" onclick="openVTT()">VTT</button>
             <button type="button" class="nav-btn" id="theme-toggle-btn" title="Switch theme">Theme</button>
