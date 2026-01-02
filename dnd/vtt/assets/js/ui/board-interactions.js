@@ -14860,6 +14860,10 @@ function createTemplateTool() {
           return { column: Math.max(0, column), row: Math.max(0, row) };
         })
         .filter(Boolean);
+      // Include wall color if set
+      if (typeof shape.wallColor === 'string' && shape.wallColor.trim()) {
+        base.wallColor = shape.wallColor.trim();
+      }
       return base;
     }
 
@@ -14956,12 +14960,17 @@ function createTemplateTool() {
         })
         .filter(Boolean);
 
-      return {
+      const normalized = {
         id,
         type: 'wall',
         color,
         squares,
       };
+      // Preserve wall color if set
+      if (typeof entry.wallColor === 'string' && entry.wallColor.trim()) {
+        normalized.wallColor = entry.wallColor.trim();
+      }
+      return normalized;
     }
 
     return null;
@@ -15173,6 +15182,7 @@ function createTemplateTool() {
           type: 'circle',
           center: { ...previewShape.center },
           radius: Math.max(MIN_CIRCLE_RADIUS, previewShape.radius ?? MIN_CIRCLE_RADIUS),
+          color: placementState.values?.color,
         });
         return;
       }
@@ -15186,6 +15196,7 @@ function createTemplateTool() {
           type: 'circle',
           center: snappedPoint,
           radius,
+          color: placementState.values?.color,
         });
         return;
       }
@@ -15226,6 +15237,7 @@ function createTemplateTool() {
           rotation: previewShape.rotation ?? 0,
           anchor: previewShape.anchor ? { ...previewShape.anchor } : undefined,
           orientation: previewShape.orientation ? { ...previewShape.orientation } : undefined,
+          color: placementState.values?.color,
         });
         return;
       }
@@ -15242,6 +15254,7 @@ function createTemplateTool() {
           rotation: 0,
           anchor: snappedPoint,
           orientation: { x: 1, y: 1 },
+          color: placementState.values?.color,
         });
         return;
       }
@@ -15409,6 +15422,7 @@ function createTemplateTool() {
         type: 'circle',
         center: placementState.start,
         radius,
+        color: placementState.values?.color,
       });
       return;
     }
@@ -15434,6 +15448,7 @@ function createTemplateTool() {
           rotation: previewShape.rotation ?? 0,
           anchor: previewShape.anchor ? { ...previewShape.anchor } : undefined,
           orientation: previewShape.orientation ? { ...previewShape.orientation } : undefined,
+          color: placementState.values?.color,
         });
         return;
       }
@@ -15459,6 +15474,7 @@ function createTemplateTool() {
         rotation: 0,
         anchor: placementState.anchor ? { ...placementState.anchor } : undefined,
         orientation: rectConfig.orientation ? { ...rectConfig.orientation } : undefined,
+        color: placementState.values?.color,
       });
       return;
     }
@@ -15484,7 +15500,7 @@ function createTemplateTool() {
       const shape = createShape('circle', {
         center,
         radius: config.radius,
-      });
+      }, { color: config.color });
       addShape(shape);
       return;
     }
@@ -15495,7 +15511,7 @@ function createTemplateTool() {
         render(viewState);
         return;
       }
-      const shape = createShape('wall', { squares });
+      const shape = createShape('wall', { squares, wallColor: config.wallColor });
       addShape(shape);
       return;
     }
@@ -15525,7 +15541,7 @@ function createTemplateTool() {
       rotation,
       anchor,
       orientation,
-    });
+    }, { color: config.color });
     addShape(shape);
   }
 
@@ -15553,6 +15569,12 @@ function createTemplateTool() {
     root.className = `vtt-template vtt-template--${type}${isPreview ? ' vtt-template--preview' : ''}`;
     root.dataset.templateId = id;
     root.style.setProperty('--vtt-template-color', color);
+
+    // Set wall color attribute for CSS variants
+    const wallColor = data.wallColor;
+    if (type === 'wall' && typeof wallColor === 'string' && wallColor.trim() && !isPreview) {
+      root.dataset.wallColor = wallColor.trim();
+    }
 
     const shapeEl = document.createElement('div');
     shapeEl.className = 'vtt-template__shape';
@@ -15669,6 +15691,10 @@ function createTemplateTool() {
       }
     } else if (type === 'wall') {
       shape.squares = sanitizeWallSquares(data.squares);
+      // Store wall color for serialization
+      if (typeof data.wallColor === 'string' && data.wallColor.trim()) {
+        shape.wallColor = data.wallColor.trim();
+      }
     }
 
     if (!isPreview) {
@@ -16223,8 +16249,93 @@ function createTemplateTool() {
     wallField.input.inputMode = 'numeric';
     wallField.input.pattern = '\\d*';
 
+    // Template color picker (6 colors)
+    const templateColors = [
+      { name: 'blue', color: 'rgba(59, 130, 246, 0.95)' },
+      { name: 'cyan', color: 'rgba(6, 182, 212, 0.95)' },
+      { name: 'green', color: 'rgba(34, 197, 94, 0.95)' },
+      { name: 'pink', color: 'rgba(236, 72, 153, 0.95)' },
+      { name: 'purple', color: 'rgba(168, 85, 247, 0.95)' },
+      { name: 'orange', color: 'rgba(249, 115, 22, 0.95)' },
+    ];
+
+    let selectedTemplateColor = null;
+
+    const templateColorPicker = document.createElement('div');
+    templateColorPicker.className = 'vtt-template-menu__field';
+    const templateColorLabel = document.createElement('label');
+    templateColorLabel.textContent = 'Color (optional)';
+    templateColorPicker.appendChild(templateColorLabel);
+    const templateColorRow = document.createElement('div');
+    templateColorRow.className = 'vtt-template-menu__colors';
+    templateColorPicker.appendChild(templateColorRow);
+
+    templateColors.forEach((colorDef) => {
+      const swatch = document.createElement('button');
+      swatch.type = 'button';
+      swatch.className = 'vtt-template-menu__color';
+      swatch.style.background = colorDef.color;
+      swatch.dataset.colorName = colorDef.name;
+      swatch.dataset.colorValue = colorDef.color;
+      swatch.addEventListener('click', () => {
+        templateColorRow.querySelectorAll('.vtt-template-menu__color').forEach((el) => {
+          el.classList.remove('is-selected');
+        });
+        if (selectedTemplateColor === colorDef.color) {
+          selectedTemplateColor = null;
+        } else {
+          swatch.classList.add('is-selected');
+          selectedTemplateColor = colorDef.color;
+        }
+      });
+      templateColorRow.appendChild(swatch);
+    });
+
+    // Wall color picker (6 colors that match the CSS data-wall-color variants)
+    const wallColors = [
+      { name: 'brown', label: 'Brown', color: 'rgba(184, 115, 51, 0.95)' },
+      { name: 'gray', label: 'Gray', color: 'rgba(148, 163, 184, 0.95)' },
+      { name: 'red', label: 'Red', color: 'rgba(185, 28, 28, 0.95)' },
+      { name: 'green', label: 'Green', color: 'rgba(34, 197, 94, 0.95)' },
+      { name: 'blue', label: 'Blue', color: 'rgba(59, 130, 246, 0.95)' },
+      { name: 'purple', label: 'Purple', color: 'rgba(168, 85, 247, 0.95)' },
+    ];
+
+    let selectedWallColor = null;
+
+    const wallColorPicker = document.createElement('div');
+    wallColorPicker.className = 'vtt-template-menu__field';
+    const wallColorLabel = document.createElement('label');
+    wallColorLabel.textContent = 'Color (optional)';
+    wallColorPicker.appendChild(wallColorLabel);
+    const wallColorRow = document.createElement('div');
+    wallColorRow.className = 'vtt-template-menu__colors';
+    wallColorPicker.appendChild(wallColorRow);
+
+    wallColors.forEach((colorDef) => {
+      const swatch = document.createElement('button');
+      swatch.type = 'button';
+      swatch.className = 'vtt-template-menu__color';
+      swatch.style.background = colorDef.color;
+      swatch.dataset.colorName = colorDef.name;
+      swatch.title = colorDef.label;
+      swatch.addEventListener('click', () => {
+        wallColorRow.querySelectorAll('.vtt-template-menu__color').forEach((el) => {
+          el.classList.remove('is-selected');
+        });
+        if (selectedWallColor === colorDef.name) {
+          selectedWallColor = null;
+        } else {
+          swatch.classList.add('is-selected');
+          selectedWallColor = colorDef.name;
+        }
+      });
+      wallColorRow.appendChild(swatch);
+    });
+
     form.appendChild(lengthField.wrapper);
     form.appendChild(widthField.wrapper);
+    form.appendChild(templateColorPicker);
 
     const actions = document.createElement('div');
     actions.className = 'vtt-template-menu__actions';
@@ -16249,11 +16360,11 @@ function createTemplateTool() {
       wallChoice.classList.toggle('is-active', nextType === 'wall');
 
       if (nextType === 'circle') {
-        form.replaceChildren(circleField.wrapper, actions);
+        form.replaceChildren(circleField.wrapper, templateColorPicker, actions);
       } else if (nextType === 'rectangle') {
-        form.replaceChildren(lengthField.wrapper, widthField.wrapper, actions);
+        form.replaceChildren(lengthField.wrapper, widthField.wrapper, templateColorPicker, actions);
       } else {
-        form.replaceChildren(wallField.wrapper, actions);
+        form.replaceChildren(wallField.wrapper, wallColorPicker, actions);
       }
     }
 
@@ -16272,6 +16383,8 @@ function createTemplateTool() {
         length: parseFieldValue(lengthField.input.value),
         width: parseFieldValue(widthField.input.value),
         squares: parseSquareCount(wallField.input.value),
+        color: activeType === 'wall' ? null : selectedTemplateColor,
+        wallColor: activeType === 'wall' ? selectedWallColor : null,
       };
       controller.hide();
       beginPlacement(activeType, values);
@@ -16432,6 +16545,10 @@ function createTemplateTool() {
     labelEl.textContent = labelText;
     wrapper.appendChild(labelEl);
 
+    const numberWrapper = document.createElement('div');
+    numberWrapper.className = 'vtt-template-menu__number-wrapper';
+    wrapper.appendChild(numberWrapper);
+
     const input = document.createElement('input');
     input.type = 'number';
     input.name = name;
@@ -16440,7 +16557,31 @@ function createTemplateTool() {
     if (typeof options.placeholder === 'string') {
       input.placeholder = options.placeholder;
     }
-    wrapper.appendChild(input);
+    numberWrapper.appendChild(input);
+
+    const spinners = document.createElement('div');
+    spinners.className = 'vtt-template-menu__spinners';
+    numberWrapper.appendChild(spinners);
+
+    const upBtn = document.createElement('button');
+    upBtn.type = 'button';
+    upBtn.className = 'vtt-template-menu__spinner';
+    upBtn.textContent = '▲';
+    upBtn.addEventListener('click', () => {
+      input.stepUp();
+      input.dispatchEvent(new Event('input', { bubbles: true }));
+    });
+    spinners.appendChild(upBtn);
+
+    const downBtn = document.createElement('button');
+    downBtn.type = 'button';
+    downBtn.className = 'vtt-template-menu__spinner';
+    downBtn.textContent = '▼';
+    downBtn.addEventListener('click', () => {
+      input.stepDown();
+      input.dispatchEvent(new Event('input', { bubbles: true }));
+    });
+    spinners.appendChild(downBtn);
 
     return { wrapper, input };
   }
@@ -16636,7 +16777,7 @@ function createTemplateTool() {
     const total = Number.isInteger(placementState.values?.squares) ? placementState.values.squares : placementState.squares.length;
     const remaining = Math.max(0, total - placementState.squares.length);
     if (remaining <= 0) {
-      finalizePlacement({ type: 'wall', squares: placementState.squares.slice() });
+      finalizePlacement({ type: 'wall', squares: placementState.squares.slice(), wallColor: placementState.values?.wallColor });
       return;
     }
 
