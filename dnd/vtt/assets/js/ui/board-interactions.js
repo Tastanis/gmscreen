@@ -1106,6 +1106,7 @@ export function mountBoardInteractions(store, routes = {}) {
   let lastPersistedBoardStateSignature = null;
   let lastPersistedBoardStateHash = null;
   let pendingBoardStateSave = null;
+  let pendingCombatStateSave = null;
   let suppressCombatStateSync = false;
   let pendingCombatStateSync = false;
   let combatStateVersion = 0;
@@ -1947,7 +1948,13 @@ export function mountBoardInteractions(store, routes = {}) {
   }
 
   function getPendingBoardStateSaveInfo() {
-    if (!pendingBoardStateSave?.promise) {
+    // Check both board state saves and combat state saves
+    // to prevent poller from overwriting during any pending save operation
+    const hasBoardSavePending = Boolean(pendingBoardStateSave?.promise);
+    const hasCombatSavePending = Boolean(pendingCombatStateSave?.promise);
+    const hasPending = hasBoardSavePending || hasCombatSavePending;
+
+    if (!hasPending) {
       return {
         pending: Boolean(pendingBoardStateSave?.blocking),
         promise: pendingBoardStateSave?.promise ?? null,
@@ -1960,11 +1967,11 @@ export function mountBoardInteractions(store, routes = {}) {
 
     return {
       pending: true,
-      promise: pendingBoardStateSave.promise,
-      signature: pendingBoardStateSave.signature ?? null,
-      hash: pendingBoardStateSave.hash ?? null,
-      blocking: Boolean(pendingBoardStateSave.blocking),
-      result: pendingBoardStateSave.lastResult ?? null,
+      promise: pendingBoardStateSave?.promise ?? pendingCombatStateSave?.promise ?? null,
+      signature: pendingBoardStateSave?.signature ?? null,
+      hash: pendingBoardStateSave?.hash ?? null,
+      blocking: Boolean(pendingBoardStateSave?.blocking),
+      result: pendingBoardStateSave?.lastResult ?? null,
     };
   }
 
@@ -7710,10 +7717,27 @@ export function mountBoardInteractions(store, routes = {}) {
 
     const snapshot = createCombatStateSnapshot();
     if (existingNormalized.updatedAt && existingNormalized.updatedAt > combatStateVersion) {
+      // Remote state is newer - incorporate remote changes but preserve local completedCombatantIds
+      // to prevent race conditions where local turn completion is lost
+      const roundChanged = existingNormalized.round !== snapshot.round;
+
       snapshot.active = existingNormalized.active;
       snapshot.round = existingNormalized.round;
       snapshot.activeCombatantId = existingNormalized.activeCombatantId;
-      snapshot.completedCombatantIds = [...existingNormalized.completedCombatantIds];
+
+      // For completedCombatantIds: if round changed, use remote state completely (new round started)
+      // Otherwise, merge local and remote to preserve local turn completions
+      if (roundChanged) {
+        snapshot.completedCombatantIds = [...existingNormalized.completedCombatantIds];
+      } else {
+        // Merge: keep local changes (just-completed combatants) plus any remote changes
+        const mergedCompletedIds = Array.from(new Set([
+          ...snapshot.completedCombatantIds,
+          ...existingNormalized.completedCombatantIds
+        ]));
+        snapshot.completedCombatantIds = mergedCompletedIds;
+      }
+
       snapshot.startingTeam = existingNormalized.startingTeam;
       snapshot.currentTeam = existingNormalized.currentTeam;
       snapshot.lastTeam = existingNormalized.lastTeam;
@@ -7752,7 +7776,26 @@ export function mountBoardInteractions(store, routes = {}) {
     if (latest?.user?.isGM) {
       persistBoardStateSnapshot();
     } else if (routes?.state) {
-      persistCombatState(routes.state, activeSceneId, snapshot);
+      // Track pending combat state save to prevent poller from overwriting during save
+      const savePromise = persistCombatState(routes.state, activeSceneId, snapshot);
+      if (savePromise && typeof savePromise.then === 'function') {
+        pendingCombatStateSave = {
+          promise: savePromise,
+          sceneId: activeSceneId,
+          timestamp: snapshot.updatedAt,
+        };
+        savePromise
+          .then(() => {
+            if (pendingCombatStateSave?.promise === savePromise) {
+              pendingCombatStateSave = null;
+            }
+          })
+          .catch(() => {
+            if (pendingCombatStateSave?.promise === savePromise) {
+              pendingCombatStateSave = null;
+            }
+          });
+      }
     }
 
     combatStateVersion = snapshot.updatedAt;
