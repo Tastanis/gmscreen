@@ -476,6 +476,7 @@ export function mountBoardInteractions(store, routes = {}) {
   const tokenLayer = document.getElementById('vtt-token-layer');
   const templateLayer = document.getElementById('vtt-template-layer');
   let pingLayer = document.getElementById('vtt-ping-layer');
+  const selectionBox = document.getElementById('vtt-selection-box');
   const mapBackdrop = document.getElementById('vtt-map-backdrop');
   const mapImage = document.getElementById('vtt-map-image');
   const emptyState = board?.querySelector('.vtt-board__empty');
@@ -597,6 +598,7 @@ export function mountBoardInteractions(store, routes = {}) {
     mapPixelSize: { width: 0, height: 0 },
     dragCandidate: null,
     dragState: null,
+    selectionBoxState: null,
   };
 
   const tokenLibraryDragState = {
@@ -2277,8 +2279,10 @@ export function mountBoardInteractions(store, routes = {}) {
         }
         prepareTokenDrag(event, placement);
         templateTool.clearSelection();
-      } else if (!event.shiftKey && !event.ctrlKey && !event.metaKey) {
-        if (clearSelection()) {
+      } else {
+        // Empty space clicked - start selection box for drag-to-select
+        const isAdditive = event.shiftKey;
+        if (!isAdditive && clearSelection()) {
           renderTokens(boardApi.getState?.() ?? {}, tokenLayer, viewState);
         }
         templateTool.clearSelection();
@@ -2286,8 +2290,7 @@ export function mountBoardInteractions(store, routes = {}) {
         if (viewState.dragState) {
           endTokenDrag({ commit: false });
         }
-      } else {
-        clearDragCandidate();
+        startSelectionBox(event);
       }
       focusBoard();
       event.preventDefault();
@@ -2387,6 +2390,16 @@ export function mountBoardInteractions(store, routes = {}) {
       }
     }
 
+    if (viewState.selectionBoxState && event.pointerId === viewState.selectionBoxState.pointerId) {
+      if ((event.buttons & 1) === 0) {
+        cancelSelectionBox();
+      } else {
+        event.preventDefault();
+        updateSelectionBox(event);
+        return;
+      }
+    }
+
     if (!viewState.isPanning || event.pointerId !== viewState.pointerId) {
       updateHoverFromPointer(event);
       return;
@@ -2427,6 +2440,15 @@ export function mountBoardInteractions(store, routes = {}) {
       clearDragCandidate(event.pointerId);
     }
 
+    if (viewState.selectionBoxState && event.pointerId === viewState.selectionBoxState.pointerId) {
+      const isPrimaryButton = event.button === 0 || event.button === -1;
+      if (isPrimaryButton) {
+        finishSelectionBox(event, { additive: event.shiftKey });
+      } else {
+        cancelSelectionBox();
+      }
+    }
+
     if (event.button === 2) {
       endPan(event);
     }
@@ -2441,6 +2463,7 @@ export function mountBoardInteractions(store, routes = {}) {
       endTokenDrag({ commit: false, pointerId: event.pointerId });
     }
     clearDragCandidate(event.pointerId);
+    cancelSelectionBox();
     endPan(event);
   };
 
@@ -2453,6 +2476,7 @@ export function mountBoardInteractions(store, routes = {}) {
       endTokenDrag({ commit: false, pointerId: event.pointerId });
     }
     clearDragCandidate(event.pointerId);
+    cancelSelectionBox();
     endPan(event);
 
     if (hoveredTokenId) {
@@ -2804,6 +2828,161 @@ export function mountBoardInteractions(store, routes = {}) {
     selectedTokenIds.clear();
     notifySelectionChanged();
     return true;
+  }
+
+  function startSelectionBox(event) {
+    if (!selectionBox || !viewState.mapLoaded) {
+      return false;
+    }
+
+    const localPoint = getLocalMapPoint(event);
+    if (!localPoint) {
+      return false;
+    }
+
+    viewState.selectionBoxState = {
+      pointerId: event.pointerId,
+      startLocal: { x: localPoint.x, y: localPoint.y },
+      currentLocal: { x: localPoint.x, y: localPoint.y },
+      active: false,
+    };
+
+    try {
+      mapSurface.setPointerCapture(event.pointerId);
+    } catch (error) {
+      console.warn('[VTT] Unable to set pointer capture for selection box', error);
+    }
+
+    return true;
+  }
+
+  function updateSelectionBox(event) {
+    const state = viewState.selectionBoxState;
+    if (!state || !selectionBox) {
+      return;
+    }
+
+    const localPoint = getLocalMapPoint(event);
+    if (!localPoint) {
+      return;
+    }
+
+    state.currentLocal = { x: localPoint.x, y: localPoint.y };
+
+    const deltaX = Math.abs(state.currentLocal.x - state.startLocal.x);
+    const deltaY = Math.abs(state.currentLocal.y - state.startLocal.y);
+    const distance = Math.hypot(deltaX, deltaY);
+
+    if (!state.active && distance >= DRAG_ACTIVATION_DISTANCE) {
+      state.active = true;
+      selectionBox.hidden = false;
+    }
+
+    if (!state.active) {
+      return;
+    }
+
+    const minX = Math.min(state.startLocal.x, state.currentLocal.x);
+    const minY = Math.min(state.startLocal.y, state.currentLocal.y);
+    const width = Math.abs(state.currentLocal.x - state.startLocal.x);
+    const height = Math.abs(state.currentLocal.y - state.startLocal.y);
+
+    selectionBox.style.left = `${minX}px`;
+    selectionBox.style.top = `${minY}px`;
+    selectionBox.style.width = `${width}px`;
+    selectionBox.style.height = `${height}px`;
+  }
+
+  function getTokensInSelectionBox() {
+    const state = viewState.selectionBoxState;
+    if (!state || !state.active) {
+      return [];
+    }
+
+    const minX = Math.min(state.startLocal.x, state.currentLocal.x);
+    const minY = Math.min(state.startLocal.y, state.currentLocal.y);
+    const maxX = Math.max(state.startLocal.x, state.currentLocal.x);
+    const maxY = Math.max(state.startLocal.y, state.currentLocal.y);
+
+    const matching = [];
+    const gridSize = viewState.gridSize || 64;
+    const offsets = viewState.gridOffsets || { top: 0, right: 0, bottom: 0, left: 0 };
+
+    renderedPlacements.forEach((placement) => {
+      if (!placement || !placement.id) {
+        return;
+      }
+
+      const tokenSize = (placement.size ?? 1) * gridSize;
+      const tokenLeft = (placement.x ?? 0) * gridSize + offsets.left;
+      const tokenTop = (placement.y ?? 0) * gridSize + offsets.top;
+      const tokenRight = tokenLeft + tokenSize;
+      const tokenBottom = tokenTop + tokenSize;
+
+      const overlapsX = tokenRight > minX && tokenLeft < maxX;
+      const overlapsY = tokenBottom > minY && tokenTop < maxY;
+
+      if (overlapsX && overlapsY) {
+        matching.push(placement);
+      }
+    });
+
+    return matching;
+  }
+
+  function finishSelectionBox(event, { additive = false } = {}) {
+    const state = viewState.selectionBoxState;
+    if (!state) {
+      return;
+    }
+
+    const wasActive = state.active;
+    // Get tokens before clearing state since getTokensInSelectionBox depends on it
+    const tokensInBox = wasActive ? getTokensInSelectionBox() : [];
+
+    try {
+      mapSurface.releasePointerCapture?.(state.pointerId);
+    } catch (error) {
+      // Ignore release errors
+    }
+
+    if (selectionBox) {
+      selectionBox.hidden = true;
+    }
+    viewState.selectionBoxState = null;
+
+    if (!wasActive || !tokensInBox.length) {
+      return;
+    }
+
+    if (!additive) {
+      selectedTokenIds.clear();
+    }
+
+    tokensInBox.forEach((placement) => {
+      selectedTokenIds.add(placement.id);
+    });
+
+    notifySelectionChanged();
+    renderTokens(boardApi.getState?.() ?? {}, tokenLayer, viewState);
+  }
+
+  function cancelSelectionBox() {
+    const state = viewState.selectionBoxState;
+    if (!state) {
+      return;
+    }
+
+    try {
+      mapSurface.releasePointerCapture?.(state.pointerId);
+    } catch (error) {
+      // Ignore release errors
+    }
+
+    if (selectionBox) {
+      selectionBox.hidden = true;
+    }
+    viewState.selectionBoxState = null;
   }
 
   function prepareTokenDrag(event, placement) {
@@ -5153,6 +5332,15 @@ export function mountBoardInteractions(store, routes = {}) {
     const representativeSet = renderedRepresentatives;
     if (activeCombatantId && !representativeSet.has(activeCombatantId)) {
       setActiveCombatantId(null);
+    }
+
+    // Clear stale tracker hover states before replacing DOM elements.
+    // This fixes highlighting persistence when tracker entries are replaced
+    // without mouseleave events firing.
+    if (trackerHoverTokenIds.size) {
+      const staleIds = Array.from(trackerHoverTokenIds);
+      trackerHoverTokenIds.clear();
+      staleIds.forEach((id) => updateBoardTokenHighlight(id));
     }
 
     waitingContainer.innerHTML = '';
