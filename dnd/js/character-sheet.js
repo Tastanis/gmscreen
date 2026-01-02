@@ -2379,11 +2379,6 @@ function openStrixhavenSection(section) {
     window.open(url, '_blank');
 }
 
-function openCombatTracker() {
-    const url = `combat/index.php`;
-    window.open(url, '_blank');
-}
-
 function openSchedule() {
     const url = `schedule/index.php`;
     window.open(url, '_blank');

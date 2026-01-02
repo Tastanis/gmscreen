@@ -4,6 +4,9 @@
 /** @var array<string,string> $routes */
 
 $assetVersion = (int) ($config['assetsVersion'] ?? time());
+
+// Include navigation bar
+require_once __DIR__ . '/../../includes/strix-nav.php';
 ?>
 <!DOCTYPE html>
 <html lang="en">
@@ -21,6 +24,7 @@ $assetVersion = (int) ($config['assetsVersion'] ?? time());
     <link rel="stylesheet" href="../dice-roller/dice-roller.css?v=<?= $assetVersion ?>" />
 </head>
 <body class="vtt-body">
+    <?php renderStrixNav('vtt'); ?>
     <div id="vtt-app" class="vtt-app" data-routes='<?= json_encode($routes, JSON_HEX_TAG | JSON_HEX_APOS | JSON_HEX_QUOT | JSON_HEX_AMP) ?>'>
         <?= $sections['settingsPanel'] ?? '' ?>
         <main class="vtt-app__main" id="vtt-main" tabindex="-1">

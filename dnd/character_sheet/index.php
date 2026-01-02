@@ -6,6 +6,9 @@ if (session_status() === PHP_SESSION_NONE) {
 $sessionUser = isset($_SESSION['user']) ? strtolower($_SESSION['user']) : '';
 $requestedCharacter = isset($_GET['character']) ? strtolower(trim($_GET['character'])) : '';
 $activeCharacter = $requestedCharacter !== '' ? $requestedCharacter : $sessionUser;
+
+// Include navigation bar
+require_once '../includes/strix-nav.php';
 ?>
 <!DOCTYPE html>
 <html lang="en">
@@ -17,6 +20,7 @@ $activeCharacter = $requestedCharacter !== '' ? $requestedCharacter : $sessionUs
   <script type="module" src="sheet.js"></script>
 </head>
 <body data-character="<?php echo htmlspecialchars($activeCharacter); ?>">
+  <?php renderStrixNav('charactersheet'); ?>
   <div class="app-shell">
     <main class="sheet">
       <header class="sheet__header">

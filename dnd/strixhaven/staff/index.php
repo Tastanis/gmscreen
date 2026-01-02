@@ -483,6 +483,9 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['action'])) {
 
 // Load initial data for page
 $staffData = loadStaffData();
+
+// Include navigation bar
+require_once '../../includes/strix-nav.php';
 ?>
 
 <!DOCTYPE html>
@@ -495,6 +498,7 @@ $staffData = loadStaffData();
     <link rel="stylesheet" href="css/staff.css">
 </head>
 <body>
+    <?php renderStrixNav('staff'); ?>
     <!-- Top Navigation Bar -->
     <div class="top-nav">
         <div class="nav-buttons">
