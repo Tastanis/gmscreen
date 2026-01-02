@@ -6,6 +6,14 @@
  */
 
 function renderStrixNav($currentPage = '') {
+    // Ensure session is started
+    if (session_status() === PHP_SESSION_NONE) {
+        session_start();
+    }
+
+    $user = isset($_SESSION['user']) ? $_SESSION['user'] : '';
+    $isGM = ($user === 'GM');
+
     $navItems = [
         'dashboard' => ['label' => 'Dashboard', 'url' => '/dnd/dashboard.php'],
         'map' => ['label' => 'Map', 'url' => '/dnd/strixhaven/map/index.php'],
@@ -13,8 +21,15 @@ function renderStrixNav($currentPage = '') {
         'staff' => ['label' => 'Staff', 'url' => '/dnd/strixhaven/staff/index.php'],
         'schedule' => ['label' => 'Schedule', 'url' => '/dnd/schedule/index.php'],
         'vtt' => ['label' => 'VTT', 'url' => '/dnd/vtt/index.php'],
-        'charactersheet' => ['label' => 'Sheet', 'url' => '/dnd/character_sheet/index.php'],
     ];
+
+    // Only add Sheet link for non-GM users
+    if (!$isGM && !empty($user)) {
+        $navItems['charactersheet'] = [
+            'label' => 'Sheet',
+            'url' => '/dnd/character_sheet/index.php?character=' . urlencode(strtolower($user))
+        ];
+    }
 
     $currentPage = strtolower($currentPage);
     ?>
