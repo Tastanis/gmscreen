@@ -2610,6 +2610,11 @@ export function mountBoardInteractions(store, routes = {}) {
 
     persistBoardStateSnapshot();
 
+    // For PC folder tokens, fetch and apply character sheet stamina
+    if (isTokenSourcePlayerVisible(template)) {
+      fetchAndApplyCharacterStamina(placement.id, activeSceneId);
+    }
+
     if (status) {
       const label = template.name ? `"${template.name}"` : 'Token';
       status.textContent = `Placed ${label} on the scene.`;
@@ -10116,6 +10121,14 @@ export function mountBoardInteractions(store, routes = {}) {
 
     const placementMetadata = {};
 
+    // Preserve folder information for PC token stamina linking
+    if (template.sourceFolderName) {
+      placementMetadata.sourceFolderName = template.sourceFolderName;
+    }
+    if (template.sourceFolderId) {
+      placementMetadata.sourceFolderId = template.sourceFolderId;
+    }
+
     if (template.monsterId) {
       const trimmedId = typeof template.monsterId === 'string' ? template.monsterId.trim() : '';
       if (trimmedId) {
@@ -11340,6 +11353,14 @@ export function mountBoardInteractions(store, routes = {}) {
       return;
     }
 
+    // Only sync stamina for PC folder tokens (player characters)
+    const metadata = extractPlacementMetadata(placement);
+    const inPlayerFolder = isPlacementInPlayerFolder(placement, metadata);
+    const isPlayerOwned = isPlacementPlayerOwned(placement, metadata);
+    if (!inPlayerFolder && !isPlayerOwned) {
+      return;
+    }
+
     const activeSceneId = getActiveSceneId();
     const snapshot = ensurePlacementHitPoints(hitPoints);
 
@@ -11351,6 +11372,88 @@ export function mountBoardInteractions(store, routes = {}) {
       },
       { savePromise, sceneId: activeSceneId }
     );
+  }
+
+  /**
+   * Fetches stamina from character sheet for a PC placement and updates it.
+   * Called when placing a PC token to ensure stamina is pulled from character sheet.
+   */
+  async function fetchAndApplyCharacterStamina(placementId, sceneId) {
+    if (!placementId || !sceneId) {
+      return;
+    }
+
+    const endpoint = typeof routes?.sheet === 'string' ? routes.sheet : null;
+    if (!endpoint || typeof fetch !== 'function') {
+      return;
+    }
+
+    const placement = getPlacementFromStore(placementId);
+    if (!placement) {
+      return;
+    }
+
+    const name = typeof placement.name === 'string' ? placement.name.trim() : '';
+    if (!name) {
+      return;
+    }
+
+    // Check if this is a PC folder token
+    const metadata = extractPlacementMetadata(placement);
+    const inPlayerFolder = isPlacementInPlayerFolder(placement, metadata);
+    const isPlayerOwned = isPlacementPlayerOwned(placement, metadata);
+    if (!inPlayerFolder && !isPlayerOwned) {
+      return;
+    }
+
+    try {
+      let url = null;
+      if (typeof window !== 'undefined' && window?.location?.href) {
+        url = new URL(endpoint, window.location.href);
+      } else {
+        url = new URL(endpoint);
+      }
+
+      url.searchParams.set('action', 'sync-stamina');
+      url.searchParams.set('character', name);
+
+      const response = await fetch(url.toString(), { method: 'GET' });
+      if (!response?.ok) {
+        return;
+      }
+
+      const data = await response.json();
+      if (!data || typeof data !== 'object' || data.success === false) {
+        return;
+      }
+
+      const currentStamina = data.currentStamina;
+      const staminaMax = data.staminaMax;
+
+      if (currentStamina === undefined && staminaMax === undefined) {
+        return;
+      }
+
+      // Update the placement with character sheet stamina
+      updatePlacementById(placementId, (target) => {
+        const currentHp = target.hp && typeof target.hp === 'object' ? target.hp : { current: '', max: '' };
+        target.hp = {
+          current: currentStamina !== undefined ? String(currentStamina) : currentHp.current,
+          max: staminaMax !== undefined ? String(staminaMax) : currentHp.max,
+        };
+
+        if (target.overlays && typeof target.overlays === 'object') {
+          if (!target.overlays.hitPoints || typeof target.overlays.hitPoints !== 'object') {
+            target.overlays.hitPoints = {};
+          }
+          target.overlays.hitPoints.value = target.hp;
+        }
+      });
+
+      persistBoardStateSnapshot();
+    } catch (error) {
+      console.warn('[VTT] Failed to fetch character stamina for placement', error);
+    }
   }
 
   function normalizePlacementCondition(value) {

@@ -73,7 +73,7 @@ export function renderTokenLibrary(routes, store, options = {}) {
   };
 
   const shouldPrefetchStamina = () =>
-    Boolean(endpoints?.sheet) && isTokenLibraryVisible() && Boolean(getActiveSceneId());
+    Boolean(endpoints?.sheet) && isTokenLibraryVisible();
 
   const collectTokenNamesFromLibrary = () => {
     if (!listContainer) {
