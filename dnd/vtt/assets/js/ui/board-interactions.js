@@ -613,6 +613,9 @@ export function mountBoardInteractions(store, routes = {}) {
   let suppressNextTrackerDoubleClick = false;
   let lastTrackerActivationAt = 0;
   const TRACKER_ACTIVATION_DEBOUNCE_MS = 250;
+  let lastTrackerClickTarget = null;
+  let lastTrackerClickAt = 0;
+  const TRACKER_DOUBLE_CLICK_THRESHOLD_MS = 400;
 
   function handleTokenLibraryDragStart(event) {
     const tokenItem = event?.target?.closest?.('.token-item');
@@ -1131,6 +1134,7 @@ export function mountBoardInteractions(store, routes = {}) {
   let lastTurnEffect = null;
   let lastTurnEffectSignature = null;
   let lastProcessedTurnEffectSignature = null;
+  const TURN_EFFECT_MAX_AGE_MS = 10000; // Effects older than 10s are ignored on load
   const sheetSyncQueue = new Map();
   const maliceVictoriesCache = new Map();
   // Sand timer artwork is resolved via CSS data-stage attributes using
@@ -5809,17 +5813,41 @@ export function mountBoardInteractions(store, routes = {}) {
   function handleCombatTrackerClick(event) {
     const target = event.target instanceof HTMLElement ? event.target.closest('[data-combatant-id]') : null;
     if (!target || !combatTrackerRoot?.contains(target)) {
+      lastTrackerClickTarget = null;
+      lastTrackerClickAt = 0;
       return;
     }
 
-    if (event.detail >= 2 && combatActive) {
-      const now = Date.now();
+    const now = Date.now();
+    const combatantId = target.dataset.combatantId || '';
+
+    // Manual double-click detection: check if this click is within threshold
+    // of a previous click on the same target. This is more reliable than
+    // event.detail which can be inconsistent across browsers/platforms.
+    const isManualDoubleClick =
+      combatActive &&
+      combatantId &&
+      lastTrackerClickTarget === combatantId &&
+      now - lastTrackerClickAt <= TRACKER_DOUBLE_CLICK_THRESHOLD_MS;
+
+    // Also honor browser's native double-click detection via event.detail
+    const isNativeDoubleClick = event.detail >= 2 && combatActive;
+
+    if (isManualDoubleClick || isNativeDoubleClick) {
+      // Reset click tracking after activation
+      lastTrackerClickTarget = null;
+      lastTrackerClickAt = 0;
+
       if (now - lastTrackerActivationAt > TRACKER_ACTIVATION_DEBOUNCE_MS) {
         lastTrackerActivationAt = now;
         suppressNextTrackerDoubleClick = activateCombatTrackerTarget(target);
       }
       return;
     }
+
+    // Track this click for manual double-click detection
+    lastTrackerClickTarget = combatantId;
+    lastTrackerClickAt = now;
 
     if (!combatActive || !isGmUser()) {
       return;
@@ -7310,7 +7338,20 @@ export function mountBoardInteractions(store, routes = {}) {
         Object.prototype.hasOwnProperty.call(combatState, 'maliceCount'));
     const normalized = normalizeCombatState(combatState);
 
-    if (normalized.updatedAt && normalized.updatedAt <= combatStateVersion) {
+    // Allow updates on initial load (combatStateVersion === 0) even if timestamps match.
+    // Also check if groups have changed - partial group data can arrive initially and
+    // we need to apply complete group data when it arrives, even with the same timestamp.
+    const isInitialLoad = combatStateVersion === 0;
+    const hasNewerTimestamp = !normalized.updatedAt || normalized.updatedAt > combatStateVersion;
+    const groupsChanged = normalized.groups?.length !== combatTrackerGroups.size ||
+      normalized.groups?.some((group) => {
+        const existing = combatTrackerGroups.get(group.representativeId);
+        if (!existing) return true;
+        if (existing.size !== group.memberIds?.length) return true;
+        return group.memberIds?.some((id) => !existing.has(id));
+      });
+
+    if (!isInitialLoad && !hasNewerTimestamp && !groupsChanged) {
       return;
     }
 
@@ -7535,6 +7576,13 @@ export function mountBoardInteractions(store, routes = {}) {
     lastTurnEffect = normalized;
     lastTurnEffectSignature = signature;
     lastProcessedTurnEffectSignature = signature;
+
+    // Skip showing effects that are too old - prevents replaying on page load
+    const now = Date.now();
+    const effectAge = normalized.triggeredAt ? now - normalized.triggeredAt : Infinity;
+    if (effectAge > TURN_EFFECT_MAX_AGE_MS) {
+      return;
+    }
 
     if (normalized.type === 'sharon-hesitation') {
       showHesitationPopup();
