@@ -237,6 +237,7 @@ function formatCombatState(raw = {}) {
   const groups = sanitizeCombatGroups(
     raw.groups ?? raw.groupings ?? raw.combatGroups ?? raw.combatantGroups ?? null
   );
+  const lastEffect = sanitizeTurnEffect(raw.lastEffect ?? raw.lastEvent ?? null);
 
   return {
     active,
@@ -251,6 +252,7 @@ function formatCombatState(raw = {}) {
     updatedAt,
     turnLock,
     groups,
+    lastEffect,
   };
 }
 
@@ -585,6 +587,36 @@ function sanitizeTurnLock(raw) {
     combatantId: combatantId || null,
     lockedAt,
   };
+}
+
+function sanitizeTurnEffect(raw) {
+  if (!raw || typeof raw !== 'object') {
+    return null;
+  }
+
+  const type = typeof raw.type === 'string' ? raw.type.trim().toLowerCase() : '';
+  if (!type) {
+    return null;
+  }
+
+  const combatantId = typeof raw.combatantId === 'string' ? raw.combatantId.trim() : '';
+  const triggeredAt = toInt(raw.triggeredAt ?? raw.timestamp ?? raw.updatedAt, Date.now());
+  const initiatorId = typeof raw.initiatorId === 'string' ? raw.initiatorId.trim().toLowerCase() : '';
+
+  const effect = {
+    type,
+    triggeredAt,
+  };
+
+  if (combatantId) {
+    effect.combatantId = combatantId;
+  }
+
+  if (initiatorId) {
+    effect.initiatorId = initiatorId;
+  }
+
+  return effect;
 }
 
 function sanitizeCombatGroups(raw) {
