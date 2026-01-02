@@ -675,20 +675,23 @@ export function renderTokenLibrary(routes, store, options = {}) {
     openContextMenu(token, event.clientX, event.clientY, tokenElement);
   });
 
-  moduleRoot.addEventListener('dragstart', async (event) => {
+  moduleRoot.addEventListener('dragstart', (event) => {
     const tokenElement = event.target.closest('.token-item');
     if (!tokenElement) {
       return;
     }
 
-    const dragData = await buildTokenDragDataWithStamina(
+    // Use synchronous buildTokenDragData instead of async buildTokenDragDataWithStamina.
+    // Async dragstart handlers are unreliable - browsers require dataTransfer to be
+    // set synchronously during the event. The sync version uses cached stamina if
+    // available and kicks off a background fetch for next time if not cached.
+    const dragData = buildTokenDragData(
       tokenElement,
       tokenIndex,
       {
         getState: stateApi.getState,
         routes: endpoints,
-      },
-      { staminaTimeoutMs: 200 }
+      }
     );
     const dataTransfer = event.dataTransfer;
     if (!dragData || !dataTransfer) {
