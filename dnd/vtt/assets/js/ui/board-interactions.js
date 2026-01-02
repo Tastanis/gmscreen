@@ -14700,6 +14700,8 @@ function createTemplateTool() {
   const MIN_RECT_DIMENSION = 1;
   const MIN_CIRCLE_RADIUS = 0.5;
   let lastSyncedSnapshot = null;
+  const shrinkTimers = new Map();
+  const SHRINK_DELAY_MS = 5000;
   const canRestoreStatus = () => !placementState && !activeDrag && !selectedId;
   const restoreTemplateStatus = () => restoreStatus(canRestoreStatus);
 
@@ -14720,6 +14722,43 @@ function createTemplateTool() {
   }
 
   updateLayerVisibility();
+
+  function activateTemplate(shape) {
+    if (!shape || shape.isPreview) {
+      return;
+    }
+    // Clear any existing shrink timer for this template
+    const existingTimer = shrinkTimers.get(shape.id);
+    if (existingTimer) {
+      clearTimeout(existingTimer);
+    }
+    // Remove shrunk class immediately
+    shape.elements.node.classList.remove('is-shrunk');
+    // Set a new timer to shrink after inactivity
+    const timer = setTimeout(() => {
+      shrinkTemplate(shape);
+    }, SHRINK_DELAY_MS);
+    shrinkTimers.set(shape.id, timer);
+  }
+
+  function shrinkTemplate(shape) {
+    if (!shape || shape.isPreview) {
+      return;
+    }
+    // Only shrink if not currently selected
+    if (selectedId !== shape.id) {
+      shape.elements.node.classList.add('is-shrunk');
+    }
+    shrinkTimers.delete(shape.id);
+  }
+
+  function clearShrinkTimer(shapeId) {
+    const timer = shrinkTimers.get(shapeId);
+    if (timer) {
+      clearTimeout(timer);
+      shrinkTimers.delete(shapeId);
+    }
+  }
 
   function sanitizeColorValue(value) {
     if (typeof value !== 'string') {
@@ -14929,6 +14968,10 @@ function createTemplateTool() {
   }
 
   function hydrateFromSerializedTemplates(entries) {
+    // Clear all shrink timers for existing shapes
+    shrinkTimers.forEach((timer) => clearTimeout(timer));
+    shrinkTimers.clear();
+
     shapes.splice(0, shapes.length).forEach((shape) => {
       shape.elements.root.remove();
     });
@@ -14938,6 +14981,8 @@ function createTemplateTool() {
       if (shape) {
         shapes.push(shape);
         layer.appendChild(shape.elements.root);
+        // Start templates in shrunk state since they haven't been recently interacted with
+        shape.elements.node.classList.add('is-shrunk');
       }
     });
 
@@ -15488,6 +15533,7 @@ function createTemplateTool() {
     shapes.push(shape);
     layer.appendChild(shape.elements.root);
     selectShape(shape.id);
+    activateTemplate(shape);
     render(viewState);
     commitShapes();
   }
@@ -15685,6 +15731,7 @@ function createTemplateTool() {
     if (index === -1) {
       return;
     }
+    clearShrinkTimer(id);
     const [removed] = shapes.splice(index, 1);
     removed.elements.root.remove();
     if (selectedId === id) {
@@ -15751,6 +15798,7 @@ function createTemplateTool() {
     event.preventDefault();
     event.stopPropagation();
     selectShape(shape.id);
+    activateTemplate(shape);
 
     const localPoint = getLocalMapPoint(event);
     const pivot = rectangleAnchorToLocal(shape, viewState) ?? rectangleCenterToLocal(shape, viewState);
@@ -15859,6 +15907,7 @@ function createTemplateTool() {
     event.preventDefault();
     event.stopPropagation();
     selectShape(shape.id);
+    activateTemplate(shape);
   }
 
   function handleNodePointerDown(event, shape) {
@@ -15868,6 +15917,7 @@ function createTemplateTool() {
     event.preventDefault();
     event.stopPropagation();
     selectShape(shape.id);
+    activateTemplate(shape);
 
     const localPoint = getLocalMapPoint(event);
     if (!localPoint) {

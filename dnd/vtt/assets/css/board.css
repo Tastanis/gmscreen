@@ -1871,6 +1871,24 @@
   pointer-events: none;
 }
 
+/* Shrunk state for inactive template nodes */
+.vtt-template__node.is-shrunk {
+  transform: scale(0.25);
+  opacity: 0.6;
+  transition: transform 300ms ease, opacity 300ms ease, box-shadow 160ms ease;
+}
+
+.vtt-template__node.is-shrunk:hover {
+  transform: scale(0.4);
+  opacity: 0.8;
+}
+
+/* Selected state overrides shrunk state */
+.vtt-template.is-selected .vtt-template__node.is-shrunk {
+  transform: scale(1.05);
+  opacity: 1;
+}
+
 .vtt-template__rotate-handle {
   position: absolute;
   bottom: -0.85rem;
