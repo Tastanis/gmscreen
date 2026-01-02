@@ -575,6 +575,7 @@ function normalizeCombatStatePayload($rawCombat): array
         'updatedAt' => time(),
         'turnLock' => null,
         'groups' => [],
+        'lastEffect' => null,
     ];
 
     if (!is_array($rawCombat)) {
@@ -629,6 +630,7 @@ function normalizeCombatStatePayload($rawCombat): array
     $state['groups'] = normalizeCombatGroups(
         $rawCombat['groups'] ?? $rawCombat['groupings'] ?? $rawCombat['combatGroups'] ?? $rawCombat['combatantGroups'] ?? []
     );
+    $state['lastEffect'] = normalizeCombatTurnEffect($rawCombat['lastEffect'] ?? $rawCombat['lastEvent'] ?? null);
 
     return $state;
 }
@@ -676,6 +678,46 @@ function normalizeCombatTurnLock($rawLock): ?array
         'combatantId' => $combatantId === '' ? null : $combatantId,
         'lockedAt' => $lockedAt,
     ];
+}
+
+/**
+ * @param mixed $rawEffect
+ */
+function normalizeCombatTurnEffect($rawEffect): ?array
+{
+    if (!is_array($rawEffect)) {
+        return null;
+    }
+
+    $type = isset($rawEffect['type']) && is_string($rawEffect['type']) ? strtolower(trim($rawEffect['type'])) : '';
+    if ($type === '') {
+        return null;
+    }
+
+    $combatantId = isset($rawEffect['combatantId']) && is_string($rawEffect['combatantId']) ? trim($rawEffect['combatantId']) : '';
+    $triggeredAt = isset($rawEffect['triggeredAt']) && is_numeric($rawEffect['triggeredAt'])
+        ? max(0, (int) round((float) $rawEffect['triggeredAt']))
+        : (isset($rawEffect['timestamp']) && is_numeric($rawEffect['timestamp'])
+            ? max(0, (int) round((float) $rawEffect['timestamp']))
+            : time());
+    $initiatorId = isset($rawEffect['initiatorId']) && is_string($rawEffect['initiatorId'])
+        ? strtolower(trim($rawEffect['initiatorId']))
+        : '';
+
+    $effect = [
+        'type' => $type,
+        'triggeredAt' => $triggeredAt,
+    ];
+
+    if ($combatantId !== '') {
+        $effect['combatantId'] = $combatantId;
+    }
+
+    if ($initiatorId !== '') {
+        $effect['initiatorId'] = $initiatorId;
+    }
+
+    return $effect;
 }
 
 /**

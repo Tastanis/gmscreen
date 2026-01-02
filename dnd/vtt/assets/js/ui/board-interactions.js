@@ -1938,12 +1938,18 @@ export function mountBoardInteractions(store, routes = {}) {
     }
 
     combatStateRefreshIntervalId = window.setInterval(() => {
+      // Skip refresh if a combat state save is pending to avoid race conditions
+      const pendingInfo = getPendingBoardStateSaveInfo();
+      if (pendingInfo.pending) {
+        return;
+      }
+
       const state = boardApi.getState?.();
       if (!state) {
         return;
       }
+      // applyCombatStateFromBoardState handles refreshCombatTracker internally
       applyCombatStateFromBoardState(state);
-      refreshCombatTracker();
     }, COMBAT_STATE_REFRESH_INTERVAL_MS);
   }
 
@@ -6109,8 +6115,25 @@ export function mountBoardInteractions(store, routes = {}) {
     }
     completedCombatants.add(finishedId);
     roundTurnCount = Math.max(0, roundTurnCount + 1);
-    setActiveCombatantId(null);
+
+    // Determine next combatant before clearing current one to avoid visual pop
+    releaseTurnLock(getCurrentUserId());
+    const nextId = pickNextCombatantId([
+      finishedTeam === 'ally' ? 'enemy' : 'ally',
+      finishedTeam,
+    ]);
+    if (nextId) {
+      pendingTurnTransition = { fromTeam: finishedTeam, fromCombatantId: finishedId };
+      setActiveCombatantId(nextId);
+    } else {
+      pendingTurnTransition = null;
+      setActiveCombatantId(null);
+    }
+
+    // Refresh tracker once with final state (avoids intermediate null state flash)
     refreshCombatTracker();
+
+    // Handle save-ends conditions after state is stable
     const saveEndsConditions = [];
     if (finishingConditions.length) {
       finishingConditions.forEach((condition) => {
@@ -6144,17 +6167,7 @@ export function mountBoardInteractions(store, routes = {}) {
         });
       });
     }
-    releaseTurnLock(getCurrentUserId());
-    const nextId = pickNextCombatantId([
-      finishedTeam === 'ally' ? 'enemy' : 'ally',
-      finishedTeam,
-    ]);
-    if (nextId) {
-      pendingTurnTransition = { fromTeam: finishedTeam, fromCombatantId: finishedId };
-      setActiveCombatantId(nextId);
-    } else {
-      pendingTurnTransition = null;
-    }
+
     updateCombatModeIndicators();
     checkForRoundCompletion();
     syncCombatStateToStore();
@@ -7746,6 +7759,30 @@ export function mountBoardInteractions(store, routes = {}) {
       snapshot.turnLock = existingNormalized.turnLock;
       snapshot.lastEffect = existingNormalized.lastEffect;
       snapshot.groups = existingNormalized.groups;
+
+      // Also update local in-memory state to match remote state
+      // This prevents UI from using stale local state when refresh loop runs
+      combatActive = snapshot.active;
+      combatRound = snapshot.round;
+      completedCombatants.clear();
+      snapshot.completedCombatantIds.forEach((id) => completedCombatants.add(id));
+      startingCombatTeam = snapshot.startingTeam;
+      currentTurnTeam = snapshot.currentTeam;
+      lastActingTeam = snapshot.lastTeam;
+      roundTurnCount = snapshot.roundTurnCount;
+      if (isGmUser() || existingHasMaliceValue) {
+        maliceCount = snapshot.malice;
+      }
+      updateTurnLockState(snapshot.turnLock);
+      applyCombatGroupsFromState(snapshot.groups);
+      combatStateVersion = existingNormalized.updatedAt;
+
+      // Use setter to properly update active combatant with highlights and handlers
+      setActiveCombatantId(snapshot.activeCombatantId);
+
+      // Refresh UI to reflect the new state immediately
+      updateCombatModeIndicators();
+      refreshCombatTracker();
     }
     if (!isGmUser()) {
       if (existingHasMaliceValue) {
