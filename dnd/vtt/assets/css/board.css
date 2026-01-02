@@ -208,7 +208,7 @@
 
 .vtt-token[data-group-color='3'],
 .vtt-combat-token[data-group-color='3'] {
-  --vtt-group-color: #22c55e;
+  --vtt-group-color: #14b8a6;
 }
 
 .vtt-token[data-group-color='4'],
@@ -228,7 +228,7 @@
 
 .vtt-token[data-group-color='7'],
 .vtt-combat-token[data-group-color='7'] {
-  --vtt-group-color: #f43f5e;
+  --vtt-group-color: #ec4899;
 }
 
 .vtt-combat-token {
@@ -267,6 +267,11 @@
 .vtt-combat-token[data-combat-team='enemy'] {
   border-color: rgba(248, 113, 113, 0.4);
   box-shadow: 0 2px 6px rgba(127, 29, 29, 0.28);
+}
+
+.vtt-combat-token[data-group-color] {
+  border-color: var(--vtt-group-color);
+  box-shadow: 0 2px 6px color-mix(in srgb, var(--vtt-group-color) 35%, transparent);
 }
 
 .vtt-combat-token img {
@@ -2145,6 +2150,11 @@
 .vtt-token[data-combat-team='enemy'] {
   border-color: rgba(248, 113, 113, 0.9);
   box-shadow: 0 10px 24px rgba(127, 29, 29, 0.55);
+}
+
+.vtt-token[data-group-color] {
+  border-color: var(--vtt-group-color);
+  box-shadow: 0 10px 24px color-mix(in srgb, var(--vtt-group-color) 45%, transparent);
 }
 
 .vtt-token.is-selected,
