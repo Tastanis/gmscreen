@@ -2913,11 +2913,12 @@ export function mountBoardInteractions(store, routes = {}) {
         return;
       }
 
-      const tokenSize = (placement.size ?? 1) * gridSize;
-      const tokenLeft = (placement.x ?? 0) * gridSize + offsets.left;
-      const tokenTop = (placement.y ?? 0) * gridSize + offsets.top;
-      const tokenRight = tokenLeft + tokenSize;
-      const tokenBottom = tokenTop + tokenSize;
+      const tokenWidth = (placement.width ?? 1) * gridSize;
+      const tokenHeight = (placement.height ?? 1) * gridSize;
+      const tokenLeft = (placement.column ?? 0) * gridSize + offsets.left;
+      const tokenTop = (placement.row ?? 0) * gridSize + offsets.top;
+      const tokenRight = tokenLeft + tokenWidth;
+      const tokenBottom = tokenTop + tokenHeight;
 
       const overlapsX = tokenRight > minX && tokenLeft < maxX;
       const overlapsY = tokenBottom > minY && tokenTop < maxY;
