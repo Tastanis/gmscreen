@@ -1367,23 +1367,53 @@ function exportSelectedStaff() {
 }
 
 function buildStaffExportPayload(payload) {
-    if (!payload.metadata || typeof payload.metadata !== 'object') {
-        payload.metadata = {};
-    }
-    payload.metadata.total_staff = payload.staff.length;
-    return payload;
+    // Return simplified format with just the staff array
+    return {
+        staff: payload.staff
+    };
 }
 
 function cleanStaffExportSections(member) {
-    const cleanedMember = { ...member };
-    ['character_info', 'gm_only'].forEach(sectionKey => {
-        const cleanedSection = cleanEmptySection(cleanedMember[sectionKey]);
-        if (cleanedSection) {
-            cleanedMember[sectionKey] = cleanedSection;
-        } else {
-            delete cleanedMember[sectionKey];
+    // Only include important visible fields
+    const cleanedMember = {};
+
+    // Basic Information
+    if (member.name) cleanedMember.name = member.name;
+    if (member.college) cleanedMember.college = member.college;
+    if (member.character_description && !isValueEmpty(member.character_description)) {
+        cleanedMember.character_description = member.character_description.replace(/<[^>]*>/g, '').replace(/&nbsp;/g, ' ').trim();
+    }
+    if (member.general_info && !isValueEmpty(member.general_info)) {
+        cleanedMember.general_info = member.general_info.replace(/<[^>]*>/g, '').replace(/&nbsp;/g, ' ').trim();
+    }
+
+    // Character Information (origin, desire, fear, connection, impact, change)
+    if (member.character_info) {
+        const charInfo = {};
+        ['origin', 'desire', 'fear', 'connection', 'impact', 'change'].forEach(key => {
+            if (member.character_info[key] && !isValueEmpty(member.character_info[key])) {
+                // Strip HTML tags for cleaner export
+                charInfo[key] = member.character_info[key].replace(/<[^>]*>/g, '').replace(/&nbsp;/g, ' ').trim();
+            }
+        });
+        if (Object.keys(charInfo).length > 0) {
+            cleanedMember.character_info = charInfo;
         }
-    });
+    }
+
+    // GM Only notes (personality, other)
+    if (member.gm_only) {
+        const gmNotes = {};
+        ['personality', 'other'].forEach(key => {
+            if (member.gm_only[key] && !isValueEmpty(member.gm_only[key])) {
+                // Strip HTML tags for cleaner export
+                gmNotes[key] = member.gm_only[key].replace(/<[^>]*>/g, '').replace(/&nbsp;/g, ' ').trim();
+            }
+        });
+        if (Object.keys(gmNotes).length > 0) {
+            cleanedMember.gm_notes = gmNotes;
+        }
+    }
 
     return cleanedMember;
 }
