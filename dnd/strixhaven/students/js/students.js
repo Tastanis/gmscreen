@@ -1828,23 +1828,49 @@ function exportSelectedStudents() {
 }
 
 function buildStudentExportPayload(payload) {
-    if (!payload.metadata || typeof payload.metadata !== 'object') {
-        payload.metadata = {};
-    }
-    payload.metadata.total_students = payload.students.length;
-    return payload;
+    // Return simplified format with just the students array
+    return {
+        students: payload.students
+    };
 }
 
 function cleanStudentExportSections(student) {
-    const cleanedStudent = { ...student };
-    ['character_info', 'relationships', 'details'].forEach(sectionKey => {
-        const cleanedSection = cleanEmptySection(cleanedStudent[sectionKey]);
-        if (cleanedSection) {
-            cleanedStudent[sectionKey] = cleanedSection;
-        } else {
-            delete cleanedStudent[sectionKey];
+    // Only include important visible fields
+    const cleanedStudent = {};
+
+    // Basic Information
+    if (student.name) cleanedStudent.name = student.name;
+    if (student.race) cleanedStudent.race = student.race;
+    if (student.age) cleanedStudent.age = student.age;
+    if (student.job) cleanedStudent.job = student.job;
+    if (student.grade_level) cleanedStudent.grade_level = student.grade_level;
+    if (student.college) cleanedStudent.college = student.college;
+    if (student.clubs && student.clubs.length > 0) cleanedStudent.clubs = student.clubs;
+    if (student.edge) cleanedStudent.edge = student.edge;
+    if (student.bane) cleanedStudent.bane = student.bane;
+
+    // Skills
+    if (student.skills && student.skills.length > 0) cleanedStudent.skills = student.skills;
+
+    // Character Information (origin, desire, fear, connection, impact, change)
+    if (student.character_info) {
+        const charInfo = {};
+        ['origin', 'desire', 'fear', 'connection', 'impact', 'change'].forEach(key => {
+            if (student.character_info[key] && !isValueEmpty(student.character_info[key])) {
+                // Strip HTML tags for cleaner export
+                charInfo[key] = student.character_info[key].replace(/<[^>]*>/g, '').replace(/&nbsp;/g, ' ').trim();
+            }
+        });
+        if (Object.keys(charInfo).length > 0) {
+            cleanedStudent.character_info = charInfo;
         }
-    });
+    }
+
+    // Other Notes (from details.other)
+    if (student.details && student.details.other && !isValueEmpty(student.details.other)) {
+        // Strip HTML tags for cleaner export
+        cleanedStudent.other_notes = student.details.other.replace(/<[^>]*>/g, '').replace(/&nbsp;/g, ' ').trim();
+    }
 
     return cleanedStudent;
 }
