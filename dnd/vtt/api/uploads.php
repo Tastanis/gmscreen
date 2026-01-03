@@ -96,11 +96,12 @@ if ($imageInfo === false) {
 }
 
 [$width, $height, $imageType] = $imageInfo;
-if ($width > 12000 || $height > 12000) {
+// Source limit is 6000 since we double the image (final max: 12000x12000)
+if ($width > 6000 || $height > 6000) {
     http_response_code(413);
     echo json_encode([
         'success' => false,
-        'error' => 'Map dimensions exceed the supported 12,000 x 12,000 pixel limit.',
+        'error' => 'Map dimensions exceed the supported 6,000 x 6,000 pixel limit (images are doubled for better grid display).',
     ]);
     return;
 }
@@ -136,17 +137,65 @@ try {
     return;
 }
 
-$filename = sprintf('%s_%dx%d.%s', $basename, $width, $height, $extension);
-$destinationPath = $destinationDir . '/' . $filename;
+// Double the image dimensions for better grid/token display
+$doubledWidth = $width * 2;
+$doubledHeight = $height * 2;
 
-if (!move_uploaded_file($tmpPath, $destinationPath)) {
+$sourceImage = loadImageFromFile($tmpPath, $imageType);
+if ($sourceImage === null) {
     http_response_code(500);
     echo json_encode([
         'success' => false,
-        'error' => 'Unable to save the uploaded map to disk.',
+        'error' => 'Failed to process the uploaded image.',
     ]);
     return;
 }
+
+$doubledImage = imagecreatetruecolor($doubledWidth, $doubledHeight);
+if ($doubledImage === false) {
+    imagedestroy($sourceImage);
+    http_response_code(500);
+    echo json_encode([
+        'success' => false,
+        'error' => 'Failed to create doubled image canvas.',
+    ]);
+    return;
+}
+
+// Preserve transparency for PNG and GIF
+if ($imageType === IMAGETYPE_PNG || $imageType === IMAGETYPE_GIF) {
+    imagealphablending($doubledImage, false);
+    imagesavealpha($doubledImage, true);
+    $transparent = imagecolorallocatealpha($doubledImage, 0, 0, 0, 127);
+    imagefill($doubledImage, 0, 0, $transparent);
+}
+
+// Resample source to doubled size
+imagecopyresampled(
+    $doubledImage,
+    $sourceImage,
+    0, 0,    // dest x, y
+    0, 0,    // src x, y
+    $doubledWidth, $doubledHeight,  // dest width, height
+    $width, $height                  // src width, height
+);
+
+imagedestroy($sourceImage);
+
+$filename = sprintf('%s_%dx%d.%s', $basename, $doubledWidth, $doubledHeight, $extension);
+$destinationPath = $destinationDir . '/' . $filename;
+
+if (!saveImageToFile($doubledImage, $destinationPath, $imageType)) {
+    imagedestroy($doubledImage);
+    http_response_code(500);
+    echo json_encode([
+        'success' => false,
+        'error' => 'Unable to save the doubled map to disk.',
+    ]);
+    return;
+}
+
+imagedestroy($doubledImage);
 
 $publicUrl = '/dnd/vtt/storage/uploads/' . $filename;
 
@@ -166,8 +215,10 @@ echo json_encode([
     'success' => true,
     'data' => [
         'url' => $publicUrl,
-        'width' => $width,
-        'height' => $height,
+        'width' => $doubledWidth,
+        'height' => $doubledHeight,
+        'originalWidth' => $width,
+        'originalHeight' => $height,
     ],
 ]);
 
@@ -199,5 +250,35 @@ function uploadErrorMessage(int $code): string
         UPLOAD_ERR_CANT_WRITE => 'Failed to write the map image to disk.',
         UPLOAD_ERR_EXTENSION => 'A server extension stopped the upload.',
         default => 'The map upload failed due to an unexpected error.',
+    };
+}
+
+/**
+ * Loads an image from file based on its type.
+ */
+function loadImageFromFile(string $path, int $imageType): ?GdImage
+{
+    $image = match ($imageType) {
+        IMAGETYPE_GIF => @imagecreatefromgif($path),
+        IMAGETYPE_JPEG => @imagecreatefromjpeg($path),
+        IMAGETYPE_PNG => @imagecreatefrompng($path),
+        IMAGETYPE_WEBP => @imagecreatefromwebp($path),
+        default => false,
+    };
+
+    return $image instanceof GdImage ? $image : null;
+}
+
+/**
+ * Saves a GD image to file based on the target type.
+ */
+function saveImageToFile(GdImage $image, string $path, int $imageType): bool
+{
+    return match ($imageType) {
+        IMAGETYPE_GIF => @imagegif($image, $path),
+        IMAGETYPE_JPEG => @imagejpeg($image, $path, 90), // 90% quality
+        IMAGETYPE_PNG => @imagepng($image, $path, 6),    // Compression level 6
+        IMAGETYPE_WEBP => @imagewebp($image, $path, 90), // 90% quality
+        default => false,
     };
 }
