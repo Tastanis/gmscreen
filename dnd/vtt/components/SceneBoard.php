@@ -1,7 +1,7 @@
 <?php
 declare(strict_types=1);
 
-function renderVttSceneBoard(): string
+function renderVttSceneBoard(bool $isGm = false): string
 {
     ob_start();
     ?>
@@ -79,6 +79,7 @@ function renderVttSceneBoard(): string
                         Damage/Heal
                     </button>
                 </div>
+                <?php if ($isGm): ?>
                 <div class="vtt-board__coming-soon">
                     <button
                         class="btn"
@@ -91,6 +92,7 @@ function renderVttSceneBoard(): string
                     </button>
                     <button class="btn" type="button" data-action="start-combat">Start Combat</button>
                 </div>
+                <?php endif; ?>
                 <div class="vtt-board__controls">
                     <button class="btn" type="button" data-action="measure-distance" aria-pressed="false">Measure</button>
                     <button
