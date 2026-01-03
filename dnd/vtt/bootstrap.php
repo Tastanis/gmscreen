@@ -178,7 +178,7 @@ function buildVttSections(bool $isGm = false): array
     return [
         'chatPanel' => renderVttChatPanel($isGm),
         'settingsPanel' => renderVttSettingsPanel($tokenLibraryMarkup, $isGm),
-        'sceneBoard' => renderVttSceneBoard(),
+        'sceneBoard' => renderVttSceneBoard($isGm),
         'tokenLibrary' => $tokenLibraryMarkup,
     ];
 }
