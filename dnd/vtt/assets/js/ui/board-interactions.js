@@ -2582,6 +2582,7 @@ export function mountBoardInteractions(store, routes = {}) {
     }
 
     event.preventDefault();
+    event.stopPropagation();
     mapSurface.classList.remove('is-token-drop-active');
     tokenDropDepth = 0;
 
