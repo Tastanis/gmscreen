@@ -161,14 +161,15 @@ class MapPingManager {
             authorId: window.USER_DATA?.username || 'unknown'
         };
 
-        // Render ping immediately
-        this.renderPing(pingEntry);
-        this.recordProcessedPing(pingEntry);
-
-        // Center view if it's a focus ping
+        // For focus pings, center view FIRST before rendering
+        // This ensures the ping appears at the correct screen position after the viewport moves
         if (isFocus) {
             this.centerViewOnPing(pingEntry);
         }
+
+        // Render ping after viewport is in final position
+        this.renderPing(pingEntry);
+        this.recordProcessedPing(pingEntry);
 
         // Send ping to server
         try {
