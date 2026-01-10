@@ -1,0 +1,3 @@
+# Ignore ping data files
+*.json
+!.gitignore
