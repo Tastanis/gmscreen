@@ -9449,6 +9449,13 @@ export function mountBoardInteractions(store, routes = {}) {
       return;
     }
 
+    // Determine if HP values (numbers) should be shown
+    // Non-GM users cannot see HP numbers for enemy tokens, only the bar
+    const gmViewing = isGmUser();
+    const team = normalizeCombatTeam(placement.team ?? placement.combatTeam ?? null);
+    const isEnemy = team === 'enemy';
+    const showHpValues = gmViewing || !isEnemy;
+
     if (!hpBar) {
       hpBar = document.createElement('div');
       hpBar.className = 'vtt-token__hp-bar';
@@ -9470,10 +9477,19 @@ export function mountBoardInteractions(store, routes = {}) {
     }
 
     let valueElement = hpBar.querySelector('.vtt-token__hp-value');
-    if (!valueElement) {
-      valueElement = document.createElement('span');
-      valueElement.className = 'vtt-token__hp-value';
-      hpBar.appendChild(valueElement);
+    if (showHpValues) {
+      // Show HP values for GMs or for allied tokens
+      if (!valueElement) {
+        valueElement = document.createElement('span');
+        valueElement.className = 'vtt-token__hp-value';
+        hpBar.appendChild(valueElement);
+      }
+    } else {
+      // Hide HP values for non-GM users viewing enemy tokens
+      if (valueElement) {
+        valueElement.remove();
+        valueElement = null;
+      }
     }
 
     const hp = normalizePlacementHitPoints(placement.hp);
@@ -9490,7 +9506,12 @@ export function mountBoardInteractions(store, routes = {}) {
 
     const isEmpty = !hp || (hp.current === '' && hp.max === '');
     hpBar.dataset.empty = isEmpty ? 'true' : 'false';
-    const ariaLabel = isEmpty ? 'Hit points not set' : `${displayValue} hit points`;
+    // For accessibility, only include specific HP values if user can see them
+    const ariaLabel = isEmpty
+      ? 'Hit points not set'
+      : showHpValues
+        ? `${displayValue} hit points`
+        : 'Hit points';
     hpBar.setAttribute('aria-label', ariaLabel);
   }
 
