@@ -1637,6 +1637,11 @@ export function mountBoardInteractions(store, routes = {}) {
     }
 
     snapshot.metadata = metadata;
+    boardApi.updateState?.((draft) => {
+      const boardDraft = ensureBoardStateDraft(draft);
+      const metadataDraft = ensureBoardMetadataDraft(boardDraft);
+      Object.assign(metadataDraft, metadata);
+    });
 
     const snapshotHashCandidate = hashBoardStateSnapshot(snapshot);
     const snapshotHash = snapshotHashCandidate ?? safeJsonStringify(snapshot) ?? null;
