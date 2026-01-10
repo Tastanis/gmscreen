@@ -477,6 +477,76 @@ require_once '../../includes/strix-nav.php';
         #hex-tooltip.visible {
             display: block;
         }
+
+        /* Map Ping Styles */
+        .map-ping-layer {
+            position: absolute;
+            inset: 0;
+            pointer-events: none;
+            z-index: 50;
+            overflow: hidden;
+        }
+
+        .map-ping {
+            --ping-color: #ff9f1c;
+            position: absolute;
+            width: var(--ping-size, 120px);
+            height: var(--ping-size, 120px);
+            margin: calc(var(--ping-size, 120px) / -2);
+            border-radius: 999px;
+            border: 4px solid var(--ping-color);
+            background: color-mix(in srgb, var(--ping-color) 20%, transparent);
+            box-shadow: 0 0 1.5rem color-mix(in srgb, var(--ping-color) 45%, transparent);
+            pointer-events: none;
+            opacity: 0;
+            transform: scale(1.75);
+            transform-origin: center;
+            animation: map-ping-pulse 900ms cubic-bezier(0.22, 1, 0.36, 1) forwards;
+            animation-delay: var(--ping-delay, 0ms);
+        }
+
+        .map-ping::after {
+            content: "";
+            position: absolute;
+            top: 50%;
+            left: 50%;
+            width: 0.6rem;
+            height: 0.6rem;
+            margin-top: -0.3rem;
+            margin-left: -0.3rem;
+            border-radius: 999px;
+            background: var(--ping-color);
+            box-shadow: 0 0 0 2px rgba(15, 23, 42, 0.85);
+            opacity: 1;
+        }
+
+        .map-ping--focus {
+            --ping-color: #38bdf8;
+            background: color-mix(in srgb, var(--ping-color) 25%, transparent);
+        }
+
+        @keyframes map-ping-pulse {
+            0% {
+                opacity: 0;
+                transform: scale(2.25);
+            }
+            18% {
+                opacity: 0.96;
+                transform: scale(0.3);
+            }
+            52% {
+                opacity: 0.82;
+                transform: scale(1.4);
+            }
+            78% {
+                opacity: 0.6;
+                transform: scale(0.55);
+            }
+            100% {
+                opacity: 0;
+                transform: scale(0.12);
+            }
+        }
     </style>
 </head>
 <body>
@@ -484,7 +554,10 @@ require_once '../../includes/strix-nav.php';
     <div class="map-container">
         <!-- Main canvas for hex grid -->
         <canvas id="hex-canvas"></canvas>
-        
+
+        <!-- Ping Layer (for cross-user pings) -->
+        <div id="ping-layer" class="map-ping-layer"></div>
+
         <!-- Controls -->
         <div class="controls">
             <button onclick="resetView()">Reset View</button>
@@ -497,6 +570,10 @@ require_once '../../includes/strix-nav.php';
             <div>User: <?php echo htmlspecialchars($user); ?> <?php if ($isGM): ?><span style="color: #ff6b6b;">(GM)</span><?php endif; ?></div>
             <div>Hex: <span id="hex-info">-</span></div>
             <div>Zoom: <span id="zoom-info">100%</span></div>
+            <div style="margin-top: 8px; padding-top: 8px; border-top: 1px solid rgba(255,255,255,0.2); font-size: 11px; color: #aaa;">
+                <div>Alt+Click: Ping</div>
+                <div>Alt+Right: Focus all</div>
+            </div>
         </div>
         
         <!-- Version footer -->
@@ -511,20 +588,26 @@ require_once '../../includes/strix-nav.php';
     <script src="js/hex-grid.js"></script>
     <script src="js/map-interface.js"></script>
     <script src="js/hex-popup.js"></script>
+    <script src="js/map-ping.js"></script>
     
     <script>
         // Global map interface
         let mapInterface;
-        
+        let pingManager;
+
         // Initialize when page loads
         document.addEventListener('DOMContentLoaded', function() {
             console.log('Initializing Strixhaven 60x60 hex grid...');
-            
+
             mapInterface = new MapInterface();
             mapInterface.initialize();
 
             // Expose the interface globally for popup helpers (copy mode, etc.)
             window.mapInterface = mapInterface;
+
+            // Initialize ping manager
+            pingManager = new MapPingManager(mapInterface);
+            window.pingManager = pingManager;
             
             // Update info panel on mouse move
             document.getElementById('hex-canvas').addEventListener('mousemove', function(e) {

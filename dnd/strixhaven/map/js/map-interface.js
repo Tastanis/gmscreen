@@ -83,8 +83,9 @@ class MapInterfaceV2 {
             }
         });
         
-        // Mouse click
+        // Mouse click (skip if Alt key for pings)
         this.canvas.addEventListener('click', (e) => {
+            if (e.altKey) return; // Let ping manager handle Alt+click
             this.hexGrid.handleMouseClick(e.clientX, e.clientY);
         });
         
@@ -94,8 +95,9 @@ class MapInterfaceV2 {
             this.handleZoom(e.deltaY, e.clientX, e.clientY);
         });
         
-        // Mouse down for pan start
+        // Mouse down for pan start (skip if Alt key for pings)
         this.canvas.addEventListener('mousedown', (e) => {
+            if (e.altKey) return; // Let ping manager handle Alt+click
             if (e.button === 2) { // Right click
                 this.startPan(e.clientX, e.clientY);
             }
