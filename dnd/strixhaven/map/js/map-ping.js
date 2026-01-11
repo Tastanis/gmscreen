@@ -380,14 +380,17 @@ class MapPingManager {
             // Skip already processed pings
             if (this.processedPings.has(ping.id)) return;
 
-            // Record and render the ping
+            // Record as processed
             this.recordProcessedPing(ping);
-            this.renderPing(ping);
 
-            // Center view for focus pings
+            // For focus pings, center view FIRST before rendering
+            // This ensures the ping appears at the correct screen position after the viewport moves
             if (ping.type === 'focus') {
                 this.centerViewOnPing(ping);
             }
+
+            // Render ping after viewport is in final position
+            this.renderPing(ping);
         });
     }
 
