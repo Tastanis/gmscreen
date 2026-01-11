@@ -2697,6 +2697,22 @@ export function mountBoardInteractions(store, routes = {}) {
       selectedTokenIds.clear();
       notifySelectionChanged();
       resetCombatGroups();
+      // Pre-apply groups from state before rendering to ensure proper filtering.
+      // Without this, the initial render shows all placements because groups are
+      // empty after resetCombatGroups, then refreshCombatTracker corrects it.
+      // This causes a flash of duplicate tokens and potential race conditions.
+      const activeSceneKey = typeof activeSceneId === 'string' ? activeSceneId.trim() : '';
+      if (activeSceneKey) {
+        const boardState = state?.boardState ?? {};
+        const sceneStateData = boardState.sceneState && typeof boardState.sceneState === 'object'
+          ? boardState.sceneState
+          : {};
+        const combatState = sceneStateData[activeSceneKey]?.combat ?? {};
+        const groups = normalizeCombatGroups(
+          combatState?.groups ?? combatState?.groupings ?? combatState?.combatGroups ?? null
+        );
+        applyCombatGroupsFromState(groups);
+      }
       clearDragCandidate();
       if (viewState.dragState) {
         try {
