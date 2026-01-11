@@ -4948,6 +4948,23 @@ export function mountBoardInteractions(store, routes = {}) {
     const leftOffset = Number.isFinite(offsets.left) ? offsets.left : 0;
     const topOffset = Number.isFinite(offsets.top) ? offsets.top : 0;
 
+    const activeSceneIdRaw = state?.boardState?.activeSceneId ?? null;
+    const activeSceneKey =
+      typeof activeSceneIdRaw === 'string'
+        ? activeSceneIdRaw.trim()
+        : activeSceneIdRaw != null
+        ? String(activeSceneIdRaw).trim()
+        : '';
+    if (activeSceneKey) {
+      const combatState = state?.boardState?.sceneState?.[activeSceneKey]?.combat ?? null;
+      const groups = normalizeCombatGroups(
+        combatState?.groups ?? combatState?.groupings ?? combatState?.combatGroups ?? combatState?.combatantGroups ?? null
+      );
+      if (groups.length || combatTrackerGroups.size) {
+        applyCombatGroupsFromState(groups);
+      }
+    }
+
     const placements = view?.mapLoaded ? getActiveScenePlacements(state) : [];
     if (!view?.mapLoaded || !placements.length || !Number.isFinite(gridSize) || gridSize <= 0) {
       while (layer.firstChild) {
