@@ -423,10 +423,13 @@ function scheduleSyncDrawings(state) {
   state.pendingSync = true;
   state.syncTimeout = setTimeout(() => {
     state.syncTimeout = null;
-    state.pendingSync = false;
     if (onDrawingChange) {
       onDrawingChange(state.drawings.slice());
     }
+    // Set pendingSync to false AFTER the callback completes
+    // This ensures syncDrawingsFromState sees the sync is still pending
+    // and doesn't overwrite the drawing tool state (which would clear undo)
+    state.pendingSync = false;
   }, 100);
 }
 

@@ -3605,7 +3605,12 @@ export function mountBoardInteractions(store, routes = {}) {
   }
 
   function syncDrawingsFromState(boardState, activeSceneId) {
-    if (!activeSceneId || (isDrawModeActive() && (isDrawingInProgress() || isDrawingSyncPending()))) {
+    if (!activeSceneId) {
+      return;
+    }
+
+    // Don't interrupt active drawing
+    if (isDrawModeActive() && isDrawingInProgress()) {
       return;
     }
 
@@ -3619,6 +3624,15 @@ export function mountBoardInteractions(store, routes = {}) {
     }
 
     lastSyncedDrawingsHash = hash;
+
+    // If sync is pending, the change came from the local drawing tool
+    // Persist the state but don't update the drawing tool (to preserve undo stack)
+    if (isDrawingSyncPending()) {
+      persistBoardStateSnapshot();
+      return;
+    }
+
+    // Change came from external source, update the drawing tool
     setDrawingToolDrawings(drawings);
   }
 
