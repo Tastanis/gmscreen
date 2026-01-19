@@ -387,6 +387,10 @@ export function isDrawModeActive() {
   return Boolean(sharedState?.active);
 }
 
+export function isDrawingInProgress() {
+  return Boolean(sharedState?.drawing);
+}
+
 export function getDrawings() {
   return sharedState?.drawings.slice() || [];
 }
