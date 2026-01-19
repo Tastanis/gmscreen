@@ -64,15 +64,18 @@ async function bootstrap() {
   });
   mountDiceRoller();
 
-  await hydrateFromServer(routes);
+  await hydrateFromServer(routes, userContext);
 }
 
-async function hydrateFromServer(routes) {
+async function hydrateFromServer(routes, userContext) {
+  const isGM = Boolean(userContext?.isGM);
+
   try {
+    // Only GM can access scenes.php directly - players get scene data from state.php
     const [scenesResult, tokensResult, boardStateResult] = await Promise.all([
-      routes.scenes ? fetchScenes(routes.scenes) : [],
-      routes.tokens ? fetchTokens(routes.tokens) : [],
-      routes.state ? fetchBoardState(routes.state) : null,
+      isGM && routes.scenes ? fetchScenes(routes.scenes) : Promise.resolve([]),
+      routes.tokens ? fetchTokens(routes.tokens) : Promise.resolve([]),
+      routes.state ? fetchBoardState(routes.state) : Promise.resolve(null),
     ]);
 
     const scenes = boardStateResult?.scenes ?? scenesResult;
