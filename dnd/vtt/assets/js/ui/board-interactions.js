@@ -5,7 +5,11 @@ import {
   isMeasureModeActive,
   updateExternalMeasurement,
 } from './drag-ruler.js';
-import { setDrawings as setDrawingToolDrawings, isDrawModeActive } from './drawing-tool.js';
+import {
+  setDrawings as setDrawingToolDrawings,
+  isDrawModeActive,
+  isDrawingInProgress,
+} from './drawing-tool.js';
 import { persistBoardState, persistCombatState } from '../services/board-state-service.js';
 import {
   PLAYER_VISIBLE_TOKEN_FOLDER,
@@ -3599,7 +3603,7 @@ export function mountBoardInteractions(store, routes = {}) {
   let lastSyncedDrawingsHash = null;
 
   function syncDrawingsFromState(boardState, activeSceneId) {
-    if (!activeSceneId || isDrawModeActive()) {
+    if (!activeSceneId || (isDrawModeActive() && isDrawingInProgress())) {
       return;
     }
 
