@@ -104,6 +104,7 @@ function renderVttSceneBoard(bool $isGm = false): string
                     >
                         Templates
                     </button>
+                    <button class="btn" type="button" data-action="toggle-draw" aria-pressed="false">Draw</button>
                 </div>
             </div>
         </header>
@@ -117,6 +118,7 @@ function renderVttSceneBoard(bool $isGm = false): string
                         <div id="vtt-map-overlay" class="vtt-board__map-overlay" aria-hidden="true" hidden></div>
                         <div id="vtt-grid-overlay" class="vtt-board__grid" aria-hidden="true"></div>
                         <div id="vtt-template-layer" class="vtt-board__templates" aria-hidden="true"></div>
+                        <svg id="vtt-drawing-layer" class="vtt-board__drawings" aria-hidden="true"></svg>
                         <div
                             id="vtt-token-layer"
                             class="vtt-board__tokens"
@@ -149,6 +151,32 @@ function renderVttSceneBoard(bool $isGm = false): string
             </div>
             <div id="vtt-distance-ruler" class="vtt-board__ruler" hidden>
                 <span class="vtt-board__ruler-value">0 squares</span>
+            </div>
+            <div id="vtt-drawing-settings" class="vtt-drawing-settings" hidden>
+                <div class="vtt-drawing-settings__row">
+                    <label class="vtt-drawing-settings__label" for="vtt-draw-color">Color</label>
+                    <input
+                        type="color"
+                        id="vtt-draw-color"
+                        class="vtt-drawing-settings__color"
+                        value="#ff0000"
+                    />
+                </div>
+                <div class="vtt-drawing-settings__row">
+                    <label class="vtt-drawing-settings__label" for="vtt-draw-stroke">Size</label>
+                    <input
+                        type="range"
+                        id="vtt-draw-stroke"
+                        class="vtt-drawing-settings__stroke"
+                        min="1"
+                        max="20"
+                        value="3"
+                    />
+                    <span id="vtt-draw-stroke-value" class="vtt-drawing-settings__stroke-value">3</span>
+                </div>
+                <button type="button" class="btn vtt-drawing-settings__clear" data-action="clear-drawings">
+                    Clear All
+                </button>
             </div>
             <div class="vtt-board__malice" data-malice hidden>
                 <button

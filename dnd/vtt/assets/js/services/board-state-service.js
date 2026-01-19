@@ -142,6 +142,13 @@ function buildPayload(boardState = {}) {
     }
   }
 
+  if ('drawings' in boardState) {
+    const rawDrawings = boardState.drawings;
+    if (rawDrawings && typeof rawDrawings === 'object') {
+      payload.drawings = rawDrawings;
+    }
+  }
+
   if ('overlay' in boardState) {
     payload.overlay = formatOverlayState(boardState.overlay ?? null);
   }

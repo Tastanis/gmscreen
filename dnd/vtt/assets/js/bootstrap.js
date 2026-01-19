@@ -10,6 +10,7 @@ import { mountSettingsPanel } from './ui/settings-panel.js';
 import { mountChatPanel } from './ui/chat-panel.js';
 import { mountBoardInteractions } from './ui/board-interactions.js';
 import { mountDragRuler } from './ui/drag-ruler.js';
+import { mountDrawingTool } from './ui/drawing-tool.js';
 import { mountDiceRoller } from './ui/dice-roller.js';
 import { fetchScenes } from './services/scene-service.js';
 import { fetchTokens } from './services/token-service.js';
@@ -45,6 +46,22 @@ async function bootstrap() {
   mountChatPanel(routes, userContext, chatParticipants);
   mountBoardInteractions({ getState, subscribe, updateState }, routes);
   mountDragRuler();
+  mountDrawingTool({
+    onDrawingChange: (drawings) => {
+      const currentState = getState();
+      const activeSceneId = currentState?.boardState?.activeSceneId;
+      if (!activeSceneId) {
+        return;
+      }
+
+      updateState((draft) => {
+        if (!draft.boardState.drawings) {
+          draft.boardState.drawings = {};
+        }
+        draft.boardState.drawings[activeSceneId] = drawings;
+      });
+    },
+  });
   mountDiceRoller();
 
   await hydrateFromServer(routes);
@@ -132,6 +149,10 @@ function normalizeBoardStateSnapshot(raw = {}) {
 
   if (Object.prototype.hasOwnProperty.call(raw, 'templates')) {
     snapshot.templates = cloneBoardSection(raw.templates);
+  }
+
+  if (Object.prototype.hasOwnProperty.call(raw, 'drawings')) {
+    snapshot.drawings = cloneBoardSection(raw.drawings);
   }
 
   if (Object.prototype.hasOwnProperty.call(raw, 'overlay')) {

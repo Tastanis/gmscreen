@@ -5,6 +5,7 @@ import {
   isMeasureModeActive,
   updateExternalMeasurement,
 } from './drag-ruler.js';
+import { setDrawings as setDrawingToolDrawings, isDrawModeActive } from './drawing-tool.js';
 import { persistBoardState, persistCombatState } from '../services/board-state-service.js';
 import {
   PLAYER_VISIBLE_TOKEN_FOLDER,
@@ -1827,6 +1828,7 @@ export function mountBoardInteractions(store, routes = {}) {
       { includeHidden: isGm }
     );
     snapshot.templates = sanitizeTemplatesForPersistence(boardState.templates);
+    snapshot.drawings = sanitizeDrawingsForPersistence(boardState.drawings);
     snapshot.pings = sanitizePingsForPersistence(boardState.pings);
 
     if (isGm) {
@@ -1854,6 +1856,11 @@ export function mountBoardInteractions(store, routes = {}) {
   }
 
   function sanitizeTemplatesForPersistence(source) {
+    const clone = cloneBoardSection(source);
+    return clone && typeof clone === 'object' ? clone : {};
+  }
+
+  function sanitizeDrawingsForPersistence(source) {
     const clone = cloneBoardSection(source);
     return clone && typeof clone === 'object' ? clone : {};
   }
@@ -2741,6 +2748,7 @@ export function mountBoardInteractions(store, routes = {}) {
     overlayTool.notifyMapState();
     applyCombatStateFromBoardState(state);
     processIncomingPings(state.boardState?.pings ?? [], activeSceneId);
+    syncDrawingsFromState(state.boardState, activeSceneId);
 
     if (activeTokenSettingsId) {
       const placementForSettings = resolvePlacementById(state, activeSceneId, activeTokenSettingsId);
@@ -3586,6 +3594,26 @@ export function mountBoardInteractions(store, routes = {}) {
         processedPings.delete(id);
       }
     });
+  }
+
+  let lastSyncedDrawingsHash = null;
+
+  function syncDrawingsFromState(boardState, activeSceneId) {
+    if (!activeSceneId || isDrawModeActive()) {
+      return;
+    }
+
+    const drawingsByScene = boardState?.drawings ?? {};
+    const sceneDrawings = drawingsByScene[activeSceneId] ?? [];
+    const drawings = Array.isArray(sceneDrawings) ? sceneDrawings : [];
+
+    const hash = JSON.stringify(drawings);
+    if (hash === lastSyncedDrawingsHash) {
+      return;
+    }
+
+    lastSyncedDrawingsHash = hash;
+    setDrawingToolDrawings(drawings);
   }
 
   function processIncomingPings(entries, activeSceneId) {
@@ -13582,6 +13610,16 @@ export function mountBoardInteractions(store, routes = {}) {
     return boardDraft.templates[sceneId];
   }
 
+  function ensureSceneDrawingDraft(draft, sceneId) {
+    const boardDraft = ensureBoardStateDraft(draft);
+
+    if (!Array.isArray(boardDraft.drawings[sceneId])) {
+      boardDraft.drawings[sceneId] = [];
+    }
+
+    return boardDraft.drawings[sceneId];
+  }
+
   function ensureBoardStateDraft(draft) {
     if (!draft.boardState || typeof draft.boardState !== 'object') {
       draft.boardState = {
@@ -13590,6 +13628,7 @@ export function mountBoardInteractions(store, routes = {}) {
         placements: {},
         sceneState: {},
         templates: {},
+        drawings: {},
         overlay: createEmptyOverlayState(),
       };
     }
@@ -13604,6 +13643,10 @@ export function mountBoardInteractions(store, routes = {}) {
 
     if (!draft.boardState.templates || typeof draft.boardState.templates !== 'object') {
       draft.boardState.templates = {};
+    }
+
+    if (!draft.boardState.drawings || typeof draft.boardState.drawings !== 'object') {
+      draft.boardState.drawings = {};
     }
 
     if (!draft.boardState.overlay || typeof draft.boardState.overlay !== 'object') {

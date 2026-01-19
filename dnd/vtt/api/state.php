@@ -70,6 +70,9 @@ if (!defined('VTT_STATE_API_INCLUDE_ONLY')) {
                     $templateUpdates = isset($updates['templates']) && is_array($updates['templates'])
                         ? $updates['templates']
                         : [];
+                    $drawingUpdates = isset($updates['drawings']) && is_array($updates['drawings'])
+                        ? $updates['drawings']
+                        : [];
                     $pingUpdates = isset($updates['pings']) && is_array($updates['pings'])
                         ? $updates['pings']
                         : [];
@@ -77,12 +80,13 @@ if (!defined('VTT_STATE_API_INCLUDE_ONLY')) {
                     $hasCombatUpdates = !empty($combatUpdates);
                     $hasPlacementUpdates = !empty($placementUpdates);
                     $hasTemplateUpdates = !empty($templateUpdates);
+                    $hasDrawingUpdates = !empty($drawingUpdates);
                     $hasPingUpdates = !empty($pingUpdates);
 
-                    if (!$hasCombatUpdates && !$hasPlacementUpdates && !$hasTemplateUpdates && !$hasPingUpdates) {
+                    if (!$hasCombatUpdates && !$hasPlacementUpdates && !$hasTemplateUpdates && !$hasDrawingUpdates && !$hasPingUpdates) {
                         respondJson(403, [
                             'success' => false,
-                            'error' => 'Only combat, placement, template, or ping updates are permitted for players.',
+                            'error' => 'Only combat, placement, template, drawing, or ping updates are permitted for players.',
                         ]);
                     }
 
@@ -126,6 +130,28 @@ if (!defined('VTT_STATE_API_INCLUDE_ONLY')) {
                             $nextState['templates'][$sceneKey] = mergeSceneEntriesPreservingGmAuthored(
                                 $existingTemplates,
                                 $templates
+                            );
+                        }
+                    }
+
+                    if ($hasDrawingUpdates) {
+                        if (!isset($nextState['drawings']) || !is_array($nextState['drawings'])) {
+                            $nextState['drawings'] = [];
+                        }
+                        foreach ($drawingUpdates as $sceneId => $drawings) {
+                            if (!is_array($drawings)) {
+                                continue;
+                            }
+                            $sceneKey = is_string($sceneId) ? trim($sceneId) : (string) $sceneId;
+                            if ($sceneKey === '') {
+                                continue;
+                            }
+                            $existingDrawings = isset($nextState['drawings'][$sceneKey]) && is_array($nextState['drawings'][$sceneKey])
+                                ? $nextState['drawings'][$sceneKey]
+                                : [];
+                            $nextState['drawings'][$sceneKey] = mergeSceneEntriesPreservingGmAuthored(
+                                $existingDrawings,
+                                $drawings
                             );
                         }
                     }
@@ -279,6 +305,17 @@ function sanitizeBoardStateUpdates(array $raw): array
         }
     }
 
+    if (array_key_exists('drawings', $raw)) {
+        $rawDrawings = $raw['drawings'];
+        if ($rawDrawings === null) {
+            $updates['drawings'] = [];
+        } elseif (is_array($rawDrawings)) {
+            $updates['drawings'] = normalizeDrawingsPayload($rawDrawings);
+        } else {
+            throw new InvalidArgumentException('Drawings must be an array or object.');
+        }
+    }
+
     if (array_key_exists('overlay', $raw)) {
         $rawOverlay = $raw['overlay'];
         if ($rawOverlay === null) {
@@ -316,6 +353,7 @@ function normalizeBoardState($raw): array
         'placements' => [],
         'sceneState' => [],
         'templates' => [],
+        'drawings' => [],
         'overlay' => normalizeOverlayPayload([]),
         'pings' => [],
     ];
@@ -354,6 +392,10 @@ function normalizeBoardState($raw): array
 
     if (array_key_exists('templates', $raw) && is_array($raw['templates'])) {
         $state['templates'] = normalizeTemplatesPayload($raw['templates']);
+    }
+
+    if (array_key_exists('drawings', $raw) && is_array($raw['drawings'])) {
+        $state['drawings'] = normalizeDrawingsPayload($raw['drawings']);
     }
 
     if (array_key_exists('overlay', $raw) && is_array($raw['overlay'])) {
@@ -418,6 +460,97 @@ function normalizeTemplatesPayload(array $rawTemplates): array
     }
 
     return $normalized;
+}
+
+/**
+ * @param array<string|int,mixed> $rawDrawings
+ * @return array<string,array<int,array<string,mixed>>>
+ */
+function normalizeDrawingsPayload(array $rawDrawings): array
+{
+    $normalized = [];
+
+    foreach ($rawDrawings as $sceneId => $drawings) {
+        if (!is_array($drawings)) {
+            continue;
+        }
+
+        $key = is_string($sceneId) ? trim($sceneId) : (string) $sceneId;
+        if ($key === '') {
+            continue;
+        }
+
+        $normalized[$key] = [];
+        foreach ($drawings as $entry) {
+            $drawing = normalizeDrawingEntry($entry);
+            if ($drawing !== null) {
+                $normalized[$key][] = $drawing;
+            }
+        }
+    }
+
+    return $normalized;
+}
+
+/**
+ * @param mixed $entry
+ */
+function normalizeDrawingEntry($entry): ?array
+{
+    if (!is_array($entry)) {
+        return null;
+    }
+
+    $id = isset($entry['id']) && is_string($entry['id']) ? trim($entry['id']) : '';
+    if ($id === '') {
+        return null;
+    }
+
+    $points = isset($entry['points']) && is_array($entry['points']) ? $entry['points'] : [];
+    $normalizedPoints = [];
+
+    foreach ($points as $point) {
+        if (!is_array($point)) {
+            continue;
+        }
+
+        $x = isset($point['x']) && is_numeric($point['x']) ? (float) $point['x'] : null;
+        $y = isset($point['y']) && is_numeric($point['y']) ? (float) $point['y'] : null;
+
+        if ($x === null || $y === null) {
+            continue;
+        }
+
+        $normalizedPoints[] = [
+            'x' => round($x, 2),
+            'y' => round($y, 2),
+        ];
+    }
+
+    if (count($normalizedPoints) < 2) {
+        return null;
+    }
+
+    // Limit points to prevent bloat
+    if (count($normalizedPoints) > 10000) {
+        $normalizedPoints = array_slice($normalizedPoints, 0, 10000);
+    }
+
+    $color = isset($entry['color']) && is_string($entry['color']) ? trim($entry['color']) : '#ff0000';
+    if (strlen($color) > 64) {
+        $color = '#ff0000';
+    }
+
+    $strokeWidth = isset($entry['strokeWidth']) && is_numeric($entry['strokeWidth'])
+        ? max(1, min(50, (int) $entry['strokeWidth']))
+        : 3;
+
+    return [
+        'id' => $id,
+        'points' => $normalizedPoints,
+        'color' => $color,
+        'strokeWidth' => $strokeWidth,
+    ];
 }
 
 /**
