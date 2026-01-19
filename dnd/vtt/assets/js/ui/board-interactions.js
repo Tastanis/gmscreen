@@ -9,6 +9,7 @@ import {
   setDrawings as setDrawingToolDrawings,
   isDrawModeActive,
   isDrawingInProgress,
+  isDrawingSyncPending,
 } from './drawing-tool.js';
 import { persistBoardState, persistCombatState } from '../services/board-state-service.js';
 import {
@@ -3603,7 +3604,7 @@ export function mountBoardInteractions(store, routes = {}) {
   let lastSyncedDrawingsHash = null;
 
   function syncDrawingsFromState(boardState, activeSceneId) {
-    if (!activeSceneId || (isDrawModeActive() && isDrawingInProgress())) {
+    if (!activeSceneId || (isDrawModeActive() && (isDrawingInProgress() || isDrawingSyncPending()))) {
       return;
     }
 

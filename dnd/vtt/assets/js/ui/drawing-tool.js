@@ -366,8 +366,10 @@ function scheduleSyncDrawings(state) {
     clearTimeout(state.syncTimeout);
   }
 
+  state.pendingSync = true;
   state.syncTimeout = setTimeout(() => {
     state.syncTimeout = null;
+    state.pendingSync = false;
     if (onDrawingChange) {
       onDrawingChange(state.drawings.slice());
     }
@@ -389,6 +391,10 @@ export function isDrawModeActive() {
 
 export function isDrawingInProgress() {
   return Boolean(sharedState?.drawing);
+}
+
+export function isDrawingSyncPending() {
+  return Boolean(sharedState?.pendingSync);
 }
 
 export function getDrawings() {
