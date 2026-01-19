@@ -76,6 +76,18 @@ export function renderSceneList(routes, store) {
     const action = target.getAttribute('data-action');
     const sceneId = target.getAttribute('data-scene-id');
 
+    if (action === 'toggle-folder') {
+      const folderId = target.getAttribute('data-folder-id');
+      if (!folderId) return;
+
+      const section = target.closest('.scene-group');
+      if (section) {
+        const isNowCollapsed = toggleFolderCollapsed(folderId);
+        section.classList.toggle('is-collapsed', isNowCollapsed);
+      }
+      return;
+    }
+
     if (action === 'activate-scene' && sceneId) {
       const currentState = stateApi.getState?.() ?? {};
       const sceneState = normalizeSceneState(currentState.scenes);
@@ -1131,11 +1143,20 @@ function buildSceneMarkup(sceneState, activeSceneId, boardSceneState = {}, optio
     groups.push({ id: null, title: 'Unsorted Scenes', scenes: unsorted });
   }
 
+  const collapsedFolders = loadCollapsedFolders();
+
   const markup = groups
-    .map((group) => `
-      <section class="scene-group" data-folder-id="${group.id ?? ''}">
+    .map((group) => {
+      const folderId = group.id ?? 'unsorted';
+      const isCollapsed = collapsedFolders.has(folderId);
+      return `
+      <section class="scene-group${isCollapsed ? ' is-collapsed' : ''}" data-folder-id="${group.id ?? ''}">
         <header class="scene-group__header">
-          <h4>${escapeHtml(group.title)}</h4>
+          <button type="button" class="scene-group__toggle" data-action="toggle-folder" data-folder-id="${folderId}">
+            <span class="scene-group__chevron"></span>
+            <h4 class="scene-group__title">${escapeHtml(group.title)}</h4>
+            <span class="scene-group__count">${group.scenes.length}</span>
+          </button>
         </header>
         <div class="scene-group__body">
           ${group.scenes
@@ -1145,10 +1166,47 @@ function buildSceneMarkup(sceneState, activeSceneId, boardSceneState = {}, optio
             .join('')}
         </div>
       </section>
-    `)
+    `;
+    })
     .join('');
 
   return `<div class="scene-list">${markup}</div>`;
+}
+
+const COLLAPSED_FOLDERS_KEY = 'vtt-collapsed-scene-folders';
+
+function loadCollapsedFolders() {
+  try {
+    const stored = localStorage.getItem(COLLAPSED_FOLDERS_KEY);
+    if (stored) {
+      const parsed = JSON.parse(stored);
+      if (Array.isArray(parsed)) {
+        return new Set(parsed);
+      }
+    }
+  } catch (error) {
+    // Ignore localStorage errors
+  }
+  return new Set();
+}
+
+function saveCollapsedFolders(collapsedSet) {
+  try {
+    localStorage.setItem(COLLAPSED_FOLDERS_KEY, JSON.stringify([...collapsedSet]));
+  } catch (error) {
+    // Ignore localStorage errors
+  }
+}
+
+function toggleFolderCollapsed(folderId) {
+  const collapsed = loadCollapsedFolders();
+  if (collapsed.has(folderId)) {
+    collapsed.delete(folderId);
+  } else {
+    collapsed.add(folderId);
+  }
+  saveCollapsedFolders(collapsed);
+  return collapsed.has(folderId);
 }
 
 function renderSceneItem(scene, activeSceneId, sceneBoardState = {}, options = {}) {
