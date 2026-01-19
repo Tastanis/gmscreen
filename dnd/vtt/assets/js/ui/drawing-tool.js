@@ -29,6 +29,7 @@ export function mountDrawingTool(options = {}) {
     color: colorInput?.value || '#ff0000',
     strokeWidth: parseInt(strokeInput?.value || '3', 10),
     drawings: [],
+    undoStack: [],
     drawButton,
     drawingLayer,
     settingsPanel,
@@ -146,6 +147,14 @@ export function mountDrawingTool(options = {}) {
         toggleDrawMode(state, false);
       }
     }
+
+    // Handle Ctrl+Z / Cmd+Z for undo
+    if ((event.ctrlKey || event.metaKey) && event.key === 'z' && !event.shiftKey) {
+      if (state.active && !state.drawing) {
+        event.preventDefault();
+        undoLastDrawing(state);
+      }
+    }
   });
 
   document.addEventListener('visibilitychange', () => {
@@ -217,6 +226,9 @@ function endDrawing(state, event) {
   }
 
   if (state.currentPath && state.currentPoints.length >= 2) {
+    // Save current state to undo stack before adding new drawing
+    pushToUndoStack(state);
+
     const drawing = {
       id: generateDrawingId(),
       points: state.currentPoints.map((p) => ({ x: round(p.x, 2), y: round(p.y, 2) })),
@@ -248,10 +260,52 @@ function cancelDrawing(state) {
 }
 
 function clearAllDrawings(state) {
+  // Save current state to undo stack before clearing (if there are drawings)
+  if (state.drawings.length > 0) {
+    pushToUndoStack(state);
+  }
+
   state.drawings = [];
   while (state.drawingLayer.firstChild) {
     state.drawingLayer.removeChild(state.drawingLayer.firstChild);
   }
+  scheduleSyncDrawings(state);
+}
+
+const MAX_UNDO_STACK_SIZE = 10;
+
+function pushToUndoStack(state) {
+  // Clone the current drawings array
+  const snapshot = state.drawings.map((d) => ({
+    id: d.id,
+    points: d.points.map((p) => ({ x: p.x, y: p.y })),
+    color: d.color,
+    strokeWidth: d.strokeWidth,
+  }));
+
+  state.undoStack.push(snapshot);
+
+  // Keep only the last 10 states
+  if (state.undoStack.length > MAX_UNDO_STACK_SIZE) {
+    state.undoStack.shift();
+  }
+}
+
+function undoLastDrawing(state) {
+  if (state.undoStack.length === 0) {
+    return;
+  }
+
+  // Pop the last saved state
+  const previousDrawings = state.undoStack.pop();
+
+  // Restore the drawings
+  state.drawings = previousDrawings;
+
+  // Re-render all drawings
+  renderDrawings(state);
+
+  // Sync to server
   scheduleSyncDrawings(state);
 }
 
@@ -407,6 +461,8 @@ export function setDrawings(drawings) {
   }
 
   sharedState.drawings = Array.isArray(drawings) ? drawings.slice() : [];
+  // Clear undo stack when drawings are loaded from external source
+  sharedState.undoStack = [];
   renderDrawings(sharedState);
 }
 
