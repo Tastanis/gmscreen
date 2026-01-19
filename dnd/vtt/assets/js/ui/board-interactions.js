@@ -557,6 +557,9 @@ export function mountBoardInteractions(store, routes = {}) {
     trackerOverflowResizeListenerAttached = true;
   }
 
+  // Drawing sync state - must be declared before applyStateToBoard is called
+  let lastSyncedDrawingsHash = null;
+
   const defaultStatusText = status?.textContent ?? '';
   function updateStatus(message) {
     if (!status) {
@@ -3600,8 +3603,6 @@ export function mountBoardInteractions(store, routes = {}) {
       }
     });
   }
-
-  let lastSyncedDrawingsHash = null;
 
   function syncDrawingsFromState(boardState, activeSceneId) {
     if (!activeSceneId || (isDrawModeActive() && (isDrawingInProgress() || isDrawingSyncPending()))) {
