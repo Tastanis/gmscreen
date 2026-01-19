@@ -2146,7 +2146,15 @@ function addNewMonster() {
 function addAbility(monsterId, category = 'action') {
     const monster = monsterData.monsters[monsterId];
     if (!monster) return;
-    
+
+    // Save current expanded/collapsed state of all categories BEFORE refresh
+    const categoryStates = {};
+    const categoryElements = document.querySelectorAll(`[data-monster-id="${monsterId}"] .ability-category`);
+    categoryElements.forEach(el => {
+        const cat = el.dataset.category;
+        categoryStates[cat] = el.classList.contains('expanded');
+    });
+
     // Ensure abilities structure exists
     if (!monster.abilities || Array.isArray(monster.abilities)) {
         monster.abilities = {
@@ -2215,15 +2223,31 @@ function addAbility(monsterId, category = 'action') {
     refreshMonsterCard(monsterId);
     markMonsterDirty(monsterId);
     
-    // Expand the category after adding (with delay to ensure DOM is updated)
+    // Restore collapsed state for other categories, and expand only the added category
     setTimeout(() => {
-        const categoryElement = document.querySelector(`[data-monster-id="${monsterId}"] .ability-category[data-category="${category}"]`);
-        if (categoryElement) {
-            categoryElement.classList.remove('collapsed');
-            categoryElement.classList.add('expanded');
-            const icon = categoryElement.querySelector('.expand-icon');
-            if (icon) icon.textContent = '▼';
-        }
+        const newCategoryElements = document.querySelectorAll(`[data-monster-id="${monsterId}"] .ability-category`);
+        newCategoryElements.forEach(el => {
+            const cat = el.dataset.category;
+            const icon = el.querySelector('.expand-icon');
+
+            if (cat === category) {
+                // Expand the category where we added the ability
+                el.classList.remove('collapsed');
+                el.classList.add('expanded');
+                if (icon) icon.textContent = '▼';
+            } else if (categoryStates.hasOwnProperty(cat)) {
+                // Restore previous state for other categories
+                if (categoryStates[cat]) {
+                    el.classList.remove('collapsed');
+                    el.classList.add('expanded');
+                    if (icon) icon.textContent = '▼';
+                } else {
+                    el.classList.remove('expanded');
+                    el.classList.add('collapsed');
+                    if (icon) icon.textContent = '▶';
+                }
+            }
+        });
     }, 100);
 }
 
@@ -3092,7 +3116,7 @@ function createNewMonsterForEditor() {
             image: '',
             // Enhanced stats system
             size: '1M',
-            movement: 'fly 8 squares',
+            movement: '',
             stamina: 0,
             stability: 0,
             free_strike: 0,
