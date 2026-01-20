@@ -498,3 +498,7 @@ export function setDrawModeActive(active) {
     toggleDrawMode(sharedState, active);
   }
 }
+
+export function isDrawingToolMounted() {
+  return sharedState !== null;
+}

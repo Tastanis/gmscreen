@@ -10,6 +10,7 @@ import {
   isDrawModeActive,
   isDrawingInProgress,
   isDrawingSyncPending,
+  isDrawingToolMounted,
 } from './drawing-tool.js';
 import { persistBoardState, persistCombatState } from '../services/board-state-service.js';
 import {
@@ -4346,6 +4347,13 @@ export function mountBoardInteractions(store, routes = {}) {
 
     // Don't interrupt active drawing
     if (isDrawModeActive() && isDrawingInProgress()) {
+      return;
+    }
+
+    // Don't update hash if drawing tool isn't mounted yet
+    // This prevents a race condition where the hash gets set before
+    // the drawing tool can receive the initial drawings
+    if (!isDrawingToolMounted()) {
       return;
     }
 
