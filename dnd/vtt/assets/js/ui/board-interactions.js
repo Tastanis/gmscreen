@@ -284,6 +284,413 @@ function applyPlacementPositionUpdates(placementsDraft, positionUpdates) {
   }
 }
 
+/**
+ * Extracts template changes from incoming state for templates that exist in current state.
+ * Also extracts new templates that don't exist in current state.
+ *
+ * @param {Object} currentTemplates - Current templates keyed by scene ID
+ * @param {Object} incomingTemplates - Incoming templates keyed by scene ID
+ * @returns {Object} Object with updates and newTemplates keyed by scene ID
+ */
+function extractTemplateChanges(currentTemplates, incomingTemplates) {
+  const updates = {};
+  const newTemplates = {};
+
+  if (!incomingTemplates || typeof incomingTemplates !== 'object') {
+    return { updates, newTemplates };
+  }
+
+  const currentMap = currentTemplates && typeof currentTemplates === 'object'
+    ? currentTemplates
+    : {};
+
+  for (const sceneId of Object.keys(incomingTemplates)) {
+    const incomingSceneTemplates = incomingTemplates[sceneId];
+    if (!Array.isArray(incomingSceneTemplates)) {
+      continue;
+    }
+
+    const currentSceneTemplates = Array.isArray(currentMap[sceneId])
+      ? currentMap[sceneId]
+      : [];
+
+    // Build a map of current templates by ID
+    const currentById = new Map();
+    for (const template of currentSceneTemplates) {
+      if (template && typeof template === 'object' && template.id) {
+        currentById.set(template.id, template);
+      }
+    }
+
+    const sceneUpdates = [];
+    const sceneNewTemplates = [];
+
+    for (const incomingTemplate of incomingSceneTemplates) {
+      if (!incomingTemplate || typeof incomingTemplate !== 'object' || !incomingTemplate.id) {
+        continue;
+      }
+
+      const currentTemplate = currentById.get(incomingTemplate.id);
+      if (!currentTemplate) {
+        // New template - add it
+        sceneNewTemplates.push({ ...incomingTemplate });
+        continue;
+      }
+
+      // Check if template has changed (compare stringified versions)
+      const currentJson = JSON.stringify(currentTemplate);
+      const incomingJson = JSON.stringify(incomingTemplate);
+      if (currentJson !== incomingJson) {
+        sceneUpdates.push({ ...incomingTemplate });
+      }
+    }
+
+    if (sceneUpdates.length > 0) {
+      updates[sceneId] = sceneUpdates;
+    }
+    if (sceneNewTemplates.length > 0) {
+      newTemplates[sceneId] = sceneNewTemplates;
+    }
+  }
+
+  return { updates, newTemplates };
+}
+
+/**
+ * Applies template updates and new templates to the templates draft.
+ *
+ * @param {Object} templatesDraft - Mutable templates object (Immer draft)
+ * @param {Object} templateUpdates - Template updates keyed by scene ID
+ * @param {Object} newTemplates - New templates keyed by scene ID
+ */
+function applyTemplateChanges(templatesDraft, templateUpdates, newTemplates) {
+  // Apply updates to existing templates
+  if (templateUpdates && typeof templateUpdates === 'object') {
+    for (const sceneId of Object.keys(templateUpdates)) {
+      const sceneUpdates = templateUpdates[sceneId];
+      if (!Array.isArray(sceneUpdates) || !Array.isArray(templatesDraft[sceneId])) {
+        continue;
+      }
+
+      const updatesById = new Map();
+      for (const update of sceneUpdates) {
+        if (update && update.id) {
+          updatesById.set(update.id, update);
+        }
+      }
+
+      for (let i = 0; i < templatesDraft[sceneId].length; i++) {
+        const template = templatesDraft[sceneId][i];
+        if (template && template.id && updatesById.has(template.id)) {
+          templatesDraft[sceneId][i] = updatesById.get(template.id);
+        }
+      }
+    }
+  }
+
+  // Add new templates
+  if (newTemplates && typeof newTemplates === 'object') {
+    for (const sceneId of Object.keys(newTemplates)) {
+      const sceneNewTemplates = newTemplates[sceneId];
+      if (!Array.isArray(sceneNewTemplates) || sceneNewTemplates.length === 0) {
+        continue;
+      }
+
+      if (!Array.isArray(templatesDraft[sceneId])) {
+        templatesDraft[sceneId] = [];
+      }
+
+      const existingIds = new Set();
+      for (const template of templatesDraft[sceneId]) {
+        if (template && template.id) {
+          existingIds.add(template.id);
+        }
+      }
+
+      for (const newTemplate of sceneNewTemplates) {
+        if (newTemplate && newTemplate.id && !existingIds.has(newTemplate.id)) {
+          templatesDraft[sceneId].push(newTemplate);
+        }
+      }
+    }
+  }
+}
+
+/**
+ * Extracts drawing changes from incoming state.
+ *
+ * @param {Object} currentDrawings - Current drawings keyed by scene ID
+ * @param {Object} incomingDrawings - Incoming drawings keyed by scene ID
+ * @returns {Object} Object with updates and newDrawings keyed by scene ID
+ */
+function extractDrawingChanges(currentDrawings, incomingDrawings) {
+  const updates = {};
+  const newDrawings = {};
+
+  if (!incomingDrawings || typeof incomingDrawings !== 'object') {
+    return { updates, newDrawings };
+  }
+
+  const currentMap = currentDrawings && typeof currentDrawings === 'object'
+    ? currentDrawings
+    : {};
+
+  for (const sceneId of Object.keys(incomingDrawings)) {
+    const incomingSceneDrawings = incomingDrawings[sceneId];
+    if (!Array.isArray(incomingSceneDrawings)) {
+      continue;
+    }
+
+    const currentSceneDrawings = Array.isArray(currentMap[sceneId])
+      ? currentMap[sceneId]
+      : [];
+
+    const currentById = new Map();
+    for (const drawing of currentSceneDrawings) {
+      if (drawing && typeof drawing === 'object' && drawing.id) {
+        currentById.set(drawing.id, drawing);
+      }
+    }
+
+    const sceneUpdates = [];
+    const sceneNewDrawings = [];
+
+    for (const incomingDrawing of incomingSceneDrawings) {
+      if (!incomingDrawing || typeof incomingDrawing !== 'object' || !incomingDrawing.id) {
+        continue;
+      }
+
+      const currentDrawing = currentById.get(incomingDrawing.id);
+      if (!currentDrawing) {
+        sceneNewDrawings.push({ ...incomingDrawing });
+        continue;
+      }
+
+      const currentJson = JSON.stringify(currentDrawing);
+      const incomingJson = JSON.stringify(incomingDrawing);
+      if (currentJson !== incomingJson) {
+        sceneUpdates.push({ ...incomingDrawing });
+      }
+    }
+
+    if (sceneUpdates.length > 0) {
+      updates[sceneId] = sceneUpdates;
+    }
+    if (sceneNewDrawings.length > 0) {
+      newDrawings[sceneId] = sceneNewDrawings;
+    }
+  }
+
+  return { updates, newDrawings };
+}
+
+/**
+ * Applies drawing updates and new drawings to the drawings draft.
+ *
+ * @param {Object} drawingsDraft - Mutable drawings object (Immer draft)
+ * @param {Object} drawingUpdates - Drawing updates keyed by scene ID
+ * @param {Object} newDrawings - New drawings keyed by scene ID
+ */
+function applyDrawingChanges(drawingsDraft, drawingUpdates, newDrawings) {
+  if (drawingUpdates && typeof drawingUpdates === 'object') {
+    for (const sceneId of Object.keys(drawingUpdates)) {
+      const sceneUpdates = drawingUpdates[sceneId];
+      if (!Array.isArray(sceneUpdates) || !Array.isArray(drawingsDraft[sceneId])) {
+        continue;
+      }
+
+      const updatesById = new Map();
+      for (const update of sceneUpdates) {
+        if (update && update.id) {
+          updatesById.set(update.id, update);
+        }
+      }
+
+      for (let i = 0; i < drawingsDraft[sceneId].length; i++) {
+        const drawing = drawingsDraft[sceneId][i];
+        if (drawing && drawing.id && updatesById.has(drawing.id)) {
+          drawingsDraft[sceneId][i] = updatesById.get(drawing.id);
+        }
+      }
+    }
+  }
+
+  if (newDrawings && typeof newDrawings === 'object') {
+    for (const sceneId of Object.keys(newDrawings)) {
+      const sceneNewDrawings = newDrawings[sceneId];
+      if (!Array.isArray(sceneNewDrawings) || sceneNewDrawings.length === 0) {
+        continue;
+      }
+
+      if (!Array.isArray(drawingsDraft[sceneId])) {
+        drawingsDraft[sceneId] = [];
+      }
+
+      const existingIds = new Set();
+      for (const drawing of drawingsDraft[sceneId]) {
+        if (drawing && drawing.id) {
+          existingIds.add(drawing.id);
+        }
+      }
+
+      for (const newDrawing of sceneNewDrawings) {
+        if (newDrawing && newDrawing.id && !existingIds.has(newDrawing.id)) {
+          drawingsDraft[sceneId].push(newDrawing);
+        }
+      }
+    }
+  }
+}
+
+/**
+ * Extracts placement property changes beyond just position (e.g., conditions, hp, size).
+ * This is used to sync non-positional changes from players to the GM when the GM has
+ * authoritative state.
+ *
+ * @param {Object} currentPlacements - Current placements keyed by scene ID
+ * @param {Object} incomingPlacements - Incoming placements keyed by scene ID
+ * @returns {Object} Property updates keyed by scene ID, each containing placement updates
+ */
+function extractPlacementPropertyChanges(currentPlacements, incomingPlacements) {
+  const updates = {};
+
+  if (!incomingPlacements || typeof incomingPlacements !== 'object') {
+    return updates;
+  }
+
+  const currentMap = currentPlacements && typeof currentPlacements === 'object'
+    ? currentPlacements
+    : {};
+
+  // Properties that should sync from players to GM (excluding position which is handled separately)
+  const syncableProperties = [
+    'conditions',
+    'hp',
+    'currentHp',
+    'maxHp',
+    'tempHp',
+    'size',
+    'label',
+    'notes',
+    'statusEffects',
+    'overlays',
+  ];
+
+  for (const sceneId of Object.keys(incomingPlacements)) {
+    const incomingScenePlacements = incomingPlacements[sceneId];
+    if (!Array.isArray(incomingScenePlacements)) {
+      continue;
+    }
+
+    const currentScenePlacements = Array.isArray(currentMap[sceneId])
+      ? currentMap[sceneId]
+      : [];
+
+    const currentById = new Map();
+    for (const placement of currentScenePlacements) {
+      if (placement && typeof placement === 'object' && placement.id) {
+        currentById.set(placement.id, placement);
+      }
+    }
+
+    const sceneUpdates = [];
+
+    for (const incomingPlacement of incomingScenePlacements) {
+      if (!incomingPlacement || typeof incomingPlacement !== 'object' || !incomingPlacement.id) {
+        continue;
+      }
+
+      const currentPlacement = currentById.get(incomingPlacement.id);
+      if (!currentPlacement) {
+        // New placements are handled by extractNewPlacements
+        continue;
+      }
+
+      const propertyChanges = { id: incomingPlacement.id };
+      let hasChanges = false;
+
+      for (const prop of syncableProperties) {
+        const currentValue = currentPlacement[prop];
+        const incomingValue = incomingPlacement[prop];
+
+        // Skip if both undefined
+        if (currentValue === undefined && incomingValue === undefined) {
+          continue;
+        }
+
+        // Compare values (stringify for deep comparison of objects/arrays)
+        const currentJson = JSON.stringify(currentValue);
+        const incomingJson = JSON.stringify(incomingValue);
+
+        if (currentJson !== incomingJson) {
+          propertyChanges[prop] = incomingValue;
+          hasChanges = true;
+        }
+      }
+
+      if (hasChanges) {
+        sceneUpdates.push(propertyChanges);
+      }
+    }
+
+    if (sceneUpdates.length > 0) {
+      updates[sceneId] = sceneUpdates;
+    }
+  }
+
+  return updates;
+}
+
+/**
+ * Applies placement property updates to the placements draft.
+ * Updates properties like conditions, hp, etc. on existing placements.
+ *
+ * @param {Object} placementsDraft - Mutable placements object (Immer draft)
+ * @param {Object} propertyUpdates - Property updates keyed by scene ID
+ */
+function applyPlacementPropertyUpdates(placementsDraft, propertyUpdates) {
+  if (!propertyUpdates || typeof propertyUpdates !== 'object') {
+    return;
+  }
+
+  for (const sceneId of Object.keys(propertyUpdates)) {
+    const sceneUpdates = propertyUpdates[sceneId];
+    if (!Array.isArray(sceneUpdates)) {
+      continue;
+    }
+
+    const scenePlacements = placementsDraft[sceneId];
+    if (!Array.isArray(scenePlacements)) {
+      continue;
+    }
+
+    const updatesById = new Map();
+    for (const update of sceneUpdates) {
+      if (update && update.id) {
+        updatesById.set(update.id, update);
+      }
+    }
+
+    for (const placement of scenePlacements) {
+      if (!placement || !placement.id) {
+        continue;
+      }
+
+      const update = updatesById.get(placement.id);
+      if (!update) {
+        continue;
+      }
+
+      // Apply each property from the update (except id)
+      for (const prop of Object.keys(update)) {
+        if (prop !== 'id') {
+          placement[prop] = update[prop];
+        }
+      }
+    }
+  }
+}
+
 export function createBoardStatePoller({
   routes,
   stateEndpoint,
@@ -456,8 +863,8 @@ export function createBoardStatePoller({
             currentSignature === snapshotSignature));
 
       if (gmHasAuthoritativeSnapshot && !hasNewerCombatUpdate) {
-        // GM has authoritative state but we should still merge player placement
-        // position updates and new placements to ensure token changes from players are synced.
+        // GM has authoritative state but we should still merge player changes
+        // for placements (position, conditions, hp), templates, and drawings.
         const currentPlacements = currentState?.boardState?.placements ?? {};
         const incomingPlacements = incoming?.placements ?? {};
         const placementPositionUpdates = extractPlacementPositionChanges(
@@ -468,23 +875,74 @@ export function createBoardStatePoller({
           currentPlacements,
           incomingPlacements
         );
+        const placementPropertyUpdates = extractPlacementPropertyChanges(
+          currentPlacements,
+          incomingPlacements
+        );
+
+        // Extract template changes
+        const currentTemplates = currentState?.boardState?.templates ?? {};
+        const incomingTemplates = incoming?.templates ?? {};
+        const { updates: templateUpdates, newTemplates } = extractTemplateChanges(
+          currentTemplates,
+          incomingTemplates
+        );
+
+        // Extract drawing changes
+        const currentDrawings = currentState?.boardState?.drawings ?? {};
+        const incomingDrawings = incoming?.drawings ?? {};
+        const { updates: drawingUpdates, newDrawings } = extractDrawingChanges(
+          currentDrawings,
+          incomingDrawings
+        );
 
         const hasPositionUpdates = placementPositionUpdates && Object.keys(placementPositionUpdates).length > 0;
         const hasNewPlacements = newPlacementsToAdd && Object.keys(newPlacementsToAdd).length > 0;
+        const hasPropertyUpdates = placementPropertyUpdates && Object.keys(placementPropertyUpdates).length > 0;
+        const hasTemplateUpdates = templateUpdates && Object.keys(templateUpdates).length > 0;
+        const hasNewTemplates = newTemplates && Object.keys(newTemplates).length > 0;
+        const hasDrawingUpdates = drawingUpdates && Object.keys(drawingUpdates).length > 0;
+        const hasNewDrawings = newDrawings && Object.keys(newDrawings).length > 0;
 
-        if (hasPositionUpdates || hasNewPlacements) {
+        const hasAnyChanges = hasPositionUpdates || hasNewPlacements || hasPropertyUpdates ||
+          hasTemplateUpdates || hasNewTemplates || hasDrawingUpdates || hasNewDrawings;
+
+        if (hasAnyChanges) {
           boardApi.updateState?.((draft) => {
             if (!draft.boardState) {
               draft.boardState = {};
             }
-            if (!draft.boardState.placements) {
-              draft.boardState.placements = {};
+
+            // Apply placement changes
+            if (hasPositionUpdates || hasNewPlacements || hasPropertyUpdates) {
+              if (!draft.boardState.placements) {
+                draft.boardState.placements = {};
+              }
+              if (hasPositionUpdates) {
+                applyPlacementPositionUpdates(draft.boardState.placements, placementPositionUpdates);
+              }
+              if (hasNewPlacements) {
+                applyNewPlacements(draft.boardState.placements, newPlacementsToAdd);
+              }
+              if (hasPropertyUpdates) {
+                applyPlacementPropertyUpdates(draft.boardState.placements, placementPropertyUpdates);
+              }
             }
-            if (hasPositionUpdates) {
-              applyPlacementPositionUpdates(draft.boardState.placements, placementPositionUpdates);
+
+            // Apply template changes
+            if (hasTemplateUpdates || hasNewTemplates) {
+              if (!draft.boardState.templates) {
+                draft.boardState.templates = {};
+              }
+              applyTemplateChanges(draft.boardState.templates, templateUpdates, newTemplates);
             }
-            if (hasNewPlacements) {
-              applyNewPlacements(draft.boardState.placements, newPlacementsToAdd);
+
+            // Apply drawing changes
+            if (hasDrawingUpdates || hasNewDrawings) {
+              if (!draft.boardState.drawings) {
+                draft.boardState.drawings = {};
+              }
+              applyDrawingChanges(draft.boardState.drawings, drawingUpdates, newDrawings);
             }
           });
         }
