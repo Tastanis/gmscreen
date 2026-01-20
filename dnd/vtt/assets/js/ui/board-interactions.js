@@ -28,6 +28,11 @@ let trackerOverflowResizeListenerAttached = false;
 const STAMINA_SYNC_CHANNEL = 'vtt-stamina-sync';
 let staminaSyncChannel = null;
 
+// Global flag to prevent recursive state updates during state application.
+// When true, any calls to syncCombatStateToStore() or boardApi.updateState()
+// that would trigger subscribers are blocked to prevent infinite recursion.
+let isApplyingState = false;
+
 function getStaminaSyncChannel() {
   if (typeof BroadcastChannel !== 'function') {
     return null;
@@ -2705,66 +2710,77 @@ export function mountBoardInteractions(store, routes = {}) {
   };
 
   const applyStateToBoard = (state = {}) => {
-    const sceneState = normalizeSceneState(state.scenes);
-    const activeSceneId = state.boardState?.activeSceneId ?? null;
-    if (activeSceneId !== lastActiveSceneId) {
-      lastActiveSceneId = activeSceneId;
-      selectedTokenIds.clear();
-      notifySelectionChanged();
-      resetCombatGroups();
-      // Pre-apply groups from state before rendering to ensure proper filtering.
-      // Without this, the initial render shows all placements because groups are
-      // empty after resetCombatGroups, then refreshCombatTracker corrects it.
-      // This causes a flash of duplicate tokens and potential race conditions.
-      const activeSceneKey = typeof activeSceneId === 'string' ? activeSceneId.trim() : '';
-      if (activeSceneKey) {
-        const boardState = state?.boardState ?? {};
-        const sceneStateData = boardState.sceneState && typeof boardState.sceneState === 'object'
-          ? boardState.sceneState
-          : {};
-        const combatState = sceneStateData[activeSceneKey]?.combat ?? {};
-        const groups = normalizeCombatGroups(
-          combatState?.groups ?? combatState?.groupings ?? combatState?.combatGroups ?? null
-        );
-        applyCombatGroupsFromState(groups);
-      }
-      clearDragCandidate();
-      if (viewState.dragState) {
-        try {
-          mapSurface.releasePointerCapture?.(viewState.dragState.pointerId);
-        } catch (error) {
-          // Ignore release errors when swapping scenes
+    // Prevent recursive state application. When applyStateToBoard is already running,
+    // any state updates from sync functions would trigger subscribers again.
+    // This guard ensures we complete the current application before processing new updates.
+    if (isApplyingState) {
+      return;
+    }
+    isApplyingState = true;
+    try {
+      const sceneState = normalizeSceneState(state.scenes);
+      const activeSceneId = state.boardState?.activeSceneId ?? null;
+      if (activeSceneId !== lastActiveSceneId) {
+        lastActiveSceneId = activeSceneId;
+        selectedTokenIds.clear();
+        notifySelectionChanged();
+        resetCombatGroups();
+        // Pre-apply groups from state before rendering to ensure proper filtering.
+        // Without this, the initial render shows all placements because groups are
+        // empty after resetCombatGroups, then refreshCombatTracker corrects it.
+        // This causes a flash of duplicate tokens and potential race conditions.
+        const activeSceneKey = typeof activeSceneId === 'string' ? activeSceneId.trim() : '';
+        if (activeSceneKey) {
+          const boardState = state?.boardState ?? {};
+          const sceneStateData = boardState.sceneState && typeof boardState.sceneState === 'object'
+            ? boardState.sceneState
+            : {};
+          const combatState = sceneStateData[activeSceneKey]?.combat ?? {};
+          const groups = normalizeCombatGroups(
+            combatState?.groups ?? combatState?.groupings ?? combatState?.combatGroups ?? null
+          );
+          applyCombatGroupsFromState(groups);
         }
-        viewState.dragState = null;
-      }
-      closeTokenSettings();
-    }
-    const activeScene = sceneState.items.find((scene) => scene.id === activeSceneId) ?? null;
-
-    updateSceneMeta(activeScene);
-
-    const nextUrl = state.boardState?.mapUrl ?? null;
-    if (nextUrl !== viewState.activeMapUrl) {
-      loadMap(nextUrl);
-    }
-    const overlayConfig = resolveSceneOverlayState(state.boardState ?? {}, activeSceneId);
-    syncOverlayLayer(overlayConfig);
-    overlayTool.notifyOverlayMaskChange(overlayConfig ?? null);
-    applyGridState(state.grid ?? {});
-    renderTokens(state, tokenLayer, viewState);
-    templateTool.notifyMapState();
-    overlayTool.notifyMapState();
-    applyCombatStateFromBoardState(state);
-    processIncomingPings(state.boardState?.pings ?? [], activeSceneId);
-    syncDrawingsFromState(state.boardState, activeSceneId);
-
-    if (activeTokenSettingsId) {
-      const placementForSettings = resolvePlacementById(state, activeSceneId, activeTokenSettingsId);
-      if (!placementForSettings) {
+        clearDragCandidate();
+        if (viewState.dragState) {
+          try {
+            mapSurface.releasePointerCapture?.(viewState.dragState.pointerId);
+          } catch (error) {
+            // Ignore release errors when swapping scenes
+          }
+          viewState.dragState = null;
+        }
         closeTokenSettings();
-      } else {
-        syncTokenSettingsForm(placementForSettings);
       }
+      const activeScene = sceneState.items.find((scene) => scene.id === activeSceneId) ?? null;
+
+      updateSceneMeta(activeScene);
+
+      const nextUrl = state.boardState?.mapUrl ?? null;
+      if (nextUrl !== viewState.activeMapUrl) {
+        loadMap(nextUrl);
+      }
+      const overlayConfig = resolveSceneOverlayState(state.boardState ?? {}, activeSceneId);
+      syncOverlayLayer(overlayConfig);
+      overlayTool.notifyOverlayMaskChange(overlayConfig ?? null);
+      applyGridState(state.grid ?? {});
+      renderTokens(state, tokenLayer, viewState);
+      templateTool.notifyMapState();
+      overlayTool.notifyMapState();
+      applyCombatStateFromBoardState(state);
+      processIncomingPings(state.boardState?.pings ?? [], activeSceneId);
+      syncDrawingsFromState(state.boardState, activeSceneId);
+
+      if (activeTokenSettingsId) {
+        const placementForSettings = resolvePlacementById(state, activeSceneId, activeTokenSettingsId);
+        if (!placementForSettings) {
+          closeTokenSettings();
+        } else {
+          syncTokenSettingsForm(placementForSettings);
+        }
+      }
+    } finally {
+      isApplyingState = false;
     }
   };
 
@@ -5326,7 +5342,9 @@ export function mountBoardInteractions(store, routes = {}) {
         pruneCompletedCombatants(activeIds);
       }
 
-      if (groupsPruned && isGmUser() && !suppressCombatStateSync) {
+      // Only sync if groups were pruned and we're not currently applying state from server.
+      // The isApplyingState check prevents recursive state updates during applyStateToBoard.
+      if (groupsPruned && isGmUser() && !suppressCombatStateSync && !isApplyingState) {
         syncCombatStateToStore();
       }
     }
@@ -7703,10 +7721,16 @@ export function mountBoardInteractions(store, routes = {}) {
         }
       }
     } finally {
-      suppressCombatStateSync = false;
+      // IMPORTANT: Keep suppressCombatStateSync = true while processing pending sync
+      // to prevent recursive calls. Only reset after pending sync is complete.
       if (pendingCombatStateSync) {
         pendingCombatStateSync = false;
+        // Call sync while still suppressed to prevent recursion during the call itself
+        // The sync function will check suppressCombatStateSync and queue if needed
+        suppressCombatStateSync = false;
         syncCombatStateToStore();
+      } else {
+        suppressCombatStateSync = false;
       }
     }
   }
@@ -8034,6 +8058,13 @@ export function mountBoardInteractions(store, routes = {}) {
   }
 
   function syncCombatStateToStore() {
+    // Prevent sync during state application to avoid infinite recursion.
+    // When applyStateToBoard is running, any state updates would trigger
+    // the subscriber again, causing a stack overflow.
+    if (isApplyingState) {
+      pendingCombatStateSync = true;
+      return;
+    }
     if (suppressCombatStateSync || typeof boardApi.updateState !== 'function') {
       if (suppressCombatStateSync) {
         pendingCombatStateSync = true;
