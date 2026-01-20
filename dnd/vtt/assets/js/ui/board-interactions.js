@@ -29,6 +29,11 @@ let trackerOverflowResizeListenerAttached = false;
 const STAMINA_SYNC_CHANNEL = 'vtt-stamina-sync';
 let staminaSyncChannel = null;
 
+// Default scene ID used when no scene is explicitly selected.
+// This allows drawings, templates, and other per-scene data to persist
+// even when the user hasn't created or activated a scene.
+const DEFAULT_SCENE_ID = '_default';
+
 // Global flag to prevent recursive state updates during state application.
 // When true, any calls to syncCombatStateToStore() or boardApi.updateState()
 // that would trigger subscribers are blocked to prevent infinite recursion.
@@ -2333,18 +2338,21 @@ export function mountBoardInteractions(store, routes = {}) {
 
   const persistBoardStateSnapshot = (options = {}) => {
     if (!routes?.state || typeof boardApi.getState !== 'function') {
+      console.warn('[VTT] Cannot persist board state: routes.state missing or boardApi.getState unavailable');
       return;
     }
 
     const latest = boardApi.getState?.();
     const boardState = latest?.boardState ?? null;
     if (!boardState || typeof boardState !== 'object') {
+      console.warn('[VTT] Cannot persist board state: boardState is invalid');
       return;
     }
 
     const isGmUser = Boolean(latest?.user?.isGM);
     const snapshot = buildBoardStateSnapshotForPersistence(boardState, { isGm: isGmUser });
     if (!snapshot) {
+      console.warn('[VTT] Cannot persist board state: failed to build snapshot');
       return;
     }
 
@@ -3489,7 +3497,9 @@ export function mountBoardInteractions(store, routes = {}) {
       overlayTool.notifyMapState();
       applyCombatStateFromBoardState(state);
       processIncomingPings(state.boardState?.pings ?? [], activeSceneId);
-      syncDrawingsFromState(state.boardState, activeSceneId);
+      // Use the active scene ID or fall back to the default scene ID.
+      // This ensures drawings sync even when no scene is explicitly selected.
+      syncDrawingsFromState(state.boardState, activeSceneId || DEFAULT_SCENE_ID);
 
       if (activeTokenSettingsId) {
         const placementForSettings = resolvePlacementById(state, activeSceneId, activeTokenSettingsId);
@@ -4340,10 +4350,10 @@ export function mountBoardInteractions(store, routes = {}) {
     });
   }
 
-  function syncDrawingsFromState(boardState, activeSceneId) {
-    if (!activeSceneId) {
-      return;
-    }
+  function syncDrawingsFromState(boardState, sceneId) {
+    // Use the provided scene ID or fall back to the default.
+    // This ensures drawings can be synced even when no scene is selected.
+    const activeSceneId = sceneId || DEFAULT_SCENE_ID;
 
     // Don't interrupt active drawing
     if (isDrawModeActive() && isDrawingInProgress()) {

@@ -6,6 +6,11 @@ import {
   restrictTokensToPlayerView,
   restrictPlacementsToPlayerView,
 } from './state/store.js';
+
+// Default scene ID used when no scene is explicitly selected.
+// This allows drawings, templates, and other per-scene data to persist
+// even when the user hasn't created or activated a scene.
+const DEFAULT_SCENE_ID = '_default';
 import { mountSettingsPanel } from './ui/settings-panel.js';
 import { mountChatPanel } from './ui/chat-panel.js';
 import { mountBoardInteractions } from './ui/board-interactions.js';
@@ -57,16 +62,15 @@ async function bootstrap() {
   mountDrawingTool({
     onDrawingChange: (drawings) => {
       const currentState = getState();
-      const activeSceneId = currentState?.boardState?.activeSceneId;
-      if (!activeSceneId) {
-        return;
-      }
+      // Use the active scene ID or fall back to the default scene ID.
+      // This allows drawings to persist even when no scene is selected.
+      const sceneId = currentState?.boardState?.activeSceneId || DEFAULT_SCENE_ID;
 
       updateState((draft) => {
         if (!draft.boardState.drawings) {
           draft.boardState.drawings = {};
         }
-        draft.boardState.drawings[activeSceneId] = drawings;
+        draft.boardState.drawings[sceneId] = drawings;
       });
     },
   });
