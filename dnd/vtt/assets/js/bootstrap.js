@@ -83,7 +83,9 @@ async function hydrateFromServer(routes, userContext) {
     const boardStateSnapshot = boardStateResult?.boardState ?? null;
 
     const currentState = getState();
-    const isGM = Boolean(currentState?.user?.isGM);
+    // Use the fresh isGM value from the current state (which may have been updated)
+    // instead of the initial userContext value. Renamed to avoid TDZ shadowing issue.
+    const currentIsGM = Boolean(currentState?.user?.isGM);
 
     updateState((draft) => {
       if (scenes) {
@@ -91,7 +93,7 @@ async function hydrateFromServer(routes, userContext) {
       }
       if (tokens) {
         const normalized = normalizeTokenState(tokens);
-        draft.tokens = isGM ? normalized : restrictTokensToPlayerView(normalized);
+        draft.tokens = currentIsGM ? normalized : restrictTokensToPlayerView(normalized);
       }
       if (boardStateSnapshot && typeof boardStateSnapshot === 'object') {
         const normalizedBoard = normalizeBoardStateSnapshot(boardStateSnapshot);
@@ -100,7 +102,7 @@ async function hydrateFromServer(routes, userContext) {
             ...draft.boardState,
             ...normalizedBoard,
           };
-          if (!isGM) {
+          if (!currentIsGM) {
             nextBoardState.placements = restrictPlacementsToPlayerView(
               nextBoardState.placements ?? {}
             );
