@@ -2739,6 +2739,7 @@ export function mountBoardInteractions(store, routes = {}) {
       placements: cloneBoardSection(incoming.placements),
       sceneState: cloneBoardSection(incoming.sceneState),
       templates: cloneBoardSection(incoming.templates),
+      drawings: cloneBoardSection(incoming.drawings),
       overlay: cloneOverlayState(incoming.overlay),
       pings: clonePingEntries(incoming.pings),
     };
@@ -2793,6 +2794,7 @@ export function mountBoardInteractions(store, routes = {}) {
       placements: cloneBoardSection(snapshot.placements),
       sceneState: cloneBoardSection(snapshot.sceneState),
       templates: cloneBoardSection(snapshot.templates),
+      drawings: cloneBoardSection(snapshot.drawings),
       overlay: cloneOverlayState(snapshot.overlay),
       pings: clonePingEntries(snapshot.pings),
     };
