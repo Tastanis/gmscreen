@@ -6077,6 +6077,11 @@ export function mountBoardInteractions(store, routes = {}) {
       }
     });
 
+    // For players, build a map of display representatives for groups whose actual
+    // representative is hidden. This allows groups to remain visible when at least
+    // one member is visible, even if the representative is hidden.
+    const displayRepresentatives = gmViewing ? new Map() : buildDisplayRepresentatives(visibleEntryIds);
+
     if (!options?.skipPrune) {
       const groupsPruned = gmViewing ? pruneCombatGroups(activeIds) : false;
       if (gmViewing) {
@@ -6106,10 +6111,21 @@ export function mountBoardInteractions(store, routes = {}) {
         return;
       }
 
-      const representativeId = getRepresentativeIdFor(id);
-      if (!representativeId || representativeId !== id) {
+      // Check if this combatant is an actual representative or a display representative
+      // (for players when the actual representative is hidden)
+      const actualRepresentativeId = getRepresentativeIdFor(id);
+      const isDisplayRepresentative = displayRepresentatives.has(id);
+      const displayRepForGroup = displayRepresentatives.get(id);
+
+      // For normal cases: only render if this is the actual representative
+      // For display representative cases: render if this entry is the display rep for a hidden group
+      if (!isDisplayRepresentative && (!actualRepresentativeId || actualRepresentativeId !== id)) {
         return;
       }
+
+      // Use the actual representative ID for group operations, but use the display rep's
+      // representative ID when the actual representative is hidden
+      const representativeId = isDisplayRepresentative ? displayRepForGroup : actualRepresentativeId;
 
       if (renderedRepresentatives.has(representativeId)) {
         return;
@@ -6599,6 +6615,40 @@ export function mountBoardInteractions(store, routes = {}) {
       return members;
     }
     return members.filter((memberId) => visibleIds.has(memberId));
+  }
+
+  /**
+   * Build a mapping of display representatives for players when the actual
+   * group representative is hidden. For each group whose representative is
+   * not visible, finds the first visible member to serve as the display
+   * representative.
+   *
+   * @param {Set<string>} visibleEntryIds - Set of visible combatant IDs
+   * @returns {Map<string, string>} Map of visibleMemberId -> actualRepresentativeId
+   */
+  function buildDisplayRepresentatives(visibleEntryIds) {
+    const displayReps = new Map();
+    if (!visibleEntryIds || !visibleEntryIds.size) {
+      return displayReps;
+    }
+
+    combatTrackerGroups.forEach((members, representativeId) => {
+      if (!members || members.size <= 1) {
+        return;
+      }
+      // If the actual representative is visible, no need for a display representative
+      if (visibleEntryIds.has(representativeId)) {
+        return;
+      }
+      // Find the first visible member to serve as display representative
+      const visibleMembers = Array.from(members).filter((id) => visibleEntryIds.has(id));
+      if (visibleMembers.length > 0) {
+        // Map the first visible member as the display representative for this group
+        displayReps.set(visibleMembers[0], representativeId);
+      }
+    });
+
+    return displayReps;
   }
 
   function highlightTrackerToken(combatantId, shouldHighlight) {
