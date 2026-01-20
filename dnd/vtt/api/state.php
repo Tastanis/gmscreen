@@ -545,12 +545,22 @@ function normalizeDrawingEntry($entry): ?array
         ? max(1, min(50, (int) $entry['strokeWidth']))
         : 3;
 
-    return [
+    $normalized = [
         'id' => $id,
         'points' => $normalizedPoints,
         'color' => $color,
         'strokeWidth' => $strokeWidth,
     ];
+
+    // Preserve authorId if present (for user-specific drawing management)
+    if (isset($entry['authorId']) && is_string($entry['authorId'])) {
+        $authorId = strtolower(trim($entry['authorId']));
+        if ($authorId !== '') {
+            $normalized['authorId'] = $authorId;
+        }
+    }
+
+    return $normalized;
 }
 
 /**
