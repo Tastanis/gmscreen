@@ -2,6 +2,7 @@ const SVG_NS = 'http://www.w3.org/2000/svg';
 
 let sharedState = null;
 let onDrawingChange = null;
+let getCurrentUserId = null;
 
 export function mountDrawingTool(options = {}) {
   const drawButton = document.querySelector('[data-action="toggle-draw"]');
@@ -19,6 +20,7 @@ export function mountDrawingTool(options = {}) {
   }
 
   onDrawingChange = options.onDrawingChange || null;
+  getCurrentUserId = options.getCurrentUserId || null;
 
   const state = {
     active: false,
@@ -229,12 +231,16 @@ function endDrawing(state, event) {
     // Save current state to undo stack before adding new drawing
     pushToUndoStack(state);
 
+    const authorId = typeof getCurrentUserId === 'function' ? getCurrentUserId() : null;
     const drawing = {
       id: generateDrawingId(),
       points: state.currentPoints.map((p) => ({ x: round(p.x, 2), y: round(p.y, 2) })),
       color: state.color,
       strokeWidth: state.strokeWidth,
     };
+    if (authorId) {
+      drawing.authorId = authorId;
+    }
     state.drawings.push(drawing);
     state.currentPath.dataset.drawingId = drawing.id;
     scheduleSyncDrawings(state);
@@ -260,15 +266,32 @@ function cancelDrawing(state) {
 }
 
 function clearAllDrawings(state) {
-  // Save current state to undo stack before clearing (if there are drawings)
-  if (state.drawings.length > 0) {
-    pushToUndoStack(state);
+  const currentUserId = typeof getCurrentUserId === 'function' ? getCurrentUserId() : null;
+
+  // Find drawings that belong to the current user
+  const userDrawings = currentUserId
+    ? state.drawings.filter((d) => d.authorId === currentUserId)
+    : state.drawings;
+
+  // If user has no drawings to clear, do nothing
+  if (userDrawings.length === 0) {
+    return;
   }
 
-  state.drawings = [];
-  while (state.drawingLayer.firstChild) {
-    state.drawingLayer.removeChild(state.drawingLayer.firstChild);
+  // Save current state to undo stack before clearing
+  pushToUndoStack(state);
+
+  if (currentUserId) {
+    // Only remove drawings belonging to the current user
+    const userDrawingIds = new Set(userDrawings.map((d) => d.id));
+    state.drawings = state.drawings.filter((d) => !userDrawingIds.has(d.id));
+  } else {
+    // No user ID - clear all drawings (fallback behavior)
+    state.drawings = [];
   }
+
+  // Re-render remaining drawings
+  renderDrawings(state);
   scheduleSyncDrawings(state);
 }
 
@@ -276,12 +299,18 @@ const MAX_UNDO_STACK_SIZE = 10;
 
 function pushToUndoStack(state) {
   // Clone the current drawings array
-  const snapshot = state.drawings.map((d) => ({
-    id: d.id,
-    points: d.points.map((p) => ({ x: p.x, y: p.y })),
-    color: d.color,
-    strokeWidth: d.strokeWidth,
-  }));
+  const snapshot = state.drawings.map((d) => {
+    const clone = {
+      id: d.id,
+      points: d.points.map((p) => ({ x: p.x, y: p.y })),
+      color: d.color,
+      strokeWidth: d.strokeWidth,
+    };
+    if (d.authorId) {
+      clone.authorId = d.authorId;
+    }
+    return clone;
+  });
 
   state.undoStack.push(snapshot);
 
@@ -292,21 +321,52 @@ function pushToUndoStack(state) {
 }
 
 function undoLastDrawing(state) {
-  if (state.undoStack.length === 0) {
-    return;
+  const currentUserId = typeof getCurrentUserId === 'function' ? getCurrentUserId() : null;
+
+  if (currentUserId) {
+    // Find the last drawing by the current user
+    let lastUserDrawingIndex = -1;
+    for (let i = state.drawings.length - 1; i >= 0; i--) {
+      if (state.drawings[i].authorId === currentUserId) {
+        lastUserDrawingIndex = i;
+        break;
+      }
+    }
+
+    if (lastUserDrawingIndex === -1) {
+      // No drawings by this user to undo
+      return;
+    }
+
+    // Save current state to undo stack before removing
+    pushToUndoStack(state);
+
+    // Remove the last drawing by this user
+    state.drawings.splice(lastUserDrawingIndex, 1);
+
+    // Re-render all drawings
+    renderDrawings(state);
+
+    // Sync to server
+    scheduleSyncDrawings(state);
+  } else {
+    // Fallback to original behavior when no user ID
+    if (state.undoStack.length === 0) {
+      return;
+    }
+
+    // Pop the last saved state
+    const previousDrawings = state.undoStack.pop();
+
+    // Restore the drawings
+    state.drawings = previousDrawings;
+
+    // Re-render all drawings
+    renderDrawings(state);
+
+    // Sync to server
+    scheduleSyncDrawings(state);
   }
-
-  // Pop the last saved state
-  const previousDrawings = state.undoStack.pop();
-
-  // Restore the drawings
-  state.drawings = previousDrawings;
-
-  // Re-render all drawings
-  renderDrawings(state);
-
-  // Sync to server
-  scheduleSyncDrawings(state);
 }
 
 function updatePathFromPoints(pathElement, points) {

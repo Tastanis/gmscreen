@@ -73,6 +73,12 @@ async function bootstrap() {
         draft.boardState.drawings[sceneId] = drawings;
       });
     },
+    getCurrentUserId: () => {
+      const currentState = getState();
+      const rawName = typeof currentState?.user?.name === 'string' ? currentState.user.name : '';
+      const normalized = rawName.trim().toLowerCase();
+      return normalized || null;
+    },
   });
   mountDiceRoller();
 
