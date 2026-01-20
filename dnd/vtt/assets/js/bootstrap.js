@@ -32,6 +32,14 @@ async function bootstrap() {
     : {
         ...rawBoardState,
         placements: restrictPlacementsToPlayerView(rawBoardState.placements ?? {}),
+        // Reset metadata for non-GM users to prevent them from inheriting
+        // GM-authored metadata which would cause the poller authority check
+        // to incorrectly trigger and skip new placement syncs.
+        metadata: {
+          ...(rawBoardState.metadata ?? {}),
+          authorIsGm: false,
+          authorRole: 'player',
+        },
       };
 
   initializeState({
@@ -106,6 +114,14 @@ async function hydrateFromServer(routes, userContext) {
             nextBoardState.placements = restrictPlacementsToPlayerView(
               nextBoardState.placements ?? {}
             );
+            // Reset metadata for non-GM users to prevent inheriting GM-authored
+            // metadata which would cause the poller authority check to incorrectly
+            // trigger and skip syncing new placements from other users.
+            nextBoardState.metadata = {
+              ...(nextBoardState.metadata ?? {}),
+              authorIsGm: false,
+              authorRole: 'player',
+            };
           }
           draft.boardState = nextBoardState;
         }

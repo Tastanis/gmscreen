@@ -138,6 +138,107 @@ function extractPlacementPositionChanges(currentPlacements, incomingPlacements) 
 }
 
 /**
+ * Extracts new placements from incoming state that don't exist in current state.
+ * Returns an object keyed by scene ID containing arrays of full placement objects.
+ *
+ * This is used to sync new token placements from other users when the local client
+ * has an authoritative state (e.g., GM state or inherited GM metadata).
+ *
+ * @param {Object} currentPlacements - Current placements keyed by scene ID
+ * @param {Object} incomingPlacements - Incoming placements keyed by scene ID
+ * @returns {Object} New placements keyed by scene ID
+ */
+function extractNewPlacements(currentPlacements, incomingPlacements) {
+  const newPlacements = {};
+
+  if (!incomingPlacements || typeof incomingPlacements !== 'object') {
+    return newPlacements;
+  }
+
+  const currentMap = currentPlacements && typeof currentPlacements === 'object'
+    ? currentPlacements
+    : {};
+
+  for (const sceneId of Object.keys(incomingPlacements)) {
+    const incomingScenePlacements = incomingPlacements[sceneId];
+    if (!Array.isArray(incomingScenePlacements)) {
+      continue;
+    }
+
+    const currentScenePlacements = Array.isArray(currentMap[sceneId])
+      ? currentMap[sceneId]
+      : [];
+
+    // Build a set of current placement IDs for fast lookup
+    const currentIds = new Set();
+    for (const placement of currentScenePlacements) {
+      if (placement && typeof placement === 'object' && placement.id) {
+        currentIds.add(placement.id);
+      }
+    }
+
+    const sceneNewPlacements = [];
+
+    for (const incomingPlacement of incomingScenePlacements) {
+      if (!incomingPlacement || typeof incomingPlacement !== 'object' || !incomingPlacement.id) {
+        continue;
+      }
+
+      // If this placement doesn't exist in current state, it's a new placement
+      if (!currentIds.has(incomingPlacement.id)) {
+        // Clone the placement to avoid reference issues
+        sceneNewPlacements.push({ ...incomingPlacement });
+      }
+    }
+
+    if (sceneNewPlacements.length > 0) {
+      newPlacements[sceneId] = sceneNewPlacements;
+    }
+  }
+
+  return newPlacements;
+}
+
+/**
+ * Applies new placements to the placements draft by adding them to the scene arrays.
+ *
+ * @param {Object} placementsDraft - Mutable placements object (Immer draft)
+ * @param {Object} newPlacements - New placements keyed by scene ID
+ */
+function applyNewPlacements(placementsDraft, newPlacements) {
+  if (!newPlacements || typeof newPlacements !== 'object') {
+    return;
+  }
+
+  for (const sceneId of Object.keys(newPlacements)) {
+    const sceneNewPlacements = newPlacements[sceneId];
+    if (!Array.isArray(sceneNewPlacements) || sceneNewPlacements.length === 0) {
+      continue;
+    }
+
+    // Ensure the scene array exists
+    if (!Array.isArray(placementsDraft[sceneId])) {
+      placementsDraft[sceneId] = [];
+    }
+
+    // Build a set of existing IDs to avoid duplicates
+    const existingIds = new Set();
+    for (const placement of placementsDraft[sceneId]) {
+      if (placement && placement.id) {
+        existingIds.add(placement.id);
+      }
+    }
+
+    // Add new placements that don't already exist
+    for (const newPlacement of sceneNewPlacements) {
+      if (newPlacement && newPlacement.id && !existingIds.has(newPlacement.id)) {
+        placementsDraft[sceneId].push(newPlacement);
+      }
+    }
+  }
+}
+
+/**
  * Applies placement position updates to the placements draft.
  * Only updates column and row properties of existing placements.
  *
@@ -356,15 +457,22 @@ export function createBoardStatePoller({
 
       if (gmHasAuthoritativeSnapshot && !hasNewerCombatUpdate) {
         // GM has authoritative state but we should still merge player placement
-        // position updates to ensure token movements from players are synced.
+        // position updates and new placements to ensure token changes from players are synced.
         const currentPlacements = currentState?.boardState?.placements ?? {};
         const incomingPlacements = incoming?.placements ?? {};
         const placementPositionUpdates = extractPlacementPositionChanges(
           currentPlacements,
           incomingPlacements
         );
+        const newPlacementsToAdd = extractNewPlacements(
+          currentPlacements,
+          incomingPlacements
+        );
 
-        if (placementPositionUpdates && Object.keys(placementPositionUpdates).length > 0) {
+        const hasPositionUpdates = placementPositionUpdates && Object.keys(placementPositionUpdates).length > 0;
+        const hasNewPlacements = newPlacementsToAdd && Object.keys(newPlacementsToAdd).length > 0;
+
+        if (hasPositionUpdates || hasNewPlacements) {
           boardApi.updateState?.((draft) => {
             if (!draft.boardState) {
               draft.boardState = {};
@@ -372,7 +480,12 @@ export function createBoardStatePoller({
             if (!draft.boardState.placements) {
               draft.boardState.placements = {};
             }
-            applyPlacementPositionUpdates(draft.boardState.placements, placementPositionUpdates);
+            if (hasPositionUpdates) {
+              applyPlacementPositionUpdates(draft.boardState.placements, placementPositionUpdates);
+            }
+            if (hasNewPlacements) {
+              applyNewPlacements(draft.boardState.placements, newPlacementsToAdd);
+            }
           });
         }
 
