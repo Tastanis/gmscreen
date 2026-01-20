@@ -842,9 +842,10 @@ export function createBoardStatePoller({
       const lastPersistedSignature = getLastPersistedSignatureFn?.() ?? null;
 
       const authoredSnapshot = Boolean(
-        (snapshotSignature && snapshotSignature === lastPersistedSignature) ||
-          (snapshotAuthorId && currentUserId && snapshotAuthorId === currentUserId) ||
-          (incomingHash && incomingHash === lastPersistedHash)
+        (incomingHash && incomingHash === lastPersistedHash) ||
+          (!incomingHash &&
+            ((snapshotSignature && snapshotSignature === lastPersistedSignature) ||
+              (snapshotAuthorId && currentUserId && snapshotAuthorId === currentUserId)))
       );
 
       if (authoredSnapshot) {
