@@ -29,6 +29,10 @@ let trackerOverflowResizeListenerAttached = false;
 const STAMINA_SYNC_CHANNEL = 'vtt-stamina-sync';
 let staminaSyncChannel = null;
 
+// Turn lock timeout: locks older than this are considered stale and auto-released.
+// This prevents orphaned locks when players disconnect without ending their turn.
+const TURN_LOCK_STALE_TIMEOUT_MS = 10 * 60 * 1000; // 10 minutes
+
 // Default scene ID used when no scene is explicitly selected.
 // This allows drawings, templates, and other per-scene data to persist
 // even when the user hasn't created or activated a scene.
@@ -6204,6 +6208,9 @@ export function mountBoardInteractions(store, routes = {}) {
 
   // Validates if a turn start attempt is valid and returns context
   function validateTurnStart(combatantId, options = {}) {
+    // Clear any stale turn locks before validation
+    clearStaleTurnLock();
+
     const team = getCombatantTeam(combatantId);
     const currentPhase = getTurnPhase();
     const isOverride = options.override === true;
@@ -7936,15 +7943,26 @@ export function mountBoardInteractions(store, routes = {}) {
       applyCombatGroupsFromState(normalized.groups);
       updateTurnLockState(normalized.turnLock);
 
+      // Clear stale turn locks to prevent orphaned lock state from blocking turns.
+      // This handles cases where a player disconnected without finishing their turn.
+      const wasLockStale = clearStaleTurnLock();
+      let effectiveActiveCombatantId = normalized.activeCombatantId;
+
+      // If the turn lock was stale and the activeCombatantId matches the stale lock's
+      // combatant, clear the activeCombatantId to return to pick phase
+      if (wasLockStale && effectiveActiveCombatantId && normalized.turnLock?.combatantId === effectiveActiveCombatantId) {
+        effectiveActiveCombatantId = null;
+      }
+
       if (!combatActive) {
         stopAllyTurnTimer();
         clearTurnBorderFlash();
       }
 
-      if (normalized.activeCombatantId !== previousActive) {
-        setActiveCombatantId(normalized.activeCombatantId);
+      if (effectiveActiveCombatantId !== previousActive) {
+        setActiveCombatantId(effectiveActiveCombatantId);
       } else {
-        activeCombatantId = normalized.activeCombatantId;
+        activeCombatantId = effectiveActiveCombatantId;
         refreshCombatantStateClasses();
       }
 
@@ -8538,6 +8556,42 @@ export function mountBoardInteractions(store, routes = {}) {
     turnLockState.holderName = null;
     turnLockState.combatantId = null;
     turnLockState.lockedAt = 0;
+    if (previousHolder) {
+      updateCombatModeIndicators();
+    }
+    return true;
+  }
+
+  function isTurnLockStale(lock = turnLockState) {
+    if (!lock || !lock.holderId) {
+      return false;
+    }
+    const lockedAt = Number.isFinite(lock.lockedAt) ? lock.lockedAt : 0;
+    if (lockedAt <= 0) {
+      return false;
+    }
+    const elapsed = Date.now() - lockedAt;
+    return elapsed > TURN_LOCK_STALE_TIMEOUT_MS;
+  }
+
+  function clearStaleTurnLock() {
+    if (!isTurnLockStale()) {
+      return false;
+    }
+    const previousHolder = turnLockState.holderId;
+    const staleCombatantId = turnLockState.combatantId;
+    turnLockState.holderId = null;
+    turnLockState.holderName = null;
+    turnLockState.combatantId = null;
+    turnLockState.lockedAt = 0;
+
+    // If the stale lock was for the currently active combatant, clear that too
+    // so the system returns to PICK phase instead of staying stuck in ACTIVE
+    if (staleCombatantId && activeCombatantId === staleCombatantId) {
+      activeCombatantId = null;
+      updateTurnPhase();
+    }
+
     if (previousHolder) {
       updateCombatModeIndicators();
     }
@@ -9214,7 +9268,8 @@ export function mountBoardInteractions(store, routes = {}) {
       return;
     }
 
-    // Check turn lock first
+    // Check turn lock first, but clear stale locks automatically
+    clearStaleTurnLock();
     if (turnLockState.holderId && turnLockState.holderId !== userId) {
       if (!confirmTurnLockOverride(turnLockState.holderName)) {
         notifyTurnLocked(turnLockState.holderName);
