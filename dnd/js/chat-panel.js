@@ -1,5 +1,6 @@
 (function () {
-    const FETCH_INTERVAL_MS = 2500;
+    // Chat polling interval - lowered for faster message sync
+    const FETCH_INTERVAL_MS = 1500;
     const MAX_MESSAGES = 100;
     let escapeListenerAttached = false;
     const CHAT_ENDPOINT = (typeof window !== 'undefined' && window.chatHandlerUrl)

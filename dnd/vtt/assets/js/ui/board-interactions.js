@@ -983,8 +983,11 @@ export function createBoardStatePoller({
       return { stop() {} };
     }
 
+    // Polling interval for board state - lowered for faster sync
+    // Keep in sync with COMBAT_STATE_REFRESH_INTERVAL_MS for consistent updates
+    const BOARD_STATE_POLL_INTERVAL_MS = 1000;
     poll();
-    const intervalId = windowRef.setInterval(poll, 2000);
+    const intervalId = windowRef.setInterval(poll, BOARD_STATE_POLL_INTERVAL_MS);
     return {
       stop() {
         if (typeof windowRef?.clearInterval === 'function') {
@@ -1348,7 +1351,9 @@ export function mountBoardInteractions(store, routes = {}) {
   let lastBoardStateHeartbeatAt = 0;
   const BOARD_STATE_HEARTBEAT_DEBOUNCE_MS = 2000;
   let combatStateRefreshIntervalId = null;
-  const COMBAT_STATE_REFRESH_INTERVAL_MS = 5000;
+  // Polling interval for combat state refresh - lowered for faster sync
+  // Keep in sync with BOARD_STATE_POLL_INTERVAL_MS for consistent updates
+  const COMBAT_STATE_REFRESH_INTERVAL_MS = 1000;
   let suppressNextTrackerDoubleClick = false;
   let lastTrackerActivationAt = 0;
   const TRACKER_ACTIVATION_DEBOUNCE_MS = 250;

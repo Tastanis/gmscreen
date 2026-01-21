@@ -1,5 +1,12 @@
 // Integrated Inventory Management Functions for Dashboard
 
+// Polling interval for inventory sync - lowered for faster sync
+const INVENTORY_SYNC_INTERVAL_MS = 1000;
+
+// Track pending inventory saves to prevent race conditions
+// When a save is in-flight, polling should not overwrite local state
+let pendingInventorySaves = new Set();
+
 // Utility function to escape HTML to prevent XSS attacks
 function escapeHtml(text) {
     if (typeof text !== 'string') {
@@ -74,8 +81,13 @@ function setupRealtimeInventorySync() {
             return;
         }
 
+        // Skip polling if any inventory saves are pending to prevent race conditions
+        if (pendingInventorySaves.size > 0) {
+            return;
+        }
+
         loadInventoryData({ silent: true, onlyIfModified: true });
-    }, 3000);
+    }, INVENTORY_SYNC_INTERVAL_MS);
 }
 
 // Render all inventory tabs
@@ -532,6 +544,9 @@ function updateInventoryItemField(tab, index, field, value) {
 
 // Save inventory item field to server
 function updateInventoryItemFieldOnServer(tab, index, field, value) {
+    const saveKey = `${tab}:${index}:${field}`;
+    pendingInventorySaves.add(saveKey);
+
     fetch('dashboard.php', {
         method: 'POST',
         headers: {
@@ -541,11 +556,13 @@ function updateInventoryItemFieldOnServer(tab, index, field, value) {
     })
     .then(response => response.json())
     .then(data => {
+        pendingInventorySaves.delete(saveKey);
         if (!data.success) {
             showInventoryStatus('Error saving: ' + data.error, 'error');
         }
     })
     .catch(error => {
+        pendingInventorySaves.delete(saveKey);
         console.error('Error:', error);
         showInventoryStatus('Network error saving field', 'error');
     });
@@ -553,8 +570,10 @@ function updateInventoryItemFieldOnServer(tab, index, field, value) {
 
 // Save entire inventory item to server
 function saveInventoryItem(tab, index, itemData, callback) {
+    const saveKey = `item:${tab}:${index}`;
+    pendingInventorySaves.add(saveKey);
     showInventoryStatus('Saving item...', 'loading');
-    
+
     fetch('dashboard.php', {
         method: 'POST',
         headers: {
@@ -564,6 +583,7 @@ function saveInventoryItem(tab, index, itemData, callback) {
     })
     .then(response => response.json())
     .then(data => {
+        pendingInventorySaves.delete(saveKey);
         if (data.success) {
             showInventoryStatus('Item saved successfully', 'success');
             if (callback) callback();
@@ -572,6 +592,7 @@ function saveInventoryItem(tab, index, itemData, callback) {
         }
     })
     .catch(error => {
+        pendingInventorySaves.delete(saveKey);
         console.error('Error:', error);
         showInventoryStatus('Network error saving item', 'error');
     });
@@ -583,13 +604,15 @@ function deleteInventoryItem(tab, index) {
         showInventoryStatus('Permission denied', 'error');
         return;
     }
-    
+
     if (!confirm('Are you sure you want to delete this item?')) {
         return;
     }
-    
+
+    const saveKey = `delete:${tab}:${index}`;
+    pendingInventorySaves.add(saveKey);
     showInventoryStatus('Deleting item...', 'loading');
-    
+
     fetch('dashboard.php', {
         method: 'POST',
         headers: {
@@ -599,17 +622,18 @@ function deleteInventoryItem(tab, index) {
     })
     .then(response => response.json())
     .then(data => {
+        pendingInventorySaves.delete(saveKey);
         if (data.success) {
             showInventoryStatus('Item deleted successfully', 'success');
-            
+
             // Remove from local data
             if (inventoryData[tab] && inventoryData[tab].items) {
                 inventoryData[tab].items.splice(index, 1);
             }
-            
+
             // Re-render the grid
             renderInventoryGrid(tab);
-            
+
             // Clear expanded card if it was the deleted one
             if (expandedInventoryCard) {
                 clearExpandedInventoryState();
@@ -619,6 +643,7 @@ function deleteInventoryItem(tab, index) {
         }
     })
     .catch(error => {
+        pendingInventorySaves.delete(saveKey);
         console.error('Error:', error);
         showInventoryStatus('Network error deleting item', 'error');
     });
