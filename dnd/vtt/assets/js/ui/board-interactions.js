@@ -92,6 +92,7 @@ export function createBoardStatePoller({
   getPendingSaveInfo = () => ({ pending: false }),
   getLastPersistedHashFn = () => null,
   getLastPersistedSignatureFn = () => null,
+  onStateUpdated = null,
 } = {}) {
   const endpoint = stateEndpoint ?? routes?.state ?? null;
 
@@ -237,6 +238,19 @@ export function createBoardStatePoller({
           incoming
         );
       });
+
+      // Immediately trigger combat state refresh after board state update
+      // This replaces the separate combat refresh polling loop
+      if (typeof onStateUpdated === 'function') {
+        try {
+          const updatedState = boardApi.getState?.();
+          if (updatedState) {
+            onStateUpdated(updatedState);
+          }
+        } catch (callbackError) {
+          console.warn('[VTT] onStateUpdated callback failed', callbackError);
+        }
+      }
     } catch (error) {
       if (!pollErrorLogged) {
         console.warn('[VTT] Board state poll failed', error);
@@ -620,9 +634,9 @@ export function mountBoardInteractions(store, routes = {}) {
   let lastBoardStateHeartbeatAt = 0;
   const BOARD_STATE_HEARTBEAT_DEBOUNCE_MS = 2000;
   let combatStateRefreshIntervalId = null;
-  // Polling interval for combat state refresh - lowered for faster sync
-  // Keep in sync with BOARD_STATE_POLL_INTERVAL_MS for consistent updates
-  const COMBAT_STATE_REFRESH_INTERVAL_MS = 1000;
+  // Combat state refresh is now triggered immediately by board state poller callback.
+  // This backup interval only runs as a safety fallback in case the callback fails.
+  const COMBAT_STATE_REFRESH_INTERVAL_MS = 5000;
   let suppressNextTrackerDoubleClick = false;
   let lastTrackerActivationAt = 0;
   const TRACKER_ACTIVATION_DEBOUNCE_MS = 250;
@@ -1126,12 +1140,26 @@ export function mountBoardInteractions(store, routes = {}) {
   let suppressCombatStateSync = false;
   let pendingCombatStateSync = false;
   let combatStateVersion = 0;
+  // Sequence number for combat state sync - increments on each local change
+  // Used instead of timestamps to avoid clock drift issues between clients
+  let combatSequence = 0;
   let lastCombatStateSnapshot = null;
   let startingCombatTeam = null;
   let currentTurnTeam = null;
   let activeTeam = null;
   let lastActingTeam = null;
   let pendingTurnTransition = null;
+
+  // Turn state machine phases:
+  // - 'idle': Combat not active
+  // - 'pick': Team's pick phase - waiting for someone to start their turn
+  // - 'active': A token is actively taking their turn
+  const TURN_PHASE = {
+    IDLE: 'idle',
+    PICK: 'pick',
+    ACTIVE: 'active',
+  };
+  let turnPhase = TURN_PHASE.IDLE;
   let borderFlashTimeoutId = null;
   let allyTurnTimerInterval = null;
   let allyTurnTimerMode = 'idle';
@@ -1954,6 +1982,9 @@ export function mountBoardInteractions(store, routes = {}) {
       getPendingSaveInfo: getPendingBoardStateSaveInfo,
       getLastPersistedHashFn: () => lastPersistedBoardStateHash,
       getLastPersistedSignatureFn: () => lastPersistedBoardStateSignature,
+      // Immediately refresh combat state when board state updates
+      // This ensures combat tracker syncs instantly instead of waiting for separate loop
+      onStateUpdated: applyCombatStateFromBoardState,
     });
 
     poller.start();
@@ -1968,6 +1999,9 @@ export function mountBoardInteractions(store, routes = {}) {
       return;
     }
 
+    // This is a backup fallback loop. Primary combat state refresh now happens
+    // immediately via the board state poller's onStateUpdated callback.
+    // This loop catches any edge cases where the callback might not fire.
     combatStateRefreshIntervalId = window.setInterval(() => {
       // Skip refresh if a combat state save is pending to avoid race conditions
       const pendingInfo = getPendingBoardStateSaveInfo();
@@ -1979,7 +2013,6 @@ export function mountBoardInteractions(store, routes = {}) {
       if (!state) {
         return;
       }
-      // applyCombatStateFromBoardState handles refreshCombatTracker internally
       applyCombatStateFromBoardState(state);
     }, COMBAT_STATE_REFRESH_INTERVAL_MS);
   }
@@ -6096,6 +6129,147 @@ export function mountBoardInteractions(store, routes = {}) {
     });
   }
 
+  // ============================================================================
+  // Turn State Machine
+  // ============================================================================
+  // Manages combat turn phases to ensure consistent state across clients.
+  // States:
+  //   IDLE   - Combat not active
+  //   PICK   - Team's pick phase (currentTurnTeam determines which team)
+  //   ACTIVE - A token is actively taking their turn (activeCombatantId set)
+  //
+  // Valid transitions:
+  //   IDLE → PICK     (combat starts)
+  //   PICK → ACTIVE   (token starts turn)
+  //   ACTIVE → PICK   (turn ends or is canceled)
+  //   PICK/ACTIVE → IDLE (combat ends)
+  // ============================================================================
+
+  function getTurnPhase() {
+    if (!combatActive) {
+      return TURN_PHASE.IDLE;
+    }
+    if (activeCombatantId) {
+      return TURN_PHASE.ACTIVE;
+    }
+    return TURN_PHASE.PICK;
+  }
+
+  function updateTurnPhase() {
+    const newPhase = getTurnPhase();
+    if (newPhase !== turnPhase) {
+      turnPhase = newPhase;
+    }
+    return turnPhase;
+  }
+
+  function transitionToPickPhase(team) {
+    const normalizedTeam = normalizeCombatTeam(team);
+    if (!normalizedTeam) {
+      return false;
+    }
+
+    // Clear any active combatant
+    if (activeCombatantId) {
+      activeCombatantId = null;
+    }
+
+    currentTurnTeam = normalizedTeam;
+    turnPhase = TURN_PHASE.PICK;
+    return true;
+  }
+
+  function transitionToActiveTurn(combatantId) {
+    if (!combatantId || !combatActive) {
+      return false;
+    }
+
+    const team = getCombatantTeam(combatantId);
+    if (!team) {
+      return false;
+    }
+
+    activeCombatantId = combatantId;
+    activeTeam = team;
+    turnPhase = TURN_PHASE.ACTIVE;
+    return true;
+  }
+
+  function transitionToIdle() {
+    activeCombatantId = null;
+    activeTeam = null;
+    currentTurnTeam = null;
+    turnPhase = TURN_PHASE.IDLE;
+  }
+
+  // Validates if a turn start attempt is valid and returns context
+  function validateTurnStart(combatantId, options = {}) {
+    const team = getCombatantTeam(combatantId);
+    const currentPhase = getTurnPhase();
+    const isOverride = options.override === true;
+    const isSharonOverride = options.sharonOverride === true;
+
+    const result = {
+      valid: false,
+      requiresConfirmation: false,
+      confirmationType: null,
+      team,
+      currentPhase,
+      expectedTeam: currentTurnTeam,
+    };
+
+    // Can't start turn if combat isn't active
+    if (!combatActive) {
+      return result;
+    }
+
+    // Can't start turn for a token that has already completed
+    const representativeId = getRepresentativeIdFor(combatantId) || combatantId;
+    if (completedCombatants.has(representativeId)) {
+      return result;
+    }
+
+    // If someone else is actively taking their turn
+    if (currentPhase === TURN_PHASE.ACTIVE && activeCombatantId !== combatantId) {
+      if (isOverride || isSharonOverride) {
+        result.valid = true;
+        return result;
+      }
+      result.requiresConfirmation = true;
+      result.confirmationType = 'override_active_turn';
+      return result;
+    }
+
+    // If it's the correct team's pick phase, always valid
+    if (currentPhase === TURN_PHASE.PICK && team === currentTurnTeam) {
+      result.valid = true;
+      return result;
+    }
+
+    // If it's the other team's pick phase
+    if (currentPhase === TURN_PHASE.PICK && team !== currentTurnTeam) {
+      if (isSharonOverride) {
+        // Sharon can take turn immediately when it's enemy turn (hesitation is weakness)
+        result.valid = true;
+        return result;
+      }
+      if (isOverride) {
+        result.valid = true;
+        return result;
+      }
+      result.requiresConfirmation = true;
+      result.confirmationType = 'wrong_team_pick';
+      return result;
+    }
+
+    // Default: allow if we're in pick phase or override is set
+    if (currentPhase === TURN_PHASE.PICK || isOverride) {
+      result.valid = true;
+    }
+
+    return result;
+  }
+
   function setActiveCombatantId(nextId) {
     const normalizedNextId = typeof nextId === 'string' && nextId ? nextId : null;
     const transitionHint = pendingTurnTransition;
@@ -6120,6 +6294,9 @@ export function mountBoardInteractions(store, routes = {}) {
     highlightedCombatantId = normalizedNextId;
     activeCombatantId = normalizedNextId;
     activeTeam = nextTeam ?? null;
+
+    // Update turn phase to reflect new state
+    updateTurnPhase();
 
     if (normalizedNextId) {
       highlightBoardTokensForCombatant(normalizedNextId, true);
@@ -6457,7 +6634,8 @@ export function mountBoardInteractions(store, routes = {}) {
       ? getRepresentativeIdFor(activeCombatantId) || activeCombatantId
       : null;
     const canceledTeam = canceledId ? getCombatantTeam(canceledId) : null;
-    const nextTeam = canceledTeam === 'ally' ? 'enemy' : canceledTeam === 'enemy' ? 'ally' : currentTurnTeam;
+    // When canceling, stay on the SAME team's pick phase (don't switch to opposite team)
+    const nextTeam = canceledTeam || currentTurnTeam;
 
     closeTurnPrompt();
 
@@ -6512,19 +6690,23 @@ export function mountBoardInteractions(store, routes = {}) {
     completedCombatants.add(finishedId);
     roundTurnCount = Math.max(0, roundTurnCount + 1);
 
+    // Determine next team (opposing team gets to pick next)
+    const nextTeam = finishedTeam === 'ally' ? 'enemy' : 'ally';
+
     // Determine next combatant before clearing current one to avoid visual pop
     releaseTurnLock(getCurrentUserId());
-    const nextId = pickNextCombatantId([
-      finishedTeam === 'ally' ? 'enemy' : 'ally',
-      finishedTeam,
-    ]);
+    const nextId = pickNextCombatantId([nextTeam, finishedTeam]);
     if (nextId) {
       pendingTurnTransition = { fromTeam: finishedTeam, fromCombatantId: finishedId };
       setActiveCombatantId(nextId);
     } else {
+      // No next combatant found - transition to opposing team's pick phase
       pendingTurnTransition = null;
+      currentTurnTeam = nextTeam;
       setActiveCombatantId(null);
     }
+    // Ensure turn phase is updated
+    updateTurnPhase();
 
     // Refresh tracker once with final state (avoids intermediate null state flash)
     refreshCombatTracker();
@@ -7706,11 +7888,15 @@ export function mountBoardInteractions(store, routes = {}) {
         Object.prototype.hasOwnProperty.call(combatState, 'maliceCount'));
     const normalized = normalizeCombatState(combatState);
 
-    // Allow updates on initial load (combatStateVersion === 0) even if timestamps match.
+    // Allow updates on initial load (combatStateVersion === 0) even if sequence matches.
     // Also check if groups have changed - partial group data can arrive initially and
-    // we need to apply complete group data when it arrives, even with the same timestamp.
+    // we need to apply complete group data when it arrives, even with the same sequence.
     const isInitialLoad = combatStateVersion === 0;
-    const hasNewerTimestamp = !normalized.updatedAt || normalized.updatedAt > combatStateVersion;
+    // Use sequence numbers for reliable ordering (avoids clock drift between clients)
+    // Fall back to timestamp comparison if sequence is not available (backwards compatibility)
+    const hasNewerVersion = normalized.sequence > 0
+      ? normalized.sequence > combatStateVersion
+      : (!normalized.updatedAt || normalized.updatedAt > combatStateVersion);
     const groupsChanged = normalized.groups?.length !== combatTrackerGroups.size ||
       normalized.groups?.some((group) => {
         const existing = combatTrackerGroups.get(group.representativeId);
@@ -7719,7 +7905,7 @@ export function mountBoardInteractions(store, routes = {}) {
         return group.memberIds?.some((id) => !existing.has(id));
       });
 
-    if (!isInitialLoad && !hasNewerTimestamp && !groupsChanged) {
+    if (!isInitialLoad && !hasNewerVersion && !groupsChanged) {
       return;
     }
 
@@ -7735,6 +7921,10 @@ export function mountBoardInteractions(store, routes = {}) {
       startingCombatTeam = normalized.startingTeam;
       currentTurnTeam = normalized.currentTeam;
       lastActingTeam = normalized.lastTeam;
+      // Apply turn phase from synced state
+      if (normalized.turnPhase) {
+        turnPhase = normalized.turnPhase;
+      }
       roundTurnCount = normalized.roundTurnCount;
       if (!combatActive) {
         maliceCount = 0;
@@ -7770,9 +7960,14 @@ export function mountBoardInteractions(store, routes = {}) {
       if (combatActive && isGmUser()) {
         checkForRoundCompletion();
       }
-      const appliedVersion = normalized.updatedAt || Date.now();
+      // Use sequence number as the version (or fall back to timestamp for backwards compatibility)
+      const appliedVersion = normalized.sequence > 0 ? normalized.sequence : (normalized.updatedAt || Date.now());
       combatStateVersion = appliedVersion;
-      const snapshot = { ...normalized, updatedAt: appliedVersion };
+      // Sync local sequence to match the applied version to prevent duplicate sequence numbers
+      if (normalized.sequence > 0 && normalized.sequence > combatSequence) {
+        combatSequence = normalized.sequence;
+      }
+      const snapshot = { ...normalized, updatedAt: normalized.updatedAt || Date.now(), sequence: appliedVersion };
       lastCombatStateSnapshot = JSON.stringify(snapshot);
       if (normalized.lastEffect) {
         applyTurnEffectFromState(normalized.lastEffect);
@@ -7819,10 +8014,22 @@ export function mountBoardInteractions(store, routes = {}) {
     const startingTeam = normalizeCombatTeam(raw?.startingTeam ?? raw?.initialTeam ?? null);
     const currentTeam = normalizeCombatTeam(raw?.currentTeam ?? raw?.activeTeam ?? null);
     const lastTeam = normalizeCombatTeam(raw?.lastTeam ?? raw?.previousTeam ?? null);
+    // Parse turn phase (idle, pick, active) - derive from state if not provided
+    const rawTurnPhase = raw?.turnPhase ?? raw?.phase ?? null;
+    const parsedTurnPhase = typeof rawTurnPhase === 'string' &&
+      (rawTurnPhase === 'idle' || rawTurnPhase === 'pick' || rawTurnPhase === 'active')
+      ? rawTurnPhase
+      : null;
+    // Derive turn phase if not explicitly provided
+    const derivedTurnPhase = !active ? 'idle' : (activeCombatantId ? 'active' : 'pick');
+    const turnPhaseValue = parsedTurnPhase ?? derivedTurnPhase;
     const roundTurnCount = Math.max(0, toNonNegativeNumber(raw?.roundTurnCount ?? 0));
     const malice = Math.max(0, toNonNegativeNumber(raw?.malice ?? raw?.maliceCount ?? 0));
     const updatedAtRaw = Number(raw?.updatedAt);
     const updatedAt = Number.isFinite(updatedAtRaw) ? Math.max(0, Math.trunc(updatedAtRaw)) : 0;
+    // Sequence number for reliable sync ordering (avoids clock drift issues)
+    const sequenceRaw = Number(raw?.sequence ?? raw?.seq ?? 0);
+    const sequence = Number.isFinite(sequenceRaw) ? Math.max(0, Math.trunc(sequenceRaw)) : 0;
     const turnLock = normalizeTurnLock(raw?.turnLock ?? null);
     const lastEffect = normalizeTurnEffect(raw?.lastEffect ?? raw?.lastEvent ?? null);
     const groups = normalizeCombatGroups(
@@ -7837,9 +8044,11 @@ export function mountBoardInteractions(store, routes = {}) {
       startingTeam,
       currentTeam,
       lastTeam,
+      turnPhase: turnPhaseValue,
       roundTurnCount,
       malice,
       updatedAt,
+      sequence,
       turnLock,
       lastEffect,
       groups,
@@ -8052,6 +8261,11 @@ export function mountBoardInteractions(store, routes = {}) {
     const uniqueCompleted = Array.from(new Set(completed));
     const timestamp = Date.now();
     const effectSnapshot = lastTurnEffect ? { ...lastTurnEffect } : null;
+    // Increment sequence on each snapshot creation to ensure unique ordering
+    combatSequence += 1;
+
+    // Calculate turn phase for explicit state tracking
+    const phase = getTurnPhase();
 
     return {
       active: Boolean(combatActive),
@@ -8061,9 +8275,11 @@ export function mountBoardInteractions(store, routes = {}) {
       startingTeam: normalizeCombatTeam(startingCombatTeam),
       currentTeam: normalizeCombatTeam(currentTurnTeam),
       lastTeam: normalizeCombatTeam(lastActingTeam),
+      turnPhase: phase,
       roundTurnCount: Math.max(0, Math.trunc(roundTurnCount)),
       malice: Math.max(0, Math.trunc(maliceCount)),
       updatedAt: timestamp,
+      sequence: combatSequence,
       turnLock: serializeTurnLockState(),
       lastEffect: effectSnapshot,
       groups: serializeCombatGroups(),
@@ -8158,7 +8374,10 @@ export function mountBoardInteractions(store, routes = {}) {
         Object.prototype.hasOwnProperty.call(existingCombatState, 'maliceCount'));
 
     const snapshot = createCombatStateSnapshot();
-    if (existingNormalized.updatedAt && existingNormalized.updatedAt > combatStateVersion) {
+    // Use sequence numbers for reliable ordering, fall back to timestamp for backwards compatibility
+    const existingVersion = existingNormalized.sequence > 0 ? existingNormalized.sequence : existingNormalized.updatedAt;
+    const isRemoteNewer = existingVersion && existingVersion > combatStateVersion;
+    if (isRemoteNewer) {
       // Remote state is newer - incorporate remote changes but preserve local completedCombatantIds
       // to prevent race conditions where local turn completion is lost
       const roundChanged = existingNormalized.round !== snapshot.round;
@@ -8183,11 +8402,17 @@ export function mountBoardInteractions(store, routes = {}) {
       snapshot.startingTeam = existingNormalized.startingTeam;
       snapshot.currentTeam = existingNormalized.currentTeam;
       snapshot.lastTeam = existingNormalized.lastTeam;
+      snapshot.turnPhase = existingNormalized.turnPhase;
       snapshot.roundTurnCount = existingNormalized.roundTurnCount;
       snapshot.malice = existingNormalized.malice;
       snapshot.turnLock = existingNormalized.turnLock;
       snapshot.lastEffect = existingNormalized.lastEffect;
       snapshot.groups = existingNormalized.groups;
+      // Preserve the higher sequence number
+      if (existingNormalized.sequence > snapshot.sequence) {
+        snapshot.sequence = existingNormalized.sequence + 1;
+        combatSequence = snapshot.sequence;
+      }
 
       // Also update local in-memory state to match remote state
       // This prevents UI from using stale local state when refresh loop runs
@@ -8198,13 +8423,14 @@ export function mountBoardInteractions(store, routes = {}) {
       startingCombatTeam = snapshot.startingTeam;
       currentTurnTeam = snapshot.currentTeam;
       lastActingTeam = snapshot.lastTeam;
+      turnPhase = snapshot.turnPhase;
       roundTurnCount = snapshot.roundTurnCount;
       if (isGmUser() || existingHasMaliceValue) {
         maliceCount = snapshot.malice;
       }
       updateTurnLockState(snapshot.turnLock);
       applyCombatGroupsFromState(snapshot.groups);
-      combatStateVersion = existingNormalized.updatedAt;
+      combatStateVersion = existingVersion;
 
       // Use setter to properly update active combatant with highlights and handlers
       setActiveCombatantId(snapshot.activeCombatantId);
@@ -8264,7 +8490,8 @@ export function mountBoardInteractions(store, routes = {}) {
       }
     }
 
-    combatStateVersion = snapshot.updatedAt;
+    // Use sequence number as version (or fall back to timestamp)
+    combatStateVersion = snapshot.sequence > 0 ? snapshot.sequence : snapshot.updatedAt;
     lastCombatStateSnapshot = serialized;
   }
 
@@ -8987,6 +9214,7 @@ export function mountBoardInteractions(store, routes = {}) {
       return;
     }
 
+    // Check turn lock first
     if (turnLockState.holderId && turnLockState.holderId !== userId) {
       if (!confirmTurnLockOverride(turnLockState.holderName)) {
         notifyTurnLocked(turnLockState.holderName);
@@ -8994,18 +9222,40 @@ export function mountBoardInteractions(store, routes = {}) {
       }
     }
 
-    const expectedTeam = context.expectedTeam ?? currentTurnTeam ?? team;
-    const wasEnemyExpected = normalizeCombatTeam(expectedTeam) === 'enemy';
+    // Check if this is a Sharon "hesitation is weakness" scenario
     const combatantProfileId = normalizeProfileId(getCombatantProfileId(combatantId));
     const isSharonUser = userId === SHARON_PROFILE_ID;
     const isSharonCombatant = combatantProfileId === SHARON_PROFILE_ID;
-    const initiatorName = getCurrentUserName();
+    const isSharonOverride = isSharonUser && isSharonCombatant;
 
-    if (wasEnemyExpected && !(isSharonUser && isSharonCombatant)) {
-      if (!confirmPlayerTurnOverride()) {
-        return;
+    // Validate turn start using state machine
+    const validation = validateTurnStart(combatantId, { sharonOverride: isSharonOverride });
+
+    if (!validation.valid && validation.requiresConfirmation) {
+      // Need user confirmation to proceed
+      if (validation.confirmationType === 'override_active_turn') {
+        // Someone else is actively taking their turn
+        if (!window.confirm('Another token is currently taking their turn. Override and take your turn instead?')) {
+          return;
+        }
+      } else if (validation.confirmationType === 'wrong_team_pick') {
+        // It's the other team's pick phase
+        if (!confirmPlayerTurnOverride()) {
+          return;
+        }
+      } else {
+        // Unknown confirmation type, use generic
+        if (!confirmPlayerTurnOverride()) {
+          return;
+        }
       }
+    } else if (!validation.valid) {
+      // Invalid and no confirmation option
+      return;
     }
+
+    const expectedTeam = context.expectedTeam ?? currentTurnTeam ?? team;
+    const initiatorName = getCurrentUserName();
 
     beginCombatantTurn(combatantId, {
       initiatorProfileId: userId,

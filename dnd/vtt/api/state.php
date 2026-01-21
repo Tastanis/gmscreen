@@ -713,9 +713,11 @@ function normalizeCombatStatePayload($rawCombat): array
         'startingTeam' => null,
         'currentTeam' => null,
         'lastTeam' => null,
+        'turnPhase' => 'idle',
         'roundTurnCount' => 0,
         'malice' => 0,
         'updatedAt' => time(),
+        'sequence' => 0,
         'turnLock' => null,
         'groups' => [],
         'lastEffect' => null,
@@ -767,6 +769,26 @@ function normalizeCombatStatePayload($rawCombat): array
 
     if (isset($rawCombat['updatedAt']) && is_numeric($rawCombat['updatedAt'])) {
         $state['updatedAt'] = max(0, (int) round((float) $rawCombat['updatedAt']));
+    }
+
+    // Sequence number for reliable sync ordering (avoids clock drift issues between clients)
+    if (isset($rawCombat['sequence']) && is_numeric($rawCombat['sequence'])) {
+        $state['sequence'] = max(0, (int) round((float) $rawCombat['sequence']));
+    } elseif (isset($rawCombat['seq']) && is_numeric($rawCombat['seq'])) {
+        $state['sequence'] = max(0, (int) round((float) $rawCombat['seq']));
+    }
+
+    // Turn phase state machine: idle, pick, or active
+    $rawTurnPhase = $rawCombat['turnPhase'] ?? $rawCombat['phase'] ?? null;
+    if (is_string($rawTurnPhase)) {
+        $normalizedPhase = strtolower(trim($rawTurnPhase));
+        if ($normalizedPhase === 'idle' || $normalizedPhase === 'pick' || $normalizedPhase === 'active') {
+            $state['turnPhase'] = $normalizedPhase;
+        }
+    }
+    // Derive turn phase if not explicitly set
+    if ($state['turnPhase'] === 'idle' && $state['active']) {
+        $state['turnPhase'] = $state['activeCombatantId'] ? 'active' : 'pick';
     }
 
     $state['turnLock'] = normalizeCombatTurnLock($rawCombat['turnLock'] ?? null);
