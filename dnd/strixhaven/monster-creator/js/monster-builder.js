@@ -3617,6 +3617,10 @@ function showPrintPreview() {
     const modal = document.getElementById('printPreviewModal');
     const previewBody = document.getElementById('printPreviewBody');
 
+    // Track border color index for rotating colors
+    let borderColorIndex = 0;
+    const totalBorderColors = 8;
+
     const selectedMonsters = Array.from(selectedForPrint)
         .map(monsterId => {
             const monster = monsterData.monsters[monsterId];
@@ -3624,7 +3628,9 @@ function showPrintPreview() {
                 return null;
             }
 
-            return renderMonsterForPrint(monsterId, monster);
+            // Assign rotating border color (1-8)
+            borderColorIndex = (borderColorIndex % totalBorderColors) + 1;
+            return renderMonsterForPrint(monsterId, monster, { borderColor: borderColorIndex });
         })
         .filter(Boolean);
 
@@ -3653,10 +3659,10 @@ function closePrintPreview() {
 function renderMonsterForPrint(monsterId, monsterData, options = {}) {
     if (!monsterData) return '<div class="print-monster">Monster not found</div>';
 
-    const { isFullPage = false } = options;
+    const { isFullPage = false, borderColor = 1 } = options;
     const classes = ['print-monster', isFullPage ? 'print-monster-full' : 'print-monster-normal'];
 
-    let html = `<div class="${classes.join(' ')}" data-monster-id="${monsterId}" data-print-size="${isFullPage ? 'full' : 'normal'}">`;
+    let html = `<div class="${classes.join(' ')}" data-monster-id="${monsterId}" data-print-size="${isFullPage ? 'full' : 'normal'}" data-border-color="${borderColor}">`;
     
     // Add image if available
     if (monsterData.image) {
@@ -3740,15 +3746,15 @@ function renderMonsterForPrint(monsterId, monsterData, options = {}) {
             const categoryAbilities = monsterData.abilities[category.key] || [];
             if (categoryAbilities.length > 0) {
                 hasAnyAbilities = true;
-                html += `<div class="print-ability-category">`;
+                html += `<div class="print-ability-category" data-category="${category.key}">`;
                 html += `<h3 class="print-category-name">${category.name}</h3>`;
-                
+
                 categoryAbilities.forEach(ability => {
                     if (ability && ability.name) {
                         html += renderAbilityForPrint(ability, category.key);
                     }
                 });
-                
+
                 html += '</div>';
             }
         });
