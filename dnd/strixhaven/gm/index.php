@@ -532,6 +532,9 @@ $panelTitles = loadPanelTitles($panelTitlesFile);
                 <button onclick="exportNotes()">Export Notes</button>
                 <button onclick="window.location.href='../../logout.php'">Logout</button>
             </div>
+
+            <!-- Simple Version Display -->
+            <div style="position: absolute; bottom: 5px; right: 10px; font-size: 10px; color: rgba(255,255,255,0.5);">1.0</div>
         </main>
 
         <!-- Right Side Panel 1 -->
