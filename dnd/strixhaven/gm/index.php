@@ -521,7 +521,7 @@ $panelTitles = loadPanelTitles($panelTitlesFile);
                 <h1>Strixhaven Campaign</h1>
                 <div class="session-info">
                     <span id="session-date"></span>
-                    <span id="auto-save-status">Popup Mode Active</span>
+                    <span class="version-display">v<?php echo Version::get(); ?></span>
                 </div>
             </div>
             
@@ -533,8 +533,6 @@ $panelTitles = loadPanelTitles($panelTitlesFile);
                 <button onclick="window.location.href='../../logout.php'">Logout</button>
             </div>
 
-            <!-- Simple Version Display -->
-            <div style="position: absolute; bottom: 5px; right: 10px; font-size: 10px; color: rgba(255,255,255,0.5);">1.0</div>
         </main>
 
         <!-- Right Side Panel 1 -->
@@ -605,12 +603,6 @@ $panelTitles = loadPanelTitles($panelTitlesFile);
     </div>
 
     <!-- Dice Roller will be created dynamically by JavaScript -->
-
-    <!-- Version Display -->
-    <div class="version-footer">
-        <span class="version-info"><?php echo Version::displayVersion(); ?></span>
-        <span class="version-updated">Updated: <?php echo Version::getLastUpdated(); ?></span>
-    </div>
 
     <!-- Scripts -->
     <script src="js/rich-text-editor.js"></script>

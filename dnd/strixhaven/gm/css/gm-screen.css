@@ -1193,6 +1193,11 @@ body {
     text-shadow: 1px 1px 4px rgba(0, 0, 0, 0.8);
 }
 
+.version-display {
+    font-weight: 500;
+    color: rgba(255, 255, 255, 0.85);
+}
+
 .quick-actions button {
     background: rgba(0, 0, 0, 0.7); /* Darker background for better visibility */
     border: 1px solid rgba(255, 255, 255, 0.4);
