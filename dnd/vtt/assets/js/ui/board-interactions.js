@@ -11280,11 +11280,6 @@ export function mountBoardInteractions(store, routes = {}) {
   }
 
   function commitHitPointsInput(rawValue) {
-    const state = boardApi.getState?.() ?? {};
-    if (!state?.user?.isGM) {
-      return false;
-    }
-
     if (!activeTokenSettingsId) {
       return false;
     }
@@ -13260,11 +13255,6 @@ export function mountBoardInteractions(store, routes = {}) {
   }
 
   function applyConditionToPlacement(placementId, condition) {
-    const state = boardApi.getState?.() ?? {};
-    if (!state?.user?.isGM) {
-      return;
-    }
-
     if (!placementId) {
       return false;
     }
