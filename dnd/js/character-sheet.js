@@ -1053,26 +1053,26 @@ function createRelationshipElement(relationship, index) {
                 <div class="form-group">
                     <label>NPC Name:</label>
                     <input type="text" class="npc-name-input" value="${relationship.npc_name || ''}"
-                           onchange="updateRelationshipField(${index}, 'npc_name', this.value)">
+                           oninput="updateRelationshipField(${index}, 'npc_name', this.value)">
                 </div>
                 <div class="form-group">
                     <label>Points:</label>
                     <input type="text" class="relationship-points-input" value="${relationship.points || ''}"
-                           onchange="updateRelationshipField(${index}, 'points', this.value)">
+                           oninput="updateRelationshipField(${index}, 'points', this.value)">
                 </div>
                 <div class="form-group">
                     <label>Boon:</label>
                     <input type="text" value="${relationship.boon || ''}"
-                           onchange="updateRelationshipField(${index}, 'boon', this.value)">
+                           oninput="updateRelationshipField(${index}, 'boon', this.value)">
                 </div>
                 <div class="form-group">
                     <label>Bane:</label>
                     <input type="text" value="${relationship.bane || ''}"
-                           onchange="updateRelationshipField(${index}, 'bane', this.value)">
+                           oninput="updateRelationshipField(${index}, 'bane', this.value)">
                 </div>
                 <div class="form-group">
                     <label>Extra:</label>
-                    <textarea rows="3" onchange="updateRelationshipField(${index}, 'extra', this.value)">${relationship.extra || ''}</textarea>
+                    <textarea rows="3" oninput="updateRelationshipField(${index}, 'extra', this.value)">${relationship.extra || ''}</textarea>
                 </div>
                 <button class="btn-danger" onclick="deleteRelationship(${index})">Delete</button>
             </div>
