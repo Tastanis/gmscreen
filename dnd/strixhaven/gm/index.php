@@ -607,9 +607,9 @@ $panelTitles = loadPanelTitles($panelTitlesFile);
     <!-- Dice Roller will be created dynamically by JavaScript -->
 
     <!-- Version Display -->
-    <div class="version-footer" style="position: fixed; bottom: 10px; right: 10px; font-size: 0.8em; color: #666; background: rgba(255,255,255,0.9); padding: 5px 10px; border-radius: 5px; box-shadow: 0 2px 5px rgba(0,0,0,0.1);">
+    <div class="version-footer">
         <span class="version-info"><?php echo Version::displayVersion(); ?></span>
-        <span class="version-updated" style="margin-left: 10px;">Updated: <?php echo Version::getLastUpdated(); ?></span>
+        <span class="version-updated">Updated: <?php echo Version::getLastUpdated(); ?></span>
     </div>
 
     <!-- Scripts -->
