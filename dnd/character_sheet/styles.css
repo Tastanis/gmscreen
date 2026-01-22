@@ -137,17 +137,23 @@ body {
   border: 1px solid var(--border);
   border-radius: 4px;
   overflow: hidden;
+  /* Subtle shadow to give tabs section definition */
+  box-shadow: 0 2px 6px rgba(0, 0, 0, 0.25);
 }
 
 .tab {
   padding: 10px 6px;
   border: none;
-  background: var(--panel-alt);
+  /* Slightly darker, cooler tone to differentiate from main content */
+  background: linear-gradient(180deg, #3d2518 0%, #2f1a10 100%);
   color: var(--muted);
   font-weight: 600;
   letter-spacing: 0.04em;
   cursor: pointer;
   border-right: 1px solid var(--border);
+  /* Subtle inner shadow for depth */
+  box-shadow: inset 0 -2px 4px rgba(0, 0, 0, 0.2);
+  transition: background 0.15s ease, color 0.15s ease;
 }
 
 .tab:last-child {
@@ -155,8 +161,13 @@ body {
 }
 
 .tab--active {
-  background: var(--panel);
+  /* Active tab is brighter with accent highlight */
+  background: linear-gradient(180deg, #4a2d1d 0%, #3a2214 100%);
   color: var(--text);
+  box-shadow:
+    inset 0 2px 4px rgba(213, 164, 94, 0.15),
+    inset 0 -1px 2px rgba(0, 0, 0, 0.2);
+  border-bottom: 2px solid var(--accent);
 }
 
 .sheet__content {
@@ -241,14 +252,30 @@ body {
 }
 
 .marip-block {
-  background: linear-gradient(135deg, #2a1a12, #301d14);
-  border: 1px solid var(--accent);
-  border-radius: 4px;
-  padding: 14px;
+  background: linear-gradient(135deg, #2a1a12 0%, #352016 50%, #2a1a12 100%);
+  border: 2px solid #5a3d28;
+  border-radius: 6px;
+  padding: 10px;
   display: flex;
   flex-direction: column;
   gap: 6px;
-  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.04);
+  /* 3D Stone tablet effect - raised appearance */
+  box-shadow:
+    /* Outer drop shadow for raised effect */
+    4px 4px 8px rgba(0, 0, 0, 0.5),
+    2px 2px 4px rgba(0, 0, 0, 0.3),
+    /* Highlight on top-left edge (light hitting raised surface) */
+    inset 2px 2px 4px rgba(255, 255, 255, 0.08),
+    inset 1px 1px 2px rgba(213, 164, 94, 0.15),
+    /* Shadow on bottom-right edge (depth) */
+    inset -2px -2px 4px rgba(0, 0, 0, 0.3),
+    inset -1px -1px 2px rgba(0, 0, 0, 0.2);
+  /* Chiseled stone border effect */
+  border-top-color: #7a5a3a;
+  border-left-color: #6a4a30;
+  border-right-color: #4a3020;
+  border-bottom-color: #3a2518;
+  position: relative;
 }
 
 .quick-resources {
