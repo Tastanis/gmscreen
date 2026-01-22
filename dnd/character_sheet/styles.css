@@ -252,46 +252,61 @@ body {
 }
 
 .marip-block {
-  background: linear-gradient(135deg, #352016 0%, #2a1a12 50%, #251510 100%);
-  border-radius: 6px;
-  padding: 12px;
   display: flex;
   flex-direction: column;
   gap: 6px;
+}
+
+/* 3D Stone tablet effect for attribute cards */
+.marip-block .stat-card {
+  background: linear-gradient(145deg, #4a3525 0%, #3a2518 60%, #2d1b12 100%);
+  border-radius: 6px;
   position: relative;
 
-  /* Enhanced 3D Stone tablet effect - raised appearance */
+  /* Hard shadow creates visible "thickness" - the key to 3D look */
   box-shadow:
-    /* Deep outer shadow - makes it look raised */
-    6px 6px 12px rgba(0, 0, 0, 0.7),
-    3px 3px 6px rgba(0, 0, 0, 0.5),
-    /* Bright highlight on top-left - key for 3D look */
-    inset 3px 3px 6px rgba(255, 220, 180, 0.15),
-    /* Dark shadow on bottom-right */
-    inset -3px -3px 6px rgba(0, 0, 0, 0.5);
+    /* Solid edge shadow - simulates stone thickness */
+    4px 4px 0 #1a0f08,
+    5px 5px 0 #150c06,
+    6px 6px 0 #100904,
+    /* Soft ambient shadow */
+    8px 8px 16px rgba(0, 0, 0, 0.5);
 
-  /* Chiseled stone border effect - beveled edge */
+  /* Beveled border - light on top/left, dark on bottom/right */
   border: 3px solid;
-  border-top-color: #6a5040;
-  border-left-color: #5a4030;
-  border-right-color: #3a2518;
-  border-bottom-color: #2a1810;
+  border-top-color: #8a6a50;
+  border-left-color: #7a5a40;
+  border-right-color: #3a2010;
+  border-bottom-color: #2a1508;
 }
 
-/* Raised inner bevel effect for stone tablets */
-.marip-block::before {
+/* Highlight shine on top face of stone tablets */
+.marip-block .stat-card::before {
   content: '';
   position: absolute;
-  inset: 3px;
-  border-radius: 4px;
-  background: linear-gradient(135deg, #3d2518 0%, #2d1b12 100%);
-  box-shadow:
-    inset 2px 2px 4px rgba(255, 200, 150, 0.12),
-    inset -2px -2px 4px rgba(0, 0, 0, 0.4);
-  z-index: 0;
+  top: 0;
+  left: 0;
+  right: 0;
+  height: 50%;
+  background: linear-gradient(180deg, rgba(255, 220, 180, 0.12) 0%, transparent 100%);
+  border-radius: 4px 4px 0 0;
+  pointer-events: none;
 }
 
-.marip-block > * {
+/* Inner embossed edge effect */
+.marip-block .stat-card::after {
+  content: '';
+  position: absolute;
+  inset: 2px;
+  border-radius: 4px;
+  box-shadow:
+    inset 2px 2px 4px rgba(255, 200, 150, 0.15),
+    inset -2px -2px 4px rgba(0, 0, 0, 0.4);
+  pointer-events: none;
+}
+
+/* Ensure stat card content stays above pseudo-elements */
+.marip-block .stat-card > * {
   position: relative;
   z-index: 1;
 }
