@@ -252,42 +252,46 @@ body {
 }
 
 .marip-block {
-  background: linear-gradient(135deg, #352016 0%, #2a1a12 50%, #251510 100%);
-  border-radius: 6px;
-  padding: 12px;
+  /* Lighter face color for better contrast against dark background */
+  background: linear-gradient(145deg, #4a3525 0%, #3d2818 60%, #352016 100%);
+  border-radius: 8px;
+  padding: 14px;
   display: flex;
   flex-direction: column;
   gap: 6px;
   position: relative;
 
-  /* Enhanced 3D Stone tablet effect - raised appearance */
+  /* 3D "Raised Platform" stone tablet effect */
   box-shadow:
-    /* Deep outer shadow - makes it look raised */
-    6px 6px 12px rgba(0, 0, 0, 0.7),
-    3px 3px 6px rgba(0, 0, 0, 0.5),
-    /* Bright highlight on top-left - key for 3D look */
-    inset 3px 3px 6px rgba(255, 220, 180, 0.15),
-    /* Dark shadow on bottom-right */
-    inset -3px -3px 6px rgba(0, 0, 0, 0.5);
+    /* Hard shadow layers - creates visible stone "thickness/edge" */
+    4px 4px 0 #1a0f08,
+    5px 5px 0 #1a0f08,
+    6px 6px 0 #1a0f08,
+    /* Soft ambient shadow underneath for depth */
+    10px 10px 20px rgba(0, 0, 0, 0.6),
+    /* Inner highlights for embossed surface */
+    inset 3px 3px 8px rgba(255, 220, 180, 0.2),
+    inset -3px -3px 8px rgba(0, 0, 0, 0.5);
 
-  /* Chiseled stone border effect - beveled edge */
-  border: 3px solid;
-  border-top-color: #6a5040;
-  border-left-color: #5a4030;
-  border-right-color: #3a2518;
-  border-bottom-color: #2a1810;
+  /* Thick beveled border - visible edge definition */
+  border: 4px solid;
+  border-top-color: #8a6a50;    /* Bright - light hitting top */
+  border-left-color: #7a5a40;   /* Medium-light */
+  border-right-color: #3a2010;  /* Dark - shadow side */
+  border-bottom-color: #2a1508; /* Darkest - underside */
 }
 
-/* Raised inner bevel effect for stone tablets */
+/* Top face highlight shine for realistic stone reflection */
 .marip-block::before {
   content: '';
   position: absolute;
-  inset: 3px;
-  border-radius: 4px;
-  background: linear-gradient(135deg, #3d2518 0%, #2d1b12 100%);
-  box-shadow:
-    inset 2px 2px 4px rgba(255, 200, 150, 0.12),
-    inset -2px -2px 4px rgba(0, 0, 0, 0.4);
+  top: 4px;
+  left: 4px;
+  right: 4px;
+  height: 40%;
+  background: linear-gradient(180deg, rgba(255, 220, 180, 0.12) 0%, transparent 100%);
+  border-radius: 6px 6px 0 0;
+  pointer-events: none;
   z-index: 0;
 }
 
