@@ -311,6 +311,73 @@ body {
   z-index: 1;
 }
 
+/* Subtle 3D button effect for field-cards (less extreme than stat-cards) */
+.identity--primary .field-card,
+.bottom-details .field-card,
+.vital-grid .field-card,
+.bars .field-card,
+.quick-resources .field-card {
+  background: linear-gradient(145deg, #3d2a1e 0%, #352016 60%, #2d1b12 100%);
+  border-radius: 4px;
+  position: relative;
+
+  /* Subtle shadow for depth - less pronounced than stat-cards */
+  box-shadow:
+    2px 2px 0 #1a0f08,
+    3px 3px 0 #150c06,
+    4px 4px 8px rgba(0, 0, 0, 0.35);
+
+  /* Beveled border - light on top/left, dark on bottom/right */
+  border: 2px solid;
+  border-top-color: #6a5240;
+  border-left-color: #5a4230;
+  border-right-color: #3a2010;
+  border-bottom-color: #2a1508;
+}
+
+/* Highlight shine on top face */
+.identity--primary .field-card::before,
+.bottom-details .field-card::before,
+.vital-grid .field-card::before,
+.bars .field-card::before,
+.quick-resources .field-card::before {
+  content: '';
+  position: absolute;
+  top: 0;
+  left: 0;
+  right: 0;
+  height: 50%;
+  background: linear-gradient(180deg, rgba(255, 220, 180, 0.08) 0%, transparent 100%);
+  border-radius: 3px 3px 0 0;
+  pointer-events: none;
+}
+
+/* Inner embossed edge effect */
+.identity--primary .field-card::after,
+.bottom-details .field-card::after,
+.vital-grid .field-card::after,
+.bars .field-card::after,
+.quick-resources .field-card::after {
+  content: '';
+  position: absolute;
+  inset: 1px;
+  border-radius: 3px;
+  box-shadow:
+    inset 1px 1px 3px rgba(255, 200, 150, 0.1),
+    inset -1px -1px 3px rgba(0, 0, 0, 0.3);
+  pointer-events: none;
+}
+
+/* Ensure field-card content stays above pseudo-elements */
+.identity--primary .field-card > *,
+.bottom-details .field-card > *,
+.vital-grid .field-card > *,
+.bars .field-card > *,
+.quick-resources .field-card > * {
+  position: relative;
+  z-index: 1;
+}
+
 .quick-resources {
   display: grid;
   grid-template-columns: repeat(auto-fit, minmax(160px, 1fr));
