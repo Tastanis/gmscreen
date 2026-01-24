@@ -15,6 +15,7 @@ require_once __DIR__ . '/../../includes/strix-nav.php';
     <meta http-equiv="X-UA-Compatible" content="IE=edge" />
     <meta name="viewport" content="width=device-width, initial-scale=1" />
     <title>VTT Workspace</title>
+    <script src="https://js.pusher.com/8.4.0/pusher.min.js"></script>
     <link rel="stylesheet" href="../css/style.css" />
     <link rel="stylesheet" href="assets/css/base.css?v=<?= $assetVersion ?>" />
     <link rel="stylesheet" href="assets/css/layout.css?v=<?= $assetVersion ?>" />
@@ -36,6 +37,12 @@ require_once __DIR__ . '/../../includes/strix-nav.php';
         window.vttConfig = <?= json_encode($config, JSON_HEX_TAG | JSON_HEX_APOS | JSON_HEX_QUOT | JSON_HEX_AMP) ?>;
         window.chatHandlerUrl = <?= json_encode($config['chatHandlerUrl'] ?? ($routes['chat'] ?? '/dnd/chat_handler.php'), JSON_HEX_TAG | JSON_HEX_APOS | JSON_HEX_QUOT | JSON_HEX_AMP) ?>;
         window.chatParticipants = <?= json_encode($config['chatParticipants'] ?? [], JSON_HEX_TAG | JSON_HEX_APOS | JSON_HEX_QUOT | JSON_HEX_AMP) ?>;
+        // Pusher configuration for real-time sync
+        window.vttPusherConfig = {
+            key: 'c32516844b741a8b1772',
+            cluster: 'us3',
+            channel: 'vtt-board'
+        };
     </script>
     <script src="../js/chat-panel.js?v=<?= $assetVersion ?>"></script>
     <script type="module" src="assets/js/bootstrap.js?v=<?= $assetVersion ?>"></script>
