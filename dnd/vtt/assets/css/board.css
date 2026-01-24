@@ -3833,3 +3833,355 @@
   border-color: rgba(96, 165, 250, 0.5);
   color: #60a5fa;
 }
+
+/* =============================================================================
+   STONE BUTTON STYLING FOR VTT HEADER
+   Matches the character sheet and dashboard aesthetic
+   ============================================================================= */
+
+/* Stone button base style for all VTT header buttons */
+.vtt-board__actions .btn {
+  background: linear-gradient(145deg, #4a3525 0%, #3a2518 60%, #2d1b12 100%);
+  border-radius: 4px;
+  position: relative;
+
+  /* Hard shadow creates visible "thickness" - the key to 3D look */
+  box-shadow:
+    2px 2px 0 #1a0f08,
+    3px 3px 0 #150c06,
+    4px 4px 6px rgba(0, 0, 0, 0.4);
+
+  /* Beveled border - light on top/left, dark on bottom/right */
+  border: 2px solid;
+  border-top-color: #8a6a50;
+  border-left-color: #7a5a40;
+  border-right-color: #3a2010;
+  border-bottom-color: #2a1508;
+
+  color: var(--vtt-text-primary);
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+  padding: 0.4rem 0.75rem;
+  font-size: 0.78rem;
+  transition: transform 0.1s ease, box-shadow 0.1s ease;
+}
+
+/* Highlight shine on top face of stone buttons */
+.vtt-board__actions .btn::before {
+  content: '';
+  position: absolute;
+  top: 0;
+  left: 0;
+  right: 0;
+  height: 50%;
+  background: linear-gradient(180deg, rgba(255, 220, 180, 0.1) 0%, transparent 100%);
+  border-radius: 3px 3px 0 0;
+  pointer-events: none;
+}
+
+/* Inner embossed edge effect */
+.vtt-board__actions .btn::after {
+  content: '';
+  position: absolute;
+  inset: 1px;
+  border-radius: 3px;
+  box-shadow:
+    inset 1px 1px 2px rgba(255, 200, 150, 0.1),
+    inset -1px -1px 2px rgba(0, 0, 0, 0.3);
+  pointer-events: none;
+}
+
+/* Button hover state */
+.vtt-board__actions .btn:hover {
+  background: linear-gradient(145deg, #5a4530 0%, #4a3020 60%, #3a2518 100%);
+  transform: translateY(-1px);
+  box-shadow:
+    2px 3px 0 #1a0f08,
+    3px 4px 0 #150c06,
+    5px 5px 8px rgba(0, 0, 0, 0.45);
+}
+
+/* Button active/pressed state */
+.vtt-board__actions .btn:active {
+  transform: translateY(1px);
+  box-shadow:
+    1px 1px 0 #1a0f08,
+    2px 2px 4px rgba(0, 0, 0, 0.35);
+}
+
+/* Active toggle state for stone buttons */
+.vtt-board__actions .btn.is-active,
+.vtt-board__actions .btn[aria-pressed="true"] {
+  background: linear-gradient(145deg, #5a4030 0%, #4a3020 60%, #3a2015 100%);
+  border-top-color: #9a7a60;
+  border-left-color: #8a6a50;
+  box-shadow:
+    inset 2px 2px 4px rgba(0, 0, 0, 0.3),
+    1px 1px 0 #1a0f08;
+  color: #d5a45e;
+}
+
+/* Disabled button state */
+.vtt-board__actions .btn:disabled,
+.vtt-board__actions .btn[disabled] {
+  opacity: 0.5;
+  cursor: not-allowed;
+  box-shadow:
+    1px 1px 0 #1a0f08,
+    2px 2px 3px rgba(0, 0, 0, 0.3);
+}
+
+.vtt-board__actions .btn:disabled:hover,
+.vtt-board__actions .btn[disabled]:hover {
+  transform: none;
+  box-shadow:
+    1px 1px 0 #1a0f08,
+    2px 2px 3px rgba(0, 0, 0, 0.3);
+}
+
+/* =============================================================================
+   COMBAT TRACKER STONE PANEL STYLING
+   ============================================================================= */
+
+/* Combat tracker container with stone styling */
+.vtt-combat-tracker {
+  background: linear-gradient(145deg, #3d2a1e 0%, #352016 60%, #2d1b12 100%);
+  border-radius: 6px;
+  position: relative;
+
+  /* Hard shadow creates visible "thickness" */
+  box-shadow:
+    3px 3px 0 #1a0f08,
+    4px 4px 0 #150c06,
+    5px 5px 0 #100904,
+    6px 6px 12px rgba(0, 0, 0, 0.4);
+
+  /* Beveled border - light on top/left, dark on bottom/right */
+  border: 3px solid;
+  border-top-color: #7a5a45;
+  border-left-color: #6a4a35;
+  border-right-color: #3a2010;
+  border-bottom-color: #2a1508;
+
+  padding: 0.5rem 0 0.6rem;
+}
+
+/* Highlight shine on tracker */
+.vtt-combat-tracker::before {
+  content: '';
+  position: absolute;
+  top: 0;
+  left: 0;
+  right: 0;
+  height: 40%;
+  background: linear-gradient(180deg, rgba(255, 220, 180, 0.06) 0%, transparent 100%);
+  border-radius: 4px 4px 0 0;
+  pointer-events: none;
+  z-index: 0;
+}
+
+/* Inner embossed edge effect */
+.vtt-combat-tracker::after {
+  content: '';
+  position: absolute;
+  inset: 2px;
+  border-radius: 4px;
+  box-shadow:
+    inset 2px 2px 4px rgba(255, 200, 150, 0.08),
+    inset -2px -2px 4px rgba(0, 0, 0, 0.3);
+  pointer-events: none;
+  z-index: 0;
+}
+
+/* Ensure segments are above pseudo-elements */
+.vtt-combat-tracker__segment {
+  position: relative;
+  z-index: 1;
+  padding: 0 0.5rem 0.6rem;
+}
+
+/* Combat tracker section headings with decorative underline */
+.vtt-combat-tracker__heading {
+  margin: 0 0 0.35rem;
+  padding-bottom: 0.35rem;
+  font-weight: 700;
+  font-size: 0.78rem;
+  text-align: center;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  color: var(--vtt-text-primary);
+  position: relative;
+}
+
+/* Decorative line under heading */
+.vtt-combat-tracker__heading::after {
+  content: '';
+  position: absolute;
+  bottom: 0;
+  left: 50%;
+  transform: translateX(-50%);
+  width: 70%;
+  height: 2px;
+  background: linear-gradient(90deg,
+    transparent 0%,
+    #d5a45e 15%,
+    #d5a45e 85%,
+    transparent 100%
+  );
+  border-radius: 1px;
+  box-shadow: 0 1px 2px rgba(0, 0, 0, 0.3);
+}
+
+/* Combat tracker sections (waiting/completed) */
+.vtt-combat-tracker__section {
+  background: rgba(45, 27, 18, 0.6);
+  border-radius: 4px;
+  border: 1px solid rgba(122, 84, 53, 0.4);
+  box-shadow:
+    inset 0 2px 4px rgba(0, 0, 0, 0.2),
+    inset 0 -1px 2px rgba(255, 200, 150, 0.05);
+  position: relative;
+  z-index: 1;
+  min-height: 3rem;
+  padding: 0.4rem;
+}
+
+/* Waiting section - warmer tone */
+.vtt-combat-tracker__section--waiting {
+  background: rgba(60, 45, 30, 0.7);
+  border-color: rgba(140, 100, 60, 0.4);
+}
+
+/* Completed section - slightly cooler/darker tone */
+.vtt-combat-tracker__section--completed {
+  background: rgba(45, 35, 30, 0.7);
+  border-color: rgba(100, 80, 60, 0.4);
+}
+
+/* Combat tracker divider */
+.vtt-combat-tracker__divider {
+  width: 2px;
+  background: linear-gradient(to bottom,
+    transparent 5%,
+    rgba(122, 84, 53, 0.6) 20%,
+    rgba(122, 84, 53, 0.6) 80%,
+    transparent 95%
+  );
+  position: relative;
+  z-index: 1;
+}
+
+/* =============================================================================
+   TOP-RIGHT SCENE META STYLING
+   ============================================================================= */
+
+/* Scene meta container with stone panel effect */
+.vtt-board__scene-meta {
+  background: linear-gradient(145deg, #3d2a1e 0%, #352016 60%, #2d1b12 100%);
+  border-radius: 6px;
+  padding: 0.6rem 0.8rem 0.5rem;
+  position: relative;
+
+  /* Hard shadow creates visible "thickness" */
+  box-shadow:
+    3px 3px 0 #1a0f08,
+    4px 4px 0 #150c06,
+    5px 5px 10px rgba(0, 0, 0, 0.4);
+
+  /* Beveled border */
+  border: 2px solid;
+  border-top-color: #6a5240;
+  border-left-color: #5a4230;
+  border-right-color: #3a2010;
+  border-bottom-color: #2a1508;
+
+  min-width: 140px;
+}
+
+/* Shine effect on scene meta */
+.vtt-board__scene-meta::before {
+  content: '';
+  position: absolute;
+  top: 0;
+  left: 0;
+  right: 0;
+  height: 50%;
+  background: linear-gradient(180deg, rgba(255, 220, 180, 0.06) 0%, transparent 100%);
+  border-radius: 4px 4px 0 0;
+  pointer-events: none;
+}
+
+/* Scene title styling */
+.vtt-board__title {
+  margin: 0;
+  font-size: 1rem;
+  font-weight: 700;
+  letter-spacing: 0.03em;
+  color: var(--vtt-text-primary);
+  text-shadow: 1px 1px 2px rgba(0, 0, 0, 0.4);
+  position: relative;
+  padding-bottom: 0.3rem;
+}
+
+/* Decorative line under title */
+.vtt-board__title::after {
+  content: '';
+  position: absolute;
+  bottom: 0;
+  right: 0;
+  width: 80%;
+  height: 2px;
+  background: linear-gradient(90deg,
+    transparent 0%,
+    #d5a45e 25%,
+    #d5a45e 100%
+  );
+  border-radius: 1px;
+}
+
+/* Round tracker stone badge */
+.vtt-board__round-tracker {
+  background: linear-gradient(145deg, #4a3525 0%, #3a2518 100%);
+  border-radius: 4px;
+  padding: 0.25rem 0.6rem;
+  border: 1px solid;
+  border-top-color: #7a5a40;
+  border-left-color: #6a4a30;
+  border-right-color: #3a2010;
+  border-bottom-color: #2a1508;
+  box-shadow:
+    1px 1px 0 #150c06,
+    2px 2px 4px rgba(0, 0, 0, 0.3);
+}
+
+.vtt-board__round-label {
+  color: var(--vtt-text-muted);
+  font-size: 0.65rem;
+}
+
+.vtt-board__round-value {
+  color: #d5a45e;
+  font-size: 1rem;
+  font-weight: 700;
+}
+
+/* Turn indicator styling */
+.vtt-board__turn-indicator {
+  margin: 0.25rem 0 0;
+  padding: 0.2rem 0.5rem;
+  font-size: 0.8rem;
+  font-weight: 600;
+  color: var(--vtt-text-primary);
+  letter-spacing: 0.02em;
+  background: rgba(45, 27, 18, 0.6);
+  border-radius: 3px;
+  border: 1px solid rgba(122, 84, 53, 0.3);
+  text-align: center;
+}
+
+/* Ensure content stays above pseudo-elements */
+.vtt-board__scene-meta > * {
+  position: relative;
+  z-index: 1;
+}
