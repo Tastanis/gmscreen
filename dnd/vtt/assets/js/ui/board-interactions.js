@@ -13,6 +13,7 @@ import {
   isDrawingToolMounted,
 } from './drawing-tool.js';
 import { persistBoardState, persistCombatState } from '../services/board-state-service.js';
+import { initializePusher, getSocketId, isPusherConnected } from '../services/pusher-service.js';
 import {
   PLAYER_VISIBLE_TOKEN_FOLDER,
   normalizeMonsterSnapshot,
@@ -270,9 +271,12 @@ export function createBoardStatePoller({
       return { stop() {} };
     }
 
-    // Polling interval for board state - lowered for faster sync
-    // Keep in sync with COMBAT_STATE_REFRESH_INTERVAL_MS for consistent updates
-    const BOARD_STATE_POLL_INTERVAL_MS = 1000;
+    // Polling interval for board state
+    // When Pusher is connected, we use a longer interval as a fallback
+    // When Pusher is not connected, we poll more frequently
+    const BOARD_STATE_POLL_INTERVAL_MS = isPusherConnected()
+      ? 10000  // 10 seconds when Pusher is connected (fallback only)
+      : 1000;  // 1 second when no real-time connection
     poll();
     const intervalId = windowRef.setInterval(poll, BOARD_STATE_POLL_INTERVAL_MS);
     return {
@@ -1142,6 +1146,15 @@ export function mountBoardInteractions(store, routes = {}) {
   // This handles the window between save completion and server state propagation
   let lastBoardStateSaveCompletedAt = 0;
   const SAVE_GRACE_PERIOD_MS = 1500;
+
+  // Pusher real-time sync state
+  let pusherInterface = null;
+  let pusherConnected = false;
+  let currentBoardStateVersion = 0;
+  // Reduced polling interval when Pusher is connected (fallback only)
+  const PUSHER_FALLBACK_POLL_INTERVAL_MS = 10000;
+  // Normal polling interval when Pusher is not available
+  const NORMAL_POLL_INTERVAL_MS = 1000;
   let suppressCombatStateSync = false;
   let pendingCombatStateSync = false;
   let combatStateVersion = 0;
@@ -1684,6 +1697,18 @@ export function mountBoardInteractions(store, routes = {}) {
     }
 
     snapshot.metadata = metadata;
+
+    // Include current version for server-side conflict detection
+    if (currentBoardStateVersion > 0) {
+      snapshot._version = currentBoardStateVersion;
+    }
+
+    // Include Pusher socket ID so server can exclude us from the broadcast
+    const socketId = getSocketId?.();
+    if (socketId) {
+      snapshot._socketId = socketId;
+    }
+
     boardApi.updateState?.((draft) => {
       const boardDraft = ensureBoardStateDraft(draft);
       const metadataDraft = ensureBoardMetadataDraft(boardDraft);
@@ -1717,6 +1742,15 @@ export function mountBoardInteractions(store, routes = {}) {
           lastPersistedBoardStateHash = snapshotHash;
           lastBoardStateSaveCompletedAt = Date.now();
           pendingBoardStateSave = null;
+
+          // Update version from server response
+          const newVersion = result?.data?._version;
+          if (typeof newVersion === 'number' && newVersion > currentBoardStateVersion) {
+            currentBoardStateVersion = newVersion;
+            if (pusherInterface?.setLastAppliedVersion) {
+              pusherInterface.setLastAppliedVersion(newVersion);
+            }
+          }
         }
         return result;
       });
@@ -2021,6 +2055,181 @@ export function mountBoardInteractions(store, routes = {}) {
       }
       applyCombatStateFromBoardState(state);
     }, COMBAT_STATE_REFRESH_INTERVAL_MS);
+  }
+
+  /**
+   * Initialize Pusher for real-time state synchronization.
+   * This provides instant updates instead of relying on polling.
+   */
+  function initializePusherSync() {
+    // Get Pusher config from window (set by layout.php or via vttConfig from bootstrap)
+    const pusherConfig = typeof window !== 'undefined'
+      ? (window.vttPusherConfig || window.vttConfig?.pusher)
+      : null;
+    if (!pusherConfig || !pusherConfig.key || !pusherConfig.cluster) {
+      console.log('[VTT] Pusher not configured, using polling only');
+      return;
+    }
+
+    // Initialize the board state version from current state
+    const currentState = boardApi.getState?.();
+    const initialVersion = currentState?.boardState?._version;
+    if (typeof initialVersion === 'number') {
+      currentBoardStateVersion = initialVersion;
+    }
+
+    pusherInterface = initializePusher({
+      key: pusherConfig.key,
+      cluster: pusherConfig.cluster,
+      channel: pusherConfig.channel || 'vtt-board',
+      onStateUpdate: handlePusherStateUpdate,
+      onConnectionStateChange: handlePusherConnectionChange,
+      getCurrentUserId: getCurrentUserId,
+      getLastVersion: () => currentBoardStateVersion,
+    });
+
+    console.log('[VTT] Pusher sync initialized');
+  }
+
+  /**
+   * Handle state updates received from Pusher.
+   * Applies delta updates with version checking.
+   */
+  function handlePusherStateUpdate(delta) {
+    if (!delta || typeof delta !== 'object') {
+      return;
+    }
+
+    // Check for pending saves or drag operations
+    const pendingInfo = getPendingBoardStateSaveInfo();
+    if (pendingInfo.pending || pendingInfo.blocking) {
+      console.log('[VTT Pusher] Skipping update due to pending operation');
+      return;
+    }
+
+    // Update version tracking
+    if (typeof delta.version === 'number' && delta.version > currentBoardStateVersion) {
+      currentBoardStateVersion = delta.version;
+      if (pusherInterface?.setLastAppliedVersion) {
+        pusherInterface.setLastAppliedVersion(delta.version);
+      }
+    }
+
+    // Apply delta updates to the board state
+    boardApi.updateState?.((draft) => {
+      if (!draft.boardState) {
+        draft.boardState = {};
+      }
+
+      // Apply placements delta (merge by scene)
+      if (delta.placements && typeof delta.placements === 'object') {
+        if (!draft.boardState.placements) {
+          draft.boardState.placements = {};
+        }
+        Object.entries(delta.placements).forEach(([sceneId, placements]) => {
+          if (Array.isArray(placements)) {
+            // Merge placements by ID
+            const existing = draft.boardState.placements[sceneId] || [];
+            const byId = new Map(existing.map((p) => [p.id, p]));
+            placements.forEach((placement) => {
+              if (placement && placement.id) {
+                byId.set(placement.id, placement);
+              }
+            });
+            draft.boardState.placements[sceneId] = Array.from(byId.values());
+          }
+        });
+      }
+
+      // Apply templates delta
+      if (delta.templates && typeof delta.templates === 'object') {
+        if (!draft.boardState.templates) {
+          draft.boardState.templates = {};
+        }
+        Object.entries(delta.templates).forEach(([sceneId, templates]) => {
+          if (Array.isArray(templates)) {
+            draft.boardState.templates[sceneId] = templates;
+          }
+        });
+      }
+
+      // Apply drawings delta
+      if (delta.drawings && typeof delta.drawings === 'object') {
+        if (!draft.boardState.drawings) {
+          draft.boardState.drawings = {};
+        }
+        Object.entries(delta.drawings).forEach(([sceneId, drawings]) => {
+          if (Array.isArray(drawings)) {
+            draft.boardState.drawings[sceneId] = drawings;
+          }
+        });
+      }
+
+      // Apply pings
+      if (Array.isArray(delta.pings)) {
+        draft.boardState.pings = delta.pings;
+      }
+
+      // Apply scene state (combat updates)
+      if (delta.sceneState && typeof delta.sceneState === 'object') {
+        if (!draft.boardState.sceneState) {
+          draft.boardState.sceneState = {};
+        }
+        Object.entries(delta.sceneState).forEach(([sceneId, state]) => {
+          if (!draft.boardState.sceneState[sceneId]) {
+            draft.boardState.sceneState[sceneId] = {};
+          }
+          if (state.combat) {
+            draft.boardState.sceneState[sceneId].combat = state.combat;
+          }
+          if (state.grid) {
+            draft.boardState.sceneState[sceneId].grid = state.grid;
+          }
+          if (state.overlay) {
+            draft.boardState.sceneState[sceneId].overlay = state.overlay;
+          }
+        });
+      }
+
+      // Apply scene/map changes (GM only sends these)
+      if (delta.activeSceneId !== undefined) {
+        draft.boardState.activeSceneId = delta.activeSceneId;
+      }
+      if (delta.mapUrl !== undefined) {
+        draft.boardState.mapUrl = delta.mapUrl;
+      }
+      if (delta.overlay !== undefined) {
+        draft.boardState.overlay = delta.overlay;
+      }
+
+      // Update version in board state
+      if (typeof delta.version === 'number') {
+        draft.boardState._version = delta.version;
+      }
+    });
+
+    // Re-render the board with updated state
+    const updatedState = boardApi.getState?.();
+    if (updatedState) {
+      applyStateToBoard(updatedState);
+      applyCombatStateFromBoardState(updatedState);
+    }
+
+    console.log('[VTT Pusher] Applied update, version:', delta.version);
+  }
+
+  /**
+   * Handle Pusher connection state changes.
+   */
+  function handlePusherConnectionChange(state) {
+    pusherConnected = state.connected;
+    console.log('[VTT Pusher] Connection state:', state.connected ? 'connected' : 'disconnected');
+
+    // If we just reconnected, trigger a resync by fetching fresh state
+    if (state.connected) {
+      // The poller will naturally fetch fresh state on its next tick
+      // We could also trigger an immediate fetch here if needed
+    }
   }
 
   function getPendingBoardStateSaveInfo() {
@@ -2852,6 +3061,7 @@ export function mountBoardInteractions(store, routes = {}) {
   applyStateToBoard(boardApi.getState?.() ?? {});
   startBoardStatePoller();
   startCombatStateRefreshLoop();
+  initializePusherSync();
 
   function focusBoard() {
     if (!board) {

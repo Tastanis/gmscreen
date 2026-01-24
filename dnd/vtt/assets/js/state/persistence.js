@@ -194,7 +194,16 @@ async function persist(key, entry) {
       throw new Error(`Failed to save ${key}`);
     }
 
-    result = createResult(true);
+    // Parse response to extract data (including version)
+    let responseData = null;
+    try {
+      const responseJson = await response.json();
+      responseData = responseJson?.data ?? null;
+    } catch (parseError) {
+      // Response parsing is optional, continue with success
+    }
+
+    result = createResult(true, { data: responseData });
   } catch (error) {
     const aborted = controller.signal.aborted || error?.name === 'AbortError';
     if (!aborted) {
@@ -280,8 +289,8 @@ function finalizeEntry(entry, result) {
   }
 }
 
-function createResult(success, { aborted = false, error = null } = {}) {
-  return { success: Boolean(success), aborted: Boolean(aborted), error: error ?? null };
+function createResult(success, { aborted = false, error = null, data = null } = {}) {
+  return { success: Boolean(success), aborted: Boolean(aborted), error: error ?? null, data: data ?? null };
 }
 
 function createAbortError(key) {

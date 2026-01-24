@@ -155,6 +155,20 @@ function getVttBootstrapConfig(?array $authContext = null): array
         $boardState = filterPlacementsForPlayerView($boardState);
     }
 
+    // Load Pusher config if available
+    $pusherConfig = null;
+    $pusherConfigPath = __DIR__ . '/config/pusher.php';
+    if (is_file($pusherConfigPath)) {
+        $pusherData = require $pusherConfigPath;
+        if (is_array($pusherData) && !empty($pusherData['enabled'])) {
+            $pusherConfig = [
+                'key' => $pusherData['key'] ?? '',
+                'cluster' => $pusherData['cluster'] ?? 'us3',
+                'channel' => $pusherData['channel'] ?? 'vtt-board',
+            ];
+        }
+    }
+
     return [
         'routes' => $routes,
         'scenes' => $scenes,
@@ -165,6 +179,7 @@ function getVttBootstrapConfig(?array $authContext = null): array
         'currentUser' => $context['user'] ?? '',
         'chatParticipants' => loadChatParticipants(),
         'chatHandlerUrl' => $routes['chat'] ?? '/dnd/chat_handler.php',
+        'pusher' => $pusherConfig,
     ];
 }
 

@@ -3,8 +3,113 @@ declare(strict_types=1);
 
 require_once __DIR__ . '/../bootstrap.php';
 require_once __DIR__ . '/state_helpers.php';
+require_once __DIR__ . '/../lib/PusherClient.php';
 
 const VTT_PING_RETENTION_MS = 10000;
+const VTT_VERSION_FILE = 'board-state-version.json';
+
+/**
+ * Get the current board state version.
+ * Version is a monotonically increasing integer that prevents stale updates.
+ */
+function getVttBoardStateVersion(): int
+{
+    $data = loadVttJson(VTT_VERSION_FILE);
+    if (!is_array($data) || !isset($data['version'])) {
+        return 0;
+    }
+    return max(0, (int) $data['version']);
+}
+
+/**
+ * Increment and save the board state version.
+ * Returns the new version number.
+ */
+function incrementVttBoardStateVersion(): int
+{
+    $current = getVttBoardStateVersion();
+    $next = $current + 1;
+    saveVttJson(VTT_VERSION_FILE, [
+        'version' => $next,
+        'updatedAt' => time(),
+    ]);
+    return $next;
+}
+
+/**
+ * Create a Pusher client instance if configured and enabled.
+ * Returns null if Pusher is not configured or disabled.
+ */
+function createVttPusherClient(): ?PusherClient
+{
+    $configPath = __DIR__ . '/../config/pusher.php';
+    if (!is_file($configPath)) {
+        return null;
+    }
+
+    $config = require $configPath;
+    if (!is_array($config) || empty($config['enabled'])) {
+        return null;
+    }
+
+    $appId = $config['app_id'] ?? '';
+    $key = $config['key'] ?? '';
+    $secret = $config['secret'] ?? '';
+    $cluster = $config['cluster'] ?? 'us3';
+    $timeout = (int) ($config['timeout'] ?? 5);
+
+    if ($appId === '' || $key === '' || $secret === '') {
+        return null;
+    }
+
+    return new PusherClient($appId, $key, $secret, $cluster, $timeout);
+}
+
+/**
+ * Get the Pusher configuration for client-side initialization.
+ * Only returns public information (key and cluster).
+ */
+function getVttPusherConfig(): ?array
+{
+    $configPath = __DIR__ . '/../config/pusher.php';
+    if (!is_file($configPath)) {
+        return null;
+    }
+
+    $config = require $configPath;
+    if (!is_array($config) || empty($config['enabled'])) {
+        return null;
+    }
+
+    return [
+        'key' => $config['key'] ?? '',
+        'cluster' => $config['cluster'] ?? 'us3',
+        'channel' => $config['channel'] ?? 'vtt-board',
+    ];
+}
+
+/**
+ * Broadcast a state update via Pusher.
+ * Fails silently if Pusher is not configured or the request fails.
+ */
+function broadcastVttStateUpdate(array $update, ?string $excludeSocketId = null): bool
+{
+    $pusher = createVttPusherClient();
+    if ($pusher === null) {
+        return false;
+    }
+
+    $configPath = __DIR__ . '/../config/pusher.php';
+    $config = is_file($configPath) ? require $configPath : [];
+    $channel = $config['channel'] ?? 'vtt-board';
+
+    try {
+        return $pusher->trigger($channel, 'state-updated', $update, $excludeSocketId);
+    } catch (Throwable $e) {
+        error_log('[VTT] Pusher broadcast failed: ' . $e->getMessage());
+        return false;
+    }
+}
 
 if (!defined('VTT_STATE_API_INCLUDE_ONLY')) {
     header('Content-Type: application/json');
@@ -18,12 +123,22 @@ if (!defined('VTT_STATE_API_INCLUDE_ONLY')) {
             if (!($auth['isGM'] ?? false)) {
                 $config['boardState'] = filterPlacementsForPlayerView($config['boardState'] ?? []);
             }
+
+            // Include version for sync conflict detection
+            $version = getVttBoardStateVersion();
+            $boardState = $config['boardState'] ?? [];
+            $boardState['_version'] = $version;
+
+            // Include Pusher config for client-side initialization
+            $pusherConfig = getVttPusherConfig();
+
             respondJson(200, [
                 'success' => true,
                 'data' => [
                     'scenes' => $config['scenes'],
                     'tokens' => $config['tokens'],
-                    'boardState' => $config['boardState'],
+                    'boardState' => $boardState,
+                    'pusher' => $pusherConfig,
                 ],
             ]);
         }
@@ -45,6 +160,14 @@ if (!defined('VTT_STATE_API_INCLUDE_ONLY')) {
                 $rawState = $payload;
             }
 
+            // Extract client version and socket ID for Pusher exclusion
+            $clientVersion = isset($rawState['_version']) ? (int) $rawState['_version'] : null;
+            $clientSocketId = isset($rawState['_socketId']) && is_string($rawState['_socketId'])
+                ? trim($rawState['_socketId'])
+                : null;
+            // Remove internal fields before processing
+            unset($rawState['_version'], $rawState['_socketId']);
+
             $updates = sanitizeBoardStateUpdates($rawState);
             if (empty($updates)) {
                 respondJson(422, [
@@ -53,7 +176,10 @@ if (!defined('VTT_STATE_API_INCLUDE_ONLY')) {
                 ]);
             }
 
-            $responseState = withVttBoardStateLock(function () use ($updates, $auth) {
+            // Determine what changed for targeted Pusher broadcasts
+            $changedFields = array_keys($updates);
+
+            $responseState = withVttBoardStateLock(function () use ($updates, $auth, $clientVersion) {
                 $existing = loadVttJson('board-state.json');
                 $nextState = normalizeBoardState($existing);
 
@@ -204,6 +330,50 @@ if (!defined('VTT_STATE_API_INCLUDE_ONLY')) {
 
                 return $nextState;
             });
+
+            // Increment version after successful save
+            $newVersion = incrementVttBoardStateVersion();
+
+            // Add version to response state
+            $responseState['_version'] = $newVersion;
+
+            // Broadcast update via Pusher (non-blocking, fails silently)
+            $broadcastData = [
+                'version' => $newVersion,
+                'timestamp' => time() * 1000, // milliseconds for JS
+                'authorId' => strtolower(trim($auth['user'] ?? '')),
+                'authorRole' => ($auth['isGM'] ?? false) ? 'gm' : 'player',
+                'changedFields' => $changedFields,
+            ];
+
+            // Include delta updates for efficient client-side merging
+            if (isset($updates['placements'])) {
+                $broadcastData['placements'] = $updates['placements'];
+            }
+            if (isset($updates['templates'])) {
+                $broadcastData['templates'] = $updates['templates'];
+            }
+            if (isset($updates['drawings'])) {
+                $broadcastData['drawings'] = $updates['drawings'];
+            }
+            if (isset($updates['pings'])) {
+                $broadcastData['pings'] = $updates['pings'];
+            }
+            if (isset($updates['sceneState'])) {
+                $broadcastData['sceneState'] = $updates['sceneState'];
+            }
+            if (isset($updates['activeSceneId'])) {
+                $broadcastData['activeSceneId'] = $updates['activeSceneId'];
+            }
+            if (isset($updates['mapUrl'])) {
+                $broadcastData['mapUrl'] = $updates['mapUrl'];
+            }
+            if (isset($updates['overlay'])) {
+                $broadcastData['overlay'] = $updates['overlay'];
+            }
+
+            // Broadcast asynchronously (don't wait for response)
+            broadcastVttStateUpdate($broadcastData, $clientSocketId);
 
             respondJson(200, [
                 'success' => true,
