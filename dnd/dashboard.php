@@ -940,12 +940,12 @@ $defaultInventoryTab = $is_gm ? 'frunk' : $user;
                     <a href="#" onclick="openStrixhavenSection('students')">Students</a>
                     <a href="#" onclick="openStrixhavenSection('staff')">Staff</a>
                     <a href="#" onclick="openStrixhavenSection('locations')">Locations</a>
-                    <a href="#" onclick="openStrixhavenSection('monster-creator')" class="<?php echo $is_gm ? 'gm-allowed' : 'gm-restricted'; ?>">Monster Creator</a>
+                    <?php if ($is_gm): ?><a href="#" onclick="openStrixhavenSection('monster-creator')">Monster Creator</a><?php endif; ?>
                     <a href="#" onclick="openStrixhavenSection('templates')">Templates</a>
                     <a href="#" onclick="openStrixhavenSection('arcaneconstruction')" class="<?php echo ($user === 'zepha' || $is_gm) ? 'zepha-gm-allowed' : 'access-restricted'; ?>">Arcane Construction</a>
                     <a href="#" onclick="openStrixhavenSection('coming-soon-5')">Coming Soon</a>
-                    <!-- GM tab - positioned at bottom with conditional styling -->
-                    <a href="#" onclick="openStrixhavenSection('gm')" class="<?php echo $is_gm ? 'gm-allowed' : 'gm-restricted'; ?>">GM</a>
+                    <?php if ($is_gm): ?><!-- GM tab - only visible to GM -->
+                    <a href="#" onclick="openStrixhavenSection('gm')">GM</a><?php endif; ?>
                 </div>
             </div>
             <button class="nav-btn" onclick="openSchedule()">Schedule</button>
