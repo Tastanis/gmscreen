@@ -6463,8 +6463,16 @@ export function mountBoardInteractions(store, routes = {}) {
       return result;
     }
 
-    // If someone else is actively taking their turn (ACTIVE phase with different combatant)
-    if (currentPhase === TURN_PHASE.ACTIVE && activeCombatantId && activeCombatantId !== combatantId) {
+    // Check if someone has an active turn lock (authoritative for blocking)
+    // A turn lock means someone is actively taking their turn
+    const hasActiveTurnLock = Boolean(turnLockState.holderId);
+    const lockHeldByDifferentCombatant =
+      hasActiveTurnLock &&
+      typeof turnLockState.combatantId === 'string' &&
+      turnLockState.combatantId !== combatantId;
+
+    // If someone else has the turn lock, they're actively taking their turn
+    if (lockHeldByDifferentCombatant) {
       if (isOverride || isSharonOverride) {
         result.valid = true;
         return result;
@@ -6474,8 +6482,8 @@ export function mountBoardInteractions(store, routes = {}) {
       return result;
     }
 
-    // In PICK phase, allies can always take their turn
-    // The currentTurnTeam is for display/guidance, not for blocking allies
+    // In PICK phase (no active combatant), team members can take their turn
+    // currentTurnTeam is informational for the GM, not a hard blocker for allies
     if (currentPhase === TURN_PHASE.PICK) {
       if (team === 'ally') {
         // Allies can always go during pick phase
@@ -6819,7 +6827,9 @@ export function mountBoardInteractions(store, routes = {}) {
       ? getRepresentativeIdFor(activeCombatantId) || activeCombatantId
       : null;
     const canceledTeam = canceledId ? getCombatantTeam(canceledId) : null;
-    // When canceling, stay on the SAME team's pick phase (don't switch to opposite team)
+
+    // When canceling a turn, stay on the SAME team's pick phase
+    // This allows the player to select a different token if they changed their mind
     const nextTeam = canceledTeam || currentTurnTeam;
 
     closeTurnPrompt();
@@ -6878,19 +6888,22 @@ export function mountBoardInteractions(store, routes = {}) {
     // Determine next team (opposing team gets to pick next)
     const nextTeam = finishedTeam === 'ally' ? 'enemy' : 'ally';
 
-    // Determine next combatant before clearing current one to avoid visual pop
+    // Release the turn lock and transition to PICK phase for the next team
+    // The next combatant should only become ACTIVE when they actually start their turn
     releaseTurnLock(getCurrentUserId());
+
+    // Transition to PICK phase for the opposing team
+    currentTurnTeam = nextTeam;
+    pendingTurnTransition = null;
+    setActiveCombatantId(null);
+
+    // Suggest the next combatant via focus (UI only, not active turn)
     const nextId = pickNextCombatantId([nextTeam, finishedTeam]);
     if (nextId) {
-      pendingTurnTransition = { fromTeam: finishedTeam, fromCombatantId: finishedId };
-      setActiveCombatantId(nextId);
-    } else {
-      // No next combatant found - transition to opposing team's pick phase
-      pendingTurnTransition = null;
-      currentTurnTeam = nextTeam;
-      setActiveCombatantId(null);
+      setFocusedCombatantId(nextId);
     }
-    // Ensure turn phase is updated
+
+    // Ensure turn phase is updated to PICK
     updateTurnPhase();
 
     // Refresh tracker once with final state (avoids intermediate null state flash)
@@ -7812,12 +7825,13 @@ export function mountBoardInteractions(store, routes = {}) {
   function focusNextCombatant(preferredTeams = []) {
     const nextId = pickNextCombatantId(preferredTeams);
     if (!nextId) {
-      setActiveCombatantId(null);
+      setFocusedCombatantId(null);
       return false;
     }
 
-    completedCombatants.delete(nextId);
-    setActiveCombatantId(nextId);
+    // Only set UI focus, not active combatant - this is PICK phase suggestion
+    // activeCombatantId should only be set when a turn is actually started
+    setFocusedCombatantId(nextId);
     return true;
   }
 
@@ -8892,29 +8906,19 @@ export function mountBoardInteractions(store, routes = {}) {
     const secondaryTeam = preferredTeam === 'ally' ? 'enemy' : 'ally';
     updateStartCombatButton();
     refreshCombatTracker();
+
+    // Determine the team that should go first in the new round
+    const preferredTeamForRound = preferredTeam;
+    currentTurnTeam = preferredTeamForRound;
+
+    // Suggest next combatant via focus (UI only, not active turn)
     const nextId = pickNextCombatantId([preferredTeam, secondaryTeam]);
     if (nextId) {
-      const waitingPools = getWaitingCombatantsByTeam();
-      const nextTeam = getCombatantTeam(nextId) ?? currentTurnTeam ?? preferredTeam;
-      const opposingTeam = nextTeam === 'ally' ? 'enemy' : 'ally';
-      const opposingHasCombatants = Array.isArray(waitingPools[opposingTeam])
-        ? waitingPools[opposingTeam].length > 0
-        : false;
-      const previousTeam = opposingHasCombatants || !lastActingTeam
-        ? opposingTeam
-        : lastActingTeam !== nextTeam
-          ? lastActingTeam
-          : opposingTeam;
-      pendingTurnTransition = {
-        fromTeam: previousTeam ?? null,
-        fromCombatantId: null,
-      };
-      completedCombatants.delete(nextId);
-      setActiveCombatantId(nextId);
-    } else {
-      pendingTurnTransition = null;
-      setActiveCombatantId(null);
+      setFocusedCombatantId(nextId);
     }
+
+    // Stay in PICK phase - don't set activeCombatantId
+    pendingTurnTransition = null;
     updateCombatModeIndicators();
     if (status) {
       status.textContent = `Round ${combatRound} begins.`;
