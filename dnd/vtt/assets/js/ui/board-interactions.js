@@ -1147,6 +1147,75 @@ export function mountBoardInteractions(store, routes = {}) {
   let lastBoardStateSaveCompletedAt = 0;
   const SAVE_GRACE_PERIOD_MS = 1500;
 
+  // Delta tracking for efficient saves - only send what changed
+  // Maps sceneId -> Set of placement IDs that were modified
+  const dirtyPlacements = new Map();
+  // Maps sceneId -> Set of template IDs that were modified
+  const dirtyTemplates = new Map();
+  // Maps sceneId -> Set of drawing IDs that were modified
+  const dirtyDrawings = new Map();
+  // Track if pings changed
+  let dirtyPings = false;
+  // Track if scene state changed (combat, grid, overlay)
+  const dirtySceneState = new Set();
+  // Track if top-level fields changed
+  const dirtyTopLevel = new Set();
+
+  // Helper functions for dirty tracking
+  function markPlacementDirty(sceneId, placementId) {
+    if (!sceneId || !placementId) return;
+    if (!dirtyPlacements.has(sceneId)) {
+      dirtyPlacements.set(sceneId, new Set());
+    }
+    dirtyPlacements.get(sceneId).add(placementId);
+  }
+
+  function markTemplateDirty(sceneId, templateId) {
+    if (!sceneId || !templateId) return;
+    if (!dirtyTemplates.has(sceneId)) {
+      dirtyTemplates.set(sceneId, new Set());
+    }
+    dirtyTemplates.get(sceneId).add(templateId);
+  }
+
+  function markDrawingDirty(sceneId, drawingId) {
+    if (!sceneId || !drawingId) return;
+    if (!dirtyDrawings.has(sceneId)) {
+      dirtyDrawings.set(sceneId, new Set());
+    }
+    dirtyDrawings.get(sceneId).add(drawingId);
+  }
+
+  function markPingsDirty() {
+    dirtyPings = true;
+  }
+
+  function markSceneStateDirty(sceneId) {
+    if (sceneId) dirtySceneState.add(sceneId);
+  }
+
+  function markTopLevelDirty(field) {
+    if (field) dirtyTopLevel.add(field);
+  }
+
+  function clearDirtyTracking() {
+    dirtyPlacements.clear();
+    dirtyTemplates.clear();
+    dirtyDrawings.clear();
+    dirtyPings = false;
+    dirtySceneState.clear();
+    dirtyTopLevel.clear();
+  }
+
+  function hasDirtyState() {
+    return dirtyPlacements.size > 0 ||
+           dirtyTemplates.size > 0 ||
+           dirtyDrawings.size > 0 ||
+           dirtyPings ||
+           dirtySceneState.size > 0 ||
+           dirtyTopLevel.size > 0;
+  }
+
   // Pusher real-time sync state
   let pusherInterface = null;
   let pusherConnected = false;
@@ -1670,10 +1739,25 @@ export function mountBoardInteractions(store, routes = {}) {
     }
 
     const isGmUser = Boolean(latest?.user?.isGM);
-    const snapshot = buildBoardStateSnapshotForPersistence(boardState, { isGm: isGmUser });
+    // Use delta-only saves when we have dirty tracking info
+    const useDelta = hasDirtyState();
+    const snapshot = buildBoardStateSnapshotForPersistence(boardState, { isGm: isGmUser, deltaOnly: useDelta });
     if (!snapshot) {
       console.warn('[VTT] Cannot persist board state: failed to build snapshot');
+      clearDirtyTracking(); // Clear dirty state even on failure
       return;
+    }
+
+    // Skip save if delta mode but nothing to save
+    if (useDelta && Object.keys(snapshot).length === 0) {
+      console.log('[VTT] Skipping save: no dirty entities to persist');
+      clearDirtyTracking();
+      return;
+    }
+
+    // Mark as delta save for server-side handling
+    if (useDelta) {
+      snapshot._deltaOnly = true;
     }
 
     const previousMetadata = cloneBoardSection(boardState.metadata ?? boardState.meta);
@@ -1742,6 +1826,8 @@ export function mountBoardInteractions(store, routes = {}) {
           lastPersistedBoardStateHash = snapshotHash;
           lastBoardStateSaveCompletedAt = Date.now();
           pendingBoardStateSave = null;
+          // Clear dirty tracking after successful save
+          clearDirtyTracking();
 
           // Update version from server response
           const newVersion = result?.data?._version;
@@ -1893,13 +1979,67 @@ export function mountBoardInteractions(store, routes = {}) {
     persistBoardStateSnapshot();
   }
 
-  function buildBoardStateSnapshotForPersistence(boardState = {}, { isGm = false } = {}) {
+  function buildBoardStateSnapshotForPersistence(boardState = {}, { isGm = false, deltaOnly = false } = {}) {
     if (!boardState || typeof boardState !== 'object') {
       return null;
     }
 
     const snapshot = {};
 
+    // For delta saves, only include what's marked dirty
+    if (deltaOnly && hasDirtyState()) {
+      // Include only dirty placements (by ID)
+      if (dirtyPlacements.size > 0) {
+        snapshot.placements = buildDirtyPlacementsSnapshot(
+          boardState.placements,
+          { includeHidden: isGm }
+        );
+      }
+
+      // Include only dirty templates (by ID)
+      if (dirtyTemplates.size > 0) {
+        snapshot.templates = buildDirtyTemplatesSnapshot(boardState.templates);
+      }
+
+      // Include only dirty drawings (by ID)
+      if (dirtyDrawings.size > 0) {
+        snapshot.drawings = buildDirtyDrawingsSnapshot(boardState.drawings);
+      }
+
+      // Include pings only if they changed
+      if (dirtyPings) {
+        snapshot.pings = sanitizePingsForPersistence(boardState.pings);
+      }
+
+      // Include scene state only for dirty scenes
+      if (dirtySceneState.size > 0 && isGm) {
+        const sceneStateClone = cloneBoardSection(boardState.sceneState);
+        const filteredSceneState = {};
+        dirtySceneState.forEach((sceneId) => {
+          if (sceneStateClone[sceneId]) {
+            filteredSceneState[sceneId] = sceneStateClone[sceneId];
+          }
+        });
+        if (Object.keys(filteredSceneState).length > 0) {
+          snapshot.sceneState = filteredSceneState;
+        }
+      }
+
+      // Include top-level fields only if dirty
+      if (dirtyTopLevel.has('activeSceneId')) {
+        snapshot.activeSceneId = boardState.activeSceneId ?? null;
+      }
+      if (dirtyTopLevel.has('mapUrl') && isGm) {
+        snapshot.mapUrl = boardState.mapUrl ?? null;
+      }
+      if (dirtyTopLevel.has('overlay') && isGm) {
+        snapshot.overlay = cloneOverlayState(boardState.overlay);
+      }
+
+      return snapshot;
+    }
+
+    // Full state save (fallback when no dirty tracking or for initial load)
     if (Object.prototype.hasOwnProperty.call(boardState, 'activeSceneId')) {
       snapshot.activeSceneId = boardState.activeSceneId ?? null;
     }
@@ -1919,6 +2059,74 @@ export function mountBoardInteractions(store, routes = {}) {
     }
 
     return snapshot;
+  }
+
+  // Build a snapshot containing only the dirty placements (by ID)
+  function buildDirtyPlacementsSnapshot(source, { includeHidden = false } = {}) {
+    const result = {};
+    const allPlacements = cloneBoardSection(source);
+    if (!allPlacements || typeof allPlacements !== 'object') {
+      return result;
+    }
+
+    dirtyPlacements.forEach((dirtyIds, sceneId) => {
+      const scenePlacements = Array.isArray(allPlacements[sceneId]) ? allPlacements[sceneId] : [];
+      const filtered = scenePlacements.filter((placement) => {
+        if (!placement || !placement.id) return false;
+        if (!dirtyIds.has(placement.id)) return false;
+        if (!includeHidden && isPlacementHiddenForPersistence(placement)) return false;
+        return true;
+      });
+      if (filtered.length > 0) {
+        result[sceneId] = filtered;
+      }
+    });
+
+    return result;
+  }
+
+  // Build a snapshot containing only the dirty templates (by ID)
+  function buildDirtyTemplatesSnapshot(source) {
+    const result = {};
+    const allTemplates = cloneBoardSection(source);
+    if (!allTemplates || typeof allTemplates !== 'object') {
+      return result;
+    }
+
+    dirtyTemplates.forEach((dirtyIds, sceneId) => {
+      const sceneTemplates = Array.isArray(allTemplates[sceneId]) ? allTemplates[sceneId] : [];
+      const filtered = sceneTemplates.filter((template) => {
+        if (!template || !template.id) return false;
+        return dirtyIds.has(template.id);
+      });
+      if (filtered.length > 0) {
+        result[sceneId] = filtered;
+      }
+    });
+
+    return result;
+  }
+
+  // Build a snapshot containing only the dirty drawings (by ID)
+  function buildDirtyDrawingsSnapshot(source) {
+    const result = {};
+    const allDrawings = cloneBoardSection(source);
+    if (!allDrawings || typeof allDrawings !== 'object') {
+      return result;
+    }
+
+    dirtyDrawings.forEach((dirtyIds, sceneId) => {
+      const sceneDrawings = Array.isArray(allDrawings[sceneId]) ? allDrawings[sceneId] : [];
+      const filtered = sceneDrawings.filter((drawing) => {
+        if (!drawing || !drawing.id) return false;
+        return dirtyIds.has(drawing.id);
+      });
+      if (filtered.length > 0) {
+        result[sceneId] = filtered;
+      }
+    });
+
+    return result;
   }
 
   function sanitizePlacementsForPersistence(source, { includeHidden = false } = {}) {
@@ -2121,19 +2329,31 @@ export function mountBoardInteractions(store, routes = {}) {
         draft.boardState = {};
       }
 
-      // Apply placements delta (merge by scene)
+      // Apply placements delta (merge by scene with timestamp-based conflict resolution)
       if (delta.placements && typeof delta.placements === 'object') {
         if (!draft.boardState.placements) {
           draft.boardState.placements = {};
         }
         Object.entries(delta.placements).forEach(([sceneId, placements]) => {
           if (Array.isArray(placements)) {
-            // Merge placements by ID
+            // Merge placements by ID, keeping newer timestamps
             const existing = draft.boardState.placements[sceneId] || [];
             const byId = new Map(existing.map((p) => [p.id, p]));
             placements.forEach((placement) => {
               if (placement && placement.id) {
-                byId.set(placement.id, placement);
+                const existingPlacement = byId.get(placement.id);
+                if (existingPlacement) {
+                  // Compare timestamps - keep the newer one
+                  const existingTime = existingPlacement._lastModified || 0;
+                  const incomingTime = placement._lastModified || 0;
+                  if (incomingTime >= existingTime) {
+                    byId.set(placement.id, placement);
+                  }
+                  // else: keep existing (it's newer)
+                } else {
+                  // New placement
+                  byId.set(placement.id, placement);
+                }
               }
             });
             draft.boardState.placements[sceneId] = Array.from(byId.values());
@@ -2141,26 +2361,58 @@ export function mountBoardInteractions(store, routes = {}) {
         });
       }
 
-      // Apply templates delta
+      // Apply templates delta (merge by ID with timestamp-based conflict resolution)
       if (delta.templates && typeof delta.templates === 'object') {
         if (!draft.boardState.templates) {
           draft.boardState.templates = {};
         }
         Object.entries(delta.templates).forEach(([sceneId, templates]) => {
           if (Array.isArray(templates)) {
-            draft.boardState.templates[sceneId] = templates;
+            const existing = draft.boardState.templates[sceneId] || [];
+            const byId = new Map(existing.map((t) => [t.id, t]));
+            templates.forEach((template) => {
+              if (template && template.id) {
+                const existingTemplate = byId.get(template.id);
+                if (existingTemplate) {
+                  const existingTime = existingTemplate._lastModified || 0;
+                  const incomingTime = template._lastModified || 0;
+                  if (incomingTime >= existingTime) {
+                    byId.set(template.id, template);
+                  }
+                } else {
+                  byId.set(template.id, template);
+                }
+              }
+            });
+            draft.boardState.templates[sceneId] = Array.from(byId.values());
           }
         });
       }
 
-      // Apply drawings delta
+      // Apply drawings delta (merge by ID with timestamp-based conflict resolution)
       if (delta.drawings && typeof delta.drawings === 'object') {
         if (!draft.boardState.drawings) {
           draft.boardState.drawings = {};
         }
         Object.entries(delta.drawings).forEach(([sceneId, drawings]) => {
           if (Array.isArray(drawings)) {
-            draft.boardState.drawings[sceneId] = drawings;
+            const existing = draft.boardState.drawings[sceneId] || [];
+            const byId = new Map(existing.map((d) => [d.id, d]));
+            drawings.forEach((drawing) => {
+              if (drawing && drawing.id) {
+                const existingDrawing = byId.get(drawing.id);
+                if (existingDrawing) {
+                  const existingTime = existingDrawing._lastModified || 0;
+                  const incomingTime = drawing._lastModified || 0;
+                  if (incomingTime >= existingTime) {
+                    byId.set(drawing.id, drawing);
+                  }
+                } else {
+                  byId.set(drawing.id, drawing);
+                }
+              }
+            });
+            draft.boardState.drawings[sceneId] = Array.from(byId.values());
           }
         });
       }
@@ -2890,11 +3142,16 @@ export function mountBoardInteractions(store, routes = {}) {
       return;
     }
 
+    // Add timestamp for conflict resolution
+    placement._lastModified = Date.now();
+
     boardApi.updateState?.((draft) => {
       const scenePlacements = ensureScenePlacementDraft(draft, activeSceneId);
       scenePlacements.push(placement);
     });
 
+    // Mark placement as dirty for delta save
+    markPlacementDirty(activeSceneId, placement.id);
     persistBoardStateSnapshot();
 
     // For PC folder tokens, fetch and apply character sheet stamina
@@ -3633,6 +3890,8 @@ export function mountBoardInteractions(store, routes = {}) {
     }
 
     let movedCount = 0;
+    const movedIds = [];
+    const moveTimestamp = Date.now();
     boardApi.updateState?.((draft) => {
       const scenePlacements = ensureScenePlacementDraft(draft, activeSceneId);
       if (!Array.isArray(scenePlacements) || !scenePlacements.length) {
@@ -3650,12 +3909,17 @@ export function mountBoardInteractions(store, routes = {}) {
         if (placement.column !== clamped.column || placement.row !== clamped.row) {
           placement.column = clamped.column;
           placement.row = clamped.row;
+          // Add timestamp for conflict resolution
+          placement._lastModified = moveTimestamp;
           movedCount += 1;
+          movedIds.push(placement.id);
         }
       });
     });
 
     if (movedCount) {
+      // Mark only the moved placements as dirty
+      movedIds.forEach((id) => markPlacementDirty(activeSceneId, id));
       persistBoardStateSnapshot();
     }
 
@@ -3726,6 +3990,8 @@ export function mountBoardInteractions(store, routes = {}) {
       centerViewOnPing(pingEntry);
     }
     if (queued) {
+      // Mark only pings as dirty - don't include placements in the save
+      markPingsDirty();
       persistBoardStateSnapshot();
     }
 
@@ -3911,6 +4177,16 @@ export function mountBoardInteractions(store, routes = {}) {
     }
 
     lastSyncedDrawingsHash = hash;
+
+    // If sync is pending, the change came from the local drawing tool
+    // Mark drawings as dirty for delta save
+    if (isDrawingSyncPending()) {
+      drawings.forEach((drawing) => {
+        if (drawing && drawing.id) {
+          markDrawingDirty(activeSceneId, drawing.id);
+        }
+      });
+    }
 
     // Always persist when drawings change to ensure they are saved to the server.
     // This fixes an issue where local drawings were not being persisted because
@@ -4127,6 +4403,8 @@ export function mountBoardInteractions(store, routes = {}) {
     }
 
     let moved = false;
+    const movedIds = [];
+    const moveTimestamp = Date.now();
     boardApi.updateState?.((draft) => {
       if (!draft.boardState || typeof draft.boardState !== 'object') {
         return;
@@ -4158,12 +4436,16 @@ export function mountBoardInteractions(store, routes = {}) {
         if (nextColumn !== currentColumn || nextRow !== currentRow) {
           placement.column = nextColumn;
           placement.row = nextRow;
+          placement._lastModified = moveTimestamp;
           moved = true;
+          movedIds.push(placement.id);
         }
       });
     });
 
     if (moved) {
+      // Mark moved placements as dirty for delta save
+      movedIds.forEach((id) => markPlacementDirty(activeSceneId, id));
       persistBoardStateSnapshot();
     }
 
@@ -4216,6 +4498,9 @@ export function mountBoardInteractions(store, routes = {}) {
     });
 
     if (removedCount > 0) {
+      // Clear dirty tracking to force a full state save for deletions
+      // Delta saves can't represent deletions, so we need to send full state
+      clearDirtyTracking();
       persistBoardStateSnapshot();
       selectedTokenIds.clear();
       notifySelectionChanged();
@@ -15823,10 +16108,22 @@ function createTemplateTool() {
       return;
     }
 
+    const commitTimestamp = Date.now();
     boardApi.updateState?.((draft) => {
       const templatesDraft = ensureSceneTemplateDraft(draft, activeSceneId);
       templatesDraft.length = 0;
-      serialized.forEach((entry) => templatesDraft.push(entry));
+      serialized.forEach((entry) => {
+        // Add timestamp for conflict resolution
+        entry._lastModified = commitTimestamp;
+        templatesDraft.push(entry);
+      });
+    });
+
+    // Mark all templates as dirty for delta save
+    serialized.forEach((entry) => {
+      if (entry.id) {
+        markTemplateDirty(activeSceneId, entry.id);
+      }
     });
 
     lastSyncedSnapshot = snapshotKey(serialized);

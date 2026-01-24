@@ -255,3 +255,96 @@ function extractBoardEntryIdentifier(array $entry): ?string
 
     return null;
 }
+
+/**
+ * Merge scene entries using timestamp-based conflict resolution (delta merge).
+ * Incoming entries are merged by ID - if an entry exists, the one with newer _lastModified wins.
+ * Existing entries not in the incoming set are preserved (this is a delta, not a replacement).
+ *
+ * @param array<int,array<string,mixed>> $existingEntries
+ * @param array<int,array<string,mixed>> $incomingEntries
+ * @return array<int,array<string,mixed>>
+ */
+function mergeSceneEntriesByTimestamp(array $existingEntries, array $incomingEntries): array
+{
+    // Index existing entries by ID
+    $existingById = [];
+    $existingWithoutId = [];
+    foreach ($existingEntries as $entry) {
+        if (!is_array($entry)) {
+            continue;
+        }
+        $id = extractBoardEntryIdentifier($entry);
+        if ($id !== null) {
+            $existingById[$id] = $entry;
+        } else {
+            $existingWithoutId[] = $entry;
+        }
+    }
+
+    // Process incoming entries - merge by ID using timestamps
+    foreach ($incomingEntries as $entry) {
+        if (!is_array($entry)) {
+            continue;
+        }
+        $id = extractBoardEntryIdentifier($entry);
+        if ($id === null) {
+            // Entry without ID - add if new
+            $existingWithoutId[] = $entry;
+            continue;
+        }
+
+        // Check if entry exists and compare timestamps
+        if (array_key_exists($id, $existingById)) {
+            $existingEntry = $existingById[$id];
+            $existingTimestamp = extractEntryTimestamp($existingEntry);
+            $incomingTimestamp = extractEntryTimestamp($entry);
+
+            // Keep the entry with newer timestamp (or incoming if equal/no timestamp)
+            if ($incomingTimestamp >= $existingTimestamp) {
+                // Preserve GM markers if the existing entry was GM-authored
+                if (isGmAuthoredBoardEntry($existingEntry)) {
+                    $existingById[$id] = mergeGmAuthoredEntry($existingEntry, $entry);
+                } else {
+                    $existingById[$id] = $entry;
+                }
+            }
+            // else: keep existing entry (it's newer)
+        } else {
+            // New entry - add it
+            $existingById[$id] = $entry;
+        }
+    }
+
+    // Combine results
+    $merged = array_values($existingById);
+    foreach ($existingWithoutId as $entry) {
+        $merged[] = $entry;
+    }
+
+    return $merged;
+}
+
+/**
+ * Extract timestamp from an entry for conflict resolution.
+ * Looks for _lastModified, lastModified, updatedAt, or timestamp fields.
+ *
+ * @param array<string,mixed> $entry
+ * @return int Timestamp in milliseconds, or 0 if not found
+ */
+function extractEntryTimestamp(array $entry): int
+{
+    $timestampKeys = ['_lastModified', 'lastModified', 'updatedAt', 'timestamp', 'modifiedAt'];
+
+    foreach ($timestampKeys as $key) {
+        if (!array_key_exists($key, $entry)) {
+            continue;
+        }
+        $value = $entry[$key];
+        if (is_numeric($value)) {
+            return (int) $value;
+        }
+    }
+
+    return 0;
+}
