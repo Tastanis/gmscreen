@@ -2256,3 +2256,278 @@ body:not(.gm-mode) .club-navigation button:hover:not(:disabled) {
     }
 }
 /* Dice roller styles moved to dnd/dice-roller/dice-roller.css */
+
+/* ============================================
+   ENHANCED CHARACTER DETAILS & CLASS INFO STYLING
+   3D button-like effects for form fields
+   ============================================ */
+
+/* Darker background for character details and class info sections */
+.character-section,
+.classes-section {
+    background: linear-gradient(145deg, #e8dac5 0%, #dccdb5 50%, #d4c4aa 100%);
+    border-radius: 8px;
+    padding: 20px;
+    margin: -18px;
+    margin-bottom: 0;
+}
+
+/* Section title styling with embossing effect */
+.character-details h2,
+.classes-section > h2 {
+    font-size: 1.5em;
+    font-weight: 800;
+    color: #2f2417;
+    text-transform: uppercase;
+    letter-spacing: 0.08em;
+    text-align: center;
+    margin-bottom: 20px;
+    padding-bottom: 12px;
+    position: relative;
+
+    /* Embossed text effect */
+    text-shadow:
+        1px 1px 0 rgba(255, 255, 255, 0.5),
+        -1px -1px 0 rgba(0, 0, 0, 0.15),
+        2px 2px 4px rgba(0, 0, 0, 0.2);
+}
+
+/* Decorative underline for section titles */
+.character-details h2::after,
+.classes-section > h2::after {
+    content: '';
+    position: absolute;
+    bottom: 0;
+    left: 50%;
+    transform: translateX(-50%);
+    width: 60%;
+    height: 3px;
+    background: linear-gradient(90deg,
+        transparent 0%,
+        var(--accent) 20%,
+        var(--accent-strong) 50%,
+        var(--accent) 80%,
+        transparent 100%);
+    border-radius: 2px;
+}
+
+/* Enhanced form group styling - centered labels */
+.character-details .form-group,
+.classes-section .form-group {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    text-align: center;
+}
+
+/* Styled field labels */
+.character-details .form-group label,
+.classes-section .form-group label {
+    font-size: 12px;
+    font-weight: 700;
+    text-transform: uppercase;
+    letter-spacing: 0.06em;
+    color: #4a3828;
+    margin-bottom: 8px;
+    padding: 4px 12px;
+    background: linear-gradient(145deg, rgba(255,255,255,0.4) 0%, rgba(255,255,255,0.2) 100%);
+    border-radius: 3px;
+
+    /* Subtle embossed label effect */
+    text-shadow: 0 1px 0 rgba(255, 255, 255, 0.6);
+    box-shadow:
+        inset 0 1px 0 rgba(255, 255, 255, 0.5),
+        0 1px 2px rgba(0, 0, 0, 0.1);
+}
+
+/* 3D Raised/Sunken effect for input fields */
+.character-details .form-group input,
+.classes-section .form-group input {
+    width: 100%;
+    padding: 12px 14px;
+    font-size: 14px;
+    font-weight: 500;
+    color: #3b2a1c;
+    background: linear-gradient(145deg, #f0e5d5 0%, #e8dcc8 100%);
+    border-radius: 6px;
+    position: relative;
+    text-align: center;
+
+    /* Outer raised border effect - light on outer edges */
+    border: 3px solid;
+    border-top-color: #c9b99a;
+    border-left-color: #bfad8e;
+    border-right-color: #a08a68;
+    border-bottom-color: #8f7958;
+
+    /* Multi-layer shadow for depth */
+    box-shadow:
+        /* Outer raised edge */
+        2px 2px 0 #8a7555,
+        3px 3px 0 #7a6545,
+        /* Inner sunken effect */
+        inset 2px 2px 6px rgba(0, 0, 0, 0.2),
+        inset -1px -1px 4px rgba(255, 255, 255, 0.3),
+        /* Ambient shadow */
+        4px 4px 10px rgba(0, 0, 0, 0.2);
+}
+
+.character-details .form-group input:focus,
+.classes-section .form-group input:focus {
+    outline: none;
+    background: linear-gradient(145deg, #f5efe3 0%, #ede3d5 100%);
+    border-top-color: #d9c9aa;
+    border-left-color: #cfbd9e;
+    box-shadow:
+        2px 2px 0 #8a7555,
+        3px 3px 0 #7a6545,
+        inset 2px 2px 6px rgba(0, 0, 0, 0.15),
+        inset -1px -1px 4px rgba(255, 255, 255, 0.4),
+        4px 4px 10px rgba(0, 0, 0, 0.2),
+        0 0 0 2px rgba(139, 111, 78, 0.3);
+}
+
+/* Readonly fields - same 3D effect */
+.character-details .form-group .readonly-field,
+.classes-section .form-group .readonly-field {
+    width: 100%;
+    padding: 12px 14px;
+    font-size: 14px;
+    font-weight: 500;
+    color: #3b2a1c;
+    background: linear-gradient(145deg, #f0e5d5 0%, #e8dcc8 100%);
+    border-radius: 6px;
+    text-align: center;
+
+    /* Outer raised border effect */
+    border: 3px solid;
+    border-top-color: #c9b99a;
+    border-left-color: #bfad8e;
+    border-right-color: #a08a68;
+    border-bottom-color: #8f7958;
+
+    /* Multi-layer shadow */
+    box-shadow:
+        2px 2px 0 #8a7555,
+        3px 3px 0 #7a6545,
+        inset 2px 2px 6px rgba(0, 0, 0, 0.2),
+        inset -1px -1px 4px rgba(255, 255, 255, 0.3),
+        4px 4px 10px rgba(0, 0, 0, 0.2);
+}
+
+/* Less dramatic styling for textarea fields (Other, Test Buffs) */
+.character-details .form-group.full-width,
+.classes-section .form-group.full-width {
+    align-items: stretch;
+}
+
+.character-details .form-group.full-width label,
+.classes-section .form-group.full-width label {
+    align-self: center;
+    display: inline-block;
+    width: auto;
+}
+
+.character-details .form-group textarea,
+.classes-section .form-group textarea {
+    width: 100%;
+    padding: 12px 14px;
+    font-size: 14px;
+    color: #3b2a1c;
+    background: linear-gradient(180deg, #f5efe3 0%, #ede3d5 100%);
+    border-radius: 6px;
+    text-align: left;
+    resize: vertical;
+    min-height: 80px;
+
+    /* Softer border for textareas - less dramatic */
+    border: 2px solid;
+    border-top-color: #c0b095;
+    border-left-color: #b8a88d;
+    border-right-color: #a89878;
+    border-bottom-color: #988868;
+
+    /* Subtle shadow - less pronounced than inputs */
+    box-shadow:
+        1px 1px 0 #9a8565,
+        inset 1px 1px 4px rgba(0, 0, 0, 0.12),
+        inset -1px -1px 3px rgba(255, 255, 255, 0.25),
+        2px 2px 6px rgba(0, 0, 0, 0.12);
+}
+
+.character-details .form-group textarea:focus,
+.classes-section .form-group textarea:focus {
+    outline: none;
+    background: linear-gradient(180deg, #faf6ee 0%, #f3ebe0 100%);
+    box-shadow:
+        1px 1px 0 #9a8565,
+        inset 1px 1px 4px rgba(0, 0, 0, 0.1),
+        inset -1px -1px 3px rgba(255, 255, 255, 0.3),
+        2px 2px 6px rgba(0, 0, 0, 0.12),
+        0 0 0 2px rgba(139, 111, 78, 0.25);
+}
+
+/* Readonly textarea styling */
+.character-details .form-group .readonly-field.readonly-textarea,
+.classes-section .form-group .readonly-field.readonly-textarea {
+    text-align: left;
+    min-height: 80px;
+    background: linear-gradient(180deg, #f5efe3 0%, #ede3d5 100%);
+
+    /* Softer border */
+    border: 2px solid;
+    border-top-color: #c0b095;
+    border-left-color: #b8a88d;
+    border-right-color: #a89878;
+    border-bottom-color: #988868;
+
+    /* Subtle shadow */
+    box-shadow:
+        1px 1px 0 #9a8565,
+        inset 1px 1px 4px rgba(0, 0, 0, 0.12),
+        inset -1px -1px 3px rgba(255, 255, 255, 0.25),
+        2px 2px 6px rgba(0, 0, 0, 0.12);
+}
+
+/* Portrait section adjustments to match new styling */
+.character-section .portrait-section {
+    padding: 10px;
+    background: linear-gradient(145deg, rgba(255,255,255,0.15) 0%, rgba(255,255,255,0.05) 100%);
+    border-radius: 8px;
+}
+
+.character-section .portrait-frame {
+    border: 3px solid;
+    border-top-color: #c9b99a;
+    border-left-color: #bfad8e;
+    border-right-color: #a08a68;
+    border-bottom-color: #8f7958;
+    box-shadow:
+        2px 2px 0 #8a7555,
+        3px 3px 0 #7a6545,
+        inset 2px 2px 8px rgba(0, 0, 0, 0.15),
+        4px 4px 12px rgba(0, 0, 0, 0.2);
+}
+
+/* Action buttons styling for classes section */
+.classes-section .action-buttons {
+    margin-top: 24px;
+    padding-top: 16px;
+    border-top: 1px solid rgba(139, 111, 78, 0.3);
+}
+
+/* Responsive adjustments */
+@media (max-width: 768px) {
+    .character-section,
+    .classes-section {
+        padding: 15px;
+        margin: -15px;
+    }
+
+    .character-details .form-group input,
+    .classes-section .form-group input,
+    .character-details .form-group .readonly-field,
+    .classes-section .form-group .readonly-field {
+        padding: 10px 12px;
+    }
+}
