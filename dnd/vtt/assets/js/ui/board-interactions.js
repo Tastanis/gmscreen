@@ -641,12 +641,9 @@ export function mountBoardInteractions(store, routes = {}) {
   // Combat state refresh is now triggered immediately by board state poller callback.
   // This backup interval only runs as a safety fallback in case the callback fails.
   const COMBAT_STATE_REFRESH_INTERVAL_MS = 5000;
-  let suppressNextTrackerDoubleClick = false;
+  // Double-click activation debounce to prevent rapid re-activations
   let lastTrackerActivationAt = 0;
-  const TRACKER_ACTIVATION_DEBOUNCE_MS = 250;
-  let lastTrackerClickTarget = null;
-  let lastTrackerClickAt = 0;
-  const TRACKER_DOUBLE_CLICK_THRESHOLD_MS = 400;
+  const TRACKER_ACTIVATION_DEBOUNCE_MS = 300;
 
   function handleTokenLibraryDragStart(event) {
     const tokenItem = event?.target?.closest?.('.token-item');
@@ -6173,10 +6170,12 @@ export function mountBoardInteractions(store, routes = {}) {
       return false;
     }
 
-    // Clear any active combatant
+    // Clear any active combatant and release lock
     if (activeCombatantId) {
       activeCombatantId = null;
     }
+    // In PICK phase, no one should hold the lock
+    releaseTurnLock();
 
     currentTurnTeam = normalizedTeam;
     turnPhase = TURN_PHASE.PICK;
@@ -6204,6 +6203,8 @@ export function mountBoardInteractions(store, routes = {}) {
     activeTeam = null;
     currentTurnTeam = null;
     turnPhase = TURN_PHASE.IDLE;
+    // Clear any locks when combat ends
+    releaseTurnLock();
   }
 
   // Validates if a turn start attempt is valid and returns context
@@ -6236,8 +6237,8 @@ export function mountBoardInteractions(store, routes = {}) {
       return result;
     }
 
-    // If someone else is actively taking their turn
-    if (currentPhase === TURN_PHASE.ACTIVE && activeCombatantId !== combatantId) {
+    // If someone else is actively taking their turn (ACTIVE phase with different combatant)
+    if (currentPhase === TURN_PHASE.ACTIVE && activeCombatantId && activeCombatantId !== combatantId) {
       if (isOverride || isSharonOverride) {
         result.valid = true;
         return result;
@@ -6247,30 +6248,33 @@ export function mountBoardInteractions(store, routes = {}) {
       return result;
     }
 
-    // If it's the correct team's pick phase, always valid
-    if (currentPhase === TURN_PHASE.PICK && team === currentTurnTeam) {
+    // In PICK phase, allies can always take their turn
+    // The currentTurnTeam is for display/guidance, not for blocking allies
+    if (currentPhase === TURN_PHASE.PICK) {
+      if (team === 'ally') {
+        // Allies can always go during pick phase
+        result.valid = true;
+        return result;
+      }
+      // Enemies during pick phase - only GM should control these
+      // For non-GM users, this would have already been blocked by team !== 'ally' check
+      // in handlePlayerInitiatedTurn, but adding here for completeness
+      if (isOverride || isSharonOverride) {
+        result.valid = true;
+        return result;
+      }
       result.valid = true;
       return result;
     }
 
-    // If it's the other team's pick phase
-    if (currentPhase === TURN_PHASE.PICK && team !== currentTurnTeam) {
-      if (isSharonOverride) {
-        // Sharon can take turn immediately when it's enemy turn (hesitation is weakness)
-        result.valid = true;
-        return result;
-      }
-      if (isOverride) {
-        result.valid = true;
-        return result;
-      }
-      result.requiresConfirmation = true;
-      result.confirmationType = 'wrong_team_pick';
+    // If we're in ACTIVE phase but for the same combatant, that's valid (re-selecting)
+    if (currentPhase === TURN_PHASE.ACTIVE && activeCombatantId === combatantId) {
+      result.valid = true;
       return result;
     }
 
-    // Default: allow if we're in pick phase or override is set
-    if (currentPhase === TURN_PHASE.PICK || isOverride) {
+    // Default: allow with override
+    if (isOverride) {
       result.valid = true;
     }
 
@@ -6363,43 +6367,12 @@ export function mountBoardInteractions(store, routes = {}) {
   }
 
   function handleCombatTrackerClick(event) {
+    // Single click handler - just handles focus for GM users
+    // Double-click is handled by handleCombatTrackerDoubleClick
     const target = event.target instanceof HTMLElement ? event.target.closest('[data-combatant-id]') : null;
     if (!target || !combatTrackerRoot?.contains(target)) {
-      lastTrackerClickTarget = null;
-      lastTrackerClickAt = 0;
       return;
     }
-
-    const now = Date.now();
-    const combatantId = target.dataset.combatantId || '';
-
-    // Manual double-click detection: check if this click is within threshold
-    // of a previous click on the same target. This is more reliable than
-    // event.detail which can be inconsistent across browsers/platforms.
-    const isManualDoubleClick =
-      combatActive &&
-      combatantId &&
-      lastTrackerClickTarget === combatantId &&
-      now - lastTrackerClickAt <= TRACKER_DOUBLE_CLICK_THRESHOLD_MS;
-
-    // Also honor browser's native double-click detection via event.detail
-    const isNativeDoubleClick = event.detail >= 2 && combatActive;
-
-    if (isManualDoubleClick || isNativeDoubleClick) {
-      // Reset click tracking after activation
-      lastTrackerClickTarget = null;
-      lastTrackerClickAt = 0;
-
-      if (now - lastTrackerActivationAt > TRACKER_ACTIVATION_DEBOUNCE_MS) {
-        lastTrackerActivationAt = now;
-        suppressNextTrackerDoubleClick = activateCombatTrackerTarget(target);
-      }
-      return;
-    }
-
-    // Track this click for manual double-click detection
-    lastTrackerClickTarget = combatantId;
-    lastTrackerClickAt = now;
 
     if (!combatActive || !isGmUser()) {
       return;
@@ -6410,10 +6383,7 @@ export function mountBoardInteractions(store, routes = {}) {
   }
 
   function handleCombatTrackerDoubleClick(event) {
-    if (suppressNextTrackerDoubleClick) {
-      suppressNextTrackerDoubleClick = false;
-      return;
-    }
+    // Primary handler for double-click activation of combatants
     if (!combatActive) {
       return;
     }
@@ -6537,34 +6507,16 @@ export function mountBoardInteractions(store, routes = {}) {
       return initiatorName || formatProfileDisplayName(participantId);
     })();
 
-    const latestState = boardApi.getState?.() ?? {};
-    const activeSceneId = latestState.boardState?.activeSceneId ?? null;
-    if (activeSceneId) {
-      const sceneCombatState = latestState.boardState?.sceneState?.[activeSceneId]?.combat ?? null;
-      const normalizedCombatState = normalizeCombatState(sceneCombatState ?? {});
-      updateTurnLockState(normalizedCombatState.turnLock);
-    }
-
-    const existingLockHolder = normalizeProfileId(turnLockState.holderId);
+    // Acquire the turn lock - validation was already done by validateTurnStart
+    // Use force for GM users to ensure they can always take control
     const initiatorId = normalizeProfileId(initiatorProfileId || getCurrentUserId());
-    const lockHeldByAnotherUser = existingLockHolder && existingLockHolder !== initiatorId;
-
-    if (lockHeldByAnotherUser) {
-      const confirmed = confirmTurnLockOverride(turnLockState.holderName);
-      if (!confirmed) {
-        notifyTurnLocked(turnLockState.holderName);
-        return;
-      }
-    }
-
     const lockAcquired = acquireTurnLock(initiatorId || 'gm', initiatorName, representativeId, {
-      force: isGmUser() || lockHeldByAnotherUser,
+      force: isGmUser(),
     });
 
     if (!lockAcquired) {
-      if (!isGmUser()) {
-        notifyTurnLocked(turnLockState.holderName);
-      }
+      // Lock acquisition failed - another user has it
+      // This shouldn't happen often since we validate first, but handle gracefully
       return;
     }
 
@@ -7941,17 +7893,22 @@ export function mountBoardInteractions(store, routes = {}) {
       completedCombatants.clear();
       normalized.completedCombatantIds.forEach((id) => completedCombatants.add(id));
       applyCombatGroupsFromState(normalized.groups);
-      updateTurnLockState(normalized.turnLock);
 
-      // Clear stale turn locks to prevent orphaned lock state from blocking turns.
-      // This handles cases where a player disconnected without finishing their turn.
-      const wasLockStale = clearStaleTurnLock();
       let effectiveActiveCombatantId = normalized.activeCombatantId;
 
-      // If the turn lock was stale and the activeCombatantId matches the stale lock's
-      // combatant, clear the activeCombatantId to return to pick phase
-      if (wasLockStale && effectiveActiveCombatantId && normalized.turnLock?.combatantId === effectiveActiveCombatantId) {
-        effectiveActiveCombatantId = null;
+      // Only apply turn lock if there's an active combatant
+      // If we're in PICK phase (no active combatant), locks should be cleared
+      if (effectiveActiveCombatantId) {
+        updateTurnLockState(normalized.turnLock);
+        // Clear stale turn locks to prevent orphaned lock state from blocking turns.
+        const wasLockStale = clearStaleTurnLock();
+        // If the turn lock was stale and matches the active combatant, clear the active combatant
+        if (wasLockStale && normalized.turnLock?.combatantId === effectiveActiveCombatantId) {
+          effectiveActiveCombatantId = null;
+        }
+      } else {
+        // No active combatant means we're in PICK phase - clear any stale lock
+        updateTurnLockState(null);
       }
 
       if (!combatActive) {
@@ -9268,14 +9225,8 @@ export function mountBoardInteractions(store, routes = {}) {
       return;
     }
 
-    // Check turn lock first, but clear stale locks automatically
+    // Clear any stale turn locks first
     clearStaleTurnLock();
-    if (turnLockState.holderId && turnLockState.holderId !== userId) {
-      if (!confirmTurnLockOverride(turnLockState.holderName)) {
-        notifyTurnLocked(turnLockState.holderName);
-        return;
-      }
-    }
 
     // Check if this is a Sharon "hesitation is weakness" scenario
     const combatantProfileId = normalizeProfileId(getCombatantProfileId(combatantId));
@@ -9289,13 +9240,9 @@ export function mountBoardInteractions(store, routes = {}) {
     if (!validation.valid && validation.requiresConfirmation) {
       // Need user confirmation to proceed
       if (validation.confirmationType === 'override_active_turn') {
-        // Someone else is actively taking their turn
-        if (!window.confirm('Another token is currently taking their turn. Override and take your turn instead?')) {
-          return;
-        }
-      } else if (validation.confirmationType === 'wrong_team_pick') {
-        // It's the other team's pick phase
-        if (!confirmPlayerTurnOverride()) {
+        // Someone else is actively taking their turn - check if there's a lock holder
+        const lockHolderName = turnLockState.holderName || 'Another player';
+        if (!window.confirm(`${lockHolderName} is currently taking their turn. Override and take your turn instead?`)) {
           return;
         }
       } else {
