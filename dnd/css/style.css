@@ -2614,3 +2614,1094 @@ body:not(.gm-mode) .club-navigation button:hover:not(:disabled) {
             4px 4px 8px rgba(0, 0, 0, 0.18);
     }
 }
+
+/* ============================================
+   PAST CLASSES SECTION - 3D STONE STYLING
+   ============================================ */
+
+.past-classes-section {
+    background: linear-gradient(145deg, #c0b090 0%, #b0a078 50%, #9a8a68 100%);
+    border-radius: 8px;
+    padding: 20px;
+    margin: -18px;
+    margin-bottom: 0;
+    position: relative;
+    border: 2px solid;
+    border-top-color: #d0c0a0;
+    border-left-color: #c8b898;
+    border-right-color: #907850;
+    border-bottom-color: #806840;
+    box-shadow:
+        inset 0 1px 0 rgba(255, 255, 255, 0.2),
+        0 4px 12px rgba(0, 0, 0, 0.15);
+}
+
+.past-classes-section > h2 {
+    font-size: 1.5em;
+    font-weight: 800;
+    color: #2f2417;
+    text-transform: uppercase;
+    letter-spacing: 0.08em;
+    text-align: center;
+    margin-bottom: 20px;
+    padding-bottom: 12px;
+    position: relative;
+    text-shadow:
+        1px 1px 0 rgba(255, 255, 255, 0.5),
+        -1px -1px 0 rgba(0, 0, 0, 0.15),
+        2px 2px 4px rgba(0, 0, 0, 0.2);
+}
+
+.past-classes-section > h2::after {
+    content: '';
+    position: absolute;
+    bottom: 0;
+    left: 50%;
+    transform: translateX(-50%);
+    width: 60%;
+    height: 3px;
+    background: linear-gradient(90deg,
+        transparent 0%,
+        var(--accent) 20%,
+        var(--accent-strong) 50%,
+        var(--accent) 80%,
+        transparent 100%);
+    border-radius: 2px;
+}
+
+/* Past class cards styled as stone tablets */
+.past-classes-section .past-class-item {
+    background: linear-gradient(145deg, #d8ccb0 0%, #c8bc98 60%, #bab088 100%);
+    border: 3px solid;
+    border-top-color: #e8dcc0;
+    border-left-color: #dcd0b0;
+    border-right-color: #8a7858;
+    border-bottom-color: #7a6848;
+    border-radius: 8px;
+    padding: 16px;
+    cursor: pointer;
+    transition: all 0.2s ease;
+    box-shadow:
+        3px 3px 0 #6a5a3a,
+        4px 4px 0 #5a4a2a,
+        5px 5px 0 #4a3a1a,
+        7px 7px 14px rgba(0, 0, 0, 0.35),
+        inset 2px 2px 4px rgba(0, 0, 0, 0.1),
+        inset -2px -2px 4px rgba(255, 255, 255, 0.15);
+}
+
+.past-classes-section .past-class-item:hover {
+    background: linear-gradient(145deg, #e0d4b8 0%, #d0c4a0 60%, #c2b890 100%);
+    transform: translateY(-2px);
+    box-shadow:
+        4px 4px 0 #6a5a3a,
+        5px 5px 0 #5a4a2a,
+        6px 6px 0 #4a3a1a,
+        9px 9px 18px rgba(0, 0, 0, 0.4),
+        inset 2px 2px 4px rgba(0, 0, 0, 0.1),
+        inset -2px -2px 4px rgba(255, 255, 255, 0.15);
+}
+
+.past-classes-section .past-class-item h3 {
+    color: #2f2417;
+    font-weight: 700;
+    text-transform: uppercase;
+    letter-spacing: 0.04em;
+    margin-bottom: 8px;
+    text-shadow: 1px 1px 0 rgba(255, 255, 255, 0.4);
+}
+
+.past-classes-section .past-class-item p {
+    color: #4a3a28;
+    font-size: 13px;
+    text-shadow: 0 1px 0 rgba(255, 255, 255, 0.3);
+}
+
+/* ============================================
+   RELATIONSHIPS SECTION - 3D STONE STYLING
+   ============================================ */
+
+.relationships-section {
+    background: linear-gradient(145deg, #c0b090 0%, #b0a078 50%, #9a8a68 100%);
+    border-radius: 8px;
+    padding: 20px;
+    margin: -18px;
+    margin-bottom: 0;
+    position: relative;
+    border: 2px solid;
+    border-top-color: #d0c0a0;
+    border-left-color: #c8b898;
+    border-right-color: #907850;
+    border-bottom-color: #806840;
+    box-shadow:
+        inset 0 1px 0 rgba(255, 255, 255, 0.2),
+        0 4px 12px rgba(0, 0, 0, 0.15);
+}
+
+.relationships-section .section-header {
+    border-bottom: 2px solid rgba(139, 111, 78, 0.3);
+    padding-bottom: 12px;
+    margin-bottom: 20px;
+}
+
+.relationships-section .section-header h2 {
+    font-size: 1.5em;
+    font-weight: 800;
+    color: #2f2417;
+    text-transform: uppercase;
+    letter-spacing: 0.08em;
+    text-shadow:
+        1px 1px 0 rgba(255, 255, 255, 0.5),
+        -1px -1px 0 rgba(0, 0, 0, 0.15),
+        2px 2px 4px rgba(0, 0, 0, 0.2);
+}
+
+/* Relationship items styled as stone tablets */
+.relationships-section .relationship-item {
+    background: linear-gradient(145deg, #d8ccb0 0%, #c8bc98 60%, #bab088 100%);
+    border: 3px solid;
+    border-top-color: #e8dcc0;
+    border-left-color: #dcd0b0;
+    border-right-color: #8a7858;
+    border-bottom-color: #7a6848;
+    border-radius: 8px;
+    overflow: hidden;
+    margin-bottom: 12px;
+    box-shadow:
+        3px 3px 0 #6a5a3a,
+        4px 4px 0 #5a4a2a,
+        5px 5px 0 #4a3a1a,
+        7px 7px 14px rgba(0, 0, 0, 0.35),
+        inset 2px 2px 4px rgba(0, 0, 0, 0.08),
+        inset -2px -2px 4px rgba(255, 255, 255, 0.12);
+}
+
+.relationships-section .relationship-header {
+    background: linear-gradient(145deg, #ddd3c0 0%, #d0c4a8 60%, #c4b898 100%);
+    padding: 14px 16px;
+    border-bottom: 2px solid rgba(139, 111, 78, 0.2);
+    transition: all 0.2s ease;
+}
+
+.relationships-section .relationship-header:hover {
+    background: linear-gradient(145deg, #e5dbc8 0%, #d8ccb0 60%, #ccbea0 100%);
+}
+
+.relationships-section .relationship-header h3 {
+    color: #2f2417;
+    font-weight: 700;
+    text-transform: uppercase;
+    letter-spacing: 0.04em;
+    text-shadow: 1px 1px 0 rgba(255, 255, 255, 0.4);
+}
+
+.relationships-section .relationship-points {
+    font-weight: 800;
+    color: #5a4530;
+    background: linear-gradient(145deg, rgba(255,255,255,0.4) 0%, rgba(255,255,255,0.2) 100%);
+    padding: 4px 12px;
+    border-radius: 12px;
+    text-shadow: 0 1px 0 rgba(255, 255, 255, 0.5);
+    box-shadow:
+        inset 0 1px 0 rgba(255, 255, 255, 0.5),
+        0 1px 3px rgba(0, 0, 0, 0.15);
+}
+
+.relationships-section .relationship-details {
+    background: linear-gradient(145deg, #c8bc98 0%, #bab088 50%, #aca078 100%);
+    padding: 16px;
+    border-top: none;
+}
+
+.relationships-section .relationship-details .form-group {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    text-align: center;
+    margin-bottom: 16px;
+}
+
+.relationships-section .relationship-details .form-group label {
+    font-size: 12px;
+    font-weight: 700;
+    text-transform: uppercase;
+    letter-spacing: 0.06em;
+    color: #3a2818;
+    margin-bottom: 8px;
+    padding: 5px 14px;
+    background: linear-gradient(145deg, rgba(255,255,255,0.5) 0%, rgba(255,255,255,0.3) 100%);
+    border-radius: 8px;
+    text-shadow: 0 1px 0 rgba(255, 255, 255, 0.7);
+    box-shadow:
+        inset 0 1px 0 rgba(255, 255, 255, 0.6),
+        0 1px 3px rgba(0, 0, 0, 0.15);
+    border: 1px solid rgba(255, 255, 255, 0.3);
+    border-bottom-color: rgba(0, 0, 0, 0.1);
+}
+
+.relationships-section .relationship-details input,
+.relationships-section .relationship-details textarea {
+    width: 100%;
+    padding: 12px 14px;
+    font-size: 14px;
+    color: #3b2a1c;
+    background: linear-gradient(145deg, #d8ccb0 0%, #c8bc98 60%, #bab088 100%);
+    border-radius: 8px;
+    text-align: center;
+    border: 3px solid;
+    border-top-color: #e8dcc0;
+    border-left-color: #dcd0b0;
+    border-right-color: #8a7858;
+    border-bottom-color: #7a6848;
+    box-shadow:
+        3px 3px 0 #6a5a3a,
+        4px 4px 0 #5a4a2a,
+        5px 5px 0 #4a3a1a,
+        7px 7px 14px rgba(0, 0, 0, 0.35),
+        inset 2px 2px 4px rgba(0, 0, 0, 0.15),
+        inset -2px -2px 4px rgba(255, 255, 255, 0.2);
+}
+
+.relationships-section .relationship-details textarea {
+    text-align: left;
+    min-height: 80px;
+    resize: vertical;
+}
+
+.relationships-section .relationship-details input:focus,
+.relationships-section .relationship-details textarea:focus {
+    outline: none;
+    background: linear-gradient(145deg, #e0d4b8 0%, #d0c4a0 60%, #c2b890 100%);
+    box-shadow:
+        3px 3px 0 #6a5a3a,
+        4px 4px 0 #5a4a2a,
+        5px 5px 0 #4a3a1a,
+        7px 7px 14px rgba(0, 0, 0, 0.35),
+        inset 2px 2px 4px rgba(0, 0, 0, 0.12),
+        inset -2px -2px 4px rgba(255, 255, 255, 0.25),
+        0 0 0 3px rgba(139, 111, 78, 0.35);
+}
+
+/* ============================================
+   PROJECTS SECTION - 3D STONE STYLING
+   ============================================ */
+
+.projects-section {
+    background: linear-gradient(145deg, #c0b090 0%, #b0a078 50%, #9a8a68 100%);
+    border-radius: 8px;
+    padding: 20px;
+    margin: -18px;
+    margin-bottom: 0;
+    position: relative;
+    border: 2px solid;
+    border-top-color: #d0c0a0;
+    border-left-color: #c8b898;
+    border-right-color: #907850;
+    border-bottom-color: #806840;
+    box-shadow:
+        inset 0 1px 0 rgba(255, 255, 255, 0.2),
+        0 4px 12px rgba(0, 0, 0, 0.15);
+}
+
+.projects-section .section-header {
+    border-bottom: 2px solid rgba(139, 111, 78, 0.3);
+    padding-bottom: 12px;
+    margin-bottom: 20px;
+}
+
+.projects-section .section-header h2 {
+    font-size: 1.5em;
+    font-weight: 800;
+    color: #2f2417;
+    text-transform: uppercase;
+    letter-spacing: 0.08em;
+    text-shadow:
+        1px 1px 0 rgba(255, 255, 255, 0.5),
+        -1px -1px 0 rgba(0, 0, 0, 0.15),
+        2px 2px 4px rgba(0, 0, 0, 0.2);
+}
+
+/* Project items styled as stone tablets */
+.projects-section .project-item {
+    background: linear-gradient(145deg, #d8ccb0 0%, #c8bc98 60%, #bab088 100%);
+    border: 3px solid;
+    border-top-color: #e8dcc0;
+    border-left-color: #dcd0b0;
+    border-right-color: #8a7858;
+    border-bottom-color: #7a6848;
+    border-radius: 8px;
+    overflow: hidden;
+    margin-bottom: 12px;
+    box-shadow:
+        3px 3px 0 #6a5a3a,
+        4px 4px 0 #5a4a2a,
+        5px 5px 0 #4a3a1a,
+        7px 7px 14px rgba(0, 0, 0, 0.35),
+        inset 2px 2px 4px rgba(0, 0, 0, 0.08),
+        inset -2px -2px 4px rgba(255, 255, 255, 0.12);
+}
+
+.projects-section .project-header {
+    background: linear-gradient(145deg, #ddd3c0 0%, #d0c4a8 60%, #c4b898 100%);
+    padding: 14px 16px;
+    border-bottom: 2px solid rgba(139, 111, 78, 0.2);
+    transition: all 0.2s ease;
+}
+
+.projects-section .project-header:hover {
+    background: linear-gradient(145deg, #e5dbc8 0%, #d8ccb0 60%, #ccbea0 100%);
+}
+
+.projects-section .project-header h3 {
+    color: #2f2417;
+    font-weight: 700;
+    text-transform: uppercase;
+    letter-spacing: 0.04em;
+    text-shadow: 1px 1px 0 rgba(255, 255, 255, 0.4);
+}
+
+/* Enhanced progress bar styling */
+.projects-section .progress-bar {
+    background: linear-gradient(145deg, #a09070 0%, #908060 100%);
+    border: 2px solid;
+    border-top-color: #807050;
+    border-left-color: #786848;
+    border-right-color: #b0a080;
+    border-bottom-color: #a89878;
+    border-radius: 12px;
+    height: 22px;
+    box-shadow:
+        inset 2px 2px 4px rgba(0, 0, 0, 0.3),
+        inset -1px -1px 2px rgba(255, 255, 255, 0.1);
+}
+
+.projects-section .progress-fill {
+    background: linear-gradient(90deg, #5a8040 0%, #6a9050 50%, #7aa060 100%);
+    border-radius: 10px;
+    box-shadow:
+        inset 0 2px 4px rgba(255, 255, 255, 0.3),
+        0 1px 2px rgba(0, 0, 0, 0.2);
+}
+
+.projects-section .progress-text {
+    font-weight: 700;
+    color: #3a2818;
+    text-shadow: 0 1px 0 rgba(255, 255, 255, 0.4);
+}
+
+.projects-section .project-details {
+    background: linear-gradient(145deg, #c8bc98 0%, #bab088 50%, #aca078 100%);
+    padding: 16px;
+    border-top: none;
+}
+
+.projects-section .project-details .form-group {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    text-align: center;
+    margin-bottom: 16px;
+}
+
+.projects-section .project-details .form-group label {
+    font-size: 12px;
+    font-weight: 700;
+    text-transform: uppercase;
+    letter-spacing: 0.06em;
+    color: #3a2818;
+    margin-bottom: 8px;
+    padding: 5px 14px;
+    background: linear-gradient(145deg, rgba(255,255,255,0.5) 0%, rgba(255,255,255,0.3) 100%);
+    border-radius: 8px;
+    text-shadow: 0 1px 0 rgba(255, 255, 255, 0.7);
+    box-shadow:
+        inset 0 1px 0 rgba(255, 255, 255, 0.6),
+        0 1px 3px rgba(0, 0, 0, 0.15);
+    border: 1px solid rgba(255, 255, 255, 0.3);
+    border-bottom-color: rgba(0, 0, 0, 0.1);
+}
+
+.projects-section .project-details input,
+.projects-section .project-details textarea {
+    width: 100%;
+    padding: 12px 14px;
+    font-size: 14px;
+    color: #3b2a1c;
+    background: linear-gradient(145deg, #d8ccb0 0%, #c8bc98 60%, #bab088 100%);
+    border-radius: 8px;
+    text-align: center;
+    border: 3px solid;
+    border-top-color: #e8dcc0;
+    border-left-color: #dcd0b0;
+    border-right-color: #8a7858;
+    border-bottom-color: #7a6848;
+    box-shadow:
+        3px 3px 0 #6a5a3a,
+        4px 4px 0 #5a4a2a,
+        5px 5px 0 #4a3a1a,
+        7px 7px 14px rgba(0, 0, 0, 0.35),
+        inset 2px 2px 4px rgba(0, 0, 0, 0.15),
+        inset -2px -2px 4px rgba(255, 255, 255, 0.2);
+}
+
+.projects-section .project-details textarea {
+    text-align: left;
+    min-height: 80px;
+    resize: vertical;
+}
+
+.projects-section .project-details input:focus,
+.projects-section .project-details textarea:focus {
+    outline: none;
+    background: linear-gradient(145deg, #e0d4b8 0%, #d0c4a0 60%, #c2b890 100%);
+    box-shadow:
+        3px 3px 0 #6a5a3a,
+        4px 4px 0 #5a4a2a,
+        5px 5px 0 #4a3a1a,
+        7px 7px 14px rgba(0, 0, 0, 0.35),
+        inset 2px 2px 4px rgba(0, 0, 0, 0.12),
+        inset -2px -2px 4px rgba(255, 255, 255, 0.25),
+        0 0 0 3px rgba(139, 111, 78, 0.35);
+}
+
+/* ============================================
+   CLUBS SECTION - 3D STONE STYLING
+   ============================================ */
+
+.clubs-section {
+    background: linear-gradient(145deg, #c0b090 0%, #b0a078 50%, #9a8a68 100%);
+    border-radius: 8px;
+    padding: 20px;
+    margin: -18px;
+    margin-bottom: 0;
+    position: relative;
+    border: 2px solid;
+    border-top-color: #d0c0a0;
+    border-left-color: #c8b898;
+    border-right-color: #907850;
+    border-bottom-color: #806840;
+    box-shadow:
+        inset 0 1px 0 rgba(255, 255, 255, 0.2),
+        0 4px 12px rgba(0, 0, 0, 0.15);
+}
+
+.clubs-section .section-header {
+    border-bottom: 2px solid rgba(139, 111, 78, 0.3);
+    padding-bottom: 12px;
+    margin-bottom: 20px;
+}
+
+.clubs-section .section-header h2 {
+    font-size: 1.5em;
+    font-weight: 800;
+    color: #2f2417;
+    text-transform: uppercase;
+    letter-spacing: 0.08em;
+    text-shadow:
+        1px 1px 0 rgba(255, 255, 255, 0.5),
+        -1px -1px 0 rgba(0, 0, 0, 0.15),
+        2px 2px 4px rgba(0, 0, 0, 0.2);
+}
+
+/* Club navigation buttons - 3D stone style */
+.clubs-section .club-navigation {
+    gap: 12px;
+}
+
+.clubs-section .club-navigation button {
+    background: linear-gradient(145deg, #8b7355 0%, #7a6245 60%, #695535 100%);
+    color: #fdfaf5;
+    border: 2px solid;
+    border-top-color: #a08a6a;
+    border-left-color: #988260;
+    border-right-color: #5a4830;
+    border-bottom-color: #4a3820;
+    padding: 10px 16px;
+    border-radius: 6px;
+    font-weight: 700;
+    text-transform: uppercase;
+    letter-spacing: 0.04em;
+    font-size: 12px;
+    cursor: pointer;
+    position: relative;
+    transition: all 0.15s ease;
+    box-shadow:
+        2px 2px 0 #4a3820,
+        3px 3px 0 #3a2810,
+        4px 4px 8px rgba(0, 0, 0, 0.35);
+    text-shadow: 0 1px 2px rgba(0, 0, 0, 0.4);
+}
+
+.clubs-section .club-navigation button:hover:not(:disabled) {
+    background: linear-gradient(145deg, #9b8365 0%, #8a7255 60%, #796545 100%);
+    transform: translateY(-1px);
+    box-shadow:
+        3px 3px 0 #4a3820,
+        4px 4px 0 #3a2810,
+        5px 5px 10px rgba(0, 0, 0, 0.4);
+}
+
+.clubs-section .club-navigation button:active:not(:disabled) {
+    transform: translateY(1px);
+    box-shadow:
+        1px 1px 0 #4a3820,
+        2px 2px 4px rgba(0, 0, 0, 0.3);
+}
+
+.clubs-section .club-navigation button:disabled {
+    background: linear-gradient(145deg, #a09080 0%, #908070 60%, #807060 100%);
+    border-top-color: #b0a090;
+    border-left-color: #a89888;
+    border-right-color: #706050;
+    border-bottom-color: #605040;
+    color: #a09080;
+    cursor: not-allowed;
+    box-shadow:
+        1px 1px 0 #605040,
+        2px 2px 4px rgba(0, 0, 0, 0.2);
+}
+
+.clubs-section #club-indicator {
+    font-weight: 700;
+    color: #2f2417;
+    padding: 10px 16px;
+    background: linear-gradient(145deg, #d8ccb0 0%, #c8bc98 60%, #bab088 100%);
+    border: 2px solid;
+    border-top-color: #e8dcc0;
+    border-left-color: #dcd0b0;
+    border-right-color: #8a7858;
+    border-bottom-color: #7a6848;
+    border-radius: 6px;
+    text-shadow: 0 1px 0 rgba(255, 255, 255, 0.5);
+    box-shadow:
+        2px 2px 0 #6a5a3a,
+        3px 3px 0 #5a4a2a,
+        4px 4px 8px rgba(0, 0, 0, 0.25),
+        inset 1px 1px 2px rgba(0, 0, 0, 0.1),
+        inset -1px -1px 2px rgba(255, 255, 255, 0.15);
+}
+
+/* Club form styling */
+.clubs-section .club-form {
+    margin-top: 24px;
+    padding: 20px;
+    background: linear-gradient(145deg, rgba(255,255,255,0.15) 0%, rgba(255,255,255,0.05) 100%);
+    border-radius: 8px;
+    box-shadow: inset 1px 1px 4px rgba(0, 0, 0, 0.08);
+}
+
+.clubs-section .club-form .form-group {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    text-align: center;
+    margin-bottom: 20px;
+}
+
+.clubs-section .club-form .form-group label {
+    font-size: 12px;
+    font-weight: 700;
+    text-transform: uppercase;
+    letter-spacing: 0.06em;
+    color: #3a2818;
+    margin-bottom: 8px;
+    padding: 5px 14px;
+    background: linear-gradient(145deg, rgba(255,255,255,0.5) 0%, rgba(255,255,255,0.3) 100%);
+    border-radius: 8px;
+    text-shadow: 0 1px 0 rgba(255, 255, 255, 0.7);
+    box-shadow:
+        inset 0 1px 0 rgba(255, 255, 255, 0.6),
+        0 1px 3px rgba(0, 0, 0, 0.15);
+    border: 1px solid rgba(255, 255, 255, 0.3);
+    border-bottom-color: rgba(0, 0, 0, 0.1);
+}
+
+.clubs-section .club-form input {
+    width: 100%;
+    padding: 12px 14px;
+    font-size: 14px;
+    font-weight: 500;
+    color: #3b2a1c;
+    background: linear-gradient(145deg, #d8ccb0 0%, #c8bc98 60%, #bab088 100%);
+    border-radius: 8px;
+    text-align: center;
+    border: 3px solid;
+    border-top-color: #e8dcc0;
+    border-left-color: #dcd0b0;
+    border-right-color: #8a7858;
+    border-bottom-color: #7a6848;
+    box-shadow:
+        3px 3px 0 #6a5a3a,
+        4px 4px 0 #5a4a2a,
+        5px 5px 0 #4a3a1a,
+        7px 7px 14px rgba(0, 0, 0, 0.35),
+        inset 2px 2px 4px rgba(0, 0, 0, 0.15),
+        inset -2px -2px 4px rgba(255, 255, 255, 0.2);
+}
+
+.clubs-section .club-form textarea {
+    width: 100%;
+    padding: 12px 14px;
+    font-size: 14px;
+    color: #3b2a1c;
+    background: linear-gradient(145deg, #ddd3c0 0%, #d0c4a8 60%, #c4b898 100%);
+    border-radius: 8px;
+    text-align: left;
+    resize: vertical;
+    border: 3px solid;
+    border-top-color: #e8dcc0;
+    border-left-color: #dcd0b0;
+    border-right-color: #8a7858;
+    border-bottom-color: #7a6848;
+    box-shadow:
+        3px 3px 0 #6a5a3a,
+        4px 4px 0 #5a4a2a,
+        5px 5px 0 #4a3a1a,
+        7px 7px 14px rgba(0, 0, 0, 0.35),
+        inset 2px 2px 4px rgba(0, 0, 0, 0.15),
+        inset -2px -2px 4px rgba(255, 255, 255, 0.2);
+}
+
+.clubs-section .club-form input:focus,
+.clubs-section .club-form textarea:focus {
+    outline: none;
+    background: linear-gradient(145deg, #e0d4b8 0%, #d0c4a0 60%, #c2b890 100%);
+    box-shadow:
+        3px 3px 0 #6a5a3a,
+        4px 4px 0 #5a4a2a,
+        5px 5px 0 #4a3a1a,
+        7px 7px 14px rgba(0, 0, 0, 0.35),
+        inset 2px 2px 4px rgba(0, 0, 0, 0.12),
+        inset -2px -2px 4px rgba(255, 255, 255, 0.25),
+        0 0 0 3px rgba(139, 111, 78, 0.35);
+}
+
+.clubs-section .club-form .readonly-field {
+    width: 100%;
+    padding: 12px 14px;
+    font-size: 14px;
+    font-weight: 500;
+    color: #3b2a1c;
+    background: linear-gradient(145deg, #d8ccb0 0%, #c8bc98 60%, #bab088 100%);
+    border-radius: 8px;
+    text-align: center;
+    border: 3px solid;
+    border-top-color: #e8dcc0;
+    border-left-color: #dcd0b0;
+    border-right-color: #8a7858;
+    border-bottom-color: #7a6848;
+    box-shadow:
+        3px 3px 0 #6a5a3a,
+        4px 4px 0 #5a4a2a,
+        5px 5px 0 #4a3a1a,
+        7px 7px 14px rgba(0, 0, 0, 0.35),
+        inset 2px 2px 4px rgba(0, 0, 0, 0.15),
+        inset -2px -2px 4px rgba(255, 255, 255, 0.2);
+}
+
+.clubs-section .club-form .readonly-field.readonly-textarea {
+    text-align: left;
+    min-height: 80px;
+    background: linear-gradient(145deg, #ddd3c0 0%, #d0c4a8 60%, #c4b898 100%);
+}
+
+.clubs-section .action-buttons {
+    margin-top: 24px;
+    padding-top: 16px;
+    border-top: 2px solid rgba(139, 111, 78, 0.2);
+}
+
+/* ============================================
+   JOB SECTION - 3D STONE STYLING
+   ============================================ */
+
+.job-section {
+    background: linear-gradient(145deg, #c0b090 0%, #b0a078 50%, #9a8a68 100%);
+    border-radius: 8px;
+    padding: 20px;
+    margin: -18px;
+    margin-bottom: 0;
+    position: relative;
+    border: 2px solid;
+    border-top-color: #d0c0a0;
+    border-left-color: #c8b898;
+    border-right-color: #907850;
+    border-bottom-color: #806840;
+    box-shadow:
+        inset 0 1px 0 rgba(255, 255, 255, 0.2),
+        0 4px 12px rgba(0, 0, 0, 0.15);
+}
+
+.job-section > h2 {
+    font-size: 1.5em;
+    font-weight: 800;
+    color: #2f2417;
+    text-transform: uppercase;
+    letter-spacing: 0.08em;
+    text-align: center;
+    margin-bottom: 20px;
+    padding-bottom: 12px;
+    position: relative;
+    text-shadow:
+        1px 1px 0 rgba(255, 255, 255, 0.5),
+        -1px -1px 0 rgba(0, 0, 0, 0.15),
+        2px 2px 4px rgba(0, 0, 0, 0.2);
+}
+
+.job-section > h2::after {
+    content: '';
+    position: absolute;
+    bottom: 0;
+    left: 50%;
+    transform: translateX(-50%);
+    width: 60%;
+    height: 3px;
+    background: linear-gradient(90deg,
+        transparent 0%,
+        var(--accent) 20%,
+        var(--accent-strong) 50%,
+        var(--accent) 80%,
+        transparent 100%);
+    border-radius: 2px;
+}
+
+/* Job form grid styling */
+.job-section .form-grid {
+    display: grid;
+    grid-template-columns: repeat(auto-fill, minmax(200px, 1fr));
+    gap: 20px;
+}
+
+.job-section .form-group {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    text-align: center;
+}
+
+.job-section .form-group.full-width {
+    grid-column: 1 / -1;
+    align-items: stretch;
+}
+
+.job-section .form-group.full-width label {
+    align-self: center;
+}
+
+.job-section .form-group label {
+    font-size: 12px;
+    font-weight: 700;
+    text-transform: uppercase;
+    letter-spacing: 0.06em;
+    color: #3a2818;
+    margin-bottom: 8px;
+    padding: 5px 14px;
+    background: linear-gradient(145deg, rgba(255,255,255,0.5) 0%, rgba(255,255,255,0.3) 100%);
+    border-radius: 8px;
+    text-shadow: 0 1px 0 rgba(255, 255, 255, 0.7);
+    box-shadow:
+        inset 0 1px 0 rgba(255, 255, 255, 0.6),
+        0 1px 3px rgba(0, 0, 0, 0.15);
+    border: 1px solid rgba(255, 255, 255, 0.3);
+    border-bottom-color: rgba(0, 0, 0, 0.1);
+}
+
+.job-section .form-group input {
+    width: 100%;
+    padding: 12px 14px;
+    font-size: 14px;
+    font-weight: 500;
+    color: #3b2a1c;
+    background: linear-gradient(145deg, #d8ccb0 0%, #c8bc98 60%, #bab088 100%);
+    border-radius: 8px;
+    text-align: center;
+    border: 3px solid;
+    border-top-color: #e8dcc0;
+    border-left-color: #dcd0b0;
+    border-right-color: #8a7858;
+    border-bottom-color: #7a6848;
+    box-shadow:
+        3px 3px 0 #6a5a3a,
+        4px 4px 0 #5a4a2a,
+        5px 5px 0 #4a3a1a,
+        7px 7px 14px rgba(0, 0, 0, 0.35),
+        inset 2px 2px 4px rgba(0, 0, 0, 0.15),
+        inset -2px -2px 4px rgba(255, 255, 255, 0.2);
+}
+
+.job-section .form-group textarea {
+    width: 100%;
+    padding: 12px 14px;
+    font-size: 14px;
+    color: #3b2a1c;
+    background: linear-gradient(145deg, #ddd3c0 0%, #d0c4a8 60%, #c4b898 100%);
+    border-radius: 8px;
+    text-align: left;
+    resize: vertical;
+    min-height: 100px;
+    border: 3px solid;
+    border-top-color: #e8dcc0;
+    border-left-color: #dcd0b0;
+    border-right-color: #8a7858;
+    border-bottom-color: #7a6848;
+    box-shadow:
+        3px 3px 0 #6a5a3a,
+        4px 4px 0 #5a4a2a,
+        5px 5px 0 #4a3a1a,
+        7px 7px 14px rgba(0, 0, 0, 0.35),
+        inset 2px 2px 4px rgba(0, 0, 0, 0.15),
+        inset -2px -2px 4px rgba(255, 255, 255, 0.2);
+}
+
+.job-section .form-group input:focus,
+.job-section .form-group textarea:focus {
+    outline: none;
+    background: linear-gradient(145deg, #e0d4b8 0%, #d0c4a0 60%, #c2b890 100%);
+    box-shadow:
+        3px 3px 0 #6a5a3a,
+        4px 4px 0 #5a4a2a,
+        5px 5px 0 #4a3a1a,
+        7px 7px 14px rgba(0, 0, 0, 0.35),
+        inset 2px 2px 4px rgba(0, 0, 0, 0.12),
+        inset -2px -2px 4px rgba(255, 255, 255, 0.25),
+        0 0 0 3px rgba(139, 111, 78, 0.35);
+}
+
+.job-section .form-group .readonly-field {
+    width: 100%;
+    padding: 12px 14px;
+    font-size: 14px;
+    font-weight: 500;
+    color: #3b2a1c;
+    background: linear-gradient(145deg, #d8ccb0 0%, #c8bc98 60%, #bab088 100%);
+    border-radius: 8px;
+    text-align: center;
+    border: 3px solid;
+    border-top-color: #e8dcc0;
+    border-left-color: #dcd0b0;
+    border-right-color: #8a7858;
+    border-bottom-color: #7a6848;
+    box-shadow:
+        3px 3px 0 #6a5a3a,
+        4px 4px 0 #5a4a2a,
+        5px 5px 0 #4a3a1a,
+        7px 7px 14px rgba(0, 0, 0, 0.35),
+        inset 2px 2px 4px rgba(0, 0, 0, 0.15),
+        inset -2px -2px 4px rgba(255, 255, 255, 0.2);
+}
+
+.job-section .form-group .readonly-field.readonly-textarea {
+    text-align: left;
+    min-height: 100px;
+    background: linear-gradient(145deg, #ddd3c0 0%, #d0c4a8 60%, #c4b898 100%);
+}
+
+/* ============================================
+   ENHANCED BUTTON STYLING FOR ALL SECTIONS
+   3D Stone button effects
+   ============================================ */
+
+/* Add/Action buttons with 3D stone effect */
+.past-classes-section .btn-add,
+.relationships-section .btn-add,
+.projects-section .btn-add,
+.clubs-section .btn-add,
+.job-section .btn-add {
+    background: linear-gradient(145deg, #8b7355 0%, #7a6245 60%, #695535 100%);
+    color: #fdfaf5;
+    border: 2px solid;
+    border-top-color: #a08a6a;
+    border-left-color: #988260;
+    border-right-color: #5a4830;
+    border-bottom-color: #4a3820;
+    padding: 10px 18px;
+    border-radius: 6px;
+    font-weight: 700;
+    text-transform: uppercase;
+    letter-spacing: 0.04em;
+    font-size: 12px;
+    cursor: pointer;
+    position: relative;
+    transition: all 0.15s ease;
+    box-shadow:
+        2px 2px 0 #4a3820,
+        3px 3px 0 #3a2810,
+        4px 4px 8px rgba(0, 0, 0, 0.35);
+    text-shadow: 0 1px 2px rgba(0, 0, 0, 0.4);
+}
+
+.past-classes-section .btn-add:hover,
+.relationships-section .btn-add:hover,
+.projects-section .btn-add:hover,
+.clubs-section .btn-add:hover,
+.job-section .btn-add:hover {
+    background: linear-gradient(145deg, #9b8365 0%, #8a7255 60%, #796545 100%);
+    transform: translateY(-1px);
+    box-shadow:
+        3px 3px 0 #4a3820,
+        4px 4px 0 #3a2810,
+        5px 5px 10px rgba(0, 0, 0, 0.4);
+}
+
+.past-classes-section .btn-add:active,
+.relationships-section .btn-add:active,
+.projects-section .btn-add:active,
+.clubs-section .btn-add:active,
+.job-section .btn-add:active {
+    transform: translateY(1px);
+    box-shadow:
+        1px 1px 0 #4a3820,
+        2px 2px 4px rgba(0, 0, 0, 0.3);
+}
+
+/* Danger button styling */
+.past-classes-section .btn-danger,
+.relationships-section .btn-danger,
+.projects-section .btn-danger,
+.clubs-section .btn-danger,
+.job-section .btn-danger {
+    background: linear-gradient(145deg, #a35540 0%, #8c4535 60%, #753828 100%);
+    color: #fdfaf5;
+    border: 2px solid;
+    border-top-color: #c06850;
+    border-left-color: #b06048;
+    border-right-color: #5a2818;
+    border-bottom-color: #4a2010;
+    padding: 10px 18px;
+    border-radius: 6px;
+    font-weight: 700;
+    text-transform: uppercase;
+    letter-spacing: 0.04em;
+    font-size: 12px;
+    cursor: pointer;
+    position: relative;
+    transition: all 0.15s ease;
+    box-shadow:
+        2px 2px 0 #4a2010,
+        3px 3px 0 #3a1808,
+        4px 4px 8px rgba(0, 0, 0, 0.35);
+    text-shadow: 0 1px 2px rgba(0, 0, 0, 0.4);
+}
+
+.past-classes-section .btn-danger:hover,
+.relationships-section .btn-danger:hover,
+.projects-section .btn-danger:hover,
+.clubs-section .btn-danger:hover,
+.job-section .btn-danger:hover {
+    background: linear-gradient(145deg, #b36550 0%, #9c5545 60%, #854838 100%);
+    transform: translateY(-1px);
+    box-shadow:
+        3px 3px 0 #4a2010,
+        4px 4px 0 #3a1808,
+        5px 5px 10px rgba(0, 0, 0, 0.4);
+}
+
+.past-classes-section .btn-danger:active,
+.relationships-section .btn-danger:active,
+.projects-section .btn-danger:active,
+.clubs-section .btn-danger:active,
+.job-section .btn-danger:active {
+    transform: translateY(1px);
+    box-shadow:
+        1px 1px 0 #4a2010,
+        2px 2px 4px rgba(0, 0, 0, 0.3);
+}
+
+/* Primary button styling (like Finalize Class) */
+.past-classes-section .btn-primary,
+.relationships-section .btn-primary,
+.projects-section .btn-primary,
+.clubs-section .btn-primary,
+.job-section .btn-primary {
+    background: linear-gradient(145deg, #5a8040 0%, #4a7030 60%, #3a6020 100%);
+    color: #fdfaf5;
+    border: 2px solid;
+    border-top-color: #7a9858;
+    border-left-color: #6a8848;
+    border-right-color: #2a4818;
+    border-bottom-color: #1a3810;
+    padding: 10px 18px;
+    border-radius: 6px;
+    font-weight: 700;
+    text-transform: uppercase;
+    letter-spacing: 0.04em;
+    font-size: 12px;
+    cursor: pointer;
+    position: relative;
+    transition: all 0.15s ease;
+    box-shadow:
+        2px 2px 0 #2a4818,
+        3px 3px 0 #1a3808,
+        4px 4px 8px rgba(0, 0, 0, 0.35);
+    text-shadow: 0 1px 2px rgba(0, 0, 0, 0.4);
+}
+
+.past-classes-section .btn-primary:hover,
+.relationships-section .btn-primary:hover,
+.projects-section .btn-primary:hover,
+.clubs-section .btn-primary:hover,
+.job-section .btn-primary:hover {
+    background: linear-gradient(145deg, #6a9050 0%, #5a8040 60%, #4a7030 100%);
+    transform: translateY(-1px);
+    box-shadow:
+        3px 3px 0 #2a4818,
+        4px 4px 0 #1a3808,
+        5px 5px 10px rgba(0, 0, 0, 0.4);
+}
+
+/* ============================================
+   RESPONSIVE ADJUSTMENTS FOR NEW SECTIONS
+   ============================================ */
+
+@media (max-width: 768px) {
+    .past-classes-section,
+    .relationships-section,
+    .projects-section,
+    .clubs-section,
+    .job-section {
+        padding: 15px;
+        margin: -15px;
+    }
+
+    .past-classes-section .past-class-item,
+    .relationships-section .relationship-item,
+    .projects-section .project-item {
+        box-shadow:
+            2px 2px 0 #6a5a3a,
+            3px 3px 0 #4a3a1a,
+            5px 5px 10px rgba(0, 0, 0, 0.3),
+            inset 2px 2px 4px rgba(0, 0, 0, 0.08),
+            inset -2px -2px 4px rgba(255, 255, 255, 0.12);
+    }
+
+    .clubs-section .club-navigation {
+        flex-wrap: wrap;
+        justify-content: center;
+    }
+
+    .clubs-section .club-navigation button,
+    .clubs-section #club-indicator {
+        padding: 8px 12px;
+        font-size: 11px;
+    }
+
+    .job-section .form-grid {
+        grid-template-columns: 1fr;
+    }
+
+    .relationships-section .relationship-details input,
+    .relationships-section .relationship-details textarea,
+    .projects-section .project-details input,
+    .projects-section .project-details textarea,
+    .clubs-section .club-form input,
+    .clubs-section .club-form textarea,
+    .job-section .form-group input,
+    .job-section .form-group textarea {
+        box-shadow:
+            2px 2px 0 #6a5a3a,
+            3px 3px 0 #4a3a1a,
+            5px 5px 10px rgba(0, 0, 0, 0.3),
+            inset 2px 2px 4px rgba(0, 0, 0, 0.15),
+            inset -2px -2px 4px rgba(255, 255, 255, 0.2);
+    }
+}
