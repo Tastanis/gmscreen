@@ -1465,7 +1465,7 @@ body {
 .form-grid {
     display: grid;
     grid-template-columns: repeat(auto-fit, minmax(240px, 1fr));
-    gap: 14px;
+    gap: 28px 14px; /* row-gap column-gap: more vertical space between rows */
 }
 
 .form-group {
@@ -2101,36 +2101,6 @@ body:not(.gm-mode) .club-navigation button:hover:not(:disabled) {
     }
 }
 
-/* GM Restriction Styles */
-.dropdown-content a.gm-restricted {
-    background-color: #ffebee !important;
-    color: #c62828 !important;
-    cursor: not-allowed !important;
-    opacity: 0.7;
-}
-
-.dropdown-content a.gm-restricted:hover {
-    background-color: #ffcdd2 !important;
-    color: #b71c1c !important;
-}
-
-.dropdown-content a.gm-allowed {
-    background-color: #e8f5e8;
-    color: #2e7d32;
-}
-
-.dropdown-content a.gm-allowed:hover {
-    background-color: #c8e6c9;
-    color: #1b5e20;
-}
-
-/* Ensure GM option appears at bottom of dropdown */
-.dropdown-content a.gm-restricted,
-.dropdown-content a.gm-allowed {
-    order: 999;
-    border-top: 1px solid var(--border);
-    margin-top: 5px;
-}
 
 /* Autocomplete dropdown for NPC name lookup */
 .character-autocomplete {
@@ -2342,7 +2312,7 @@ body:not(.gm-mode) .club-navigation button:hover:not(:disabled) {
     text-transform: uppercase;
     letter-spacing: 0.06em;
     color: #3a2818;
-    margin-bottom: 8px;
+    margin-bottom: 4px;
     padding: 5px 14px;
     background: linear-gradient(145deg, rgba(255,255,255,0.5) 0%, rgba(255,255,255,0.3) 100%);
     border-radius: 8px;
