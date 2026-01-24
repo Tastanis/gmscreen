@@ -2380,18 +2380,17 @@ body:not(.gm-mode) .club-navigation button:hover:not(:disabled) {
     border-right-color: #706038;  /* Darker side */
     border-bottom-color: #604830; /* Much darker shadow */
 
-    /* Multi-layer shadow for pronounced 3D depth - increased contrast between layers */
+    /* Smoother 2-layer shadow for refined 3D depth */
     box-shadow:
-        /* Hard-edge offset shadows - bigger jumps between layers */
-        3px 3px 0 #8a7a5a,
-        4px 4px 0 #5a4a2a,
-        5px 5px 0 #3a2a1a,
+        /* Hard-edge offset shadows - tighter layers for smoother edge */
+        2px 2px 0 #8a7a5a,
+        3px 3px 0 #4a3a1a,
         /* Ambient shadow */
-        7px 7px 14px rgba(0, 0, 0, 0.3),
-        /* Inner frame edge - darker for visible "step" */
+        5px 5px 10px rgba(0, 0, 0, 0.25),
+        /* Inner frame edge */
         inset 0 0 0 2px #9a8868,
-        /* Deep inner shadow for sunken well effect */
-        inset 3px 3px 8px rgba(0, 0, 0, 0.3),
+        /* Inner shadow for sunken well effect */
+        inset 2px 2px 6px rgba(0, 0, 0, 0.25),
         /* Inner highlight for contrast */
         inset -2px -2px 6px rgba(255, 255, 255, 0.25);
 }
@@ -2405,16 +2404,15 @@ body:not(.gm-mode) .club-navigation button:hover:not(:disabled) {
     border-right-color: #786840;
     border-bottom-color: #685038;
     box-shadow:
-        /* Hard-edge shadows - increased contrast */
-        3px 3px 0 #8a7a5a,
-        4px 4px 0 #5a4a2a,
-        5px 5px 0 #3a2a1a,
+        /* Smoother 2-layer shadows */
+        2px 2px 0 #8a7a5a,
+        3px 3px 0 #4a3a1a,
         /* Ambient shadow */
-        7px 7px 14px rgba(0, 0, 0, 0.3),
-        /* Inner frame edge - darker */
+        5px 5px 10px rgba(0, 0, 0, 0.25),
+        /* Inner frame edge */
         inset 0 0 0 2px #a89870,
         /* Slightly lighter inner shadows on focus */
-        inset 3px 3px 6px rgba(0, 0, 0, 0.2),
+        inset 2px 2px 5px rgba(0, 0, 0, 0.18),
         inset -2px -2px 6px rgba(255, 255, 255, 0.35),
         /* Focus glow ring */
         0 0 0 3px rgba(139, 111, 78, 0.35);
@@ -2440,18 +2438,17 @@ body:not(.gm-mode) .club-navigation button:hover:not(:disabled) {
     border-right-color: #706038;
     border-bottom-color: #604830;
 
-    /* Multi-layer shadow for pronounced depth - increased contrast */
+    /* Smoother 2-layer shadow for refined depth */
     box-shadow:
-        /* Hard-edge offset shadows - bigger jumps */
-        3px 3px 0 #8a7a5a,
-        4px 4px 0 #5a4a2a,
-        5px 5px 0 #3a2a1a,
+        /* Hard-edge offset shadows - tighter layers */
+        2px 2px 0 #8a7a5a,
+        3px 3px 0 #4a3a1a,
         /* Ambient shadow */
-        7px 7px 14px rgba(0, 0, 0, 0.3),
-        /* Inner frame edge - darker */
+        5px 5px 10px rgba(0, 0, 0, 0.25),
+        /* Inner frame edge */
         inset 0 0 0 2px #9a8868,
-        /* Deep inner shadow for sunken well */
-        inset 3px 3px 8px rgba(0, 0, 0, 0.3),
+        /* Inner shadow for sunken well */
+        inset 2px 2px 6px rgba(0, 0, 0, 0.25),
         /* Inner highlight */
         inset -2px -2px 6px rgba(255, 255, 255, 0.25);
 }
@@ -2555,15 +2552,14 @@ body:not(.gm-mode) .club-navigation button:hover:not(:disabled) {
     border-bottom-color: #604830;
     border-radius: 10px;
     box-shadow:
-        /* Hard-edge shadows for 3D thickness - increased contrast */
-        3px 3px 0 #8a7a5a,
-        4px 4px 0 #5a4a2a,
-        5px 5px 0 #3a2a1a,
+        /* Smoother 2-layer shadows for refined 3D thickness */
+        2px 2px 0 #8a7a5a,
+        3px 3px 0 #4a3a1a,
         /* Inner shadow for recessed image area */
-        inset 3px 3px 8px rgba(0, 0, 0, 0.25),
+        inset 2px 2px 6px rgba(0, 0, 0, 0.22),
         inset -2px -2px 4px rgba(255, 255, 255, 0.15),
         /* Ambient shadow */
-        7px 7px 14px rgba(0, 0, 0, 0.25);
+        5px 5px 10px rgba(0, 0, 0, 0.22);
 }
 
 /* Action buttons styling for classes section */
@@ -2588,22 +2584,22 @@ body:not(.gm-mode) .club-navigation button:hover:not(:disabled) {
         padding: 10px 12px;
         /* Slightly thinner border on mobile */
         border-width: 3px;
-        /* Reduced shadows for mobile - increased contrast */
+        /* Reduced shadows for mobile - smoother edge */
         box-shadow:
-            2px 2px 0 #8a7a5a,
-            3px 3px 0 #5a4a2a,
-            5px 5px 10px rgba(0, 0, 0, 0.25),
+            1px 1px 0 #8a7a5a,
+            2px 2px 0 #4a3a1a,
+            4px 4px 8px rgba(0, 0, 0, 0.22),
             inset 0 0 0 1px #9a8868,
-            inset 2px 2px 6px rgba(0, 0, 0, 0.25),
+            inset 2px 2px 5px rgba(0, 0, 0, 0.22),
             inset -1px -1px 4px rgba(255, 255, 255, 0.2);
     }
 
     .character-section .portrait-frame {
         border-width: 3px;
         box-shadow:
-            2px 2px 0 #8a7a5a,
-            3px 3px 0 #5a4a2a,
-            inset 2px 2px 6px rgba(0, 0, 0, 0.2),
-            5px 5px 10px rgba(0, 0, 0, 0.2);
+            1px 1px 0 #8a7a5a,
+            2px 2px 0 #4a3a1a,
+            inset 2px 2px 5px rgba(0, 0, 0, 0.18),
+            4px 4px 8px rgba(0, 0, 0, 0.18);
     }
 }
