@@ -46,10 +46,7 @@ export function persistBoardState(endpoint, boardState = {}, options = {}) {
     return null;
   }
 
-  // Use immediate mode by default for board state saves to reduce the window
-  // where stale state could be applied by polling, preventing token popback
-  const normalizedOptions = { immediate: true, ...options };
-  return queueSave(SAVE_KEY, { boardState: payload }, endpoint, normalizedOptions);
+  return queueSave(SAVE_KEY, { boardState: payload }, endpoint, options);
 }
 
 export function persistCombatState(endpoint, sceneId, combatState = {}, options = {}) {

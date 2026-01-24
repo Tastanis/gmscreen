@@ -46,7 +46,6 @@ export function queueSave(key, payload, endpoint, options = {}) {
     retryLimit = 3,
     retryBackoffMs = 500,
     coalesce = true,
-    immediate = false,
   } =
     normalizedOptions;
 
@@ -55,7 +54,6 @@ export function queueSave(key, payload, endpoint, options = {}) {
     endpoint,
     controller,
     keepalive: Boolean(keepalive),
-    immediate: Boolean(immediate),
     callbacks: [],
     resolvers: [],
     promise: null,
@@ -111,13 +109,6 @@ export function queueSave(key, payload, endpoint, options = {}) {
 }
 
 function schedulePersist(key, entry) {
-  // If immediate mode is requested, skip the debounce delay to reduce
-  // the window where stale state could be applied by polling
-  if (entry.immediate) {
-    persist(key, entry);
-    return;
-  }
-
   const setTimeoutFn = globalThis?.window?.setTimeout ?? globalThis.setTimeout;
   if (typeof setTimeoutFn === 'function') {
     setTimeoutFn(() => {
