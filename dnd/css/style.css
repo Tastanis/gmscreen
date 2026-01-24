@@ -2359,7 +2359,7 @@ body:not(.gm-mode) .club-navigation button:hover:not(:disabled) {
     border-bottom-color: rgba(0, 0, 0, 0.1);
 }
 
-/* 3D Raised/Sunken effect for input fields */
+/* 3D Raised stone tablet effect for input fields */
 .character-details .form-group input,
 .classes-section .form-group input {
     width: 100%;
@@ -2367,58 +2367,55 @@ body:not(.gm-mode) .club-navigation button:hover:not(:disabled) {
     font-size: 14px;
     font-weight: 500;
     color: #3b2a1c;
-    /* Darker background for better contrast */
-    background: linear-gradient(180deg, #d8ccb0 0%, #d0c4a8 100%);
-    border-radius: 10px;
+    /* Gradient background matching stone tablet look */
+    background: linear-gradient(145deg, #d8ccb0 0%, #c8bc98 60%, #bab088 100%);
+    border-radius: 8px;
     position: relative;
     text-align: center;
 
-    /* THICKER outer raised border - brighter highlights, darker shadows */
-    border: 4px solid;
-    border-top-color: #e8d8b8;    /* Brighter highlight */
-    border-left-color: #d8c8a8;   /* Light side */
-    border-right-color: #706038;  /* Darker side */
-    border-bottom-color: #604830; /* Much darker shadow */
+    /* Beveled border - light on top/left, dark on bottom/right */
+    border: 3px solid;
+    border-top-color: #e8dcc0;
+    border-left-color: #dcd0b0;
+    border-right-color: #8a7858;
+    border-bottom-color: #7a6848;
 
-    /* Smoother 2-layer shadow for refined 3D depth */
+    /* Layered hard shadows for proper stone thickness */
     box-shadow:
-        /* Hard-edge offset shadows - tighter layers for smoother edge */
-        2px 2px 0 #8a7a5a,
-        3px 3px 0 #4a3a1a,
-        /* Ambient shadow */
-        5px 5px 10px rgba(0, 0, 0, 0.25),
-        /* Inner frame edge */
-        inset 0 0 0 2px #9a8868,
-        /* Inner shadow for sunken well effect */
-        inset 2px 2px 6px rgba(0, 0, 0, 0.25),
-        /* Inner highlight for contrast */
-        inset -2px -2px 6px rgba(255, 255, 255, 0.25);
+        /* Solid edge shadows - darker, progressive for connected look */
+        3px 3px 0 #6a5a3a,
+        4px 4px 0 #5a4a2a,
+        5px 5px 0 #4a3a1a,
+        /* Soft ambient shadow */
+        7px 7px 14px rgba(0, 0, 0, 0.35),
+        /* Inner embossed effect */
+        inset 2px 2px 4px rgba(0, 0, 0, 0.15),
+        inset -2px -2px 4px rgba(255, 255, 255, 0.2);
 }
 
 .character-details .form-group input:focus,
 .classes-section .form-group input:focus {
     outline: none;
-    background: linear-gradient(180deg, #e0d4c0 0%, #d8ccb8 100%);
-    border-top-color: #f0e0c8;
-    border-left-color: #e0d0b8;
-    border-right-color: #786840;
-    border-bottom-color: #685038;
+    background: linear-gradient(145deg, #e0d4b8 0%, #d0c4a0 60%, #c2b890 100%);
+    border-top-color: #f0e4c8;
+    border-left-color: #e4d8b8;
+    border-right-color: #8a7858;
+    border-bottom-color: #7a6848;
     box-shadow:
-        /* Smoother 2-layer shadows */
-        2px 2px 0 #8a7a5a,
-        3px 3px 0 #4a3a1a,
-        /* Ambient shadow */
-        5px 5px 10px rgba(0, 0, 0, 0.25),
-        /* Inner frame edge */
-        inset 0 0 0 2px #a89870,
-        /* Slightly lighter inner shadows on focus */
-        inset 2px 2px 5px rgba(0, 0, 0, 0.18),
-        inset -2px -2px 6px rgba(255, 255, 255, 0.35),
+        /* Solid edge shadows */
+        3px 3px 0 #6a5a3a,
+        4px 4px 0 #5a4a2a,
+        5px 5px 0 #4a3a1a,
+        /* Soft ambient shadow */
+        7px 7px 14px rgba(0, 0, 0, 0.35),
+        /* Inner embossed effect - slightly lighter on focus */
+        inset 2px 2px 4px rgba(0, 0, 0, 0.12),
+        inset -2px -2px 4px rgba(255, 255, 255, 0.25),
         /* Focus glow ring */
         0 0 0 3px rgba(139, 111, 78, 0.35);
 }
 
-/* Readonly fields - same enhanced 3D effect */
+/* Readonly fields - same raised stone tablet effect */
 .character-details .form-group .readonly-field,
 .classes-section .form-group .readonly-field {
     width: 100%;
@@ -2426,31 +2423,29 @@ body:not(.gm-mode) .club-navigation button:hover:not(:disabled) {
     font-size: 14px;
     font-weight: 500;
     color: #3b2a1c;
-    /* Darker background for better contrast */
-    background: linear-gradient(180deg, #d8ccb0 0%, #d0c4a8 100%);
-    border-radius: 10px;
+    /* Gradient background matching stone tablet look */
+    background: linear-gradient(145deg, #d8ccb0 0%, #c8bc98 60%, #bab088 100%);
+    border-radius: 8px;
     text-align: center;
 
-    /* THICKER outer raised border - brighter highlights, darker shadows */
-    border: 4px solid;
-    border-top-color: #e8d8b8;
-    border-left-color: #d8c8a8;
-    border-right-color: #706038;
-    border-bottom-color: #604830;
+    /* Beveled border - light on top/left, dark on bottom/right */
+    border: 3px solid;
+    border-top-color: #e8dcc0;
+    border-left-color: #dcd0b0;
+    border-right-color: #8a7858;
+    border-bottom-color: #7a6848;
 
-    /* Smoother 2-layer shadow for refined depth */
+    /* Layered hard shadows for proper stone thickness */
     box-shadow:
-        /* Hard-edge offset shadows - tighter layers */
-        2px 2px 0 #8a7a5a,
-        3px 3px 0 #4a3a1a,
-        /* Ambient shadow */
-        5px 5px 10px rgba(0, 0, 0, 0.25),
-        /* Inner frame edge */
-        inset 0 0 0 2px #9a8868,
-        /* Inner shadow for sunken well */
-        inset 2px 2px 6px rgba(0, 0, 0, 0.25),
-        /* Inner highlight */
-        inset -2px -2px 6px rgba(255, 255, 255, 0.25);
+        /* Solid edge shadows - darker, progressive for connected look */
+        3px 3px 0 #6a5a3a,
+        4px 4px 0 #5a4a2a,
+        5px 5px 0 #4a3a1a,
+        /* Soft ambient shadow */
+        7px 7px 14px rgba(0, 0, 0, 0.35),
+        /* Inner embossed effect */
+        inset 2px 2px 4px rgba(0, 0, 0, 0.15),
+        inset -2px -2px 4px rgba(255, 255, 255, 0.2);
 }
 
 /* Less dramatic styling for textarea fields (Other, Test Buffs) */
@@ -2472,42 +2467,52 @@ body:not(.gm-mode) .club-navigation button:hover:not(:disabled) {
     padding: 12px 14px;
     font-size: 14px;
     color: #3b2a1c;
-    background: linear-gradient(180deg, #ddd3c0 0%, #d5cbb8 100%);
-    border-radius: 10px;
+    /* Gradient background matching stone tablet look */
+    background: linear-gradient(145deg, #ddd3c0 0%, #d0c4a8 60%, #c4b898 100%);
+    border-radius: 8px;
     text-align: left;
     resize: vertical;
     min-height: 80px;
 
-    /* Enhanced border for textareas - brighter highlights, darker shadows */
+    /* Beveled border - light on top/left, dark on bottom/right */
     border: 3px solid;
-    border-top-color: #e0d0b0;
-    border-left-color: #d0c0a0;
-    border-right-color: #786848;
-    border-bottom-color: #685838;
+    border-top-color: #e8dcc0;
+    border-left-color: #dcd0b0;
+    border-right-color: #8a7858;
+    border-bottom-color: #7a6848;
 
-    /* Enhanced shadow - increased contrast between layers */
+    /* Layered hard shadows for proper stone thickness */
     box-shadow:
-        2px 2px 0 #8a7a5a,
-        3px 3px 0 #5a4a2a,
-        /* Ambient shadow */
-        5px 5px 10px rgba(0, 0, 0, 0.2),
-        /* Inner sunken effect */
-        inset 2px 2px 6px rgba(0, 0, 0, 0.2),
-        inset -1px -1px 4px rgba(255, 255, 255, 0.2);
+        /* Solid edge shadows - darker, progressive for connected look */
+        3px 3px 0 #6a5a3a,
+        4px 4px 0 #5a4a2a,
+        5px 5px 0 #4a3a1a,
+        /* Soft ambient shadow */
+        7px 7px 14px rgba(0, 0, 0, 0.35),
+        /* Inner embossed effect */
+        inset 2px 2px 4px rgba(0, 0, 0, 0.15),
+        inset -2px -2px 4px rgba(255, 255, 255, 0.2);
 }
 
 .character-details .form-group textarea:focus,
 .classes-section .form-group textarea:focus {
     outline: none;
-    background: linear-gradient(180deg, #e5dbd0 0%, #ddd3c8 100%);
-    border-top-color: #e8d8b8;
-    border-left-color: #d8c8a8;
+    background: linear-gradient(145deg, #e5dbc8 0%, #d8ccb0 60%, #ccbea0 100%);
+    border-top-color: #f0e4c8;
+    border-left-color: #e4d8b8;
+    border-right-color: #8a7858;
+    border-bottom-color: #7a6848;
     box-shadow:
-        2px 2px 0 #8a7a5a,
-        3px 3px 0 #5a4a2a,
-        5px 5px 10px rgba(0, 0, 0, 0.2),
-        inset 2px 2px 5px rgba(0, 0, 0, 0.15),
-        inset -1px -1px 4px rgba(255, 255, 255, 0.25),
+        /* Solid edge shadows */
+        3px 3px 0 #6a5a3a,
+        4px 4px 0 #5a4a2a,
+        5px 5px 0 #4a3a1a,
+        /* Soft ambient shadow */
+        7px 7px 14px rgba(0, 0, 0, 0.35),
+        /* Inner embossed effect - slightly lighter on focus */
+        inset 2px 2px 4px rgba(0, 0, 0, 0.12),
+        inset -2px -2px 4px rgba(255, 255, 255, 0.25),
+        /* Focus glow ring */
         0 0 0 3px rgba(139, 111, 78, 0.3);
 }
 
@@ -2516,22 +2521,27 @@ body:not(.gm-mode) .club-navigation button:hover:not(:disabled) {
 .classes-section .form-group .readonly-field.readonly-textarea {
     text-align: left;
     min-height: 80px;
-    background: linear-gradient(180deg, #ddd3c0 0%, #d5cbb8 100%);
+    /* Gradient background matching stone tablet look */
+    background: linear-gradient(145deg, #ddd3c0 0%, #d0c4a8 60%, #c4b898 100%);
 
-    /* Enhanced border - brighter highlights, darker shadows */
+    /* Beveled border - light on top/left, dark on bottom/right */
     border: 3px solid;
-    border-top-color: #e0d0b0;
-    border-left-color: #d0c0a0;
-    border-right-color: #786848;
-    border-bottom-color: #685838;
+    border-top-color: #e8dcc0;
+    border-left-color: #dcd0b0;
+    border-right-color: #8a7858;
+    border-bottom-color: #7a6848;
 
-    /* Enhanced shadow - increased contrast */
+    /* Layered hard shadows for proper stone thickness */
     box-shadow:
-        2px 2px 0 #8a7a5a,
-        3px 3px 0 #5a4a2a,
-        5px 5px 10px rgba(0, 0, 0, 0.2),
-        inset 2px 2px 6px rgba(0, 0, 0, 0.2),
-        inset -1px -1px 4px rgba(255, 255, 255, 0.2);
+        /* Solid edge shadows - darker, progressive for connected look */
+        3px 3px 0 #6a5a3a,
+        4px 4px 0 #5a4a2a,
+        5px 5px 0 #4a3a1a,
+        /* Soft ambient shadow */
+        7px 7px 14px rgba(0, 0, 0, 0.35),
+        /* Inner embossed effect */
+        inset 2px 2px 4px rgba(0, 0, 0, 0.15),
+        inset -2px -2px 4px rgba(255, 255, 255, 0.2);
 }
 
 /* Portrait section adjustments to match enhanced styling */
@@ -2544,22 +2554,23 @@ body:not(.gm-mode) .club-navigation button:hover:not(:disabled) {
 }
 
 .character-section .portrait-frame {
-    /* THICKER border with brighter highlights, darker shadows */
-    border: 4px solid;
-    border-top-color: #e8d8b8;
-    border-left-color: #d8c8a8;
-    border-right-color: #706038;
-    border-bottom-color: #604830;
-    border-radius: 10px;
+    /* Beveled border - light on top/left, dark on bottom/right */
+    border: 3px solid;
+    border-top-color: #e8dcc0;
+    border-left-color: #dcd0b0;
+    border-right-color: #8a7858;
+    border-bottom-color: #7a6848;
+    border-radius: 8px;
     box-shadow:
-        /* Smoother 2-layer shadows for refined 3D thickness */
-        2px 2px 0 #8a7a5a,
-        3px 3px 0 #4a3a1a,
+        /* Solid edge shadows - darker, progressive for connected look */
+        3px 3px 0 #6a5a3a,
+        4px 4px 0 #5a4a2a,
+        5px 5px 0 #4a3a1a,
+        /* Soft ambient shadow */
+        7px 7px 14px rgba(0, 0, 0, 0.35),
         /* Inner shadow for recessed image area */
-        inset 2px 2px 6px rgba(0, 0, 0, 0.22),
-        inset -2px -2px 4px rgba(255, 255, 255, 0.15),
-        /* Ambient shadow */
-        5px 5px 10px rgba(0, 0, 0, 0.22);
+        inset 2px 2px 4px rgba(0, 0, 0, 0.15),
+        inset -2px -2px 4px rgba(255, 255, 255, 0.2);
 }
 
 /* Action buttons styling for classes section */
