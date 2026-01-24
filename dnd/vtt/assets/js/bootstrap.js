@@ -66,11 +66,18 @@ async function bootstrap() {
       // This allows drawings to persist even when no scene is selected.
       const sceneId = currentState?.boardState?.activeSceneId || DEFAULT_SCENE_ID;
 
+      // Add timestamps to drawings for conflict resolution
+      const timestamp = Date.now();
+      const drawingsWithTimestamps = drawings.map((drawing) => ({
+        ...drawing,
+        _lastModified: drawing._lastModified || timestamp,
+      }));
+
       updateState((draft) => {
         if (!draft.boardState.drawings) {
           draft.boardState.drawings = {};
         }
-        draft.boardState.drawings[sceneId] = drawings;
+        draft.boardState.drawings[sceneId] = drawingsWithTimestamps;
       });
     },
     getCurrentUserId: () => {

@@ -165,8 +165,10 @@ if (!defined('VTT_STATE_API_INCLUDE_ONLY')) {
             $clientSocketId = isset($rawState['_socketId']) && is_string($rawState['_socketId'])
                 ? trim($rawState['_socketId'])
                 : null;
+            // Check if this is a delta-only update (only changed entities)
+            $isDeltaOnly = !empty($rawState['_deltaOnly']);
             // Remove internal fields before processing
-            unset($rawState['_version'], $rawState['_socketId']);
+            unset($rawState['_version'], $rawState['_socketId'], $rawState['_deltaOnly']);
 
             $updates = sanitizeBoardStateUpdates($rawState);
             if (empty($updates)) {
@@ -179,7 +181,7 @@ if (!defined('VTT_STATE_API_INCLUDE_ONLY')) {
             // Determine what changed for targeted Pusher broadcasts
             $changedFields = array_keys($updates);
 
-            $responseState = withVttBoardStateLock(function () use ($updates, $auth, $clientVersion) {
+            $responseState = withVttBoardStateLock(function () use ($updates, $auth, $clientVersion, $isDeltaOnly) {
                 $existing = loadVttJson('board-state.json');
                 $nextState = normalizeBoardState($existing);
 
@@ -231,10 +233,18 @@ if (!defined('VTT_STATE_API_INCLUDE_ONLY')) {
                             $existingPlacements = isset($nextState['placements'][$sceneKey]) && is_array($nextState['placements'][$sceneKey])
                                 ? $nextState['placements'][$sceneKey]
                                 : [];
-                            $nextState['placements'][$sceneKey] = mergeSceneEntriesPreservingGmAuthored(
-                                $existingPlacements,
-                                $placements
-                            );
+                            // Use timestamp-based merge for delta updates to prevent race conditions
+                            if ($isDeltaOnly) {
+                                $nextState['placements'][$sceneKey] = mergeSceneEntriesByTimestamp(
+                                    $existingPlacements,
+                                    $placements
+                                );
+                            } else {
+                                $nextState['placements'][$sceneKey] = mergeSceneEntriesPreservingGmAuthored(
+                                    $existingPlacements,
+                                    $placements
+                                );
+                            }
                         }
                     }
 
@@ -253,10 +263,18 @@ if (!defined('VTT_STATE_API_INCLUDE_ONLY')) {
                             $existingTemplates = isset($nextState['templates'][$sceneKey]) && is_array($nextState['templates'][$sceneKey])
                                 ? $nextState['templates'][$sceneKey]
                                 : [];
-                            $nextState['templates'][$sceneKey] = mergeSceneEntriesPreservingGmAuthored(
-                                $existingTemplates,
-                                $templates
-                            );
+                            // Use timestamp-based merge for delta updates
+                            if ($isDeltaOnly) {
+                                $nextState['templates'][$sceneKey] = mergeSceneEntriesByTimestamp(
+                                    $existingTemplates,
+                                    $templates
+                                );
+                            } else {
+                                $nextState['templates'][$sceneKey] = mergeSceneEntriesPreservingGmAuthored(
+                                    $existingTemplates,
+                                    $templates
+                                );
+                            }
                         }
                     }
 
@@ -275,10 +293,18 @@ if (!defined('VTT_STATE_API_INCLUDE_ONLY')) {
                             $existingDrawings = isset($nextState['drawings'][$sceneKey]) && is_array($nextState['drawings'][$sceneKey])
                                 ? $nextState['drawings'][$sceneKey]
                                 : [];
-                            $nextState['drawings'][$sceneKey] = mergeSceneEntriesPreservingGmAuthored(
-                                $existingDrawings,
-                                $drawings
-                            );
+                            // Use timestamp-based merge for delta updates
+                            if ($isDeltaOnly) {
+                                $nextState['drawings'][$sceneKey] = mergeSceneEntriesByTimestamp(
+                                    $existingDrawings,
+                                    $drawings
+                                );
+                            } else {
+                                $nextState['drawings'][$sceneKey] = mergeSceneEntriesPreservingGmAuthored(
+                                    $existingDrawings,
+                                    $drawings
+                                );
+                            }
                         }
                     }
 
@@ -315,6 +341,75 @@ if (!defined('VTT_STATE_API_INCLUDE_ONLY')) {
                                 continue;
                             }
                             $nextState['sceneState'][$sceneId] = array_merge($nextState['sceneState'][$sceneId], $config);
+                        }
+                        continue;
+                    }
+                    // Use timestamp-based merge for placements in delta mode
+                    if ($key === 'placements' && $isDeltaOnly && is_array($value)) {
+                        if (!isset($nextState['placements']) || !is_array($nextState['placements'])) {
+                            $nextState['placements'] = [];
+                        }
+                        foreach ($value as $sceneId => $placements) {
+                            if (!is_array($placements)) {
+                                continue;
+                            }
+                            $sceneKey = is_string($sceneId) ? trim($sceneId) : (string) $sceneId;
+                            if ($sceneKey === '') {
+                                continue;
+                            }
+                            $existingPlacements = isset($nextState['placements'][$sceneKey]) && is_array($nextState['placements'][$sceneKey])
+                                ? $nextState['placements'][$sceneKey]
+                                : [];
+                            $nextState['placements'][$sceneKey] = mergeSceneEntriesByTimestamp(
+                                $existingPlacements,
+                                $placements
+                            );
+                        }
+                        continue;
+                    }
+                    // Use timestamp-based merge for templates in delta mode
+                    if ($key === 'templates' && $isDeltaOnly && is_array($value)) {
+                        if (!isset($nextState['templates']) || !is_array($nextState['templates'])) {
+                            $nextState['templates'] = [];
+                        }
+                        foreach ($value as $sceneId => $templates) {
+                            if (!is_array($templates)) {
+                                continue;
+                            }
+                            $sceneKey = is_string($sceneId) ? trim($sceneId) : (string) $sceneId;
+                            if ($sceneKey === '') {
+                                continue;
+                            }
+                            $existingTemplates = isset($nextState['templates'][$sceneKey]) && is_array($nextState['templates'][$sceneKey])
+                                ? $nextState['templates'][$sceneKey]
+                                : [];
+                            $nextState['templates'][$sceneKey] = mergeSceneEntriesByTimestamp(
+                                $existingTemplates,
+                                $templates
+                            );
+                        }
+                        continue;
+                    }
+                    // Use timestamp-based merge for drawings in delta mode
+                    if ($key === 'drawings' && $isDeltaOnly && is_array($value)) {
+                        if (!isset($nextState['drawings']) || !is_array($nextState['drawings'])) {
+                            $nextState['drawings'] = [];
+                        }
+                        foreach ($value as $sceneId => $drawings) {
+                            if (!is_array($drawings)) {
+                                continue;
+                            }
+                            $sceneKey = is_string($sceneId) ? trim($sceneId) : (string) $sceneId;
+                            if ($sceneKey === '') {
+                                continue;
+                            }
+                            $existingDrawings = isset($nextState['drawings'][$sceneKey]) && is_array($nextState['drawings'][$sceneKey])
+                                ? $nextState['drawings'][$sceneKey]
+                                : [];
+                            $nextState['drawings'][$sceneKey] = mergeSceneEntriesByTimestamp(
+                                $existingDrawings,
+                                $drawings
+                            );
                         }
                         continue;
                     }
