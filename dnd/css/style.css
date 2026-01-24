@@ -2265,11 +2265,25 @@ body:not(.gm-mode) .club-navigation button:hover:not(:disabled) {
 /* Darker background for character details and class info sections */
 .character-section,
 .classes-section {
-    background: linear-gradient(145deg, #e8dac5 0%, #dccdb5 50%, #d4c4aa 100%);
+    /* Much darker, muted tan for better contrast with raised elements */
+    background: linear-gradient(145deg, #d5c5a8 0%, #c8b898 50%, #baa880 100%);
     border-radius: 8px;
     padding: 20px;
     margin: -18px;
     margin-bottom: 0;
+    position: relative;
+
+    /* Add subtle outer bevel to the section itself */
+    border: 2px solid;
+    border-top-color: #e0d0b8;
+    border-left-color: #d8c8b0;
+    border-right-color: #a89870;
+    border-bottom-color: #988860;
+
+    /* Ambient shadow for the section */
+    box-shadow:
+        inset 0 1px 0 rgba(255, 255, 255, 0.2),
+        0 4px 12px rgba(0, 0, 0, 0.15);
 }
 
 /* Section title styling with embossing effect */
@@ -2327,17 +2341,22 @@ body:not(.gm-mode) .club-navigation button:hover:not(:disabled) {
     font-weight: 700;
     text-transform: uppercase;
     letter-spacing: 0.06em;
-    color: #4a3828;
+    color: #3a2818;
     margin-bottom: 8px;
-    padding: 4px 12px;
-    background: linear-gradient(145deg, rgba(255,255,255,0.4) 0%, rgba(255,255,255,0.2) 100%);
-    border-radius: 3px;
+    padding: 5px 14px;
+    background: linear-gradient(145deg, rgba(255,255,255,0.5) 0%, rgba(255,255,255,0.3) 100%);
+    border-radius: 4px;
 
-    /* Subtle embossed label effect */
-    text-shadow: 0 1px 0 rgba(255, 255, 255, 0.6);
+    /* Enhanced embossed label effect */
+    text-shadow: 0 1px 0 rgba(255, 255, 255, 0.7);
     box-shadow:
-        inset 0 1px 0 rgba(255, 255, 255, 0.5),
-        0 1px 2px rgba(0, 0, 0, 0.1);
+        inset 0 1px 0 rgba(255, 255, 255, 0.6),
+        0 1px 3px rgba(0, 0, 0, 0.15),
+        0 2px 4px rgba(0, 0, 0, 0.08);
+
+    /* Subtle border for label definition */
+    border: 1px solid rgba(255, 255, 255, 0.3);
+    border-bottom-color: rgba(0, 0, 0, 0.1);
 }
 
 /* 3D Raised/Sunken effect for input fields */
@@ -2348,46 +2367,60 @@ body:not(.gm-mode) .club-navigation button:hover:not(:disabled) {
     font-size: 14px;
     font-weight: 500;
     color: #3b2a1c;
-    background: linear-gradient(145deg, #f0e5d5 0%, #e8dcc8 100%);
+    /* Slightly darker background to contrast with raised frame */
+    background: linear-gradient(180deg, #e8dcc8 0%, #e0d4c0 100%);
     border-radius: 6px;
     position: relative;
     text-align: center;
 
-    /* Outer raised border effect - light on outer edges */
-    border: 3px solid;
-    border-top-color: #c9b99a;
-    border-left-color: #bfad8e;
-    border-right-color: #a08a68;
-    border-bottom-color: #8f7958;
+    /* THICKER outer raised border - more contrast between light/dark */
+    border: 4px solid;
+    border-top-color: #d8c8a8;    /* Bright highlight */
+    border-left-color: #ccbc9c;   /* Light side */
+    border-right-color: #90805a;  /* Dark side */
+    border-bottom-color: #807048; /* Deep shadow */
 
-    /* Multi-layer shadow for depth */
+    /* Multi-layer shadow for pronounced 3D depth */
     box-shadow:
-        /* Outer raised edge */
-        2px 2px 0 #8a7555,
-        3px 3px 0 #7a6545,
-        /* Inner sunken effect */
-        inset 2px 2px 6px rgba(0, 0, 0, 0.2),
-        inset -1px -1px 4px rgba(255, 255, 255, 0.3),
+        /* Hard-edge offset shadows like stat cards */
+        3px 3px 0 #7a6a4a,
+        4px 4px 0 #6a5a3a,
+        5px 5px 0 #5a4a2a,
         /* Ambient shadow */
-        4px 4px 10px rgba(0, 0, 0, 0.2);
+        7px 7px 14px rgba(0, 0, 0, 0.3),
+        /* Inner frame edge - creates the "step down" effect */
+        inset 0 0 0 2px #b8a888,
+        /* Deep inner shadow for sunken well effect */
+        inset 3px 3px 8px rgba(0, 0, 0, 0.3),
+        /* Inner highlight for contrast */
+        inset -2px -2px 6px rgba(255, 255, 255, 0.25);
 }
 
 .character-details .form-group input:focus,
 .classes-section .form-group input:focus {
     outline: none;
-    background: linear-gradient(145deg, #f5efe3 0%, #ede3d5 100%);
-    border-top-color: #d9c9aa;
-    border-left-color: #cfbd9e;
+    background: linear-gradient(180deg, #f0e8d8 0%, #e8e0d0 100%);
+    border-top-color: #e0d0b0;
+    border-left-color: #d8c8a8;
+    border-right-color: #988860;
+    border-bottom-color: #887850;
     box-shadow:
-        2px 2px 0 #8a7555,
-        3px 3px 0 #7a6545,
-        inset 2px 2px 6px rgba(0, 0, 0, 0.15),
-        inset -1px -1px 4px rgba(255, 255, 255, 0.4),
-        4px 4px 10px rgba(0, 0, 0, 0.2),
-        0 0 0 2px rgba(139, 111, 78, 0.3);
+        /* Hard-edge shadows maintained */
+        3px 3px 0 #7a6a4a,
+        4px 4px 0 #6a5a3a,
+        5px 5px 0 #5a4a2a,
+        /* Ambient shadow */
+        7px 7px 14px rgba(0, 0, 0, 0.3),
+        /* Inner frame edge */
+        inset 0 0 0 2px #c0a890,
+        /* Slightly lighter inner shadows on focus */
+        inset 3px 3px 6px rgba(0, 0, 0, 0.2),
+        inset -2px -2px 6px rgba(255, 255, 255, 0.35),
+        /* Focus glow ring */
+        0 0 0 3px rgba(139, 111, 78, 0.35);
 }
 
-/* Readonly fields - same 3D effect */
+/* Readonly fields - same enhanced 3D effect */
 .character-details .form-group .readonly-field,
 .classes-section .form-group .readonly-field {
     width: 100%;
@@ -2395,24 +2428,32 @@ body:not(.gm-mode) .club-navigation button:hover:not(:disabled) {
     font-size: 14px;
     font-weight: 500;
     color: #3b2a1c;
-    background: linear-gradient(145deg, #f0e5d5 0%, #e8dcc8 100%);
+    /* Slightly darker background to contrast with raised frame */
+    background: linear-gradient(180deg, #e8dcc8 0%, #e0d4c0 100%);
     border-radius: 6px;
     text-align: center;
 
-    /* Outer raised border effect */
-    border: 3px solid;
-    border-top-color: #c9b99a;
-    border-left-color: #bfad8e;
-    border-right-color: #a08a68;
-    border-bottom-color: #8f7958;
+    /* THICKER outer raised border - more contrast */
+    border: 4px solid;
+    border-top-color: #d8c8a8;
+    border-left-color: #ccbc9c;
+    border-right-color: #90805a;
+    border-bottom-color: #807048;
 
-    /* Multi-layer shadow */
+    /* Multi-layer shadow for pronounced depth */
     box-shadow:
-        2px 2px 0 #8a7555,
-        3px 3px 0 #7a6545,
-        inset 2px 2px 6px rgba(0, 0, 0, 0.2),
-        inset -1px -1px 4px rgba(255, 255, 255, 0.3),
-        4px 4px 10px rgba(0, 0, 0, 0.2);
+        /* Hard-edge offset shadows */
+        3px 3px 0 #7a6a4a,
+        4px 4px 0 #6a5a3a,
+        5px 5px 0 #5a4a2a,
+        /* Ambient shadow */
+        7px 7px 14px rgba(0, 0, 0, 0.3),
+        /* Inner frame edge */
+        inset 0 0 0 2px #b8a888,
+        /* Deep inner shadow for sunken well */
+        inset 3px 3px 8px rgba(0, 0, 0, 0.3),
+        /* Inner highlight */
+        inset -2px -2px 6px rgba(255, 255, 255, 0.25);
 }
 
 /* Less dramatic styling for textarea fields (Other, Test Buffs) */
@@ -2434,37 +2475,43 @@ body:not(.gm-mode) .club-navigation button:hover:not(:disabled) {
     padding: 12px 14px;
     font-size: 14px;
     color: #3b2a1c;
-    background: linear-gradient(180deg, #f5efe3 0%, #ede3d5 100%);
+    background: linear-gradient(180deg, #ede3d0 0%, #e5dbc8 100%);
     border-radius: 6px;
     text-align: left;
     resize: vertical;
     min-height: 80px;
 
-    /* Softer border for textareas - less dramatic */
-    border: 2px solid;
-    border-top-color: #c0b095;
-    border-left-color: #b8a88d;
-    border-right-color: #a89878;
-    border-bottom-color: #988868;
+    /* Enhanced border for textareas - moderate 3D effect */
+    border: 3px solid;
+    border-top-color: #d0c0a0;
+    border-left-color: #c8b898;
+    border-right-color: #988868;
+    border-bottom-color: #887858;
 
-    /* Subtle shadow - less pronounced than inputs */
+    /* Enhanced shadow - more depth than before */
     box-shadow:
-        1px 1px 0 #9a8565,
-        inset 1px 1px 4px rgba(0, 0, 0, 0.12),
-        inset -1px -1px 3px rgba(255, 255, 255, 0.25),
-        2px 2px 6px rgba(0, 0, 0, 0.12);
+        2px 2px 0 #8a7a5a,
+        3px 3px 0 #7a6a4a,
+        /* Ambient shadow */
+        5px 5px 10px rgba(0, 0, 0, 0.2),
+        /* Inner sunken effect */
+        inset 2px 2px 6px rgba(0, 0, 0, 0.2),
+        inset -1px -1px 4px rgba(255, 255, 255, 0.2);
 }
 
 .character-details .form-group textarea:focus,
 .classes-section .form-group textarea:focus {
     outline: none;
-    background: linear-gradient(180deg, #faf6ee 0%, #f3ebe0 100%);
+    background: linear-gradient(180deg, #f5ede0 0%, #ede5d8 100%);
+    border-top-color: #d8c8a8;
+    border-left-color: #d0c0a0;
     box-shadow:
-        1px 1px 0 #9a8565,
-        inset 1px 1px 4px rgba(0, 0, 0, 0.1),
-        inset -1px -1px 3px rgba(255, 255, 255, 0.3),
-        2px 2px 6px rgba(0, 0, 0, 0.12),
-        0 0 0 2px rgba(139, 111, 78, 0.25);
+        2px 2px 0 #8a7a5a,
+        3px 3px 0 #7a6a4a,
+        5px 5px 10px rgba(0, 0, 0, 0.2),
+        inset 2px 2px 5px rgba(0, 0, 0, 0.15),
+        inset -1px -1px 4px rgba(255, 255, 255, 0.25),
+        0 0 0 3px rgba(139, 111, 78, 0.3);
 }
 
 /* Readonly textarea styling */
@@ -2472,41 +2519,50 @@ body:not(.gm-mode) .club-navigation button:hover:not(:disabled) {
 .classes-section .form-group .readonly-field.readonly-textarea {
     text-align: left;
     min-height: 80px;
-    background: linear-gradient(180deg, #f5efe3 0%, #ede3d5 100%);
+    background: linear-gradient(180deg, #ede3d0 0%, #e5dbc8 100%);
 
-    /* Softer border */
-    border: 2px solid;
-    border-top-color: #c0b095;
-    border-left-color: #b8a88d;
-    border-right-color: #a89878;
-    border-bottom-color: #988868;
+    /* Enhanced border - moderate 3D effect */
+    border: 3px solid;
+    border-top-color: #d0c0a0;
+    border-left-color: #c8b898;
+    border-right-color: #988868;
+    border-bottom-color: #887858;
 
-    /* Subtle shadow */
+    /* Enhanced shadow */
     box-shadow:
-        1px 1px 0 #9a8565,
-        inset 1px 1px 4px rgba(0, 0, 0, 0.12),
-        inset -1px -1px 3px rgba(255, 255, 255, 0.25),
-        2px 2px 6px rgba(0, 0, 0, 0.12);
+        2px 2px 0 #8a7a5a,
+        3px 3px 0 #7a6a4a,
+        5px 5px 10px rgba(0, 0, 0, 0.2),
+        inset 2px 2px 6px rgba(0, 0, 0, 0.2),
+        inset -1px -1px 4px rgba(255, 255, 255, 0.2);
 }
 
-/* Portrait section adjustments to match new styling */
+/* Portrait section adjustments to match enhanced styling */
 .character-section .portrait-section {
-    padding: 10px;
-    background: linear-gradient(145deg, rgba(255,255,255,0.15) 0%, rgba(255,255,255,0.05) 100%);
+    padding: 12px;
+    background: linear-gradient(145deg, rgba(255,255,255,0.2) 0%, rgba(255,255,255,0.08) 100%);
     border-radius: 8px;
+    /* Subtle inset for the portrait area */
+    box-shadow: inset 1px 1px 4px rgba(0, 0, 0, 0.1);
 }
 
 .character-section .portrait-frame {
-    border: 3px solid;
-    border-top-color: #c9b99a;
-    border-left-color: #bfad8e;
-    border-right-color: #a08a68;
-    border-bottom-color: #8f7958;
+    /* THICKER border with more contrast */
+    border: 4px solid;
+    border-top-color: #d8c8a8;
+    border-left-color: #ccbc9c;
+    border-right-color: #90805a;
+    border-bottom-color: #807048;
     box-shadow:
-        2px 2px 0 #8a7555,
-        3px 3px 0 #7a6545,
-        inset 2px 2px 8px rgba(0, 0, 0, 0.15),
-        4px 4px 12px rgba(0, 0, 0, 0.2);
+        /* Hard-edge shadows for 3D thickness */
+        3px 3px 0 #7a6a4a,
+        4px 4px 0 #6a5a3a,
+        5px 5px 0 #5a4a2a,
+        /* Inner shadow for recessed image area */
+        inset 3px 3px 8px rgba(0, 0, 0, 0.25),
+        inset -2px -2px 4px rgba(255, 255, 255, 0.15),
+        /* Ambient shadow */
+        7px 7px 14px rgba(0, 0, 0, 0.25);
 }
 
 /* Action buttons styling for classes section */
@@ -2529,5 +2585,24 @@ body:not(.gm-mode) .club-navigation button:hover:not(:disabled) {
     .character-details .form-group .readonly-field,
     .classes-section .form-group .readonly-field {
         padding: 10px 12px;
+        /* Slightly thinner border on mobile */
+        border-width: 3px;
+        /* Reduced shadows for mobile */
+        box-shadow:
+            2px 2px 0 #7a6a4a,
+            3px 3px 0 #6a5a3a,
+            5px 5px 10px rgba(0, 0, 0, 0.25),
+            inset 0 0 0 1px #b8a888,
+            inset 2px 2px 6px rgba(0, 0, 0, 0.25),
+            inset -1px -1px 4px rgba(255, 255, 255, 0.2);
+    }
+
+    .character-section .portrait-frame {
+        border-width: 3px;
+        box-shadow:
+            2px 2px 0 #7a6a4a,
+            3px 3px 0 #6a5a3a,
+            inset 2px 2px 6px rgba(0, 0, 0, 0.2),
+            5px 5px 10px rgba(0, 0, 0, 0.2);
     }
 }
