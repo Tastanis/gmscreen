@@ -199,6 +199,18 @@ function buildPayload(boardState = {}) {
     }
   }
 
+  // Include internal fields for server-side processing
+  // These are prefixed with _ to indicate they are not persisted to the state file
+  if (boardState._deltaOnly === true) {
+    payload._deltaOnly = true;
+  }
+  if (typeof boardState._version === 'number' && boardState._version > 0) {
+    payload._version = boardState._version;
+  }
+  if (typeof boardState._socketId === 'string' && boardState._socketId.trim()) {
+    payload._socketId = boardState._socketId.trim();
+  }
+
   return Object.keys(payload).length > 0 ? payload : null;
 }
 
