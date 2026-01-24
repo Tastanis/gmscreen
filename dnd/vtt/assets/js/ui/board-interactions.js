@@ -1138,6 +1138,10 @@ export function mountBoardInteractions(store, routes = {}) {
   let lastPersistedBoardStateHash = null;
   let pendingBoardStateSave = null;
   let pendingCombatStateSave = null;
+  // Grace period after save completes to prevent poller from overwriting with stale state
+  // This handles the window between save completion and server state propagation
+  let lastBoardStateSaveCompletedAt = 0;
+  const SAVE_GRACE_PERIOD_MS = 1500;
   let suppressCombatStateSync = false;
   let pendingCombatStateSync = false;
   let combatStateVersion = 0;
@@ -1711,6 +1715,7 @@ export function mountBoardInteractions(store, routes = {}) {
         if (result?.success) {
           lastPersistedBoardStateSignature = signature;
           lastPersistedBoardStateHash = snapshotHash;
+          lastBoardStateSaveCompletedAt = Date.now();
           pendingBoardStateSave = null;
         }
         return result;
@@ -2025,7 +2030,17 @@ export function mountBoardInteractions(store, routes = {}) {
     const hasCombatSavePending = Boolean(pendingCombatStateSave?.promise);
     const hasPending = hasBoardSavePending || hasCombatSavePending;
 
-    if (!hasPending) {
+    // Check if we're still within the grace period after a recent save completed.
+    // This prevents the poller from overwriting with stale server state during
+    // the window between save completion and server state propagation.
+    const timeSinceLastSave = Date.now() - lastBoardStateSaveCompletedAt;
+    const isInGracePeriod = lastBoardStateSaveCompletedAt > 0 && timeSinceLastSave < SAVE_GRACE_PERIOD_MS;
+
+    // Block poller during active drag operations to prevent state overwrites
+    // that could cause visible position jumps while the user is dragging
+    const isDragging = Boolean(viewState.dragState || viewState.dragCandidate);
+
+    if (!hasPending && !isInGracePeriod && !isDragging) {
       return {
         pending: Boolean(pendingBoardStateSave?.blocking),
         promise: pendingBoardStateSave?.promise ?? null,
@@ -2036,12 +2051,13 @@ export function mountBoardInteractions(store, routes = {}) {
       };
     }
 
+    // If in grace period, has pending save, or is dragging, block the poller
     return {
       pending: true,
       promise: pendingBoardStateSave?.promise ?? pendingCombatStateSave?.promise ?? null,
-      signature: pendingBoardStateSave?.signature ?? null,
-      hash: pendingBoardStateSave?.hash ?? null,
-      blocking: Boolean(pendingBoardStateSave?.blocking),
+      signature: pendingBoardStateSave?.signature ?? lastPersistedBoardStateSignature ?? null,
+      hash: pendingBoardStateSave?.hash ?? lastPersistedBoardStateHash ?? null,
+      blocking: hasPending || isInGracePeriod || isDragging,
       result: pendingBoardStateSave?.lastResult ?? null,
     };
   }
