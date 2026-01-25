@@ -482,6 +482,8 @@ const INDIGO_ROTATION_INCREMENT_DEGREES = 45;
 const TURN_INDICATOR_DEFAULT_TEXT = 'Waiting for turn';
 const TURN_INDICATOR_GM_TEXT = "GM's turn";
 const TURN_INDICATOR_ALLIES_TEXT = "Allies' turn";
+const TURN_INDICATOR_PC_PICK_TEXT = "PC's turns";
+const TURN_INDICATOR_ENEMY_PICK_TEXT = "Enemy Turns";
 const TURN_FLASH_TONE_CLASSES = {
   yellow: 'is-turn-flash-yellow',
   red: 'is-turn-flash-red',
@@ -9566,35 +9568,42 @@ export function mountBoardInteractions(store, routes = {}) {
   }
 
   function getTurnIndicatorLabel() {
-    if (!combatActive || !activeCombatantId) {
+    if (!combatActive) {
       return null;
     }
 
+    // PICK phase - no active combatant, show team-based text
+    if (!activeCombatantId) {
+      const team = normalizeCombatTeam(currentTurnTeam);
+      if (team === 'ally') {
+        return TURN_INDICATOR_PC_PICK_TEXT;
+      }
+      if (team === 'enemy') {
+        return TURN_INDICATOR_ENEMY_PICK_TEXT;
+      }
+      // Fallback if no team set yet
+      return null;
+    }
+
+    // ACTIVE phase - show "{name}'s turn"
     const hidden = isCombatantHidden(activeCombatantId);
     const team = normalizeCombatTeam(getCombatantTeam(activeCombatantId));
 
+    // For hidden or enemy tokens, show "GM's turn" to avoid revealing info
     if (hidden || team !== 'ally') {
       return TURN_INDICATOR_GM_TEXT;
     }
 
-    const hasActiveTurnLock =
-      typeof turnLockState.holderId === 'string' &&
-      turnLockState.holderId &&
-      typeof turnLockState.combatantId === 'string' &&
-      turnLockState.combatantId === activeCombatantId;
-
-    if (!hasActiveTurnLock) {
-      return TURN_INDICATOR_ALLIES_TEXT;
-    }
-
+    // Get the combatant's name for display
     const label = getCombatantLabel(activeCombatantId);
     if (typeof label === 'string') {
       const trimmed = label.trim();
       if (trimmed) {
-        return trimmed;
+        return `${trimmed}'s turn`;
       }
     }
 
+    // Fallback if no name available
     return TURN_INDICATOR_GM_TEXT;
   }
 
