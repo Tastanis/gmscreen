@@ -558,26 +558,41 @@ export function mergeArrayByIdWithTimestamp(existingArray, incomingArray) {
  * Merge scene-keyed objects (placements, templates, drawings) with timestamp-based resolution.
  * @param {Object} existingSection - Current scene-keyed object
  * @param {Object} incomingSection - Incoming scene-keyed object
+ * @param {Object} options - Merge options
+ * @param {boolean} options.fullSync - If true, incoming is authoritative (deletions propagate)
  * @returns {Object} Merged scene-keyed object
  */
-export function mergeSceneKeyedSection(existingSection, incomingSection) {
+export function mergeSceneKeyedSection(existingSection, incomingSection, { fullSync = false } = {}) {
   const existing = existingSection && typeof existingSection === 'object' ? existingSection : {};
   const incoming = incomingSection && typeof incomingSection === 'object' ? incomingSection : {};
 
   const merged = {};
 
-  // Get all scene IDs from both existing and incoming
-  const allSceneIds = new Set([...Object.keys(existing), ...Object.keys(incoming)]);
+  // For full sync, only use scenes from incoming (deleted scenes should disappear)
+  // For delta, merge scenes from both existing and incoming
+  const allSceneIds = fullSync
+    ? new Set(Object.keys(incoming))
+    : new Set([...Object.keys(existing), ...Object.keys(incoming)]);
 
   allSceneIds.forEach((sceneId) => {
     const existingArray = existing[sceneId];
     const incomingArray = incoming[sceneId];
 
     if (incomingArray !== undefined) {
-      // Incoming has data for this scene - merge with existing
-      merged[sceneId] = mergeArrayByIdWithTimestamp(existingArray, incomingArray);
-    } else if (existingArray !== undefined) {
-      // Only existing has data - keep it (clone to avoid mutation)
+      if (fullSync) {
+        // Full sync: incoming is authoritative - use it directly (enables deletion sync)
+        // Items not in incoming have been deleted on the server
+        try {
+          merged[sceneId] = JSON.parse(JSON.stringify(incomingArray));
+        } catch (e) {
+          merged[sceneId] = [];
+        }
+      } else {
+        // Delta: merge with existing, preserving local items not in incoming
+        merged[sceneId] = mergeArrayByIdWithTimestamp(existingArray, incomingArray);
+      }
+    } else if (existingArray !== undefined && !fullSync) {
+      // Only existing has data and we're not in full sync - keep it (clone to avoid mutation)
       try {
         merged[sceneId] = JSON.parse(JSON.stringify(existingArray));
       } catch (e) {
@@ -592,6 +607,7 @@ export function mergeSceneKeyedSection(existingSection, incomingSection) {
 /**
  * Merge board state snapshots with timestamp-based conflict resolution for placements, templates, and drawings.
  * This ensures that concurrent updates don't cause data loss.
+ * When incoming has _fullSync: true (from GET responses), deletions will propagate correctly.
  * @param {Object} existing - Current board state
  * @param {Object} incoming - Incoming board state from server
  * @returns {Object} Merged board state
@@ -600,6 +616,10 @@ export function mergeBoardStateSnapshot(existing, incoming) {
   if (!incoming || typeof incoming !== 'object') {
     return existing ?? {};
   }
+
+  // Check if this is a full sync (authoritative state from server GET)
+  // When fullSync is true, items not in incoming have been deleted
+  const fullSync = Boolean(incoming._fullSync);
 
   // If no existing state, just use incoming
   if (!existing || typeof existing !== 'object') {
@@ -617,13 +637,15 @@ export function mergeBoardStateSnapshot(existing, incoming) {
   }
 
   // Merge with timestamp-based conflict resolution for placements, templates, drawings
+  // Pass fullSync flag to enable deletion sync when receiving full state from server
+  const mergeOptions = { fullSync };
   const snapshot = {
     activeSceneId: typeof incoming.activeSceneId === 'string' ? incoming.activeSceneId : existing.activeSceneId,
     mapUrl: typeof incoming.mapUrl === 'string' ? incoming.mapUrl : existing.mapUrl,
-    placements: mergeSceneKeyedSection(existing.placements, incoming.placements),
+    placements: mergeSceneKeyedSection(existing.placements, incoming.placements, mergeOptions),
     sceneState: cloneSectionSimple(incoming.sceneState),
-    templates: mergeSceneKeyedSection(existing.templates, incoming.templates),
-    drawings: mergeSceneKeyedSection(existing.drawings, incoming.drawings),
+    templates: mergeSceneKeyedSection(existing.templates, incoming.templates, mergeOptions),
+    drawings: mergeSceneKeyedSection(existing.drawings, incoming.drawings, mergeOptions),
     overlay: cloneSectionSimple(incoming.overlay),
     pings: cloneArraySimple(incoming.pings),
   };
