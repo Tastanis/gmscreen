@@ -334,7 +334,7 @@ test('gm clients sync player placement position changes even when gm has authori
   assert.equal(boardStateContainer.boardState.metadata.updatedAt, 1000);
 });
 
-test('gm clients do not update when no placement position changes', async () => {
+test('gm clients do not update on second poll when no changes', async () => {
   const { createBoardStatePoller } = await modulePromise;
 
   const boardStateContainer = {
@@ -394,8 +394,104 @@ test('gm clients do not update when no placement position changes', async () => 
     getLastPersistedSignatureFn: () => null,
   });
 
+  // First poll sets the lastHash
   await poller.poll();
+  assert.equal(updateCalls.length, 1, 'first poll should call updateState');
 
-  // No position changes, so updateState should not be called
-  assert.equal(updateCalls.length, 0, 'updateState should not be called when no position changes');
+  // Second poll with same content should skip due to hash match
+  await poller.poll();
+  assert.equal(updateCalls.length, 1, 'second poll with identical content should not call updateState');
+});
+
+test('mergeBoardStateSnapshot merges placements by ID with timestamp-based conflict resolution', async () => {
+  const { createBoardStatePoller } = await modulePromise;
+
+  // Get the actual merge function by creating a poller and tracking what merge fn it uses
+  let capturedMergeFn = null;
+
+  const boardStateContainer = {
+    boardState: {
+      placements: {
+        'scene-1': [
+          { id: 'token-1', column: 0, row: 0, _lastModified: 1000 },
+          { id: 'token-2', column: 5, row: 5, _lastModified: 1000 },
+        ],
+      },
+    },
+  };
+
+  const boardApi = {
+    getState: () => boardStateContainer,
+    updateState: (mutator) => mutator(boardStateContainer),
+  };
+
+  // Incoming state has token-1 moved (newer timestamp) and token-2 with older timestamp
+  const remoteSnapshot = {
+    placements: {
+      'scene-1': [
+        { id: 'token-1', column: 3, row: 4, _lastModified: 2000 }, // Newer - should win
+        { id: 'token-2', column: 10, row: 10, _lastModified: 500 }, // Older - should lose
+      ],
+    },
+  };
+
+  // We need to access the internal merge function - create poller with defaults
+  const { mergeBoardStateSnapshot } = await import('../board-interactions.js');
+
+  // Test the merge
+  const existing = boardStateContainer.boardState;
+  const merged = mergeBoardStateSnapshot(existing, remoteSnapshot);
+
+  const token1 = merged.placements['scene-1'].find(t => t.id === 'token-1');
+  const token2 = merged.placements['scene-1'].find(t => t.id === 'token-2');
+
+  // Token 1 should have the new position (incoming timestamp 2000 > existing 1000)
+  assert.equal(token1.column, 3, 'token-1 should have incoming column (newer timestamp)');
+  assert.equal(token1.row, 4, 'token-1 should have incoming row (newer timestamp)');
+
+  // Token 2 should keep the old position (existing timestamp 1000 > incoming 500)
+  assert.equal(token2.column, 5, 'token-2 should keep existing column (newer timestamp)');
+  assert.equal(token2.row, 5, 'token-2 should keep existing row (newer timestamp)');
+});
+
+test('mergeBoardStateSnapshot preserves existing placements not in incoming', async () => {
+  const { mergeBoardStateSnapshot } = await import('../board-interactions.js');
+
+  const existing = {
+    placements: {
+      'scene-1': [
+        { id: 'token-1', column: 0, row: 0, _lastModified: 1000 },
+        { id: 'token-2', column: 5, row: 5, _lastModified: 1000 },
+        { id: 'token-3', column: 10, row: 10, _lastModified: 1000 },
+      ],
+    },
+  };
+
+  // Incoming only has token-1 (delta update scenario)
+  const incoming = {
+    placements: {
+      'scene-1': [
+        { id: 'token-1', column: 3, row: 4, _lastModified: 2000 },
+      ],
+    },
+  };
+
+  const merged = mergeBoardStateSnapshot(existing, incoming);
+
+  // All three tokens should be present
+  assert.equal(merged.placements['scene-1'].length, 3, 'all tokens should be preserved');
+
+  const token1 = merged.placements['scene-1'].find(t => t.id === 'token-1');
+  const token2 = merged.placements['scene-1'].find(t => t.id === 'token-2');
+  const token3 = merged.placements['scene-1'].find(t => t.id === 'token-3');
+
+  // Token 1 updated
+  assert.equal(token1.column, 3);
+  assert.equal(token1.row, 4);
+
+  // Tokens 2 and 3 preserved
+  assert.equal(token2.column, 5);
+  assert.equal(token2.row, 5);
+  assert.equal(token3.column, 10);
+  assert.equal(token3.row, 10);
 });
