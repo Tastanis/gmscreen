@@ -128,6 +128,9 @@ if (!defined('VTT_STATE_API_INCLUDE_ONLY')) {
             $version = getVttBoardStateVersion();
             $boardState = $config['boardState'] ?? [];
             $boardState['_version'] = $version;
+            // Mark as full sync so clients know to replace (not merge) scene data
+            // This enables proper deletion sync - items not in this response should be removed
+            $boardState['_fullSync'] = true;
 
             // Include Pusher config for client-side initialization
             $pusherConfig = getVttPusherConfig();
@@ -233,18 +236,13 @@ if (!defined('VTT_STATE_API_INCLUDE_ONLY')) {
                             $existingPlacements = isset($nextState['placements'][$sceneKey]) && is_array($nextState['placements'][$sceneKey])
                                 ? $nextState['placements'][$sceneKey]
                                 : [];
-                            // Use timestamp-based merge for delta updates to prevent race conditions
-                            if ($isDeltaOnly) {
-                                $nextState['placements'][$sceneKey] = mergeSceneEntriesByTimestamp(
-                                    $existingPlacements,
-                                    $placements
-                                );
-                            } else {
-                                $nextState['placements'][$sceneKey] = mergeSceneEntriesPreservingGmAuthored(
-                                    $existingPlacements,
-                                    $placements
-                                );
-                            }
+                            // Always use timestamp-based merge for players to prevent token deletion
+                            // Players should only be able to update existing tokens, not delete them
+                            // Only GMs can delete tokens (via the separate GM update path)
+                            $nextState['placements'][$sceneKey] = mergeSceneEntriesByTimestamp(
+                                $existingPlacements,
+                                $placements
+                            );
                         }
                     }
 
@@ -263,18 +261,12 @@ if (!defined('VTT_STATE_API_INCLUDE_ONLY')) {
                             $existingTemplates = isset($nextState['templates'][$sceneKey]) && is_array($nextState['templates'][$sceneKey])
                                 ? $nextState['templates'][$sceneKey]
                                 : [];
-                            // Use timestamp-based merge for delta updates
-                            if ($isDeltaOnly) {
-                                $nextState['templates'][$sceneKey] = mergeSceneEntriesByTimestamp(
-                                    $existingTemplates,
-                                    $templates
-                                );
-                            } else {
-                                $nextState['templates'][$sceneKey] = mergeSceneEntriesPreservingGmAuthored(
-                                    $existingTemplates,
-                                    $templates
-                                );
-                            }
+                            // Always use timestamp-based merge for players to prevent deletion
+                            // Only GMs can delete templates
+                            $nextState['templates'][$sceneKey] = mergeSceneEntriesByTimestamp(
+                                $existingTemplates,
+                                $templates
+                            );
                         }
                     }
 
@@ -293,18 +285,12 @@ if (!defined('VTT_STATE_API_INCLUDE_ONLY')) {
                             $existingDrawings = isset($nextState['drawings'][$sceneKey]) && is_array($nextState['drawings'][$sceneKey])
                                 ? $nextState['drawings'][$sceneKey]
                                 : [];
-                            // Use timestamp-based merge for delta updates
-                            if ($isDeltaOnly) {
-                                $nextState['drawings'][$sceneKey] = mergeSceneEntriesByTimestamp(
-                                    $existingDrawings,
-                                    $drawings
-                                );
-                            } else {
-                                $nextState['drawings'][$sceneKey] = mergeSceneEntriesPreservingGmAuthored(
-                                    $existingDrawings,
-                                    $drawings
-                                );
-                            }
+                            // Always use timestamp-based merge for players to prevent deletion
+                            // Only GMs can delete drawings
+                            $nextState['drawings'][$sceneKey] = mergeSceneEntriesByTimestamp(
+                                $existingDrawings,
+                                $drawings
+                            );
                         }
                     }
 
