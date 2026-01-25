@@ -97,6 +97,8 @@ export function createBoardStatePoller({
   getPendingSaveInfo = () => ({ pending: false }),
   getLastPersistedHashFn = () => null,
   getLastPersistedSignatureFn = () => null,
+  getCurrentVersionFn = () => 0,
+  onVersionUpdated = null,
   onStateUpdated = null,
 } = {}) {
   const endpoint = stateEndpoint ?? routes?.state ?? null;
@@ -234,6 +236,33 @@ export function createBoardStatePoller({
         return;
       }
 
+      // Version-based stale response rejection
+      // This prevents race conditions where a polling response initiated BEFORE a save
+      // arrives AFTER a Pusher real-time update, which would overwrite newer data
+      const incomingVersion = typeof incoming._version === 'number'
+        ? incoming._version
+        : (typeof incoming._version === 'string' ? parseInt(incoming._version, 10) : 0);
+      const currentVersion = typeof getCurrentVersionFn === 'function'
+        ? getCurrentVersionFn()
+        : 0;
+
+      // Check for stale response: incoming version is older than what we have
+      // Exception: If current version is very high but incoming is low (e.g., 500 vs 1),
+      // this likely indicates a server reset - accept the incoming data in that case.
+      // We use a threshold of 100 versions to detect this scenario.
+      const VERSION_RESET_THRESHOLD = 100;
+      const isStaleResponse = incomingVersion > 0 &&
+                              currentVersion > 0 &&
+                              incomingVersion < currentVersion &&
+                              (currentVersion - incomingVersion) < VERSION_RESET_THRESHOLD;
+
+      if (isStaleResponse) {
+        console.log(`[VTT] Rejecting stale poll response (v${incomingVersion} < current v${currentVersion})`);
+        lastHash = hash;
+        pollErrorLogged = false;
+        return;
+      }
+
       lastHash = hash;
       pollErrorLogged = false;
 
@@ -243,6 +272,11 @@ export function createBoardStatePoller({
           incoming
         );
       });
+
+      // Update version tracking if polling response has a newer version
+      if (incomingVersion > currentVersion && typeof onVersionUpdated === 'function') {
+        onVersionUpdated(incomingVersion);
+      }
 
       // Immediately trigger combat state refresh after board state update
       // This replaces the separate combat refresh polling loop
@@ -2397,6 +2431,15 @@ export function mountBoardInteractions(store, routes = {}) {
       getPendingSaveInfo: getPendingBoardStateSaveInfo,
       getLastPersistedHashFn: () => lastPersistedBoardStateHash,
       getLastPersistedSignatureFn: () => lastPersistedBoardStateSignature,
+      // Version tracking for stale response rejection
+      // This prevents race conditions where polling responses initiated before a save
+      // arrive after Pusher real-time updates, which would overwrite newer state
+      getCurrentVersionFn: () => currentBoardStateVersion,
+      onVersionUpdated: (version) => {
+        if (typeof version === 'number' && version > currentBoardStateVersion) {
+          currentBoardStateVersion = version;
+        }
+      },
       // Immediately refresh combat state when board state updates
       // This ensures combat tracker syncs instantly instead of waiting for separate loop
       onStateUpdated: applyCombatStateFromBoardState,
