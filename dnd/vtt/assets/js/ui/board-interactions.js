@@ -1573,6 +1573,8 @@ export function mountBoardInteractions(store, routes = {}) {
   let roundTurnCount = 0;
   let hesitationBannerTimeoutId = null;
   let hesitationBannerRemoveId = null;
+  let drawSteelBannerTimeoutId = null;
+  let drawSteelBannerRemoveId = null;
 
   function escapeHtml(value) {
     if (typeof value !== 'string') {
@@ -8435,6 +8437,12 @@ export function mountBoardInteractions(store, routes = {}) {
     ]);
     releaseTurnLock();
     updateCombatModeIndicators();
+
+    recordTurnEffect({
+      type: 'draw-steel',
+      triggeredAt: Date.now(),
+    });
+    showDrawSteelPopup();
     syncCombatStateToStore();
 
     if (isGmUser()) {
@@ -8857,6 +8865,8 @@ export function mountBoardInteractions(store, routes = {}) {
 
     if (normalized.type === 'sharon-hesitation') {
       showHesitationPopup();
+    } else if (normalized.type === 'draw-steel') {
+      showDrawSteelPopup();
     }
   }
 
@@ -10330,6 +10340,56 @@ export function mountBoardInteractions(store, routes = {}) {
           }
           hesitationBannerTimeoutId = null;
           hesitationBannerRemoveId = null;
+        }, 2100);
+      }
+    }
+  }
+
+  function clearDrawSteelBanner() {
+    if (drawSteelBannerTimeoutId && typeof window !== 'undefined' && typeof window.clearTimeout === 'function') {
+      window.clearTimeout(drawSteelBannerTimeoutId);
+    }
+    if (drawSteelBannerRemoveId && typeof window !== 'undefined' && typeof window.clearTimeout === 'function') {
+      window.clearTimeout(drawSteelBannerRemoveId);
+    }
+    drawSteelBannerTimeoutId = null;
+    drawSteelBannerRemoveId = null;
+    if (typeof document !== 'undefined') {
+      const existing = document.querySelector('.vtt-draw-steel-banner');
+      if (existing && typeof existing.remove === 'function') {
+        existing.remove();
+      }
+    }
+  }
+
+  function showDrawSteelPopup() {
+    if (typeof document === 'undefined') {
+      return;
+    }
+    clearDrawSteelBanner();
+    const banner = document.createElement('div');
+    banner.className = 'vtt-draw-steel-banner';
+    banner.textContent = 'DRAW STEEL!';
+    document.body.appendChild(banner);
+
+    if (typeof window !== 'undefined') {
+      try {
+        void banner.offsetWidth;
+      } catch (error) {
+        // Ignore layout thrash errors.
+      }
+      banner.classList.add('is-visible');
+
+      if (typeof window.setTimeout === 'function') {
+        drawSteelBannerTimeoutId = window.setTimeout(() => {
+          banner.classList.add('is-fading');
+        }, 1800);
+        drawSteelBannerRemoveId = window.setTimeout(() => {
+          if (banner.parentNode) {
+            banner.parentNode.removeChild(banner);
+          }
+          drawSteelBannerTimeoutId = null;
+          drawSteelBannerRemoveId = null;
         }, 2100);
       }
     }
