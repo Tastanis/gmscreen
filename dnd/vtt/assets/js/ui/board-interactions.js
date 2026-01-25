@@ -493,6 +493,149 @@ const MAP_PING_PROCESSED_RETENTION_MS = 60000;
 const SHEET_SYNC_DEBOUNCE_MS = 400;
 const MALICE_VICTORIES_ACTION = 'fetch-victories';
 
+/**
+ * Module-level merge functions for board state synchronization.
+ * These are exported for testing and can be used independently of mountBoardInteractions.
+ */
+
+function cloneSectionSimple(section) {
+  if (!section || typeof section !== 'object') {
+    return {};
+  }
+  try {
+    return JSON.parse(JSON.stringify(section));
+  } catch (error) {
+    return {};
+  }
+}
+
+function cloneArraySimple(arr) {
+  if (!Array.isArray(arr)) {
+    return [];
+  }
+  try {
+    return JSON.parse(JSON.stringify(arr));
+  } catch (error) {
+    return [];
+  }
+}
+
+/**
+ * Merge arrays of entities by ID using timestamp-based conflict resolution.
+ * Keeps the entry with the higher _lastModified timestamp.
+ * @param {Array} existingArray - Current array of entities
+ * @param {Array} incomingArray - Incoming array of entities
+ * @returns {Array} Merged array with newer entries winning conflicts
+ */
+export function mergeArrayByIdWithTimestamp(existingArray, incomingArray) {
+  const existing = Array.isArray(existingArray) ? existingArray : [];
+  const incoming = Array.isArray(incomingArray) ? incomingArray : [];
+
+  const byId = new Map(existing.map((item) => [item.id, item]));
+
+  incoming.forEach((item) => {
+    if (item && item.id) {
+      const existingItem = byId.get(item.id);
+      if (existingItem) {
+        // Compare timestamps - keep the newer one
+        const existingTime = existingItem._lastModified || 0;
+        const incomingTime = item._lastModified || 0;
+        if (incomingTime >= existingTime) {
+          byId.set(item.id, item);
+        }
+        // else: keep existing (it's newer)
+      } else {
+        // New item from server
+        byId.set(item.id, item);
+      }
+    }
+  });
+
+  return Array.from(byId.values());
+}
+
+/**
+ * Merge scene-keyed objects (placements, templates, drawings) with timestamp-based resolution.
+ * @param {Object} existingSection - Current scene-keyed object
+ * @param {Object} incomingSection - Incoming scene-keyed object
+ * @returns {Object} Merged scene-keyed object
+ */
+export function mergeSceneKeyedSection(existingSection, incomingSection) {
+  const existing = existingSection && typeof existingSection === 'object' ? existingSection : {};
+  const incoming = incomingSection && typeof incomingSection === 'object' ? incomingSection : {};
+
+  const merged = {};
+
+  // Get all scene IDs from both existing and incoming
+  const allSceneIds = new Set([...Object.keys(existing), ...Object.keys(incoming)]);
+
+  allSceneIds.forEach((sceneId) => {
+    const existingArray = existing[sceneId];
+    const incomingArray = incoming[sceneId];
+
+    if (incomingArray !== undefined) {
+      // Incoming has data for this scene - merge with existing
+      merged[sceneId] = mergeArrayByIdWithTimestamp(existingArray, incomingArray);
+    } else if (existingArray !== undefined) {
+      // Only existing has data - keep it (clone to avoid mutation)
+      try {
+        merged[sceneId] = JSON.parse(JSON.stringify(existingArray));
+      } catch (e) {
+        merged[sceneId] = [];
+      }
+    }
+  });
+
+  return merged;
+}
+
+/**
+ * Merge board state snapshots with timestamp-based conflict resolution for placements, templates, and drawings.
+ * This ensures that concurrent updates don't cause data loss.
+ * @param {Object} existing - Current board state
+ * @param {Object} incoming - Incoming board state from server
+ * @returns {Object} Merged board state
+ */
+export function mergeBoardStateSnapshot(existing, incoming) {
+  if (!incoming || typeof incoming !== 'object') {
+    return existing ?? {};
+  }
+
+  // If no existing state, just use incoming
+  if (!existing || typeof existing !== 'object') {
+    return {
+      activeSceneId: typeof incoming.activeSceneId === 'string' ? incoming.activeSceneId : null,
+      mapUrl: typeof incoming.mapUrl === 'string' ? incoming.mapUrl : null,
+      placements: cloneSectionSimple(incoming.placements),
+      sceneState: cloneSectionSimple(incoming.sceneState),
+      templates: cloneSectionSimple(incoming.templates),
+      drawings: cloneSectionSimple(incoming.drawings),
+      overlay: cloneSectionSimple(incoming.overlay),
+      pings: cloneArraySimple(incoming.pings),
+      metadata: cloneSectionSimple(incoming.metadata ?? incoming.meta),
+    };
+  }
+
+  // Merge with timestamp-based conflict resolution for placements, templates, drawings
+  const snapshot = {
+    activeSceneId: typeof incoming.activeSceneId === 'string' ? incoming.activeSceneId : existing.activeSceneId,
+    mapUrl: typeof incoming.mapUrl === 'string' ? incoming.mapUrl : existing.mapUrl,
+    placements: mergeSceneKeyedSection(existing.placements, incoming.placements),
+    sceneState: cloneSectionSimple(incoming.sceneState),
+    templates: mergeSceneKeyedSection(existing.templates, incoming.templates),
+    drawings: mergeSceneKeyedSection(existing.drawings, incoming.drawings),
+    overlay: cloneSectionSimple(incoming.overlay),
+    pings: cloneArraySimple(incoming.pings),
+  };
+
+  const metadata = cloneSectionSimple(incoming.metadata ?? incoming.meta);
+  if (metadata && typeof metadata === 'object' && Object.keys(metadata).length > 0) {
+    snapshot.metadata = metadata;
+  }
+
+  return snapshot;
+}
+
 export function mountBoardInteractions(store, routes = {}) {
   const board = document.getElementById('vtt-board-canvas');
   const mapSurface = document.getElementById('vtt-map-surface');
@@ -2523,29 +2666,7 @@ export function mountBoardInteractions(store, routes = {}) {
     };
   }
 
-  function mergeBoardStateSnapshot(existing, incoming) {
-    if (!incoming || typeof incoming !== 'object') {
-      return existing ?? {};
-    }
-
-    const snapshot = {
-      activeSceneId: typeof incoming.activeSceneId === 'string' ? incoming.activeSceneId : null,
-      mapUrl: typeof incoming.mapUrl === 'string' ? incoming.mapUrl : null,
-      placements: cloneBoardSection(incoming.placements),
-      sceneState: cloneBoardSection(incoming.sceneState),
-      templates: cloneBoardSection(incoming.templates),
-      drawings: cloneBoardSection(incoming.drawings),
-      overlay: cloneOverlayState(incoming.overlay),
-      pings: clonePingEntries(incoming.pings),
-    };
-
-    const metadata = cloneBoardSection(incoming.metadata ?? incoming.meta);
-    if (metadata && typeof metadata === 'object' && Object.keys(metadata).length > 0) {
-      snapshot.metadata = metadata;
-    }
-
-    return snapshot;
-  }
+  // Note: mergeBoardStateSnapshot is now exported at module level and used directly
 
   function cloneBoardSection(section) {
     if (!section || typeof section !== 'object') {
