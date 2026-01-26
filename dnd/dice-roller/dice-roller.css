@@ -703,6 +703,130 @@
     }
 }
 
+/* Retainer Dialog */
+.dice-retainer-dialog {
+    position: absolute;
+    right: 1rem;
+    top: 1rem;
+    z-index: 1100;
+    pointer-events: none;
+}
+
+.dice-retainer-dialog.hidden {
+    display: none;
+}
+
+.dice-retainer-dialog__card {
+    pointer-events: auto;
+    background: var(--dice-surface);
+    border: 1px solid var(--dice-border);
+    border-radius: 8px;
+    padding: 1rem;
+    min-width: 280px;
+    box-shadow: 0 4px 12px rgba(0, 0, 0, 0.15);
+}
+
+.dice-retainer-dialog__header {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    margin-bottom: 0.75rem;
+}
+
+.dice-retainer-dialog__header h3 {
+    margin: 0;
+    font-size: 1rem;
+    letter-spacing: 0.05em;
+    color: var(--dice-text);
+}
+
+.dice-retainer-dialog__close {
+    background: transparent;
+    border: none;
+    color: var(--dice-muted);
+    font-size: 1.5rem;
+    cursor: pointer;
+    padding: 0;
+    line-height: 1;
+}
+
+.dice-retainer-dialog__body {
+    display: flex;
+    flex-direction: column;
+    gap: 0.75rem;
+}
+
+.dice-retainer-dialog__label {
+    margin: 0;
+    font-size: 0.9rem;
+    color: var(--dice-text);
+}
+
+.dice-retainer-dialog__controls {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    gap: 1rem;
+}
+
+.dice-retainer-dialog__btn {
+    width: 40px;
+    height: 40px;
+    border-radius: 6px;
+    border: 1px solid var(--dice-border);
+    background: var(--dice-surface-strong);
+    color: var(--dice-text);
+    font-size: 1.2rem;
+    font-weight: 600;
+    cursor: pointer;
+    transition: background 0.2s ease, border-color 0.15s ease;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+}
+
+.dice-retainer-dialog__btn:hover,
+.dice-retainer-dialog__btn:focus {
+    background: var(--dice-surface);
+    border-color: var(--dice-accent);
+}
+
+.dice-retainer-dialog__value {
+    min-width: 60px;
+    text-align: center;
+    font-size: 1.5rem;
+    font-weight: 700;
+    color: var(--dice-accent-strong);
+}
+
+.dice-retainer-dialog__info {
+    margin: 0;
+    font-size: 0.85rem;
+    color: var(--dice-muted);
+    text-align: center;
+    font-style: italic;
+}
+
+.dice-retainer-dialog__confirm {
+    border-radius: 4px;
+    border: 1px solid var(--dice-success);
+    background: #dce8dc;
+    color: var(--dice-success);
+    font-weight: 600;
+    letter-spacing: 0.05em;
+    text-transform: uppercase;
+    padding: 0.65rem 1.2rem;
+    cursor: pointer;
+    transition: background 0.2s ease, border-color 0.15s ease;
+    margin-top: 0.5rem;
+}
+
+.dice-retainer-dialog__confirm:hover,
+.dice-retainer-dialog__confirm:focus {
+    background: var(--dice-surface);
+    border-color: var(--dice-accent);
+}
+
 @media (max-width: 640px) {
     .dice-modal {
         width: 95vw;
