@@ -2739,11 +2739,13 @@ export function mountBoardInteractions(store, routes = {}) {
     const timeSinceLastSave = Date.now() - lastBoardStateSaveCompletedAt;
     const isInGracePeriod = lastBoardStateSaveCompletedAt > 0 && timeSinceLastSave < SAVE_GRACE_PERIOD_MS;
 
-    // Block poller during active drag operations to prevent state overwrites
-    // that could cause visible position jumps while the user is dragging
-    const isDragging = Boolean(viewState.dragState || viewState.dragCandidate);
+    // NOTE: We no longer block the poller entirely during drag operations.
+    // The merge logic in applyBoardStateDelta already handles excluding dragged
+    // tokens (storing their updates in deferredUpdates for later application).
+    // This allows updates for OTHER tokens to be applied normally during drag,
+    // preventing the issue where other players' moves are lost while dragging.
 
-    if (!hasPending && !isInGracePeriod && !isDragging) {
+    if (!hasPending && !isInGracePeriod) {
       return {
         pending: Boolean(pendingBoardStateSave?.blocking),
         promise: pendingBoardStateSave?.promise ?? null,
@@ -2754,13 +2756,13 @@ export function mountBoardInteractions(store, routes = {}) {
       };
     }
 
-    // If in grace period, has pending save, or is dragging, block the poller
+    // If in grace period or has pending save, block the poller
     return {
       pending: true,
       promise: pendingBoardStateSave?.promise ?? pendingCombatStateSave?.promise ?? null,
       signature: pendingBoardStateSave?.signature ?? lastPersistedBoardStateSignature ?? null,
       hash: pendingBoardStateSave?.hash ?? lastPersistedBoardStateHash ?? null,
-      blocking: hasPending || isInGracePeriod || isDragging,
+      blocking: hasPending || isInGracePeriod,
       result: pendingBoardStateSave?.lastResult ?? null,
     };
   }
@@ -7214,7 +7216,8 @@ export function mountBoardInteractions(store, routes = {}) {
     if (isInCompleted || state === 'completed') {
       completedCombatants.delete(representativeId);
       setActiveCombatantId(representativeId);
-      currentTurnTeam = getCombatantTeam(representativeId) ?? currentTurnTeam;
+      // Don't change currentTurnTeam here - preserve the existing decision state.
+      // Moving a token back from completed doesn't change whose turn it is to pick.
       refreshCombatTracker();
       forceAcquireTurnLockForGm(representativeId);
       updateCombatModeIndicators();
@@ -7314,7 +7317,9 @@ export function mountBoardInteractions(store, routes = {}) {
         role: participantRole,
       });
     }
-    currentTurnTeam = getCombatantTeam(representativeId) ?? currentTurnTeam;
+    // Don't change currentTurnTeam here - it should already be set correctly
+    // by the picking logic. Changing it here could break decision state if
+    // a turn is started manually for a combatant on a different team.
     refreshCombatTracker();
     updateCombatModeIndicators();
     const shouldShowPrompt = !initiatorProfileId || initiatorProfileId === currentUserId;
