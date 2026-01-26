@@ -2566,9 +2566,18 @@ export function mountBoardInteractions(store, routes = {}) {
             const byId = new Map(existing.map((p) => [p.id, p]));
             placements.forEach((placement) => {
               if (placement && placement.id) {
-                // Skip tokens that are currently being dragged locally
-                // Their positions will be set when the drag commits
+                // For tokens currently being dragged, store the update for later comparison
+                // instead of skipping it entirely (prevents popback on concurrent moves)
                 if (draggedTokenIds.has(placement.id)) {
+                  const dragState = viewState.dragState;
+                  if (dragState?.deferredUpdates) {
+                    const incomingTime = placement._lastModified || 0;
+                    const existing = dragState.deferredUpdates.get(placement.id);
+                    // Keep only the newest deferred update for each token
+                    if (!existing || incomingTime > (existing._lastModified || 0)) {
+                      dragState.deferredUpdates.set(placement.id, placement);
+                    }
+                  }
                   return;
                 }
                 const existingPlacement = byId.get(placement.id);
@@ -3874,6 +3883,8 @@ export function mountBoardInteractions(store, routes = {}) {
       previewPositions: preview,
       hasMoved: false,
       measurement: null,
+      startTime: Date.now(),
+      deferredUpdates: new Map(),
     };
 
     if (isMeasureModeActive()) {
@@ -3988,6 +3999,8 @@ export function mountBoardInteractions(store, routes = {}) {
     const preview = dragState.previewPositions;
     const moved = dragState.hasMoved;
     const measurement = dragState.measurement ?? null;
+    const startTime = dragState.startTime ?? 0;
+    const deferredUpdates = dragState.deferredUpdates ?? null;
 
     if (measurement) {
       if (!isMeasureModeActive()) {
@@ -4009,7 +4022,7 @@ export function mountBoardInteractions(store, routes = {}) {
     clearDragCandidate(pointerId);
 
     if (commit && moved && preview && preview.size) {
-      commitDragPreview(preview);
+      commitDragPreview(preview, { startTime, deferredUpdates });
     } else {
       renderTokens(boardApi.getState?.() ?? {}, tokenLayer, viewState);
     }
@@ -4070,7 +4083,7 @@ export function mountBoardInteractions(store, routes = {}) {
     viewState.dragCandidate = null;
   }
 
-  function commitDragPreview(preview) {
+  function commitDragPreview(preview, { startTime = 0, deferredUpdates = null } = {}) {
     if (typeof boardApi.updateState !== 'function') {
       renderTokens(boardApi.getState?.() ?? {}, tokenLayer, viewState);
       return;
@@ -4083,9 +4096,27 @@ export function mountBoardInteractions(store, routes = {}) {
       return;
     }
 
+    // Check which tokens have deferred updates that should take precedence
+    // If another user moved a token AFTER we started dragging, their move wins
+    const tokensWithNewerRemoteUpdate = new Set();
+    if (deferredUpdates instanceof Map && startTime > 0) {
+      deferredUpdates.forEach((deferredPlacement, tokenId) => {
+        const deferredTime = deferredPlacement._lastModified || 0;
+        if (deferredTime > startTime) {
+          // This token was moved by someone else after we started dragging
+          tokensWithNewerRemoteUpdate.add(tokenId);
+          console.log('[VTT Drag] Token moved by another user during drag, deferring to their position:', tokenId);
+        }
+      });
+    }
+
     const updates = new Map();
     preview.forEach((position, id) => {
       if (!id) {
+        return;
+      }
+      // Skip tokens that have a newer remote update - their position takes precedence
+      if (tokensWithNewerRemoteUpdate.has(id)) {
         return;
       }
       const column = toNonNegativeNumber(position.column ?? position.col ?? 0);
@@ -4095,7 +4126,18 @@ export function mountBoardInteractions(store, routes = {}) {
       updates.set(id, { column, row, width, height });
     });
 
-    if (!updates.size) {
+    // Apply deferred remote updates for tokens that were moved by other users
+    const deferredToApply = [];
+    if (tokensWithNewerRemoteUpdate.size > 0 && deferredUpdates instanceof Map) {
+      tokensWithNewerRemoteUpdate.forEach((tokenId) => {
+        const deferred = deferredUpdates.get(tokenId);
+        if (deferred) {
+          deferredToApply.push(deferred);
+        }
+      });
+    }
+
+    if (!updates.size && !deferredToApply.length) {
       renderTokens(state, tokenLayer, viewState);
       return;
     }
@@ -4108,6 +4150,8 @@ export function mountBoardInteractions(store, routes = {}) {
       if (!Array.isArray(scenePlacements) || !scenePlacements.length) {
         return;
       }
+
+      // Apply our drag updates for tokens without newer remote updates
       scenePlacements.forEach((placement) => {
         if (!placement || typeof placement !== 'object') {
           return;
@@ -4124,6 +4168,14 @@ export function mountBoardInteractions(store, routes = {}) {
           placement._lastModified = moveTimestamp;
           movedCount += 1;
           movedIds.push(placement.id);
+        }
+      });
+
+      // Apply deferred remote updates (these don't count as "moved by us")
+      deferredToApply.forEach((deferred) => {
+        const idx = scenePlacements.findIndex((p) => p?.id === deferred.id);
+        if (idx >= 0) {
+          scenePlacements[idx] = deferred;
         }
       });
     });
