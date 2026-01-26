@@ -835,13 +835,31 @@ body {
   font-size: 18px;
 }
 
+/* 3D stone vessel for health/stamina bars - Diablo style */
 .meter__track {
   position: relative;
-  height: 18px;
-  background: #1e120c;
-  border: 1px solid var(--border);
-  border-radius: 5px;
+  height: 24px;
+  background: linear-gradient(180deg, #1a0f08 0%, #2d1b12 40%, #1a0f08 100%);
+  border-radius: 6px;
   overflow: hidden;
+
+  /* Hard shadow creates visible "thickness" - stone vessel effect */
+  box-shadow:
+    /* Solid edge shadow - simulates stone thickness */
+    3px 3px 0 #150c06,
+    4px 4px 0 #100904,
+    /* Soft ambient shadow */
+    6px 6px 12px rgba(0, 0, 0, 0.5),
+    /* Deep inner shadow for vessel cavity */
+    inset 0 4px 8px rgba(0, 0, 0, 0.7),
+    inset 0 -2px 4px rgba(0, 0, 0, 0.4);
+
+  /* Beveled border - light on top/left, dark on bottom/right */
+  border: 3px solid;
+  border-top-color: #5a4230;
+  border-left-color: #4a3220;
+  border-right-color: #2a1508;
+  border-bottom-color: #1a0a04;
 }
 
 .meter__fill {
@@ -849,22 +867,80 @@ body {
   transition: width 0.2s ease;
 }
 
+/* Dark green liquid fill - Diablo health potion style */
 .meter__fill--stamina {
-  background: linear-gradient(90deg, #4caf50, #7ed47c);
+  background:
+    /* Surface highlight - liquid reflection */
+    linear-gradient(180deg,
+      rgba(120, 200, 120, 0.3) 0%,
+      transparent 20%,
+      transparent 80%,
+      rgba(0, 40, 0, 0.4) 100%
+    ),
+    /* Main liquid gradient - dark emerald green */
+    linear-gradient(180deg,
+      #1a5c1a 0%,
+      #0d3d0d 30%,
+      #082808 60%,
+      #041404 100%
+    );
+  box-shadow:
+    /* Inner glow for liquid luminosity */
+    inset 0 0 8px rgba(40, 120, 40, 0.5),
+    inset 0 2px 4px rgba(80, 160, 80, 0.3);
 }
 
+/* Dark blue liquid fill - Diablo mana potion style */
 .meter__fill--recovery {
-  background: linear-gradient(90deg, #4a90e2, #6fb5ff);
+  background:
+    /* Surface highlight - liquid reflection */
+    linear-gradient(180deg,
+      rgba(100, 150, 220, 0.3) 0%,
+      transparent 20%,
+      transparent 80%,
+      rgba(0, 20, 60, 0.4) 100%
+    ),
+    /* Main liquid gradient - dark sapphire blue */
+    linear-gradient(180deg,
+      #1a4a7a 0%,
+      #0d2d4d 30%,
+      #081d33 60%,
+      #040d1a 100%
+    );
+  box-shadow:
+    /* Inner glow for liquid luminosity */
+    inset 0 0 8px rgba(40, 100, 180, 0.5),
+    inset 0 2px 4px rgba(80, 140, 200, 0.3);
 }
 
+/* Dark crimson overflow - temp stamina excess */
 .meter__overflow {
   position: absolute;
   left: 0;
-  top: -6px;
-  height: 10px;
-  background: linear-gradient(90deg, #ff4d4f, #ff9f9f);
-  border-radius: 5px;
-  box-shadow: 0 2px 6px rgba(255, 77, 79, 0.45);
+  top: -8px;
+  height: 12px;
+  background:
+    /* Surface highlight */
+    linear-gradient(180deg,
+      rgba(200, 100, 100, 0.3) 0%,
+      transparent 30%
+    ),
+    /* Dark blood red liquid */
+    linear-gradient(180deg,
+      #6a1a1a 0%,
+      #4d0d0d 40%,
+      #330808 100%
+    );
+  border-radius: 4px;
+  box-shadow:
+    2px 2px 0 #1a0808,
+    3px 3px 4px rgba(0, 0, 0, 0.4),
+    inset 0 0 6px rgba(120, 40, 40, 0.5);
+  border: 2px solid;
+  border-top-color: #8a3030;
+  border-left-color: #6a2020;
+  border-right-color: #2a0808;
+  border-bottom-color: #1a0404;
 }
 
 .meter__row {
@@ -902,15 +978,23 @@ body {
   align-items: center;
 }
 
+/* Raised stone label - 3D tablet effect for vitals labels */
 .tracker-label {
   font-size: 13px;
-  padding: 6px 10px;
-  border-radius: 6px;
+  padding: 6px 12px;
+  border-radius: 4px;
   display: inline-block;
   color: #fff;
   font-weight: 800;
   letter-spacing: 0.06em;
   text-transform: uppercase;
+  position: relative;
+
+  /* 3D raised effect matching other UI elements */
+  box-shadow:
+    2px 2px 0 #1a0f08,
+    3px 3px 0 #150c06,
+    4px 4px 6px rgba(0, 0, 0, 0.4);
 }
 
 .tracker-label--prominent {
@@ -918,23 +1002,47 @@ body {
   font-size: 14px;
 }
 
+/* Dark emerald stamina label - matches liquid fill */
 .tracker-label--stamina {
-  background: rgba(76, 175, 80, 0.25);
-  border: 1px solid rgba(76, 175, 80, 0.5);
-  color: #d7f7d9;
+  background: linear-gradient(145deg, #1a4a1a 0%, #0d2d0d 60%, #082008 100%);
+  color: #8fcf8f;
+  text-shadow: 0 1px 2px rgba(0, 0, 0, 0.6);
+
+  /* Beveled border - stone tablet style */
+  border: 2px solid;
+  border-top-color: #2a6a2a;
+  border-left-color: #1f5a1f;
+  border-right-color: #0a1f0a;
+  border-bottom-color: #051005;
 }
 
+/* Dark sapphire recovery label - matches liquid fill */
 .tracker-label--recovery {
-  background: rgba(74, 144, 226, 0.22);
-  border: 1px solid rgba(111, 181, 255, 0.45);
-  color: #d8e9ff;
+  background: linear-gradient(145deg, #1a3a5a 0%, #0d2540 60%, #081828 100%);
+  color: #8fb8df;
+  text-shadow: 0 1px 2px rgba(0, 0, 0, 0.6);
+
+  /* Beveled border - stone tablet style */
+  border: 2px solid;
+  border-top-color: #2a5a8a;
+  border-left-color: #1f4a7a;
+  border-right-color: #0a1828;
+  border-bottom-color: #050c14;
 }
 
+/* Dark crimson temp label - matches overflow bar */
 .tracker-label--temp {
-  background: rgba(255, 77, 79, 0.25);
-  border: 1px solid rgba(255, 77, 79, 0.5);
-  color: #ffe4e4;
+  background: linear-gradient(145deg, #5a1a1a 0%, #3d0d0d 60%, #280808 100%);
+  color: #df8f8f;
+  text-shadow: 0 1px 2px rgba(0, 0, 0, 0.6);
   animation: temp-stamina-flash 0.75s ease-in-out 2;
+
+  /* Beveled border - stone tablet style */
+  border: 2px solid;
+  border-top-color: #8a3a3a;
+  border-left-color: #6a2a2a;
+  border-right-color: #2a0a0a;
+  border-bottom-color: #140505;
 }
 
 .meter__history {
