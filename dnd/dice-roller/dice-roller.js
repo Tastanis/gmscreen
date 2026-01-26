@@ -35,6 +35,7 @@ class DashboardDiceRoller {
         this.retainerCount = 0;
         this.projectBaseQueue = [];
         this.projectExtraQueue = [];
+        this.projectRetainerQueue = [];
         this.projectQueueDisplay = null;
 
         this.currentRollQueue = [];
@@ -300,7 +301,7 @@ class DashboardDiceRoller {
 
         const info = document.createElement('p');
         info.className = 'dice-retainer-dialog__info';
-        info.textContent = 'Each retainer adds 2d10 per day selected.';
+        info.textContent = 'Each retainer adds 2d10 + 2 per day selected.';
         body.appendChild(info);
 
         const confirmBtn = document.createElement('button');
@@ -358,6 +359,7 @@ class DashboardDiceRoller {
         if (this.projectState.mode === 'ready') {
             if (this.dayCounterValue === 0) {
                 this.projectBaseQueue = [];
+                this.projectRetainerQueue = [];
                 this.currentRollQueue = [...this.projectExtraQueue];
                 this.updateQueueDisplay();
                 this.updateProjectStatusMessage('Set the day counter above 0 to queue the base roll, or add modifiers manually.');
@@ -385,21 +387,27 @@ class DashboardDiceRoller {
     computeProjectBaseQueue() {
         const dayCount = Math.max(0, this.dayCounterValue);
         if (dayCount === 0 || !this.projectVariant) {
+            this.projectRetainerQueue = [];
             return [];
         }
-        const diceCount = 5 * dayCount;
+
+        // Zepha gets 6d10 per day instead of 5d10
+        const dicePerDay = (typeof window.currentUser === 'string' && window.currentUser.toLowerCase() === 'zepha') ? 6 : 5;
+        const diceCount = dicePerDay * dayCount;
         const modifierPerDay = this.projectVariant === 'school' ? 6 : 12;
         const modifier = modifierPerDay * dayCount;
         const modifierText = modifier >= 0 ? `+${modifier}` : `${modifier}`;
 
         const queue = [`${diceCount}d10`, modifierText];
 
-        // Add retainer dice: 2d10+2 per retainer per day
+        // Compute retainer queue separately: 2d10+2 per retainer per day
+        // Retainer dice are NOT affected by advantage (rolled only once)
         if (this.retainerCount > 0) {
             const retainerDiceCount = 2 * this.retainerCount * dayCount;
             const retainerModifier = 2 * this.retainerCount * dayCount;
-            queue.push(`${retainerDiceCount}d10`);
-            queue.push(`+${retainerModifier}`);
+            this.projectRetainerQueue = [`${retainerDiceCount}d10`, `+${retainerModifier}`];
+        } else {
+            this.projectRetainerQueue = [];
         }
 
         return queue;
@@ -415,7 +423,8 @@ class DashboardDiceRoller {
             this.projectExtraQueue = [];
         }
 
-        this.currentRollQueue = [...this.projectBaseQueue, ...this.projectExtraQueue];
+        // Combine base queue + retainer queue + extra queue for display
+        this.currentRollQueue = [...this.projectBaseQueue, ...this.projectRetainerQueue, ...this.projectExtraQueue];
         this.updateQueueDisplay();
     }
 
@@ -800,6 +809,7 @@ class DashboardDiceRoller {
             this.projectVariant = null;
             this.projectBaseQueue = [];
             this.projectExtraQueue = [];
+            this.projectRetainerQueue = [];
             this.disableProjectManualEntry();
             this.updateProjectStatusMessage('');
             this.hideProjectTypeDialog();
@@ -821,6 +831,7 @@ class DashboardDiceRoller {
         this.projectVariant = null;
         this.projectBaseQueue = [];
         this.projectExtraQueue = [];
+        this.projectRetainerQueue = [];
         this.clearQueue();
         this.projectState.manualActive = false;
         this.disableProjectManualEntry();
@@ -835,6 +846,7 @@ class DashboardDiceRoller {
         this.projectVariant = null;
         this.projectBaseQueue = [];
         this.projectExtraQueue = [];
+        this.projectRetainerQueue = [];
         this.disableProjectManualEntry();
         this.updateProjectStatusMessage('Pick a project to continue.');
         this.setProjectMode('selecting');
@@ -851,6 +863,7 @@ class DashboardDiceRoller {
         this.retainerCount = 0;
         this.projectBaseQueue = [];
         this.projectExtraQueue = [];
+        this.projectRetainerQueue = [];
         this.hideProjectTypeDialog();
         this.hideRetainerDialog();
         this.setProjectMode('inactive');
@@ -1141,15 +1154,17 @@ class DashboardDiceRoller {
         if (this.projectState.mode === 'ready' && this.projectBaseQueue.length > 0 && !this.projectState.manualActive) {
             if (this.projectExtraQueue.length > 0) {
                 this.projectExtraQueue = [];
-                this.currentRollQueue = [...this.projectBaseQueue];
+                this.currentRollQueue = [...this.projectBaseQueue, ...this.projectRetainerQueue];
             } else {
                 this.projectBaseQueue = [];
                 this.projectExtraQueue = [];
+                this.projectRetainerQueue = [];
                 this.currentRollQueue = [];
             }
         } else {
             this.projectBaseQueue = [];
             this.projectExtraQueue = [];
+            this.projectRetainerQueue = [];
             this.currentRollQueue = [];
         }
         this.updateQueueDisplay();
@@ -1215,54 +1230,165 @@ class DashboardDiceRoller {
     }
 
     resolveCurrentRollResult() {
-        const baseRoll = this.performRoll();
-        if (!baseRoll) {
-            return null;
+        // For project rolls with advantage, retainer dice should NOT be rolled twice
+        // Only the base (non-retainer) dice get rolled twice for advantage
+        const isProjectRollWithRetainers = this.projectState.mode === 'ready' && this.projectRetainerQueue.length > 0;
+
+        if (!this.advantageEnabled || !isProjectRollWithRetainers) {
+            // Standard behavior: roll everything, with advantage rolling twice if enabled
+            const baseRoll = this.performRoll();
+            if (!baseRoll) {
+                return null;
+            }
+
+            if (!this.advantageEnabled) {
+                baseRoll.advantage = { active: false };
+                return baseRoll;
+            }
+
+            const secondRoll = this.performRoll();
+            if (!secondRoll) {
+                baseRoll.advantage = { active: false };
+                return baseRoll;
+            }
+
+            const attempts = [baseRoll, secondRoll];
+            const keptIndex = attempts[0].total >= attempts[1].total ? 0 : 1;
+            const keptRoll = {
+                ...attempts[keptIndex],
+                components: Array.isArray(attempts[keptIndex].components)
+                    ? [...attempts[keptIndex].components]
+                    : attempts[keptIndex].components,
+                breakdown: Array.isArray(attempts[keptIndex].breakdown)
+                    ? attempts[keptIndex].breakdown.map((entry) => {
+                        if (!entry || typeof entry !== 'object') {
+                            return entry;
+                        }
+                        const cloned = { ...entry };
+                        if (Array.isArray(entry.rolls)) {
+                            cloned.rolls = [...entry.rolls];
+                        }
+                        return cloned;
+                    })
+                    : attempts[keptIndex].breakdown
+            };
+
+            keptRoll.advantage = {
+                active: true,
+                keptIndex,
+                attempts: attempts.map((roll, index) => ({
+                    index,
+                    total: roll.total,
+                    expression: roll.expression
+                }))
+            };
+
+            return keptRoll;
         }
 
-        if (!this.advantageEnabled) {
-            baseRoll.advantage = { active: false };
-            return baseRoll;
+        // Special handling for project rolls with advantage + retainers:
+        // Roll base dice (non-retainer) twice for advantage, roll retainer dice only once
+        const nonRetainerQueue = [...this.projectBaseQueue, ...this.projectExtraQueue];
+        const retainerQueue = [...this.projectRetainerQueue];
+
+        // Roll non-retainer dice twice and take the higher
+        const firstNonRetainerRoll = this.performRollOnQueue(nonRetainerQueue);
+        const secondNonRetainerRoll = this.performRollOnQueue(nonRetainerQueue);
+
+        if (!firstNonRetainerRoll || !secondNonRetainerRoll) {
+            // Fallback to standard roll if something fails
+            const fallbackRoll = this.performRoll();
+            if (fallbackRoll) {
+                fallbackRoll.advantage = { active: false };
+            }
+            return fallbackRoll;
         }
 
-        const secondRoll = this.performRoll();
-        if (!secondRoll) {
-            baseRoll.advantage = { active: false };
-            return baseRoll;
+        const nonRetainerAttempts = [firstNonRetainerRoll, secondNonRetainerRoll];
+        const keptNonRetainerIndex = nonRetainerAttempts[0].total >= nonRetainerAttempts[1].total ? 0 : 1;
+        const keptNonRetainerRoll = nonRetainerAttempts[keptNonRetainerIndex];
+
+        // Roll retainer dice only once (no advantage)
+        const retainerRoll = this.performRollOnQueue(retainerQueue);
+
+        // Combine the results
+        const combinedTotal = keptNonRetainerRoll.total + (retainerRoll ? retainerRoll.total : 0);
+        const combinedComponents = [...keptNonRetainerRoll.components];
+        const combinedBreakdown = keptNonRetainerRoll.breakdown.map((entry) => {
+            if (!entry || typeof entry !== 'object') {
+                return entry;
+            }
+            const cloned = { ...entry };
+            if (Array.isArray(entry.rolls)) {
+                cloned.rolls = [...entry.rolls];
+            }
+            return cloned;
+        });
+
+        if (retainerRoll) {
+            combinedComponents.push(...retainerRoll.components);
+            combinedBreakdown.push(...retainerRoll.breakdown);
         }
 
-        const attempts = [baseRoll, secondRoll];
-        const keptIndex = attempts[0].total >= attempts[1].total ? 0 : 1;
-        const keptRoll = {
-            ...attempts[keptIndex],
-            components: Array.isArray(attempts[keptIndex].components)
-                ? [...attempts[keptIndex].components]
-                : attempts[keptIndex].components,
-            breakdown: Array.isArray(attempts[keptIndex].breakdown)
-                ? attempts[keptIndex].breakdown.map((entry) => {
-                    if (!entry || typeof entry !== 'object') {
-                        return entry;
-                    }
-                    const cloned = { ...entry };
-                    if (Array.isArray(entry.rolls)) {
-                        cloned.rolls = [...entry.rolls];
-                    }
-                    return cloned;
-                })
-                : attempts[keptIndex].breakdown
+        return {
+            total: combinedTotal,
+            components: combinedComponents,
+            breakdown: combinedBreakdown,
+            expression: combinedComponents.join(' '),
+            advantage: {
+                active: true,
+                keptIndex: keptNonRetainerIndex,
+                retainerDiceNotAffected: true,
+                attempts: nonRetainerAttempts.map((roll, index) => ({
+                    index,
+                    total: roll.total,
+                    expression: roll.expression
+                }))
+            }
         };
+    }
 
-        keptRoll.advantage = {
-            active: true,
-            keptIndex,
-            attempts: attempts.map((roll, index) => ({
-                index,
-                total: roll.total,
-                expression: roll.expression
-            }))
+    performRollOnQueue(queue) {
+        if (!queue || queue.length === 0) {
+            return { total: 0, components: [], breakdown: [], expression: '' };
+        }
+
+        const components = [...queue];
+        const breakdown = [];
+        let totalResult = 0;
+
+        for (const item of components) {
+            if (typeof item !== 'string' || item.trim() === '') {
+                continue;
+            }
+
+            if (/^[+-]\d+$/.test(item.trim())) {
+                const modifierValue = parseInt(item, 10);
+                totalResult += modifierValue;
+                breakdown.push({
+                    type: 'modifier',
+                    notation: item.trim(),
+                    value: modifierValue
+                });
+            } else {
+                const { result, detail } = this.parseAndRollDice(item.trim());
+                const rolls = Array.isArray(detail) ? detail.map((roll) => parseInt(roll, 10)) : [];
+                totalResult += result;
+                breakdown.push({
+                    type: 'dice',
+                    notation: item.trim(),
+                    rolls,
+                    total: result
+                });
+            }
+        }
+
+        return {
+            total: totalResult,
+            components,
+            breakdown,
+            expression: components.join(' ')
         };
-
-        return keptRoll;
     }
 
     performRoll() {
