@@ -394,10 +394,12 @@ class DashboardDiceRoller {
 
         const queue = [`${diceCount}d10`, modifierText];
 
-        // Add retainer dice: 2d10 per retainer per day
+        // Add retainer dice: 2d10+2 per retainer per day
         if (this.retainerCount > 0) {
             const retainerDiceCount = 2 * this.retainerCount * dayCount;
+            const retainerModifier = 2 * this.retainerCount * dayCount;
             queue.push(`${retainerDiceCount}d10`);
+            queue.push(`+${retainerModifier}`);
         }
 
         return queue;
