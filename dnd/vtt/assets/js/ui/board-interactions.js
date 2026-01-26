@@ -2520,19 +2520,32 @@ export function mountBoardInteractions(store, routes = {}) {
       return;
     }
 
-    // Check for pending saves or drag operations
-    const pendingInfo = getPendingBoardStateSaveInfo();
-    if (pendingInfo.pending || pendingInfo.blocking) {
-      console.log('[VTT Pusher] Skipping update due to pending operation');
-      return;
-    }
-
-    // Update version tracking
+    // ALWAYS update version tracking first, regardless of other state
+    // This prevents the poller from applying stale data later
     if (typeof delta.version === 'number' && delta.version > currentBoardStateVersion) {
       currentBoardStateVersion = delta.version;
       if (pusherInterface?.setLastAppliedVersion) {
         pusherInterface.setLastAppliedVersion(delta.version);
       }
+    }
+
+    // Check if a save is actually in flight (promise exists)
+    // We should NOT block during drag operations or grace periods - only during actual saves
+    // Drag operations: we want to receive updates for tokens we're NOT dragging
+    // Grace period: timestamp-based merging handles conflicts correctly
+    const hasPendingSave = Boolean(pendingBoardStateSave?.promise);
+    if (hasPendingSave) {
+      console.log('[VTT Pusher] Deferring update due to pending save (version tracked)');
+      return;
+    }
+
+    // Get IDs of tokens currently being dragged (if any)
+    // We'll skip updating these - they'll be set by the drag commit
+    const draggedTokenIds = new Set();
+    if (viewState.dragState?.previewPositions) {
+      viewState.dragState.previewPositions.forEach((_, id) => {
+        if (id) draggedTokenIds.add(id);
+      });
     }
 
     // Apply delta updates to the board state
@@ -2553,6 +2566,11 @@ export function mountBoardInteractions(store, routes = {}) {
             const byId = new Map(existing.map((p) => [p.id, p]));
             placements.forEach((placement) => {
               if (placement && placement.id) {
+                // Skip tokens that are currently being dragged locally
+                // Their positions will be set when the drag commits
+                if (draggedTokenIds.has(placement.id)) {
+                  return;
+                }
                 const existingPlacement = byId.get(placement.id);
                 if (existingPlacement) {
                   // Compare timestamps - keep the newer one
@@ -2673,13 +2691,16 @@ export function mountBoardInteractions(store, routes = {}) {
     });
 
     // Re-render the board with updated state
+    // During drag operations, the render will use drag preview positions
+    // for tokens being dragged, so this is safe to call
     const updatedState = boardApi.getState?.();
     if (updatedState) {
       applyStateToBoard(updatedState);
       applyCombatStateFromBoardState(updatedState);
     }
 
-    console.log('[VTT Pusher] Applied update, version:', delta.version);
+    const dragInfo = draggedTokenIds.size > 0 ? ` (skipped ${draggedTokenIds.size} dragged tokens)` : '';
+    console.log('[VTT Pusher] Applied update, version:', delta.version, dragInfo);
   }
 
   /**
