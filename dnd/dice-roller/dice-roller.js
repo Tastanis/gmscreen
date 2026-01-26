@@ -31,6 +31,8 @@ class DashboardDiceRoller {
         this.dayCounterDisplays = [];
         this.projectTypeDialog = null;
         this.projectVariant = null;
+        this.retainerDialog = null;
+        this.retainerCount = 0;
         this.projectBaseQueue = [];
         this.projectExtraQueue = [];
         this.projectQueueDisplay = null;
@@ -145,6 +147,10 @@ class DashboardDiceRoller {
         if (this.projectTypeDialog) {
             this.overlay.appendChild(this.projectTypeDialog);
         }
+        this.retainerDialog = this.createRetainerDialog();
+        if (this.retainerDialog) {
+            this.overlay.appendChild(this.retainerDialog);
+        }
         document.body.appendChild(this.overlay);
 
         this.setProjectMode('inactive');
@@ -238,6 +244,112 @@ class DashboardDiceRoller {
         return dialog;
     }
 
+    createRetainerDialog() {
+        const dialog = document.createElement('div');
+        dialog.className = 'dice-retainer-dialog hidden';
+
+        const card = document.createElement('div');
+        card.className = 'dice-retainer-dialog__card';
+
+        const header = document.createElement('div');
+        header.className = 'dice-retainer-dialog__header';
+        const title = document.createElement('h3');
+        title.textContent = 'Retainers Rolling';
+        header.appendChild(title);
+
+        const closeBtn = document.createElement('button');
+        closeBtn.type = 'button';
+        closeBtn.className = 'dice-retainer-dialog__close';
+        closeBtn.innerHTML = '&times;';
+        closeBtn.addEventListener('click', () => this.close());
+        header.appendChild(closeBtn);
+        card.appendChild(header);
+
+        const body = document.createElement('div');
+        body.className = 'dice-retainer-dialog__body';
+
+        const label = document.createElement('p');
+        label.className = 'dice-retainer-dialog__label';
+        label.textContent = 'Number of retainers rolling during this time:';
+        body.appendChild(label);
+
+        const controls = document.createElement('div');
+        controls.className = 'dice-retainer-dialog__controls';
+
+        const downBtn = document.createElement('button');
+        downBtn.type = 'button';
+        downBtn.className = 'dice-retainer-dialog__btn dice-retainer-dialog__btn--down';
+        downBtn.textContent = '▼';
+        downBtn.addEventListener('click', () => this.changeRetainerCount(-1));
+        controls.appendChild(downBtn);
+
+        const display = document.createElement('div');
+        display.className = 'dice-retainer-dialog__value';
+        display.textContent = '0';
+        controls.appendChild(display);
+        this.retainerCountDisplay = display;
+
+        const upBtn = document.createElement('button');
+        upBtn.type = 'button';
+        upBtn.className = 'dice-retainer-dialog__btn dice-retainer-dialog__btn--up';
+        upBtn.textContent = '▲';
+        upBtn.addEventListener('click', () => this.changeRetainerCount(1));
+        controls.appendChild(upBtn);
+
+        body.appendChild(controls);
+
+        const info = document.createElement('p');
+        info.className = 'dice-retainer-dialog__info';
+        info.textContent = 'Each retainer adds 2d10 per day selected.';
+        body.appendChild(info);
+
+        const confirmBtn = document.createElement('button');
+        confirmBtn.type = 'button';
+        confirmBtn.className = 'dice-retainer-dialog__confirm';
+        confirmBtn.textContent = 'Continue';
+        confirmBtn.addEventListener('click', () => this.confirmRetainerSelection());
+        body.appendChild(confirmBtn);
+
+        card.appendChild(body);
+        dialog.appendChild(card);
+        return dialog;
+    }
+
+    changeRetainerCount(delta) {
+        const nextValue = Math.max(0, this.retainerCount + delta);
+        this.retainerCount = nextValue;
+        if (this.retainerCountDisplay) {
+            this.retainerCountDisplay.textContent = this.retainerCount.toString();
+        }
+    }
+
+    showRetainerDialog() {
+        this.retainerCount = 0;
+        if (this.retainerCountDisplay) {
+            this.retainerCountDisplay.textContent = '0';
+        }
+        if (this.retainerDialog) {
+            this.retainerDialog.classList.remove('hidden');
+        }
+        if (this.modal) {
+            this.modal.classList.add('dice-modal--hidden');
+        }
+    }
+
+    hideRetainerDialog() {
+        if (this.retainerDialog) {
+            this.retainerDialog.classList.add('hidden');
+        }
+        if (this.modal) {
+            this.modal.classList.remove('dice-modal--hidden');
+        }
+    }
+
+    confirmRetainerSelection() {
+        this.hideRetainerDialog();
+        this.finalizeProjectSetup();
+    }
+
     changeDayCounter(delta) {
         const nextValue = Math.max(0, this.dayCounterValue + delta);
         this.dayCounterValue = nextValue;
@@ -279,7 +391,16 @@ class DashboardDiceRoller {
         const modifierPerDay = this.projectVariant === 'school' ? 6 : 12;
         const modifier = modifierPerDay * dayCount;
         const modifierText = modifier >= 0 ? `+${modifier}` : `${modifier}`;
-        return [`${diceCount}d10`, modifierText];
+
+        const queue = [`${diceCount}d10`, modifierText];
+
+        // Add retainer dice: 2d10 per retainer per day
+        if (this.retainerCount > 0) {
+            const retainerDiceCount = 2 * this.retainerCount * dayCount;
+            queue.push(`${retainerDiceCount}d10`);
+        }
+
+        return queue;
     }
 
     applyProjectBaseQueue(resetExtras = false) {
@@ -299,7 +420,7 @@ class DashboardDiceRoller {
     selectProjectVariant(variant) {
         this.projectVariant = variant;
         this.hideProjectTypeDialog();
-        this.finalizeProjectSetup();
+        this.showRetainerDialog();
     }
 
     showProjectTypeDialog() {
@@ -725,9 +846,11 @@ class DashboardDiceRoller {
 
         document.removeEventListener('click', this.handleProjectSelection, true);
         this.projectVariant = null;
+        this.retainerCount = 0;
         this.projectBaseQueue = [];
         this.projectExtraQueue = [];
         this.hideProjectTypeDialog();
+        this.hideRetainerDialog();
         this.setProjectMode('inactive');
         this.clearQueue();
     }

@@ -939,7 +939,6 @@ $defaultInventoryTab = $is_gm ? 'frunk' : $user;
                     <a href="#" onclick="openStrixhavenSection('colleges')">Colleges</a>
                     <a href="#" onclick="openStrixhavenSection('students')">Students</a>
                     <a href="#" onclick="openStrixhavenSection('staff')">Staff</a>
-                    <a href="#" onclick="openStrixhavenSection('locations')">Locations</a>
                     <?php if ($is_gm): ?><a href="#" onclick="openStrixhavenSection('monster-creator')">Monster Creator</a><?php endif; ?>
                     <a href="#" onclick="openStrixhavenSection('templates')">Templates</a>
                     <a href="#" onclick="openStrixhavenSection('arcaneconstruction')" class="<?php echo ($user === 'zepha' || $is_gm) ? 'zepha-gm-allowed' : 'access-restricted'; ?>">Arcane Construction</a>
