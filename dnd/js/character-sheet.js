@@ -529,7 +529,7 @@ async function switchCharacter(character) {
                 tab.textContent = tabCharacter.charAt(0).toUpperCase() + tabCharacter.slice(1);
             }
         });
-        document.querySelector(`[data-character="${character}"]`).classList.add('active');
+        document.querySelector(`.character-tab[data-character="${character}"]`).classList.add('active');
         
         // Clear all form data before loading new character
         clearAllFormData();
