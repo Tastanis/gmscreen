@@ -110,10 +110,8 @@ require_once '../includes/strix-nav.php';
     <?php renderStrixNav('schedule'); ?>
     <div class="container">
         <header>
-            <h1>📅 Strixhaven Academic Schedule</h1>
+            <h1><?php echo $is_gm ? 'Game Master Schedule' : $character_names[$user] . ' Schedule'; ?></h1>
             <div class="user-info">
-                <span>Logged in as: <strong><?php echo $is_gm ? 'Game Master' : ucfirst($user); ?></strong></span>
-                <a href="../logout.php" class="logout-btn">Logout</a>
                 <a href="../dashboard.php" class="back-btn">← Back to Main</a>
             </div>
         </header>
@@ -141,7 +139,7 @@ require_once '../includes/strix-nav.php';
                 <!-- GM VIEW: All characters stacked -->
                 <div class="gm-view">
                     <div class="view-info">
-                        <span class="view-label">🎭 Game Master View - All Characters</span>
+                        <span class="view-label">All Characters</span>
                         <span class="save-status" id="saveStatus">Ready</span>
                     </div>
                     
@@ -187,7 +185,7 @@ require_once '../includes/strix-nav.php';
                 <!-- PLAYER VIEW: Individual character only -->
                 <div class="player-view">
                     <div class="view-info">
-                        <span class="view-label">📝 <?php echo $character_names[$user]; ?>'s Schedule</span>
+                        <span class="view-label">Weekly Schedule</span>
                         <span class="save-status" id="saveStatus">Ready</span>
                     </div>
                     
@@ -196,7 +194,7 @@ require_once '../includes/strix-nav.php';
                             <table class="schedule-table player-table">
                             <thead>
                                 <tr>
-                                    <th class="time-header"><?php echo $character_names[$user]; ?></th>
+                                    <th class="time-header">Time Block</th>
                                     <?php foreach ($days as $day): ?>
                                         <th class="day-header"><?php echo $day_labels[$day]; ?></th>
                                     <?php endforeach; ?>
