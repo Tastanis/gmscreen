@@ -392,7 +392,7 @@ class DashboardDiceRoller {
         }
 
         // Zepha gets 6d10 per day instead of 5d10
-        const dicePerDay = (typeof window.currentUser === 'string' && window.currentUser.toLowerCase() === 'zepha') ? 6 : 5;
+        const dicePerDay = (typeof currentUser === 'string' && currentUser.toLowerCase() === 'zepha') ? 6 : 5;
         const diceCount = dicePerDay * dayCount;
         const modifierPerDay = this.projectVariant === 'school' ? 6 : 12;
         const modifier = modifierPerDay * dayCount;
