@@ -1080,15 +1080,66 @@ body {
   gap: 8px;
 }
 
+/* 3D stone tablet effect for feature and action cards */
 .feature-card,
 .action-card {
-  background: var(--panel-alt);
-  border: 1px solid var(--border);
-  border-radius: 4px;
+  background: linear-gradient(145deg, #3d2a1e 0%, #352016 60%, #2d1b12 100%);
+  border-radius: 5px;
   padding: 10px;
   display: flex;
   flex-direction: column;
   gap: 8px;
+  position: relative;
+
+  /* Hard shadow creates visible "thickness" - 3D stone effect */
+  box-shadow:
+    /* Solid edge shadow - simulates stone thickness */
+    3px 3px 0 #1a0f08,
+    4px 4px 0 #150c06,
+    5px 5px 0 #100904,
+    /* Soft ambient shadow */
+    6px 6px 12px rgba(0, 0, 0, 0.45);
+
+  /* Beveled border - light on top/left, dark on bottom/right */
+  border: 2px solid;
+  border-top-color: #7a5a45;
+  border-left-color: #6a4a35;
+  border-right-color: #3a2010;
+  border-bottom-color: #2a1508;
+}
+
+/* Highlight shine on top face of ability cards */
+.feature-card::before,
+.action-card::before {
+  content: '';
+  position: absolute;
+  top: 0;
+  left: 0;
+  right: 0;
+  height: 50%;
+  background: linear-gradient(180deg, rgba(255, 220, 180, 0.1) 0%, transparent 100%);
+  border-radius: 4px 4px 0 0;
+  pointer-events: none;
+}
+
+/* Inner embossed edge effect */
+.feature-card::after,
+.action-card::after {
+  content: '';
+  position: absolute;
+  inset: 2px;
+  border-radius: 3px;
+  box-shadow:
+    inset 2px 2px 4px rgba(255, 200, 150, 0.12),
+    inset -2px -2px 4px rgba(0, 0, 0, 0.35);
+  pointer-events: none;
+}
+
+/* Ensure card content stays above pseudo-elements */
+.feature-card > *,
+.action-card > * {
+  position: relative;
+  z-index: 1;
 }
 
 .feature-card--wide {
