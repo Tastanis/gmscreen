@@ -1865,6 +1865,92 @@ body.edit-mode .edit-only {
   display: inline-flex;
 }
 
+/* Action card - larger name styling */
+.action-card .action-name {
+  font-size: 1.6em;
+  font-weight: 800;
+  color: var(--accent-strong);
+  cursor: pointer;
+  transition: color 0.15s ease;
+}
+
+.action-card .action-name:hover {
+  color: var(--accent);
+}
+
+/* Use when field styling */
+.use-when-row {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: baseline;
+  gap: 6px;
+  margin-top: 4px;
+  font-size: 0.9em;
+}
+
+.use-when-label {
+  font-weight: 600;
+  color: var(--muted);
+}
+
+.use-when-value {
+  color: var(--text);
+  font-style: italic;
+}
+
+.use-when-input {
+  flex: 1;
+  min-width: 150px;
+}
+
+/* Collapse/expand functionality */
+.action-card--collapsed .action-collapsible {
+  display: none;
+}
+
+.action-card--collapsed {
+  padding-bottom: 10px;
+}
+
+/* In edit mode, don't collapse */
+body.edit-mode .action-card--collapsed .action-collapsible {
+  display: flex;
+}
+
+body.edit-mode .action-card--collapsed .action-notes,
+body.edit-mode .action-card--collapsed .test-list {
+  display: flex;
+  flex-direction: column;
+}
+
+body.edit-mode .action-card--collapsed .action-meta {
+  display: grid;
+}
+
+/* Visual indicator that card is expandable when collapsed */
+.action-card--collapsed .action-name::after {
+  content: " [+]";
+  font-size: 0.6em;
+  color: var(--muted);
+  font-weight: normal;
+}
+
+body.edit-mode .action-card--collapsed .action-name::after {
+  display: none;
+}
+
+/* When expanded, show collapse indicator */
+.action-card:not(.action-card--collapsed) .action-name::after {
+  content: " [-]";
+  font-size: 0.6em;
+  color: var(--muted);
+  font-weight: normal;
+}
+
+body.edit-mode .action-card:not(.action-card--collapsed) .action-name::after {
+  display: none;
+}
+
 @media (max-width: 1100px) {
   .app-shell {
     grid-template-columns: 1fr;
