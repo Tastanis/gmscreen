@@ -432,6 +432,7 @@ function mergeWithDefaults(data) {
         target: action.target || "",
         cost: action.cost || "",
         description: action.description || "",
+        useWhen: action.useWhen || "",
         tests: Array.isArray(action.tests)
           ? action.tests.map(normalizeTest)
           : convertLegacyEffectsToTests(action.effects).map(normalizeTest),
@@ -1629,6 +1630,7 @@ function actionDefaults(type) {
     target: "",
     cost: "",
     description: "",
+    useWhen: "",
     tests: [],
   };
   if (type === "triggers") {
