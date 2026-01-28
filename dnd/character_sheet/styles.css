@@ -1072,38 +1072,38 @@ body {
 .card-grid {
   display: grid;
   grid-template-columns: repeat(auto-fit, minmax(240px, 1fr));
-  gap: 10px;
+  gap: 16px;
 }
 
 .action-grid {
   grid-template-columns: repeat(auto-fit, minmax(320px, 1fr));
-  gap: 8px;
+  gap: 16px;
 }
 
-/* 3D stone tablet effect for feature and action cards */
+/* 3D stone tablet effect for feature and action cards - matching hero stat-card styling */
 .feature-card,
 .action-card {
-  background: linear-gradient(145deg, #3d2a1e 0%, #352016 60%, #2d1b12 100%);
-  border-radius: 5px;
-  padding: 10px;
+  background: linear-gradient(145deg, #4a3525 0%, #3a2518 60%, #2d1b12 100%);
+  border-radius: 6px;
+  padding: 12px;
   display: flex;
   flex-direction: column;
   gap: 8px;
   position: relative;
 
-  /* Hard shadow creates visible "thickness" - 3D stone effect */
+  /* Hard shadow creates visible "thickness" - matching stat-card 3D effect */
   box-shadow:
     /* Solid edge shadow - simulates stone thickness */
-    3px 3px 0 #1a0f08,
-    4px 4px 0 #150c06,
-    5px 5px 0 #100904,
+    4px 4px 0 #1a0f08,
+    5px 5px 0 #150c06,
+    6px 6px 0 #100904,
     /* Soft ambient shadow */
-    6px 6px 12px rgba(0, 0, 0, 0.45);
+    8px 8px 16px rgba(0, 0, 0, 0.5);
 
   /* Beveled border - light on top/left, dark on bottom/right */
-  border: 2px solid;
-  border-top-color: #7a5a45;
-  border-left-color: #6a4a35;
+  border: 3px solid;
+  border-top-color: #8a6a50;
+  border-left-color: #7a5a40;
   border-right-color: #3a2010;
   border-bottom-color: #2a1508;
 }
@@ -1117,7 +1117,7 @@ body {
   left: 0;
   right: 0;
   height: 50%;
-  background: linear-gradient(180deg, rgba(255, 220, 180, 0.1) 0%, transparent 100%);
+  background: linear-gradient(180deg, rgba(255, 220, 180, 0.12) 0%, transparent 100%);
   border-radius: 4px 4px 0 0;
   pointer-events: none;
 }
@@ -1128,10 +1128,10 @@ body {
   content: '';
   position: absolute;
   inset: 2px;
-  border-radius: 3px;
+  border-radius: 4px;
   box-shadow:
-    inset 2px 2px 4px rgba(255, 200, 150, 0.12),
-    inset -2px -2px 4px rgba(0, 0, 0, 0.35);
+    inset 2px 2px 4px rgba(255, 200, 150, 0.15),
+    inset -2px -2px 4px rgba(0, 0, 0, 0.4);
   pointer-events: none;
 }
 
