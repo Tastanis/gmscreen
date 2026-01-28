@@ -1892,13 +1892,19 @@ function renderActionSection(type, containerId) {
               )
               .join("");
 
+            const useWhenValue = (action.useWhen || "").trim();
             return `
-            <article class="action-card" data-action-id="${action.id}" data-action-type="${type}">
+            <article class="action-card action-card--collapsed" data-action-id="${action.id}" data-action-type="${type}">
               <header class="card-head">
                 <div class="card-head__left">
-                  <div class="display-value action-name">${action.name || "New Action"}</div>
+                  <div class="display-value action-name" data-action-toggle>${action.name || "New Action"}</div>
                   <input class="edit-field" type="text" data-field="name" value="${action.name || ""}" />
-                  <div class="chip-row display-value">
+                  <div class="use-when-row">
+                    <span class="use-when-label display-value">Use when:</span>
+                    <span class="use-when-value display-value">${useWhenValue || "-"}</span>
+                    <input class="edit-field use-when-input" type="text" data-field="useWhen" value="${action.useWhen || ""}" placeholder="When to use this ability..." />
+                  </div>
+                  <div class="chip-row display-value action-collapsible">
                     <span class="chip chip--tone">${action.actionLabel || "Action"}</span>
                     ${(action.tags || []).map((tag) => `<span class="chip">${tag}</span>`).join("")}
                   </div>
@@ -1907,11 +1913,11 @@ function renderActionSection(type, containerId) {
                 </div>
                 <button class="icon-btn edit-only" data-remove-action="${action.id}" aria-label="Remove action">✕</button>
               </header>
-              <div class="action-label display-value">${action.actionLabel || "Action"}</div>
-              <div class="action-meta">
+              <div class="action-label display-value action-collapsible">${action.actionLabel || "Action"}</div>
+              <div class="action-meta action-collapsible">
                 ${metaMarkup}
               </div>
-              <div class="test-list">
+              <div class="test-list action-collapsible">
                 ${
                   (action.tests || []).length
                     ? (action.tests || []).map((test) => renderTest(test)).join("")
@@ -1923,9 +1929,9 @@ function renderActionSection(type, containerId) {
               ${
                 (action.tests || []).length || !isEditMode
                   ? ""
-                  : `<button class="text-btn edit-only" data-add-test="${action.id}">+ Add Test</button>`
+                  : `<button class="text-btn edit-only action-collapsible" data-add-test="${action.id}">+ Add Test</button>`
               }
-              <div class="action-notes">
+              <div class="action-notes action-collapsible">
                 <div class="display-value rich-text-display">${renderRichText(action.description || "")}</div>
                 <div class="rich-text-wrapper">
                   <div class="rich-toolbar edit-only" role="toolbar" aria-label="Action notes formatting">
@@ -1955,6 +1961,7 @@ function renderActionSection(type, containerId) {
 
   bindActionAdds();
   bindActionRemovals();
+  bindActionToggles();
   bindTestAdds();
   bindTestRemovals();
   bindAttributeToggles();
@@ -2127,6 +2134,48 @@ function bindActionRemovals() {
       if (!type) return;
       sheetState.actions[type] = (sheetState.actions[type] || []).filter((a) => a.id !== id);
       renderActionSection(type, ACTION_CONTAINER_IDS[type] || `${type}-pane`);
+    };
+  });
+}
+
+function bindActionToggles() {
+  document.querySelectorAll("[data-action-toggle]").forEach((toggle) => {
+    toggle.onclick = (e) => {
+      // Don't toggle if clicking on edit input
+      if (e.target.classList.contains("edit-field")) return;
+
+      const card = toggle.closest(".action-card");
+      if (!card) return;
+
+      const grid = card.closest(".action-grid");
+      if (!grid) return;
+
+      const allCards = Array.from(grid.querySelectorAll(".action-card"));
+      const isCurrentlyCollapsed = card.classList.contains("action-card--collapsed");
+
+      if (isCurrentlyCollapsed) {
+        // Opening this card - find cards in the same row
+        const cardRect = card.getBoundingClientRect();
+        const sameRowCards = allCards.filter((c) => {
+          const rect = c.getBoundingClientRect();
+          // Cards are in same row if their tops are within 10px of each other
+          return Math.abs(rect.top - cardRect.top) < 10;
+        });
+
+        // Count how many cards are currently expanded
+        const expandedCards = allCards.filter((c) => !c.classList.contains("action-card--collapsed"));
+
+        if (expandedCards.length > 0) {
+          // At least one card is already open, opening another means open ALL
+          allCards.forEach((c) => c.classList.remove("action-card--collapsed"));
+        } else {
+          // No cards open yet, open this row
+          sameRowCards.forEach((c) => c.classList.remove("action-card--collapsed"));
+        }
+      } else {
+        // Closing this card - close ALL cards
+        allCards.forEach((c) => c.classList.add("action-card--collapsed"));
+      }
     };
   });
 }
@@ -2312,6 +2361,7 @@ function captureActions() {
         id,
         name: getField("name")?.value || "",
         actionLabel: getField("actionLabel")?.value || "",
+        useWhen: getField("useWhen")?.value || "",
         tags: (getField("tags")?.value || "")
           .split(",")
           .map((tag) => tag.trim())
