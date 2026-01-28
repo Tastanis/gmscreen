@@ -1471,6 +1471,23 @@ export function mountBoardInteractions(store, routes = {}) {
            dirtyTopLevel.size > 0;
   }
 
+  // Track dirty combat state fields to prevent remote state from overwriting local changes
+  // This is separate from the general dirty tracking because combat state has special
+  // sync logic in syncCombatStateToStore that handles remote vs local state merging
+  const dirtyCombatFields = new Set();
+
+  function markCombatFieldDirty(field) {
+    if (field) dirtyCombatFields.add(field);
+  }
+
+  function isCombatFieldDirty(field) {
+    return dirtyCombatFields.has(field);
+  }
+
+  function clearDirtyCombatFields() {
+    dirtyCombatFields.clear();
+  }
+
   // Pusher real-time sync state
   let pusherInterface = null;
   let pusherConnected = false;
@@ -6703,6 +6720,19 @@ export function mountBoardInteractions(store, routes = {}) {
       return false;
     }
 
+    // Preserve missing counts for tokens that will still be in the new groups
+    // This prevents health tracking from being lost when groups are synced
+    const preservedMissingCounts = new Map();
+    const newMemberIds = new Set();
+    prepared.forEach(({ members }) => {
+      members.forEach((memberId) => newMemberIds.add(memberId));
+    });
+    combatGroupMissingCounts.forEach((count, tokenId) => {
+      if (newMemberIds.has(tokenId)) {
+        preservedMissingCounts.set(tokenId, count);
+      }
+    });
+
     combatTrackerGroups.clear();
     combatantGroupRepresentative.clear();
     combatGroupMissingCounts.clear();
@@ -6715,6 +6745,11 @@ export function mountBoardInteractions(store, routes = {}) {
           combatantGroupRepresentative.set(memberId, representativeId);
         }
       });
+    });
+
+    // Restore preserved missing counts
+    preservedMissingCounts.forEach((count, tokenId) => {
+      combatGroupMissingCounts.set(tokenId, count);
     });
 
     return true;
@@ -7494,6 +7529,7 @@ export function mountBoardInteractions(store, routes = {}) {
       lastActingTeam = finishedTeam;
     }
     completedCombatants.add(finishedId);
+    markCombatFieldDirty('completedCombatantIds');
     roundTurnCount = Math.max(0, roundTurnCount + 1);
 
     // Determine next team (opposing team gets to pick next)
@@ -9212,58 +9248,81 @@ export function mountBoardInteractions(store, routes = {}) {
     const existingVersion = existingNormalized.sequence > 0 ? existingNormalized.sequence : existingNormalized.updatedAt;
     const isRemoteNewer = existingVersion && existingVersion > combatStateVersion;
     if (isRemoteNewer) {
-      // Remote state is newer - incorporate remote changes but preserve local completedCombatantIds
-      // to prevent race conditions where local turn completion is lost
+      // Remote state is newer - incorporate remote changes but preserve locally modified fields
+      // to prevent race conditions where local changes are lost ("popback" issue)
       const roundChanged = existingNormalized.round !== snapshot.round;
 
       snapshot.active = existingNormalized.active;
       snapshot.round = existingNormalized.round;
       snapshot.activeCombatantId = existingNormalized.activeCombatantId;
 
-      // For completedCombatantIds: if round changed, use remote state completely (new round started)
-      // Otherwise, merge local and remote to preserve local turn completions
-      if (roundChanged) {
-        snapshot.completedCombatantIds = [...existingNormalized.completedCombatantIds];
-      } else {
-        // Merge: keep local changes (just-completed combatants) plus any remote changes
-        const mergedCompletedIds = Array.from(new Set([
-          ...snapshot.completedCombatantIds,
-          ...existingNormalized.completedCombatantIds
-        ]));
-        snapshot.completedCombatantIds = mergedCompletedIds;
+      // For completedCombatantIds: if dirty, keep local state; if round changed, use remote;
+      // otherwise merge local and remote to preserve local turn completions
+      if (!isCombatFieldDirty('completedCombatantIds')) {
+        if (roundChanged) {
+          snapshot.completedCombatantIds = [...existingNormalized.completedCombatantIds];
+        } else {
+          // Merge: keep local changes (just-completed combatants) plus any remote changes
+          const mergedCompletedIds = Array.from(new Set([
+            ...snapshot.completedCombatantIds,
+            ...existingNormalized.completedCombatantIds
+          ]));
+          snapshot.completedCombatantIds = mergedCompletedIds;
+        }
       }
+      // If completedCombatantIds is dirty, keep the local snapshot values (already set)
 
       snapshot.startingTeam = existingNormalized.startingTeam;
       snapshot.currentTeam = existingNormalized.currentTeam;
       snapshot.lastTeam = existingNormalized.lastTeam;
       snapshot.turnPhase = existingNormalized.turnPhase;
       snapshot.roundTurnCount = existingNormalized.roundTurnCount;
-      snapshot.malice = existingNormalized.malice;
-      snapshot.turnLock = existingNormalized.turnLock;
+
+      // Only overwrite malice from remote if not locally modified
+      if (!isCombatFieldDirty('malice')) {
+        snapshot.malice = existingNormalized.malice;
+      }
+
+      // Only overwrite turnLock from remote if not locally modified
+      if (!isCombatFieldDirty('turnLock')) {
+        snapshot.turnLock = existingNormalized.turnLock;
+      }
+
       snapshot.lastEffect = existingNormalized.lastEffect;
-      snapshot.groups = existingNormalized.groups;
+
+      // Only overwrite groups from remote if not locally modified
+      if (!isCombatFieldDirty('groups')) {
+        snapshot.groups = existingNormalized.groups;
+      }
+
       // Preserve the higher sequence number
       if (existingNormalized.sequence > snapshot.sequence) {
         snapshot.sequence = existingNormalized.sequence + 1;
         combatSequence = snapshot.sequence;
       }
 
-      // Also update local in-memory state to match remote state
+      // Also update local in-memory state to match the snapshot we're saving
       // This prevents UI from using stale local state when refresh loop runs
       combatActive = snapshot.active;
       combatRound = snapshot.round;
-      completedCombatants.clear();
-      snapshot.completedCombatantIds.forEach((id) => completedCombatants.add(id));
+      if (!isCombatFieldDirty('completedCombatantIds')) {
+        completedCombatants.clear();
+        snapshot.completedCombatantIds.forEach((id) => completedCombatants.add(id));
+      }
       startingCombatTeam = snapshot.startingTeam;
       currentTurnTeam = snapshot.currentTeam;
       lastActingTeam = snapshot.lastTeam;
       turnPhase = snapshot.turnPhase;
       roundTurnCount = snapshot.roundTurnCount;
-      if (isGmUser() || existingHasMaliceValue) {
+      if (!isCombatFieldDirty('malice') && (isGmUser() || existingHasMaliceValue)) {
         maliceCount = snapshot.malice;
       }
-      updateTurnLockState(snapshot.turnLock);
-      applyCombatGroupsFromState(snapshot.groups);
+      if (!isCombatFieldDirty('turnLock')) {
+        updateTurnLockState(snapshot.turnLock);
+      }
+      if (!isCombatFieldDirty('groups')) {
+        applyCombatGroupsFromState(snapshot.groups);
+      }
       combatStateVersion = existingVersion;
 
       // Use setter to properly update active combatant with highlights and handlers
@@ -9274,16 +9333,26 @@ export function mountBoardInteractions(store, routes = {}) {
       refreshCombatTracker();
     }
     if (!isGmUser()) {
-      if (existingHasMaliceValue) {
-        snapshot.malice = existingNormalized.malice;
-      } else {
-        const fallbackMalice = getCombatStateMaliceSnapshot(lastCombatStateSnapshot);
-        if (fallbackMalice !== null) {
-          snapshot.malice = fallbackMalice;
+      // Non-GMs should use remote values for malice and groups UNLESS they just modified them locally
+      if (!isCombatFieldDirty('malice')) {
+        if (existingHasMaliceValue) {
+          snapshot.malice = existingNormalized.malice;
+        } else {
+          const fallbackMalice = getCombatStateMaliceSnapshot(lastCombatStateSnapshot);
+          if (fallbackMalice !== null) {
+            snapshot.malice = fallbackMalice;
+          }
         }
       }
-      snapshot.groups = existingNormalized.groups;
+      if (!isCombatFieldDirty('groups')) {
+        snapshot.groups = existingNormalized.groups;
+      }
     }
+
+    // Clear dirty combat field tracking after we've incorporated them into the snapshot
+    // This ensures the next sync will properly receive remote updates
+    clearDirtyCombatFields();
+
     const serialized = JSON.stringify(snapshot);
     if (serialized === lastCombatStateSnapshot) {
       return;
@@ -9354,6 +9423,7 @@ export function mountBoardInteractions(store, routes = {}) {
       turnLockState.holderId !== previousHolder ||
       turnLockState.combatantId !== previousCombatantId
     ) {
+      markCombatFieldDirty('turnLock');
       updateCombatModeIndicators();
     }
     return true;
@@ -9373,6 +9443,7 @@ export function mountBoardInteractions(store, routes = {}) {
     turnLockState.combatantId = null;
     turnLockState.lockedAt = 0;
     if (previousHolder) {
+      markCombatFieldDirty('turnLock');
       updateCombatModeIndicators();
     }
     return true;
@@ -9685,6 +9756,7 @@ export function mountBoardInteractions(store, routes = {}) {
     }
 
     maliceCount = normalized;
+    markCombatFieldDirty('malice');
     updateMaliceDisplay();
 
     if (malicePanelOpen) {
@@ -10703,6 +10775,7 @@ export function mountBoardInteractions(store, routes = {}) {
             }
           });
           combatTrackerGroups.delete(candidateRep);
+          markCombatFieldDirty('groups');
           refreshCombatTracker();
           syncCombatStateToStore();
           if (status) {
@@ -10726,6 +10799,7 @@ export function mountBoardInteractions(store, routes = {}) {
       }
     });
 
+    markCombatFieldDirty('groups');
     refreshCombatTracker();
     syncCombatStateToStore();
     if (status) {
