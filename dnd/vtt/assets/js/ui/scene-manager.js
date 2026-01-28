@@ -99,7 +99,8 @@ export function renderSceneList(routes, store) {
         const boardDraft = ensureBoardStateDraft(draft);
         boardDraft.activeSceneId = scene.id;
         boardDraft.mapUrl = scene.mapUrl ?? null;
-        const sceneBoardState = ensureSceneBoardStateEntry(
+        // Ensure scene board state entry exists
+        ensureSceneBoardStateEntry(
           boardDraft,
           scene.id,
           scene.grid ?? null
@@ -107,10 +108,17 @@ export function renderSceneList(routes, store) {
         if (!draft.grid || typeof draft.grid !== 'object') {
           draft.grid = { size: 64, locked: false, visible: true };
         }
-        const sceneGrid = sceneBoardState?.grid ?? normalizeGridConfig(scene.grid ?? {});
+        // CRITICAL: Always use the scene's permanent grid property, NOT the synced sceneState grid.
+        // Grid is a permanent scene setting that should never be overwritten by sync.
+        const sceneGrid = normalizeGridConfig(scene.grid ?? {});
         draft.grid.size = sceneGrid.size;
         draft.grid.locked = sceneGrid.locked;
         draft.grid.visible = sceneGrid.visible;
+        // Also update the sceneState entry to match the scene's permanent grid
+        // This ensures consistency between the scene definition and the board state
+        if (boardDraft.sceneState && boardDraft.sceneState[scene.id]) {
+          boardDraft.sceneState[scene.id].grid = normalizeGridConfig(scene.grid ?? {});
+        }
       });
 
       persistBoardStateSnapshot();
@@ -549,14 +557,20 @@ export function renderSceneList(routes, store) {
         const boardDraft = ensureBoardStateDraft(draft);
         boardDraft.activeSceneId = scene.id;
         boardDraft.mapUrl = scene.mapUrl ?? null;
-        const sceneBoardState = ensureSceneBoardStateEntry(boardDraft, scene.id, scene.grid ?? null);
+        ensureSceneBoardStateEntry(boardDraft, scene.id, scene.grid ?? null);
         if (!draft.grid || typeof draft.grid !== 'object') {
           draft.grid = { size: 64, locked: false, visible: true };
         }
-        const gridConfig = sceneBoardState?.grid ?? normalizeGridConfig(scene.grid ?? {});
+        // CRITICAL: Always use the scene's permanent grid property.
+        // Grid is saved with the scene and should be the authoritative source.
+        const gridConfig = normalizeGridConfig(scene.grid ?? {});
         draft.grid.size = gridConfig.size;
         draft.grid.locked = gridConfig.locked;
         draft.grid.visible = gridConfig.visible;
+        // Also update the sceneState entry to match the scene's permanent grid
+        if (boardDraft.sceneState && boardDraft.sceneState[scene.id]) {
+          boardDraft.sceneState[scene.id].grid = normalizeGridConfig(scene.grid ?? {});
+        }
       });
 
       persistBoardStateSnapshot();

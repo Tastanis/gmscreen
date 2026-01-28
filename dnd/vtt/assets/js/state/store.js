@@ -1025,6 +1025,30 @@ function applySceneGridState(state) {
     return;
   }
 
+  // CRITICAL: Read grid from the scene's PERMANENT grid property first.
+  // Grid is stored with the scene definition and should be the authoritative source.
+  // This prevents grid resets when polling/Pusher updates arrive with stale grid values.
+  const scenes = state.scenes?.items ?? [];
+  const activeScene = scenes.find((scene) => scene && scene.id === activeSceneId);
+
+  if (activeScene && activeScene.grid) {
+    // Use the scene's permanent grid property
+    const gridState = normalizeGridState(activeScene.grid);
+    state.grid = {
+      ...state.grid,
+      ...gridState,
+    };
+
+    // Also update the sceneState entry to match the scene's permanent grid
+    // This ensures consistency between the scene definition and the board state
+    if (state.boardState.sceneState && state.boardState.sceneState[activeSceneId]) {
+      state.boardState.sceneState[activeSceneId].grid = gridState;
+    }
+    return;
+  }
+
+  // Fallback to boardState.sceneState if scene definition not available
+  // (this shouldn't happen in normal operation, but provides backwards compatibility)
   const sceneState = state.boardState.sceneState ?? {};
   if (!sceneState || typeof sceneState !== 'object') {
     return;
