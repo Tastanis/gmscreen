@@ -431,7 +431,14 @@ class DashboardDiceRoller {
     selectProjectVariant(variant) {
         this.projectVariant = variant;
         this.hideProjectTypeDialog();
-        this.showRetainerDialog();
+
+        // School projects cannot use retainers, skip the retainer dialog
+        if (variant === 'school') {
+            this.resetRetainerCount();
+            this.finalizeProjectSetup();
+        } else {
+            this.showRetainerDialog();
+        }
     }
 
     showProjectTypeDialog() {
