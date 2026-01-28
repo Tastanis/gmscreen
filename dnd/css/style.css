@@ -236,7 +236,7 @@ body {
     min-width: 160px;
     border-radius: 4px;
     z-index: 1001;
-    top: calc(100% + 4px);
+    top: 100%;
     left: 0;
 
     /* Match the 3D button shadow style */
