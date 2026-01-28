@@ -641,9 +641,61 @@ export function mergeSceneKeyedSection(existingSection, incomingSection, { fullS
 }
 
 /**
+ * Merge sceneState while preserving grid settings from existing state.
+ * Grid size is a permanent scene setting that should NOT be overwritten by sync.
+ * Only combat, overlay, and other transient state should be synced.
+ * @param {Object} existingSceneState - Current scene state
+ * @param {Object} incomingSceneState - Incoming scene state from server
+ * @returns {Object} Merged scene state with preserved grid settings
+ */
+function mergeSceneStatePreservingGrid(existingSceneState, incomingSceneState) {
+  const existing = existingSceneState && typeof existingSceneState === 'object' ? existingSceneState : {};
+  const incoming = incomingSceneState && typeof incomingSceneState === 'object' ? incomingSceneState : {};
+
+  const merged = {};
+  const allSceneIds = new Set([...Object.keys(existing), ...Object.keys(incoming)]);
+
+  allSceneIds.forEach((sceneId) => {
+    const existingEntry = existing[sceneId];
+    const incomingEntry = incoming[sceneId];
+
+    if (!incomingEntry || typeof incomingEntry !== 'object') {
+      // No incoming data for this scene - preserve existing if present
+      if (existingEntry && typeof existingEntry === 'object') {
+        try {
+          merged[sceneId] = JSON.parse(JSON.stringify(existingEntry));
+        } catch (e) {
+          merged[sceneId] = { grid: { size: 64, locked: false, visible: true } };
+        }
+      }
+      return;
+    }
+
+    // Clone incoming entry
+    let mergedEntry;
+    try {
+      mergedEntry = JSON.parse(JSON.stringify(incomingEntry));
+    } catch (e) {
+      mergedEntry = {};
+    }
+
+    // CRITICAL: Preserve grid settings from existing state
+    // Grid is a permanent scene setting, not transient board state
+    if (existingEntry && typeof existingEntry === 'object' && existingEntry.grid) {
+      mergedEntry.grid = JSON.parse(JSON.stringify(existingEntry.grid));
+    }
+
+    merged[sceneId] = mergedEntry;
+  });
+
+  return merged;
+}
+
+/**
  * Merge board state snapshots with timestamp-based conflict resolution for placements, templates, and drawings.
  * This ensures that concurrent updates don't cause data loss.
  * When incoming has _fullSync: true (from GET responses), deletions will propagate correctly.
+ * IMPORTANT: Grid settings are NEVER overwritten by sync - they are permanent scene settings.
  * @param {Object} existing - Current board state
  * @param {Object} incoming - Incoming board state from server
  * @returns {Object} Merged board state
@@ -679,7 +731,9 @@ export function mergeBoardStateSnapshot(existing, incoming) {
     activeSceneId: typeof incoming.activeSceneId === 'string' ? incoming.activeSceneId : existing.activeSceneId,
     mapUrl: typeof incoming.mapUrl === 'string' ? incoming.mapUrl : existing.mapUrl,
     placements: mergeSceneKeyedSection(existing.placements, incoming.placements, mergeOptions),
-    sceneState: cloneSectionSimple(incoming.sceneState),
+    // CRITICAL: Use mergeSceneStatePreservingGrid to preserve grid settings
+    // Grid is a permanent scene setting that should NOT be synced
+    sceneState: mergeSceneStatePreservingGrid(existing.sceneState, incoming.sceneState),
     templates: mergeSceneKeyedSection(existing.templates, incoming.templates, mergeOptions),
     drawings: mergeSceneKeyedSection(existing.drawings, incoming.drawings, mergeOptions),
     overlay: cloneSectionSimple(incoming.overlay),
@@ -2661,7 +2715,8 @@ export function mountBoardInteractions(store, routes = {}) {
         draft.boardState.pings = delta.pings;
       }
 
-      // Apply scene state (combat updates)
+      // Apply scene state (combat and overlay updates)
+      // CRITICAL: Grid is NOT synced via Pusher - it's a permanent scene setting
       if (delta.sceneState && typeof delta.sceneState === 'object') {
         if (!draft.boardState.sceneState) {
           draft.boardState.sceneState = {};
@@ -2673,9 +2728,12 @@ export function mountBoardInteractions(store, routes = {}) {
           if (state.combat) {
             draft.boardState.sceneState[sceneId].combat = state.combat;
           }
-          if (state.grid) {
-            draft.boardState.sceneState[sceneId].grid = state.grid;
-          }
+          // CRITICAL: Do NOT apply grid updates from Pusher
+          // Grid is a permanent scene setting that should only come from the scene definition
+          // Syncing grid via Pusher causes grid resets when scenes are reactivated
+          // if (state.grid) {
+          //   draft.boardState.sceneState[sceneId].grid = state.grid;
+          // }
           if (state.overlay) {
             draft.boardState.sceneState[sceneId].overlay = state.overlay;
           }

@@ -495,3 +495,117 @@ test('mergeBoardStateSnapshot preserves existing placements not in incoming', as
   assert.equal(token3.column, 10);
   assert.equal(token3.row, 10);
 });
+
+test('mergeBoardStateSnapshot preserves grid settings from existing sceneState', async () => {
+  const { mergeBoardStateSnapshot } = await import('../board-interactions.js');
+
+  // Existing state has a custom grid size (128px)
+  const existing = {
+    activeSceneId: 'scene-1',
+    mapUrl: 'http://example.com/map.png',
+    placements: {
+      'scene-1': [
+        { id: 'token-1', column: 0, row: 0, _lastModified: 1000 },
+      ],
+    },
+    sceneState: {
+      'scene-1': {
+        grid: { size: 128, locked: true, visible: true },
+        combat: { active: false },
+      },
+    },
+  };
+
+  // Incoming state has default grid size (64px) - this simulates a stale sync
+  const incoming = {
+    _fullSync: true,
+    activeSceneId: 'scene-1',
+    mapUrl: 'http://example.com/map.png',
+    placements: {
+      'scene-1': [
+        { id: 'token-1', column: 0, row: 0, _lastModified: 1000 },
+      ],
+    },
+    sceneState: {
+      'scene-1': {
+        grid: { size: 64, locked: false, visible: true },
+        combat: { active: true, round: 1 },
+      },
+    },
+  };
+
+  const merged = mergeBoardStateSnapshot(existing, incoming);
+
+  // CRITICAL: Grid should be preserved from existing state, NOT replaced with incoming
+  assert.equal(
+    merged.sceneState['scene-1'].grid.size,
+    128,
+    'grid size should be preserved from existing state (128), not incoming (64)'
+  );
+  assert.equal(
+    merged.sceneState['scene-1'].grid.locked,
+    true,
+    'grid locked should be preserved from existing state'
+  );
+
+  // Combat state SHOULD be updated from incoming (it's transient state that should sync)
+  assert.equal(
+    merged.sceneState['scene-1'].combat.active,
+    true,
+    'combat state should be updated from incoming'
+  );
+  assert.equal(
+    merged.sceneState['scene-1'].combat.round,
+    1,
+    'combat round should be updated from incoming'
+  );
+});
+
+test('mergeBoardStateSnapshot preserves grid for scenes not in incoming', async () => {
+  const { mergeBoardStateSnapshot } = await import('../board-interactions.js');
+
+  // Existing state has two scenes with custom grid sizes
+  const existing = {
+    activeSceneId: 'scene-1',
+    sceneState: {
+      'scene-1': {
+        grid: { size: 128, locked: false, visible: true },
+      },
+      'scene-2': {
+        grid: { size: 96, locked: true, visible: false },
+      },
+    },
+  };
+
+  // Incoming only has scene-1 data
+  const incoming = {
+    activeSceneId: 'scene-1',
+    sceneState: {
+      'scene-1': {
+        grid: { size: 64, locked: false, visible: true },
+        combat: { active: true },
+      },
+    },
+  };
+
+  const merged = mergeBoardStateSnapshot(existing, incoming);
+
+  // Scene-1 grid should be preserved from existing (128), not incoming (64)
+  assert.equal(
+    merged.sceneState['scene-1'].grid.size,
+    128,
+    'scene-1 grid should be preserved from existing'
+  );
+
+  // Scene-2 should be completely preserved (not in incoming)
+  assert.equal(
+    merged.sceneState['scene-2'].grid.size,
+    96,
+    'scene-2 should be preserved from existing'
+  );
+  assert.equal(
+    merged.sceneState['scene-2'].grid.locked,
+    true,
+    'scene-2 locked state should be preserved'
+  );
+});
