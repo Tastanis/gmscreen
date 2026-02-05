@@ -8748,7 +8748,7 @@ export function mountBoardInteractions(store, routes = {}) {
     // Fall back to timestamp comparison if sequence is not available (backwards compatibility)
     const hasNewerVersion = normalized.sequence > 0
       ? normalized.sequence > combatStateVersion
-      : (!normalized.updatedAt || normalized.updatedAt > combatStateVersion);
+      : (normalized.updatedAt > 0 && normalized.updatedAt > combatStateVersion);
     const groupsChanged = normalized.groups?.length !== combatTrackerGroups.size ||
       normalized.groups?.some((group) => {
         const existing = combatTrackerGroups.get(group.representativeId);
