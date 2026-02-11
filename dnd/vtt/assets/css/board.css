@@ -4223,3 +4223,56 @@
   position: relative;
   z-index: 1;
 }
+
+/* Persistence error banner */
+.vtt-persistence-error-banner {
+  position: fixed;
+  top: 0;
+  left: 0;
+  right: 0;
+  z-index: 10000;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  padding: 10px 16px;
+  background: #b91c1c;
+  color: #fff;
+  font-size: 14px;
+  line-height: 1.4;
+  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.3);
+  animation: vtt-banner-slide-in 0.25s ease-out;
+}
+
+@keyframes vtt-banner-slide-in {
+  from {
+    transform: translateY(-100%);
+  }
+  to {
+    transform: translateY(0);
+  }
+}
+
+.vtt-persistence-error-banner__text {
+  flex: 1;
+}
+
+.vtt-persistence-error-banner__text strong {
+  font-weight: 700;
+}
+
+.vtt-persistence-error-banner__dismiss {
+  flex-shrink: 0;
+  background: transparent;
+  border: 1px solid rgba(255, 255, 255, 0.4);
+  border-radius: 4px;
+  color: #fff;
+  font-size: 18px;
+  line-height: 1;
+  padding: 4px 8px;
+  cursor: pointer;
+}
+
+.vtt-persistence-error-banner__dismiss:hover {
+  background: rgba(255, 255, 255, 0.15);
+}

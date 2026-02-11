@@ -13,6 +13,7 @@ import {
   isDrawingToolMounted,
 } from './drawing-tool.js';
 import { persistBoardState, persistCombatState } from '../services/board-state-service.js';
+import { onPersistenceFailure } from '../state/persistence.js';
 import { initializePusher, getSocketId, isPusherConnected } from '../services/pusher-service.js';
 import {
   PLAYER_VISIBLE_TOKEN_FOLDER,
@@ -3616,6 +3617,56 @@ export function mountBoardInteractions(store, routes = {}) {
   startBoardStatePoller();
   startCombatStateRefreshLoop();
   initializePusherSync();
+
+  // Show a dismissible banner when persistence fails repeatedly
+  let persistenceErrorBanner = null;
+  let persistenceErrorDismissedAt = 0;
+  const PERSISTENCE_ERROR_DISMISS_COOLDOWN_MS = 60000; // Don't re-show for 60s after dismiss
+
+  onPersistenceFailure(({ key, status, message }) => {
+    // Don't re-show if recently dismissed
+    if (Date.now() - persistenceErrorDismissedAt < PERSISTENCE_ERROR_DISMISS_COOLDOWN_MS) {
+      return;
+    }
+    // Don't create duplicate banners
+    if (persistenceErrorBanner && persistenceErrorBanner.parentNode) {
+      return;
+    }
+
+    const banner = document.createElement('div');
+    banner.className = 'vtt-persistence-error-banner';
+    banner.setAttribute('role', 'alert');
+    const hint = status >= 500
+      ? 'The server cannot save changes right now. Check server file permissions on the storage directory.'
+      : 'Unable to save changes. Check your connection.';
+    banner.innerHTML =
+      `<span class="vtt-persistence-error-banner__text">` +
+      `<strong>Save failed</strong> &mdash; ${hint}` +
+      `</span>` +
+      `<button class="vtt-persistence-error-banner__dismiss" type="button" aria-label="Dismiss">&times;</button>`;
+
+    const dismissBtn = banner.querySelector('.vtt-persistence-error-banner__dismiss');
+    if (dismissBtn) {
+      dismissBtn.addEventListener('click', () => {
+        persistenceErrorDismissedAt = Date.now();
+        banner.remove();
+        persistenceErrorBanner = null;
+      });
+    }
+
+    persistenceErrorBanner = banner;
+    // Insert at top of board area
+    const container = board?.parentNode ?? document.body;
+    container.insertBefore(banner, container.firstChild);
+
+    // Auto-dismiss after 15 seconds
+    setTimeout(() => {
+      if (banner.parentNode) {
+        banner.remove();
+        persistenceErrorBanner = null;
+      }
+    }, 15000);
+  });
 
   function focusBoard() {
     if (!board) {

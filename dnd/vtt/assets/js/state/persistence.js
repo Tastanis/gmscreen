@@ -6,6 +6,15 @@ const globalNavigator = typeof navigator === 'undefined' ? null : navigator;
 let pageVisibilityState = globalDocument?.visibilityState ?? 'visible';
 let pageIsUnloading = false;
 
+// Track server error state to avoid retry storms
+let serverErrorCount = 0;
+let lastServerErrorAt = 0;
+const SERVER_ERROR_COOLDOWN_MS = 30000; // 30s cooldown after repeated server errors
+const SERVER_ERROR_THRESHOLD = 3; // Number of consecutive errors before entering cooldown
+
+// Persistence failure listeners (for UI notifications)
+const failureListeners = new Set();
+
 const updatePageVisibility = () => {
   pageVisibilityState = globalDocument?.visibilityState ?? pageVisibilityState;
 };
@@ -36,7 +45,67 @@ function shouldUseKeepalive(entryKeepalive = false) {
   return Boolean(entryKeepalive || pageIsUnloading || isDocumentHidden());
 }
 
+/**
+ * Register a listener for persistence failures.
+ * Called with { key, status, message } when a save fails after all retries.
+ */
+export function onPersistenceFailure(listener) {
+  if (typeof listener === 'function') {
+    failureListeners.add(listener);
+  }
+  return () => failureListeners.delete(listener);
+}
+
+function notifyPersistenceFailure(detail) {
+  for (const listener of failureListeners) {
+    try {
+      listener(detail);
+    } catch (e) {
+      // Ignore listener errors
+    }
+  }
+}
+
+function isServerInCooldown() {
+  if (serverErrorCount < SERVER_ERROR_THRESHOLD) {
+    return false;
+  }
+  const elapsed = Date.now() - lastServerErrorAt;
+  if (elapsed > SERVER_ERROR_COOLDOWN_MS) {
+    // Cooldown expired, reset
+    serverErrorCount = 0;
+    return false;
+  }
+  return true;
+}
+
+function recordServerError() {
+  serverErrorCount += 1;
+  lastServerErrorAt = Date.now();
+}
+
+function resetServerErrors() {
+  serverErrorCount = 0;
+}
+
 export function queueSave(key, payload, endpoint, options = {}) {
+  // If server is in cooldown from repeated errors, reject immediately
+  // to avoid flooding a struggling server
+  if (isServerInCooldown()) {
+    const cooldownRemaining = Math.ceil(
+      (SERVER_ERROR_COOLDOWN_MS - (Date.now() - lastServerErrorAt)) / 1000
+    );
+    console.warn(
+      `[VTT] Server in error cooldown (${cooldownRemaining}s remaining), skipping save for ${key}`
+    );
+    return Promise.resolve(
+      createResult(false, {
+        aborted: true,
+        error: new Error(`Server error cooldown active for ${key}`),
+      })
+    );
+  }
+
   const controller = new AbortController();
   const normalizedOptions =
     typeof options === 'function' ? { onComplete: options } : options ?? {};
@@ -65,6 +134,7 @@ export function queueSave(key, payload, endpoint, options = {}) {
     retryBackoffMs: Math.max(0, Math.trunc(retryBackoffMs) || 0),
     blocked: false,
     lastResult: null,
+    lastHttpStatus: 0,
   };
 
   if (typeof onComplete === 'function') {
@@ -136,6 +206,7 @@ async function persist(key, entry) {
   entry.attempts += 1;
   const { payload, endpoint, controller, keepalive } = entry;
   let result = null;
+  let httpStatus = 0;
   try {
     if (!endpoint) {
       console.warn(`[VTT] Persistence endpoint missing for ${key}, skipping save.`);
@@ -183,15 +254,31 @@ async function persist(key, entry) {
       ...(useKeepalive ? { keepalive: true } : null),
     });
 
+    httpStatus = response?.status ?? 0;
+
     if (!response?.ok) {
-      const responseText = await response
-        .text()
-        .catch(() => '[VTT] Unable to read persistence response body');
-      console.error(
-        `[VTT] Persistence error for ${key}: ${response?.status ?? 'unknown status'}`,
-        responseText
-      );
-      throw new Error(`Failed to save ${key}`);
+      let responseText = '';
+      let serverMessage = '';
+      try {
+        responseText = await response.text();
+        // Try to parse JSON error message from server
+        const parsed = JSON.parse(responseText);
+        serverMessage = parsed?.error ?? '';
+      } catch {
+        // Response may not be JSON
+      }
+
+      // Only log the first occurrence per attempt cycle, not every retry
+      if (entry.attempts === 1) {
+        console.error(
+          `[VTT] Persistence error for ${key}: ${httpStatus}`,
+          serverMessage || responseText.substring(0, 200)
+        );
+      }
+
+      const serverError = new Error(serverMessage || `Failed to save ${key}`);
+      serverError.httpStatus = httpStatus;
+      throw serverError;
     }
 
     // Parse response to extract data (including version)
@@ -203,17 +290,26 @@ async function persist(key, entry) {
       // Response parsing is optional, continue with success
     }
 
+    resetServerErrors();
     result = createResult(true, { data: responseData });
   } catch (error) {
     const aborted = controller.signal.aborted || error?.name === 'AbortError';
     if (!aborted) {
-      console.error(`[VTT] Persistence error for ${key}`, error);
+      // Track server errors for cooldown logic
+      if (httpStatus >= 500) {
+        recordServerError();
+      }
+      // Only log on first attempt to reduce console noise
+      if (entry.attempts <= 1) {
+        console.error(`[VTT] Persistence error for ${key}`, error?.message ?? error);
+      }
     }
-    result = createResult(false, { aborted, error });
+    result = createResult(false, { aborted, error, httpStatus });
   } finally {
     const slot = pending.get(key);
     const stillPending = slot?.current === entry || slot?.current?.controller === controller;
     entry.lastResult = result ?? createResult(false, { aborted: controller.signal.aborted });
+    entry.lastHttpStatus = httpStatus;
     entry.blocked = !entry.lastResult.success;
 
     if (entry.lastResult.success || !stillPending) {
@@ -230,9 +326,13 @@ async function persist(key, entry) {
       return;
     }
 
+    // Don't retry on 5xx server errors - the server has a problem that retrying won't fix.
+    // Only retry on network errors (status 0) or client-side transient issues.
+    const isServerError = httpStatus >= 500;
     const shouldRetry =
       !entry.lastResult.success &&
       !entry.lastResult.aborted &&
+      !isServerError &&
       entry.attempts < entry.retryLimit;
 
     if (shouldRetry) {
@@ -250,6 +350,15 @@ async function persist(key, entry) {
         persist(key, entry);
       }
       return;
+    }
+
+    // Notify failure listeners if we're done retrying
+    if (!entry.lastResult.success && !entry.lastResult.aborted) {
+      notifyPersistenceFailure({
+        key,
+        status: httpStatus,
+        message: entry.lastResult.error?.message ?? 'Save failed',
+      });
     }
 
     if (stillPending && slot) {
@@ -289,8 +398,14 @@ function finalizeEntry(entry, result) {
   }
 }
 
-function createResult(success, { aborted = false, error = null, data = null } = {}) {
-  return { success: Boolean(success), aborted: Boolean(aborted), error: error ?? null, data: data ?? null };
+function createResult(success, { aborted = false, error = null, data = null, httpStatus = 0 } = {}) {
+  return {
+    success: Boolean(success),
+    aborted: Boolean(aborted),
+    error: error ?? null,
+    data: data ?? null,
+    httpStatus: httpStatus || 0,
+  };
 }
 
 function createAbortError(key) {

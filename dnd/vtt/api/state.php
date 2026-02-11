@@ -114,6 +114,12 @@ function broadcastVttStateUpdate(array $update, ?string $excludeSocketId = null)
 if (!defined('VTT_STATE_API_INCLUDE_ONLY')) {
     header('Content-Type: application/json');
 
+    // Self-heal storage on every request to handle deployment/permission issues
+    $storageCheck = ensureVttStorageReady();
+    if (!$storageCheck['ok']) {
+        error_log('[VTT] Storage check failed: ' . implode('; ', $storageCheck['errors']));
+    }
+
     $method = strtoupper($_SERVER['REQUEST_METHOD'] ?? 'GET');
 
     try {
@@ -472,10 +478,15 @@ if (!defined('VTT_STATE_API_INCLUDE_ONLY')) {
             'error' => $exception->getMessage() ?: 'Invalid board state payload.',
         ]);
     } catch (Throwable $exception) {
-        error_log('[VTT] State API error: ' . $exception->getMessage());
+        error_log('[VTT] State API error: ' . $exception->getMessage() . ' in ' . $exception->getFile() . ':' . $exception->getLine());
+        $errorDetail = 'Failed to process board state.';
+        // Provide actionable hints for common issues
+        if (stripos($exception->getMessage(), 'lock file') !== false || stripos($exception->getMessage(), 'storage directory') !== false) {
+            $errorDetail = 'Storage directory is not writable. Check file permissions on the server.';
+        }
         respondJson(500, [
             'success' => false,
-            'error' => 'Failed to process board state.',
+            'error' => $errorDetail,
         ]);
     }
 }

@@ -51,6 +51,69 @@ function getVttUserContext(): array
 }
 
 /**
+ * Ensure the VTT storage directory is writable and contains required initial files.
+ * Call this early in API request handling to self-heal common deployment issues.
+ *
+ * @return array{ok:bool,errors:string[]}
+ */
+function ensureVttStorageReady(): array
+{
+    $storageDir = __DIR__ . '/storage';
+    $errors = [];
+
+    // Ensure directory exists
+    if (!is_dir($storageDir)) {
+        if (!@mkdir($storageDir, 0775, true)) {
+            $errors[] = 'Storage directory does not exist and could not be created: ' . $storageDir;
+            return ['ok' => false, 'errors' => $errors];
+        }
+    }
+
+    // Attempt to make directory writable if it isn't
+    if (!is_writable($storageDir)) {
+        @chmod($storageDir, 0775);
+        if (!is_writable($storageDir)) {
+            $owner = function_exists('posix_getpwuid') ? (posix_getpwuid(fileowner($storageDir))['name'] ?? '?') : '?';
+            $currentUser = function_exists('posix_getpwuid') ? (posix_getpwuid(posix_geteuid())['name'] ?? '?') : '?';
+            $errors[] = "Storage directory is not writable. Owner: {$owner}, PHP user: {$currentUser}, path: {$storageDir}";
+        }
+    }
+
+    // Ensure subdirectories exist
+    foreach (['backups', 'tokens', 'uploads'] as $subdir) {
+        $subdirPath = $storageDir . '/' . $subdir;
+        if (!is_dir($subdirPath)) {
+            @mkdir($subdirPath, 0775, true);
+        }
+    }
+
+    // Create initial JSON files if missing
+    $initialFiles = [
+        'board-state.json' => '{}',
+        'board-state-version.json' => json_encode(['version' => 0, 'updatedAt' => time()]),
+        'scenes.json' => json_encode(['folders' => [], 'items' => []]),
+        'tokens.json' => json_encode(['folders' => [], 'items' => []]),
+    ];
+
+    foreach ($initialFiles as $filename => $defaultContent) {
+        $filePath = $storageDir . '/' . $filename;
+        if (!is_file($filePath)) {
+            if (@file_put_contents($filePath, $defaultContent) === false) {
+                $errors[] = "Could not create initial file: {$filename}";
+            }
+        }
+    }
+
+    if (!empty($errors)) {
+        foreach ($errors as $error) {
+            error_log('[VTT] Storage setup: ' . $error);
+        }
+    }
+
+    return ['ok' => empty($errors), 'errors' => $errors];
+}
+
+/**
  * Loads JSON data from storage with graceful fallbacks.
  *
  * @return array<string,mixed>|array<int,mixed>
@@ -79,30 +142,49 @@ function saveVttJson(string $filename, $data): bool
     $path = __DIR__ . '/storage/' . $filename;
     $directory = dirname($path);
 
-    if (!is_dir($directory) && !mkdir($directory, 0775, true) && !is_dir($directory)) {
+    if (!is_dir($directory) && !@mkdir($directory, 0775, true) && !is_dir($directory)) {
+        error_log("[VTT] saveVttJson failed: directory does not exist and cannot be created: {$directory}");
         return false;
+    }
+
+    if (!is_writable($directory)) {
+        // Attempt to fix permissions
+        @chmod($directory, 0775);
+        if (!is_writable($directory)) {
+            error_log("[VTT] saveVttJson failed: directory not writable: {$directory}");
+            return false;
+        }
     }
 
     $encoded = json_encode($data, JSON_PRETTY_PRINT);
     if ($encoded === false) {
+        error_log('[VTT] saveVttJson failed: json_encode error: ' . json_last_error_msg());
         return false;
     }
 
     $tempPath = $path . '.tmp';
-    if (file_put_contents($tempPath, $encoded) === false) {
+    if (@file_put_contents($tempPath, $encoded) === false) {
+        error_log("[VTT] saveVttJson failed: cannot write temp file: {$tempPath}");
         return false;
     }
 
     if (is_file($path)) {
         $backupDir = __DIR__ . '/storage/backups';
         if (!is_dir($backupDir)) {
-            mkdir($backupDir, 0775, true);
+            @mkdir($backupDir, 0775, true);
         }
         $timestamp = date('Ymd_His');
         @copy($path, $backupDir . '/' . basename($filename, '.json') . '-' . $timestamp . '.json');
     }
 
-    return rename($tempPath, $path);
+    if (!@rename($tempPath, $path)) {
+        error_log("[VTT] saveVttJson failed: cannot rename {$tempPath} to {$path}");
+        // Clean up temp file
+        @unlink($tempPath);
+        return false;
+    }
+
+    return true;
 }
 
 /**
@@ -115,14 +197,20 @@ function saveVttJson(string $filename, $data): bool
 function withVttBoardStateLock(callable $callback)
 {
     $lockDir = __DIR__ . '/storage';
-    if (!is_dir($lockDir) && !mkdir($lockDir, 0775, true) && !is_dir($lockDir)) {
+    if (!is_dir($lockDir) && !@mkdir($lockDir, 0775, true) && !is_dir($lockDir)) {
+        error_log('[VTT] Lock failed: storage directory does not exist and cannot be created');
         throw new RuntimeException('Unable to prepare VTT storage directory.');
     }
 
+    if (!is_writable($lockDir)) {
+        @chmod($lockDir, 0775);
+    }
+
     $lockPath = $lockDir . '/board-state.lock';
-    $handle = fopen($lockPath, 'c');
+    $handle = @fopen($lockPath, 'c');
     if ($handle === false) {
-        throw new RuntimeException('Unable to open board state lock file.');
+        error_log("[VTT] Lock failed: cannot open lock file {$lockPath} (dir writable: " . (is_writable($lockDir) ? 'yes' : 'no') . ')');
+        throw new RuntimeException('Unable to open board state lock file. Check storage directory permissions.');
     }
 
     try {
