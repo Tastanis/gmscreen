@@ -150,7 +150,11 @@ export function createBoardStatePoller({
       );
 
       if (hasPendingSave) {
-        lastHash = hash;
+        // Do NOT update lastHash here. If we record the hash while skipping,
+        // the next poll after the save completes will see the same hash and
+        // skip again, causing the client to permanently miss this update.
+        // By leaving lastHash unchanged, the next poll will detect the
+        // difference and apply the state correctly.
         pollErrorLogged = false;
         return;
       }
@@ -9418,6 +9422,10 @@ export function mountBoardInteractions(store, routes = {}) {
 
     const latest = boardApi.getState?.() ?? state;
     if (latest?.user?.isGM) {
+      // Mark scene state dirty so combat changes (including groups) are included
+      // in delta saves. Without this, group changes are lost when other dirty
+      // entities exist and only a delta snapshot is built.
+      markSceneStateDirty(activeSceneId);
       persistBoardStateSnapshot();
     } else if (routes?.state) {
       // Track pending combat state save to prevent poller from overwriting during save
@@ -12426,6 +12434,10 @@ export function mountBoardInteractions(store, routes = {}) {
     });
 
     if (updatedIds.length && syncBoard) {
+      // Mark each updated placement as dirty so delta saves include these changes.
+      // Without this, property changes (e.g. hidden flag toggles) would be lost
+      // when other dirty entities exist and a delta save is built.
+      updatedIds.forEach((id) => markPlacementDirty(activeSceneId, id));
       savePromise = persistBoardStateSnapshot();
     }
 
