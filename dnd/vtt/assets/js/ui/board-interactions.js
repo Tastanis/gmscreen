@@ -3638,6 +3638,11 @@ export function mountBoardInteractions(store, routes = {}) {
     }
   };
 
+  // Expose persist so fog-of-war.js can flush dirty state to the server
+  boardApi._persistBoardState = () => {
+    persistBoardStateSnapshot();
+  };
+
   applyStateToBoard(boardApi.getState?.() ?? {});
   startBoardStatePoller();
   startCombatStateRefreshLoop();

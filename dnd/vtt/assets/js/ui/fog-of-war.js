@@ -379,6 +379,9 @@ function mountPanel() {
       toggleFogForScene(sceneId, toggleInput.checked, {
         markSceneStateDirty: boardApi._markSceneStateDirty,
       });
+      if (typeof boardApi._persistBoardState === 'function') {
+        boardApi._persistBoardState();
+      }
     });
   }
 
@@ -517,6 +520,9 @@ function applyFogChange(addFog) {
 
   if (typeof boardApi._markSceneStateDirty === 'function') {
     boardApi._markSceneStateDirty(sceneId);
+  }
+  if (typeof boardApi._persistBoardState === 'function') {
+    boardApi._persistBoardState();
   }
 
   clearFogSelection();
