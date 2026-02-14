@@ -129,6 +129,10 @@ function buildPayload(boardState = {}) {
         if (combat) {
           entry.combat = combat;
         }
+        // Pass through fogOfWar data if present
+        if (value.fogOfWar && typeof value.fogOfWar === 'object') {
+          entry.fogOfWar = value.fogOfWar;
+        }
         normalized[key] = entry;
       });
 

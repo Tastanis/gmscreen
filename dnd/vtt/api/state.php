@@ -945,6 +945,13 @@ function normalizeSceneStatePayload(array $rawSceneState): array
             $entry['combat'] = normalizeCombatStatePayload($config['combat']);
         }
 
+        if (array_key_exists('fogOfWar', $config)) {
+            $fogOfWar = normalizeFogOfWarPayload($config['fogOfWar']);
+            if ($fogOfWar !== null) {
+                $entry['fogOfWar'] = $fogOfWar;
+            }
+        }
+
         $normalized[$key] = $entry;
     }
 
@@ -1570,6 +1577,47 @@ function normalizeOverlayMaskPoint($point): ?array
     }
 
     return ['column' => $column, 'row' => $row];
+}
+
+/**
+ * @param mixed $raw
+ * @return array<string,mixed>|null
+ */
+function normalizeFogOfWarPayload($raw): ?array
+{
+    if (!is_array($raw)) {
+        return null;
+    }
+
+    $enabled = !empty($raw['enabled']);
+    $revealedCells = [];
+
+    if (isset($raw['revealedCells']) && is_array($raw['revealedCells'])) {
+        foreach ($raw['revealedCells'] as $key => $value) {
+            if (!is_string($key)) {
+                continue;
+            }
+            $parts = explode(',', $key);
+            if (count($parts) !== 2) {
+                continue;
+            }
+            $col = filter_var($parts[0], FILTER_VALIDATE_INT);
+            $row = filter_var($parts[1], FILTER_VALIDATE_INT);
+            if ($col === false || $row === false || $col < 0 || $row < 0) {
+                continue;
+            }
+            $revealedCells[$col . ',' . $row] = true;
+        }
+    }
+
+    if (!$enabled && empty($revealedCells)) {
+        return null;
+    }
+
+    return [
+        'enabled' => $enabled,
+        'revealedCells' => empty($revealedCells) ? new \stdClass() : $revealedCells,
+    ];
 }
 
 /**

@@ -386,6 +386,24 @@ export function renderSceneList(routes, store) {
       return;
     }
 
+    if (action === 'toggle-fog' && sceneId) {
+      const currentState = stateApi.getState?.() ?? {};
+      const sceneState = currentState.boardState?.sceneState?.[sceneId] ?? {};
+      const currentlyEnabled = Boolean(sceneState.fogOfWar?.enabled);
+      stateApi.updateState?.((draft) => {
+        const boardDraft = ensureBoardStateDraft(draft);
+        if (!boardDraft.sceneState) boardDraft.sceneState = {};
+        if (!boardDraft.sceneState[sceneId]) {
+          boardDraft.sceneState[sceneId] = { grid: { size: 64, locked: false, visible: true } };
+        }
+        if (!boardDraft.sceneState[sceneId].fogOfWar) {
+          boardDraft.sceneState[sceneId].fogOfWar = { enabled: false, revealedCells: {} };
+        }
+        boardDraft.sceneState[sceneId].fogOfWar.enabled = !currentlyEnabled;
+      });
+      persistBoardStateSnapshot();
+    }
+
     if (action === 'delete-scene' && sceneId) {
       if (!endpoints.scenes) return;
       const confirmed = window.confirm('Delete this scene? This cannot be undone.');
@@ -1228,6 +1246,7 @@ function renderSceneItem(scene, activeSceneId, sceneBoardState = {}, options = {
   const name = escapeHtml(scene.name || 'Untitled Scene');
   const overlayState = normalizeOverlayConfig(sceneBoardState.overlay ?? {});
   const overlayMapSet = Boolean(overlayState.mapUrl);
+  const fogEnabled = Boolean(sceneBoardState.fogOfWar?.enabled);
   const hasOverlayContent = overlayMapSet || overlayState.layers.some((layer) => maskHasMeaningfulContent(layer.mask));
 
   const overlayUploadDisabled =
@@ -1290,6 +1309,13 @@ function renderSceneItem(scene, activeSceneId, sceneBoardState = {}, options = {
           >
             Clear Overlay
           </button>
+          <button
+            type="button"
+            class="scene-item__fog-toggle${fogEnabled ? ' is-active' : ''}"
+            data-action="toggle-fog"
+            data-scene-id="${scene.id}"
+            title="${fogEnabled ? 'Disable fog of war' : 'Enable fog of war'}"
+          >${fogEnabled ? '&#x1F441; Fog On' : '&#x1F441; Fog Off'}</button>
           <button type="button" class="btn btn--danger" data-action="delete-scene" data-scene-id="${scene.id}">Delete</button>
         </footer>
       </div>

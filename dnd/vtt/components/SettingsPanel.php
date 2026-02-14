@@ -137,6 +137,18 @@ function renderVttSettingsPanel(string $tokenLibraryMarkup = '', bool $isGm = fa
             <span class="vtt-settings-launcher__icon" aria-hidden="true"></span>
             <span class="visually-hidden">Open Tokens</span>
         </button>
+        <?php if ($isGm): ?>
+        <button
+            type="button"
+            class="vtt-settings-launcher vtt-settings-launcher--fog"
+            data-settings-launch="fog"
+            aria-label="Fog of War"
+            title="Fog of War"
+        >
+            <span class="vtt-settings-launcher__icon" aria-hidden="true"></span>
+            <span class="visually-hidden">Fog of War</span>
+        </button>
+        <?php endif; ?>
     </div>
     <?php
     return trim((string) ob_get_clean());

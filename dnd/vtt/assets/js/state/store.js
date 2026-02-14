@@ -452,6 +452,7 @@ function normalizeSceneBoardState(raw = {}) {
     const grid = normalizeGridState(value.grid ?? value);
     const combat = normalizeCombatStateEntry(value.combat ?? value.combatState ?? null);
     const overlay = normalizeOverlayEntry(value.overlay ?? null);
+    const fogOfWar = normalizeFogOfWarEntry(value.fogOfWar ?? null);
     const entry = { grid };
 
     if (combat) {
@@ -459,6 +460,10 @@ function normalizeSceneBoardState(raw = {}) {
     }
 
     entry.overlay = overlay;
+
+    if (fogOfWar) {
+      entry.fogOfWar = fogOfWar;
+    }
 
     normalized[key] = entry;
   });
@@ -476,6 +481,34 @@ function normalizeGridState(raw = {}) {
     locked: Boolean(raw.locked),
     visible: raw.visible === undefined ? true : Boolean(raw.visible),
   };
+}
+
+function normalizeFogOfWarEntry(raw) {
+  if (!raw || typeof raw !== 'object') {
+    return null;
+  }
+
+  const enabled = Boolean(raw.enabled);
+  const revealedCells = {};
+
+  if (raw.revealedCells && typeof raw.revealedCells === 'object') {
+    Object.keys(raw.revealedCells).forEach((key) => {
+      const parts = key.split(',');
+      if (parts.length === 2) {
+        const col = parseInt(parts[0], 10);
+        const row = parseInt(parts[1], 10);
+        if (Number.isFinite(col) && Number.isFinite(row) && col >= 0 && row >= 0) {
+          revealedCells[col + ',' + row] = true;
+        }
+      }
+    });
+  }
+
+  if (!enabled && Object.keys(revealedCells).length === 0) {
+    return null;
+  }
+
+  return { enabled, revealedCells };
 }
 
 function normalizeCombatStateEntry(raw = {}) {
