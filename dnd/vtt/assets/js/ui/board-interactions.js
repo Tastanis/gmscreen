@@ -2755,6 +2755,9 @@ export function mountBoardInteractions(store, routes = {}) {
           if (state.overlay) {
             draft.boardState.sceneState[sceneId].overlay = state.overlay;
           }
+          if (state.fogOfWar !== undefined) {
+            draft.boardState.sceneState[sceneId].fogOfWar = state.fogOfWar;
+          }
         });
       }
 
@@ -6005,6 +6008,22 @@ export function mountBoardInteractions(store, routes = {}) {
 
       if (!gmViewing && normalized.hidden) {
         return;
+      }
+
+      // Hide tokens that are wholly under fog of war for non-GM users.
+      // Check every cell the token occupies; if ALL are fogged, skip rendering.
+      if (!gmViewing) {
+        let allFogged = true;
+        for (let dc = 0; dc < normalized.width && allFogged; dc++) {
+          for (let dr = 0; dr < normalized.height && allFogged; dr++) {
+            if (!isPositionFogged(state, normalized.column + dc, normalized.row + dr)) {
+              allFogged = false;
+            }
+          }
+        }
+        if (allFogged) {
+          return;
+        }
       }
 
       trackerEntries.push(normalized);
