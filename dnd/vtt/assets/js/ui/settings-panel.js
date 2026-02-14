@@ -69,6 +69,9 @@ export function mountSettingsPanel(routes, store, user = {}) {
   launchers.forEach((launcher) => {
     launcher.addEventListener('click', () => {
       const tabId = launcher.getAttribute('data-settings-launch');
+      // Fog panel is managed independently by fog-of-war.js; skip it here
+      // to avoid opening the main settings panel alongside the fog panel.
+      if (tabId === 'fog') return;
       openView(tabId);
     });
   });

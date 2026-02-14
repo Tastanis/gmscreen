@@ -202,6 +202,28 @@ export function isPositionFogged(state, col, row) {
 }
 
 /**
+ * Create a fog-check function with pre-computed data for efficient batch
+ * checks (e.g. during token rendering).  Returns null when fog is inactive.
+ */
+export function createFogChecker(state) {
+  if (isGm) return null;
+
+  const activeSceneId = state?.boardState?.activeSceneId ?? null;
+  if (!activeSceneId) return null;
+
+  const fogState = getFogState(state, activeSceneId);
+  if (!fogState || !fogState.enabled) return null;
+
+  const revealed = fogState.revealedCells ?? {};
+  const pcCells = buildPcRevealedCells(state, activeSceneId);
+
+  return (col, row) => {
+    const key = Math.floor(col) + ',' + Math.floor(row);
+    return !revealed[key] && !pcCells.has(key);
+  };
+}
+
+/**
  * Returns true if fog-select mode is currently active.
  */
 export function isFogSelectActive() {
@@ -328,16 +350,23 @@ function mountPanel() {
 
   // Launcher button
   const launcher = document.querySelector('[data-settings-launch="fog"]');
+  const syncLauncherActive = (open) => {
+    if (!launcher) return;
+    launcher.classList.toggle('is-active', open);
+    launcher.setAttribute('aria-pressed', String(open));
+  };
   if (launcher) {
     launcher.addEventListener('click', () => {
       const isOpen = !panelEl.hidden;
       panelEl.hidden = isOpen;
+      syncLauncherActive(!isOpen);
     });
   }
 
   // Close button
   panelEl.querySelector('[data-fog-close]')?.addEventListener('click', () => {
     panelEl.hidden = true;
+    syncLauncherActive(false);
   });
 
   // Toggle switch

@@ -22,7 +22,7 @@ import {
 import { close as closeMonsterStatBlock, open as openMonsterStatBlock } from './monster-stat-block.js';
 import { createCombatTimerService } from '../services/combat-timer-service.js';
 import { showCombatTimerReport } from './combat-timer-report.js';
-import { mountFogOfWar, renderFog, renderFogSelection, isFogSelectActive, isPositionFogged } from './fog-of-war.js';
+import { mountFogOfWar, renderFog, renderFogSelection, isFogSelectActive, isPositionFogged, createFogChecker } from './fog-of-war.js';
 
 const OVERLAY_LAYER_PREFIX = 'overlay-layer-';
 let overlayLayerSeed = Date.now();
@@ -2754,6 +2754,9 @@ export function mountBoardInteractions(store, routes = {}) {
           // }
           if (state.overlay) {
             draft.boardState.sceneState[sceneId].overlay = state.overlay;
+          }
+          if (state.fogOfWar !== undefined) {
+            draft.boardState.sceneState[sceneId].fogOfWar = state.fogOfWar;
           }
         });
       }
@@ -5994,6 +5997,8 @@ export function mountBoardInteractions(store, routes = {}) {
     const activeCombatantIds = new Set();
     const activeRotationIds = new Set();
     const groupColorAssignments = getCombatGroupColorAssignments();
+    // Pre-compute fog checker once (null when fog inactive or GM viewing)
+    const isCellFogged = gmViewing ? null : createFogChecker(state);
 
     placements.forEach((placement) => {
       const normalized = normalizePlacementForRender(placement);
@@ -6005,6 +6010,22 @@ export function mountBoardInteractions(store, routes = {}) {
 
       if (!gmViewing && normalized.hidden) {
         return;
+      }
+
+      // Hide tokens that are wholly under fog of war for non-GM users.
+      // Check every cell the token occupies; if ALL are fogged, skip rendering.
+      if (isCellFogged) {
+        let allFogged = true;
+        for (let dc = 0; dc < normalized.width && allFogged; dc++) {
+          for (let dr = 0; dr < normalized.height && allFogged; dr++) {
+            if (!isCellFogged(normalized.column + dc, normalized.row + dr)) {
+              allFogged = false;
+            }
+          }
+        }
+        if (allFogged) {
+          return;
+        }
       }
 
       trackerEntries.push(normalized);
