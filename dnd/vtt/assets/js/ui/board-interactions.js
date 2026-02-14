@@ -22,6 +22,7 @@ import {
 import { close as closeMonsterStatBlock, open as openMonsterStatBlock } from './monster-stat-block.js';
 import { createCombatTimerService } from '../services/combat-timer-service.js';
 import { showCombatTimerReport } from './combat-timer-report.js';
+import { mountFogOfWar, renderFog, renderFogSelection, isFogSelectActive, isPositionFogged } from './fog-of-war.js';
 
 const OVERLAY_LAYER_PREFIX = 'overlay-layer-';
 let overlayLayerSeed = Date.now();
@@ -3044,6 +3045,11 @@ export function mountBoardInteractions(store, routes = {}) {
       return;
     }
 
+    // When fog-select mode is active, let the fog handler manage pointer events
+    if (isFogSelectActive() && event.button === 0) {
+      return;
+    }
+
     if (event.altKey && (event.button === 0 || event.button === 2)) {
       const handled = handleMapPing(event, { focus: event.button === 2 });
       if (handled) {
@@ -3580,6 +3586,8 @@ export function mountBoardInteractions(store, routes = {}) {
       overlayTool.notifyOverlayMaskChange(overlayConfig ?? null);
       applyGridState(state.grid ?? {});
       renderTokens(state, tokenLayer, viewState);
+      renderFog(state);
+      renderFogSelection();
       templateTool.notifyMapState();
       overlayTool.notifyMapState();
       applyCombatStateFromBoardState(state);
@@ -3611,6 +3619,21 @@ export function mountBoardInteractions(store, routes = {}) {
       grid.classList.toggle('is-visible');
     });
   }
+
+  // Mount fog of war system
+  const userState = boardApi.getState?.()?.user ?? {};
+  mountFogOfWar({
+    boardApi,
+    viewState,
+    isGm: Boolean(userState.isGM),
+  });
+
+  // Expose a helper so fog-of-war.js can mark scene state dirty for saving
+  boardApi._markSceneStateDirty = (sceneId) => {
+    if (typeof sceneId === 'string' && sceneId) {
+      dirtySceneState.add(sceneId);
+    }
+  };
 
   applyStateToBoard(boardApi.getState?.() ?? {});
   startBoardStatePoller();
@@ -11108,6 +11131,10 @@ export function mountBoardInteractions(store, routes = {}) {
       const bottom = top + height * gridSize;
 
       if (pointX >= left && pointX < right && pointY >= top && pointY < bottom) {
+        // For non-GM users, skip tokens hidden by fog of war
+        if (isPositionFogged(boardApi.getState?.() ?? {}, column, row)) {
+          continue;
+        }
         return placement;
       }
     }
