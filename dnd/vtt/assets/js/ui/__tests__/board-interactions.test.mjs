@@ -2592,3 +2592,794 @@ test('token drags that only expose fallback payload still enable drops', () => {
     dom.window.close();
   }
 });
+
+// ---------------------------------------------------------------------------
+// Overlay cutout alignment tests
+//
+// These tests ensure the overlay cutout system produces a canvas that matches
+// the inner grid area (excluding backdrop padding).  A mismatch causes the
+// cutout to appear offset from the base map — the original bug was ~20 px.
+// ---------------------------------------------------------------------------
+
+function createFakeCanvasInfrastructure(imageWidth = 80, imageHeight = 80) {
+  class FakeImage {
+    constructor(width, height) {
+      this.width = width;
+      this.height = height;
+      this.naturalWidth = width;
+      this.naturalHeight = height;
+      this.onload = null;
+      this.onerror = null;
+      this.crossOrigin = null;
+    }
+
+    set src(value) {
+      this._src = value;
+      queueMicrotask(() => {
+        if (typeof this.onload === 'function') {
+          this.onload();
+        }
+      });
+    }
+  }
+
+  class FakeContext {
+    constructor(canvas) {
+      this.canvas = canvas;
+      this.globalCompositeOperation = 'source-over';
+      this.fillStyle = '#000';
+      this._path = [];
+      this._stack = [];
+      this.fillCount = 0;
+      this.lastCompositeOperation = '';
+      this.drawImageCalls = [];
+    }
+
+    clearRect() {
+      this.canvas._pixels.fill(0);
+    }
+
+    drawImage(image, dx, dy, dw, dh) {
+      this.drawImageCalls.push({ image, dx, dy, dw, dh });
+      const length = this.canvas._width * this.canvas._height;
+      this.canvas._pixels = new Array(length).fill(1);
+    }
+
+    save() {
+      this._stack.push({
+        globalCompositeOperation: this.globalCompositeOperation,
+        fillStyle: this.fillStyle,
+      });
+    }
+
+    restore() {
+      const state = this._stack.pop();
+      if (state) {
+        this.globalCompositeOperation = state.globalCompositeOperation;
+        this.fillStyle = state.fillStyle;
+      }
+    }
+
+    beginPath() {
+      this._path = [];
+    }
+
+    moveTo(x, y) {
+      this._path.push([{ x, y }]);
+    }
+
+    lineTo(x, y) {
+      const current = this._path[this._path.length - 1];
+      if (current) {
+        current.push({ x, y });
+      }
+    }
+
+    closePath() {
+      const current = this._path[this._path.length - 1];
+      if (current && current.length > 0) {
+        current.push({ ...current[0] });
+      }
+    }
+
+    fill() {
+      this.fillCount += 1;
+      this.lastCompositeOperation = this.globalCompositeOperation;
+
+      const width = this.canvas._width;
+      const height = this.canvas._height;
+      if (!width || !height) return;
+
+      const mask = new Array(width * height).fill(false);
+
+      const pointInPolygon = (x, y, polygon) => {
+        let inside = false;
+        for (let i = 0, j = polygon.length - 1; i < polygon.length; j = i++) {
+          const xi = polygon[i].x;
+          const yi = polygon[i].y;
+          const xj = polygon[j].x;
+          const yj = polygon[j].y;
+          const intersects =
+            yi > y !== yj > y &&
+            x < ((xj - xi) * (y - yi)) / (yj - yi || Number.EPSILON) + xi;
+          if (intersects) inside = !inside;
+        }
+        return inside;
+      };
+
+      this._path.forEach((subPath) => {
+        const polygon = subPath.filter(Boolean);
+        if (polygon.length < 3) return;
+        for (let y = 0; y < height; y += 1) {
+          for (let x = 0; x < width; x += 1) {
+            if (pointInPolygon(x + 0.5, y + 0.5, polygon)) {
+              mask[y * width + x] = true;
+            }
+          }
+        }
+      });
+
+      const existing = this.canvas._pixels.slice();
+      if (this.globalCompositeOperation === 'destination-in') {
+        for (let index = 0; index < existing.length; index += 1) {
+          this.canvas._pixels[index] = existing[index] && mask[index] ? 1 : 0;
+        }
+      } else if (this.globalCompositeOperation === 'destination-out') {
+        for (let index = 0; index < existing.length; index += 1) {
+          this.canvas._pixels[index] = mask[index] ? 0 : existing[index];
+        }
+      }
+    }
+  }
+
+  class FakeCanvas {
+    constructor() {
+      this._width = 0;
+      this._height = 0;
+      this._pixels = [];
+      this.context = new FakeContext(this);
+    }
+
+    get width() { return this._width; }
+    set width(value) { this._width = value; this._resize(); }
+    get height() { return this._height; }
+    set height(value) { this._height = value; this._resize(); }
+
+    _resize() {
+      const length = Math.max(0, this._width * this._height);
+      this._pixels = new Array(length).fill(0);
+    }
+
+    getContext(type) {
+      return type === '2d' ? this.context : null;
+    }
+
+    toBlob(callback) {
+      callback({
+        opaquePixels: this._pixels.slice(),
+        width: this._width,
+        height: this._height,
+      });
+    }
+  }
+
+  class FakeDocument {
+    constructor() {
+      this.createdCanvases = [];
+    }
+
+    createElement(tagName) {
+      if (tagName === 'canvas') {
+        const canvas = new FakeCanvas();
+        this.createdCanvases.push(canvas);
+        return canvas;
+      }
+      if (tagName === 'img') {
+        return new FakeImage(imageWidth, imageHeight);
+      }
+      throw new Error(`Unsupported element: ${tagName}`);
+    }
+  }
+
+  return { FakeDocument, FakeCanvas, FakeContext, FakeImage };
+}
+
+test('cutout canvas dimensions match inner area when grid offsets are present', async () => {
+  const { FakeDocument } = createFakeCanvasInfrastructure(100, 100);
+  const documentRef = new FakeDocument();
+
+  const blob = await createOverlayCutoutBlob({
+    mapUrl: 'http://example.com/map.png',
+    polygons: [
+      {
+        points: [
+          { column: 0, row: 0 },
+          { column: 2, row: 0 },
+          { column: 2, row: 2 },
+          { column: 0, row: 2 },
+        ],
+      },
+    ],
+    view: {
+      mapPixelSize: { width: 120, height: 120 },
+      gridSize: 10,
+      gridOffsets: { top: 10, right: 10, bottom: 10, left: 10 },
+    },
+    documentRef,
+  });
+
+  assert.ok(blob, 'blob should be produced');
+
+  const canvas = documentRef.createdCanvases[0];
+  assert.ok(canvas, 'canvas should be created');
+
+  // Canvas must match inner dimensions (120 - 10 - 10 = 100)
+  assert.equal(canvas._width, 100, 'canvas width should equal inner width (mapWidth - left - right)');
+  assert.equal(canvas._height, 100, 'canvas height should equal inner height (mapHeight - top - bottom)');
+});
+
+test('cutout drawImage uses negative offset to crop padding from source image', async () => {
+  const { FakeDocument } = createFakeCanvasInfrastructure(100, 100);
+  const documentRef = new FakeDocument();
+
+  await createOverlayCutoutBlob({
+    mapUrl: 'http://example.com/map.png',
+    polygons: [
+      {
+        points: [
+          { column: 0, row: 0 },
+          { column: 1, row: 0 },
+          { column: 1, row: 1 },
+          { column: 0, row: 1 },
+        ],
+      },
+    ],
+    view: {
+      mapPixelSize: { width: 140, height: 140 },
+      gridSize: 10,
+      gridOffsets: { top: 20, right: 20, bottom: 20, left: 20 },
+    },
+    documentRef,
+  });
+
+  const canvas = documentRef.createdCanvases[0];
+  const call = canvas.context.drawImageCalls[0];
+  assert.ok(call, 'drawImage should have been called');
+  assert.equal(call.dx, -20, 'drawImage dx should be -offsetLeft');
+  assert.equal(call.dy, -20, 'drawImage dy should be -offsetTop');
+  assert.equal(call.dw, 140, 'drawImage dw should be full mapWidth');
+  assert.equal(call.dh, 140, 'drawImage dh should be full mapHeight');
+});
+
+test('cutout polygon coordinates are relative to inner area (no offset added)', async () => {
+  const { FakeDocument } = createFakeCanvasInfrastructure(100, 100);
+  const documentRef = new FakeDocument();
+
+  await createOverlayCutoutBlob({
+    mapUrl: 'http://example.com/map.png',
+    polygons: [
+      {
+        points: [
+          { column: 1, row: 1 },
+          { column: 3, row: 1 },
+          { column: 3, row: 3 },
+          { column: 1, row: 3 },
+        ],
+      },
+    ],
+    view: {
+      mapPixelSize: { width: 140, height: 140 },
+      gridSize: 10,
+      gridOffsets: { top: 20, right: 20, bottom: 20, left: 20 },
+    },
+    documentRef,
+  });
+
+  const canvas = documentRef.createdCanvases[0];
+  const path = canvas.context._path;
+
+  // With gridSize=10 and no offset in polygon coords, first polygon should be:
+  // (1*10, 1*10), (3*10, 1*10), (3*10, 3*10), (1*10, 3*10), close
+  assert.ok(path.length >= 1, 'should have at least one sub-path');
+  const polygon = path[0];
+  // moveTo produces first point, then lineTo produces rest, closePath adds closing
+  assert.equal(polygon[0].x, 10, 'first point x should be column * gridSize = 10');
+  assert.equal(polygon[0].y, 10, 'first point y should be row * gridSize = 10');
+  assert.equal(polygon[1].x, 30, 'second point x should be 3 * 10 = 30');
+  assert.equal(polygon[1].y, 10, 'second point y should be row * gridSize = 10');
+  assert.equal(polygon[2].x, 30, 'third point x should be 3 * 10 = 30');
+  assert.equal(polygon[2].y, 30, 'third point y should be 3 * 10 = 30');
+});
+
+test('cutout with zero grid offsets produces canvas at full map dimensions', async () => {
+  const { FakeDocument } = createFakeCanvasInfrastructure(80, 80);
+  const documentRef = new FakeDocument();
+
+  const blob = await createOverlayCutoutBlob({
+    mapUrl: 'http://example.com/map.png',
+    polygons: [
+      {
+        points: [
+          { column: 0, row: 0 },
+          { column: 1, row: 0 },
+          { column: 1, row: 1 },
+          { column: 0, row: 1 },
+        ],
+      },
+    ],
+    view: {
+      mapPixelSize: { width: 80, height: 80 },
+      gridSize: 8,
+      gridOffsets: { top: 0, right: 0, bottom: 0, left: 0 },
+    },
+    documentRef,
+  });
+
+  assert.ok(blob, 'blob should be produced');
+  const canvas = documentRef.createdCanvases[0];
+  assert.equal(canvas._width, 80, 'with no offsets, canvas width should equal mapWidth');
+  assert.equal(canvas._height, 80, 'with no offsets, canvas height should equal mapHeight');
+});
+
+test('cutout with no gridOffsets in view defaults to full map dimensions', async () => {
+  const { FakeDocument } = createFakeCanvasInfrastructure(80, 80);
+  const documentRef = new FakeDocument();
+
+  const blob = await createOverlayCutoutBlob({
+    mapUrl: 'http://example.com/map.png',
+    polygons: [
+      {
+        points: [
+          { column: 0, row: 0 },
+          { column: 1, row: 0 },
+          { column: 1, row: 1 },
+          { column: 0, row: 1 },
+        ],
+      },
+    ],
+    view: {
+      mapPixelSize: { width: 80, height: 80 },
+      gridSize: 8,
+    },
+    documentRef,
+  });
+
+  assert.ok(blob, 'blob should be produced');
+  const canvas = documentRef.createdCanvases[0];
+  assert.equal(canvas._width, 80, 'canvas should default to mapWidth when offsets are absent');
+  assert.equal(canvas._height, 80, 'canvas should default to mapHeight when offsets are absent');
+
+  const call = canvas.context.drawImageCalls[0];
+  // -0 === 0 is true but assert.equal uses Object.is, so compare with ===
+  assert.ok(call.dx === 0, 'drawImage dx should default to 0');
+  assert.ok(call.dy === 0, 'drawImage dy should default to 0');
+});
+
+test('cutout pixel alignment: polygon at grid origin is opaque at (0,0) on inner canvas', async () => {
+  const { FakeDocument } = createFakeCanvasInfrastructure(100, 100);
+  const documentRef = new FakeDocument();
+
+  // Map is 120x120 with 10px padding on each side → inner = 100x100
+  // Polygon covers grid cells (0,0) to (2,2) → pixels (0,0) to (20,20)
+  const blob = await createOverlayCutoutBlob({
+    mapUrl: 'http://example.com/map.png',
+    polygons: [
+      {
+        points: [
+          { column: 0, row: 0 },
+          { column: 2, row: 0 },
+          { column: 2, row: 2 },
+          { column: 0, row: 2 },
+        ],
+      },
+    ],
+    view: {
+      mapPixelSize: { width: 120, height: 120 },
+      gridSize: 10,
+      gridOffsets: { top: 10, right: 10, bottom: 10, left: 10 },
+    },
+    documentRef,
+  });
+
+  assert.ok(blob, 'blob should be produced');
+  const { opaquePixels, width, height } = blob;
+  assert.equal(width, 100, 'blob width should be inner area');
+  assert.equal(height, 100, 'blob height should be inner area');
+
+  const idx = (x, y) => y * width + x;
+
+  // Pixel (5,5) is inside the polygon (0→20, 0→20) and should be opaque
+  assert.equal(opaquePixels[idx(5, 5)], 1, 'pixel at (5,5) inside polygon should be opaque');
+
+  // Pixel (0,0) is right at the corner — with center sampling at (0.5,0.5)
+  // it should be inside the 0→20 range
+  assert.equal(opaquePixels[idx(0, 0)], 1, 'pixel at grid origin (0,0) should be opaque');
+
+  // Pixel well outside the polygon should be transparent
+  assert.equal(opaquePixels[idx(50, 50)], 0, 'pixel far outside polygon should be transparent');
+  assert.equal(opaquePixels[idx(99, 99)], 0, 'pixel at bottom-right corner should be transparent');
+});
+
+test('cutout with asymmetric grid offsets produces correct inner dimensions', async () => {
+  const { FakeDocument } = createFakeCanvasInfrastructure(200, 200);
+  const documentRef = new FakeDocument();
+
+  // Map: 250 wide x 230 tall with uneven padding
+  const blob = await createOverlayCutoutBlob({
+    mapUrl: 'http://example.com/map.png',
+    polygons: [
+      {
+        points: [
+          { column: 0, row: 0 },
+          { column: 1, row: 0 },
+          { column: 1, row: 1 },
+          { column: 0, row: 1 },
+        ],
+      },
+    ],
+    view: {
+      mapPixelSize: { width: 250, height: 230 },
+      gridSize: 20,
+      gridOffsets: { top: 15, right: 25, bottom: 15, left: 10 },
+    },
+    documentRef,
+  });
+
+  assert.ok(blob, 'blob should be produced');
+  const canvas = documentRef.createdCanvases[0];
+
+  // innerWidth = 250 - 10 - 25 = 215
+  // innerHeight = 230 - 15 - 15 = 200
+  assert.equal(canvas._width, 215, 'canvas width should be mapWidth - left - right');
+  assert.equal(canvas._height, 200, 'canvas height should be mapHeight - top - bottom');
+
+  const call = canvas.context.drawImageCalls[0];
+  assert.equal(call.dx, -10, 'drawImage dx should be -offsetLeft (10)');
+  assert.equal(call.dy, -15, 'drawImage dy should be -offsetTop (15)');
+});
+
+test('cutout with multiple polygons places all paths at inner-relative coordinates', async () => {
+  const { FakeDocument } = createFakeCanvasInfrastructure(100, 100);
+  const documentRef = new FakeDocument();
+
+  await createOverlayCutoutBlob({
+    mapUrl: 'http://example.com/map.png',
+    polygons: [
+      {
+        points: [
+          { column: 0, row: 0 },
+          { column: 1, row: 0 },
+          { column: 1, row: 1 },
+          { column: 0, row: 1 },
+        ],
+      },
+      {
+        points: [
+          { column: 3, row: 3 },
+          { column: 5, row: 3 },
+          { column: 5, row: 5 },
+          { column: 3, row: 5 },
+        ],
+      },
+    ],
+    view: {
+      mapPixelSize: { width: 140, height: 140 },
+      gridSize: 10,
+      gridOffsets: { top: 20, right: 20, bottom: 20, left: 20 },
+    },
+    documentRef,
+  });
+
+  const canvas = documentRef.createdCanvases[0];
+  const path = canvas.context._path;
+
+  // Two polygons → two sub-paths
+  assert.equal(path.length, 2, 'should have two sub-paths for two polygons');
+
+  // First polygon starts at (0*10, 0*10) = (0, 0)
+  assert.equal(path[0][0].x, 0, 'first polygon x should start at 0');
+  assert.equal(path[0][0].y, 0, 'first polygon y should start at 0');
+
+  // Second polygon starts at (3*10, 3*10) = (30, 30)
+  assert.equal(path[1][0].x, 30, 'second polygon x should start at 30');
+  assert.equal(path[1][0].y, 30, 'second polygon y should start at 30');
+});
+
+test('cutout returns null for empty polygons', async () => {
+  const { FakeDocument } = createFakeCanvasInfrastructure(80, 80);
+  const documentRef = new FakeDocument();
+
+  const blob = await createOverlayCutoutBlob({
+    mapUrl: 'http://example.com/map.png',
+    polygons: [],
+    view: {
+      mapPixelSize: { width: 80, height: 80 },
+      gridSize: 8,
+    },
+    documentRef,
+  });
+
+  assert.equal(blob, null, 'should return null when no polygons provided');
+});
+
+test('cutout returns null for missing mapUrl', async () => {
+  const { FakeDocument } = createFakeCanvasInfrastructure(80, 80);
+  const documentRef = new FakeDocument();
+
+  const blob = await createOverlayCutoutBlob({
+    mapUrl: '',
+    polygons: [
+      {
+        points: [
+          { column: 0, row: 0 },
+          { column: 1, row: 0 },
+          { column: 1, row: 1 },
+          { column: 0, row: 1 },
+        ],
+      },
+    ],
+    view: { mapPixelSize: { width: 80, height: 80 }, gridSize: 8 },
+    documentRef,
+  });
+
+  assert.equal(blob, null, 'should return null for empty mapUrl');
+});
+
+test('cutout ignores polygons with fewer than 3 points', async () => {
+  const { FakeDocument } = createFakeCanvasInfrastructure(80, 80);
+  const documentRef = new FakeDocument();
+
+  const blob = await createOverlayCutoutBlob({
+    mapUrl: 'http://example.com/map.png',
+    polygons: [
+      {
+        points: [
+          { column: 0, row: 0 },
+          { column: 1, row: 0 },
+        ],
+      },
+    ],
+    view: { mapPixelSize: { width: 80, height: 80 }, gridSize: 8 },
+    documentRef,
+  });
+
+  assert.equal(blob, null, 'should return null when only polygon has fewer than 3 points');
+});
+
+test('cutout accepts single polygon via polygon parameter', async () => {
+  const { FakeDocument } = createFakeCanvasInfrastructure(80, 80);
+  const documentRef = new FakeDocument();
+
+  const blob = await createOverlayCutoutBlob({
+    mapUrl: 'http://example.com/map.png',
+    polygon: {
+      points: [
+        { column: 0, row: 0 },
+        { column: 2, row: 0 },
+        { column: 2, row: 2 },
+        { column: 0, row: 2 },
+      ],
+    },
+    view: { mapPixelSize: { width: 80, height: 80 }, gridSize: 8 },
+    documentRef,
+  });
+
+  assert.ok(blob, 'blob should be produced from single polygon parameter');
+});
+
+test('cutout handles large grid offsets (simulating 18rem padding)', async () => {
+  // Simulate a scenario like --vtt-map-padding: 18rem at 16px/rem = 288px
+  const { FakeDocument } = createFakeCanvasInfrastructure(1000, 800);
+  const documentRef = new FakeDocument();
+
+  const padding = 288;
+  const imgWidth = 1000;
+  const imgHeight = 800;
+  const mapWidth = imgWidth + padding * 2;   // 1576
+  const mapHeight = imgHeight + padding * 2;  // 1376
+
+  const blob = await createOverlayCutoutBlob({
+    mapUrl: 'http://example.com/map.png',
+    polygons: [
+      {
+        points: [
+          { column: 0, row: 0 },
+          { column: 5, row: 0 },
+          { column: 5, row: 5 },
+          { column: 0, row: 5 },
+        ],
+      },
+    ],
+    view: {
+      mapPixelSize: { width: mapWidth, height: mapHeight },
+      gridSize: 64,
+      gridOffsets: { top: padding, right: padding, bottom: padding, left: padding },
+    },
+    documentRef,
+  });
+
+  assert.ok(blob, 'blob should be produced with large offsets');
+
+  const canvas = documentRef.createdCanvases[0];
+  assert.equal(canvas._width, imgWidth, 'canvas width should match image width (no padding)');
+  assert.equal(canvas._height, imgHeight, 'canvas height should match image height (no padding)');
+
+  const call = canvas.context.drawImageCalls[0];
+  assert.equal(call.dx, -padding, 'drawImage dx should be -288');
+  assert.equal(call.dy, -padding, 'drawImage dy should be -288');
+  assert.equal(call.dw, mapWidth, 'drawImage dw should be full map width');
+  assert.equal(call.dh, mapHeight, 'drawImage dh should be full map height');
+
+  // Polygon coordinates should NOT include offset
+  const path = canvas.context._path[0];
+  assert.equal(path[0].x, 0, 'grid origin should map to pixel 0 (not 288)');
+  assert.equal(path[0].y, 0, 'grid origin should map to pixel 0 (not 288)');
+  assert.equal(path[1].x, 320, 'column 5 * gridSize 64 = 320');
+});
+
+test('cutout with fractional grid offsets does not introduce rounding errors', async () => {
+  const { FakeDocument } = createFakeCanvasInfrastructure(100, 100);
+  const documentRef = new FakeDocument();
+
+  const blob = await createOverlayCutoutBlob({
+    mapUrl: 'http://example.com/map.png',
+    polygons: [
+      {
+        points: [
+          { column: 0, row: 0 },
+          { column: 1, row: 0 },
+          { column: 1, row: 1 },
+          { column: 0, row: 1 },
+        ],
+      },
+    ],
+    view: {
+      mapPixelSize: { width: 120.5, height: 120.5 },
+      gridSize: 10,
+      gridOffsets: { top: 10.25, right: 10.25, bottom: 10.25, left: 10.25 },
+    },
+    documentRef,
+  });
+
+  assert.ok(blob, 'blob should be produced with fractional offsets');
+  const canvas = documentRef.createdCanvases[0];
+
+  // innerWidth = 120.5 - 10.25 - 10.25 = 100
+  assert.equal(canvas._width, 100, 'canvas width should handle fractional offsets');
+  assert.equal(canvas._height, 100, 'canvas height should handle fractional offsets');
+});
+
+test('clip path percentages align with overlay div coordinate space', () => {
+  const dom = createDom();
+  try {
+    const { document } = dom.window;
+
+    // Set up a scene with grid offsets to verify clip-path alignment
+    const board = document.getElementById('vtt-board-canvas');
+    board.getBoundingClientRect = () => ({
+      width: 640,
+      height: 640,
+      top: 0, left: 0, right: 640, bottom: 640,
+    });
+
+    const store = createMockStore({
+      user: { isGM: true, name: 'GM' },
+      scenes: { items: [{ id: 'scene-1', name: 'Scene 1' }] },
+      boardState: {
+        activeSceneId: 'scene-1',
+        mapUrl: 'http://example.com/map.png',
+        sceneState: {
+          'scene-1': {
+            overlay: buildOverlayState('http://example.com/overlay.png'),
+          },
+        },
+        overlay: buildOverlayState('http://example.com/overlay.png'),
+      },
+      grid: { size: 64, visible: true },
+    });
+
+    mountBoardInteractions(store);
+
+    const mapImage = document.getElementById('vtt-map-image');
+    Object.defineProperty(mapImage, 'naturalWidth', { value: 640, configurable: true });
+    Object.defineProperty(mapImage, 'naturalHeight', { value: 640, configurable: true });
+    mapImage.onload?.();
+
+    // Grid is 10x10 (640/64 = 10 columns/rows)
+    // Polygon covers column 2-4, row 2-4 → 20%-40% of the grid area
+    store.updateState((draft) => {
+      const mask = {
+        visible: true,
+        polygons: [
+          {
+            points: [
+              { column: 2, row: 2 },
+              { column: 4, row: 2 },
+              { column: 4, row: 4 },
+              { column: 2, row: 4 },
+            ],
+          },
+        ],
+      };
+      draft.boardState.sceneState['scene-1'].overlay = buildOverlayState(
+        'http://example.com/overlay.png',
+        mask
+      );
+      draft.boardState.overlay = buildOverlayState('http://example.com/overlay.png', mask);
+    });
+
+    const mapOverlay = document.getElementById('vtt-map-overlay');
+    const overlayLayer = mapOverlay.querySelector('.vtt-board__map-overlay-layer');
+    assert.ok(overlayLayer, 'overlay layer should exist');
+
+    const clipPath = overlayLayer.style.clipPath || overlayLayer.style.webkitClipPath;
+    assert.ok(clipPath, 'clip-path should be set');
+
+    // With 10 columns and 10 rows, column 2 = 20%, column 4 = 40%
+    const expectedClipPath =
+      "path('M 20% 20% L 40% 20% L 40% 40% L 20% 40% Z')";
+    assert.equal(clipPath, expectedClipPath, 'clip-path percentages should match grid coordinates');
+  } finally {
+    dom.window.close();
+  }
+});
+
+test('overlay layer background-size is always 100% 100% for proper alignment', () => {
+  const dom = createDom();
+  try {
+    const { document } = dom.window;
+
+    const board = document.getElementById('vtt-board-canvas');
+    board.getBoundingClientRect = () => ({
+      width: 512,
+      height: 512,
+      top: 0, left: 0, right: 512, bottom: 512,
+    });
+
+    const store = createMockStore({
+      user: { isGM: true, name: 'GM' },
+      scenes: { items: [{ id: 'scene-1', name: 'Scene 1' }] },
+      boardState: {
+        activeSceneId: 'scene-1',
+        mapUrl: 'http://example.com/map.png',
+        sceneState: {
+          'scene-1': {
+            overlay: buildOverlayState('http://example.com/overlay.png', {
+              visible: true,
+              polygons: [
+                {
+                  points: [
+                    { column: 0, row: 0 },
+                    { column: 5, row: 0 },
+                    { column: 5, row: 5 },
+                    { column: 0, row: 5 },
+                  ],
+                },
+              ],
+            }),
+          },
+        },
+        overlay: buildOverlayState('http://example.com/overlay.png'),
+      },
+    });
+
+    mountBoardInteractions(store);
+
+    const mapImage = document.getElementById('vtt-map-image');
+    Object.defineProperty(mapImage, 'naturalWidth', { value: 512, configurable: true });
+    Object.defineProperty(mapImage, 'naturalHeight', { value: 512, configurable: true });
+    mapImage.onload?.();
+
+    const mapOverlay = document.getElementById('vtt-map-overlay');
+    const overlayLayer = mapOverlay.querySelector('.vtt-board__map-overlay-layer');
+    assert.ok(overlayLayer, 'overlay layer should render');
+
+    // Verify the background image is set correctly
+    assert.ok(
+      overlayLayer.style.backgroundImage.includes('overlay.png'),
+      'overlay layer should have the overlay map as background'
+    );
+  } finally {
+    dom.window.close();
+  }
+});

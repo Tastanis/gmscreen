@@ -392,22 +392,36 @@ export async function createOverlayCutoutBlob({
     return null;
   }
 
+  const offsets = view?.gridOffsets ?? {};
+  const offsetLeft = Number.isFinite(offsets.left) ? offsets.left : 0;
+  const offsetTop = Number.isFinite(offsets.top) ? offsets.top : 0;
+  const offsetRight = Number.isFinite(offsets.right) ? offsets.right : 0;
+  const offsetBottom = Number.isFinite(offsets.bottom) ? offsets.bottom : 0;
+  const gridSize = Math.max(8, Number.isFinite(view?.gridSize) ? view.gridSize : 64);
+
+  // The overlay div is inset by the grid offsets, so the cutout canvas must
+  // match those inner dimensions.  Drawing at the full mapWidth/mapHeight
+  // (which includes the backdrop padding) and then displaying the result
+  // inside the smaller overlay div causes the cutout to shift by the padding
+  // amount.
+  const innerWidth = Math.max(1, mapWidth - offsetLeft - offsetRight);
+  const innerHeight = Math.max(1, mapHeight - offsetTop - offsetBottom);
+
   const canvas = documentRef.createElement('canvas');
-  canvas.width = mapWidth;
-  canvas.height = mapHeight;
+  canvas.width = innerWidth;
+  canvas.height = innerHeight;
 
   const context = canvas.getContext('2d');
   if (!context) {
     return null;
   }
 
-  context.clearRect(0, 0, mapWidth, mapHeight);
-  context.drawImage(image, 0, 0, mapWidth, mapHeight);
-
-  const offsets = view?.gridOffsets ?? {};
-  const offsetLeft = Number.isFinite(offsets.left) ? offsets.left : 0;
-  const offsetTop = Number.isFinite(offsets.top) ? offsets.top : 0;
-  const gridSize = Math.max(8, Number.isFinite(view?.gridSize) ? view.gridSize : 64);
+  context.clearRect(0, 0, innerWidth, innerHeight);
+  // Draw the source image offset so that only the inner (non-padding) portion
+  // of the map lands on the canvas.  The image is scaled to mapWidth×mapHeight
+  // (the full map including padding) and placed at (-offsetLeft, -offsetTop) so
+  // the visible canvas window captures just the grid area.
+  context.drawImage(image, -offsetLeft, -offsetTop, mapWidth, mapHeight);
 
   context.save();
   context.globalCompositeOperation = 'destination-in';
@@ -418,8 +432,10 @@ export async function createOverlayCutoutBlob({
 
   normalizedPolygons.forEach((points) => {
     points.forEach((point, index) => {
-      const x = offsetLeft + point.column * gridSize;
-      const y = offsetTop + point.row * gridSize;
+      // Coordinates are relative to the inner area (no offset needed) because
+      // the canvas already represents only the grid area.
+      const x = point.column * gridSize;
+      const y = point.row * gridSize;
 
       if (index === 0) {
         context.moveTo(x, y);
