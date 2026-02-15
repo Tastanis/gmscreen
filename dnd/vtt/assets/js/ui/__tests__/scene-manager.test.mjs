@@ -24,7 +24,7 @@ function createDom() {
   const { window } = dom;
   globalThis.window = window;
   globalThis.document = window.document;
-  globalThis.navigator = window.navigator;
+  Object.defineProperty(globalThis, 'navigator', { value: window.navigator, writable: true, configurable: true });
   globalThis.HTMLElement = window.HTMLElement;
   globalThis.Element = window.Element;
   globalThis.Node = window.Node;
