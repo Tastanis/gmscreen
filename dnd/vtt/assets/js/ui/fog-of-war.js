@@ -360,6 +360,7 @@ function mountPanel() {
       const isOpen = !panelEl.hidden;
       panelEl.hidden = isOpen;
       syncLauncherActive(!isOpen);
+      if (isOpen) deactivateFogSelect();
     });
   }
 
@@ -367,6 +368,7 @@ function mountPanel() {
   panelEl.querySelector('[data-fog-close]')?.addEventListener('click', () => {
     panelEl.hidden = true;
     syncLauncherActive(false);
+    deactivateFogSelect();
   });
 
   // Toggle switch
@@ -447,6 +449,14 @@ function syncPanelToggle(enabled) {
   const toggle = panelEl.querySelector('[data-fog-toggle]');
   if (toggle && toggle.checked !== enabled) {
     toggle.checked = enabled;
+  }
+}
+
+function deactivateFogSelect() {
+  if (fogSelectActive) {
+    fogSelectActive = false;
+    updateSelectButtonState();
+    clearFogSelection();
   }
 }
 
