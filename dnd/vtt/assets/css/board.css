@@ -1454,10 +1454,17 @@
   max-width: min(calc(20rem * var(--vtt-overlay-scale, 1)), 90vw);
 }
 
+.vtt-overlay-editor__header {
+  display: flex;
+  align-items: center;
+  gap: calc(0.35rem * var(--vtt-overlay-scale, 1));
+}
+
 .vtt-overlay-editor__drag-handle {
   display: flex;
   align-items: center;
   justify-content: center;
+  flex: 1;
   height: calc(0.5rem * var(--vtt-overlay-scale, 1));
   border-radius: 999px;
   background: rgba(120, 90, 60, 0.5);
@@ -1469,6 +1476,30 @@
 .vtt-overlay-editor__drag-handle.is-dragging {
   cursor: grabbing;
   background: rgba(120, 90, 60, 0.7);
+}
+
+.vtt-overlay-editor__exit {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: calc(1.3rem * var(--vtt-overlay-scale, 1));
+  height: calc(1.3rem * var(--vtt-overlay-scale, 1));
+  padding: 0;
+  border: 1px solid rgba(120, 90, 60, 0.5);
+  border-radius: 3px;
+  background: rgba(60, 30, 20, 0.8);
+  color: rgba(226, 232, 240, 0.9);
+  font-size: calc(1rem * var(--vtt-overlay-scale, 1));
+  line-height: 1;
+  cursor: pointer;
+  pointer-events: auto;
+  flex-shrink: 0;
+}
+
+.vtt-overlay-editor__exit:hover {
+  background: rgba(120, 40, 30, 0.9);
+  border-color: rgba(180, 80, 60, 0.7);
+  color: #fff;
 }
 
 .vtt-overlay-editor__controls {

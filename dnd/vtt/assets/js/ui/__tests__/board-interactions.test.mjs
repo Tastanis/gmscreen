@@ -3324,6 +3324,85 @@ test('clip path percentages align with overlay div coordinate space', () => {
   }
 });
 
+test('clip path does not double-count grid offsets', () => {
+  const dom = createDom();
+  try {
+    const { document } = dom.window;
+
+    const board = document.getElementById('vtt-board-canvas');
+    board.getBoundingClientRect = () => ({
+      width: 800,
+      height: 800,
+      top: 0, left: 0, right: 800, bottom: 800,
+    });
+
+    // Map is 800x800 but the grid area is inset by 80px on each side,
+    // leaving a 640x640 inner area with 10x10 grid cells (gridSize 64).
+    const store = createMockStore({
+      user: { isGM: true, name: 'GM' },
+      scenes: { items: [{ id: 'scene-1', name: 'Scene 1' }] },
+      boardState: {
+        activeSceneId: 'scene-1',
+        mapUrl: 'http://example.com/map.png',
+        sceneState: {
+          'scene-1': {
+            grid: { size: 64, visible: true, offsets: { top: 80, right: 80, bottom: 80, left: 80 } },
+            overlay: buildOverlayState('http://example.com/overlay.png'),
+          },
+        },
+        overlay: buildOverlayState('http://example.com/overlay.png'),
+      },
+      grid: { size: 64, visible: true, offsets: { top: 80, right: 80, bottom: 80, left: 80 } },
+    });
+
+    mountBoardInteractions(store);
+
+    const mapImage = document.getElementById('vtt-map-image');
+    Object.defineProperty(mapImage, 'naturalWidth', { value: 800, configurable: true });
+    Object.defineProperty(mapImage, 'naturalHeight', { value: 800, configurable: true });
+    mapImage.onload?.();
+
+    // Polygon at grid column 2-4, row 2-4
+    store.updateState((draft) => {
+      const mask = {
+        visible: true,
+        polygons: [
+          {
+            points: [
+              { column: 2, row: 2 },
+              { column: 4, row: 2 },
+              { column: 4, row: 4 },
+              { column: 2, row: 4 },
+            ],
+          },
+        ],
+      };
+      draft.boardState.sceneState['scene-1'].overlay = buildOverlayState(
+        'http://example.com/overlay.png',
+        mask
+      );
+      draft.boardState.overlay = buildOverlayState('http://example.com/overlay.png', mask);
+    });
+
+    const mapOverlay = document.getElementById('vtt-map-overlay');
+    const overlayLayer = mapOverlay.querySelector('.vtt-board__map-overlay-layer');
+    assert.ok(overlayLayer, 'overlay layer should exist');
+
+    const clipPath = overlayLayer.style.clipPath || overlayLayer.style.webkitClipPath;
+    assert.ok(clipPath, 'clip-path should be set');
+
+    // The overlay element is already inset by 80px via CSS.  Clip-path
+    // coordinates must be relative to this inner area: column 2 * 64 = 128,
+    // column 4 * 64 = 256.  Without the fix, the offsets would be added again
+    // giving M 208 208 (128+80) which is the desync bug.
+    const expectedClipPath =
+      "path('M 128 128 L 256 128 L 256 256 L 128 256 Z')";
+    assert.equal(clipPath, expectedClipPath, 'clip-path must not include grid offsets (overlay is already inset)');
+  } finally {
+    dom.window.close();
+  }
+});
+
 test('overlay layer background-size is always 100% 100% for proper alignment', () => {
   const dom = createDom();
   try {
@@ -3524,6 +3603,67 @@ test('overlay editor toolbar is visible at position (0,0) on first activation', 
     const toolbarY = editor.style.getPropertyValue('--overlay-toolbar-y');
     assert.equal(toolbarX, '0px', 'toolbar should be positioned at x=0 on first activation');
     assert.equal(toolbarY, '0px', 'toolbar should be positioned at y=0 on first activation');
+  } finally {
+    dom.window.close();
+  }
+});
+
+test('overlay editor has an exit button that closes the editor', () => {
+  const dom = createDom();
+  try {
+    const { document, MouseEvent } = dom.window;
+
+    const sceneManager = document.createElement('div');
+    sceneManager.id = 'scene-manager';
+    const toggleButton = document.createElement('button');
+    toggleButton.dataset.action = 'toggle-overlay-editor';
+    toggleButton.setAttribute('data-scene-id', 'scene-1');
+    sceneManager.append(toggleButton);
+    document.body.append(sceneManager);
+
+    const initialState = {
+      user: { isGM: true, name: 'GM' },
+      boardState: {
+        activeSceneId: 'scene-1',
+        mapUrl: 'http://example.com/map.png',
+        sceneState: {
+          'scene-1': {
+            overlay: buildOverlayState('http://example.com/overlay.png'),
+          },
+        },
+      },
+      scenes: { items: [{ id: 'scene-1', name: 'Scene One' }] },
+    };
+
+    const store = createMockStore(initialState);
+    mountBoardInteractions(store);
+
+    const board = document.getElementById('vtt-board-canvas');
+    board.getBoundingClientRect = () => ({
+      width: 512, height: 512,
+      top: 0, right: 512, bottom: 512, left: 0,
+    });
+
+    const mapImage = document.getElementById('vtt-map-image');
+    Object.defineProperty(mapImage, 'naturalWidth', { value: 512, configurable: true });
+    Object.defineProperty(mapImage, 'naturalHeight', { value: 512, configurable: true });
+    mapImage.onload?.();
+
+    // Activate the editor
+    toggleButton.dispatchEvent(new MouseEvent('click', { bubbles: true }));
+
+    const editor = document.querySelector('.vtt-overlay-editor');
+    assert.ok(editor, 'overlay editor should exist');
+    assert.equal(editor.hidden, false, 'editor should be visible after activation');
+
+    // Find and click the exit button
+    const exitButton = editor.querySelector('.vtt-overlay-editor__exit');
+    assert.ok(exitButton, 'exit button should exist in the toolbar');
+    assert.equal(exitButton.textContent, '\u00D7', 'exit button should display X character');
+
+    exitButton.dispatchEvent(new MouseEvent('click', { bubbles: true }));
+
+    assert.equal(editor.hidden, true, 'editor should be hidden after clicking exit button');
   } finally {
     dom.window.close();
   }

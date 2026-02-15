@@ -5752,8 +5752,17 @@ export function mountBoardInteractions(store, routes = {}) {
 
     const offsets = view?.gridOffsets ?? {};
     const offsetLeft = Number.isFinite(offsets.left) ? offsets.left : 0;
+    const offsetRight = Number.isFinite(offsets.right) ? offsets.right : 0;
     const offsetTop = Number.isFinite(offsets.top) ? offsets.top : 0;
+    const offsetBottom = Number.isFinite(offsets.bottom) ? offsets.bottom : 0;
     const gridSize = Math.max(8, Number.isFinite(view?.gridSize) ? view.gridSize : 64);
+
+    // The clip-path is applied to the overlay layer element which is already
+    // inset by the grid offsets via CSS positioning.  Coordinates must be
+    // relative to this inner area, so we do NOT add offsetLeft/offsetTop and
+    // we clamp to the inner dimensions rather than the full map size.
+    const innerWidth = Math.max(0, mapWidth - offsetLeft - offsetRight);
+    const innerHeight = Math.max(0, mapHeight - offsetTop - offsetBottom);
 
     const commands = [];
 
@@ -5765,8 +5774,8 @@ export function mountBoardInteractions(store, routes = {}) {
 
       const path = points
         .map((point, index) => {
-          const px = clamp(roundToPrecision(offsetLeft + (point.column ?? 0) * gridSize, 2), 0, mapWidth);
-          const py = clamp(roundToPrecision(offsetTop + (point.row ?? 0) * gridSize, 2), 0, mapHeight);
+          const px = clamp(roundToPrecision((point.column ?? 0) * gridSize, 2), 0, innerWidth);
+          const py = clamp(roundToPrecision((point.row ?? 0) * gridSize, 2), 0, innerHeight);
           if (!Number.isFinite(px) || !Number.isFinite(py)) {
             return null;
           }
@@ -15190,8 +15199,24 @@ function createOverlayTool(uploadsEndpoint) {
   toolbar.addEventListener('pointercancel', handleToolbarPointerCancel);
   toolbar.addEventListener('lostpointercapture', handleToolbarPointerCancel);
 
+  const toolbarHeader = document.createElement('div');
+  toolbarHeader.className = 'vtt-overlay-editor__header';
+
   const dragHandle = document.createElement('div');
   dragHandle.className = 'vtt-overlay-editor__drag-handle';
+
+  const exitButton = document.createElement('button');
+  exitButton.type = 'button';
+  exitButton.className = 'vtt-overlay-editor__exit';
+  exitButton.setAttribute('aria-label', 'Close overlay editor');
+  exitButton.textContent = '\u00D7';
+  exitButton.addEventListener('click', (event) => {
+    event.preventDefault();
+    event.stopPropagation();
+    toggle();
+  });
+
+  toolbarHeader.append(dragHandle, exitButton);
 
   const controls = document.createElement('div');
   controls.className = 'vtt-overlay-editor__controls';
@@ -15223,7 +15248,7 @@ function createOverlayTool(uploadsEndpoint) {
   statusLabel.className = 'vtt-overlay-editor__status';
   statusLabel.hidden = true;
 
-  toolbar.append(dragHandle, controls, statusLabel);
+  toolbar.append(toolbarHeader, controls, statusLabel);
   editor.append(toolbar);
 
   const handlesLayer = document.createElement('div');
