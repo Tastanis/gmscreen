@@ -268,6 +268,15 @@ export function createBoardStatePoller({
         return;
       }
 
+      // Reject stale player snapshots when current state has newer GM data
+      if (!snapshotAuthorIsGm && currentAuthorIsGm &&
+          snapshotUpdatedAt > 0 && currentUpdatedAt > 0 &&
+          snapshotUpdatedAt < currentUpdatedAt) {
+        lastHash = hash;
+        pollErrorLogged = false;
+        return;
+      }
+
       lastHash = hash;
       pollErrorLogged = false;
 
@@ -4840,9 +4849,7 @@ export function mountBoardInteractions(store, routes = {}) {
     }
 
     const state = boardApi.getState?.() ?? {};
-    if (!state?.user?.isGM) {
-      return;
-    }
+    const isGM = Boolean(state?.user?.isGM);
 
     const activeSceneId = state.boardState?.activeSceneId ?? null;
     if (!activeSceneId) {
@@ -4864,7 +4871,14 @@ export function mountBoardInteractions(store, routes = {}) {
         if (!placement || typeof placement !== 'object') {
           return true;
         }
-        return !selectedSet.has(placement.id);
+        if (!selectedSet.has(placement.id)) {
+          return true;
+        }
+        // Non-GM players can only remove non-hidden tokens
+        if (!isGM && placement.hidden) {
+          return true;
+        }
+        return false;
       });
       removedCount = scenePlacements.length - nextPlacements.length;
       if (removedCount > 0) {
@@ -6414,7 +6428,7 @@ export function mountBoardInteractions(store, routes = {}) {
     });
 
     const representativeSet = renderedRepresentatives;
-    if (activeCombatantId && !representativeSet.has(activeCombatantId)) {
+    if (activeCombatantId && !representativeSet.has(activeCombatantId) && isGmUser()) {
       setActiveCombatantId(null);
     }
 
@@ -6669,7 +6683,7 @@ export function mountBoardInteractions(store, routes = {}) {
 
     toRemove.forEach((id) => completedCombatants.delete(id));
 
-    if (activeCombatantId && !representativeSet.has(activeCombatantId)) {
+    if (activeCombatantId && !representativeSet.has(activeCombatantId) && isGmUser()) {
       setActiveCombatantId(null);
     }
   }
@@ -7203,8 +7217,9 @@ export function mountBoardInteractions(store, routes = {}) {
       return result;
     }
 
-    // Default: allow with override
-    if (isOverride) {
+    // Default: not valid, but allow confirmation to override
+    result.requiresConfirmation = true;
+    if (isOverride || isSharonOverride) {
       result.valid = true;
     }
 

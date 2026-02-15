@@ -1,6 +1,6 @@
 {
   "scripts": {
-    "test": "node --test dnd/vtt/assets/js"
+    "test": "node --test 'dnd/vtt/assets/js/**/*.test.mjs'"
   },
   "dependencies": {
     "playwright": "^1.55.0"

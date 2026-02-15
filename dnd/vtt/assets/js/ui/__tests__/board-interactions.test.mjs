@@ -54,7 +54,7 @@ function createDom() {
   const { window } = dom;
   globalThis.window = window;
   globalThis.document = window.document;
-  globalThis.navigator = window.navigator;
+  Object.defineProperty(globalThis, 'navigator', { value: window.navigator, writable: true, configurable: true });
   globalThis.HTMLElement = window.HTMLElement;
   globalThis.Element = window.Element;
   globalThis.Node = window.Node;
@@ -715,10 +715,16 @@ test('Sharon confirmation is required for other allies but triggers Hesitation b
       throw new Error('Sharon should not be prompted when selecting her own token');
     };
 
+    // Advance Date.now past the double-click debounce window (300ms)
+    const originalDateNow = Date.now;
+    let timeOffset = 500;
+    Date.now = () => originalDateNow.call(Date) + timeOffset;
+
     const sharonToken = document.querySelector('[data-combatant-id="sharon-token"]');
     assert.ok(sharonToken, 'Sharon combatant should render');
 
     sharonToken.dispatchEvent(new window.MouseEvent('dblclick', { bubbles: true }));
+    Date.now = originalDateNow;
 
     const banner = document.querySelector('.vtt-hesitation-banner');
     assert.ok(banner, 'Hesitation banner should appear for Sharon overriding her own turn');
@@ -2165,7 +2171,7 @@ test('Sharon hesitation broadcast from shared combat state shows banner for obse
               lastEffect: {
                 type: 'sharon-hesitation',
                 combatantId: 'sharon-token',
-                triggeredAt: 1700000000000,
+                triggeredAt: Date.now(),
                 initiatorId: 'sharon',
               },
             },

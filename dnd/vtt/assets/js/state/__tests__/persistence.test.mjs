@@ -147,7 +147,7 @@ test('queueSave resolves completion listeners when save finishes', async (t) => 
   request.resolve({ ok: true, json: async () => ({}) });
 
   const outcome = await promise;
-  assert.deepEqual(outcome, { success: true, aborted: false, error: null });
+  assert.deepEqual(outcome, { success: true, aborted: false, error: null, data: null });
   assert.equal(results.length, 1);
   assert.deepEqual(results[0], outcome);
 });
