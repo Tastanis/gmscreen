@@ -302,8 +302,17 @@ function mergeSceneEntriesByTimestamp(array $existingEntries, array $incomingEnt
 
             // Keep the entry with newer timestamp (or incoming if equal/no timestamp)
             if ($incomingTimestamp >= $existingTimestamp) {
-                // Preserve GM markers if the existing entry was GM-authored
-                if (isGmAuthoredBoardEntry($existingEntry)) {
+                // When BOTH entries are GM-authored, the incoming GM update wins completely.
+                // This allows the GM to change fields like 'hidden' without the server
+                // reverting them via restoreGmMarkers. We still use array_replace_recursive
+                // to preserve fields from the existing entry that the delta might not include
+                // (e.g. monster snapshots), but we do NOT call restoreGmMarkers.
+                if (isGmAuthoredBoardEntry($existingEntry) && isGmAuthoredBoardEntry($entry)) {
+                    $existingById[$id] = array_replace_recursive($existingEntry, $entry);
+                } elseif (isGmAuthoredBoardEntry($existingEntry)) {
+                    // Only the existing entry is GM-authored (incoming is from a player).
+                    // Preserve GM markers to prevent players from modifying GM-controlled
+                    // fields like 'hidden'.
                     $existingById[$id] = mergeGmAuthoredEntry($existingEntry, $entry);
                 } else {
                     $existingById[$id] = $entry;

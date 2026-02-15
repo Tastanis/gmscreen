@@ -12384,6 +12384,9 @@ export function mountBoardInteractions(store, routes = {}) {
         return;
       }
       mutator(target);
+      // Set _lastModified so server-side timestamp-based conflict resolution
+      // correctly identifies this as a newer update.
+      target._lastModified = Date.now();
       if (gmUser) {
         markPlacementAsGmAuthored(target, { isGm: gmUser });
       }
@@ -12391,6 +12394,7 @@ export function mountBoardInteractions(store, routes = {}) {
     });
 
     if (updated && syncBoard) {
+      markPlacementDirty(activeSceneId, placementId);
       savePromise = persistBoardStateSnapshot();
     }
 
@@ -12433,6 +12437,7 @@ export function mountBoardInteractions(store, routes = {}) {
       if (!Array.isArray(scenePlacements) || !scenePlacements.length) {
         return;
       }
+      const updateTimestamp = Date.now();
       scenePlacements.forEach((placement) => {
         if (!placement || typeof placement !== 'object') {
           return;
@@ -12441,6 +12446,10 @@ export function mountBoardInteractions(store, routes = {}) {
           return;
         }
         mutator(placement);
+        // Set _lastModified so server-side timestamp-based conflict resolution
+        // correctly identifies this as a newer update. Without this, the timestamp
+        // falls back to 0 and stale state can overwrite these changes.
+        placement._lastModified = updateTimestamp;
         if (gmUser) {
           markPlacementAsGmAuthored(placement, { isGm: gmUser });
         }
