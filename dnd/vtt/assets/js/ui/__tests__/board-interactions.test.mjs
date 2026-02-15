@@ -798,7 +798,7 @@ test('overlay editor preview applies clip path while editing', () => {
     const overlayLayer = mapOverlay.querySelector('.vtt-board__map-overlay-layer');
     assert.ok(overlayLayer, 'overlay layer element should render');
     const expectedClipPath =
-      "path('M 12.5% 12.5% L 37.5% 12.5% L 37.5% 37.5% L 12.5% 37.5% Z')";
+      "path('M 64 64 L 192 64 L 192 192 L 64 192 Z')";
 
     assert.equal(overlayLayer.style.clipPath, expectedClipPath);
     assert.equal(overlayLayer.style.webkitClipPath, expectedClipPath);
@@ -884,11 +884,11 @@ test('overlay clip path uses only provided polygons and keeps both visible', () 
     const clipPath = overlayLayer.style.clipPath || overlayLayer.style.webkitClipPath;
 
     const expectedClipPath =
-      "path('M 0% 0% L 50% 0% L 50% 50% L 0% 50% Z M 50% 50% L 100% 50% L 100% 0% L 50% 0% Z')";
+      "path('M 0 0 L 320 0 L 320 320 L 0 320 Z M 320 320 L 640 320 L 640 0 L 320 0 Z')";
     assert.equal(
       clipPath,
       expectedClipPath,
-      'clip path should include the provided polygons with even-odd fill rule',
+      'clip path should include the provided polygons using pixel coordinates',
     );
 
     const segments = clipPath.match(/M /g) ?? [];
@@ -2496,9 +2496,9 @@ test('polygon overlay clip path omits implicit bounding box', () => {
     assert.ok(overlayLayer, 'overlay layer element should render');
     const clipPath = overlayLayer.style.clipPath || overlayLayer.style.webkitClipPath;
     const expectedClipPath =
-      "path('M 20% 30% L 40% 30% L 40% 60% L 20% 60% Z')";
+      "path('M 128 192 L 256 192 L 256 384 L 128 384 Z')";
 
-    assert.equal(clipPath, expectedClipPath);
+    assert.equal(clipPath, expectedClipPath, 'clip path should use pixel coordinates');
   } finally {
     dom.window.close();
   }
@@ -3315,10 +3315,10 @@ test('clip path percentages align with overlay div coordinate space', () => {
     const clipPath = overlayLayer.style.clipPath || overlayLayer.style.webkitClipPath;
     assert.ok(clipPath, 'clip-path should be set');
 
-    // With 10 columns and 10 rows, column 2 = 20%, column 4 = 40%
+    // With grid size 64, column 2 = 128px, column 4 = 256px
     const expectedClipPath =
-      "path('M 20% 20% L 40% 20% L 40% 40% L 20% 40% Z')";
-    assert.equal(clipPath, expectedClipPath, 'clip-path percentages should match grid coordinates');
+      "path('M 128 128 L 256 128 L 256 256 L 128 256 Z')";
+    assert.equal(clipPath, expectedClipPath, 'clip-path should use pixel coordinates matching grid positions');
   } finally {
     dom.window.close();
   }
@@ -3379,6 +3379,225 @@ test('overlay layer background-size is always 100% 100% for proper alignment', (
       overlayLayer.style.backgroundImage.includes('overlay.png'),
       'overlay layer should have the overlay map as background'
     );
+  } finally {
+    dom.window.close();
+  }
+});
+
+test('overlay clip path uses pixel coordinates instead of invalid percentage units', () => {
+  const dom = createDom();
+  try {
+    const { document, MouseEvent } = dom.window;
+
+    const sceneManager = document.createElement('div');
+    sceneManager.id = 'scene-manager';
+    const toggleButton = document.createElement('button');
+    toggleButton.dataset.action = 'toggle-overlay-editor';
+    toggleButton.setAttribute('data-scene-id', 'scene-1');
+    sceneManager.append(toggleButton);
+    document.body.append(sceneManager);
+
+    const initialState = {
+      user: { isGM: true, name: 'GM' },
+      boardState: {
+        activeSceneId: 'scene-1',
+        mapUrl: 'http://example.com/map.png',
+        sceneState: {
+          'scene-1': {
+            overlay: buildOverlayState('http://example.com/overlay.png', {
+              visible: true,
+              polygons: [
+                {
+                  points: [
+                    { column: 2, row: 2 },
+                    { column: 6, row: 2 },
+                    { column: 6, row: 6 },
+                    { column: 2, row: 6 },
+                  ],
+                },
+              ],
+            }),
+          },
+        },
+      },
+      scenes: { items: [{ id: 'scene-1', name: 'Scene One' }] },
+    };
+
+    const store = createMockStore(initialState);
+    mountBoardInteractions(store);
+
+    const board = document.getElementById('vtt-board-canvas');
+    board.getBoundingClientRect = () => ({
+      width: 512,
+      height: 512,
+      top: 0,
+      right: 512,
+      bottom: 512,
+      left: 0,
+    });
+
+    const mapImage = document.getElementById('vtt-map-image');
+    Object.defineProperty(mapImage, 'naturalWidth', { value: 512, configurable: true });
+    Object.defineProperty(mapImage, 'naturalHeight', { value: 512, configurable: true });
+    mapImage.onload?.();
+
+    toggleButton.dispatchEvent(new MouseEvent('click', { bubbles: true }));
+
+    const mapOverlay = document.getElementById('vtt-map-overlay');
+    const overlayLayer = mapOverlay.querySelector('.vtt-board__map-overlay-layer');
+    assert.ok(overlayLayer, 'overlay layer element should render');
+    const clipPath = overlayLayer.style.clipPath || overlayLayer.style.webkitClipPath;
+
+    assert.ok(clipPath, 'clip path should be set on overlay layer');
+    assert.ok(
+      !clipPath.includes('%'),
+      'clip path should not contain percentage units (invalid in SVG path syntax)'
+    );
+
+    const expectedClipPath =
+      "path('M 128 128 L 384 128 L 384 384 L 128 384 Z')";
+    assert.equal(
+      clipPath,
+      expectedClipPath,
+      'clip path should use absolute pixel coordinates'
+    );
+  } finally {
+    dom.window.close();
+  }
+});
+
+test('overlay editor toolbar is visible at position (0,0) on first activation', () => {
+  const dom = createDom();
+  try {
+    const { document, MouseEvent } = dom.window;
+
+    const sceneManager = document.createElement('div');
+    sceneManager.id = 'scene-manager';
+    const toggleButton = document.createElement('button');
+    toggleButton.dataset.action = 'toggle-overlay-editor';
+    toggleButton.setAttribute('data-scene-id', 'scene-1');
+    sceneManager.append(toggleButton);
+    document.body.append(sceneManager);
+
+    const initialState = {
+      user: { isGM: true, name: 'GM' },
+      boardState: {
+        activeSceneId: 'scene-1',
+        mapUrl: 'http://example.com/map.png',
+        sceneState: {
+          'scene-1': {
+            overlay: buildOverlayState('http://example.com/overlay.png'),
+          },
+        },
+      },
+      scenes: { items: [{ id: 'scene-1', name: 'Scene One' }] },
+    };
+
+    const store = createMockStore(initialState);
+    mountBoardInteractions(store);
+
+    const board = document.getElementById('vtt-board-canvas');
+    board.getBoundingClientRect = () => ({
+      width: 512,
+      height: 512,
+      top: 0,
+      right: 512,
+      bottom: 512,
+      left: 0,
+    });
+
+    const mapImage = document.getElementById('vtt-map-image');
+    Object.defineProperty(mapImage, 'naturalWidth', { value: 512, configurable: true });
+    Object.defineProperty(mapImage, 'naturalHeight', { value: 512, configurable: true });
+    mapImage.onload?.();
+
+    toggleButton.dispatchEvent(new MouseEvent('click', { bubbles: true }));
+
+    const editor = document.querySelector('.vtt-overlay-editor');
+    assert.ok(editor, 'overlay editor element should exist');
+    assert.equal(editor.hidden, false, 'editor should be visible after activation');
+
+    const toolbar = editor.querySelector('.vtt-overlay-editor__toolbar');
+    assert.ok(toolbar, 'toolbar should exist');
+
+    const toolbarX = editor.style.getPropertyValue('--overlay-toolbar-x');
+    const toolbarY = editor.style.getPropertyValue('--overlay-toolbar-y');
+    assert.equal(toolbarX, '0px', 'toolbar should be positioned at x=0 on first activation');
+    assert.equal(toolbarY, '0px', 'toolbar should be positioned at y=0 on first activation');
+  } finally {
+    dom.window.close();
+  }
+});
+
+test('overlay editor nodes use compact sizing for precise placement', () => {
+  const dom = createDom();
+  try {
+    const { document, MouseEvent } = dom.window;
+
+    const sceneManager = document.createElement('div');
+    sceneManager.id = 'scene-manager';
+    const toggleButton = document.createElement('button');
+    toggleButton.dataset.action = 'toggle-overlay-editor';
+    toggleButton.setAttribute('data-scene-id', 'scene-1');
+    sceneManager.append(toggleButton);
+    document.body.append(sceneManager);
+
+    const initialState = {
+      user: { isGM: true, name: 'GM' },
+      boardState: {
+        activeSceneId: 'scene-1',
+        mapUrl: 'http://example.com/map.png',
+        sceneState: {
+          'scene-1': {
+            overlay: buildOverlayState('http://example.com/overlay.png'),
+          },
+        },
+      },
+      scenes: { items: [{ id: 'scene-1', name: 'Scene One' }] },
+    };
+
+    const store = createMockStore(initialState);
+    mountBoardInteractions(store);
+
+    const board = document.getElementById('vtt-board-canvas');
+    board.getBoundingClientRect = () => ({
+      width: 512,
+      height: 512,
+      top: 0,
+      right: 512,
+      bottom: 512,
+      left: 0,
+    });
+
+    const surface = document.getElementById('vtt-map-surface');
+    surface.getBoundingClientRect = () => ({
+      width: 512,
+      height: 512,
+      top: 0,
+      left: 0,
+      right: 512,
+      bottom: 512,
+    });
+
+    const mapImage = document.getElementById('vtt-map-image');
+    Object.defineProperty(mapImage, 'naturalWidth', { value: 512, configurable: true });
+    Object.defineProperty(mapImage, 'naturalHeight', { value: 512, configurable: true });
+    mapImage.onload?.();
+
+    toggleButton.dispatchEvent(new MouseEvent('click', { bubbles: true }));
+
+    dispatchPointerEvent(surface, 'pointerdown', { clientX: 64, clientY: 64, pointerId: 1 });
+    dispatchPointerEvent(surface, 'pointerdown', { clientX: 320, clientY: 64, pointerId: 2 });
+    dispatchPointerEvent(surface, 'pointerdown', { clientX: 320, clientY: 320, pointerId: 3 });
+
+    const nodes = document.querySelectorAll('.vtt-overlay-editor__node');
+    assert.equal(nodes.length, 3, 'three nodes should render for three placed points');
+
+    const segments = document.querySelectorAll('.vtt-overlay-editor__segment');
+    assert.equal(segments.length, 2, 'two segments should connect the three nodes');
+
+    const startNode = document.querySelector('.vtt-overlay-editor__node.is-start');
+    assert.ok(startNode, 'first node should have the is-start class');
   } finally {
     dom.window.close();
   }

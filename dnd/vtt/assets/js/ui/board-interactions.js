@@ -5744,12 +5744,16 @@ export function mountBoardInteractions(store, routes = {}) {
       return '';
     }
 
-    const bounds = resolveGridBounds(view);
-    const totalColumns = Number.isFinite(bounds?.columns) ? bounds.columns : 0;
-    const totalRows = Number.isFinite(bounds?.rows) ? bounds.rows : 0;
-    if (totalColumns <= 0 || totalRows <= 0) {
+    const mapWidth = Number.isFinite(view?.mapPixelSize?.width) ? view.mapPixelSize.width : 0;
+    const mapHeight = Number.isFinite(view?.mapPixelSize?.height) ? view.mapPixelSize.height : 0;
+    if (mapWidth <= 0 || mapHeight <= 0) {
       return '';
     }
+
+    const offsets = view?.gridOffsets ?? {};
+    const offsetLeft = Number.isFinite(offsets.left) ? offsets.left : 0;
+    const offsetTop = Number.isFinite(offsets.top) ? offsets.top : 0;
+    const gridSize = Math.max(8, Number.isFinite(view?.gridSize) ? view.gridSize : 64);
 
     const commands = [];
 
@@ -5761,12 +5765,12 @@ export function mountBoardInteractions(store, routes = {}) {
 
       const path = points
         .map((point, index) => {
-          const xPercent = clamp(((point.column ?? 0) / totalColumns) * 100, 0, 100);
-          const yPercent = clamp(((point.row ?? 0) / totalRows) * 100, 0, 100);
-          if (!Number.isFinite(xPercent) || !Number.isFinite(yPercent)) {
+          const px = clamp(roundToPrecision(offsetLeft + (point.column ?? 0) * gridSize, 2), 0, mapWidth);
+          const py = clamp(roundToPrecision(offsetTop + (point.row ?? 0) * gridSize, 2), 0, mapHeight);
+          if (!Number.isFinite(px) || !Number.isFinite(py)) {
             return null;
           }
-          return `${index === 0 ? 'M' : 'L'} ${roundToPrecision(xPercent, 4)}% ${roundToPrecision(yPercent, 4)}%`;
+          return `${index === 0 ? 'M' : 'L'} ${px} ${py}`;
         })
         .filter(Boolean);
 
@@ -15616,6 +15620,9 @@ function createOverlayTool(uploadsEndpoint) {
     attachOverlayDropProxies();
     setButtonState(true);
     setStatus(DEFAULT_STATUS);
+    if (!toolbarPosition) {
+      applyToolbarPosition(0, 0);
+    }
     renderHandles();
     applyPreviewMask();
     updateControls();
