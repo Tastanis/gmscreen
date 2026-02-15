@@ -5,7 +5,7 @@
   top: 0;
   left: 0;
   pointer-events: none;
-  z-index: 1;
+  z-index: 3;
   image-rendering: pixelated;
 }
 
@@ -16,7 +16,7 @@
   top: 0;
   left: 0;
   pointer-events: none;
-  z-index: 2;
+  z-index: 4;
   image-rendering: pixelated;
 }
 

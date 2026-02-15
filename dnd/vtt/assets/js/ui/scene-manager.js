@@ -1344,9 +1344,10 @@ function renderOverlayListItem(sceneId, overlayState, layer, index, options = {}
   const visibilityTitle = options.isActiveScene
     ? 'Toggle overlay visibility.'
     : 'Activate this scene to toggle overlay visibility.';
-  const editDisabled = !options.isActiveScene || !options.overlayMapSet;
+  const layerHasMap = Boolean(layer.mapUrl);
+  const editDisabled = !options.isActiveScene || (!options.overlayMapSet && !layerHasMap);
   let editTitle = '';
-  if (!options.overlayMapSet) {
+  if (!options.overlayMapSet && !layerHasMap) {
     editTitle = 'Upload an overlay image before editing the overlay mask.';
   } else if (!options.isActiveScene) {
     editTitle = 'Activate this scene to edit this overlay.';
