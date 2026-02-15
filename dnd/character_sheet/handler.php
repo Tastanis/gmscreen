@@ -301,6 +301,10 @@ function sendJsonResponse($payload) {
     exit;
 }
 
+if (defined('HANDLER_INCLUDE_ONLY') && HANDLER_INCLUDE_ONLY) {
+    return;
+}
+
 $requestMethod = $_SERVER['REQUEST_METHOD'];
 
 if ($requestMethod !== 'POST' && $requestMethod !== 'GET') {
