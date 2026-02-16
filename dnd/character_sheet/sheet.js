@@ -910,30 +910,26 @@ function renderHeroPane() {
 
   pane.innerHTML = `
     <section class="hero-grid">
-      <div class="identity identity--primary">
-        <div class="identity-group">
-          <div class="field-card large identity-group__name">
-            <label>Name</label>
-            <div class="display-value">${hero.name || "Unnamed Hero"}</div>
-            <input class="edit-field" type="text" data-model="hero.name" value="${hero.name || ""}" />
-          </div>
-          <div class="field-card">
-            <label>Level</label>
-            <div class="display-value">${hero.level || ""}</div>
-            <input class="edit-field" type="number" min="1" data-model="hero.level" value="${hero.level || ""}" />
-          </div>
-          <div class="field-card">
-            <label>Class</label>
-            <div class="display-value">${hero.class || ""}</div>
-            <input class="edit-field" type="text" data-model="hero.class" value="${hero.class || ""}" />
-          </div>
-          <div class="field-card">
-            <label>Class Track</label>
-            <div class="display-value">${hero.classTrack || ""}</div>
-            <input class="edit-field" type="text" data-model="hero.classTrack" value="${hero.classTrack || ""}" />
-          </div>
+      ${isEditMode ? `
+      <div class="identity-edit-row">
+        <div class="field-card">
+          <label>Name</label>
+          <input class="edit-field" type="text" data-model="hero.name" value="${hero.name || ""}" />
+        </div>
+        <div class="field-card">
+          <label>Level</label>
+          <input class="edit-field" type="number" min="1" data-model="hero.level" value="${hero.level || ""}" />
+        </div>
+        <div class="field-card">
+          <label>Class</label>
+          <input class="edit-field" type="text" data-model="hero.class" value="${hero.class || ""}" />
+        </div>
+        <div class="field-card">
+          <label>Class Track</label>
+          <input class="edit-field" type="text" data-model="hero.classTrack" value="${hero.classTrack || ""}" />
         </div>
       </div>
+      ` : ""}
 
       <div class="marip-block">
         <div class="stat-grid">
@@ -945,11 +941,17 @@ function renderHeroPane() {
         </div>
       </div>
 
+      <div class="key-vitals-row">
+        ${vitalField("Victories", "hero.victories", "number")}
+        ${vitalField("Size", "hero.vitals.size")}
+        ${vitalField("Stability", "hero.vitals.stability")}
+        ${vitalField("Speed", "hero.vitals.speed")}
+      </div>
+
       <div class="quick-resources">
         ${identityField("Wealth", "hero.wealth")}
         ${identityField("Renown", "hero.renown")}
         ${identityField("XP", "hero.xp")}
-        ${identityField("Victories", "hero.victories")}
         ${identityField("Surges", "hero.surges")}
         ${
           isEditMode
@@ -979,9 +981,6 @@ function renderHeroPane() {
       </div>
 
       <div class="vital-grid">
-        ${vitalField("Size", "hero.vitals.size")}
-        ${vitalField("Speed", "hero.vitals.speed")}
-        ${vitalField("Stability", "hero.vitals.stability")}
         ${vitalField("Disengage", "hero.vitals.disengage")}
         ${vitalField("Save", "hero.vitals.save")}
         ${vitalField("Stamina", "hero.vitals.staminaMax", "number")}
@@ -2434,8 +2433,10 @@ function bindAutoSave() {
 function updateHeading() {
   const heading = document.getElementById("hero-name-heading");
   if (!heading) return;
-  const name = sheetState.hero.name || "Tableside Hero View";
-  heading.textContent = name;
+  const hero = sheetState.hero;
+  const name = hero.name || "Tableside Hero View";
+  const details = [hero.level ? `Lvl ${hero.level}` : "", hero.class || "", hero.classTrack || ""].filter(Boolean).join(" \u2022 ");
+  heading.innerHTML = name + (details ? ` <span class="hero-heading-details">${details}</span>` : "");
 }
 
 function toggleEditMode(enabled) {
