@@ -1910,7 +1910,7 @@ function renderActionSection(type, containerId) {
             <article class="action-card action-card--collapsed" data-action-id="${action.id}" data-action-type="${type}">
               <header class="card-head">
                 <div class="card-head__left">
-                  <div class="display-value action-name" data-action-toggle>${action.name || "New Action"}</div>
+                  <div class="display-value action-name" data-action-toggle>${action.name || "New Action"}${costValue ? `<span class="cost-badge">\u2728 ${costValue}</span>` : ""}</div>
                   <input class="edit-field" type="text" data-field="name" value="${action.name || ""}" />
                   <div class="use-when-row">
                     <span class="use-when-label display-value">Use when:</span>
