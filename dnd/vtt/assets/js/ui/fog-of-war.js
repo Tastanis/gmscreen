@@ -22,6 +22,15 @@ const FOG_COLOR = '0,0,0';
 const SELECTION_FILL = 'rgba(70,160,255,0.25)';
 const SELECTION_STROKE = 'rgba(70,160,255,0.8)';
 
+// ── Debug logging (check F12 console) ────────────────────────────
+const FOG_DEBUG = true; // set to false to silence fog diagnostics
+function fogLog(...args) {
+  if (FOG_DEBUG) console.log('[FOG DEBUG]', ...args);
+}
+function fogWarn(...args) {
+  if (FOG_DEBUG) console.warn('[FOG DEBUG]', ...args);
+}
+
 // ── Module state ─────────────────────────────────────────────────
 
 let fogCanvas = null;
@@ -57,6 +66,19 @@ export function mountFogOfWar(options = {}) {
   if (fogCanvas) fogCtx = fogCanvas.getContext('2d');
   if (selCanvas) selCtx = selCanvas.getContext('2d');
 
+  fogLog('mountFogOfWar:', {
+    isGm,
+    hasBoardApi: !!boardApi,
+    hasViewState: !!viewStateRef,
+    hasFogCanvas: !!fogCanvas,
+    hasFogCtx: !!fogCtx,
+    hasSelCanvas: !!selCanvas,
+    hasSelCtx: !!selCtx,
+  });
+
+  if (!selCanvas) fogWarn('vtt-fog-selection-layer element NOT found in DOM');
+  if (!fogCanvas) fogWarn('vtt-fog-layer element NOT found in DOM');
+
   if (isGm) {
     mountPanel();
     mountFogSelectInteraction();
@@ -77,6 +99,7 @@ export function renderFog(state) {
 
   const fogState = getFogState(state, activeSceneId);
   if (!fogState || !fogState.enabled) {
+    fogLog('renderFog: fog OFF for scene', activeSceneId, '— fogState:', fogState);
     clearCanvas(fogCtx, fogCanvas);
     syncPanelToggle(false);
     return;
@@ -134,12 +157,16 @@ export function renderFog(state) {
  * Render the selection highlight overlay (separate canvas).
  */
 export function renderFogSelection() {
-  if (!selCanvas || !selCtx) return;
+  if (!selCanvas || !selCtx) {
+    fogWarn('renderFogSelection: missing canvas/ctx — selCanvas:', !!selCanvas, 'selCtx:', !!selCtx);
+    return;
+  }
 
   const view = viewStateRef ?? {};
   const mapW = Number.isFinite(view.mapPixelSize?.width) ? view.mapPixelSize.width : 0;
   const mapH = Number.isFinite(view.mapPixelSize?.height) ? view.mapPixelSize.height : 0;
   if (mapW <= 0 || mapH <= 0) {
+    fogWarn('renderFogSelection: mapPixelSize invalid — clearing canvas. mapW:', mapW, 'mapH:', mapH);
     clearCanvas(selCtx, selCanvas);
     return;
   }
@@ -234,6 +261,7 @@ export function isFogSelectActive() {
  * Toggle fog enabled/disabled for the given scene.
  */
 export function toggleFogForScene(sceneId, enabled, options = {}) {
+  fogLog('toggleFogForScene:', sceneId, 'enabled:', enabled);
   if (!boardApi || !sceneId) return;
 
   const markDirty = options.markSceneStateDirty;
@@ -390,6 +418,7 @@ function mountPanel() {
   // Select button
   panelEl.querySelector('[data-fog-select]')?.addEventListener('click', () => {
     fogSelectActive = !fogSelectActive;
+    fogLog('Select Area toggled:', fogSelectActive);
     updateSelectButtonState();
     if (!fogSelectActive) {
       clearFogSelection();
@@ -497,11 +526,21 @@ function clearFogSelection() {
  * Apply fog change (reveal or cover) to all selected cells.
  */
 function applyFogChange(addFog) {
-  if (selectedCells.size === 0) return;
+  fogLog('applyFogChange called — addFog:', addFog, 'selectedCells:', selectedCells.size);
+  if (selectedCells.size === 0) {
+    fogWarn('applyFogChange: no cells selected — aborting');
+    return;
+  }
 
   const state = boardApi?.getState?.() ?? {};
   const sceneId = state.boardState?.activeSceneId;
-  if (!sceneId) return;
+  if (!sceneId) {
+    fogWarn('applyFogChange: no activeSceneId — aborting');
+    return;
+  }
+
+  fogLog('applyFogChange: scene:', sceneId, 'cells:', Array.from(selectedCells).slice(0, 10).join('; '),
+    selectedCells.size > 10 ? `... (${selectedCells.size} total)` : '');
 
   const cellKeys = Array.from(selectedCells);
 
@@ -526,7 +565,18 @@ function applyFogChange(addFog) {
         fog.revealedCells[key] = true;
       }
     });
+
+    fogLog('applyFogChange: after update — fog.enabled:', fog.enabled,
+      'revealedCells count:', Object.keys(fog.revealedCells).length);
   });
+
+  // Verify the state was actually updated
+  const afterState = boardApi?.getState?.() ?? {};
+  const afterFog = afterState.boardState?.sceneState?.[sceneId]?.fogOfWar;
+  fogLog('applyFogChange: post-update verification — fogState:', afterFog ? {
+    enabled: afterFog.enabled,
+    revealedCount: afterFog.revealedCells ? Object.keys(afterFog.revealedCells).length : 0,
+  } : null);
 
   if (typeof boardApi._markSceneStateDirty === 'function') {
     boardApi._markSceneStateDirty(sceneId);
@@ -542,8 +592,12 @@ function applyFogChange(addFog) {
 
 function mountFogSelectInteraction() {
   const mapSurface = document.getElementById('vtt-map-surface');
-  if (!mapSurface) return;
+  if (!mapSurface) {
+    fogWarn('mountFogSelectInteraction: vtt-map-surface not found — fog selection will not work');
+    return;
+  }
 
+  fogLog('mountFogSelectInteraction: attaching pointerdown/move/up/cancel on', mapSurface.id);
   mapSurface.addEventListener('pointerdown', handleFogPointerDown, false);
   mapSurface.addEventListener('pointermove', handleFogPointerMove, false);
   mapSurface.addEventListener('pointerup', handleFogPointerUp, false);
@@ -551,12 +605,23 @@ function mountFogSelectInteraction() {
 }
 
 function handleFogPointerDown(event) {
+  fogLog('pointerdown on map surface — fogSelectActive:', fogSelectActive, 'button:', event.button);
   if (!fogSelectActive) return;
   // Only handle left-click for fog selection
   if (event.button !== 0) return;
 
   const gridPos = pointerToGridCell(event);
-  if (!gridPos) return;
+  fogLog('pointerToGridCell result:', gridPos);
+  if (!gridPos) {
+    fogWarn('pointerToGridCell returned null — selection aborted. viewState:', JSON.stringify({
+      scale: viewStateRef?.scale,
+      translation: viewStateRef?.translation,
+      gridSize: viewStateRef?.gridSize,
+      gridOffsets: viewStateRef?.gridOffsets,
+      mapPixelSize: viewStateRef?.mapPixelSize,
+    }));
+    return;
+  }
 
   // Prevent the default board interactions from also firing
   event.stopPropagation();
@@ -566,6 +631,7 @@ function handleFogPointerDown(event) {
   selectionStart = gridPos;
   selectionEnd = gridPos;
   updateSelectedCellsFromRect();
+  fogLog('selectedCells after pointerdown:', selectedCells.size, 'cells');
   renderFogSelection();
   updateActionButtonStates();
 }
