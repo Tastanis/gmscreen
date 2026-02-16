@@ -56,6 +56,14 @@ body {
 .header__title h1 {
   margin: 2px 0 4px;
   font-size: 28px;
+  color: #000;
+}
+
+.hero-heading-details {
+  font-size: 14px;
+  font-weight: 500;
+  color: #444;
+  letter-spacing: 0.02em;
 }
 
 .title__eyebrow {
@@ -238,29 +246,21 @@ body {
 
 .stat-grid {
   display: grid;
-  grid-template-columns: repeat(auto-fit, minmax(170px, 1fr));
-  gap: 12px;
+  grid-template-columns: repeat(5, 1fr);
+  gap: 8px;
 }
 
 .marip-block {
-  display: flex;
-  flex-direction: column;
-  gap: 6px;
-}
-
-/* 3D Raised parchment effect for attribute cards */
-.marip-block .stat-card {
   background: linear-gradient(145deg, #ebe0cf 0%, #e3d6c2 60%, #d8ccb5 100%);
   border-radius: 6px;
   position: relative;
+  padding: 14px 10px;
 
   /* Hard shadow creates visible "thickness" - raised parchment look */
   box-shadow:
-    /* Solid edge shadow - simulates parchment thickness */
     3px 3px 0 #b5a48a,
     4px 4px 0 #aa9a80,
     5px 5px 0 #a09276,
-    /* Soft ambient shadow */
     6px 6px 12px rgba(0, 0, 0, 0.12);
 
   /* Beveled border - light on top/left, dark on bottom/right */
@@ -271,8 +271,8 @@ body {
   border-bottom-color: #aa9a80;
 }
 
-/* Highlight shine on top face of parchment tablets */
-.marip-block .stat-card::before {
+/* Highlight shine on top face of marip container */
+.marip-block::before {
   content: '';
   position: absolute;
   top: 0;
@@ -285,7 +285,7 @@ body {
 }
 
 /* Inner embossed edge effect */
-.marip-block .stat-card::after {
+.marip-block::after {
   content: '';
   position: absolute;
   inset: 2px;
@@ -296,14 +296,32 @@ body {
   pointer-events: none;
 }
 
-/* Ensure stat card content stays above pseudo-elements */
-.marip-block .stat-card > * {
+/* Ensure marip-block content stays above pseudo-elements */
+.marip-block > * {
   position: relative;
   z-index: 1;
 }
 
+/* Individual stat cards within the shared container */
+.marip-block .stat-card {
+  background: transparent;
+  border: none;
+  border-radius: 0;
+  box-shadow: none;
+  padding: 8px 12px;
+  min-height: auto;
+  text-align: center;
+}
+
+.marip-block .stat-card::before,
+.marip-block .stat-card::after {
+  display: none;
+}
+
 /* Subtle 3D button effect for field-cards (less extreme than stat-cards) */
 .identity--primary .field-card,
+.identity-edit-row .field-card,
+.key-vitals-row .field-card,
 .bottom-details .field-card,
 .vital-grid .field-card,
 .bars .field-card,
@@ -328,6 +346,8 @@ body {
 
 /* Highlight shine on top face */
 .identity--primary .field-card::before,
+.identity-edit-row .field-card::before,
+.key-vitals-row .field-card::before,
 .bottom-details .field-card::before,
 .vital-grid .field-card::before,
 .bars .field-card::before,
@@ -345,6 +365,8 @@ body {
 
 /* Inner embossed edge effect */
 .identity--primary .field-card::after,
+.identity-edit-row .field-card::after,
+.key-vitals-row .field-card::after,
 .bottom-details .field-card::after,
 .vital-grid .field-card::after,
 .bars .field-card::after,
@@ -361,6 +383,8 @@ body {
 
 /* Ensure field-card content stays above pseudo-elements */
 .identity--primary .field-card > *,
+.identity-edit-row .field-card > *,
+.key-vitals-row .field-card > *,
 .bottom-details .field-card > *,
 .vital-grid .field-card > *,
 .bars .field-card > *,
@@ -436,9 +460,44 @@ body {
   background: var(--accent-strong);
 }
 
+/* Key vitals row: Victories, Size, Stability, Speed */
+.key-vitals-row {
+  display: grid;
+  grid-template-columns: repeat(4, 1fr);
+  gap: 8px;
+}
+
+.key-vitals-row .field-card {
+  text-align: center;
+}
+
+.key-vitals-row .field-card label {
+  font-size: 12px;
+  font-weight: 800;
+  color: #000;
+  letter-spacing: 0.06em;
+}
+
+.key-vitals-row .display-value {
+  font-size: 18px;
+  font-weight: 800;
+  color: #000;
+}
+
+/* Identity edit row - shown only in edit mode */
+.identity-edit-row {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+}
+
+.identity-edit-row .field-card {
+  flex: 1 1 140px;
+}
+
 .vital-grid {
   display: grid;
-  grid-template-columns: repeat(8, minmax(90px, 1fr));
+  grid-template-columns: repeat(5, minmax(90px, 1fr));
   gap: 6px;
 }
 
@@ -452,6 +511,7 @@ body {
   margin-bottom: 0;
   font-size: 10px;
   letter-spacing: 0.06em;
+  color: #000;
 }
 
 .vital-grid .display-value {
@@ -484,18 +544,19 @@ body {
   text-transform: uppercase;
   letter-spacing: 0.08em;
   font-size: 11px;
-  color: var(--muted);
+  color: #000;
 }
 
 .stat-card .card__label::first-letter {
-  font-size: 120%;
-  font-weight: 800;
+  font-size: 140%;
+  font-weight: 900;
 }
 
 .card__value,
 .display-value {
   font-weight: 700;
   font-size: 15px;
+  color: #000;
 }
 
 .label--emphasis {
@@ -513,11 +574,16 @@ body {
 }
 
 .marip-block .card__label {
-  font-size: 13px;
+  font-size: 16px;
+  font-weight: 800;
+  color: #000;
+  letter-spacing: 0.06em;
 }
 
 .marip-block .card__value {
-  font-size: 26px;
+  font-size: 30px;
+  font-weight: 900;
+  color: #000;
 }
 
 .edit-field {
@@ -728,7 +794,7 @@ body {
 
 .sub-section__title {
   font-weight: 700;
-  color: var(--accent-strong);
+  color: #000;
   letter-spacing: 0.04em;
 }
 
@@ -1140,6 +1206,7 @@ body {
 .feature-title {
   font-size: 1.8em;
   font-weight: 800;
+  color: #000;
 }
 
 .feature-controls {
@@ -1265,7 +1332,7 @@ body {
 
 .effect__label {
   font-weight: 600;
-  color: var(--accent-strong);
+  color: #000;
 }
 
 .effect__body textarea {
@@ -1458,6 +1525,14 @@ body {
   .attribute-check__fields [data-tier-field="attr-effect"] {
     grid-column: 1 / -1;
   }
+
+  .key-vitals-row {
+    grid-template-columns: repeat(2, 1fr);
+  }
+
+  .vital-grid {
+    grid-template-columns: repeat(3, minmax(90px, 1fr));
+  }
 }
 
 .action-label {
@@ -1484,7 +1559,7 @@ body {
 .effect-block__title {
   font-size: 13px;
   font-weight: 700;
-  color: var(--accent-strong);
+  color: #000;
 }
 
 .effect-block p {
@@ -1863,13 +1938,13 @@ body.edit-mode .edit-only {
 .action-card .action-name {
   font-size: 1.6em;
   font-weight: 800;
-  color: var(--accent-strong);
+  color: #000;
   cursor: pointer;
   transition: color 0.15s ease;
 }
 
 .action-card .action-name:hover {
-  color: var(--accent);
+  color: #333;
 }
 
 /* Use when field styling */
