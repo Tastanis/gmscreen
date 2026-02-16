@@ -101,7 +101,17 @@ export function subscribe(listener) {
 
 export function updateState(updater) {
   updater(state);
+
+  // Preserve fogOfWar data across syncBoardOverlayState.
+  // The overlay normalization rebuilds overlay objects on each scene entry;
+  // capture fogOfWar references beforehand so cells cannot be lost if the
+  // entry object is inadvertently replaced during overlay processing.
+  const fogSnap = captureFogOfWarSnapshot(state.boardState);
+
   syncBoardOverlayState(state.boardState);
+
+  restoreFogOfWarSnapshot(state.boardState, fogSnap);
+
   if (!state.user?.isGM) {
     state.boardState.placements = restrictPlacementsToPlayerView(state.boardState.placements);
     state.tokens = restrictTokensToPlayerView(state.tokens);
@@ -937,6 +947,60 @@ function roundToPrecision(value, precision = 4) {
   const places = Number.isFinite(precision) ? Math.max(0, Math.trunc(precision)) : 0;
   const factor = 10 ** places;
   return Math.round(value * factor) / factor;
+}
+
+/**
+ * Snapshot every scene entry's fogOfWar reference so it can be restored if a
+ * subsequent normalization step inadvertently replaces the entry object.
+ */
+function captureFogOfWarSnapshot(boardState) {
+  const snap = new Map();
+  if (!boardState || typeof boardState !== 'object') return snap;
+  const sceneState = boardState.sceneState;
+  if (!sceneState || typeof sceneState !== 'object') return snap;
+
+  Object.keys(sceneState).forEach((sceneId) => {
+    const entry = sceneState[sceneId];
+    if (entry && typeof entry === 'object' && entry.fogOfWar && typeof entry.fogOfWar === 'object') {
+      snap.set(sceneId, entry.fogOfWar);
+    }
+  });
+  return snap;
+}
+
+/**
+ * After overlay normalization, verify that each scene entry still has its
+ * fogOfWar data.  If it was dropped (e.g. the entry was rebuilt as a new
+ * object), re-attach the captured reference.
+ */
+function restoreFogOfWarSnapshot(boardState, snap) {
+  if (!snap || !snap.size) return;
+  if (!boardState || typeof boardState !== 'object') return;
+  const sceneState = boardState.sceneState;
+  if (!sceneState || typeof sceneState !== 'object') return;
+
+  snap.forEach((fogOfWar, sceneId) => {
+    const entry = sceneState[sceneId];
+    if (!entry || typeof entry !== 'object') return;
+
+    if (!entry.fogOfWar || typeof entry.fogOfWar !== 'object') {
+      // Entry lost its fogOfWar entirely — restore it.
+      entry.fogOfWar = fogOfWar;
+      return;
+    }
+
+    // Entry still has a fogOfWar object.  Make sure revealedCells were not
+    // replaced with an empty object when the snapshot had actual cells.
+    const snapCells = fogOfWar.revealedCells;
+    const entryCells = entry.fogOfWar.revealedCells;
+    if (
+      snapCells && typeof snapCells === 'object' &&
+      Object.keys(snapCells).length > 0 &&
+      (!entryCells || typeof entryCells !== 'object' || Object.keys(entryCells).length === 0)
+    ) {
+      entry.fogOfWar.revealedCells = snapCells;
+    }
+  });
 }
 
 function syncBoardOverlayState(boardState) {

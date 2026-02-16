@@ -715,13 +715,30 @@ function mergeSceneStatePreservingGrid(existingSceneState, incomingSceneState) {
       mergedEntry.grid = JSON.parse(JSON.stringify(existingEntry.grid));
     }
 
-    // Preserve fogOfWar from existing state when incoming doesn't include it.
-    // Fog of war is a persistent scene setting that should not be lost during
-    // sync cycles (e.g. when overlay changes trigger a delta save that doesn't
-    // include fog data).
-    if (existingEntry && typeof existingEntry === 'object' && existingEntry.fogOfWar) {
+    // Deep-merge fogOfWar so locally-revealed cells are never lost.
+    // The server may return stale fogOfWar (e.g. a save is still in-flight),
+    // so we take the union of revealedCells from both existing and incoming.
+    if (existingEntry && typeof existingEntry === 'object' && existingEntry.fogOfWar &&
+        typeof existingEntry.fogOfWar === 'object') {
       if (!mergedEntry.fogOfWar || typeof mergedEntry.fogOfWar !== 'object') {
+        // Incoming has no fogOfWar at all — use existing entirely.
         mergedEntry.fogOfWar = JSON.parse(JSON.stringify(existingEntry.fogOfWar));
+      } else {
+        // Both sides have fogOfWar — merge revealedCells (union).
+        const existingCells = existingEntry.fogOfWar.revealedCells;
+        const mergedCells = mergedEntry.fogOfWar.revealedCells;
+        if (existingCells && typeof existingCells === 'object' && Object.keys(existingCells).length > 0) {
+          if (!mergedCells || typeof mergedCells !== 'object') {
+            mergedEntry.fogOfWar.revealedCells = JSON.parse(JSON.stringify(existingCells));
+          } else {
+            // Union: copy existing cells that are missing from incoming.
+            Object.keys(existingCells).forEach((key) => {
+              if (!(key in mergedCells)) {
+                mergedCells[key] = true;
+              }
+            });
+          }
+        }
       }
     }
 
@@ -2795,7 +2812,28 @@ export function mountBoardInteractions(store, routes = {}) {
             draft.boardState.sceneState[sceneId].overlay = state.overlay;
           }
           if (state.fogOfWar !== undefined) {
-            draft.boardState.sceneState[sceneId].fogOfWar = state.fogOfWar;
+            const existing = draft.boardState.sceneState[sceneId].fogOfWar;
+            if (
+              existing && typeof existing === 'object' &&
+              existing.revealedCells && typeof existing.revealedCells === 'object' &&
+              Object.keys(existing.revealedCells).length > 0 &&
+              state.fogOfWar && typeof state.fogOfWar === 'object'
+            ) {
+              // Merge: keep enabled flag from delta, but union revealedCells
+              // so locally-cleared fog cells are not overwritten by stale data.
+              draft.boardState.sceneState[sceneId].fogOfWar = {
+                enabled: Boolean(state.fogOfWar.enabled),
+                revealedCells: { ...existing.revealedCells },
+              };
+              const incomingCells = state.fogOfWar.revealedCells;
+              if (incomingCells && typeof incomingCells === 'object') {
+                Object.keys(incomingCells).forEach((key) => {
+                  draft.boardState.sceneState[sceneId].fogOfWar.revealedCells[key] = true;
+                });
+              }
+            } else {
+              draft.boardState.sceneState[sceneId].fogOfWar = state.fogOfWar;
+            }
           }
         });
       }

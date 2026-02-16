@@ -123,10 +123,38 @@ async function hydrateFromServer(routes, userContext) {
       if (boardStateSnapshot && typeof boardStateSnapshot === 'object') {
         const normalizedBoard = normalizeBoardStateSnapshot(boardStateSnapshot);
         if (normalizedBoard && Object.keys(normalizedBoard).length > 0) {
+          // Preserve existing fogOfWar data so locally-set fog cells are not
+          // overwritten when the hydration response replaces sceneState.
+          const existingSceneState = draft.boardState?.sceneState;
           const nextBoardState = {
             ...draft.boardState,
             ...normalizedBoard,
           };
+          // Re-merge fogOfWar from existing scene entries that had cells.
+          if (existingSceneState && typeof existingSceneState === 'object' &&
+              nextBoardState.sceneState && typeof nextBoardState.sceneState === 'object') {
+            Object.keys(existingSceneState).forEach((sid) => {
+              const existingFog = existingSceneState[sid]?.fogOfWar;
+              if (!existingFog || typeof existingFog !== 'object') return;
+              const existingCells = existingFog.revealedCells;
+              if (!existingCells || typeof existingCells !== 'object' ||
+                  Object.keys(existingCells).length === 0) return;
+              const target = nextBoardState.sceneState[sid];
+              if (!target || typeof target !== 'object') return;
+              if (!target.fogOfWar || typeof target.fogOfWar !== 'object') {
+                target.fogOfWar = JSON.parse(JSON.stringify(existingFog));
+              } else {
+                if (!target.fogOfWar.revealedCells || typeof target.fogOfWar.revealedCells !== 'object') {
+                  target.fogOfWar.revealedCells = {};
+                }
+                Object.keys(existingCells).forEach((key) => {
+                  if (!(key in target.fogOfWar.revealedCells)) {
+                    target.fogOfWar.revealedCells[key] = true;
+                  }
+                });
+              }
+            });
+          }
           if (!currentIsGM) {
             nextBoardState.placements = restrictPlacementsToPlayerView(
               nextBoardState.placements ?? {}
