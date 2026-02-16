@@ -3097,6 +3097,7 @@ export function mountBoardInteractions(store, routes = {}) {
 
     // When fog-select mode is active, let the fog handler manage pointer events
     if (isFogSelectActive() && event.button === 0) {
+      if (typeof console !== 'undefined') console.log('[FOG DEBUG] board-interactions yielding pointerdown to fog handler');
       return;
     }
 
@@ -15171,7 +15172,7 @@ export function mountBoardInteractions(store, routes = {}) {
     const boardDraft = ensureBoardStateDraft(draft);
     const key = typeof sceneId === 'string' ? sceneId : String(sceneId ?? '');
     if (!key) {
-      return boardDraft.sceneState;
+      return null;
     }
 
     if (!boardDraft.sceneState[key] || typeof boardDraft.sceneState[key] !== 'object') {
@@ -16915,6 +16916,9 @@ function createTemplateTool() {
   function handlePlacementPointerDown(event) {
     if (!placementState || event.button !== 0) {
       return;
+    }
+    if (isFogSelectActive()) {
+      if (typeof console !== 'undefined') console.warn('[FOG DEBUG] handlePlacementPointerDown firing with placementState active during fog select! type:', placementState.type);
     }
 
     if (placementState.type !== 'wall' && event.target && event.target.closest('.vtt-template__node')) {
