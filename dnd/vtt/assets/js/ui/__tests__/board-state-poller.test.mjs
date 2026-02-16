@@ -609,3 +609,180 @@ test('mergeBoardStateSnapshot preserves grid for scenes not in incoming', async 
     'scene-2 locked state should be preserved'
   );
 });
+
+test('mergeBoardStateSnapshot preserves fogOfWar when incoming has no fogOfWar', async () => {
+  const { mergeBoardStateSnapshot } = await import('../board-interactions.js');
+
+  // Existing state has fogOfWar with revealed cells
+  const existing = {
+    activeSceneId: 'scene-1',
+    sceneState: {
+      'scene-1': {
+        grid: { size: 64, locked: false, visible: true },
+        fogOfWar: {
+          enabled: true,
+          revealedCells: { '0,0': true, '1,1': true, '3,5': true },
+        },
+      },
+    },
+  };
+
+  // Incoming state has overlay changes but no fogOfWar data
+  const incoming = {
+    activeSceneId: 'scene-1',
+    sceneState: {
+      'scene-1': {
+        grid: { size: 64, locked: false, visible: true },
+        overlay: { mapUrl: 'overlay.png', layers: [] },
+      },
+    },
+  };
+
+  const merged = mergeBoardStateSnapshot(existing, incoming);
+
+  // fogOfWar should be preserved from existing state
+  assert.ok(
+    merged.sceneState['scene-1'].fogOfWar,
+    'fogOfWar should be preserved when incoming has no fogOfWar'
+  );
+  assert.equal(
+    merged.sceneState['scene-1'].fogOfWar.enabled,
+    true,
+    'fogOfWar.enabled should be preserved from existing'
+  );
+  assert.deepStrictEqual(
+    merged.sceneState['scene-1'].fogOfWar.revealedCells,
+    { '0,0': true, '1,1': true, '3,5': true },
+    'fogOfWar.revealedCells should be preserved from existing'
+  );
+});
+
+test('mergeBoardStateSnapshot uses incoming fogOfWar when present', async () => {
+  const { mergeBoardStateSnapshot } = await import('../board-interactions.js');
+
+  // Existing state has old fogOfWar data
+  const existing = {
+    activeSceneId: 'scene-1',
+    sceneState: {
+      'scene-1': {
+        grid: { size: 64, locked: false, visible: true },
+        fogOfWar: {
+          enabled: true,
+          revealedCells: { '0,0': true },
+        },
+      },
+    },
+  };
+
+  // Incoming has updated fogOfWar
+  const incoming = {
+    activeSceneId: 'scene-1',
+    sceneState: {
+      'scene-1': {
+        grid: { size: 64, locked: false, visible: true },
+        fogOfWar: {
+          enabled: true,
+          revealedCells: { '0,0': true, '2,2': true, '4,4': true },
+        },
+      },
+    },
+  };
+
+  const merged = mergeBoardStateSnapshot(existing, incoming);
+
+  // Should use incoming fogOfWar since it has the data
+  assert.deepStrictEqual(
+    merged.sceneState['scene-1'].fogOfWar.revealedCells,
+    { '0,0': true, '2,2': true, '4,4': true },
+    'should use incoming fogOfWar when it has data'
+  );
+});
+
+test('mergeBoardStateSnapshot preserves fogOfWar during overlay toggle cycle', async () => {
+  const { mergeBoardStateSnapshot } = await import('../board-interactions.js');
+
+  // Simulate: user has fog setup, then toggles overlay visibility
+  // This creates a delta save that only includes overlay changes
+  const existing = {
+    activeSceneId: 'scene-1',
+    sceneState: {
+      'scene-1': {
+        grid: { size: 64, locked: false, visible: true },
+        fogOfWar: {
+          enabled: true,
+          revealedCells: { '1,1': true, '2,2': true, '3,3': true },
+        },
+        overlay: { layers: [{ id: 'l1', visible: true }] },
+      },
+    },
+  };
+
+  // Delta save: overlay changed but no fogOfWar included
+  const incoming = {
+    activeSceneId: 'scene-1',
+    sceneState: {
+      'scene-1': {
+        grid: { size: 64, locked: false, visible: true },
+        overlay: { layers: [{ id: 'l1', visible: false }] },
+      },
+    },
+  };
+
+  const merged = mergeBoardStateSnapshot(existing, incoming);
+
+  // fogOfWar MUST be preserved
+  assert.ok(merged.sceneState['scene-1'].fogOfWar, 'fogOfWar must survive overlay toggle');
+  assert.equal(merged.sceneState['scene-1'].fogOfWar.enabled, true);
+  assert.deepStrictEqual(
+    merged.sceneState['scene-1'].fogOfWar.revealedCells,
+    { '1,1': true, '2,2': true, '3,3': true },
+    'all revealed cells must survive overlay toggle'
+  );
+
+  // Overlay should reflect the incoming change
+  assert.equal(
+    merged.sceneState['scene-1'].overlay.layers[0].visible,
+    false,
+    'overlay visibility should be updated from incoming'
+  );
+});
+
+test('mergeBoardStateSnapshot preserves fogOfWar for scenes not in incoming', async () => {
+  const { mergeBoardStateSnapshot } = await import('../board-interactions.js');
+
+  const existing = {
+    activeSceneId: 'scene-1',
+    sceneState: {
+      'scene-1': {
+        grid: { size: 64, locked: false, visible: true },
+        fogOfWar: { enabled: true, revealedCells: { '5,5': true } },
+      },
+      'scene-2': {
+        grid: { size: 96, locked: false, visible: true },
+        fogOfWar: { enabled: true, revealedCells: { '10,10': true } },
+      },
+    },
+  };
+
+  // Incoming only has scene-1 data (e.g., delta save)
+  const incoming = {
+    activeSceneId: 'scene-1',
+    sceneState: {
+      'scene-1': {
+        grid: { size: 64, locked: false, visible: true },
+        fogOfWar: { enabled: true, revealedCells: { '5,5': true } },
+      },
+    },
+  };
+
+  const merged = mergeBoardStateSnapshot(existing, incoming);
+
+  // Scene-2 should be fully preserved (not in incoming)
+  assert.ok(merged.sceneState['scene-2'], 'scene-2 should be preserved');
+  assert.ok(merged.sceneState['scene-2'].fogOfWar, 'scene-2 fogOfWar should be preserved');
+  assert.deepStrictEqual(
+    merged.sceneState['scene-2'].fogOfWar.revealedCells,
+    { '10,10': true },
+    'scene-2 fogOfWar revealedCells should be preserved'
+  );
+});
