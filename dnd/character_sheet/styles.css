@@ -1995,8 +1995,18 @@ body.edit-mode .action-card:not(.action-card--collapsed) .action-name::after {
   border-radius: 4px;
   padding: 6px 8px;
   box-shadow: 0 6px 16px rgba(0, 0, 0, 0.35);
-  z-index: 30;
+  z-index: 9999;
   white-space: nowrap;
+}
+
+/* Raise stacking contexts when popup is active so it renders above sibling elements */
+.chat-dot-wrap:has(.chat-dot-confirm) {
+  z-index: 9999;
+}
+
+.action-card > *:has(.chat-dot-confirm),
+.feature-card > *:has(.chat-dot-confirm) {
+  z-index: 100;
 }
 
 .chat-dot-confirm__text {
