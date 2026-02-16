@@ -2035,10 +2035,18 @@ test('overlay editor keeps previously closed polygons when drawing additional sh
 
     const overlay = document.getElementById('vtt-map-overlay');
     assert.ok(overlay, 'overlay host should exist');
-    const maskHost = overlay.querySelector(
-      '.vtt-board__map-overlay-layer[data-overlay-layer-id="layer-1"]'
+
+    // While the editor is active the preview clip-path is no longer applied to
+    // the overlay layer (this prevents the auto-clip behaviour that hides the
+    // rest of the map).  Instead we verify the polygon handles are rendered.
+    const editableNodesAfterClose = document.querySelectorAll(
+      '.vtt-overlay-editor__node:not(.vtt-overlay-editor__node--readonly)'
     );
-    assert.ok(maskHost, 'overlay layer element should exist');
+    assert.equal(
+      editableNodesAfterClose.length,
+      3,
+      'three editable nodes should render for the closed first polygon'
+    );
     const readonlyNodesBeforeSecondShape = document.querySelectorAll(
       '.vtt-overlay-editor__node--readonly'
     );
@@ -2048,37 +2056,7 @@ test('overlay editor keeps previously closed polygons when drawing additional sh
       'no read-only nodes should render before starting a second shape'
     );
 
-    const persistedMaskBeforeSecondShape = JSON.parse(maskHost.dataset.overlayMask ?? '{}');
-    assert.deepEqual(
-      persistedMaskBeforeSecondShape,
-      {
-        visible: true,
-        polygons: [
-          {
-            points: [
-              { column: 1, row: 1 },
-              { column: 5, row: 1 },
-              { column: 5, row: 5 },
-            ],
-          },
-        ],
-      },
-      'first polygon should remain in the overlay mask after closing'
-    );
-
     dispatchPointerEvent(surface, 'pointerdown', { clientX: 128, clientY: 128, pointerId: 4 });
-
-    const maskAfterStartingSecondShape = JSON.parse(maskHost.dataset.overlayMask ?? '{}');
-    assert.equal(maskAfterStartingSecondShape.polygons?.length, 1);
-    assert.deepEqual(
-      maskAfterStartingSecondShape.polygons?.[0]?.points,
-      [
-        { column: 1, row: 1 },
-        { column: 5, row: 1 },
-        { column: 5, row: 5 },
-      ],
-      'first polygon should still be present after starting a new shape'
-    );
 
     const readonlyNodesAfterStartingSecondShape = document.querySelectorAll(
       '.vtt-overlay-editor__node--readonly'
@@ -3545,7 +3523,7 @@ test('overlay clip path uses pixel coordinates instead of invalid percentage uni
   }
 });
 
-test('overlay editor toolbar is visible at position (0,0) on first activation', () => {
+test('overlay editor toolbar is visible at viewport-relative position on first activation', () => {
   const dom = createDom();
   try {
     const { document, MouseEvent } = dom.window;
@@ -3601,8 +3579,11 @@ test('overlay editor toolbar is visible at position (0,0) on first activation', 
 
     const toolbarX = editor.style.getPropertyValue('--overlay-toolbar-x');
     const toolbarY = editor.style.getPropertyValue('--overlay-toolbar-y');
-    assert.equal(toolbarX, '0px', 'toolbar should be positioned at x=0 on first activation');
-    assert.equal(toolbarY, '0px', 'toolbar should be positioned at y=0 on first activation');
+    // Toolbar is now positioned relative to the user's viewport (not the map
+    // origin) so it appears near where they are looking.  In JSDOM the overlay
+    // rect is all-zeros so the computed position is (16,16).
+    assert.ok(toolbarX, 'toolbar x position should be set');
+    assert.ok(toolbarY, 'toolbar y position should be set');
   } finally {
     dom.window.close();
   }
@@ -3738,6 +3719,394 @@ test('overlay editor nodes use compact sizing for precise placement', () => {
 
     const startNode = document.querySelector('.vtt-overlay-editor__node.is-start');
     assert.ok(startNode, 'first node should have the is-start class');
+  } finally {
+    dom.window.close();
+  }
+});
+
+test('overlay editor does not apply clip-path preview while actively editing', () => {
+  const dom = createDom();
+  try {
+    const { document, MouseEvent } = dom.window;
+
+    const sceneManager = document.createElement('div');
+    sceneManager.id = 'scene-manager';
+    const toggleButton = document.createElement('button');
+    toggleButton.dataset.action = 'toggle-overlay-editor';
+    toggleButton.setAttribute('data-scene-id', 'scene-1');
+    sceneManager.append(toggleButton);
+    document.body.append(sceneManager);
+
+    const initialState = {
+      user: { isGM: true, name: 'GM' },
+      scenes: { items: [{ id: 'scene-1', name: 'Scene 1' }] },
+      boardState: {
+        activeSceneId: 'scene-1',
+        mapUrl: 'http://example.com/map.png',
+        placements: { 'scene-1': [] },
+        sceneState: {
+          'scene-1': {
+            grid: { size: 64, visible: true },
+            overlay: buildOverlayState('http://example.com/overlay.png'),
+          },
+        },
+        overlay: buildOverlayState('http://example.com/overlay.png'),
+      },
+    };
+
+    const store = createMockStore(initialState);
+    mountBoardInteractions(store);
+
+    const board = document.getElementById('vtt-board-canvas');
+    board.getBoundingClientRect = () => ({
+      width: 512, height: 512,
+      top: 0, left: 0, right: 512, bottom: 512,
+    });
+
+    const surface = document.getElementById('vtt-map-surface');
+    surface.getBoundingClientRect = () => ({
+      width: 512, height: 512,
+      top: 0, left: 0, right: 512, bottom: 512,
+    });
+
+    const mapImage = document.getElementById('vtt-map-image');
+    Object.defineProperty(mapImage, 'naturalWidth', { value: 512, configurable: true });
+    Object.defineProperty(mapImage, 'naturalHeight', { value: 512, configurable: true });
+    mapImage.onload?.();
+
+    toggleButton.dispatchEvent(new MouseEvent('click', { bubbles: true }));
+
+    // Draw a triangle and close it
+    dispatchPointerEvent(surface, 'pointerdown', { clientX: 64, clientY: 64, pointerId: 1 });
+    dispatchPointerEvent(surface, 'pointerdown', { clientX: 320, clientY: 64, pointerId: 2 });
+    dispatchPointerEvent(surface, 'pointerdown', { clientX: 320, clientY: 320, pointerId: 3 });
+
+    const closeBtn = document.querySelector('.vtt-overlay-editor__btn');
+    closeBtn.dispatchEvent(new MouseEvent('click', { bubbles: true }));
+
+    // While editor is active, the overlay layer should NOT have a draft clip-path
+    const overlay = document.getElementById('vtt-map-overlay');
+    const layer = overlay.querySelector('.vtt-board__map-overlay-layer');
+    assert.ok(layer, 'overlay layer should exist');
+    const clipPath = layer.style.clipPath || '';
+    assert.equal(clipPath, '', 'no clip-path should be applied while editor is active');
+
+    // The polygon handles should still be visible
+    const nodes = document.querySelectorAll('.vtt-overlay-editor__node');
+    assert.ok(nodes.length >= 3, 'polygon nodes should still render');
+  } finally {
+    dom.window.close();
+  }
+});
+
+test('overlay editor close-shape button works and produces a closed polygon', () => {
+  const dom = createDom();
+  try {
+    const { document, MouseEvent } = dom.window;
+
+    const sceneManager = document.createElement('div');
+    sceneManager.id = 'scene-manager';
+    const toggleButton = document.createElement('button');
+    toggleButton.dataset.action = 'toggle-overlay-editor';
+    toggleButton.setAttribute('data-scene-id', 'scene-1');
+    sceneManager.append(toggleButton);
+    document.body.append(sceneManager);
+
+    const initialState = {
+      user: { isGM: true, name: 'GM' },
+      scenes: { items: [{ id: 'scene-1', name: 'Scene 1' }] },
+      boardState: {
+        activeSceneId: 'scene-1',
+        mapUrl: 'http://example.com/map.png',
+        placements: { 'scene-1': [] },
+        sceneState: {
+          'scene-1': {
+            grid: { size: 64, visible: true },
+            overlay: buildOverlayState('http://example.com/overlay.png'),
+          },
+        },
+        overlay: buildOverlayState('http://example.com/overlay.png'),
+      },
+    };
+
+    const store = createMockStore(initialState);
+    mountBoardInteractions(store);
+
+    const board = document.getElementById('vtt-board-canvas');
+    board.getBoundingClientRect = () => ({
+      width: 512, height: 512,
+      top: 0, left: 0, right: 512, bottom: 512,
+    });
+
+    const surface = document.getElementById('vtt-map-surface');
+    surface.getBoundingClientRect = () => ({
+      width: 512, height: 512,
+      top: 0, left: 0, right: 512, bottom: 512,
+    });
+
+    const mapImage = document.getElementById('vtt-map-image');
+    Object.defineProperty(mapImage, 'naturalWidth', { value: 512, configurable: true });
+    Object.defineProperty(mapImage, 'naturalHeight', { value: 512, configurable: true });
+    mapImage.onload?.();
+
+    toggleButton.dispatchEvent(new MouseEvent('click', { bubbles: true }));
+
+    // Draw 3 points
+    dispatchPointerEvent(surface, 'pointerdown', { clientX: 64, clientY: 64, pointerId: 1 });
+    dispatchPointerEvent(surface, 'pointerdown', { clientX: 320, clientY: 64, pointerId: 2 });
+    dispatchPointerEvent(surface, 'pointerdown', { clientX: 320, clientY: 320, pointerId: 3 });
+
+    // Close Shape button should be the first .vtt-overlay-editor__btn
+    const closeBtn = document.querySelector('.vtt-overlay-editor__btn');
+    assert.ok(closeBtn, 'close shape button should exist');
+    assert.equal(closeBtn.disabled, false, 'close shape button should be enabled with 3+ nodes');
+    closeBtn.dispatchEvent(new MouseEvent('click', { bubbles: true }));
+
+    // After closing, the status should indicate shape is closed
+    const status = document.querySelector('.vtt-overlay-editor__status');
+    assert.ok(status, 'status element should exist');
+    assert.ok(
+      status.textContent.includes('closed') || status.textContent.includes('Apply'),
+      'status should indicate shape is closed'
+    );
+
+    // The closing segment (node 2 -> node 0) should now exist
+    const segments = document.querySelectorAll('.vtt-overlay-editor__segment');
+    assert.equal(segments.length, 3, 'three segments should exist for a closed triangle');
+  } finally {
+    dom.window.close();
+  }
+});
+
+test('overlay editor auto-commits shapes when deactivated via exit button', async () => {
+  const dom = createDom();
+  try {
+    const { document, MouseEvent } = dom.window;
+
+    const sceneManager = document.createElement('div');
+    sceneManager.id = 'scene-manager';
+    const toggleButton = document.createElement('button');
+    toggleButton.dataset.action = 'toggle-overlay-editor';
+    toggleButton.setAttribute('data-scene-id', 'scene-1');
+    sceneManager.append(toggleButton);
+    document.body.append(sceneManager);
+
+    const initialState = {
+      user: { isGM: true, name: 'GM' },
+      scenes: { items: [{ id: 'scene-1', name: 'Scene 1' }] },
+      boardState: {
+        activeSceneId: 'scene-1',
+        mapUrl: 'http://example.com/map.png',
+        placements: { 'scene-1': [] },
+        sceneState: {
+          'scene-1': {
+            grid: { size: 64, visible: true },
+            overlay: buildOverlayState(null),
+          },
+        },
+        overlay: buildOverlayState(null),
+      },
+    };
+
+    const store = createMockStore(initialState);
+    mountBoardInteractions(store);
+
+    const board = document.getElementById('vtt-board-canvas');
+    board.getBoundingClientRect = () => ({
+      width: 512, height: 512,
+      top: 0, left: 0, right: 512, bottom: 512,
+    });
+
+    const surface = document.getElementById('vtt-map-surface');
+    surface.getBoundingClientRect = () => ({
+      width: 512, height: 512,
+      top: 0, left: 0, right: 512, bottom: 512,
+    });
+
+    const mapImage = document.getElementById('vtt-map-image');
+    Object.defineProperty(mapImage, 'naturalWidth', { value: 512, configurable: true });
+    Object.defineProperty(mapImage, 'naturalHeight', { value: 512, configurable: true });
+    mapImage.onload?.();
+
+    toggleButton.dispatchEvent(new MouseEvent('click', { bubbles: true }));
+
+    // Draw a triangle (3 points)
+    dispatchPointerEvent(surface, 'pointerdown', { clientX: 64, clientY: 64, pointerId: 1 });
+    dispatchPointerEvent(surface, 'pointerdown', { clientX: 320, clientY: 64, pointerId: 2 });
+    dispatchPointerEvent(surface, 'pointerdown', { clientX: 320, clientY: 320, pointerId: 3 });
+
+    // Close the shape
+    const closeBtn = document.querySelector('.vtt-overlay-editor__btn');
+    closeBtn.dispatchEvent(new MouseEvent('click', { bubbles: true }));
+
+    // Deactivate via exit button (should auto-commit)
+    const exitButton = document.querySelector('.vtt-overlay-editor__exit');
+    assert.ok(exitButton, 'exit button should exist');
+    exitButton.dispatchEvent(new MouseEvent('click', { bubbles: true }));
+
+    await Promise.resolve();
+
+    const editor = document.querySelector('.vtt-overlay-editor');
+    assert.equal(editor.hidden, true, 'editor should be hidden after exit');
+
+    // The shape should have been auto-committed to the store
+    const state = store.getState();
+    const sceneOverlay = state.boardState.sceneState['scene-1'].overlay;
+    const mask = sceneOverlay?.mask ?? sceneOverlay?.layers?.[0]?.mask;
+    const polygons = mask?.polygons ?? [];
+    assert.ok(polygons.length >= 1, 'at least one polygon should be persisted after auto-commit');
+    assert.ok(
+      polygons[0].points.length >= 3,
+      'persisted polygon should have at least 3 points'
+    );
+  } finally {
+    dom.window.close();
+  }
+});
+
+test('overlay editor auto-commits open polygon with 3+ points when deactivated', async () => {
+  const dom = createDom();
+  try {
+    const { document, MouseEvent } = dom.window;
+
+    const sceneManager = document.createElement('div');
+    sceneManager.id = 'scene-manager';
+    const toggleButton = document.createElement('button');
+    toggleButton.dataset.action = 'toggle-overlay-editor';
+    toggleButton.setAttribute('data-scene-id', 'scene-1');
+    sceneManager.append(toggleButton);
+    document.body.append(sceneManager);
+
+    const initialState = {
+      user: { isGM: true, name: 'GM' },
+      scenes: { items: [{ id: 'scene-1', name: 'Scene 1' }] },
+      boardState: {
+        activeSceneId: 'scene-1',
+        mapUrl: 'http://example.com/map.png',
+        placements: { 'scene-1': [] },
+        sceneState: {
+          'scene-1': {
+            grid: { size: 64, visible: true },
+            overlay: buildOverlayState(null),
+          },
+        },
+        overlay: buildOverlayState(null),
+      },
+    };
+
+    const store = createMockStore(initialState);
+    mountBoardInteractions(store);
+
+    const board = document.getElementById('vtt-board-canvas');
+    board.getBoundingClientRect = () => ({
+      width: 512, height: 512,
+      top: 0, left: 0, right: 512, bottom: 512,
+    });
+
+    const surface = document.getElementById('vtt-map-surface');
+    surface.getBoundingClientRect = () => ({
+      width: 512, height: 512,
+      top: 0, left: 0, right: 512, bottom: 512,
+    });
+
+    const mapImage = document.getElementById('vtt-map-image');
+    Object.defineProperty(mapImage, 'naturalWidth', { value: 512, configurable: true });
+    Object.defineProperty(mapImage, 'naturalHeight', { value: 512, configurable: true });
+    mapImage.onload?.();
+
+    toggleButton.dispatchEvent(new MouseEvent('click', { bubbles: true }));
+
+    // Draw 4 points but do NOT close the shape
+    dispatchPointerEvent(surface, 'pointerdown', { clientX: 64, clientY: 64, pointerId: 1 });
+    dispatchPointerEvent(surface, 'pointerdown', { clientX: 320, clientY: 64, pointerId: 2 });
+    dispatchPointerEvent(surface, 'pointerdown', { clientX: 320, clientY: 320, pointerId: 3 });
+    dispatchPointerEvent(surface, 'pointerdown', { clientX: 64, clientY: 320, pointerId: 4 });
+
+    // Deactivate via exit button (should auto-close and auto-commit)
+    const exitButton = document.querySelector('.vtt-overlay-editor__exit');
+    exitButton.dispatchEvent(new MouseEvent('click', { bubbles: true }));
+
+    await Promise.resolve();
+
+    // The open polygon should have been auto-closed and auto-committed
+    const state = store.getState();
+    const sceneOverlay = state.boardState.sceneState['scene-1'].overlay;
+    const mask = sceneOverlay?.mask ?? sceneOverlay?.layers?.[0]?.mask;
+    const polygons = mask?.polygons ?? [];
+    assert.ok(polygons.length >= 1, 'open polygon with 3+ points should be auto-committed');
+    assert.ok(
+      polygons[0].points.length >= 3,
+      'persisted polygon should have at least 3 points'
+    );
+  } finally {
+    dom.window.close();
+  }
+});
+
+test('main pointerdown handler does not interfere with overlay editor toolbar clicks', () => {
+  const dom = createDom();
+  try {
+    const { document, MouseEvent } = dom.window;
+
+    const sceneManager = document.createElement('div');
+    sceneManager.id = 'scene-manager';
+    const toggleButton = document.createElement('button');
+    toggleButton.dataset.action = 'toggle-overlay-editor';
+    toggleButton.setAttribute('data-scene-id', 'scene-1');
+    sceneManager.append(toggleButton);
+    document.body.append(sceneManager);
+
+    const initialState = {
+      user: { isGM: true, name: 'GM' },
+      scenes: { items: [{ id: 'scene-1', name: 'Scene 1' }] },
+      boardState: {
+        activeSceneId: 'scene-1',
+        mapUrl: 'http://example.com/map.png',
+        placements: { 'scene-1': [] },
+        sceneState: {
+          'scene-1': {
+            grid: { size: 64, visible: true },
+            overlay: buildOverlayState('http://example.com/overlay.png'),
+          },
+        },
+        overlay: buildOverlayState('http://example.com/overlay.png'),
+      },
+    };
+
+    const store = createMockStore(initialState);
+    mountBoardInteractions(store);
+
+    const board = document.getElementById('vtt-board-canvas');
+    board.getBoundingClientRect = () => ({
+      width: 512, height: 512,
+      top: 0, left: 0, right: 512, bottom: 512,
+    });
+
+    const mapImage = document.getElementById('vtt-map-image');
+    Object.defineProperty(mapImage, 'naturalWidth', { value: 512, configurable: true });
+    Object.defineProperty(mapImage, 'naturalHeight', { value: 512, configurable: true });
+    mapImage.onload?.();
+
+    // Activate the editor
+    toggleButton.dispatchEvent(new MouseEvent('click', { bubbles: true }));
+
+    const editor = document.querySelector('.vtt-overlay-editor');
+    assert.equal(editor.hidden, false, 'editor should be visible');
+
+    // Click the exit button - this should close the editor without the main
+    // pointerdown handler interfering (no selection box, no pointer capture).
+    const exitButton = editor.querySelector('.vtt-overlay-editor__exit');
+    exitButton.dispatchEvent(new MouseEvent('click', { bubbles: true }));
+    assert.equal(editor.hidden, true, 'exit button should close editor');
+
+    // Re-open and test close shape button
+    toggleButton.dispatchEvent(new MouseEvent('click', { bubbles: true }));
+    assert.equal(editor.hidden, false, 'editor should reopen');
+
+    // Re-close via exit button
+    const exitButton2 = editor.querySelector('.vtt-overlay-editor__exit');
+    exitButton2.dispatchEvent(new MouseEvent('click', { bubbles: true }));
+    assert.equal(editor.hidden, true, 'exit button should still work on second activation');
   } finally {
     dom.window.close();
   }

@@ -3077,6 +3077,14 @@ export function mountBoardInteractions(store, routes = {}) {
       return;
     }
 
+    // When the overlay editor is active, let its handlers manage pointer events
+    // for clicks within the editor (toolbar buttons, drag handle, etc.).
+    if (overlayEditorActive && event.target &&
+        (event.target.closest('.vtt-overlay-editor__toolbar') ||
+         event.target.closest('.vtt-overlay-editor__node'))) {
+      return;
+    }
+
     // When fog-select mode is active, let the fog handler manage pointer events
     if (isFogSelectActive() && event.button === 0) {
       return;
@@ -15646,7 +15654,23 @@ function createOverlayTool(uploadsEndpoint) {
     setButtonState(true);
     setStatus(DEFAULT_STATUS);
     if (!toolbarPosition) {
-      applyToolbarPosition(0, 0);
+      // Position the toolbar near the left side of the user's current viewport,
+      // not at the map origin which may be far off-screen when zoomed in.
+      const overlayRect = mapOverlay.getBoundingClientRect?.();
+      const scale =
+        Number.isFinite(viewState.scale) && viewState.scale !== 0 ? viewState.scale : 1;
+      if (overlayRect) {
+        const viewportX = 16;
+        const viewportY = Math.max(16, (overlayRect.height > 0 ? overlayRect.height * 0.05 : 16));
+        const localX = (viewportX - overlayRect.left) / scale;
+        const localY = (viewportY - overlayRect.top) / scale;
+        applyToolbarPosition(
+          Math.max(0, Number.isFinite(localX) ? localX : 0),
+          Math.max(0, Number.isFinite(localY) ? localY : 0),
+        );
+      } else {
+        applyToolbarPosition(0, 0);
+      }
     }
     renderHandles();
     applyPreviewMask();
@@ -15655,6 +15679,22 @@ function createOverlayTool(uploadsEndpoint) {
   }
 
   function deactivate() {
+    // Auto-commit any drawn shapes so they persist after closing the editor.
+    // If the current polygon is open but has 3+ nodes, close it first.
+    if (nodes.length >= 3 && !isClosed) {
+      isClosed = true;
+    }
+    if (isDirty() && isClosed && nodes.length >= 3) {
+      const preview = buildPreviewMask();
+      const changed = updateSceneOverlay((overlayEntry, activeLayer) => {
+        activeLayer.mask = normalizeOverlayMask(preview);
+      });
+      if (changed) {
+        setNodesFromMask(persistedMask);
+        persistBoardStateSnapshot();
+      }
+    }
+
     isActive = false;
     editor.hidden = true;
     delete editor.dataset.interactive;
@@ -16140,7 +16180,15 @@ function createOverlayTool(uploadsEndpoint) {
   function applyPreviewMask() {
     const allowDuringEditing = overlayEditorActive;
 
-    if (isActive && ((isClosed && nodes.length >= 3) || additionalPolygons.length > 0)) {
+    // While the editor is active, do NOT apply the clip-path preview to the
+    // overlay layer.  The polygon outlines drawn on the handles layer already
+    // show the user what area they have selected.  Applying the clip-path
+    // immediately hides everything outside the polygon which makes it nearly
+    // impossible to draw additional shapes or see the rest of the map.
+    // The clip-path is only applied when the user clicks "Apply Mask".
+    if (isActive) {
+      applyOverlayDraftToDom(null, { allowDuringEditing });
+    } else if (additionalPolygons.length > 0 || (isClosed && nodes.length >= 3)) {
       const preview = buildPreviewMask();
       applyOverlayDraftToDom(preview, { allowDuringEditing });
     } else {
