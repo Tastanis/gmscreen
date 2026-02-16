@@ -23,7 +23,7 @@ const SELECTION_FILL = 'rgba(70,160,255,0.25)';
 const SELECTION_STROKE = 'rgba(70,160,255,0.8)';
 
 // ── Debug logging (check F12 console) ────────────────────────────
-const FOG_DEBUG = true; // set to false to silence fog diagnostics
+const FOG_DEBUG = false; // set to false to silence fog diagnostics
 function fogLog(...args) {
   if (FOG_DEBUG) console.log('[FOG DEBUG]', ...args);
 }
