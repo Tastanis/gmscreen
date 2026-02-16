@@ -674,10 +674,5 @@ export function normalizeFogOfWarState(raw) {
     });
   }
 
-  // Only return a fog object if it was explicitly enabled or has revealed cells
-  if (!enabled && Object.keys(revealedCells).length === 0) {
-    return null;
-  }
-
   return { enabled, revealedCells };
 }

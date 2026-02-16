@@ -132,8 +132,9 @@ describe('normalizeFogOfWarState', () => {
     assert.equal(normalizeFogOfWarState(42), null);
   });
 
-  test('returns null for disabled fog with no revealed cells', () => {
-    assert.equal(normalizeFogOfWarState({ enabled: false, revealedCells: {} }), null);
+  test('preserves disabled fog with no revealed cells', () => {
+    const result = normalizeFogOfWarState({ enabled: false, revealedCells: {} });
+    assert.deepEqual(result, { enabled: false, revealedCells: {} });
   });
 
   test('returns object for enabled fog with empty revealed cells', () => {
