@@ -554,7 +554,7 @@ function applyFogChange(addFog) {
     }
 
     const fog = draft.boardState.sceneState[sceneId].fogOfWar;
-    if (!fog.revealedCells || typeof fog.revealedCells !== 'object') {
+    if (!fog.revealedCells || typeof fog.revealedCells !== 'object' || Array.isArray(fog.revealedCells)) {
       fog.revealedCells = {};
     }
 

@@ -150,6 +150,24 @@ function getVttBootstrapConfig(?array $authContext = null): array
     $scenes = loadVttScenes();
     $tokens = loadVttTokens();
     $boardState = loadVttJson('board-state.json');
+
+    // Normalize fogOfWar.revealedCells to ensure it's always a JSON object, not an array.
+    // PHP's json_encode() turns empty PHP arrays into [] (JSON array) instead of {} (JSON object).
+    // JavaScript treats [] as an Array, so setting arr["36,66"] = true creates an expando property
+    // that JSON.stringify() silently drops (non-numeric keys on arrays are ignored).
+    if (is_array($boardState) && isset($boardState['sceneState']) && is_array($boardState['sceneState'])) {
+        foreach ($boardState['sceneState'] as &$scene) {
+            if (is_array($scene) && isset($scene['fogOfWar']) && is_array($scene['fogOfWar'])) {
+                if (!isset($scene['fogOfWar']['revealedCells'])
+                    || !is_array($scene['fogOfWar']['revealedCells'])
+                    || empty($scene['fogOfWar']['revealedCells'])) {
+                    $scene['fogOfWar']['revealedCells'] = new \stdClass();
+                }
+            }
+        }
+        unset($scene);
+    }
+
     if (!$isGm) {
         $tokens = filterTokensForPlayerView($tokens);
         $boardState = filterPlacementsForPlayerView($boardState);

@@ -507,7 +507,7 @@ function normalizeFogOfWarEntry(raw) {
   const enabled = Boolean(raw.enabled);
   const revealedCells = {};
 
-  if (raw.revealedCells && typeof raw.revealedCells === 'object') {
+  if (raw.revealedCells && typeof raw.revealedCells === 'object' && !Array.isArray(raw.revealedCells)) {
     Object.keys(raw.revealedCells).forEach((key) => {
       const parts = key.split(',');
       if (parts.length === 2) {

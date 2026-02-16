@@ -727,8 +727,12 @@ function mergeSceneStatePreservingGrid(existingSceneState, incomingSceneState) {
         // Both sides have fogOfWar — merge revealedCells (union).
         const existingCells = existingEntry.fogOfWar.revealedCells;
         const mergedCells = mergedEntry.fogOfWar.revealedCells;
-        if (existingCells && typeof existingCells === 'object' && Object.keys(existingCells).length > 0) {
-          if (!mergedCells || typeof mergedCells !== 'object') {
+        // Coerce arrays to plain objects (PHP encodes empty {} as [])
+        if (Array.isArray(mergedEntry.fogOfWar.revealedCells)) {
+          mergedEntry.fogOfWar.revealedCells = {};
+        }
+        if (existingCells && typeof existingCells === 'object' && !Array.isArray(existingCells) && Object.keys(existingCells).length > 0) {
+          if (!mergedCells || typeof mergedCells !== 'object' || Array.isArray(mergedCells)) {
             mergedEntry.fogOfWar.revealedCells = JSON.parse(JSON.stringify(existingCells));
           } else {
             // Union: copy existing cells that are missing from incoming.
@@ -740,6 +744,11 @@ function mergeSceneStatePreservingGrid(existingSceneState, incomingSceneState) {
           }
         }
       }
+    }
+
+    // Final safety: ensure revealedCells is always a plain object after merge
+    if (mergedEntry.fogOfWar && Array.isArray(mergedEntry.fogOfWar.revealedCells)) {
+      mergedEntry.fogOfWar.revealedCells = {};
     }
 
     merged[sceneId] = mergedEntry;
@@ -2813,26 +2822,32 @@ export function mountBoardInteractions(store, routes = {}) {
           }
           if (state.fogOfWar !== undefined) {
             const existing = draft.boardState.sceneState[sceneId].fogOfWar;
+            // Coerce arrays from PHP's json_encode (empty {} → []) to plain objects
+            const incomingFog = state.fogOfWar && typeof state.fogOfWar === 'object'
+              ? state.fogOfWar : { enabled: false, revealedCells: {} };
+            if (Array.isArray(incomingFog.revealedCells)) {
+              incomingFog.revealedCells = {};
+            }
             if (
               existing && typeof existing === 'object' &&
               existing.revealedCells && typeof existing.revealedCells === 'object' &&
-              Object.keys(existing.revealedCells).length > 0 &&
-              state.fogOfWar && typeof state.fogOfWar === 'object'
+              !Array.isArray(existing.revealedCells) &&
+              Object.keys(existing.revealedCells).length > 0
             ) {
               // Merge: keep enabled flag from delta, but union revealedCells
               // so locally-cleared fog cells are not overwritten by stale data.
               draft.boardState.sceneState[sceneId].fogOfWar = {
-                enabled: Boolean(state.fogOfWar.enabled),
+                enabled: Boolean(incomingFog.enabled),
                 revealedCells: { ...existing.revealedCells },
               };
-              const incomingCells = state.fogOfWar.revealedCells;
-              if (incomingCells && typeof incomingCells === 'object') {
+              const incomingCells = incomingFog.revealedCells;
+              if (incomingCells && typeof incomingCells === 'object' && !Array.isArray(incomingCells)) {
                 Object.keys(incomingCells).forEach((key) => {
                   draft.boardState.sceneState[sceneId].fogOfWar.revealedCells[key] = true;
                 });
               }
             } else {
-              draft.boardState.sceneState[sceneId].fogOfWar = state.fogOfWar;
+              draft.boardState.sceneState[sceneId].fogOfWar = incomingFog;
             }
           }
         });
