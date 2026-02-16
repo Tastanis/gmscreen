@@ -1610,10 +1610,6 @@ function normalizeFogOfWarPayload($raw): ?array
         }
     }
 
-    if (!$enabled && empty($revealedCells)) {
-        return null;
-    }
-
     return [
         'enabled' => $enabled,
         'revealedCells' => empty($revealedCells) ? new \stdClass() : $revealedCells,

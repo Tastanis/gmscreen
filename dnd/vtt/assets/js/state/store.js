@@ -461,7 +461,7 @@ function normalizeSceneBoardState(raw = {}) {
 
     entry.overlay = overlay;
 
-    if (fogOfWar) {
+    if (fogOfWar !== null) {
       entry.fogOfWar = fogOfWar;
     }
 
@@ -502,10 +502,6 @@ function normalizeFogOfWarEntry(raw) {
         }
       }
     });
-  }
-
-  if (!enabled && Object.keys(revealedCells).length === 0) {
-    return null;
   }
 
   return { enabled, revealedCells };

@@ -683,17 +683,16 @@ function ensureSceneBoardStateEntry(boardState, sceneId, fallbackGrid = null) {
   if (existing && typeof existing === 'object') {
     existing.grid = normalizeGridConfig(existing.grid ?? fallbackGrid ?? {});
     existing.overlay = normalizeOverlayConfig(existing.overlay ?? {});
-    // Ensure fogOfWar defaults to enabled if not explicitly set
-    if (!existing.fogOfWar || typeof existing.fogOfWar !== 'object') {
-      existing.fogOfWar = { enabled: true, revealedCells: {} };
-    }
+    // Do NOT force fogOfWar defaults here. Missing fogOfWar means "not configured"
+    // which renders as fog-off. Forcing { enabled: true } would override the user's
+    // explicit choice to disable fog whenever any scene action (overlay toggle, etc.)
+    // calls this function.
     return existing;
   }
 
   const entry = {
     grid: normalizeGridConfig(fallbackGrid ?? {}),
     overlay: createEmptyOverlayConfig(),
-    fogOfWar: { enabled: true, revealedCells: {} },
   };
   boardState.sceneState[key] = entry;
   return entry;
