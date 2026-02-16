@@ -990,7 +990,8 @@ function renderHeroPane() {
       </div>
 
       <div class="bottom-details">
-        <div class="identity identity--secondary">
+        <div class="identity identity--secondary" style="position:relative;">
+          <span class="chat-dot-wrap" style="position:absolute;top:4px;right:4px;"><button class="chat-dot chat-dot--section" type="button" aria-label="Post background to chat" data-chat-type="background"></button></span>
           ${identityField("Ancestry", "hero.ancestry")}
           ${detailGroup(
             "Culture",
@@ -1015,13 +1016,18 @@ function renderHeroPane() {
       </div>
     </section>
   `;
+  bindChatDots();
 }
 
 function renderListSection(containerId, title, key, placeholder) {
   const container = document.getElementById(containerId);
   const values = sheetState.sidebar.lists[key] || [];
+  const chatType = key === "languages" ? "languages" : null;
+  const dotMarkup = chatType
+    ? ` <span class="chat-dot-wrap"><button class="chat-dot chat-dot--section" type="button" aria-label="Post ${title.toLowerCase()} to chat" data-chat-type="${chatType}"></button></span>`
+    : "";
   container.innerHTML = `
-    <div class="sidebar__header">${title}</div>
+    <div class="sidebar__header">${title}${dotMarkup}</div>
     <div class="sidebar__content">
       <ul class="display-list">
         ${values.map((item) => `<li>${item}</li>`).join("") || `<li class="muted">${placeholder}</li>`}
@@ -1029,6 +1035,7 @@ function renderListSection(containerId, title, key, placeholder) {
       <textarea class="edit-field" rows="4" data-list="${key}" placeholder="${placeholder}">${values.join("\n")}</textarea>
     </div>
   `;
+  bindChatDots();
 }
 
 function renderCommonThingCard(thing) {
@@ -1037,6 +1044,7 @@ function renderCommonThingCard(thing) {
 
   return `
     <article class="common-card" data-common-id="${thing.id}">
+      <span class="chat-dot-wrap"><button class="chat-dot" type="button" aria-label="Post to chat" data-chat-type="common" data-chat-id="${thing.id}"></button></span>
       <header class="common-card__header">
         <div class="common-card__title-group">
           <div class="display-value common-card__title">${displayTitle}</div>
@@ -1095,6 +1103,7 @@ function renderCommonThings() {
   bindCommonAdds();
   bindCommonRemovals();
   bindRichTextToolbars();
+  bindChatDots();
 }
 
 function renderSidebarResource() {
@@ -1504,7 +1513,7 @@ function renderSkills() {
     : "";
 
   container.innerHTML = `
-    <div class="sidebar__header">Skills</div>
+    <div class="sidebar__header">Skills <span class="chat-dot-wrap"><button class="chat-dot chat-dot--section" type="button" aria-label="Post skills to chat" data-chat-type="skills"></button></span></div>
     <div class="sidebar__content skills-panel">
       ${isEditMode ? editorList : displayList}
       ${isEditMode ? '<button class="text-btn" type="button" id="open-skill-picker">+ Add New Skill</button>' : ""}
@@ -1527,6 +1536,7 @@ function renderSkills() {
       addBtn.addEventListener("click", () => openSkillPickerModal(availableSkills));
     }
   }
+  bindChatDots();
 }
 
 function renderFeatures() {
@@ -1554,6 +1564,7 @@ function renderFeatures() {
                   <input class="edit-field" type="text" data-field="title" value="${feature.title || ""}" />
                 </div>
                 <div class="feature-controls">
+                  <span class="chat-dot-wrap"><button class="chat-dot" type="button" aria-label="Post to chat" data-chat-type="feature" data-chat-id="${feature.id}"></button></span>
                   <button
                     class="icon-btn edit-only"
                     data-move-feature="up"
@@ -1612,6 +1623,7 @@ function renderFeatures() {
   bindFeatureMoves();
   bindFeatureWidthToggles();
   bindRichTextToolbars();
+  bindChatDots();
 }
 
 function actionDefaults(type) {
@@ -1913,6 +1925,7 @@ function renderActionSection(type, containerId) {
                   <input class="edit-field" type="text" data-field="actionLabel" value="${action.actionLabel || ""}" placeholder="Action label" />
                   <input class="edit-field" type="text" data-field="tags" value="${(action.tags || []).join(", ")}" placeholder="Tags" />
                 </div>
+                <span class="chat-dot-wrap"><button class="chat-dot" type="button" aria-label="Post to chat" data-chat-type="action" data-chat-id="${action.id}" data-chat-action-type="${type}"></button></span>
                 <button class="icon-btn edit-only" data-remove-action="${action.id}" aria-label="Remove action">✕</button>
               </header>
               <div class="action-label display-value action-collapsible">${action.actionLabel || "Action"}</div>
@@ -1968,6 +1981,7 @@ function renderActionSection(type, containerId) {
   bindTestRemovals();
   bindAttributeToggles();
   bindRichTextToolbars();
+  bindChatDots();
 }
 
 function renderSidebarLists() {
@@ -1977,7 +1991,7 @@ function renderSidebarLists() {
     const vulnerabilities = sheetState.sidebar.lists.vulnerability || [];
     const immunities = sheetState.sidebar.lists.immunity || [];
     weakContainer.innerHTML = `
-      <div class="sidebar__header">Vulnerability &amp; Immunity</div>
+      <div class="sidebar__header">Vulnerability &amp; Immunity <span class="chat-dot-wrap"><button class="chat-dot chat-dot--section" type="button" aria-label="Post vulnerabilities and immunities to chat" data-chat-type="vuln-immunity"></button></span></div>
       <div class="sidebar__content">
         <div class="sub-section">
           <div class="sub-section__title">Vulnerability</div>
@@ -1999,6 +2013,7 @@ function renderSidebarLists() {
         </div>
       </div>
     `;
+    bindChatDots();
   }
 
   renderListSection("sidebar-languages", "Languages", "languages", "Languages known.");
@@ -2514,6 +2529,264 @@ async function saveSheet() {
   } catch (error) {
     console.error("Error saving sheet", error);
   }
+}
+
+/* ─── Post-to-Chat System ─── */
+
+const CHAT_API = "/dnd/chat_handler.php";
+
+async function sendToChat(text) {
+  const params = new URLSearchParams();
+  params.append("action", "chat_send");
+  params.append("message", text);
+  try {
+    const response = await fetch(CHAT_API, {
+      method: "POST",
+      headers: { "Content-Type": "application/x-www-form-urlencoded" },
+      body: params.toString(),
+    });
+    if (!response.ok) throw new Error("Chat send failed");
+    const data = await response.json();
+    return Boolean(data && data.success);
+  } catch (error) {
+    console.warn("Failed to post to chat", error);
+    return false;
+  }
+}
+
+function showChatToast(text) {
+  const existing = document.querySelector(".chat-post-toast");
+  if (existing) existing.remove();
+  const toast = document.createElement("div");
+  toast.className = "chat-post-toast";
+  toast.textContent = text;
+  document.body.appendChild(toast);
+  toast.addEventListener("animationend", () => toast.remove());
+}
+
+function stripHtmlToText(html) {
+  if (!html) return "";
+  const div = document.createElement("div");
+  div.innerHTML = html;
+  return (div.textContent || div.innerText || "").trim();
+}
+
+function clearChatDotConfirmations() {
+  document.querySelectorAll(".chat-dot-confirm").forEach((el) => el.remove());
+}
+
+function showChatDotConfirm(dotWrap, onConfirm) {
+  clearChatDotConfirmations();
+  const confirm = document.createElement("div");
+  confirm.className = "chat-dot-confirm";
+  confirm.innerHTML = `
+    <div class="chat-dot-confirm__text">Post to chat?</div>
+    <div class="chat-dot-confirm__actions">
+      <button class="chat-dot-confirm__btn chat-dot-confirm__btn--yes" data-chat-yes>Yes</button>
+      <button class="chat-dot-confirm__btn" data-chat-no>No</button>
+    </div>
+  `;
+  dotWrap.appendChild(confirm);
+
+  confirm.querySelector("[data-chat-no]").addEventListener("click", (e) => {
+    e.stopPropagation();
+    confirm.remove();
+  });
+  confirm.querySelector("[data-chat-yes]").addEventListener("click", async (e) => {
+    e.stopPropagation();
+    confirm.remove();
+    await onConfirm();
+  });
+
+  const dismiss = (e) => {
+    if (!dotWrap.contains(e.target)) {
+      confirm.remove();
+      document.removeEventListener("pointerdown", dismiss, true);
+    }
+  };
+  setTimeout(() => document.addEventListener("pointerdown", dismiss, true), 0);
+}
+
+function chatDotHtml(extraClass) {
+  const cls = extraClass ? `chat-dot ${extraClass}` : "chat-dot";
+  return `<span class="chat-dot-wrap"><button class="${cls}" type="button" aria-label="Post to chat"></button></span>`;
+}
+
+/* ─── Chat formatting helpers ─── */
+
+function formatActionForChat(action, type) {
+  const heroName = sheetState.hero.name || "Hero";
+  const name = action.name || "Unnamed Action";
+  const labelMap = { mains: "Action", maneuvers: "Maneuver", triggers: "Triggered Action", freeStrikes: "Free Strike" };
+  const actionLabel = action.actionLabel || labelMap[type] || "Action";
+  const tags = (action.tags || []).join(", ");
+
+  const lines = [];
+  lines.push(`${heroName} — ${name}`);
+  lines.push(`Type: ${actionLabel}${tags ? " | " + tags : ""}`);
+
+  if (action.range) lines.push(`Range: ${action.range}`);
+  if (action.target) lines.push(`Target: ${action.target}`);
+  if (type === "triggers" && action.trigger) lines.push(`Trigger: ${action.trigger}`);
+  if (action.cost) lines.push(`Cost: ${action.cost}`);
+  if (action.useWhen) lines.push(`Use When: ${action.useWhen}`);
+  if (action.description) lines.push(`Effect: ${stripHtmlToText(action.description)}`);
+
+  (action.tests || []).forEach((test) => {
+    const testLabel = test.label || "Test";
+    lines.push(`--- ${testLabel} (${formatRoll(test.rollMod)}) ---`);
+    if (test.beforeEffect) lines.push(`Before: ${test.beforeEffect}`);
+    for (const { key, label } of TEST_TIERS) {
+      const tier = test.tiers?.[key];
+      if (!tier) continue;
+      const parts = [];
+      if (tier.damage || tier.damageType) {
+        parts.push(`${tier.damage || "-"} ${tier.damageType || ""}`.trim());
+      }
+      if (tier.notes) parts.push(tier.notes);
+      if (tier.attributeCheck?.enabled) {
+        const attr = tier.attributeCheck.attribute || "Attr";
+        const thresh = tier.attributeCheck.threshold || "?";
+        const eff = tier.attributeCheck.effect || "";
+        parts.push(`${attr} \u2264 ${thresh}: ${eff}`);
+      }
+      if (parts.length) lines.push(`  ${label}: ${parts.join(" | ")}`);
+    }
+    if (test.additionalEffect) lines.push(`Additional: ${test.additionalEffect}`);
+  });
+
+  return lines.join("\n");
+}
+
+function formatFeatureForChat(feature) {
+  const heroName = sheetState.hero.name || "Hero";
+  const title = feature.title || "Untitled Feature";
+  const tags = (feature.tags || []).join(", ");
+  const body = stripHtmlToText(feature.text);
+
+  const lines = [];
+  lines.push(`${heroName} — ${title}`);
+  if (tags) lines.push(`Tags: ${tags}`);
+  if (body) lines.push(body);
+  return lines.join("\n");
+}
+
+function formatSkillsForChat() {
+  const heroName = sheetState.hero.name || "Hero";
+  const skills = normalizeSkillsState(sheetState.sidebar.skills);
+  const entries = Object.entries(skills);
+  if (!entries.length) return null;
+
+  const lines = [`${heroName} — Skills`];
+  entries.forEach(([skill, data]) => {
+    const group = getSkillGroup(skill);
+    const bonus = formatBonusValue(data.bonus);
+    lines.push(`  ${skill} (${group}) ${bonus}`);
+  });
+  return lines.join("\n");
+}
+
+function formatLanguagesForChat() {
+  const heroName = sheetState.hero.name || "Hero";
+  const languages = sheetState.sidebar.lists.languages || [];
+  if (!languages.length) return null;
+
+  return `${heroName} — Languages\n  ${languages.join(", ")}`;
+}
+
+function formatBackgroundForChat() {
+  const hero = sheetState.hero;
+  const heroName = hero.name || "Hero";
+  const lines = [`${heroName} — Background`];
+
+  if (hero.ancestry) lines.push(`Ancestry: ${hero.ancestry}`);
+  if (hero.complication) lines.push(`Complication: ${hero.complication}`);
+
+  const culture = hero.culture || {};
+  const cultureParts = [];
+  if (culture.culture) cultureParts.push(`Culture: ${culture.culture}`);
+  if (culture.environment) cultureParts.push(`Environment: ${culture.environment}`);
+  if (culture.organization) cultureParts.push(`Organization: ${culture.organization}`);
+  if (culture.upbringing) cultureParts.push(`Upbringing: ${culture.upbringing}`);
+  if (cultureParts.length) lines.push(...cultureParts);
+
+  const career = hero.career || {};
+  if (career.career) lines.push(`Career: ${career.career}`);
+  if (career.incitingIncident) lines.push(`Inciting Incident: ${career.incitingIncident}`);
+
+  return lines.length > 1 ? lines.join("\n") : null;
+}
+
+function formatCommonThingForChat(thing) {
+  const heroName = sheetState.hero.name || "Hero";
+  const title = thing.title || "Common Thing";
+  const details = stripHtmlToText(thing.details);
+
+  const lines = [`${heroName} — ${title}`];
+  if (details) lines.push(details);
+  return lines.join("\n");
+}
+
+function formatVulnImmunityForChat() {
+  const heroName = sheetState.hero.name || "Hero";
+  const vulns = sheetState.sidebar.lists.vulnerability || [];
+  const immunes = sheetState.sidebar.lists.immunity || [];
+  if (!vulns.length && !immunes.length) return null;
+
+  const lines = [`${heroName} — Vulnerabilities & Immunities`];
+  if (vulns.length) lines.push(`Vulnerable: ${vulns.join(", ")}`);
+  if (immunes.length) lines.push(`Immune: ${immunes.join(", ")}`);
+  return lines.join("\n");
+}
+
+/* ─── Bind post-to-chat dots ─── */
+
+function bindChatDots(scope) {
+  const root = scope || document;
+  root.querySelectorAll(".chat-dot").forEach((dot) => {
+    if (dot.dataset.chatBound) return;
+    dot.dataset.chatBound = "1";
+    dot.addEventListener("click", (e) => {
+      e.stopPropagation();
+      const wrap = dot.closest(".chat-dot-wrap");
+      if (!wrap) return;
+
+      const dataType = dot.dataset.chatType;
+      const dataId = dot.dataset.chatId;
+      const dataActionType = dot.dataset.chatActionType;
+
+      showChatDotConfirm(wrap, async () => {
+        let text = null;
+        if (dataType === "action") {
+          const actions = sheetState.actions[dataActionType] || [];
+          const action = actions.find((a) => a.id === dataId);
+          if (action) text = formatActionForChat(action, dataActionType);
+        } else if (dataType === "feature") {
+          const feature = sheetState.features.find((f) => f.id === dataId);
+          if (feature) text = formatFeatureForChat(feature);
+        } else if (dataType === "skills") {
+          text = formatSkillsForChat();
+        } else if (dataType === "languages") {
+          text = formatLanguagesForChat();
+        } else if (dataType === "background") {
+          text = formatBackgroundForChat();
+        } else if (dataType === "common") {
+          const commons = sheetState.sidebar.lists.common || [];
+          const thing = commons.find((c) => c.id === dataId);
+          if (thing) text = formatCommonThingForChat(thing);
+        } else if (dataType === "vuln-immunity") {
+          text = formatVulnImmunityForChat();
+        }
+
+        if (text) {
+          const ok = await sendToChat(text);
+          showChatToast(ok ? "Posted to chat" : "Failed to post");
+        } else {
+          showChatToast("Nothing to post");
+        }
+      });
+    });
+  });
 }
 
 async function ready() {
