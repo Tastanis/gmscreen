@@ -96,12 +96,21 @@ if ($imageInfo === false) {
 }
 
 [$width, $height, $imageType] = $imageInfo;
-// Source limit is 6000 since we double the image (final max: 12000x12000)
-if ($width > 6000 || $height > 6000) {
+
+// When noResize is set the image is already at display resolution (e.g. overlay
+// cutouts rendered from the already-doubled map).  Skip the doubling step and
+// allow up to the final 12000px limit.  Normal uploads are limited to 6000px
+// because the server doubles them (final max: 12000x12000).
+$noResize = !empty($_POST['noResize']);
+$maxDimension = $noResize ? 12000 : 6000;
+
+if ($width > $maxDimension || $height > $maxDimension) {
+    $limitLabel = number_format($maxDimension);
     http_response_code(413);
     echo json_encode([
         'success' => false,
-        'error' => 'Map dimensions exceed the supported 6,000 x 6,000 pixel limit (images are doubled for better grid display).',
+        'error' => "Map dimensions exceed the supported {$limitLabel} x {$limitLabel} pixel limit"
+            . ($noResize ? '.' : ' (images are doubled for better grid display).'),
     ]);
     return;
 }
@@ -137,65 +146,102 @@ try {
     return;
 }
 
-// Double the image dimensions for better grid/token display
-$doubledWidth = $width * 2;
-$doubledHeight = $height * 2;
+if ($noResize) {
+    // Image is already at display resolution — save as-is.
+    $finalWidth = $width;
+    $finalHeight = $height;
 
-$sourceImage = loadImageFromFile($tmpPath, $imageType);
-if ($sourceImage === null) {
-    http_response_code(500);
-    echo json_encode([
-        'success' => false,
-        'error' => 'Failed to process the uploaded image.',
-    ]);
-    return;
-}
+    $sourceImage = loadImageFromFile($tmpPath, $imageType);
+    if ($sourceImage === null) {
+        http_response_code(500);
+        echo json_encode([
+            'success' => false,
+            'error' => 'Failed to process the uploaded image.',
+        ]);
+        return;
+    }
 
-$doubledImage = imagecreatetruecolor($doubledWidth, $doubledHeight);
-if ($doubledImage === false) {
+    // Preserve transparency for PNG and GIF
+    if ($imageType === IMAGETYPE_PNG || $imageType === IMAGETYPE_GIF) {
+        imagealphablending($sourceImage, false);
+        imagesavealpha($sourceImage, true);
+    }
+
+    $filename = sprintf('%s_%dx%d.%s', $basename, $finalWidth, $finalHeight, $extension);
+    $destinationPath = $destinationDir . '/' . $filename;
+
+    if (!saveImageToFile($sourceImage, $destinationPath, $imageType)) {
+        imagedestroy($sourceImage);
+        http_response_code(500);
+        echo json_encode([
+            'success' => false,
+            'error' => 'Unable to save the map to disk.',
+        ]);
+        return;
+    }
+
     imagedestroy($sourceImage);
-    http_response_code(500);
-    echo json_encode([
-        'success' => false,
-        'error' => 'Failed to create doubled image canvas.',
-    ]);
-    return;
-}
+} else {
+    // Double the image dimensions for better grid/token display
+    $finalWidth = $width * 2;
+    $finalHeight = $height * 2;
 
-// Preserve transparency for PNG and GIF
-if ($imageType === IMAGETYPE_PNG || $imageType === IMAGETYPE_GIF) {
-    imagealphablending($doubledImage, false);
-    imagesavealpha($doubledImage, true);
-    $transparent = imagecolorallocatealpha($doubledImage, 0, 0, 0, 127);
-    imagefill($doubledImage, 0, 0, $transparent);
-}
+    $sourceImage = loadImageFromFile($tmpPath, $imageType);
+    if ($sourceImage === null) {
+        http_response_code(500);
+        echo json_encode([
+            'success' => false,
+            'error' => 'Failed to process the uploaded image.',
+        ]);
+        return;
+    }
 
-// Resample source to doubled size
-imagecopyresampled(
-    $doubledImage,
-    $sourceImage,
-    0, 0,    // dest x, y
-    0, 0,    // src x, y
-    $doubledWidth, $doubledHeight,  // dest width, height
-    $width, $height                  // src width, height
-);
+    $doubledImage = imagecreatetruecolor($finalWidth, $finalHeight);
+    if ($doubledImage === false) {
+        imagedestroy($sourceImage);
+        http_response_code(500);
+        echo json_encode([
+            'success' => false,
+            'error' => 'Failed to create doubled image canvas.',
+        ]);
+        return;
+    }
 
-imagedestroy($sourceImage);
+    // Preserve transparency for PNG and GIF
+    if ($imageType === IMAGETYPE_PNG || $imageType === IMAGETYPE_GIF) {
+        imagealphablending($doubledImage, false);
+        imagesavealpha($doubledImage, true);
+        $transparent = imagecolorallocatealpha($doubledImage, 0, 0, 0, 127);
+        imagefill($doubledImage, 0, 0, $transparent);
+    }
 
-$filename = sprintf('%s_%dx%d.%s', $basename, $doubledWidth, $doubledHeight, $extension);
-$destinationPath = $destinationDir . '/' . $filename;
+    // Resample source to doubled size
+    imagecopyresampled(
+        $doubledImage,
+        $sourceImage,
+        0, 0,    // dest x, y
+        0, 0,    // src x, y
+        $finalWidth, $finalHeight,  // dest width, height
+        $width, $height             // src width, height
+    );
 
-if (!saveImageToFile($doubledImage, $destinationPath, $imageType)) {
+    imagedestroy($sourceImage);
+
+    $filename = sprintf('%s_%dx%d.%s', $basename, $finalWidth, $finalHeight, $extension);
+    $destinationPath = $destinationDir . '/' . $filename;
+
+    if (!saveImageToFile($doubledImage, $destinationPath, $imageType)) {
+        imagedestroy($doubledImage);
+        http_response_code(500);
+        echo json_encode([
+            'success' => false,
+            'error' => 'Unable to save the doubled map to disk.',
+        ]);
+        return;
+    }
+
     imagedestroy($doubledImage);
-    http_response_code(500);
-    echo json_encode([
-        'success' => false,
-        'error' => 'Unable to save the doubled map to disk.',
-    ]);
-    return;
 }
-
-imagedestroy($doubledImage);
 
 $publicUrl = '/dnd/vtt/storage/uploads/' . $filename;
 
@@ -215,8 +261,8 @@ echo json_encode([
     'success' => true,
     'data' => [
         'url' => $publicUrl,
-        'width' => $doubledWidth,
-        'height' => $doubledHeight,
+        'width' => $finalWidth,
+        'height' => $finalHeight,
         'originalWidth' => $width,
         'originalHeight' => $height,
     ],
