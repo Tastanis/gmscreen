@@ -102,10 +102,11 @@ export function subscribe(listener) {
 export function updateState(updater) {
   updater(state);
 
-  // Preserve fogOfWar data across syncBoardOverlayState.
-  // The overlay normalization rebuilds overlay objects on each scene entry;
-  // capture fogOfWar references beforehand so cells cannot be lost if the
-  // entry object is inadvertently replaced during overlay processing.
+  // Preserve fogOfWar data across syncBoardOverlayState AND notify().
+  // The overlay normalization rebuilds overlay objects on each scene entry,
+  // and subscribers triggered by notify() (e.g. poller merge, Pusher sync)
+  // can call updateState again and replace draft.boardState entirely.
+  // We deep-copy fogOfWar before those steps and restore afterwards.
   const fogSnap = captureFogOfWarSnapshot(state.boardState);
 
   syncBoardOverlayState(state.boardState);
@@ -118,6 +119,11 @@ export function updateState(updater) {
   }
   state.boardState.pings = normalizePings(state.boardState.pings);
   notify();
+
+  // After notify(), subscribers may have triggered nested updateState calls
+  // that replaced boardState (e.g. the poller merging server state).
+  // Re-check and restore fog data if it was lost during notification.
+  restoreFogOfWarSnapshot(state.boardState, fogSnap);
 }
 
 function notify() {
@@ -950,8 +956,14 @@ function roundToPrecision(value, precision = 4) {
 }
 
 /**
- * Snapshot every scene entry's fogOfWar reference so it can be restored if a
- * subsequent normalization step inadvertently replaces the entry object.
+ * Snapshot every scene entry's fogOfWar data so it can be restored if a
+ * subsequent normalization step or subscriber-triggered updateState call
+ * inadvertently replaces or clears the fog data.
+ *
+ * IMPORTANT: We deep-copy the fogOfWar objects rather than storing references,
+ * because a subscriber (e.g. the poller merge) can replace `draft.boardState`
+ * entirely during `notify()`, which would make a reference-based snapshot point
+ * to the *new* (empty) object instead of preserving the original cells.
  */
 function captureFogOfWarSnapshot(boardState) {
   const snap = new Map();
@@ -962,7 +974,8 @@ function captureFogOfWarSnapshot(boardState) {
   Object.keys(sceneState).forEach((sceneId) => {
     const entry = sceneState[sceneId];
     if (entry && typeof entry === 'object' && entry.fogOfWar && typeof entry.fogOfWar === 'object') {
-      snap.set(sceneId, entry.fogOfWar);
+      // Deep copy so the snapshot is immune to later mutations or replacements
+      snap.set(sceneId, JSON.parse(JSON.stringify(entry.fogOfWar)));
     }
   });
   return snap;
