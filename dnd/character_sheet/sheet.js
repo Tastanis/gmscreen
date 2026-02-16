@@ -155,6 +155,7 @@ const defaultSheet = {
     xp: "",
     victories: "",
     surges: "",
+    surgesUsed: 0,
     resource: { title: "Resource", value: 0, autoDice: "" },
     heroTokens: [false, false],
     stats: {
@@ -331,6 +332,16 @@ function normalizeVitals(vitals = {}) {
   normalized.staminaHistory = history.slice(-4);
 
   return normalized;
+}
+
+function computeRecoveryValue(vitals) {
+  const raw = vitals.recoveryValue;
+  if (raw !== "" && raw !== null && raw !== undefined && Number(raw) !== 0) {
+    return Math.floor(Number(raw)) || raw;
+  }
+  const staminaMax = Number(vitals.staminaMax) || 0;
+  if (staminaMax <= 0) return "";
+  return Math.floor(staminaMax / 3);
 }
 
 function normalizeSkillsState(skills = {}) {
@@ -853,6 +864,52 @@ function applyTrackerChange(path, rawValue) {
   saveSheet();
 }
 
+function renderSurgesBox(hero, isEditMode) {
+  const totalSurges = Math.min(10, Math.max(0, Number(hero.surges) || 0));
+  const surgesUsed = Math.min(totalSurges, Math.max(0, Number(hero.surgesUsed) || 0));
+
+  if (isEditMode) {
+    return `
+      <div class="field-card vital-card compact surges-card">
+        <label class="${getLabelClass("Surges")}">Surges</label>
+        <input class="edit-field" type="number" min="0" max="10" data-model="hero.surges" value="${hero.surges ?? ""}" />
+      </div>`;
+  }
+
+  if (totalSurges === 0) {
+    return `
+      <div class="field-card vital-card compact surges-card">
+        <label class="${getLabelClass("Surges")}">Surges</label>
+        <div class="display-value">0</div>
+      </div>`;
+  }
+
+  let boxes = "";
+  for (let i = 0; i < totalSurges; i++) {
+    const filled = i < surgesUsed;
+    boxes += `<button class="surge-tick ${filled ? "surge-tick--filled" : ""}" data-surge-index="${i}" type="button" aria-label="Toggle surge ${i + 1}"></button>`;
+  }
+
+  return `
+    <div class="field-card vital-card compact surges-card">
+      <label class="${getLabelClass("Surges")}">Surges</label>
+      <div class="surges-tick-grid">${boxes}</div>
+    </div>`;
+}
+
+function renderXpWithRespite(hero, isEditMode) {
+  const xpValue = hero.xp || "";
+  return `
+    <div class="field-card xp-card">
+      <label class="${getLabelClass("XP")}">XP</label>
+      <div class="display-value xp-display-row">
+        <span>${xpValue}</span>
+        <button class="text-btn respite-btn" data-respite type="button">Respite</button>
+      </div>
+      <input class="edit-field" type="text" data-model="hero.xp" value="${xpValue}" />
+    </div>`;
+}
+
 function renderHeroPane() {
   const hero = sheetState.hero;
   const pane = document.getElementById("hero-pane");
@@ -942,8 +999,15 @@ function renderHeroPane() {
       </div>
 
       <div class="key-vitals-row">
-        ${vitalField("Victories", "hero.victories", "number")}
-        ${vitalField("Size", "hero.vitals.size")}
+        <div class="field-card vital-card compact victories-card">
+          <label class="${getLabelClass("Victories")}">Victories</label>
+          <div class="display-value victories-display-row">
+            <span>${hero.victories ?? ""}</span>
+            <button class="text-btn add-victory-btn" data-add-victory type="button">+1</button>
+          </div>
+          <input class="edit-field" type="number" data-model="hero.victories" value="${hero.victories ?? ""}" />
+        </div>
+        ${renderSurgesBox(hero, isEditMode)}
         ${vitalField("Stability", "hero.vitals.stability")}
         ${vitalField("Speed", "hero.vitals.speed")}
       </div>
@@ -951,8 +1015,7 @@ function renderHeroPane() {
       <div class="quick-resources">
         ${identityField("Wealth", "hero.wealth")}
         ${identityField("Renown", "hero.renown")}
-        ${identityField("XP", "hero.xp")}
-        ${identityField("Surges", "hero.surges")}
+        ${renderXpWithRespite(hero, isEditMode)}
         ${
           isEditMode
             ? `<div class="field-card resource-card edit-only">
@@ -981,11 +1044,16 @@ function renderHeroPane() {
       </div>
 
       <div class="vital-grid">
+        ${vitalField("Size", "hero.vitals.size")}
         ${vitalField("Disengage", "hero.vitals.disengage")}
         ${vitalField("Save", "hero.vitals.save")}
         ${vitalField("Stamina", "hero.vitals.staminaMax", "number")}
         ${vitalField("Recoveries", "hero.vitals.recoveriesMax", "number")}
-        ${vitalField("Recovery Value", "hero.vitals.recoveryValue")}
+        <div class="field-card vital-card compact">
+          <label class="${getLabelClass("Recovery Value")}">Recovery Value</label>
+          <div class="display-value">${computeRecoveryValue(hero.vitals)}</div>
+          <input class="edit-field" type="text" data-model="hero.vitals.recoveryValue" value="${hero.vitals.recoveryValue ?? ""}" />
+        </div>
       </div>
 
       <div class="bottom-details">
@@ -1355,12 +1423,11 @@ function renderBars() {
           <div class="tracker-input-wrapper">
             <input class="edit-field tracker-input" data-live-edit="true" type="text" data-model="hero.vitals.currentRecoveries" value="${vitals.currentRecoveries}" />
           </div>
+          <div class="recovery-value-inline">
+            <span class="recovery-value-label">Recovery Value</span>
+            <span class="recovery-value-number">${computeRecoveryValue(vitals)}</span>
+          </div>
         </div>
-      </div>
-      <div class="field-card compact">
-        <label>Recovery Value</label>
-        <div class="display-value">${recoveryValue}</div>
-        <input class="edit-field" type="text" data-model="hero.vitals.recoveryValue" value="${recoveryValue}" />
       </div>
     </div>
   `;
@@ -2035,6 +2102,9 @@ function renderAll() {
   bindTokenButtons();
   bindResourceControls();
   bindRichTextToolbars();
+  bindSurgeButtons();
+  bindVictoryButtons();
+  bindRespiteButton();
 }
 
 function bindTokenButtons() {
@@ -2042,6 +2112,67 @@ function bindTokenButtons() {
     btn.addEventListener("click", () => {
       const index = Number(btn.dataset.tokenIndex);
       showHeroTokenConfirmation(btn, index);
+    });
+  });
+}
+
+function bindSurgeButtons() {
+  document.querySelectorAll(".surge-tick").forEach((btn) => {
+    btn.addEventListener("click", () => {
+      const totalSurges = Math.min(10, Math.max(0, Number(sheetState.hero.surges) || 0));
+      let surgesUsed = Math.min(totalSurges, Math.max(0, Number(sheetState.hero.surgesUsed) || 0));
+      const isFilled = btn.classList.contains("surge-tick--filled");
+
+      if (isFilled) {
+        surgesUsed = Math.max(0, surgesUsed - 1);
+      } else {
+        surgesUsed = Math.min(totalSurges, surgesUsed + 1);
+      }
+
+      sheetState.hero.surgesUsed = surgesUsed;
+      renderHeroPane();
+      bindSurgeButtons();
+      bindVictoryButtons();
+      bindRespiteButton();
+      saveSheet();
+    });
+  });
+}
+
+function bindVictoryButtons() {
+  document.querySelectorAll("[data-add-victory]").forEach((btn) => {
+    btn.addEventListener("click", () => {
+      const current = Number(sheetState.hero.victories) || 0;
+      sheetState.hero.victories = current + 1;
+      renderHeroPane();
+      bindSurgeButtons();
+      bindVictoryButtons();
+      bindRespiteButton();
+      saveSheet();
+    });
+  });
+}
+
+function bindRespiteButton() {
+  document.querySelectorAll("[data-respite]").forEach((btn) => {
+    btn.addEventListener("click", () => {
+      const currentXp = Number(sheetState.hero.xp) || 0;
+      const victories = Number(sheetState.hero.victories) || 0;
+      sheetState.hero.xp = currentXp + victories;
+      sheetState.hero.victories = 0;
+
+      const vitals = sheetState.hero.vitals;
+      const recoveriesMax = Number(vitals.recoveriesMax) || 0;
+      vitals.currentRecoveries = recoveriesMax;
+
+      renderHeroPane();
+      renderBars();
+      bindSurgeButtons();
+      bindVictoryButtons();
+      bindRespiteButton();
+      bindTokenButtons();
+      bindResourceControls();
+      saveSheet();
     });
   });
 }
