@@ -27,9 +27,9 @@ body {
 
 .app-shell {
   display: grid;
-  grid-template-columns: 1fr 320px;
-  gap: 12px;
-  padding: 12px;
+  grid-template-columns: 1fr 350px;
+  gap: 6px;
+  padding: 8px;
   max-width: 1600px;
   margin: 0 auto;
 }
@@ -41,7 +41,7 @@ body {
   display: flex;
   flex-direction: column;
   gap: 10px;
-  padding: 12px;
+  padding: 10px;
 }
 
 .sheet__header {
@@ -460,11 +460,12 @@ body {
   background: var(--accent-strong);
 }
 
-/* Key vitals row: Victories, Size, Stability, Speed */
+/* Key vitals row: Victories, Surges, Stability, Speed */
 .key-vitals-row {
   display: grid;
-  grid-template-columns: repeat(4, 1fr);
+  grid-template-columns: auto 1fr auto auto;
   gap: 8px;
+  align-items: start;
 }
 
 .key-vitals-row .field-card {
@@ -497,7 +498,7 @@ body {
 
 .vital-grid {
   display: grid;
-  grid-template-columns: repeat(5, minmax(90px, 1fr));
+  grid-template-columns: repeat(6, minmax(75px, 1fr));
   gap: 6px;
 }
 
@@ -665,12 +666,12 @@ body {
   background: var(--panel);
   border: 1px solid var(--border);
   border-radius: 4px;
-  padding: 10px;
+  padding: 8px;
   display: flex;
   flex-direction: column;
   gap: 8px;
   position: sticky;
-  top: 12px;
+  top: 8px;
   height: fit-content;
 }
 
@@ -1003,7 +1004,7 @@ body {
 .meter__row {
   display: flex;
   justify-content: space-between;
-  align-items: flex-end;
+  align-items: center;
   gap: 10px;
 }
 
@@ -1017,7 +1018,7 @@ body {
   flex-direction: column;
   align-items: flex-end;
   gap: 4px;
-  width: 100%;
+  flex: 1;
 }
 
 .tracker-input {
@@ -1106,6 +1107,135 @@ body {
   font-size: 12px;
   color: var(--muted);
   margin-top: -2px;
+}
+
+/* Recovery value inline in the recoveries row */
+.recovery-value-inline {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  padding: 4px 8px;
+  background: var(--panel-alt);
+  border: 1px solid var(--border);
+  border-radius: 4px;
+  min-width: 60px;
+  flex-shrink: 0;
+}
+
+.recovery-value-label {
+  font-size: 9px;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+  color: var(--muted);
+  line-height: 1.1;
+  text-align: center;
+}
+
+.recovery-value-number {
+  font-size: 18px;
+  font-weight: 800;
+  color: var(--text);
+  line-height: 1.2;
+}
+
+/* Surges tick boxes */
+.surges-card {
+  text-align: center;
+}
+
+.surges-tick-grid {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 3px;
+  justify-content: center;
+  max-width: 120px;
+  margin: 0 auto;
+}
+
+.surge-tick {
+  width: 18px;
+  height: 18px;
+  border-radius: 3px;
+  border: 2px solid var(--border);
+  background: var(--panel);
+  cursor: pointer;
+  padding: 0;
+  transition: background 0.15s ease;
+}
+
+.surge-tick:hover {
+  border-color: var(--accent);
+}
+
+.surge-tick--filled {
+  background: var(--accent);
+  border-color: var(--accent-strong);
+}
+
+/* Victories +1 button */
+.victories-card {
+  text-align: center;
+}
+
+.victories-display-row {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 6px;
+}
+
+.add-victory-btn {
+  font-size: 12px;
+  padding: 1px 6px;
+  border-radius: 3px;
+  background: var(--accent);
+  color: #f0e8da;
+  border: 1px solid var(--accent-strong);
+  cursor: pointer;
+  font-weight: 700;
+  line-height: 1.4;
+}
+
+.add-victory-btn:hover {
+  background: var(--accent-strong);
+}
+
+body.edit-mode .add-victory-btn {
+  display: none;
+}
+
+/* XP with Respite button */
+.xp-card {
+  position: relative;
+}
+
+.xp-display-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 6px;
+}
+
+.respite-btn {
+  font-size: 11px;
+  padding: 2px 8px;
+  border-radius: 3px;
+  background: var(--info);
+  color: #fff;
+  border: 1px solid #4a90b8;
+  cursor: pointer;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+}
+
+.respite-btn:hover {
+  background: #4a90b8;
+}
+
+body.edit-mode .respite-btn {
+  display: none;
 }
 
 @keyframes temp-stamina-flash {
