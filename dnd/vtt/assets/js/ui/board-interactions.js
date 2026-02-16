@@ -458,7 +458,7 @@ export async function createOverlayCutoutBlob({
   return blob;
 }
 
-export async function uploadMap(file, endpoint, fileName) {
+export async function uploadMap(file, endpoint, fileName, options) {
   if (!endpoint) {
     throw new Error('Upload endpoint is not defined');
   }
@@ -470,6 +470,10 @@ export async function uploadMap(file, endpoint, fileName) {
   const resolvedName = providedName || inferredName || fallbackName;
 
   formData.append('map', file, resolvedName);
+
+  if (options?.noResize) {
+    formData.append('noResize', '1');
+  }
 
   const response = await fetch(endpoint, {
     method: 'POST',
@@ -16313,7 +16317,8 @@ function createOverlayTool(uploadsEndpoint) {
           const uploadedUrl = await overlayUploadHelpers.uploadMap(
             blob,
             uploadsEndpoint,
-            fileName
+            fileName,
+            { noResize: true }
           );
 
           if (uploadedUrl) {
