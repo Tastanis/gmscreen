@@ -197,3 +197,75 @@ test('uploading an overlay map for a single layer preserves other layer masks', 
 
   globalThis.fetch = originalFetch;
 });
+
+// ===========================================================================
+// Fog of war default state and scene sidebar tests
+// ===========================================================================
+
+test('scene sidebar does not render fog toggle button', async () => {
+  const dom = createDom();
+  const store = createMockStore({
+    boardState: {
+      activeSceneId: 'scene-1',
+      mapUrl: 'http://example.com/map.png',
+      overlay: {},
+      placements: {},
+      sceneState: {
+        'scene-1': {
+          grid: { size: 64, locked: false, visible: true },
+          fogOfWar: { enabled: true, revealedCells: {} },
+          overlay: {},
+        },
+      },
+    },
+    scenes: {
+      items: [{ id: 'scene-1', name: 'Test Scene', mapUrl: 'http://example.com/map.png' }],
+      folders: [],
+    },
+    tokens: { folders: [], items: [] },
+    user: { isGM: true },
+  });
+
+  renderSceneList(
+    { uploads: 'http://example.com/uploads', scenes: 'http://example.com/scenes', state: 'http://example.com/state' },
+    store
+  );
+
+  const fogToggle = dom.window.document.querySelector('[data-action="toggle-fog"]');
+  assert.equal(fogToggle, null, 'fog toggle button should not exist in scene sidebar');
+});
+
+test('scene sidebar still renders overlay and delete buttons', async () => {
+  const dom = createDom();
+  const store = createMockStore({
+    boardState: {
+      activeSceneId: 'scene-1',
+      mapUrl: 'http://example.com/map.png',
+      overlay: {},
+      placements: {},
+      sceneState: {
+        'scene-1': {
+          grid: { size: 64, locked: false, visible: true },
+          overlay: {},
+        },
+      },
+    },
+    scenes: {
+      items: [{ id: 'scene-1', name: 'Test Scene', mapUrl: 'http://example.com/map.png' }],
+      folders: [],
+    },
+    tokens: { folders: [], items: [] },
+    user: { isGM: true },
+  });
+
+  renderSceneList(
+    { uploads: 'http://example.com/uploads', scenes: 'http://example.com/scenes', state: 'http://example.com/state' },
+    store
+  );
+
+  const deleteButton = dom.window.document.querySelector('[data-action="delete-scene"]');
+  assert.ok(deleteButton, 'delete button should still exist');
+
+  const clearOverlayButton = dom.window.document.querySelector('[data-action="clear-overlay"]');
+  assert.ok(clearOverlayButton, 'clear overlay button should still exist');
+});

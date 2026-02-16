@@ -715,6 +715,16 @@ function mergeSceneStatePreservingGrid(existingSceneState, incomingSceneState) {
       mergedEntry.grid = JSON.parse(JSON.stringify(existingEntry.grid));
     }
 
+    // Preserve fogOfWar from existing state when incoming doesn't include it.
+    // Fog of war is a persistent scene setting that should not be lost during
+    // sync cycles (e.g. when overlay changes trigger a delta save that doesn't
+    // include fog data).
+    if (existingEntry && typeof existingEntry === 'object' && existingEntry.fogOfWar) {
+      if (!mergedEntry.fogOfWar || typeof mergedEntry.fogOfWar !== 'object') {
+        mergedEntry.fogOfWar = JSON.parse(JSON.stringify(existingEntry.fogOfWar));
+      }
+    }
+
     merged[sceneId] = mergedEntry;
   });
 

@@ -1061,3 +1061,174 @@ describe('fog of war edge cases', () => {
     assert.deepEqual(updated.boardState.sceneState['scene-1'].fogOfWar.revealedCells, {});
   });
 });
+
+// ===========================================================================
+// Fog of war / overlay interaction tests
+// ===========================================================================
+
+describe('fog of war and overlay interaction', () => {
+  let dom;
+
+  beforeEach(() => {
+    dom = createDom();
+  });
+
+  test('fog state is independent of overlay state changes', () => {
+    const state = makeFogState({ revealedCells: { '1,1': true, '2,2': true } });
+    const api = createMockBoardApi(state);
+    mountFogOfWar({ isGm: true, boardApi: api });
+
+    // Simulate overlay-related state change (modify overlay without touching fog)
+    api.updateState((draft) => {
+      if (!draft.boardState.sceneState['scene-1'].overlay) {
+        draft.boardState.sceneState['scene-1'].overlay = {};
+      }
+      draft.boardState.sceneState['scene-1'].overlay.mapUrl = 'http://example.com/overlay.png';
+    });
+
+    // Fog state should be unchanged after overlay modification
+    const updated = api._getState();
+    const fog = updated.boardState.sceneState['scene-1'].fogOfWar;
+    assert.equal(fog.enabled, true, 'fog should remain enabled after overlay change');
+    assert.deepEqual(fog.revealedCells, { '1,1': true, '2,2': true },
+      'revealed cells should be preserved after overlay change');
+  });
+
+  test('fog remains enabled when overlay is toggled visible/hidden', () => {
+    const state = makeFogState({ revealedCells: { '0,0': true, '3,3': true } });
+    const api = createMockBoardApi(state);
+    mountFogOfWar({ isGm: true, boardApi: api });
+
+    // Simulate toggling overlay layer visibility
+    api.updateState((draft) => {
+      const scene = draft.boardState.sceneState['scene-1'];
+      if (!scene.overlay) scene.overlay = {};
+      if (!scene.overlay.layers) scene.overlay.layers = [];
+      scene.overlay.layers.push({ id: 'layer-1', visible: false, mapUrl: 'test.png' });
+    });
+
+    // Toggle overlay layer back to visible
+    api.updateState((draft) => {
+      const layers = draft.boardState.sceneState['scene-1'].overlay.layers;
+      if (layers && layers[0]) layers[0].visible = true;
+    });
+
+    // Fog should still be intact
+    const updated = api._getState();
+    const fog = updated.boardState.sceneState['scene-1'].fogOfWar;
+    assert.equal(fog.enabled, true, 'fog should remain enabled');
+    assert.deepEqual(fog.revealedCells, { '0,0': true, '3,3': true },
+      'revealed cells should persist through overlay toggles');
+  });
+
+  test('revealed cells survive multiple overlay modifications', () => {
+    const revealedCells = {};
+    for (let c = 0; c < 5; c++) {
+      for (let r = 0; r < 5; r++) {
+        revealedCells[`${c},${r}`] = true;
+      }
+    }
+    const state = makeFogState({ revealedCells });
+    const api = createMockBoardApi(state);
+    mountFogOfWar({ isGm: true, boardApi: api });
+
+    // Do multiple overlay operations
+    for (let i = 0; i < 5; i++) {
+      api.updateState((draft) => {
+        const scene = draft.boardState.sceneState['scene-1'];
+        if (!scene.overlay) scene.overlay = {};
+        scene.overlay.mapUrl = `overlay-${i}.png`;
+      });
+    }
+
+    const updated = api._getState();
+    const fog = updated.boardState.sceneState['scene-1'].fogOfWar;
+    assert.equal(Object.keys(fog.revealedCells).length, 25,
+      'all 25 revealed cells should survive overlay operations');
+  });
+
+  test('fog toggle via toggleFogForScene does not affect overlay', () => {
+    const state = makeFogState();
+    // Add overlay to state
+    state.boardState.sceneState['scene-1'].overlay = {
+      mapUrl: 'overlay.png',
+      layers: [{ id: 'layer-1', visible: true, mapUrl: 'overlay.png' }],
+    };
+    const api = createMockBoardApi(state);
+    mountFogOfWar({ isGm: true, boardApi: api });
+
+    // Toggle fog off then on
+    toggleFogForScene('scene-1', false);
+    toggleFogForScene('scene-1', true);
+
+    const updated = api._getState();
+    const overlay = updated.boardState.sceneState['scene-1'].overlay;
+    assert.equal(overlay.mapUrl, 'overlay.png', 'overlay mapUrl preserved after fog toggle');
+    assert.equal(overlay.layers[0].visible, true, 'overlay layer visibility preserved after fog toggle');
+  });
+
+  test('renderFog produces correct output when overlay data exists alongside fog', () => {
+    const viewState = {
+      gridSize: 64,
+      mapPixelSize: { width: 256, height: 256 },
+      gridOffsets: { left: 0, top: 0 },
+      scale: 1,
+      translation: { x: 0, y: 0 },
+    };
+    mountFogOfWar({ isGm: true, viewState });
+
+    // State has both overlay and fog data
+    const state = makeFogState({ revealedCells: { '0,0': true, '1,1': true } });
+    state.boardState.sceneState['scene-1'].overlay = {
+      mapUrl: 'overlay.png',
+      layers: [{ id: 'layer-1', visible: true, mapUrl: 'overlay.png' }],
+    };
+
+    renderFog(state);
+    const fogCanvas = document.getElementById('vtt-fog-layer');
+    const ctx = fogCanvas.getContext('2d');
+
+    // 16 cells total, 2 revealed = 14 fog rectangles
+    const fillCalls = ctx._calls.filter((c) => c.method === 'fillRect');
+    assert.equal(fillCalls.length, 14,
+      'fog should render correctly when overlay data is present');
+  });
+
+  test('fog remains editable (enabled) when scene has overlay', () => {
+    const state = makeFogState({ revealedCells: { '2,2': true } });
+    state.boardState.sceneState['scene-1'].overlay = {
+      mapUrl: 'overlay.png',
+      layers: [{ id: 'layer-1', visible: true, mapUrl: 'overlay.png' }],
+    };
+    const api = createMockBoardApi(state);
+    mountFogOfWar({ isGm: true, boardApi: api });
+
+    // Toggle fog off
+    toggleFogForScene('scene-1', false);
+    let updated = api._getState();
+    assert.equal(updated.boardState.sceneState['scene-1'].fogOfWar.enabled, false);
+
+    // Toggle fog back on - revealed cells should be preserved
+    toggleFogForScene('scene-1', true);
+    updated = api._getState();
+    assert.equal(updated.boardState.sceneState['scene-1'].fogOfWar.enabled, true);
+    assert.deepEqual(updated.boardState.sceneState['scene-1'].fogOfWar.revealedCells,
+      { '2,2': true }, 'revealed cells preserved through fog toggle cycle');
+  });
+
+  test('isPositionFogged works correctly when overlay data exists', () => {
+    mountFogOfWar({ isGm: false });
+    const state = makeFogState({ revealedCells: { '5,5': true } });
+    state.boardState.sceneState['scene-1'].overlay = {
+      mapUrl: 'overlay.png',
+      layers: [{ id: 'layer-1', visible: true }],
+    };
+
+    // Fogged cell should still be fogged even with overlay present
+    assert.equal(isPositionFogged(state, 3, 3), true,
+      'unrevealed cells remain fogged with overlay');
+    // Revealed cell should not be fogged
+    assert.equal(isPositionFogged(state, 5, 5), false,
+      'revealed cells remain visible with overlay');
+  });
+});
