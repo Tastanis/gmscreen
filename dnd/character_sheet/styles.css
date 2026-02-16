@@ -1947,6 +1947,22 @@ body.edit-mode .edit-only {
   color: #333;
 }
 
+/* Cost badge shown in action name header */
+.cost-badge {
+  display: inline-block;
+  font-size: 0.45em;
+  font-weight: 600;
+  color: #7c5e10;
+  background: #fef3cd;
+  border: 1px solid #e0c97a;
+  border-radius: 8px;
+  padding: 1px 8px;
+  margin-left: 8px;
+  vertical-align: middle;
+  line-height: 1.6;
+  white-space: nowrap;
+}
+
 /* Use when field styling */
 .use-when-row {
   display: flex;
