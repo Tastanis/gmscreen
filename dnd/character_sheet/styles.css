@@ -463,13 +463,15 @@ body {
 /* Key vitals row: Victories, Surges, Stability, Speed */
 .key-vitals-row {
   display: grid;
-  grid-template-columns: auto 1fr auto auto;
+  grid-template-columns: repeat(4, 1fr);
   gap: 8px;
-  align-items: start;
+  align-items: stretch;
 }
 
 .key-vitals-row .field-card {
   text-align: center;
+  min-height: 90px;
+  justify-content: center;
 }
 
 .key-vitals-row .field-card label {
@@ -480,7 +482,7 @@ body {
 }
 
 .key-vitals-row .display-value {
-  font-size: 18px;
+  font-size: 22px;
   font-weight: 800;
   color: #000;
 }
