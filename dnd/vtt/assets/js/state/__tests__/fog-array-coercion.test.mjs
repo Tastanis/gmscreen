@@ -176,6 +176,7 @@ describe('mergeBoardStateSnapshot: array revealedCells coercion', () => {
         'scene-1': {
           grid: { size: 64, locked: false, visible: true },
           // Server returns [] for empty revealedCells (the PHP bug)
+          // This means the GM has re-fogged everything — no cells should be revealed
           fogOfWar: { enabled: true, revealedCells: [] },
         },
       },
@@ -190,9 +191,10 @@ describe('mergeBoardStateSnapshot: array revealedCells coercion', () => {
     assert.ok(!Array.isArray(fog.revealedCells),
       'merged revealedCells must not be an array');
     assert.equal(typeof fog.revealedCells, 'object');
-    // Existing cells should be preserved (union merge)
-    assert.equal(fog.revealedCells['5,5'], true,
-      'existing revealed cell should be preserved');
+    // Server state is authoritative — empty incoming means GM re-fogged everything.
+    // Previously this used a union merge which prevented fog from being added back.
+    assert.deepStrictEqual(fog.revealedCells, {},
+      'empty incoming revealedCells means all cells are fogged');
   });
 
   test('both sides have array revealedCells — result is always object', () => {

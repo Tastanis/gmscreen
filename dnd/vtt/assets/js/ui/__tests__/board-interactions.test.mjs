@@ -10,6 +10,7 @@ const {
   createBoardStatePoller,
   overlayUploadHelpers,
   createOverlayCutoutBlob,
+  mergeBoardStateSnapshot,
 } = boardInteractionsModule;
 
 function createDom() {
@@ -4110,4 +4111,227 @@ test('main pointerdown handler does not interfere with overlay editor toolbar cl
   } finally {
     dom.window.close();
   }
+});
+
+// ---------------------------------------------------------------------------
+// Fog of War sync — mergeBoardStateSnapshot must propagate cell removal
+// ---------------------------------------------------------------------------
+
+test('mergeBoardStateSnapshot: adding fog back removes cells from revealedCells', () => {
+  const existing = {
+    activeSceneId: 'scene-1',
+    sceneState: {
+      'scene-1': {
+        grid: { size: 64, locked: false, visible: true },
+        fogOfWar: {
+          enabled: true,
+          revealedCells: { '0,0': true, '1,1': true, '2,2': true },
+        },
+      },
+    },
+    placements: {},
+    templates: {},
+    drawings: {},
+  };
+
+  // GM added fog back to cells 1,1 and 2,2 — only 0,0 remains revealed
+  const incoming = {
+    activeSceneId: 'scene-1',
+    sceneState: {
+      'scene-1': {
+        grid: { size: 64, locked: false, visible: true },
+        fogOfWar: {
+          enabled: true,
+          revealedCells: { '0,0': true },
+        },
+      },
+    },
+    placements: {},
+    templates: {},
+    drawings: {},
+  };
+
+  const merged = mergeBoardStateSnapshot(existing, incoming);
+  const fog = merged.sceneState['scene-1'].fogOfWar;
+
+  assert.equal(fog.enabled, true);
+  assert.deepStrictEqual(
+    Object.keys(fog.revealedCells).sort(),
+    ['0,0'],
+    'cells 1,1 and 2,2 should be removed — GM added fog back',
+  );
+});
+
+test('mergeBoardStateSnapshot: clearing fog adds cells to revealedCells', () => {
+  const existing = {
+    activeSceneId: 'scene-1',
+    sceneState: {
+      'scene-1': {
+        grid: { size: 64, locked: false, visible: true },
+        fogOfWar: {
+          enabled: true,
+          revealedCells: { '0,0': true },
+        },
+      },
+    },
+    placements: {},
+    templates: {},
+    drawings: {},
+  };
+
+  // GM cleared fog on cells 1,1 and 2,2
+  const incoming = {
+    activeSceneId: 'scene-1',
+    sceneState: {
+      'scene-1': {
+        grid: { size: 64, locked: false, visible: true },
+        fogOfWar: {
+          enabled: true,
+          revealedCells: { '0,0': true, '1,1': true, '2,2': true },
+        },
+      },
+    },
+    placements: {},
+    templates: {},
+    drawings: {},
+  };
+
+  const merged = mergeBoardStateSnapshot(existing, incoming);
+  const fog = merged.sceneState['scene-1'].fogOfWar;
+
+  assert.equal(fog.enabled, true);
+  assert.deepStrictEqual(
+    Object.keys(fog.revealedCells).sort(),
+    ['0,0', '1,1', '2,2'],
+    'newly revealed cells should appear after merge',
+  );
+});
+
+test('mergeBoardStateSnapshot: adding fog to ALL cells results in empty revealedCells', () => {
+  const existing = {
+    activeSceneId: 'scene-1',
+    sceneState: {
+      'scene-1': {
+        grid: { size: 64, locked: false, visible: true },
+        fogOfWar: {
+          enabled: true,
+          revealedCells: { '3,3': true, '4,4': true },
+        },
+      },
+    },
+    placements: {},
+    templates: {},
+    drawings: {},
+  };
+
+  // GM re-fogged everything — revealedCells is now empty
+  const incoming = {
+    activeSceneId: 'scene-1',
+    sceneState: {
+      'scene-1': {
+        grid: { size: 64, locked: false, visible: true },
+        fogOfWar: {
+          enabled: true,
+          revealedCells: {},
+        },
+      },
+    },
+    placements: {},
+    templates: {},
+    drawings: {},
+  };
+
+  const merged = mergeBoardStateSnapshot(existing, incoming);
+  const fog = merged.sceneState['scene-1'].fogOfWar;
+
+  assert.equal(fog.enabled, true);
+  assert.deepStrictEqual(
+    Object.keys(fog.revealedCells),
+    [],
+    'all cells should be fogged — revealedCells must be empty',
+  );
+});
+
+test('mergeBoardStateSnapshot: preserves existing fog when incoming has none', () => {
+  const existing = {
+    activeSceneId: 'scene-1',
+    sceneState: {
+      'scene-1': {
+        grid: { size: 64, locked: false, visible: true },
+        fogOfWar: {
+          enabled: true,
+          revealedCells: { '5,5': true },
+        },
+      },
+    },
+    placements: {},
+    templates: {},
+    drawings: {},
+  };
+
+  // Incoming has no fogOfWar at all (e.g. older save format)
+  const incoming = {
+    activeSceneId: 'scene-1',
+    sceneState: {
+      'scene-1': {
+        grid: { size: 64, locked: false, visible: true },
+      },
+    },
+    placements: {},
+    templates: {},
+    drawings: {},
+  };
+
+  const merged = mergeBoardStateSnapshot(existing, incoming);
+  const fog = merged.sceneState['scene-1'].fogOfWar;
+
+  assert.ok(fog, 'fogOfWar should be preserved from existing state');
+  assert.equal(fog.enabled, true);
+  assert.deepStrictEqual(
+    Object.keys(fog.revealedCells),
+    ['5,5'],
+    'existing revealed cells should be preserved when incoming has no fog data',
+  );
+});
+
+test('mergeBoardStateSnapshot: coerces PHP empty array revealedCells to object', () => {
+  const existing = {
+    activeSceneId: 'scene-1',
+    sceneState: {
+      'scene-1': {
+        grid: { size: 64, locked: false, visible: true },
+        fogOfWar: {
+          enabled: true,
+          revealedCells: { '1,1': true },
+        },
+      },
+    },
+    placements: {},
+    templates: {},
+    drawings: {},
+  };
+
+  // PHP json_encode turns empty {} into [] — incoming has array revealedCells
+  const incoming = {
+    activeSceneId: 'scene-1',
+    sceneState: {
+      'scene-1': {
+        grid: { size: 64, locked: false, visible: true },
+        fogOfWar: {
+          enabled: true,
+          revealedCells: [],
+        },
+      },
+    },
+    placements: {},
+    templates: {},
+    drawings: {},
+  };
+
+  const merged = mergeBoardStateSnapshot(existing, incoming);
+  const fog = merged.sceneState['scene-1'].fogOfWar;
+
+  assert.equal(fog.enabled, true);
+  assert.ok(!Array.isArray(fog.revealedCells), 'revealedCells must not be an array');
+  assert.equal(typeof fog.revealedCells, 'object');
 });
