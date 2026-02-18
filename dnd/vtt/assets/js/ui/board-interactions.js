@@ -18272,7 +18272,7 @@ function createTemplateTool() {
 
       placementState = {
         type: 'wall',
-        values: { squares: totalSquares },
+        values: { squares: totalSquares, wallColor: values?.wallColor },
         stage: 'wall-select',
         pointerId: null,
         start: null,
