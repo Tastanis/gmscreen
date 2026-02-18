@@ -1818,6 +1818,10 @@
   --vtt-wall-surface: linear-gradient(145deg, rgba(184, 115, 51, 0.95) 0%, rgba(76, 40, 16, 0.98) 90%);
   --vtt-wall-border: rgba(59, 28, 10, 0.85);
   --vtt-wall-highlight: linear-gradient(135deg, rgba(248, 220, 180, 0.5) 0%, rgba(120, 63, 21, 0.25) 100%);
+  --vtt-wall-shadow-inset: rgba(69, 26, 3, 0.65);
+  --vtt-wall-shadow-outer: rgba(45, 19, 5, 0.55);
+  --vtt-wall-shadow-selected-inset: rgba(120, 63, 21, 0.65);
+  --vtt-wall-shadow-selected-outer: rgba(68, 36, 10, 0.5);
 }
 
 /* Wall color variants - 6 colors with dark/light */
@@ -1826,6 +1830,10 @@
   --vtt-wall-surface: linear-gradient(145deg, rgba(148, 163, 184, 0.95) 0%, rgba(71, 85, 105, 0.98) 90%);
   --vtt-wall-border: rgba(51, 65, 85, 0.85);
   --vtt-wall-highlight: linear-gradient(135deg, rgba(226, 232, 240, 0.5) 0%, rgba(100, 116, 139, 0.25) 100%);
+  --vtt-wall-shadow-inset: rgba(51, 65, 85, 0.65);
+  --vtt-wall-shadow-outer: rgba(30, 41, 59, 0.55);
+  --vtt-wall-shadow-selected-inset: rgba(71, 85, 105, 0.65);
+  --vtt-wall-shadow-selected-outer: rgba(51, 65, 85, 0.5);
 }
 
 .vtt-template--wall[data-wall-color="red"] {
@@ -1833,6 +1841,10 @@
   --vtt-wall-surface: linear-gradient(145deg, rgba(185, 28, 28, 0.95) 0%, rgba(127, 29, 29, 0.98) 90%);
   --vtt-wall-border: rgba(69, 10, 10, 0.85);
   --vtt-wall-highlight: linear-gradient(135deg, rgba(254, 202, 202, 0.5) 0%, rgba(153, 27, 27, 0.25) 100%);
+  --vtt-wall-shadow-inset: rgba(69, 10, 10, 0.65);
+  --vtt-wall-shadow-outer: rgba(50, 7, 7, 0.55);
+  --vtt-wall-shadow-selected-inset: rgba(127, 29, 29, 0.65);
+  --vtt-wall-shadow-selected-outer: rgba(69, 10, 10, 0.5);
 }
 
 .vtt-template--wall[data-wall-color="green"] {
@@ -1840,6 +1852,10 @@
   --vtt-wall-surface: linear-gradient(145deg, rgba(34, 197, 94, 0.95) 0%, rgba(21, 128, 61, 0.98) 90%);
   --vtt-wall-border: rgba(20, 83, 45, 0.85);
   --vtt-wall-highlight: linear-gradient(135deg, rgba(187, 247, 208, 0.5) 0%, rgba(22, 163, 74, 0.25) 100%);
+  --vtt-wall-shadow-inset: rgba(20, 83, 45, 0.65);
+  --vtt-wall-shadow-outer: rgba(5, 46, 22, 0.55);
+  --vtt-wall-shadow-selected-inset: rgba(21, 128, 61, 0.65);
+  --vtt-wall-shadow-selected-outer: rgba(20, 83, 45, 0.5);
 }
 
 .vtt-template--wall[data-wall-color="blue"] {
@@ -1847,6 +1863,10 @@
   --vtt-wall-surface: linear-gradient(145deg, rgba(59, 130, 246, 0.95) 0%, rgba(29, 78, 216, 0.98) 90%);
   --vtt-wall-border: rgba(30, 58, 138, 0.85);
   --vtt-wall-highlight: linear-gradient(135deg, rgba(191, 219, 254, 0.5) 0%, rgba(59, 130, 246, 0.25) 100%);
+  --vtt-wall-shadow-inset: rgba(30, 58, 138, 0.65);
+  --vtt-wall-shadow-outer: rgba(23, 37, 84, 0.55);
+  --vtt-wall-shadow-selected-inset: rgba(29, 78, 216, 0.65);
+  --vtt-wall-shadow-selected-outer: rgba(30, 58, 138, 0.5);
 }
 
 .vtt-template--wall[data-wall-color="purple"] {
@@ -1854,6 +1874,10 @@
   --vtt-wall-surface: linear-gradient(145deg, rgba(168, 85, 247, 0.95) 0%, rgba(126, 34, 206, 0.98) 90%);
   --vtt-wall-border: rgba(88, 28, 135, 0.85);
   --vtt-wall-highlight: linear-gradient(135deg, rgba(233, 213, 255, 0.5) 0%, rgba(147, 51, 234, 0.25) 100%);
+  --vtt-wall-shadow-inset: rgba(88, 28, 135, 0.65);
+  --vtt-wall-shadow-outer: rgba(59, 7, 100, 0.55);
+  --vtt-wall-shadow-selected-inset: rgba(126, 34, 206, 0.65);
+  --vtt-wall-shadow-selected-outer: rgba(88, 28, 135, 0.5);
 }
 
 .vtt-template--wall[data-wall-color="cyan"] {
@@ -1861,6 +1885,10 @@
   --vtt-wall-surface: linear-gradient(145deg, rgba(6, 182, 212, 0.95) 0%, rgba(8, 145, 178, 0.98) 90%);
   --vtt-wall-border: rgba(21, 94, 117, 0.85);
   --vtt-wall-highlight: linear-gradient(135deg, rgba(165, 243, 252, 0.5) 0%, rgba(34, 211, 238, 0.25) 100%);
+  --vtt-wall-shadow-inset: rgba(21, 94, 117, 0.65);
+  --vtt-wall-shadow-outer: rgba(8, 51, 68, 0.55);
+  --vtt-wall-shadow-selected-inset: rgba(8, 145, 178, 0.65);
+  --vtt-wall-shadow-selected-outer: rgba(21, 94, 117, 0.5);
 }
 
 .vtt-template__shape--wall {
@@ -1885,8 +1913,8 @@
   border: 1px solid var(--vtt-wall-border);
   box-shadow:
     inset 0 3px 6px rgba(255, 255, 255, 0.2),
-    inset 0 -5px 10px rgba(69, 26, 3, 0.65),
-    0 8px 18px rgba(45, 19, 5, 0.55);
+    inset 0 -5px 10px var(--vtt-wall-shadow-inset),
+    0 8px 18px var(--vtt-wall-shadow-outer);
   z-index: 2;
 }
 
@@ -1898,8 +1926,8 @@
   border-color: rgba(226, 232, 240, 0.9);
   box-shadow:
     inset 0 3px 6px rgba(255, 255, 255, 0.35),
-    inset 0 -5px 10px rgba(120, 63, 21, 0.65),
-    0 10px 22px rgba(68, 36, 10, 0.5);
+    inset 0 -5px 10px var(--vtt-wall-shadow-selected-inset),
+    0 10px 22px var(--vtt-wall-shadow-selected-outer);
 }
 
 .vtt-wall__tile::after {
@@ -1920,8 +1948,8 @@
   transform-origin: 50% 50%;
   box-shadow:
     inset 0 3px 6px rgba(255, 255, 255, 0.2),
-    inset 0 -5px 10px rgba(69, 26, 3, 0.6),
-    0 6px 14px rgba(45, 19, 5, 0.45);
+    inset 0 -5px 10px var(--vtt-wall-shadow-inset),
+    0 6px 14px var(--vtt-wall-shadow-outer);
   z-index: 1;
 }
 
@@ -1945,8 +1973,8 @@
   border-color: rgba(226, 232, 240, 0.9);
   box-shadow:
     inset 0 3px 6px rgba(255, 255, 255, 0.35),
-    inset 0 -5px 10px rgba(120, 63, 21, 0.65),
-    0 8px 18px rgba(68, 36, 10, 0.5);
+    inset 0 -5px 10px var(--vtt-wall-shadow-selected-inset),
+    0 8px 18px var(--vtt-wall-shadow-selected-outer);
 }
 
 .vtt-template__node {
