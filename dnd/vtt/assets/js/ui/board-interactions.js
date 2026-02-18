@@ -719,33 +719,21 @@ function mergeSceneStatePreservingGrid(existingSceneState, incomingSceneState) {
       mergedEntry.grid = JSON.parse(JSON.stringify(existingEntry.grid));
     }
 
-    // Deep-merge fogOfWar so locally-revealed cells are never lost.
-    // The server may return stale fogOfWar (e.g. a save is still in-flight),
-    // so we take the union of revealedCells from both existing and incoming.
+    // Merge fogOfWar: trust the incoming (server) state as authoritative.
+    // The server state is saved before Pusher broadcasts, so by the time
+    // the poller reads it the fog data reflects the GM's latest changes.
+    // Using a union here would prevent the GM from adding fog back
+    // (removing cells from revealedCells) because deleted cells would be
+    // restored from the player's existing local state.
     if (existingEntry && typeof existingEntry === 'object' && existingEntry.fogOfWar &&
         typeof existingEntry.fogOfWar === 'object') {
       if (!mergedEntry.fogOfWar || typeof mergedEntry.fogOfWar !== 'object') {
         // Incoming has no fogOfWar at all — use existing entirely.
         mergedEntry.fogOfWar = JSON.parse(JSON.stringify(existingEntry.fogOfWar));
       } else {
-        // Both sides have fogOfWar — merge revealedCells (union).
-        const existingCells = existingEntry.fogOfWar.revealedCells;
-        const mergedCells = mergedEntry.fogOfWar.revealedCells;
         // Coerce arrays to plain objects (PHP encodes empty {} as [])
         if (Array.isArray(mergedEntry.fogOfWar.revealedCells)) {
           mergedEntry.fogOfWar.revealedCells = {};
-        }
-        if (existingCells && typeof existingCells === 'object' && !Array.isArray(existingCells) && Object.keys(existingCells).length > 0) {
-          if (!mergedCells || typeof mergedCells !== 'object' || Array.isArray(mergedCells)) {
-            mergedEntry.fogOfWar.revealedCells = JSON.parse(JSON.stringify(existingCells));
-          } else {
-            // Union: copy existing cells that are missing from incoming.
-            Object.keys(existingCells).forEach((key) => {
-              if (!(key in mergedCells)) {
-                mergedCells[key] = true;
-              }
-            });
-          }
         }
       }
     }
@@ -2825,34 +2813,18 @@ export function mountBoardInteractions(store, routes = {}) {
             draft.boardState.sceneState[sceneId].overlay = state.overlay;
           }
           if (state.fogOfWar !== undefined) {
-            const existing = draft.boardState.sceneState[sceneId].fogOfWar;
-            // Coerce arrays from PHP's json_encode (empty {} → []) to plain objects
+            // Trust the incoming fog state from Pusher as authoritative.
+            // Pusher broadcasts are sent after the server saves, so the
+            // data reflects the GM's latest changes. Using a union here
+            // would prevent the GM from adding fog back because deleted
+            // cells would be restored from the player's existing state.
             const incomingFog = state.fogOfWar && typeof state.fogOfWar === 'object'
               ? state.fogOfWar : { enabled: false, revealedCells: {} };
+            // Coerce arrays from PHP's json_encode (empty {} → []) to plain objects
             if (Array.isArray(incomingFog.revealedCells)) {
               incomingFog.revealedCells = {};
             }
-            if (
-              existing && typeof existing === 'object' &&
-              existing.revealedCells && typeof existing.revealedCells === 'object' &&
-              !Array.isArray(existing.revealedCells) &&
-              Object.keys(existing.revealedCells).length > 0
-            ) {
-              // Merge: keep enabled flag from delta, but union revealedCells
-              // so locally-cleared fog cells are not overwritten by stale data.
-              draft.boardState.sceneState[sceneId].fogOfWar = {
-                enabled: Boolean(incomingFog.enabled),
-                revealedCells: { ...existing.revealedCells },
-              };
-              const incomingCells = incomingFog.revealedCells;
-              if (incomingCells && typeof incomingCells === 'object' && !Array.isArray(incomingCells)) {
-                Object.keys(incomingCells).forEach((key) => {
-                  draft.boardState.sceneState[sceneId].fogOfWar.revealedCells[key] = true;
-                });
-              }
-            } else {
-              draft.boardState.sceneState[sceneId].fogOfWar = incomingFog;
-            }
+            draft.boardState.sceneState[sceneId].fogOfWar = incomingFog;
           }
         });
       }
