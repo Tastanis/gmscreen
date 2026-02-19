@@ -1141,6 +1141,38 @@ body {
   line-height: 1.2;
 }
 
+/* Recovery value as button */
+.recovery-value-btn {
+  cursor: pointer;
+  transition: background 0.15s, border-color 0.15s, box-shadow 0.15s;
+  font-family: inherit;
+}
+
+.recovery-value-btn:hover:not(:disabled) {
+  background: var(--info);
+  border-color: #4a90b8;
+  box-shadow: 0 2px 8px rgba(74, 144, 184, 0.25);
+}
+
+.recovery-value-btn:hover:not(:disabled) .recovery-value-label,
+.recovery-value-btn:hover:not(:disabled) .recovery-value-number {
+  color: #fff;
+}
+
+.recovery-value-btn:active:not(:disabled) {
+  background: #4a90b8;
+  box-shadow: 0 1px 4px rgba(74, 144, 184, 0.35);
+}
+
+.recovery-value-btn--disabled {
+  cursor: not-allowed;
+  opacity: 0.45;
+}
+
+body.edit-mode .recovery-value-btn {
+  pointer-events: none;
+}
+
 /* Surges tick boxes */
 .surges-card {
   text-align: center;
@@ -1238,6 +1270,34 @@ body.edit-mode .add-victory-btn {
 
 body.edit-mode .respite-btn {
   display: none;
+}
+
+/* Respite confirmation popup */
+.respite-confirmation {
+  position: absolute;
+  top: 100%;
+  right: 0;
+  min-width: 220px;
+  background: var(--panel);
+  border: 1px solid var(--border);
+  border-radius: 4px;
+  padding: 8px;
+  box-shadow: 0 6px 16px rgba(0, 0, 0, 0.15);
+  z-index: 20;
+  margin-top: 4px;
+}
+
+.respite-confirmation__text {
+  font-size: 12px;
+  color: var(--text);
+  margin-bottom: 8px;
+  line-height: 1.4;
+}
+
+.respite-confirmation__actions {
+  display: flex;
+  gap: 6px;
+  justify-content: flex-end;
 }
 
 @keyframes temp-stamina-flash {
