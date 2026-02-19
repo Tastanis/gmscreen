@@ -875,6 +875,7 @@ export function mountBoardInteractions(store, routes = {}) {
   const overlayLayerElements = new Map();
   const grid = document.getElementById('vtt-grid-overlay');
   const tokenLayer = document.getElementById('vtt-token-layer');
+  const auraLayer = document.getElementById('vtt-aura-layer');
   const templateLayer = document.getElementById('vtt-template-layer');
   let pingLayer = document.getElementById('vtt-ping-layer');
   const selectionBox = document.getElementById('vtt-selection-box');
@@ -6350,6 +6351,137 @@ export function mountBoardInteractions(store, routes = {}) {
     }
 
     updateCombatTracker(trackerEntries, { activeIds: activeCombatantIds });
+
+    // Render auras whenever tokens are rendered
+    renderAuras(state, auraLayer, view);
+  }
+
+  function renderAuras(state = {}, layer, view) {
+    if (!layer) {
+      return;
+    }
+
+    const gridSize = Math.max(8, Number.isFinite(view?.gridSize) ? view.gridSize : 64);
+    const offsets = view?.gridOffsets ?? {};
+    const leftOffset = Number.isFinite(offsets.left) ? offsets.left : 0;
+    const topOffset = Number.isFinite(offsets.top) ? offsets.top : 0;
+    const placements = view?.mapLoaded ? getActiveScenePlacements(state) : [];
+
+    // Build set of existing aura elements by placement ID
+    const existingAuras = new Map();
+    Array.from(layer.children).forEach((child) => {
+      if (!(child instanceof HTMLElement)) {
+        layer.removeChild(child);
+        return;
+      }
+      const id = child.dataset?.placementId;
+      if (id) {
+        existingAuras.set(id, child);
+      } else {
+        layer.removeChild(child);
+      }
+    });
+
+    const fragment = document.createDocumentFragment();
+    let auraCount = 0;
+    const renderedAuraIds = new Set();
+
+    const gmViewing = isGmUser();
+    const isCellFogged = gmViewing ? null : createFogChecker(state);
+
+    placements.forEach((placement) => {
+      const normalized = normalizePlacementForRender(placement);
+      if (!normalized) {
+        return;
+      }
+
+      // Skip hidden tokens for non-GM
+      if (!gmViewing && normalized.hidden) {
+        return;
+      }
+
+      // Check fog: if the token is fully fogged, skip its aura too
+      if (isCellFogged) {
+        let allFogged = true;
+        for (let dc = 0; dc < normalized.width && allFogged; dc++) {
+          for (let dr = 0; dr < normalized.height && allFogged; dr++) {
+            if (!isCellFogged(normalized.column + dc, normalized.row + dr)) {
+              allFogged = false;
+            }
+          }
+        }
+        if (allFogged) {
+          return;
+        }
+      }
+
+      const aura = placement.aura && typeof placement.aura === 'object' ? placement.aura : null;
+      if (!aura?.enabled) {
+        return;
+      }
+
+      const auraRadius = Math.max(1, Math.min(20, parseInt(aura.radius, 10) || 1));
+      const auraColor = typeof aura.color === 'string' ? aura.color : '#3b82f6';
+
+      // Calculate aura dimensions
+      // The aura extends auraRadius squares from each edge of the token
+      // For a WxH token, the aura circle pixel-radius on X axis = (W/2 + auraRadius) * gridSize
+      // We use the larger dimension to keep it circular
+      const tokenW = normalized.width;
+      const tokenH = normalized.height;
+      const tokenCenterX = leftOffset + (normalized.column + tokenW / 2) * gridSize;
+      const tokenCenterY = topOffset + (normalized.row + tokenH / 2) * gridSize;
+
+      // Pixel radius: from center to token edge + auraRadius squares
+      const pixelRadiusX = (tokenW / 2 + auraRadius) * gridSize;
+      const pixelRadiusY = (tokenH / 2 + auraRadius) * gridSize;
+      // Use the larger to keep it a circle measured from the axis
+      const pixelRadius = Math.max(pixelRadiusX, pixelRadiusY);
+      const diameter = pixelRadius * 2;
+
+      renderedAuraIds.add(normalized.id);
+
+      let auraEl = existingAuras.get(normalized.id);
+      if (auraEl) {
+        existingAuras.delete(normalized.id);
+      } else {
+        auraEl = document.createElement('div');
+        auraEl.className = 'vtt-token-aura';
+      }
+
+      auraEl.dataset.placementId = normalized.id;
+      auraEl.style.width = `${diameter}px`;
+      auraEl.style.height = `${diameter}px`;
+
+      // Parse hex color to get RGB components for translucent background
+      const r = parseInt(auraColor.slice(1, 3), 16) || 0;
+      const g = parseInt(auraColor.slice(3, 5), 16) || 0;
+      const b = parseInt(auraColor.slice(5, 7), 16) || 0;
+      auraEl.style.background = `radial-gradient(circle, rgba(${r},${g},${b},0.3) 0%, rgba(${r},${g},${b},0.15) 60%, rgba(${r},${g},${b},0.05) 100%)`;
+
+      const auraLeft = tokenCenterX - pixelRadius;
+      const auraTop = tokenCenterY - pixelRadius;
+      auraEl.style.transform = `translate3d(${auraLeft}px, ${auraTop}px, 0)`;
+
+      fragment.appendChild(auraEl);
+      auraCount += 1;
+    });
+
+    // Remove stale aura elements
+    existingAuras.forEach((node) => {
+      node.remove();
+    });
+
+    while (layer.firstChild) {
+      layer.removeChild(layer.firstChild);
+    }
+
+    if (auraCount > 0) {
+      layer.appendChild(fragment);
+      layer.hidden = false;
+    } else {
+      layer.hidden = true;
+    }
   }
 
   function updateCombatTracker(combatants = [], options = {}) {
@@ -13461,6 +13593,13 @@ export function mountBoardInteractions(store, routes = {}) {
       `
       : '';
 
+    const sizeOptions = ['1x1', '2x2', '3x3', '4x4', '5x5']
+      .map((label) => {
+        const size = parseInt(label, 10);
+        return `<option value="${size}">${label}</option>`;
+      })
+      .join('');
+
     element.innerHTML = `
       <form class="vtt-token-settings__form" novalidate>
         <header class="vtt-token-settings__header">
@@ -13546,7 +13685,45 @@ export function mountBoardInteractions(store, routes = {}) {
               <span>Triggered Action</span>
             </label>
           </div>
-          <p class="vtt-token-settings__hint" data-token-settings-hint>Click the on-board indicator to toggle its state.</p>
+        </div>
+        <div class="vtt-token-settings__section">
+          <div class="vtt-token-settings__row">
+            <span class="vtt-token-settings__toggle" style="cursor:default">Size</span>
+            <select
+              class="vtt-token-settings__size-select"
+              data-token-settings-size-select
+              aria-label="Token size"
+            >
+              ${sizeOptions}
+            </select>
+          </div>
+        </div>
+        <div class="vtt-token-settings__section">
+          <div class="vtt-token-settings__row">
+            <label class="vtt-token-settings__toggle">
+              <input type="checkbox" data-token-settings-toggle="aura" />
+              <span>Aura</span>
+            </label>
+          </div>
+          <div class="vtt-token-settings__aura-options" data-token-settings-field="aura">
+            <input
+              type="number"
+              class="vtt-token-settings__aura-radius"
+              data-token-settings-input="auraRadius"
+              min="1"
+              max="20"
+              value="1"
+              aria-label="Aura radius in squares"
+            />
+            <span class="vtt-token-settings__aura-unit">sq</span>
+            <input
+              type="color"
+              class="vtt-token-settings__aura-color"
+              data-token-settings-input="auraColor"
+              value="#3b82f6"
+              aria-label="Aura color"
+            />
+          </div>
         </div>
         ${hiddenToggleMarkup}
       </form>
@@ -13571,6 +13748,11 @@ export function mountBoardInteractions(store, routes = {}) {
       conditionApply: element.querySelector('[data-token-settings-condition-apply]'),
       conditionList: element.querySelector('[data-token-settings-condition-list]'),
       hiddenToggle: element.querySelector('[data-token-settings-toggle="hidden"]'),
+      sizeSelect: element.querySelector('[data-token-settings-size-select]'),
+      auraToggle: element.querySelector('[data-token-settings-toggle="aura"]'),
+      auraField: element.querySelector('[data-token-settings-field="aura"]'),
+      auraRadiusInput: element.querySelector('[data-token-settings-input="auraRadius"]'),
+      auraColorInput: element.querySelector('[data-token-settings-input="auraColor"]'),
     };
 
     element.addEventListener('contextmenu', (event) => {
@@ -13741,6 +13923,71 @@ export function mountBoardInteractions(store, routes = {}) {
           }
         });
         refreshTokenSettings();
+      });
+    }
+
+    if (menu.sizeSelect) {
+      menu.sizeSelect.addEventListener('change', () => {
+        if (!activeTokenSettingsId) {
+          return;
+        }
+        const size = Math.max(1, Math.min(5, parseInt(menu.sizeSelect.value, 10) || 1));
+        updatePlacementById(activeTokenSettingsId, (target) => {
+          target.sizeOverride = size;
+          target.width = size;
+          target.height = size;
+        });
+        renderTokens(boardApi.getState?.() ?? {}, tokenLayer, viewState);
+      });
+    }
+
+    if (menu.auraToggle) {
+      menu.auraToggle.addEventListener('change', () => {
+        if (!activeTokenSettingsId) {
+          return;
+        }
+        const enabled = menu.auraToggle.checked;
+        updatePlacementById(activeTokenSettingsId, (target) => {
+          if (!target.aura || typeof target.aura !== 'object') {
+            target.aura = { enabled: false, radius: 1, color: '#3b82f6' };
+          }
+          target.aura.enabled = Boolean(enabled);
+        });
+        refreshTokenSettings();
+        renderAuras(boardApi.getState?.() ?? {}, auraLayer, viewState);
+      });
+    }
+
+    if (menu.auraRadiusInput) {
+      menu.auraRadiusInput.addEventListener('change', () => {
+        if (!activeTokenSettingsId) {
+          return;
+        }
+        const radius = Math.max(1, Math.min(20, parseInt(menu.auraRadiusInput.value, 10) || 1));
+        menu.auraRadiusInput.value = String(radius);
+        updatePlacementById(activeTokenSettingsId, (target) => {
+          if (!target.aura || typeof target.aura !== 'object') {
+            target.aura = { enabled: true, radius: 1, color: '#3b82f6' };
+          }
+          target.aura.radius = radius;
+        });
+        renderAuras(boardApi.getState?.() ?? {}, auraLayer, viewState);
+      });
+    }
+
+    if (menu.auraColorInput) {
+      menu.auraColorInput.addEventListener('input', () => {
+        if (!activeTokenSettingsId) {
+          return;
+        }
+        const color = menu.auraColorInput.value || '#3b82f6';
+        updatePlacementById(activeTokenSettingsId, (target) => {
+          if (!target.aura || typeof target.aura !== 'object') {
+            target.aura = { enabled: true, radius: 1, color: '#3b82f6' };
+          }
+          target.aura.color = color;
+        });
+        renderAuras(boardApi.getState?.() ?? {}, auraLayer, viewState);
       });
     }
 
@@ -13984,6 +14231,32 @@ export function mountBoardInteractions(store, routes = {}) {
       tokenSettingsMenu.hiddenToggle.checked = Boolean(
         placement.hidden ?? placement.isHidden ?? false
       );
+    }
+
+    // Size override
+    if (tokenSettingsMenu.sizeSelect) {
+      const currentSize = placement.sizeOverride
+        ?? placement.width
+        ?? 1;
+      tokenSettingsMenu.sizeSelect.value = String(Math.max(1, Math.min(5, currentSize)));
+    }
+
+    // Aura controls
+    const aura = placement.aura && typeof placement.aura === 'object' ? placement.aura : null;
+    const auraEnabled = Boolean(aura?.enabled);
+    if (tokenSettingsMenu.auraToggle) {
+      tokenSettingsMenu.auraToggle.checked = auraEnabled;
+    }
+    if (tokenSettingsMenu.auraField) {
+      tokenSettingsMenu.auraField.classList.toggle('is-disabled', !auraEnabled);
+    }
+    if (tokenSettingsMenu.auraRadiusInput) {
+      tokenSettingsMenu.auraRadiusInput.value = String(aura?.radius ?? 1);
+      tokenSettingsMenu.auraRadiusInput.disabled = !auraEnabled;
+    }
+    if (tokenSettingsMenu.auraColorInput) {
+      tokenSettingsMenu.auraColorInput.value = aura?.color || '#3b82f6';
+      tokenSettingsMenu.auraColorInput.disabled = !auraEnabled;
     }
   }
 
