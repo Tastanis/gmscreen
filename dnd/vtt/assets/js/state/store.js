@@ -561,6 +561,11 @@ function normalizeCombatStateEntry(raw = {}) {
     return null;
   }
 
+  // Preserve the sequence counter for reliable cross-client ordering.
+  // Sequence is immune to clock drift (unlike updatedAt) and is used by
+  // applyCombatStateFromBoardState to decide whether incoming state is newer.
+  const sequence = Math.max(0, toInt(raw.sequence, 0));
+
   return {
     active,
     round,
@@ -572,6 +577,7 @@ function normalizeCombatStateEntry(raw = {}) {
     roundTurnCount,
     malice,
     updatedAt: Math.max(0, toInt(raw.updatedAt, Date.now())),
+    sequence,
     turnLock,
     lastEffect,
     groups,

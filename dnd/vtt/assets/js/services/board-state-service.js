@@ -264,6 +264,8 @@ function formatCombatState(raw = {}) {
     raw.groups ?? raw.groupings ?? raw.combatGroups ?? raw.combatantGroups ?? null
   );
   const lastEffect = sanitizeTurnEffect(raw.lastEffect ?? raw.lastEvent ?? null);
+  // Preserve the sequence counter for reliable cross-client ordering.
+  const sequence = Math.max(0, toInt(raw.sequence, 0));
 
   return {
     active,
@@ -276,6 +278,7 @@ function formatCombatState(raw = {}) {
     roundTurnCount,
     malice,
     updatedAt,
+    sequence,
     turnLock,
     groups,
     lastEffect,

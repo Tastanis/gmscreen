@@ -650,12 +650,43 @@ export function mergeSceneKeyedSection(existingSection, incomingSection, { fullS
 
     if (incomingArray !== undefined) {
       if (fullSync) {
-        // Full sync: incoming is authoritative - use it directly (enables deletion sync)
-        // Items not in incoming have been deleted on the server
-        try {
-          merged[sceneId] = JSON.parse(JSON.stringify(incomingArray));
-        } catch (e) {
-          merged[sceneId] = [];
+        // Full sync: incoming is authoritative for what items EXIST (deletion sync),
+        // but we still use timestamp-based merging for individual items to avoid
+        // reverting recent local changes (e.g. HP updates) with stale server data.
+        const incomingItems = Array.isArray(incomingArray) ? incomingArray : [];
+        const existingItems = Array.isArray(existingArray) ? existingArray : [];
+
+        if (existingItems.length === 0) {
+          try {
+            merged[sceneId] = JSON.parse(JSON.stringify(incomingArray));
+          } catch (e) {
+            merged[sceneId] = [];
+          }
+        } else {
+          // Build map of incoming items - these define what exists on the server
+          const incomingById = new Map();
+          incomingItems.forEach((item) => {
+            if (item && item.id) incomingById.set(item.id, item);
+          });
+
+          // For each incoming item, keep the version with the newer _lastModified
+          const result = [];
+          incomingById.forEach((incomingItem, id) => {
+            const existingItem = existingItems.find((e) => e && e.id === id);
+            if (existingItem) {
+              const existingTime = existingItem._lastModified || 0;
+              const incomingTime = incomingItem._lastModified || 0;
+              result.push(incomingTime >= existingTime ? incomingItem : existingItem);
+            } else {
+              result.push(incomingItem);
+            }
+          });
+          // Items NOT in incoming are considered deleted (fullSync semantics)
+          try {
+            merged[sceneId] = JSON.parse(JSON.stringify(result));
+          } catch (e) {
+            merged[sceneId] = result;
+          }
         }
       } else {
         // Delta: merge with existing, preserving local items not in incoming
@@ -717,6 +748,31 @@ function mergeSceneStatePreservingGrid(existingSceneState, incomingSceneState) {
     // Grid is a permanent scene setting, not transient board state
     if (existingEntry && typeof existingEntry === 'object' && existingEntry.grid) {
       mergedEntry.grid = JSON.parse(JSON.stringify(existingEntry.grid));
+    }
+
+    // CRITICAL: Protect combat state from stale server data.
+    // When a player's keepalive save overwrites the server's combat state
+    // with stale data, the next poll would bring that stale data back and
+    // revert the GM's changes ("popback" bug).  Compare sequence numbers
+    // (immune to clock drift) or updatedAt timestamps to keep the newer one.
+    if (existingEntry && typeof existingEntry === 'object' &&
+        existingEntry.combat && typeof existingEntry.combat === 'object' &&
+        mergedEntry.combat && typeof mergedEntry.combat === 'object') {
+      const existingSeq = Number(existingEntry.combat.sequence) || 0;
+      const incomingSeq = Number(mergedEntry.combat.sequence) || 0;
+      const existingTs = Number(existingEntry.combat.updatedAt) || 0;
+      const incomingTs = Number(mergedEntry.combat.updatedAt) || 0;
+
+      let keepExisting = false;
+      if (existingSeq > 0 && incomingSeq > 0) {
+        keepExisting = existingSeq > incomingSeq;
+      } else if (existingTs > 0 && incomingTs > 0) {
+        keepExisting = existingTs > incomingTs;
+      }
+
+      if (keepExisting) {
+        mergedEntry.combat = JSON.parse(JSON.stringify(existingEntry.combat));
+      }
     }
 
     // Merge fogOfWar: trust the incoming (server) state as authoritative.
@@ -2151,7 +2207,6 @@ export function mountBoardInteractions(store, routes = {}) {
 
         pendingEntry.promise = null;
         pendingEntry.lastResult = result ?? null;
-        pendingEntry.blocking = !result?.success;
 
         if (result?.success) {
           lastPersistedBoardStateSignature = signature;
@@ -2169,6 +2224,12 @@ export function mountBoardInteractions(store, routes = {}) {
               pusherInterface.setLastAppliedVersion(newVersion);
             }
           }
+        } else {
+          // CRITICAL: Clear the pending entry on failure so the poller is not
+          // permanently blocked.  Previously, failed saves left blocking=true
+          // with promise=null, which caused getPendingBoardStateSaveInfo() to
+          // return pending=true indefinitely, starving the poller of updates.
+          pendingBoardStateSave = null;
         }
         return result;
       });
@@ -2196,7 +2257,12 @@ export function mountBoardInteractions(store, routes = {}) {
     const isGmUser = Boolean(latestState?.user?.isGM);
     const activeSceneId = latestState?.boardState?.activeSceneId ?? null;
 
-    if (!isGmUser && routes?.state && activeSceneId) {
+    // Only save combat state for non-GM users if the player actually made
+    // combat changes (dirty fields exist).  Previously this saved on EVERY
+    // tab switch / visibility change, which overwrote the GM's newer combat
+    // state on the server with the player's stale local copy — causing the
+    // "popback" reversion bug after ~20 minutes of play.
+    if (!isGmUser && routes?.state && activeSceneId && dirtyCombatFields.size > 0) {
       const combatSnapshot = createCombatStateSnapshot();
       const existingCombatState =
         latestState?.boardState?.sceneState?.[activeSceneId]?.combat ?? null;
