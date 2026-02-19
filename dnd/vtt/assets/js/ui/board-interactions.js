@@ -668,11 +668,15 @@ export function mergeSceneKeyedSection(existingSection, incomingSection, { fullS
           incomingItems.forEach((item) => {
             if (item && item.id) incomingById.set(item.id, item);
           });
+          const existingById = new Map();
+          existingItems.forEach((item) => {
+            if (item && item.id) existingById.set(item.id, item);
+          });
 
           // For each incoming item, keep the version with the newer _lastModified
           const result = [];
           incomingById.forEach((incomingItem, id) => {
-            const existingItem = existingItems.find((e) => e && e.id === id);
+            const existingItem = existingById.get(id);
             if (existingItem) {
               const existingTime = existingItem._lastModified || 0;
               const incomingTime = incomingItem._lastModified || 0;
