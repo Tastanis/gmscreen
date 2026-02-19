@@ -117,6 +117,7 @@ function renderVttSceneBoard(bool $isGm = false): string
                         </div>
                         <div id="vtt-map-overlay" class="vtt-board__map-overlay" aria-hidden="true" hidden></div>
                         <div id="vtt-grid-overlay" class="vtt-board__grid" aria-hidden="true"></div>
+                        <div id="vtt-aura-layer" class="vtt-board__auras" aria-hidden="true" hidden></div>
                         <div id="vtt-template-layer" class="vtt-board__templates" aria-hidden="true"></div>
                         <svg id="vtt-drawing-layer" class="vtt-board__drawings" aria-hidden="true"></svg>
                         <div
