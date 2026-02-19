@@ -301,7 +301,28 @@ if (!defined('VTT_STATE_API_INCLUDE_ONLY')) {
                                     'grid' => normalizeGridSettings([]),
                                 ];
                             }
-                            $nextState['sceneState'][$sceneId]['combat'] = $combatState;
+                            // Timestamp-based merge: only apply player combat updates
+                            // if they are newer than the existing combat state.
+                            // This prevents stale player data (e.g. from tab-switch
+                            // keepalive saves) from overwriting the GM's latest changes.
+                            $existingCombat = $nextState['sceneState'][$sceneId]['combat'] ?? [];
+                            $existingUpdatedAt = is_array($existingCombat) ? (int) ($existingCombat['updatedAt'] ?? 0) : 0;
+                            $existingSequence = is_array($existingCombat) ? (int) ($existingCombat['sequence'] ?? 0) : 0;
+                            $incomingUpdatedAt = is_array($combatState) ? (int) ($combatState['updatedAt'] ?? 0) : 0;
+                            $incomingSequence = is_array($combatState) ? (int) ($combatState['sequence'] ?? 0) : 0;
+
+                            // Use sequence for comparison when available (immune to clock drift),
+                            // fall back to updatedAt timestamp comparison otherwise.
+                            $isNewer = true;
+                            if ($existingSequence > 0 && $incomingSequence > 0) {
+                                $isNewer = $incomingSequence >= $existingSequence;
+                            } elseif ($existingUpdatedAt > 0 && $incomingUpdatedAt > 0) {
+                                $isNewer = $incomingUpdatedAt >= $existingUpdatedAt;
+                            }
+
+                            if ($isNewer) {
+                                $nextState['sceneState'][$sceneId]['combat'] = $combatState;
+                            }
                         }
                     }
 
