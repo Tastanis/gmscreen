@@ -1423,10 +1423,10 @@ function renderBars() {
           <div class="tracker-input-wrapper">
             <input class="edit-field tracker-input" data-live-edit="true" type="text" data-model="hero.vitals.currentRecoveries" value="${vitals.currentRecoveries}" />
           </div>
-          <div class="recovery-value-inline">
-            <span class="recovery-value-label">Recovery Value</span>
+          <button class="recovery-value-inline recovery-value-btn${currentRecoveries <= 0 ? ' recovery-value-btn--disabled' : ''}" type="button" data-use-recovery ${currentRecoveries <= 0 ? 'disabled' : ''}>
+            <span class="recovery-value-label">Use Recovery</span>
             <span class="recovery-value-number">${computeRecoveryValue(vitals)}</span>
-          </div>
+          </button>
         </div>
       </div>
     </div>
@@ -1450,6 +1450,28 @@ function renderBars() {
     });
 
     input.addEventListener("blur", apply);
+  });
+
+  container.querySelectorAll("[data-use-recovery]").forEach((btn) => {
+    btn.addEventListener("click", () => {
+      const vitals = sheetState.hero.vitals;
+      const currentRecoveries = Number(vitals.currentRecoveries) || 0;
+      if (currentRecoveries <= 0) return;
+
+      const recoveryVal = Number(computeRecoveryValue(vitals)) || 0;
+      if (recoveryVal <= 0) return;
+
+      const currentStamina = Number(vitals.currentStamina) || 0;
+      const staminaMax = Number(vitals.staminaMax) || 0;
+      const newStamina = Math.min(currentStamina + recoveryVal, staminaMax);
+
+      vitals.currentStamina = newStamina;
+      vitals.currentRecoveries = currentRecoveries - 1;
+
+      updateStaminaHistory(newStamina);
+      renderBars();
+      saveSheet();
+    });
   });
 }
 
@@ -2153,26 +2175,54 @@ function bindVictoryButtons() {
   });
 }
 
+function clearRespiteConfirmations() {
+  document.querySelectorAll(".respite-confirmation").forEach((el) => el.remove());
+}
+
 function bindRespiteButton() {
   document.querySelectorAll("[data-respite]").forEach((btn) => {
     btn.addEventListener("click", () => {
-      const currentXp = Number(sheetState.hero.xp) || 0;
-      const victories = Number(sheetState.hero.victories) || 0;
-      sheetState.hero.xp = currentXp + victories;
-      sheetState.hero.victories = 0;
+      clearRespiteConfirmations();
+      const wrapper = btn.closest(".xp-display-row") || btn.parentElement;
+      if (!wrapper) return;
+      wrapper.style.position = "relative";
 
-      const vitals = sheetState.hero.vitals;
-      const recoveriesMax = Number(vitals.recoveriesMax) || 0;
-      vitals.currentRecoveries = recoveriesMax;
+      const confirm = document.createElement("div");
+      confirm.className = "respite-confirmation";
+      confirm.innerHTML = `
+        <div class="respite-confirmation__text">Take a respite? Victories will convert to XP and recoveries will be restored.</div>
+        <div class="respite-confirmation__actions">
+          <button class="text-btn" data-confirm-respite>Yes</button>
+          <button class="text-btn" data-cancel-respite>Cancel</button>
+        </div>
+      `;
+      wrapper.appendChild(confirm);
 
-      renderHeroPane();
-      renderBars();
-      bindSurgeButtons();
-      bindVictoryButtons();
-      bindRespiteButton();
-      bindTokenButtons();
-      bindResourceControls();
-      saveSheet();
+      confirm.querySelector("[data-cancel-respite]")?.addEventListener("click", () => {
+        confirm.remove();
+      });
+
+      confirm.querySelector("[data-confirm-respite]")?.addEventListener("click", () => {
+        confirm.remove();
+
+        const currentXp = Number(sheetState.hero.xp) || 0;
+        const victories = Number(sheetState.hero.victories) || 0;
+        sheetState.hero.xp = currentXp + victories;
+        sheetState.hero.victories = 0;
+
+        const vitals = sheetState.hero.vitals;
+        const recoveriesMax = Number(vitals.recoveriesMax) || 0;
+        vitals.currentRecoveries = recoveriesMax;
+
+        renderHeroPane();
+        renderBars();
+        bindSurgeButtons();
+        bindVictoryButtons();
+        bindRespiteButton();
+        bindTokenButtons();
+        bindResourceControls();
+        saveSheet();
+      });
     });
   });
 }
