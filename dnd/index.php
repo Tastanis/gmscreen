@@ -4,25 +4,82 @@ session_start();
 // Define users and passwords
 $users = array(
     'frunk' => 'frunk',
-    'sharon' => 'sharon', 
+    'sharon' => 'sharon',
     'indigo' => 'indigo',
     'zepha' => 'zepha',
     'harms' => 'GM'  // password 'harms' maps to user 'GM'
 );
+
+// Secret key for signing remember-me cookies (HMAC)
+define('REMEMBER_SECRET', 'dnd-portal-remember-key-2024');
+define('REMEMBER_COOKIE', 'dnd_remember');
+define('REMEMBER_DAYS', 30);
+
+/**
+ * Create a signed remember-me cookie value.
+ */
+function createRememberToken($user) {
+    $expires = time() + (REMEMBER_DAYS * 86400);
+    $payload = $user . '|' . $expires;
+    $signature = hash_hmac('sha256', $payload, REMEMBER_SECRET);
+    return $payload . '|' . $signature;
+}
+
+/**
+ * Validate a remember-me cookie and return the user, or false.
+ */
+function validateRememberToken($token) {
+    $parts = explode('|', $token);
+    if (count($parts) !== 3) return false;
+
+    list($user, $expires, $signature) = $parts;
+
+    // Check expiration
+    if (time() > (int)$expires) return false;
+
+    // Verify signature
+    $expected = hash_hmac('sha256', $user . '|' . $expires, REMEMBER_SECRET);
+    if (!hash_equals($expected, $signature)) return false;
+
+    return $user;
+}
 
 $error_message = '';
 
 // Handle login form submission
 if (isset($_POST['password']) && $_POST['password'] != '') {
     $password = trim($_POST['password']);
-    
+
     if (isset($users[$password])) {
         $_SESSION['user'] = $users[$password];
         $_SESSION['logged_in'] = true;
+
+        // Set remember-me cookie if checkbox was checked
+        if (!empty($_POST['remember'])) {
+            $token = createRememberToken($users[$password]);
+            setcookie(REMEMBER_COOKIE, $token, time() + (REMEMBER_DAYS * 86400), '/');
+        }
+
         header('Location: dashboard.php');
         exit;
     } else {
         $error_message = 'Invalid password';
+    }
+}
+
+// Auto-login from remember-me cookie
+if (!isset($_SESSION['logged_in']) || $_SESSION['logged_in'] !== true) {
+    if (isset($_COOKIE[REMEMBER_COOKIE])) {
+        $user = validateRememberToken($_COOKIE[REMEMBER_COOKIE]);
+        if ($user !== false) {
+            $_SESSION['user'] = $user;
+            $_SESSION['logged_in'] = true;
+            header('Location: dashboard.php');
+            exit;
+        } else {
+            // Invalid/expired token — clear it
+            setcookie(REMEMBER_COOKIE, '', time() - 3600, '/');
+        }
     }
 }
 
@@ -137,6 +194,27 @@ if (isset($_SESSION['logged_in']) && $_SESSION['logged_in'] === true) {
             transform: translateY(0);
         }
 
+        .remember-group {
+            display: flex;
+            align-items: center;
+            margin-bottom: 20px;
+            gap: 8px;
+        }
+
+        .remember-group input[type="checkbox"] {
+            width: 18px;
+            height: 18px;
+            accent-color: #667eea;
+            cursor: pointer;
+        }
+
+        .remember-group label {
+            font-size: 0.9em;
+            color: #555;
+            cursor: pointer;
+            user-select: none;
+        }
+
         /* Responsive design */
         @media (max-width: 480px) {
             .login-container {
@@ -157,6 +235,10 @@ if (isset($_SESSION['logged_in']) && $_SESSION['logged_in'] === true) {
             <div class="form-group">
                 <label for="password">Password:</label>
                 <input type="password" id="password" name="password" required>
+            </div>
+            <div class="remember-group">
+                <input type="checkbox" id="remember" name="remember" value="1">
+                <label for="remember">Stay signed in</label>
             </div>
             <?php if ($error_message): ?>
                 <div class="error"><?= htmlspecialchars($error_message) ?></div>
