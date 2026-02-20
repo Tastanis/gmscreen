@@ -1283,8 +1283,17 @@ body.edit-mode .respite-btn {
   border-radius: 4px;
   padding: 8px;
   box-shadow: 0 6px 16px rgba(0, 0, 0, 0.15);
-  z-index: 20;
+  z-index: 9999;
   margin-top: 4px;
+}
+
+/* Raise stacking contexts when respite popup is active so it renders above sibling sections */
+.xp-card:has(.respite-confirmation) {
+  z-index: 100;
+}
+
+.quick-resources .field-card > *:has(.respite-confirmation) {
+  z-index: 100;
 }
 
 .respite-confirmation__text {
