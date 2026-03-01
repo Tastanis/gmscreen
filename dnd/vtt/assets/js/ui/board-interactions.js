@@ -2253,9 +2253,17 @@ export function mountBoardInteractions(store, routes = {}) {
     keepaliveFlushScheduled = true;
 
     const tasks = [];
-    const boardPromise = persistBoardStateSnapshot({ keepalive: true });
-    if (boardPromise && typeof boardPromise.then === 'function') {
-      tasks.push(boardPromise);
+
+    // Only save board state if there are actual local changes to flush.
+    // Without this guard, tabbing away sends a FULL snapshot of the local
+    // state which can overwrite other players' recent changes that this
+    // client hasn't polled yet — the same "popback" issue that was already
+    // fixed for combat state below.
+    if (hasDirtyState()) {
+      const boardPromise = persistBoardStateSnapshot({ keepalive: true });
+      if (boardPromise && typeof boardPromise.then === 'function') {
+        tasks.push(boardPromise);
+      }
     }
 
     const latestState = typeof boardApi.getState === 'function' ? boardApi.getState() : null;
