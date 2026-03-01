@@ -19,7 +19,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['action'])) {
     header('Content-Type: application/json');
     
     // BLOCK SOME SAVE OPERATIONS FOR NON-GM USERS (but allow toggle_favorite for all users)
-    if (!$is_gm && in_array($_POST['action'], ['save_staff', 'add_staff', 'delete_staff', 'upload_portrait', 'delete_image'])) {
+    if (!$is_gm && in_array($_POST['action'], ['save_staff', 'add_staff', 'delete_staff', 'upload_portrait', 'delete_image', 'save_image_adjust'])) {
         echo json_encode(array('success' => false, 'error' => 'Only GM can make changes'));
         exit;
     }
@@ -465,13 +465,48 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['action'])) {
         } catch (Exception $e) {
             echo json_encode(['success' => false, 'error' => 'Failed to get character details: ' . $e->getMessage()]);
         }
+    } elseif ($_POST['action'] === 'save_image_adjust') {
+        $staff_id = isset($_POST['staff_id']) ? $_POST['staff_id'] : '';
+        $image_path = isset($_POST['image_path']) ? $_POST['image_path'] : '';
+        $adjustment = isset($_POST['adjustment']) ? $_POST['adjustment'] : '';
+
+        if ($staff_id && $image_path && $adjustment) {
+            $adj_data = json_decode($adjustment, true);
+            if (!is_array($adj_data)) {
+                echo json_encode(array('success' => false, 'error' => 'Invalid adjustment data'));
+                exit;
+            }
+
+            $result = modifyStaffData(function (&$data) use ($staff_id, $image_path, $adj_data) {
+                foreach ($data['staff'] as &$member) {
+                    if ($member['staff_id'] === $staff_id) {
+                        if (!isset($member['image_adjustments']) || !is_array($member['image_adjustments'])) {
+                            $member['image_adjustments'] = array();
+                        }
+                        $member['image_adjustments'][$image_path] = $adj_data;
+                        return ['result' => true];
+                    }
+                }
+                return ['save' => false, 'error' => 'Staff member not found'];
+            });
+
+            if ($result['success']) {
+                echo json_encode(array('success' => true));
+            } else {
+                $error = isset($result['error']) ? $result['error'] : 'Failed to save adjustment';
+                echo json_encode(array('success' => false, 'error' => $error));
+            }
+        } else {
+            echo json_encode(array('success' => false, 'error' => 'Invalid parameters'));
+        }
+
     } elseif ($_POST['action'] === 'export_staff') {
         // Export all staff data
         if (!$is_gm) {
             echo json_encode(array('success' => false, 'error' => 'Only GM can export data'));
             exit;
         }
-        
+
         $data = loadStaffData();
         echo json_encode(array(
             'success' => true,
@@ -496,6 +531,7 @@ require_once '../../includes/strix-nav.php';
     <title>Strixhaven Staff - <?php echo htmlspecialchars($user); ?></title>
     <link rel="stylesheet" href="../../css/style.css">
     <link rel="stylesheet" href="css/staff.css">
+    <link rel="stylesheet" href="../includes/image-adjuster.css">
 </head>
 <body>
     <?php renderStrixNav('staff'); ?>
@@ -655,6 +691,7 @@ require_once '../../includes/strix-nav.php';
 
     <script src="../gm/js/rich-text-editor.js"></script>
     <script src="../gm/js/character-lookup.js"></script>
+    <script src="../includes/image-adjuster.js"></script>
     <script src="js/staff.js"></script>
 </body>
 </html>

@@ -324,7 +324,7 @@ function createStudentCard(student) {
     const favoriteIcon = isFavorite ? '<div class="student-favorite">★</div>' : '';
     const isSelectedForExport = selectedExportStudents.has(student.student_id);
     const exportClass = isSelectedForExport ? ' is-selected' : '';
-    
+
     // Handle both old image_path and new images array for backward compatibility
     let thumbnailImage = '';
     if (student.images && student.images.length > 0) {
@@ -332,11 +332,22 @@ function createStudentCard(student) {
     } else if (student.image_path) {
         thumbnailImage = student.image_path;
     }
-    
-    const imageHtml = thumbnailImage ? 
-        `<img src="${escapeHtml(thumbnailImage)}?t=${Date.now()}" alt="${escapeHtml(student.name)}" class="student-thumbnail">` :
-        `<div class="student-placeholder">No Photo</div>`;
-    
+
+    let imageHtml;
+    if (thumbnailImage) {
+        // Check for image adjustment
+        const adj = student.image_adjustments && student.image_adjustments[thumbnailImage];
+        const adjustedHtml = adj && typeof ImageAdjuster !== 'undefined' ?
+            ImageAdjuster.createAdjustedImageHtml(
+                escapeHtml(thumbnailImage) + '?t=' + Date.now(),
+                escapeHtml(student.name), adj, '', ''
+            ) : null;
+        imageHtml = adjustedHtml ||
+            `<img src="${escapeHtml(thumbnailImage)}?t=${Date.now()}" alt="${escapeHtml(student.name)}" class="student-thumbnail">`;
+    } else {
+        imageHtml = `<div class="student-placeholder">No Photo</div>`;
+    }
+
     return `
         <div class="student-card${exportClass}" data-student-id="${escapeHtml(student.student_id)}">
             ${favoriteIcon}
@@ -403,11 +414,11 @@ function createStudentDetailForm(student) {
         images = [student.image_path];
     }
     
-    const imageHtml = images.length > 0 ? 
-        createImageGallery(images, student.student_id, 'student') :
+    const imageHtml = images.length > 0 ?
+        createImageGallery(images, student.student_id, 'student', student.image_adjustments) :
         `<div class="student-portrait-placeholder">No Photo</div>`;
-    
-    const uploadButton = isGM ? 
+
+    const uploadButton = isGM ?
         `<button class="upload-portrait-btn" onclick="uploadStudentPortrait('${student.student_id}')">Upload Photo</button>` : '';
     
     // Create skills options HTML
@@ -1527,71 +1538,115 @@ function debounce(func, wait) {
 }
 
 // Image Gallery Functions
-function createImageGallery(images, itemId, itemType) {
+function createImageGallery(images, itemId, itemType, imageAdjustments) {
     if (!images || images.length === 0) {
         return `<div class="${itemType}-portrait-placeholder">No Photo</div>`;
     }
-    
+
     const currentImageIndex = 0;
     const hasMultipleImages = images.length > 1;
-    
+    const currentImage = images[currentImageIndex];
+    const adj = imageAdjustments && imageAdjustments[currentImage];
+
+    // Build the image element - adjusted or standard
+    let imageElement;
+    const adjustedHtml = adj && typeof ImageAdjuster !== 'undefined' ?
+        ImageAdjuster.createAdjustedImageHtml(
+            escapeHtml(currentImage) + '?t=' + Date.now(),
+            itemType + ' image', adj, '',
+            "openImagePopup('" + escapeHtml(currentImage) + "')"
+        ) : null;
+
+    if (adjustedHtml) {
+        imageElement = adjustedHtml;
+    } else {
+        imageElement = `<img src="${escapeHtml(currentImage)}?t=${Date.now()}"
+                     alt="${itemType} image"
+                     class="${itemType}-portrait gallery-image"
+                     onclick="openImagePopup('${escapeHtml(currentImage)}')"
+                     data-current-index="${currentImageIndex}">`;
+    }
+
     return `
         <div class="image-gallery" data-item-id="${itemId}" data-item-type="${itemType}">
             <div class="image-container">
-                <img src="${escapeHtml(images[currentImageIndex])}?t=${Date.now()}" 
-                     alt="${itemType} image" 
-                     class="${itemType}-portrait gallery-image"
-                     onclick="openImagePopup('${escapeHtml(images[currentImageIndex])}')"
-                     data-current-index="${currentImageIndex}">
-                
+                ${imageElement}
+
                 ${hasMultipleImages ? `
                     <button class="gallery-nav prev" onclick="navigateGallery('${itemId}', -1)">‹</button>
                     <button class="gallery-nav next" onclick="navigateGallery('${itemId}', 1)">›</button>
                     <div class="gallery-indicator">${currentImageIndex + 1} / ${images.length}</div>
                 ` : ''}
-                
+
                 ${isGM ? `
-                    <button class="delete-image-btn" onclick="deleteImage('${itemId}', '${escapeHtml(images[currentImageIndex])}', '${itemType}')">×</button>
+                    <button class="delete-image-btn" onclick="deleteImage('${itemId}', '${escapeHtml(currentImage)}', '${itemType}')">×</button>
                 ` : ''}
             </div>
+            ${isGM ? `
+                <button class="adjust-image-btn" onclick="openImageAdjuster('${itemId}', '${escapeHtml(currentImage)}', '${itemType}')">Adjust Image</button>
+            ` : ''}
         </div>
     `;
 }
 
 function navigateGallery(itemId, direction) {
-    const gallery = document.querySelector(`[data-item-id="${itemId}"] .image-container img`);
-    if (!gallery) return;
-    
-    const currentIndex = parseInt(gallery.getAttribute('data-current-index'));
-    let images = [];
-    
-    // Get images array based on selected item
-    if (selectedStudent && selectedStudent.student_id === itemId) {
-        images = selectedStudent.images || (selectedStudent.image_path ? [selectedStudent.image_path] : []);
-    }
-    
+    if (!selectedStudent || selectedStudent.student_id !== itemId) return;
+
+    const images = selectedStudent.images || (selectedStudent.image_path ? [selectedStudent.image_path] : []);
     if (images.length <= 1) return;
-    
+
+    // Re-render the gallery section for the new image
+    const galleryEl = document.querySelector(`[data-item-id="${itemId}"]`);
+    if (!galleryEl) return;
+
+    const imgEl = galleryEl.querySelector('.image-container img, .image-container .adjusted-image-wrapper img');
+    const currentIndex = imgEl ? parseInt(imgEl.getAttribute('data-current-index') || '0') : 0;
+
     let newIndex = currentIndex + direction;
     if (newIndex < 0) newIndex = images.length - 1;
     if (newIndex >= images.length) newIndex = 0;
-    
-    // Update image
-    gallery.src = images[newIndex];
-    gallery.setAttribute('data-current-index', newIndex);
-    gallery.setAttribute('onclick', `openImagePopup('${escapeHtml(images[newIndex])}')`);
-    
-    // Update indicator
-    const indicator = gallery.parentElement.querySelector('.gallery-indicator');
-    if (indicator) {
-        indicator.textContent = `${newIndex + 1} / ${images.length}`;
+
+    const newImage = images[newIndex];
+    const adj = selectedStudent.image_adjustments && selectedStudent.image_adjustments[newImage];
+    const container = galleryEl.querySelector('.image-container');
+
+    // Build new image element
+    let newImageHtml;
+    const adjustedHtml = adj && typeof ImageAdjuster !== 'undefined' ?
+        ImageAdjuster.createAdjustedImageHtml(
+            escapeHtml(newImage) + '?t=' + Date.now(),
+            'student image', adj, '',
+            "openImagePopup('" + escapeHtml(newImage) + "')"
+        ) : null;
+
+    if (adjustedHtml) {
+        newImageHtml = adjustedHtml;
+    } else {
+        newImageHtml = `<img src="${escapeHtml(newImage)}?t=${Date.now()}"
+             alt="student image"
+             class="student-portrait gallery-image"
+             onclick="openImagePopup('${escapeHtml(newImage)}')"
+             data-current-index="${newIndex}">`;
     }
-    
-    // Update delete button
-    const deleteBtn = gallery.parentElement.querySelector('.delete-image-btn');
-    if (deleteBtn) {
-        deleteBtn.setAttribute('onclick', `deleteImage('${itemId}', '${escapeHtml(images[newIndex])}', 'student')`);
+
+    // Rebuild container content
+    container.innerHTML = `
+        ${newImageHtml}
+        <button class="gallery-nav prev" onclick="navigateGallery('${itemId}', -1)">&#8249;</button>
+        <button class="gallery-nav next" onclick="navigateGallery('${itemId}', 1)">&#8250;</button>
+        <div class="gallery-indicator">${newIndex + 1} / ${images.length}</div>
+        ${isGM ? `<button class="delete-image-btn" onclick="deleteImage('${itemId}', '${escapeHtml(newImage)}', 'student')">×</button>` : ''}
+    `;
+
+    // Update the adjust button
+    const adjustBtn = galleryEl.querySelector('.adjust-image-btn');
+    if (adjustBtn) {
+        adjustBtn.setAttribute('onclick', `openImageAdjuster('${itemId}', '${escapeHtml(newImage)}', 'student')`);
     }
+
+    // Store current index on the new img element
+    const newImgEl = container.querySelector('img');
+    if (newImgEl) newImgEl.setAttribute('data-current-index', newIndex);
 }
 
 function openImagePopup(imagePath) {
@@ -1776,9 +1831,38 @@ function uploadStudentPortrait(studentId) {
     input.click();
 }
 
+// Open image adjuster for a student's image
+function openImageAdjuster(itemId, imagePath, itemType) {
+    if (!isGM || typeof ImageAdjuster === 'undefined') return;
+
+    const student = selectedStudent && selectedStudent.student_id === itemId ? selectedStudent : null;
+    const existingAdj = student && student.image_adjustments ? student.image_adjustments[imagePath] : null;
+
+    ImageAdjuster.open(imagePath, itemId, itemType, studentsEndpoint, existingAdj, function(imgPath, adjustment) {
+        // Update local data with the new adjustment
+        if (selectedStudent && selectedStudent.student_id === itemId) {
+            if (!selectedStudent.image_adjustments) {
+                selectedStudent.image_adjustments = {};
+            }
+            selectedStudent.image_adjustments[imgPath] = adjustment;
+
+            // Refresh the modal content
+            const modalBody = document.querySelector('#student-modal .student-details');
+            if (modalBody) {
+                modalBody.innerHTML = createStudentDetailForm(selectedStudent);
+                setupFormEventListeners(modalBody);
+                setupModalRichTextEditors(modalBody, selectedStudent);
+            }
+        }
+
+        // Refresh the main grid to show updated thumbnails
+        loadStudents();
+    });
+}
+
 function setupFormEventListeners(container) {
     if (!isGM) return;
-    
+
     // Only handle input and select elements - rich text editors handle their own auto-save
     container.querySelectorAll('input, select').forEach(input => {
         input.addEventListener('change', function() {
