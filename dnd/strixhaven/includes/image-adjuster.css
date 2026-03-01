@@ -1,0 +1,311 @@
+/* Image Adjuster Modal Styles */
+.image-adjuster-overlay {
+    position: fixed;
+    top: 0;
+    left: 0;
+    width: 100%;
+    height: 100%;
+    background: rgba(0, 0, 0, 0.7);
+    z-index: 10000;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+}
+
+.image-adjuster-modal {
+    background: #f5efe6;
+    border-radius: 12px;
+    box-shadow: 0 10px 40px rgba(0, 0, 0, 0.4);
+    width: 500px;
+    max-width: 95vw;
+    overflow: hidden;
+    border: 2px solid #8b6f47;
+}
+
+.image-adjuster-header {
+    background: linear-gradient(135deg, #6b4423 0%, #8b6f47 100%);
+    color: #f5efe6;
+    padding: 14px 20px;
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+}
+
+.image-adjuster-header h3 {
+    margin: 0;
+    font-size: 16px;
+    font-weight: 600;
+}
+
+.image-adjuster-close {
+    background: none;
+    border: none;
+    color: #f5efe6;
+    font-size: 22px;
+    cursor: pointer;
+    padding: 0 4px;
+    line-height: 1;
+    opacity: 0.8;
+    transition: opacity 0.2s;
+}
+
+.image-adjuster-close:hover {
+    opacity: 1;
+}
+
+.image-adjuster-body {
+    padding: 20px;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    gap: 16px;
+}
+
+/* The viewport - shows the square crop area */
+.image-adjuster-viewport {
+    width: 300px;
+    height: 300px;
+    border-radius: 8px;
+    overflow: hidden;
+    position: relative;
+    cursor: grab;
+    border: 3px solid #8b6f47;
+    box-shadow: 0 4px 12px rgba(0, 0, 0, 0.2);
+    /* Brown watercolor/gradient background */
+    background:
+        radial-gradient(ellipse at 20% 50%, rgba(139, 111, 71, 0.4) 0%, transparent 70%),
+        radial-gradient(ellipse at 80% 30%, rgba(160, 120, 60, 0.3) 0%, transparent 60%),
+        radial-gradient(ellipse at 50% 80%, rgba(120, 90, 50, 0.35) 0%, transparent 65%),
+        radial-gradient(ellipse at 30% 20%, rgba(180, 140, 80, 0.25) 0%, transparent 55%),
+        radial-gradient(ellipse at 70% 70%, rgba(100, 75, 40, 0.3) 0%, transparent 60%),
+        linear-gradient(135deg, #c4a882 0%, #a68b6b 25%, #d4b896 50%, #b8976e 75%, #c9ad8a 100%);
+}
+
+.image-adjuster-viewport:active {
+    cursor: grabbing;
+}
+
+.image-adjuster-viewport img {
+    position: absolute;
+    top: 50%;
+    left: 50%;
+    transform-origin: center center;
+    user-select: none;
+    -webkit-user-drag: none;
+    pointer-events: none;
+}
+
+/* Controls area */
+.image-adjuster-controls {
+    width: 100%;
+    display: flex;
+    flex-direction: column;
+    gap: 10px;
+}
+
+.image-adjuster-zoom-row {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+}
+
+.image-adjuster-zoom-row label {
+    font-weight: 600;
+    color: #5b4a3a;
+    font-size: 13px;
+    min-width: 45px;
+}
+
+.image-adjuster-zoom-btn {
+    background: #8b6f47;
+    color: white;
+    border: none;
+    width: 32px;
+    height: 32px;
+    border-radius: 6px;
+    cursor: pointer;
+    font-size: 18px;
+    font-weight: bold;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    transition: background 0.2s;
+}
+
+.image-adjuster-zoom-btn:hover {
+    background: #6b4423;
+}
+
+.image-adjuster-zoom-slider {
+    flex: 1;
+    height: 6px;
+    -webkit-appearance: none;
+    appearance: none;
+    background: #d4c4a8;
+    border-radius: 3px;
+    outline: none;
+}
+
+.image-adjuster-zoom-slider::-webkit-slider-thumb {
+    -webkit-appearance: none;
+    appearance: none;
+    width: 18px;
+    height: 18px;
+    border-radius: 50%;
+    background: #8b6f47;
+    cursor: pointer;
+    border: 2px solid #f5efe6;
+    box-shadow: 0 1px 3px rgba(0,0,0,0.3);
+}
+
+.image-adjuster-zoom-slider::-moz-range-thumb {
+    width: 18px;
+    height: 18px;
+    border-radius: 50%;
+    background: #8b6f47;
+    cursor: pointer;
+    border: 2px solid #f5efe6;
+    box-shadow: 0 1px 3px rgba(0,0,0,0.3);
+}
+
+.image-adjuster-zoom-value {
+    font-size: 12px;
+    color: #8b6f47;
+    min-width: 40px;
+    text-align: right;
+    font-weight: 600;
+}
+
+.image-adjuster-hint {
+    font-size: 12px;
+    color: #8b7a6a;
+    text-align: center;
+    font-style: italic;
+}
+
+.image-adjuster-actions {
+    display: flex;
+    gap: 10px;
+    width: 100%;
+    justify-content: flex-end;
+    padding-top: 4px;
+}
+
+.image-adjuster-btn {
+    padding: 8px 20px;
+    border-radius: 6px;
+    border: none;
+    cursor: pointer;
+    font-size: 14px;
+    font-weight: 600;
+    transition: all 0.2s;
+}
+
+.image-adjuster-btn-reset {
+    background: #e0d5c5;
+    color: #5b4a3a;
+    margin-right: auto;
+}
+
+.image-adjuster-btn-reset:hover {
+    background: #d4c4a8;
+}
+
+.image-adjuster-btn-cancel {
+    background: #e0d5c5;
+    color: #5b4a3a;
+}
+
+.image-adjuster-btn-cancel:hover {
+    background: #d4c4a8;
+}
+
+.image-adjuster-btn-save {
+    background: #8b6f47;
+    color: white;
+}
+
+.image-adjuster-btn-save:hover {
+    background: #6b4423;
+}
+
+/* Adjusted thumbnail wrapper - used in grid cards and modal portraits */
+.adjusted-image-wrapper {
+    display: inline-block;
+    overflow: hidden;
+    position: relative;
+    /* Brown watercolor/gradient background */
+    background:
+        radial-gradient(ellipse at 20% 50%, rgba(139, 111, 71, 0.4) 0%, transparent 70%),
+        radial-gradient(ellipse at 80% 30%, rgba(160, 120, 60, 0.3) 0%, transparent 60%),
+        radial-gradient(ellipse at 50% 80%, rgba(120, 90, 50, 0.35) 0%, transparent 65%),
+        linear-gradient(135deg, #c4a882 0%, #a68b6b 50%, #c9ad8a 100%);
+}
+
+/* Card thumbnails */
+.student-card .adjusted-image-wrapper,
+.staff-card .adjusted-image-wrapper {
+    width: 80px;
+    height: 80px;
+    border-radius: 6px;
+    border: 2px solid #c2b39a;
+    margin: 0 auto 10px;
+    transition: border-color 0.2s ease;
+}
+
+.student-card:hover .adjusted-image-wrapper,
+.staff-card:hover .adjusted-image-wrapper {
+    border-color: #8b5e3c;
+}
+
+.student-card .adjusted-image-wrapper img,
+.staff-card .adjusted-image-wrapper img {
+    position: absolute;
+    top: 50%;
+    left: 50%;
+    transform-origin: center center;
+    display: block;
+}
+
+/* Modal portrait adjustments */
+.image-gallery .adjusted-image-wrapper {
+    max-width: 300px;
+    max-height: 300px;
+    width: 300px;
+    height: 300px;
+    border-radius: 8px;
+    border: 2px solid #e1e8ed;
+    cursor: pointer;
+    transition: all 0.3s ease;
+}
+
+.image-gallery .adjusted-image-wrapper:hover {
+    border-color: #667eea;
+    transform: scale(1.02);
+}
+
+.image-gallery .adjusted-image-wrapper img {
+    position: absolute;
+    top: 50%;
+    left: 50%;
+    transform-origin: center center;
+}
+
+/* Adjust Image button in the gallery */
+.adjust-image-btn {
+    display: block;
+    margin: 8px auto 0;
+    background: #8b6f47;
+    color: white;
+    border: none;
+    padding: 6px 14px;
+    border-radius: 6px;
+    cursor: pointer;
+    font-size: 13px;
+    font-weight: 500;
+    transition: all 0.2s;
+}
+
+.adjust-image-btn:hover {
+    background: #6b4423;
+}
