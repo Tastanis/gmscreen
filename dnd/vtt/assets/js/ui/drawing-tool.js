@@ -22,9 +22,16 @@ export function mountDrawingTool(options = {}) {
   onDrawingChange = options.onDrawingChange || null;
   getCurrentUserId = options.getCurrentUserId || null;
 
+  const drawModeBtn = document.querySelector('[data-action="draw-mode-draw"]');
+  const eraseModeBtn = document.querySelector('[data-action="draw-mode-erase"]');
+  const colorRow = document.querySelector('[data-draw-color-row]');
+
   const state = {
     active: false,
     drawing: false,
+    eraseMode: false,
+    erasing: false,
+    eraseDidChange: false,
     pointerId: null,
     currentPath: null,
     currentPoints: [],
@@ -39,6 +46,9 @@ export function mountDrawingTool(options = {}) {
     strokeInput,
     strokeValue,
     clearButton,
+    drawModeBtn,
+    eraseModeBtn,
+    colorRow,
     mapSurface,
     mapTransform,
     layerSize: { width: 0, height: 0 },
@@ -88,6 +98,18 @@ export function mountDrawingTool(options = {}) {
     });
   }
 
+  if (drawModeBtn) {
+    drawModeBtn.addEventListener('click', () => {
+      setEraseMode(state, false);
+    });
+  }
+
+  if (eraseModeBtn) {
+    eraseModeBtn.addEventListener('click', () => {
+      setEraseMode(state, true);
+    });
+  }
+
   mapSurface.addEventListener(
     'pointerdown',
     (event) => {
@@ -102,7 +124,11 @@ export function mountDrawingTool(options = {}) {
       event.preventDefault();
       event.stopPropagation();
 
-      beginDrawing(state, event);
+      if (state.eraseMode) {
+        beginErasing(state, event);
+      } else {
+        beginDrawing(state, event);
+      }
       try {
         mapSurface.setPointerCapture(event.pointerId);
       } catch (error) {
@@ -113,7 +139,18 @@ export function mountDrawingTool(options = {}) {
   );
 
   mapSurface.addEventListener('pointermove', (event) => {
-    if (!state.drawing || event.pointerId !== state.pointerId) {
+    if (event.pointerId !== state.pointerId) {
+      return;
+    }
+
+    if (state.erasing) {
+      event.preventDefault();
+      event.stopPropagation();
+      continueErasing(state, event);
+      return;
+    }
+
+    if (!state.drawing) {
       return;
     }
 
@@ -123,7 +160,19 @@ export function mountDrawingTool(options = {}) {
   });
 
   mapSurface.addEventListener('pointerup', (event) => {
-    if (!state.drawing || event.pointerId !== state.pointerId) {
+    if (event.pointerId !== state.pointerId) {
+      return;
+    }
+
+    if (state.erasing) {
+      event.preventDefault();
+      event.stopPropagation();
+      endErasing(state);
+      mapSurface.releasePointerCapture?.(event.pointerId);
+      return;
+    }
+
+    if (!state.drawing) {
       return;
     }
 
@@ -134,6 +183,12 @@ export function mountDrawingTool(options = {}) {
   });
 
   mapSurface.addEventListener('pointercancel', (event) => {
+    if (state.erasing && event.pointerId === state.pointerId) {
+      event.stopPropagation();
+      endErasing(state);
+      mapSurface.releasePointerCapture?.(event.pointerId);
+      return;
+    }
     if (state.drawing && event.pointerId === state.pointerId) {
       event.stopPropagation();
       cancelDrawing(state);
@@ -155,6 +210,17 @@ export function mountDrawingTool(options = {}) {
       if (state.active && !state.drawing) {
         event.preventDefault();
         undoLastDrawing(state);
+      }
+    }
+
+    // Handle [ and ] to adjust stroke size when draw panel is open
+    if (state.active && !event.ctrlKey && !event.metaKey && !event.altKey) {
+      if (event.key === '[') {
+        event.preventDefault();
+        adjustStrokeSize(state, -1);
+      } else if (event.key === ']') {
+        event.preventDefault();
+        adjustStrokeSize(state, 1);
       }
     }
   });
@@ -189,6 +255,10 @@ function toggleDrawMode(state, nextActive) {
 
   if (!state.active) {
     cancelDrawing(state);
+    if (state.erasing) {
+      endErasing(state);
+    }
+    setEraseMode(state, false);
   }
 }
 
@@ -263,6 +333,193 @@ function cancelDrawing(state) {
   state.pointerId = null;
   state.currentPath = null;
   state.currentPoints = [];
+}
+
+function setEraseMode(state, eraseMode) {
+  state.eraseMode = eraseMode;
+
+  if (state.drawModeBtn) {
+    state.drawModeBtn.classList.toggle('is-active', !eraseMode);
+  }
+  if (state.eraseModeBtn) {
+    state.eraseModeBtn.classList.toggle('is-active', eraseMode);
+  }
+  if (state.colorRow) {
+    state.colorRow.hidden = eraseMode;
+  }
+  if (state.drawingLayer) {
+    state.drawingLayer.setAttribute('data-erase-active', eraseMode ? 'true' : 'false');
+  }
+}
+
+function beginErasing(state, event) {
+  const point = getMapCoordinates(state.mapTransform, event);
+  if (!point) {
+    return;
+  }
+
+  state.erasing = true;
+  state.pointerId = event.pointerId;
+  state.eraseDidChange = false;
+
+  // Save undo snapshot before any erasing happens
+  pushToUndoStack(state);
+
+  eraseAtPoint(state, point);
+}
+
+function continueErasing(state, event) {
+  const point = getMapCoordinates(state.mapTransform, event);
+  if (!point) {
+    return;
+  }
+
+  eraseAtPoint(state, point);
+}
+
+function endErasing(state) {
+  if (!state.eraseDidChange) {
+    // Nothing was erased, remove the undo snapshot we saved
+    state.undoStack.pop();
+  } else {
+    scheduleSyncDrawings(state);
+  }
+
+  state.erasing = false;
+  state.pointerId = null;
+  state.eraseDidChange = false;
+}
+
+function eraseAtPoint(state, point) {
+  const eraserRadius = state.strokeWidth / 2;
+  const result = [];
+  let changed = false;
+
+  for (const drawing of state.drawings) {
+    if (!drawing.points || drawing.points.length < 2) {
+      result.push(drawing);
+      continue;
+    }
+
+    const halfStroke = (drawing.strokeWidth || 3) / 2;
+    const hitRadius = eraserRadius + halfStroke;
+    const hitRadiusSq = hitRadius * hitRadius;
+
+    // Check each segment for intersection with the eraser
+    const segmentCount = drawing.points.length - 1;
+    let anyHit = false;
+
+    for (let i = 0; i < segmentCount; i++) {
+      if (distSqPointToSegment(point, drawing.points[i], drawing.points[i + 1]) <= hitRadiusSq) {
+        anyHit = true;
+        break;
+      }
+    }
+
+    if (!anyHit) {
+      result.push(drawing);
+      continue;
+    }
+
+    changed = true;
+
+    // Split into fragments: collect runs of consecutive non-erased segments
+    let fragStart = null;
+    for (let i = 0; i < segmentCount; i++) {
+      const hit = distSqPointToSegment(point, drawing.points[i], drawing.points[i + 1]) <= hitRadiusSq;
+
+      if (!hit) {
+        if (fragStart === null) {
+          fragStart = i;
+        }
+      } else {
+        if (fragStart !== null) {
+          // Points fragStart through i form the non-erased run
+          const fragPoints = drawing.points.slice(fragStart, i + 1);
+          if (fragPoints.length >= 2) {
+            const frag = {
+              id: generateDrawingId(),
+              points: fragPoints,
+              color: drawing.color,
+              strokeWidth: drawing.strokeWidth,
+            };
+            if (drawing.authorId) {
+              frag.authorId = drawing.authorId;
+            }
+            result.push(frag);
+          }
+          fragStart = null;
+        }
+      }
+    }
+
+    // Trailing non-erased run
+    if (fragStart !== null) {
+      const fragPoints = drawing.points.slice(fragStart, segmentCount + 1);
+      if (fragPoints.length >= 2) {
+        const frag = {
+          id: generateDrawingId(),
+          points: fragPoints,
+          color: drawing.color,
+          strokeWidth: drawing.strokeWidth,
+        };
+        if (drawing.authorId) {
+          frag.authorId = drawing.authorId;
+        }
+        result.push(frag);
+      }
+    }
+  }
+
+  if (!changed) {
+    return;
+  }
+
+  state.eraseDidChange = true;
+  state.drawings = result;
+  renderDrawings(state);
+}
+
+function distSqPointToSegment(p, a, b) {
+  const dx = b.x - a.x;
+  const dy = b.y - a.y;
+  const lenSq = dx * dx + dy * dy;
+
+  if (lenSq === 0) {
+    // a and b are the same point
+    const ex = p.x - a.x;
+    const ey = p.y - a.y;
+    return ex * ex + ey * ey;
+  }
+
+  let t = ((p.x - a.x) * dx + (p.y - a.y) * dy) / lenSq;
+  t = Math.max(0, Math.min(1, t));
+
+  const projX = a.x + t * dx;
+  const projY = a.y + t * dy;
+  const ex = p.x - projX;
+  const ey = p.y - projY;
+  return ex * ex + ey * ey;
+}
+
+function adjustStrokeSize(state, delta) {
+  if (!state.strokeInput) {
+    return;
+  }
+
+  const min = parseInt(state.strokeInput.min, 10) || 1;
+  const max = parseInt(state.strokeInput.max, 10) || 20;
+  const newValue = Math.max(min, Math.min(max, state.strokeWidth + delta));
+
+  if (newValue === state.strokeWidth) {
+    return;
+  }
+
+  state.strokeWidth = newValue;
+  state.strokeInput.value = String(newValue);
+  if (state.strokeValue) {
+    state.strokeValue.textContent = String(newValue);
+  }
 }
 
 function clearAllDrawings(state) {

@@ -156,7 +156,21 @@ function renderVttSceneBoard(bool $isGm = false): string
                 <span class="vtt-board__ruler-value">0 squares</span>
             </div>
             <div id="vtt-drawing-settings" class="vtt-drawing-settings" hidden>
-                <div class="vtt-drawing-settings__row">
+                <div class="vtt-drawing-settings__row vtt-drawing-settings__mode-row">
+                    <button
+                        type="button"
+                        class="btn vtt-drawing-settings__mode-btn is-active"
+                        data-action="draw-mode-draw"
+                        title="Draw"
+                    >Draw</button>
+                    <button
+                        type="button"
+                        class="btn vtt-drawing-settings__mode-btn"
+                        data-action="draw-mode-erase"
+                        title="Eraser"
+                    >Eraser</button>
+                </div>
+                <div class="vtt-drawing-settings__row" data-draw-color-row>
                     <label class="vtt-drawing-settings__label" for="vtt-draw-color">Color</label>
                     <input
                         type="color"
