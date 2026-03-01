@@ -2324,6 +2324,13 @@ export function mountBoardInteractions(store, routes = {}) {
     const handleVisibilityChange = () => {
       if (document.visibilityState === 'hidden') {
         flushBoardStateWithKeepalive();
+      } else if (document.visibilityState === 'visible') {
+        // When the tab becomes visible again, re-save any dirty state that
+        // failed to persist while the tab was hidden (sendBeacon / keepalive
+        // fetch failures).  This ensures changes are never silently lost.
+        if (hasDirtyState()) {
+          persistBoardStateSnapshot();
+        }
       }
     };
     document.addEventListener('visibilitychange', handleVisibilityChange, {

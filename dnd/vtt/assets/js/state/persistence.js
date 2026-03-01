@@ -172,6 +172,20 @@ async function persist(key, entry) {
       } catch (beaconError) {
         console.warn('[VTT] sendBeacon failed, falling back to fetch', beaconError);
       }
+
+      // If sendBeacon failed and the page is hidden or unloading, a regular
+      // fetch is very unlikely to succeed either.  Treat this as a
+      // non-retriable abort so we don't spam the console with pointless
+      // retry errors.  The visibility-change handler will re-save dirty
+      // state when the tab becomes visible again.
+      if (pageIsUnloading || isDocumentHidden()) {
+        console.warn(`[VTT] Skipping fetch fallback for ${key} (page hidden/unloading)`);
+        result = createResult(false, {
+          aborted: true,
+          error: new Error(`Page hidden during persistence for ${key}`),
+        });
+        return;
+      }
     }
 
     const response = await fetch(endpoint, {
@@ -230,10 +244,16 @@ async function persist(key, entry) {
       return;
     }
 
+    // Don't retry while the tab is hidden or the page is unloading —
+    // network requests are throttled/blocked in that state and retries
+    // just generate console noise.  The visibility-change handler will
+    // re-save dirty state when the tab becomes visible again.
     const shouldRetry =
       !entry.lastResult.success &&
       !entry.lastResult.aborted &&
-      entry.attempts < entry.retryLimit;
+      entry.attempts < entry.retryLimit &&
+      !pageIsUnloading &&
+      !isDocumentHidden();
 
     if (shouldRetry) {
       const delayMs = entry.retryBackoffMs * Math.max(1, 2 ** (entry.attempts - 1));
