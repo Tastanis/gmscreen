@@ -31,7 +31,7 @@ export function mountDrawingTool(options = {}) {
     drawing: false,
     eraseMode: false,
     erasing: false,
-    erasedIds: null,
+    eraseDidChange: false,
     pointerId: null,
     currentPath: null,
     currentPoints: [],
@@ -360,7 +360,7 @@ function beginErasing(state, event) {
 
   state.erasing = true;
   state.pointerId = event.pointerId;
-  state.erasedIds = new Set();
+  state.eraseDidChange = false;
 
   // Save undo snapshot before any erasing happens
   pushToUndoStack(state);
@@ -378,9 +378,7 @@ function continueErasing(state, event) {
 }
 
 function endErasing(state) {
-  const didErase = state.erasedIds && state.erasedIds.size > 0;
-
-  if (!didErase) {
+  if (!state.eraseDidChange) {
     // Nothing was erased, remove the undo snapshot we saved
     state.undoStack.pop();
   } else {
@@ -389,61 +387,97 @@ function endErasing(state) {
 
   state.erasing = false;
   state.pointerId = null;
-  state.erasedIds = null;
+  state.eraseDidChange = false;
 }
 
 function eraseAtPoint(state, point) {
   const eraserRadius = state.strokeWidth / 2;
-  const toRemove = [];
+  const result = [];
+  let changed = false;
 
   for (const drawing of state.drawings) {
-    if (state.erasedIds.has(drawing.id)) {
+    if (!drawing.points || drawing.points.length < 2) {
+      result.push(drawing);
       continue;
     }
 
-    if (drawingIntersectsCircle(drawing, point, eraserRadius)) {
-      toRemove.push(drawing.id);
+    const halfStroke = (drawing.strokeWidth || 3) / 2;
+    const hitRadius = eraserRadius + halfStroke;
+    const hitRadiusSq = hitRadius * hitRadius;
+
+    // Check each segment for intersection with the eraser
+    const segmentCount = drawing.points.length - 1;
+    let anyHit = false;
+
+    for (let i = 0; i < segmentCount; i++) {
+      if (distSqPointToSegment(point, drawing.points[i], drawing.points[i + 1]) <= hitRadiusSq) {
+        anyHit = true;
+        break;
+      }
+    }
+
+    if (!anyHit) {
+      result.push(drawing);
+      continue;
+    }
+
+    changed = true;
+
+    // Split into fragments: collect runs of consecutive non-erased segments
+    let fragStart = null;
+    for (let i = 0; i < segmentCount; i++) {
+      const hit = distSqPointToSegment(point, drawing.points[i], drawing.points[i + 1]) <= hitRadiusSq;
+
+      if (!hit) {
+        if (fragStart === null) {
+          fragStart = i;
+        }
+      } else {
+        if (fragStart !== null) {
+          // Points fragStart through i form the non-erased run
+          const fragPoints = drawing.points.slice(fragStart, i + 1);
+          if (fragPoints.length >= 2) {
+            const frag = {
+              id: generateDrawingId(),
+              points: fragPoints,
+              color: drawing.color,
+              strokeWidth: drawing.strokeWidth,
+            };
+            if (drawing.authorId) {
+              frag.authorId = drawing.authorId;
+            }
+            result.push(frag);
+          }
+          fragStart = null;
+        }
+      }
+    }
+
+    // Trailing non-erased run
+    if (fragStart !== null) {
+      const fragPoints = drawing.points.slice(fragStart, segmentCount + 1);
+      if (fragPoints.length >= 2) {
+        const frag = {
+          id: generateDrawingId(),
+          points: fragPoints,
+          color: drawing.color,
+          strokeWidth: drawing.strokeWidth,
+        };
+        if (drawing.authorId) {
+          frag.authorId = drawing.authorId;
+        }
+        result.push(frag);
+      }
     }
   }
 
-  if (toRemove.length === 0) {
+  if (!changed) {
     return;
   }
 
-  for (const id of toRemove) {
-    state.erasedIds.add(id);
-  }
-
-  const removeSet = new Set(toRemove);
-  state.drawings = state.drawings.filter((d) => !removeSet.has(d.id));
-
-  // Remove the SVG path elements for erased drawings
-  for (const id of toRemove) {
-    const pathEl = state.drawingLayer.querySelector(`[data-drawing-id="${id}"]`);
-    if (pathEl) {
-      pathEl.remove();
-    }
-  }
-}
-
-function drawingIntersectsCircle(drawing, center, radius) {
-  if (!drawing.points || drawing.points.length < 2) {
-    return false;
-  }
-
-  const halfStroke = (drawing.strokeWidth || 3) / 2;
-  const hitRadius = radius + halfStroke;
-  const hitRadiusSq = hitRadius * hitRadius;
-
-  for (let i = 0; i < drawing.points.length - 1; i++) {
-    const a = drawing.points[i];
-    const b = drawing.points[i + 1];
-    if (distSqPointToSegment(center, a, b) <= hitRadiusSq) {
-      return true;
-    }
-  }
-
-  return false;
+  state.eraseDidChange = true;
+  state.drawings = result;
+  renderDrawings(state);
 }
 
 function distSqPointToSegment(p, a, b) {
