@@ -634,7 +634,7 @@ function openImagePopup(imagePath) {
     }
     const popupImage = popup.querySelector('.image-popup-content img');
     
-    popupImage.src = imagePath + '?t=' + Date.now();
+    popupImage.src = imagePath;
     popup.style.display = 'block';
 }
 

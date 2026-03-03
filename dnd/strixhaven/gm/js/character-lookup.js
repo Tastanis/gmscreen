@@ -694,7 +694,7 @@ class CharacterLookup {
     }
 
     createStudentDetailContent(student) {
-        const imagePath = student.image_path ? `../students/${student.image_path}?t=${Date.now()}` : '';
+        const imagePath = student.image_path ? `../students/${student.image_path}` : '';
         return `
             <div class="character-portrait-section">
                 ${imagePath ?
@@ -792,7 +792,7 @@ class CharacterLookup {
     }
 
     createStaffDetailContent(staff) {
-        const imagePath = staff.image_path ? `../staff/${staff.image_path}?t=${Date.now()}` : '';
+        const imagePath = staff.image_path ? `../staff/${staff.image_path}` : '';
         return `
             <div class="character-portrait-section">
                 ${imagePath ?
@@ -830,7 +830,7 @@ class CharacterLookup {
     }
 
     createLocationDetailContent(location) {
-        const imagePath = location.image_path ? `../locations/${location.image_path}?t=${Date.now()}` : '';
+        const imagePath = location.image_path ? `../locations/${location.image_path}` : '';
         return `
             <div class="character-portrait-section">
                 ${imagePath ?

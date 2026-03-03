@@ -361,7 +361,7 @@ const ImageAdjuster = (function() {
      * @param {string} onclickAttr - onclick attribute string
      * @returns {string} HTML string
      */
-    function createAdjustedImageHtml(src, alt, adjustment, extraClasses, onclickAttr) {
+    function createAdjustedImageHtml(src, alt, adjustment, extraClasses, onclickAttr, extraAttrs) {
         if (!adjustment || (adjustment.offsetX === 0 && adjustment.offsetY === 0 && (adjustment.scale === 1 || !adjustment.scale))) {
             // No adjustment - return standard img
             return null;
@@ -372,6 +372,7 @@ const ImageAdjuster = (function() {
         const adjData = encodeURIComponent(JSON.stringify(adjustment));
         return `<div class="adjusted-image-wrapper ${extraClasses || ''}"${clickAttr}>
             <img src="${src}" alt="${alt}" draggable="false"
+                 ${extraAttrs || ''}
                  data-adjustment="${adjData}"
                  onload="ImageAdjuster.applyAdjustmentToImg(this)">
         </div>`;

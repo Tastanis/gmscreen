@@ -335,15 +335,19 @@ function createStudentCard(student) {
 
     let imageHtml;
     if (thumbnailImage) {
+        // Use thumbnail for card grid if available, fall back to full image
+        const thumbSrc = student.thumbnails && student.thumbnails[thumbnailImage];
+        const cardSrc = thumbSrc || escapeHtml(thumbnailImage);
+
         // Check for image adjustment
         const adj = student.image_adjustments && student.image_adjustments[thumbnailImage];
         const adjustedHtml = adj && typeof ImageAdjuster !== 'undefined' ?
             ImageAdjuster.createAdjustedImageHtml(
-                escapeHtml(thumbnailImage) + '?t=' + Date.now(),
-                escapeHtml(student.name), adj, '', ''
+                cardSrc,
+                escapeHtml(student.name), adj, '', '', 'loading="lazy"'
             ) : null;
         imageHtml = adjustedHtml ||
-            `<img src="${escapeHtml(thumbnailImage)}?t=${Date.now()}" alt="${escapeHtml(student.name)}" class="student-thumbnail">`;
+            `<img src="${cardSrc}" alt="${escapeHtml(student.name)}" class="student-thumbnail" loading="lazy">`;
     } else {
         imageHtml = `<div class="student-placeholder">No Photo</div>`;
     }
@@ -1415,7 +1419,7 @@ function updatePortraitInModal(portraitPath) {
     const portraitSection = document.querySelector('.student-portrait-section');
     if (portraitSection && selectedStudent) {
         const imageHtml = portraitPath ? 
-            `<img src="${escapeHtml(portraitPath)}?t=${Date.now()}" alt="${escapeHtml(selectedStudent.name)}" class="student-portrait">` :
+            `<img src="${escapeHtml(portraitPath)}" alt="${escapeHtml(selectedStudent.name)}" class="student-portrait">` :
             `<div class="student-portrait-placeholder">No Photo</div>`;
         
         const uploadButton = isGM ? 
@@ -1552,7 +1556,7 @@ function createImageGallery(images, itemId, itemType, imageAdjustments) {
     let imageElement;
     const adjustedHtml = adj && typeof ImageAdjuster !== 'undefined' ?
         ImageAdjuster.createAdjustedImageHtml(
-            escapeHtml(currentImage) + '?t=' + Date.now(),
+            escapeHtml(currentImage),
             itemType + ' image', adj, '',
             "openImagePopup('" + escapeHtml(currentImage) + "')"
         ) : null;
@@ -1560,7 +1564,7 @@ function createImageGallery(images, itemId, itemType, imageAdjustments) {
     if (adjustedHtml) {
         imageElement = adjustedHtml;
     } else {
-        imageElement = `<img src="${escapeHtml(currentImage)}?t=${Date.now()}"
+        imageElement = `<img src="${escapeHtml(currentImage)}"
                      alt="${itemType} image"
                      class="${itemType}-portrait gallery-image"
                      onclick="openImagePopup('${escapeHtml(currentImage)}')"
@@ -1614,7 +1618,7 @@ function navigateGallery(itemId, direction) {
     let newImageHtml;
     const adjustedHtml = adj && typeof ImageAdjuster !== 'undefined' ?
         ImageAdjuster.createAdjustedImageHtml(
-            escapeHtml(newImage) + '?t=' + Date.now(),
+            escapeHtml(newImage),
             'student image', adj, '',
             "openImagePopup('" + escapeHtml(newImage) + "')"
         ) : null;
@@ -1622,7 +1626,7 @@ function navigateGallery(itemId, direction) {
     if (adjustedHtml) {
         newImageHtml = adjustedHtml;
     } else {
-        newImageHtml = `<img src="${escapeHtml(newImage)}?t=${Date.now()}"
+        newImageHtml = `<img src="${escapeHtml(newImage)}"
              alt="student image"
              class="student-portrait gallery-image"
              onclick="openImagePopup('${escapeHtml(newImage)}')"
@@ -1656,7 +1660,7 @@ function openImagePopup(imagePath) {
     }
     const popupImage = popup.querySelector('.image-popup-content img');
     
-    popupImage.src = imagePath + '?t=' + Date.now();
+    popupImage.src = imagePath;
     popup.style.display = 'block';
 }
 

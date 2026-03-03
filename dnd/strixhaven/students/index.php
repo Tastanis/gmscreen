@@ -155,6 +155,19 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['action'])) {
             }
         });
         
+        // Add thumbnail paths for each student's images
+        require_once '../includes/thumbnail-utils.php';
+        foreach ($students as &$s) {
+            if (isset($s['images']) && is_array($s['images'])) {
+                $s['thumbnails'] = array();
+                foreach ($s['images'] as $img) {
+                    $thumbPath = getThumbnailPath($img);
+                    $s['thumbnails'][$img] = file_exists($thumbPath) ? $thumbPath : null;
+                }
+            }
+        }
+        unset($s);
+
         // Return all students, no pagination
         echo json_encode(array(
             'success' => true,
@@ -479,6 +492,10 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['action'])) {
         
         // Move uploaded file
         if (move_uploaded_file($file['tmp_name'], $filepath)) {
+            // Generate thumbnail
+            require_once '../includes/thumbnail-utils.php';
+            generateThumbnail($filepath, 'thumbnails', 320);
+
             $result = modifyStudentData(function (&$data) use ($student_id, $filepath) {
                 foreach ($data['students'] as &$student) {
                     if ($student['student_id'] === $student_id) {
@@ -548,6 +565,12 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['action'])) {
             if ($result['success']) {
                 if ($shouldDeleteFile && file_exists($image_path)) {
                     unlink($image_path);
+                    // Also delete thumbnail
+                    require_once '../includes/thumbnail-utils.php';
+                    $thumbPath = getThumbnailPath($image_path);
+                    if (file_exists($thumbPath)) {
+                        unlink($thumbPath);
+                    }
                 }
                 echo json_encode(array('success' => true));
             } else {

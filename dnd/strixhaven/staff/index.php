@@ -67,6 +67,19 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['action'])) {
             }
         });
         
+        // Add thumbnail paths for each staff member's images
+        require_once '../includes/thumbnail-utils.php';
+        foreach ($staff as &$m) {
+            if (isset($m['images']) && is_array($m['images'])) {
+                $m['thumbnails'] = array();
+                foreach ($m['images'] as $img) {
+                    $thumbPath = getThumbnailPath($img);
+                    $m['thumbnails'][$img] = file_exists($thumbPath) ? $thumbPath : null;
+                }
+            }
+        }
+        unset($m);
+
         // Return all staff, no pagination
         echo json_encode(array(
             'success' => true,
@@ -316,6 +329,10 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['action'])) {
         
         // Move uploaded file
         if (move_uploaded_file($file['tmp_name'], $filepath)) {
+            // Generate thumbnail
+            require_once '../includes/thumbnail-utils.php';
+            generateThumbnail($filepath, 'thumbnails', 320);
+
             $result = modifyStaffData(function (&$data) use ($staff_id, $filepath) {
                 foreach ($data['staff'] as &$member) {
                     if ($member['staff_id'] === $staff_id) {
@@ -385,6 +402,12 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['action'])) {
             if ($result['success']) {
                 if ($shouldDeleteFile && file_exists($image_path)) {
                     unlink($image_path);
+                    // Also delete thumbnail
+                    require_once '../includes/thumbnail-utils.php';
+                    $thumbPath = getThumbnailPath($image_path);
+                    if (file_exists($thumbPath)) {
+                        unlink($thumbPath);
+                    }
                 }
                 echo json_encode(array('success' => true));
             } else {
