@@ -58,6 +58,7 @@ function getDefaultCharacterEntry() {
                 'currentRecoveries' => 0,
                 'recoveryValue' => '',
             ),
+            'bonuses' => array(),
         ),
         'sidebar' => array(
             'lists' => array(
@@ -216,6 +217,10 @@ function mergeCharacterDefaults($entry, $defaults) {
                 isset($heroInput['heroTokens'][0]) ? (bool)$heroInput['heroTokens'][0] : false,
                 isset($heroInput['heroTokens'][1]) ? (bool)$heroInput['heroTokens'][1] : false,
             );
+        }
+
+        if (isset($heroInput['bonuses']) && is_array($heroInput['bonuses'])) {
+            $normalized['hero']['bonuses'] = $heroInput['bonuses'];
         }
     }
 
