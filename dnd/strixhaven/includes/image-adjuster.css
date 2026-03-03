@@ -250,6 +250,7 @@
     border-radius: 6px;
     border: 2px solid #c2b39a;
     margin: 0 auto 10px;
+    display: block;
     transition: border-color 0.2s ease;
 }
 
