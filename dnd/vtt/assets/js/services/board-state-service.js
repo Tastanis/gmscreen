@@ -214,6 +214,9 @@ function buildPayload(boardState = {}) {
   if (typeof boardState._socketId === 'string' && boardState._socketId.trim()) {
     payload._socketId = boardState._socketId.trim();
   }
+  if (Array.isArray(boardState._replaceDrawings) && boardState._replaceDrawings.length > 0) {
+    payload._replaceDrawings = boardState._replaceDrawings;
+  }
 
   return Object.keys(payload).length > 0 ? payload : null;
 }
