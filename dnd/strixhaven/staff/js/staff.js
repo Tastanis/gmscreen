@@ -337,15 +337,19 @@ function createStaffCard(member) {
 
     let imageHtml;
     if (thumbnailImage) {
+        // Use thumbnail for card grid if available, fall back to full image
+        const thumbSrc = member.thumbnails && member.thumbnails[thumbnailImage];
+        const cardSrc = thumbSrc || escapeHtml(thumbnailImage);
+
         // Check for image adjustment
         const adj = member.image_adjustments && member.image_adjustments[thumbnailImage];
         const adjustedHtml = adj && typeof ImageAdjuster !== 'undefined' ?
             ImageAdjuster.createAdjustedImageHtml(
-                escapeHtml(thumbnailImage) + '?t=' + Date.now(),
-                escapeHtml(member.name), adj, '', ''
+                cardSrc,
+                escapeHtml(member.name), adj, '', '', 'loading="lazy"'
             ) : null;
         imageHtml = adjustedHtml ||
-            `<img src="${escapeHtml(thumbnailImage)}?t=${Date.now()}" alt="${escapeHtml(member.name)}" class="staff-thumbnail">`;
+            `<img src="${cardSrc}" alt="${escapeHtml(member.name)}" class="staff-thumbnail" loading="lazy">`;
     } else {
         imageHtml = `<div class="staff-placeholder">No Photo</div>`;
     }
@@ -1041,7 +1045,7 @@ function updatePortraitInModal(portraitPath) {
     const portraitSection = document.querySelector('.staff-portrait-section');
     if (portraitSection && selectedStaff) {
         const imageHtml = portraitPath ? 
-            `<img src="${escapeHtml(portraitPath)}?t=${Date.now()}" alt="${escapeHtml(selectedStaff.name)}" class="staff-portrait">` :
+            `<img src="${escapeHtml(portraitPath)}" alt="${escapeHtml(selectedStaff.name)}" class="staff-portrait">` :
             `<div class="staff-portrait-placeholder">No Photo</div>`;
         
         const uploadButton = isGM ? 
@@ -1182,7 +1186,7 @@ function createImageGallery(images, itemId, itemType, imageAdjustments) {
     let imageElement;
     const adjustedHtml = adj && typeof ImageAdjuster !== 'undefined' ?
         ImageAdjuster.createAdjustedImageHtml(
-            escapeHtml(currentImage) + '?t=' + Date.now(),
+            escapeHtml(currentImage),
             itemType + ' image', adj, '',
             "openImagePopup('" + escapeHtml(currentImage) + "')"
         ) : null;
@@ -1190,7 +1194,7 @@ function createImageGallery(images, itemId, itemType, imageAdjustments) {
     if (adjustedHtml) {
         imageElement = adjustedHtml;
     } else {
-        imageElement = `<img src="${escapeHtml(currentImage)}?t=${Date.now()}"
+        imageElement = `<img src="${escapeHtml(currentImage)}"
                      alt="${itemType} image"
                      class="${itemType}-portrait gallery-image"
                      onclick="openImagePopup('${escapeHtml(currentImage)}')"
@@ -1243,7 +1247,7 @@ function navigateGallery(itemId, direction) {
     let newImageHtml;
     const adjustedHtml = adj && typeof ImageAdjuster !== 'undefined' ?
         ImageAdjuster.createAdjustedImageHtml(
-            escapeHtml(newImage) + '?t=' + Date.now(),
+            escapeHtml(newImage),
             'staff image', adj, '',
             "openImagePopup('" + escapeHtml(newImage) + "')"
         ) : null;
@@ -1251,7 +1255,7 @@ function navigateGallery(itemId, direction) {
     if (adjustedHtml) {
         newImageHtml = adjustedHtml;
     } else {
-        newImageHtml = `<img src="${escapeHtml(newImage)}?t=${Date.now()}"
+        newImageHtml = `<img src="${escapeHtml(newImage)}"
              alt="staff image"
              class="staff-portrait gallery-image"
              onclick="openImagePopup('${escapeHtml(newImage)}')"
@@ -1283,7 +1287,7 @@ function openImagePopup(imagePath) {
     }
     const popupImage = popup.querySelector('.image-popup-content img');
     
-    popupImage.src = imagePath + '?t=' + Date.now();
+    popupImage.src = imagePath;
     popup.style.display = 'block';
 }
 
