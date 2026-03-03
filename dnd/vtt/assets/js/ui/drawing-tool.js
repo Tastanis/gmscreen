@@ -32,6 +32,7 @@ export function mountDrawingTool(options = {}) {
     eraseMode: false,
     erasing: false,
     eraseDidChange: false,
+    needsFullSync: false,
     pointerId: null,
     currentPath: null,
     currentPoints: [],
@@ -39,6 +40,7 @@ export function mountDrawingTool(options = {}) {
     strokeWidth: parseInt(strokeInput?.value || '3', 10),
     drawings: [],
     undoStack: [],
+    cursorIndicator: null,
     drawButton,
     drawingLayer,
     settingsPanel,
@@ -82,6 +84,7 @@ export function mountDrawingTool(options = {}) {
   if (colorInput) {
     colorInput.addEventListener('input', () => {
       state.color = colorInput.value;
+      updateCursorIndicatorStyle(state);
     });
   }
 
@@ -89,6 +92,7 @@ export function mountDrawingTool(options = {}) {
     strokeInput.addEventListener('input', () => {
       state.strokeWidth = parseInt(strokeInput.value, 10);
       strokeValue.textContent = strokeInput.value;
+      updateCursorIndicatorSize(state);
     });
   }
 
@@ -139,6 +143,11 @@ export function mountDrawingTool(options = {}) {
   );
 
   mapSurface.addEventListener('pointermove', (event) => {
+    // Update cursor indicator whenever draw mode is active
+    if (state.active) {
+      updateCursorIndicatorPosition(state, event);
+    }
+
     if (event.pointerId !== state.pointerId) {
       return;
     }
@@ -253,12 +262,15 @@ function toggleDrawMode(state, nextActive) {
     state.settingsPanel.hidden = !state.active;
   }
 
-  if (!state.active) {
+  if (state.active) {
+    createCursorIndicator(state);
+  } else {
     cancelDrawing(state);
     if (state.erasing) {
       endErasing(state);
     }
     setEraseMode(state, false);
+    removeCursorIndicator(state);
   }
 }
 
@@ -350,6 +362,7 @@ function setEraseMode(state, eraseMode) {
   if (state.drawingLayer) {
     state.drawingLayer.setAttribute('data-erase-active', eraseMode ? 'true' : 'false');
   }
+  updateCursorIndicatorStyle(state);
 }
 
 function beginErasing(state, event) {
@@ -382,6 +395,8 @@ function endErasing(state) {
     // Nothing was erased, remove the undo snapshot we saved
     state.undoStack.pop();
   } else {
+    // Erasing removes drawings — needs a full replace on the server, not a delta merge
+    state.needsFullSync = true;
     scheduleSyncDrawings(state);
   }
 
@@ -520,6 +535,7 @@ function adjustStrokeSize(state, delta) {
   if (state.strokeValue) {
     state.strokeValue.textContent = String(newValue);
   }
+  updateCursorIndicatorSize(state);
 }
 
 function clearAllDrawings(state) {
@@ -549,6 +565,8 @@ function clearAllDrawings(state) {
 
   // Re-render remaining drawings
   renderDrawings(state);
+  // Clearing removes drawings — needs a full replace on the server, not a delta merge
+  state.needsFullSync = true;
   scheduleSyncDrawings(state);
 }
 
@@ -604,6 +622,8 @@ function undoLastDrawing(state) {
     // Re-render all drawings
     renderDrawings(state);
 
+    // Undo removes a drawing — needs a full replace on the server
+    state.needsFullSync = true;
     // Sync to server
     scheduleSyncDrawings(state);
   } else {
@@ -759,6 +779,78 @@ function round(value, precision) {
   return Math.round(value * factor) / factor;
 }
 
+// --- Cursor indicator (circle showing brush/eraser radius) ---
+
+function createCursorIndicator(state) {
+  if (state.cursorIndicator) {
+    return;
+  }
+
+  const circle = document.createElementNS(SVG_NS, 'circle');
+  circle.setAttribute('class', 'vtt-cursor-indicator');
+  circle.setAttribute('r', String(state.strokeWidth / 2));
+  circle.setAttribute('cx', '0');
+  circle.setAttribute('cy', '0');
+  circle.style.display = 'none';
+  updateCursorIndicatorStyle(state);
+  state.drawingLayer.appendChild(circle);
+  state.cursorIndicator = circle;
+}
+
+function removeCursorIndicator(state) {
+  if (state.cursorIndicator) {
+    state.cursorIndicator.remove();
+    state.cursorIndicator = null;
+  }
+}
+
+function updateCursorIndicatorPosition(state, event) {
+  if (!state.cursorIndicator) {
+    return;
+  }
+
+  const point = getMapCoordinates(state.mapTransform, event);
+  if (!point) {
+    state.cursorIndicator.style.display = 'none';
+    return;
+  }
+
+  state.cursorIndicator.setAttribute('cx', String(point.x));
+  state.cursorIndicator.setAttribute('cy', String(point.y));
+  state.cursorIndicator.style.display = '';
+}
+
+function updateCursorIndicatorSize(state) {
+  if (!state.cursorIndicator) {
+    return;
+  }
+  state.cursorIndicator.setAttribute('r', String(state.strokeWidth / 2));
+}
+
+function updateCursorIndicatorStyle(state) {
+  if (!state.cursorIndicator) {
+    return;
+  }
+  if (state.eraseMode) {
+    state.cursorIndicator.setAttribute('stroke', 'rgba(255, 255, 255, 0.8)');
+    state.cursorIndicator.setAttribute('fill', 'rgba(255, 255, 255, 0.1)');
+  } else {
+    state.cursorIndicator.setAttribute('stroke', state.color);
+    state.cursorIndicator.setAttribute('fill', 'rgba(255, 255, 255, 0.15)');
+  }
+}
+
+// --- Exports ---
+
+export function consumeFullSyncNeeded() {
+  if (!sharedState) {
+    return false;
+  }
+  const needed = sharedState.needsFullSync;
+  sharedState.needsFullSync = false;
+  return needed;
+}
+
 export function isDrawModeActive() {
   return Boolean(sharedState?.active);
 }
@@ -792,8 +884,12 @@ export function renderDrawings(state) {
     return;
   }
 
-  while (targetState.drawingLayer.firstChild) {
-    targetState.drawingLayer.removeChild(targetState.drawingLayer.firstChild);
+  // Remove all children except the cursor indicator
+  const children = Array.from(targetState.drawingLayer.childNodes);
+  for (const child of children) {
+    if (child !== targetState.cursorIndicator) {
+      targetState.drawingLayer.removeChild(child);
+    }
   }
 
   for (const drawing of targetState.drawings) {
@@ -807,6 +903,11 @@ export function renderDrawings(state) {
     path.dataset.drawingId = drawing.id;
     updatePathFromPoints(path, drawing.points);
     targetState.drawingLayer.appendChild(path);
+  }
+
+  // Re-append cursor indicator so it stays on top
+  if (targetState.cursorIndicator) {
+    targetState.drawingLayer.appendChild(targetState.cursorIndicator);
   }
 }
 

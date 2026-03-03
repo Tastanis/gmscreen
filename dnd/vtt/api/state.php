@@ -170,8 +170,17 @@ if (!defined('VTT_STATE_API_INCLUDE_ONLY')) {
                 : null;
             // Check if this is a delta-only update (only changed entities)
             $isDeltaOnly = !empty($rawState['_deltaOnly']);
+            // Scenes whose drawings should be fully replaced (after erasing/clearing)
+            $replaceDrawingScenes = [];
+            if (isset($rawState['_replaceDrawings']) && is_array($rawState['_replaceDrawings'])) {
+                foreach ($rawState['_replaceDrawings'] as $sceneId) {
+                    if (is_string($sceneId) && trim($sceneId) !== '') {
+                        $replaceDrawingScenes[] = trim($sceneId);
+                    }
+                }
+            }
             // Remove internal fields before processing
-            unset($rawState['_version'], $rawState['_socketId'], $rawState['_deltaOnly']);
+            unset($rawState['_version'], $rawState['_socketId'], $rawState['_deltaOnly'], $rawState['_replaceDrawings']);
 
             $updates = sanitizeBoardStateUpdates($rawState);
             if (empty($updates)) {
@@ -184,7 +193,7 @@ if (!defined('VTT_STATE_API_INCLUDE_ONLY')) {
             // Determine what changed for targeted Pusher broadcasts
             $changedFields = array_keys($updates);
 
-            $responseState = withVttBoardStateLock(function () use ($updates, $auth, $clientVersion, $isDeltaOnly) {
+            $responseState = withVttBoardStateLock(function () use ($updates, $auth, $clientVersion, $isDeltaOnly, $replaceDrawingScenes) {
                 $existing = loadVttJson('board-state.json');
                 $nextState = normalizeBoardState($existing);
 
@@ -282,11 +291,18 @@ if (!defined('VTT_STATE_API_INCLUDE_ONLY')) {
                             if ($sceneKey === '') {
                                 continue;
                             }
+
+                            // If this scene is marked for full replacement (erasing/clearing),
+                            // replace the entire drawings array instead of merging
+                            if (in_array($sceneKey, $replaceDrawingScenes, true)) {
+                                $nextState['drawings'][$sceneKey] = $drawings;
+                                continue;
+                            }
+
                             $existingDrawings = isset($nextState['drawings'][$sceneKey]) && is_array($nextState['drawings'][$sceneKey])
                                 ? $nextState['drawings'][$sceneKey]
                                 : [];
-                            // Always use timestamp-based merge for players to prevent deletion
-                            // Only GMs can delete drawings
+                            // Use timestamp-based merge for players (delta mode)
                             $nextState['drawings'][$sceneKey] = mergeSceneEntriesByTimestamp(
                                 $existingDrawings,
                                 $drawings
@@ -410,6 +426,14 @@ if (!defined('VTT_STATE_API_INCLUDE_ONLY')) {
                             if ($sceneKey === '') {
                                 continue;
                             }
+
+                            // If this scene is marked for full replacement (erasing/clearing),
+                            // replace the entire drawings array instead of merging
+                            if (in_array($sceneKey, $replaceDrawingScenes, true)) {
+                                $nextState['drawings'][$sceneKey] = $drawings;
+                                continue;
+                            }
+
                             $existingDrawings = isset($nextState['drawings'][$sceneKey]) && is_array($nextState['drawings'][$sceneKey])
                                 ? $nextState['drawings'][$sceneKey]
                                 : [];
