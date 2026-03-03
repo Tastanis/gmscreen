@@ -104,6 +104,14 @@ function defaultCommonThing() {
   };
 }
 
+function defaultBonus() {
+  return {
+    id: createId("bonus"),
+    bonus: "",
+    source: "",
+  };
+}
+
 const DEFAULT_VITALS = {
   size: "",
   speed: "",
@@ -166,6 +174,7 @@ const defaultSheet = {
       presence: 0,
     },
     vitals: { ...DEFAULT_VITALS },
+    bonuses: [],
   },
   sidebar: {
     lists: {
@@ -414,6 +423,14 @@ function mergeWithDefaults(data) {
     Boolean(inputHero.heroTokens?.[0]),
     Boolean(inputHero.heroTokens?.[1]),
   ];
+
+  merged.hero.bonuses = Array.isArray(inputHero.bonuses)
+    ? inputHero.bonuses.map((b) => ({
+        id: b.id || createId("bonus"),
+        bonus: b.bonus || "",
+        source: b.source || "",
+      }))
+    : [];
 
   merged.sidebar = { ...merged.sidebar, ...(data.sidebar || {}) };
   merged.sidebar.lists = { ...merged.sidebar.lists, ...(data.sidebar?.lists || {}) };
@@ -1081,9 +1098,12 @@ function renderHeroPane() {
           ${identityField("Complication", "hero.complication")}
         </div>
       </div>
+
+      <div id="bonuses-section" class="bonuses-section"></div>
     </section>
   `;
   bindChatDots();
+  renderBonuses();
 }
 
 function renderListSection(containerId, title, key, placeholder) {
@@ -1171,6 +1191,124 @@ function renderCommonThings() {
   bindCommonRemovals();
   bindRichTextToolbars();
   bindChatDots();
+}
+
+function renderBonusCard(item) {
+  return `
+    <div class="bonus-row" data-bonus-id="${item.id}">
+      <div class="bonus-row__cell bonus-row__cell--bonus">
+        <div class="display-value rich-text-display">${renderRichText(item.bonus || "")}</div>
+        <div class="rich-text-wrapper">
+          <div class="rich-toolbar edit-only" role="toolbar" aria-label="Bonus formatting">
+            <button class="icon-btn rich-toolbar__btn" type="button" data-rich-command="bold" aria-label="Bold">
+              <strong>B</strong>
+            </button>
+            <button class="icon-btn rich-toolbar__btn" type="button" data-rich-command="underline" aria-label="Underline">
+              <span class="rich-toolbar__underline">U</span>
+            </button>
+          </div>
+          <div
+            class="rich-text-editor edit-field"
+            data-bonus-field="bonus"
+            contenteditable="true"
+            data-placeholder="Describe the bonus"
+          >${renderRichText(item.bonus || "")}</div>
+        </div>
+      </div>
+      <div class="bonus-row__cell bonus-row__cell--source">
+        <div class="display-value rich-text-display">${renderRichText(item.source || "")}</div>
+        <div class="rich-text-wrapper">
+          <div class="rich-toolbar edit-only" role="toolbar" aria-label="Source formatting">
+            <button class="icon-btn rich-toolbar__btn" type="button" data-rich-command="bold" aria-label="Bold">
+              <strong>B</strong>
+            </button>
+            <button class="icon-btn rich-toolbar__btn" type="button" data-rich-command="underline" aria-label="Underline">
+              <span class="rich-toolbar__underline">U</span>
+            </button>
+          </div>
+          <div
+            class="rich-text-editor edit-field"
+            data-bonus-field="source"
+            contenteditable="true"
+            data-placeholder="Where does this bonus come from?"
+          >${renderRichText(item.source || "")}</div>
+        </div>
+      </div>
+      <button class="icon-btn edit-only bonus-row__remove" data-remove-bonus="${item.id}" aria-label="Remove bonus">\u2715</button>
+    </div>
+  `;
+}
+
+function renderBonuses() {
+  const container = document.getElementById("bonuses-section");
+  if (!container) return;
+
+  const bonuses = Array.isArray(sheetState.hero.bonuses) ? sheetState.hero.bonuses : [];
+  sheetState.hero.bonuses = bonuses;
+
+  container.innerHTML = `
+    <div class="bonuses-header">
+      <span class="bonuses-title">Bonuses</span>
+      <button class="text-btn edit-only" data-add-bonus title="Add bonus">+ Add Bonus</button>
+    </div>
+    <div class="bonuses-body">
+      ${bonuses.length > 0 ? `
+        <div class="bonuses-column-headers">
+          <div class="bonuses-col-label">Bonuses</div>
+          <div class="bonuses-col-label">Source</div>
+        </div>
+        ${bonuses.map((item) => renderBonusCard(item)).join("")}
+      ` : '<div class="muted bonuses-empty">No bonuses added yet.</div>'}
+    </div>
+  `;
+
+  bindBonusAdds();
+  bindBonusRemovals();
+  bindRichTextToolbars();
+}
+
+function bindBonusAdds() {
+  document.querySelectorAll("[data-add-bonus]").forEach((btn) => {
+    btn.onclick = () => {
+      if (!Array.isArray(sheetState.hero.bonuses)) {
+        sheetState.hero.bonuses = [];
+      }
+      captureBonuses();
+      sheetState.hero.bonuses.push(defaultBonus());
+      renderBonuses();
+      queueAutoSave();
+    };
+  });
+}
+
+function bindBonusRemovals() {
+  document.querySelectorAll("[data-remove-bonus]").forEach((btn) => {
+    btn.onclick = () => {
+      const id = btn.getAttribute("data-remove-bonus");
+      captureBonuses();
+      sheetState.hero.bonuses = sheetState.hero.bonuses.filter((b) => b.id !== id);
+      renderBonuses();
+      queueAutoSave();
+    };
+  });
+}
+
+function captureBonuses() {
+  const rows = document.querySelectorAll(".bonus-row");
+  const updated = [];
+
+  rows.forEach((row) => {
+    const id = row.getAttribute("data-bonus-id") || createId("bonus");
+    const bonusEl = row.querySelector('[data-bonus-field="bonus"]');
+    const sourceEl = row.querySelector('[data-bonus-field="source"]');
+    updated.push({
+      id,
+      bonus: sanitizeRichText(normalizeRichText(bonusEl?.innerHTML || "")),
+      source: sanitizeRichText(normalizeRichText(sourceEl?.innerHTML || "")),
+    });
+  });
+
+  sheetState.hero.bonuses = updated;
 }
 
 function renderSidebarResource() {
@@ -2582,6 +2720,7 @@ function captureActions() {
 function captureAllSections() {
   captureCoreFields();
   captureCommonThings();
+  captureBonuses();
   captureFeatures();
   captureActions();
 }
