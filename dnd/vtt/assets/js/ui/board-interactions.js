@@ -11,6 +11,7 @@ import {
   isDrawingInProgress,
   isDrawingSyncPending,
   isDrawingToolMounted,
+  consumeFullSyncNeeded,
 } from './drawing-tool.js';
 import { persistBoardState, persistCombatState } from '../services/board-state-service.js';
 import { initializePusher, getSocketId, isPusherConnected } from '../services/pusher-service.js';
@@ -1528,6 +1529,8 @@ export function mountBoardInteractions(store, routes = {}) {
   const dirtyTemplates = new Map();
   // Maps sceneId -> Set of drawing IDs that were modified
   const dirtyDrawings = new Map();
+  // Scenes whose drawings need full replacement (not delta merge) — set after erasing/clearing
+  const drawingFullReplaceScenes = new Set();
   // Track if pings changed
   let dirtyPings = false;
   // Track if scene state changed (combat, grid, overlay)
@@ -1576,6 +1579,7 @@ export function mountBoardInteractions(store, routes = {}) {
     dirtyPlacements.clear();
     dirtyTemplates.clear();
     dirtyDrawings.clear();
+    drawingFullReplaceScenes.clear();
     dirtyPings = false;
     dirtySceneState.clear();
     dirtyTopLevel.clear();
@@ -1585,6 +1589,7 @@ export function mountBoardInteractions(store, routes = {}) {
     return dirtyPlacements.size > 0 ||
            dirtyTemplates.size > 0 ||
            dirtyDrawings.size > 0 ||
+           drawingFullReplaceScenes.size > 0 ||
            dirtyPings ||
            dirtySceneState.size > 0 ||
            dirtyTopLevel.size > 0;
@@ -2419,9 +2424,22 @@ export function mountBoardInteractions(store, routes = {}) {
         snapshot.templates = buildDirtyTemplatesSnapshot(boardState.templates);
       }
 
-      // Include only dirty drawings (by ID)
-      if (dirtyDrawings.size > 0) {
+      // Include only dirty drawings (by ID), or full scene replacement for erase/clear
+      if (dirtyDrawings.size > 0 || drawingFullReplaceScenes.size > 0) {
         snapshot.drawings = buildDirtyDrawingsSnapshot(boardState.drawings);
+
+        // For scenes that need full replacement (erasing/clearing removed drawings),
+        // include ALL drawings for those scenes so the server can replace entirely
+        if (drawingFullReplaceScenes.size > 0) {
+          const allDrawings = cloneBoardSection(boardState.drawings);
+          const replaceScenes = [];
+          drawingFullReplaceScenes.forEach((sceneId) => {
+            // Include the full array for this scene (even if empty, to clear it)
+            snapshot.drawings[sceneId] = Array.isArray(allDrawings?.[sceneId]) ? allDrawings[sceneId] : [];
+            replaceScenes.push(sceneId);
+          });
+          snapshot._replaceDrawings = replaceScenes;
+        }
       }
 
       // Include pings only if they changed
@@ -4714,6 +4732,10 @@ export function mountBoardInteractions(store, routes = {}) {
     // If sync is pending, the change came from the local drawing tool
     // Mark drawings as dirty for delta save
     if (isDrawingSyncPending()) {
+      // Check if a full replace is needed (erasing/clearing removes drawings)
+      if (consumeFullSyncNeeded()) {
+        drawingFullReplaceScenes.add(activeSceneId);
+      }
       drawings.forEach((drawing) => {
         if (drawing && drawing.id) {
           markDrawingDirty(activeSceneId, drawing.id);

@@ -3955,7 +3955,7 @@
 
 .vtt-board__drawings[data-drawing-active="true"] {
   pointer-events: auto;
-  cursor: crosshair;
+  cursor: none;
 }
 
 .vtt-board__drawings path {
@@ -4081,7 +4081,15 @@
 }
 
 .vtt-board__drawings[data-erase-active="true"] {
-  cursor: cell;
+  cursor: none;
+}
+
+.vtt-cursor-indicator {
+  pointer-events: none;
+  stroke-width: 1.5;
+  stroke-dasharray: 4 3;
+  fill-opacity: 1;
+  stroke-opacity: 1;
 }
 
 /* Draw button active state */
