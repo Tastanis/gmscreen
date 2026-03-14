@@ -254,36 +254,55 @@ document.addEventListener('DOMContentLoaded', function() {
             }
         }
         
-        // Character information
-        if (jsonData.character_information) {
-            preview += '\nCharacter Information:\n';
-            const charInfo = jsonData.character_information;
-            
-            if (charInfo.origin) {
-                preview += `Origin: ${charInfo.origin}\n`;
-            }
-            
-            if (charInfo.desire) {
-                preview += `Desire: ${charInfo.desire}\n`;
-            }
-            
-            if (charInfo.fear) {
-                preview += `Fear: ${charInfo.fear}\n`;
-            }
-            
-            if (charInfo.connection) {
-                preview += `Connection: ${charInfo.connection}\n`;
-            }
-            
-            if (charInfo.impact) {
-                preview += `Impact: ${charInfo.impact}\n`;
-            }
-            
-            if (charInfo.change) {
-                preview += `Change: ${charInfo.change}\n`;
-            }
+        // Conflict Engine
+        if (jsonData.conflict_engine) {
+            preview += '\nConflict Engine:\n';
+            const ce = jsonData.conflict_engine;
+            if (ce.want) preview += `  Want: ${ce.want}\n`;
+            if (ce.want_tag) preview += `  Want Tag: ${ce.want_tag}\n`;
+            if (ce.obstacle) preview += `  Obstacle: ${ce.obstacle}\n`;
+            if (ce.action) preview += `  Action: ${ce.action}\n`;
+            if (ce.consequence) preview += `  Consequence: ${ce.consequence}\n`;
         }
-        
+
+        // Tension Web
+        if (jsonData.tension_web && Array.isArray(jsonData.tension_web) && jsonData.tension_web.length > 0) {
+            preview += '\nTension Web:\n';
+            jsonData.tension_web.forEach((entry, i) => {
+                preview += `  ${i + 1}. ${entry.name || 'Unnamed'}`;
+                if (entry.role) preview += ` (${entry.role})`;
+                preview += '\n';
+                if (entry.description) preview += `     ${entry.description}\n`;
+            });
+        }
+
+        // Pressure Point
+        if (jsonData.pressure_point) {
+            preview += `\nPressure Point: ${jsonData.pressure_point}\n`;
+        }
+
+        // Trajectory
+        if (jsonData.trajectory) {
+            preview += `\nTrajectory: ${jsonData.trajectory}\n`;
+        }
+
+        // Director's Notes
+        if (jsonData.directors_notes) {
+            preview += `\nDirector's Notes: ${jsonData.directors_notes}\n`;
+        }
+
+        // Legacy character information (backward compatibility)
+        if (jsonData.character_information) {
+            preview += '\nLegacy Character Information:\n';
+            const charInfo = jsonData.character_information;
+            if (charInfo.origin) preview += `  Origin: ${charInfo.origin}\n`;
+            if (charInfo.desire) preview += `  Desire: ${charInfo.desire}\n`;
+            if (charInfo.fear) preview += `  Fear: ${charInfo.fear}\n`;
+            if (charInfo.connection) preview += `  Connection: ${charInfo.connection}\n`;
+            if (charInfo.impact) preview += `  Impact: ${charInfo.impact}\n`;
+            if (charInfo.change) preview += `  Change: ${charInfo.change}\n`;
+        }
+
         // Other notes
         if (jsonData.other_notes) {
             preview += `\nOther Notes: ${jsonData.other_notes}\n`;

@@ -204,14 +204,20 @@ require_once '../../version.php';
   "clubs": ["Debate Society", "Spell Theory Club"],
   "edge": "Quick learner",
   "bane": "Overconfident",
-  "character_information": {
-    "origin": "Small town scholar",
-    "desire": "Master all forms of magic",
-    "fear": "Being forgotten",
-    "connection": "Childhood friend at rival college",
-    "impact": "Wants to revolutionize magical education",
-    "change": "Learning to work with others"
+  "conflict_engine": {
+    "want": "Master all forms of magic",
+    "want_tag": "Knowledge",
+    "obstacle": "Overconfidence alienates potential allies",
+    "action": "Studying forbidden texts in secret",
+    "consequence": "Risks expulsion if caught"
   },
+  "tension_web": [
+    { "name": "Professor Onyx", "role": "Mentor", "description": "Worries about her ambition" },
+    { "name": "Killian Lu", "role": "Rival", "description": "Competing for same fellowship" }
+  ],
+  "pressure_point": "Her friend threatens to report her",
+  "trajectory": "Trust others or spiral into isolation",
+  "directors_notes": "Good candidate for a moral dilemma arc",
   "skills": ["Arcana", "Investigation", "Persuasion"],
   "other_notes": "Has a pet familiar owl named Wisdom"
 }</div>
