@@ -30,6 +30,18 @@ function getBlankStaffRecord() {
         'image_path' => '',
         'images' => [],
         'favorites' => [],
+        'conflict_engine' => [
+            'want' => '',
+            'want_tag' => '',
+            'obstacle' => '',
+            'action' => '',
+            'consequence' => '',
+        ],
+        'tension_web' => [],
+        'pressure_point' => '',
+        'trajectory' => '',
+        'directors_notes' => '',
+        // Legacy fields kept for backward compatibility
         'character_info' => [
             'origin' => '',
             'motivation' => '',

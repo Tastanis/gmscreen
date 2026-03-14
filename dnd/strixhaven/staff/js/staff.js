@@ -410,7 +410,9 @@ function openStaffModal(member) {
 function createStaffDetailForm(member) {
     const gmOnly = member.gm_only || {};
     const characterInfo = member.character_info || {};
-    
+    const conflictEngine = member.conflict_engine || {};
+    const tensionWeb = member.tension_web || [];
+
     // Handle both old image_path and new images array for backward compatibility
     let images = [];
     if (member.images && member.images.length > 0) {
@@ -418,14 +420,30 @@ function createStaffDetailForm(member) {
     } else if (member.image_path) {
         images = [member.image_path];
     }
-    
+
     const imageHtml = images.length > 0 ?
         createImageGallery(images, member.staff_id, 'staff', member.image_adjustments) :
         `<div class="staff-portrait-placeholder">No Photo</div>`;
-    
-    const uploadButton = isGM ? 
+
+    const uploadButton = isGM ?
         `<button class="upload-portrait-btn" onclick="uploadStaffPortrait('${member.staff_id}')">Upload Photo</button>` : '';
-    
+
+    // Build tension web entries HTML
+    const tensionWebHtml = tensionWeb.map((entry, index) => `
+        <div class="tension-web-entry" data-index="${index}">
+            <div class="tension-web-entry-header">
+                <strong class="tension-web-name">${escapeHtml(entry.name || '')}</strong>
+                <span class="tension-web-role">(${escapeHtml(entry.role || '')})</span>
+                ${isGM ? `<button class="btn-remove-tension" onclick="removeTensionWebEntry('${member.staff_id}', ${index})" title="Remove entry">&times;</button>` : ''}
+            </div>
+            <div class="tension-web-description">${escapeHtml(entry.description || '')}</div>
+        </div>
+    `).join('');
+
+    // Want tag options
+    const wantTagOptions = ['Legacy', 'Recognition', 'Freedom', 'Power', 'Knowledge', 'Connection', 'Survival', 'Justice', 'Creation', 'Redemption'];
+    const currentWantTag = conflictEngine.want_tag || '';
+
     return `
         <div class="staff-form">
             <!-- Portrait Section -->
@@ -433,20 +451,20 @@ function createStaffDetailForm(member) {
                 ${imageHtml}
                 ${uploadButton}
             </div>
-            
+
             <!-- Basic Information -->
             <div class="form-section">
                 <h3>Basic Information</h3>
                 <div class="form-group">
                     <label>Name:</label>
-                    ${isGM ? 
+                    ${isGM ?
                         `<input type="text" value="${escapeHtml(member.name)}" data-field="name">` :
                         `<div class="readonly-field">${escapeHtml(member.name)}</div>`
                     }
                 </div>
                 <div class="form-group">
                     <label>College:</label>
-                    ${isGM ? 
+                    ${isGM ?
                         `<select data-field="college">
                             <option value="">No College</option>
                             <option value="Silverquill" ${member.college === 'Silverquill' ? 'selected' : ''}>Silverquill</option>
@@ -460,62 +478,118 @@ function createStaffDetailForm(member) {
                 </div>
                 <div class="form-group">
                     <label>Character Description:</label>
-                    ${isGM ? 
+                    ${isGM ?
                         `<div class="rich-text-container medium" data-field="character_description" data-placeholder="Brief character description..."></div>` :
                         `<div class="readonly-field readonly-textarea">${escapeHtml(member.character_description || 'No description available')}</div>`
                     }
                 </div>
                 <div class="form-group">
                     <label>General Information:</label>
-                    ${isGM ? 
+                    ${isGM ?
                         `<div class="rich-text-container large" data-field="general_info" data-placeholder="General information about this staff member..."></div>` :
                         `<div class="readonly-field readonly-textarea">${escapeHtml(member.general_info || 'No general information available')}</div>`
                     }
                 </div>
             </div>
 
-            <!-- Character Information Section (GM Only) -->
+            <!-- Conflict Engine Section (GM Only) -->
             ${isGM ? `
-            <div class="form-section gm-only character-info">
-                <h3>Character Information</h3>
-                <div class="form-group">
-                    <label>Origin:</label>
-                    <div class="rich-text-container" data-field="character_info.origin" data-placeholder="Character's origin and background..."></div>
+            <div class="form-section gm-only conflict-engine-section">
+                <h3><span class="ce-icon">&#9881;</span> Conflict Engine</h3>
+
+                <!-- Want -->
+                <div class="ce-block ce-want">
+                    <div class="ce-block-header">
+                        <span class="ce-badge ce-badge-want">W</span>
+                        <span class="ce-block-title">Want</span>
+                        <select class="ce-want-tag-select" data-field="conflict_engine.want_tag">
+                            <option value="">No tag</option>
+                            ${wantTagOptions.map(tag => `<option value="${tag}" ${currentWantTag === tag ? 'selected' : ''}>${tag}</option>`).join('')}
+                        </select>
+                        ${currentWantTag ? `<span class="ce-want-tag">${escapeHtml(currentWantTag)}</span>` : ''}
+                    </div>
+                    <div class="ce-block-body">
+                        <div class="rich-text-container" data-field="conflict_engine.want" data-placeholder="What does this character want most?"></div>
+                    </div>
                 </div>
-                <div class="form-group">
-                    <label>Desire:</label>
-                    <div class="rich-text-container" data-field="character_info.desire" data-placeholder="What the character desires most..."></div>
+
+                <!-- Obstacle -->
+                <div class="ce-block ce-obstacle">
+                    <div class="ce-block-header">
+                        <span class="ce-badge ce-badge-obstacle">O</span>
+                        <span class="ce-block-title">Obstacle</span>
+                    </div>
+                    <div class="ce-block-body">
+                        <div class="rich-text-container" data-field="conflict_engine.obstacle" data-placeholder="What stands in the way?"></div>
+                    </div>
                 </div>
-                <div class="form-group">
-                    <label>Fear:</label>
-                    <div class="rich-text-container" data-field="character_info.fear" data-placeholder="Character's fears and anxieties..."></div>
+
+                <!-- Action -->
+                <div class="ce-block ce-action">
+                    <div class="ce-block-header">
+                        <span class="ce-badge ce-badge-action">A</span>
+                        <span class="ce-block-title">Action</span>
+                    </div>
+                    <div class="ce-block-body">
+                        <div class="rich-text-container" data-field="conflict_engine.action" data-placeholder="What is this character actively doing about it?"></div>
+                    </div>
                 </div>
-                <div class="form-group">
-                    <label>Connection:</label>
-                    <div class="rich-text-container" data-field="character_info.connection" data-placeholder="Important connections to people, places, or things..."></div>
-                </div>
-                <div class="form-group">
-                    <label>Impact:</label>
-                    <div class="rich-text-container" data-field="character_info.impact" data-placeholder="How this character affects others..."></div>
-                </div>
-                <div class="form-group">
-                    <label>Change:</label>
-                    <div class="rich-text-container" data-field="character_info.change" data-placeholder="How the character grows or changes..."></div>
+
+                <!-- Consequence -->
+                <div class="ce-block ce-consequence">
+                    <div class="ce-block-header">
+                        <span class="ce-badge ce-badge-consequence">C</span>
+                        <span class="ce-block-title">Consequence</span>
+                    </div>
+                    <div class="ce-block-body">
+                        <div class="rich-text-container" data-field="conflict_engine.consequence" data-placeholder="What happens if they fail or succeed?"></div>
+                    </div>
                 </div>
             </div>
             ` : ''}
 
-            <!-- GM Only Section -->
+            <!-- Tension Web Section (GM Only) -->
             ${isGM ? `
-            <div class="form-section gm-only">
-                <h3>GM Only Information</h3>
-                <div class="form-group">
-                    <label>Personality:</label>
-                    <div class="rich-text-container medium" data-field="gm_only.personality" data-placeholder="Personality notes for GM..."></div>
+            <div class="form-section gm-only tension-web-section">
+                <h3>Tension Web</h3>
+                <div class="tension-web-list" id="tension-web-${member.staff_id}">
+                    ${tensionWebHtml || '<p class="tension-web-empty">No tension web entries yet.</p>'}
                 </div>
-                <div class="form-group">
-                    <label>Other:</label>
-                    <div class="rich-text-container medium" data-field="gm_only.other" data-placeholder="Other GM notes..."></div>
+                <div class="tension-web-add">
+                    <div class="tension-web-add-row">
+                        <input type="text" id="tw-name-${member.staff_id}" placeholder="Name..." class="tw-input tw-name-input">
+                        <input type="text" id="tw-role-${member.staff_id}" placeholder="Role (e.g. mentor, rival)..." class="tw-input tw-role-input">
+                    </div>
+                    <div class="tension-web-add-row">
+                        <input type="text" id="tw-desc-${member.staff_id}" placeholder="Describe the tension/friction..." class="tw-input tw-desc-input">
+                        <button class="btn-add-tension" onclick="addTensionWebEntry('${member.staff_id}')">+ Add</button>
+                    </div>
+                </div>
+            </div>
+            ` : ''}
+
+            <!-- Pressure Point Section (GM Only) -->
+            ${isGM ? `
+            <div class="form-section gm-only pressure-point-section">
+                <h3>Pressure Point</h3>
+                <div class="rich-text-container" data-field="pressure_point" data-placeholder="When [trigger], they [behavior]..."></div>
+            </div>
+            ` : ''}
+
+            <!-- Trajectory Section (GM Only) -->
+            ${isGM ? `
+            <div class="form-section gm-only trajectory-section">
+                <h3>Trajectory</h3>
+                <div class="rich-text-container" data-field="trajectory" data-placeholder="Without intervention, what happens to this character?"></div>
+            </div>
+            ` : ''}
+
+            <!-- Director's Notes Section (GM Only, collapsed by default) -->
+            ${isGM ? `
+            <div class="form-section gm-only directors-notes-section">
+                <h3 class="directors-notes-toggle" onclick="toggleDirectorsNotes(this)">Director's Notes <span class="toggle-arrow">&#9660;</span></h3>
+                <div class="directors-notes-content" style="display: none;">
+                    <div class="rich-text-container large" data-field="directors_notes" data-placeholder="Origin, background, personality, and other GM notes..."></div>
                 </div>
             </div>
             ` : ''}
@@ -534,6 +608,104 @@ function closeStaffModal() {
 }
 
 // Expand staff to new tab
+// Toggle Director's Notes collapsed/expanded
+function toggleDirectorsNotes(header) {
+    const content = header.nextElementSibling;
+    const arrow = header.querySelector('.toggle-arrow');
+    if (content.style.display === 'none') {
+        content.style.display = 'block';
+        arrow.innerHTML = '&#9650;';
+        // Initialize rich text editors inside if not already done
+        const containers = content.querySelectorAll('.rich-text-container');
+        containers.forEach(container => {
+            if (!container.querySelector('.rich-text-editor') && typeof RichTextEditor !== 'undefined') {
+                const field = container.getAttribute('data-field');
+                const placeholder = container.getAttribute('data-placeholder') || 'Enter text...';
+                const editor = new RichTextEditor(container, {
+                    placeholder: placeholder + ' Type [[character name]] to link to characters'
+                });
+                editor.init();
+                if (selectedStaff && field) {
+                    const value = selectedStaff[field] || '';
+                    if (value) editor.setContent(value);
+                }
+                editor.onChange((editorContent) => {
+                    if (selectedStaff) {
+                        saveStaffField(selectedStaff.staff_id, field, editorContent);
+                    }
+                });
+                if (!isGM) editor.setReadOnly(true);
+                modalRichTextEditors.set(field, editor);
+            }
+        });
+    } else {
+        content.style.display = 'none';
+        arrow.innerHTML = '&#9660;';
+    }
+}
+
+// Add a tension web entry
+function addTensionWebEntry(staffId) {
+    const nameInput = document.getElementById(`tw-name-${staffId}`);
+    const roleInput = document.getElementById(`tw-role-${staffId}`);
+    const descInput = document.getElementById(`tw-desc-${staffId}`);
+
+    const name = nameInput.value.trim();
+    const role = roleInput.value.trim();
+    const description = descInput.value.trim();
+
+    if (!name) {
+        nameInput.focus();
+        return;
+    }
+
+    const member = selectedStaff;
+    if (!member) return;
+
+    if (!member.tension_web) member.tension_web = [];
+    member.tension_web.push({ name, role, description });
+
+    saveStaffField(staffId, 'tension_web', JSON.stringify(member.tension_web));
+
+    nameInput.value = '';
+    roleInput.value = '';
+    descInput.value = '';
+
+    renderTensionWebList(staffId, member.tension_web);
+}
+
+// Remove a tension web entry
+function removeTensionWebEntry(staffId, index) {
+    const member = selectedStaff;
+    if (!member || !member.tension_web) return;
+
+    member.tension_web.splice(index, 1);
+    saveStaffField(staffId, 'tension_web', JSON.stringify(member.tension_web));
+    renderTensionWebList(staffId, member.tension_web);
+}
+
+// Render tension web list
+function renderTensionWebList(staffId, entries) {
+    const list = document.getElementById(`tension-web-${staffId}`);
+    if (!list) return;
+
+    if (!entries || entries.length === 0) {
+        list.innerHTML = '<p class="tension-web-empty">No tension web entries yet.</p>';
+        return;
+    }
+
+    list.innerHTML = entries.map((entry, index) => `
+        <div class="tension-web-entry" data-index="${index}">
+            <div class="tension-web-entry-header">
+                <strong class="tension-web-name">${escapeHtml(entry.name || '')}</strong>
+                <span class="tension-web-role">(${escapeHtml(entry.role || '')})</span>
+                ${isGM ? `<button class="btn-remove-tension" onclick="removeTensionWebEntry('${staffId}', ${index})" title="Remove entry">&times;</button>` : ''}
+            </div>
+            <div class="tension-web-description">${escapeHtml(entry.description || '')}</div>
+        </div>
+    `).join('');
+}
+
 function expandStaffToNewTab() {
     if (!selectedStaff) return;
     

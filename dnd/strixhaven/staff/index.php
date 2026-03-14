@@ -95,7 +95,21 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['action'])) {
             $result = modifyStaffData(function (&$data) use ($staff_id, $field, $value) {
                 foreach ($data['staff'] as &$member) {
                     if ($member['staff_id'] === $staff_id) {
-                        if (strpos($field, 'gm_only.') === 0) {
+                        if (strpos($field, 'conflict_engine.') === 0) {
+                            $ceField = substr($field, 16);
+                            if (!isset($member['conflict_engine']) || !is_array($member['conflict_engine'])) {
+                                $member['conflict_engine'] = array();
+                            }
+                            $member['conflict_engine'][$ceField] = $value;
+                        } elseif ($field === 'tension_web') {
+                            $decoded = json_decode($value, true);
+                            if (!is_array($decoded)) {
+                                return ['save' => false, 'error' => 'Invalid tension web data'];
+                            }
+                            $member['tension_web'] = $decoded;
+                        } elseif ($field === 'pressure_point' || $field === 'trajectory' || $field === 'directors_notes') {
+                            $member[$field] = $value;
+                        } elseif (strpos($field, 'gm_only.') === 0) {
                             $gmField = substr($field, 8);
                             if (!isset($member['gm_only']) || !is_array($member['gm_only'])) {
                                 $member['gm_only'] = array();

@@ -44,6 +44,18 @@ function getBlankStudentRecord() {
             'indigo_points' => '',
             'indigo_notes' => '',
         ],
+        'conflict_engine' => [
+            'want' => '',
+            'want_tag' => '',
+            'obstacle' => '',
+            'action' => '',
+            'consequence' => '',
+        ],
+        'tension_web' => [],
+        'pressure_point' => '',
+        'trajectory' => '',
+        'directors_notes' => '',
+        // Legacy fields kept for backward compatibility
         'character_info' => [
             'origin' => '',
             'desire' => '',

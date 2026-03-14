@@ -409,7 +409,9 @@ function openStudentModal(student) {
 function createStudentDetailForm(student) {
     const details = student.details || {};
     const relationships = student.relationships || {};
-    
+    const conflictEngine = student.conflict_engine || {};
+    const tensionWeb = student.tension_web || [];
+
     // Handle both old image_path and new images array for backward compatibility
     let images = [];
     if (student.images && student.images.length > 0) {
@@ -417,29 +419,45 @@ function createStudentDetailForm(student) {
     } else if (student.image_path) {
         images = [student.image_path];
     }
-    
+
     const imageHtml = images.length > 0 ?
         createImageGallery(images, student.student_id, 'student', student.image_adjustments) :
         `<div class="student-portrait-placeholder">No Photo</div>`;
 
     const uploadButton = isGM ?
         `<button class="upload-portrait-btn" onclick="uploadStudentPortrait('${student.student_id}')">Upload Photo</button>` : '';
-    
+
     // Create skills options HTML
     const skillsOptionsHtml = Object.keys(SKILLS_LIST).map(category => {
         return `<optgroup label="${category}">` +
-            SKILLS_LIST[category].map(skill => 
+            SKILLS_LIST[category].map(skill =>
                 `<option value="${skill}">${skill}</option>`
             ).join('') +
             `</optgroup>`;
     }).join('');
-    
+
     // Create selected skills display
     const selectedSkills = student.skills || [];
-    const skillsDisplayHtml = selectedSkills.map(skill => 
+    const skillsDisplayHtml = selectedSkills.map(skill =>
         `<span class="skill-tag">${escapeHtml(skill)} ${isGM ? `<span class="remove-skill" onclick="removeSkill('${student.student_id}', '${escapeHtml(skill)}')">×</span>` : ''}</span>`
     ).join('');
-    
+
+    // Build tension web entries HTML
+    const tensionWebHtml = tensionWeb.map((entry, index) => `
+        <div class="tension-web-entry" data-index="${index}">
+            <div class="tension-web-entry-header">
+                <strong class="tension-web-name">${escapeHtml(entry.name || '')}</strong>
+                <span class="tension-web-role">(${escapeHtml(entry.role || '')})</span>
+                ${isGM ? `<button class="btn-remove-tension" onclick="removeTensionWebEntry('${student.student_id}', ${index})" title="Remove entry">&times;</button>` : ''}
+            </div>
+            <div class="tension-web-description">${entry.description || ''}</div>
+        </div>
+    `).join('');
+
+    // Want tag options
+    const wantTagOptions = ['Legacy', 'Recognition', 'Freedom', 'Power', 'Knowledge', 'Connection', 'Survival', 'Justice', 'Creation', 'Redemption'];
+    const currentWantTag = conflictEngine.want_tag || '';
+
     return `
         <div class="student-form">
             <!-- Portrait Section -->
@@ -447,35 +465,35 @@ function createStudentDetailForm(student) {
                 ${imageHtml}
                 ${uploadButton}
             </div>
-            
+
             <!-- Basic Information -->
             <div class="form-section">
                 <h3>Basic Information</h3>
                 <div class="form-row">
                     <div class="form-group">
                         <label>Name:</label>
-                        ${isGM ? 
+                        ${isGM ?
                             `<input type="text" value="${escapeHtml(student.name)}" data-field="name">` :
                             `<div class="readonly-field">${escapeHtml(student.name)}</div>`
                         }
                     </div>
                     <div class="form-group">
                         <label>Race:</label>
-                        ${isGM ? 
+                        ${isGM ?
                             `<input type="text" value="${escapeHtml(student.race || '')}" data-field="race" placeholder="Enter race">` :
                             `<div class="readonly-field">${escapeHtml(student.race || 'Unknown')}</div>`
                         }
                     </div>
                     <div class="form-group form-group-half">
                         <label>Age:</label>
-                        ${isGM ? 
+                        ${isGM ?
                             `<input type="text" value="${escapeHtml(student.age || '')}" data-field="age" placeholder="Enter age">` :
                             `<div class="readonly-field">${escapeHtml(student.age || 'Unknown')}</div>`
                         }
                     </div>
                     <div class="form-group form-group-half">
                         <label>Job:</label>
-                        ${isGM ? 
+                        ${isGM ?
                             `<input type="text" value="${escapeHtml(student.job || '')}" data-field="job" placeholder="Enter job/position">` :
                             `<div class="readonly-field">${escapeHtml(student.job || 'None')}</div>`
                         }
@@ -484,7 +502,7 @@ function createStudentDetailForm(student) {
                 <div class="form-row">
                     <div class="form-group">
                         <label>Grade Level:</label>
-                        ${isGM ? 
+                        ${isGM ?
                             `<select data-field="grade_level">
                                 <option value="1st Year" ${student.grade_level === '1st Year' ? 'selected' : ''}>1st Year</option>
                                 <option value="2nd Year" ${student.grade_level === '2nd Year' ? 'selected' : ''}>2nd Year</option>
@@ -496,7 +514,7 @@ function createStudentDetailForm(student) {
                     </div>
                     <div class="form-group">
                         <label>College:</label>
-                        ${isGM ? 
+                        ${isGM ?
                             `<select data-field="college">
                                 <option value="">No College</option>
                                 <option value="Silverquill" ${student.college === 'Silverquill' ? 'selected' : ''}>Silverquill</option>
@@ -510,7 +528,7 @@ function createStudentDetailForm(student) {
                     </div>
                     <div class="form-group">
                         <label>Clubs:</label>
-                        ${isGM ? 
+                        ${isGM ?
                             `<input type="text" value="${escapeHtml((student.clubs || []).join(', '))}" data-field="clubs" placeholder="Comma-separated list">` :
                             `<div class="readonly-field">
                                 <div class="clubs-container">
@@ -523,14 +541,14 @@ function createStudentDetailForm(student) {
                 <div class="form-row">
                     <div class="form-group">
                         <label>Edge:</label>
-                        ${isGM ? 
+                        ${isGM ?
                             `<input type="text" value="${escapeHtml(student.edge || '')}" data-field="edge" placeholder="Character edge/advantage">` :
                             `<div class="readonly-field">${escapeHtml(student.edge || 'None')}</div>`
                         }
                     </div>
                     <div class="form-group">
                         <label>Bane:</label>
-                        ${isGM ? 
+                        ${isGM ?
                             `<input type="text" value="${escapeHtml(student.bane || '')}" data-field="bane" placeholder="Character bane/weakness">` :
                             `<div class="readonly-field">${escapeHtml(student.bane || 'None')}</div>`
                         }
@@ -538,34 +556,96 @@ function createStudentDetailForm(student) {
                 </div>
             </div>
 
-            <!-- Character Information Section (GM Only) -->
+            <!-- Conflict Engine Section (GM Only) -->
             ${isGM ? `
-            <div class="form-section gm-only character-info">
-                <h3>Character Information</h3>
-                <div class="form-group">
-                    <label>Origin:</label>
-                    <div class="rich-text-container" data-field="character_info.origin" data-placeholder="Character's origin and background..."></div>
+            <div class="form-section gm-only conflict-engine-section">
+                <h3><span class="ce-icon">&#9881;</span> Conflict Engine</h3>
+
+                <!-- Want -->
+                <div class="ce-block ce-want">
+                    <div class="ce-block-header">
+                        <span class="ce-badge ce-badge-want">W</span>
+                        <span class="ce-block-title">Want</span>
+                        ${isGM ? `
+                        <select class="ce-want-tag-select" data-field="conflict_engine.want_tag">
+                            <option value="">No tag</option>
+                            ${wantTagOptions.map(tag => `<option value="${tag}" ${currentWantTag === tag ? 'selected' : ''}>${tag}</option>`).join('')}
+                        </select>` : ''}
+                        ${currentWantTag ? `<span class="ce-want-tag">${escapeHtml(currentWantTag)}</span>` : ''}
+                    </div>
+                    <div class="ce-block-body">
+                        <div class="rich-text-container" data-field="conflict_engine.want" data-placeholder="What does this character want most?"></div>
+                    </div>
                 </div>
-                <div class="form-group">
-                    <label>Desire:</label>
-                    <div class="rich-text-container" data-field="character_info.desire" data-placeholder="What the character desires most..."></div>
+
+                <!-- Obstacle -->
+                <div class="ce-block ce-obstacle">
+                    <div class="ce-block-header">
+                        <span class="ce-badge ce-badge-obstacle">O</span>
+                        <span class="ce-block-title">Obstacle</span>
+                    </div>
+                    <div class="ce-block-body">
+                        <div class="rich-text-container" data-field="conflict_engine.obstacle" data-placeholder="What stands in the way of what they want?"></div>
+                    </div>
                 </div>
-                <div class="form-group">
-                    <label>Fear:</label>
-                    <div class="rich-text-container" data-field="character_info.fear" data-placeholder="Character's fears and anxieties..."></div>
+
+                <!-- Action -->
+                <div class="ce-block ce-action">
+                    <div class="ce-block-header">
+                        <span class="ce-badge ce-badge-action">A</span>
+                        <span class="ce-block-title">Action</span>
+                    </div>
+                    <div class="ce-block-body">
+                        <div class="rich-text-container" data-field="conflict_engine.action" data-placeholder="What is this character actively doing about it?"></div>
+                    </div>
                 </div>
-                <div class="form-group">
-                    <label>Connection:</label>
-                    <div class="rich-text-container" data-field="character_info.connection" data-placeholder="Important connections to people, places, or things..."></div>
+
+                <!-- Consequence -->
+                <div class="ce-block ce-consequence">
+                    <div class="ce-block-header">
+                        <span class="ce-badge ce-badge-consequence">C</span>
+                        <span class="ce-block-title">Consequence</span>
+                    </div>
+                    <div class="ce-block-body">
+                        <div class="rich-text-container" data-field="conflict_engine.consequence" data-placeholder="What happens if they fail or succeed? What's at stake?"></div>
+                    </div>
                 </div>
-                <div class="form-group">
-                    <label>Impact:</label>
-                    <div class="rich-text-container" data-field="character_info.impact" data-placeholder="How this character affects others..."></div>
+            </div>
+            ` : ''}
+
+            <!-- Tension Web Section (GM Only) -->
+            ${isGM ? `
+            <div class="form-section gm-only tension-web-section">
+                <h3>Tension Web</h3>
+                <div class="tension-web-list" id="tension-web-${student.student_id}">
+                    ${tensionWebHtml || '<p class="tension-web-empty">No tension web entries yet.</p>'}
                 </div>
-                <div class="form-group">
-                    <label>Change:</label>
-                    <div class="rich-text-container" data-field="character_info.change" data-placeholder="How the character grows or changes..."></div>
+                <div class="tension-web-add">
+                    <div class="tension-web-add-row">
+                        <input type="text" id="tw-name-${student.student_id}" placeholder="Name..." class="tw-input tw-name-input">
+                        <input type="text" id="tw-role-${student.student_id}" placeholder="Role (e.g. mentor, rival)..." class="tw-input tw-role-input">
+                    </div>
+                    <div class="tension-web-add-row">
+                        <input type="text" id="tw-desc-${student.student_id}" placeholder="Describe the tension/friction..." class="tw-input tw-desc-input">
+                        <button class="btn-add-tension" onclick="addTensionWebEntry('${student.student_id}')">+ Add</button>
+                    </div>
                 </div>
+            </div>
+            ` : ''}
+
+            <!-- Pressure Point Section (GM Only) -->
+            ${isGM ? `
+            <div class="form-section gm-only pressure-point-section">
+                <h3>Pressure Point</h3>
+                <div class="rich-text-container" data-field="pressure_point" data-placeholder="When [trigger], they [behavior]... What pushes this character's buttons?"></div>
+            </div>
+            ` : ''}
+
+            <!-- Trajectory Section (GM Only) -->
+            ${isGM ? `
+            <div class="form-section gm-only trajectory-section">
+                <h3>Trajectory</h3>
+                <div class="rich-text-container" data-field="trajectory" data-placeholder="Without intervention, what happens to this character? (single sentence arc)"></div>
             </div>
             ` : ''}
 
@@ -597,54 +677,54 @@ function createStudentDetailForm(student) {
                     <div class="pc-relationship">
                         <div class="pc-relationship-header">
                             <label>Frunk:</label>
-                            ${isGM ? 
+                            ${isGM ?
                                 `<input type="text" value="${escapeHtml(relationships.frunk_points || '')}" data-field="relationships.frunk_points" placeholder="Points" class="relationship-points">` :
                                 `<span class="readonly-points">${escapeHtml(relationships.frunk_points || '0')}</span>`
                             }
                         </div>
-                        ${isGM ? 
+                        ${isGM ?
                             `<div class="rich-text-container small" data-field="relationships.frunk_notes" data-placeholder="Relationship notes..."></div>` :
                             `<div class="readonly-field readonly-textarea">${escapeHtml(relationships.frunk_notes || 'No relationship notes')}</div>`
                         }
                     </div>
-                    
+
                     <div class="pc-relationship">
                         <div class="pc-relationship-header">
                             <label>Zepha:</label>
-                            ${isGM ? 
+                            ${isGM ?
                                 `<input type="text" value="${escapeHtml(relationships.zepha_points || '')}" data-field="relationships.zepha_points" placeholder="Points" class="relationship-points">` :
                                 `<span class="readonly-points">${escapeHtml(relationships.zepha_points || '0')}</span>`
                             }
                         </div>
-                        ${isGM ? 
+                        ${isGM ?
                             `<div class="rich-text-container small" data-field="relationships.zepha_notes" data-placeholder="Relationship notes..."></div>` :
                             `<div class="readonly-field readonly-textarea">${escapeHtml(relationships.zepha_notes || 'No relationship notes')}</div>`
                         }
                     </div>
-                    
+
                     <div class="pc-relationship">
                         <div class="pc-relationship-header">
                             <label>Sharon:</label>
-                            ${isGM ? 
+                            ${isGM ?
                                 `<input type="text" value="${escapeHtml(relationships.sharon_points || '')}" data-field="relationships.sharon_points" placeholder="Points" class="relationship-points">` :
                                 `<span class="readonly-points">${escapeHtml(relationships.sharon_points || '0')}</span>`
                             }
                         </div>
-                        ${isGM ? 
+                        ${isGM ?
                             `<div class="rich-text-container small" data-field="relationships.sharon_notes" data-placeholder="Relationship notes..."></div>` :
                             `<div class="readonly-field readonly-textarea">${escapeHtml(relationships.sharon_notes || 'No relationship notes')}</div>`
                         }
                     </div>
-                    
+
                     <div class="pc-relationship">
                         <div class="pc-relationship-header">
                             <label>Indigo:</label>
-                            ${isGM ? 
+                            ${isGM ?
                                 `<input type="text" value="${escapeHtml(relationships.indigo_points || '')}" data-field="relationships.indigo_points" placeholder="Points" class="relationship-points">` :
                                 `<span class="readonly-points">${escapeHtml(relationships.indigo_points || '0')}</span>`
                             }
                         </div>
-                        ${isGM ? 
+                        ${isGM ?
                             `<div class="rich-text-container small" data-field="relationships.indigo_notes" data-placeholder="Relationship notes..."></div>` :
                             `<div class="readonly-field readonly-textarea">${escapeHtml(relationships.indigo_notes || 'No relationship notes')}</div>`
                         }
@@ -652,27 +732,12 @@ function createStudentDetailForm(student) {
                 </div>
             </div>
 
-            <!-- Detailed Information -->
+            <!-- Director's Notes Section (GM Only, collapsed by default) -->
             ${isGM ? `
-            <div class="form-section">
-                <h3>Character Details</h3>
-                <div class="form-group">
-                    <label>Backstory:</label>
-                    <div class="rich-text-container large" data-field="details.backstory" data-placeholder="Character backstory..."></div>
-                </div>
-                <div class="form-row">
-                    <div class="form-group">
-                        <label>Core Want:</label>
-                        <div class="rich-text-container medium" data-field="details.core_want" data-placeholder="What does this character want most?"></div>
-                    </div>
-                    <div class="form-group">
-                        <label>Core Fear:</label>
-                        <div class="rich-text-container medium" data-field="details.core_fear" data-placeholder="What does this character fear most?"></div>
-                    </div>
-                </div>
-                <div class="form-group">
-                    <label>Other Notes:</label>
-                    <div class="rich-text-container medium" data-field="details.other" data-placeholder="Additional notes..."></div>
+            <div class="form-section gm-only directors-notes-section">
+                <h3 class="directors-notes-toggle" onclick="toggleDirectorsNotes(this)">Director's Notes <span class="toggle-arrow">&#9660;</span></h3>
+                <div class="directors-notes-content" style="display: none;">
+                    <div class="rich-text-container large" data-field="directors_notes" data-placeholder="Origin, background, and other GM notes..."></div>
                 </div>
             </div>
             ` : ''}
@@ -688,6 +753,109 @@ function closeStudentModal() {
     const modal = document.getElementById('student-modal');
     modal.style.display = 'none';
     selectedStudent = null;
+}
+
+// Toggle Director's Notes collapsed/expanded
+function toggleDirectorsNotes(header) {
+    const content = header.nextElementSibling;
+    const arrow = header.querySelector('.toggle-arrow');
+    if (content.style.display === 'none') {
+        content.style.display = 'block';
+        arrow.innerHTML = '&#9650;';
+        // Initialize rich text editors inside if not already done
+        const containers = content.querySelectorAll('.rich-text-container');
+        containers.forEach(container => {
+            if (!container.querySelector('.rich-text-editor') && typeof RichTextEditor !== 'undefined') {
+                const field = container.getAttribute('data-field');
+                const placeholder = container.getAttribute('data-placeholder') || 'Enter text...';
+                const editor = new RichTextEditor(container, {
+                    placeholder: placeholder + ' Type [[character name]] to link to characters'
+                });
+                editor.init();
+                // Set content
+                if (selectedStudent && field) {
+                    const value = selectedStudent[field] || '';
+                    if (value) editor.setContent(value);
+                }
+                editor.onChange((editorContent) => {
+                    if (selectedStudent) {
+                        saveStudentField(selectedStudent.student_id, field, editorContent);
+                    }
+                });
+                if (!isGM) editor.setReadOnly(true);
+                modalRichTextEditors.set(field, editor);
+            }
+        });
+    } else {
+        content.style.display = 'none';
+        arrow.innerHTML = '&#9660;';
+    }
+}
+
+// Add a tension web entry
+function addTensionWebEntry(studentId) {
+    const nameInput = document.getElementById(`tw-name-${studentId}`);
+    const roleInput = document.getElementById(`tw-role-${studentId}`);
+    const descInput = document.getElementById(`tw-desc-${studentId}`);
+
+    const name = nameInput.value.trim();
+    const role = roleInput.value.trim();
+    const description = descInput.value.trim();
+
+    if (!name) {
+        nameInput.focus();
+        return;
+    }
+
+    // Find current student and add entry
+    const student = window.allStudents ? window.allStudents.find(s => s.student_id === studentId) : selectedStudent;
+    if (!student) return;
+
+    if (!student.tension_web) student.tension_web = [];
+    student.tension_web.push({ name, role, description });
+
+    // Save to server
+    saveStudentField(studentId, 'tension_web', JSON.stringify(student.tension_web));
+
+    // Clear inputs
+    nameInput.value = '';
+    roleInput.value = '';
+    descInput.value = '';
+
+    // Re-render the tension web list
+    renderTensionWebList(studentId, student.tension_web);
+}
+
+// Remove a tension web entry
+function removeTensionWebEntry(studentId, index) {
+    const student = window.allStudents ? window.allStudents.find(s => s.student_id === studentId) : selectedStudent;
+    if (!student || !student.tension_web) return;
+
+    student.tension_web.splice(index, 1);
+    saveStudentField(studentId, 'tension_web', JSON.stringify(student.tension_web));
+    renderTensionWebList(studentId, student.tension_web);
+}
+
+// Render tension web list
+function renderTensionWebList(studentId, entries) {
+    const list = document.getElementById(`tension-web-${studentId}`);
+    if (!list) return;
+
+    if (!entries || entries.length === 0) {
+        list.innerHTML = '<p class="tension-web-empty">No tension web entries yet.</p>';
+        return;
+    }
+
+    list.innerHTML = entries.map((entry, index) => `
+        <div class="tension-web-entry" data-index="${index}">
+            <div class="tension-web-entry-header">
+                <strong class="tension-web-name">${escapeHtml(entry.name || '')}</strong>
+                <span class="tension-web-role">(${escapeHtml(entry.role || '')})</span>
+                ${isGM ? `<button class="btn-remove-tension" onclick="removeTensionWebEntry('${studentId}', ${index})" title="Remove entry">&times;</button>` : ''}
+            </div>
+            <div class="tension-web-description">${escapeHtml(entry.description || '')}</div>
+        </div>
+    `).join('');
 }
 
 // Expand student to new tab
