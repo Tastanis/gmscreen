@@ -614,6 +614,7 @@ require_once '../../includes/strix-nav.php';
                 <?php if ($is_gm): ?>
                 <div class="admin-controls">
                     <button class="btn-add" id="add-staff-btn">+ Add Staff Member</button>
+                    <button class="btn-import" onclick="window.location.href='staff-import.php'">📥 Import Staff</button>
                     <button class="btn-export" id="export-staff-btn">📤 Export Staff</button>
                     <div class="export-selection-actions" id="export-selection-actions" style="display: none;">
                         <span class="export-selection-count" id="export-selection-count">0 selected</span>

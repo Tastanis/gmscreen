@@ -1600,33 +1600,20 @@ function exportSelectedStaff() {
         return;
     }
 
-    const formData = new FormData();
-    formData.append('action', 'export_staff');
-    
-    fetch('index.php', {
-        method: 'POST',
-        body: formData
-    })
-    .then(response => response.json())
-    .then(data => {
-        if (data.success) {
-            const selectedData = Array.isArray(data.data.staff)
-                ? data.data.staff.filter(member => selectedExportStaff.has(member.staff_id))
-                : [];
-            const exportPayload = buildStaffExportPayload({
-                ...data.data,
-                staff: selectedData.map(cleanStaffExportSections)
-            });
+    // Use in-memory data (window.allStaff) which reflects the currently displayed info
+    const allStaffData = window.allStaff || [];
+    const selectedData = allStaffData.filter(member => selectedExportStaff.has(member.staff_id));
 
-            showExportModal(exportPayload);
-        } else {
-            alert('Failed to export data: ' + (data.error || 'Unknown error'));
-        }
-    })
-    .catch(error => {
-        console.error('Error exporting data:', error);
-        alert('Error exporting data');
+    if (selectedData.length === 0) {
+        alert('No matching staff found. Try refreshing the page.');
+        return;
+    }
+
+    const exportPayload = buildStaffExportPayload({
+        staff: selectedData.map(cleanStaffExportSections)
     });
+
+    showExportModal(exportPayload);
 }
 
 function buildStaffExportPayload(payload) {

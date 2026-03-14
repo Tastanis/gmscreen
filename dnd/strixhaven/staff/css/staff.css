@@ -119,6 +119,24 @@
     transform: translateY(-1px);
 }
 
+.btn-import {
+    background: #8b5e3c;
+    color: #fdfaf5;
+    border: 1px solid #7a4f31;
+    padding: 9px 16px;
+    border-radius: 5px;
+    cursor: pointer;
+    font-size: 14px;
+    font-weight: 600;
+    transition: background-color 0.2s ease, transform 0.2s ease;
+    margin-left: 8px;
+}
+
+.btn-import:hover {
+    background: #9c6b45;
+    transform: translateY(-1px);
+}
+
 .btn-export {
     background: #6f7a3a;
     color: #fdfaf5;

@@ -2054,33 +2054,20 @@ function exportSelectedStudents() {
         return;
     }
 
-    const formData = new FormData();
-    formData.append('action', 'export_students');
-    
-    fetch(studentsEndpoint, {
-        method: 'POST',
-        body: formData
-    })
-    .then(response => response.json())
-    .then(data => {
-        if (data.success) {
-            const selectedData = Array.isArray(data.data.students)
-                ? data.data.students.filter(student => selectedExportStudents.has(student.student_id))
-                : [];
-            const exportPayload = buildStudentExportPayload({
-                ...data.data,
-                students: selectedData.map(cleanStudentExportSections)
-            });
+    // Use in-memory data (window.allStudents) which reflects the currently displayed info
+    const allStudentsData = window.allStudents || [];
+    const selectedData = allStudentsData.filter(student => selectedExportStudents.has(student.student_id));
 
-            showExportModal(exportPayload);
-        } else {
-            alert('Failed to export data: ' + (data.error || 'Unknown error'));
-        }
-    })
-    .catch(error => {
-        console.error('Error exporting data:', error);
-        alert('Error exporting data');
+    if (selectedData.length === 0) {
+        alert('No matching students found. Try refreshing the page.');
+        return;
+    }
+
+    const exportPayload = buildStudentExportPayload({
+        students: selectedData.map(cleanStudentExportSections)
     });
+
+    showExportModal(exportPayload);
 }
 
 function buildStudentExportPayload(payload) {
