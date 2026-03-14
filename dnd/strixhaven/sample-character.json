@@ -8,14 +8,28 @@
   "clubs": ["Debate Society", "Spell Theory Club"],
   "edge": "Quick learner with exceptional memory",
   "bane": "Overconfident and sometimes reckless",
-  "character_information": {
-    "origin": "Small town scholar from a family of farmers",
-    "desire": "Master all forms of magic and become a renowned professor",
-    "fear": "Being forgotten and having accomplished nothing meaningful",
-    "connection": "Childhood friend studying at rival Silverquill college",
-    "impact": "Wants to revolutionize magical education and make it accessible to all",
-    "change": "Learning to work with others instead of trying to do everything alone"
+  "conflict_engine": {
+    "want": "Wants to master all forms of magic and become a renowned professor — not for fame, but to prove that anyone from anywhere can reshape the arcane world.",
+    "want_tag": "Legacy",
+    "obstacle": "Professor Vexara keeps steering her toward safe, conventional research, consuming her time with busywork and blocking access to the restricted theory archives.",
+    "action": "Sneaking into the restricted archives after hours using her library assistant access, building a secret thesis that combines Quandrix and Prismari techniques.",
+    "consequence": "If Vexara discovers the unauthorized research, Aria loses her assistantship and access to the library entirely — and the thesis that was supposed to prove her independence becomes evidence of rule-breaking."
   },
-  "skills": ["Arcana", "Investigation", "Persuasion", "History", "Insight"],
+  "tension_web": [
+    {
+      "name": "Professor Vexara",
+      "role": "mentor / gatekeeper",
+      "description": "Vexara sees a talented student who needs discipline; Aria sees a captor limiting her potential. Both want Aria to succeed but disagree on what that means."
+    },
+    {
+      "name": "Kael Brightforge",
+      "role": "childhood friend / rival",
+      "description": "Childhood friend now at Silverquill. Kael thinks Aria is reckless; Aria thinks Kael sold out. The friendship is real but the competition is getting personal."
+    }
+  ],
+  "pressure_point": "When someone implies she's only successful because of luck rather than skill, she overcommits to proving them wrong — taking on impossible challenges and burning out rather than letting the slight go.",
+  "trajectory": "Without intervention, Aria gets caught in the restricted archives, loses her position, and Vexara uses it to justify keeping unconventional students out of advanced research.",
+  "directors_notes": "ORIGIN / BACKGROUND\nSmall town scholar from a family of farmers in the outer provinces. First in her family to attend any academy. Speaks three languages fluently. Carries a journal filled with spell research notes. Has a pet familiar owl named Wisdom.\n\nGM NOTES\nAria's secret thesis could become a major plot hook in Year 3. Kael at Silverquill is a potential ally or antagonist depending on how PCs interact with both of them.",
+  "skills": ["Magic", "History", "Persuade", "Search", "Strategy"],
   "other_notes": "Has a pet familiar owl named Wisdom. Speaks three languages fluently. Carries a journal filled with spell research notes."
 }
