@@ -233,26 +233,66 @@ $type = $result['type'];
                         <?php endif; ?>
                     </div>
                     
-                    <?php if (isset($character['character_info'])): ?>
+                    <?php if (isset($character['conflict_engine'])): ?>
                     <div class="detail-section">
-                        <h3>Character Information</h3>
-                        
-                        <?php foreach ($character['character_info'] as $key => $value): ?>
-                        <?php if ($value): ?>
+                        <h3>Conflict Engine</h3>
+                        <?php
+                        $ce = $character['conflict_engine'];
+                        $ce_fields = ['want' => 'Want', 'obstacle' => 'Obstacle', 'action' => 'Action', 'consequence' => 'Consequence'];
+                        foreach ($ce_fields as $key => $label):
+                            if (!empty($ce[$key])):
+                        ?>
                         <div class="detail-item">
-                            <div class="detail-label"><?php echo htmlspecialchars(ucwords(str_replace('_', ' ', $key))); ?></div>
-                            <div class="detail-value"><?php echo nl2br(htmlspecialchars($value)); ?></div>
+                            <div class="detail-label"><?php echo $label; ?><?php if ($key === 'want' && !empty($ce['want_tag'])) echo ' (' . htmlspecialchars($ce['want_tag']) . ')'; ?></div>
+                            <div class="detail-value"><?php echo nl2br(htmlspecialchars($ce[$key])); ?></div>
                         </div>
-                        <?php endif; ?>
+                        <?php endif; endforeach; ?>
+                    </div>
+                    <?php endif; ?>
+
+                    <?php if (!empty($character['tension_web'])): ?>
+                    <div class="detail-section">
+                        <h3>Tension Web</h3>
+                        <?php foreach ($character['tension_web'] as $entry): ?>
+                        <div class="detail-item">
+                            <div class="detail-label"><?php echo htmlspecialchars($entry['name'] ?? ''); ?> (<?php echo htmlspecialchars($entry['role'] ?? ''); ?>)</div>
+                            <div class="detail-value"><?php echo nl2br(htmlspecialchars($entry['description'] ?? '')); ?></div>
+                        </div>
                         <?php endforeach; ?>
                     </div>
                     <?php endif; ?>
-                    
-                    <?php if (isset($character['details'])): ?>
+
+                    <?php if (!empty($character['pressure_point'])): ?>
                     <div class="detail-section">
-                        <h3>Details</h3>
-                        
-                        <?php foreach ($character['details'] as $key => $value): ?>
+                        <h3>Pressure Point</h3>
+                        <div class="detail-item">
+                            <div class="detail-value"><?php echo nl2br(htmlspecialchars($character['pressure_point'])); ?></div>
+                        </div>
+                    </div>
+                    <?php endif; ?>
+
+                    <?php if (!empty($character['trajectory'])): ?>
+                    <div class="detail-section">
+                        <h3>Trajectory</h3>
+                        <div class="detail-item">
+                            <div class="detail-value"><?php echo nl2br(htmlspecialchars($character['trajectory'])); ?></div>
+                        </div>
+                    </div>
+                    <?php endif; ?>
+
+                    <?php if (!empty($character['directors_notes'])): ?>
+                    <div class="detail-section">
+                        <h3>Director's Notes</h3>
+                        <div class="detail-item">
+                            <div class="detail-value"><?php echo nl2br(htmlspecialchars($character['directors_notes'])); ?></div>
+                        </div>
+                    </div>
+                    <?php endif; ?>
+
+                    <?php if (isset($character['character_info'])): ?>
+                    <div class="detail-section">
+                        <h3>Character Information (Legacy)</h3>
+                        <?php foreach ($character['character_info'] as $key => $value): ?>
                         <?php if ($value): ?>
                         <div class="detail-item">
                             <div class="detail-label"><?php echo htmlspecialchars(ucwords(str_replace('_', ' ', $key))); ?></div>

@@ -1386,6 +1386,268 @@
     font-size: 11px;
 }
 
+/* ===================== */
+/* Conflict Engine Styles */
+/* ===================== */
+
+.conflict-engine-section h3 {
+    color: #5b4a3a;
+    border-bottom-color: #c07a2d;
+}
+
+.ce-icon {
+    font-size: 16px;
+    margin-right: 4px;
+}
+
+.ce-block {
+    margin-bottom: 20px;
+    background: #fffdf7;
+    border-radius: 8px;
+    border: 1px solid #e8dcc8;
+    overflow: hidden;
+}
+
+.ce-block-header {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    padding: 10px 14px;
+    background: #faf5ec;
+    border-bottom: 1px solid #e8dcc8;
+}
+
+.ce-badge {
+    width: 28px;
+    height: 28px;
+    border-radius: 50%;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    font-weight: 700;
+    font-size: 14px;
+    color: white;
+    flex-shrink: 0;
+}
+
+.ce-badge-want { background: #2e7d32; }
+.ce-badge-obstacle { background: #6d4c41; }
+.ce-badge-action { background: #1565c0; }
+.ce-badge-consequence { background: #e65100; }
+
+.ce-block-title {
+    font-weight: 600;
+    font-size: 15px;
+    color: #3d3123;
+}
+
+.ce-want-tag-select {
+    margin-left: auto;
+    padding: 4px 8px;
+    border: 1px solid #c2b39a;
+    border-radius: 4px;
+    font-size: 13px;
+    background: white;
+}
+
+.ce-want-tag {
+    background: #2e7d32;
+    color: white;
+    padding: 2px 10px;
+    border-radius: 12px;
+    font-size: 12px;
+    font-weight: 600;
+}
+
+.ce-block-body {
+    padding: 12px 14px;
+}
+
+.ce-block-body .rich-text-container {
+    border: none;
+    min-height: 60px;
+    background: transparent;
+}
+
+/* ===================== */
+/* Tension Web Styles    */
+/* ===================== */
+
+.tension-web-section h3 {
+    color: #c07a2d;
+    border-bottom-color: #c07a2d;
+}
+
+.tension-web-list {
+    display: flex;
+    flex-direction: column;
+    gap: 12px;
+    margin-bottom: 16px;
+}
+
+.tension-web-entry {
+    background: #fffdf7;
+    border-left: 4px solid #c07a2d;
+    border-radius: 0 8px 8px 0;
+    padding: 12px 16px;
+    border-top: 1px solid #e8dcc8;
+    border-right: 1px solid #e8dcc8;
+    border-bottom: 1px solid #e8dcc8;
+}
+
+.tension-web-entry-header {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    margin-bottom: 6px;
+}
+
+.tension-web-name {
+    font-size: 15px;
+    color: #2f261b;
+}
+
+.tension-web-role {
+    font-size: 13px;
+    color: #8b7355;
+    font-style: italic;
+}
+
+.tension-web-description {
+    font-size: 14px;
+    color: #5b4a3a;
+    line-height: 1.5;
+}
+
+.btn-remove-tension {
+    margin-left: auto;
+    background: none;
+    border: none;
+    color: #9b3b2f;
+    font-size: 18px;
+    cursor: pointer;
+    padding: 0 4px;
+    line-height: 1;
+    opacity: 0.6;
+    transition: opacity 0.2s;
+}
+
+.btn-remove-tension:hover {
+    opacity: 1;
+}
+
+.tension-web-empty {
+    color: #8b7355;
+    font-style: italic;
+    text-align: center;
+    padding: 16px;
+}
+
+.tension-web-add {
+    display: flex;
+    flex-direction: column;
+    gap: 8px;
+}
+
+.tension-web-add-row {
+    display: flex;
+    gap: 8px;
+    align-items: center;
+}
+
+.tw-input {
+    padding: 8px 12px;
+    border: 1px solid #c2b39a;
+    border-radius: 6px;
+    font-size: 14px;
+    background: #fffdf7;
+    transition: border-color 0.2s;
+}
+
+.tw-input:focus {
+    outline: none;
+    border-color: #8b5e3c;
+}
+
+.tw-name-input {
+    flex: 1;
+    max-width: 200px;
+}
+
+.tw-role-input {
+    flex: 1;
+    max-width: 250px;
+}
+
+.tw-desc-input {
+    flex: 1;
+}
+
+.btn-add-tension {
+    background: #c07a2d;
+    color: white;
+    border: 1px solid #a86522;
+    padding: 8px 16px;
+    border-radius: 6px;
+    cursor: pointer;
+    font-size: 14px;
+    font-weight: 600;
+    transition: background-color 0.2s;
+    white-space: nowrap;
+}
+
+.btn-add-tension:hover {
+    background: #d18633;
+}
+
+/* ===================== */
+/* Pressure Point Styles */
+/* ===================== */
+
+.pressure-point-section h3 {
+    color: #c07a2d;
+    border-bottom-color: #c07a2d;
+}
+
+/* ===================== */
+/* Trajectory Styles     */
+/* ===================== */
+
+.trajectory-section h3 {
+    color: #c07a2d;
+    border-bottom-color: #c07a2d;
+}
+
+/* ===================== */
+/* Director's Notes      */
+/* ===================== */
+
+.directors-notes-section h3 {
+    color: #9b3b2f;
+    border-bottom-color: #9b3b2f;
+}
+
+.directors-notes-toggle {
+    cursor: pointer;
+    user-select: none;
+    transition: color 0.2s;
+}
+
+.directors-notes-toggle:hover {
+    color: #c04a3d;
+}
+
+.toggle-arrow {
+    font-size: 12px;
+    margin-left: 6px;
+    display: inline-block;
+    transition: transform 0.2s;
+}
+
+.directors-notes-content {
+    padding-top: 12px;
+}
+
 /* Debug Info Styles */
 .debug-info {
     font-size: 12px;

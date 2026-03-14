@@ -184,7 +184,21 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['action'])) {
             $result = modifyStudentData(function (&$data) use ($student_id, $field, $value, &$updatedStudent) {
                 foreach ($data['students'] as &$student) {
                     if ($student['student_id'] === $student_id) {
-                        if (strpos($field, 'details.') === 0) {
+                        if (strpos($field, 'conflict_engine.') === 0) {
+                            $ceField = substr($field, 16);
+                            if (!isset($student['conflict_engine']) || !is_array($student['conflict_engine'])) {
+                                $student['conflict_engine'] = array();
+                            }
+                            $student['conflict_engine'][$ceField] = $value;
+                        } elseif ($field === 'tension_web') {
+                            $decoded = json_decode($value, true);
+                            if (!is_array($decoded)) {
+                                return ['save' => false, 'error' => 'Invalid tension web data'];
+                            }
+                            $student['tension_web'] = $decoded;
+                        } elseif ($field === 'pressure_point' || $field === 'trajectory' || $field === 'directors_notes') {
+                            $student[$field] = $value;
+                        } elseif (strpos($field, 'details.') === 0) {
                             $detailField = substr($field, 8);
                             if (!isset($student['details']) || !is_array($student['details'])) {
                                 $student['details'] = array();
