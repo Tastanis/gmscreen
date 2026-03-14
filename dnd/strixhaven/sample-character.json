@@ -8,6 +8,28 @@
   "clubs": ["Debate Society", "Spell Theory Club"],
   "edge": "Quick learner with exceptional memory",
   "bane": "Overconfident and sometimes reckless",
+  "conflict_engine": {
+    "want": "Master all forms of magic and become a renowned professor",
+    "want_tag": "Knowledge",
+    "obstacle": "Her overconfidence leads her to tackle challenges alone, alienating potential allies",
+    "action": "Secretly studying forbidden texts in the Biblioplex restricted section",
+    "consequence": "If caught, she faces expulsion — and if she succeeds, the knowledge may change her in ways she doesn't expect"
+  },
+  "tension_web": [
+    {
+      "name": "Professor Onyx",
+      "role": "Mentor",
+      "description": "Sees Aria's potential but worries about her reckless ambition"
+    },
+    {
+      "name": "Killian Lu",
+      "role": "Rival",
+      "description": "Silverquill student competing for the same research fellowship"
+    }
+  ],
+  "pressure_point": "Her childhood friend at Silverquill has discovered what she's doing and is threatening to report her unless she shares what she finds",
+  "trajectory": "Either Aria learns to trust others and builds a coalition of allies, or her isolation leads her down an increasingly dangerous path",
+  "directors_notes": "Good candidate for a moral dilemma arc. Could tie into the Oriq storyline if she discovers something she shouldn't.",
   "character_information": {
     "origin": "Small town scholar from a family of farmers",
     "desire": "Master all forms of magic and become a renowned professor",

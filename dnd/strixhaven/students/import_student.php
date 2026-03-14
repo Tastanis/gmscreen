@@ -162,29 +162,62 @@ function mapImportDataToStudent($importData) {
         $student['skills'] = array();
     }
     
+    // New Conflict Engine fields
+    if (isset($importData['conflict_engine']) && is_array($importData['conflict_engine'])) {
+        $ce = $importData['conflict_engine'];
+        foreach (['want', 'want_tag', 'obstacle', 'action', 'consequence'] as $key) {
+            if (isset($ce[$key])) {
+                $student['conflict_engine'][$key] = trim($ce[$key]);
+            }
+        }
+    }
+
+    // Tension Web array
+    if (isset($importData['tension_web']) && is_array($importData['tension_web'])) {
+        $tensionWeb = array();
+        foreach ($importData['tension_web'] as $entry) {
+            if (is_array($entry)) {
+                $twEntry = array(
+                    'name' => isset($entry['name']) ? trim($entry['name']) : '',
+                    'role' => isset($entry['role']) ? trim($entry['role']) : '',
+                    'description' => isset($entry['description']) ? trim($entry['description']) : '',
+                );
+                if (!empty($twEntry['name']) || !empty($twEntry['role']) || !empty($twEntry['description'])) {
+                    $tensionWeb[] = $twEntry;
+                }
+            }
+        }
+        $student['tension_web'] = $tensionWeb;
+    }
+
+    // Pressure Point, Trajectory, Director's Notes
+    if (isset($importData['pressure_point'])) {
+        $student['pressure_point'] = trim($importData['pressure_point']);
+    }
+    if (isset($importData['trajectory'])) {
+        $student['trajectory'] = trim($importData['trajectory']);
+    }
+    if (isset($importData['directors_notes'])) {
+        $student['directors_notes'] = trim($importData['directors_notes']);
+    }
+
+    // Legacy character_information fields — map to old structure for backward compat,
+    // and forward-fill into conflict_engine if new fields weren't provided
     if (isset($importData['character_information']) && is_array($importData['character_information'])) {
         $charInfo = $importData['character_information'];
 
-        if (isset($charInfo['origin'])) {
-            $student['character_info']['origin'] = trim($charInfo['origin']);
+        foreach (['origin', 'desire', 'fear', 'connection', 'impact', 'change'] as $key) {
+            if (isset($charInfo[$key])) {
+                $student['character_info'][$key] = trim($charInfo[$key]);
+            }
         }
-        if (isset($charInfo['desire'])) {
-            $student['character_info']['desire'] = trim($charInfo['desire']);
-        }
-        if (isset($charInfo['fear'])) {
-            $student['character_info']['fear'] = trim($charInfo['fear']);
-        }
-        if (isset($charInfo['connection'])) {
-            $student['character_info']['connection'] = trim($charInfo['connection']);
-        }
-        if (isset($charInfo['impact'])) {
-            $student['character_info']['impact'] = trim($charInfo['impact']);
-        }
-        if (isset($charInfo['change'])) {
-            $student['character_info']['change'] = trim($charInfo['change']);
+
+        // Forward-fill: if conflict_engine.want is still empty, populate from legacy desire
+        if (empty($student['conflict_engine']['want']) && isset($charInfo['desire'])) {
+            $student['conflict_engine']['want'] = trim($charInfo['desire']);
         }
     }
-    
+
     if (isset($importData['other_notes'])) {
         $student['details']['other'] = trim($importData['other_notes']);
     }

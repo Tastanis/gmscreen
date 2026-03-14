@@ -2108,12 +2108,53 @@ function cleanStudentExportSections(student) {
     // Skills
     if (student.skills && student.skills.length > 0) cleanedStudent.skills = student.skills;
 
-    // Character Information (origin, desire, fear, connection, impact, change)
+    // Conflict Engine
+    if (student.conflict_engine) {
+        const ce = {};
+        ['want', 'want_tag', 'obstacle', 'action', 'consequence'].forEach(key => {
+            if (student.conflict_engine[key] && !isValueEmpty(student.conflict_engine[key])) {
+                ce[key] = student.conflict_engine[key].replace(/<[^>]*>/g, '').replace(/&nbsp;/g, ' ').trim();
+            }
+        });
+        if (Object.keys(ce).length > 0) {
+            cleanedStudent.conflict_engine = ce;
+        }
+    }
+
+    // Tension Web
+    if (student.tension_web && Array.isArray(student.tension_web) && student.tension_web.length > 0) {
+        const tw = student.tension_web.map(entry => {
+            const clean = {};
+            if (entry.name) clean.name = entry.name.replace(/<[^>]*>/g, '').replace(/&nbsp;/g, ' ').trim();
+            if (entry.role) clean.role = entry.role.replace(/<[^>]*>/g, '').replace(/&nbsp;/g, ' ').trim();
+            if (entry.description) clean.description = entry.description.replace(/<[^>]*>/g, '').replace(/&nbsp;/g, ' ').trim();
+            return clean;
+        }).filter(entry => entry.name || entry.role || entry.description);
+        if (tw.length > 0) {
+            cleanedStudent.tension_web = tw;
+        }
+    }
+
+    // Pressure Point
+    if (student.pressure_point && !isValueEmpty(student.pressure_point)) {
+        cleanedStudent.pressure_point = student.pressure_point.replace(/<[^>]*>/g, '').replace(/&nbsp;/g, ' ').trim();
+    }
+
+    // Trajectory
+    if (student.trajectory && !isValueEmpty(student.trajectory)) {
+        cleanedStudent.trajectory = student.trajectory.replace(/<[^>]*>/g, '').replace(/&nbsp;/g, ' ').trim();
+    }
+
+    // Director's Notes
+    if (student.directors_notes && !isValueEmpty(student.directors_notes)) {
+        cleanedStudent.directors_notes = student.directors_notes.replace(/<[^>]*>/g, '').replace(/&nbsp;/g, ' ').trim();
+    }
+
+    // Legacy Character Information (origin, desire, fear, connection, impact, change)
     if (student.character_info) {
         const charInfo = {};
         ['origin', 'desire', 'fear', 'connection', 'impact', 'change'].forEach(key => {
             if (student.character_info[key] && !isValueEmpty(student.character_info[key])) {
-                // Strip HTML tags for cleaner export
                 charInfo[key] = student.character_info[key].replace(/<[^>]*>/g, '').replace(/&nbsp;/g, ' ').trim();
             }
         });
@@ -2124,7 +2165,6 @@ function cleanStudentExportSections(student) {
 
     // Other Notes (from details.other)
     if (student.details && student.details.other && !isValueEmpty(student.details.other)) {
-        // Strip HTML tags for cleaner export
         cleanedStudent.other_notes = student.details.other.replace(/<[^>]*>/g, '').replace(/&nbsp;/g, ' ').trim();
     }
 
