@@ -895,6 +895,7 @@ export function mountBoardInteractions(store, routes = {}) {
   const sceneListContainer = document.getElementById('scene-manager');
   const groupButton = document.querySelector('[data-action="group-combatants"]');
   const startCombatButton = document.querySelector('[data-action="start-combat"]');
+  const endRoundButton = document.querySelector('[data-action="end-round"]');
   const damageHealButton = document.querySelector('[data-action="damage-heal"]');
   const roundTracker = document.querySelector('[data-round-tracker]');
   const roundValue = roundTracker?.querySelector('[data-round-value]');
@@ -2041,6 +2042,16 @@ export function mountBoardInteractions(store, routes = {}) {
         return;
       }
       handleStartCombat();
+    });
+  }
+
+  if (endRoundButton) {
+    endRoundButton.addEventListener('click', (event) => {
+      event.preventDefault();
+      if (!isGmUser() || !combatActive) {
+        return;
+      }
+      advanceCombatRound();
     });
   }
 
@@ -10051,6 +10062,9 @@ export function mountBoardInteractions(store, routes = {}) {
       startCombatButton.title = combatActive
         ? 'Only the GM can end combat.'
         : 'Only the GM can start combat.';
+    }
+    if (endRoundButton) {
+      endRoundButton.hidden = !combatActive;
     }
   }
 

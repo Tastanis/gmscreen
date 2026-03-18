@@ -97,6 +97,16 @@ body.vtt-body {
   background: rgba(34, 197, 94, 0.3);
 }
 
+.btn--warning {
+  background: rgba(213, 155, 90, 0.18);
+  border-color: rgba(213, 155, 90, 0.4);
+  color: var(--vtt-accent);
+}
+
+.btn--warning:hover {
+  background: rgba(213, 155, 90, 0.3);
+}
+
 .btn--small {
   padding: 0.35rem 0.6rem;
   font-size: 0.8rem;
