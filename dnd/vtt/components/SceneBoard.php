@@ -91,6 +91,7 @@ function renderVttSceneBoard(bool $isGm = false): string
                         Group
                     </button>
                     <button class="btn" type="button" data-action="start-combat">Start Combat</button>
+                    <button class="btn btn--warning" type="button" data-action="end-round" hidden title="End the current round early">End Round</button>
                 </div>
                 <?php endif; ?>
                 <div class="vtt-board__controls">
