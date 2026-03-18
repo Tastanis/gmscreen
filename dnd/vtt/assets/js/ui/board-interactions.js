@@ -66,6 +66,7 @@ function broadcastStaminaSync(payload = {}) {
 
   channel.postMessage({
     type: 'stamina-sync',
+    source: 'vtt',
     character: payload.character,
     currentStamina: payload.currentStamina,
     staminaMax: payload.staminaMax,
@@ -3838,6 +3839,7 @@ export function mountBoardInteractions(store, routes = {}) {
   startBoardStatePoller();
   startCombatStateRefreshLoop();
   initializePusherSync();
+  startListeningForSheetSync();
 
   function focusBoard() {
     if (!board) {
@@ -13314,6 +13316,82 @@ export function mountBoardInteractions(store, routes = {}) {
     }
   }
 
+  /**
+   * Handles stamina-sync broadcasts originating from the character sheet.
+   * Finds all PC placements matching the character name and updates their HP
+   * without re-syncing back to the sheet (prevents oscillation loops).
+   */
+  function handleSheetStaminaBroadcast(event) {
+    const payload = event?.data;
+    if (!payload || payload.type !== 'stamina-sync' || payload.source !== 'sheet') {
+      return;
+    }
+
+    const characterName = typeof payload.character === 'string' ? payload.character.trim() : '';
+    if (!characterName) {
+      return;
+    }
+
+    const currentStamina = payload.currentStamina;
+    const staminaMax = payload.staminaMax;
+    if (currentStamina === undefined && staminaMax === undefined) {
+      return;
+    }
+
+    const placements = getPlacementsForActiveScene();
+    let anyUpdated = false;
+
+    for (const placement of placements) {
+      const name = typeof placement.name === 'string' ? placement.name.trim() : '';
+      if (!name || name.toLowerCase() !== characterName.toLowerCase()) {
+        continue;
+      }
+
+      // Only update PC placements, not monsters with the same name
+      const metadata = extractPlacementMetadata(placement);
+      const inPlayerFolder = isPlacementInPlayerFolder(placement, metadata);
+      const isPlayerOwned = isPlacementPlayerOwned(placement, metadata);
+      if (!inPlayerFolder && !isPlayerOwned) {
+        continue;
+      }
+
+      const currentHp = placement.hp && typeof placement.hp === 'object'
+        ? placement.hp
+        : { current: '', max: '' };
+
+      const nextCurrent = currentStamina !== undefined ? String(currentStamina) : currentHp.current;
+      const nextMax = staminaMax !== undefined ? String(staminaMax) : currentHp.max;
+
+      // Skip if values haven't actually changed (prevents unnecessary saves)
+      if (nextCurrent === currentHp.current && nextMax === currentHp.max) {
+        continue;
+      }
+
+      updatePlacementById(placement.id, (target) => {
+        target.hp = { current: nextCurrent, max: nextMax };
+
+        if (target.overlays && typeof target.overlays === 'object') {
+          if (!target.overlays.hitPoints || typeof target.overlays.hitPoints !== 'object') {
+            target.overlays.hitPoints = {};
+          }
+          target.overlays.hitPoints.value = { current: nextCurrent, max: nextMax };
+        }
+      });
+      anyUpdated = true;
+    }
+
+    if (anyUpdated) {
+      persistBoardStateSnapshot();
+    }
+  }
+
+  function startListeningForSheetSync() {
+    const channel = getStaminaSyncChannel();
+    if (channel) {
+      channel.addEventListener('message', handleSheetStaminaBroadcast);
+    }
+  }
+
   function normalizePlacementCondition(value) {
     if (!value) {
       return null;
@@ -19544,6 +19622,8 @@ function createTemplateTool() {
       removeConditionFromPlacementByCondition,
       clearEndOfTurnConditionsForTarget,
       syncConditionsAfterMutation,
+      applyDamageHealToPlacement,
+      handleSheetStaminaBroadcast,
     },
   };
 }

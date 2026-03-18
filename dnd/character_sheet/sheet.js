@@ -616,6 +616,19 @@ function getStaminaSyncChannel() {
   return staminaSyncChannel;
 }
 
+function broadcastStaminaToVtt() {
+  const channel = getStaminaSyncChannel();
+  if (!channel || !activeCharacter) return;
+  const vitals = sheetState.hero.vitals;
+  channel.postMessage({
+    type: "stamina-sync",
+    source: "sheet",
+    character: activeCharacter,
+    currentStamina: Number(vitals.currentStamina) || 0,
+    staminaMax: Number(vitals.staminaMax) || 0,
+  });
+}
+
 function applyStaminaSync({ currentStamina, staminaMax }) {
   const normalizedVitals = normalizeVitals(sheetState.hero.vitals);
   const nextCurrent = Number.isFinite(Number(currentStamina))
@@ -654,6 +667,8 @@ function applyStaminaSync({ currentStamina, staminaMax }) {
 function handleStaminaBroadcast(event) {
   const payload = event?.data;
   if (!payload || payload.type !== "stamina-sync") return;
+  // Ignore broadcasts that originated from the character sheet itself to prevent loops
+  if (payload.source === "sheet") return;
   const payloadCharacter =
     typeof payload.character === "string" ? payload.character.trim().toLowerCase() : "";
   const activeKey = typeof activeCharacter === "string" ? activeCharacter.trim().toLowerCase() : "";
@@ -879,6 +894,10 @@ function applyTrackerChange(path, rawValue) {
 
   renderBars();
   saveSheet();
+
+  if (isStamina) {
+    broadcastStaminaToVtt();
+  }
 }
 
 function renderSurgesBox(hero, isEditMode) {
@@ -1609,6 +1628,7 @@ function renderBars() {
       updateStaminaHistory(newStamina);
       renderBars();
       saveSheet();
+      broadcastStaminaToVtt();
     });
   });
 }
