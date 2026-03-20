@@ -624,8 +624,8 @@ function broadcastStaminaToVtt() {
     type: "stamina-sync",
     source: "sheet",
     character: activeCharacter,
-    currentStamina: Number(vitals.currentStamina) || 0,
-    staminaMax: Number(vitals.staminaMax) || 0,
+    currentStamina: Number.isFinite(Number(vitals.currentStamina)) ? Number(vitals.currentStamina) : 0,
+    staminaMax: Number.isFinite(Number(vitals.staminaMax)) ? Number(vitals.staminaMax) : 0,
   });
 }
 

@@ -412,3 +412,41 @@ test('Multiple rapid sheet broadcasts settle to final value without oscillation'
   dom.window.close();
 });
 
+test('handleSheetStaminaBroadcast correctly handles zero HP', () => {
+  const dom = createDom();
+  const store = createMockStore(
+    buildPcBoardState([pcPlacement('plc-frunk', 'Frunk', 30, 50)])
+  );
+
+  globalThis.fetch = async () => ({ ok: true, json: async () => ({}) });
+  const api = mountBoardInteractions(store, { sheet: '/api/sheet.php' });
+  const { handleSheetStaminaBroadcast } = api.__testing;
+
+  handleSheetStaminaBroadcast(sheetBroadcastEvent('Frunk', 0, 50));
+
+  const state = store.getState();
+  const placement = state.boardState.placements['scene-1'].find((p) => p.id === 'plc-frunk');
+  assert.equal(placement.hp.current, '0', 'Zero HP should be preserved, not skipped');
+
+  dom.window.close();
+});
+
+test('handleSheetStaminaBroadcast correctly handles negative HP', () => {
+  const dom = createDom();
+  const store = createMockStore(
+    buildPcBoardState([pcPlacement('plc-frunk', 'Frunk', 5, 50)])
+  );
+
+  globalThis.fetch = async () => ({ ok: true, json: async () => ({}) });
+  const api = mountBoardInteractions(store, { sheet: '/api/sheet.php' });
+  const { handleSheetStaminaBroadcast } = api.__testing;
+
+  handleSheetStaminaBroadcast(sheetBroadcastEvent('Frunk', -5, 50));
+
+  const state = store.getState();
+  const placement = state.boardState.placements['scene-1'].find((p) => p.id === 'plc-frunk');
+  assert.equal(placement.hp.current, '-5', 'Negative HP should be preserved');
+
+  dom.window.close();
+});
+
