@@ -450,3 +450,83 @@ test('handleSheetStaminaBroadcast correctly handles negative HP', () => {
   dom.window.close();
 });
 
+// ---------------------------------------------------------------------------
+// Tests: Negative HP via damage and display
+// ---------------------------------------------------------------------------
+
+test('VTT damage can produce negative HP (no floor at 0)', () => {
+  const dom = createDom();
+  const store = createMockStore(
+    buildPcBoardState([pcPlacement('plc-frunk', 'Frunk', 5, 50)])
+  );
+
+  globalThis.fetch = async () => ({ ok: true, json: async () => ({ success: true }) });
+  const api = mountBoardInteractions(store, { sheet: '/api/sheet.php' });
+  const { applyDamageHealToPlacement } = api.__testing;
+
+  const result = applyDamageHealToPlacement('plc-frunk', 'damage', 15);
+  assert.ok(result, 'Damage should return a result');
+  assert.equal(result.current, -10, 'HP should go negative: 5 - 15 = -10');
+
+  const state = store.getState();
+  const placement = state.boardState.placements['scene-1'].find((p) => p.id === 'plc-frunk');
+  assert.equal(placement.hp.current, '-10', 'Stored HP should be -10');
+
+  dom.window.close();
+});
+
+test('VTT damage to 0 exactly still works', () => {
+  const dom = createDom();
+  const store = createMockStore(
+    buildPcBoardState([pcPlacement('plc-frunk', 'Frunk', 10, 50)])
+  );
+
+  globalThis.fetch = async () => ({ ok: true, json: async () => ({ success: true }) });
+  const api = mountBoardInteractions(store, { sheet: '/api/sheet.php' });
+  const { applyDamageHealToPlacement } = api.__testing;
+
+  const result = applyDamageHealToPlacement('plc-frunk', 'damage', 10);
+  assert.equal(result.current, 0, 'HP should be exactly 0');
+
+  dom.window.close();
+});
+
+test('Negative HP syncs from sheet to token and back without corruption', async () => {
+  const dom = createDom();
+
+  let sheetSyncCount = 0;
+  globalThis.fetch = async (url, opts) => {
+    if (opts?.method === 'POST' && String(opts.body ?? '').includes('sync-stamina')) {
+      sheetSyncCount++;
+    }
+    return { ok: true, json: async () => ({ success: true }) };
+  };
+
+  const store = createMockStore(
+    buildPcBoardState([pcPlacement('plc-frunk', 'Frunk', 5, 50)])
+  );
+
+  const api = mountBoardInteractions(store, { sheet: '/api/sheet.php' });
+  const { applyDamageHealToPlacement, handleSheetStaminaBroadcast } = api.__testing;
+
+  // Step 1: Damage token into negative (5 - 20 = -15)
+  const damageResult = applyDamageHealToPlacement('plc-frunk', 'damage', 20);
+  assert.equal(damageResult.current, -15, 'Token should go to -15');
+
+  await new Promise((resolve) => setTimeout(resolve, 600));
+  const syncCountAfterDamage = sheetSyncCount;
+
+  // Step 2: Sheet adjusts to -10 (e.g. some partial effect)
+  handleSheetStaminaBroadcast(sheetBroadcastEvent('Frunk', -10, 50));
+
+  const state = store.getState();
+  const placement = state.boardState.placements['scene-1'].find((p) => p.id === 'plc-frunk');
+  assert.equal(placement.hp.current, '-10', 'Token should update to -10 from sheet');
+
+  // No oscillation
+  await new Promise((resolve) => setTimeout(resolve, 800));
+  assert.equal(sheetSyncCount, syncCountAfterDamage, 'No feedback loop with negative values');
+
+  dom.window.close();
+});
+

@@ -973,6 +973,31 @@ body {
     inset 0 2px 4px rgba(80, 140, 200, 0.3);
 }
 
+/* Negative stamina - fill from right side with dark crimson */
+.meter__fill--negative {
+  position: absolute;
+  right: 0;
+  left: auto;
+  background:
+    /* Surface highlight - liquid reflection */
+    linear-gradient(180deg,
+      rgba(200, 100, 100, 0.3) 0%,
+      transparent 20%,
+      transparent 80%,
+      rgba(60, 0, 0, 0.4) 100%
+    ),
+    /* Main liquid gradient - dark blood red */
+    linear-gradient(180deg,
+      #8a2a2a 0%,
+      #6a1a1a 30%,
+      #501010 60%,
+      #380a0a 100%
+    );
+  box-shadow:
+    inset 0 0 8px rgba(120, 40, 40, 0.5),
+    inset 0 2px 4px rgba(160, 80, 80, 0.3);
+}
+
 /* Dark crimson overflow - temp stamina excess */
 .meter__overflow {
   position: absolute;

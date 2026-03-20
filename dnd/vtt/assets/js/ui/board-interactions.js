@@ -11317,8 +11317,13 @@ export function mountBoardInteractions(store, routes = {}) {
     }
 
     if (fillElement) {
-      const percent = calculateHitPointsFillPercentage(hp);
+      const { percent, negative } = calculateHitPointsFillPercentage(hp);
       fillElement.style.width = `${percent}%`;
+      if (negative) {
+        fillElement.classList.add('vtt-token__hp-fill--negative');
+      } else {
+        fillElement.classList.remove('vtt-token__hp-fill--negative');
+      }
     }
 
     const isEmpty = !hp || (hp.current === '' && hp.max === '');
@@ -12532,9 +12537,7 @@ export function mountBoardInteractions(store, routes = {}) {
 
       let nextValue = mode === 'damage' ? baseCurrent - normalizedAmount : baseCurrent + normalizedAmount;
 
-      if (mode === 'damage') {
-        nextValue = Math.max(0, nextValue);
-      } else if (maxValue !== null) {
+      if (mode === 'heal' && maxValue !== null) {
         nextValue = Math.min(maxValue, nextValue);
       }
 
@@ -12542,7 +12545,7 @@ export function mountBoardInteractions(store, routes = {}) {
         nextValue = baseCurrent;
       }
 
-      const finalValue = Math.max(0, Math.trunc(nextValue));
+      const finalValue = Math.trunc(nextValue);
       const finalString = String(finalValue);
 
       target.hp = { current: finalString, max: hp.max };
@@ -13655,14 +13658,15 @@ export function mountBoardInteractions(store, routes = {}) {
 
     if (maxValue === null || maxValue <= 0) {
       if (currentValue === null || currentValue <= 0) {
-        return 0;
+        return { percent: 0, negative: currentValue !== null && currentValue < 0 };
       }
-      return 100;
+      return { percent: 100, negative: false };
     }
 
     const safeCurrent = currentValue === null ? maxValue : currentValue;
-    const ratio = Math.max(0, Math.min(safeCurrent / maxValue, 1));
-    return Math.round(ratio * 100);
+    const isNegative = safeCurrent < 0;
+    const ratio = Math.min(Math.abs(safeCurrent) / maxValue, 1);
+    return { percent: Math.round(ratio * 100), negative: isNegative };
   }
 
   function formatHitPointsDisplay(value) {

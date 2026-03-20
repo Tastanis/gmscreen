@@ -862,7 +862,8 @@ function applyTrackerChange(path, rawValue) {
 
   const isStamina = path.endsWith("currentStamina");
   const vitals = sheetState.hero.vitals;
-  const currentValue = Number(getValue(path)) || 0;
+  const rawCurrent = Number(getValue(path));
+  const currentValue = Number.isFinite(rawCurrent) ? rawCurrent : 0;
   const maxValue = isStamina ? Number(vitals.staminaMax) || 0 : Number(vitals.recoveriesMax) || 0;
 
   let newValue = currentValue;
@@ -877,7 +878,10 @@ function applyTrackerChange(path, rawValue) {
     newValue = parsed.value;
   }
 
-  newValue = Math.max(0, newValue);
+  // Stamina can go negative; recoveries cannot
+  if (!isStamina) {
+    newValue = Math.max(0, newValue);
+  }
 
   if (isStamina) {
     const overflow = Math.max(0, newValue - maxValue);
@@ -1517,7 +1521,7 @@ function renderBars() {
   sheetState.hero.vitals = vitals;
   const staminaMax = Number(vitals.staminaMax) || 0;
   const recoveriesMax = Number(vitals.recoveriesMax) || 0;
-  const currentStamina = Number(vitals.currentStamina) || 0;
+  const currentStamina = Number.isFinite(Number(vitals.currentStamina)) ? Number(vitals.currentStamina) : 0;
   const currentRecoveries = Number(vitals.currentRecoveries) || 0;
   const recoveryValue = vitals.recoveryValue || "";
   const staminaHistory = Array.isArray(vitals.staminaHistory) ? vitals.staminaHistory : [];
@@ -1526,8 +1530,11 @@ function renderBars() {
   const currentStaminaDisplay = vitals.currentStamina === "" ? 0 : currentStamina;
   const currentRecoveriesDisplay = vitals.currentRecoveries === "" ? 0 : currentRecoveries;
 
-  const staminaWidth =
-    staminaMax > 0 ? Math.max(0, Math.min(100, (currentStamina / staminaMax) * 100)) : 0;
+  // Positive stamina fills left-to-right; negative fills right-to-left
+  const isNegativeStamina = currentStamina < 0;
+  const staminaWidth = staminaMax > 0
+    ? Math.min(100, (Math.abs(currentStamina) / staminaMax) * 100)
+    : 0;
   const recoveryWidth =
     recoveriesMax > 0
       ? Math.max(0, Math.min(100, (currentRecoveries / recoveriesMax) * 100))
@@ -1552,8 +1559,8 @@ function renderBars() {
             ? `<span class="tracker-label tracker-label--temp tracker-label--prominent" data-flash-id="${tempStaminaFlashId}">TEMP STAMINA</span>`
             : ""}
         </div>
-        <div class="meter__track">
-          <div class="meter__fill meter__fill--stamina" style="width:${staminaWidth}%;"></div>
+        <div class="meter__track${isNegativeStamina ? ' meter__track--negative' : ''}">
+          <div class="meter__fill meter__fill--stamina${isNegativeStamina ? ' meter__fill--negative' : ''}" style="width:${staminaWidth}%;"></div>
           ${staminaOverflowWidth > 0
             ? `<div class="meter__overflow" style="width:${staminaOverflowWidth}%;"></div>`
             : ""}
