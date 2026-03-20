@@ -66,6 +66,7 @@ function broadcastStaminaSync(payload = {}) {
 
   channel.postMessage({
     type: 'stamina-sync',
+    source: 'vtt',
     character: payload.character,
     currentStamina: payload.currentStamina,
     staminaMax: payload.staminaMax,
@@ -3838,6 +3839,7 @@ export function mountBoardInteractions(store, routes = {}) {
   startBoardStatePoller();
   startCombatStateRefreshLoop();
   initializePusherSync();
+  startListeningForSheetSync();
 
   function focusBoard() {
     if (!board) {
@@ -11315,8 +11317,13 @@ export function mountBoardInteractions(store, routes = {}) {
     }
 
     if (fillElement) {
-      const percent = calculateHitPointsFillPercentage(hp);
+      const { percent, negative } = calculateHitPointsFillPercentage(hp);
       fillElement.style.width = `${percent}%`;
+      if (negative) {
+        fillElement.classList.add('vtt-token__hp-fill--negative');
+      } else {
+        fillElement.classList.remove('vtt-token__hp-fill--negative');
+      }
     }
 
     const isEmpty = !hp || (hp.current === '' && hp.max === '');
@@ -12530,9 +12537,7 @@ export function mountBoardInteractions(store, routes = {}) {
 
       let nextValue = mode === 'damage' ? baseCurrent - normalizedAmount : baseCurrent + normalizedAmount;
 
-      if (mode === 'damage') {
-        nextValue = Math.max(0, nextValue);
-      } else if (maxValue !== null) {
+      if (mode === 'heal' && maxValue !== null) {
         nextValue = Math.min(maxValue, nextValue);
       }
 
@@ -12540,7 +12545,7 @@ export function mountBoardInteractions(store, routes = {}) {
         nextValue = baseCurrent;
       }
 
-      const finalValue = Math.max(0, Math.trunc(nextValue));
+      const finalValue = Math.trunc(nextValue);
       const finalString = String(finalValue);
 
       target.hp = { current: finalString, max: hp.max };
@@ -13314,6 +13319,82 @@ export function mountBoardInteractions(store, routes = {}) {
     }
   }
 
+  /**
+   * Handles stamina-sync broadcasts originating from the character sheet.
+   * Finds all PC placements matching the character name and updates their HP
+   * without re-syncing back to the sheet (prevents oscillation loops).
+   */
+  function handleSheetStaminaBroadcast(event) {
+    const payload = event?.data;
+    if (!payload || payload.type !== 'stamina-sync' || payload.source !== 'sheet') {
+      return;
+    }
+
+    const characterName = typeof payload.character === 'string' ? payload.character.trim() : '';
+    if (!characterName) {
+      return;
+    }
+
+    const currentStamina = payload.currentStamina;
+    const staminaMax = payload.staminaMax;
+    if (currentStamina === undefined && staminaMax === undefined) {
+      return;
+    }
+
+    const placements = getPlacementsForActiveScene();
+    let anyUpdated = false;
+
+    for (const placement of placements) {
+      const name = typeof placement.name === 'string' ? placement.name.trim() : '';
+      if (!name || name.toLowerCase() !== characterName.toLowerCase()) {
+        continue;
+      }
+
+      // Only update PC placements, not monsters with the same name
+      const metadata = extractPlacementMetadata(placement);
+      const inPlayerFolder = isPlacementInPlayerFolder(placement, metadata);
+      const isPlayerOwned = isPlacementPlayerOwned(placement, metadata);
+      if (!inPlayerFolder && !isPlayerOwned) {
+        continue;
+      }
+
+      const currentHp = placement.hp && typeof placement.hp === 'object'
+        ? placement.hp
+        : { current: '', max: '' };
+
+      const nextCurrent = currentStamina !== undefined ? String(currentStamina) : currentHp.current;
+      const nextMax = staminaMax !== undefined ? String(staminaMax) : currentHp.max;
+
+      // Skip if values haven't actually changed (prevents unnecessary saves)
+      if (nextCurrent === currentHp.current && nextMax === currentHp.max) {
+        continue;
+      }
+
+      updatePlacementById(placement.id, (target) => {
+        target.hp = { current: nextCurrent, max: nextMax };
+
+        if (target.overlays && typeof target.overlays === 'object') {
+          if (!target.overlays.hitPoints || typeof target.overlays.hitPoints !== 'object') {
+            target.overlays.hitPoints = {};
+          }
+          target.overlays.hitPoints.value = { current: nextCurrent, max: nextMax };
+        }
+      });
+      anyUpdated = true;
+    }
+
+    if (anyUpdated) {
+      persistBoardStateSnapshot();
+    }
+  }
+
+  function startListeningForSheetSync() {
+    const channel = getStaminaSyncChannel();
+    if (channel) {
+      channel.addEventListener('message', handleSheetStaminaBroadcast);
+    }
+  }
+
   function normalizePlacementCondition(value) {
     if (!value) {
       return null;
@@ -13577,14 +13658,15 @@ export function mountBoardInteractions(store, routes = {}) {
 
     if (maxValue === null || maxValue <= 0) {
       if (currentValue === null || currentValue <= 0) {
-        return 0;
+        return { percent: 0, negative: currentValue !== null && currentValue < 0 };
       }
-      return 100;
+      return { percent: 100, negative: false };
     }
 
     const safeCurrent = currentValue === null ? maxValue : currentValue;
-    const ratio = Math.max(0, Math.min(safeCurrent / maxValue, 1));
-    return Math.round(ratio * 100);
+    const isNegative = safeCurrent < 0;
+    const ratio = Math.min(Math.abs(safeCurrent) / maxValue, 1);
+    return { percent: Math.round(ratio * 100), negative: isNegative };
   }
 
   function formatHitPointsDisplay(value) {
@@ -19544,6 +19626,8 @@ function createTemplateTool() {
       removeConditionFromPlacementByCondition,
       clearEndOfTurnConditionsForTarget,
       syncConditionsAfterMutation,
+      applyDamageHealToPlacement,
+      handleSheetStaminaBroadcast,
     },
   };
 }

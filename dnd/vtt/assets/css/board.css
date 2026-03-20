@@ -2482,6 +2482,13 @@
   transition: width var(--vtt-transition);
 }
 
+/* Negative HP - fill from right side with purple/dark indicator */
+.vtt-token__hp-fill--negative {
+  left: auto;
+  right: 0;
+  background: linear-gradient(90deg, #7f1d1d 0%, #991b1b 35%, #b91c1c 100%);
+}
+
 .vtt-token__hp-bar[data-empty='true'] .vtt-token__hp-fill {
   width: 0%;
   opacity: 0.6;
