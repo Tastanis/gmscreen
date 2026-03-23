@@ -53,6 +53,7 @@ if ($college === '' && $type === '') {
     }
     echo "\n  All Students:        ?college=all&type=students\n";
     echo "  All Staff:           ?college=all&type=staff\n";
+    echo "\n  Character Projects:  See /dnd/api/projects.php\n";
     exit;
 }
 
