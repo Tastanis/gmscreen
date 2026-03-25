@@ -1353,6 +1353,24 @@ function captureBonuses() {
 const MAX_HIRELING_SKILLS = 10;
 const MAX_HIRELING_BONUS = 5;
 
+function openHirelingLightbox(src, alt) {
+  let overlay = document.getElementById("hireling-lightbox");
+  if (!overlay) {
+    overlay = document.createElement("div");
+    overlay.id = "hireling-lightbox";
+    overlay.className = "hireling-lightbox";
+    overlay.innerHTML = '<img class="hireling-lightbox__img" />';
+    overlay.addEventListener("click", () => {
+      overlay.classList.remove("hireling-lightbox--visible");
+    });
+    document.body.appendChild(overlay);
+  }
+  const img = overlay.querySelector("img");
+  img.src = src;
+  img.alt = alt || "Hireling";
+  overlay.classList.add("hireling-lightbox--visible");
+}
+
 function renderHirelingCard(hireling) {
   const selectedSkills = Array.isArray(hireling.skills) ? hireling.skills : [];
   const bonusVal = Math.min(Math.max(parseInt(hireling.bonus) || 0, 0), MAX_HIRELING_BONUS);
@@ -1379,7 +1397,7 @@ function renderHirelingCard(hireling) {
       <div class="hireling-card__top">
         <div class="hireling-card__image-area">
           ${hasImage
-            ? `<img class="hireling-card__image" src="${imageSrc}" alt="${hireling.name || 'Hireling'}" />`
+            ? `<img class="hireling-card__image" src="${imageSrc}" alt="${hireling.name || 'Hireling'}" onclick="openHirelingLightbox(this.src, this.alt)" style="cursor:pointer" />`
             : `<div class="hireling-card__image-placeholder">No Image</div>`
           }
           <label class="text-btn edit-only hireling-card__upload-btn">
