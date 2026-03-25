@@ -1058,7 +1058,9 @@ function createRelationshipElement(relationship, index) {
                 <div class="form-group">
                     <label>Points:</label>
                     <input type="text" class="relationship-points-input" value="${relationship.points || ''}"
-                           oninput="updateRelationshipField(${index}, 'points', this.value)">
+                           onchange="updateRelationshipPoints(${index}, this.value)"
+                           placeholder="Enter points or +# to add"
+                           id="relationship-points-${index}">
                 </div>
                 <div class="form-group">
                     <label>Boon:</label>
@@ -1156,12 +1158,75 @@ function updateRelationshipField(index, field, value) {
         syncRelationshipToStudentCard(index);
     }
     
-    // Update header if name or points changed
-    if (field === 'npc_name' || field === 'points') {
-        // Delay the reload to allow save to process
-        setTimeout(() => {
-            loadRelationships();
-        }, 100);
+    // Update header inline if name changed (without rebuilding DOM)
+    if (field === 'npc_name') {
+        const container = document.getElementById('relationships-list');
+        if (container) {
+            const items = container.querySelectorAll('.relationship-item');
+            if (items[index]) {
+                const nameEl = items[index].querySelector('.relationship-header h3');
+                if (nameEl) {
+                    nameEl.textContent = value || 'Unnamed NPC';
+                }
+            }
+        }
+    }
+}
+
+// Update relationship points with +# support (GM only)
+function updateRelationshipPoints(index, value) {
+    if (!isGM) return;
+
+    if (!characterData.relationships[index]) {
+        characterData.relationships[index] = {};
+    }
+
+    const relationship = characterData.relationships[index];
+    let newPoints;
+
+    // Check if input starts with + (addition mode)
+    if (value.toString().startsWith('+')) {
+        const addPoints = parseInt(value.substring(1)) || 0;
+        const basePoints = parseInt(relationship.points) || 0;
+        newPoints = basePoints + addPoints;
+        console.log(`Relationship points: ${basePoints} + ${addPoints} = ${newPoints}`);
+    } else if (value.toString().startsWith('-')) {
+        const subPoints = parseInt(value.substring(1)) || 0;
+        const basePoints = parseInt(relationship.points) || 0;
+        newPoints = basePoints - subPoints;
+        console.log(`Relationship points: ${basePoints} - ${subPoints} = ${newPoints}`);
+    } else {
+        newPoints = parseInt(value) || 0;
+    }
+
+    // Update the data
+    characterData.relationships[index].points = newPoints.toString();
+
+    // Update the input field to show resolved value
+    const pointsInput = document.getElementById(`relationship-points-${index}`);
+    if (pointsInput) {
+        pointsInput.value = newPoints;
+    }
+
+    // Update the header display inline without rebuilding DOM
+    const container = document.getElementById('relationships-list');
+    if (container) {
+        const items = container.querySelectorAll('.relationship-item');
+        if (items[index]) {
+            const pointsSpan = items[index].querySelector('.relationship-points');
+            if (pointsSpan) {
+                pointsSpan.textContent = `Points: ${newPoints}`;
+            }
+        }
+    }
+
+    // Mark as modified and save
+    markFieldDirty(currentCharacter, 'relationships', 'points', newPoints.toString(), index);
+    saveFieldData(currentCharacter, 'relationships', 'points', newPoints.toString(), index, 2000);
+
+    // Sync with student card if applicable
+    if (characterData.relationships[index].student_id) {
+        syncRelationshipToStudentCard(index);
     }
 }
 
