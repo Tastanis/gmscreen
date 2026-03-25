@@ -617,29 +617,14 @@
     align-items: center;
 }
 
-.dice-project-manual-btn {
-    border-radius: 4px;
-    border: 1px solid var(--dice-warning);
-    background: #f5e6c4;
-    color: var(--dice-text);
+.dice-project-manual-label {
     font-weight: 700;
     letter-spacing: 0.06em;
     text-transform: uppercase;
-    padding: 0.55rem 1rem;
-    cursor: pointer;
-    transition: background 0.2s ease, border-color 0.15s ease;
-}
-
-.dice-project-manual-btn:hover,
-.dice-project-manual-btn:focus {
-    background: var(--dice-surface);
-    border-color: var(--dice-accent);
-}
-
-.dice-project-manual-btn--active {
-    background: #f0e0c6;
-    color: var(--dice-accent-strong);
-    border-color: var(--dice-accent-strong);
+    color: var(--dice-text);
+    padding: 0.55rem 0;
+    white-space: nowrap;
+    font-size: 0.85rem;
 }
 
 .dice-project-manual-input {
@@ -651,10 +636,6 @@
     padding: 0.55rem 0.7rem;
     font-size: 1rem;
     transition: border 0.2s ease, box-shadow 0.2s ease;
-}
-
-.dice-project-manual-input:disabled {
-    opacity: 0.35;
 }
 
 .dice-project-manual-input:focus {
