@@ -1396,7 +1396,10 @@ function createProjectElement(project, index) {
                     <label>Extra:</label>
                     <textarea rows="3" onchange="updateProjectField(${index}, 'extra', this.value)">${project.extra || ''}</textarea>
                 </div>
-                <button class="btn-danger" onclick="deleteProject(${index})">Delete</button>
+                <div class="project-actions">
+                    <button class="btn-project-roll" onclick="startProjectRollFromButton(${index})">Project Roll</button>
+                    <button class="btn-danger" onclick="deleteProject(${index})">Delete</button>
+                </div>
             </div>
         `;
     } else {
@@ -1434,11 +1437,24 @@ function createProjectElement(project, index) {
                     <label>Extra:</label>
                     <div class="readonly-field readonly-textarea">${project.extra || '-'}</div>
                 </div>
+                <div class="project-actions">
+                    <button class="btn-project-roll" onclick="startProjectRollFromButton(${index})">Project Roll</button>
+                </div>
             </div>
         `;
     }
     
     return div;
+}
+
+// Start a project roll directly for a specific project
+function startProjectRollFromButton(index) {
+    const project = characterData.projects[index];
+    if (!project) return;
+    const name = project.project_name || 'Unnamed Project';
+    if (window.dashboardDiceRoller) {
+        window.dashboardDiceRoller.startProjectRollForProject(index, name);
+    }
 }
 
 // Toggle project details
