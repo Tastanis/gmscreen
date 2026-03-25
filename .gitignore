@@ -69,6 +69,7 @@ pnpm-lock.yaml
 
 # Character sheet data
 /dnd/character_sheet/data/character_sheets.json
+/dnd/character_sheet/data/hireling_images/
 
 # Arcane Construction data
 /dnd/strixhaven/arcaneconstruction/data/
