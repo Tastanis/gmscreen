@@ -1057,8 +1057,10 @@ function createRelationshipElement(relationship, index) {
                 </div>
                 <div class="form-group">
                     <label>Points:</label>
-                    <input type="text" class="relationship-points-input" value="${relationship.points || ''}"
-                           oninput="updateRelationshipField(${index}, 'points', this.value)">
+                    <input type="text" class="relationship-points-input no-spinner" value="${relationship.points || ''}"
+                           onchange="updateRelationshipPoints(${index}, this.value)"
+                           placeholder="Enter points or +# to add"
+                           id="relationship-points-${index}">
                 </div>
                 <div class="form-group">
                     <label>Boon:</label>
@@ -1137,32 +1139,122 @@ function toggleRelationship(index) {
 // Update relationship field (GM only)
 function updateRelationshipField(index, field, value) {
     if (!isGM) return;
-    
+
     if (!characterData.relationships[index]) {
         characterData.relationships[index] = {};
     }
-    
+
     characterData.relationships[index][field] = value;
-    
+
     // Mark as modified and track the exact field that changed
     markFieldDirty(currentCharacter, 'relationships', field, value, index);
-    
+
     // Save this specific field to server with longer debounce
     saveFieldData(currentCharacter, 'relationships', field, value, index, 2000);
-    
+
     // If we have a student_id and are updating points or extra, sync with student card
-    if (characterData.relationships[index].student_id && 
+    if (characterData.relationships[index].student_id &&
         (field === 'points' || field === 'extra')) {
         syncRelationshipToStudentCard(index);
     }
-    
-    // Update header if name or points changed
-    if (field === 'npc_name' || field === 'points') {
-        // Delay the reload to allow save to process
-        setTimeout(() => {
-            loadRelationships();
-        }, 100);
+
+    // Update header display if name changed (without full reload)
+    if (field === 'npc_name') {
+        const header = document.querySelector(`#relationships-list .relationship-item:nth-child(${index + 1}) .relationship-header h3`);
+        if (header) {
+            header.textContent = value || 'Unnamed NPC';
+        }
     }
+}
+
+// Update relationship points with addition mode support (GM only)
+function updateRelationshipPoints(index, value) {
+    if (!isGM) return;
+
+    if (!characterData.relationships[index]) {
+        characterData.relationships[index] = {};
+    }
+
+    const relationship = characterData.relationships[index];
+
+    // Initialize points history if it doesn't exist
+    if (!relationship.points_history) {
+        relationship.points_history = [];
+    }
+
+    let newPoints;
+
+    // Check if input starts with + (addition mode)
+    if (value.toString().startsWith('+')) {
+        const addPoints = parseInt(value.substring(1)) || 0;
+
+        // Get the base value for addition
+        let basePoints;
+        if (relationship.points_history.length > 0) {
+            basePoints = relationship.points_history[relationship.points_history.length - 1];
+        } else {
+            basePoints = parseInt(relationship.points) || 0;
+            if (basePoints > 0) {
+                relationship.points_history.push(basePoints);
+            }
+        }
+
+        newPoints = basePoints + addPoints;
+    } else {
+        newPoints = parseInt(value) || 0;
+    }
+
+    // Update the points in data
+    relationship.points = newPoints.toString();
+
+    // Add to history
+    relationship.points_history.push(newPoints);
+    if (relationship.points_history.length > 10) {
+        relationship.points_history = relationship.points_history.slice(-10);
+    }
+
+    // Update the input field to show resolved value
+    const pointsInput = document.getElementById(`relationship-points-${index}`);
+    if (pointsInput) {
+        pointsInput.value = newPoints;
+    }
+
+    // Update the header display
+    const headerPoints = document.querySelector(`#relationships-list .relationship-item:nth-child(${index + 1}) .relationship-points`);
+    if (headerPoints) {
+        headerPoints.textContent = `Points: ${newPoints}`;
+    }
+
+    // Save all relationship fields including history
+    saveRelationshipData(index);
+
+    // Sync with student card if applicable
+    if (relationship.student_id) {
+        syncRelationshipToStudentCard(index);
+    }
+}
+
+// Save entire relationship data (GM only)
+function saveRelationshipData(index) {
+    if (!isGM) return;
+
+    const relationship = characterData.relationships[index];
+
+    // Save all relationship fields
+    Object.keys(relationship).forEach(field => {
+        let value = relationship[field];
+
+        // Convert arrays to JSON strings for transmission
+        if (Array.isArray(value)) {
+            value = JSON.stringify(value);
+        }
+
+        // Save each field with debounce
+        saveFieldData(currentCharacter, 'relationships', field, value, index, 2000);
+
+        // Track dirty state
+        markFieldDirty(currentCharacter, 'relationships', field, value, index);
+    });
 }
 
 // Sync relationship data to student card
