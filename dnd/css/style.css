@@ -3574,6 +3574,55 @@ body:not(.gm-mode) .club-navigation button:hover:not(:disabled) {
         2px 2px 4px rgba(0, 0, 0, 0.3);
 }
 
+/* Project actions row */
+.project-actions {
+    display: flex;
+    gap: 10px;
+    margin-top: 10px;
+    align-items: center;
+}
+
+/* Project Roll button styling */
+.projects-section .btn-project-roll {
+    background: linear-gradient(145deg, #3a6b8c 0%, #2d5570 60%, #1e4058 100%);
+    color: #fdfaf5;
+    border: 2px solid;
+    border-top-color: #4a8ab0;
+    border-left-color: #3e7a9e;
+    border-right-color: #1a3548;
+    border-bottom-color: #142a3a;
+    padding: 10px 18px;
+    border-radius: 6px;
+    font-weight: 700;
+    text-transform: uppercase;
+    letter-spacing: 0.04em;
+    font-size: 12px;
+    cursor: pointer;
+    position: relative;
+    transition: all 0.15s ease;
+    box-shadow:
+        2px 2px 0 #142a3a,
+        3px 3px 0 #0e1f2c,
+        4px 4px 8px rgba(0, 0, 0, 0.35);
+    text-shadow: 0 1px 2px rgba(0, 0, 0, 0.4);
+}
+
+.projects-section .btn-project-roll:hover {
+    background: linear-gradient(145deg, #4a7b9c 0%, #3d6580 60%, #2e5068 100%);
+    transform: translateY(-1px);
+    box-shadow:
+        3px 3px 0 #142a3a,
+        4px 4px 0 #0e1f2c,
+        5px 5px 10px rgba(0, 0, 0, 0.4);
+}
+
+.projects-section .btn-project-roll:active {
+    transform: translateY(1px);
+    box-shadow:
+        1px 1px 0 #142a3a,
+        2px 2px 4px rgba(0, 0, 0, 0.3);
+}
+
 /* Danger button styling */
 .past-classes-section .btn-danger,
 .relationships-section .btn-danger,

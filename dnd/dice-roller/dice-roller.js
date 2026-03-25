@@ -846,6 +846,20 @@ class DashboardDiceRoller {
         document.addEventListener('click', this.handleProjectSelection, true);
     }
 
+    startProjectRollForProject(index, name) {
+        this.open();
+        this.focusProjectsSection();
+        this.positionDiceModalForProjectRoll();
+        this.projectVariant = null;
+        this.projectBaseQueue = [];
+        this.projectExtraQueue = [];
+        this.projectRetainerQueue = [];
+        this.clearQueue();
+        this.projectState.manualActive = false;
+        this.disableProjectManualEntry();
+        this.applyProjectSelection(index, name);
+    }
+
     restartProjectSelection() {
         this.clearQueue();
         this.projectState.selectedIndex = null;
@@ -1720,5 +1734,5 @@ class DashboardDiceRoller {
 }
 
 window.addEventListener('DOMContentLoaded', () => {
-    new DashboardDiceRoller('dice-roller-btn');
+    window.dashboardDiceRoller = new DashboardDiceRoller('dice-roller-btn');
 });
