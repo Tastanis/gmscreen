@@ -45,21 +45,44 @@ function syncRelationshipsToCharacters($student) {
             $updated = false;
 
             foreach ($pcs as $pc) {
-                if (!isset($charactersData[$pc]['relationships']) || !is_array($charactersData[$pc]['relationships'])) {
-                    continue;
-                }
-
                 $points = isset($relationships[$pc . '_points']) ? $relationships[$pc . '_points'] : '';
                 $notes = isset($relationships[$pc . '_notes']) ? $relationships[$pc . '_notes'] : '';
 
+                // Skip if no points and no notes - nothing to sync
+                if ($points === '' && $notes === '') {
+                    continue;
+                }
+
+                // Ensure relationships array exists for this PC
+                if (!isset($charactersData[$pc]['relationships']) || !is_array($charactersData[$pc]['relationships'])) {
+                    $charactersData[$pc]['relationships'] = array();
+                }
+
+                // Look for existing relationship with this student
+                $found = false;
                 foreach ($charactersData[$pc]['relationships'] as &$rel) {
                     if (isset($rel['student_id']) && $rel['student_id'] === $studentId) {
                         $rel['points'] = $points;
                         $rel['extra'] = $notes;
                         $rel['npc_name'] = $studentName;
+                        $found = true;
                         $updated = true;
                         break;
                     }
+                }
+                unset($rel);
+
+                // Create new relationship if one doesn't exist
+                if (!$found) {
+                    $charactersData[$pc]['relationships'][] = array(
+                        'npc_name' => $studentName,
+                        'points' => $points,
+                        'boon' => '',
+                        'bane' => '',
+                        'extra' => $notes,
+                        'student_id' => $studentId
+                    );
+                    $updated = true;
                 }
             }
 
