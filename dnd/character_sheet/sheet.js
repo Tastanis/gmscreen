@@ -112,6 +112,17 @@ function defaultBonus() {
   };
 }
 
+function defaultHireling() {
+  return {
+    id: createId("hireling"),
+    name: "",
+    image: "",
+    skills: [],
+    bonus: 0,
+    notes: "",
+  };
+}
+
 const DEFAULT_VITALS = {
   size: "",
   speed: "",
@@ -175,6 +186,7 @@ const defaultSheet = {
     },
     vitals: { ...DEFAULT_VITALS },
     bonuses: [],
+    hirelings: [],
   },
   sidebar: {
     lists: {
@@ -1123,10 +1135,12 @@ function renderHeroPane() {
       </div>
 
       <div id="bonuses-section" class="bonuses-section"></div>
+      <div id="hirelings-section" class="hirelings-section"></div>
     </section>
   `;
   bindChatDots();
   renderBonuses();
+  renderHirelings();
 }
 
 function renderListSection(containerId, title, key, placeholder) {
@@ -1332,6 +1346,247 @@ function captureBonuses() {
   });
 
   sheetState.hero.bonuses = updated;
+}
+
+/* ─── Hirelings System ─── */
+
+const MAX_HIRELING_SKILLS = 10;
+const MAX_HIRELING_BONUS = 5;
+
+function renderHirelingCard(hireling) {
+  const selectedSkills = Array.isArray(hireling.skills) ? hireling.skills : [];
+  const bonusVal = Math.min(Math.max(parseInt(hireling.bonus) || 0, 0), MAX_HIRELING_BONUS);
+  const imageSrc = hireling.image || "";
+  const hasImage = imageSrc !== "";
+
+  const skillCheckboxes = ALL_SKILLS.map((skill) => {
+    const checked = selectedSkills.includes(skill) ? "checked" : "";
+    const disabled = !checked && selectedSkills.length >= MAX_HIRELING_SKILLS ? "disabled" : "";
+    return `<label class="hireling-skill-option ${checked ? "hireling-skill-option--checked" : ""}" title="${skill}">
+      <input type="checkbox" class="hireling-skill-checkbox edit-field" data-hireling-skill="${skill}" ${checked} ${disabled} />
+      <span class="hireling-skill-label">${skill}</span>
+    </label>`;
+  }).join("");
+
+  const skillTags = selectedSkills.length > 0
+    ? selectedSkills.map((s) => `<span class="hireling-skill-tag">${s}</span>`).join("")
+    : '<span class="muted">No skills selected</span>';
+
+  const bonusDisplay = bonusVal > 0 ? `+${bonusVal}` : "0";
+
+  return `
+    <div class="hireling-card" data-hireling-id="${hireling.id}">
+      <div class="hireling-card__top">
+        <div class="hireling-card__image-area">
+          ${hasImage
+            ? `<img class="hireling-card__image" src="${imageSrc}" alt="${hireling.name || 'Hireling'}" />`
+            : `<div class="hireling-card__image-placeholder">No Image</div>`
+          }
+          <label class="text-btn edit-only hireling-card__upload-btn">
+            Upload
+            <input type="file" class="hireling-card__file-input" accept="image/*" data-hireling-upload="${hireling.id}" hidden />
+          </label>
+        </div>
+        <div class="hireling-card__info">
+          <div class="hireling-card__name-row">
+            <div class="display-value hireling-card__name-display">${hireling.name || '<span class="muted">Unnamed Hireling</span>'}</div>
+            <input class="edit-field hireling-card__name-input" type="text" data-hireling-field="name" value="${(hireling.name || "").replace(/"/g, "&quot;")}" placeholder="Hireling name" />
+          </div>
+          <div class="hireling-card__bonus-row">
+            <span class="hireling-card__bonus-label">Bonus:</span>
+            <span class="hireling-card__bonus-display display-value">${bonusDisplay}</span>
+            <div class="hireling-card__bonus-controls edit-only">
+              <button class="icon-btn hireling-bonus-step" data-hireling-bonus-delta="-1" aria-label="Decrease bonus">&#9660;</button>
+              <span class="hireling-card__bonus-value">${bonusDisplay}</span>
+              <button class="icon-btn hireling-bonus-step" data-hireling-bonus-delta="1" aria-label="Increase bonus">&#9650;</button>
+            </div>
+          </div>
+          <div class="hireling-card__skills-display display-value">
+            <span class="hireling-card__skills-label">Skills:</span>
+            <div class="hireling-skill-tags">${skillTags}</div>
+          </div>
+        </div>
+      </div>
+      <div class="hireling-card__skills-picker edit-only">
+        <div class="hireling-skills-heading">Select Skills (${selectedSkills.length}/${MAX_HIRELING_SKILLS})</div>
+        <div class="hireling-skills-grid">${skillCheckboxes}</div>
+      </div>
+      <div class="hireling-card__notes-section">
+        <div class="hireling-notes-label">Notes</div>
+        <div class="hireling-card__notes-display display-value rich-text-display">${renderRichText(hireling.notes || "")}</div>
+        <div class="rich-text-wrapper">
+          <div class="rich-toolbar edit-only" role="toolbar" aria-label="Hireling notes formatting">
+            <button class="icon-btn rich-toolbar__btn" type="button" data-rich-command="bold" aria-label="Bold">
+              <strong>B</strong>
+            </button>
+            <button class="icon-btn rich-toolbar__btn" type="button" data-rich-command="underline" aria-label="Underline">
+              <span class="rich-toolbar__underline">U</span>
+            </button>
+          </div>
+          <div
+            class="rich-text-editor edit-field"
+            data-hireling-field="notes"
+            contenteditable="true"
+            data-placeholder="Notes about this hireling..."
+          >${renderRichText(hireling.notes || "")}</div>
+        </div>
+      </div>
+      <button class="icon-btn edit-only hireling-card__remove" data-remove-hireling="${hireling.id}" aria-label="Remove hireling">\u2715</button>
+    </div>
+  `;
+}
+
+function renderHirelings() {
+  const container = document.getElementById("hirelings-section");
+  if (!container) return;
+
+  const hirelings = Array.isArray(sheetState.hero.hirelings) ? sheetState.hero.hirelings : [];
+  sheetState.hero.hirelings = hirelings;
+
+  container.innerHTML = `
+    <div class="hirelings-header">
+      <span class="hirelings-title">Hirelings</span>
+      <button class="text-btn edit-only" data-add-hireling title="Add hireling">+ Add Hireling</button>
+    </div>
+    <div class="hirelings-body">
+      ${hirelings.length > 0
+        ? hirelings.map((h) => renderHirelingCard(h)).join("")
+        : '<div class="muted hirelings-empty">No hirelings added yet.</div>'}
+    </div>
+  `;
+
+  bindHirelingAdds();
+  bindHirelingRemovals();
+  bindHirelingSkillPickers();
+  bindHirelingBonusControls();
+  bindHirelingUploads();
+  bindRichTextToolbars();
+}
+
+function bindHirelingAdds() {
+  document.querySelectorAll("[data-add-hireling]").forEach((btn) => {
+    btn.onclick = () => {
+      if (!Array.isArray(sheetState.hero.hirelings)) {
+        sheetState.hero.hirelings = [];
+      }
+      captureHirelings();
+      sheetState.hero.hirelings.push(defaultHireling());
+      renderHirelings();
+      queueAutoSave();
+    };
+  });
+}
+
+function bindHirelingRemovals() {
+  document.querySelectorAll("[data-remove-hireling]").forEach((btn) => {
+    btn.onclick = () => {
+      const id = btn.getAttribute("data-remove-hireling");
+      captureHirelings();
+      sheetState.hero.hirelings = sheetState.hero.hirelings.filter((h) => h.id !== id);
+      renderHirelings();
+      queueAutoSave();
+    };
+  });
+}
+
+function bindHirelingSkillPickers() {
+  document.querySelectorAll(".hireling-card").forEach((card) => {
+    const hirelingId = card.getAttribute("data-hireling-id");
+    card.querySelectorAll(".hireling-skill-checkbox").forEach((cb) => {
+      cb.addEventListener("change", () => {
+        captureHirelings();
+        renderHirelings();
+        queueAutoSave();
+      });
+    });
+  });
+}
+
+function bindHirelingBonusControls() {
+  document.querySelectorAll(".hireling-card").forEach((card) => {
+    const hirelingId = card.getAttribute("data-hireling-id");
+    card.querySelectorAll("[data-hireling-bonus-delta]").forEach((btn) => {
+      btn.onclick = () => {
+        const delta = parseInt(btn.getAttribute("data-hireling-bonus-delta"));
+        const hireling = sheetState.hero.hirelings.find((h) => h.id === hirelingId);
+        if (!hireling) return;
+        captureHirelings();
+        const current = parseInt(hireling.bonus) || 0;
+        hireling.bonus = Math.min(Math.max(current + delta, 0), MAX_HIRELING_BONUS);
+        renderHirelings();
+        queueAutoSave();
+      };
+    });
+  });
+}
+
+function bindHirelingUploads() {
+  document.querySelectorAll("[data-hireling-upload]").forEach((input) => {
+    input.addEventListener("change", async (event) => {
+      const file = event.target.files[0];
+      if (!file) return;
+
+      const hirelingId = input.getAttribute("data-hireling-upload");
+      const formData = new FormData();
+      formData.append("image", file);
+      formData.append("character", activeCharacter);
+      formData.append("hireling_id", hirelingId);
+
+      try {
+        const response = await fetch("upload_hireling_image.php", {
+          method: "POST",
+          body: formData,
+          credentials: "same-origin",
+        });
+        const result = await response.json();
+        if (result.success) {
+          captureHirelings();
+          const hireling = sheetState.hero.hirelings.find((h) => h.id === hirelingId);
+          if (hireling) {
+            hireling.image = result.image_path;
+          }
+          renderHirelings();
+          queueAutoSave();
+        } else {
+          console.warn("Hireling image upload failed:", result.error);
+        }
+      } catch (err) {
+        console.error("Error uploading hireling image:", err);
+      }
+    });
+  });
+}
+
+function captureHirelings() {
+  const cards = document.querySelectorAll(".hireling-card");
+  const updated = [];
+
+  cards.forEach((card) => {
+    const id = card.getAttribute("data-hireling-id") || createId("hireling");
+    const nameEl = card.querySelector('[data-hireling-field="name"]');
+    const notesEl = card.querySelector('[data-hireling-field="notes"]');
+    const imgEl = card.querySelector(".hireling-card__image");
+
+    const skills = [];
+    card.querySelectorAll(".hireling-skill-checkbox:checked").forEach((cb) => {
+      skills.push(cb.getAttribute("data-hireling-skill"));
+    });
+
+    const existing = sheetState.hero.hirelings.find((h) => h.id === id);
+    const bonusVal = existing ? (parseInt(existing.bonus) || 0) : 0;
+    const imagePath = imgEl ? imgEl.getAttribute("src") : (existing?.image || "");
+
+    updated.push({
+      id,
+      name: nameEl?.value || "",
+      image: imagePath,
+      skills: skills.slice(0, MAX_HIRELING_SKILLS),
+      bonus: Math.min(Math.max(bonusVal, 0), MAX_HIRELING_BONUS),
+      notes: sanitizeRichText(normalizeRichText(notesEl?.innerHTML || "")),
+    });
+  });
+
+  sheetState.hero.hirelings = updated;
 }
 
 function renderSidebarResource() {
@@ -2794,6 +3049,7 @@ function captureAllSections() {
   captureCoreFields();
   captureCommonThings();
   captureBonuses();
+  captureHirelings();
   captureFeatures();
   captureActions();
 }
