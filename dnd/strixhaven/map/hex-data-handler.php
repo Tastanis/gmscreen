@@ -31,19 +31,20 @@ function getHexDataPath($q, $r) {
 }
 
 /**
- * Load hex data
+ * Get the lock file path for a hex (separate from data file to avoid corruption)
  */
-function loadHexData($q, $r) {
-    $filePath = getHexDataPath($q, $r);
-    if (file_exists($filePath)) {
-        $content = file_get_contents($filePath);
-        $data = json_decode($content, true);
-        if ($data) {
-            return $data;
-        }
+function getHexLockPath($q, $r) {
+    $lockDir = 'hex-data/locks';
+    if (!is_dir($lockDir)) {
+        mkdir($lockDir, 0755, true);
     }
-    
-    // Return default structure
+    return "$lockDir/hex-{$q}-{$r}.lock";
+}
+
+/**
+ * Get default hex data structure
+ */
+function getDefaultHexData() {
     return [
         'player' => [
             'title' => '',
@@ -64,7 +65,81 @@ function loadHexData($q, $r) {
 }
 
 /**
- * Save hex data
+ * Load hex data (for read-only use, e.g. 'load' action)
+ */
+function loadHexData($q, $r) {
+    $filePath = getHexDataPath($q, $r);
+    if (file_exists($filePath)) {
+        $content = file_get_contents($filePath);
+        $data = json_decode($content, true);
+        if ($data) {
+            return $data;
+        }
+    }
+    return getDefaultHexData();
+}
+
+/**
+ * Safely modify hex data with file locking.
+ * Locks, reads, calls $modifyFn to apply changes, then writes and unlocks.
+ * This prevents race conditions where two operations read stale data
+ * and one overwrites the other's changes.
+ *
+ * @param int $q Hex q coordinate
+ * @param int $r Hex r coordinate
+ * @param callable $modifyFn Function that receives hex data array and returns modified array
+ * @return array ['success' => bool, 'data' => array|null, 'error' => string|null]
+ */
+function lockedModifyHexData($q, $r, $modifyFn) {
+    $lockPath = getHexLockPath($q, $r);
+    $dataPath = getHexDataPath($q, $r);
+
+    $lockFp = fopen($lockPath, 'c');
+    if (!$lockFp) {
+        return ['success' => false, 'error' => 'Could not open lock file'];
+    }
+
+    // Block until we get an exclusive lock
+    if (!flock($lockFp, LOCK_EX)) {
+        fclose($lockFp);
+        return ['success' => false, 'error' => 'Could not acquire lock'];
+    }
+
+    try {
+        // Read current data while holding the lock
+        $hexData = getDefaultHexData();
+        if (file_exists($dataPath)) {
+            $content = file_get_contents($dataPath);
+            $decoded = json_decode($content, true);
+            if ($decoded) {
+                $hexData = $decoded;
+            }
+        }
+
+        // Apply the modification
+        $modified = $modifyFn($hexData);
+
+        // Write back while still holding the lock
+        $written = file_put_contents($dataPath, json_encode($modified, JSON_PRETTY_PRINT));
+
+        flock($lockFp, LOCK_UN);
+        fclose($lockFp);
+
+        if ($written === false) {
+            return ['success' => false, 'error' => 'Failed to write hex data'];
+        }
+
+        return ['success' => true, 'data' => $modified];
+    } catch (Exception $e) {
+        flock($lockFp, LOCK_UN);
+        fclose($lockFp);
+        return ['success' => false, 'error' => 'Error modifying hex data: ' . $e->getMessage()];
+    }
+}
+
+/**
+ * Save hex data (only used for operations that already hold their own lock,
+ * like reset_hex which deletes the file, or duplicate_hex)
  */
 function saveHexData($q, $r, $data) {
     $filePath = getHexDataPath($q, $r);
@@ -104,23 +179,27 @@ function handleImageUpload($q, $r, $section) {
     
     // Move uploaded file
     if (move_uploaded_file($file['tmp_name'], $filepath)) {
-        // Add to hex data
-        $hexData = loadHexData($q, $r);
-        $hexData[$section]['images'][] = [
+        // Add to hex data using locked modify to prevent race conditions
+        $imageEntry = [
             'filename' => $filename,
             'original_name' => $file['name'],
             'uploaded_by' => $user,
             'uploaded_at' => date('Y-m-d H:i:s')
         ];
-        
-        if (saveHexData($q, $r, $hexData)) {
+
+        $result = lockedModifyHexData($q, $r, function($hexData) use ($section, $imageEntry) {
+            $hexData[$section]['images'][] = $imageEntry;
+            return $hexData;
+        });
+
+        if ($result['success']) {
             return ['success' => true, 'filename' => $filename, 'filepath' => $filepath];
         } else {
             unlink($filepath); // Clean up file if save failed
             return ['success' => false, 'error' => 'Failed to save data'];
         }
     }
-    
+
     return ['success' => false, 'error' => 'Failed to move file'];
 }
 
@@ -145,41 +224,63 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         case 'save_notes':
             $section = $_POST['section'] ?? '';
             $notes = $_POST['notes'] ?? '';
-            
+
             // Check permissions
             if ($section === 'gm' && !$isGM) {
                 echo json_encode(['success' => false, 'error' => 'GM access required']);
                 break;
             }
-            
-            $hexData = loadHexData($q, $r);
-            $hexData[$section]['notes'] = $notes;
-            
-            if (saveHexData($q, $r, $hexData)) {
-                echo json_encode(['success' => true]);
-            } else {
-                echo json_encode(['success' => false, 'error' => 'Failed to save notes']);
-            }
+
+            $result = lockedModifyHexData($q, $r, function($hexData) use ($section, $notes) {
+                $hexData[$section]['notes'] = $notes;
+                return $hexData;
+            });
+            echo json_encode($result);
             break;
-            
+
         case 'save_title':
             $section = $_POST['section'] ?? '';
             $title = $_POST['title'] ?? '';
-            
+
             // Check permissions
             if ($section === 'gm' && !$isGM) {
                 echo json_encode(['success' => false, 'error' => 'GM access required']);
                 break;
             }
-            
-            $hexData = loadHexData($q, $r);
-            $hexData[$section]['title'] = $title;
-            
-            if (saveHexData($q, $r, $hexData)) {
-                echo json_encode(['success' => true]);
-            } else {
-                echo json_encode(['success' => false, 'error' => 'Failed to save title']);
-            }
+
+            $result = lockedModifyHexData($q, $r, function($hexData) use ($section, $title) {
+                $hexData[$section]['title'] = $title;
+                return $hexData;
+            });
+            echo json_encode($result);
+            break;
+
+        case 'save_all':
+            // Save title and notes for player (and gm if GM user) in a single locked operation.
+            // This replaces the old pattern of 4 separate save calls that could race with each other.
+            $playerTitle = $_POST['player_title'] ?? null;
+            $playerNotes = $_POST['player_notes'] ?? null;
+            $gmTitle = $_POST['gm_title'] ?? null;
+            $gmNotes = $_POST['gm_notes'] ?? null;
+
+            $result = lockedModifyHexData($q, $r, function($hexData) use ($isGM, $playerTitle, $playerNotes, $gmTitle, $gmNotes) {
+                if ($playerTitle !== null) {
+                    $hexData['player']['title'] = $playerTitle;
+                }
+                if ($playerNotes !== null) {
+                    $hexData['player']['notes'] = $playerNotes;
+                }
+                if ($isGM) {
+                    if ($gmTitle !== null) {
+                        $hexData['gm']['title'] = $gmTitle;
+                    }
+                    if ($gmNotes !== null) {
+                        $hexData['gm']['notes'] = $gmNotes;
+                    }
+                }
+                return $hexData;
+            });
+            echo json_encode($result);
             break;
             
         case 'upload_image':
@@ -194,51 +295,52 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                 break;
             }
 
-            $hexData = loadHexData($q, $r);
-            $gmImages = [];
-            if (isset($hexData['gm']['images']) && is_array($hexData['gm']['images'])) {
-                $gmImages = $hexData['gm']['images'];
-            }
-
-            if (count($gmImages) === 0) {
-                echo json_encode(['success' => false, 'error' => 'No GM images available to share.']);
-                break;
-            }
-
-            $playerImages = [];
-            if (isset($hexData['player']['images']) && is_array($hexData['player']['images'])) {
-                $playerImages = $hexData['player']['images'];
-            }
-
-            $existing = [];
-            foreach ($playerImages as $image) {
-                if (is_array($image) && isset($image['filename'])) {
-                    $existing[$image['filename']] = true;
-                }
-            }
-
             $sharedFiles = [];
-            foreach ($gmImages as $image) {
-                if (!is_array($image) || !isset($image['filename'])) {
-                    continue;
+            $result = lockedModifyHexData($q, $r, function($hexData) use (&$sharedFiles) {
+                $gmImages = [];
+                if (isset($hexData['gm']['images']) && is_array($hexData['gm']['images'])) {
+                    $gmImages = $hexData['gm']['images'];
                 }
-                $filename = $image['filename'];
-                if (isset($existing[$filename])) {
-                    continue;
+
+                if (count($gmImages) === 0) {
+                    return $hexData; // Nothing to share
                 }
-                $sharedImage = $image;
-                $sharedImage['shared_from'] = 'gm';
-                $playerImages[] = $sharedImage;
-                $existing[$filename] = true;
-                $sharedFiles[] = $filename;
-            }
 
-            $hexData['player']['images'] = $playerImages;
+                $playerImages = [];
+                if (isset($hexData['player']['images']) && is_array($hexData['player']['images'])) {
+                    $playerImages = $hexData['player']['images'];
+                }
 
-            if (saveHexData($q, $r, $hexData)) {
+                $existing = [];
+                foreach ($playerImages as $image) {
+                    if (is_array($image) && isset($image['filename'])) {
+                        $existing[$image['filename']] = true;
+                    }
+                }
+
+                foreach ($gmImages as $image) {
+                    if (!is_array($image) || !isset($image['filename'])) {
+                        continue;
+                    }
+                    $filename = $image['filename'];
+                    if (isset($existing[$filename])) {
+                        continue;
+                    }
+                    $sharedImage = $image;
+                    $sharedImage['shared_from'] = 'gm';
+                    $playerImages[] = $sharedImage;
+                    $existing[$filename] = true;
+                    $sharedFiles[] = $filename;
+                }
+
+                $hexData['player']['images'] = $playerImages;
+                return $hexData;
+            });
+
+            if ($result['success']) {
                 echo json_encode(['success' => true, 'shared' => $sharedFiles]);
             } else {
-                echo json_encode(['success' => false, 'error' => 'Failed to share GM images.']);
+                echo json_encode(['success' => false, 'error' => $result['error'] ?? 'Failed to share GM images.']);
             }
             break;
 
@@ -251,108 +353,110 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                 echo json_encode(['success' => false, 'error' => 'GM access required']);
                 break;
             }
-            
-            $hexData = loadHexData($q, $r);
-            $images = &$hexData[$section]['images'];
-            
-            // Find and remove image
-            for ($i = 0; $i < count($images); $i++) {
-                if ($images[$i]['filename'] === $filename) {
-                    // Delete file
-                    $filepath = "hex-images/" . $filename;
-                    if (file_exists($filepath)) {
-                        unlink($filepath);
-                    }
 
-                    // Remove from array
-                    array_splice($images, $i, 1);
-                    if ($section === 'gm' && isset($hexData['player']['images']) && is_array($hexData['player']['images'])) {
-                        $hexData['player']['images'] = array_values(array_filter(
-                            $hexData['player']['images'],
-                            function ($playerImage) use ($filename) {
-                                if (!is_array($playerImage)) {
-                                    return false;
-                                }
-                                if (!isset($playerImage['filename'])) {
+            $result = lockedModifyHexData($q, $r, function($hexData) use ($section, $filename) {
+                $images = $hexData[$section]['images'] ?? [];
+
+                // Find and remove image
+                for ($i = 0; $i < count($images); $i++) {
+                    if ($images[$i]['filename'] === $filename) {
+                        // Delete file
+                        $filepath = "hex-images/" . $filename;
+                        if (file_exists($filepath)) {
+                            unlink($filepath);
+                        }
+
+                        // Remove from array
+                        array_splice($images, $i, 1);
+                        $hexData[$section]['images'] = $images;
+
+                        // If deleting a GM image, also remove shared copies from player section
+                        if ($section === 'gm' && isset($hexData['player']['images']) && is_array($hexData['player']['images'])) {
+                            $hexData['player']['images'] = array_values(array_filter(
+                                $hexData['player']['images'],
+                                function ($playerImage) use ($filename) {
+                                    if (!is_array($playerImage)) {
+                                        return false;
+                                    }
+                                    if (!isset($playerImage['filename'])) {
+                                        return true;
+                                    }
+                                    if ($playerImage['filename'] !== $filename) {
+                                        return true;
+                                    }
+                                    if (isset($playerImage['shared_from']) && $playerImage['shared_from'] === 'gm') {
+                                        return false;
+                                    }
                                     return true;
                                 }
-                                if ($playerImage['filename'] !== $filename) {
-                                    return true;
-                                }
-                                if (isset($playerImage['shared_from']) && $playerImage['shared_from'] === 'gm') {
-                                    return false;
-                                }
-                                return true;
-                            }
-                        ));
+                            ));
+                        }
+                        break;
                     }
-                    break;
                 }
-            }
 
-            if (saveHexData($q, $r, $hexData)) {
-                echo json_encode(['success' => true]);
-            } else {
-                echo json_encode(['success' => false, 'error' => 'Failed to save data']);
-            }
+                return $hexData;
+            });
+            echo json_encode($result);
             break;
             
         case 'lock_edit':
             $section = $_POST['section'] ?? '';
-            
-            $hexData = loadHexData($q, $r);
-            
-            // Check if already locked by someone else
-            $currentTime = time();
-            $lockTimeout = 300; // 5 minutes
-            $existingLock = $hexData['editing'];
-            
-            if ($existingLock['user'] && $existingLock['user'] !== $user) {
-                $lockTime = strtotime($existingLock['timestamp']);
-                if ($currentTime - $lockTime < $lockTimeout) {
-                    echo json_encode(['success' => false, 'error' => 'Currently being edited by ' . $existingLock['user']]);
-                    break;
+            $lockError = null;
+
+            $result = lockedModifyHexData($q, $r, function($hexData) use ($user, $section, &$lockError) {
+                $currentTime = time();
+                $lockTimeout = 300; // 5 minutes
+                $existingLock = $hexData['editing'] ?? ['user' => '', 'timestamp' => '', 'section' => ''];
+
+                if ($existingLock['user'] && $existingLock['user'] !== $user) {
+                    $lockTime = strtotime($existingLock['timestamp']);
+                    if ($currentTime - $lockTime < $lockTimeout) {
+                        $lockError = 'Currently being edited by ' . $existingLock['user'];
+                        return $hexData; // Return unchanged
+                    }
                 }
-            }
-            
-            // Set lock
-            $hexData['editing'] = [
-                'user' => $user,
-                'timestamp' => date('Y-m-d H:i:s'),
-                'section' => $section
-            ];
-            
-            if (saveHexData($q, $r, $hexData)) {
-                echo json_encode(['success' => true]);
+
+                $hexData['editing'] = [
+                    'user' => $user,
+                    'timestamp' => date('Y-m-d H:i:s'),
+                    'section' => $section
+                ];
+                return $hexData;
+            });
+
+            if ($lockError) {
+                echo json_encode(['success' => false, 'error' => $lockError]);
             } else {
-                echo json_encode(['success' => false, 'error' => 'Failed to set lock']);
+                echo json_encode($result);
             }
             break;
-            
+
         case 'unlock_edit':
-            $hexData = loadHexData($q, $r);
-            
-            // Only allow unlocking if locked by current user or timeout
-            $currentTime = time();
-            $lockTimeout = 300; // 5 minutes
-            $existingLock = $hexData['editing'];
-            
-            if ($existingLock['user'] === $user || 
-                ($existingLock['timestamp'] && $currentTime - strtotime($existingLock['timestamp']) >= $lockTimeout)) {
-                
-                $hexData['editing'] = [
-                    'user' => '',
-                    'timestamp' => '',
-                    'section' => ''
-                ];
-                
-                if (saveHexData($q, $r, $hexData)) {
-                    echo json_encode(['success' => true]);
+            $unlockError = null;
+
+            $result = lockedModifyHexData($q, $r, function($hexData) use ($user, &$unlockError) {
+                $currentTime = time();
+                $lockTimeout = 300; // 5 minutes
+                $existingLock = $hexData['editing'] ?? ['user' => '', 'timestamp' => '', 'section' => ''];
+
+                if ($existingLock['user'] === $user ||
+                    ($existingLock['timestamp'] && $currentTime - strtotime($existingLock['timestamp']) >= $lockTimeout)) {
+                    $hexData['editing'] = [
+                        'user' => '',
+                        'timestamp' => '',
+                        'section' => ''
+                    ];
                 } else {
-                    echo json_encode(['success' => false, 'error' => 'Failed to unlock']);
+                    $unlockError = 'Cannot unlock - not your lock';
                 }
+                return $hexData;
+            });
+
+            if ($unlockError) {
+                echo json_encode(['success' => false, 'error' => $unlockError]);
             } else {
-                echo json_encode(['success' => false, 'error' => 'Cannot unlock - not your lock']);
+                echo json_encode($result);
             }
             break;
             
@@ -435,35 +539,45 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                 echo json_encode(['success' => false, 'error' => 'GM access required']);
                 break;
             }
-            
-            $hexData = loadHexData($q, $r);
-            
-            // Delete all associated image files
-            if (isset($hexData['player']['images'])) {
-                foreach ($hexData['player']['images'] as $image) {
-                    $filepath = "hex-images/" . $image['filename'];
-                    if (file_exists($filepath)) {
-                        unlink($filepath);
+
+            // Lock the hex before resetting to prevent concurrent modifications
+            $lockPath = getHexLockPath($q, $r);
+            $lockFp = fopen($lockPath, 'c');
+            if ($lockFp && flock($lockFp, LOCK_EX)) {
+                $hexData = loadHexData($q, $r);
+
+                // Delete all associated image files
+                if (isset($hexData['player']['images'])) {
+                    foreach ($hexData['player']['images'] as $image) {
+                        $filepath = "hex-images/" . $image['filename'];
+                        if (file_exists($filepath)) {
+                            unlink($filepath);
+                        }
                     }
                 }
-            }
-            
-            if (isset($hexData['gm']['images'])) {
-                foreach ($hexData['gm']['images'] as $image) {
-                    $filepath = "hex-images/" . $image['filename'];
-                    if (file_exists($filepath)) {
-                        unlink($filepath);
+
+                if (isset($hexData['gm']['images'])) {
+                    foreach ($hexData['gm']['images'] as $image) {
+                        $filepath = "hex-images/" . $image['filename'];
+                        if (file_exists($filepath)) {
+                            unlink($filepath);
+                        }
                     }
                 }
+
+                // Delete hex data file
+                $filePath = getHexDataPath($q, $r);
+                if (file_exists($filePath)) {
+                    unlink($filePath);
+                }
+
+                flock($lockFp, LOCK_UN);
+                fclose($lockFp);
+                echo json_encode(['success' => true]);
+            } else {
+                if ($lockFp) fclose($lockFp);
+                echo json_encode(['success' => false, 'error' => 'Could not acquire lock for reset']);
             }
-            
-            // Delete hex data file
-            $filePath = getHexDataPath($q, $r);
-            if (file_exists($filePath)) {
-                unlink($filePath);
-            }
-            
-            echo json_encode(['success' => true]);
             break;
             
         case 'duplicate_hex':
@@ -472,7 +586,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                 echo json_encode(['success' => false, 'error' => 'GM access required']);
                 break;
             }
-            
+
             $sourceQ = (int)($_POST['source_q'] ?? 0);
             $sourceR = (int)($_POST['source_r'] ?? 0);
             $copyPlayerNotes = ($_POST['copy_player_notes'] ?? 'true') === 'true';
@@ -482,24 +596,41 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
             $copyGMImages = ($_POST['copy_gm_images'] ?? 'true') === 'true';
             $copyGMData = ($_POST['copy_gm_data'] ?? 'true') === 'true';
 
-            // Load source hex data
+            // Lock source (read) then target (write) to prevent concurrent modifications.
+            // Always lock in coordinate order to prevent deadlocks.
+            $firstQ = $sourceQ; $firstR = $sourceR;
+            $secondQ = $q; $secondR = $r;
+            if ($sourceQ > $q || ($sourceQ === $q && $sourceR > $r)) {
+                $firstQ = $q; $firstR = $r;
+                $secondQ = $sourceQ; $secondR = $sourceR;
+            }
+
+            $lock1Path = getHexLockPath($firstQ, $firstR);
+            $lock2Path = getHexLockPath($secondQ, $secondR);
+            $lock1Fp = fopen($lock1Path, 'c');
+            $lock2Fp = fopen($lock2Path, 'c');
+
+            if (!$lock1Fp || !flock($lock1Fp, LOCK_EX)) {
+                if ($lock1Fp) fclose($lock1Fp);
+                if ($lock2Fp) fclose($lock2Fp);
+                echo json_encode(['success' => false, 'error' => 'Could not acquire lock']);
+                break;
+            }
+            if (!$lock2Fp || !flock($lock2Fp, LOCK_EX)) {
+                flock($lock1Fp, LOCK_UN); fclose($lock1Fp);
+                if ($lock2Fp) fclose($lock2Fp);
+                echo json_encode(['success' => false, 'error' => 'Could not acquire lock']);
+                break;
+            }
+
             $sourceData = loadHexData($sourceQ, $sourceR);
             $targetData = loadHexData($q, $r);
 
             if (!isset($targetData['player']) || !is_array($targetData['player'])) {
-                $targetData['player'] = [
-                    'title' => '',
-                    'notes' => '',
-                    'images' => []
-                ];
+                $targetData['player'] = ['title' => '', 'notes' => '', 'images' => []];
             }
-
             if (!isset($targetData['gm']) || !is_array($targetData['gm'])) {
-                $targetData['gm'] = [
-                    'title' => '',
-                    'notes' => '',
-                    'images' => []
-                ];
+                $targetData['gm'] = ['title' => '', 'notes' => '', 'images' => []];
             }
 
             // Copy player data if requested
@@ -535,10 +666,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
 
                     foreach ($existingPlayerImages as $image) {
                         $existingFilename = $image['filename'] ?? '';
-                        if (!$existingFilename) {
-                            continue;
-                        }
-
+                        if (!$existingFilename) continue;
                         $filepath = "hex-images/" . $existingFilename;
                         if (file_exists($filepath) && is_file($filepath)) {
                             unlink($filepath);
@@ -582,10 +710,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
 
                     foreach ($existingGMImages as $image) {
                         $existingFilename = $image['filename'] ?? '';
-                        if (!$existingFilename) {
-                            continue;
-                        }
-
+                        if (!$existingFilename) continue;
                         $filepath = "hex-images/" . $existingFilename;
                         if (file_exists($filepath) && is_file($filepath)) {
                             unlink($filepath);
@@ -595,11 +720,15 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                     $targetData['gm']['images'] = $copiedGMImages;
                 }
             }
-            
-            // Save target hex data
+
+            // Save target hex data while still holding locks
             if (saveHexData($q, $r, $targetData)) {
+                flock($lock1Fp, LOCK_UN); fclose($lock1Fp);
+                flock($lock2Fp, LOCK_UN); fclose($lock2Fp);
                 echo json_encode(['success' => true]);
             } else {
+                flock($lock1Fp, LOCK_UN); fclose($lock1Fp);
+                flock($lock2Fp, LOCK_UN); fclose($lock2Fp);
                 echo json_encode(['success' => false, 'error' => 'Failed to save duplicated data']);
             }
             break;

@@ -475,22 +475,43 @@ function updateEditLockStatus() {
  * Save hex data
  */
 async function saveHexData() {
-    // Save player notes and title
-    await saveNotes('player');
-    await saveTitle('player');
-    
-    // Save GM notes and title if GM
+    // Save everything in a single atomic request to prevent race conditions
+    const formData = new FormData();
+    formData.append('action', 'save_all');
+    formData.append('q', currentHex.q);
+    formData.append('r', currentHex.r);
+    formData.append('player_title', document.getElementById('player-title').value);
+    formData.append('player_notes', document.getElementById('player-notes').value);
+
     if (isGM) {
-        await saveNotes('gm');
-        await saveTitle('gm');
+        formData.append('gm_title', document.getElementById('gm-title').value);
+        formData.append('gm_notes', document.getElementById('gm-notes').value);
     }
-    
+
+    try {
+        const response = await fetch('hex-data-handler.php', {
+            method: 'POST',
+            body: formData
+        });
+
+        const result = await response.json();
+        if (!result.success) {
+            console.error('Failed to save hex data:', result.error);
+            alert('Failed to save hex data: ' + (result.error || 'Unknown error'));
+            return;
+        }
+    } catch (error) {
+        console.error('Error saving hex data:', error);
+        alert('Error saving hex data');
+        return;
+    }
+
     // Refresh hex visual indicators
     if (window.mapInterface && window.mapInterface.hexGrid) {
         window.mapInterface.hexGrid.refreshHexStatus();
         window.mapInterface.hexGrid.loadAllHexData(); // Refresh tooltip data
     }
-    
+
     alert('Hex data saved!');
 }
 
