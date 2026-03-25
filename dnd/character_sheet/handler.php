@@ -59,6 +59,7 @@ function getDefaultCharacterEntry() {
                 'recoveryValue' => '',
             ),
             'bonuses' => array(),
+            'hirelings' => array(),
         ),
         'sidebar' => array(
             'lists' => array(
@@ -221,6 +222,10 @@ function mergeCharacterDefaults($entry, $defaults) {
 
         if (isset($heroInput['bonuses']) && is_array($heroInput['bonuses'])) {
             $normalized['hero']['bonuses'] = $heroInput['bonuses'];
+        }
+
+        if (isset($heroInput['hirelings']) && is_array($heroInput['hirelings'])) {
+            $normalized['hero']['hirelings'] = $heroInput['hirelings'];
         }
     }
 

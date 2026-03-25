@@ -2547,6 +2547,324 @@ body.edit-mode .bonus-row__remove {
   margin-top: 4px;
 }
 
+/* ─── Hirelings Section ─── */
+
+.hirelings-section {
+  border: 1px solid var(--border);
+  background: var(--panel-alt);
+  border-radius: 4px;
+  padding: 6px;
+  margin-top: 6px;
+}
+
+.hirelings-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  padding: 4px 4px 8px;
+}
+
+.hirelings-title {
+  font-size: 16px;
+  font-weight: 800;
+  letter-spacing: 0.06em;
+  color: var(--text);
+  text-transform: uppercase;
+}
+
+.hirelings-body {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+
+.hirelings-empty {
+  padding: 8px 4px;
+  font-size: 13px;
+}
+
+.hireling-card {
+  background: linear-gradient(145deg, #e8ddd0 0%, #ddd1c0 60%, #d2c6b0 100%);
+  border-radius: 6px;
+  padding: 12px;
+  position: relative;
+  border: 2px solid;
+  border-top-color: #f0e8da;
+  border-left-color: #e0d6c2;
+  border-right-color: #b5a48a;
+  border-bottom-color: #aa9a80;
+  box-shadow:
+    2px 2px 0 #b5a48a,
+    3px 3px 0 #aa9a80,
+    3px 3px 6px rgba(0, 0, 0, 0.08);
+}
+
+.hireling-card::before {
+  content: '';
+  position: absolute;
+  top: 0;
+  left: 0;
+  right: 0;
+  height: 50%;
+  background: linear-gradient(180deg, rgba(255, 255, 255, 0.15) 0%, transparent 100%);
+  border-radius: 5px 5px 0 0;
+  pointer-events: none;
+}
+
+.hireling-card > * {
+  position: relative;
+  z-index: 1;
+}
+
+.hireling-card__top {
+  display: flex;
+  gap: 12px;
+  align-items: flex-start;
+}
+
+.hireling-card__image-area {
+  flex-shrink: 0;
+  width: 80px;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 4px;
+}
+
+.hireling-card__image {
+  width: 80px;
+  height: 80px;
+  object-fit: cover;
+  border-radius: 6px;
+  border: 2px solid #b5a48a;
+  box-shadow: 1px 1px 4px rgba(0, 0, 0, 0.15);
+}
+
+.hireling-card__image-placeholder {
+  width: 80px;
+  height: 80px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background: rgba(0, 0, 0, 0.06);
+  border-radius: 6px;
+  border: 2px dashed #b5a48a;
+  font-size: 11px;
+  color: #998877;
+}
+
+.hireling-card__upload-btn {
+  font-size: 11px;
+  cursor: pointer;
+  text-align: center;
+}
+
+.hireling-card__info {
+  flex: 1;
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+.hireling-card__name-row {
+  font-weight: 700;
+  font-size: 15px;
+}
+
+.hireling-card__name-display {
+  min-height: 1.4em;
+}
+
+.hireling-card__name-input {
+  width: 100%;
+  font-size: 14px;
+  font-weight: 700;
+  padding: 2px 6px;
+  border: 1px solid var(--border);
+  border-radius: 3px;
+  background: rgba(255, 255, 255, 0.5);
+}
+
+.hireling-card__bonus-row {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  font-size: 13px;
+}
+
+.hireling-card__bonus-label {
+  font-weight: 700;
+  text-transform: uppercase;
+  font-size: 11px;
+  letter-spacing: 0.05em;
+  color: var(--accent-strong);
+}
+
+.hireling-card__bonus-display {
+  font-weight: 800;
+  font-size: 16px;
+  color: #5a4a30;
+}
+
+.hireling-card__bonus-controls {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+}
+
+.hireling-card__bonus-value {
+  font-weight: 800;
+  font-size: 16px;
+  min-width: 28px;
+  text-align: center;
+  color: #5a4a30;
+}
+
+.hireling-bonus-step {
+  font-size: 10px;
+  padding: 2px 6px;
+  cursor: pointer;
+  border: 1px solid #b5a48a;
+  border-radius: 3px;
+  background: rgba(255, 255, 255, 0.4);
+  color: #5a4a30;
+}
+
+.hireling-bonus-step:hover {
+  background: rgba(255, 255, 255, 0.7);
+}
+
+.hireling-card__skills-display {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 4px;
+  align-items: center;
+}
+
+.hireling-card__skills-label {
+  font-weight: 700;
+  text-transform: uppercase;
+  font-size: 11px;
+  letter-spacing: 0.05em;
+  color: var(--accent-strong);
+  margin-right: 4px;
+}
+
+.hireling-skill-tags {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 3px;
+}
+
+.hireling-skill-tag {
+  display: inline-block;
+  background: rgba(90, 74, 48, 0.12);
+  color: #5a4a30;
+  font-size: 11px;
+  font-weight: 600;
+  padding: 2px 7px;
+  border-radius: 10px;
+  border: 1px solid rgba(90, 74, 48, 0.2);
+}
+
+.hireling-card__skills-picker {
+  margin-top: 8px;
+  padding-top: 8px;
+  border-top: 1px solid rgba(0, 0, 0, 0.08);
+}
+
+.hireling-skills-heading {
+  font-size: 11px;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+  color: var(--accent-strong);
+  margin-bottom: 6px;
+}
+
+.hireling-skills-grid {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 2px 8px;
+  max-height: 180px;
+  overflow-y: auto;
+}
+
+.hireling-skill-option {
+  display: flex;
+  align-items: center;
+  gap: 3px;
+  font-size: 11px;
+  cursor: pointer;
+  padding: 1px 0;
+  white-space: nowrap;
+}
+
+.hireling-skill-option--checked .hireling-skill-label {
+  font-weight: 700;
+  color: #5a4a30;
+}
+
+.hireling-skill-checkbox {
+  width: 13px;
+  height: 13px;
+  margin: 0;
+  cursor: pointer;
+}
+
+.hireling-skill-label {
+  color: #776655;
+}
+
+.hireling-skill-option input:disabled + .hireling-skill-label {
+  color: #bbb;
+  cursor: not-allowed;
+}
+
+.hireling-card__notes-section {
+  margin-top: 8px;
+  padding-top: 8px;
+  border-top: 1px solid rgba(0, 0, 0, 0.08);
+}
+
+.hireling-notes-label {
+  font-size: 11px;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+  color: var(--accent-strong);
+  margin-bottom: 4px;
+}
+
+.hireling-card__notes-display {
+  min-height: 1.2em;
+  font-size: 13px;
+}
+
+.hireling-card__notes-section .rich-text-editor {
+  min-height: 40px;
+  font-size: 13px;
+}
+
+.hireling-card__remove {
+  position: absolute;
+  top: 6px;
+  right: 6px;
+  z-index: 2;
+}
+
+/* In edit mode, show edit fields and hide display values for hirelings */
+body:not(.edit-mode) .hireling-card__name-input,
+body:not(.edit-mode) .hireling-card__bonus-controls {
+  display: none;
+}
+
+body.edit-mode .hireling-card__name-display,
+body.edit-mode .hireling-card__bonus-display {
+  display: none;
+}
+
 @media (max-width: 1100px) {
   .app-shell {
     grid-template-columns: 1fr;
