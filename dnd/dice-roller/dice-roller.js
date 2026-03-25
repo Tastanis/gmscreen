@@ -45,7 +45,7 @@ class DashboardDiceRoller {
             mode: 'inactive',
             selectedIndex: null,
             selectedName: '',
-            manualActive: false
+            manualActive: false // legacy, no longer toggled
         };
 
         this.lastPosition = null;
@@ -643,28 +643,20 @@ class DashboardDiceRoller {
         const manualRow = document.createElement('div');
         manualRow.className = 'dice-project-manual';
 
-        const manualBtn = document.createElement('button');
-        manualBtn.type = 'button';
-        manualBtn.className = 'dice-project-manual-btn';
-        manualBtn.textContent = 'Manual Result';
-        manualBtn.setAttribute('aria-pressed', 'false');
-        manualBtn.addEventListener('click', () => this.toggleProjectManual());
-        manualRow.appendChild(manualBtn);
-        this.projectManualButton = manualBtn;
+        const manualLabel = document.createElement('span');
+        manualLabel.className = 'dice-project-manual-label';
+        manualLabel.textContent = 'Manual Result';
+        manualRow.appendChild(manualLabel);
 
         const manualInput = document.createElement('input');
         manualInput.type = 'number';
         manualInput.className = 'dice-project-manual-input';
         manualInput.placeholder = 'Enter a result';
         manualInput.addEventListener('input', () => {
-            this.updateProjectStatusMessage();
             this.updateProjectRollButtonState();
         });
         manualRow.appendChild(manualInput);
         this.projectManualInput = manualInput;
-        if (this.projectManualInput) {
-            this.projectManualInput.disabled = true;
-        }
 
         container.appendChild(manualRow);
 
@@ -686,9 +678,7 @@ class DashboardDiceRoller {
         clearBtn.textContent = 'Clear';
         clearBtn.addEventListener('click', () => {
             this.clearQueue();
-            if (!this.projectState.manualActive) {
-                this.updateProjectStatusMessage('Add dice for the project roll.');
-            }
+            this.updateProjectStatusMessage('Add dice for the project roll.');
         });
         actions.appendChild(clearBtn);
 
@@ -817,7 +807,7 @@ class DashboardDiceRoller {
             this.projectBaseQueue = [];
             this.projectExtraQueue = [];
             this.projectRetainerQueue = [];
-            this.disableProjectManualEntry();
+            this.clearProjectManualInput();
             this.updateProjectStatusMessage('');
             this.hideProjectTypeDialog();
         }
@@ -840,8 +830,7 @@ class DashboardDiceRoller {
         this.projectExtraQueue = [];
         this.projectRetainerQueue = [];
         this.clearQueue();
-        this.projectState.manualActive = false;
-        this.disableProjectManualEntry();
+        this.clearProjectManualInput();
         this.setProjectMode('selecting');
         document.addEventListener('click', this.handleProjectSelection, true);
     }
@@ -855,8 +844,7 @@ class DashboardDiceRoller {
         this.projectExtraQueue = [];
         this.projectRetainerQueue = [];
         this.clearQueue();
-        this.projectState.manualActive = false;
-        this.disableProjectManualEntry();
+        this.clearProjectManualInput();
         this.applyProjectSelection(index, name);
     }
 
@@ -868,7 +856,7 @@ class DashboardDiceRoller {
         this.projectBaseQueue = [];
         this.projectExtraQueue = [];
         this.projectRetainerQueue = [];
-        this.disableProjectManualEntry();
+        this.clearProjectManualInput();
         this.updateProjectStatusMessage('Pick a project to continue.');
         this.setProjectMode('selecting');
         document.addEventListener('click', this.handleProjectSelection, true);
@@ -923,7 +911,7 @@ class DashboardDiceRoller {
         }
 
         this.clearQueue();
-        this.disableProjectManualEntry();
+        this.clearProjectManualInput();
         this.projectState.manualActive = false;
 
         if (this.dayCounterValue === 0) {
@@ -974,58 +962,10 @@ class DashboardDiceRoller {
         element.addEventListener('animationend', removeClass, { once: true });
     }
 
-    toggleProjectManual() {
-        if (this.projectState.mode !== 'ready') {
-            return;
-        }
-
-        const nextState = !this.projectState.manualActive;
-        this.projectState.manualActive = nextState;
-
-        if (this.projectManualButton) {
-            this.projectManualButton.setAttribute('aria-pressed', nextState ? 'true' : 'false');
-            this.projectManualButton.classList.toggle('dice-project-manual-btn--active', nextState);
-            this.projectManualButton.textContent = nextState ? 'Manual Result On' : 'Manual Result';
-        }
-
-        if (this.projectManualInput) {
-            this.projectManualInput.disabled = !nextState;
-            if (!nextState) {
-                this.projectManualInput.value = '';
-            } else {
-                this.projectManualInput.focus();
-            }
-        }
-
-        if (nextState) {
-            this.clearQueue();
-            this.updateProjectStatusMessage('Enter the manual result you want to submit.');
-        } else {
-            this.applyProjectBaseQueue(true);
-            this.updateProjectStatusMessage('Add dice for the project roll.');
-        }
-
-        this.updateProjectRollButtonState();
-    }
-
-    disableProjectManualEntry() {
-        if (!this.projectState.manualActive) {
-            return;
-        }
-
-        this.projectState.manualActive = false;
-
-        if (this.projectManualButton) {
-            this.projectManualButton.setAttribute('aria-pressed', 'false');
-            this.projectManualButton.classList.remove('dice-project-manual-btn--active');
-            this.projectManualButton.textContent = 'Manual Result';
-        }
-
+    clearProjectManualInput() {
         if (this.projectManualInput) {
             this.projectManualInput.value = '';
-            this.projectManualInput.disabled = true;
         }
-
         this.updateProjectRollButtonState();
     }
 
@@ -1040,7 +980,6 @@ class DashboardDiceRoller {
             return;
         }
 
-        this.disableProjectManualEntry();
         this.addToQueue(diceNotation);
     }
 
@@ -1054,13 +993,8 @@ class DashboardDiceRoller {
         const projectName = this.projectState.selectedName || `Project ${typeof projectIndex === 'number' ? projectIndex + 1 : ''}`;
         const characterId = typeof window.currentCharacter === 'string' ? window.currentCharacter : '';
 
-        if (this.projectState.manualActive) {
-            const manualValueRaw = this.projectManualInput ? this.projectManualInput.value.trim() : '';
-            if (manualValueRaw === '') {
-                this.updateProjectStatusMessage('Enter the result value you want to submit.');
-                return;
-            }
-
+        const manualValueRaw = this.projectManualInput ? this.projectManualInput.value.trim() : '';
+        if (manualValueRaw !== '') {
             const manualValue = Number(manualValueRaw);
             if (!Number.isFinite(manualValue)) {
                 this.updateProjectStatusMessage('Please enter a valid number for the manual result.');
@@ -1087,6 +1021,7 @@ class DashboardDiceRoller {
                 status: 'pending'
             });
             this.updateProjectStatusMessage('Manual result submitted to chat.');
+            this.projectManualInput.value = '';
             this.currentRollQueue = [];
             this.updateQueueDisplay();
             this.setProjectMode('inactive');
@@ -1126,8 +1061,6 @@ class DashboardDiceRoller {
         if (this.projectState.mode === 'selecting') {
             return;
         }
-
-        this.disableProjectManualEntry();
 
         if (this.projectState.mode === 'ready' && this.projectBaseQueue.length > 0) {
             this.projectExtraQueue.push(item);
@@ -1172,7 +1105,7 @@ class DashboardDiceRoller {
     }
 
     clearQueue() {
-        if (this.projectState.mode === 'ready' && this.projectBaseQueue.length > 0 && !this.projectState.manualActive) {
+        if (this.projectState.mode === 'ready' && this.projectBaseQueue.length > 0) {
             if (this.projectExtraQueue.length > 0) {
                 this.projectExtraQueue = [];
                 this.currentRollQueue = [...this.projectBaseQueue, ...this.projectRetainerQueue];
@@ -1197,8 +1130,7 @@ class DashboardDiceRoller {
             return;
         }
 
-        const manualReady = this.projectState.manualActive
-            && this.projectManualInput
+        const manualReady = this.projectManualInput
             && this.projectManualInput.value.trim() !== '';
 
         this.projectReadyRollButton.classList.toggle('dice-project-roll-btn--manual-ready', manualReady);
