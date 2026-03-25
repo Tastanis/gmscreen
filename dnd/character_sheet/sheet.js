@@ -2106,7 +2106,7 @@ function renderActionSection(type, containerId) {
     <div class="card-grid action-grid">
       ${actions
         .map(
-          (action) => {
+          (action, index) => {
             const rangeValue = (action.range || "").trim();
             const targetValue = (action.target || "").trim();
             const triggerValue = (action.trigger || "").trim();
@@ -2179,6 +2179,22 @@ function renderActionSection(type, containerId) {
                   <input class="edit-field" type="text" data-field="tags" value="${(action.tags || []).join(", ")}" placeholder="Tags" />
                 </div>
                 <span class="chat-dot-wrap"><button class="chat-dot" type="button" aria-label="Post to chat" data-chat-type="action" data-chat-id="${action.id}" data-chat-action-type="${type}"></button></span>
+                <button
+                  class="icon-btn edit-only"
+                  data-move-action="up"
+                  data-action-id="${action.id}"
+                  data-action-type="${type}"
+                  aria-label="Move action up"
+                  ${index === 0 ? "disabled" : ""}
+                >▲</button>
+                <button
+                  class="icon-btn edit-only"
+                  data-move-action="down"
+                  data-action-id="${action.id}"
+                  data-action-type="${type}"
+                  aria-label="Move action down"
+                  ${index === actions.length - 1 ? "disabled" : ""}
+                >▼</button>
                 <button class="icon-btn edit-only" data-remove-action="${action.id}" aria-label="Remove action">✕</button>
               </header>
               <div class="action-label display-value action-collapsible">${action.actionLabel || "Action"}</div>
@@ -2229,6 +2245,7 @@ function renderActionSection(type, containerId) {
 
   bindActionAdds();
   bindActionRemovals();
+  bindActionMoves();
   bindActionToggles();
   bindTestAdds();
   bindTestRemovals();
@@ -2430,6 +2447,35 @@ function bindFeatureMoves() {
       [updated[index], updated[swapIndex]] = [updated[swapIndex], updated[index]];
       sheetState.features = updated;
       renderFeatures();
+      queueAutoSave();
+    });
+  });
+}
+
+function bindActionMoves() {
+  document.querySelectorAll("[data-move-action]").forEach((btn) => {
+    btn.addEventListener("click", () => {
+      const id = btn.getAttribute("data-action-id");
+      const direction = btn.getAttribute("data-move-action");
+      const type = btn.getAttribute("data-action-type");
+      if (!id || !direction || !type) return;
+      captureActions();
+      const list = sheetState.actions[type];
+      if (!list) return;
+      const index = list.findIndex((a) => a.id === id);
+      if (index === -1) return;
+      const swapIndex = direction === "up" ? index - 1 : index + 1;
+      if (swapIndex < 0 || swapIndex >= list.length) return;
+      const updated = [...list];
+      [updated[index], updated[swapIndex]] = [updated[swapIndex], updated[index]];
+      sheetState.actions[type] = updated;
+      const containerMap = {
+        mains: "mains-pane",
+        maneuvers: "maneuvers-pane",
+        triggers: "triggers-pane",
+        freeStrikes: "free-strikes-pane",
+      };
+      renderActionSection(type, containerMap[type]);
       queueAutoSave();
     });
   });
