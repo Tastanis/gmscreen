@@ -492,6 +492,41 @@ class DashboardDiceRoller {
 
         container.appendChild(screen);
 
+        // ── Roll / Clear / Advantage row (right under the screen) ──
+        const actionRow = document.createElement('div');
+        actionRow.className = 'dice-actions';
+
+        const controls = document.createElement('div');
+        controls.className = 'dice-actions__controls';
+
+        const rollBtn = document.createElement('button');
+        rollBtn.type = 'button';
+        rollBtn.className = 'dice-roll-btn';
+        rollBtn.textContent = 'Roll';
+        rollBtn.addEventListener('click', () => this.calculateRoll());
+        controls.appendChild(rollBtn);
+        this.rollButton = rollBtn;
+
+        const clearBtn = document.createElement('button');
+        clearBtn.type = 'button';
+        clearBtn.className = 'dice-clear-btn';
+        clearBtn.textContent = 'Clear';
+        clearBtn.addEventListener('click', () => this.clearQueue());
+        controls.appendChild(clearBtn);
+        this.clearButton = clearBtn;
+
+        const advantageToggle = document.createElement('button');
+        advantageToggle.type = 'button';
+        advantageToggle.className = 'dice-advantage-toggle';
+        advantageToggle.textContent = 'Advantage: Off';
+        advantageToggle.setAttribute('aria-pressed', 'false');
+        advantageToggle.addEventListener('click', () => this.toggleAdvantage());
+        controls.appendChild(advantageToggle);
+        this.advantageToggleButtons.push(advantageToggle);
+
+        actionRow.appendChild(controls);
+        container.appendChild(actionRow);
+
         // ── Power Roll (main button) ──
         const powerRow = document.createElement('div');
         powerRow.className = 'dice-row dice-row--quick dice-row--quick-primary';
@@ -531,41 +566,6 @@ class DashboardDiceRoller {
         container.appendChild(diceRow);
 
         container.appendChild(this.createDivider());
-
-        // ── Roll / Clear / Advantage row ──
-        const actionRow = document.createElement('div');
-        actionRow.className = 'dice-actions';
-
-        const controls = document.createElement('div');
-        controls.className = 'dice-actions__controls';
-
-        const rollBtn = document.createElement('button');
-        rollBtn.type = 'button';
-        rollBtn.className = 'dice-roll-btn';
-        rollBtn.textContent = 'Roll';
-        rollBtn.addEventListener('click', () => this.calculateRoll());
-        controls.appendChild(rollBtn);
-        this.rollButton = rollBtn;
-
-        const clearBtn = document.createElement('button');
-        clearBtn.type = 'button';
-        clearBtn.className = 'dice-clear-btn';
-        clearBtn.textContent = 'Clear';
-        clearBtn.addEventListener('click', () => this.clearQueue());
-        controls.appendChild(clearBtn);
-        this.clearButton = clearBtn;
-
-        const advantageToggle = document.createElement('button');
-        advantageToggle.type = 'button';
-        advantageToggle.className = 'dice-advantage-toggle';
-        advantageToggle.textContent = 'Advantage: Off';
-        advantageToggle.setAttribute('aria-pressed', 'false');
-        advantageToggle.addEventListener('click', () => this.toggleAdvantage());
-        controls.appendChild(advantageToggle);
-        this.advantageToggleButtons.push(advantageToggle);
-
-        actionRow.appendChild(controls);
-        container.appendChild(actionRow);
 
         // ── Project section (bottom) ──
         const projectSection = document.createElement('div');
