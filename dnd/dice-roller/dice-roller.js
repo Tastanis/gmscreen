@@ -627,6 +627,63 @@ class DashboardDiceRoller {
         const container = document.createElement('div');
         container.className = 'dice-view dice-view--project-ready';
 
+        // ── Calculator Screen (result + queue at top) ──
+        const screen = document.createElement('div');
+        screen.className = 'dice-result-screen';
+
+        const screenQueueDisplay = document.createElement('div');
+        screenQueueDisplay.className = 'dice-queue-display';
+        screen.appendChild(screenQueueDisplay);
+        this.queueDisplays.push(screenQueueDisplay);
+        this.projectQueueDisplay = screenQueueDisplay;
+
+        const screenResultTotal = document.createElement('div');
+        screenResultTotal.className = 'dice-result-total';
+        const screenResultDetail = document.createElement('div');
+        screenResultDetail.className = 'dice-result-detail';
+        screen.appendChild(screenResultTotal);
+        screen.appendChild(screenResultDetail);
+        this.resultDisplays.push({ total: screenResultTotal, detail: screenResultDetail });
+
+        container.appendChild(screen);
+
+        // ── Roll / Clear / Advantage row (right under the screen) ──
+        const actionRow = document.createElement('div');
+        actionRow.className = 'dice-actions';
+
+        const actionControls = document.createElement('div');
+        actionControls.className = 'dice-actions__controls';
+
+        const rollBtn2 = document.createElement('button');
+        rollBtn2.type = 'button';
+        rollBtn2.className = 'dice-project-roll-btn';
+        rollBtn2.textContent = 'Roll Project';
+        rollBtn2.addEventListener('click', () => this.completeProjectRoll());
+        actionControls.appendChild(rollBtn2);
+        this.projectReadyRollButton = rollBtn2;
+
+        const clearBtn2 = document.createElement('button');
+        clearBtn2.type = 'button';
+        clearBtn2.className = 'dice-clear-btn';
+        clearBtn2.textContent = 'Clear';
+        clearBtn2.addEventListener('click', () => {
+            this.clearQueue();
+            this.updateProjectStatusMessage('Add dice for the project roll.');
+        });
+        actionControls.appendChild(clearBtn2);
+
+        const advantageToggle2 = document.createElement('button');
+        advantageToggle2.type = 'button';
+        advantageToggle2.className = 'dice-advantage-toggle dice-advantage-toggle--project';
+        advantageToggle2.textContent = 'Advantage: Off';
+        advantageToggle2.setAttribute('aria-pressed', 'false');
+        advantageToggle2.addEventListener('click', () => this.toggleAdvantage());
+        actionControls.appendChild(advantageToggle2);
+        this.advantageToggleButtons.push(advantageToggle2);
+
+        actionRow.appendChild(actionControls);
+        container.appendChild(actionRow);
+
         const projectPowerRow = document.createElement('div');
         projectPowerRow.className = 'dice-row dice-row--quick dice-row--quick-primary';
 
@@ -675,68 +732,7 @@ class DashboardDiceRoller {
 
         container.appendChild(manualRow);
 
-        const actions = document.createElement('div');
-        actions.className = 'dice-project-actions';
-
-        const rollBtn = document.createElement('button');
-        rollBtn.type = 'button';
-        rollBtn.className = 'dice-project-roll-btn';
-        rollBtn.textContent = 'Roll Project';
-        rollBtn.addEventListener('click', () => this.completeProjectRoll());
-        actions.appendChild(rollBtn);
-        this.projectReadyRollButton = rollBtn;
         this.updateProjectRollButtonState();
-
-        const clearBtn = document.createElement('button');
-        clearBtn.type = 'button';
-        clearBtn.className = 'dice-clear-btn';
-        clearBtn.textContent = 'Clear';
-        clearBtn.addEventListener('click', () => {
-            this.clearQueue();
-            this.updateProjectStatusMessage('Add dice for the project roll.');
-        });
-        actions.appendChild(clearBtn);
-
-        const advantageToggle = document.createElement('button');
-        advantageToggle.type = 'button';
-        advantageToggle.className = 'dice-advantage-toggle dice-advantage-toggle--project';
-        advantageToggle.textContent = 'Advantage: Off';
-        advantageToggle.setAttribute('aria-pressed', 'false');
-        advantageToggle.addEventListener('click', () => this.toggleAdvantage());
-        actions.appendChild(advantageToggle);
-        this.advantageToggleButtons.push(advantageToggle);
-
-        container.appendChild(actions);
-
-        const summary = document.createElement('div');
-        summary.className = 'dice-project-summary';
-
-        const queueSection = document.createElement('div');
-        queueSection.className = 'dice-queue-section dice-queue-section--project';
-        const queueLabel = document.createElement('div');
-        queueLabel.className = 'dice-queue-label';
-        queueLabel.textContent = 'Project Roll';
-        const queueDisplay = document.createElement('div');
-        queueDisplay.className = 'dice-queue-display';
-        queueSection.appendChild(queueLabel);
-        queueSection.appendChild(queueDisplay);
-        summary.appendChild(queueSection);
-        this.queueDisplays.push(queueDisplay);
-        this.projectQueueDisplay = queueDisplay;
-
-        const resultContainer = document.createElement('div');
-        resultContainer.className = 'dice-result dice-result--project';
-        const resultTotal = document.createElement('div');
-        resultTotal.className = 'dice-result-total';
-        const resultDetail = document.createElement('div');
-        resultDetail.className = 'dice-result-detail';
-        resultContainer.appendChild(resultTotal);
-        resultContainer.appendChild(resultDetail);
-        summary.appendChild(resultContainer);
-        this.resultDisplays.push({ total: resultTotal, detail: resultDetail });
-        this.resultContainers.push(resultContainer);
-
-        container.appendChild(summary);
 
         const status = document.createElement('div');
         status.className = 'dice-project-status';
