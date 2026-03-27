@@ -1348,87 +1348,111 @@ class DiceRoller {
     createExpandedContent() {
         this.expandedFrame = document.createElement('div');
         this.expandedFrame.className = 'dice-content';
-        
-        // First row of dice buttons
-        const firstRow = document.createElement('div');
-        firstRow.className = 'dice-buttons-row';
-        
-        const diceRow1 = [
+
+        // ── Calculator Screen (result + queue at top) ──
+        const screen = document.createElement('div');
+        screen.className = 'dice-result-screen';
+
+        this.queueDisplay = document.createElement('div');
+        this.queueDisplay.className = 'dice-screen-queue empty';
+        this.queueDisplay.textContent = '(nothing queued)';
+        screen.appendChild(this.queueDisplay);
+
+        this.resultTotal = document.createElement('div');
+        this.resultTotal.className = 'dice-screen-total';
+        this.resultTotal.textContent = '-';
+        screen.appendChild(this.resultTotal);
+
+        this.resultDetail = document.createElement('div');
+        this.resultDetail.className = 'dice-screen-detail';
+        screen.appendChild(this.resultDetail);
+
+        this.expandedFrame.appendChild(screen);
+
+        // ── Roll / Clear row (right under the screen) ──
+        const actionsDiv = document.createElement('div');
+        actionsDiv.className = 'dice-actions';
+
+        const rollBtn = document.createElement('button');
+        rollBtn.className = 'dice-roll-btn';
+        rollBtn.textContent = 'Roll';
+        rollBtn.addEventListener('click', () => this.calculateRoll());
+
+        const clearBtn = document.createElement('button');
+        clearBtn.className = 'dice-clear-btn';
+        clearBtn.textContent = 'Clear';
+        clearBtn.addEventListener('click', () => this.clearQueue());
+
+        actionsDiv.appendChild(rollBtn);
+        actionsDiv.appendChild(clearBtn);
+        this.expandedFrame.appendChild(actionsDiv);
+
+        // ── Power Roll (main button) ──
+        const powerRow = document.createElement('div');
+        powerRow.className = 'dice-buttons-row dice-buttons-row--full';
+        const powerBtn = document.createElement('button');
+        powerBtn.className = 'dice-btn dice-btn--power';
+        powerBtn.textContent = 'Power Roll';
+        powerBtn.addEventListener('click', () => this.addToQueue('2d10'));
+        powerRow.appendChild(powerBtn);
+        this.expandedFrame.appendChild(powerRow);
+
+        // ── Edge / Bane row ──
+        const edgeBaneRow = document.createElement('div');
+        edgeBaneRow.className = 'dice-buttons-row dice-buttons-row--half';
+
+        const edgeBtn = document.createElement('button');
+        edgeBtn.className = 'dice-btn dice-btn--edge';
+        edgeBtn.textContent = 'Edge (+2)';
+        edgeBtn.addEventListener('click', () => this.addToQueue('+2'));
+        edgeBaneRow.appendChild(edgeBtn);
+
+        const baneBtn = document.createElement('button');
+        baneBtn.className = 'dice-btn dice-btn--bane';
+        baneBtn.textContent = 'Bane (-2)';
+        baneBtn.addEventListener('click', () => this.addToQueue('-2'));
+        edgeBaneRow.appendChild(baneBtn);
+
+        this.expandedFrame.appendChild(edgeBaneRow);
+
+        // ── Divider ──
+        const divider = document.createElement('div');
+        divider.className = 'dice-divider';
+        this.expandedFrame.appendChild(divider);
+
+        // ── Modifier buttons ──
+        const modRow = document.createElement('div');
+        modRow.className = 'dice-buttons-row dice-buttons-row--thirds';
+        ['-1', '+1', '+2'].forEach(value => {
+            const btn = document.createElement('button');
+            btn.className = 'dice-btn';
+            btn.textContent = value;
+            btn.addEventListener('click', () => this.addToQueue(value));
+            modRow.appendChild(btn);
+        });
+        this.expandedFrame.appendChild(modRow);
+
+        // ── Dice grid ──
+        const diceRow = document.createElement('div');
+        diceRow.className = 'dice-buttons-row dice-buttons-row--grid';
+
+        [
             { text: 'D2', dice: '1d2' },
             { text: 'D4', dice: '1d4' },
             { text: 'D6', dice: '1d6' },
             { text: 'D8', dice: '1d8' },
             { text: 'D10', dice: '1d10' },
             { text: 'D20', dice: '1d20' }
-        ];
-        
-        diceRow1.forEach(({ text, dice }) => {
+        ].forEach(({ text, dice }) => {
             const btn = document.createElement('button');
             btn.className = 'dice-btn';
             btn.textContent = text;
             btn.addEventListener('click', () => this.addToQueue(dice));
-            firstRow.appendChild(btn);
+            diceRow.appendChild(btn);
         });
-        
-        // Second row - special buttons
-        const secondRow = document.createElement('div');
-        secondRow.className = 'dice-buttons-row';
-        
-        const specialButtons = [
-            { text: 'Power Roll', value: '2d10' },
-            { text: 'Edge', value: '+2' },
-            { text: 'Bane', value: '-2' },
-            { text: '+1', value: '+1' }
-        ];
-        
-        specialButtons.forEach(({ text, value }) => {
-            const btn = document.createElement('button');
-            btn.className = 'dice-btn special';
-            btn.textContent = text;
-            btn.addEventListener('click', () => this.addToQueue(value));
-            secondRow.appendChild(btn);
-        });
-        
-        // Queue display
-        const queueLabel = document.createElement('div');
-        queueLabel.textContent = 'Current Roll:';
-        queueLabel.style.marginBottom = '5px';
-        queueLabel.style.fontSize = '14px';
-        queueLabel.style.fontWeight = 'bold';
-        
-        this.queueDisplay = document.createElement('div');
-        this.queueDisplay.className = 'dice-queue empty';
-        this.queueDisplay.textContent = '(nothing queued)';
-        
-        // Action buttons
-        const actionsDiv = document.createElement('div');
-        actionsDiv.className = 'dice-actions';
-        
-        const rollBtn = document.createElement('button');
-        rollBtn.className = 'dice-roll-btn';
-        rollBtn.textContent = 'ROLL';
-        rollBtn.addEventListener('click', () => this.calculateRoll());
-        
-        const clearBtn = document.createElement('button');
-        clearBtn.className = 'dice-clear-btn';
-        clearBtn.textContent = 'Clear';
-        clearBtn.addEventListener('click', () => this.clearQueue());
-        
-        this.resultLabel = document.createElement('div');
-        this.resultLabel.className = 'dice-result';
-        this.resultLabel.textContent = 'Result: -';
-        
-        actionsDiv.appendChild(rollBtn);
-        actionsDiv.appendChild(clearBtn);
-        actionsDiv.appendChild(this.resultLabel);
-        
-        // Assemble expanded content
-        this.expandedFrame.appendChild(firstRow);
-        this.expandedFrame.appendChild(secondRow);
-        this.expandedFrame.appendChild(queueLabel);
-        this.expandedFrame.appendChild(this.queueDisplay);
-        this.expandedFrame.appendChild(actionsDiv);
-        
+
+        this.expandedFrame.appendChild(diceRow);
+
         this.diceFrame.appendChild(this.expandedFrame);
     }
     
@@ -1476,19 +1500,21 @@ class DiceRoller {
     clearQueue() {
         this.currentRollQueue = [];
         this.updateQueueDisplay();
-        this.resultLabel.textContent = 'Result: -';
+        this.resultTotal.textContent = '-';
+        this.resultDetail.textContent = '';
     }
     
     calculateRoll() {
         if (this.currentRollQueue.length === 0) {
-            this.resultLabel.textContent = 'Nothing to roll!';
+            this.resultTotal.textContent = '-';
+            this.resultDetail.textContent = 'Add dice to the queue before rolling.';
             return;
         }
-        
+
         try {
             let totalResult = 0;
             let rollDetails = [];
-            
+
             for (const item of this.currentRollQueue) {
                 if (item.startsWith('+')) {
                     const modifier = parseInt(item.substring(1));
@@ -1504,15 +1530,17 @@ class DiceRoller {
                     rollDetails.push(detail);
                 }
             }
-            
-            this.resultLabel.textContent = `Result: ${totalResult}`;
-            
+
+            this.resultTotal.textContent = totalResult;
+            this.resultDetail.textContent = rollDetails.join(' | ');
+
             // Clear queue
             this.currentRollQueue = [];
             this.updateQueueDisplay();
-            
+
         } catch (error) {
-            this.resultLabel.textContent = `Error: ${error.message}`;
+            this.resultTotal.textContent = '!';
+            this.resultDetail.textContent = error.message;
         }
     }
     

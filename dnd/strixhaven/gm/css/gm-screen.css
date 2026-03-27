@@ -1227,20 +1227,20 @@ body {
     bottom: 20px;
     left: 50%;
     transform: translateX(-50%);
-    background: rgba(255, 255, 255, 0.95);
-    border: 2px solid rgba(103, 126, 234, 0.3);
-    border-radius: 15px;
-    padding: 15px;
-    color: #2c3e50;
-    backdrop-filter: blur(10px);
+    background: linear-gradient(135deg, #f2e8dc 0%, #e3d3c0 100%);
+    border: 1px solid #c2ad90;
+    border-radius: 8px;
+    padding: 10px;
+    color: #2f2417;
     z-index: 100;
-    min-width: 320px;
-    box-shadow: 0 8px 25px rgba(0, 0, 0, 0.2);
+    width: 340px;
+    box-shadow: 0 8px 24px rgba(47, 36, 23, 0.25);
     transition: all 0.3s ease;
 }
 
 .dice-roller.collapsed {
     padding: 10px 20px;
+    width: auto;
     min-width: auto;
 }
 
@@ -1248,142 +1248,253 @@ body {
     display: flex;
     justify-content: space-between;
     align-items: center;
-    margin-bottom: 10px;
+    margin-bottom: 8px;
+    padding-bottom: 6px;
+    border-bottom: 1px solid #c2ad90;
+    cursor: grab;
+    user-select: none;
 }
 
 .dice-roller-title {
-    font-size: 16px;
-    font-weight: 600;
-    color: #2c3e50;
+    font-size: 1rem;
+    font-weight: 700;
+    letter-spacing: 0.03em;
+    color: #6f5333;
     text-shadow: none;
 }
 
 .dice-toggle-btn {
-    background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
-    border: none;
-    color: white;
-    font-size: 16px;
+    background: #8b6f4e;
+    border: 1px solid #6f5333;
+    color: #fdfaf5;
+    font-size: 14px;
     cursor: pointer;
-    width: 32px;
-    height: 32px;
-    border-radius: 50%;
+    width: 28px;
+    height: 28px;
+    border-radius: 5px;
     display: flex;
     align-items: center;
     justify-content: center;
-    transition: all 0.3s ease;
-    box-shadow: 0 2px 5px rgba(0, 0, 0, 0.1);
+    transition: background 0.15s ease, border-color 0.15s ease;
 }
 
 .dice-toggle-btn:hover {
-    background: linear-gradient(135deg, #5a67d8 0%, #6a4190 100%);
-    transform: scale(1.1);
+    background: #6f5333;
+    border-color: #6f5333;
 }
 
 .dice-content {
     display: none;
+    flex-direction: column;
+    gap: 6px;
 }
 
 .dice-content.expanded {
-    display: block;
+    display: flex;
 }
 
+/* ── Calculator Screen ── */
+.dice-result-screen {
+    background: #2f2417;
+    border: 2px solid #6f5333;
+    border-radius: 6px;
+    padding: 0.6rem 0.75rem;
+    min-height: 68px;
+    display: flex;
+    flex-direction: column;
+    justify-content: center;
+    gap: 0.2rem;
+}
+
+.dice-screen-queue {
+    font-size: 0.8rem;
+    color: #c2ad90;
+    min-height: 1.1rem;
+}
+
+.dice-screen-queue.empty {
+    opacity: 0.5;
+}
+
+.dice-screen-total {
+    font-size: 2rem;
+    font-weight: 800;
+    letter-spacing: 0.03em;
+    color: #f4eadc;
+    text-align: right;
+    line-height: 1;
+}
+
+.dice-screen-detail {
+    font-size: 0.75rem;
+    color: #a89278;
+    text-align: right;
+    line-height: 1.2;
+}
+
+/* ── Divider ── */
+.dice-divider {
+    width: 100%;
+    height: 2px;
+    border-radius: 2px;
+    background: linear-gradient(90deg, rgba(194, 173, 144, 0.5) 0%, rgba(194, 173, 144, 0.15) 100%);
+    margin: 2px 0;
+}
+
+/* ── Button Rows ── */
 .dice-buttons-row {
     display: flex;
     flex-wrap: wrap;
-    gap: 8px;
-    margin-bottom: 12px;
+    gap: 6px;
 }
 
+.dice-buttons-row--full {
+    width: 100%;
+}
+
+.dice-buttons-row--full .dice-btn {
+    flex: 1 1 100%;
+}
+
+.dice-buttons-row--half {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 6px;
+}
+
+.dice-buttons-row--thirds {
+    display: grid;
+    grid-template-columns: repeat(3, 1fr);
+    gap: 6px;
+}
+
+.dice-buttons-row--grid {
+    display: grid;
+    grid-template-columns: repeat(3, 1fr);
+    gap: 6px;
+}
+
+/* ── Shared Button Styles ── */
 .dice-btn {
-    background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
-    color: white;
-    border: none;
-    padding: 8px 14px;
-    border-radius: 8px;
+    padding: 0.55rem 0.5rem;
+    border-radius: 5px;
+    border: 1px solid #c2ad90;
+    background: #e6d8c5;
+    color: #2f2417;
+    font-weight: 700;
+    font-size: 0.85rem;
+    letter-spacing: 0.03em;
+    text-transform: uppercase;
     cursor: pointer;
-    font-size: 12px;
-    font-weight: 600;
-    transition: all 0.3s ease;
-    min-width: 50px;
-    box-shadow: 0 2px 5px rgba(0, 0, 0, 0.1);
+    transition: background 0.15s ease, border-color 0.15s ease, transform 0.1s ease;
+    min-width: 0;
+    text-align: center;
 }
 
-.dice-btn:hover {
-    background: linear-gradient(135deg, #5a67d8 0%, #6a4190 100%);
-    transform: translateY(-2px);
-    box-shadow: 0 4px 12px rgba(0, 0, 0, 0.15);
+.dice-btn:active {
+    transform: scale(0.97);
 }
 
-.dice-btn.special {
-    background: linear-gradient(135deg, #28a745 0%, #20c997 100%);
+.dice-btn:hover,
+.dice-btn:focus {
+    background: #f4eadc;
+    border-color: #8b6f4e;
 }
 
-.dice-btn.special:hover {
-    background: linear-gradient(135deg, #218838 0%, #17a085 100%);
+.dice-btn--power {
+    background: #8b6f4e;
+    border-color: #6f5333;
+    color: #fdfaf5;
+    font-size: 1.05rem;
+    padding: 0.75rem 0.5rem;
 }
 
-.dice-queue {
-    background: rgba(240, 240, 240, 0.8);
-    border: 2px solid rgba(103, 126, 234, 0.2);
-    border-radius: 8px;
-    padding: 10px;
-    margin-bottom: 12px;
-    min-height: 35px;
-    font-family: 'Segoe UI', sans-serif;
-    font-size: 14px;
-    color: #2c3e50;
+.dice-btn--power:hover,
+.dice-btn--power:focus {
+    background: #6f5333;
+    border-color: #6f5333;
 }
 
-.dice-queue.empty {
-    color: #999;
-    font-style: italic;
+.dice-btn--edge {
+    background: #dce8dc;
+    color: #3b6d42;
+    border-color: #3b6d42;
 }
 
+.dice-btn--edge:hover,
+.dice-btn--edge:focus {
+    background: #f4eadc;
+    border-color: #8b6f4e;
+}
+
+.dice-btn--bane {
+    background: #f2d8d4;
+    color: #8c3a2f;
+    border-color: #8c3a2f;
+}
+
+.dice-btn--bane:hover,
+.dice-btn--bane:focus {
+    background: #f4eadc;
+    border-color: #8b6f4e;
+}
+
+/* ── Actions Row ── */
 .dice-actions {
-    display: flex;
-    justify-content: space-between;
-    align-items: center;
-    gap: 10px;
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 6px;
 }
 
 .dice-roll-btn {
-    background: linear-gradient(135deg, #28a745 0%, #20c997 100%);
-    color: white;
-    border: none;
-    padding: 10px 20px;
-    border-radius: 8px;
+    background: #dce8dc;
+    color: #3b6d42;
+    border: 1px solid #3b6d42;
+    border-radius: 5px;
+    padding: 0.6rem 0.75rem;
     cursor: pointer;
-    font-weight: bold;
-    transition: all 0.3s ease;
-    box-shadow: 0 2px 5px rgba(0, 0, 0, 0.1);
+    font-weight: 700;
+    font-size: 0.85rem;
+    letter-spacing: 0.04em;
+    text-transform: uppercase;
+    transition: background 0.15s ease, border-color 0.15s ease, transform 0.1s ease;
+}
+
+.dice-roll-btn:active {
+    transform: scale(0.97);
 }
 
 .dice-roll-btn:hover {
-    background: linear-gradient(135deg, #218838 0%, #17a085 100%);
-    transform: translateY(-1px);
-    box-shadow: 0 4px 12px rgba(0, 0, 0, 0.15);
+    background: #f4eadc;
+    border-color: #8b6f4e;
 }
 
 .dice-clear-btn {
-    background: #e74c3c;
-    color: white;
-    border: none;
-    padding: 8px 16px;
-    border-radius: 8px;
+    background: #f2d8d4;
+    color: #8c3a2f;
+    border: 1px solid #8c3a2f;
+    border-radius: 5px;
+    padding: 0.6rem 0.75rem;
     cursor: pointer;
-    font-size: 12px;
-    transition: all 0.3s ease;
-    box-shadow: 0 2px 5px rgba(0, 0, 0, 0.1);
+    font-weight: 700;
+    font-size: 0.85rem;
+    letter-spacing: 0.04em;
+    text-transform: uppercase;
+    transition: background 0.15s ease, border-color 0.15s ease, transform 0.1s ease;
+}
+
+.dice-clear-btn:active {
+    transform: scale(0.97);
 }
 
 .dice-clear-btn:hover {
-    background: #c0392b;
-    transform: translateY(-1px);
+    background: #f4eadc;
+    border-color: #8b6f4e;
 }
 
 .dice-result {
     font-weight: bold;
-    color: #2c3e50;
+    color: #2f2417;
     font-size: 16px;
 }
 
@@ -1531,7 +1642,7 @@ body {
     }
     
     .dice-roller {
-        min-width: 280px;
+        width: 300px;
     }
 }
 
@@ -1565,7 +1676,7 @@ body {
     
     .dice-roller {
         bottom: 15px;
-        min-width: 260px;
+        width: 280px;
     }
     
     .tab-popup {
@@ -1608,7 +1719,7 @@ body {
         left: 10px;
         right: 10px;
         transform: none;
-        min-width: auto;
+        width: auto;
     }
     
     .tab-popup {
