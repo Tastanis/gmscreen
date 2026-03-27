@@ -110,52 +110,26 @@ class VttDiceRoller {
     const container = document.createElement('div');
     container.className = 'dice-view dice-view--standard';
 
-    const powerRow = document.createElement('div');
-    powerRow.className = 'dice-row dice-row--quick dice-row--quick-primary';
-    powerRow.appendChild(
-      this.createQuickButton('Power Roll', '2d10', 'dice-btn--accent dice-btn--power'),
-    );
-    container.appendChild(powerRow);
+    // ── Calculator Screen (result + queue at top) ──
+    const screen = document.createElement('div');
+    screen.className = 'dice-result-screen';
 
-    const modifierRow = document.createElement('div');
-    modifierRow.className = 'dice-row dice-row--quick dice-row--quick-secondary';
-    modifierRow.appendChild(this.createQuickButton('Edge', '+2'));
-    modifierRow.appendChild(this.createQuickButton('Bane', '-2'));
-    modifierRow.appendChild(this.createQuickButton('-1', '-1'));
-    modifierRow.appendChild(this.createQuickButton('+1', '+1'));
-    modifierRow.appendChild(this.createQuickButton('+2', '+2'));
-    container.appendChild(modifierRow);
-
-    container.appendChild(this.createDivider());
-
-    const diceRow = document.createElement('div');
-    diceRow.className = 'dice-row dice-row--grid';
-    [
-      { label: 'D2', value: '1d2' },
-      { label: 'D4', value: '1d4' },
-      { label: 'D6', value: '1d6' },
-      { label: 'D8', value: '1d8' },
-      { label: 'D10', value: '1d10' },
-    ].forEach(({ label, value }) => {
-      const btn = this.createQuickButton(label, value);
-      diceRow.appendChild(btn);
-    });
-    container.appendChild(diceRow);
-
-    container.appendChild(this.createDivider());
-
-    const queueSection = document.createElement('div');
-    queueSection.className = 'dice-queue-section';
-    const queueLabel = document.createElement('div');
-    queueLabel.className = 'dice-queue-label';
-    queueLabel.textContent = 'Current Roll';
     const queueDisplay = document.createElement('div');
     queueDisplay.className = 'dice-queue-display';
-    queueSection.appendChild(queueLabel);
-    queueSection.appendChild(queueDisplay);
-    container.appendChild(queueSection);
+    screen.appendChild(queueDisplay);
     this.queueDisplays.push(queueDisplay);
 
+    const resultTotal = document.createElement('div');
+    resultTotal.className = 'dice-result-total';
+    const resultDetail = document.createElement('div');
+    resultDetail.className = 'dice-result-detail';
+    screen.appendChild(resultTotal);
+    screen.appendChild(resultDetail);
+    this.resultDisplays.push({ total: resultTotal, detail: resultDetail });
+
+    container.appendChild(screen);
+
+    // ── Roll / Clear / Advantage row (right under the screen) ──
     const actionRow = document.createElement('div');
     actionRow.className = 'dice-actions';
 
@@ -178,33 +152,57 @@ class VttDiceRoller {
     controls.appendChild(clearBtn);
     this.clearButton = clearBtn;
 
-    const resultContainer = document.createElement('div');
-    resultContainer.className = 'dice-result';
-    const resultTotal = document.createElement('div');
-    resultTotal.className = 'dice-result-total';
-    const resultDetail = document.createElement('div');
-    resultDetail.className = 'dice-result-detail';
-    resultContainer.appendChild(resultTotal);
-    resultContainer.appendChild(resultDetail);
-    controls.appendChild(resultContainer);
-    this.resultDisplays.push({ total: resultTotal, detail: resultDetail });
-
-    actionRow.appendChild(controls);
-
-    const bottomRow = document.createElement('div');
-    bottomRow.className = 'dice-actions__footer';
-
     const advantageToggle = document.createElement('button');
     advantageToggle.type = 'button';
     advantageToggle.className = 'dice-advantage-toggle';
     advantageToggle.textContent = 'Advantage: Off';
     advantageToggle.setAttribute('aria-pressed', 'false');
     advantageToggle.addEventListener('click', () => this.toggleAdvantage());
-    bottomRow.appendChild(advantageToggle);
+    controls.appendChild(advantageToggle);
     this.advantageToggleButtons.push(advantageToggle);
 
-    actionRow.appendChild(bottomRow);
+    actionRow.appendChild(controls);
     container.appendChild(actionRow);
+
+    // ── Power Roll (main button) ──
+    const powerRow = document.createElement('div');
+    powerRow.className = 'dice-row dice-row--quick dice-row--quick-primary';
+    powerRow.appendChild(
+      this.createQuickButton('Power Roll', '2d10', 'dice-btn--accent dice-btn--power'),
+    );
+    container.appendChild(powerRow);
+
+    // ── Edge / Bane row ──
+    const edgeBaneRow = document.createElement('div');
+    edgeBaneRow.className = 'dice-row dice-row--edge-bane';
+    edgeBaneRow.appendChild(this.createQuickButton('Edge (+2)', '+2', 'dice-btn--edge'));
+    edgeBaneRow.appendChild(this.createQuickButton('Bane (-2)', '-2', 'dice-btn--bane'));
+    container.appendChild(edgeBaneRow);
+
+    container.appendChild(this.createDivider());
+
+    // ── Modifier buttons ──
+    const modifierRow = document.createElement('div');
+    modifierRow.className = 'dice-row dice-row--modifiers';
+    modifierRow.appendChild(this.createQuickButton('-1', '-1'));
+    modifierRow.appendChild(this.createQuickButton('+1', '+1'));
+    modifierRow.appendChild(this.createQuickButton('+2', '+2'));
+    container.appendChild(modifierRow);
+
+    // ── Dice grid ──
+    const diceRow = document.createElement('div');
+    diceRow.className = 'dice-row dice-row--grid';
+    [
+      { label: 'D2', value: '1d2' },
+      { label: 'D4', value: '1d4' },
+      { label: 'D6', value: '1d6' },
+      { label: 'D8', value: '1d8' },
+      { label: 'D10', value: '1d10' },
+    ].forEach(({ label, value }) => {
+      const btn = this.createQuickButton(label, value);
+      diceRow.appendChild(btn);
+    });
+    container.appendChild(diceRow);
 
     return container;
   }
@@ -273,11 +271,10 @@ class VttDiceRoller {
   resetResultDisplays() {
     this.resultDisplays.forEach(({ total, detail }) => {
       if (total) {
-        total.textContent = 'Result: -';
+        total.textContent = '-';
       }
       if (detail) {
         detail.textContent = '';
-        detail.style.display = 'none';
       }
     });
   }
@@ -306,11 +303,10 @@ class VttDiceRoller {
       this.resetResultDisplays();
       this.resultDisplays.forEach(({ total, detail }) => {
         if (total) {
-          total.textContent = 'Result: -';
+          total.textContent = '-';
         }
         if (detail) {
           detail.textContent = 'Add dice to the queue before rolling.';
-          detail.style.display = 'block';
         }
       });
       return;
@@ -495,16 +491,15 @@ class VttDiceRoller {
 
     this.resultDisplays.forEach(({ total, detail }) => {
       if (total) {
-        total.textContent = `${resultLabel}: ${rollResult.total}`;
+        total.textContent = `${rollResult.total}`;
       }
       if (detail) {
-        if (detailParts.length > 0) {
-          detail.textContent = detailParts.join(' | ');
-          detail.style.display = 'block';
-        } else {
-          detail.textContent = '';
-          detail.style.display = 'none';
+        const parts = [];
+        if (hasAdvantage) {
+          parts.push(resultLabel);
         }
+        parts.push(...detailParts);
+        detail.textContent = parts.length > 0 ? parts.join(' | ') : '';
       }
     });
   }
