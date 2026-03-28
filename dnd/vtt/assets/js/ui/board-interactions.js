@@ -19628,6 +19628,8 @@ function createTemplateTool() {
       syncConditionsAfterMutation,
       applyDamageHealToPlacement,
       handleSheetStaminaBroadcast,
+      fetchAndApplyCharacterStamina,
+      syncPlacementHitPointsToSheet,
     },
   };
 }
