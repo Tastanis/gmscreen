@@ -75,7 +75,7 @@ const SORTED_SKILL_GROUPS = Object.fromEntries(
   ])
 );
 
-const ALL_SKILLS = Object.values(SORTED_SKILL_GROUPS).flat();
+const ALL_SKILLS = Object.values(SORTED_SKILL_GROUPS).flat().sort((a, b) => a.localeCompare(b));
 
 function getSkillGroup(skill) {
   return (
@@ -1526,9 +1526,9 @@ function bindHirelingBonusControls() {
     card.querySelectorAll("[data-hireling-bonus-delta]").forEach((btn) => {
       btn.onclick = () => {
         const delta = parseInt(btn.getAttribute("data-hireling-bonus-delta"));
+        captureHirelings();
         const hireling = sheetState.hero.hirelings.find((h) => h.id === hirelingId);
         if (!hireling) return;
-        captureHirelings();
         const current = parseInt(hireling.bonus) || 0;
         hireling.bonus = Math.min(Math.max(current + delta, 0), MAX_HIRELING_BONUS);
         renderHirelings();
