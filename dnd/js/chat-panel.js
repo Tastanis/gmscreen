@@ -158,6 +158,92 @@
         let whisperPopoutStackOffset = 0;
         let activeWhisperDrag = null;
 
+        // Chat notification toast queue
+        const chatNotificationQueue = [];
+        let chatNotificationActive = false;
+        let chatNotificationHost = null;
+
+        function ensureChatNotificationHost() {
+            if (chatNotificationHost) {
+                return chatNotificationHost;
+            }
+            chatNotificationHost = document.createElement('div');
+            chatNotificationHost.className = 'chat-notification-host';
+            chatNotificationHost.setAttribute('aria-live', 'polite');
+            chatNotificationHost.setAttribute('aria-atomic', 'true');
+            document.body.appendChild(chatNotificationHost);
+            return chatNotificationHost;
+        }
+
+        function showNextChatNotification() {
+            if (chatNotificationQueue.length === 0) {
+                chatNotificationActive = false;
+                return;
+            }
+
+            chatNotificationActive = true;
+            const msg = chatNotificationQueue.shift();
+            const host = ensureChatNotificationHost();
+
+            const toast = document.createElement('div');
+            toast.className = 'chat-notification-toast';
+
+            const sender = document.createElement('div');
+            sender.className = 'chat-notification-toast__sender';
+            sender.textContent = getParticipantLabel(msg.user);
+
+            const body = document.createElement('div');
+            body.className = 'chat-notification-toast__body';
+
+            if (msg.type === 'dice_roll') {
+                body.textContent = msg.message || 'Rolled dice';
+            } else if (msg.imageUrl) {
+                body.textContent = 'Sent an image';
+            } else {
+                const text = msg.message || '';
+                body.textContent = text.length > 120 ? text.substring(0, 120) + '…' : text;
+            }
+
+            toast.appendChild(sender);
+            toast.appendChild(body);
+
+            // Clicking the toast opens chat
+            toast.addEventListener('click', () => {
+                removeToast();
+                setOpen(true);
+            });
+
+            host.appendChild(toast);
+
+            const DISPLAY_DURATION = 4000;
+            const FADE_DURATION = 300;
+
+            const removeToast = () => {
+                if (!toast.parentElement) {
+                    return;
+                }
+                toast.classList.add('chat-notification-toast--exit');
+                window.setTimeout(() => {
+                    if (toast.parentElement) {
+                        toast.parentElement.removeChild(toast);
+                    }
+                    showNextChatNotification();
+                }, FADE_DURATION);
+            };
+
+            window.setTimeout(removeToast, DISPLAY_DURATION);
+        }
+
+        function queueChatNotification(message) {
+            if (!message || message.user === currentUser) {
+                return;
+            }
+            chatNotificationQueue.push(message);
+            if (!chatNotificationActive) {
+                showNextChatNotification();
+            }
+        }
+
         const existingMessages = messageList.dataset.initialMessages;
         if (existingMessages) {
             try {
@@ -1501,6 +1587,12 @@
             toggleButton.textContent = state ? 'Close Chat' : 'Open Chat';
 
             if (state) {
+                // Clear notification queue and remove any visible toasts when chat opens
+                chatNotificationQueue.length = 0;
+                chatNotificationActive = false;
+                if (chatNotificationHost) {
+                    chatNotificationHost.innerHTML = '';
+                }
                 textarea.focus();
             }
         }
@@ -1566,6 +1658,11 @@
                     messages[idx] = Object.assign({}, messages[idx], normalized, { pending: false, error: false });
                 } else {
                     messages.push(Object.assign({}, normalized, { pending: false, error: false }));
+
+                    // Queue chat notification if panel is closed and this is not the initial fetch
+                    if (hasCompletedInitialFetch && !isOpen && normalized.user !== currentUser) {
+                        queueChatNotification(normalized);
+                    }
                 }
 
                 hasChanges = true;
