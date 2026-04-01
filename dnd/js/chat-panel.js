@@ -2,6 +2,9 @@
     // Chat polling interval - lowered for faster message sync
     const FETCH_INTERVAL_MS = 1500;
     const MAX_MESSAGES = 100;
+    // Only render recent messages in the DOM to reduce page-wide layout cost.
+    // All messages stay in the array for sync; this only limits what's in the DOM.
+    const MAX_VISIBLE_MESSAGES = 30;
     let escapeListenerAttached = false;
     const CHAT_ENDPOINT = (typeof window !== 'undefined' && window.chatHandlerUrl)
         ? window.chatHandlerUrl
@@ -1571,7 +1574,12 @@
                 return timeA - timeB;
             });
 
-            for (const message of sorted) {
+            // Only put the most recent messages into the DOM. The full array
+            // is kept in memory for sync, but a large DOM (100 messages with
+            // images) causes the entire page to slow down on every layout.
+            const visible = sorted.slice(-MAX_VISIBLE_MESSAGES);
+
+            for (const message of visible) {
                 const element = createMessageElement(message);
                 if (element) {
                     messageList.appendChild(element);
