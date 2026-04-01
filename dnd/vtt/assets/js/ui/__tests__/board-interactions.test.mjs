@@ -4344,3 +4344,421 @@ test('mergeBoardStateSnapshot: coerces PHP empty array revealedCells to object',
   assert.ok(!Array.isArray(fog.revealedCells), 'revealedCells must not be an array');
   assert.equal(typeof fog.revealedCells, 'object');
 });
+
+// ---------------------------------------------------------------------------
+// Token drag CSS-transform tests
+//
+// These tests verify that during a pointer drag, the dragged token's CSS
+// transform is updated directly (GPU-composited path) rather than through a
+// full renderTokens cycle, and that commit/cancel produce correct final state.
+// ---------------------------------------------------------------------------
+
+function createDragTestEnvironment() {
+  const dom = createDom();
+  const { window } = dom;
+  const { document } = window;
+
+  const board = document.getElementById('vtt-board-canvas');
+  board.getBoundingClientRect = () => ({
+    width: 512, height: 512, top: 0, left: 0, right: 512, bottom: 512,
+  });
+
+  const mapSurface = document.getElementById('vtt-map-surface');
+  mapSurface.getBoundingClientRect = () => ({
+    width: 512, height: 512, top: 0, left: 0, right: 512, bottom: 512,
+  });
+
+  // Stub setPointerCapture/releasePointerCapture (jsdom doesn't support them)
+  mapSurface.setPointerCapture = () => {};
+  mapSurface.releasePointerCapture = () => {};
+
+  const mapImage = document.getElementById('vtt-map-image');
+  Object.defineProperty(mapImage, 'naturalWidth', { get: () => 512, configurable: true });
+  Object.defineProperty(mapImage, 'naturalHeight', { get: () => 512, configurable: true });
+  Object.defineProperty(mapImage, 'complete', { get: () => true, configurable: true });
+  Object.defineProperty(mapImage, 'decode', { value: undefined, configurable: true, writable: true });
+
+  const store = createMockStore({
+    user: { isGM: true, name: 'GM' },
+    scenes: { items: [{ id: 'scene-1', name: 'Scene 1' }] },
+    grid: { size: 64, visible: true },
+    boardState: {
+      activeSceneId: 'scene-1',
+      mapUrl: 'http://example.com/map.png',
+      placements: {
+        'scene-1': [
+          { id: 'token-a', tokenId: 'token-a', name: 'Fighter', column: 2, row: 2, width: 1, height: 1 },
+          { id: 'token-b', tokenId: 'token-b', name: 'Wizard', column: 5, row: 5, width: 1, height: 1 },
+        ],
+      },
+      sceneState: {
+        'scene-1': { grid: { size: 64, visible: true } },
+      },
+    },
+  });
+
+  return { dom, window, document, mapSurface, store };
+}
+
+async function mountAndWaitForMap(store) {
+  const interactions = mountBoardInteractions(store) ?? {};
+  const viewState = interactions.getViewState?.();
+
+  // Wait for map load detection
+  await Promise.resolve();
+  await new Promise((resolve) => setTimeout(resolve, 0));
+
+  return { interactions, viewState };
+}
+
+function flushRaf() {
+  // In jsdom, requestAnimationFrame is shimmed to setTimeout(cb, 16).
+  // We need to flush it synchronously for tests.
+  return new Promise((resolve) => setTimeout(resolve, 20));
+}
+
+test('CSS transform drag: dragged token gets direct transform during drag', async () => {
+  const { dom, document, mapSurface, store } = createDragTestEnvironment();
+  try {
+    const { viewState } = await mountAndWaitForMap(store);
+    assert.ok(viewState, 'viewState should exist');
+    assert.equal(viewState.mapLoaded, true, 'map should be loaded');
+
+    // Wait for initial render
+    await flushRaf();
+
+    const tokenLayer = document.getElementById('vtt-token-layer');
+    const tokenA = tokenLayer.querySelector('[data-placement-id="token-a"]');
+    assert.ok(tokenA, 'token-a should be rendered in the DOM');
+
+    // Record initial transform
+    const initialTransform = tokenA.style.transform;
+    assert.ok(initialTransform, 'token-a should have a transform');
+
+    // gridSize=64, token at col=2,row=2, no offsets → left=128,top=128
+    assert.ok(
+      initialTransform.includes('128'),
+      `initial transform should position at grid coords: ${initialTransform}`
+    );
+
+    // Pointerdown on the token (clientX=160, clientY=160 → center of 1x1 token at col=2,row=2)
+    dispatchPointerEvent(mapSurface, 'pointerdown', {
+      clientX: 160, clientY: 160, pointerId: 10, button: 0, buttons: 1,
+    });
+
+    // Move past DRAG_ACTIVATION_DISTANCE (6px) to trigger beginTokenDrag
+    dispatchPointerEvent(mapSurface, 'pointermove', {
+      clientX: 170, clientY: 160, pointerId: 10, buttons: 1,
+    });
+
+    // Wait for RAF from beginTokenDrag's applyDragPreview
+    await flushRaf();
+
+    assert.ok(viewState.dragState, 'drag state should be active');
+    assert.ok(tokenA.classList.contains('is-dragging'), 'token should have is-dragging class');
+
+    // Now move further — this should apply CSS transform directly without renderTokens
+    dispatchPointerEvent(mapSurface, 'pointermove', {
+      clientX: 224, clientY: 160, pointerId: 10, buttons: 1,
+    });
+
+    // CSS transform should be updated synchronously (no RAF needed for direct transform)
+    const dragTransform = tokenA.style.transform;
+    assert.ok(dragTransform, 'token should have transform during drag');
+    assert.notEqual(
+      dragTransform,
+      initialTransform,
+      'transform should differ from initial position during drag'
+    );
+
+    // The preview position should be tracked in dragState for commit
+    assert.ok(viewState.dragState.previewPositions, 'previewPositions should exist');
+    assert.ok(viewState.dragState.previewPositions.has('token-a'), 'token-a should be in preview');
+
+    // The other token should NOT have is-dragging
+    const tokenB = tokenLayer.querySelector('[data-placement-id="token-b"]');
+    if (tokenB) {
+      assert.equal(
+        tokenB.classList.contains('is-dragging'),
+        false,
+        'non-dragged token should not have is-dragging class'
+      );
+    }
+
+    // Release to commit
+    dispatchPointerEvent(mapSurface, 'pointerup', {
+      clientX: 224, clientY: 160, pointerId: 10, button: 0,
+    });
+
+    assert.equal(viewState.dragState, null, 'drag state should be cleared after drop');
+    assert.equal(
+      tokenA.classList.contains('is-dragging'),
+      false,
+      'is-dragging should be removed after drop'
+    );
+  } finally {
+    dom.window.close();
+  }
+});
+
+test('CSS transform drag: commit updates server state with correct grid position', async () => {
+  const { dom, document, mapSurface, store } = createDragTestEnvironment();
+  try {
+    const { viewState } = await mountAndWaitForMap(store);
+    await flushRaf();
+
+    // Token at col=2, row=2. Grid=64, so pixel center = (160, 160).
+    // Drag right by 64px = 1 grid cell.
+    dispatchPointerEvent(mapSurface, 'pointerdown', {
+      clientX: 160, clientY: 160, pointerId: 20, button: 0, buttons: 1,
+    });
+
+    // Activate drag (past 6px threshold)
+    dispatchPointerEvent(mapSurface, 'pointermove', {
+      clientX: 170, clientY: 160, pointerId: 20, buttons: 1,
+    });
+    await flushRaf();
+
+    // Move exactly 1 grid cell right (64px from start)
+    dispatchPointerEvent(mapSurface, 'pointermove', {
+      clientX: 224, clientY: 160, pointerId: 20, buttons: 1,
+    });
+
+    // Verify preview position before commit
+    const preview = viewState.dragState?.previewPositions?.get('token-a');
+    assert.ok(preview, 'preview should exist for token-a');
+    assert.equal(preview.column, 3, 'preview column should be 3 (moved right by 1)');
+    assert.equal(preview.row, 2, 'preview row should remain 2');
+
+    // Commit the drag
+    dispatchPointerEvent(mapSurface, 'pointerup', {
+      clientX: 224, clientY: 160, pointerId: 20, button: 0,
+    });
+
+    // Verify server state was updated
+    const state = store.getState();
+    const placements = state.boardState.placements['scene-1'];
+    const movedToken = placements.find((p) => p.id === 'token-a');
+    assert.ok(movedToken, 'token-a should still exist in placements');
+    assert.equal(movedToken.column, 3, 'committed column should be 3');
+    assert.equal(movedToken.row, 2, 'committed row should remain 2');
+
+    // Verify unmoved token is unchanged
+    const otherToken = placements.find((p) => p.id === 'token-b');
+    assert.ok(otherToken, 'token-b should still exist');
+    assert.equal(otherToken.column, 5, 'token-b column should be unchanged');
+    assert.equal(otherToken.row, 5, 'token-b row should be unchanged');
+  } finally {
+    dom.window.close();
+  }
+});
+
+test('CSS transform drag: cancel reverts token to original position (no popback)', async () => {
+  const { dom, document, mapSurface, store } = createDragTestEnvironment();
+  try {
+    const { viewState } = await mountAndWaitForMap(store);
+    await flushRaf();
+
+    const tokenLayer = document.getElementById('vtt-token-layer');
+    const tokenA = tokenLayer.querySelector('[data-placement-id="token-a"]');
+    const originalTransform = tokenA.style.transform;
+
+    // Start drag
+    dispatchPointerEvent(mapSurface, 'pointerdown', {
+      clientX: 160, clientY: 160, pointerId: 30, button: 0, buttons: 1,
+    });
+    dispatchPointerEvent(mapSurface, 'pointermove', {
+      clientX: 170, clientY: 160, pointerId: 30, buttons: 1,
+    });
+    await flushRaf();
+
+    // Move token
+    dispatchPointerEvent(mapSurface, 'pointermove', {
+      clientX: 288, clientY: 288, pointerId: 30, buttons: 1,
+    });
+
+    assert.ok(viewState.dragState, 'drag should be active');
+    assert.ok(viewState.dragState.hasMoved, 'hasMoved should be true');
+
+    // Cancel via pointercancel
+    const cancelEvent = new dom.window.Event('pointercancel', { bubbles: true });
+    Object.assign(cancelEvent, { pointerId: 30 });
+    mapSurface.dispatchEvent(cancelEvent);
+
+    // Wait for final render
+    await flushRaf();
+
+    assert.equal(viewState.dragState, null, 'drag state should be cleared');
+
+    // Server state should be unchanged
+    const state = store.getState();
+    const placements = state.boardState.placements['scene-1'];
+    const tokenAState = placements.find((p) => p.id === 'token-a');
+    assert.equal(tokenAState.column, 2, 'column should revert to original');
+    assert.equal(tokenAState.row, 2, 'row should revert to original');
+
+    // Token should be re-rendered at original position
+    const rerenderedToken = tokenLayer.querySelector('[data-placement-id="token-a"]');
+    if (rerenderedToken) {
+      assert.equal(
+        rerenderedToken.classList.contains('is-dragging'),
+        false,
+        'is-dragging should be removed after cancel'
+      );
+      assert.equal(rerenderedToken.style.zIndex, '', 'z-index should be reset after cancel');
+    }
+  } finally {
+    dom.window.close();
+  }
+});
+
+test('CSS transform drag: transform derived from previewPositions matches commit coordinates', async () => {
+  const { dom, document, mapSurface, store } = createDragTestEnvironment();
+  try {
+    const { viewState } = await mountAndWaitForMap(store);
+    await flushRaf();
+
+    const tokenLayer = document.getElementById('vtt-token-layer');
+
+    // Start drag on token-a at col=2,row=2
+    dispatchPointerEvent(mapSurface, 'pointerdown', {
+      clientX: 160, clientY: 160, pointerId: 40, button: 0, buttons: 1,
+    });
+    dispatchPointerEvent(mapSurface, 'pointermove', {
+      clientX: 170, clientY: 160, pointerId: 40, buttons: 1,
+    });
+    await flushRaf();
+
+    // Move 2 cells right, 1 cell down
+    dispatchPointerEvent(mapSurface, 'pointermove', {
+      clientX: 288, clientY: 224, pointerId: 40, buttons: 1,
+    });
+
+    const preview = viewState.dragState?.previewPositions?.get('token-a');
+    assert.ok(preview, 'preview should exist');
+
+    // gridSize=64, no offsets → expected pixel position = column*64, row*64
+    const expectedLeft = preview.column * 64;
+    const expectedTop = preview.row * 64;
+
+    const tokenA = tokenLayer.querySelector('[data-placement-id="token-a"]');
+    const transform = tokenA.style.transform;
+
+    // Verify the CSS transform matches the preview position
+    assert.ok(
+      transform.includes(`${expectedLeft}px`) && transform.includes(`${expectedTop}px`),
+      `transform "${transform}" should contain ${expectedLeft}px and ${expectedTop}px from preview col=${preview.column}, row=${preview.row}`
+    );
+
+    // Now commit and verify committed state matches the preview
+    const previewColumn = preview.column;
+    const previewRow = preview.row;
+
+    dispatchPointerEvent(mapSurface, 'pointerup', {
+      clientX: 288, clientY: 224, pointerId: 40, button: 0,
+    });
+
+    const state = store.getState();
+    const committed = state.boardState.placements['scene-1'].find((p) => p.id === 'token-a');
+    assert.equal(committed.column, previewColumn, 'committed column should match preview');
+    assert.equal(committed.row, previewRow, 'committed row should match preview');
+  } finally {
+    dom.window.close();
+  }
+});
+
+test('CSS transform drag: is-dragging and z-index are cleaned up on drop', async () => {
+  const { dom, document, mapSurface, store } = createDragTestEnvironment();
+  try {
+    const { viewState } = await mountAndWaitForMap(store);
+    await flushRaf();
+
+    const tokenLayer = document.getElementById('vtt-token-layer');
+
+    // Start drag
+    dispatchPointerEvent(mapSurface, 'pointerdown', {
+      clientX: 160, clientY: 160, pointerId: 50, button: 0, buttons: 1,
+    });
+    dispatchPointerEvent(mapSurface, 'pointermove', {
+      clientX: 170, clientY: 160, pointerId: 50, buttons: 1,
+    });
+    await flushRaf();
+
+    const tokenA = tokenLayer.querySelector('[data-placement-id="token-a"]');
+    assert.equal(tokenA.classList.contains('is-dragging'), true, 'is-dragging set during drag');
+    assert.equal(tokenA.style.zIndex, '10', 'z-index elevated during drag');
+
+    // Drop
+    dispatchPointerEvent(mapSurface, 'pointerup', {
+      clientX: 170, clientY: 160, pointerId: 50, button: 0,
+    });
+
+    await flushRaf();
+
+    // After final renderTokens, the token should be clean
+    const rerenderedToken = tokenLayer.querySelector('[data-placement-id="token-a"]');
+    if (rerenderedToken) {
+      assert.equal(
+        rerenderedToken.classList.contains('is-dragging'),
+        false,
+        'is-dragging removed after drop'
+      );
+      // z-index may be '' or unset after renderTokens
+      assert.ok(
+        !rerenderedToken.style.zIndex || rerenderedToken.style.zIndex === '',
+        'z-index reset after drop'
+      );
+    }
+  } finally {
+    dom.window.close();
+  }
+});
+
+test('CSS transform drag: multiple pointermove events do not schedule redundant renderTokens', async () => {
+  const { dom, document, mapSurface, store } = createDragTestEnvironment();
+  try {
+    const { viewState } = await mountAndWaitForMap(store);
+    await flushRaf();
+
+    // Start drag
+    dispatchPointerEvent(mapSurface, 'pointerdown', {
+      clientX: 160, clientY: 160, pointerId: 60, button: 0, buttons: 1,
+    });
+    dispatchPointerEvent(mapSurface, 'pointermove', {
+      clientX: 170, clientY: 160, pointerId: 60, buttons: 1,
+    });
+    await flushRaf();
+
+    // Track requestAnimationFrame calls during rapid movement
+    let rafCallCount = 0;
+    const originalRaf = globalThis.requestAnimationFrame;
+    globalThis.requestAnimationFrame = (cb) => {
+      rafCallCount++;
+      return originalRaf(cb);
+    };
+
+    // Fire several pointermove events rapidly
+    for (let i = 0; i < 10; i++) {
+      dispatchPointerEvent(mapSurface, 'pointermove', {
+        clientX: 170 + i * 8, clientY: 160, pointerId: 60, buttons: 1,
+      });
+    }
+
+    // With CSS transform path, no RAF should be scheduled for these moves
+    // (the direct transform path doesn't use requestAnimationFrame)
+    assert.equal(
+      rafCallCount,
+      0,
+      `rapid pointermove events during CSS-transform drag should not schedule RAFs, got ${rafCallCount}`
+    );
+
+    globalThis.requestAnimationFrame = originalRaf;
+
+    // Cleanup
+    dispatchPointerEvent(mapSurface, 'pointerup', {
+      clientX: 250, clientY: 160, pointerId: 60, button: 0,
+    });
+  } finally {
+    dom.window.close();
+  }
+});
