@@ -100,7 +100,8 @@ if ($imageInfo === false) {
 // When noResize is set the image is already at display resolution (e.g. overlay
 // cutouts rendered from the already-doubled map).  Skip the doubling step and
 // allow up to the final 12000px limit.  Normal uploads are limited to 6000px
-// because the server doubles them (final max: 12000x12000).
+// because the server doubles them (final max: 12000x12000) so that grid cells
+// are large enough for token overlays (HP bars, conditions, names) to be readable.
 $noResize = !empty($_POST['noResize']);
 $maxDimension = $noResize ? 12000 : 6000;
 
@@ -110,7 +111,7 @@ if ($width > $maxDimension || $height > $maxDimension) {
     echo json_encode([
         'success' => false,
         'error' => "Map dimensions exceed the supported {$limitLabel} x {$limitLabel} pixel limit"
-            . ($noResize ? '.' : ' (images are doubled for better grid display).'),
+            . ($noResize ? '.' : ' (images are doubled so token overlays remain readable).'),
     ]);
     return;
 }
@@ -182,7 +183,9 @@ if ($noResize) {
 
     imagedestroy($sourceImage);
 } else {
-    // Double the image dimensions for better grid/token display
+    // Double the image dimensions so grid cells are large enough for token
+    // overlays (HP bars, condition icons, names) to be readable without
+    // having to zoom all the way in.
     $finalWidth = $width * 2;
     $finalHeight = $height * 2;
 

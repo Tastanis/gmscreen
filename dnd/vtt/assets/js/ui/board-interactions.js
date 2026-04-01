@@ -1132,6 +1132,12 @@ export function mountBoardInteractions(store, routes = {}) {
   let mapLoadWatchdogId = null;
   let lastActiveSceneId = null;
   let lastOverlaySignature = null;
+  // Track previous fog/combat/drawing state to skip expensive re-renders when unchanged.
+  // These are cheap reference checks — if the object reference is the same, the data
+  // hasn't been replaced by a poll or Pusher update, so we can skip the render.
+  let lastRenderedFogState = null;
+  let lastRenderedCombatState = null;
+  let lastRenderedDrawingsState = null;
   const movementQueue = [];
   let movementScheduled = false;
   const MAX_QUEUED_MOVEMENTS = 12;
@@ -3736,7 +3742,8 @@ export function mountBoardInteractions(store, routes = {}) {
     try {
       const sceneState = normalizeSceneState(state.scenes);
       const activeSceneId = state.boardState?.activeSceneId ?? null;
-      if (activeSceneId !== lastActiveSceneId) {
+      const sceneChanged = activeSceneId !== lastActiveSceneId;
+      if (sceneChanged) {
         lastActiveSceneId = activeSceneId;
         selectedTokenIds.clear();
         notifySelectionChanged();
@@ -3781,15 +3788,36 @@ export function mountBoardInteractions(store, routes = {}) {
       overlayTool.notifyOverlayMaskChange(overlayConfig ?? null);
       applyGridState(state.grid ?? {});
       renderTokens(state, tokenLayer, viewState);
-      renderFog(state);
-      renderFogSelection();
+
+      // Skip expensive subsystem re-renders when their data hasn't changed.
+      // The store replaces object references on updates, so a reference check
+      // is a reliable and nearly free way to detect changes.
+      const sceneKey = typeof activeSceneId === 'string' ? activeSceneId.trim() : '';
+      const currentSceneState = sceneKey
+        ? state.boardState?.sceneState?.[sceneKey]
+        : null;
+      const currentFogState = currentSceneState?.fogOfWar ?? null;
+      const currentCombatState = currentSceneState?.combat ?? null;
+      const currentDrawingsState = state.boardState?.drawings ?? null;
+
+      if (sceneChanged || currentFogState !== lastRenderedFogState) {
+        lastRenderedFogState = currentFogState;
+        renderFog(state);
+        renderFogSelection();
+      }
       templateTool.notifyMapState();
       overlayTool.notifyMapState();
-      applyCombatStateFromBoardState(state);
+      if (sceneChanged || currentCombatState !== lastRenderedCombatState) {
+        lastRenderedCombatState = currentCombatState;
+        applyCombatStateFromBoardState(state);
+      }
       processIncomingPings(state.boardState?.pings ?? [], activeSceneId);
-      // Use the active scene ID or fall back to the default scene ID.
-      // This ensures drawings sync even when no scene is explicitly selected.
-      syncDrawingsFromState(state.boardState, activeSceneId || DEFAULT_SCENE_ID);
+      if (sceneChanged || currentDrawingsState !== lastRenderedDrawingsState) {
+        lastRenderedDrawingsState = currentDrawingsState;
+        // Use the active scene ID or fall back to the default scene ID.
+        // This ensures drawings sync even when no scene is explicitly selected.
+        syncDrawingsFromState(state.boardState, activeSceneId || DEFAULT_SCENE_ID);
+      }
 
       if (activeTokenSettingsId) {
         const placementForSettings = resolvePlacementById(state, activeSceneId, activeTokenSettingsId);
@@ -3804,8 +3832,30 @@ export function mountBoardInteractions(store, routes = {}) {
     }
   };
 
+  // Coalesce rapid state updates into a single render per animation frame.
+  // Without this, multiple updateState() calls in the same 16ms frame each
+  // trigger a full applyStateToBoard (tokens + fog + auras + combat + drawings).
+  // The rAF wrapper ensures we only render once per frame with the latest state.
+  let pendingRafId = null;
+  let latestPendingState = null;
+
+  function scheduleApplyStateToBoard(state) {
+    latestPendingState = state;
+    if (pendingRafId !== null) {
+      return; // already scheduled for this frame
+    }
+    pendingRafId = requestAnimationFrame(() => {
+      pendingRafId = null;
+      const stateToApply = latestPendingState;
+      latestPendingState = null;
+      if (stateToApply) {
+        applyStateToBoard(stateToApply);
+      }
+    });
+  }
+
   if (typeof boardApi.subscribe === 'function') {
-    boardApi.subscribe(applyStateToBoard);
+    boardApi.subscribe(scheduleApplyStateToBoard);
   }
 
   if (grid && (!boardApi || typeof boardApi.updateState !== 'function')) {
@@ -6277,12 +6327,16 @@ export function mountBoardInteractions(store, routes = {}) {
       }
 
       token.dataset.placementId = normalized.id;
-      token.style.width = `${width * gridSize}px`;
-      token.style.height = `${height * gridSize}px`;
+
+      // Only touch style properties when values actually changed to avoid layout thrash
+      const wPx = `${width * gridSize}px`;
+      const hPx = `${height * gridSize}px`;
+      if (token.style.width !== wPx) token.style.width = wPx;
+      if (token.style.height !== hPx) token.style.height = hPx;
       const left = leftOffset + column * gridSize;
       const top = topOffset + row * gridSize;
       const baseTransform = `translate3d(${left}px, ${top}px, 0)`;
-      token.style.transform = baseTransform;
+      if (token.style.transform !== baseTransform) token.style.transform = baseTransform;
 
       const rotation = tokenRotationAngles.get(normalized.id);
       if (Number.isFinite(rotation)) {
@@ -6500,18 +6554,21 @@ export function mountBoardInteractions(store, routes = {}) {
       }
 
       auraEl.dataset.placementId = normalized.id;
-      auraEl.style.width = `${diameter}px`;
-      auraEl.style.height = `${diameter}px`;
+      const diameterPx = `${diameter}px`;
+      if (auraEl.style.width !== diameterPx) auraEl.style.width = diameterPx;
+      if (auraEl.style.height !== diameterPx) auraEl.style.height = diameterPx;
 
       // Parse hex color to get RGB components for translucent background
       const r = parseInt(auraColor.slice(1, 3), 16) || 0;
       const g = parseInt(auraColor.slice(3, 5), 16) || 0;
       const b = parseInt(auraColor.slice(5, 7), 16) || 0;
-      auraEl.style.background = `radial-gradient(circle, rgba(${r},${g},${b},0.3) 0%, rgba(${r},${g},${b},0.15) 60%, rgba(${r},${g},${b},0.05) 100%)`;
+      const bg = `radial-gradient(circle, rgba(${r},${g},${b},0.3) 0%, rgba(${r},${g},${b},0.15) 60%, rgba(${r},${g},${b},0.05) 100%)`;
+      if (auraEl.style.background !== bg) auraEl.style.background = bg;
 
       const auraLeft = tokenCenterX - pixelRadius;
       const auraTop = tokenCenterY - pixelRadius;
-      auraEl.style.transform = `translate3d(${auraLeft}px, ${auraTop}px, 0)`;
+      const auraTransform = `translate3d(${auraLeft}px, ${auraTop}px, 0)`;
+      if (auraEl.style.transform !== auraTransform) auraEl.style.transform = auraTransform;
 
       fragment.appendChild(auraEl);
       auraCount += 1;

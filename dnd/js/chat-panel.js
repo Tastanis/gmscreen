@@ -2,6 +2,9 @@
     // Chat polling interval - lowered for faster message sync
     const FETCH_INTERVAL_MS = 1500;
     const MAX_MESSAGES = 100;
+    // Number of recent image messages to keep fully loaded in the DOM.
+    // Older images get their src removed to free GPU memory, but reload on scroll.
+    const MAX_LOADED_IMAGES = 6;
     let escapeListenerAttached = false;
     const CHAT_ENDPOINT = (typeof window !== 'undefined' && window.chatHandlerUrl)
         ? window.chatHandlerUrl
@@ -259,6 +262,22 @@
                 messages = [];
             }
         }
+
+        // Reload unloaded images when they scroll into view
+        const chatImageObserver = new IntersectionObserver((entries) => {
+            entries.forEach((entry) => {
+                if (entry.isIntersecting) {
+                    const img = entry.target;
+                    if (img.dataset.unloaded && img.dataset.originalSrc) {
+                        img.src = img.dataset.originalSrc;
+                        delete img.dataset.unloaded;
+                        delete img.dataset.originalSrc;
+                        img.alt = img.dataset.savedAlt || 'Shared image';
+                    }
+                    chatImageObserver.unobserve(img);
+                }
+            });
+        }, { root: messageList, rootMargin: '200px' });
 
         function trimMessages() {
             if (messages.length > MAX_MESSAGES) {
@@ -757,7 +776,7 @@
 
                     const image = document.createElement('img');
                     image.className = 'chat-whisper-popout__thumbnail';
-                    image.src = message.imageUrl;
+                    image.src = message.thumbnailUrl || message.imageUrl;
                     image.alt = message.message || 'Shared image';
                     image.loading = 'lazy';
 
@@ -1345,6 +1364,9 @@
 
             const wrapper = document.createElement('div');
             wrapper.className = 'chat-message';
+            if (message.id) {
+                wrapper.dataset.messageId = message.id;
+            }
 
             const messageText = getDisplayText(typeof message.message === 'string' ? message.message : '');
 
@@ -1399,12 +1421,15 @@
 
                 const image = document.createElement('img');
                 image.className = 'chat-message__image';
-                image.src = message.imageUrl;
+                // Use thumbnail for inline display if available; full image
+                // is only loaded when the user clicks to open the lightbox.
+                image.src = message.thumbnailUrl || message.imageUrl;
                 image.alt = messageText || 'Shared image';
-                image.loading = 'eager';
+                image.loading = 'lazy';
 
                 const handleImageInteraction = (event) => {
                     event.preventDefault();
+                    // Always open the full-size original in lightbox
                     openImageLightbox(message.imageUrl, image.alt, messageText);
                 };
 
@@ -1575,7 +1600,34 @@
                 }
             }
 
+            // Unload images from older messages to free GPU memory.
+            // Each decoded image can use 3MB+ of GPU RAM regardless of file size.
+            // Keep only the most recent few loaded; older ones get a placeholder
+            // and will reload via loading="lazy" if the user scrolls back up.
+            unloadOldImages();
+
             messageList.scrollTop = messageList.scrollHeight;
+        }
+
+        function unloadOldImages() {
+            const allImages = messageList.querySelectorAll('img.chat-message__image');
+            const count = allImages.length;
+            if (count <= MAX_LOADED_IMAGES) {
+                return;
+            }
+            // Unload all but the last MAX_LOADED_IMAGES images
+            for (let i = 0; i < count - MAX_LOADED_IMAGES; i++) {
+                const img = allImages[i];
+                if (img.src && !img.dataset.unloaded) {
+                    img.dataset.originalSrc = img.src;
+                    img.dataset.savedAlt = img.alt;
+                    img.dataset.unloaded = '1';
+                    img.removeAttribute('src');
+                    img.alt = '[image — scroll to load]';
+                    // Watch for this image scrolling back into view
+                    chatImageObserver.observe(img);
+                }
+            }
         }
 
         function setOpen(state) {
@@ -1893,11 +1945,12 @@
             }
         }
 
-        async function sendChatMessage({ message = '', imageUrl = '', type = 'text', payload = null, target = '', onOptimistic = null, onSuccess = null, onError = null }) {
+        async function sendChatMessage({ message = '', imageUrl = '', thumbnailUrl = '', type = 'text', payload = null, target = '', onOptimistic = null, onSuccess = null, onError = null }) {
             const text = typeof message === 'string' ? message.trim() : '';
             const displayText = getDisplayText(text);
             const image = typeof imageUrl === 'string' ? imageUrl.trim() : '';
             const normalizedImage = image ? normalizeChatImageUrl(image) : '';
+            const thumbnail = typeof thumbnailUrl === 'string' ? thumbnailUrl.trim() : '';
             const normalizedType = typeof type === 'string' && type.trim() !== '' ? type.trim() : 'text';
             const payloadObject = payload && typeof payload === 'object' ? payload : null;
             const normalizedTarget = typeof target === 'string' ? target.trim() : '';
@@ -1920,6 +1973,9 @@
 
             if (image) {
                 optimisticMessage.imageUrl = normalizedImage || image;
+                if (thumbnail) {
+                    optimisticMessage.thumbnailUrl = thumbnail;
+                }
             }
 
             if (payloadObject) {
@@ -1954,6 +2010,9 @@
                 }
                 if (image !== '') {
                     params.append('imageUrl', image);
+                }
+                if (thumbnail !== '') {
+                    params.append('thumbnailUrl', thumbnail);
                 }
                 if (normalizedType !== 'text' || payloadObject) {
                     params.append('type', normalizedType);
@@ -2133,7 +2192,8 @@
 
                 const payload = {
                     message: normalizedCaption !== '' ? normalizedCaption : (file.name || ''),
-                    imageUrl: data.url
+                    imageUrl: data.url,
+                    thumbnailUrl: data.thumbnailUrl || ''
                 };
 
                 if (normalizedType !== 'text') {

@@ -510,6 +510,11 @@ function handleChatSend($dataFile, $maxMessages, array $validParticipants) {
 
     if ($imageUrl !== '') {
         $entry['imageUrl'] = $imageUrl;
+        $rawThumbnailUrl = $_POST['thumbnailUrl'] ?? '';
+        $thumbnailUrl = sanitizeImageUrl($rawThumbnailUrl);
+        if ($thumbnailUrl !== '') {
+            $entry['thumbnailUrl'] = $thumbnailUrl;
+        }
     }
 
     if (!empty($payload)) {
@@ -737,11 +742,116 @@ function handleChatUpload($uploadsDir) {
 
     $relativePath = 'chat_uploads/' . $safeName;
 
-    echo json_encode([
+    // Generate a thumbnail for chat display. The full image is only loaded
+    // when the user clicks to open the lightbox. This prevents large photos
+    // (e.g. 4000x3000 phone images) from consuming 30MB+ of GPU memory each
+    // just to be displayed in a 260px-wide chat bubble.
+    $thumbnailUrl = null;
+    $imageTypes = ['image/jpeg', 'image/png', 'image/gif', 'image/webp'];
+    if (in_array($mimeType, $imageTypes, true)) {
+        $thumbnailUrl = generateChatThumbnail($destination, $uploadsDir, $safeName, $mimeType);
+    }
+
+    $response = [
         'success' => true,
         'url' => $relativePath,
         'filename' => $safeName,
         'mime' => $mimeType
-    ]);
+    ];
+    if ($thumbnailUrl !== null) {
+        $response['thumbnailUrl'] = $thumbnailUrl;
+    }
+
+    echo json_encode($response);
     exit;
+}
+
+/**
+ * Generate a small thumbnail for chat display.
+ * Returns the relative URL to the thumbnail, or null on failure.
+ */
+function generateChatThumbnail($sourcePath, $uploadsDir, $originalName, $mimeType) {
+    $maxWidth = 400;
+    $maxHeight = 300;
+
+    $info = @getimagesize($sourcePath);
+    if (!$info) {
+        return null;
+    }
+
+    [$origW, $origH] = $info;
+
+    // Skip thumbnail if already small enough
+    if ($origW <= $maxWidth && $origH <= $maxHeight) {
+        return null;
+    }
+
+    // Calculate scaled dimensions preserving aspect ratio
+    $ratio = min($maxWidth / $origW, $maxHeight / $origH);
+    $newW = (int) round($origW * $ratio);
+    $newH = (int) round($origH * $ratio);
+
+    $source = null;
+    switch ($mimeType) {
+        case 'image/jpeg':
+            $source = @imagecreatefromjpeg($sourcePath);
+            break;
+        case 'image/png':
+            $source = @imagecreatefrompng($sourcePath);
+            break;
+        case 'image/gif':
+            $source = @imagecreatefromgif($sourcePath);
+            break;
+        case 'image/webp':
+            $source = @imagecreatefromwebp($sourcePath);
+            break;
+    }
+
+    if (!$source) {
+        return null;
+    }
+
+    $thumb = imagecreatetruecolor($newW, $newH);
+    if (!$thumb) {
+        imagedestroy($source);
+        return null;
+    }
+
+    // Preserve transparency for PNG/GIF
+    if ($mimeType === 'image/png' || $mimeType === 'image/gif') {
+        imagealphablending($thumb, false);
+        imagesavealpha($thumb, true);
+        $transparent = imagecolorallocatealpha($thumb, 0, 0, 0, 127);
+        imagefill($thumb, 0, 0, $transparent);
+    }
+
+    imagecopyresampled($thumb, $source, 0, 0, 0, 0, $newW, $newH, $origW, $origH);
+    imagedestroy($source);
+
+    $thumbName = 'thumb_' . $originalName;
+    $thumbPath = rtrim($uploadsDir, DIRECTORY_SEPARATOR) . DIRECTORY_SEPARATOR . $thumbName;
+
+    $saved = false;
+    switch ($mimeType) {
+        case 'image/jpeg':
+            $saved = imagejpeg($thumb, $thumbPath, 80);
+            break;
+        case 'image/png':
+            $saved = imagepng($thumb, $thumbPath, 6);
+            break;
+        case 'image/gif':
+            $saved = imagegif($thumb, $thumbPath);
+            break;
+        case 'image/webp':
+            $saved = imagewebp($thumb, $thumbPath, 80);
+            break;
+    }
+
+    imagedestroy($thumb);
+
+    if (!$saved) {
+        return null;
+    }
+
+    return 'chat_uploads/' . $thumbName;
 }

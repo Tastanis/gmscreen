@@ -454,14 +454,17 @@ if (!defined('VTT_STATE_API_INCLUDE_ONLY')) {
                     ]);
                 }
 
+                // Increment version inside the lock to prevent race conditions
+                // where two concurrent saves both increment and produce duplicate
+                // or skipped version numbers
+                $newVersion = incrementVttBoardStateVersion();
+                $nextState['_version'] = $newVersion;
+
                 return $nextState;
             });
 
-            // Increment version after successful save
-            $newVersion = incrementVttBoardStateVersion();
-
-            // Add version to response state
-            $responseState['_version'] = $newVersion;
+            // Extract version from the locked response
+            $newVersion = $responseState['_version'] ?? getVttBoardStateVersion();
 
             // Broadcast update via Pusher (non-blocking, fails silently)
             $broadcastData = [
