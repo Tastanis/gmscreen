@@ -776,7 +776,7 @@
 
                     const image = document.createElement('img');
                     image.className = 'chat-whisper-popout__thumbnail';
-                    image.src = message.imageUrl;
+                    image.src = message.thumbnailUrl || message.imageUrl;
                     image.alt = message.message || 'Shared image';
                     image.loading = 'lazy';
 
@@ -1421,12 +1421,15 @@
 
                 const image = document.createElement('img');
                 image.className = 'chat-message__image';
-                image.src = message.imageUrl;
+                // Use thumbnail for inline display if available; full image
+                // is only loaded when the user clicks to open the lightbox.
+                image.src = message.thumbnailUrl || message.imageUrl;
                 image.alt = messageText || 'Shared image';
                 image.loading = 'lazy';
 
                 const handleImageInteraction = (event) => {
                     event.preventDefault();
+                    // Always open the full-size original in lightbox
                     openImageLightbox(message.imageUrl, image.alt, messageText);
                 };
 
@@ -1942,11 +1945,12 @@
             }
         }
 
-        async function sendChatMessage({ message = '', imageUrl = '', type = 'text', payload = null, target = '', onOptimistic = null, onSuccess = null, onError = null }) {
+        async function sendChatMessage({ message = '', imageUrl = '', thumbnailUrl = '', type = 'text', payload = null, target = '', onOptimistic = null, onSuccess = null, onError = null }) {
             const text = typeof message === 'string' ? message.trim() : '';
             const displayText = getDisplayText(text);
             const image = typeof imageUrl === 'string' ? imageUrl.trim() : '';
             const normalizedImage = image ? normalizeChatImageUrl(image) : '';
+            const thumbnail = typeof thumbnailUrl === 'string' ? thumbnailUrl.trim() : '';
             const normalizedType = typeof type === 'string' && type.trim() !== '' ? type.trim() : 'text';
             const payloadObject = payload && typeof payload === 'object' ? payload : null;
             const normalizedTarget = typeof target === 'string' ? target.trim() : '';
@@ -1969,6 +1973,9 @@
 
             if (image) {
                 optimisticMessage.imageUrl = normalizedImage || image;
+                if (thumbnail) {
+                    optimisticMessage.thumbnailUrl = thumbnail;
+                }
             }
 
             if (payloadObject) {
@@ -2003,6 +2010,9 @@
                 }
                 if (image !== '') {
                     params.append('imageUrl', image);
+                }
+                if (thumbnail !== '') {
+                    params.append('thumbnailUrl', thumbnail);
                 }
                 if (normalizedType !== 'text' || payloadObject) {
                     params.append('type', normalizedType);
@@ -2182,7 +2192,8 @@
 
                 const payload = {
                     message: normalizedCaption !== '' ? normalizedCaption : (file.name || ''),
-                    imageUrl: data.url
+                    imageUrl: data.url,
+                    thumbnailUrl: data.thumbnailUrl || ''
                 };
 
                 if (normalizedType !== 'text') {
