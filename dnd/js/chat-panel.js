@@ -2,9 +2,9 @@
     // Chat polling interval - lowered for faster message sync
     const FETCH_INTERVAL_MS = 1500;
     const MAX_MESSAGES = 100;
-    // Only render recent messages in the DOM to reduce page-wide layout cost.
-    // All messages stay in the array for sync; this only limits what's in the DOM.
-    const MAX_VISIBLE_MESSAGES = 30;
+    // Number of recent image messages to keep fully loaded in the DOM.
+    // Older images get their src removed to free GPU memory, but reload on scroll.
+    const MAX_LOADED_IMAGES = 6;
     let escapeListenerAttached = false;
     const CHAT_ENDPOINT = (typeof window !== 'undefined' && window.chatHandlerUrl)
         ? window.chatHandlerUrl
@@ -262,6 +262,22 @@
                 messages = [];
             }
         }
+
+        // Reload unloaded images when they scroll into view
+        const chatImageObserver = new IntersectionObserver((entries) => {
+            entries.forEach((entry) => {
+                if (entry.isIntersecting) {
+                    const img = entry.target;
+                    if (img.dataset.unloaded && img.dataset.originalSrc) {
+                        img.src = img.dataset.originalSrc;
+                        delete img.dataset.unloaded;
+                        delete img.dataset.originalSrc;
+                        img.alt = img.dataset.savedAlt || 'Shared image';
+                    }
+                    chatImageObserver.unobserve(img);
+                }
+            });
+        }, { root: messageList, rootMargin: '200px' });
 
         function trimMessages() {
             if (messages.length > MAX_MESSAGES) {
@@ -1574,19 +1590,41 @@
                 return timeA - timeB;
             });
 
-            // Only put the most recent messages into the DOM. The full array
-            // is kept in memory for sync, but a large DOM (100 messages with
-            // images) causes the entire page to slow down on every layout.
-            const visible = sorted.slice(-MAX_VISIBLE_MESSAGES);
-
-            for (const message of visible) {
+            for (const message of sorted) {
                 const element = createMessageElement(message);
                 if (element) {
                     messageList.appendChild(element);
                 }
             }
 
+            // Unload images from older messages to free GPU memory.
+            // Each decoded image can use 3MB+ of GPU RAM regardless of file size.
+            // Keep only the most recent few loaded; older ones get a placeholder
+            // and will reload via loading="lazy" if the user scrolls back up.
+            unloadOldImages();
+
             messageList.scrollTop = messageList.scrollHeight;
+        }
+
+        function unloadOldImages() {
+            const allImages = messageList.querySelectorAll('img.chat-message__image');
+            const count = allImages.length;
+            if (count <= MAX_LOADED_IMAGES) {
+                return;
+            }
+            // Unload all but the last MAX_LOADED_IMAGES images
+            for (let i = 0; i < count - MAX_LOADED_IMAGES; i++) {
+                const img = allImages[i];
+                if (img.src && !img.dataset.unloaded) {
+                    img.dataset.originalSrc = img.src;
+                    img.dataset.savedAlt = img.alt;
+                    img.dataset.unloaded = '1';
+                    img.removeAttribute('src');
+                    img.alt = '[image — scroll to load]';
+                    // Watch for this image scrolling back into view
+                    chatImageObserver.observe(img);
+                }
+            }
         }
 
         function setOpen(state) {
