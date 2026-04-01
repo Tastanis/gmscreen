@@ -289,6 +289,11 @@
             } else {
                 delete normalized.imageUrl;
             }
+            if (typeof message.thumbnailUrl === 'string' && message.thumbnailUrl !== '') {
+                normalized.thumbnailUrl = normalizeChatImageUrl(message.thumbnailUrl);
+            } else {
+                delete normalized.thumbnailUrl;
+            }
             return normalized;
         }
 
@@ -757,7 +762,7 @@
 
                     const image = document.createElement('img');
                     image.className = 'chat-whisper-popout__thumbnail';
-                    image.src = message.imageUrl;
+                    image.src = message.thumbnailUrl || message.imageUrl;
                     image.alt = message.message || 'Shared image';
                     image.loading = 'lazy';
 
@@ -1399,9 +1404,13 @@
 
                 const image = document.createElement('img');
                 image.className = 'chat-message__image';
-                image.src = message.imageUrl;
+                image.src = message.thumbnailUrl || message.imageUrl;
                 image.alt = messageText || 'Shared image';
                 image.loading = 'eager';
+                image.dataset.fullUrl = message.imageUrl;
+                if (message.thumbnailUrl) {
+                    image.dataset.thumbnailUrl = message.thumbnailUrl;
+                }
 
                 const handleImageInteraction = (event) => {
                     event.preventDefault();
@@ -1575,7 +1584,69 @@
                 }
             }
 
+            applyChatImageTiering();
+            setupChatImageObserver();
+
             messageList.scrollTop = messageList.scrollHeight;
+        }
+
+        function applyChatImageTiering() {
+            const allImages = Array.from(messageList.querySelectorAll('img.chat-message__image'));
+            if (allImages.length === 0) {
+                return;
+            }
+
+            // Images are in DOM order (oldest first), reverse to get newest first
+            const reversed = [...allImages].reverse();
+
+            reversed.forEach((img, index) => {
+                if (index === 0) {
+                    // Most recent: full resolution
+                    img.src = img.dataset.fullUrl || img.src;
+                    img.loading = 'eager';
+                } else if (index >= 1 && index <= 5) {
+                    // Images 2-6: thumbnail (already set by createMessageElement), eager load
+                    img.loading = 'eager';
+                } else {
+                    // Images 7+: defer loading until scrolled into view
+                    const thumbOrFull = img.dataset.thumbnailUrl || img.dataset.fullUrl || img.src;
+                    img.dataset.originalSrc = thumbOrFull;
+                    img.removeAttribute('src');
+                    img.alt = '[image — scroll to load]';
+                    img.loading = 'lazy';
+                }
+            });
+        }
+
+        let chatImageObserver = null;
+
+        function setupChatImageObserver() {
+            if (chatImageObserver) {
+                chatImageObserver.disconnect();
+            }
+
+            chatImageObserver = new IntersectionObserver((entries) => {
+                for (const entry of entries) {
+                    if (entry.isIntersecting) {
+                        const img = entry.target;
+                        if (img.dataset.originalSrc && !img.src) {
+                            img.src = img.dataset.originalSrc;
+                            img.alt = img.dataset.fullUrl ? 'Shared image' : (img.alt || 'Shared image');
+                        }
+                        chatImageObserver.unobserve(img);
+                    }
+                }
+            }, {
+                root: messageList,
+                rootMargin: '200px'
+            });
+
+            const deferredImages = messageList.querySelectorAll('img.chat-message__image[data-original-src]');
+            deferredImages.forEach((img) => {
+                if (!img.src) {
+                    chatImageObserver.observe(img);
+                }
+            });
         }
 
         function setOpen(state) {
@@ -1893,11 +1964,12 @@
             }
         }
 
-        async function sendChatMessage({ message = '', imageUrl = '', type = 'text', payload = null, target = '', onOptimistic = null, onSuccess = null, onError = null }) {
+        async function sendChatMessage({ message = '', imageUrl = '', thumbnailUrl = '', type = 'text', payload = null, target = '', onOptimistic = null, onSuccess = null, onError = null }) {
             const text = typeof message === 'string' ? message.trim() : '';
             const displayText = getDisplayText(text);
             const image = typeof imageUrl === 'string' ? imageUrl.trim() : '';
             const normalizedImage = image ? normalizeChatImageUrl(image) : '';
+            const thumbnail = typeof thumbnailUrl === 'string' ? thumbnailUrl.trim() : '';
             const normalizedType = typeof type === 'string' && type.trim() !== '' ? type.trim() : 'text';
             const payloadObject = payload && typeof payload === 'object' ? payload : null;
             const normalizedTarget = typeof target === 'string' ? target.trim() : '';
@@ -1920,6 +1992,10 @@
 
             if (image) {
                 optimisticMessage.imageUrl = normalizedImage || image;
+            }
+
+            if (thumbnail) {
+                optimisticMessage.thumbnailUrl = thumbnail;
             }
 
             if (payloadObject) {
@@ -1954,6 +2030,9 @@
                 }
                 if (image !== '') {
                     params.append('imageUrl', image);
+                }
+                if (thumbnail !== '') {
+                    params.append('thumbnailUrl', thumbnail);
                 }
                 if (normalizedType !== 'text' || payloadObject) {
                     params.append('type', normalizedType);
@@ -2133,7 +2212,8 @@
 
                 const payload = {
                     message: normalizedCaption !== '' ? normalizedCaption : (file.name || ''),
-                    imageUrl: data.url
+                    imageUrl: data.url,
+                    thumbnailUrl: data.thumbnailUrl || ''
                 };
 
                 if (normalizedType !== 'text') {

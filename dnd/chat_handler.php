@@ -467,8 +467,10 @@ function handleChatSend($dataFile, $maxMessages, array $validParticipants) {
 
     $rawMessage = $_POST['message'] ?? '';
     $rawImageUrl = $_POST['imageUrl'] ?? '';
+    $rawThumbnailUrl = $_POST['thumbnailUrl'] ?? '';
     $message = sanitizeMessage($rawMessage);
     $imageUrl = sanitizeImageUrl($rawImageUrl);
+    $thumbnailUrl = sanitizeImageUrl($rawThumbnailUrl);
 
     if ($message === '' && $imageUrl === '') {
         echo json_encode(['success' => false, 'error' => 'Message cannot be empty']);
@@ -510,6 +512,10 @@ function handleChatSend($dataFile, $maxMessages, array $validParticipants) {
 
     if ($imageUrl !== '') {
         $entry['imageUrl'] = $imageUrl;
+    }
+
+    if ($thumbnailUrl !== '') {
+        $entry['thumbnailUrl'] = $thumbnailUrl;
     }
 
     if (!empty($payload)) {
@@ -685,6 +691,97 @@ function handleRollStatusUpdate($dataFile)
     exit;
 }
 
+function generateChatThumbnail($sourcePath, $mimeType, $uploadsDir, $originalName) {
+    $imageTypes = ['image/jpeg', 'image/png', 'image/gif', 'image/webp'];
+    if (!in_array($mimeType, $imageTypes)) {
+        return null;
+    }
+
+    $imageInfo = @getimagesize($sourcePath);
+    if ($imageInfo === false) {
+        return null;
+    }
+
+    $origWidth = $imageInfo[0];
+    $origHeight = $imageInfo[1];
+
+    $maxWidth = 400;
+    $maxHeight = 300;
+
+    if ($origWidth <= $maxWidth && $origHeight <= $maxHeight) {
+        return null; // Already small enough
+    }
+
+    $ratio = min($maxWidth / $origWidth, $maxHeight / $origHeight);
+    $newWidth = (int) round($origWidth * $ratio);
+    $newHeight = (int) round($origHeight * $ratio);
+
+    switch ($mimeType) {
+        case 'image/jpeg':
+            $sourceImage = @imagecreatefromjpeg($sourcePath);
+            break;
+        case 'image/png':
+            $sourceImage = @imagecreatefrompng($sourcePath);
+            break;
+        case 'image/gif':
+            $sourceImage = @imagecreatefromgif($sourcePath);
+            break;
+        case 'image/webp':
+            $sourceImage = @imagecreatefromwebp($sourcePath);
+            break;
+        default:
+            return null;
+    }
+
+    if (!$sourceImage) {
+        return null;
+    }
+
+    $thumbnail = imagecreatetruecolor($newWidth, $newHeight);
+    if (!$thumbnail) {
+        imagedestroy($sourceImage);
+        return null;
+    }
+
+    // Preserve transparency for PNG and WebP
+    if ($mimeType === 'image/png' || $mimeType === 'image/webp') {
+        imagealphablending($thumbnail, false);
+        imagesavealpha($thumbnail, true);
+        $transparent = imagecolorallocatealpha($thumbnail, 0, 0, 0, 127);
+        imagefilledrectangle($thumbnail, 0, 0, $newWidth, $newHeight, $transparent);
+    }
+
+    imagecopyresampled($thumbnail, $sourceImage, 0, 0, 0, 0, $newWidth, $newHeight, $origWidth, $origHeight);
+
+    $thumbName = 'thumb_' . $originalName;
+    $thumbPath = rtrim($uploadsDir, DIRECTORY_SEPARATOR) . DIRECTORY_SEPARATOR . $thumbName;
+
+    $saved = false;
+    switch ($mimeType) {
+        case 'image/jpeg':
+            $saved = imagejpeg($thumbnail, $thumbPath, 80);
+            break;
+        case 'image/png':
+            $saved = imagepng($thumbnail, $thumbPath, 6);
+            break;
+        case 'image/gif':
+            $saved = imagegif($thumbnail, $thumbPath);
+            break;
+        case 'image/webp':
+            $saved = imagewebp($thumbnail, $thumbPath, 80);
+            break;
+    }
+
+    imagedestroy($sourceImage);
+    imagedestroy($thumbnail);
+
+    if ($saved) {
+        return 'chat_uploads/' . $thumbName;
+    }
+
+    return null;
+}
+
 function handleChatUpload($uploadsDir) {
     if (!isset($_SESSION['user'])) {
         echo json_encode(['success' => false, 'error' => 'Not authenticated']);
@@ -737,11 +834,18 @@ function handleChatUpload($uploadsDir) {
 
     $relativePath = 'chat_uploads/' . $safeName;
 
-    echo json_encode([
+    $response = [
         'success' => true,
         'url' => $relativePath,
         'filename' => $safeName,
         'mime' => $mimeType
-    ]);
+    ];
+
+    $thumbnailUrl = generateChatThumbnail($destination, $mimeType, $uploadsDir, $safeName);
+    if ($thumbnailUrl !== null) {
+        $response['thumbnailUrl'] = $thumbnailUrl;
+    }
+
+    echo json_encode($response);
     exit;
 }
