@@ -1010,6 +1010,8 @@ export function mountBoardInteractions(store, routes = {}) {
   };
 
   let dragRenderRafId = null;
+  /** @type {Map<string, {element: HTMLElement, baseLeft: number, baseTop: number}>} */
+  let dragElements = null;
 
   const tokenLibraryDragState = {
     active: false,
@@ -4215,6 +4217,29 @@ export function mountBoardInteractions(store, routes = {}) {
     }
 
     applyDragPreview(preview, false);
+
+    // Capture DOM references for CSS-transform-based drag rendering.
+    // After applyDragPreview triggers renderTokens, the elements are positioned
+    // at their original grid locations. We store those base positions so
+    // updateTokenDrag can apply translate3d offsets directly.
+    const gridSize = Math.max(8, Number.isFinite(viewState.gridSize) ? viewState.gridSize : 64);
+    const offsets = viewState.gridOffsets ?? {};
+    const leftOffset = Number.isFinite(offsets.left) ? offsets.left : 0;
+    const topOffset = Number.isFinite(offsets.top) ? offsets.top : 0;
+    dragElements = new Map();
+    if (tokenLayer) {
+      preview.forEach((pos, id) => {
+        const el = tokenLayer.querySelector(`[data-placement-id="${id}"]`);
+        if (el instanceof HTMLElement) {
+          const baseLeft = leftOffset + (pos.column ?? 0) * gridSize;
+          const baseTop = topOffset + (pos.row ?? 0) * gridSize;
+          el.classList.add('is-dragging');
+          el.style.zIndex = '10';
+          dragElements.set(id, { element: el, baseLeft, baseTop });
+        }
+      });
+    }
+
     return true;
   }
 
@@ -4279,7 +4304,38 @@ export function mountBoardInteractions(store, routes = {}) {
       return;
     }
 
-    applyDragPreview(nextPreview, changed);
+    // Update previewPositions and hasMoved for commit, measurement sync, etc.
+    // but skip the renderTokens() call — apply CSS transforms directly instead.
+    if (viewState.dragState) {
+      viewState.dragState.previewPositions = nextPreview;
+      if (changed) {
+        viewState.dragState.hasMoved = true;
+      }
+      if (viewState.dragState.measurement) {
+        syncTokenMeasurement(nextPreview);
+      }
+    }
+
+    // Apply CSS transform directly on dragged elements (GPU-composited, no layout).
+    // Position is derived from the same previewPositions grid coords that commitDragPreview
+    // will read, guaranteeing visual matches commit.
+    if (dragElements && dragElements.size) {
+      const offsets = viewState.gridOffsets ?? {};
+      const lo = Number.isFinite(offsets.left) ? offsets.left : 0;
+      const to = Number.isFinite(offsets.top) ? offsets.top : 0;
+      nextPreview.forEach((pos, id) => {
+        const cached = dragElements.get(id);
+        if (!cached) {
+          return;
+        }
+        const left = lo + (pos.column ?? 0) * gridSize;
+        const top = to + (pos.row ?? 0) * gridSize;
+        cached.element.style.transform = `translate3d(${left}px, ${top}px, 0)`;
+      });
+    } else {
+      // Fallback: no cached elements, use original render path
+      applyDragPreview(nextPreview, changed);
+    }
   }
 
   function endTokenDrag({ commit = false, pointerId = null } = {}) {
@@ -4329,6 +4385,16 @@ export function mountBoardInteractions(store, routes = {}) {
 
     viewState.dragState = null;
     clearDragCandidate(pointerId);
+
+    // Clear CSS-transform drag elements before final render so renderTokens
+    // applies authoritative positions from state without leftover transforms.
+    if (dragElements) {
+      dragElements.forEach(({ element }) => {
+        element.classList.remove('is-dragging');
+        element.style.zIndex = '';
+      });
+      dragElements = null;
+    }
 
     if (commit && moved && preview && preview.size) {
       commitDragPreview(preview, { startTime, deferredUpdates });
