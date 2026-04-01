@@ -1009,6 +1009,8 @@ export function mountBoardInteractions(store, routes = {}) {
     selectionBoxState: null,
   };
 
+  let dragRenderRafId = null;
+
   const tokenLibraryDragState = {
     active: false,
     usesFallbackPayload: false,
@@ -1646,7 +1648,7 @@ export function mountBoardInteractions(store, routes = {}) {
   };
   let turnPhase = TURN_PHASE.IDLE;
   let borderFlashTimeoutId = null;
-  let allyTurnTimerInterval = null;
+  let allyTurnTimerRafId = null;
   let allyTurnTimerMode = 'idle';
   let allyTurnTimerExpiresAt = null;
   let allyTurnTimerStartedAt = null;
@@ -4281,6 +4283,12 @@ export function mountBoardInteractions(store, routes = {}) {
   }
 
   function endTokenDrag({ commit = false, pointerId = null } = {}) {
+    // Cancel any pending drag render so the final render below is immediate
+    if (dragRenderRafId != null) {
+      cancelAnimationFrame(dragRenderRafId);
+      dragRenderRafId = null;
+    }
+
     const dragState = viewState.dragState;
     if (!dragState) {
       clearDragCandidate(pointerId);
@@ -4340,7 +4348,12 @@ export function mountBoardInteractions(store, routes = {}) {
     if (viewState.dragState.measurement) {
       syncTokenMeasurement(preview);
     }
-    renderTokens(boardApi.getState?.() ?? {}, tokenLayer, viewState);
+    if (dragRenderRafId == null) {
+      dragRenderRafId = requestAnimationFrame(() => {
+        dragRenderRafId = null;
+        renderTokens(boardApi.getState?.() ?? {}, tokenLayer, viewState);
+      });
+    }
   }
 
   function syncTokenMeasurement(preview) {
@@ -6402,8 +6415,10 @@ export function mountBoardInteractions(store, routes = {}) {
 
     updateCombatTracker(trackerEntries, { activeIds: activeCombatantIds });
 
-    // Render auras whenever tokens are rendered
-    renderAuras(state, auraLayer, view);
+    // Skip aura rendering during active drag for performance; auras snap on drop
+    if (!viewState.dragState) {
+      renderAuras(state, auraLayer, view);
+    }
   }
 
   function renderAuras(state = {}, layer, view) {
@@ -6432,9 +6447,7 @@ export function mountBoardInteractions(store, routes = {}) {
       }
     });
 
-    const fragment = document.createDocumentFragment();
     let auraCount = 0;
-    const renderedAuraIds = new Set();
 
     const gmViewing = isGmUser();
     const isCellFogged = gmViewing ? null : createFogChecker(state);
@@ -6489,49 +6502,46 @@ export function mountBoardInteractions(store, routes = {}) {
       const pixelRadius = Math.max(pixelRadiusX, pixelRadiusY);
       const diameter = pixelRadius * 2;
 
-      renderedAuraIds.add(normalized.id);
-
       let auraEl = existingAuras.get(normalized.id);
+      let isNew = false;
       if (auraEl) {
         existingAuras.delete(normalized.id);
       } else {
         auraEl = document.createElement('div');
         auraEl.className = 'vtt-token-aura';
+        auraEl.dataset.placementId = normalized.id;
+        isNew = true;
       }
 
-      auraEl.dataset.placementId = normalized.id;
       auraEl.style.width = `${diameter}px`;
       auraEl.style.height = `${diameter}px`;
 
-      // Parse hex color to get RGB components for translucent background
-      const r = parseInt(auraColor.slice(1, 3), 16) || 0;
-      const g = parseInt(auraColor.slice(3, 5), 16) || 0;
-      const b = parseInt(auraColor.slice(5, 7), 16) || 0;
-      auraEl.style.background = `radial-gradient(circle, rgba(${r},${g},${b},0.3) 0%, rgba(${r},${g},${b},0.15) 60%, rgba(${r},${g},${b},0.05) 100%)`;
+      // Memoize gradient: only recompute if color or opacity changed
+      const gradientKey = auraColor;
+      if (auraEl._lastGradientKey !== gradientKey) {
+        const r = parseInt(auraColor.slice(1, 3), 16) || 0;
+        const g = parseInt(auraColor.slice(3, 5), 16) || 0;
+        const b = parseInt(auraColor.slice(5, 7), 16) || 0;
+        auraEl.style.background = `radial-gradient(circle, rgba(${r},${g},${b},0.3) 0%, rgba(${r},${g},${b},0.15) 60%, rgba(${r},${g},${b},0.05) 100%)`;
+        auraEl._lastGradientKey = gradientKey;
+      }
 
       const auraLeft = tokenCenterX - pixelRadius;
       const auraTop = tokenCenterY - pixelRadius;
       auraEl.style.transform = `translate3d(${auraLeft}px, ${auraTop}px, 0)`;
 
-      fragment.appendChild(auraEl);
+      if (isNew) {
+        layer.appendChild(auraEl);
+      }
       auraCount += 1;
     });
 
-    // Remove stale aura elements
+    // Remove orphaned aura elements no longer in state
     existingAuras.forEach((node) => {
       node.remove();
     });
 
-    while (layer.firstChild) {
-      layer.removeChild(layer.firstChild);
-    }
-
-    if (auraCount > 0) {
-      layer.appendChild(fragment);
-      layer.hidden = false;
-    } else {
-      layer.hidden = true;
-    }
+    layer.hidden = auraCount === 0;
   }
 
   function updateCombatTracker(combatants = [], options = {}) {
@@ -10453,6 +10463,21 @@ export function mountBoardInteractions(store, routes = {}) {
     }
   }
 
+  function startAllyTurnTimerLoop() {
+    function tick() {
+      updateAllyTurnTimerDisplay();
+      allyTurnTimerRafId = requestAnimationFrame(tick);
+    }
+    allyTurnTimerRafId = requestAnimationFrame(tick);
+  }
+
+  function stopAllyTurnTimerLoop() {
+    if (allyTurnTimerRafId != null) {
+      cancelAnimationFrame(allyTurnTimerRafId);
+      allyTurnTimerRafId = null;
+    }
+  }
+
   function startAllyTurnCountdown() {
     if (!turnTimerElement) {
       return;
@@ -10469,12 +10494,8 @@ export function mountBoardInteractions(store, routes = {}) {
     turnTimerElement.hidden = false;
     turnTimerElement.setAttribute('aria-hidden', 'false');
 
-    if (allyTurnTimerInterval && typeof window !== 'undefined' && typeof window.clearInterval === 'function') {
-      window.clearInterval(allyTurnTimerInterval);
-    }
-    if (typeof window !== 'undefined' && typeof window.setInterval === 'function') {
-      allyTurnTimerInterval = window.setInterval(updateAllyTurnTimerDisplay, 500);
-    }
+    stopAllyTurnTimerLoop();
+    startAllyTurnTimerLoop();
     updateAllyTurnTimerDisplay();
   }
 
@@ -10494,21 +10515,14 @@ export function mountBoardInteractions(store, routes = {}) {
     turnTimerElement.hidden = false;
     turnTimerElement.setAttribute('aria-hidden', 'false');
 
-    if (allyTurnTimerInterval && typeof window !== 'undefined' && typeof window.clearInterval === 'function') {
-      window.clearInterval(allyTurnTimerInterval);
-    }
-    if (typeof window !== 'undefined' && typeof window.setInterval === 'function') {
-      allyTurnTimerInterval = window.setInterval(updateAllyTurnTimerDisplay, 500);
-    }
+    stopAllyTurnTimerLoop();
+    startAllyTurnTimerLoop();
     updateAllyTurnTimerDisplay();
   }
 
   function stopAllyTurnTimer(options = {}) {
     const { hide = true, holdStage = false } = options;
-    if (allyTurnTimerInterval && typeof window !== 'undefined' && typeof window.clearInterval === 'function') {
-      window.clearInterval(allyTurnTimerInterval);
-    }
-    allyTurnTimerInterval = null;
+    stopAllyTurnTimerLoop();
     allyTurnTimerMode = 'idle';
     allyTurnTimerExpiresAt = null;
     allyTurnTimerStartedAt = null;

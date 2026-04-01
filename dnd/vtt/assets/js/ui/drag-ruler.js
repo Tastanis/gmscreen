@@ -2,6 +2,7 @@ const SVG_NS = 'http://www.w3.org/2000/svg';
 const MAX_MEASUREMENT_POINTS = 21; // 20 segments
 
 let sharedState = null;
+let cachedMapRect = null;
 
 export function mountDragRuler() {
   const ruler = document.getElementById('vtt-distance-ruler');
@@ -164,6 +165,7 @@ function toggleMeasureMode(state, nextActive) {
 }
 
 function beginMeasurement(state, pointerId, startPoint) {
+  invalidateMapRectCache();
   state.measuring = true;
   state.pointerId = pointerId;
   state.points = [startPoint];
@@ -202,6 +204,7 @@ function commitHoverPoint(state, snapPoint) {
 }
 
 function endMeasurement(state) {
+  invalidateMapRectCache();
   state.measuring = false;
   state.pointerId = null;
   state.hoverPoint = null;
@@ -337,23 +340,38 @@ function getSnappedPoint(state, event) {
   };
 }
 
-function getMapCoordinates(mapTransform, event) {
+function invalidateMapRectCache() {
+  cachedMapRect = null;
+}
+
+function getOrComputeMapRect(mapTransform) {
+  if (cachedMapRect) {
+    return cachedMapRect;
+  }
   const rect = mapTransform.getBoundingClientRect();
   const baseWidth = mapTransform.offsetWidth;
   const baseHeight = mapTransform.offsetHeight;
   if (!baseWidth || !baseHeight) {
     return null;
   }
-
   const scaleX = rect.width / baseWidth;
   const scaleY = rect.height / baseHeight;
   if (!Number.isFinite(scaleX) || !Number.isFinite(scaleY) || scaleX === 0 || scaleY === 0) {
     return null;
   }
+  cachedMapRect = { rect, scaleX, scaleY };
+  return cachedMapRect;
+}
+
+function getMapCoordinates(mapTransform, event) {
+  const cached = getOrComputeMapRect(mapTransform);
+  if (!cached) {
+    return null;
+  }
 
   return {
-    x: (event.clientX - rect.left) / scaleX,
-    y: (event.clientY - rect.top) / scaleY,
+    x: (event.clientX - cached.rect.left) / cached.scaleX,
+    y: (event.clientY - cached.rect.top) / cached.scaleY,
   };
 }
 
@@ -563,6 +581,7 @@ function createOverlay(container) {
 }
 
 function syncOverlaySize(state) {
+  invalidateMapRectCache();
   const width = state.mapTransform.offsetWidth || 0;
   const height = state.mapTransform.offsetHeight || 0;
   if (state.overlaySize.width === width && state.overlaySize.height === height) {
