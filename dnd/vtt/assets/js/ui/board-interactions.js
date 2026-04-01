@@ -323,10 +323,11 @@ export function createBoardStatePoller({
 
     // Polling interval for board state
     // When Pusher is connected, we use a longer interval as a fallback
-    // When Pusher is not connected, we poll more frequently
+    // When Pusher is not connected, we poll at a moderate interval.
+    // Diff-based rendering and timestamp merging make longer intervals safe.
     const BOARD_STATE_POLL_INTERVAL_MS = isPusherConnected()
       ? 10000  // 10 seconds when Pusher is connected (fallback only)
-      : 1000;  // 1 second when no real-time connection
+      : 3000;  // 3 seconds when no real-time connection
     poll();
     const intervalId = windowRef.setInterval(poll, BOARD_STATE_POLL_INTERVAL_MS);
     return {
@@ -6209,7 +6210,6 @@ export function mountBoardInteractions(store, routes = {}) {
       }
     });
 
-    const fragment = document.createDocumentFragment();
     let renderedCount = 0;
     const retainedSelection = new Set();
     const renderedIds = new Set();
@@ -6219,6 +6219,9 @@ export function mountBoardInteractions(store, routes = {}) {
     const groupColorAssignments = getCombatGroupColorAssignments();
     // Pre-compute fog checker once (null when fog inactive or GM viewing)
     const isCellFogged = gmViewing ? null : createFogChecker(state);
+
+    // Collect the desired order of token IDs so we can reconcile DOM order at the end
+    const desiredOrder = [];
 
     placements.forEach((placement) => {
       const normalized = normalizePlacementForRender(placement);
@@ -6269,20 +6272,26 @@ export function mountBoardInteractions(store, routes = {}) {
       renderedPlacements.push({ id: normalized.id, column, row, width, height });
 
       let token = existingNodes.get(normalized.id);
+      let isNew = false;
       if (token) {
         existingNodes.delete(normalized.id);
       } else {
         token = document.createElement('div');
         token.className = 'vtt-token';
+        isNew = true;
       }
 
       token.dataset.placementId = normalized.id;
-      token.style.width = `${width * gridSize}px`;
-      token.style.height = `${height * gridSize}px`;
+
+      // Only touch style properties when values actually changed to avoid layout thrash
+      const wPx = `${width * gridSize}px`;
+      const hPx = `${height * gridSize}px`;
+      if (token.style.width !== wPx) token.style.width = wPx;
+      if (token.style.height !== hPx) token.style.height = hPx;
       const left = leftOffset + column * gridSize;
       const top = topOffset + row * gridSize;
       const baseTransform = `translate3d(${left}px, ${top}px, 0)`;
-      token.style.transform = baseTransform;
+      if (token.style.transform !== baseTransform) token.style.transform = baseTransform;
 
       const rotation = tokenRotationAngles.get(normalized.id);
       if (Number.isFinite(rotation)) {
@@ -6345,7 +6354,11 @@ export function mountBoardInteractions(store, routes = {}) {
       }
       applyTokenOverlays(token, normalized);
 
-      fragment.appendChild(token);
+      // Only append new tokens to the DOM; existing ones are already in the layer
+      if (isNew) {
+        layer.appendChild(token);
+      }
+      desiredOrder.push(token);
       renderedCount += 1;
     });
 
@@ -6384,16 +6397,30 @@ export function mountBoardInteractions(store, routes = {}) {
       }
     });
 
+    // Remove tokens that are no longer in placements
     existingNodes.forEach((node) => {
       node.remove();
     });
 
-    while (layer.firstChild) {
-      layer.removeChild(layer.firstChild);
-    }
-
-    if (renderedCount > 0) {
-      layer.appendChild(fragment);
+    // Reconcile DOM order only if it actually differs from desired order.
+    // This avoids moving nodes (which triggers layout) when nothing changed.
+    if (desiredOrder.length > 0) {
+      const currentChildren = Array.from(layer.children);
+      let orderCorrect = currentChildren.length === desiredOrder.length;
+      if (orderCorrect) {
+        for (let i = 0; i < desiredOrder.length; i++) {
+          if (currentChildren[i] !== desiredOrder[i]) {
+            orderCorrect = false;
+            break;
+          }
+        }
+      }
+      if (!orderCorrect) {
+        // Re-order by appending in desired sequence; appendChild moves existing nodes
+        for (const node of desiredOrder) {
+          layer.appendChild(node);
+        }
+      }
       layer.hidden = false;
     } else {
       layer.hidden = true;
@@ -6432,7 +6459,6 @@ export function mountBoardInteractions(store, routes = {}) {
       }
     });
 
-    const fragment = document.createDocumentFragment();
     let auraCount = 0;
     const renderedAuraIds = new Set();
 
@@ -6492,46 +6518,44 @@ export function mountBoardInteractions(store, routes = {}) {
       renderedAuraIds.add(normalized.id);
 
       let auraEl = existingAuras.get(normalized.id);
+      let isNewAura = false;
       if (auraEl) {
         existingAuras.delete(normalized.id);
       } else {
         auraEl = document.createElement('div');
         auraEl.className = 'vtt-token-aura';
+        isNewAura = true;
       }
 
       auraEl.dataset.placementId = normalized.id;
-      auraEl.style.width = `${diameter}px`;
-      auraEl.style.height = `${diameter}px`;
+      const diameterPx = `${diameter}px`;
+      if (auraEl.style.width !== diameterPx) auraEl.style.width = diameterPx;
+      if (auraEl.style.height !== diameterPx) auraEl.style.height = diameterPx;
 
       // Parse hex color to get RGB components for translucent background
       const r = parseInt(auraColor.slice(1, 3), 16) || 0;
       const g = parseInt(auraColor.slice(3, 5), 16) || 0;
       const b = parseInt(auraColor.slice(5, 7), 16) || 0;
-      auraEl.style.background = `radial-gradient(circle, rgba(${r},${g},${b},0.3) 0%, rgba(${r},${g},${b},0.15) 60%, rgba(${r},${g},${b},0.05) 100%)`;
+      const bg = `radial-gradient(circle, rgba(${r},${g},${b},0.3) 0%, rgba(${r},${g},${b},0.15) 60%, rgba(${r},${g},${b},0.05) 100%)`;
+      if (auraEl.style.background !== bg) auraEl.style.background = bg;
 
       const auraLeft = tokenCenterX - pixelRadius;
       const auraTop = tokenCenterY - pixelRadius;
-      auraEl.style.transform = `translate3d(${auraLeft}px, ${auraTop}px, 0)`;
+      const auraTransform = `translate3d(${auraLeft}px, ${auraTop}px, 0)`;
+      if (auraEl.style.transform !== auraTransform) auraEl.style.transform = auraTransform;
 
-      fragment.appendChild(auraEl);
+      if (isNewAura) {
+        layer.appendChild(auraEl);
+      }
       auraCount += 1;
     });
 
-    // Remove stale aura elements
+    // Remove aura elements for tokens that no longer have auras
     existingAuras.forEach((node) => {
       node.remove();
     });
 
-    while (layer.firstChild) {
-      layer.removeChild(layer.firstChild);
-    }
-
-    if (auraCount > 0) {
-      layer.appendChild(fragment);
-      layer.hidden = false;
-    } else {
-      layer.hidden = true;
-    }
+    layer.hidden = auraCount === 0;
   }
 
   function updateCombatTracker(combatants = [], options = {}) {
