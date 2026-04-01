@@ -323,11 +323,10 @@ export function createBoardStatePoller({
 
     // Polling interval for board state
     // When Pusher is connected, we use a longer interval as a fallback
-    // When Pusher is not connected, we poll at a moderate interval.
-    // Diff-based rendering and timestamp merging make longer intervals safe.
+    // When Pusher is not connected, we poll more frequently
     const BOARD_STATE_POLL_INTERVAL_MS = isPusherConnected()
       ? 10000  // 10 seconds when Pusher is connected (fallback only)
-      : 3000;  // 3 seconds when no real-time connection
+      : 1000;  // 1 second when no real-time connection
     poll();
     const intervalId = windowRef.setInterval(poll, BOARD_STATE_POLL_INTERVAL_MS);
     return {
@@ -6210,6 +6209,7 @@ export function mountBoardInteractions(store, routes = {}) {
       }
     });
 
+    const fragment = document.createDocumentFragment();
     let renderedCount = 0;
     const retainedSelection = new Set();
     const renderedIds = new Set();
@@ -6219,9 +6219,6 @@ export function mountBoardInteractions(store, routes = {}) {
     const groupColorAssignments = getCombatGroupColorAssignments();
     // Pre-compute fog checker once (null when fog inactive or GM viewing)
     const isCellFogged = gmViewing ? null : createFogChecker(state);
-
-    // Collect the desired order of token IDs so we can reconcile DOM order at the end
-    const desiredOrder = [];
 
     placements.forEach((placement) => {
       const normalized = normalizePlacementForRender(placement);
@@ -6272,13 +6269,11 @@ export function mountBoardInteractions(store, routes = {}) {
       renderedPlacements.push({ id: normalized.id, column, row, width, height });
 
       let token = existingNodes.get(normalized.id);
-      let isNew = false;
       if (token) {
         existingNodes.delete(normalized.id);
       } else {
         token = document.createElement('div');
         token.className = 'vtt-token';
-        isNew = true;
       }
 
       token.dataset.placementId = normalized.id;
@@ -6354,11 +6349,7 @@ export function mountBoardInteractions(store, routes = {}) {
       }
       applyTokenOverlays(token, normalized);
 
-      // Only append new tokens to the DOM; existing ones are already in the layer
-      if (isNew) {
-        layer.appendChild(token);
-      }
-      desiredOrder.push(token);
+      fragment.appendChild(token);
       renderedCount += 1;
     });
 
@@ -6397,30 +6388,16 @@ export function mountBoardInteractions(store, routes = {}) {
       }
     });
 
-    // Remove tokens that are no longer in placements
     existingNodes.forEach((node) => {
       node.remove();
     });
 
-    // Reconcile DOM order only if it actually differs from desired order.
-    // This avoids moving nodes (which triggers layout) when nothing changed.
-    if (desiredOrder.length > 0) {
-      const currentChildren = Array.from(layer.children);
-      let orderCorrect = currentChildren.length === desiredOrder.length;
-      if (orderCorrect) {
-        for (let i = 0; i < desiredOrder.length; i++) {
-          if (currentChildren[i] !== desiredOrder[i]) {
-            orderCorrect = false;
-            break;
-          }
-        }
-      }
-      if (!orderCorrect) {
-        // Re-order by appending in desired sequence; appendChild moves existing nodes
-        for (const node of desiredOrder) {
-          layer.appendChild(node);
-        }
-      }
+    while (layer.firstChild) {
+      layer.removeChild(layer.firstChild);
+    }
+
+    if (renderedCount > 0) {
+      layer.appendChild(fragment);
       layer.hidden = false;
     } else {
       layer.hidden = true;
@@ -6459,6 +6436,7 @@ export function mountBoardInteractions(store, routes = {}) {
       }
     });
 
+    const fragment = document.createDocumentFragment();
     let auraCount = 0;
     const renderedAuraIds = new Set();
 
@@ -6518,13 +6496,11 @@ export function mountBoardInteractions(store, routes = {}) {
       renderedAuraIds.add(normalized.id);
 
       let auraEl = existingAuras.get(normalized.id);
-      let isNewAura = false;
       if (auraEl) {
         existingAuras.delete(normalized.id);
       } else {
         auraEl = document.createElement('div');
         auraEl.className = 'vtt-token-aura';
-        isNewAura = true;
       }
 
       auraEl.dataset.placementId = normalized.id;
@@ -6544,18 +6520,25 @@ export function mountBoardInteractions(store, routes = {}) {
       const auraTransform = `translate3d(${auraLeft}px, ${auraTop}px, 0)`;
       if (auraEl.style.transform !== auraTransform) auraEl.style.transform = auraTransform;
 
-      if (isNewAura) {
-        layer.appendChild(auraEl);
-      }
+      fragment.appendChild(auraEl);
       auraCount += 1;
     });
 
-    // Remove aura elements for tokens that no longer have auras
+    // Remove stale aura elements
     existingAuras.forEach((node) => {
       node.remove();
     });
 
-    layer.hidden = auraCount === 0;
+    while (layer.firstChild) {
+      layer.removeChild(layer.firstChild);
+    }
+
+    if (auraCount > 0) {
+      layer.appendChild(fragment);
+      layer.hidden = false;
+    } else {
+      layer.hidden = true;
+    }
   }
 
   function updateCombatTracker(combatants = [], options = {}) {

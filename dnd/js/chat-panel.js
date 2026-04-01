@@ -1563,57 +1563,19 @@
         }
 
         function renderMessages() {
+            messageList.innerHTML = '';
+
             const sorted = [...messages].sort((a, b) => {
                 const timeA = new Date(a.timestamp || 0).getTime();
                 const timeB = new Date(b.timestamp || 0).getTime();
                 return timeA - timeB;
             });
 
-            // Build a map of existing message elements by ID for diffing
-            const existingById = new Map();
-            Array.from(messageList.children).forEach((child) => {
-                const id = child.dataset?.messageId;
-                if (id) {
-                    existingById.set(id, child);
-                }
-            });
-
-            // Build the desired ID order
-            const desiredIds = sorted.map((m) => m.id).filter(Boolean);
-
-            // Check if we can skip the render entirely (same IDs in same order)
-            const currentIds = Array.from(messageList.children).map((c) => c.dataset?.messageId).filter(Boolean);
-            const orderUnchanged = desiredIds.length === currentIds.length &&
-                desiredIds.every((id, i) => id === currentIds[i]);
-            if (orderUnchanged) {
-                return;
-            }
-
-            // Remove messages no longer in the list
-            const desiredIdSet = new Set(desiredIds);
-            existingById.forEach((el, id) => {
-                if (!desiredIdSet.has(id)) {
-                    el.remove();
-                    existingById.delete(id);
-                }
-            });
-
-            // Add new messages and reorder
-            let previousNode = null;
             for (const message of sorted) {
-                if (!message || !message.id) continue;
-                let el = existingById.get(message.id);
-                if (!el) {
-                    el = createMessageElement(message);
-                    if (!el) continue;
-                    el.dataset.messageId = message.id;
+                const element = createMessageElement(message);
+                if (element) {
+                    messageList.appendChild(element);
                 }
-                // Insert in correct order: after previousNode, or at start
-                const nextSibling = previousNode ? previousNode.nextSibling : messageList.firstChild;
-                if (el !== nextSibling) {
-                    messageList.insertBefore(el, nextSibling);
-                }
-                previousNode = el;
             }
 
             messageList.scrollTop = messageList.scrollHeight;
