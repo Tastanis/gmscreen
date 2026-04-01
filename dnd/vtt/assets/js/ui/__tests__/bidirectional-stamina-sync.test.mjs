@@ -2,6 +2,9 @@ import test from 'node:test';
 import assert from 'node:assert/strict';
 import { JSDOM } from 'jsdom';
 
+// Prevent BroadcastChannel from keeping the process alive
+globalThis.BroadcastChannel = undefined;
+
 import { mountBoardInteractions } from '../board-interactions.js';
 
 // ---------------------------------------------------------------------------
@@ -69,6 +72,12 @@ function createDom() {
   globalThis.cancelAnimationFrame =
     window.cancelAnimationFrame?.bind(window) ?? ((id) => clearTimeout(id));
   globalThis.fetch = async () => ({ ok: true, json: async () => ({}) });
+
+  // Mock setInterval/clearInterval to prevent leaked timers from blocking process exit
+  window.setInterval = () => 0;
+  window.clearInterval = () => {};
+
+
   return dom;
 }
 
