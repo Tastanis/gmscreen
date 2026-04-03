@@ -239,6 +239,7 @@
                 return;
             }
             chatNotificationQueue.push(message);
+            toggleButton.classList.add('chat-panel-toggle--unread');
             if (!chatNotificationActive) {
                 showNextChatNotification();
             }
@@ -1664,6 +1665,7 @@
                 if (chatNotificationHost) {
                     chatNotificationHost.innerHTML = '';
                 }
+                toggleButton.classList.remove('chat-panel-toggle--unread');
                 textarea.focus();
             }
         }
