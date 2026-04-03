@@ -1500,6 +1500,7 @@ export function mountBoardInteractions(store, routes = {}) {
   let damageHealUi = null;
   let pendingDamageHeal = null;
   let damageHealStatusTimeoutId = null;
+  let healOverflowPopup = null;
   const completedCombatants = new Set();
   const combatantTeams = new Map();
   let trackerOverflowAnimationFrame = null;
@@ -3268,11 +3269,35 @@ export function mountBoardInteractions(store, routes = {}) {
 
     if (pendingDamageHeal && event.button === 0) {
       event.preventDefault();
+      closeHealOverflowPopup();
       const action = pendingDamageHeal;
       const placement = findRenderedPlacementAtPoint(event);
       if (!placement) {
         const noun = action.mode === 'damage' ? 'damage' : 'healing';
         updateStatus(`Click a token to apply ${action.amount} ${noun}.`);
+        return;
+      }
+
+      // Check if healing would exceed max HP - show popup to choose
+      if (action.mode === 'heal' && wouldHealOverflow(placement.id, action.amount)) {
+        showHealOverflowPopup(event, placement, action, (choice) => {
+          const allowTempHp = choice === 'temp';
+          const healResult = applyDamageHealToPlacement(placement.id, 'heal', action.amount, { allowTempHp });
+          if (!healResult) {
+            updateStatus('Unable to update hit points for that token.');
+            return;
+          }
+          const healName = healResult.name;
+          const healMax = healResult.max;
+          const healMaxDisplay = healMax !== null ? healMax : DEFAULT_HP_PLACEHOLDER;
+          const healCurrent = healResult.current;
+          if (allowTempHp && healMax !== null && healCurrent > healMax) {
+            const tempAmount = healCurrent - healMax;
+            updateStatus(`${healName} healed to max + ${tempAmount} temp HP (${healCurrent}/${healMaxDisplay} HP).`);
+          } else {
+            updateStatus(`${healName} recovers ${healResult.change} HP (${healCurrent}/${healMaxDisplay} HP).`);
+          }
+        });
         return;
       }
 
@@ -11396,13 +11421,28 @@ export function mountBoardInteractions(store, routes = {}) {
       valueElement.textContent = displayValue;
     }
 
+    // Temp HP fill bar (overlaid on track, different color)
+    let tempFillElement = track.querySelector('.vtt-token__hp-temp-fill');
+
     if (fillElement) {
-      const { percent, negative } = calculateHitPointsFillPercentage(hp);
+      const { percent, negative, tempPercent } = calculateHitPointsFillPercentage(hp);
       fillElement.style.width = `${percent}%`;
       if (negative) {
         fillElement.classList.add('vtt-token__hp-fill--negative');
       } else {
         fillElement.classList.remove('vtt-token__hp-fill--negative');
+      }
+
+      // Show/hide temp HP bar
+      if (tempPercent > 0) {
+        if (!tempFillElement) {
+          tempFillElement = document.createElement('div');
+          tempFillElement.className = 'vtt-token__hp-temp-fill';
+          track.appendChild(tempFillElement);
+        }
+        tempFillElement.style.width = `${tempPercent}%`;
+      } else if (tempFillElement) {
+        tempFillElement.remove();
       }
     }
 
@@ -12460,6 +12500,7 @@ export function mountBoardInteractions(store, routes = {}) {
 
   function closeDamageHealWidget(options = {}) {
     const { restoreStatus: restoreMessage = true } = options;
+    closeHealOverflowPopup();
     if (damageHealUi) {
       damageHealUi.cleanup?.();
       if (damageHealUi.container?.parentElement) {
@@ -12549,6 +12590,126 @@ export function mountBoardInteractions(store, routes = {}) {
     }
   }
 
+  function closeHealOverflowPopup() {
+    if (healOverflowPopup) {
+      healOverflowPopup.cleanup?.();
+      if (healOverflowPopup.element?.parentElement) {
+        healOverflowPopup.element.remove();
+      }
+      healOverflowPopup = null;
+    }
+  }
+
+  function wouldHealOverflow(placementId, amount) {
+    const placement = getPlacementFromStore(placementId);
+    if (!placement) return false;
+    const hp = ensurePlacementHitPoints(placement.hp);
+    const currentValue = parseHitPointNumber(hp.current);
+    const maxValue = parseHitPointNumber(hp.max);
+    if (currentValue === null || maxValue === null || maxValue <= 0) return false;
+    return (currentValue + amount) > maxValue;
+  }
+
+  function showHealOverflowPopup(event, placement, action, onChoice) {
+    closeHealOverflowPopup();
+
+    const popup = document.createElement('div');
+    popup.className = 'vtt-heal-overflow-popup';
+
+    // Position near the click/token
+    const clientX = event.clientX ?? 0;
+    const clientY = event.clientY ?? 0;
+    popup.style.left = `${clientX + 12}px`;
+    popup.style.top = `${clientY - 20}px`;
+
+    const hp = ensurePlacementHitPoints(placement.hp);
+    const currentValue = parseHitPointNumber(hp.current) ?? 0;
+    const maxValue = parseHitPointNumber(hp.max) ?? 0;
+    const healAmount = action.amount;
+    const wouldReach = currentValue + healAmount;
+    const overflow = wouldReach - maxValue;
+
+    const label = document.createElement('div');
+    label.className = 'vtt-heal-overflow-popup__label';
+    label.textContent = `+${healAmount} exceeds max by ${overflow}`;
+    popup.appendChild(label);
+
+    const actions = document.createElement('div');
+    actions.className = 'vtt-heal-overflow-popup__actions';
+
+    const healToMaxBtn = document.createElement('button');
+    healToMaxBtn.type = 'button';
+    healToMaxBtn.className = 'vtt-heal-overflow-popup__btn vtt-heal-overflow-popup__btn--max';
+    healToMaxBtn.textContent = 'Heal to Max';
+
+    const addTempBtn = document.createElement('button');
+    addTempBtn.type = 'button';
+    addTempBtn.className = 'vtt-heal-overflow-popup__btn vtt-heal-overflow-popup__btn--temp';
+    addTempBtn.textContent = 'Add Temp HP';
+
+    actions.appendChild(healToMaxBtn);
+    actions.appendChild(addTempBtn);
+    popup.appendChild(actions);
+
+    const handleChoice = (choice) => {
+      closeHealOverflowPopup();
+      onChoice(choice);
+    };
+
+    healToMaxBtn.addEventListener('click', (e) => {
+      e.preventDefault();
+      e.stopPropagation();
+      handleChoice('max');
+    });
+
+    addTempBtn.addEventListener('click', (e) => {
+      e.preventDefault();
+      e.stopPropagation();
+      handleChoice('temp');
+    });
+
+    // Close on outside click
+    const handleOutsideClick = (e) => {
+      if (!popup.contains(e.target)) {
+        closeHealOverflowPopup();
+        document.removeEventListener('pointerdown', handleOutsideClick, true);
+      }
+    };
+
+    // Close on escape
+    const handleEscape = (e) => {
+      if (e.key === 'Escape') {
+        closeHealOverflowPopup();
+        document.removeEventListener('keydown', handleEscape, true);
+      }
+    };
+
+    healOverflowPopup = {
+      element: popup,
+      cleanup: () => {
+        document.removeEventListener('pointerdown', handleOutsideClick, true);
+        document.removeEventListener('keydown', handleEscape, true);
+      },
+    };
+
+    document.body.appendChild(popup);
+
+    // Ensure popup stays within viewport
+    const rect = popup.getBoundingClientRect();
+    if (rect.right > window.innerWidth) {
+      popup.style.left = `${clientX - rect.width - 12}px`;
+    }
+    if (rect.bottom > window.innerHeight) {
+      popup.style.top = `${clientY - rect.height - 8}px`;
+    }
+
+    // Delay attaching outside click to avoid immediately closing
+    requestAnimationFrame(() => {
+      document.addEventListener('pointerdown', handleOutsideClick, true);
+      document.addEventListener('keydown', handleEscape, true);
+    });
+  }
+
   function scheduleDamageHealStatusReset(delay = 4000) {
     clearDamageHealStatusTimeout();
     if (typeof window === 'undefined' || typeof window.setTimeout !== 'function') {
@@ -12594,7 +12755,7 @@ export function mountBoardInteractions(store, routes = {}) {
     return null;
   }
 
-  function applyDamageHealToPlacement(placementId, mode, amount) {
+  function applyDamageHealToPlacement(placementId, mode, amount, { allowTempHp = false } = {}) {
     if (!placementId || (mode !== 'damage' && mode !== 'heal')) {
       return null;
     }
@@ -12617,7 +12778,7 @@ export function mountBoardInteractions(store, routes = {}) {
 
       let nextValue = mode === 'damage' ? baseCurrent - normalizedAmount : baseCurrent + normalizedAmount;
 
-      if (mode === 'heal' && maxValue !== null) {
+      if (mode === 'heal' && maxValue !== null && !allowTempHp) {
         nextValue = Math.min(maxValue, nextValue);
       }
 
@@ -13738,15 +13899,26 @@ export function mountBoardInteractions(store, routes = {}) {
 
     if (maxValue === null || maxValue <= 0) {
       if (currentValue === null || currentValue <= 0) {
-        return { percent: 0, negative: currentValue !== null && currentValue < 0 };
+        return { percent: 0, negative: currentValue !== null && currentValue < 0, tempPercent: 0 };
       }
-      return { percent: 100, negative: false };
+      return { percent: 100, negative: false, tempPercent: 0 };
     }
 
     const safeCurrent = currentValue === null ? maxValue : currentValue;
     const isNegative = safeCurrent < 0;
-    const ratio = Math.min(Math.abs(safeCurrent) / maxValue, 1);
-    return { percent: Math.round(ratio * 100), negative: isNegative };
+
+    // Temp HP: current exceeds max
+    const hasTempHp = safeCurrent > maxValue;
+    const baseHp = hasTempHp ? maxValue : Math.abs(safeCurrent);
+    const tempHp = hasTempHp ? safeCurrent - maxValue : 0;
+
+    const ratio = Math.min(baseHp / maxValue, 1);
+    const tempRatio = Math.min(tempHp / maxValue, 1);
+    return {
+      percent: Math.round(ratio * 100),
+      negative: isNegative,
+      tempPercent: Math.round(tempRatio * 100),
+    };
   }
 
   function formatHitPointsDisplay(value) {
@@ -13757,6 +13929,15 @@ export function mountBoardInteractions(store, routes = {}) {
     const currentText =
       hp.current === '' ? (hp.max === '' ? DEFAULT_HP_PLACEHOLDER : hp.max) : hp.current;
     const maxText = hp.max === '' ? DEFAULT_HP_PLACEHOLDER : hp.max;
+
+    // Show temp HP indicator when current exceeds max
+    const currentNum = parseHitPointsNumber(hp.current);
+    const maxNum = parseHitPointsNumber(hp.max);
+    if (currentNum !== null && maxNum !== null && currentNum > maxNum) {
+      const tempAmount = currentNum - maxNum;
+      return `${maxText} / ${maxText} (+${tempAmount})`;
+    }
+
     return `${currentText} / ${maxText}`;
   }
 
