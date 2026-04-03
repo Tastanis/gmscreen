@@ -1229,9 +1229,23 @@ body {
     letter-spacing: 0.12em;
 }
 
+.chat-panel-toggle.chat-panel-toggle--unread {
+    background: #dc2626;
+    animation: chatToggleUnreadPulse 1.5s ease-in-out infinite;
+}
+
 .chat-panel-toggle:not([aria-expanded="true"]):hover {
     background: var(--accent-strong);
     transform: translate3d(-6px, -50%, 0);
+}
+
+.chat-panel-toggle.chat-panel-toggle--unread:not([aria-expanded="true"]):hover {
+    background: #b91c1c;
+}
+
+@keyframes chatToggleUnreadPulse {
+    0%, 100% { box-shadow: -6px 0 16px rgba(47, 36, 28, 0.18); }
+    50% { box-shadow: -6px 0 24px rgba(220, 38, 38, 0.45); }
 }
 
 .chat-panel-toggle[aria-expanded="true"] {
