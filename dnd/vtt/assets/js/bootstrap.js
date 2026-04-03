@@ -17,6 +17,7 @@ import { mountBoardInteractions } from './ui/board-interactions.js';
 import { mountDragRuler } from './ui/drag-ruler.js';
 import { mountDrawingTool } from './ui/drawing-tool.js';
 import { mountDiceRoller } from './ui/dice-roller.js';
+import { mountMemoryMonitor } from './ui/memory-monitor.js'; // [REMOVABLE] Memory monitor widget
 import { fetchScenes } from './services/scene-service.js';
 import { fetchTokens } from './services/token-service.js';
 import { fetchBoardState } from './services/board-state-service.js';
@@ -88,6 +89,7 @@ async function bootstrap() {
     },
   });
   mountDiceRoller();
+  mountMemoryMonitor({ getState }); // [REMOVABLE] Memory monitor widget
 
   await hydrateFromServer(routes, userContext);
 }
