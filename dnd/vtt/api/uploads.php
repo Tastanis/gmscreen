@@ -97,20 +97,14 @@ if ($imageInfo === false) {
 
 [$width, $height, $imageType] = $imageInfo;
 
-// When noResize is set the image is already at display resolution (e.g. overlay
-// cutouts rendered from the already-doubled map).  Skip the doubling step and
-// allow up to the final 12000px limit.  Normal uploads are limited to 6000px
-// because the server doubles them (final max: 12000x12000).
-$noResize = !empty($_POST['noResize']);
-$maxDimension = $noResize ? 12000 : 6000;
+$maxDimension = 12000;
 
 if ($width > $maxDimension || $height > $maxDimension) {
     $limitLabel = number_format($maxDimension);
     http_response_code(413);
     echo json_encode([
         'success' => false,
-        'error' => "Map dimensions exceed the supported {$limitLabel} x {$limitLabel} pixel limit"
-            . ($noResize ? '.' : ' (images are doubled for better grid display).'),
+        'error' => "Map dimensions exceed the supported {$limitLabel} x {$limitLabel} pixel limit.",
     ]);
     return;
 }
@@ -146,102 +140,39 @@ try {
     return;
 }
 
-if ($noResize) {
-    // Image is already at display resolution — save as-is.
-    $finalWidth = $width;
-    $finalHeight = $height;
+$finalWidth = $width;
+$finalHeight = $height;
 
-    $sourceImage = loadImageFromFile($tmpPath, $imageType);
-    if ($sourceImage === null) {
-        http_response_code(500);
-        echo json_encode([
-            'success' => false,
-            'error' => 'Failed to process the uploaded image.',
-        ]);
-        return;
-    }
-
-    // Preserve transparency for PNG and GIF
-    if ($imageType === IMAGETYPE_PNG || $imageType === IMAGETYPE_GIF) {
-        imagealphablending($sourceImage, false);
-        imagesavealpha($sourceImage, true);
-    }
-
-    $filename = sprintf('%s_%dx%d.%s', $basename, $finalWidth, $finalHeight, $extension);
-    $destinationPath = $destinationDir . '/' . $filename;
-
-    if (!saveImageToFile($sourceImage, $destinationPath, $imageType)) {
-        imagedestroy($sourceImage);
-        http_response_code(500);
-        echo json_encode([
-            'success' => false,
-            'error' => 'Unable to save the map to disk.',
-        ]);
-        return;
-    }
-
-    imagedestroy($sourceImage);
-} else {
-    // Double the image dimensions for better grid/token display
-    $finalWidth = $width * 2;
-    $finalHeight = $height * 2;
-
-    $sourceImage = loadImageFromFile($tmpPath, $imageType);
-    if ($sourceImage === null) {
-        http_response_code(500);
-        echo json_encode([
-            'success' => false,
-            'error' => 'Failed to process the uploaded image.',
-        ]);
-        return;
-    }
-
-    $doubledImage = imagecreatetruecolor($finalWidth, $finalHeight);
-    if ($doubledImage === false) {
-        imagedestroy($sourceImage);
-        http_response_code(500);
-        echo json_encode([
-            'success' => false,
-            'error' => 'Failed to create doubled image canvas.',
-        ]);
-        return;
-    }
-
-    // Preserve transparency for PNG and GIF
-    if ($imageType === IMAGETYPE_PNG || $imageType === IMAGETYPE_GIF) {
-        imagealphablending($doubledImage, false);
-        imagesavealpha($doubledImage, true);
-        $transparent = imagecolorallocatealpha($doubledImage, 0, 0, 0, 127);
-        imagefill($doubledImage, 0, 0, $transparent);
-    }
-
-    // Resample source to doubled size
-    imagecopyresampled(
-        $doubledImage,
-        $sourceImage,
-        0, 0,    // dest x, y
-        0, 0,    // src x, y
-        $finalWidth, $finalHeight,  // dest width, height
-        $width, $height             // src width, height
-    );
-
-    imagedestroy($sourceImage);
-
-    $filename = sprintf('%s_%dx%d.%s', $basename, $finalWidth, $finalHeight, $extension);
-    $destinationPath = $destinationDir . '/' . $filename;
-
-    if (!saveImageToFile($doubledImage, $destinationPath, $imageType)) {
-        imagedestroy($doubledImage);
-        http_response_code(500);
-        echo json_encode([
-            'success' => false,
-            'error' => 'Unable to save the doubled map to disk.',
-        ]);
-        return;
-    }
-
-    imagedestroy($doubledImage);
+$sourceImage = loadImageFromFile($tmpPath, $imageType);
+if ($sourceImage === null) {
+    http_response_code(500);
+    echo json_encode([
+        'success' => false,
+        'error' => 'Failed to process the uploaded image.',
+    ]);
+    return;
 }
+
+// Preserve transparency for PNG and GIF
+if ($imageType === IMAGETYPE_PNG || $imageType === IMAGETYPE_GIF) {
+    imagealphablending($sourceImage, false);
+    imagesavealpha($sourceImage, true);
+}
+
+$filename = sprintf('%s_%dx%d.%s', $basename, $finalWidth, $finalHeight, $extension);
+$destinationPath = $destinationDir . '/' . $filename;
+
+if (!saveImageToFile($sourceImage, $destinationPath, $imageType)) {
+    imagedestroy($sourceImage);
+    http_response_code(500);
+    echo json_encode([
+        'success' => false,
+        'error' => 'Unable to save the map to disk.',
+    ]);
+    return;
+}
+
+imagedestroy($sourceImage);
 
 $publicUrl = '/dnd/vtt/storage/uploads/' . $filename;
 
