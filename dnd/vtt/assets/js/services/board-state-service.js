@@ -100,6 +100,16 @@ function buildPayload(boardState = {}) {
     }
   }
 
+  if ('thumbnailUrl' in boardState) {
+    const rawThumbUrl = boardState.thumbnailUrl;
+    if (typeof rawThumbUrl === 'string') {
+      const trimmed = rawThumbUrl.trim();
+      payload.thumbnailUrl = trimmed === '' ? null : trimmed;
+    } else {
+      payload.thumbnailUrl = null;
+    }
+  }
+
   if ('placements' in boardState) {
     const rawPlacements = boardState.placements;
     if (rawPlacements && typeof rawPlacements === 'object') {

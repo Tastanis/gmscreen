@@ -1653,7 +1653,7 @@ test('overlay cutout upload replaces overlay map when available', async () => {
   const store = createMockStore(initialState);
   const cutoutBlob = new Blob(['cutout'], { type: 'image/png' });
   const cutoutMock = mock.method(overlayUploadHelpers, 'createOverlayCutoutBlob', async () => cutoutBlob);
-  const uploadMock = mock.method(overlayUploadHelpers, 'uploadMap', async () => 'http://example.com/cropped.png');
+  const uploadMock = mock.method(overlayUploadHelpers, 'uploadMap', async () => ({ url: 'http://example.com/cropped.png', thumbnailUrl: null }));
 
   try {
     mountBoardInteractions(store, { uploads: 'http://example.com/uploads' });

@@ -24,6 +24,7 @@ const state = {
     activeSceneId: null,
     placements: {},
     mapUrl: null,
+    thumbnailUrl: null,
     sceneState: {},
     templates: {},
     drawings: {},

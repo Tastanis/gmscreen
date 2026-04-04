@@ -569,7 +569,7 @@ export function renderTokenLibrary(routes, store, options = {}) {
       try {
         setButtonsDisabled(createButtons, true);
         showFeedback(feedback, 'Preparing token image…', 'info');
-        const exportResult = await maker.exportToken?.({ size: 512 });
+        const exportResult = await maker.exportToken?.({ size: 256 });
         if (!exportResult?.dataUrl) {
           throw new Error('Unable to prepare token image.');
         }

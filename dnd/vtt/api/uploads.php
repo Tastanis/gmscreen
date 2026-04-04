@@ -172,16 +172,41 @@ if (!saveImageToFile($sourceImage, $destinationPath, $imageType)) {
     return;
 }
 
+// Generate a small thumbnail for the scene sidebar.
+$thumbnailUrl = null;
+$thumbMaxWidth = 164;
+$thumbMaxHeight = 124;
+if ($finalWidth > $thumbMaxWidth || $finalHeight > $thumbMaxHeight) {
+    $scale = min($thumbMaxWidth / $finalWidth, $thumbMaxHeight / $finalHeight);
+    $thumbW = (int) round($finalWidth * $scale);
+    $thumbH = (int) round($finalHeight * $scale);
+
+    $thumb = imagecreatetruecolor($thumbW, $thumbH);
+    if ($thumb instanceof GdImage) {
+        imagecopyresampled($thumb, $sourceImage, 0, 0, 0, 0, $thumbW, $thumbH, $finalWidth, $finalHeight);
+
+        $thumbFilename = sprintf('%s_%dx%d_thumb.jpg', $basename, $thumbW, $thumbH);
+        $thumbPath = $destinationDir . '/' . $thumbFilename;
+        if (@imagejpeg($thumb, $thumbPath, 70)) {
+            $thumbnailUrl = '/dnd/vtt/storage/uploads/' . $thumbFilename;
+        }
+        imagedestroy($thumb);
+    }
+}
+
 imagedestroy($sourceImage);
 
 $publicUrl = '/dnd/vtt/storage/uploads/' . $filename;
 
-withVttBoardStateLock(function () use ($publicUrl) {
+withVttBoardStateLock(function () use ($publicUrl, $thumbnailUrl) {
     $boardState = loadVttJson('board-state.json');
     if (!is_array($boardState) || array_values($boardState) === $boardState) {
         $boardState = [];
     }
     $boardState['mapUrl'] = $publicUrl;
+    if ($thumbnailUrl !== null) {
+        $boardState['thumbnailUrl'] = $thumbnailUrl;
+    }
     if (!saveVttJson('board-state.json', $boardState)) {
         // Do not fail the upload if the board state cannot be persisted.
         error_log('[VTT] Unable to persist board-state.json after map upload.');
@@ -192,6 +217,7 @@ echo json_encode([
     'success' => true,
     'data' => [
         'url' => $publicUrl,
+        'thumbnailUrl' => $thumbnailUrl,
         'width' => $finalWidth,
         'height' => $finalHeight,
         'originalWidth' => $width,

@@ -207,6 +207,15 @@ function normalizeBoardStateSnapshot(raw = {}) {
     }
   }
 
+  if (Object.prototype.hasOwnProperty.call(raw, 'thumbnailUrl')) {
+    const thumbnailUrl = raw.thumbnailUrl;
+    if (typeof thumbnailUrl === 'string') {
+      snapshot.thumbnailUrl = thumbnailUrl;
+    } else if (thumbnailUrl === null) {
+      snapshot.thumbnailUrl = null;
+    }
+  }
+
   if (Object.prototype.hasOwnProperty.call(raw, 'placements')) {
     snapshot.placements = cloneBoardSection(raw.placements);
   }

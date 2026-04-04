@@ -493,7 +493,8 @@ export async function uploadMap(file, endpoint, fileName, options) {
   }
 
   const url = typeof payload?.data?.url === 'string' ? payload.data.url.trim() : '';
-  return url || null;
+  const thumbnailUrl = typeof payload?.data?.thumbnailUrl === 'string' ? payload.data.thumbnailUrl.trim() : '';
+  return { url: url || null, thumbnailUrl: thumbnailUrl || null };
 }
 
 export const overlayUploadHelpers = {
@@ -3176,7 +3177,8 @@ export function mountBoardInteractions(store, routes = {}) {
 
       try {
         setUploadingState(true);
-        const url = await overlayUploadHelpers.uploadMap(file, routes.uploads);
+        const uploadResult = await overlayUploadHelpers.uploadMap(file, routes.uploads);
+        const url = uploadResult?.url ?? null;
         if (!url) {
           throw new Error('Upload endpoint returned no URL.');
         }
@@ -3184,6 +3186,7 @@ export function mountBoardInteractions(store, routes = {}) {
         boardApi.updateState?.((draft) => {
           const boardDraft = ensureBoardStateDraft(draft);
           boardDraft.mapUrl = url;
+          boardDraft.thumbnailUrl = uploadResult.thumbnailUrl ?? null;
         });
         persistBoardStateSnapshot();
 
@@ -17023,12 +17026,13 @@ function createOverlayTool(uploadsEndpoint) {
 
         if (blob) {
           const fileName = `overlay-cutout-${Date.now()}.png`;
-          const uploadedUrl = await overlayUploadHelpers.uploadMap(
+          const uploadedResult = await overlayUploadHelpers.uploadMap(
             blob,
             uploadsEndpoint,
             fileName,
             { noResize: true }
           );
+          const uploadedUrl = uploadedResult?.url ?? null;
 
           if (uploadedUrl) {
             const changed = updateSceneOverlay((overlayEntry, activeLayer) => {
