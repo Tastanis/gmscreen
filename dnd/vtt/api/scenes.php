@@ -165,11 +165,14 @@ function createScene(array $payload): array
         }
     }
 
+    $thumbnailUrl = isset($payload['thumbnailUrl']) ? trim((string) $payload['thumbnailUrl']) : '';
+
     $scene = [
         'id' => generateId('scn'),
         'name' => truncateString(trim((string) ($payload['name'] ?? '')), 160) ?: 'Untitled Scene',
         'folderId' => $folderId,
         'mapUrl' => $mapUrl,
+        'thumbnailUrl' => $thumbnailUrl !== '' ? $thumbnailUrl : null,
         'grid' => sanitizeGrid($payload['grid'] ?? []),
         'createdAt' => date(DATE_ATOM),
     ];

@@ -99,6 +99,7 @@ export function renderSceneList(routes, store) {
         const boardDraft = ensureBoardStateDraft(draft);
         boardDraft.activeSceneId = scene.id;
         boardDraft.mapUrl = scene.mapUrl ?? null;
+        boardDraft.thumbnailUrl = scene.thumbnailUrl ?? null;
         // Ensure scene board state entry exists
         ensureSceneBoardStateEntry(
           boardDraft,
@@ -528,6 +529,7 @@ export function renderSceneList(routes, store) {
 
     const currentState = stateApi.getState?.() ?? {};
     const mapUrl = currentState.boardState?.mapUrl ?? null;
+    const thumbnailUrl = currentState.boardState?.thumbnailUrl ?? null;
     const gridState = currentState.grid ?? { size: 64, locked: false, visible: true };
 
     if (!mapUrl) {
@@ -544,6 +546,7 @@ export function renderSceneList(routes, store) {
         name,
         folderId,
         mapUrl,
+        thumbnailUrl,
         grid: gridState,
       });
 
@@ -557,6 +560,7 @@ export function renderSceneList(routes, store) {
         const boardDraft = ensureBoardStateDraft(draft);
         boardDraft.activeSceneId = scene.id;
         boardDraft.mapUrl = scene.mapUrl ?? null;
+        boardDraft.thumbnailUrl = scene.thumbnailUrl ?? null;
         ensureSceneBoardStateEntry(boardDraft, scene.id, scene.grid ?? null);
         if (!draft.grid || typeof draft.grid !== 'object') {
           draft.grid = { size: 64, locked: false, visible: true };
@@ -645,7 +649,7 @@ function ensureSceneDraft(draft) {
 
 function ensureBoardStateDraft(draft) {
   if (!draft.boardState || typeof draft.boardState !== 'object') {
-    draft.boardState = { activeSceneId: null, mapUrl: null, placements: {}, sceneState: {} };
+    draft.boardState = { activeSceneId: null, mapUrl: null, thumbnailUrl: null, placements: {}, sceneState: {} };
   }
 
   if (!draft.boardState.placements || typeof draft.boardState.placements !== 'object') {
@@ -1414,8 +1418,8 @@ function escapeHtml(value = '') {
 }
 
 function renderScenePreview(scene, fallbackName) {
-  const url = typeof scene.mapUrl === 'string' ? scene.mapUrl.trim() : '';
-  if (!url) {
+  const mapUrl = typeof scene.mapUrl === 'string' ? scene.mapUrl.trim() : '';
+  if (!mapUrl) {
     return `
       <div class="scene-item__preview scene-item__preview--empty">
         <span class="scene-item__preview-text">No Map</span>
@@ -1423,11 +1427,13 @@ function renderScenePreview(scene, fallbackName) {
     `;
   }
 
+  const thumbUrl = typeof scene.thumbnailUrl === 'string' ? scene.thumbnailUrl.trim() : '';
+  const previewSrc = thumbUrl || mapUrl;
   const safeName = typeof fallbackName === 'string' ? fallbackName.trim() : '';
   const label = safeName ? `Preview of ${safeName}` : 'Scene preview';
   return `
     <div class="scene-item__preview">
-      <img src="${escapeHtml(url)}" alt="${escapeHtml(label)}" loading="lazy" />
+      <img src="${escapeHtml(previewSrc)}" alt="${escapeHtml(label)}" loading="lazy" />
     </div>
   `;
 }
@@ -1467,7 +1473,8 @@ async function uploadOverlayAsset(file, endpoint) {
     throw new Error(payload.error || 'Upload failed');
   }
 
-  return payload.data?.url ?? null;
+  const url = payload.data?.url ?? null;
+  return typeof url === 'string' ? url.trim() || null : null;
 }
 
 async function readUploadError(response) {

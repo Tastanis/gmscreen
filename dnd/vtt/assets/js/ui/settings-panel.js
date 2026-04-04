@@ -144,7 +144,7 @@ export function mountSettingsPanel(routes, store, user = {}) {
     }
 
     if (!draft.boardState || typeof draft.boardState !== 'object') {
-      draft.boardState = { activeSceneId: null, mapUrl: null, placements: {}, sceneState: {} };
+      draft.boardState = { activeSceneId: null, mapUrl: null, thumbnailUrl: null, placements: {}, sceneState: {} };
     }
 
     if (!draft.boardState.sceneState || typeof draft.boardState.sceneState !== 'object') {
