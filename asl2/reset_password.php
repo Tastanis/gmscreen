@@ -1,5 +1,6 @@
 <?php
 session_start();
+require_once __DIR__ . '/../dnd/includes/no-cache.php';
 require_once 'config.php';
 
 $token = isset($_GET['token']) ? $_GET['token'] : '';

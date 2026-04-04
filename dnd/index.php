@@ -1,5 +1,6 @@
 <?php
 session_start();
+require_once __DIR__ . '/includes/no-cache.php';
 
 // Define users and passwords
 $users = array(

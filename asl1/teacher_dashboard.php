@@ -1,5 +1,6 @@
 <?php
 session_start();
+require_once __DIR__ . '/../dnd/includes/no-cache.php';
 require_once 'config.php';
 
 // Check if user is logged in and is a teacher

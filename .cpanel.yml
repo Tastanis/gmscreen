@@ -2,4 +2,4 @@
 deployment:
   tasks:
     - export DEPLOYPATH=/home/rylabsuueil3/public_html/
-    - /bin/cp -R * $DEPLOYPATH
+    - /bin/cp -R .htaccess .user.ini * $DEPLOYPATH

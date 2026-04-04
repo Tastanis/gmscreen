@@ -1,6 +1,7 @@
 <?php
 session_start();
 
+require_once __DIR__ . '/../../includes/no-cache.php';
 // Check if user is logged in and is GM
 if (!isset($_SESSION['logged_in']) || $_SESSION['logged_in'] !== true || $_SESSION['user'] !== 'GM') {
     header('Location: ../../index.php');

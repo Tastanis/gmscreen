@@ -1,6 +1,7 @@
 <?php
 if (session_status() === PHP_SESSION_NONE) {
   session_start();
+require_once __DIR__ . '/../includes/no-cache.php';
 }
 
 $sessionUser = isset($_SESSION['user']) ? strtolower($_SESSION['user']) : '';
