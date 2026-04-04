@@ -3747,6 +3747,7 @@ export function mountBoardInteractions(store, routes = {}) {
     const size = Number.isFinite(parsedSize) ? parsedSize : 64;
     const dimension = `${Math.max(8, size)}px`;
     grid.style.setProperty('--vtt-grid-size', dimension);
+    mapSurface.style.setProperty('--vtt-grid-size', dimension);
     const isVisible = gridState.visible ?? true;
     grid.classList.toggle('is-visible', Boolean(isVisible));
     viewState.gridSize = Math.max(8, size);
