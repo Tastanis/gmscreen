@@ -3,7 +3,6 @@ error_log("DEBUG: note-editor.php loaded at " . date('Y-m-d H:i:s'));
 
 session_start();
 
-require_once __DIR__ . '/../../includes/no-cache.php';
 // Check if user is logged in and is GM
 if (!isset($_SESSION['logged_in']) || $_SESSION['logged_in'] !== true) {
     header('Location: ../../../index.php');

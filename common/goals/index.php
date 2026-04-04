@@ -10,7 +10,6 @@ if (!isset($ASL_LEVEL_NAME)) {
 }
 
 session_start();
-require_once __DIR__ . '/../../dnd/includes/no-cache.php';
 require_once $ASL_BASE_PATH . '/config.php';
 
 if (!isset($_SESSION['user_id'])) {
