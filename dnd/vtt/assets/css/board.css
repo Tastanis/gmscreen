@@ -2444,14 +2444,14 @@
   top: calc(var(--tok-unit) * -30.4);
   left: 50%;
   transform: translateX(-50%);
-  width: 75%;
-  max-width: calc(100% - var(--tok-unit) * 12);
-  padding: calc(var(--tok-unit) * 7.2) calc(var(--tok-unit) * 8.8) calc(var(--tok-unit) * 8);
+  width: 90%;
+  max-width: calc(100% - var(--tok-unit) * 4);
+  padding: calc(var(--tok-unit) * 5) calc(var(--tok-unit) * 6) calc(var(--tok-unit) * 5);
   box-sizing: border-box;
   display: flex;
   flex-direction: column;
   align-items: stretch;
-  gap: calc(var(--tok-unit) * 5.6);
+  gap: calc(var(--tok-unit) * 3.2);
   background: rgba(15, 23, 42, 0.82);
   border-radius: calc(var(--vtt-radius) * 1.2);
   box-shadow: 0 10px 22px rgba(15, 23, 42, 0.55);
@@ -2509,11 +2509,22 @@
 }
 
 .vtt-token__hp-value {
-  font-size: calc(var(--tok-unit) * 12);
+  font-size: calc(var(--tok-unit) * 11);
   font-weight: 600;
   letter-spacing: 0.015em;
   text-align: center;
   text-shadow: 0 1px 2px rgba(15, 23, 42, 0.6);
+  white-space: nowrap;
+}
+
+.vtt-token__hp-temp-value {
+  font-size: calc(var(--tok-unit) * 8);
+  font-weight: 600;
+  letter-spacing: 0.015em;
+  text-align: center;
+  text-shadow: 0 1px 2px rgba(15, 23, 42, 0.6);
+  color: #7dd3fc;
+  white-space: nowrap;
 }
 
 /* Heal overflow popup - appears near the token */
@@ -2619,21 +2630,22 @@
 .vtt-token__condition {
   position: absolute;
   left: 50%;
-  bottom: calc(var(--tok-unit) * 3.2);
+  bottom: calc(var(--tok-unit) * 1);
   transform: translateX(-50%);
   background: rgba(15, 23, 42, 0.8);
   color: #f8fafc;
-  padding: calc(var(--tok-unit) * 2.4) calc(var(--tok-unit) * 8);
-  border-radius: calc(var(--vtt-radius) * 0.8);
-  font-size: calc(var(--tok-unit) * 11.2);
-  line-height: 1.25;
+  padding: calc(var(--tok-unit) * 1.5) calc(var(--tok-unit) * 4);
+  border-radius: calc(var(--vtt-radius) * 0.6);
+  font-size: calc(var(--tok-unit) * 6);
+  line-height: 1.2;
   text-align: center;
-  box-shadow: 0 8px 20px rgba(15, 23, 42, 0.45);
+  box-shadow: 0 4px 10px rgba(15, 23, 42, 0.45);
   pointer-events: auto;
   cursor: help;
-  max-width: 90%;
-  white-space: normal;
-  word-break: break-word;
+  max-width: 96%;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
   letter-spacing: 0.02em;
 }
 
