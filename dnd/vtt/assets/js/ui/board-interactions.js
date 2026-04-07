@@ -11403,6 +11403,7 @@ export function mountBoardInteractions(store, routes = {}) {
     }
 
     let valueElement = hpBar.querySelector('.vtt-token__hp-value');
+    let tempValueElement = hpBar.querySelector('.vtt-token__hp-temp-value');
     if (showHpValues) {
       // Show HP values for GMs or for allied tokens
       if (!valueElement) {
@@ -11416,13 +11417,31 @@ export function mountBoardInteractions(store, routes = {}) {
         valueElement.remove();
         valueElement = null;
       }
+      if (tempValueElement) {
+        tempValueElement.remove();
+        tempValueElement = null;
+      }
     }
 
     const hp = normalizePlacementHitPoints(placement.hp);
-    const displayValue = formatHitPointsDisplay(hp);
+    const displayParts = formatHitPointsDisplayParts(hp);
 
-    if (valueElement && valueElement.textContent !== displayValue) {
-      valueElement.textContent = displayValue;
+    if (valueElement && valueElement.textContent !== displayParts.main) {
+      valueElement.textContent = displayParts.main;
+    }
+
+    // Handle temp HP as a separate line
+    if (showHpValues && displayParts.temp) {
+      if (!tempValueElement) {
+        tempValueElement = document.createElement('span');
+        tempValueElement.className = 'vtt-token__hp-temp-value';
+        hpBar.appendChild(tempValueElement);
+      }
+      if (tempValueElement.textContent !== displayParts.temp) {
+        tempValueElement.textContent = displayParts.temp;
+      }
+    } else if (tempValueElement) {
+      tempValueElement.remove();
     }
 
     // Temp HP fill bar (overlaid on track, different color)
@@ -11456,7 +11475,7 @@ export function mountBoardInteractions(store, routes = {}) {
     const ariaLabel = isEmpty
       ? 'Hit points not set'
       : showHpValues
-        ? `${displayValue} hit points`
+        ? `${displayParts.main}${displayParts.temp ? ' ' + displayParts.temp : ''} hit points`
         : 'Hit points';
     hpBar.setAttribute('aria-label', ariaLabel);
   }
@@ -13943,6 +13962,25 @@ export function mountBoardInteractions(store, routes = {}) {
     }
 
     return `${currentText} / ${maxText}`;
+  }
+
+  function formatHitPointsDisplayParts(value) {
+    const hp = normalizePlacementHitPoints(value);
+    if (hp.current === '' && hp.max === '') {
+      return { main: DEFAULT_HP_DISPLAY, temp: null };
+    }
+    const currentText =
+      hp.current === '' ? (hp.max === '' ? DEFAULT_HP_PLACEHOLDER : hp.max) : hp.current;
+    const maxText = hp.max === '' ? DEFAULT_HP_PLACEHOLDER : hp.max;
+
+    const currentNum = parseHitPointsNumber(hp.current);
+    const maxNum = parseHitPointsNumber(hp.max);
+    if (currentNum !== null && maxNum !== null && currentNum > maxNum) {
+      const tempAmount = currentNum - maxNum;
+      return { main: `${maxText} / ${maxText}`, temp: `(+${tempAmount})` };
+    }
+
+    return { main: `${currentText} / ${maxText}`, temp: null };
   }
 
   function createTokenSettingsMenu() {
