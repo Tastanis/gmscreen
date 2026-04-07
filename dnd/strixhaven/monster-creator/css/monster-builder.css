@@ -2701,15 +2701,17 @@ body.delete-mode-active .sub-tab:hover {
 
     /* Only protect individual abilities from being split */
     .print-ability {
-        background: #f5f5f5;
+        background: none !important;
         page-break-inside: avoid;
         break-inside: avoid;
     }
 
+    .print-ability-meta-item {
+        background: none !important;
+    }
+
     .print-test {
-        background: #f8fafc;
-        print-color-adjust: exact;
-        -webkit-print-color-adjust: exact;
+        background: none !important;
     }
 
     /* Don't protect entire category - let content flow naturally */
