@@ -20,97 +20,46 @@ function vttBoardStateVersionPath(): string
  * Get the current board state version.
  * Version is a monotonically increasing integer that prevents stale updates.
  *
- * A shared flock is taken while reading so a concurrent rename from the
- * writer cannot surface as an empty string.
+ * Reads the `_version` field from `board-state.json`. Falls back to the
+ * legacy `board-state-version.json` file for any deployment that has not
+ * yet written the state since the consolidation (phase 2-2). The legacy
+ * file is removed on the first write after migration, so this fallback
+ * becomes inert shortly after deploy.
  */
 function getVttBoardStateVersion(): int
 {
-    $path = vttBoardStateVersionPath();
-    if (!is_file($path)) {
-        return 0;
+    $state = loadVttJson('board-state.json');
+    if (is_array($state) && isset($state['_version'])) {
+        return max(0, (int) $state['_version']);
     }
-    $handle = @fopen($path, 'rb');
-    if (!$handle) {
-        return 0;
+
+    $legacyPath = vttBoardStateVersionPath();
+    if (is_file($legacyPath)) {
+        $content = @file_get_contents($legacyPath);
+        if (is_string($content) && $content !== '') {
+            $data = json_decode($content, true);
+            if (is_array($data) && isset($data['version'])) {
+                return max(0, (int) $data['version']);
+            }
+        }
     }
-    try {
-        @flock($handle, LOCK_SH);
-        $content = stream_get_contents($handle);
-    } finally {
-        @flock($handle, LOCK_UN);
-        @fclose($handle);
-    }
-    if (!is_string($content) || $content === '') {
-        return 0;
-    }
-    $data = json_decode($content, true);
-    if (!is_array($data) || !isset($data['version'])) {
-        return 0;
-    }
-    return max(0, (int) $data['version']);
+
+    return 0;
 }
 
 /**
- * Increment and save the board state version.
- * Returns the new version number.
+ * Bump the `_version` field on an in-memory board state array and return
+ * the new value. Must be called with the board state lock held so two
+ * concurrent writers cannot observe the same "current" value.
  *
- * The read+increment+write is wrapped in an exclusive flock on the version
- * file itself so the sequence is atomic even if a future caller reaches this
- * without holding the board-state lock. When called from inside
- * withVttBoardStateLock, this is belt-and-suspenders — the outer lock already
- * serializes POSTs, so no two writers can ever share a version number.
+ * @param array<string,mixed> $state
  */
-function incrementVttBoardStateVersion(): int
+function bumpVttBoardStateVersion(array &$state): int
 {
-    $path = vttBoardStateVersionPath();
-    $directory = dirname($path);
-    if (!is_dir($directory) && !mkdir($directory, 0775, true) && !is_dir($directory)) {
-        // Fall back to the legacy unlocked path. Should not happen in practice.
-        $next = getVttBoardStateVersion() + 1;
-        saveVttJson(VTT_VERSION_FILE, [
-            'version' => $next,
-            'updatedAt' => time(),
-        ]);
-        return $next;
-    }
-
-    $handle = @fopen($path, 'c+b');
-    if (!$handle) {
-        $next = getVttBoardStateVersion() + 1;
-        saveVttJson(VTT_VERSION_FILE, [
-            'version' => $next,
-            'updatedAt' => time(),
-        ]);
-        return $next;
-    }
-
-    try {
-        @flock($handle, LOCK_EX);
-        $content = stream_get_contents($handle);
-        $current = 0;
-        if (is_string($content) && $content !== '') {
-            $decoded = json_decode($content, true);
-            if (is_array($decoded) && isset($decoded['version'])) {
-                $current = max(0, (int) $decoded['version']);
-            }
-        }
-        $next = $current + 1;
-        $encoded = json_encode([
-            'version' => $next,
-            'updatedAt' => time(),
-        ], JSON_PRETTY_PRINT);
-        if (!is_string($encoded)) {
-            $encoded = '{"version":' . $next . ',"updatedAt":' . time() . '}';
-        }
-        rewind($handle);
-        ftruncate($handle, 0);
-        fwrite($handle, $encoded);
-        fflush($handle);
-        return $next;
-    } finally {
-        @flock($handle, LOCK_UN);
-        @fclose($handle);
-    }
+    $current = isset($state['_version']) ? max(0, (int) $state['_version']) : 0;
+    $next = $current + 1;
+    $state['_version'] = $next;
+    return $next;
 }
 
 /**
@@ -277,7 +226,26 @@ if (!defined('VTT_STATE_API_INCLUDE_ONLY')) {
 
             $lockResult = withVttBoardStateLock(function () use ($updates, $auth, $clientVersion, $isDeltaOnly, $replaceDrawingScenes) {
                 $existing = loadVttJson('board-state.json');
+
+                // Determine the starting version. Prefer the `_version` field
+                // already carried on the state. Lazy-migrate from the legacy
+                // `board-state-version.json` file if the state has not been
+                // written since the consolidation in phase 2-2.
+                $previousVersion = 0;
+                if (is_array($existing) && isset($existing['_version'])) {
+                    $previousVersion = max(0, (int) $existing['_version']);
+                } elseif (is_file(vttBoardStateVersionPath())) {
+                    $legacyContent = @file_get_contents(vttBoardStateVersionPath());
+                    if (is_string($legacyContent) && $legacyContent !== '') {
+                        $legacyDecoded = json_decode($legacyContent, true);
+                        if (is_array($legacyDecoded) && isset($legacyDecoded['version'])) {
+                            $previousVersion = max(0, (int) $legacyDecoded['version']);
+                        }
+                    }
+                }
+
                 $nextState = normalizeBoardState($existing);
+                $nextState['_version'] = $previousVersion;
 
                 $isGm = (bool) ($auth['isGM'] ?? false);
                 if (!$isGm) {
@@ -428,6 +396,12 @@ if (!defined('VTT_STATE_API_INCLUDE_ONLY')) {
                         $nextState['pings'] = $pingUpdates;
                     }
 
+                    // Bump the version on the in-memory state so the saved
+                    // file already carries `_version`. The outer board-state
+                    // lock serializes POSTs, so no two writes can ever share
+                    // a version number.
+                    $newVersion = bumpVttBoardStateVersion($nextState);
+
                     if (!saveVttJson('board-state.json', $nextState)) {
                         respondJson(500, [
                             'success' => false,
@@ -435,10 +409,13 @@ if (!defined('VTT_STATE_API_INCLUDE_ONLY')) {
                         ]);
                     }
 
-                    // Bump the version while still inside the board-state lock
-                    // so every POST is serialized through the version bump and
-                    // no two writes can ever share a version number.
-                    $newVersion = incrementVttBoardStateVersion();
+                    // Migration complete: drop the legacy version file. Best
+                    // effort — a failure here just leaves a stale file that
+                    // getVttBoardStateVersion() ignores.
+                    if (is_file(vttBoardStateVersionPath())) {
+                        @unlink(vttBoardStateVersionPath());
+                    }
+
                     $playerView = filterPlacementsForPlayerView($nextState);
                     $playerView['_version'] = $newVersion;
                     return [
@@ -538,6 +515,12 @@ if (!defined('VTT_STATE_API_INCLUDE_ONLY')) {
                     $nextState[$key] = $value;
                 }
 
+                // Bump the version on the in-memory state so the saved file
+                // already carries `_version`. The outer board-state lock
+                // serializes POSTs, so no two writes can ever share a
+                // version number.
+                $newVersion = bumpVttBoardStateVersion($nextState);
+
                 if (!saveVttJson('board-state.json', $nextState)) {
                     respondJson(500, [
                         'success' => false,
@@ -545,11 +528,13 @@ if (!defined('VTT_STATE_API_INCLUDE_ONLY')) {
                     ]);
                 }
 
-                // Bump the version while still inside the board-state lock
-                // so every POST is serialized through the version bump and
-                // no two writes can ever share a version number.
-                $newVersion = incrementVttBoardStateVersion();
-                $nextState['_version'] = $newVersion;
+                // Migration complete: drop the legacy version file. Best
+                // effort — a failure here just leaves a stale file that
+                // getVttBoardStateVersion() ignores.
+                if (is_file(vttBoardStateVersionPath())) {
+                    @unlink(vttBoardStateVersionPath());
+                }
+
                 return [
                     'state' => $nextState,
                     'version' => $newVersion,
