@@ -132,7 +132,29 @@ export function createBoardStatePoller({
 
     isPolling = true;
     try {
-      const response = await fetchFn(endpoint, { cache: 'no-store' });
+      // Phase 3-A: Conditional GET. Send If-None-Match with the version
+      // we last applied so the server can return 304 Not Modified when
+      // nothing has changed. Safety-net polls (every 30s while Pusher is
+      // up) become near-zero work on both client and server.
+      const headers = { Accept: 'application/json' };
+      const knownVersion = typeof getCurrentVersionFn === 'function'
+        ? getCurrentVersionFn()
+        : 0;
+      if (typeof knownVersion === 'number' && knownVersion > 0) {
+        headers['If-None-Match'] = `W/"v${knownVersion}"`;
+      }
+
+      const response = await fetchFn(endpoint, {
+        cache: 'no-store',
+        headers,
+      });
+      if (response?.status === 304) {
+        // Nothing has changed since our last applied version. Treat as a
+        // successful no-op: do not touch lastHash, do not update state,
+        // do not log an error.
+        pollErrorLogged = false;
+        return;
+      }
       if (!response?.ok) {
         throw new Error(`Unexpected status ${response?.status ?? 'unknown'}`);
       }
