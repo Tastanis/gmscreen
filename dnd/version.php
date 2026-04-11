@@ -1,6 +1,7 @@
 <?php
 // Version tracking system for D&D GM Screen
 // This file tracks the current version and provides functions to increment it
+// test
 
 class Version {
     private static $version_file = __DIR__ . '/data/version.json';
