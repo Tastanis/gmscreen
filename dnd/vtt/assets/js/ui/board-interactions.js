@@ -13,7 +13,11 @@ import {
   isDrawingToolMounted,
   consumeFullSyncNeeded,
 } from './drawing-tool.js';
-import { persistBoardState, persistCombatState } from '../services/board-state-service.js';
+import {
+  persistBoardState,
+  persistBoardStateOps,
+  persistCombatState,
+} from '../services/board-state-service.js';
 import { initializePusher, getSocketId, isPusherConnected } from '../services/pusher-service.js';
 import {
   PLAYER_VISIBLE_TOKEN_FOLDER,
@@ -2202,7 +2206,15 @@ export function mountBoardInteractions(store, routes = {}) {
   updateStartCombatButton();
   updateCombatModeIndicators();
 
-  const persistBoardStateSnapshot = (options = {}) => {
+  // Phase 3-B (commit 2): when true, token-drag saves go out as delta
+  // ops (`{ops: [{type: 'placement.move', ...}]}`) instead of full
+  // snapshots. Flip to `false` to force the legacy snapshot path for
+  // every save while the op path is bedding in. Only placement.move is
+  // routed through ops today; every other save type still uses the
+  // snapshot path regardless of this flag.
+  const USE_DELTA_SAVES = true;
+
+  const persistBoardStateSnapshot = (options = {}, opsOverride = null) => {
     if (!routes?.state || typeof boardApi.getState !== 'function') {
       console.warn('[VTT] Cannot persist board state: routes.state missing or boardApi.getState unavailable');
       return;
@@ -2216,25 +2228,39 @@ export function mountBoardInteractions(store, routes = {}) {
     }
 
     const isGmUser = Boolean(latest?.user?.isGM);
-    // Use delta-only saves when we have dirty tracking info
-    const useDelta = hasDirtyState();
-    const snapshot = buildBoardStateSnapshotForPersistence(boardState, { isGm: isGmUser, deltaOnly: useDelta });
-    if (!snapshot) {
-      console.warn('[VTT] Cannot persist board state: failed to build snapshot');
-      clearDirtyTracking(); // Clear dirty state even on failure
-      return;
-    }
 
-    // Skip save if delta mode but nothing to save
-    if (useDelta && Object.keys(snapshot).length === 0) {
-      console.log('[VTT] Skipping save: no dirty entities to persist');
-      clearDirtyTracking();
-      return;
-    }
+    // Phase 3-B: if the caller passed a non-empty ops list AND the
+    // feature flag is on, take the delta-op save path. Otherwise build
+    // a full snapshot as before. The metadata / version / socket-id
+    // wiring below is shared so both paths end up in the same pending
+    // save tracking and response handler.
+    const useOpsPath =
+      USE_DELTA_SAVES && Array.isArray(opsOverride) && opsOverride.length > 0;
 
-    // Mark as delta save for server-side handling
-    if (useDelta) {
-      snapshot._deltaOnly = true;
+    let snapshot = null;
+    let useDelta = false;
+
+    if (!useOpsPath) {
+      // Use delta-only saves when we have dirty tracking info
+      useDelta = hasDirtyState();
+      snapshot = buildBoardStateSnapshotForPersistence(boardState, { isGm: isGmUser, deltaOnly: useDelta });
+      if (!snapshot) {
+        console.warn('[VTT] Cannot persist board state: failed to build snapshot');
+        clearDirtyTracking(); // Clear dirty state even on failure
+        return;
+      }
+
+      // Skip save if delta mode but nothing to save
+      if (useDelta && Object.keys(snapshot).length === 0) {
+        console.log('[VTT] Skipping save: no dirty entities to persist');
+        clearDirtyTracking();
+        return;
+      }
+
+      // Mark as delta save for server-side handling
+      if (useDelta) {
+        snapshot._deltaOnly = true;
+      }
     }
 
     const previousMetadata = cloneBoardSection(boardState.metadata ?? boardState.meta);
@@ -2257,17 +2283,23 @@ export function mountBoardInteractions(store, routes = {}) {
       metadata.authorId = authorId;
     }
 
-    snapshot.metadata = metadata;
-
-    // Include current version for server-side conflict detection
-    if (currentBoardStateVersion > 0) {
-      snapshot._version = currentBoardStateVersion;
-    }
-
-    // Include Pusher socket ID so server can exclude us from the broadcast
+    // Snapshot path attaches metadata/version/socketId directly onto
+    // the snapshot blob; ops path will pass them via the envelope to
+    // `persistBoardStateOps` below.
     const socketId = getSocketId?.();
-    if (socketId) {
-      snapshot._socketId = socketId;
+
+    if (!useOpsPath) {
+      snapshot.metadata = metadata;
+
+      // Include current version for server-side conflict detection
+      if (currentBoardStateVersion > 0) {
+        snapshot._version = currentBoardStateVersion;
+      }
+
+      // Include Pusher socket ID so server can exclude us from the broadcast
+      if (socketId) {
+        snapshot._socketId = socketId;
+      }
     }
 
     boardApi.updateState?.((draft) => {
@@ -2276,10 +2308,29 @@ export function mountBoardInteractions(store, routes = {}) {
       Object.assign(metadataDraft, metadata);
     });
 
-    const snapshotHashCandidate = hashBoardStateSnapshot(snapshot);
-    const snapshotHash = snapshotHashCandidate ?? safeJsonStringify(snapshot) ?? null;
+    const hashInput = useOpsPath ? { ops: opsOverride, metadata, _version: currentBoardStateVersion } : snapshot;
+    const snapshotHashCandidate = hashBoardStateSnapshot(hashInput);
+    const snapshotHash = snapshotHashCandidate ?? safeJsonStringify(hashInput) ?? null;
 
-    const savePromise = persistBoardState(routes.state, snapshot, options);
+    let savePromise = null;
+    if (useOpsPath) {
+      const envelope = {
+        metadata,
+        _version: currentBoardStateVersion > 0 ? currentBoardStateVersion : undefined,
+        _socketId: socketId || undefined,
+      };
+      const opsResult = persistBoardStateOps(routes.state, opsOverride, envelope, options);
+      // Escape hatch: the ops buffer is too large or spans too many
+      // scenes for a single delta flush. Fall back to a full-snapshot
+      // save by re-entering without the override.
+      if (opsResult && typeof opsResult === 'object' && opsResult.escape === true) {
+        return persistBoardStateSnapshot(options, null);
+      }
+      savePromise = opsResult ?? null;
+    } else {
+      savePromise = persistBoardState(routes.state, snapshot, options);
+    }
+
     if (savePromise && typeof savePromise.then === 'function') {
       const pendingEntry = {
         promise: savePromise,
@@ -4660,7 +4711,40 @@ export function mountBoardInteractions(store, routes = {}) {
     if (movedCount) {
       // Mark only the moved placements as dirty
       movedIds.forEach((id) => markPlacementDirty(activeSceneId, id));
-      persistBoardStateSnapshot();
+
+      // Phase 3-B (commit 2): this is the one and only save path that
+      // currently goes out as delta ops. Every other write path in
+      // this file still calls `persistBoardStateSnapshot()` with no
+      // override, which preserves the legacy full-snapshot behavior.
+      // Build one `placement.move` op per moved id using the freshly
+      // committed column/row we just wrote into the store, then let
+      // `persistBoardStateSnapshot` route it through the ops path.
+      // The ops helper will fall back to a full snapshot on its own
+      // if the op list is too large or spans too many scenes.
+      let placementMoveOps = null;
+      if (USE_DELTA_SAVES) {
+        const latestPlacements =
+          boardApi.getState?.()?.boardState?.placements?.[activeSceneId] ?? [];
+        const ops = [];
+        movedIds.forEach((id) => {
+          const placement = latestPlacements.find((entry) => entry?.id === id);
+          if (!placement) {
+            return;
+          }
+          ops.push({
+            type: 'placement.move',
+            sceneId: activeSceneId,
+            placementId: id,
+            x: placement.column,
+            y: placement.row,
+          });
+        });
+        if (ops.length > 0) {
+          placementMoveOps = ops;
+        }
+      }
+
+      persistBoardStateSnapshot({}, placementMoveOps);
     }
 
     if (movedCount && status) {
