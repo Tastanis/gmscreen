@@ -1670,10 +1670,6 @@ export function mountBoardInteractions(store, routes = {}) {
   // handlePusherConnectionChange() can call reconfigure() when Pusher
   // connects or drops mid-session.
   let boardStatePollerHandle = null;
-  // Reduced polling interval when Pusher is connected (fallback only)
-  const PUSHER_FALLBACK_POLL_INTERVAL_MS = 10000;
-  // Normal polling interval when Pusher is not available
-  const NORMAL_POLL_INTERVAL_MS = 1000;
   let suppressCombatStateSync = false;
   let pendingCombatStateSync = false;
   let combatStateVersion = 0;
