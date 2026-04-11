@@ -168,6 +168,11 @@ if (!defined('VTT_STATE_API_INCLUDE_ONLY')) {
             $clientSocketId = isset($rawState['_socketId']) && is_string($rawState['_socketId'])
                 ? trim($rawState['_socketId'])
                 : null;
+            // Empty string after trim is meaningless for exclusion; normalize to null
+            // so PusherClient::trigger() does not attempt to include an empty socket_id.
+            if ($clientSocketId === '') {
+                $clientSocketId = null;
+            }
             // Check if this is a delta-only update (only changed entities)
             $isDeltaOnly = !empty($rawState['_deltaOnly']);
             // Scenes whose drawings should be fully replaced (after erasing/clearing)

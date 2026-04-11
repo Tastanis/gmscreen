@@ -170,6 +170,10 @@ function handleConnected() {
  */
 function handleDisconnected() {
   isConnected = false;
+  // Clear the cached socket ID — on reconnect Pusher assigns a new one,
+  // and any save that happens while we are disconnected must not carry
+  // a stale socket ID.
+  currentSocketId = null;
   console.log('[VTT Pusher] Disconnected');
 
   if (typeof onConnectionStateChangeCallback === 'function') {
@@ -197,6 +201,23 @@ function handleError(error) {
  */
 function handleStateChange(states) {
   console.log('[VTT Pusher] State change:', states.previous, '->', states.current);
+
+  // Keep currentSocketId in sync with the connection state. This is the
+  // single source of truth for the cached socket ID. Any state that is
+  // not 'connected' means we do not currently hold a valid socket and
+  // must not advertise one on saves.
+  if (states && typeof states === 'object') {
+    if (states.current === 'connected') {
+      currentSocketId = pusherInstance?.connection?.socket_id || null;
+    } else if (
+      states.current === 'disconnected' ||
+      states.current === 'failed' ||
+      states.current === 'unavailable' ||
+      states.current === 'connecting'
+    ) {
+      currentSocketId = null;
+    }
+  }
 }
 
 /**
