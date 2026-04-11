@@ -40,11 +40,11 @@ Each fix document is structured identically:
 
 You can only do a fix if its prerequisites are already merged to the branch. The safe order is:
 
-| Fix | Depends on |
-|---|---|
-| `phase-0-security.md` | nothing |
-| `phase-1-1-init-order.md` | nothing |
-| `phase-1-2-dynamic-poller.md` | 1-1 |
+| Fix | Depends on | Status |
+|---|---|---|
+| `phase-0-security.md` | nothing | |
+| `phase-1-1-init-order.md` | nothing | ✅ done (PR #662) |
+| `phase-1-2-dynamic-poller.md` | 1-1 | |
 | `phase-1-3-combat-loop.md` | 1-1, 1-2 |
 | `phase-1-4-socket-id.md` | 1-1 |
 | `phase-1-5-nonblocking-broadcast.md` | nothing (server-side only) |

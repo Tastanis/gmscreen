@@ -1,5 +1,7 @@
 # Phase 1-1 — Fix Pusher / Poller Initialization Order
 
+> **Status:** ✅ Done. Committed as `a1e2549` on `claude/app-communication-architecture-y5g1l`, PR [#662](https://github.com/Tastanis/gmscreen/pull/662).
+
 > **Prerequisite reading:** `README.md`, `diagnosis-findings.md` (findings C1 and C2), `pre-flight-investigation.md`.
 
 ## Context
