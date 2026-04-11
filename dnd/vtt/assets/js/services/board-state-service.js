@@ -3,6 +3,43 @@ import { queueSave } from '../state/persistence.js';
 const SAVE_KEY = 'board-state';
 const COMBAT_SAVE_KEY_PREFIX = 'combat-state';
 
+// Phase 3-B (commit 2): delta-op escape thresholds. If a single flush
+// would carry more than this many ops, or ops spanning more than this
+// many scenes, `persistBoardStateOps` bails out and asks the caller to
+// fall back to a full snapshot save. These are deliberately generous;
+// the intent is to catch pathological cases (e.g. a scene-wide template
+// change) rather than to nudge normal multi-select drags into the
+// snapshot path.
+export const PHASE_3B_MAX_OPS_PER_FLUSH = 64;
+export const PHASE_3B_MAX_SCENES_PER_FLUSH = 4;
+
+// Cross-call ops buffer. Rapidly repeated moves of the same token get
+// coalesced by key (the later op overwrites the earlier one), matching
+// how the full-snapshot path already behaves. Moves of *different*
+// tokens, on the other hand, accumulate so that a second drag started
+// while the first save is still in flight does not cause the first
+// token to "pop back" to its pre-save position. Entries are cleared
+// from the buffer only after the save that carried them resolves
+// successfully, so an aborted/failed save leaves its ops in place for
+// the next flush to pick up.
+let boardStateOpSendSequence = 0;
+const pendingBoardStateOps = new Map();
+
+function boardStateOpDedupKey(op) {
+  if (!op || typeof op !== 'object') {
+    return null;
+  }
+  if (op.type === 'placement.move') {
+    const sceneId = typeof op.sceneId === 'string' ? op.sceneId.trim() : '';
+    const placementId = typeof op.placementId === 'string' ? op.placementId.trim() : '';
+    if (!sceneId || !placementId) {
+      return null;
+    }
+    return `placement.move:${sceneId}:${placementId}`;
+  }
+  return null;
+}
+
 export async function fetchBoardState(endpoint, { fetchFn = typeof fetch === 'function' ? fetch : null } = {}) {
   if (!endpoint || typeof fetchFn !== 'function') {
     return null;
@@ -50,6 +87,115 @@ export function persistBoardState(endpoint, boardState = {}, options = {}) {
   // where stale state could be applied by polling, preventing token popback
   const normalizedOptions = { immediate: true, ...options };
   return queueSave(SAVE_KEY, { boardState: payload }, endpoint, normalizedOptions);
+}
+
+/**
+ * Phase 3-B (commit 2): queue a delta-op save for the board state.
+ *
+ * Accepts a list of typed ops (currently only `placement.move`) plus a
+ * small envelope carrying the metadata / `_version` / `_socketId` that
+ * the existing snapshot path rides on the payload. Returns either:
+ *   - the save promise, identical in shape to `persistBoardState`; or
+ *   - `null` if there is nothing to send / the endpoint is missing; or
+ *   - `{ escape: true }` if the pending ops buffer exceeds the size or
+ *     scene-count thresholds. The caller should treat this as "ops path
+ *     unavailable for this flush, fall back to snapshot."
+ *
+ * Rapidly repeated ops for the same (type, sceneId, placementId) are
+ * deduplicated: the later op overwrites the earlier one, so only the
+ * freshest intent is sent. Ops for *different* keys accumulate in a
+ * process-wide buffer until a save resolves successfully, then the
+ * sent ops are drained. This matches the snapshot path's behavior
+ * where the later snapshot always wins, but preserves concurrent
+ * work on unrelated tokens that would otherwise be lost if a second
+ * call simply aborted the first's in-flight save.
+ */
+export function persistBoardStateOps(endpoint, ops, envelope = {}, options = {}) {
+  if (!endpoint || !Array.isArray(ops)) {
+    return null;
+  }
+
+  boardStateOpSendSequence += 1;
+  const sendSeq = boardStateOpSendSequence;
+
+  for (const op of ops) {
+    const key = boardStateOpDedupKey(op);
+    if (!key) {
+      continue;
+    }
+    pendingBoardStateOps.set(key, { op, seq: sendSeq });
+  }
+
+  const bufferedOps = Array.from(pendingBoardStateOps.values(), (entry) => entry.op);
+  if (bufferedOps.length === 0) {
+    return null;
+  }
+
+  const uniqueScenes = new Set();
+  for (const op of bufferedOps) {
+    if (op && typeof op.sceneId === 'string') {
+      uniqueScenes.add(op.sceneId);
+    }
+  }
+  if (
+    bufferedOps.length > PHASE_3B_MAX_OPS_PER_FLUSH ||
+    uniqueScenes.size > PHASE_3B_MAX_SCENES_PER_FLUSH
+  ) {
+    // Signal "use snapshot fallback" to the caller. The buffered ops
+    // are intentionally left in place: a subsequent snapshot save will
+    // persist the canonical state, and then the next op-based save
+    // (if any) will observe an empty or reduced buffer.
+    return { escape: true };
+  }
+
+  // Build the wire payload. `ops` lives at the top level; metadata and
+  // internal fields (`_version`, `_socketId`) ride in a small
+  // `boardState` envelope so the server's existing extraction logic
+  // for those fields works unchanged.
+  const boardStateEnvelope = {};
+  if (envelope && typeof envelope === 'object') {
+    if (envelope.metadata && typeof envelope.metadata === 'object') {
+      boardStateEnvelope.metadata = envelope.metadata;
+    }
+    if (typeof envelope._version === 'number' && envelope._version > 0) {
+      boardStateEnvelope._version = envelope._version;
+    }
+    if (typeof envelope._socketId === 'string' && envelope._socketId.trim()) {
+      boardStateEnvelope._socketId = envelope._socketId.trim();
+    }
+  }
+
+  const wirePayload = { ops: bufferedOps };
+  if (Object.keys(boardStateEnvelope).length > 0) {
+    wirePayload.boardState = boardStateEnvelope;
+  }
+
+  const normalizedOptions = { immediate: true, ...options };
+  const savePromise = queueSave(SAVE_KEY, wirePayload, endpoint, normalizedOptions);
+
+  if (savePromise && typeof savePromise.then === 'function') {
+    savePromise.then((result) => {
+      if (result?.success) {
+        for (const [key, entry] of pendingBoardStateOps) {
+          if (entry.seq <= sendSeq) {
+            pendingBoardStateOps.delete(key);
+          }
+        }
+      }
+      return result;
+    });
+  }
+
+  return savePromise;
+}
+
+/**
+ * Test-only helper. Clears the module-level ops buffer between tests
+ * so state from one test does not leak into another.
+ */
+export function _resetBoardStateOpsBufferForTest() {
+  boardStateOpSendSequence = 0;
+  pendingBoardStateOps.clear();
 }
 
 export function persistCombatState(endpoint, sceneId, combatState = {}, options = {}) {

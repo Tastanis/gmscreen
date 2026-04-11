@@ -784,8 +784,14 @@ function applyBoardStateOp(array $state, array $op): array
             if ($entryId === null || $entryId !== $placementId) {
                 continue;
             }
-            $entry['x'] = $x;
-            $entry['y'] = $y;
+            // The op wire format uses `x`/`y` for coordinates (matching
+            // the doc), but placement entries in this codebase store
+            // positions as `column`/`row` (see the client store
+            // normalizer and the snapshot save path). Writing `x`/`y`
+            // directly would leave the canonical `column`/`row` stale
+            // and the move would silently fail to apply on readback.
+            $entry['column'] = $x;
+            $entry['row'] = $y;
             // Stamp `_lastModified` so downstream timestamp-based merges
             // (player saves, delta reconciliation) treat this move as
             // newer than any stale payload already in flight.
