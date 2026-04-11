@@ -20,6 +20,7 @@ import {
   normalizeMonsterSnapshot,
   normalizePlayerTokenFolderName,
 } from '../state/store.js';
+import { shouldApplyIncomingVersion } from '../state/version-guard.js';
 import { close as closeMonsterStatBlock, open as openMonsterStatBlock } from './monster-stat-block.js';
 import { createCombatTimerService } from '../services/combat-timer-service.js';
 import { showCombatTimerReport } from './combat-timer-report.js';
@@ -2282,13 +2283,30 @@ export function mountBoardInteractions(store, routes = {}) {
           // Clear dirty tracking after successful save
           clearDirtyTracking();
 
-          // Update version from server response
+          // Update version from server response.
+          // The save response is the third ingestion path for state updates
+          // (alongside Pusher broadcasts and the HTTP poller). Guard it with
+          // the shared version rule so that a save reply whose _version is
+          // not strictly greater than what the client has already applied
+          // is dropped - matching how Pusher deliveries and poll responses
+          // are filtered. Side effects above (clearing dirty tracking,
+          // updating the persisted hash/signature) still run unconditionally.
           const newVersion = result?.data?._version;
-          if (typeof newVersion === 'number' && newVersion > currentBoardStateVersion) {
+          if (shouldApplyIncomingVersion(newVersion, currentBoardStateVersion)) {
             currentBoardStateVersion = newVersion;
             if (pusherInterface?.setLastAppliedVersion) {
               pusherInterface.setLastAppliedVersion(newVersion);
             }
+          } else if (typeof newVersion === 'number') {
+            console.log(
+              '[VTT] Skipping stale save response,',
+              'version:', newVersion,
+              'current:', currentBoardStateVersion
+            );
+          } else {
+            console.warn(
+              '[VTT] Save response missing _version; not updating version tracker'
+            );
           }
         } else {
           // CRITICAL: Clear the pending entry on failure so the poller is not
@@ -2727,7 +2745,7 @@ export function mountBoardInteractions(store, routes = {}) {
       // arrive after Pusher real-time updates, which would overwrite newer state
       getCurrentVersionFn: () => currentBoardStateVersion,
       onVersionUpdated: (version) => {
-        if (typeof version === 'number' && version > currentBoardStateVersion) {
+        if (shouldApplyIncomingVersion(version, currentBoardStateVersion)) {
           currentBoardStateVersion = version;
         }
       },
@@ -2792,7 +2810,7 @@ export function mountBoardInteractions(store, routes = {}) {
 
     // ALWAYS update version tracking first, regardless of other state
     // This prevents the poller from applying stale data later
-    if (typeof delta.version === 'number' && delta.version > currentBoardStateVersion) {
+    if (shouldApplyIncomingVersion(delta.version, currentBoardStateVersion)) {
       currentBoardStateVersion = delta.version;
       if (pusherInterface?.setLastAppliedVersion) {
         pusherInterface.setLastAppliedVersion(delta.version);
