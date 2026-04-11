@@ -503,13 +503,33 @@ if (!defined('VTT_STATE_API_INCLUDE_ONLY')) {
                 $broadcastData['overlay'] = $updates['overlay'];
             }
 
-            // Broadcast asynchronously (don't wait for response)
-            broadcastVttStateUpdate($broadcastData, $clientSocketId);
-
+            // Send the response to the client first so the sender is not
+            // blocked waiting for the Pusher broadcast to complete. Pusher's
+            // cURL call can take up to the full timeout (several seconds) in
+            // degraded conditions; the client does not need that on its
+            // critical path.
             respondJson(200, [
                 'success' => true,
                 'data' => $responseState,
-            ]);
+            ], false);
+
+            // Release the session lock so other requests from the same user
+            // are not serialized behind this one's remaining work.
+            if (session_status() === PHP_SESSION_ACTIVE) {
+                session_write_close();
+            }
+
+            // Flush PHP-FPM's response so the client is already unblocked
+            // before we start the Pusher broadcast.
+            if (function_exists('fastcgi_finish_request')) {
+                fastcgi_finish_request();
+            }
+
+            // Now perform the Pusher broadcast. The client has already
+            // received its response; errors are still logged inside
+            // broadcastVttStateUpdate() but no longer delay the save.
+            broadcastVttStateUpdate($broadcastData, $clientSocketId);
+            return;
         }
 
         respondJson(405, [
@@ -1841,9 +1861,11 @@ function coerceFloat($value, ?float $fallback, int $precision): ?float
     return round($float, $precision);
 }
 
-function respondJson(int $status, array $payload): void
+function respondJson(int $status, array $payload, bool $exit = true): void
 {
     http_response_code($status);
     echo json_encode($payload);
-    exit;
+    if ($exit) {
+        exit;
+    }
 }
