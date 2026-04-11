@@ -2731,6 +2731,12 @@ export function mountBoardInteractions(store, routes = {}) {
   /**
    * Initialize Pusher for real-time state synchronization.
    * This provides instant updates instead of relying on polling.
+   *
+   * Returns a promise that resolves once Pusher has either connected or
+   * timed out, so the caller can sequence downstream init (notably the
+   * board state poller) against a known connection state instead of
+   * locking in "Pusher-is-down fallback mode" while Pusher is still
+   * handshaking.
    */
   function initializePusherSync() {
     // Get Pusher config from window (set by layout.php or via vttConfig from bootstrap)
@@ -2739,7 +2745,7 @@ export function mountBoardInteractions(store, routes = {}) {
       : null;
     if (!pusherConfig || !pusherConfig.key || !pusherConfig.cluster) {
       console.log('[VTT] Pusher not configured, using polling only');
-      return;
+      return Promise.resolve({ connected: false, reason: 'unconfigured' });
     }
 
     // Initialize the board state version from current state
@@ -2760,6 +2766,8 @@ export function mountBoardInteractions(store, routes = {}) {
     });
 
     console.log('[VTT] Pusher sync initialized');
+
+    return pusherInterface?.ready ?? Promise.resolve({ connected: false });
   }
 
   /**
@@ -3869,9 +3877,16 @@ export function mountBoardInteractions(store, routes = {}) {
   };
 
   applyStateToBoard(boardApi.getState?.() ?? {});
-  startBoardStatePoller();
-  startCombatStateRefreshLoop();
-  initializePusherSync();
+
+  // Start Pusher first, then start the poller only after Pusher has either
+  // connected or timed out. This prevents the poller from locking its
+  // interval at "1 second fallback mode" while Pusher is still handshaking.
+  const pusherReady = initializePusherSync();
+  Promise.resolve(pusherReady).then(() => {
+    startBoardStatePoller();
+    startCombatStateRefreshLoop();
+  });
+
   startListeningForSheetSync();
 
   function focusBoard() {
