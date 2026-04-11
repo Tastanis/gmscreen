@@ -1065,10 +1065,6 @@ export function mountBoardInteractions(store, routes = {}) {
   let lastBoardStateHeartbeatSignature = null;
   let lastBoardStateHeartbeatAt = 0;
   const BOARD_STATE_HEARTBEAT_DEBOUNCE_MS = 2000;
-  let combatStateRefreshIntervalId = null;
-  // Combat state refresh is now triggered immediately by board state poller callback.
-  // This backup interval only runs as a safety fallback in case the callback fails.
-  const COMBAT_STATE_REFRESH_INTERVAL_MS = 5000;
   // Double-click activation debounce to prevent rapid re-activations
   let lastTrackerActivationAt = 0;
   const TRACKER_ACTIVATION_DEBOUNCE_MS = 300;
@@ -2743,33 +2739,6 @@ export function mountBoardInteractions(store, routes = {}) {
     boardStatePollerHandle = poller.start();
   }
 
-  function startCombatStateRefreshLoop() {
-    if (
-      combatStateRefreshIntervalId !== null ||
-      typeof window === 'undefined' ||
-      typeof window.setInterval !== 'function'
-    ) {
-      return;
-    }
-
-    // This is a backup fallback loop. Primary combat state refresh now happens
-    // immediately via the board state poller's onStateUpdated callback.
-    // This loop catches any edge cases where the callback might not fire.
-    combatStateRefreshIntervalId = window.setInterval(() => {
-      // Skip refresh if a combat state save is pending to avoid race conditions
-      const pendingInfo = getPendingBoardStateSaveInfo();
-      if (pendingInfo.pending) {
-        return;
-      }
-
-      const state = boardApi.getState?.();
-      if (!state) {
-        return;
-      }
-      applyCombatStateFromBoardState(state);
-    }, COMBAT_STATE_REFRESH_INTERVAL_MS);
-  }
-
   /**
    * Initialize Pusher for real-time state synchronization.
    * This provides instant updates instead of relying on polling.
@@ -3928,7 +3897,7 @@ export function mountBoardInteractions(store, routes = {}) {
   const pusherReady = initializePusherSync();
   Promise.resolve(pusherReady).then(() => {
     startBoardStatePoller();
-    startCombatStateRefreshLoop();
+    // (combat refresh removed — covered by Pusher + main poller)
   });
 
   startListeningForSheetSync();
