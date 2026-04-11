@@ -9,12 +9,41 @@ const VTT_PING_RETENTION_MS = 10000;
 const VTT_VERSION_FILE = 'board-state-version.json';
 
 /**
+ * Resolve the on-disk path to the version file.
+ */
+function vttBoardStateVersionPath(): string
+{
+    return __DIR__ . '/../storage/' . VTT_VERSION_FILE;
+}
+
+/**
  * Get the current board state version.
  * Version is a monotonically increasing integer that prevents stale updates.
+ *
+ * A shared flock is taken while reading so a concurrent rename from the
+ * writer cannot surface as an empty string.
  */
 function getVttBoardStateVersion(): int
 {
-    $data = loadVttJson(VTT_VERSION_FILE);
+    $path = vttBoardStateVersionPath();
+    if (!is_file($path)) {
+        return 0;
+    }
+    $handle = @fopen($path, 'rb');
+    if (!$handle) {
+        return 0;
+    }
+    try {
+        @flock($handle, LOCK_SH);
+        $content = stream_get_contents($handle);
+    } finally {
+        @flock($handle, LOCK_UN);
+        @fclose($handle);
+    }
+    if (!is_string($content) || $content === '') {
+        return 0;
+    }
+    $data = json_decode($content, true);
     if (!is_array($data) || !isset($data['version'])) {
         return 0;
     }
@@ -24,16 +53,64 @@ function getVttBoardStateVersion(): int
 /**
  * Increment and save the board state version.
  * Returns the new version number.
+ *
+ * The read+increment+write is wrapped in an exclusive flock on the version
+ * file itself so the sequence is atomic even if a future caller reaches this
+ * without holding the board-state lock. When called from inside
+ * withVttBoardStateLock, this is belt-and-suspenders — the outer lock already
+ * serializes POSTs, so no two writers can ever share a version number.
  */
 function incrementVttBoardStateVersion(): int
 {
-    $current = getVttBoardStateVersion();
-    $next = $current + 1;
-    saveVttJson(VTT_VERSION_FILE, [
-        'version' => $next,
-        'updatedAt' => time(),
-    ]);
-    return $next;
+    $path = vttBoardStateVersionPath();
+    $directory = dirname($path);
+    if (!is_dir($directory) && !mkdir($directory, 0775, true) && !is_dir($directory)) {
+        // Fall back to the legacy unlocked path. Should not happen in practice.
+        $next = getVttBoardStateVersion() + 1;
+        saveVttJson(VTT_VERSION_FILE, [
+            'version' => $next,
+            'updatedAt' => time(),
+        ]);
+        return $next;
+    }
+
+    $handle = @fopen($path, 'c+b');
+    if (!$handle) {
+        $next = getVttBoardStateVersion() + 1;
+        saveVttJson(VTT_VERSION_FILE, [
+            'version' => $next,
+            'updatedAt' => time(),
+        ]);
+        return $next;
+    }
+
+    try {
+        @flock($handle, LOCK_EX);
+        $content = stream_get_contents($handle);
+        $current = 0;
+        if (is_string($content) && $content !== '') {
+            $decoded = json_decode($content, true);
+            if (is_array($decoded) && isset($decoded['version'])) {
+                $current = max(0, (int) $decoded['version']);
+            }
+        }
+        $next = $current + 1;
+        $encoded = json_encode([
+            'version' => $next,
+            'updatedAt' => time(),
+        ], JSON_PRETTY_PRINT);
+        if (!is_string($encoded)) {
+            $encoded = '{"version":' . $next . ',"updatedAt":' . time() . '}';
+        }
+        rewind($handle);
+        ftruncate($handle, 0);
+        fwrite($handle, $encoded);
+        fflush($handle);
+        return $next;
+    } finally {
+        @flock($handle, LOCK_UN);
+        @fclose($handle);
+    }
 }
 
 /**
@@ -198,7 +275,7 @@ if (!defined('VTT_STATE_API_INCLUDE_ONLY')) {
             // Determine what changed for targeted Pusher broadcasts
             $changedFields = array_keys($updates);
 
-            $responseState = withVttBoardStateLock(function () use ($updates, $auth, $clientVersion, $isDeltaOnly, $replaceDrawingScenes) {
+            $lockResult = withVttBoardStateLock(function () use ($updates, $auth, $clientVersion, $isDeltaOnly, $replaceDrawingScenes) {
                 $existing = loadVttJson('board-state.json');
                 $nextState = normalizeBoardState($existing);
 
@@ -358,7 +435,16 @@ if (!defined('VTT_STATE_API_INCLUDE_ONLY')) {
                         ]);
                     }
 
-                    return filterPlacementsForPlayerView($nextState);
+                    // Bump the version while still inside the board-state lock
+                    // so every POST is serialized through the version bump and
+                    // no two writes can ever share a version number.
+                    $newVersion = incrementVttBoardStateVersion();
+                    $playerView = filterPlacementsForPlayerView($nextState);
+                    $playerView['_version'] = $newVersion;
+                    return [
+                        'state' => $playerView,
+                        'version' => $newVersion,
+                    ];
                 }
 
                 foreach ($updates as $key => $value) {
@@ -459,14 +545,19 @@ if (!defined('VTT_STATE_API_INCLUDE_ONLY')) {
                     ]);
                 }
 
-                return $nextState;
+                // Bump the version while still inside the board-state lock
+                // so every POST is serialized through the version bump and
+                // no two writes can ever share a version number.
+                $newVersion = incrementVttBoardStateVersion();
+                $nextState['_version'] = $newVersion;
+                return [
+                    'state' => $nextState,
+                    'version' => $newVersion,
+                ];
             });
 
-            // Increment version after successful save
-            $newVersion = incrementVttBoardStateVersion();
-
-            // Add version to response state
-            $responseState['_version'] = $newVersion;
+            $responseState = $lockResult['state'];
+            $newVersion = $lockResult['version'];
 
             // Broadcast update via Pusher (non-blocking, fails silently)
             $broadcastData = [
