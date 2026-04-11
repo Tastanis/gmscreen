@@ -235,8 +235,20 @@ if (!defined('VTT_STATE_API_INCLUDE_ONLY')) {
             // Remove internal fields before processing
             unset($rawState['_version'], $rawState['_socketId'], $rawState['_deltaOnly'], $rawState['_replaceDrawings']);
 
+            // Phase 3-B (commit 1): optional delta ops live at
+            // `payload.ops` (top-level, alongside boardState). They are
+            // sanitized for shape here and applied inside the state
+            // lock below. The client does not send ops yet — this
+            // commit only teaches the server to accept them. Existing
+            // snapshot-only payloads are unaffected because `$ops`
+            // stays empty when `payload.ops` is absent.
+            $ops = [];
+            if (isset($payload['ops']) && is_array($payload['ops'])) {
+                $ops = sanitizeBoardStateOps($payload['ops']);
+            }
+
             $updates = sanitizeBoardStateUpdates($rawState);
-            if (empty($updates)) {
+            if (empty($updates) && empty($ops)) {
                 respondJson(422, [
                     'success' => false,
                     'error' => 'No board state changes were provided.',
@@ -246,7 +258,7 @@ if (!defined('VTT_STATE_API_INCLUDE_ONLY')) {
             // Determine what changed for targeted Pusher broadcasts
             $changedFields = array_keys($updates);
 
-            $lockResult = withVttBoardStateLock(function () use ($updates, $auth, $clientVersion, $isDeltaOnly, $replaceDrawingScenes) {
+            $lockResult = withVttBoardStateLock(function () use ($updates, $ops, $auth, $clientVersion, $isDeltaOnly, $replaceDrawingScenes) {
                 $existing = loadVttJson('board-state.json');
 
                 // Determine the starting version. Prefer the `_version` field
@@ -268,6 +280,19 @@ if (!defined('VTT_STATE_API_INCLUDE_ONLY')) {
 
                 $nextState = normalizeBoardState($existing);
                 $nextState['_version'] = $previousVersion;
+
+                // Phase 3-B (commit 1): apply delta ops to the
+                // normalized state before any snapshot-merge logic
+                // runs. Ops mutate the canonical state in place; the
+                // existing snapshot path, when a boardState payload is
+                // also present, will layer on top exactly as before.
+                // No client sends ops yet, so in practice `$ops` is
+                // always empty on this commit and this loop is a no-op.
+                if (!empty($ops)) {
+                    foreach ($ops as $op) {
+                        $nextState = applyBoardStateOp($nextState, $op);
+                    }
+                }
 
                 $isGm = (bool) ($auth['isGM'] ?? false);
                 if (!$isGm) {
@@ -295,7 +320,13 @@ if (!defined('VTT_STATE_API_INCLUDE_ONLY')) {
                     $hasDrawingUpdates = !empty($drawingUpdates);
                     $hasPingUpdates = !empty($pingUpdates);
 
-                    if (!$hasCombatUpdates && !$hasPlacementUpdates && !$hasTemplateUpdates && !$hasDrawingUpdates && !$hasPingUpdates) {
+                    // Phase 3-B (commit 1): an ops-only payload from a
+                    // player is also acceptable. Only `placement.move`
+                    // is supported today, which is strictly an update
+                    // to an existing placement (no create, no delete),
+                    // so it fits the same "players may only modify"
+                    // policy this branch enforces for snapshot saves.
+                    if (!$hasCombatUpdates && !$hasPlacementUpdates && !$hasTemplateUpdates && !$hasDrawingUpdates && !$hasPingUpdates && empty($ops)) {
                         respondJson(403, [
                             'success' => false,
                             'error' => 'Only combat, placement, template, drawing, or ping updates are permitted for players.',
@@ -657,6 +688,118 @@ function readJsonInput(): array
 
     $data = json_decode($raw, true);
     return is_array($data) ? $data : [];
+}
+
+/**
+ * Phase 3-B: Sanitize a list of delta ops coming in on `payload.ops`.
+ *
+ * Each op is an associative array describing a single, typed mutation
+ * of the board state (for example `{type: 'placement.move', sceneId,
+ * placementId, x, y}`). Unknown op types are preserved in the returned
+ * list so `applyBoardStateOp` can decide how to handle them; malformed
+ * entries (non-arrays, missing or non-string `type`) are dropped.
+ *
+ * This helper performs shape validation only. It does not touch the
+ * board state — application happens later, inside the state lock.
+ *
+ * @param array<int,mixed> $rawOps
+ * @return array<int,array<string,mixed>>
+ */
+function sanitizeBoardStateOps(array $rawOps): array
+{
+    $sanitized = [];
+    foreach ($rawOps as $rawOp) {
+        if (!is_array($rawOp)) {
+            continue;
+        }
+        $type = $rawOp['type'] ?? null;
+        if (!is_string($type) || trim($type) === '') {
+            continue;
+        }
+        $rawOp['type'] = trim($type);
+        $sanitized[] = $rawOp;
+    }
+    return $sanitized;
+}
+
+/**
+ * Phase 3-B: Apply a single delta op to an in-memory board state array.
+ *
+ * Commit 1 supports only `placement.move`, which updates the `x`/`y`
+ * coordinates of an existing placement in a given scene. Unknown or
+ * unsupported op types are ignored so older servers can tolerate
+ * payloads from newer clients without erroring out. The state returned
+ * is always a valid board state — if the op cannot be applied (missing
+ * scene, missing placement, bad coordinates), the input is returned
+ * unchanged.
+ *
+ * The caller is responsible for running this inside the state lock so
+ * two concurrent writers cannot interleave mutations on the same
+ * placement.
+ *
+ * @param array<string,mixed> $state
+ * @param array<string,mixed> $op
+ * @return array<string,mixed>
+ */
+function applyBoardStateOp(array $state, array $op): array
+{
+    $type = isset($op['type']) && is_string($op['type']) ? $op['type'] : '';
+
+    if ($type === 'placement.move') {
+        $sceneId = isset($op['sceneId']) && is_string($op['sceneId']) ? trim($op['sceneId']) : '';
+        if ($sceneId === '') {
+            return $state;
+        }
+        $placementId = '';
+        if (isset($op['placementId'])) {
+            $rawId = $op['placementId'];
+            if (is_string($rawId)) {
+                $placementId = trim($rawId);
+            } elseif (is_int($rawId) || is_float($rawId)) {
+                $placementId = (string) $rawId;
+            }
+        }
+        if ($placementId === '') {
+            return $state;
+        }
+        if (!isset($op['x']) || !is_numeric($op['x']) || !isset($op['y']) || !is_numeric($op['y'])) {
+            return $state;
+        }
+        $x = (float) $op['x'];
+        $y = (float) $op['y'];
+
+        if (!isset($state['placements']) || !is_array($state['placements'])) {
+            return $state;
+        }
+        if (!isset($state['placements'][$sceneId]) || !is_array($state['placements'][$sceneId])) {
+            return $state;
+        }
+
+        $nowMs = (int) round(microtime(true) * 1000);
+        foreach ($state['placements'][$sceneId] as $idx => $entry) {
+            if (!is_array($entry)) {
+                continue;
+            }
+            $entryId = extractBoardEntryIdentifier($entry);
+            if ($entryId === null || $entryId !== $placementId) {
+                continue;
+            }
+            $entry['x'] = $x;
+            $entry['y'] = $y;
+            // Stamp `_lastModified` so downstream timestamp-based merges
+            // (player saves, delta reconciliation) treat this move as
+            // newer than any stale payload already in flight.
+            $entry['_lastModified'] = $nowMs;
+            $state['placements'][$sceneId][$idx] = $entry;
+            break;
+        }
+        return $state;
+    }
+
+    // Unknown op types are silently ignored so older servers can
+    // tolerate payloads from newer clients. Commits 2+ will add more
+    // `placement.*`, `template.*`, and `drawing.*` op types here.
+    return $state;
 }
 
 /**
