@@ -46,6 +46,13 @@ const DEFAULT_SCENE_ID = '_default';
 // that would trigger subscribers are blocked to prevent infinite recursion.
 let isApplyingState = false;
 
+// Board state poller intervals. See phase-1-2-dynamic-poller.md.
+// Fallback mode: Pusher is down, poll aggressively as an active fallback.
+// Safety-net mode: Pusher is up, poll rarely just in case a Pusher event
+// was dropped during a reconnect.
+const POLL_FALLBACK_INTERVAL_MS = 1000;
+const POLL_SAFETY_NET_INTERVAL_MS = 30000;
+
 function getStaminaSyncChannel() {
   if (typeof BroadcastChannel !== 'function') {
     return null;
@@ -103,6 +110,7 @@ export function createBoardStatePoller({
   getCurrentVersionFn = () => 0,
   onVersionUpdated = null,
   onStateUpdated = null,
+  isPusherConnectedFn = isPusherConnected,
 } = {}) {
   const endpoint = stateEndpoint ?? routes?.state ?? null;
 
@@ -318,21 +326,55 @@ export function createBoardStatePoller({
 
   function start() {
     if (!endpoint || typeof windowRef?.setInterval !== 'function' || typeof fetchFn !== 'function') {
-      return { stop() {} };
+      return { stop() {}, reconfigure() {} };
     }
 
-    // Polling interval for board state
-    // When Pusher is connected, we use a longer interval as a fallback
-    // When Pusher is not connected, we poll more frequently
-    const BOARD_STATE_POLL_INTERVAL_MS = isPusherConnected()
-      ? 10000  // 10 seconds when Pusher is connected (fallback only)
-      : 1000;  // 1 second when no real-time connection
+    // The poller has two modes:
+    //   - Fallback mode (Pusher down): poll every POLL_FALLBACK_INTERVAL_MS
+    //   - Safety-net mode (Pusher up): poll every POLL_SAFETY_NET_INTERVAL_MS
+    // Pick the initial mode from the current Pusher state. Later connection
+    // changes go through reconfigure() below.
+    let currentIntervalMs =
+      typeof isPusherConnectedFn === 'function' && isPusherConnectedFn()
+        ? POLL_SAFETY_NET_INTERVAL_MS
+        : POLL_FALLBACK_INTERVAL_MS;
+    let intervalId = null;
+
+    function schedule(intervalMs) {
+      if (intervalId !== null && typeof windowRef?.clearInterval === 'function') {
+        windowRef.clearInterval(intervalId);
+      }
+      currentIntervalMs = intervalMs;
+      intervalId = windowRef.setInterval(poll, currentIntervalMs);
+    }
+
+    // Initial poll, then start the interval.
     poll();
-    const intervalId = windowRef.setInterval(poll, BOARD_STATE_POLL_INTERVAL_MS);
+    schedule(currentIntervalMs);
+
     return {
       stop() {
-        if (typeof windowRef?.clearInterval === 'function') {
+        if (intervalId !== null && typeof windowRef?.clearInterval === 'function') {
           windowRef.clearInterval(intervalId);
+        }
+        intervalId = null;
+      },
+      reconfigure({ pusherConnected } = {}) {
+        const nextIntervalMs = pusherConnected
+          ? POLL_SAFETY_NET_INTERVAL_MS
+          : POLL_FALLBACK_INTERVAL_MS;
+        if (nextIntervalMs === currentIntervalMs) {
+          return; // no-op when the mode has not actually changed
+        }
+        const enteringFallback = !pusherConnected;
+        schedule(nextIntervalMs);
+        if (enteringFallback) {
+          // Pusher just dropped. Fire one poll immediately so the user does
+          // not have to wait up to a full interval for the first fetch.
+          // When going the other way (fallback -> safety-net) we deliberately
+          // do NOT fire an immediate poll, because Pusher itself is about to
+          // deliver fresh state.
+          poll();
         }
       },
     };
@@ -1624,10 +1666,10 @@ export function mountBoardInteractions(store, routes = {}) {
   let pusherInterface = null;
   let pusherConnected = false;
   let currentBoardStateVersion = 0;
-  // Reduced polling interval when Pusher is connected (fallback only)
-  const PUSHER_FALLBACK_POLL_INTERVAL_MS = 10000;
-  // Normal polling interval when Pusher is not available
-  const NORMAL_POLL_INTERVAL_MS = 1000;
+  // Handle returned by the board state poller's start(). Captured so
+  // handlePusherConnectionChange() can call reconfigure() when Pusher
+  // connects or drops mid-session.
+  let boardStatePollerHandle = null;
   let suppressCombatStateSync = false;
   let pendingCombatStateSync = false;
   let combatStateVersion = 0;
@@ -2698,7 +2740,7 @@ export function mountBoardInteractions(store, routes = {}) {
       onStateUpdated: applyCombatStateFromBoardState,
     });
 
-    poller.start();
+    boardStatePollerHandle = poller.start();
   }
 
   function startCombatStateRefreshLoop() {
@@ -2996,10 +3038,12 @@ export function mountBoardInteractions(store, routes = {}) {
     pusherConnected = state.connected;
     console.log('[VTT Pusher] Connection state:', state.connected ? 'connected' : 'disconnected');
 
-    // If we just reconnected, trigger a resync by fetching fresh state
-    if (state.connected) {
-      // The poller will naturally fetch fresh state on its next tick
-      // We could also trigger an immediate fetch here if needed
+    // Tell the board state poller to swap modes:
+    //   connected    -> safety-net mode (poll every 30s)
+    //   disconnected -> fallback mode (poll every 1s, immediate poll)
+    // reconfigure() is a no-op when the mode has not actually changed.
+    if (boardStatePollerHandle && typeof boardStatePollerHandle.reconfigure === 'function') {
+      boardStatePollerHandle.reconfigure({ pusherConnected: state.connected });
     }
   }
 

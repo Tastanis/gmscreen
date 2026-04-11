@@ -786,3 +786,259 @@ test('mergeBoardStateSnapshot preserves fogOfWar for scenes not in incoming', as
     'scene-2 fogOfWar revealedCells should be preserved'
   );
 });
+
+// ---------------------------------------------------------------------------
+// Phase 1-2: dynamic poller interval reconfiguration
+// ---------------------------------------------------------------------------
+//
+// These tests cover the reconfigure() method that handlePusherConnectionChange
+// uses to switch the poller between fallback mode (Pusher down, 1s interval)
+// and safety-net mode (Pusher up, 30s interval). See
+// docs/vtt-sync-refactor/phase-1-2-dynamic-poller.md.
+
+function createIntervalSpyWindow() {
+  // Minimal window stub that records every setInterval / clearInterval call
+  // so the tests can assert on how often (and with what interval) the poller
+  // reschedules itself.
+  let nextId = 1;
+  const setCalls = [];
+  const clearCalls = [];
+  const windowRef = {
+    setInterval(fn, ms) {
+      const id = nextId++;
+      setCalls.push({ id, ms, fn });
+      return id;
+    },
+    clearInterval(id) {
+      clearCalls.push(id);
+    },
+  };
+  return { windowRef, setCalls, clearCalls };
+}
+
+function createReconfigurePoller({
+  createBoardStatePoller,
+  isPusherConnectedFn,
+  windowRef,
+  fetchFn,
+} = {}) {
+  const boardStateContainer = {
+    boardState: { placements: {} },
+    user: { name: 'GM User', isGM: true },
+  };
+
+  const boardApi = {
+    getState: () => boardStateContainer,
+    updateState: (mutator) => mutator(boardStateContainer),
+  };
+
+  return createBoardStatePoller({
+    stateEndpoint: '/state',
+    boardApi,
+    fetchFn,
+    windowRef,
+    documentRef: { visibilityState: 'visible' },
+    hashBoardStateSnapshotFn: (snapshot) => JSON.stringify(snapshot),
+    safeJsonStringifyFn: (value) => JSON.stringify(value),
+    mergeBoardStateSnapshotFn: (existing, incoming) => incoming ?? existing,
+    getCurrentUserIdFn: () => 'gm user',
+    normalizeProfileIdFn: (value) =>
+      typeof value === 'string' ? value.trim().toLowerCase() : null,
+    getPendingSaveInfo: () => ({ pending: false }),
+    getLastPersistedHashFn: () => null,
+    getLastPersistedSignatureFn: () => null,
+    isPusherConnectedFn,
+  });
+}
+
+test('board state poller starts in fallback mode (1s) when Pusher is down', async () => {
+  const { createBoardStatePoller } = await modulePromise;
+  const { windowRef, setCalls } = createIntervalSpyWindow();
+
+  const fetchCalls = [];
+  const fetchFn = async () => {
+    fetchCalls.push(Date.now());
+    return { ok: true, json: async () => ({ data: { boardState: {} } }) };
+  };
+
+  const poller = createReconfigurePoller({
+    createBoardStatePoller,
+    isPusherConnectedFn: () => false,
+    windowRef,
+    fetchFn,
+  });
+
+  const handle = poller.start();
+  // Yield to let the immediate poll resolve so test output is deterministic.
+  await Promise.resolve();
+
+  assert.equal(setCalls.length, 1, 'setInterval called once on start()');
+  assert.equal(setCalls[0].ms, 1000, 'fallback mode uses 1s interval');
+  assert.equal(typeof handle.reconfigure, 'function', 'handle exposes reconfigure()');
+});
+
+test('board state poller starts in safety-net mode (30s) when Pusher is up', async () => {
+  const { createBoardStatePoller } = await modulePromise;
+  const { windowRef, setCalls } = createIntervalSpyWindow();
+
+  const poller = createReconfigurePoller({
+    createBoardStatePoller,
+    isPusherConnectedFn: () => true,
+    windowRef,
+    fetchFn: async () => ({ ok: true, json: async () => ({ data: { boardState: {} } }) }),
+  });
+
+  poller.start();
+  await Promise.resolve();
+
+  assert.equal(setCalls.length, 1, 'setInterval called once on start()');
+  assert.equal(setCalls[0].ms, 30000, 'safety-net mode uses 30s interval');
+});
+
+test('reconfigure({ pusherConnected: true }) switches poller to 30s safety-net mode', async () => {
+  const { createBoardStatePoller } = await modulePromise;
+  const { windowRef, setCalls, clearCalls } = createIntervalSpyWindow();
+
+  const poller = createReconfigurePoller({
+    createBoardStatePoller,
+    isPusherConnectedFn: () => false,
+    windowRef,
+    fetchFn: async () => ({ ok: true, json: async () => ({ data: { boardState: {} } }) }),
+  });
+
+  const handle = poller.start();
+  await Promise.resolve();
+
+  // Starting in fallback mode: one setInterval call at 1000ms.
+  assert.equal(setCalls.length, 1);
+  assert.equal(setCalls[0].ms, 1000);
+  assert.equal(clearCalls.length, 0);
+
+  handle.reconfigure({ pusherConnected: true });
+  await Promise.resolve();
+
+  // Reconfigure must clear the old interval and create a new 30s one.
+  assert.equal(clearCalls.length, 1, 'clearInterval called when mode changes');
+  assert.equal(clearCalls[0], setCalls[0].id, 'old interval id was cleared');
+  assert.equal(setCalls.length, 2, 'setInterval called again for new interval');
+  assert.equal(setCalls[1].ms, 30000, 'new interval is 30s');
+});
+
+test('reconfigure({ pusherConnected: false }) returns to 1s fallback and fires immediate poll', async () => {
+  const { createBoardStatePoller } = await modulePromise;
+  const { windowRef, setCalls, clearCalls } = createIntervalSpyWindow();
+
+  let fetchCount = 0;
+  const fetchFn = async () => {
+    fetchCount += 1;
+    return { ok: true, json: async () => ({ data: { boardState: { tick: fetchCount } } }) };
+  };
+
+  const poller = createReconfigurePoller({
+    createBoardStatePoller,
+    isPusherConnectedFn: () => true, // start in safety-net mode
+    windowRef,
+    fetchFn,
+  });
+
+  const handle = poller.start();
+  // Drain microtasks until the initial poll from start() has fully settled
+  // (both the fetch await and the response.json() await) so that
+  // reconfigure() does not race the in-flight poll via isPolling guard.
+  await new Promise((resolve) => setImmediate(resolve));
+  await new Promise((resolve) => setImmediate(resolve));
+  const fetchCountAfterStart = fetchCount;
+  assert.equal(setCalls.length, 1);
+  assert.equal(setCalls[0].ms, 30000);
+
+  handle.reconfigure({ pusherConnected: false });
+  // Let the immediate-fallback poll resolve.
+  await new Promise((resolve) => setImmediate(resolve));
+  await new Promise((resolve) => setImmediate(resolve));
+
+  assert.equal(clearCalls.length, 1, 'old safety-net interval cleared');
+  assert.equal(setCalls.length, 2, 'new interval scheduled');
+  assert.equal(setCalls[1].ms, 1000, 'fallback interval is 1s');
+  assert.ok(
+    fetchCount > fetchCountAfterStart,
+    'entering fallback mode should fire one immediate poll',
+  );
+});
+
+test('reconfigure({ pusherConnected: true }) does NOT fire an immediate poll', async () => {
+  const { createBoardStatePoller } = await modulePromise;
+  const { windowRef } = createIntervalSpyWindow();
+
+  let fetchCount = 0;
+  const fetchFn = async () => {
+    fetchCount += 1;
+    return { ok: true, json: async () => ({ data: { boardState: {} } }) };
+  };
+
+  const poller = createReconfigurePoller({
+    createBoardStatePoller,
+    isPusherConnectedFn: () => false, // start in fallback mode
+    windowRef,
+    fetchFn,
+  });
+
+  const handle = poller.start();
+  await Promise.resolve();
+  await Promise.resolve();
+  const fetchCountAfterStart = fetchCount;
+
+  handle.reconfigure({ pusherConnected: true });
+  // Yield plenty of microtasks so any stray poll would have time to fire.
+  await Promise.resolve();
+  await Promise.resolve();
+  await Promise.resolve();
+
+  assert.equal(
+    fetchCount,
+    fetchCountAfterStart,
+    'entering safety-net mode should not fire an extra poll (Pusher will deliver state)',
+  );
+});
+
+test('reconfigure is a no-op when the mode has not changed', async () => {
+  const { createBoardStatePoller } = await modulePromise;
+  const { windowRef, setCalls, clearCalls } = createIntervalSpyWindow();
+
+  const poller = createReconfigurePoller({
+    createBoardStatePoller,
+    isPusherConnectedFn: () => false,
+    windowRef,
+    fetchFn: async () => ({ ok: true, json: async () => ({ data: { boardState: {} } }) }),
+  });
+
+  const handle = poller.start();
+  await Promise.resolve();
+
+  handle.reconfigure({ pusherConnected: false });
+  handle.reconfigure({ pusherConnected: false });
+
+  assert.equal(clearCalls.length, 0, 'clearInterval should not be called on a no-op reconfigure');
+  assert.equal(setCalls.length, 1, 'setInterval should not be called again on a no-op reconfigure');
+});
+
+test('start() returns a no-op reconfigure when no setInterval is available', async () => {
+  const { createBoardStatePoller } = await modulePromise;
+
+  const poller = createBoardStatePoller({
+    stateEndpoint: '/state',
+    boardApi: { getState: () => ({}), updateState: () => {} },
+    fetchFn: async () => ({ ok: true, json: async () => ({ data: { boardState: {} } }) }),
+    // windowRef without setInterval → the poller should degrade gracefully
+    windowRef: {},
+    documentRef: { visibilityState: 'visible' },
+    isPusherConnectedFn: () => false,
+  });
+
+  const handle = poller.start();
+  assert.equal(typeof handle.stop, 'function');
+  assert.equal(typeof handle.reconfigure, 'function');
+  // Calling reconfigure on the no-op handle must not throw.
+  handle.reconfigure({ pusherConnected: true });
+  handle.reconfigure({ pusherConnected: false });
+  handle.stop();
+});
