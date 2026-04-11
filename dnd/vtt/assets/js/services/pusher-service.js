@@ -83,6 +83,35 @@ export function initializePusher({
     pusherInstance.connection.bind('error', handleError);
     pusherInstance.connection.bind('state_change', handleStateChange);
 
+    // "Ready" promise: resolves the first time Pusher reports 'connected',
+    // or after a short timeout so callers waiting on it don't block the UI
+    // indefinitely when Pusher can't connect. Callers can use this to
+    // sequence initialization (e.g. starting the poller only after the
+    // connection state is known).
+    let readyResolver;
+    let readyTimeout;
+    const readyPromise = new Promise((resolve) => {
+      readyResolver = resolve;
+    });
+
+    pusherInstance.connection.bind('connected', () => {
+      if (readyResolver) {
+        readyResolver({ connected: true });
+        readyResolver = null;
+        if (readyTimeout) {
+          clearTimeout(readyTimeout);
+          readyTimeout = null;
+        }
+      }
+    });
+
+    readyTimeout = setTimeout(() => {
+      if (readyResolver) {
+        readyResolver({ connected: false, reason: 'timeout' });
+        readyResolver = null;
+      }
+    }, 2500);
+
     // Subscribe to channel
     pusherChannel = pusherInstance.subscribe(channel);
 
@@ -111,6 +140,7 @@ export function initializePusher({
           lastAppliedVersion = version;
         }
       },
+      ready: readyPromise,
     };
   } catch (error) {
     console.error('[VTT Pusher] Initialization failed:', error);
@@ -308,6 +338,7 @@ function createNullInterface() {
     isConnected: () => false,
     getLastAppliedVersion: () => 0,
     setLastAppliedVersion: () => {},
+    ready: Promise.resolve({ connected: false, reason: 'unavailable' }),
   };
 }
 
