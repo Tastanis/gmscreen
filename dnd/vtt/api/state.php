@@ -144,6 +144,27 @@ if (!defined('VTT_STATE_API_INCLUDE_ONLY')) {
 
     try {
         if ($method === 'GET') {
+            // Phase 3-A: Conditional GET. The polling fallback hits this
+            // endpoint every 30 seconds (safety-net) or 1 second (fallback).
+            // When the board state version has not advanced since the
+            // client's last applied version, return 304 Not Modified with
+            // no body so the safety-net poll is effectively free on the
+            // server: no scene/token loads, no player-view filtering, no
+            // JSON serialization. We use a weak ETag because the response
+            // body varies by user role (player view vs. GM view), but the
+            // version is always a sufficient freshness key.
+            $currentVersion = getVttBoardStateVersion();
+            $currentEtag = 'W/"v' . $currentVersion . '"';
+            $clientEtag = isset($_SERVER['HTTP_IF_NONE_MATCH'])
+                ? trim((string) $_SERVER['HTTP_IF_NONE_MATCH'])
+                : '';
+            if ($clientEtag !== '' && $clientEtag === $currentEtag) {
+                header('ETag: ' . $currentEtag);
+                header('Cache-Control: no-store');
+                http_response_code(304);
+                exit;
+            }
+
             $config = getVttBootstrapConfig();
             $auth = getVttUserContext();
             if (!($auth['isGM'] ?? false)) {
@@ -151,9 +172,8 @@ if (!defined('VTT_STATE_API_INCLUDE_ONLY')) {
             }
 
             // Include version for sync conflict detection
-            $version = getVttBoardStateVersion();
             $boardState = $config['boardState'] ?? [];
-            $boardState['_version'] = $version;
+            $boardState['_version'] = $currentVersion;
             // Mark as full sync so clients know to replace (not merge) scene data
             // This enables proper deletion sync - items not in this response should be removed
             $boardState['_fullSync'] = true;
@@ -161,6 +181,8 @@ if (!defined('VTT_STATE_API_INCLUDE_ONLY')) {
             // Include Pusher config for client-side initialization
             $pusherConfig = getVttPusherConfig();
 
+            header('ETag: ' . $currentEtag);
+            header('Cache-Control: no-store');
             respondJson(200, [
                 'success' => true,
                 'data' => [

@@ -1042,3 +1042,146 @@ test('start() returns a no-op reconfigure when no setInterval is available', asy
   handle.reconfigure({ pusherConnected: false });
   handle.stop();
 });
+
+// Phase 3-A: Conditional GET tests.
+test('poller sends If-None-Match header with the current version', async () => {
+  const { createBoardStatePoller } = await modulePromise;
+
+  const fetchCalls = [];
+  const fetchFn = async (endpoint, options) => {
+    fetchCalls.push({ endpoint, options });
+    return {
+      ok: true,
+      status: 200,
+      json: async () => ({ data: { boardState: { _version: 42 } } }),
+    };
+  };
+
+  const boardStateContainer = {
+    boardState: { placements: {} },
+    user: { name: 'GM User', isGM: true },
+  };
+
+  const poller = createBoardStatePoller({
+    stateEndpoint: '/state',
+    boardApi: {
+      getState: () => boardStateContainer,
+      updateState: (mutator) => mutator(boardStateContainer),
+    },
+    fetchFn,
+    windowRef: { setInterval: () => 0, clearInterval: () => {} },
+    documentRef: { visibilityState: 'visible' },
+    hashBoardStateSnapshotFn: (snapshot) => JSON.stringify(snapshot),
+    safeJsonStringifyFn: (value) => JSON.stringify(value),
+    mergeBoardStateSnapshotFn: (existing, incoming) => incoming ?? existing,
+    getCurrentUserIdFn: () => 'gm user',
+    normalizeProfileIdFn: (value) =>
+      typeof value === 'string' ? value.trim().toLowerCase() : null,
+    getPendingSaveInfo: () => ({ pending: false }),
+    getLastPersistedHashFn: () => null,
+    getLastPersistedSignatureFn: () => null,
+    getCurrentVersionFn: () => 42,
+  });
+
+  await poller.poll();
+
+  assert.equal(fetchCalls.length, 1);
+  const headers = fetchCalls[0].options?.headers ?? {};
+  assert.equal(headers['If-None-Match'], 'W/"v42"');
+});
+
+test('poller omits If-None-Match when no version is known yet', async () => {
+  const { createBoardStatePoller } = await modulePromise;
+
+  const fetchCalls = [];
+  const fetchFn = async (endpoint, options) => {
+    fetchCalls.push({ endpoint, options });
+    return {
+      ok: true,
+      status: 200,
+      json: async () => ({ data: { boardState: { _version: 1 } } }),
+    };
+  };
+
+  const boardStateContainer = {
+    boardState: { placements: {} },
+    user: { name: 'GM User', isGM: true },
+  };
+
+  const poller = createBoardStatePoller({
+    stateEndpoint: '/state',
+    boardApi: {
+      getState: () => boardStateContainer,
+      updateState: (mutator) => mutator(boardStateContainer),
+    },
+    fetchFn,
+    windowRef: { setInterval: () => 0, clearInterval: () => {} },
+    documentRef: { visibilityState: 'visible' },
+    hashBoardStateSnapshotFn: (snapshot) => JSON.stringify(snapshot),
+    safeJsonStringifyFn: (value) => JSON.stringify(value),
+    mergeBoardStateSnapshotFn: (existing, incoming) => incoming ?? existing,
+    getCurrentUserIdFn: () => 'gm user',
+    normalizeProfileIdFn: (value) =>
+      typeof value === 'string' ? value.trim().toLowerCase() : null,
+    getPendingSaveInfo: () => ({ pending: false }),
+    getLastPersistedHashFn: () => null,
+    getLastPersistedSignatureFn: () => null,
+    getCurrentVersionFn: () => 0,
+  });
+
+  await poller.poll();
+
+  assert.equal(fetchCalls.length, 1);
+  const headers = fetchCalls[0].options?.headers ?? {};
+  assert.equal('If-None-Match' in headers, false);
+});
+
+test('poller treats a 304 response as a no-op without applying state', async () => {
+  const { createBoardStatePoller } = await modulePromise;
+
+  const boardStateContainer = {
+    boardState: { placements: { token: { x: 9 } } },
+    user: { name: 'GM User', isGM: true },
+  };
+
+  const updateCalls = [];
+  const boardApi = {
+    getState: () => boardStateContainer,
+    updateState: (mutator) => {
+      updateCalls.push(mutator);
+      mutator(boardStateContainer);
+    },
+  };
+
+  const fetchFn = async () => ({
+    status: 304,
+    // No `ok`, no `json`. The poller must NOT call .json() on a 304.
+  });
+
+  const poller = createBoardStatePoller({
+    stateEndpoint: '/state',
+    boardApi,
+    fetchFn,
+    windowRef: { setInterval: () => 0, clearInterval: () => {} },
+    documentRef: { visibilityState: 'visible' },
+    hashBoardStateSnapshotFn: (snapshot) => JSON.stringify(snapshot),
+    safeJsonStringifyFn: (value) => JSON.stringify(value),
+    mergeBoardStateSnapshotFn: (existing, incoming) => incoming ?? existing,
+    getCurrentUserIdFn: () => 'gm user',
+    normalizeProfileIdFn: (value) =>
+      typeof value === 'string' ? value.trim().toLowerCase() : null,
+    getPendingSaveInfo: () => ({ pending: false }),
+    getLastPersistedHashFn: () => null,
+    getLastPersistedSignatureFn: () => null,
+    getCurrentVersionFn: () => 7,
+  });
+
+  await poller.poll();
+
+  assert.equal(updateCalls.length, 0, 'updateState must not be called on 304');
+  assert.deepEqual(
+    boardStateContainer.boardState,
+    { placements: { token: { x: 9 } } },
+    'board state must remain untouched on 304',
+  );
+});
