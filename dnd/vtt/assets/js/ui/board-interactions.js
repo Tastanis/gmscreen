@@ -5490,14 +5490,13 @@ export function mountBoardInteractions(store, routes = {}) {
       }
     }
 
-    // Always persist when drawings change to ensure they are saved to the server.
-    // This fixes an issue where local drawings were not being persisted because
-    // the sync pending check timing could miss the persist call.
-    persistBoardStateSnapshot({}, drawingOps);
-
-    // If sync is pending, the change came from the local drawing tool
-    // Don't update the drawing tool to preserve the undo stack
+    // Only persist when the change came from the local drawing tool.
+    // When isDrawingSyncPending() is false, the change came from an incoming
+    // Pusher broadcast — the server already has the correct state, so saving
+    // back would create a feedback loop (each client re-saves what it just
+    // received, bumping the version and triggering more broadcasts).
     if (isDrawingSyncPending()) {
+      persistBoardStateSnapshot({}, drawingOps);
       return;
     }
 
