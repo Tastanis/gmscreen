@@ -219,8 +219,12 @@ final class MonsterStatSanitizationTest extends TestCase
 
         $filtered = filterPlacementsForPlayerView($boardState);
 
-        // The entire placement should be gone (hidden), so monster data cannot leak
-        $this->assertCount(0, $filtered['placements']['scene-1']);
+        // Hidden placement is kept but all monster data is stripped
+        $this->assertCount(1, $filtered['placements']['scene-1']);
+        $token = $filtered['placements']['scene-1'][0];
+        $this->assertSame('hidden-enemy', $token['id']);
+        $this->assertArrayNotHasKey('monster', $token);
+        $this->assertArrayNotHasKey('monsterId', $token);
     }
 
     public function testVisibleEnemyWithoutMonsterDataIsPreserved(): void
