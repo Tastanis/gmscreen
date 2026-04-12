@@ -241,3 +241,339 @@ describe('Board State – delta ops persistence (phase 3-B commit 2)', () => {
     assert.equal(capturedPayloads[0].ops[0].placementId, 'hero');
   });
 });
+
+// ---------------------------------------------------------------------------
+// Phase 3-B (commit 3): the delta-ops path now covers every placement
+// mutation — add, remove, and update — in addition to the moves that
+// commit 2 shipped. These tests lock in the wire shape of each new op
+// type, the dedup key behavior (per-type keys, same-key later-wins for
+// add/remove, shallow-merge-patches for two consecutive updates), and
+// the accumulation of cross-type ops on the same placement so the
+// server applies them in the order they were produced.
+// ---------------------------------------------------------------------------
+
+describe('Board State – delta ops persistence (phase 3-B commit 3)', () => {
+  let originalFetch;
+  let originalWindow;
+  let capturedPayloads;
+  let pendingFetchResolvers;
+
+  beforeEach(() => {
+    originalFetch = globalThis.fetch;
+    originalWindow = globalThis.window;
+    capturedPayloads = [];
+    pendingFetchResolvers = [];
+
+    globalThis.fetch = async (_url, options = {}) => {
+      if (options?.body) {
+        capturedPayloads.push(JSON.parse(options.body));
+      }
+      return { ok: true, json: async () => ({ success: true, data: { _version: 99 } }) };
+    };
+
+    globalThis.window = {
+      ...(globalThis.window ?? {}),
+      setTimeout: (fn, _ms) => {
+        fn();
+        return 0;
+      },
+    };
+  });
+
+  afterEach(async () => {
+    const { _resetBoardStateOpsBufferForTest } = await import('../board-state-service.js');
+    _resetBoardStateOpsBufferForTest();
+
+    if (originalFetch === undefined) {
+      delete globalThis.fetch;
+    } else {
+      globalThis.fetch = originalFetch;
+    }
+    if (originalWindow === undefined) {
+      delete globalThis.window;
+    } else {
+      globalThis.window = originalWindow;
+    }
+    while (pendingFetchResolvers.length > 0) {
+      const resolve = pendingFetchResolvers.shift();
+      resolve?.({ ok: true, json: async () => ({ success: true, data: { _version: 1 } }) });
+    }
+  });
+
+  test('placement.add ships the full placement object under payload.ops', async () => {
+    const { persistBoardStateOps, _resetBoardStateOpsBufferForTest } = await import(
+      '../board-state-service.js'
+    );
+    _resetBoardStateOpsBufferForTest();
+
+    const placement = {
+      id: 'new-hero',
+      tokenId: 'lib-hero',
+      column: 5,
+      row: 7,
+      width: 1,
+      height: 1,
+      hidden: false,
+    };
+
+    await persistBoardStateOps(
+      '/api/state',
+      [{ type: 'placement.add', sceneId: 'scene-1', placement }],
+      {}
+    );
+
+    assert.equal(capturedPayloads.length, 1);
+    const op = capturedPayloads[0].ops[0];
+    assert.equal(op.type, 'placement.add');
+    assert.equal(op.sceneId, 'scene-1');
+    assert.deepEqual(op.placement, placement);
+  });
+
+  test('placement.remove ships just sceneId + placementId', async () => {
+    const { persistBoardStateOps, _resetBoardStateOpsBufferForTest } = await import(
+      '../board-state-service.js'
+    );
+    _resetBoardStateOpsBufferForTest();
+
+    await persistBoardStateOps(
+      '/api/state',
+      [{ type: 'placement.remove', sceneId: 'scene-1', placementId: 'goblin-42' }],
+      {}
+    );
+
+    assert.equal(capturedPayloads.length, 1);
+    const op = capturedPayloads[0].ops[0];
+    assert.deepEqual(op, {
+      type: 'placement.remove',
+      sceneId: 'scene-1',
+      placementId: 'goblin-42',
+    });
+  });
+
+  test('placement.update ships a shallow patch object', async () => {
+    const { persistBoardStateOps, _resetBoardStateOpsBufferForTest } = await import(
+      '../board-state-service.js'
+    );
+    _resetBoardStateOpsBufferForTest();
+
+    await persistBoardStateOps(
+      '/api/state',
+      [
+        {
+          type: 'placement.update',
+          sceneId: 'scene-1',
+          placementId: 'hero',
+          patch: { hp: { current: '5', max: '10' } },
+        },
+      ],
+      {}
+    );
+
+    assert.equal(capturedPayloads.length, 1);
+    const op = capturedPayloads[0].ops[0];
+    assert.equal(op.type, 'placement.update');
+    assert.deepEqual(op.patch, { hp: { current: '5', max: '10' } });
+  });
+
+  test('two placement.update ops for the same placement shallow-merge their patches', async () => {
+    const { persistBoardStateOps, _resetBoardStateOpsBufferForTest } = await import(
+      '../board-state-service.js'
+    );
+    _resetBoardStateOpsBufferForTest();
+
+    // Hold the first fetch open so both ops land in the pending buffer.
+    globalThis.fetch = async (_url, options = {}) => {
+      if (options?.body) {
+        capturedPayloads.push(JSON.parse(options.body));
+      }
+      return new Promise((resolve) => {
+        pendingFetchResolvers.push(resolve);
+      });
+    };
+
+    persistBoardStateOps(
+      '/api/state',
+      [
+        {
+          type: 'placement.update',
+          sceneId: 'scene-1',
+          placementId: 'hero',
+          patch: { hp: { current: '5', max: '10' } },
+        },
+      ],
+      {}
+    );
+    persistBoardStateOps(
+      '/api/state',
+      [
+        {
+          type: 'placement.update',
+          sceneId: 'scene-1',
+          placementId: 'hero',
+          patch: { conditions: [{ name: 'prone' }] },
+        },
+      ],
+      {}
+    );
+
+    const secondPayload = capturedPayloads[capturedPayloads.length - 1];
+    assert.ok(secondPayload, 'a second POST should have been initiated');
+    assert.equal(secondPayload.ops.length, 1, 'same-placement updates coalesce to one op');
+    assert.deepEqual(
+      secondPayload.ops[0].patch,
+      {
+        hp: { current: '5', max: '10' },
+        conditions: [{ name: 'prone' }],
+      },
+      'both field changes must survive the shallow-merge',
+    );
+  });
+
+  test('later placement.update for the same key wins when patch fields overlap', async () => {
+    const { persistBoardStateOps, _resetBoardStateOpsBufferForTest } = await import(
+      '../board-state-service.js'
+    );
+    _resetBoardStateOpsBufferForTest();
+
+    globalThis.fetch = async (_url, options = {}) => {
+      if (options?.body) {
+        capturedPayloads.push(JSON.parse(options.body));
+      }
+      return new Promise((resolve) => {
+        pendingFetchResolvers.push(resolve);
+      });
+    };
+
+    persistBoardStateOps(
+      '/api/state',
+      [
+        {
+          type: 'placement.update',
+          sceneId: 'scene-1',
+          placementId: 'hero',
+          patch: { hp: { current: '5', max: '10' } },
+        },
+      ],
+      {}
+    );
+    persistBoardStateOps(
+      '/api/state',
+      [
+        {
+          type: 'placement.update',
+          sceneId: 'scene-1',
+          placementId: 'hero',
+          patch: { hp: { current: '3', max: '10' } },
+        },
+      ],
+      {}
+    );
+
+    const secondPayload = capturedPayloads[capturedPayloads.length - 1];
+    assert.equal(secondPayload.ops.length, 1);
+    assert.deepEqual(secondPayload.ops[0].patch, { hp: { current: '3', max: '10' } });
+  });
+
+  test('add, update, and remove on the same placement coexist in one flush (per-type keys)', async () => {
+    const {
+      persistBoardStateOps,
+      _resetBoardStateOpsBufferForTest,
+    } = await import('../board-state-service.js');
+    _resetBoardStateOpsBufferForTest();
+
+    // Hold each fetch open so every call gets merged into the buffer
+    // before any save resolves.
+    globalThis.fetch = async (_url, options = {}) => {
+      if (options?.body) {
+        capturedPayloads.push(JSON.parse(options.body));
+      }
+      return new Promise((resolve) => {
+        pendingFetchResolvers.push(resolve);
+      });
+    };
+
+    persistBoardStateOps(
+      '/api/state',
+      [
+        {
+          type: 'placement.add',
+          sceneId: 'scene-1',
+          placement: { id: 'hero', column: 1, row: 1 },
+        },
+      ],
+      {}
+    );
+    persistBoardStateOps(
+      '/api/state',
+      [
+        {
+          type: 'placement.update',
+          sceneId: 'scene-1',
+          placementId: 'hero',
+          patch: { hp: { current: '5', max: '10' } },
+        },
+      ],
+      {}
+    );
+    persistBoardStateOps(
+      '/api/state',
+      [
+        {
+          type: 'placement.remove',
+          sceneId: 'scene-1',
+          placementId: 'hero',
+        },
+      ],
+      {}
+    );
+
+    const lastPayload = capturedPayloads[capturedPayloads.length - 1];
+    assert.ok(lastPayload);
+    const types = lastPayload.ops.map((op) => op.type).sort();
+    assert.deepEqual(
+      types,
+      ['placement.add', 'placement.remove', 'placement.update'],
+      'all three ops must be present because they have distinct dedup keys',
+    );
+    // Insertion order in the buffer must match the call order so the
+    // server applies add → update → remove.
+    assert.deepEqual(
+      lastPayload.ops.map((op) => op.type),
+      ['placement.add', 'placement.update', 'placement.remove'],
+    );
+  });
+
+  test('malformed new-type ops are silently dropped', async () => {
+    const { persistBoardStateOps, _resetBoardStateOpsBufferForTest } = await import(
+      '../board-state-service.js'
+    );
+    _resetBoardStateOpsBufferForTest();
+
+    await persistBoardStateOps(
+      '/api/state',
+      [
+        // placement.add without placement object
+        { type: 'placement.add', sceneId: 'scene-1' },
+        // placement.add with placement but no id
+        { type: 'placement.add', sceneId: 'scene-1', placement: { column: 1, row: 1 } },
+        // placement.remove without placementId
+        { type: 'placement.remove', sceneId: 'scene-1' },
+        // placement.update without patch
+        { type: 'placement.update', sceneId: 'scene-1', placementId: 'hero' },
+        // well-formed survivor
+        {
+          type: 'placement.update',
+          sceneId: 'scene-1',
+          placementId: 'hero',
+          patch: { hidden: true },
+        },
+      ],
+      {}
+    );
+
+    assert.equal(capturedPayloads.length, 1);
+    assert.equal(capturedPayloads[0].ops.length, 1, 'only the well-formed op should survive');
+    assert.equal(capturedPayloads[0].ops[0].type, 'placement.update');
+    assert.deepEqual(capturedPayloads[0].ops[0].patch, { hidden: true });
+  });
+});

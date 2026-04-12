@@ -22,6 +22,16 @@ export const PHASE_3B_MAX_SCENES_PER_FLUSH = 4;
 // from the buffer only after the save that carried them resolves
 // successfully, so an aborted/failed save leaves its ops in place for
 // the next flush to pick up.
+//
+// Phase 3-B (commit 3): `placement.add`, `placement.remove`, and
+// `placement.update` join `placement.move` in the buffer. Keys are
+// per-type so cross-type ops on the same placement are preserved in
+// insertion order (e.g. an add followed by an update lands in that
+// order on the server). Same-key collisions follow the commit-2
+// convention (later wins) for add/remove/move, but two
+// `placement.update` ops for the same placement instead *shallow-merge*
+// their patches so distinct field changes (HP and conditions, for
+// example) both reach the server.
 let boardStateOpSendSequence = 0;
 const pendingBoardStateOps = new Map();
 
@@ -29,13 +39,41 @@ function boardStateOpDedupKey(op) {
   if (!op || typeof op !== 'object') {
     return null;
   }
+  const sceneId = typeof op.sceneId === 'string' ? op.sceneId.trim() : '';
+  if (!sceneId) {
+    return null;
+  }
   if (op.type === 'placement.move') {
-    const sceneId = typeof op.sceneId === 'string' ? op.sceneId.trim() : '';
     const placementId = typeof op.placementId === 'string' ? op.placementId.trim() : '';
-    if (!sceneId || !placementId) {
+    if (!placementId) {
       return null;
     }
     return `placement.move:${sceneId}:${placementId}`;
+  }
+  if (op.type === 'placement.remove') {
+    const placementId = typeof op.placementId === 'string' ? op.placementId.trim() : '';
+    if (!placementId) {
+      return null;
+    }
+    return `placement.remove:${sceneId}:${placementId}`;
+  }
+  if (op.type === 'placement.update') {
+    const placementId = typeof op.placementId === 'string' ? op.placementId.trim() : '';
+    if (!placementId || !op.patch || typeof op.patch !== 'object') {
+      return null;
+    }
+    return `placement.update:${sceneId}:${placementId}`;
+  }
+  if (op.type === 'placement.add') {
+    const placement = op.placement;
+    if (!placement || typeof placement !== 'object') {
+      return null;
+    }
+    const placementId = typeof placement.id === 'string' ? placement.id.trim() : '';
+    if (!placementId) {
+      return null;
+    }
+    return `placement.add:${sceneId}:${placementId}`;
   }
   return null;
 }
@@ -122,6 +160,30 @@ export function persistBoardStateOps(endpoint, ops, envelope = {}, options = {})
     const key = boardStateOpDedupKey(op);
     if (!key) {
       continue;
+    }
+    // Phase 3-B (commit 3): two `placement.update` ops for the same
+    // placement shallow-merge their patches. This preserves distinct
+    // field changes (e.g. an HP edit followed by a condition toggle)
+    // that would otherwise be clobbered by a plain later-wins replace.
+    // All other op types keep the commit-2 "later wins" semantic.
+    if (op.type === 'placement.update') {
+      const existing = pendingBoardStateOps.get(key);
+      if (
+        existing &&
+        existing.op &&
+        existing.op.type === 'placement.update' &&
+        existing.op.patch &&
+        typeof existing.op.patch === 'object' &&
+        op.patch &&
+        typeof op.patch === 'object'
+      ) {
+        const mergedPatch = { ...existing.op.patch, ...op.patch };
+        pendingBoardStateOps.set(key, {
+          op: { ...op, patch: mergedPatch },
+          seq: sendSeq,
+        });
+        continue;
+      }
     }
     pendingBoardStateOps.set(key, { op, seq: sendSeq });
   }
