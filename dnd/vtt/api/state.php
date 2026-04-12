@@ -789,6 +789,30 @@ if (!defined('VTT_STATE_API_INCLUDE_ONLY')) {
                 if (isset($updates['overlay'])) {
                     $broadcastData['overlay'] = $updates['overlay'];
                 }
+
+                // Size guard for full-state broadcasts. The ops path
+                // already has its own overflow check above, but the
+                // full-state path previously had none — if the payload
+                // exceeded Pusher's 10 KB hard limit the PusherClient
+                // would silently drop the message and subscribers would
+                // only see the update after the 30 s safety-net poll.
+                // Fall back to an `ops-overflow` marker so receivers
+                // trigger an immediate GET resync instead.
+                $fullEncoded = json_encode($broadcastData, JSON_UNESCAPED_SLASHES | JSON_UNESCAPED_UNICODE);
+                if ($fullEncoded === false || strlen($fullEncoded) > VTT_BROADCAST_MAX_BYTES) {
+                    error_log(sprintf(
+                        '[VTT] Full-state broadcast exceeded %d bytes (was %d); falling back to overflow marker',
+                        VTT_BROADCAST_MAX_BYTES,
+                        $fullEncoded === false ? -1 : strlen($fullEncoded)
+                    ));
+                    $broadcastData = [
+                        'type' => 'ops-overflow',
+                        'version' => $newVersion,
+                        'timestamp' => $broadcastTimestampMs,
+                        'authorId' => $authorId,
+                        'authorRole' => $authorRole,
+                    ];
+                }
             }
 
             // Send the response to the client first so the sender is not

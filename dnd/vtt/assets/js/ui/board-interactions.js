@@ -2595,8 +2595,27 @@ export function mountBoardInteractions(store, routes = {}) {
           lastPersistedBoardStateHash = snapshotHash;
           lastBoardStateSaveCompletedAt = Date.now();
           pendingBoardStateSave = null;
-          // Clear dirty tracking after successful save
-          clearDirtyTracking();
+          // Clear dirty tracking after successful save. When the save
+          // used the ops path, only clear placement/template/drawing
+          // dirty state — those are the entity types that ops carry.
+          // Non-placement dirty state (scene state, pings, top-level
+          // fields) was NOT included in the ops save, so it must remain
+          // dirty for a follow-up snapshot save to persist it.
+          if (useOpsPath) {
+            dirtyPlacements.clear();
+            dirtyTemplates.clear();
+            dirtyDrawings.clear();
+            drawingFullReplaceScenes.clear();
+            // Flush remaining non-placement dirty state immediately so
+            // it is not stranded until the next user action.
+            if (hasNonPlacementDirtyState()) {
+              // Use setTimeout to avoid re-entering persistBoardStateSnapshot
+              // synchronously from its own completion handler.
+              setTimeout(() => persistBoardStateSnapshot(), 0);
+            }
+          } else {
+            clearDirtyTracking();
+          }
 
           // Phase 3-C: If a Pusher ops broadcast was deferred during
           // this save (because of a version gap or `ops-overflow`
@@ -3310,7 +3329,13 @@ export function mountBoardInteractions(store, routes = {}) {
     // Grace period: timestamp-based merging handles conflicts correctly
     const hasPendingSave = Boolean(pendingBoardStateSave?.promise);
     if (hasPendingSave) {
-      console.log('[VTT Pusher] Deferring update due to pending save (version tracked)');
+      console.log('[VTT Pusher] Deferring full-state update due to pending save (version tracked) - scheduling resync');
+      // Schedule a resync so the deferred update is recovered once the
+      // save completes. Without this, the update payload is silently
+      // dropped and the client only catches up on the next 30 s
+      // safety-net poll — matching the ops handler's behavior which
+      // already calls triggerBoardStateResync('ops-during-save').
+      pendingResyncAfterSave = true;
       return;
     }
 
@@ -13725,10 +13750,18 @@ export function mountBoardInteractions(store, routes = {}) {
 
       // Phase 3-B (commit 3): build a `placement.update` op from the
       // diff and route it through the delta-op path. If the diff is
-      // empty (mutator was a no-op) or non-placement state is also
-      // dirty, fall through to the snapshot path unchanged.
+      // empty (mutator was a no-op), fall through to the snapshot path
+      // unchanged. We always prefer the ops path for placement changes
+      // because ops produce compact Pusher broadcasts that stay within
+      // the 10 KB message limit, whereas the full-snapshot broadcast
+      // path can exceed the limit and silently fail — causing other
+      // clients to see the update only after the 30 s safety-net poll.
+      // Non-placement dirty state (scene state, pings, etc.) is NOT
+      // cleared on an ops-only save; it persists in the dirty tracker
+      // and is flushed by a follow-up snapshot save triggered from the
+      // save-completion handler.
       let updateOps = null;
-      if (USE_DELTA_SAVES && !hasNonPlacementDirtyState()) {
+      if (USE_DELTA_SAVES) {
         const patch = buildPlacementUpdatePatch(beforeSnapshot, afterSnapshot);
         if (patch) {
           updateOps = [
@@ -13818,9 +13851,12 @@ export function mountBoardInteractions(store, routes = {}) {
 
       // Phase 3-B (commit 3): build one `placement.update` op per
       // changed placement from the per-id before/after diff and route
-      // through the delta-op path.
+      // through the delta-op path. Always prefer ops for placement
+      // changes — they produce compact Pusher broadcasts that stay
+      // within the 10 KB limit. Non-placement dirty state is flushed
+      // by a follow-up snapshot save from the save-completion handler.
       let updateOps = null;
-      if (USE_DELTA_SAVES && !hasNonPlacementDirtyState()) {
+      if (USE_DELTA_SAVES) {
         const opsList = [];
         updatedIds.forEach((id) => {
           const patch = buildPlacementUpdatePatch(
