@@ -577,3 +577,228 @@ describe('Board State – delta ops persistence (phase 3-B commit 3)', () => {
     assert.deepEqual(capturedPayloads[0].ops[0].patch, { hidden: true });
   });
 });
+
+// ---------------------------------------------------------------------------
+// Phase 3-B (commit 4): template commits (the `commitShapes` path in the
+// client) now ship as `template.upsert` / `template.remove` ops instead of
+// a full snapshot. These tests lock in the wire shape of each new op type,
+// the per-type dedup keys (an upsert and a remove for the same template
+// coexist in the buffer), and the fact that malformed template ops are
+// dropped rather than shipped.
+// ---------------------------------------------------------------------------
+
+describe('Board State – delta ops persistence (phase 3-B commit 4)', () => {
+  let originalFetch;
+  let originalWindow;
+  let capturedPayloads;
+  let pendingFetchResolvers;
+
+  beforeEach(() => {
+    originalFetch = globalThis.fetch;
+    originalWindow = globalThis.window;
+    capturedPayloads = [];
+    pendingFetchResolvers = [];
+
+    globalThis.fetch = async (_url, options = {}) => {
+      if (options?.body) {
+        capturedPayloads.push(JSON.parse(options.body));
+      }
+      return { ok: true, json: async () => ({ success: true, data: { _version: 123 } }) };
+    };
+
+    globalThis.window = {
+      ...(globalThis.window ?? {}),
+      setTimeout: (fn, _ms) => {
+        fn();
+        return 0;
+      },
+    };
+  });
+
+  afterEach(async () => {
+    const { _resetBoardStateOpsBufferForTest } = await import('../board-state-service.js');
+    _resetBoardStateOpsBufferForTest();
+
+    if (originalFetch === undefined) {
+      delete globalThis.fetch;
+    } else {
+      globalThis.fetch = originalFetch;
+    }
+    if (originalWindow === undefined) {
+      delete globalThis.window;
+    } else {
+      globalThis.window = originalWindow;
+    }
+    while (pendingFetchResolvers.length > 0) {
+      const resolve = pendingFetchResolvers.shift();
+      resolve?.({ ok: true, json: async () => ({ success: true, data: { _version: 1 } }) });
+    }
+  });
+
+  test('template.upsert ships the full template object under payload.ops', async () => {
+    const { persistBoardStateOps, _resetBoardStateOpsBufferForTest } = await import(
+      '../board-state-service.js'
+    );
+    _resetBoardStateOpsBufferForTest();
+
+    const template = {
+      id: 'tpl-1',
+      type: 'circle',
+      color: '#abcdef',
+      center: { column: 3, row: 4 },
+      radius: 5,
+    };
+
+    await persistBoardStateOps(
+      '/api/state',
+      [{ type: 'template.upsert', sceneId: 'scene-1', template }],
+      {}
+    );
+
+    assert.equal(capturedPayloads.length, 1);
+    const op = capturedPayloads[0].ops[0];
+    assert.equal(op.type, 'template.upsert');
+    assert.equal(op.sceneId, 'scene-1');
+    assert.deepEqual(op.template, template);
+  });
+
+  test('template.remove ships just sceneId + templateId', async () => {
+    const { persistBoardStateOps, _resetBoardStateOpsBufferForTest } = await import(
+      '../board-state-service.js'
+    );
+    _resetBoardStateOpsBufferForTest();
+
+    await persistBoardStateOps(
+      '/api/state',
+      [{ type: 'template.remove', sceneId: 'scene-1', templateId: 'tpl-zap' }],
+      {}
+    );
+
+    assert.equal(capturedPayloads.length, 1);
+    assert.deepEqual(capturedPayloads[0].ops[0], {
+      type: 'template.remove',
+      sceneId: 'scene-1',
+      templateId: 'tpl-zap',
+    });
+  });
+
+  test('template.upsert and template.remove on the same template coexist (per-type keys)', async () => {
+    const { persistBoardStateOps, _resetBoardStateOpsBufferForTest } = await import(
+      '../board-state-service.js'
+    );
+    _resetBoardStateOpsBufferForTest();
+
+    // Hold each fetch open so every call accumulates into the buffer.
+    globalThis.fetch = async (_url, options = {}) => {
+      if (options?.body) {
+        capturedPayloads.push(JSON.parse(options.body));
+      }
+      return new Promise((resolve) => {
+        pendingFetchResolvers.push(resolve);
+      });
+    };
+
+    persistBoardStateOps(
+      '/api/state',
+      [
+        {
+          type: 'template.upsert',
+          sceneId: 'scene-1',
+          template: { id: 'tpl-1', type: 'circle', center: { column: 1, row: 1 }, radius: 2 },
+        },
+      ],
+      {}
+    );
+    persistBoardStateOps(
+      '/api/state',
+      [{ type: 'template.remove', sceneId: 'scene-1', templateId: 'tpl-1' }],
+      {}
+    );
+
+    const lastPayload = capturedPayloads[capturedPayloads.length - 1];
+    assert.ok(lastPayload);
+    // Both must be present because per-type dedup keys prevent the
+    // remove from clobbering the upsert (or vice versa). Insertion
+    // order must also match the call order so the server applies
+    // upsert → remove.
+    assert.deepEqual(
+      lastPayload.ops.map((op) => op.type),
+      ['template.upsert', 'template.remove'],
+    );
+  });
+
+  test('two template.upsert ops for the same template coalesce (later wins)', async () => {
+    const { persistBoardStateOps, _resetBoardStateOpsBufferForTest } = await import(
+      '../board-state-service.js'
+    );
+    _resetBoardStateOpsBufferForTest();
+
+    globalThis.fetch = async (_url, options = {}) => {
+      if (options?.body) {
+        capturedPayloads.push(JSON.parse(options.body));
+      }
+      return new Promise((resolve) => {
+        pendingFetchResolvers.push(resolve);
+      });
+    };
+
+    persistBoardStateOps(
+      '/api/state',
+      [
+        {
+          type: 'template.upsert',
+          sceneId: 'scene-1',
+          template: { id: 'tpl-1', type: 'circle', center: { column: 1, row: 1 }, radius: 2 },
+        },
+      ],
+      {}
+    );
+    persistBoardStateOps(
+      '/api/state',
+      [
+        {
+          type: 'template.upsert',
+          sceneId: 'scene-1',
+          template: { id: 'tpl-1', type: 'circle', center: { column: 9, row: 9 }, radius: 4 },
+        },
+      ],
+      {}
+    );
+
+    const secondPayload = capturedPayloads[capturedPayloads.length - 1];
+    assert.equal(secondPayload.ops.length, 1, 'same-key upserts coalesce to one op');
+    assert.deepEqual(secondPayload.ops[0].template.center, { column: 9, row: 9 });
+    assert.equal(secondPayload.ops[0].template.radius, 4);
+  });
+
+  test('malformed template ops are silently dropped', async () => {
+    const { persistBoardStateOps, _resetBoardStateOpsBufferForTest } = await import(
+      '../board-state-service.js'
+    );
+    _resetBoardStateOpsBufferForTest();
+
+    await persistBoardStateOps(
+      '/api/state',
+      [
+        // missing template object
+        { type: 'template.upsert', sceneId: 'scene-1' },
+        // template present but missing id
+        { type: 'template.upsert', sceneId: 'scene-1', template: { type: 'circle' } },
+        // remove without templateId
+        { type: 'template.remove', sceneId: 'scene-1' },
+        // well-formed survivor
+        {
+          type: 'template.upsert',
+          sceneId: 'scene-1',
+          template: { id: 'tpl-ok', type: 'circle', center: { column: 0, row: 0 }, radius: 1 },
+        },
+      ],
+      {}
+    );
+
+    assert.equal(capturedPayloads.length, 1);
+    assert.equal(capturedPayloads[0].ops.length, 1, 'only the well-formed op survives');
+    assert.equal(capturedPayloads[0].ops[0].type, 'template.upsert');
+    assert.equal(capturedPayloads[0].ops[0].template.id, 'tpl-ok');
+  });
+});

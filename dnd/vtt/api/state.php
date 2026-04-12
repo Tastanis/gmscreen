@@ -735,19 +735,21 @@ function sanitizeBoardStateOps(array $rawOps): array
  * Commit 1 introduced `placement.move`. Commit 3 adds `placement.add`,
  * `placement.remove`, and `placement.update` so every placement-level
  * mutation on the client can travel as a typed op instead of a full
- * snapshot. Unknown or unsupported op types are ignored so older
- * servers can tolerate payloads from newer clients without erroring
- * out. The state returned is always a valid board state — if the op
- * cannot be applied (missing scene, missing placement, bad fields,
+ * snapshot. Commit 4 adds `template.upsert` and `template.remove` so
+ * every template commit (the `commitShapes` path in the client) can
+ * also travel as ops. Unknown or unsupported op types are ignored so
+ * older servers can tolerate payloads from newer clients without
+ * erroring out. The state returned is always a valid board state — if
+ * the op cannot be applied (missing scene, missing entry, bad fields,
  * permission denied for a non-GM destructive op), the input is
  * returned unchanged.
  *
  * The caller is responsible for running this inside the state lock so
  * two concurrent writers cannot interleave mutations on the same
- * placement. The caller is also responsible for setting
- * `$context['isGm']` so destructive ops can be gated: without this
- * flag, a non-GM caller could bypass the snapshot path's
- * timestamp-merge-only policy by sending `placement.remove` directly.
+ * entry. The caller is also responsible for setting `$context['isGm']`
+ * so destructive ops can be gated: without this flag, a non-GM caller
+ * could bypass the snapshot path's timestamp-merge-only policy by
+ * sending `placement.remove` or `template.remove` directly.
  *
  * @param array<string,mixed> $state
  * @param array<string,mixed> $op
@@ -944,9 +946,108 @@ function applyBoardStateOp(array $state, array $op, array $context = []): array
         return $state;
     }
 
+    if ($type === 'template.upsert') {
+        // `template.upsert` carries the full serialized template entry
+        // in the `template` field. If a template with the same id
+        // already exists in the scene, it is replaced in-place (later
+        // wins); otherwise it is appended. Non-GM callers are allowed
+        // — the snapshot player path accepts new/modified templates
+        // via `mergeSceneEntriesByTimestamp`, so there is no
+        // regression here.
+        $sceneId = isset($op['sceneId']) && is_string($op['sceneId']) ? trim($op['sceneId']) : '';
+        if ($sceneId === '') {
+            return $state;
+        }
+        if (!isset($op['template']) || !is_array($op['template'])) {
+            return $state;
+        }
+        $template = $op['template'];
+        $templateId = extractBoardEntryIdentifier($template);
+        if ($templateId === null || $templateId === '') {
+            return $state;
+        }
+
+        if (!isset($state['templates']) || !is_array($state['templates'])) {
+            $state['templates'] = [];
+        }
+        if (!isset($state['templates'][$sceneId]) || !is_array($state['templates'][$sceneId])) {
+            $state['templates'][$sceneId] = [];
+        }
+
+        // Stamp `_lastModified` so any downstream timestamp-based
+        // merge treats this upsert as newer than any stale payload
+        // already in flight.
+        $nowMs = (int) round(microtime(true) * 1000);
+        $template['_lastModified'] = $nowMs;
+
+        $replaced = false;
+        foreach ($state['templates'][$sceneId] as $idx => $existing) {
+            if (!is_array($existing)) {
+                continue;
+            }
+            $existingId = extractBoardEntryIdentifier($existing);
+            if ($existingId === $templateId) {
+                $state['templates'][$sceneId][$idx] = $template;
+                $replaced = true;
+                break;
+            }
+        }
+        if (!$replaced) {
+            $state['templates'][$sceneId][] = $template;
+        }
+        return $state;
+    }
+
+    if ($type === 'template.remove') {
+        // Mirror the `placement.remove` rule: gate destructive template
+        // removal behind the GM flag. The snapshot player path uses
+        // `mergeSceneEntriesByTimestamp`, which never deletes, so
+        // players cannot remove templates via the snapshot path today.
+        // Allowing a player to ship `template.remove` here would
+        // bypass that policy.
+        if (!$isGm) {
+            return $state;
+        }
+        $sceneId = isset($op['sceneId']) && is_string($op['sceneId']) ? trim($op['sceneId']) : '';
+        if ($sceneId === '') {
+            return $state;
+        }
+        $templateId = '';
+        if (isset($op['templateId'])) {
+            $raw = $op['templateId'];
+            if (is_string($raw)) {
+                $templateId = trim($raw);
+            } elseif (is_int($raw) || is_float($raw)) {
+                $templateId = (string) $raw;
+            }
+        }
+        if ($templateId === '') {
+            return $state;
+        }
+        if (!isset($state['templates'][$sceneId]) || !is_array($state['templates'][$sceneId])) {
+            return $state;
+        }
+        $filtered = [];
+        foreach ($state['templates'][$sceneId] as $entry) {
+            if (!is_array($entry)) {
+                $filtered[] = $entry;
+                continue;
+            }
+            $existingId = extractBoardEntryIdentifier($entry);
+            if ($existingId === $templateId) {
+                continue;
+            }
+            $filtered[] = $entry;
+        }
+        // Re-index so json_encode serializes as a JSON array, not an
+        // object with numeric string keys.
+        $state['templates'][$sceneId] = array_values($filtered);
+        return $state;
+    }
+
     // Unknown op types are silently ignored so older servers can
-    // tolerate payloads from newer clients. Commits 4+ will add
-    // `template.*` and `drawing.*` op types here.
+    // tolerate payloads from newer clients. Commit 5 will add
+    // `drawing.*` op types here.
     return $state;
 }
 

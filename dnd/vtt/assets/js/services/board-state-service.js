@@ -75,6 +75,29 @@ function boardStateOpDedupKey(op) {
     }
     return `placement.add:${sceneId}:${placementId}`;
   }
+  // Phase 3-B (commit 4): template ops. Keys are per-type so an upsert
+  // and a remove for the same template can coexist in the buffer; the
+  // snapshot path that commitShapes used to take had no such conflict
+  // because it shipped the whole templates array. Later-wins dedup
+  // applies within a single key, matching placement.add/remove.
+  if (op.type === 'template.upsert') {
+    const template = op.template;
+    if (!template || typeof template !== 'object') {
+      return null;
+    }
+    const templateId = typeof template.id === 'string' ? template.id.trim() : '';
+    if (!templateId) {
+      return null;
+    }
+    return `template.upsert:${sceneId}:${templateId}`;
+  }
+  if (op.type === 'template.remove') {
+    const templateId = typeof op.templateId === 'string' ? op.templateId.trim() : '';
+    if (!templateId) {
+      return null;
+    }
+    return `template.remove:${sceneId}:${templateId}`;
+  }
   return null;
 }
 
