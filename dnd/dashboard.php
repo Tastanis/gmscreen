@@ -963,6 +963,9 @@ $defaultInventoryTab = $is_gm ? 'frunk' : $user;
             <?php else: ?>
                 <button type="button" class="nav-btn" id="character-sheet-btn" title="Open your character sheet">Character Sheet</button>
             <?php endif; ?>
+            <?php if ($is_gm): ?>
+                <button type="button" class="nav-btn" id="clear-cache-btn" title="Clear server + browser cache and reload">Clear Cache</button>
+            <?php endif; ?>
             <button class="nav-btn logout-btn" onclick="window.location.href='logout.php'">Logout</button>
         </div>
         <h1 class="nav-title"><?php echo $is_gm ? 'GM Dashboard' : ucfirst($user) . '\'s Character Sheet'; ?></h1>
@@ -1581,6 +1584,62 @@ $defaultInventoryTab = $is_gm ? 'frunk' : $user;
             }
         }
     </script>
+    <?php if ($is_gm): ?>
+    <script>
+        // Clear Cache button: wipes server-side PHP caches, browser Cache Storage,
+        // unregisters any service workers, and reloads the page with a cache-busting query string.
+        (function () {
+            var btn = document.getElementById('clear-cache-btn');
+            if (!btn) return;
+
+            btn.addEventListener('click', async function () {
+                if (!confirm('Clear server and browser caches, then reload the page?')) return;
+
+                var originalLabel = btn.textContent;
+                btn.disabled = true;
+                btn.textContent = 'Clearing...';
+
+                // 1. Ask the server to reset PHP OPcache / stat cache.
+                try {
+                    var resp = await fetch('clear-cache.php', {
+                        method: 'POST',
+                        credentials: 'same-origin',
+                        cache: 'no-store'
+                    });
+                    var data = await resp.json().catch(function () { return {}; });
+                    console.log('Server cache clear:', data);
+                } catch (err) {
+                    console.warn('Server cache clear failed:', err);
+                }
+
+                // 2. Clear browser Cache Storage (used by service workers / PWAs).
+                if (window.caches && caches.keys) {
+                    try {
+                        var keys = await caches.keys();
+                        await Promise.all(keys.map(function (k) { return caches.delete(k); }));
+                    } catch (err) {
+                        console.warn('Cache Storage clear failed:', err);
+                    }
+                }
+
+                // 3. Unregister any service workers.
+                if (navigator.serviceWorker && navigator.serviceWorker.getRegistrations) {
+                    try {
+                        var regs = await navigator.serviceWorker.getRegistrations();
+                        await Promise.all(regs.map(function (r) { return r.unregister(); }));
+                    } catch (err) {
+                        console.warn('Service worker unregister failed:', err);
+                    }
+                }
+
+                // 4. Reload with a cache-busting query string so CSS/JS are re-fetched.
+                var url = new URL(window.location.href);
+                url.searchParams.set('_cb', Date.now().toString());
+                window.location.replace(url.toString());
+            });
+        })();
+    </script>
+    <?php endif; ?>
     <script src="js/chat-panel.js"></script>
     <script src="dice-roller/dice-roller.js"></script>
     <script src="js/theme-manager.js"></script>
