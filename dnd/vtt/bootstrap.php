@@ -402,6 +402,23 @@ function filterPlacementsForPlayerView($boardState): array
                 continue;
             }
             if (isPlacementHiddenFromPlayers($placement)) {
+                // Keep hidden placements in the response so the client can
+                // track them by ID.  When the GM later unhides a token the
+                // client-side op-applier already has it in local state and
+                // can flip the flag without needing a full resync.  Strip
+                // ALL monster data regardless of ally status — no stat block
+                // should leak for a token the player cannot see yet.
+                $sanitized = $placement;
+                unset($sanitized['monster'], $sanitized['monsterId']);
+                if (isset($sanitized['metadata']) && is_array($sanitized['metadata'])) {
+                    $metadata = $sanitized['metadata'];
+                    unset($metadata['monster'], $metadata['monsterId']);
+                    $sanitized['metadata'] = $metadata === [] ? [] : $metadata;
+                    if ($sanitized['metadata'] === []) {
+                        unset($sanitized['metadata']);
+                    }
+                }
+                $visibleEntries[] = $sanitized;
                 continue;
             }
             $visibleEntries[] = sanitizePlacementForPlayerView($placement);
