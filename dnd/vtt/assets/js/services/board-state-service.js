@@ -75,6 +75,52 @@ function boardStateOpDedupKey(op) {
     }
     return `placement.add:${sceneId}:${placementId}`;
   }
+  // Phase 3-B (commit 4): template ops. Keys are per-type so an upsert
+  // and a remove for the same template can coexist in the buffer; the
+  // snapshot path that commitShapes used to take had no such conflict
+  // because it shipped the whole templates array. Later-wins dedup
+  // applies within a single key, matching placement.add/remove.
+  if (op.type === 'template.upsert') {
+    const template = op.template;
+    if (!template || typeof template !== 'object') {
+      return null;
+    }
+    const templateId = typeof template.id === 'string' ? template.id.trim() : '';
+    if (!templateId) {
+      return null;
+    }
+    return `template.upsert:${sceneId}:${templateId}`;
+  }
+  if (op.type === 'template.remove') {
+    const templateId = typeof op.templateId === 'string' ? op.templateId.trim() : '';
+    if (!templateId) {
+      return null;
+    }
+    return `template.remove:${sceneId}:${templateId}`;
+  }
+  // Phase 3-B (commit 5): drawing ops. Drawings are add-only or
+  // removed — the drawing tool never modifies a drawing in place
+  // (erase splits into new fragments with fresh ids; undo restores
+  // an older snapshot), so there is no drawing.upsert. Per-type
+  // later-wins dedup applies within a key, matching template.*.
+  if (op.type === 'drawing.add') {
+    const drawing = op.drawing;
+    if (!drawing || typeof drawing !== 'object') {
+      return null;
+    }
+    const drawingId = typeof drawing.id === 'string' ? drawing.id.trim() : '';
+    if (!drawingId) {
+      return null;
+    }
+    return `drawing.add:${sceneId}:${drawingId}`;
+  }
+  if (op.type === 'drawing.remove') {
+    const drawingId = typeof op.drawingId === 'string' ? op.drawingId.trim() : '';
+    if (!drawingId) {
+      return null;
+    }
+    return `drawing.remove:${sceneId}:${drawingId}`;
+  }
   return null;
 }
 

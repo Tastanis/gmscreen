@@ -1028,6 +1028,14 @@ export function mountBoardInteractions(store, routes = {}) {
 
   // Drawing sync state - must be declared before applyStateToBoard is called
   let lastSyncedDrawingsHash = null;
+  // Phase 3-B (commit 5): parallel snapshot of the most recent synced
+  // drawings list so `syncDrawingsFromState` can diff prior vs next
+  // and emit `drawing.add` / `drawing.remove` ops. The scene id is
+  // tracked alongside so we only diff within the same scene — a
+  // scene switch invalidates the prior snapshot and falls back to
+  // the snapshot save path.
+  let lastSyncedDrawingsSceneId = null;
+  let lastSyncedDrawingsList = null;
 
   const defaultStatusText = status?.textContent ?? '';
   function updateStatus(message) {
@@ -1668,17 +1676,25 @@ export function mountBoardInteractions(store, routes = {}) {
            dirtyTopLevel.size > 0;
   }
 
-  // Phase 3-B (commit 3): true when any NON-placement entity is dirty.
-  // Used at placement-mutation call sites to decide whether it is safe
-  // to route through the delta-op path: the ops path only carries
-  // placement ops today, so if templates/drawings/scene state/pings/etc.
-  // are also waiting to flush, we must fall back to the snapshot path
-  // to avoid dropping those changes on the floor. Commits 4+ will shrink
-  // what counts as "non-placement" as more op types come online.
+  // Phase 3-B (commit 3): true when any dirty entity cannot be shipped
+  // as a delta op. Used at op-routed call sites (placement mutations,
+  // commitShapes, syncDrawingsFromState) to decide whether it is safe
+  // to route through the delta-op path: if anything outside the
+  // ops-capable set is waiting to flush, we must fall back to the
+  // snapshot path to avoid dropping those changes on the floor.
+  //
+  // Phase 3-B (commit 4): templates moved out of the blocking set now
+  // that `commitShapes` emits `template.upsert`/`template.remove` ops.
+  // Phase 3-B (commit 5): drawings moved out of the blocking set now
+  // that `syncDrawingsFromState` emits `drawing.add`/`drawing.remove`
+  // ops for the non-erase/non-clear case. `drawingFullReplaceScenes`
+  // still blocks — that is the erase/clear full-replace path that
+  // relies on the snapshot path's `_replaceDrawings` field to reach
+  // the server, and it has no op equivalent. Any call site that sees
+  // a pending full-replace drops back to snapshot so `_replaceDrawings`
+  // still reaches the server intact.
   function hasNonPlacementDirtyState() {
-    return dirtyTemplates.size > 0 ||
-           dirtyDrawings.size > 0 ||
-           drawingFullReplaceScenes.size > 0 ||
+    return drawingFullReplaceScenes.size > 0 ||
            dirtyPings ||
            dirtySceneState.size > 0 ||
            dirtyTopLevel.size > 0;
@@ -1727,6 +1743,144 @@ export function mountBoardInteractions(store, routes = {}) {
       }
     }
     return Object.keys(patch).length > 0 ? patch : null;
+  }
+
+  // Phase 3-B (commit 4): compute the delta between the prior
+  // templates-for-scene list and the freshly serialized next list,
+  // returning an array of `template.upsert`/`template.remove` ops.
+  // Upsert covers both creation and modification. Removals are emitted
+  // for any id in prior but not in next. `_lastModified` is excluded
+  // from the comparison so a server-side re-stamp doesn't look like a
+  // change. Returns an empty array if the two lists are functionally
+  // identical, allowing callers to skip an unnecessary save.
+  function templateDiffKey(entry) {
+    if (!entry || typeof entry !== 'object') {
+      return null;
+    }
+    const clone = { ...entry };
+    delete clone._lastModified;
+    try {
+      return JSON.stringify(clone);
+    } catch (error) {
+      return null;
+    }
+  }
+
+  function buildTemplateOpsFromDiff(sceneId, priorList, nextList) {
+    if (!sceneId) {
+      return [];
+    }
+    const ops = [];
+    const priorById = new Map();
+    const priorKeysById = new Map();
+    const prior = Array.isArray(priorList) ? priorList : [];
+    const next = Array.isArray(nextList) ? nextList : [];
+
+    prior.forEach((entry) => {
+      if (!entry || typeof entry !== 'object') {
+        return;
+      }
+      const id = typeof entry.id === 'string' ? entry.id : '';
+      if (!id) {
+        return;
+      }
+      priorById.set(id, entry);
+      priorKeysById.set(id, templateDiffKey(entry));
+    });
+
+    const nextIds = new Set();
+    next.forEach((entry) => {
+      if (!entry || typeof entry !== 'object') {
+        return;
+      }
+      const id = typeof entry.id === 'string' ? entry.id : '';
+      if (!id) {
+        return;
+      }
+      nextIds.add(id);
+      const nextKey = templateDiffKey(entry);
+      const priorKey = priorKeysById.has(id) ? priorKeysById.get(id) : null;
+      if (!priorById.has(id) || priorKey !== nextKey) {
+        ops.push({
+          type: 'template.upsert',
+          sceneId,
+          template: entry,
+        });
+      }
+    });
+
+    priorById.forEach((_unused, id) => {
+      if (!nextIds.has(id)) {
+        ops.push({
+          type: 'template.remove',
+          sceneId,
+          templateId: id,
+        });
+      }
+    });
+
+    return ops;
+  }
+
+  // Phase 3-B (commit 5): compute the delta between the prior
+  // drawings-for-scene list and the freshly synced next list,
+  // returning an array of `drawing.add`/`drawing.remove` ops.
+  // Drawings are never modified in place so there is no upsert — the
+  // diff only looks at ids. Returns an empty array when the two lists
+  // contain the same set of ids. Must NOT be called for the
+  // erase/clear full-replace path (that one still needs the snapshot
+  // `_replaceDrawings` mechanism); callers are responsible for
+  // short-circuiting when `consumeFullSyncNeeded()` returned true.
+  function buildDrawingOpsFromDiff(sceneId, priorList, nextList) {
+    if (!sceneId) {
+      return [];
+    }
+    const ops = [];
+    const priorIds = new Set();
+    const prior = Array.isArray(priorList) ? priorList : [];
+    const next = Array.isArray(nextList) ? nextList : [];
+
+    prior.forEach((entry) => {
+      if (!entry || typeof entry !== 'object') {
+        return;
+      }
+      const id = typeof entry.id === 'string' ? entry.id : '';
+      if (!id) {
+        return;
+      }
+      priorIds.add(id);
+    });
+
+    const nextIds = new Set();
+    next.forEach((entry) => {
+      if (!entry || typeof entry !== 'object') {
+        return;
+      }
+      const id = typeof entry.id === 'string' ? entry.id : '';
+      if (!id) {
+        return;
+      }
+      nextIds.add(id);
+      if (!priorIds.has(id)) {
+        ops.push({
+          type: 'drawing.add',
+          sceneId,
+          drawing: entry,
+        });
+      }
+    });
+
+    priorIds.forEach((id) => {
+      if (!nextIds.has(id)) {
+        ops.push({
+          type: 'drawing.remove',
+          sceneId,
+          drawingId: id,
+        });
+      }
+    });
+
+    return ops;
   }
 
   // Track dirty combat state fields to prevent remote state from overwriting local changes
@@ -5088,14 +5242,28 @@ export function mountBoardInteractions(store, routes = {}) {
       return;
     }
 
+    // Phase 3-B (commit 5): capture the prior drawings list BEFORE we
+    // overwrite `lastSyncedDrawingsList`, so the op-routing branch
+    // below can diff it against the fresh list. Only usable when the
+    // prior snapshot is for the same scene — a scene switch resets
+    // the diff window and falls back to the snapshot path.
+    const priorDrawings =
+      lastSyncedDrawingsSceneId === activeSceneId && Array.isArray(lastSyncedDrawingsList)
+        ? lastSyncedDrawingsList
+        : null;
+
     lastSyncedDrawingsHash = hash;
+    lastSyncedDrawingsSceneId = activeSceneId;
+    lastSyncedDrawingsList = drawings.slice();
 
     // If sync is pending, the change came from the local drawing tool
     // Mark drawings as dirty for delta save
+    let fullSyncNeeded = false;
     if (isDrawingSyncPending()) {
       // Check if a full replace is needed (erasing/clearing removes drawings)
       if (consumeFullSyncNeeded()) {
         drawingFullReplaceScenes.add(activeSceneId);
+        fullSyncNeeded = true;
       }
       drawings.forEach((drawing) => {
         if (drawing && drawing.id) {
@@ -5104,10 +5272,38 @@ export function mountBoardInteractions(store, routes = {}) {
       });
     }
 
+    // Phase 3-B (commit 5): route through `drawing.add`/`drawing.remove`
+    // ops when the delta-saves feature flag is on, the change came
+    // from the local drawing tool (sync pending), this is NOT an
+    // erase/clear full-replace (those still need the snapshot path's
+    // `_replaceDrawings` mechanism to reach the server), we have a
+    // usable prior snapshot to diff against, and no non-ops-capable
+    // dirty state is also waiting to flush.
+    //
+    // Drawings are add-only or removed — never modified in place
+    // (verified by reading drawing-tool.js: endDrawing always creates
+    // new ids, erase splits into new fragments with new ids, undo
+    // restores an older whole snapshot). So the diff only ever emits
+    // `drawing.add` for newly-appeared ids and `drawing.remove` for
+    // ids that vanished.
+    let drawingOps = null;
+    if (
+      USE_DELTA_SAVES &&
+      isDrawingSyncPending() &&
+      !fullSyncNeeded &&
+      priorDrawings !== null &&
+      !hasNonPlacementDirtyState()
+    ) {
+      drawingOps = buildDrawingOpsFromDiff(activeSceneId, priorDrawings, drawings);
+      if (drawingOps.length === 0) {
+        drawingOps = null;
+      }
+    }
+
     // Always persist when drawings change to ensure they are saved to the server.
     // This fixes an issue where local drawings were not being persisted because
     // the sync pending check timing could miss the persist call.
-    persistBoardStateSnapshot();
+    persistBoardStateSnapshot({}, drawingOps);
 
     // If sync is pending, the change came from the local drawing tool
     // Don't update the drawing tool to preserve the undo stack
@@ -17956,6 +18152,17 @@ function createTemplateTool() {
       return;
     }
 
+    // Phase 3-B (commit 4): capture the prior templates list BEFORE
+    // updateState mutates it. The op path needs this to diff against
+    // the freshly serialized list and emit `template.upsert` only for
+    // entries that actually changed and `template.remove` for ids
+    // that vanished. Serialized prior entries may carry a stale
+    // `_lastModified` stamp — that field is excluded from the diff
+    // below so a mere re-stamp is not counted as a change.
+    const priorTemplates = Array.isArray(state.boardState?.templates?.[activeSceneId])
+      ? state.boardState.templates[activeSceneId].slice()
+      : [];
+
     const commitTimestamp = Date.now();
     boardApi.updateState?.((draft) => {
       const templatesDraft = ensureSceneTemplateDraft(draft, activeSceneId);
@@ -17975,7 +18182,26 @@ function createTemplateTool() {
     });
 
     lastSyncedSnapshot = snapshotKey(serialized);
-    persistBoardStateSnapshot();
+
+    // Phase 3-B (commit 4): build `template.upsert`/`template.remove`
+    // ops from a diff of prior vs next. Upsert covers both add and
+    // modify. The comparison ignores `_lastModified` so a
+    // no-functional-change re-commit does not produce a wire op.
+    // Falls back to the snapshot path when USE_DELTA_SAVES is off or
+    // when any non-ops-capable dirty state is also waiting to flush
+    // (drawings, pings, sceneState, overlay, drawing full-replace).
+    let templateOps = null;
+    if (USE_DELTA_SAVES && !hasNonPlacementDirtyState()) {
+      templateOps = buildTemplateOpsFromDiff(activeSceneId, priorTemplates, serialized);
+      if (templateOps && templateOps.length === 0) {
+        // Nothing actually changed in the serialized templates list.
+        // Skip the network round-trip entirely and drain dirty tracking
+        // so subsequent saves are not starved by this no-op.
+        clearDirtyTracking();
+        return;
+      }
+    }
+    persistBoardStateSnapshot({}, templateOps);
   }
 
   if (templatesButton) {

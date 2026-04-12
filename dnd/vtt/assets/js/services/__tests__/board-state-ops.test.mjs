@@ -577,3 +577,411 @@ describe('Board State – delta ops persistence (phase 3-B commit 3)', () => {
     assert.deepEqual(capturedPayloads[0].ops[0].patch, { hidden: true });
   });
 });
+
+// ---------------------------------------------------------------------------
+// Phase 3-B (commit 4): template commits (the `commitShapes` path in the
+// client) now ship as `template.upsert` / `template.remove` ops instead of
+// a full snapshot. These tests lock in the wire shape of each new op type,
+// the per-type dedup keys (an upsert and a remove for the same template
+// coexist in the buffer), and the fact that malformed template ops are
+// dropped rather than shipped.
+// ---------------------------------------------------------------------------
+
+describe('Board State – delta ops persistence (phase 3-B commit 4)', () => {
+  let originalFetch;
+  let originalWindow;
+  let capturedPayloads;
+  let pendingFetchResolvers;
+
+  beforeEach(() => {
+    originalFetch = globalThis.fetch;
+    originalWindow = globalThis.window;
+    capturedPayloads = [];
+    pendingFetchResolvers = [];
+
+    globalThis.fetch = async (_url, options = {}) => {
+      if (options?.body) {
+        capturedPayloads.push(JSON.parse(options.body));
+      }
+      return { ok: true, json: async () => ({ success: true, data: { _version: 123 } }) };
+    };
+
+    globalThis.window = {
+      ...(globalThis.window ?? {}),
+      setTimeout: (fn, _ms) => {
+        fn();
+        return 0;
+      },
+    };
+  });
+
+  afterEach(async () => {
+    const { _resetBoardStateOpsBufferForTest } = await import('../board-state-service.js');
+    _resetBoardStateOpsBufferForTest();
+
+    if (originalFetch === undefined) {
+      delete globalThis.fetch;
+    } else {
+      globalThis.fetch = originalFetch;
+    }
+    if (originalWindow === undefined) {
+      delete globalThis.window;
+    } else {
+      globalThis.window = originalWindow;
+    }
+    while (pendingFetchResolvers.length > 0) {
+      const resolve = pendingFetchResolvers.shift();
+      resolve?.({ ok: true, json: async () => ({ success: true, data: { _version: 1 } }) });
+    }
+  });
+
+  test('template.upsert ships the full template object under payload.ops', async () => {
+    const { persistBoardStateOps, _resetBoardStateOpsBufferForTest } = await import(
+      '../board-state-service.js'
+    );
+    _resetBoardStateOpsBufferForTest();
+
+    const template = {
+      id: 'tpl-1',
+      type: 'circle',
+      color: '#abcdef',
+      center: { column: 3, row: 4 },
+      radius: 5,
+    };
+
+    await persistBoardStateOps(
+      '/api/state',
+      [{ type: 'template.upsert', sceneId: 'scene-1', template }],
+      {}
+    );
+
+    assert.equal(capturedPayloads.length, 1);
+    const op = capturedPayloads[0].ops[0];
+    assert.equal(op.type, 'template.upsert');
+    assert.equal(op.sceneId, 'scene-1');
+    assert.deepEqual(op.template, template);
+  });
+
+  test('template.remove ships just sceneId + templateId', async () => {
+    const { persistBoardStateOps, _resetBoardStateOpsBufferForTest } = await import(
+      '../board-state-service.js'
+    );
+    _resetBoardStateOpsBufferForTest();
+
+    await persistBoardStateOps(
+      '/api/state',
+      [{ type: 'template.remove', sceneId: 'scene-1', templateId: 'tpl-zap' }],
+      {}
+    );
+
+    assert.equal(capturedPayloads.length, 1);
+    assert.deepEqual(capturedPayloads[0].ops[0], {
+      type: 'template.remove',
+      sceneId: 'scene-1',
+      templateId: 'tpl-zap',
+    });
+  });
+
+  test('template.upsert and template.remove on the same template coexist (per-type keys)', async () => {
+    const { persistBoardStateOps, _resetBoardStateOpsBufferForTest } = await import(
+      '../board-state-service.js'
+    );
+    _resetBoardStateOpsBufferForTest();
+
+    // Hold each fetch open so every call accumulates into the buffer.
+    globalThis.fetch = async (_url, options = {}) => {
+      if (options?.body) {
+        capturedPayloads.push(JSON.parse(options.body));
+      }
+      return new Promise((resolve) => {
+        pendingFetchResolvers.push(resolve);
+      });
+    };
+
+    persistBoardStateOps(
+      '/api/state',
+      [
+        {
+          type: 'template.upsert',
+          sceneId: 'scene-1',
+          template: { id: 'tpl-1', type: 'circle', center: { column: 1, row: 1 }, radius: 2 },
+        },
+      ],
+      {}
+    );
+    persistBoardStateOps(
+      '/api/state',
+      [{ type: 'template.remove', sceneId: 'scene-1', templateId: 'tpl-1' }],
+      {}
+    );
+
+    const lastPayload = capturedPayloads[capturedPayloads.length - 1];
+    assert.ok(lastPayload);
+    // Both must be present because per-type dedup keys prevent the
+    // remove from clobbering the upsert (or vice versa). Insertion
+    // order must also match the call order so the server applies
+    // upsert → remove.
+    assert.deepEqual(
+      lastPayload.ops.map((op) => op.type),
+      ['template.upsert', 'template.remove'],
+    );
+  });
+
+  test('two template.upsert ops for the same template coalesce (later wins)', async () => {
+    const { persistBoardStateOps, _resetBoardStateOpsBufferForTest } = await import(
+      '../board-state-service.js'
+    );
+    _resetBoardStateOpsBufferForTest();
+
+    globalThis.fetch = async (_url, options = {}) => {
+      if (options?.body) {
+        capturedPayloads.push(JSON.parse(options.body));
+      }
+      return new Promise((resolve) => {
+        pendingFetchResolvers.push(resolve);
+      });
+    };
+
+    persistBoardStateOps(
+      '/api/state',
+      [
+        {
+          type: 'template.upsert',
+          sceneId: 'scene-1',
+          template: { id: 'tpl-1', type: 'circle', center: { column: 1, row: 1 }, radius: 2 },
+        },
+      ],
+      {}
+    );
+    persistBoardStateOps(
+      '/api/state',
+      [
+        {
+          type: 'template.upsert',
+          sceneId: 'scene-1',
+          template: { id: 'tpl-1', type: 'circle', center: { column: 9, row: 9 }, radius: 4 },
+        },
+      ],
+      {}
+    );
+
+    const secondPayload = capturedPayloads[capturedPayloads.length - 1];
+    assert.equal(secondPayload.ops.length, 1, 'same-key upserts coalesce to one op');
+    assert.deepEqual(secondPayload.ops[0].template.center, { column: 9, row: 9 });
+    assert.equal(secondPayload.ops[0].template.radius, 4);
+  });
+
+  test('malformed template ops are silently dropped', async () => {
+    const { persistBoardStateOps, _resetBoardStateOpsBufferForTest } = await import(
+      '../board-state-service.js'
+    );
+    _resetBoardStateOpsBufferForTest();
+
+    await persistBoardStateOps(
+      '/api/state',
+      [
+        // missing template object
+        { type: 'template.upsert', sceneId: 'scene-1' },
+        // template present but missing id
+        { type: 'template.upsert', sceneId: 'scene-1', template: { type: 'circle' } },
+        // remove without templateId
+        { type: 'template.remove', sceneId: 'scene-1' },
+        // well-formed survivor
+        {
+          type: 'template.upsert',
+          sceneId: 'scene-1',
+          template: { id: 'tpl-ok', type: 'circle', center: { column: 0, row: 0 }, radius: 1 },
+        },
+      ],
+      {}
+    );
+
+    assert.equal(capturedPayloads.length, 1);
+    assert.equal(capturedPayloads[0].ops.length, 1, 'only the well-formed op survives');
+    assert.equal(capturedPayloads[0].ops[0].type, 'template.upsert');
+    assert.equal(capturedPayloads[0].ops[0].template.id, 'tpl-ok');
+  });
+});
+
+// ---------------------------------------------------------------------------
+// Phase 3-B (commit 5): drawings now ship as `drawing.add` / `drawing.remove`
+// ops for the non-erase/non-clear case. The erase/clear path still rides
+// the snapshot `_replaceDrawings` mechanism and is not exercised here —
+// these tests only lock in the wire shape and per-type dedup keys of the
+// new drawing op types that the diff path emits.
+// ---------------------------------------------------------------------------
+
+describe('Board State – delta ops persistence (phase 3-B commit 5)', () => {
+  let originalFetch;
+  let originalWindow;
+  let capturedPayloads;
+  let pendingFetchResolvers;
+
+  beforeEach(() => {
+    originalFetch = globalThis.fetch;
+    originalWindow = globalThis.window;
+    capturedPayloads = [];
+    pendingFetchResolvers = [];
+
+    globalThis.fetch = async (_url, options = {}) => {
+      if (options?.body) {
+        capturedPayloads.push(JSON.parse(options.body));
+      }
+      return { ok: true, json: async () => ({ success: true, data: { _version: 321 } }) };
+    };
+
+    globalThis.window = {
+      ...(globalThis.window ?? {}),
+      setTimeout: (fn, _ms) => {
+        fn();
+        return 0;
+      },
+    };
+  });
+
+  afterEach(async () => {
+    const { _resetBoardStateOpsBufferForTest } = await import('../board-state-service.js');
+    _resetBoardStateOpsBufferForTest();
+
+    if (originalFetch === undefined) {
+      delete globalThis.fetch;
+    } else {
+      globalThis.fetch = originalFetch;
+    }
+    if (originalWindow === undefined) {
+      delete globalThis.window;
+    } else {
+      globalThis.window = originalWindow;
+    }
+    while (pendingFetchResolvers.length > 0) {
+      const resolve = pendingFetchResolvers.shift();
+      resolve?.({ ok: true, json: async () => ({ success: true, data: { _version: 1 } }) });
+    }
+  });
+
+  test('drawing.add ships the full drawing object under payload.ops', async () => {
+    const { persistBoardStateOps, _resetBoardStateOpsBufferForTest } = await import(
+      '../board-state-service.js'
+    );
+    _resetBoardStateOpsBufferForTest();
+
+    const drawing = {
+      id: 'drawing-abc',
+      points: [
+        { x: 10, y: 20 },
+        { x: 30, y: 40 },
+      ],
+      color: '#ff0000',
+      strokeWidth: 3,
+      authorId: 'alice',
+    };
+
+    await persistBoardStateOps(
+      '/api/state',
+      [{ type: 'drawing.add', sceneId: 'scene-1', drawing }],
+      {}
+    );
+
+    assert.equal(capturedPayloads.length, 1);
+    const op = capturedPayloads[0].ops[0];
+    assert.equal(op.type, 'drawing.add');
+    assert.equal(op.sceneId, 'scene-1');
+    assert.deepEqual(op.drawing, drawing);
+  });
+
+  test('drawing.remove ships just sceneId + drawingId', async () => {
+    const { persistBoardStateOps, _resetBoardStateOpsBufferForTest } = await import(
+      '../board-state-service.js'
+    );
+    _resetBoardStateOpsBufferForTest();
+
+    await persistBoardStateOps(
+      '/api/state',
+      [{ type: 'drawing.remove', sceneId: 'scene-1', drawingId: 'drawing-zap' }],
+      {}
+    );
+
+    assert.equal(capturedPayloads.length, 1);
+    assert.deepEqual(capturedPayloads[0].ops[0], {
+      type: 'drawing.remove',
+      sceneId: 'scene-1',
+      drawingId: 'drawing-zap',
+    });
+  });
+
+  test('drawing.add and drawing.remove coexist in one flush (per-type keys)', async () => {
+    const { persistBoardStateOps, _resetBoardStateOpsBufferForTest } = await import(
+      '../board-state-service.js'
+    );
+    _resetBoardStateOpsBufferForTest();
+
+    // Hold each fetch open so every call accumulates into the buffer.
+    globalThis.fetch = async (_url, options = {}) => {
+      if (options?.body) {
+        capturedPayloads.push(JSON.parse(options.body));
+      }
+      return new Promise((resolve) => {
+        pendingFetchResolvers.push(resolve);
+      });
+    };
+
+    persistBoardStateOps(
+      '/api/state',
+      [
+        {
+          type: 'drawing.add',
+          sceneId: 'scene-1',
+          drawing: { id: 'd-new', points: [{ x: 1, y: 1 }, { x: 2, y: 2 }], color: '#0f0' },
+        },
+      ],
+      {}
+    );
+    persistBoardStateOps(
+      '/api/state',
+      [{ type: 'drawing.remove', sceneId: 'scene-1', drawingId: 'd-gone' }],
+      {}
+    );
+
+    const lastPayload = capturedPayloads[capturedPayloads.length - 1];
+    assert.ok(lastPayload);
+    // Insertion order must match call order so the server applies
+    // the add before the remove.
+    assert.deepEqual(
+      lastPayload.ops.map((op) => op.type),
+      ['drawing.add', 'drawing.remove'],
+    );
+    assert.equal(lastPayload.ops[0].drawing.id, 'd-new');
+    assert.equal(lastPayload.ops[1].drawingId, 'd-gone');
+  });
+
+  test('malformed drawing ops are silently dropped', async () => {
+    const { persistBoardStateOps, _resetBoardStateOpsBufferForTest } = await import(
+      '../board-state-service.js'
+    );
+    _resetBoardStateOpsBufferForTest();
+
+    await persistBoardStateOps(
+      '/api/state',
+      [
+        // missing drawing object
+        { type: 'drawing.add', sceneId: 'scene-1' },
+        // drawing object missing id
+        { type: 'drawing.add', sceneId: 'scene-1', drawing: { points: [] } },
+        // remove without drawingId
+        { type: 'drawing.remove', sceneId: 'scene-1' },
+        // well-formed survivor
+        {
+          type: 'drawing.add',
+          sceneId: 'scene-1',
+          drawing: { id: 'd-ok', points: [{ x: 0, y: 0 }], color: '#000' },
+        },
+      ],
+      {}
+    );
+
+    assert.equal(capturedPayloads.length, 1);
+    assert.equal(capturedPayloads[0].ops.length, 1, 'only the well-formed op survives');
+    assert.equal(capturedPayloads[0].ops[0].type, 'drawing.add');
+    assert.equal(capturedPayloads[0].ops[0].drawing.id, 'd-ok');
+  });
+});
