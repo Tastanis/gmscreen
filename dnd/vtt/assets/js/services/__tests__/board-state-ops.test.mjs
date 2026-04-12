@@ -802,3 +802,186 @@ describe('Board State – delta ops persistence (phase 3-B commit 4)', () => {
     assert.equal(capturedPayloads[0].ops[0].template.id, 'tpl-ok');
   });
 });
+
+// ---------------------------------------------------------------------------
+// Phase 3-B (commit 5): drawings now ship as `drawing.add` / `drawing.remove`
+// ops for the non-erase/non-clear case. The erase/clear path still rides
+// the snapshot `_replaceDrawings` mechanism and is not exercised here —
+// these tests only lock in the wire shape and per-type dedup keys of the
+// new drawing op types that the diff path emits.
+// ---------------------------------------------------------------------------
+
+describe('Board State – delta ops persistence (phase 3-B commit 5)', () => {
+  let originalFetch;
+  let originalWindow;
+  let capturedPayloads;
+  let pendingFetchResolvers;
+
+  beforeEach(() => {
+    originalFetch = globalThis.fetch;
+    originalWindow = globalThis.window;
+    capturedPayloads = [];
+    pendingFetchResolvers = [];
+
+    globalThis.fetch = async (_url, options = {}) => {
+      if (options?.body) {
+        capturedPayloads.push(JSON.parse(options.body));
+      }
+      return { ok: true, json: async () => ({ success: true, data: { _version: 321 } }) };
+    };
+
+    globalThis.window = {
+      ...(globalThis.window ?? {}),
+      setTimeout: (fn, _ms) => {
+        fn();
+        return 0;
+      },
+    };
+  });
+
+  afterEach(async () => {
+    const { _resetBoardStateOpsBufferForTest } = await import('../board-state-service.js');
+    _resetBoardStateOpsBufferForTest();
+
+    if (originalFetch === undefined) {
+      delete globalThis.fetch;
+    } else {
+      globalThis.fetch = originalFetch;
+    }
+    if (originalWindow === undefined) {
+      delete globalThis.window;
+    } else {
+      globalThis.window = originalWindow;
+    }
+    while (pendingFetchResolvers.length > 0) {
+      const resolve = pendingFetchResolvers.shift();
+      resolve?.({ ok: true, json: async () => ({ success: true, data: { _version: 1 } }) });
+    }
+  });
+
+  test('drawing.add ships the full drawing object under payload.ops', async () => {
+    const { persistBoardStateOps, _resetBoardStateOpsBufferForTest } = await import(
+      '../board-state-service.js'
+    );
+    _resetBoardStateOpsBufferForTest();
+
+    const drawing = {
+      id: 'drawing-abc',
+      points: [
+        { x: 10, y: 20 },
+        { x: 30, y: 40 },
+      ],
+      color: '#ff0000',
+      strokeWidth: 3,
+      authorId: 'alice',
+    };
+
+    await persistBoardStateOps(
+      '/api/state',
+      [{ type: 'drawing.add', sceneId: 'scene-1', drawing }],
+      {}
+    );
+
+    assert.equal(capturedPayloads.length, 1);
+    const op = capturedPayloads[0].ops[0];
+    assert.equal(op.type, 'drawing.add');
+    assert.equal(op.sceneId, 'scene-1');
+    assert.deepEqual(op.drawing, drawing);
+  });
+
+  test('drawing.remove ships just sceneId + drawingId', async () => {
+    const { persistBoardStateOps, _resetBoardStateOpsBufferForTest } = await import(
+      '../board-state-service.js'
+    );
+    _resetBoardStateOpsBufferForTest();
+
+    await persistBoardStateOps(
+      '/api/state',
+      [{ type: 'drawing.remove', sceneId: 'scene-1', drawingId: 'drawing-zap' }],
+      {}
+    );
+
+    assert.equal(capturedPayloads.length, 1);
+    assert.deepEqual(capturedPayloads[0].ops[0], {
+      type: 'drawing.remove',
+      sceneId: 'scene-1',
+      drawingId: 'drawing-zap',
+    });
+  });
+
+  test('drawing.add and drawing.remove coexist in one flush (per-type keys)', async () => {
+    const { persistBoardStateOps, _resetBoardStateOpsBufferForTest } = await import(
+      '../board-state-service.js'
+    );
+    _resetBoardStateOpsBufferForTest();
+
+    // Hold each fetch open so every call accumulates into the buffer.
+    globalThis.fetch = async (_url, options = {}) => {
+      if (options?.body) {
+        capturedPayloads.push(JSON.parse(options.body));
+      }
+      return new Promise((resolve) => {
+        pendingFetchResolvers.push(resolve);
+      });
+    };
+
+    persistBoardStateOps(
+      '/api/state',
+      [
+        {
+          type: 'drawing.add',
+          sceneId: 'scene-1',
+          drawing: { id: 'd-new', points: [{ x: 1, y: 1 }, { x: 2, y: 2 }], color: '#0f0' },
+        },
+      ],
+      {}
+    );
+    persistBoardStateOps(
+      '/api/state',
+      [{ type: 'drawing.remove', sceneId: 'scene-1', drawingId: 'd-gone' }],
+      {}
+    );
+
+    const lastPayload = capturedPayloads[capturedPayloads.length - 1];
+    assert.ok(lastPayload);
+    // Insertion order must match call order so the server applies
+    // the add before the remove.
+    assert.deepEqual(
+      lastPayload.ops.map((op) => op.type),
+      ['drawing.add', 'drawing.remove'],
+    );
+    assert.equal(lastPayload.ops[0].drawing.id, 'd-new');
+    assert.equal(lastPayload.ops[1].drawingId, 'd-gone');
+  });
+
+  test('malformed drawing ops are silently dropped', async () => {
+    const { persistBoardStateOps, _resetBoardStateOpsBufferForTest } = await import(
+      '../board-state-service.js'
+    );
+    _resetBoardStateOpsBufferForTest();
+
+    await persistBoardStateOps(
+      '/api/state',
+      [
+        // missing drawing object
+        { type: 'drawing.add', sceneId: 'scene-1' },
+        // drawing object missing id
+        { type: 'drawing.add', sceneId: 'scene-1', drawing: { points: [] } },
+        // remove without drawingId
+        { type: 'drawing.remove', sceneId: 'scene-1' },
+        // well-formed survivor
+        {
+          type: 'drawing.add',
+          sceneId: 'scene-1',
+          drawing: { id: 'd-ok', points: [{ x: 0, y: 0 }], color: '#000' },
+        },
+      ],
+      {}
+    );
+
+    assert.equal(capturedPayloads.length, 1);
+    assert.equal(capturedPayloads[0].ops.length, 1, 'only the well-formed op survives');
+    assert.equal(capturedPayloads[0].ops[0].type, 'drawing.add');
+    assert.equal(capturedPayloads[0].ops[0].drawing.id, 'd-ok');
+  });
+});

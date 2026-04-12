@@ -737,19 +737,23 @@ function sanitizeBoardStateOps(array $rawOps): array
  * mutation on the client can travel as a typed op instead of a full
  * snapshot. Commit 4 adds `template.upsert` and `template.remove` so
  * every template commit (the `commitShapes` path in the client) can
- * also travel as ops. Unknown or unsupported op types are ignored so
- * older servers can tolerate payloads from newer clients without
- * erroring out. The state returned is always a valid board state — if
- * the op cannot be applied (missing scene, missing entry, bad fields,
- * permission denied for a non-GM destructive op), the input is
- * returned unchanged.
+ * also travel as ops. Commit 5 adds `drawing.add` and `drawing.remove`
+ * for the non-erase/non-clear drawing flows; the erase/clear path
+ * still rides the snapshot `_replaceDrawings` mechanism because it
+ * has no op equivalent. Unknown or unsupported op types are ignored
+ * so older servers can tolerate payloads from newer clients without
+ * erroring out. The state returned is always a valid board state —
+ * if the op cannot be applied (missing scene, missing entry, bad
+ * fields, permission denied for a non-GM destructive op), the input
+ * is returned unchanged.
  *
  * The caller is responsible for running this inside the state lock so
  * two concurrent writers cannot interleave mutations on the same
  * entry. The caller is also responsible for setting `$context['isGm']`
  * so destructive ops can be gated: without this flag, a non-GM caller
  * could bypass the snapshot path's timestamp-merge-only policy by
- * sending `placement.remove` or `template.remove` directly.
+ * sending `placement.remove`, `template.remove`, or `drawing.remove`
+ * directly.
  *
  * @param array<string,mixed> $state
  * @param array<string,mixed> $op
@@ -1045,9 +1049,106 @@ function applyBoardStateOp(array $state, array $op, array $context = []): array
         return $state;
     }
 
+    if ($type === 'drawing.add') {
+        // `drawing.add` carries the full new drawing entry in the
+        // `drawing` field. If a drawing with the same id already
+        // exists in the scene (should not happen in practice — each
+        // drawing is minted with a fresh id), it is replaced
+        // in-place. Non-GM callers are allowed: the draw flow is a
+        // user feature, not a GM-only tool, and the snapshot player
+        // path already accepts new drawings via
+        // `mergeSceneEntriesByTimestamp`.
+        $sceneId = isset($op['sceneId']) && is_string($op['sceneId']) ? trim($op['sceneId']) : '';
+        if ($sceneId === '') {
+            return $state;
+        }
+        if (!isset($op['drawing']) || !is_array($op['drawing'])) {
+            return $state;
+        }
+        $drawing = $op['drawing'];
+        $drawingId = extractBoardEntryIdentifier($drawing);
+        if ($drawingId === null || $drawingId === '') {
+            return $state;
+        }
+
+        if (!isset($state['drawings']) || !is_array($state['drawings'])) {
+            $state['drawings'] = [];
+        }
+        if (!isset($state['drawings'][$sceneId]) || !is_array($state['drawings'][$sceneId])) {
+            $state['drawings'][$sceneId] = [];
+        }
+
+        $nowMs = (int) round(microtime(true) * 1000);
+        $drawing['_lastModified'] = $nowMs;
+
+        $replaced = false;
+        foreach ($state['drawings'][$sceneId] as $idx => $existing) {
+            if (!is_array($existing)) {
+                continue;
+            }
+            $existingId = extractBoardEntryIdentifier($existing);
+            if ($existingId === $drawingId) {
+                $state['drawings'][$sceneId][$idx] = $drawing;
+                $replaced = true;
+                break;
+            }
+        }
+        if (!$replaced) {
+            $state['drawings'][$sceneId][] = $drawing;
+        }
+        return $state;
+    }
+
+    if ($type === 'drawing.remove') {
+        // Gate destructive drawing removal behind the GM flag. The
+        // snapshot player path uses `mergeSceneEntriesByTimestamp`,
+        // which cannot delete, so players cannot remove individual
+        // drawings via the snapshot path today. Players still have
+        // access to erase/clear, which ride the `_replaceDrawings`
+        // full-sync mechanism; that path is untouched by commit 5
+        // and continues to work regardless of role.
+        if (!$isGm) {
+            return $state;
+        }
+        $sceneId = isset($op['sceneId']) && is_string($op['sceneId']) ? trim($op['sceneId']) : '';
+        if ($sceneId === '') {
+            return $state;
+        }
+        $drawingId = '';
+        if (isset($op['drawingId'])) {
+            $raw = $op['drawingId'];
+            if (is_string($raw)) {
+                $drawingId = trim($raw);
+            } elseif (is_int($raw) || is_float($raw)) {
+                $drawingId = (string) $raw;
+            }
+        }
+        if ($drawingId === '') {
+            return $state;
+        }
+        if (!isset($state['drawings'][$sceneId]) || !is_array($state['drawings'][$sceneId])) {
+            return $state;
+        }
+        $filtered = [];
+        foreach ($state['drawings'][$sceneId] as $entry) {
+            if (!is_array($entry)) {
+                $filtered[] = $entry;
+                continue;
+            }
+            $existingId = extractBoardEntryIdentifier($entry);
+            if ($existingId === $drawingId) {
+                continue;
+            }
+            $filtered[] = $entry;
+        }
+        // Re-index so json_encode serializes as a JSON array, not an
+        // object with numeric string keys.
+        $state['drawings'][$sceneId] = array_values($filtered);
+        return $state;
+    }
+
     // Unknown op types are silently ignored so older servers can
-    // tolerate payloads from newer clients. Commit 5 will add
-    // `drawing.*` op types here.
+    // tolerate payloads from newer clients.
     return $state;
 }
 
