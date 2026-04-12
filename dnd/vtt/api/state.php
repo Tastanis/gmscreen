@@ -286,15 +286,22 @@ if (!defined('VTT_STATE_API_INCLUDE_ONLY')) {
                 // runs. Ops mutate the canonical state in place; the
                 // existing snapshot path, when a boardState payload is
                 // also present, will layer on top exactly as before.
-                // No client sends ops yet, so in practice `$ops` is
-                // always empty on this commit and this loop is a no-op.
+                // Phase 3-B (commit 3): `$isGm` is computed up-front
+                // now so it can be forwarded to `applyBoardStateOp`,
+                // which uses it to gate destructive op types like
+                // `placement.remove` behind the same GM-only rule the
+                // snapshot path already enforces. This prevents a
+                // player from bypassing the snapshot path's
+                // timestamp-merge (which cannot delete) by sending a
+                // `placement.remove` op directly.
+                $isGm = (bool) ($auth['isGM'] ?? false);
                 if (!empty($ops)) {
+                    $opContext = ['isGm' => $isGm];
                     foreach ($ops as $op) {
-                        $nextState = applyBoardStateOp($nextState, $op);
+                        $nextState = applyBoardStateOp($nextState, $op, $opContext);
                     }
                 }
 
-                $isGm = (bool) ($auth['isGM'] ?? false);
                 if (!$isGm) {
                     $combatUpdates = [];
                     if (isset($updates['sceneState']) && is_array($updates['sceneState'])) {
@@ -725,40 +732,41 @@ function sanitizeBoardStateOps(array $rawOps): array
 /**
  * Phase 3-B: Apply a single delta op to an in-memory board state array.
  *
- * Commit 1 supports only `placement.move`, which updates the `x`/`y`
- * coordinates of an existing placement in a given scene. Unknown or
- * unsupported op types are ignored so older servers can tolerate
- * payloads from newer clients without erroring out. The state returned
- * is always a valid board state — if the op cannot be applied (missing
- * scene, missing placement, bad coordinates), the input is returned
- * unchanged.
+ * Commit 1 introduced `placement.move`. Commit 3 adds `placement.add`,
+ * `placement.remove`, and `placement.update` so every placement-level
+ * mutation on the client can travel as a typed op instead of a full
+ * snapshot. Unknown or unsupported op types are ignored so older
+ * servers can tolerate payloads from newer clients without erroring
+ * out. The state returned is always a valid board state — if the op
+ * cannot be applied (missing scene, missing placement, bad fields,
+ * permission denied for a non-GM destructive op), the input is
+ * returned unchanged.
  *
  * The caller is responsible for running this inside the state lock so
  * two concurrent writers cannot interleave mutations on the same
- * placement.
+ * placement. The caller is also responsible for setting
+ * `$context['isGm']` so destructive ops can be gated: without this
+ * flag, a non-GM caller could bypass the snapshot path's
+ * timestamp-merge-only policy by sending `placement.remove` directly.
  *
  * @param array<string,mixed> $state
  * @param array<string,mixed> $op
+ * @param array<string,mixed> $context Optional context with keys:
+ *   - `isGm` (bool): caller is GM. Defaults to false. Required for
+ *     destructive ops (`placement.remove`) to be applied.
  * @return array<string,mixed>
  */
-function applyBoardStateOp(array $state, array $op): array
+function applyBoardStateOp(array $state, array $op, array $context = []): array
 {
     $type = isset($op['type']) && is_string($op['type']) ? $op['type'] : '';
+    $isGm = (bool) ($context['isGm'] ?? false);
 
     if ($type === 'placement.move') {
         $sceneId = isset($op['sceneId']) && is_string($op['sceneId']) ? trim($op['sceneId']) : '';
         if ($sceneId === '') {
             return $state;
         }
-        $placementId = '';
-        if (isset($op['placementId'])) {
-            $rawId = $op['placementId'];
-            if (is_string($rawId)) {
-                $placementId = trim($rawId);
-            } elseif (is_int($rawId) || is_float($rawId)) {
-                $placementId = (string) $rawId;
-            }
-        }
+        $placementId = extractBoardStateOpPlacementId($op);
         if ($placementId === '') {
             return $state;
         }
@@ -802,10 +810,166 @@ function applyBoardStateOp(array $state, array $op): array
         return $state;
     }
 
+    if ($type === 'placement.add') {
+        // `placement.add` carries the full new placement entry in the
+        // `placement` field. If a placement with the same id already
+        // exists in the scene, it is replaced in-place (same semantics
+        // as a later-wins dedup on the client). Non-GM callers are
+        // allowed — the snapshot path already accepts new placements
+        // from players via `mergeSceneEntriesByTimestamp`.
+        $sceneId = isset($op['sceneId']) && is_string($op['sceneId']) ? trim($op['sceneId']) : '';
+        if ($sceneId === '') {
+            return $state;
+        }
+        if (!isset($op['placement']) || !is_array($op['placement'])) {
+            return $state;
+        }
+        $placement = $op['placement'];
+        $placementId = extractBoardEntryIdentifier($placement);
+        if ($placementId === null || $placementId === '') {
+            return $state;
+        }
+
+        if (!isset($state['placements']) || !is_array($state['placements'])) {
+            $state['placements'] = [];
+        }
+        if (!isset($state['placements'][$sceneId]) || !is_array($state['placements'][$sceneId])) {
+            $state['placements'][$sceneId] = [];
+        }
+
+        // Stamp `_lastModified` so subsequent timestamp-based merges
+        // treat this add as newer than any stale payload already in
+        // flight. This also mirrors the client-side stamping done at
+        // drop time.
+        $nowMs = (int) round(microtime(true) * 1000);
+        $placement['_lastModified'] = $nowMs;
+
+        $replaced = false;
+        foreach ($state['placements'][$sceneId] as $idx => $existing) {
+            if (!is_array($existing)) {
+                continue;
+            }
+            $existingId = extractBoardEntryIdentifier($existing);
+            if ($existingId === $placementId) {
+                $state['placements'][$sceneId][$idx] = $placement;
+                $replaced = true;
+                break;
+            }
+        }
+        if (!$replaced) {
+            $state['placements'][$sceneId][] = $placement;
+        }
+        return $state;
+    }
+
+    if ($type === 'placement.remove') {
+        // Gate removals behind the GM-only rule the snapshot path
+        // already enforces (snapshot path uses `mergeSceneEntriesByTimestamp`
+        // which never deletes, so player removals are silently dropped
+        // today). We do the same here by ignoring the op when the
+        // caller is not a GM.
+        if (!$isGm) {
+            return $state;
+        }
+        $sceneId = isset($op['sceneId']) && is_string($op['sceneId']) ? trim($op['sceneId']) : '';
+        if ($sceneId === '') {
+            return $state;
+        }
+        $placementId = extractBoardStateOpPlacementId($op);
+        if ($placementId === '') {
+            return $state;
+        }
+        if (!isset($state['placements'][$sceneId]) || !is_array($state['placements'][$sceneId])) {
+            return $state;
+        }
+        $filtered = [];
+        foreach ($state['placements'][$sceneId] as $entry) {
+            if (!is_array($entry)) {
+                $filtered[] = $entry;
+                continue;
+            }
+            $entryId = extractBoardEntryIdentifier($entry);
+            if ($entryId === $placementId) {
+                continue;
+            }
+            $filtered[] = $entry;
+        }
+        // Re-index so json_encode serializes as a JSON array, not an
+        // object with numeric string keys.
+        $state['placements'][$sceneId] = array_values($filtered);
+        return $state;
+    }
+
+    if ($type === 'placement.update') {
+        // `placement.update` carries a shallow `patch` object that is
+        // shallow-merged onto an existing placement. Fields not
+        // present in the patch are left untouched. The `id` field is
+        // never overwritten. `_lastModified` is always re-stamped by
+        // the server so timestamp-based merges downstream treat this
+        // as the newest version.
+        $sceneId = isset($op['sceneId']) && is_string($op['sceneId']) ? trim($op['sceneId']) : '';
+        if ($sceneId === '') {
+            return $state;
+        }
+        $placementId = extractBoardStateOpPlacementId($op);
+        if ($placementId === '') {
+            return $state;
+        }
+        if (!isset($op['patch']) || !is_array($op['patch'])) {
+            return $state;
+        }
+        $patch = $op['patch'];
+        if (!isset($state['placements'][$sceneId]) || !is_array($state['placements'][$sceneId])) {
+            return $state;
+        }
+        $nowMs = (int) round(microtime(true) * 1000);
+        foreach ($state['placements'][$sceneId] as $idx => $entry) {
+            if (!is_array($entry)) {
+                continue;
+            }
+            $entryId = extractBoardEntryIdentifier($entry);
+            if ($entryId === null || $entryId !== $placementId) {
+                continue;
+            }
+            foreach ($patch as $key => $value) {
+                if ($key === 'id') {
+                    continue;
+                }
+                $entry[$key] = $value;
+            }
+            $entry['_lastModified'] = $nowMs;
+            $state['placements'][$sceneId][$idx] = $entry;
+            break;
+        }
+        return $state;
+    }
+
     // Unknown op types are silently ignored so older servers can
-    // tolerate payloads from newer clients. Commits 2+ will add more
-    // `placement.*`, `template.*`, and `drawing.*` op types here.
+    // tolerate payloads from newer clients. Commits 4+ will add
+    // `template.*` and `drawing.*` op types here.
     return $state;
+}
+
+/**
+ * Phase 3-B: Normalize a placementId field on an incoming op. Accepts
+ * strings, ints, or floats and returns a trimmed string. Returns an
+ * empty string if the field is missing or empty.
+ *
+ * @param array<string,mixed> $op
+ */
+function extractBoardStateOpPlacementId(array $op): string
+{
+    if (!isset($op['placementId'])) {
+        return '';
+    }
+    $raw = $op['placementId'];
+    if (is_string($raw)) {
+        return trim($raw);
+    }
+    if (is_int($raw) || is_float($raw)) {
+        return (string) $raw;
+    }
+    return '';
 }
 
 /**

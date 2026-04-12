@@ -1668,6 +1668,67 @@ export function mountBoardInteractions(store, routes = {}) {
            dirtyTopLevel.size > 0;
   }
 
+  // Phase 3-B (commit 3): true when any NON-placement entity is dirty.
+  // Used at placement-mutation call sites to decide whether it is safe
+  // to route through the delta-op path: the ops path only carries
+  // placement ops today, so if templates/drawings/scene state/pings/etc.
+  // are also waiting to flush, we must fall back to the snapshot path
+  // to avoid dropping those changes on the floor. Commits 4+ will shrink
+  // what counts as "non-placement" as more op types come online.
+  function hasNonPlacementDirtyState() {
+    return dirtyTemplates.size > 0 ||
+           dirtyDrawings.size > 0 ||
+           drawingFullReplaceScenes.size > 0 ||
+           dirtyPings ||
+           dirtySceneState.size > 0 ||
+           dirtyTopLevel.size > 0;
+  }
+
+  // Phase 3-B (commit 3): helpers for building `placement.update` ops
+  // via a before/after diff. Mutator-based update call sites
+  // (`updatePlacementById`, `updatePlacementsByIds`) snapshot the
+  // placement before running the mutator, then compare top-level keys
+  // to ship only the fields that actually changed. The server applies
+  // the patch as a shallow merge. `id` is never in the patch (the
+  // server refuses to overwrite it anyway) and `_lastModified` is
+  // excluded so the server's own fresh stamp wins.
+  function clonePlacementForDiff(placement) {
+    if (!placement || typeof placement !== 'object') {
+      return null;
+    }
+    try {
+      return JSON.parse(JSON.stringify(placement));
+    } catch (error) {
+      return null;
+    }
+  }
+
+  function buildPlacementUpdatePatch(before, after) {
+    if (!after || typeof after !== 'object') {
+      return null;
+    }
+    const beforeObj = before && typeof before === 'object' ? before : {};
+    const patch = {};
+    const keys = new Set([...Object.keys(beforeObj), ...Object.keys(after)]);
+    for (const key of keys) {
+      if (key === 'id' || key === '_lastModified') {
+        continue;
+      }
+      const beforeVal = beforeObj[key];
+      const afterVal = after[key];
+      let changed = false;
+      try {
+        changed = JSON.stringify(beforeVal) !== JSON.stringify(afterVal);
+      } catch (error) {
+        changed = true;
+      }
+      if (changed) {
+        patch[key] = afterVal;
+      }
+    }
+    return Object.keys(patch).length > 0 ? patch : null;
+  }
+
   // Track dirty combat state fields to prevent remote state from overwriting local changes
   // This is separate from the general dirty tracking because combat state has special
   // sync logic in syncCombatStateToStore that handles remote vs local state merging
@@ -2206,12 +2267,21 @@ export function mountBoardInteractions(store, routes = {}) {
   updateStartCombatButton();
   updateCombatModeIndicators();
 
-  // Phase 3-B (commit 2): when true, token-drag saves go out as delta
-  // ops (`{ops: [{type: 'placement.move', ...}]}`) instead of full
-  // snapshots. Flip to `false` to force the legacy snapshot path for
-  // every save while the op path is bedding in. Only placement.move is
-  // routed through ops today; every other save type still uses the
-  // snapshot path regardless of this flag.
+  // Phase 3-B: when true, placement mutations go out as delta ops
+  // instead of full snapshots. Flip to `false` to force the legacy
+  // snapshot path for every save while the op path is bedding in.
+  //
+  //   - commit 2: `placement.move` on drag-release (`commitDragPreview`)
+  //   - commit 3: `placement.move` on arrow-key nudge, `placement.add`
+  //     on token drop, `placement.remove` on token delete (GM only),
+  //     and `placement.update` on every mutator-driven placement edit
+  //     (HP/stamina, conditions, hidden flag, triggered action, etc.)
+  //
+  // Templates, drawings, pings, scene state, fog, combat, and overlay
+  // saves still go through the snapshot path regardless of this flag;
+  // those will be moved to ops in commits 4-5. Call sites that detect
+  // non-placement dirty state also fall back to the snapshot path so
+  // the ops path never silently drops templates/drawings/etc.
   const USE_DELTA_SAVES = true;
 
   const persistBoardStateSnapshot = (options = {}, opsOverride = null) => {
@@ -3794,7 +3864,25 @@ export function mountBoardInteractions(store, routes = {}) {
 
     // Mark placement as dirty for delta save
     markPlacementDirty(activeSceneId, placement.id);
-    persistBoardStateSnapshot();
+
+    // Phase 3-B (commit 3): route the drop through a `placement.add`
+    // op when the delta-saves feature flag is on AND no non-placement
+    // state is also waiting to flush. The ops path cannot carry
+    // templates/drawings/etc. today, so if anything else is dirty we
+    // fall back to the legacy snapshot path to avoid losing those
+    // changes. This guard is applied at every commit-3 call site for
+    // the same reason.
+    let tokenAddOps = null;
+    if (USE_DELTA_SAVES && !hasNonPlacementDirtyState()) {
+      tokenAddOps = [
+        {
+          type: 'placement.add',
+          sceneId: activeSceneId,
+          placement,
+        },
+      ];
+    }
+    persistBoardStateSnapshot({}, tokenAddOps);
 
     // For PC folder tokens, fetch and apply character sheet stamina
     if (isTokenSourcePlayerVisible(template)) {
@@ -5274,7 +5362,35 @@ export function mountBoardInteractions(store, routes = {}) {
     if (moved) {
       // Mark moved placements as dirty for delta save
       movedIds.forEach((id) => markPlacementDirty(activeSceneId, id));
-      persistBoardStateSnapshot();
+
+      // Phase 3-B (commit 3): arrow-key movement is a pure
+      // placement.move path, same shape as the drag-release path
+      // (commit 2). Build one `placement.move` op per moved id from
+      // the freshly-committed store and hand it to
+      // `persistBoardStateSnapshot` so the delta-op save path runs.
+      let keyboardMoveOps = null;
+      if (USE_DELTA_SAVES && !hasNonPlacementDirtyState()) {
+        const latestPlacements =
+          boardApi.getState?.()?.boardState?.placements?.[activeSceneId] ?? [];
+        const opsList = [];
+        movedIds.forEach((id) => {
+          const placement = latestPlacements.find((entry) => entry?.id === id);
+          if (!placement) {
+            return;
+          }
+          opsList.push({
+            type: 'placement.move',
+            sceneId: activeSceneId,
+            placementId: id,
+            x: placement.column,
+            y: placement.row,
+          });
+        });
+        if (opsList.length > 0) {
+          keyboardMoveOps = opsList;
+        }
+      }
+      persistBoardStateSnapshot({}, keyboardMoveOps);
     }
 
     if (moved && status) {
@@ -5306,6 +5422,7 @@ export function mountBoardInteractions(store, routes = {}) {
     }
 
     let removedCount = 0;
+    const removedIds = [];
     boardApi.updateState?.((draft) => {
       const scenePlacements = ensureScenePlacementDraft(draft, activeSceneId);
       if (!Array.isArray(scenePlacements) || !scenePlacements.length) {
@@ -5322,6 +5439,7 @@ export function mountBoardInteractions(store, routes = {}) {
         if (!isGM && placement.hidden) {
           return true;
         }
+        removedIds.push(placement.id);
         return false;
       });
       removedCount = scenePlacements.length - nextPlacements.length;
@@ -5331,10 +5449,27 @@ export function mountBoardInteractions(store, routes = {}) {
     });
 
     if (removedCount > 0) {
-      // Clear dirty tracking to force a full state save for deletions
-      // Delta saves can't represent deletions, so we need to send full state
-      clearDirtyTracking();
-      persistBoardStateSnapshot();
+      // Phase 3-B (commit 3): route token deletion through
+      // `placement.remove` ops when it is safe (delta-saves flag on,
+      // no non-placement dirty state pending, and the caller is a GM —
+      // the server ignores remove ops from non-GM callers to match the
+      // snapshot path's "players can't delete" policy). When any of
+      // those conditions fails we fall back to the legacy behavior of
+      // clearing dirty tracking and sending a full snapshot so the
+      // delete still reaches the server.
+      let removeOps = null;
+      if (USE_DELTA_SAVES && isGM && !hasNonPlacementDirtyState()) {
+        removeOps = removedIds.map((id) => ({
+          type: 'placement.remove',
+          sceneId: activeSceneId,
+          placementId: id,
+        }));
+      } else {
+        // Clear dirty tracking to force a full state save for deletions
+        // Delta saves can't represent deletions, so we need to send full state
+        clearDirtyTracking();
+      }
+      persistBoardStateSnapshot({}, removeOps);
       selectedTokenIds.clear();
       notifySelectionChanged();
       if (status) {
@@ -10284,6 +10419,7 @@ export function mountBoardInteractions(store, routes = {}) {
     }
 
     let mutated = false;
+    const mutatedIds = [];
     boardApi.updateState?.((draft) => {
       const scenePlacements = ensureScenePlacementDraft(draft, activeSceneId);
       scenePlacements.forEach((placement) => {
@@ -10293,12 +10429,28 @@ export function mountBoardInteractions(store, routes = {}) {
         if (placement.triggeredActionReady !== true) {
           placement.triggeredActionReady = true;
           mutated = true;
+          if (placement.id) {
+            mutatedIds.push(placement.id);
+          }
         }
       });
     });
 
     if (mutated) {
-      persistBoardStateSnapshot();
+      // Phase 3-B (commit 3): every reset here is the same single-
+      // field flip (`triggeredActionReady: true`) across many
+      // placements. Emit one `placement.update` op per mutated id
+      // instead of a full snapshot.
+      let resetOps = null;
+      if (USE_DELTA_SAVES && !hasNonPlacementDirtyState() && mutatedIds.length > 0) {
+        resetOps = mutatedIds.map((id) => ({
+          type: 'placement.update',
+          sceneId: activeSceneId,
+          placementId: id,
+          patch: { triggeredActionReady: true },
+        }));
+      }
+      persistBoardStateSnapshot({}, resetOps);
       refreshTokenSettings();
     }
   }
@@ -12358,7 +12510,23 @@ export function mountBoardInteractions(store, routes = {}) {
       return false;
     }
 
-    persistBoardStateSnapshot();
+    // Phase 3-B (commit 3): the only field that changed here is
+    // `triggeredActionReady`, so we can hand-build a `placement.update`
+    // op with a tiny patch instead of running a diff. Fall back to the
+    // snapshot path if the delta flag is off or non-placement state is
+    // also waiting to flush.
+    let triggeredOps = null;
+    if (USE_DELTA_SAVES && !hasNonPlacementDirtyState()) {
+      triggeredOps = [
+        {
+          type: 'placement.update',
+          sceneId: activeSceneId,
+          placementId,
+          patch: { triggeredActionReady: nextReady },
+        },
+      ];
+    }
+    persistBoardStateSnapshot({}, triggeredOps);
 
     const latestState = boardApi.getState?.() ?? {};
     const placement = resolvePlacementById(latestState, activeSceneId, placementId);
@@ -13127,12 +13295,18 @@ export function mountBoardInteractions(store, routes = {}) {
     const gmUser = Boolean(state?.user?.isGM);
     let updated = false;
     let savePromise = null;
+    let beforeSnapshot = null;
+    let afterSnapshot = null;
     boardApi.updateState?.((draft) => {
       const scenePlacements = ensureScenePlacementDraft(draft, activeSceneId);
       const target = scenePlacements.find((item) => item && item.id === placementId);
       if (!target) {
         return;
       }
+      // Phase 3-B (commit 3): snapshot before and after the mutator so
+      // we can ship a minimal `placement.update` op containing only the
+      // fields that actually changed.
+      beforeSnapshot = clonePlacementForDiff(target);
       mutator(target);
       // Set _lastModified so server-side timestamp-based conflict resolution
       // correctly identifies this as a newer update.
@@ -13140,12 +13314,32 @@ export function mountBoardInteractions(store, routes = {}) {
       if (gmUser) {
         markPlacementAsGmAuthored(target, { isGm: gmUser });
       }
+      afterSnapshot = clonePlacementForDiff(target);
       updated = true;
     });
 
     if (updated && syncBoard) {
       markPlacementDirty(activeSceneId, placementId);
-      savePromise = persistBoardStateSnapshot();
+
+      // Phase 3-B (commit 3): build a `placement.update` op from the
+      // diff and route it through the delta-op path. If the diff is
+      // empty (mutator was a no-op) or non-placement state is also
+      // dirty, fall through to the snapshot path unchanged.
+      let updateOps = null;
+      if (USE_DELTA_SAVES && !hasNonPlacementDirtyState()) {
+        const patch = buildPlacementUpdatePatch(beforeSnapshot, afterSnapshot);
+        if (patch) {
+          updateOps = [
+            {
+              type: 'placement.update',
+              sceneId: activeSceneId,
+              placementId,
+              patch,
+            },
+          ];
+        }
+      }
+      savePromise = persistBoardStateSnapshot({}, updateOps);
     }
 
     if (returnSavePromise) {
@@ -13182,6 +13376,11 @@ export function mountBoardInteractions(store, routes = {}) {
     const gmUser = Boolean(state?.user?.isGM);
     let updatedIds = [];
     let savePromise = null;
+    // Phase 3-B (commit 3): snapshot before and after the mutator for
+    // each placement so we can ship one `placement.update` op per
+    // changed placement instead of a full dirty-tracked snapshot.
+    const patchBeforeById = new Map();
+    const patchAfterById = new Map();
     boardApi.updateState?.((draft) => {
       const scenePlacements = ensureScenePlacementDraft(draft, activeSceneId);
       if (!Array.isArray(scenePlacements) || !scenePlacements.length) {
@@ -13195,6 +13394,7 @@ export function mountBoardInteractions(store, routes = {}) {
         if (!uniqueIds.has(placement.id)) {
           return;
         }
+        patchBeforeById.set(placement.id, clonePlacementForDiff(placement));
         mutator(placement);
         // Set _lastModified so server-side timestamp-based conflict resolution
         // correctly identifies this as a newer update. Without this, the timestamp
@@ -13203,6 +13403,7 @@ export function mountBoardInteractions(store, routes = {}) {
         if (gmUser) {
           markPlacementAsGmAuthored(placement, { isGm: gmUser });
         }
+        patchAfterById.set(placement.id, clonePlacementForDiff(placement));
         updatedIds.push(placement.id);
       });
     });
@@ -13212,7 +13413,32 @@ export function mountBoardInteractions(store, routes = {}) {
       // Without this, property changes (e.g. hidden flag toggles) would be lost
       // when other dirty entities exist and a delta save is built.
       updatedIds.forEach((id) => markPlacementDirty(activeSceneId, id));
-      savePromise = persistBoardStateSnapshot();
+
+      // Phase 3-B (commit 3): build one `placement.update` op per
+      // changed placement from the per-id before/after diff and route
+      // through the delta-op path.
+      let updateOps = null;
+      if (USE_DELTA_SAVES && !hasNonPlacementDirtyState()) {
+        const opsList = [];
+        updatedIds.forEach((id) => {
+          const patch = buildPlacementUpdatePatch(
+            patchBeforeById.get(id),
+            patchAfterById.get(id)
+          );
+          if (patch) {
+            opsList.push({
+              type: 'placement.update',
+              sceneId: activeSceneId,
+              placementId: id,
+              patch,
+            });
+          }
+        });
+        if (opsList.length > 0) {
+          updateOps = opsList;
+        }
+      }
+      savePromise = persistBoardStateSnapshot({}, updateOps);
     }
 
     if (returnSavePromise) {
