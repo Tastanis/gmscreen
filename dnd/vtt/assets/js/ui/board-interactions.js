@@ -3334,43 +3334,81 @@ export function mountBoardInteractions(store, routes = {}) {
         if (!draft.boardState.placements) {
           draft.boardState.placements = {};
         }
+        // When the broadcast is a full (non-delta) snapshot, the arrays
+        // carry the *complete* set of placements for every included
+        // scene. Use replacement semantics so that tokens deleted on the
+        // server are removed locally. Delta broadcasts only carry the
+        // changed entries and must merge additively.
+        const isFullReplacement = !delta.deltaOnly;
         Object.entries(delta.placements).forEach(([sceneId, placements]) => {
           if (Array.isArray(placements)) {
-            // Merge placements by ID, keeping newer timestamps
-            const existing = draft.boardState.placements[sceneId] || [];
-            const byId = new Map(existing.map((p) => [p.id, p]));
-            placements.forEach((placement) => {
-              if (placement && placement.id) {
-                // For tokens currently being dragged, store the update for later comparison
-                // instead of skipping it entirely (prevents popback on concurrent moves)
-                if (draggedTokenIds.has(placement.id)) {
-                  const dragState = viewState.dragState;
-                  if (dragState?.deferredUpdates) {
-                    const incomingTime = placement._lastModified || 0;
-                    const existing = dragState.deferredUpdates.get(placement.id);
-                    // Keep only the newest deferred update for each token
-                    if (!existing || incomingTime > (existing._lastModified || 0)) {
-                      dragState.deferredUpdates.set(placement.id, placement);
+            if (isFullReplacement) {
+              // Full broadcast: build the authoritative set from the
+              // incoming array, but preserve local position for any
+              // token currently being dragged.
+              const incomingById = new Map();
+              placements.forEach((placement) => {
+                if (placement && placement.id) {
+                  if (draggedTokenIds.has(placement.id)) {
+                    const dragState = viewState.dragState;
+                    if (dragState?.deferredUpdates) {
+                      const incomingTime = placement._lastModified || 0;
+                      const existing = dragState.deferredUpdates.get(placement.id);
+                      if (!existing || incomingTime > (existing._lastModified || 0)) {
+                        dragState.deferredUpdates.set(placement.id, placement);
+                      }
                     }
                   }
-                  return;
+                  incomingById.set(placement.id, placement);
                 }
-                const existingPlacement = byId.get(placement.id);
-                if (existingPlacement) {
-                  // Compare timestamps - keep the newer one
-                  const existingTime = existingPlacement._lastModified || 0;
-                  const incomingTime = placement._lastModified || 0;
-                  if (incomingTime >= existingTime) {
+              });
+              // Keep dragged tokens that might have been removed
+              // server-side during the drag — they will be reconciled
+              // when the drag commits.
+              const existing = draft.boardState.placements[sceneId] || [];
+              existing.forEach((p) => {
+                if (p && p.id && draggedTokenIds.has(p.id) && !incomingById.has(p.id)) {
+                  incomingById.set(p.id, p);
+                }
+              });
+              draft.boardState.placements[sceneId] = Array.from(incomingById.values());
+            } else {
+              // Delta broadcast: merge by ID, keeping newer timestamps
+              const existing = draft.boardState.placements[sceneId] || [];
+              const byId = new Map(existing.map((p) => [p.id, p]));
+              placements.forEach((placement) => {
+                if (placement && placement.id) {
+                  // For tokens currently being dragged, store the update for later comparison
+                  // instead of skipping it entirely (prevents popback on concurrent moves)
+                  if (draggedTokenIds.has(placement.id)) {
+                    const dragState = viewState.dragState;
+                    if (dragState?.deferredUpdates) {
+                      const incomingTime = placement._lastModified || 0;
+                      const existing = dragState.deferredUpdates.get(placement.id);
+                      // Keep only the newest deferred update for each token
+                      if (!existing || incomingTime > (existing._lastModified || 0)) {
+                        dragState.deferredUpdates.set(placement.id, placement);
+                      }
+                    }
+                    return;
+                  }
+                  const existingPlacement = byId.get(placement.id);
+                  if (existingPlacement) {
+                    // Compare timestamps - keep the newer one
+                    const existingTime = existingPlacement._lastModified || 0;
+                    const incomingTime = placement._lastModified || 0;
+                    if (incomingTime >= existingTime) {
+                      byId.set(placement.id, placement);
+                    }
+                    // else: keep existing (it's newer)
+                  } else {
+                    // New placement
                     byId.set(placement.id, placement);
                   }
-                  // else: keep existing (it's newer)
-                } else {
-                  // New placement
-                  byId.set(placement.id, placement);
                 }
-              }
-            });
-            draft.boardState.placements[sceneId] = Array.from(byId.values());
+              });
+              draft.boardState.placements[sceneId] = Array.from(byId.values());
+            }
           }
         });
       }
@@ -5835,23 +5873,27 @@ export function mountBoardInteractions(store, routes = {}) {
 
     if (removedCount > 0) {
       // Phase 3-B (commit 3): route token deletion through
-      // `placement.remove` ops when it is safe (delta-saves flag on,
-      // no non-placement dirty state pending, and the caller is a GM —
-      // the server ignores remove ops from non-GM callers to match the
-      // snapshot path's "players can't delete" policy). When any of
-      // those conditions fails we fall back to the legacy behavior of
-      // clearing dirty tracking and sending a full snapshot so the
-      // delete still reaches the server.
+      // `placement.remove` ops when delta-saves are on and the caller
+      // is a GM (the server ignores remove ops from non-GM callers).
+      //
+      // Always prefer the ops path regardless of non-placement dirty
+      // state (combat, pings, scene settings, etc.). The previous
+      // guard `!hasNonPlacementDirtyState()` caused deletions to fall
+      // back to the snapshot path during combat — whose Pusher
+      // full-state merge uses additive semantics and cannot represent
+      // removal, leaving other clients with a stale token until the
+      // 30-second safety-net poll. Non-placement dirty state remains
+      // in the tracking set and flushes on the next regular save cycle
+      // (typically within seconds during active gameplay).
       let removeOps = null;
-      if (USE_DELTA_SAVES && isGM && !hasNonPlacementDirtyState()) {
+      if (USE_DELTA_SAVES && isGM) {
         removeOps = removedIds.map((id) => ({
           type: 'placement.remove',
           sceneId: activeSceneId,
           placementId: id,
         }));
       } else {
-        // Clear dirty tracking to force a full state save for deletions
-        // Delta saves can't represent deletions, so we need to send full state
+        // Non-GM or delta saves disabled: fall back to full snapshot.
         clearDirtyTracking();
       }
       persistBoardStateSnapshot({}, removeOps);
