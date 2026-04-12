@@ -9195,7 +9195,7 @@ export function mountBoardInteractions(store, routes = {}) {
           }
         }
       }
-    }, { syncBoard: false });
+    });
 
     if (updated && didChange) {
       refreshTokenSettings();
@@ -13874,7 +13874,12 @@ export function mountBoardInteractions(store, routes = {}) {
       boardApi.emitStateUpdate();
     }
 
-    persistBoardStateSnapshot();
+    // Persistence is handled by updatePlacementById / updatePlacementsByIds
+    // with syncBoard: true, which generates placement.update ops and routes
+    // them through the delta-op save path. Those ops are buffered in
+    // pendingBoardStateOps and survive save coalescing, so condition changes
+    // are no longer lost when a subsequent save (e.g. a token move) aborts
+    // the in-flight request.
     return true;
   }
 
@@ -16238,7 +16243,7 @@ export function mountBoardInteractions(store, routes = {}) {
           delete target.condition;
         }
       }
-    }, { syncBoard: false });
+    });
 
     if (updated && didChange) {
       refreshTokenSettings();
@@ -16289,7 +16294,7 @@ export function mountBoardInteractions(store, routes = {}) {
           delete target.condition;
         }
       }
-    }, { syncBoard: false });
+    });
 
     if (updated && didChange) {
       refreshTokenSettings();
@@ -16368,7 +16373,7 @@ export function mountBoardInteractions(store, routes = {}) {
             delete target.condition;
           }
         }
-      }, { syncBoard: false });
+      });
 
       if (updated) {
         cleared.push({
@@ -16440,7 +16445,7 @@ export function mountBoardInteractions(store, routes = {}) {
           delete target.condition;
         }
       }
-    }, { syncBoard: false });
+    });
 
     if (updated && didChange) {
       refreshTokenSettings();
