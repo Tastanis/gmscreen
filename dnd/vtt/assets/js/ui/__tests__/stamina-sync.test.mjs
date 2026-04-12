@@ -442,7 +442,7 @@ test('restrictPlacementsToPlayerView preserves placements with HP regardless of 
     'All non-hidden placements should be visible regardless of HP');
 });
 
-test('restrictPlacementsToPlayerView strips hidden tokens but keeps visible ones with HP', () => {
+test('restrictPlacementsToPlayerView keeps hidden tokens alongside visible ones with HP', () => {
   const placements = {
     'scene-1': [
       { id: 'visible', name: 'Fighter', hp: { current: '40', max: '50' } },
@@ -451,9 +451,11 @@ test('restrictPlacementsToPlayerView strips hidden tokens but keeps visible ones
   };
 
   const filtered = restrictPlacementsToPlayerView(placements);
-  assert.equal(filtered['scene-1'].length, 1);
+  assert.equal(filtered['scene-1'].length, 2);
   assert.equal(filtered['scene-1'][0].id, 'visible');
   assert.equal(filtered['scene-1'][0].hp.current, '40');
+  assert.equal(filtered['scene-1'][1].id, 'hidden');
+  assert.equal(filtered['scene-1'][1].hidden, true);
 });
 
 // ============================================================
