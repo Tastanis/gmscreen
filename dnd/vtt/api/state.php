@@ -9,6 +9,29 @@ const VTT_PING_RETENTION_MS = 10000;
 const VTT_VERSION_FILE = 'board-state-version.json';
 
 /**
+ * Phase 3-C: Feature flag for broadcasting delta ops over Pusher instead
+ * of the full board state. When `true`, an ops-only POST (one whose
+ * payload carried `payload.ops` and no snapshot updates) emits a compact
+ * `{type: 'ops', version, ops, ...}` Pusher message; subscribers apply
+ * the ops locally. When `false`, the existing full-state broadcast path
+ * runs unconditionally — useful as an emergency kill-switch without
+ * having to revert the whole phase.
+ */
+const VTT_USE_DELTA_BROADCASTS = true;
+
+/**
+ * Phase 3-C: Pusher imposes a 10 KB hard limit on a single message
+ * payload. We budget a little headroom for the channel/event metadata
+ * Pusher itself adds and refuse to broadcast anything larger. When an
+ * ops broadcast exceeds this size we fall back to a compact
+ * `ops-overflow` marker that forces every subscriber to GET fresh
+ * state. This is a safety net — the client-side ops escape hatch
+ * (PHASE_3B_MAX_OPS_PER_FLUSH) should already prevent ops payloads
+ * from getting this large in practice.
+ */
+const VTT_BROADCAST_MAX_BYTES = 9500;
+
+/**
  * Resolve the on-disk path to the version file.
  */
 function vttBoardStateVersionPath(): string
@@ -604,39 +627,106 @@ if (!defined('VTT_STATE_API_INCLUDE_ONLY')) {
             $responseState = $lockResult['state'];
             $newVersion = $lockResult['version'];
 
-            // Broadcast update via Pusher (non-blocking, fails silently)
-            $broadcastData = [
-                'version' => $newVersion,
-                'timestamp' => time() * 1000, // milliseconds for JS
-                'authorId' => strtolower(trim($auth['user'] ?? '')),
-                'authorRole' => ($auth['isGM'] ?? false) ? 'gm' : 'player',
-                'changedFields' => $changedFields,
-            ];
+            // Broadcast update via Pusher (non-blocking, fails silently).
+            //
+            // Phase 3-C: When the POST was an ops-only payload (no snapshot
+            // updates), broadcast a compact `{type: 'ops', ...}` message
+            // carrying the same ops the server already applied. Subscribers
+            // mirror the server's `applyBoardStateOp` and patch their own
+            // state in place. This drops the broadcast payload from
+            // hundreds of KB to a few hundred bytes for typical token
+            // moves and template/drawing edits.
+            //
+            // Mixed payloads (ops alongside snapshot updates) take the
+            // existing full-state path so the broadcast still carries
+            // every changed entity — the ops will be reapplied via the
+            // snapshot path on receivers, which is safe but redundant;
+            // we accept the redundancy because mixed payloads are rare
+            // and we don't want to maintain two parallel broadcast
+            // shapes for the same save.
+            //
+            // The full-state path is also the snapshot fallback for any
+            // op the client could not express as a delta (erase/clear,
+            // bulk fog, etc.) and is preserved unchanged.
+            $authorId = strtolower(trim($auth['user'] ?? ''));
+            $authorRole = ($auth['isGM'] ?? false) ? 'gm' : 'player';
+            $broadcastTimestampMs = time() * 1000;
 
-            // Include delta updates for efficient client-side merging
-            if (isset($updates['placements'])) {
-                $broadcastData['placements'] = $updates['placements'];
-            }
-            if (isset($updates['templates'])) {
-                $broadcastData['templates'] = $updates['templates'];
-            }
-            if (isset($updates['drawings'])) {
-                $broadcastData['drawings'] = $updates['drawings'];
-            }
-            if (isset($updates['pings'])) {
-                $broadcastData['pings'] = $updates['pings'];
-            }
-            if (isset($updates['sceneState'])) {
-                $broadcastData['sceneState'] = $updates['sceneState'];
-            }
-            if (isset($updates['activeSceneId'])) {
-                $broadcastData['activeSceneId'] = $updates['activeSceneId'];
-            }
-            if (isset($updates['mapUrl'])) {
-                $broadcastData['mapUrl'] = $updates['mapUrl'];
-            }
-            if (isset($updates['overlay'])) {
-                $broadcastData['overlay'] = $updates['overlay'];
+            $opsOnlyPayload = !empty($ops) && empty($updates);
+            $useOpsBroadcast = $opsOnlyPayload && VTT_USE_DELTA_BROADCASTS;
+
+            if ($useOpsBroadcast) {
+                $broadcastData = [
+                    'type' => 'ops',
+                    'version' => $newVersion,
+                    'timestamp' => $broadcastTimestampMs,
+                    'authorId' => $authorId,
+                    'authorRole' => $authorRole,
+                    'ops' => $ops,
+                ];
+
+                // Pusher's 10 KB per-message limit is a hard cap. If for
+                // any reason the ops list grew large enough to bust it
+                // (the client-side ops escape hatch should normally
+                // prevent this), fall back to a compact marker that
+                // forces every receiver to issue a fresh GET. We log
+                // because exceeding the cap is a signal that something
+                // upstream is sending too much in one save.
+                $encoded = json_encode($broadcastData);
+                if ($encoded === false || strlen($encoded) > VTT_BROADCAST_MAX_BYTES) {
+                    error_log(sprintf(
+                        '[VTT] Phase 3-C ops broadcast exceeded %d bytes (was %d, %d ops); falling back to ops-overflow marker',
+                        VTT_BROADCAST_MAX_BYTES,
+                        $encoded === false ? -1 : strlen($encoded),
+                        count($ops)
+                    ));
+                    $broadcastData = [
+                        'type' => 'ops-overflow',
+                        'version' => $newVersion,
+                        'timestamp' => $broadcastTimestampMs,
+                        'authorId' => $authorId,
+                        'authorRole' => $authorRole,
+                    ];
+                }
+            } else {
+                $broadcastData = [
+                    // Tag full-state broadcasts so the client subscriber
+                    // can dispatch on `type` even when the field is
+                    // missing on older messages. Older clients ignore
+                    // unknown fields, so this is non-breaking.
+                    'type' => 'full',
+                    'version' => $newVersion,
+                    'timestamp' => $broadcastTimestampMs, // milliseconds for JS
+                    'authorId' => $authorId,
+                    'authorRole' => $authorRole,
+                    'changedFields' => $changedFields,
+                ];
+
+                // Include delta updates for efficient client-side merging
+                if (isset($updates['placements'])) {
+                    $broadcastData['placements'] = $updates['placements'];
+                }
+                if (isset($updates['templates'])) {
+                    $broadcastData['templates'] = $updates['templates'];
+                }
+                if (isset($updates['drawings'])) {
+                    $broadcastData['drawings'] = $updates['drawings'];
+                }
+                if (isset($updates['pings'])) {
+                    $broadcastData['pings'] = $updates['pings'];
+                }
+                if (isset($updates['sceneState'])) {
+                    $broadcastData['sceneState'] = $updates['sceneState'];
+                }
+                if (isset($updates['activeSceneId'])) {
+                    $broadcastData['activeSceneId'] = $updates['activeSceneId'];
+                }
+                if (isset($updates['mapUrl'])) {
+                    $broadcastData['mapUrl'] = $updates['mapUrl'];
+                }
+                if (isset($updates['overlay'])) {
+                    $broadcastData['overlay'] = $updates['overlay'];
+                }
             }
 
             // Send the response to the client first so the sender is not

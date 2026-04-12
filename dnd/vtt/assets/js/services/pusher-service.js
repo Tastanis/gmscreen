@@ -222,6 +222,19 @@ function handleStateChange(states) {
 
 /**
  * Handle incoming state update from Pusher.
+ *
+ * Phase 3-C: Inspect `data.type` and dispatch:
+ *   - `'ops'`           — compact delta-op broadcast. Pass `type` and
+ *                          `ops` straight through to the consumer; do
+ *                          not unpack the (absent) full-state fields.
+ *   - `'ops-overflow'`  — the server tried to broadcast ops but the
+ *                          payload exceeded the 10 KB Pusher limit.
+ *                          Pass through so the consumer can trigger a
+ *                          full GET resync.
+ *   - `'full'` / absent — the legacy full-state broadcast shape. Unpack
+ *                          placements/templates/drawings/etc. exactly
+ *                          as before. Older messages without a `type`
+ *                          field still flow through this branch.
  */
 function handleStateUpdated(data) {
   if (!data || typeof data !== 'object') {
@@ -230,11 +243,13 @@ function handleStateUpdated(data) {
   }
 
   const {
+    type,
     version,
     timestamp,
     authorId,
     authorRole,
     changedFields,
+    ops,
     placements,
     templates,
     drawings,
@@ -245,13 +260,18 @@ function handleStateUpdated(data) {
     overlay,
   } = data;
 
-  // Version check - skip if we've already applied a newer version
+  // Version check - skip if we've already applied a newer version.
+  // Applies uniformly to ops, ops-overflow, and full-state broadcasts.
   if (typeof version === 'number' && version <= lastAppliedVersion) {
     console.log('[VTT Pusher] Skipping stale update, version:', version, 'current:', lastAppliedVersion);
     return;
   }
 
-  // Self-update check - skip if this update was authored by the current user
+  // Self-update check - skip if this update was authored by the current
+  // user. The same rule applies to ops broadcasts: the author already
+  // got the new state in their save response and re-applying their own
+  // ops is redundant. The `_socketId` exclusion at the Pusher layer is
+  // the first line of defense; this is the second.
   const currentUserId = normalizeUserId(getCurrentUserIdFn());
   const updateAuthorId = normalizeUserId(authorId);
 
@@ -264,43 +284,72 @@ function handleStateUpdated(data) {
     return;
   }
 
-  console.log('[VTT Pusher] Applying update, version:', version, 'author:', authorId);
+  console.log('[VTT Pusher] Applying update, version:', version, 'author:', authorId, 'type:', type || 'full');
 
-  // Build delta update object
-  const delta = {
-    version,
-    timestamp,
-    authorId,
-    authorRole,
-    changedFields: changedFields || [],
-  };
+  // Build the delta object handed to the consumer. The shape is
+  // discriminated by `type` so the consumer can decide whether to run
+  // the op-applier or the full-state merge.
+  let delta;
+  if (type === 'ops') {
+    delta = {
+      type: 'ops',
+      version,
+      timestamp,
+      authorId,
+      authorRole,
+      ops: Array.isArray(ops) ? ops : [],
+    };
+  } else if (type === 'ops-overflow') {
+    delta = {
+      type: 'ops-overflow',
+      version,
+      timestamp,
+      authorId,
+      authorRole,
+    };
+  } else {
+    // 'full' or undefined — legacy full-state broadcast.
+    delta = {
+      type: 'full',
+      version,
+      timestamp,
+      authorId,
+      authorRole,
+      changedFields: changedFields || [],
+    };
 
-  if (placements !== undefined) {
-    delta.placements = placements;
-  }
-  if (templates !== undefined) {
-    delta.templates = templates;
-  }
-  if (drawings !== undefined) {
-    delta.drawings = drawings;
-  }
-  if (pings !== undefined) {
-    delta.pings = pings;
-  }
-  if (sceneState !== undefined) {
-    delta.sceneState = sceneState;
-  }
-  if (activeSceneId !== undefined) {
-    delta.activeSceneId = activeSceneId;
-  }
-  if (mapUrl !== undefined) {
-    delta.mapUrl = mapUrl;
-  }
-  if (overlay !== undefined) {
-    delta.overlay = overlay;
+    if (placements !== undefined) {
+      delta.placements = placements;
+    }
+    if (templates !== undefined) {
+      delta.templates = templates;
+    }
+    if (drawings !== undefined) {
+      delta.drawings = drawings;
+    }
+    if (pings !== undefined) {
+      delta.pings = pings;
+    }
+    if (sceneState !== undefined) {
+      delta.sceneState = sceneState;
+    }
+    if (activeSceneId !== undefined) {
+      delta.activeSceneId = activeSceneId;
+    }
+    if (mapUrl !== undefined) {
+      delta.mapUrl = mapUrl;
+    }
+    if (overlay !== undefined) {
+      delta.overlay = overlay;
+    }
   }
 
-  // Update last applied version
+  // Update last applied version. We bump even before the consumer
+  // applies because the consumer's own staleness/gap rules use the
+  // store's `currentBoardStateVersion` (independent of this counter)
+  // and a resync will reconcile both. Bumping here also lets the
+  // pusher-service drop any *strictly older* follow-up broadcasts
+  // that arrive while the consumer is still mid-apply.
   if (typeof version === 'number') {
     lastAppliedVersion = version;
   }
