@@ -19,6 +19,7 @@ import {
   persistCombatState,
 } from '../services/board-state-service.js';
 import { initializePusher, getSocketId, isPusherConnected } from '../services/pusher-service.js';
+import { applyBoardStateOpsLocally } from '../services/board-state-op-applier.js';
 import {
   PLAYER_VISIBLE_TOKEN_FOLDER,
   normalizeMonsterSnapshot,
@@ -403,6 +404,16 @@ export function createBoardStatePoller({
           // deliver fresh state.
           poll();
         }
+      },
+      // Phase 3-C: External callers (the Pusher subscriber, specifically)
+      // can force a one-shot poll to recover from a version-gap detected
+      // on an ops broadcast or from an `ops-overflow` marker. The
+      // existing internal staleness/grace-period guards inside `poll()`
+      // still apply, so calling this during a pending save is a safe
+      // no-op — see the `pendingResyncAfterSave` plumbing in
+      // board-interactions for the deferred case.
+      forceImmediatePoll() {
+        poll();
       },
     };
   }
@@ -1598,6 +1609,13 @@ export function mountBoardInteractions(store, routes = {}) {
   let lastPersistedBoardStateHash = null;
   let pendingBoardStateSave = null;
   let pendingCombatStateSave = null;
+  // Phase 3-C: When the Pusher ops subscriber detects a version gap or
+  // overflow marker while a save is in flight, it cannot immediately
+  // call `forceImmediatePoll()` because the poller's own
+  // pending-save guard would short-circuit. Instead, it sets this
+  // flag; the save-completion handler then triggers a fresh poll once
+  // the in-flight save resolves.
+  let pendingResyncAfterSave = false;
   // Grace period after save completes to prevent poller from overwriting with stale state
   // This handles the window between save completion and server state propagation
   let lastBoardStateSaveCompletedAt = 0;
@@ -2580,6 +2598,18 @@ export function mountBoardInteractions(store, routes = {}) {
           // Clear dirty tracking after successful save
           clearDirtyTracking();
 
+          // Phase 3-C: If a Pusher ops broadcast was deferred during
+          // this save (because of a version gap or `ops-overflow`
+          // marker), the only way to recover is a fresh GET. Fire one
+          // now that the save is fully resolved — the save response
+          // already updated `currentBoardStateVersion`, so the poll's
+          // own ETag will reflect the post-save state and any further
+          // server progress will come back as a 200.
+          if (pendingResyncAfterSave) {
+            pendingResyncAfterSave = false;
+            triggerBoardStateResync('post-save-flush');
+          }
+
           // Update version from server response.
           // The save response is the third ingestion path for state updates
           // (alongside Pusher broadcasts and the HTTP poller). Guard it with
@@ -3097,14 +3127,174 @@ export function mountBoardInteractions(store, routes = {}) {
   }
 
   /**
+   * Phase 3-C: Force a fresh GET from `api/state.php` so the client
+   * can recover from a missed Pusher ops broadcast (version gap or
+   * `ops-overflow` marker). The poller's own `forceImmediatePoll`
+   * still respects the in-flight save guard, so during a pending save
+   * we set `pendingResyncAfterSave` and the save-completion handler
+   * fires the poll once the save resolves.
+   *
+   * This is the *only* recovery path for ops broadcasts. Unlike
+   * full-state broadcasts, which are self-healing because they carry
+   * the entire scene, an ops broadcast is incremental: missing one
+   * leaves the client silently behind the server. The 30s safety-net
+   * poll would eventually catch it, but a user-visible 30s drift on a
+   * token move is exactly the lag this phase is supposed to kill.
+   */
+  function triggerBoardStateResync(reason) {
+    const hasPendingSave = Boolean(pendingBoardStateSave?.promise);
+    if (hasPendingSave) {
+      console.log('[VTT Pusher] Resync deferred until save completes, reason:', reason);
+      pendingResyncAfterSave = true;
+      return;
+    }
+    if (
+      boardStatePollerHandle &&
+      typeof boardStatePollerHandle.forceImmediatePoll === 'function'
+    ) {
+      console.log('[VTT Pusher] Forcing immediate poll, reason:', reason);
+      boardStatePollerHandle.forceImmediatePoll();
+    } else {
+      console.warn(
+        '[VTT Pusher] Resync requested but poller not available, reason:',
+        reason
+      );
+    }
+  }
+
+  /**
    * Handle state updates received from Pusher.
    * Applies delta updates with version checking.
+   *
+   * Phase 3-C: Branches on `delta.type`:
+   *   - `'ops'`           — apply each typed op via the local op applier.
+   *                          Strict `+1` version-gap detection: any
+   *                          incoming version that is not exactly
+   *                          `currentBoardStateVersion + 1` triggers a
+   *                          full GET resync instead of applying.
+   *   - `'ops-overflow'`  — server tried to broadcast ops but exceeded
+   *                          the 10 KB Pusher cap. Drop the payload and
+   *                          force a full resync.
+   *   - `'full'` / absent — legacy full-state broadcast. Existing
+   *                          merge-by-timestamp logic runs unchanged.
    */
   function handlePusherStateUpdate(delta) {
     if (!delta || typeof delta !== 'object') {
       return;
     }
 
+    // ---- Phase 3-C: ops-overflow branch -----------------------------
+    // The server fell back to a marker because the ops list would have
+    // busted Pusher's 10 KB cap. We have no payload to apply locally;
+    // the only recovery is a fresh GET. Note that we deliberately do
+    // NOT bump `currentBoardStateVersion` here — the resync will set it
+    // from the GET response, and bumping prematurely would cause any
+    // genuinely-newer ops broadcast that beats the resync to be
+    // misclassified as a small gap (current+1) and applied against the
+    // wrong base state.
+    if (delta.type === 'ops-overflow') {
+      console.warn(
+        '[VTT Pusher] ops-overflow marker received, version:',
+        delta.version,
+        '- triggering resync'
+      );
+      triggerBoardStateResync('ops-overflow');
+      return;
+    }
+
+    // ---- Phase 3-C: ops branch --------------------------------------
+    if (delta.type === 'ops') {
+      const incomingVersion = delta.version;
+
+      // Stale: drop anything we've already moved past.
+      if (
+        typeof incomingVersion !== 'number' ||
+        !Number.isFinite(incomingVersion) ||
+        incomingVersion <= currentBoardStateVersion
+      ) {
+        console.log(
+          '[VTT Pusher] Skipping stale ops broadcast, version:',
+          incomingVersion,
+          'current:',
+          currentBoardStateVersion
+        );
+        return;
+      }
+
+      // Strict +1 gap detection. The POST handler bumps the version
+      // exactly once per save (one save = one version bump regardless
+      // of how many ops were in the payload), so two consecutive
+      // saves produce versions N and N+1. Any larger gap means we
+      // missed a broadcast and our local state is now silently out
+      // of sync with the server. Recover via a full GET — applying
+      // the ops on top of the wrong base state would compound the
+      // drift.
+      if (incomingVersion !== currentBoardStateVersion + 1) {
+        console.warn(
+          '[VTT Pusher] ops version gap detected (current:',
+          currentBoardStateVersion,
+          'incoming:',
+          incomingVersion,
+          ') - triggering resync'
+        );
+        triggerBoardStateResync('version-gap');
+        return;
+      }
+
+      // If a save is in flight, the save response is about to bump
+      // currentBoardStateVersion to the post-save value, and any
+      // strict-+1 math we do here against the pre-save version is
+      // wrong. Defer to a post-save resync — the GET will reconcile
+      // both this broadcast's ops and our own save's effects.
+      const hasPendingSaveOps = Boolean(pendingBoardStateSave?.promise);
+      if (hasPendingSaveOps) {
+        console.log('[VTT Pusher] Deferring ops update due to pending save');
+        triggerBoardStateResync('ops-during-save');
+        return;
+      }
+
+      const ops = Array.isArray(delta.ops) ? delta.ops : [];
+      let appliedCount = 0;
+      try {
+        boardApi.updateState?.((draft) => {
+          if (!draft.boardState) {
+            draft.boardState = {};
+          }
+          appliedCount = applyBoardStateOpsLocally(draft.boardState, ops);
+          draft.boardState._version = incomingVersion;
+        });
+      } catch (error) {
+        console.error(
+          '[VTT Pusher] Failed to apply ops locally, falling back to resync:',
+          error
+        );
+        triggerBoardStateResync('apply-error');
+        return;
+      }
+
+      currentBoardStateVersion = incomingVersion;
+      if (pusherInterface?.setLastAppliedVersion) {
+        pusherInterface.setLastAppliedVersion(incomingVersion);
+      }
+
+      const updatedStateAfterOps = boardApi.getState?.();
+      if (updatedStateAfterOps) {
+        applyStateToBoard(updatedStateAfterOps);
+        applyCombatStateFromBoardState(updatedStateAfterOps);
+      }
+
+      console.log(
+        '[VTT Pusher] Applied',
+        appliedCount,
+        'of',
+        ops.length,
+        'ops, version:',
+        incomingVersion
+      );
+      return;
+    }
+
+    // ---- Legacy full-state path -------------------------------------
     // ALWAYS update version tracking first, regardless of other state
     // This prevents the poller from applying stale data later
     if (shouldApplyIncomingVersion(delta.version, currentBoardStateVersion)) {
