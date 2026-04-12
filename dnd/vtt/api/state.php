@@ -188,8 +188,45 @@ if (!defined('VTT_STATE_API_INCLUDE_ONLY')) {
                 exit;
             }
 
-            $config = getVttBootstrapConfig();
+            // Phase 3-D: APCu memoization of the loaded + filtered state.
+            // After 3-A the safety-net poll is already near-free via 304,
+            // but there are still cases that must hit the full load path:
+            // a new player joining mid-session, several clients reconnecting
+            // at once, and the 3-C forceImmediatePoll() resync after a
+            // version gap. All three scenarios produce a burst of GETs at
+            // the same version. Caching the serialized response body keyed
+            // by (version, user) lets every GET after the first in a burst
+            // skip reading scenes.json/tokens.json/board-state.json from
+            // disk and re-running player-view filtering.
+            //
+            // The cache key includes the user because
+            // filterPlacementsForPlayerView() hides GM-only entities for
+            // non-GMs, so a single version produces two distinct response
+            // bodies depending on role.
+            //
+            // No explicit POST invalidation is needed. Every successful
+            // POST bumps `_version` monotonically inside the board-state
+            // lock, so old keys become unreachable the instant the next
+            // GET reads the new version. Orphaned entries at stale
+            // versions expire naturally via the short TTL below, which is
+            // the backstop for the narrow window between disk commit and
+            // cache-key rotation.
             $auth = getVttUserContext();
+            $apcuEnabled = function_exists('apcu_enabled') && apcu_enabled();
+            $cacheKey = null;
+            if ($apcuEnabled) {
+                $cacheUser = strtolower(trim((string) ($auth['user'] ?? '')));
+                $cacheKey = sprintf('vtt:state:v%d:%s', $currentVersion, $cacheUser);
+                $cachedBody = apcu_fetch($cacheKey, $cacheHit);
+                if ($cacheHit && is_string($cachedBody) && $cachedBody !== '') {
+                    header('ETag: ' . $currentEtag);
+                    header('Cache-Control: no-store');
+                    echo $cachedBody;
+                    exit;
+                }
+            }
+
+            $config = getVttBootstrapConfig();
             if (!($auth['isGM'] ?? false)) {
                 $config['boardState'] = filterPlacementsForPlayerView($config['boardState'] ?? []);
             }
@@ -204,9 +241,7 @@ if (!defined('VTT_STATE_API_INCLUDE_ONLY')) {
             // Include Pusher config for client-side initialization
             $pusherConfig = getVttPusherConfig();
 
-            header('ETag: ' . $currentEtag);
-            header('Cache-Control: no-store');
-            respondJson(200, [
+            $responseBody = json_encode([
                 'success' => true,
                 'data' => [
                     'scenes' => $config['scenes'],
@@ -215,6 +250,26 @@ if (!defined('VTT_STATE_API_INCLUDE_ONLY')) {
                     'pusher' => $pusherConfig,
                 ],
             ]);
+
+            // Phase 3-D: store the serialized body so cache hits can echo
+            // it directly without a second json_encode pass. TTL is short
+            // (2 seconds) because the version-keyed key rotation already
+            // handles invalidation; the TTL just garbage-collects orphaned
+            // entries at stale versions.
+            if ($apcuEnabled && $cacheKey !== null && is_string($responseBody)) {
+                apcu_store($cacheKey, $responseBody, 2);
+            }
+
+            header('ETag: ' . $currentEtag);
+            header('Cache-Control: no-store');
+            http_response_code(200);
+            echo is_string($responseBody)
+                ? $responseBody
+                : json_encode([
+                    'success' => false,
+                    'error' => 'Failed to encode board state response.',
+                ]);
+            exit;
         }
 
         if ($method === 'POST') {
