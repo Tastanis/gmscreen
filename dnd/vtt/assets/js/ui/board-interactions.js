@@ -10816,12 +10816,14 @@ export function mountBoardInteractions(store, routes = {}) {
     const mutatedIds = [];
     boardApi.updateState?.((draft) => {
       const scenePlacements = ensureScenePlacementDraft(draft, activeSceneId);
+      const nowMs = Date.now();
       scenePlacements.forEach((placement) => {
         if (!placement || typeof placement !== 'object') {
           return;
         }
         if (placement.triggeredActionReady !== true) {
           placement.triggeredActionReady = true;
+          placement._lastModified = nowMs;
           mutated = true;
           if (placement.id) {
             mutatedIds.push(placement.id);
@@ -10831,6 +10833,9 @@ export function mountBoardInteractions(store, routes = {}) {
     });
 
     if (mutated) {
+      for (const id of mutatedIds) {
+        markPlacementDirty(activeSceneId, id);
+      }
       // Phase 3-B (commit 3): every reset here is the same single-
       // field flip (`triggeredActionReady: true`) across many
       // placements. Emit one `placement.update` op per mutated id
@@ -12894,6 +12899,7 @@ export function mountBoardInteractions(store, routes = {}) {
       const current = target.triggeredActionReady !== false;
       nextReady = !current;
       target.triggeredActionReady = nextReady;
+      target._lastModified = Date.now();
       if (gmUser) {
         markPlacementAsGmAuthored(target, { isGm: gmUser });
       }
@@ -12903,6 +12909,8 @@ export function mountBoardInteractions(store, routes = {}) {
     if (!updated) {
       return false;
     }
+
+    markPlacementDirty(activeSceneId, placementId);
 
     // Phase 3-B (commit 3): the only field that changed here is
     // `triggeredActionReady`, so we can hand-build a `placement.update`
