@@ -755,6 +755,13 @@ if (!defined('VTT_STATE_API_INCLUDE_ONLY')) {
                     'authorId' => $authorId,
                     'authorRole' => $authorRole,
                     'changedFields' => $changedFields,
+                    // When false, the broadcast carries the *complete*
+                    // placement/template/drawing arrays for every
+                    // included scene. The client can safely replace its
+                    // local scene data (removing entries absent from the
+                    // broadcast). When true the arrays are sparse deltas
+                    // and should be merged additively.
+                    'deltaOnly' => $isDeltaOnly,
                 ];
 
                 // Include delta updates for efficient client-side merging
