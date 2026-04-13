@@ -1757,7 +1757,12 @@ export function mountBoardInteractions(store, routes = {}) {
         changed = true;
       }
       if (changed) {
-        patch[key] = afterVal;
+        // Use null (not undefined) for deleted properties so the
+        // value survives JSON.stringify and reaches the server/other
+        // clients. Without this, removing the last condition from a
+        // token produces an undefined value that is silently dropped
+        // during serialization, so the deletion never syncs.
+        patch[key] = key in after ? afterVal : null;
       }
     }
     return Object.keys(patch).length > 0 ? patch : null;

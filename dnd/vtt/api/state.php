@@ -1093,7 +1093,15 @@ function applyBoardStateOp(array $state, array $op, array $context = []): array
                 if ($key === 'id') {
                     continue;
                 }
-                $entry[$key] = $value;
+                // A null value signals that the property was deleted on
+                // the source client (e.g. the last condition removed from
+                // a token). Remove the key from the entry so downstream
+                // code sees the property as absent rather than null.
+                if ($value === null) {
+                    unset($entry[$key]);
+                } else {
+                    $entry[$key] = $value;
+                }
             }
             $entry['_lastModified'] = $nowMs;
             $state['placements'][$sceneId][$idx] = $entry;

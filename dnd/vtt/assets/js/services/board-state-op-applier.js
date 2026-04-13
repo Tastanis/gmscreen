@@ -126,10 +126,16 @@ export function applyBoardStateOpLocally(boardState, op) {
       const entry = list[i];
       if (!entry || typeof entry !== 'object') continue;
       if (entryId(entry) !== placementId) continue;
-      // Shallow merge — never overwrite the id.
+      // Shallow merge — never overwrite the id. A null value signals
+      // that the property was deleted on the source client (e.g. the
+      // last condition was removed from a token), so delete locally.
       for (const key of Object.keys(op.patch)) {
         if (key === 'id') continue;
-        entry[key] = op.patch[key];
+        if (op.patch[key] === null) {
+          delete entry[key];
+        } else {
+          entry[key] = op.patch[key];
+        }
       }
       entry._lastModified = Date.now();
       return true;
