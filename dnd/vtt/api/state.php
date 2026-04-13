@@ -789,6 +789,17 @@ if (!defined('VTT_STATE_API_INCLUDE_ONLY')) {
                 if (isset($updates['overlay'])) {
                     $broadcastData['overlay'] = $updates['overlay'];
                 }
+                // Propagate the erase/clear full-replace marker to receivers.
+                // The server applies `_replaceDrawings` by replacing each
+                // listed scene's drawing array wholesale; without this hint
+                // in the broadcast, receivers would additively merge the
+                // (often empty) `drawings` payload and never drop the
+                // drawings the author just removed. Only emitted when the
+                // save actually carried `_replaceDrawings`, so normal
+                // additive draw-add broadcasts are unchanged.
+                if (!empty($replaceDrawingScenes)) {
+                    $broadcastData['replaceDrawings'] = array_values($replaceDrawingScenes);
+                }
             }
 
             // Send the response to the client first so the sender is not
