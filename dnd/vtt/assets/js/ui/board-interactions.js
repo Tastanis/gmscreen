@@ -3418,26 +3418,43 @@ export function mountBoardInteractions(store, routes = {}) {
         if (!draft.boardState.drawings) {
           draft.boardState.drawings = {};
         }
+        // Scenes flagged for full replacement ride the snapshot
+        // `_replaceDrawings` mechanism on save (erase/clear/undo). The
+        // broadcast forwards that list via `delta.replaceDrawings` so we
+        // know to drop drawings absent from the incoming list rather than
+        // additively merging — without this, a clear from one client
+        // would never remove drawings on other clients.
+        const replaceScenes = Array.isArray(delta.replaceDrawings)
+          ? new Set(delta.replaceDrawings)
+          : null;
         Object.entries(delta.drawings).forEach(([sceneId, drawings]) => {
-          if (Array.isArray(drawings)) {
-            const existing = draft.boardState.drawings[sceneId] || [];
-            const byId = new Map(existing.map((d) => [d.id, d]));
-            drawings.forEach((drawing) => {
-              if (drawing && drawing.id) {
-                const existingDrawing = byId.get(drawing.id);
-                if (existingDrawing) {
-                  const existingTime = existingDrawing._lastModified || 0;
-                  const incomingTime = drawing._lastModified || 0;
-                  if (incomingTime >= existingTime) {
-                    byId.set(drawing.id, drawing);
-                  }
-                } else {
+          if (!Array.isArray(drawings)) {
+            return;
+          }
+          if (replaceScenes && replaceScenes.has(sceneId)) {
+            // Trust the broadcast as authoritative for this scene.
+            // Clone entries so the store does not share references with
+            // the incoming Pusher payload.
+            draft.boardState.drawings[sceneId] = drawings.map((drawing) => ({ ...drawing }));
+            return;
+          }
+          const existing = draft.boardState.drawings[sceneId] || [];
+          const byId = new Map(existing.map((d) => [d.id, d]));
+          drawings.forEach((drawing) => {
+            if (drawing && drawing.id) {
+              const existingDrawing = byId.get(drawing.id);
+              if (existingDrawing) {
+                const existingTime = existingDrawing._lastModified || 0;
+                const incomingTime = drawing._lastModified || 0;
+                if (incomingTime >= existingTime) {
                   byId.set(drawing.id, drawing);
                 }
+              } else {
+                byId.set(drawing.id, drawing);
               }
-            });
-            draft.boardState.drawings[sceneId] = Array.from(byId.values());
-          }
+            }
+          });
+          draft.boardState.drawings[sceneId] = Array.from(byId.values());
         });
       }
 

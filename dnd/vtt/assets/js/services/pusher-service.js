@@ -253,6 +253,7 @@ function handleStateUpdated(data) {
     placements,
     templates,
     drawings,
+    replaceDrawings,
     pings,
     sceneState,
     activeSceneId,
@@ -326,6 +327,13 @@ function handleStateUpdated(data) {
     }
     if (drawings !== undefined) {
       delta.drawings = drawings;
+    }
+    // List of scene IDs whose drawings array should be fully replaced
+    // (erase/clear/undo). Forwarded so the consumer's drawings merge can
+    // drop entries absent from the broadcast for those scenes; normal
+    // additive draw broadcasts omit this field.
+    if (Array.isArray(replaceDrawings) && replaceDrawings.length > 0) {
+      delta.replaceDrawings = replaceDrawings;
     }
     if (pings !== undefined) {
       delta.pings = pings;
