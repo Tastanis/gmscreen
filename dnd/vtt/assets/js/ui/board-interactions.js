@@ -32,6 +32,7 @@ import { createCombatTimerService } from '../services/combat-timer-service.js';
 import { showCombatTimerReport } from './combat-timer-report.js';
 import { mountFogOfWar, renderFog, renderFogSelection, isFogSelectActive, isPositionFogged, createFogChecker } from './fog-of-war.js';
 import { createConditionTooltips } from './condition-tooltips.js';
+import { createMapPings } from './map-pings.js';
 import {
   broadcastStaminaSync,
   subscribeToStaminaSync,
@@ -275,10 +276,6 @@ const TURN_FLASH_TONE_CLASSES = {
   yellow: 'is-turn-flash-yellow',
   red: 'is-turn-flash-red',
 };
-const MAP_PING_ANIMATION_DURATION_MS = 900;
-const MAP_PING_RETENTION_MS = 10000;
-const MAP_PING_HISTORY_LIMIT = 8;
-const MAP_PING_PROCESSED_RETENTION_MS = 60000;
 const SHEET_SYNC_DEBOUNCE_MS = 400;
 const MALICE_VICTORIES_ACTION = 'fetch-victories';
 
@@ -832,7 +829,19 @@ export function mountBoardInteractions(store, routes = {}) {
   let overlayEditorActive = false;
   const overlayTool = createOverlayTool(routes?.uploads);
   const templateTool = createTemplateTool();
-  const processedPings = new Map();
+  const mapPings = createMapPings({
+    getBoardElement: () => board,
+    getPingLayer: () => pingLayer,
+    getViewState: () => viewState,
+    applyTransform: () => applyTransform(),
+    getBoardState: () => boardApi.getState?.() ?? {},
+    updateBoardState: (mutator) => boardApi.updateState?.(mutator),
+    getCurrentUserId: () => getCurrentUserId(),
+    normalizeProfileId: (value) => normalizeProfileId(value),
+    getLocalMapPoint: (event) => getLocalMapPoint(event),
+    markPingsDirty: () => markPingsDirty(),
+    persistBoardStateSnapshot: () => persistBoardStateSnapshot(),
+  });
   const TOKEN_DRAG_TYPE = 'application/x-vtt-token-template';
   const TOKEN_DRAG_FALLBACK_TYPE = 'text/plain';
   const MAP_LOAD_WATCHDOG_DELAY_MS = 5000;
@@ -2168,7 +2177,7 @@ export function mountBoardInteractions(store, routes = {}) {
 
       // Include pings only if they changed
       if (dirtyPings) {
-        snapshot.pings = sanitizePingsForPersistence(boardState.pings);
+        snapshot.pings = mapPings.sanitizePingsForPersistence(boardState.pings);
       }
 
       // Include scene state only for dirty scenes
@@ -2210,7 +2219,7 @@ export function mountBoardInteractions(store, routes = {}) {
     );
     snapshot.templates = sanitizeTemplatesForPersistence(boardState.templates);
     snapshot.drawings = sanitizeDrawingsForPersistence(boardState.drawings);
-    snapshot.pings = sanitizePingsForPersistence(boardState.pings);
+    snapshot.pings = mapPings.sanitizePingsForPersistence(boardState.pings);
 
     if (isGm) {
       snapshot.mapUrl = boardState.mapUrl ?? null;
@@ -2312,39 +2321,6 @@ export function mountBoardInteractions(store, routes = {}) {
   function sanitizeDrawingsForPersistence(source) {
     const clone = cloneBoardSection(source);
     return clone && typeof clone === 'object' ? clone : {};
-  }
-
-  function sanitizePingsForPersistence(source) {
-    const entries = Array.isArray(source) ? source : [];
-    const retentionThreshold = Date.now() - MAP_PING_RETENTION_MS;
-    const byId = new Map();
-
-    entries.forEach((entry) => {
-      const normalized = normalizeIncomingPing(entry);
-      if (!normalized) {
-        return;
-      }
-      if (normalized.createdAt < retentionThreshold) {
-        return;
-      }
-      const previous = byId.get(normalized.id);
-      if (!previous || normalized.createdAt >= previous.createdAt) {
-        byId.set(normalized.id, normalized);
-      }
-    });
-
-    if (byId.size === 0) {
-      return [];
-    }
-
-    const sorted = Array.from(byId.values()).sort(
-      (a, b) => (a.createdAt ?? 0) - (b.createdAt ?? 0)
-    );
-    if (sorted.length > MAP_PING_HISTORY_LIMIT) {
-      return sorted.slice(sorted.length - MAP_PING_HISTORY_LIMIT);
-    }
-
-    return sorted;
   }
 
   function isPlacementHiddenForPersistence(placement) {
@@ -2928,17 +2904,6 @@ export function mountBoardInteractions(store, routes = {}) {
     return normalizeOverlayDraft(section);
   }
 
-  function clonePingEntries(entries) {
-    if (!Array.isArray(entries)) {
-      return [];
-    }
-    try {
-      return JSON.parse(JSON.stringify(entries));
-    } catch (error) {
-      return [];
-    }
-  }
-
   function hashBoardStateSnapshot(snapshot) {
     if (!snapshot || typeof snapshot !== 'object') {
       return null;
@@ -2953,7 +2918,7 @@ export function mountBoardInteractions(store, routes = {}) {
       templates: cloneBoardSection(snapshot.templates),
       drawings: cloneBoardSection(snapshot.drawings),
       overlay: cloneOverlayState(snapshot.overlay),
-      pings: clonePingEntries(snapshot.pings),
+      pings: mapPings.clonePingEntries(snapshot.pings),
     };
 
     return safeStableStringify(base);
@@ -3125,7 +3090,7 @@ export function mountBoardInteractions(store, routes = {}) {
     }
 
     if (event.altKey && (event.button === 0 || event.button === 2)) {
-      const handled = handleMapPing(event, { focus: event.button === 2 });
+      const handled = mapPings.handleMapPing(event, { focus: event.button === 2 });
       if (handled) {
         event.preventDefault();
         return;
@@ -3708,7 +3673,7 @@ export function mountBoardInteractions(store, routes = {}) {
       templateTool.notifyMapState();
       overlayTool.notifyMapState();
       applyCombatStateFromBoardState(state);
-      processIncomingPings(state.boardState?.pings ?? [], activeSceneId);
+      mapPings.processIncomingPings(state.boardState?.pings ?? [], activeSceneId);
       // Use the active scene ID or fall back to the default scene ID.
       // This ensures drawings sync even when no scene is explicitly selected.
       syncDrawingsFromState(state.boardState, activeSceneId || DEFAULT_SCENE_ID);
@@ -4546,211 +4511,6 @@ export function mountBoardInteractions(store, routes = {}) {
     return { x: localX, y: localY };
   }
 
-  function handleMapPing(event, { focus = false } = {}) {
-    if (!viewState.mapLoaded) {
-      return false;
-    }
-
-    const pointer = getLocalMapPoint(event);
-    const mapWidth = Number.isFinite(viewState.mapPixelSize?.width) ? viewState.mapPixelSize.width : 0;
-    const mapHeight = Number.isFinite(viewState.mapPixelSize?.height) ? viewState.mapPixelSize.height : 0;
-    if (!pointer || mapWidth <= 0 || mapHeight <= 0) {
-      return false;
-    }
-
-    const normalizedX = Math.min(1, Math.max(0, pointer.x / mapWidth));
-    const normalizedY = Math.min(1, Math.max(0, pointer.y / mapHeight));
-
-    const state = boardApi.getState?.() ?? {};
-    const sceneIdRaw = typeof state?.boardState?.activeSceneId === 'string'
-      ? state.boardState.activeSceneId
-      : null;
-    const sceneId = sceneIdRaw && sceneIdRaw.trim() ? sceneIdRaw : null;
-    const authorId = normalizeProfileId(getCurrentUserId());
-    const now = Date.now();
-    const signatureSeed = Math.random().toString(36).slice(2, 10);
-    const baseId = authorId ? `${authorId}:${now}` : `${now}`;
-    const pingId = `${baseId}:${signatureSeed}`;
-
-    const pingEntry = {
-      id: pingId,
-      sceneId,
-      x: normalizedX,
-      y: normalizedY,
-      type: focus ? 'focus' : 'ping',
-      createdAt: now,
-    };
-    if (authorId) {
-      pingEntry.authorId = authorId;
-    }
-
-    const queued = queuePingForState(pingEntry);
-    recordProcessedPing(pingEntry);
-    renderPing(pingEntry);
-    if (focus) {
-      centerViewOnPing(pingEntry);
-    }
-    if (queued) {
-      // Mark only pings as dirty - don't include placements in the save
-      markPingsDirty();
-      persistBoardStateSnapshot();
-    }
-
-    return true;
-  }
-
-  function queuePingForState(pingEntry) {
-    if (typeof boardApi.updateState !== 'function') {
-      return false;
-    }
-
-    let updated = false;
-    const retentionThreshold = Date.now() - MAP_PING_RETENTION_MS;
-    boardApi.updateState((draft) => {
-      if (!draft.boardState || typeof draft.boardState !== 'object') {
-        draft.boardState = { pings: [] };
-      }
-      if (!Array.isArray(draft.boardState.pings)) {
-        draft.boardState.pings = [];
-      }
-
-      draft.boardState.pings = draft.boardState.pings
-        .filter((entry) => {
-          if (!entry || typeof entry !== 'object') {
-            return false;
-          }
-          const createdAt = Number(entry.createdAt ?? entry.timestamp ?? 0);
-          if (!Number.isFinite(createdAt)) {
-            return false;
-          }
-          return createdAt >= retentionThreshold;
-        })
-        .slice(-MAP_PING_HISTORY_LIMIT + 1);
-
-      draft.boardState.pings.push({ ...pingEntry });
-      if (draft.boardState.pings.length > MAP_PING_HISTORY_LIMIT) {
-        draft.boardState.pings = draft.boardState.pings.slice(
-          draft.boardState.pings.length - MAP_PING_HISTORY_LIMIT
-        );
-      }
-      updated = true;
-    });
-
-    return updated;
-  }
-
-  function normalizeIncomingPing(entry) {
-    if (!entry || typeof entry !== 'object') {
-      return null;
-    }
-
-    const id = typeof entry.id === 'string' ? entry.id.trim() : '';
-    if (!id) {
-      return null;
-    }
-
-    const createdAtRaw = Number(entry.createdAt ?? entry.timestamp ?? Date.now());
-    const createdAt = Number.isFinite(createdAtRaw) ? Math.max(0, Math.trunc(createdAtRaw)) : Date.now();
-    const x = Number(entry.x);
-    const y = Number(entry.y);
-    if (!Number.isFinite(x) || !Number.isFinite(y)) {
-      return null;
-    }
-
-    const normalized = {
-      id,
-      sceneId:
-        typeof entry.sceneId === 'string' && entry.sceneId.trim()
-          ? entry.sceneId.trim()
-          : null,
-      x: Math.min(1, Math.max(0, x)),
-      y: Math.min(1, Math.max(0, y)),
-      type:
-        typeof entry.type === 'string' && entry.type.trim().toLowerCase() === 'focus'
-          ? 'focus'
-          : 'ping',
-      createdAt,
-    };
-
-    return normalized;
-  }
-
-  function renderPing(pingEntry) {
-    if (!pingLayer || !viewState.mapLoaded) {
-      return;
-    }
-
-    const mapWidth = Number.isFinite(viewState.mapPixelSize?.width) ? viewState.mapPixelSize.width : 0;
-    const mapHeight = Number.isFinite(viewState.mapPixelSize?.height) ? viewState.mapPixelSize.height : 0;
-    if (mapWidth <= 0 || mapHeight <= 0) {
-      return;
-    }
-
-    const localX = Math.min(1, Math.max(0, pingEntry.x)) * mapWidth;
-    const localY = Math.min(1, Math.max(0, pingEntry.y)) * mapHeight;
-    spawnPingPulse(localX, localY, pingEntry.type, 0);
-  }
-
-  function spawnPingPulse(localX, localY, type, delayMs) {
-    if (!pingLayer) {
-      return;
-    }
-
-    const element = document.createElement('div');
-    element.className = 'vtt-board__ping';
-    if (type === 'focus') {
-      element.classList.add('vtt-board__ping--focus');
-    }
-    element.style.left = `${localX}px`;
-    element.style.top = `${localY}px`;
-    element.style.setProperty('--vtt-ping-delay', `${delayMs}ms`);
-
-    const scale = Number.isFinite(viewState.scale) && viewState.scale !== 0 ? viewState.scale : 1;
-    const baseSize = 160;
-    const size = baseSize / scale;
-    element.style.setProperty('--vtt-ping-size', `${size}px`);
-
-    pingLayer.appendChild(element);
-    const cleanupDelay = MAP_PING_ANIMATION_DURATION_MS + delayMs + 160;
-    scheduleTimeout(() => {
-      element.remove();
-    }, cleanupDelay);
-  }
-
-  function scheduleTimeout(callback, delayMs) {
-    if (typeof callback !== 'function') {
-      return;
-    }
-    const timer =
-      typeof window !== 'undefined' && typeof window.setTimeout === 'function'
-        ? window.setTimeout.bind(window)
-        : typeof setTimeout === 'function'
-        ? setTimeout
-        : null;
-    if (timer) {
-      timer(callback, delayMs);
-    }
-  }
-
-  function recordProcessedPing(pingEntry) {
-    if (!pingEntry || typeof pingEntry.id !== 'string') {
-      return;
-    }
-    const timestamp = Number.isFinite(pingEntry.createdAt)
-      ? pingEntry.createdAt
-      : Date.now();
-    processedPings.set(pingEntry.id, timestamp);
-    pruneProcessedPings();
-  }
-
-  function pruneProcessedPings(now = Date.now()) {
-    processedPings.forEach((timestamp, id) => {
-      if (!Number.isFinite(timestamp) || now - timestamp > MAP_PING_PROCESSED_RETENTION_MS) {
-        processedPings.delete(id);
-      }
-    });
-  }
-
   function syncDrawingsFromState(boardState, sceneId) {
     // Use the provided scene ID or fall back to the default.
     // This ensures drawings can be synced even when no scene is selected.
@@ -4847,84 +4607,6 @@ export function mountBoardInteractions(store, routes = {}) {
 
     // Change came from external source, update the drawing tool
     setDrawingToolDrawings(drawings);
-  }
-
-  function processIncomingPings(entries, activeSceneId) {
-    const list = Array.isArray(entries) ? entries : [];
-    const now = Date.now();
-    pruneProcessedPings(now);
-
-    const retentionThreshold = now - MAP_PING_RETENTION_MS;
-    const staleIndexes = [];
-    const pendingPings = [];
-
-    list.forEach((entry, index) => {
-      const ping = normalizeIncomingPing(entry);
-      if (!ping) {
-        return;
-      }
-
-      if (ping.createdAt < retentionThreshold) {
-        staleIndexes.push(index);
-        return;
-      }
-
-      pendingPings.push(ping);
-    });
-
-    if (staleIndexes.length && Array.isArray(entries)) {
-      for (let i = staleIndexes.length - 1; i >= 0; i -= 1) {
-        entries.splice(staleIndexes[i], 1);
-      }
-    }
-
-    if (!viewState.mapLoaded) {
-      return;
-    }
-
-    pendingPings.forEach((ping) => {
-      if (ping.sceneId && activeSceneId && ping.sceneId !== activeSceneId) {
-        return;
-      }
-      if (processedPings.has(ping.id)) {
-        return;
-      }
-      recordProcessedPing(ping);
-      renderPing(ping);
-      if (ping.type === 'focus') {
-        centerViewOnPing(ping);
-      }
-    });
-  }
-
-  function centerViewOnPing(pingEntry) {
-    if (!board || !viewState.mapLoaded) {
-      return;
-    }
-
-    const mapWidth = Number.isFinite(viewState.mapPixelSize?.width) ? viewState.mapPixelSize.width : 0;
-    const mapHeight = Number.isFinite(viewState.mapPixelSize?.height) ? viewState.mapPixelSize.height : 0;
-    if (mapWidth <= 0 || mapHeight <= 0) {
-      return;
-    }
-
-    const boardRect = board.getBoundingClientRect();
-    const scale = Number.isFinite(viewState.scale) && viewState.scale !== 0 ? viewState.scale : 1;
-    const localX = Math.min(1, Math.max(0, pingEntry.x)) * mapWidth;
-    const localY = Math.min(1, Math.max(0, pingEntry.y)) * mapHeight;
-    const desiredX = boardRect.width / 2 - localX * scale;
-    const desiredY = boardRect.height / 2 - localY * scale;
-
-    const mapWidthScaled = mapWidth * scale;
-    const mapHeightScaled = mapHeight * scale;
-    const minX = Math.min(0, boardRect.width - mapWidthScaled);
-    const maxX = Math.max(0, boardRect.width - mapWidthScaled);
-    const minY = Math.min(0, boardRect.height - mapHeightScaled);
-    const maxY = Math.max(0, boardRect.height - mapHeightScaled);
-
-    viewState.translation.x = clamp(desiredX, minX, maxX);
-    viewState.translation.y = clamp(desiredY, minY, maxY);
-    applyTransform();
   }
 
   function clampPlacementToBounds(column, row, width, height) {
