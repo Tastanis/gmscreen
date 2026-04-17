@@ -2,10 +2,9 @@ import { initializeTokenMaker } from './token-maker.js';
 import { createMonsterImporter } from './monster-import.js';
 import { createToken, createTokenFolder, updateToken, deleteToken } from '../services/token-service.js';
 import { PLAYER_VISIBLE_TOKEN_FOLDER, normalizePlayerTokenFolderName, restrictTokensToPlayerView } from '../state/store.js';
+import { fetchSheetStamina, getCachedSheetStamina } from '../services/stamina-sync-service.js';
 
 const UNSORTED_KEY = '__unsorted';
-const sheetStaminaCache = new Map();
-const sheetStaminaRequests = new Map();
 const STAMINA_REFRESH_INTERVAL_MS = 60000;
 
 export function renderTokenLibrary(routes, store, options = {}) {
@@ -1064,80 +1063,6 @@ function applyCachedSheetStaminaToTemplate(template, cachedSheet) {
       max: max ?? current ?? existingMax,
     },
   };
-}
-
-function getCachedSheetStamina(tokenName) {
-  if (typeof tokenName !== 'string') {
-    return null;
-  }
-
-  const key = tokenName.trim().toLowerCase();
-  if (!key) {
-    return null;
-  }
-
-  return sheetStaminaCache.get(key) ?? null;
-}
-
-function fetchSheetStamina(routes, tokenName) {
-  if (typeof tokenName !== 'string') {
-    return null;
-  }
-
-  const key = tokenName.trim().toLowerCase();
-  if (!key) {
-    return null;
-  }
-
-  const endpoint = typeof routes?.sheet === 'string' ? routes.sheet : null;
-  if (!endpoint || typeof fetch !== 'function') {
-    return null;
-  }
-
-  const existingRequest = sheetStaminaRequests.get(key);
-  if (existingRequest) {
-    return existingRequest;
-  }
-
-  const request = (async () => {
-    try {
-      let url = null;
-      if (typeof window !== 'undefined' && window?.location?.href) {
-        url = new URL(endpoint, window.location.href);
-      } else {
-        url = new URL(endpoint);
-      }
-
-      url.searchParams.set('action', 'sync-stamina');
-      url.searchParams.set('character', tokenName);
-
-      const response = await fetch(url.toString(), { method: 'GET' });
-      if (!response?.ok) {
-        throw new Error(`Sheet fetch failed with status ${response?.status ?? 'unknown'}`);
-      }
-
-      const data = await response.json();
-      if (!data || typeof data !== 'object') {
-        return null;
-      }
-
-      if (data.success === false) {
-        sheetStaminaCache.set(key, { currentStamina: null, staminaMax: null, missing: true });
-        return null;
-      }
-
-      sheetStaminaCache.set(key, data);
-      return data;
-    } catch (error) {
-      console.warn('[VTT] Failed to fetch sheet stamina', error);
-      return null;
-    } finally {
-      sheetStaminaRequests.delete(key);
-    }
-  })();
-
-  sheetStaminaRequests.set(key, request);
-  return request;
 }
 
 function toFiniteOrNull(value) {

@@ -32,13 +32,15 @@ import { createCombatTimerService } from '../services/combat-timer-service.js';
 import { showCombatTimerReport } from './combat-timer-report.js';
 import { mountFogOfWar, renderFog, renderFogSelection, isFogSelectActive, isPositionFogged, createFogChecker } from './fog-of-war.js';
 import { createConditionTooltips } from './condition-tooltips.js';
+import {
+  broadcastStaminaSync,
+  subscribeToStaminaSync,
+} from '../services/stamina-sync-service.js';
 
 const OVERLAY_LAYER_PREFIX = 'overlay-layer-';
 let overlayLayerSeed = Date.now();
 let overlayLayerSequence = 0;
 let trackerOverflowResizeListenerAttached = false;
-const STAMINA_SYNC_CHANNEL = 'vtt-stamina-sync';
-let staminaSyncChannel = null;
 
 // Turn lock timeout: locks older than this are considered stale and auto-released.
 // This prevents orphaned locks when players disconnect without ending their turn.
@@ -53,33 +55,6 @@ const DEFAULT_SCENE_ID = '_default';
 // When true, any calls to syncCombatStateToStore() or boardApi.updateState()
 // that would trigger subscribers are blocked to prevent infinite recursion.
 let isApplyingState = false;
-
-function getStaminaSyncChannel() {
-  if (typeof BroadcastChannel !== 'function') {
-    return null;
-  }
-
-  if (!staminaSyncChannel) {
-    staminaSyncChannel = new BroadcastChannel(STAMINA_SYNC_CHANNEL);
-  }
-
-  return staminaSyncChannel;
-}
-
-function broadcastStaminaSync(payload = {}) {
-  const channel = getStaminaSyncChannel();
-  if (!channel) {
-    return;
-  }
-
-  channel.postMessage({
-    type: 'stamina-sync',
-    source: 'vtt',
-    character: payload.character,
-    currentStamina: payload.currentStamina,
-    staminaMax: payload.staminaMax,
-  });
-}
 
 // Re-exported so existing tests importing from board-interactions.js keep working.
 export { createBoardStatePoller };
@@ -13787,10 +13762,7 @@ export function mountBoardInteractions(store, routes = {}) {
   }
 
   function startListeningForSheetSync() {
-    const channel = getStaminaSyncChannel();
-    if (channel) {
-      channel.addEventListener('message', handleSheetStaminaBroadcast);
-    }
+    subscribeToStaminaSync(handleSheetStaminaBroadcast);
   }
 
   function normalizePlacementCondition(value) {
