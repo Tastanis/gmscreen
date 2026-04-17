@@ -28,7 +28,8 @@
       "mcp__playwright__browser_tabs",
       "WebSearch",
       "mcp__playwright__browser_console_messages",
-      "mcp__playwright__browser_handle_dialog"
+      "mcp__playwright__browser_handle_dialog",
+      "Bash(npm test *)"
     ],
     "deny": []
   }
