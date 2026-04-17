@@ -291,8 +291,6 @@ const TURN_TIMER_COUNTUP_INITIAL_DISPLAY = '0:00';
 const TURN_TIMER_STAGE_FALLBACK = 'full';
 const TURN_TIMER_WARNING_YELLOW_THRESHOLD_MS = 30000;
 const TURN_TIMER_WARNING_RED_THRESHOLD_MS = 10000;
-const INDIGO_ROTATION_INTERVAL_MS = 60000;
-const INDIGO_ROTATION_INCREMENT_DEGREES = 45;
 const TURN_INDICATOR_DEFAULT_TEXT = 'Waiting for turn';
 const TURN_INDICATOR_GM_TEXT = "GM's turn";
 const TURN_INDICATOR_ALLIES_TEXT = "Allies' turn";
@@ -856,10 +854,6 @@ export function mountBoardInteractions(store, routes = {}) {
 
   const boardApi = store ?? {};
   const combatTimerService = createCombatTimerService();
-  const tokenRotationAngles = new Map();
-  let indigoRotationIntervalId = null;
-  let indigoRotationUnloadRegistered = false;
-  ensureIndigoRotationTimer();
   let overlayEditorActive = false;
   const overlayTool = createOverlayTool(routes?.uploads);
   const templateTool = createTemplateTool();
@@ -1400,72 +1394,6 @@ export function mountBoardInteractions(store, routes = {}) {
       { frequency: 147.5, type: 'sine', attack: 0.02, decay: 0.5, sustain: 0.3, duration: 1.9, release: 1.5, volume: 0.22 },
     ],
   };
-
-  function clearIndigoRotationTimer() {
-    if (indigoRotationIntervalId !== null && typeof window?.clearInterval === 'function') {
-      window.clearInterval(indigoRotationIntervalId);
-      indigoRotationIntervalId = null;
-    }
-  }
-
-  function handleIndigoRotationTeardown() {
-    clearIndigoRotationTimer();
-    tokenRotationAngles.clear();
-  }
-
-  function stepIndigoRotations() {
-    if (!viewState.mapLoaded) {
-      return;
-    }
-
-    const state = boardApi.getState?.() ?? {};
-    const placements = getActiveScenePlacements(state);
-    const activeIds = new Set();
-
-    placements.forEach((placement) => {
-      const normalized = normalizePlacementForRender(placement);
-      if (!normalized) {
-        return;
-      }
-
-      activeIds.add(normalized.id);
-
-      if (normalized.name === 'Indigo') {
-        const previous = tokenRotationAngles.get(normalized.id) ?? 0;
-        const nextAngle = (previous + INDIGO_ROTATION_INCREMENT_DEGREES) % 360;
-        tokenRotationAngles.set(normalized.id, nextAngle);
-      } else if (tokenRotationAngles.has(normalized.id)) {
-        tokenRotationAngles.delete(normalized.id);
-      }
-    });
-
-    tokenRotationAngles.forEach((_, id) => {
-      if (!activeIds.has(id)) {
-        tokenRotationAngles.delete(id);
-      }
-    });
-
-    if (tokenLayer) {
-      renderTokens(state, tokenLayer, viewState);
-    }
-  }
-
-  function ensureIndigoRotationTimer() {
-    if (
-      indigoRotationIntervalId !== null ||
-      typeof window === 'undefined' ||
-      typeof window.setInterval !== 'function'
-    ) {
-      return;
-    }
-
-    indigoRotationIntervalId = window.setInterval(stepIndigoRotations, INDIGO_ROTATION_INTERVAL_MS);
-
-    if (!indigoRotationUnloadRegistered && typeof window.addEventListener === 'function') {
-      window.addEventListener('unload', handleIndigoRotationTeardown, { once: true });
-      indigoRotationUnloadRegistered = true;
-    }
-  }
 
   const PLAYER_PROFILE_ALIASES = {
     frunk: ['frunk'],
@@ -6412,7 +6340,6 @@ export function mountBoardInteractions(store, routes = {}) {
       }
       layer.hidden = true;
       renderedPlacements = [];
-      tokenRotationAngles.clear();
       selectedTokenIds.clear();
       notifySelectionChanged();
       closeTokenSettings();
@@ -6441,7 +6368,6 @@ export function mountBoardInteractions(store, routes = {}) {
     const renderedIds = new Set();
     const trackerEntries = [];
     const activeCombatantIds = new Set();
-    const activeRotationIds = new Set();
     const groupColorAssignments = getCombatGroupColorAssignments();
     // Pre-compute fog checker once (null when fog inactive or GM viewing)
     const isCellFogged = gmViewing ? null : createFogChecker(state);
@@ -6476,7 +6402,6 @@ export function mountBoardInteractions(store, routes = {}) {
 
       trackerEntries.push(normalized);
 
-      activeRotationIds.add(normalized.id);
       renderedIds.add(normalized.id);
 
       let column = normalized.column;
@@ -6509,13 +6434,6 @@ export function mountBoardInteractions(store, routes = {}) {
       const top = topOffset + row * gridSize;
       const baseTransform = `translate3d(${left}px, ${top}px, 0)`;
       token.style.transform = baseTransform;
-
-      const rotation = tokenRotationAngles.get(normalized.id);
-      if (Number.isFinite(rotation)) {
-        token.style.setProperty('--vtt-token-rotation', `${rotation}deg`);
-      } else {
-        token.style.removeProperty('--vtt-token-rotation');
-      }
 
       token.classList.toggle('vtt-token--hidden', Boolean(normalized.hidden));
 
@@ -6603,12 +6521,6 @@ export function mountBoardInteractions(store, routes = {}) {
     if (hoveredTokenId && !renderedIds.has(hoveredTokenId)) {
       hoveredTokenId = null;
     }
-
-    tokenRotationAngles.forEach((_, id) => {
-      if (!activeRotationIds.has(id)) {
-        tokenRotationAngles.delete(id);
-      }
-    });
 
     existingNodes.forEach((node) => {
       node.remove();
