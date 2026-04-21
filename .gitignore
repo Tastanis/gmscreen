@@ -54,6 +54,11 @@ pnpm-lock.yaml
 # Location data
 /dnd/strixhaven/locations/locations.json
 
+# Other NPCs data
+/dnd/strixhaven/othernpcs/othernpcs.json
+/dnd/strixhaven/othernpcs/othernpcs.lock
+/dnd/strixhaven/othernpcs/othernpcs_backup_*.json
+
 # Inventory data
 /dnd/strixhaven/data/inventory.json
 
