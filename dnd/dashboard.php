@@ -942,7 +942,7 @@ $defaultInventoryTab = $is_gm ? 'frunk' : $user;
                     <?php if ($is_gm): ?><a href="#" onclick="openStrixhavenSection('monster-creator')">Monster Creator</a><?php endif; ?>
                     <a href="#" onclick="openStrixhavenSection('templates')">Templates</a>
                     <a href="#" onclick="openStrixhavenSection('arcaneconstruction')" class="<?php echo ($user === 'zepha' || $is_gm) ? 'zepha-gm-allowed' : 'access-restricted'; ?>">Arcane Construction</a>
-                    <a href="#" onclick="openStrixhavenSection('coming-soon-5')">Coming Soon</a>
+                    <?php if ($is_gm): ?><a href="#" onclick="openStrixhavenSection('othernpcs')">Other NPCs</a><?php endif; ?>
                     <?php if ($is_gm): ?><!-- GM tab - only visible to GM -->
                     <a href="#" onclick="openStrixhavenSection('gm')">GM</a><?php endif; ?>
                 </div>
