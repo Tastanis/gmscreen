@@ -95,6 +95,9 @@ save_log.txt
 # Local settings (already exists, keeping it)
 /.claude/settings.local.json
 
+# Claude Code worktrees (nested working copies — never commit)
+/.claude/worktrees/
+
 # Local development files
 index.local.html
 
