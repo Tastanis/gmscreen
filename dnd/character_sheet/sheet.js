@@ -3201,9 +3201,17 @@ async function saveSheet() {
 
 /* ─── Post-to-Chat System ─── */
 
-const CHAT_API = "/dnd/chat_handler.php";
+const CHAT_API = window.chatHandlerUrl || "/dnd/chat_handler.php";
 
 async function sendToChat(text) {
+  if (window.dashboardChat && typeof window.dashboardChat.sendMessage === "function") {
+    try {
+      return await window.dashboardChat.sendMessage({ message: text });
+    } catch (error) {
+      console.warn("Failed to post through chat panel", error);
+    }
+  }
+
   const params = new URLSearchParams();
   params.append("action", "chat_send");
   params.append("message", text);

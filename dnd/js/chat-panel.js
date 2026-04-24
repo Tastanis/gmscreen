@@ -1654,9 +1654,18 @@
             isOpen = state;
             panel.classList.toggle('chat-panel--open', state);
             panel.classList.toggle('chat-panel--closed', !state);
+            if (document.body) {
+                document.body.classList.toggle('chat-panel-is-open', state);
+            }
             panel.setAttribute('aria-hidden', state ? 'false' : 'true');
             toggleButton.setAttribute('aria-expanded', state ? 'true' : 'false');
             toggleButton.textContent = state ? 'Close Chat' : 'Open Chat';
+            document.dispatchEvent(new CustomEvent('chat-panel:toggle', {
+                detail: {
+                    open: state,
+                    panel
+                }
+            }));
 
             if (state) {
                 // Clear notification queue and remove any visible toasts when chat opens
