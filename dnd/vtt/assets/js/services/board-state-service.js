@@ -282,8 +282,9 @@ export function persistBoardStateOps(endpoint, ops, envelope = {}, options = {})
   const savePromise = queueSave(SAVE_KEY, wirePayload, endpoint, normalizedOptions);
 
   if (savePromise && typeof savePromise.then === 'function') {
+    savePromise.sentOps = bufferedOps.map((op) => ({ ...op }));
     savePromise.then((result) => {
-      if (result?.success) {
+      if (result?.success || result?.error?.name === 'ConflictError') {
         for (const [key, entry] of pendingBoardStateOps) {
           if (entry.seq <= sendSeq) {
             pendingBoardStateOps.delete(key);

@@ -358,6 +358,17 @@ if (!defined('VTT_STATE_API_INCLUDE_ONLY')) {
 
                 $nextState = normalizeBoardState($existing);
                 $nextState['_version'] = $previousVersion;
+                $isGm = (bool) ($auth['isGM'] ?? false);
+
+                if ($clientVersion !== null && $clientVersion > 0 && $clientVersion < $previousVersion) {
+                    $currentState = $isGm ? $nextState : filterPlacementsForPlayerView($nextState);
+                    $currentState['_version'] = $previousVersion;
+                    return [
+                        'conflict' => true,
+                        'state' => $currentState,
+                        'version' => $previousVersion,
+                    ];
+                }
 
                 // Phase 3-B (commit 1): apply delta ops to the
                 // normalized state before any snapshot-merge logic
@@ -372,7 +383,6 @@ if (!defined('VTT_STATE_API_INCLUDE_ONLY')) {
                 // player from bypassing the snapshot path's
                 // timestamp-merge (which cannot delete) by sending a
                 // `placement.remove` op directly.
-                $isGm = (bool) ($auth['isGM'] ?? false);
                 if (!empty($ops)) {
                     $opContext = ['isGm' => $isGm];
                     foreach ($ops as $op) {
@@ -678,6 +688,14 @@ if (!defined('VTT_STATE_API_INCLUDE_ONLY')) {
                     'version' => $newVersion,
                 ];
             });
+
+            if (!empty($lockResult['conflict'])) {
+                respondJson(409, [
+                    'success' => false,
+                    'error' => 'Board state changed before this save could be applied.',
+                    'data' => $lockResult['state'],
+                ]);
+            }
 
             $responseState = $lockResult['state'];
             $newVersion = $lockResult['version'];

@@ -198,9 +198,28 @@ async function persist(key, entry) {
     });
 
     if (!response?.ok) {
-      const responseText = await response
-        .text()
-        .catch(() => '[VTT] Unable to read persistence response body');
+      const responseText = typeof response?.text === 'function'
+        ? await response.text().catch(() => '[VTT] Unable to read persistence response body')
+        : '';
+      let responsePayload = null;
+      try {
+        responsePayload = responseText ? JSON.parse(responseText) : null;
+      } catch (parseError) {
+        responsePayload = null;
+      }
+      if (response?.status === 409) {
+        const conflictError = new Error(
+          responsePayload?.error || `Version conflict while saving ${key}`
+        );
+        conflictError.name = 'ConflictError';
+        conflictError.status = 409;
+        result = createResult(false, {
+          aborted: true,
+          error: conflictError,
+          data: responsePayload?.data ?? null,
+        });
+        return;
+      }
       console.error(
         `[VTT] Persistence error for ${key}: ${response?.status ?? 'unknown status'}`,
         responseText

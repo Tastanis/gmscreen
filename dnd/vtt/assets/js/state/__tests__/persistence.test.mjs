@@ -151,3 +151,60 @@ test('queueSave resolves completion listeners when save finishes', async (t) => 
   assert.equal(results.length, 1);
   assert.deepEqual(results[0], outcome);
 });
+
+test('queueSave returns a non-retryable conflict result for stale board saves', async (t) => {
+  const originalWindow = global.window;
+  const originalFetch = global.fetch;
+
+  const scheduled = [];
+
+  global.window = {
+    setTimeout(callback) {
+      scheduled.push(callback);
+      return 0;
+    },
+  };
+
+  let fetchCount = 0;
+  global.fetch = async () => {
+    fetchCount += 1;
+    return {
+      ok: false,
+      status: 409,
+      text: async () => JSON.stringify({
+        success: false,
+        error: 'Board state changed before this save could be applied.',
+        data: { _version: 12 },
+      }),
+    };
+  };
+
+  t.after(() => {
+    if (originalWindow === undefined) {
+      delete global.window;
+    } else {
+      global.window = originalWindow;
+    }
+
+    if (originalFetch === undefined) {
+      delete global.fetch;
+    } else {
+      global.fetch = originalFetch;
+    }
+  });
+
+  const { queueSave } = await import('../persistence.js');
+  const promise = queueSave('board-state', { boardState: { _version: 10 } }, '/save-board-state');
+
+  while (scheduled.length) {
+    scheduled.shift()();
+  }
+
+  const result = await promise;
+  assert.equal(fetchCount, 1, 'conflict should not be retried');
+  assert.equal(result.success, false);
+  assert.equal(result.aborted, true);
+  assert.equal(result.error?.name, 'ConflictError');
+  assert.equal(result.error?.status, 409);
+  assert.deepEqual(result.data, { _version: 12 });
+});

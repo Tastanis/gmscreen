@@ -828,6 +828,135 @@ export function mountBoardInteractions(store, routes = {}) {
     dirtyTopLevel.clear();
   }
 
+  function clearDirtyEntity(map, sceneId, entryId) {
+    if (!sceneId || !entryId || !(map instanceof Map)) {
+      return;
+    }
+    const dirtyIds = map.get(sceneId);
+    if (!dirtyIds || typeof dirtyIds.delete !== 'function') {
+      return;
+    }
+    dirtyIds.delete(entryId);
+    if (dirtyIds.size === 0) {
+      map.delete(sceneId);
+    }
+  }
+
+  function clearDirtyTrackingForOps(ops) {
+    if (!Array.isArray(ops)) {
+      return;
+    }
+    ops.forEach((op) => {
+      if (!op || typeof op !== 'object') {
+        return;
+      }
+      const sceneId = typeof op.sceneId === 'string' ? op.sceneId.trim() : '';
+      if (!sceneId) {
+        return;
+      }
+      if (op.type === 'placement.add') {
+        const placementId = typeof op.placement?.id === 'string' ? op.placement.id.trim() : '';
+        clearDirtyEntity(dirtyPlacements, sceneId, placementId);
+        return;
+      }
+      if (op.type === 'placement.move' || op.type === 'placement.update' || op.type === 'placement.remove') {
+        const placementId = typeof op.placementId === 'string' ? op.placementId.trim() : '';
+        clearDirtyEntity(dirtyPlacements, sceneId, placementId);
+        return;
+      }
+      if (op.type === 'template.upsert') {
+        const templateId = typeof op.template?.id === 'string' ? op.template.id.trim() : '';
+        clearDirtyEntity(dirtyTemplates, sceneId, templateId);
+        return;
+      }
+      if (op.type === 'template.remove') {
+        const templateId = typeof op.templateId === 'string' ? op.templateId.trim() : '';
+        clearDirtyEntity(dirtyTemplates, sceneId, templateId);
+        return;
+      }
+      if (op.type === 'drawing.add') {
+        const drawingId = typeof op.drawing?.id === 'string' ? op.drawing.id.trim() : '';
+        clearDirtyEntity(dirtyDrawings, sceneId, drawingId);
+        return;
+      }
+      if (op.type === 'drawing.remove') {
+        const drawingId = typeof op.drawingId === 'string' ? op.drawingId.trim() : '';
+        clearDirtyEntity(dirtyDrawings, sceneId, drawingId);
+      }
+    });
+  }
+
+  function clearDirtyEntriesFromSnapshot(map, entriesByScene) {
+    if (!entriesByScene || typeof entriesByScene !== 'object') {
+      return;
+    }
+    Object.entries(entriesByScene).forEach(([sceneId, entries]) => {
+      if (!Array.isArray(entries)) {
+        return;
+      }
+      entries.forEach((entry) => {
+        const entryId = typeof entry?.id === 'string' ? entry.id.trim() : '';
+        clearDirtyEntity(map, sceneId, entryId);
+      });
+    });
+  }
+
+  function clearDirtyTrackingForSnapshot(snapshot, { deltaOnly = false } = {}) {
+    if (!snapshot || typeof snapshot !== 'object') {
+      return;
+    }
+    if (!deltaOnly) {
+      clearDirtyTracking();
+      return;
+    }
+
+    clearDirtyEntriesFromSnapshot(dirtyPlacements, snapshot.placements);
+    clearDirtyEntriesFromSnapshot(dirtyTemplates, snapshot.templates);
+    clearDirtyEntriesFromSnapshot(dirtyDrawings, snapshot.drawings);
+
+    if (Array.isArray(snapshot._replaceDrawings)) {
+      snapshot._replaceDrawings.forEach((sceneId) => {
+        if (typeof sceneId !== 'string' || !sceneId.trim()) {
+          return;
+        }
+        const key = sceneId.trim();
+        drawingFullReplaceScenes.delete(key);
+        dirtyDrawings.delete(key);
+      });
+    }
+
+    if (Object.prototype.hasOwnProperty.call(snapshot, 'pings')) {
+      dirtyPings = false;
+    }
+
+    if (snapshot.sceneState && typeof snapshot.sceneState === 'object') {
+      Object.keys(snapshot.sceneState).forEach((sceneId) => {
+        dirtySceneState.delete(sceneId);
+      });
+    }
+
+    ['activeSceneId', 'mapUrl', 'overlay'].forEach((field) => {
+      if (Object.prototype.hasOwnProperty.call(snapshot, field)) {
+        dirtyTopLevel.delete(field);
+      }
+    });
+  }
+
+  function clearDirtyTrackingForSave(flushDescriptor) {
+    if (!flushDescriptor || typeof flushDescriptor !== 'object') {
+      return;
+    }
+    if (flushDescriptor.kind === 'ops') {
+      clearDirtyTrackingForOps(flushDescriptor.ops);
+      return;
+    }
+    if (flushDescriptor.kind === 'snapshot') {
+      clearDirtyTrackingForSnapshot(flushDescriptor.snapshot, {
+        deltaOnly: Boolean(flushDescriptor.deltaOnly),
+      });
+    }
+  }
+
   function hasDirtyState() {
     return dirtyPlacements.size > 0 ||
            dirtyTemplates.size > 0 ||
@@ -860,6 +989,58 @@ export function mountBoardInteractions(store, routes = {}) {
            dirtyPings ||
            dirtySceneState.size > 0 ||
            dirtyTopLevel.size > 0;
+  }
+
+  function isBoardStateVersionConflictResult(result) {
+    const error = result?.error;
+    return Boolean(
+      error?.name === 'ConflictError' ||
+        error?.status === 409 ||
+        error?.statusCode === 409
+    );
+  }
+
+  function applyBoardStateConflictSnapshot(boardState) {
+    if (!boardState || typeof boardState !== 'object') {
+      return false;
+    }
+    const incomingVersion = typeof boardState._version === 'number'
+      ? boardState._version
+      : Number.parseInt(boardState._version, 10);
+    if (
+      Number.isFinite(incomingVersion) &&
+      incomingVersion > 0 &&
+      currentBoardStateVersion > incomingVersion
+    ) {
+      return false;
+    }
+
+    boardApi.updateState?.((draft) => {
+      const current = draft.boardState && typeof draft.boardState === 'object'
+        ? draft.boardState
+        : {};
+      draft.boardState = mergeBoardStateSnapshot(current, {
+        ...boardState,
+        _fullSync: true,
+      });
+      if (Number.isFinite(incomingVersion) && incomingVersion > 0) {
+        draft.boardState._version = incomingVersion;
+      }
+    });
+
+    if (Number.isFinite(incomingVersion) && incomingVersion > 0) {
+      currentBoardStateVersion = incomingVersion;
+      if (pusherInterface?.setLastAppliedVersion) {
+        pusherInterface.setLastAppliedVersion(incomingVersion);
+      }
+    }
+
+    const updatedState = boardApi.getState?.();
+    if (updatedState) {
+      applyStateToBoard(updatedState);
+      applyCombatStateFromBoardState(updatedState);
+    }
+    return true;
   }
 
   // Phase 3-B (commit 3): helpers for building `placement.update` ops
@@ -1638,6 +1819,7 @@ export function mountBoardInteractions(store, routes = {}) {
     const snapshotHash = snapshotHashCandidate ?? safeJsonStringify(hashInput) ?? null;
 
     let savePromise = null;
+    let saveFlushDescriptor = null;
     if (useOpsPath) {
       const envelope = {
         metadata,
@@ -1652,8 +1834,17 @@ export function mountBoardInteractions(store, routes = {}) {
         return persistBoardStateSnapshot(options, null);
       }
       savePromise = opsResult ?? null;
+      saveFlushDescriptor = {
+        kind: 'ops',
+        ops: Array.isArray(opsResult?.sentOps) ? opsResult.sentOps : opsOverride,
+      };
     } else {
       savePromise = persistBoardState(routes.state, snapshot, options);
+      saveFlushDescriptor = {
+        kind: 'snapshot',
+        snapshot,
+        deltaOnly: useDelta,
+      };
     }
 
     if (savePromise && typeof savePromise.then === 'function') {
@@ -1678,8 +1869,9 @@ export function mountBoardInteractions(store, routes = {}) {
           lastPersistedBoardStateHash = snapshotHash;
           lastBoardStateSaveCompletedAt = Date.now();
           pendingBoardStateSave = null;
-          // Clear dirty tracking after successful save
-          clearDirtyTracking();
+          // Clear only the dirty entries this save actually flushed. Ops
+          // saves intentionally leave unrelated dirty board state queued.
+          clearDirtyTrackingForSave(saveFlushDescriptor);
 
           // Phase 3-C: If a Pusher ops broadcast was deferred during
           // this save (because of a version gap or `ops-overflow`
@@ -1724,6 +1916,14 @@ export function mountBoardInteractions(store, routes = {}) {
           // with promise=null, which caused getPendingBoardStateSaveInfo() to
           // return pending=true indefinitely, starving the poller of updates.
           pendingBoardStateSave = null;
+          if (isBoardStateVersionConflictResult(result)) {
+            clearDirtyTrackingForSave(saveFlushDescriptor);
+            pendingResyncAfterSave = false;
+            console.warn('[VTT] Board state save rejected as stale; applying server state.');
+            if (!applyBoardStateConflictSnapshot(result?.data)) {
+              triggerBoardStateResync('save-version-conflict');
+            }
+          }
         }
         return result;
       });

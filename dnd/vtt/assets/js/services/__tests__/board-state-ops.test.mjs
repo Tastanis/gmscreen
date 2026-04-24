@@ -240,6 +240,52 @@ describe('Board State – delta ops persistence (phase 3-B commit 2)', () => {
     assert.equal(capturedPayloads[0].ops[0].sceneId, 'scene-1');
     assert.equal(capturedPayloads[0].ops[0].placementId, 'hero');
   });
+
+  test('stale-version conflicts drain sent ops so old moves are not retried later', async () => {
+    const { persistBoardStateOps, _resetBoardStateOpsBufferForTest } = await import(
+      '../board-state-service.js'
+    );
+    _resetBoardStateOpsBufferForTest();
+
+    let callCount = 0;
+    globalThis.fetch = async (_url, options = {}) => {
+      callCount += 1;
+      if (options?.body) {
+        capturedPayloads.push(JSON.parse(options.body));
+      }
+      if (callCount === 1) {
+        return {
+          ok: false,
+          status: 409,
+          text: async () => JSON.stringify({
+            success: false,
+            error: 'Board state changed before this save could be applied.',
+            data: { _version: 2 },
+          }),
+        };
+      }
+      return { ok: true, json: async () => ({ success: true, data: { _version: 3 } }) };
+    };
+
+    const firstResult = await persistBoardStateOps(
+      '/api/state',
+      [{ type: 'placement.move', sceneId: 'scene-1', placementId: 'old', x: 1, y: 1 }],
+      { _version: 1 }
+    );
+
+    assert.equal(firstResult.success, false);
+    assert.equal(firstResult.error?.name, 'ConflictError');
+
+    await persistBoardStateOps(
+      '/api/state',
+      [{ type: 'placement.move', sceneId: 'scene-1', placementId: 'new', x: 2, y: 2 }],
+      { _version: 2 }
+    );
+
+    assert.equal(capturedPayloads.length, 2);
+    assert.equal(capturedPayloads[1].ops.length, 1, 'conflicted op should be removed');
+    assert.equal(capturedPayloads[1].ops[0].placementId, 'new');
+  });
 });
 
 // ---------------------------------------------------------------------------
