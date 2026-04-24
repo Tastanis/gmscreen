@@ -284,6 +284,51 @@ body {
     max-width: 1800px;
     margin: 12px auto;
     padding: 0 12px;
+    transition: width 0.35s ease, max-width 0.35s ease, margin 0.35s ease;
+}
+
+.dashboard-page {
+    --dashboard-chat-panel-width: min(
+        var(--chat-panel-width, 360px),
+        calc(100vw - (var(--chat-panel-offset, 20px) * 2))
+    );
+    --dashboard-chat-reserve: calc(var(--dashboard-chat-panel-width) + 56px);
+}
+
+.dashboard-page .top-nav {
+    width: 100%;
+    transition: width 0.35s ease, margin 0.35s ease;
+}
+
+.dashboard-page .save-container {
+    transition: right 0.35s ease;
+}
+
+@media (min-width: 769px) {
+    .dashboard-page.chat-panel-is-open .top-nav,
+    .dashboard-page.chat-panel-is-open .main-container {
+        width: calc(100vw - var(--dashboard-chat-reserve));
+        max-width: none;
+        margin-left: 0;
+        margin-right: var(--dashboard-chat-reserve);
+    }
+
+    .dashboard-page.chat-panel-is-open .nav-buttons,
+    .dashboard-page.chat-panel-is-open .section-tabs {
+        flex-wrap: wrap;
+    }
+
+    .dashboard-page.chat-panel-is-open .section-tab {
+        flex: 1 1 120px;
+    }
+
+    .dashboard-page.chat-panel-is-open .content-wrapper {
+        min-width: 0;
+    }
+
+    .dashboard-page.chat-panel-is-open .save-container {
+        right: calc(var(--dashboard-chat-reserve) + 30px);
+    }
 }
 
 /* Chat panel */

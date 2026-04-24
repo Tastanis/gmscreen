@@ -913,7 +913,7 @@ $defaultInventoryTab = $is_gm ? 'frunk' : $user;
     <link rel="stylesheet" href="Christmas/theme.css" id="christmas-theme" disabled>
     <link rel="stylesheet" href="Frunk/theme.css" id="frunk-theme" disabled>
 </head>
-<body>
+<body class="dashboard-page">
     <!-- Top Navigation Bar -->
     <div class="top-nav">
         <div class="nav-buttons">
