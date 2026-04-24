@@ -39,6 +39,7 @@ import {
   subscribeToStaminaSync,
 } from '../services/stamina-sync-service.js';
 import {
+  cloneArraySimple,
   mergeArrayByIdWithTimestamp,
   mergeSceneKeyedSection,
   mergeBoardStateSnapshot,
@@ -289,10 +290,100 @@ const MALICE_VICTORIES_ACTION = 'fetch-victories';
 // the top of this file). Re-export them so existing callers importing
 // these names from './board-interactions.js' keep working.
 export {
+  cloneArraySimple,
   mergeArrayByIdWithTimestamp,
   mergeSceneKeyedSection,
   mergeBoardStateSnapshot,
 };
+
+function deferDraggedPlacementUpdate(dragState, placement) {
+  if (!dragState?.deferredUpdates || !placement?.id) {
+    return;
+  }
+
+  const incomingTime = placement._lastModified || 0;
+  const existing = dragState.deferredUpdates.get(placement.id);
+  if (!existing || incomingTime > (existing._lastModified || 0)) {
+    dragState.deferredUpdates.set(placement.id, placement);
+  }
+}
+
+export function mergePusherSceneEntries(
+  existingArray,
+  incomingArray,
+  { replaceScene = false, draggedTokenIds = new Set(), dragState = null } = {}
+) {
+  const existing = Array.isArray(existingArray) ? existingArray : [];
+  const incoming = Array.isArray(incomingArray) ? incomingArray : [];
+  const draggedIds = draggedTokenIds instanceof Set ? draggedTokenIds : new Set();
+
+  if (replaceScene) {
+    if (draggedIds.size === 0) {
+      return cloneArraySimple(incoming);
+    }
+
+    const existingById = new Map();
+    existing.forEach((entry) => {
+      if (entry?.id) {
+        existingById.set(entry.id, entry);
+      }
+    });
+
+    const incomingIds = new Set();
+    const merged = [];
+    incoming.forEach((entry) => {
+      if (entry?.id) {
+        incomingIds.add(entry.id);
+      }
+      if (entry?.id && draggedIds.has(entry.id)) {
+        deferDraggedPlacementUpdate(dragState, entry);
+        const existingEntry = existingById.get(entry.id);
+        if (existingEntry) {
+          merged.push(...cloneArraySimple([existingEntry]));
+        }
+        return;
+      }
+      merged.push(...cloneArraySimple([entry]));
+    });
+
+    existing.forEach((entry) => {
+      if (entry?.id && draggedIds.has(entry.id) && !incomingIds.has(entry.id)) {
+        merged.push(...cloneArraySimple([entry]));
+      }
+    });
+
+    return merged;
+  }
+
+  const byId = new Map();
+  existing.forEach((entry) => {
+    if (entry?.id) {
+      byId.set(entry.id, entry);
+    }
+  });
+  incoming.forEach((entry) => {
+    if (!entry?.id) {
+      return;
+    }
+    if (draggedIds.has(entry.id)) {
+      deferDraggedPlacementUpdate(dragState, entry);
+      return;
+    }
+
+    const existingEntry = byId.get(entry.id);
+    if (existingEntry) {
+      const existingTime = existingEntry._lastModified || 0;
+      const incomingTime = entry._lastModified || 0;
+      if (incomingTime >= existingTime) {
+        byId.set(entry.id, entry);
+      }
+    } else {
+      byId.set(entry.id, entry);
+    }
+  });
+
+  return Array.from(byId.values());
+}
 
 export function mountBoardInteractions(store, routes = {}) {
   const board = document.getElementById('vtt-board-canvas');
@@ -2574,63 +2665,32 @@ export function mountBoardInteractions(store, routes = {}) {
     }
 
     // Apply delta updates to the board state
+    const replaceIncludedSceneArrays = delta.deltaOnly === false;
     boardApi.updateState?.((draft) => {
       if (!draft.boardState) {
         draft.boardState = {};
       }
 
-      // Apply placements delta (merge by scene with timestamp-based conflict resolution)
+      // Apply placements. Legacy/ambiguous Pusher full broadcasts stay
+      // additive, but strict non-delta broadcasts carry complete arrays for
+      // included scenes and can remove entries absent from those scenes.
       if (delta.placements && typeof delta.placements === 'object') {
         if (!draft.boardState.placements) {
           draft.boardState.placements = {};
         }
-        // Always use additive merge for Pusher broadcasts. Full-state
-        // broadcasts may carry only partial placement data (e.g. when a
-        // snapshot save races with an ops save), so replacement semantics
-        // would wipe tokens not included in the broadcast. Deletions are
-        // handled via placement.remove ops; the safety-net poll with
-        // _fullSync also covers missed deletions.
         Object.entries(delta.placements).forEach(([sceneId, placements]) => {
           if (Array.isArray(placements)) {
             const existing = draft.boardState.placements[sceneId] || [];
-            const byId = new Map(existing.map((p) => [p.id, p]));
-            placements.forEach((placement) => {
-              if (placement && placement.id) {
-                // For tokens currently being dragged, store the update for later comparison
-                // instead of skipping it entirely (prevents popback on concurrent moves)
-                if (draggedTokenIds.has(placement.id)) {
-                  const dragState = viewState.dragState;
-                  if (dragState?.deferredUpdates) {
-                    const incomingTime = placement._lastModified || 0;
-                    const existing = dragState.deferredUpdates.get(placement.id);
-                    // Keep only the newest deferred update for each token
-                    if (!existing || incomingTime > (existing._lastModified || 0)) {
-                      dragState.deferredUpdates.set(placement.id, placement);
-                    }
-                  }
-                  return;
-                }
-                const existingPlacement = byId.get(placement.id);
-                if (existingPlacement) {
-                  // Compare timestamps - keep the newer one
-                  const existingTime = existingPlacement._lastModified || 0;
-                  const incomingTime = placement._lastModified || 0;
-                  if (incomingTime >= existingTime) {
-                    byId.set(placement.id, placement);
-                  }
-                  // else: keep existing (it's newer)
-                } else {
-                  // New placement
-                  byId.set(placement.id, placement);
-                }
-              }
+            draft.boardState.placements[sceneId] = mergePusherSceneEntries(existing, placements, {
+              replaceScene: replaceIncludedSceneArrays,
+              draggedTokenIds,
+              dragState: viewState.dragState,
             });
-            draft.boardState.placements[sceneId] = Array.from(byId.values());
           }
         });
       }
 
-      // Apply templates delta (merge by ID with timestamp-based conflict resolution)
+      // Apply templates.
       if (delta.templates && typeof delta.templates === 'object') {
         if (!draft.boardState.templates) {
           draft.boardState.templates = {};
@@ -2638,27 +2698,14 @@ export function mountBoardInteractions(store, routes = {}) {
         Object.entries(delta.templates).forEach(([sceneId, templates]) => {
           if (Array.isArray(templates)) {
             const existing = draft.boardState.templates[sceneId] || [];
-            const byId = new Map(existing.map((t) => [t.id, t]));
-            templates.forEach((template) => {
-              if (template && template.id) {
-                const existingTemplate = byId.get(template.id);
-                if (existingTemplate) {
-                  const existingTime = existingTemplate._lastModified || 0;
-                  const incomingTime = template._lastModified || 0;
-                  if (incomingTime >= existingTime) {
-                    byId.set(template.id, template);
-                  }
-                } else {
-                  byId.set(template.id, template);
-                }
-              }
+            draft.boardState.templates[sceneId] = mergePusherSceneEntries(existing, templates, {
+              replaceScene: replaceIncludedSceneArrays,
             });
-            draft.boardState.templates[sceneId] = Array.from(byId.values());
           }
         });
       }
 
-      // Apply drawings delta (merge by ID with timestamp-based conflict resolution)
+      // Apply drawings.
       if (delta.drawings && typeof delta.drawings === 'object') {
         if (!draft.boardState.drawings) {
           draft.boardState.drawings = {};
@@ -2676,30 +2723,10 @@ export function mountBoardInteractions(store, routes = {}) {
           if (!Array.isArray(drawings)) {
             return;
           }
-          if (replaceScenes && replaceScenes.has(sceneId)) {
-            // Trust the broadcast as authoritative for this scene.
-            // Clone entries so the store does not share references with
-            // the incoming Pusher payload.
-            draft.boardState.drawings[sceneId] = drawings.map((drawing) => ({ ...drawing }));
-            return;
-          }
           const existing = draft.boardState.drawings[sceneId] || [];
-          const byId = new Map(existing.map((d) => [d.id, d]));
-          drawings.forEach((drawing) => {
-            if (drawing && drawing.id) {
-              const existingDrawing = byId.get(drawing.id);
-              if (existingDrawing) {
-                const existingTime = existingDrawing._lastModified || 0;
-                const incomingTime = drawing._lastModified || 0;
-                if (incomingTime >= existingTime) {
-                  byId.set(drawing.id, drawing);
-                }
-              } else {
-                byId.set(drawing.id, drawing);
-              }
-            }
+          draft.boardState.drawings[sceneId] = mergePusherSceneEntries(existing, drawings, {
+            replaceScene: replaceIncludedSceneArrays || Boolean(replaceScenes?.has(sceneId)),
           });
-          draft.boardState.drawings[sceneId] = Array.from(byId.values());
         });
       }
 

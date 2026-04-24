@@ -1,7 +1,11 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 
-import { mergeSceneKeyedSection, mergeBoardStateSnapshot } from '../board-interactions.js';
+import {
+  mergePusherSceneEntries,
+  mergeSceneKeyedSection,
+  mergeBoardStateSnapshot,
+} from '../board-interactions.js';
 
 // ---------------------------------------------------------------------------
 // mergeSceneKeyedSection – token visibility during delta merges
@@ -109,6 +113,36 @@ test('delta merge preserves tokens from scenes not in incoming', () => {
   assert.ok(merged['scene-2'], 'scene-2 should be preserved');
   assert.equal(merged['scene-2'][0].id, 'dragon');
   assert.equal(merged['scene-2'][0].hidden, true, 'dragon should remain hidden');
+});
+
+test('full Pusher broadcast removes absent placement from included scene', () => {
+  const existing = [
+    { id: 'token-stays', column: 1, _lastModified: 1000 },
+    { id: 'token-removed', column: 2, _lastModified: 1000 },
+  ];
+  const incoming = [
+    { id: 'token-stays', column: 3, _lastModified: 2000 },
+  ];
+
+  const merged = mergePusherSceneEntries(existing, incoming, { replaceScene: true });
+
+  assert.deepEqual(merged.map((entry) => entry.id), ['token-stays']);
+  assert.equal(merged[0].column, 3);
+});
+
+test('legacy Pusher broadcast keeps additive placement merge behavior', () => {
+  const existing = [
+    { id: 'token-stays', column: 1, _lastModified: 1000 },
+    { id: 'token-legacy', column: 2, _lastModified: 1000 },
+  ];
+  const incoming = [
+    { id: 'token-stays', column: 3, _lastModified: 2000 },
+  ];
+
+  const merged = mergePusherSceneEntries(existing, incoming, { replaceScene: false });
+
+  assert.deepEqual(merged.map((entry) => entry.id).sort(), ['token-legacy', 'token-stays']);
+  assert.equal(merged.find((entry) => entry.id === 'token-stays').column, 3);
 });
 
 // ---------------------------------------------------------------------------

@@ -249,6 +249,7 @@ function handleStateUpdated(data) {
     authorId,
     authorRole,
     changedFields,
+    deltaOnly,
     ops,
     placements,
     templates,
@@ -319,6 +320,9 @@ function handleStateUpdated(data) {
       changedFields: changedFields || [],
     };
 
+    if (typeof deltaOnly === 'boolean') {
+      delta.deltaOnly = deltaOnly;
+    }
     if (placements !== undefined) {
       delta.placements = placements;
     }
