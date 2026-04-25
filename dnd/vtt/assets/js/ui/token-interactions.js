@@ -319,21 +319,21 @@ export function createTokenInteractions({
       deferredUpdates: new Map(),
     };
 
-    if (isMeasureModeActive()) {
-      const primaryToken = candidate.tokens.find((token) => token && token.id) ?? null;
-      if (primaryToken) {
-        const original = candidate.originalPositions.get(primaryToken.id) ?? {
-          column: primaryToken.column ?? 0,
-          row: primaryToken.row ?? 0,
-          width: primaryToken.width ?? 1,
-          height: primaryToken.height ?? 1,
+    const primaryToken = candidate.tokens.find((token) => token && token.id) ?? null;
+    if (primaryToken) {
+      const original = candidate.originalPositions.get(primaryToken.id) ?? {
+        column: primaryToken.column ?? 0,
+        row: primaryToken.row ?? 0,
+        width: primaryToken.width ?? 1,
+        height: primaryToken.height ?? 1,
+      };
+      const startPoint = measurementPointFromToken(original);
+      const measureModeActiveAtStart = isMeasureModeActive();
+      if (startPoint && beginExternalMeasurement(startPoint, { allowInactive: true })) {
+        viewState.dragState.measurement = {
+          tokenId: primaryToken.id,
+          temporary: !measureModeActiveAtStart,
         };
-        const startPoint = measurementPointFromToken(original);
-        if (startPoint && beginExternalMeasurement(startPoint)) {
-          viewState.dragState.measurement = {
-            tokenId: primaryToken.id,
-          };
-        }
       }
     }
 
@@ -495,7 +495,7 @@ export function createTokenInteractions({
     const deferredUpdates = dragState.deferredUpdates ?? null;
 
     if (measurement) {
-      if (!isMeasureModeActive()) {
+      if (measurement.temporary || !isMeasureModeActive()) {
         cancelExternalMeasurement();
       } else if (commit && moved && preview && preview.size && measurement.tokenId) {
         const finalPosition = preview instanceof Map ? preview.get(measurement.tokenId) : null;
@@ -555,7 +555,7 @@ export function createTokenInteractions({
       return;
     }
 
-    if (!isMeasureModeActive()) {
+    if (!isMeasureModeActive() && !dragState.measurement.temporary) {
       cancelExternalMeasurement();
       dragState.measurement = null;
       return;

@@ -31,6 +31,81 @@ function stubEl() {
   };
 }
 
+function createTokenDragHarness({ measureActive = false } = {}) {
+  const viewState = buildViewState();
+  const placements = [
+    { id: 'token-1', column: 1, row: 1, width: 1, height: 1 },
+  ];
+  const calls = {
+    begin: [],
+    update: [],
+    finalize: [],
+    cancel: 0,
+    render: 0,
+  };
+
+  const ti = createTokenInteractions({
+    mapSurface: stubEl(),
+    tokenLayer: null,
+    selectionBox: stubEl(),
+    viewState,
+    selectedTokenIds: new Set(),
+    boardApi: {
+      getState: () => ({
+        boardState: {
+          activeSceneId: 'scene-1',
+          placements: { 'scene-1': placements },
+        },
+      }),
+      updateState: () => {},
+    },
+    getLocalMapPoint: (event) => ({ x: event.localX, y: event.localY }),
+    normalizePlacementForRender: (placement) => placement,
+    getActiveScenePlacements: () => placements,
+    clampPlacementToBounds: (column, row, width, height) => ({ column, row, width, height }),
+    renderTokens: () => {
+      calls.render += 1;
+    },
+    notifySelectionChanged: () => {},
+    isMeasureModeActive: () => measureActive,
+    beginExternalMeasurement: (point, options) => {
+      calls.begin.push({ point, options });
+      return true;
+    },
+    updateExternalMeasurement: (point) => {
+      calls.update.push(point);
+    },
+    finalizeExternalMeasurement: (point) => {
+      calls.finalize.push(point);
+    },
+    cancelExternalMeasurement: () => {
+      calls.cancel += 1;
+    },
+    measurementPointFromToken: (position) => ({
+      column: position.column,
+      row: position.row,
+      mapX: position.column * 64 + 32,
+      mapY: position.row * 64 + 32,
+    }),
+    markPlacementDirty: () => {},
+    ensureScenePlacementDraft: () => [],
+    toNonNegativeNumber: (value, fallback = 0) => {
+      const numeric = Number(value);
+      return Number.isFinite(numeric) ? numeric : fallback;
+    },
+    persistBoardStateSnapshot: () => {},
+    windowRef: {
+      requestAnimationFrame(callback) {
+        callback();
+        return 1;
+      },
+      cancelAnimationFrame() {},
+    },
+  });
+
+  return { ti, viewState, placements, calls };
+}
+
 test('createTokenInteractions returns the expected public surface', () => {
   const ti = createTokenInteractions({
     mapSurface: stubEl(),
@@ -133,4 +208,42 @@ test('cancelSelectionBox clears state and hides the box element', () => {
   assert.equal(selectionBox.hidden, true);
   assert.equal(viewState.selectionBoxState, null);
   assert.deepEqual(released, [4]);
+});
+
+test('token drag starts a temporary measurement when measure mode is inactive', () => {
+  const { ti, viewState, placements, calls } = createTokenDragHarness({ measureActive: false });
+  const startEvent = { pointerId: 1, clientX: 64, clientY: 64, localX: 64, localY: 64 };
+
+  ti.prepareTokenDrag(startEvent, placements[0]);
+  assert.equal(ti.beginTokenDrag(startEvent), true);
+
+  assert.equal(calls.begin.length, 1);
+  assert.equal(calls.begin[0].options?.allowInactive, true);
+  assert.equal(viewState.dragState.measurement.temporary, true);
+
+  ti.updateTokenDrag({ pointerId: 1, buttons: 1, localX: 128, localY: 64 });
+  assert.ok(calls.update.length > 0);
+  assert.deepEqual(calls.update.at(-1), { column: 2, row: 1, mapX: 160, mapY: 96 });
+
+  ti.endTokenDrag({ commit: true, pointerId: 1 });
+  assert.equal(calls.cancel, 1);
+  assert.equal(calls.finalize.length, 0);
+});
+
+test('token drag finalizes measurement when measure mode is active', () => {
+  const { ti, viewState, placements, calls } = createTokenDragHarness({ measureActive: true });
+  const startEvent = { pointerId: 1, clientX: 64, clientY: 64, localX: 64, localY: 64 };
+
+  ti.prepareTokenDrag(startEvent, placements[0]);
+  assert.equal(ti.beginTokenDrag(startEvent), true);
+
+  assert.equal(calls.begin.length, 1);
+  assert.equal(calls.begin[0].options?.allowInactive, true);
+  assert.equal(viewState.dragState.measurement.temporary, false);
+
+  ti.updateTokenDrag({ pointerId: 1, buttons: 1, localX: 128, localY: 64 });
+  ti.endTokenDrag({ commit: true, pointerId: 1 });
+
+  assert.equal(calls.cancel, 0);
+  assert.deepEqual(calls.finalize, [{ column: 2, row: 1, mapX: 160, mapY: 96 }]);
 });

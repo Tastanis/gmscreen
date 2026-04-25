@@ -625,8 +625,9 @@ export function isMeasureModeActive() {
   return Boolean(sharedState?.active);
 }
 
-export function beginExternalMeasurement(point) {
-  if (!sharedState || !sharedState.active) {
+export function beginExternalMeasurement(point, options = {}) {
+  const allowInactive = Boolean(options?.allowInactive);
+  if (!sharedState || (!sharedState.active && !allowInactive)) {
     return false;
   }
   const snapshot = clonePoint(point);
