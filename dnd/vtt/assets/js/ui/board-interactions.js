@@ -44,6 +44,17 @@ import {
   mergeSceneKeyedSection,
   mergeBoardStateSnapshot,
 } from '../utils/merge-helpers.js';
+import {
+  TURN_PHASE,
+  createCombatStateSnapshot as buildCombatStateSnapshot,
+  getCombatStateVersion,
+  getTurnPhase as getCombatTurnPhase,
+  isCombatStateNewer,
+  normalizeCombatGroups,
+  normalizeCombatState,
+  normalizeCombatTeam,
+  serializeCombatGroups,
+} from '../combat/combat-state.js';
 
 const OVERLAY_LAYER_PREFIX = 'overlay-layer-';
 let overlayLayerSeed = Date.now();
@@ -1361,15 +1372,6 @@ export function mountBoardInteractions(store, routes = {}) {
   let lastActingTeam = null;
   let pendingTurnTransition = null;
 
-  // Turn state machine phases:
-  // - 'idle': Combat not active
-  // - 'pick': Team's pick phase - waiting for someone to start their turn
-  // - 'active': A token is actively taking their turn
-  const TURN_PHASE = {
-    IDLE: 'idle',
-    PICK: 'pick',
-    ACTIVE: 'active',
-  };
   let turnPhase = TURN_PHASE.IDLE;
   let borderFlashTimeoutId = null;
   let allyTurnTimerRafId = null;
@@ -6526,13 +6528,7 @@ export function mountBoardInteractions(store, routes = {}) {
   // ============================================================================
 
   function getTurnPhase() {
-    if (!combatActive) {
-      return TURN_PHASE.IDLE;
-    }
-    if (activeCombatantId) {
-      return TURN_PHASE.ACTIVE;
-    }
-    return TURN_PHASE.PICK;
+    return getCombatTurnPhase({ active: combatActive, activeCombatantId });
   }
 
   function updateTurnPhase() {
@@ -8257,12 +8253,10 @@ export function mountBoardInteractions(store, routes = {}) {
     const isInitialLoad = combatStateVersion === 0;
     // Use sequence numbers for reliable ordering (avoids clock drift between clients)
     // Fall back to timestamp comparison if sequence is not available (backwards compatibility)
-    const hasNewerVersion = normalized.sequence > 0
-      ? normalized.sequence > combatStateVersion ||
-        (normalized.sequence === combatStateVersion &&
-          normalized.updatedAt > 0 &&
-          normalized.updatedAt > combatStateUpdatedAt)
-      : (normalized.updatedAt > 0 && normalized.updatedAt > combatStateUpdatedAt);
+    const hasNewerVersion = isCombatStateNewer(normalized, {
+      version: combatStateVersion,
+      updatedAt: combatStateUpdatedAt,
+    });
     const groupsChanged = normalized.groups?.length !== combatTrackerGroups.size ||
       normalized.groups?.some((group) => {
         const existing = combatTrackerGroups.get(group.representativeId);
@@ -8382,62 +8376,6 @@ export function mountBoardInteractions(store, routes = {}) {
     }
   }
 
-  function normalizeCombatState(raw = {}) {
-    const active = Boolean(raw?.active ?? raw?.isActive ?? false);
-    const round = Math.max(0, toNonNegativeNumber(raw?.round ?? 0));
-    const activeCombatantId = typeof raw?.activeCombatantId === 'string' ? raw.activeCombatantId.trim() : '';
-    const completedSource = Array.isArray(raw?.completedCombatantIds) ? raw.completedCombatantIds : [];
-    const completedCombatantIds = Array.from(
-      new Set(
-        completedSource
-          .map((id) => (typeof id === 'string' ? id.trim() : ''))
-          .filter((id) => id.length > 0)
-      )
-    );
-    const startingTeam = normalizeCombatTeam(raw?.startingTeam ?? raw?.initialTeam ?? null);
-    const currentTeam = normalizeCombatTeam(raw?.currentTeam ?? raw?.activeTeam ?? null);
-    const lastTeam = normalizeCombatTeam(raw?.lastTeam ?? raw?.previousTeam ?? null);
-    // Parse turn phase (idle, pick, active) - derive from state if not provided
-    const rawTurnPhase = raw?.turnPhase ?? raw?.phase ?? null;
-    const parsedTurnPhase = typeof rawTurnPhase === 'string' &&
-      (rawTurnPhase === 'idle' || rawTurnPhase === 'pick' || rawTurnPhase === 'active')
-      ? rawTurnPhase
-      : null;
-    // Derive turn phase if not explicitly provided
-    const derivedTurnPhase = !active ? 'idle' : (activeCombatantId ? 'active' : 'pick');
-    const turnPhaseValue = parsedTurnPhase ?? derivedTurnPhase;
-    const roundTurnCount = Math.max(0, toNonNegativeNumber(raw?.roundTurnCount ?? 0));
-    const malice = Math.max(0, toNonNegativeNumber(raw?.malice ?? raw?.maliceCount ?? 0));
-    const updatedAtRaw = Number(raw?.updatedAt);
-    const updatedAt = Number.isFinite(updatedAtRaw) ? Math.max(0, Math.trunc(updatedAtRaw)) : 0;
-    // Sequence number for reliable sync ordering (avoids clock drift issues)
-    const sequenceRaw = Number(raw?.sequence ?? raw?.seq ?? 0);
-    const sequence = Number.isFinite(sequenceRaw) ? Math.max(0, Math.trunc(sequenceRaw)) : 0;
-    const turnLock = normalizeTurnLock(raw?.turnLock ?? null);
-    const lastEffect = normalizeTurnEffect(raw?.lastEffect ?? raw?.lastEvent ?? null);
-    const groups = normalizeCombatGroups(
-      raw?.groups ?? raw?.groupings ?? raw?.combatGroups ?? raw?.combatantGroups ?? null
-    );
-
-    return {
-      active,
-      round,
-      activeCombatantId: activeCombatantId || null,
-      completedCombatantIds,
-      startingTeam,
-      currentTeam,
-      lastTeam,
-      turnPhase: turnPhaseValue,
-      roundTurnCount,
-      malice,
-      updatedAt,
-      sequence,
-      turnLock,
-      lastEffect,
-      groups,
-    };
-  }
-
   function getCombatStateMaliceSnapshot(snapshot) {
     if (!snapshot || typeof snapshot !== 'string') {
       return null;
@@ -8452,61 +8390,6 @@ export function mountBoardInteractions(store, routes = {}) {
     } catch (error) {
       return null;
     }
-  }
-
-  function normalizeCombatGroups(rawGroups) {
-    const source = Array.isArray(rawGroups)
-      ? rawGroups
-      : rawGroups && typeof rawGroups === 'object'
-      ? Object.entries(rawGroups).map(([representativeId, memberIds]) => ({
-          representativeId,
-          memberIds: Array.isArray(memberIds) ? memberIds : [],
-        }))
-      : [];
-
-    const groups = [];
-
-    source.forEach((entry) => {
-      if (!entry || typeof entry !== 'object') {
-        return;
-      }
-
-      const representativeSource =
-        typeof entry.representativeId === 'string'
-          ? entry.representativeId
-          : typeof entry.id === 'string'
-          ? entry.id
-          : null;
-      const representativeId = representativeSource ? representativeSource.trim() : '';
-      if (!representativeId) {
-        return;
-      }
-
-      const membersSource = Array.isArray(entry.memberIds)
-        ? entry.memberIds
-        : Array.isArray(entry.members)
-        ? entry.members
-        : Array.isArray(entry.ids)
-        ? entry.ids
-        : [];
-
-      const normalizedMembers = membersSource
-        .map((memberId) => (typeof memberId === 'string' ? memberId.trim() : ''))
-        .filter((memberId) => memberId.length > 0);
-
-      if (!normalizedMembers.includes(representativeId)) {
-        normalizedMembers.push(representativeId);
-      }
-
-      const uniqueMembers = Array.from(new Set(normalizedMembers));
-      if (uniqueMembers.length <= 1) {
-        return;
-      }
-
-      groups.push({ representativeId, memberIds: uniqueMembers });
-    });
-
-    return groups;
   }
 
   function resetTurnEffects() {
@@ -8603,29 +8486,6 @@ export function mountBoardInteractions(store, routes = {}) {
     return `${type}:${combatantId}:${triggeredAt}`;
   }
 
-  function normalizeTurnLock(raw) {
-    if (!raw || typeof raw !== 'object') {
-      return null;
-    }
-
-    const holderId = normalizeProfileId(raw.holderId ?? raw.id ?? null);
-    if (!holderId) {
-      return null;
-    }
-
-    const holderName = typeof raw.holderName === 'string' ? raw.holderName.trim() : holderId;
-    const combatantId = typeof raw.combatantId === 'string' ? raw.combatantId.trim() : '';
-    const lockedAtRaw = Number(raw.lockedAt);
-    const lockedAt = Number.isFinite(lockedAtRaw) ? Math.max(0, Math.trunc(lockedAtRaw)) : Date.now();
-
-    return {
-      holderId,
-      holderName,
-      combatantId: combatantId || null,
-      lockedAt,
-    };
-  }
-
   function updateTurnLockState(lock) {
     if (!lock || typeof lock !== 'object') {
       turnLockState.holderId = null;
@@ -8642,64 +8502,24 @@ export function mountBoardInteractions(store, routes = {}) {
   }
 
   function createCombatStateSnapshot() {
-    const completed = Array.from(completedCombatants).filter((id) => typeof id === 'string' && id);
-    const uniqueCompleted = Array.from(new Set(completed));
-    const timestamp = Date.now();
-    const effectSnapshot = lastTurnEffect ? { ...lastTurnEffect } : null;
-    // Increment sequence on each snapshot creation to ensure unique ordering
-    combatSequence += 1;
-
-    // Calculate turn phase for explicit state tracking
-    const phase = getTurnPhase();
-
-    return {
-      active: Boolean(combatActive),
-      round: Math.max(0, Math.trunc(combatRound)),
-      activeCombatantId: activeCombatantId ?? null,
-      completedCombatantIds: uniqueCompleted,
-      startingTeam: normalizeCombatTeam(startingCombatTeam),
-      currentTeam: normalizeCombatTeam(currentTurnTeam),
-      lastTeam: normalizeCombatTeam(lastActingTeam),
-      turnPhase: phase,
-      roundTurnCount: Math.max(0, Math.trunc(roundTurnCount)),
-      malice: Math.max(0, Math.trunc(maliceCount)),
-      updatedAt: timestamp,
+    const snapshot = buildCombatStateSnapshot({
+      active: combatActive,
+      round: combatRound,
+      activeCombatantId,
+      completedCombatantIds: completedCombatants,
+      startingTeam: startingCombatTeam,
+      currentTeam: currentTurnTeam,
+      lastTeam: lastActingTeam,
+      turnPhase: getTurnPhase(),
+      roundTurnCount,
+      malice: maliceCount,
       sequence: combatSequence,
       turnLock: serializeTurnLockState(),
-      lastEffect: effectSnapshot,
-      groups: serializeCombatGroups(),
-    };
-  }
-
-  function serializeCombatGroups() {
-    if (!combatTrackerGroups.size) {
-      return [];
-    }
-
-    const entries = [];
-    combatTrackerGroups.forEach((members, representativeId) => {
-      if (typeof representativeId !== 'string' || representativeId.trim() === '') {
-        return;
-      }
-
-      const normalizedRep = representativeId.trim();
-      const normalizedMembers = Array.from(members)
-        .filter((id) => typeof id === 'string' && id.trim() !== '')
-        .map((id) => id.trim());
-
-      if (!normalizedMembers.includes(normalizedRep)) {
-        normalizedMembers.push(normalizedRep);
-      }
-
-      const uniqueMembers = Array.from(new Set(normalizedMembers));
-      if (uniqueMembers.length <= 1) {
-        return;
-      }
-
-      entries.push({ representativeId: normalizedRep, memberIds: uniqueMembers });
+      lastEffect: lastTurnEffect,
+      groups: serializeCombatGroups(combatTrackerGroups),
     });
-
-    return entries;
+    combatSequence = snapshot.sequence;
+    return snapshot;
   }
 
   function serializeTurnLockState() {
@@ -8760,13 +8580,11 @@ export function mountBoardInteractions(store, routes = {}) {
 
     const snapshot = createCombatStateSnapshot();
     // Use sequence numbers for reliable ordering, fall back to timestamp for backwards compatibility
-    const existingVersion = existingNormalized.sequence > 0 ? existingNormalized.sequence : existingNormalized.updatedAt;
-    const isRemoteNewer = existingNormalized.sequence > 0
-      ? existingNormalized.sequence > combatStateVersion ||
-        (existingNormalized.sequence === combatStateVersion &&
-          existingNormalized.updatedAt > 0 &&
-          existingNormalized.updatedAt > combatStateUpdatedAt)
-      : (existingNormalized.updatedAt > 0 && existingNormalized.updatedAt > combatStateUpdatedAt);
+    const existingVersion = getCombatStateVersion(existingNormalized);
+    const isRemoteNewer = isCombatStateNewer(existingNormalized, {
+      version: combatStateVersion,
+      updatedAt: combatStateUpdatedAt,
+    });
     if (isRemoteNewer) {
       // Remote state is newer - incorporate remote changes but preserve locally modified fields
       // to prevent race conditions where local changes are lost ("popback" issue)
@@ -10807,17 +10625,6 @@ export function mountBoardInteractions(store, routes = {}) {
       team,
       hidden,
     };
-  }
-
-  function normalizeCombatTeam(value) {
-    const raw = typeof value === 'string' ? value.trim().toLowerCase() : '';
-    if (raw === 'ally') {
-      return 'ally';
-    }
-    if (raw === 'enemy') {
-      return 'enemy';
-    }
-    return 'ally';
   }
 
   function toNonNegativeNumber(value, fallback = 0) {
