@@ -6,21 +6,25 @@ knows what changed, what remains, and what has been tested.
 
 ## Current Status
 
-- Status: Phase 2 map level state model implemented.
+- Status: Phase 3 renderer foundation implemented.
 - Last updated: 2026-04-25.
 - VTT grid state now supports both square size and calibrated origin offsets.
 - GM scene controls now include an Align Grid action that captures two opposite corners
   of a known map square and calculates grid size plus `offsetX` / `offsetY`.
 - Scene grid changes persist through the scene storage API as well as board scene state.
-- Scene board state now supports a `mapLevels` model for future multi-level map data.
+- Scene board state supports a `mapLevels` model for multi-level map data.
+- A dedicated map level renderer now mounts a separate level stack between the base map
+  and the old overlay stack.
+- The renderer displays visible persisted map levels with `mapUrl`, `opacity`, and
+  `zIndex`, while keeping pointer events disabled so tokens remain clickable.
 - Old overlay system is still active.
-- No level renderer, map level controls, cutout editing, token level support, or overlay
-  replacement work has started.
+- No map level controls, cutout editing, token level support, or overlay replacement work
+  has started.
 - Tests run for this phase:
-  - `npm.cmd test` - passing, 358 tests.
+  - `npm.cmd test` - passing, 363 tests.
   - `git diff --check` - passing.
-  - `php -l dnd/vtt/api/state.php` was attempted,
-    but `php` is not available on PATH in this workspace.
+  - PHP linting was not run for Phase 3 because no PHP files changed; `php` was still not
+    available on PATH during the previous PHP lint attempt.
 - User decisions captured:
   - Cutouts should work square-by-square, similar to fog editing, but they remove/hide
     parts of only the currently edited map level.
@@ -61,6 +65,7 @@ knows what changed, what remains, and what has been tested.
 
 - Board markup: `dnd/vtt/components/SceneBoard.php`
 - Main board behavior: `dnd/vtt/assets/js/ui/board-interactions.js`
+- Map level renderer: `dnd/vtt/assets/js/ui/map-level-renderer.js`
 - Scene manager and overlay controls: `dnd/vtt/assets/js/ui/scene-manager.js`
 - Settings panel grid controls: `dnd/vtt/assets/js/ui/settings-panel.js`
 - Client state normalization: `dnd/vtt/assets/js/state/normalize/`
@@ -165,6 +170,54 @@ Remaining notes:
 - PHP syntax linting should be run in an environment with PHP available.
 - Manual level sync/refresh checks remain for the future controls phase, because Phase 2
   only adds the persisted state model and does not expose level UI yet.
+
+## Completed Phase 3: Renderer Extraction
+
+Date completed: 2026-04-25.
+
+Changed files:
+
+- `dnd/vtt/assets/css/board.css`
+- `dnd/vtt/assets/js/ui/board-interactions.js`
+- `dnd/vtt/assets/js/ui/map-level-renderer.js`
+- `dnd/vtt/assets/js/ui/__tests__/map-level-renderer.test.mjs`
+- `dnd/data/version.json`
+- `docs/vtt-map-levels/IMPLEMENTATION_STATE.md`
+
+Implementation notes:
+
+- Added a standalone `createMapLevelRenderer()` module for rendering persisted map levels.
+- The renderer creates `#vtt-map-levels` with an inner stack and inserts it before
+  `#vtt-map-overlay`, so old overlays still render above map levels.
+- The level stack uses the same map-image inset variables as the old overlay stack and is
+  kept above the base map but below grid, templates, drawings, tokens, fog, and pings.
+- Rendered level entries use normalized `mapLevels` data, skip hidden or URL-less levels,
+  sort by `zIndex`, apply `opacity`, and preserve cutout counts as DOM metadata for later
+  cutout work.
+- Pointer events are disabled on the level stack and each rendered level by default.
+- `board-interactions.js` now syncs active scene `mapLevels` during state application and
+  after map image load, resets the renderer during map reloads, and keeps level insets in
+  sync with map padding.
+- This phase intentionally did not add GM controls, upload/management UI, cutout editing,
+  token `levelId`, click blocking, or old overlay replacement.
+
+Tests run for this phase:
+
+- `node --test dnd/vtt/assets/js/ui/__tests__/map-level-renderer.test.mjs` - passing,
+  5 tests.
+- `npm.cmd test` - passing, 363 tests.
+- `git diff --check` - passing.
+- PHP linting was not run because no PHP files changed; `php` remains unavailable on PATH
+  in this workspace.
+
+Remaining notes:
+
+- Manual browser verification is still needed with persisted `mapLevels` data to confirm
+  level images visually stack above the base map and below old overlays.
+- Future controls must create/update map levels; Phase 3 only renders data that already
+  exists in scene board state.
+- Cutouts are still data-only for now. Visual cutout masking and click-through behavior
+  remain part of the cutout editor phase.
 
 ## Main Findings
 

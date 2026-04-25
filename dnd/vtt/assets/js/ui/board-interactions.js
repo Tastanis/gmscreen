@@ -42,6 +42,10 @@ import { showCombatTimerReport } from './combat-timer-report.js';
 import { mountFogOfWar, renderFog, renderFogSelection, isFogSelectActive, isPositionFogged, createFogChecker } from './fog-of-war.js';
 import { createConditionTooltips } from './condition-tooltips.js';
 import { createMapPings } from './map-pings.js';
+import {
+  createMapLevelRenderer,
+  resolveSceneMapLevelsState,
+} from './map-level-renderer.js';
 import { createTokenInteractions } from './token-interactions.js';
 import {
   buildTokenStackOrderUpdate,
@@ -531,6 +535,10 @@ export function mountBoardInteractions(store, routes = {}) {
     }
   }
   if (!mapOverlay) return;
+  const mapLevelRenderer = createMapLevelRenderer({
+    mapTransform,
+    insertBefore: mapOverlay,
+  });
 
   if (
     !trackerOverflowResizeListenerAttached &&
@@ -3729,6 +3737,7 @@ export function mountBoardInteractions(store, routes = {}) {
         loadMap(nextUrl);
       }
       applyGridState(state.grid ?? {});
+      syncMapLevelsForState(state, activeSceneId);
       const overlayConfig = resolveSceneOverlayState(state.boardState ?? {}, activeSceneId);
       syncOverlayLayer(overlayConfig);
       overlayTool.notifyOverlayMaskChange(overlayConfig ?? null);
@@ -4540,6 +4549,7 @@ export function mountBoardInteractions(store, routes = {}) {
     viewState.activeMapUrl = url || null;
     viewState.mapLoaded = false;
     lastOverlaySignature = null;
+    mapLevelRenderer.reset();
     clearDragCandidate();
     if (viewState.dragState) {
       try {
@@ -4604,6 +4614,7 @@ export function mountBoardInteractions(store, routes = {}) {
       }
       const latestState = boardApi.getState?.() ?? {};
       const activeSceneId = latestState.boardState?.activeSceneId ?? null;
+      syncMapLevelsForState(latestState, activeSceneId);
       const overlayState = resolveSceneOverlayState(latestState.boardState ?? {}, activeSceneId);
       syncOverlayLayer(overlayState);
       if (status) {
@@ -4754,6 +4765,11 @@ export function mountBoardInteractions(store, routes = {}) {
     }
 
     return boardState.overlay ?? null;
+  }
+
+  function syncMapLevelsForState(state = {}, sceneId = null) {
+    const mapLevels = resolveSceneMapLevelsState(state.boardState ?? {}, sceneId);
+    mapLevelRenderer.sync(mapLevels, { sceneGrid: state.grid ?? null });
   }
 
   function syncOverlayLayer(rawOverlay) {
@@ -5559,6 +5575,12 @@ export function mountBoardInteractions(store, routes = {}) {
       mapOverlay.style.setProperty('--vtt-grid-offset-right', `${nextInsets.right}px`);
       mapOverlay.style.setProperty('--vtt-grid-offset-bottom', `${nextInsets.bottom}px`);
       mapOverlay.style.setProperty('--vtt-grid-offset-left', `${nextInsets.left}px`);
+    }
+    if (mapLevelRenderer.element) {
+      mapLevelRenderer.element.style.setProperty('--vtt-grid-offset-top', `${nextInsets.top}px`);
+      mapLevelRenderer.element.style.setProperty('--vtt-grid-offset-right', `${nextInsets.right}px`);
+      mapLevelRenderer.element.style.setProperty('--vtt-grid-offset-bottom', `${nextInsets.bottom}px`);
+      mapLevelRenderer.element.style.setProperty('--vtt-grid-offset-left', `${nextInsets.left}px`);
     }
     if (!grid) {
       renderTokens(boardApi.getState?.() ?? {}, tokenLayer, viewState);

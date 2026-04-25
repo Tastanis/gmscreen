@@ -1313,6 +1313,42 @@
   pointer-events: none;
 }
 
+.vtt-board__map-levels {
+  position: absolute;
+  top: var(--vtt-grid-offset-top, 0px);
+  right: var(--vtt-grid-offset-right, 0px);
+  bottom: var(--vtt-grid-offset-bottom, 0px);
+  left: var(--vtt-grid-offset-left, 0px);
+  z-index: 1;
+  pointer-events: none;
+  border-radius: calc(var(--vtt-radius) * 1.25);
+  overflow: hidden;
+}
+
+.vtt-board__map-levels[hidden] {
+  display: none;
+}
+
+.vtt-board__map-levels-stack {
+  position: absolute;
+  inset: 0;
+  pointer-events: none;
+}
+
+.vtt-board__map-level {
+  position: absolute;
+  inset: 0;
+  background-repeat: no-repeat;
+  background-size: 100% 100%;
+  background-position: center;
+  pointer-events: none;
+  border-radius: inherit;
+}
+
+.vtt-board__map-level[hidden] {
+  display: none;
+}
+
 .vtt-board__map-overlay {
   position: absolute;
   top: var(--vtt-grid-offset-top, 0px);
