@@ -77,6 +77,17 @@ import {
   pickNextCombatantId as selectNextCombatantId,
   validateTurnStartState,
 } from '../combat/combat-turns.js';
+import {
+  applyCombatGroupsToState,
+  buildCombatGroupDisplayRepresentatives,
+  getCombatGroupColorAssignments as buildCombatGroupColorAssignments,
+  getCombatGroupMembers,
+  getRepresentativeIdForCombatant,
+  getVisibleCombatGroupMembers,
+  pruneCombatGroupState,
+  removeTokenFromCombatGroups,
+  resetCombatGroupState,
+} from '../combat/combat-groups.js';
 
 const OVERLAY_LAYER_PREFIX = 'overlay-layer-';
 let overlayLayerSeed = Date.now();
@@ -6014,107 +6025,15 @@ export function mountBoardInteractions(store, routes = {}) {
   }
 
   function pruneCombatGroups(activeIds) {
-    const activeSet = activeIds instanceof Set ? activeIds : new Set(activeIds ?? []);
-
-    const representativesToDelete = [];
-    let mutated = false;
-    const resetMissingCount = (id) => {
-      if (!id) {
-        return;
-      }
-      combatGroupMissingCounts.delete(id);
-    };
-
-    const incrementMissingCount = (id) => {
-      if (!id) {
-        return 0;
-      }
-      const next = (combatGroupMissingCounts.get(id) ?? 0) + 1;
-      combatGroupMissingCounts.set(id, next);
-      return next;
-    };
-
-    combatTrackerGroups.forEach((members, representativeId) => {
-      const representativeActive = activeSet.has(representativeId);
-      const representativeMissingCount = representativeActive
-        ? 0
-        : incrementMissingCount(representativeId);
-      const representativeExpired = representativeMissingCount > MAX_COMBAT_GROUP_MISSING_TICKS;
-
-      const filtered = new Set();
-
-      members.forEach((memberId) => {
-        if (memberId === representativeId) {
-          return;
-        }
-
-        if (activeSet.has(memberId)) {
-          resetMissingCount(memberId);
-          filtered.add(memberId);
-          return;
-        }
-
-        const missingCount = incrementMissingCount(memberId);
-        if (missingCount <= MAX_COMBAT_GROUP_MISSING_TICKS) {
-          filtered.add(memberId);
-        } else {
-          combatantGroupRepresentative.delete(memberId);
-          combatGroupMissingCounts.delete(memberId);
-          mutated = true;
-        }
-      });
-
-      if (representativeActive) {
-        resetMissingCount(representativeId);
-        filtered.add(representativeId);
-      } else if (!representativeExpired) {
-        filtered.add(representativeId);
-      }
-
-      if (filtered.size <= 1 || representativeExpired) {
-        filtered.forEach((memberId) => {
-          if (memberId !== representativeId) {
-            combatantGroupRepresentative.delete(memberId);
-          }
-        });
-        combatGroupMissingCounts.delete(representativeId);
-        representativesToDelete.push({
-          representativeId,
-          members: new Set(members),
-        });
-        mutated = true;
-      } else {
-        let changedForRep = filtered.size !== members.size;
-        if (!changedForRep) {
-          members.forEach((memberId) => {
-            if (!filtered.has(memberId)) {
-              changedForRep = true;
-            }
-          });
-        }
-        if (changedForRep) {
-          combatTrackerGroups.set(representativeId, filtered);
-          mutated = true;
-        }
-      }
-    });
-
-    representativesToDelete.forEach(({ representativeId, members }) => {
-      combatTrackerGroups.delete(representativeId);
-      combatGroupMissingCounts.delete(representativeId);
-      members?.forEach((memberId) => combatGroupMissingCounts.delete(memberId));
-      mutated = true;
-    });
-
-    Array.from(combatantGroupRepresentative.keys()).forEach((memberId) => {
-      if (!activeSet.has(memberId)) {
-        combatantGroupRepresentative.delete(memberId);
-        combatGroupMissingCounts.delete(memberId);
-        mutated = true;
-      }
-    });
-
-    return mutated;
+    return pruneCombatGroupState(
+      {
+        groups: combatTrackerGroups,
+        representatives: combatantGroupRepresentative,
+        missingCounts: combatGroupMissingCounts,
+      },
+      activeIds,
+      { maxMissingTicks: MAX_COMBAT_GROUP_MISSING_TICKS }
+    );
   }
 
   function pruneCompletedCombatants(activeIds) {
@@ -6143,134 +6062,32 @@ export function mountBoardInteractions(store, routes = {}) {
   }
 
   function applyCombatGroupsFromState(groups) {
-    const prepared = normalizeCombatGroups(groups).map((group) => ({
-      representativeId: group.representativeId,
-      members: new Set(group.memberIds),
-    }));
-
-    let changed = combatTrackerGroups.size !== prepared.length;
-
-    if (!changed) {
-      for (const { representativeId, members } of prepared) {
-        const existing = combatTrackerGroups.get(representativeId);
-        if (!existing || existing.size !== members.size) {
-          changed = true;
-          break;
-        }
-        for (const memberId of members) {
-          if (!existing.has(memberId)) {
-            changed = true;
-            break;
-          }
-        }
-        if (changed) {
-          break;
-        }
-      }
-    }
-
-    if (!changed) {
-      const expectedRepresentatives = new Map();
-      prepared.forEach(({ representativeId, members }) => {
-        members.forEach((memberId) => {
-          if (memberId !== representativeId) {
-            expectedRepresentatives.set(memberId, representativeId);
-          }
-        });
-      });
-
-      if (combatantGroupRepresentative.size !== expectedRepresentatives.size) {
-        changed = true;
-      } else {
-        for (const [memberId, repId] of expectedRepresentatives) {
-          if (combatantGroupRepresentative.get(memberId) !== repId) {
-            changed = true;
-            break;
-          }
-        }
-      }
-    }
-
-    if (!changed) {
-      return false;
-    }
-
-    // Preserve missing counts for tokens that will still be in the new groups
-    // This prevents health tracking from being lost when groups are synced
-    const preservedMissingCounts = new Map();
-    const newMemberIds = new Set();
-    prepared.forEach(({ members }) => {
-      members.forEach((memberId) => newMemberIds.add(memberId));
-    });
-    combatGroupMissingCounts.forEach((count, tokenId) => {
-      if (newMemberIds.has(tokenId)) {
-        preservedMissingCounts.set(tokenId, count);
-      }
-    });
-
-    combatTrackerGroups.clear();
-    combatantGroupRepresentative.clear();
-    combatGroupMissingCounts.clear();
-
-    prepared.forEach(({ representativeId, members }) => {
-      const memberSet = new Set(members);
-      combatTrackerGroups.set(representativeId, memberSet);
-      memberSet.forEach((memberId) => {
-        if (memberId !== representativeId) {
-          combatantGroupRepresentative.set(memberId, representativeId);
-        }
-      });
-    });
-
-    // Restore preserved missing counts
-    preservedMissingCounts.forEach((count, tokenId) => {
-      combatGroupMissingCounts.set(tokenId, count);
-    });
-
-    return true;
+    return applyCombatGroupsToState(
+      {
+        groups: combatTrackerGroups,
+        representatives: combatantGroupRepresentative,
+        missingCounts: combatGroupMissingCounts,
+      },
+      groups
+    );
   }
 
   function getRepresentativeIdFor(combatantId) {
-    if (!combatantId) {
-      return null;
-    }
-    return combatantGroupRepresentative.get(combatantId) || combatantId;
+    return getRepresentativeIdForCombatant(combatantId, combatantGroupRepresentative);
   }
 
   function getGroupMembers(representativeId) {
-    if (!representativeId) {
-      return [];
-    }
-    const group = combatTrackerGroups.get(representativeId);
-    if (!group || !group.size) {
-      return [representativeId];
-    }
-    if (!group.has(representativeId)) {
-      group.add(representativeId);
-    }
-    return Array.from(group);
+    return getCombatGroupMembers(combatTrackerGroups, representativeId);
   }
 
   function getCombatGroupColorAssignments() {
-    const assignments = new Map();
-    let index = 0;
-    combatTrackerGroups.forEach((members, representativeId) => {
-      if (!members || members.size <= 1) {
-        return;
-      }
-      const colorIndex = (index % MAX_COMBAT_GROUP_COLORS) + 1;
-      assignments.set(representativeId, colorIndex);
-      index += 1;
+    return buildCombatGroupColorAssignments(combatTrackerGroups, {
+      maxColors: MAX_COMBAT_GROUP_COLORS,
     });
-    return assignments;
   }
 
   function getVisibleGroupMembers(representativeId, visibleIds) {
-    const members = getGroupMembers(representativeId);
-    if (!visibleIds || !members.length) {
-      return members;
-    }
-    return members.filter((memberId) => visibleIds.has(memberId));
+    return getVisibleCombatGroupMembers(combatTrackerGroups, representativeId, visibleIds);
   }
 
   /**
@@ -6283,28 +6100,7 @@ export function mountBoardInteractions(store, routes = {}) {
    * @returns {Map<string, string>} Map of visibleMemberId -> actualRepresentativeId
    */
   function buildDisplayRepresentatives(visibleEntryIds) {
-    const displayReps = new Map();
-    if (!visibleEntryIds || !visibleEntryIds.size) {
-      return displayReps;
-    }
-
-    combatTrackerGroups.forEach((members, representativeId) => {
-      if (!members || members.size <= 1) {
-        return;
-      }
-      // If the actual representative is visible, no need for a display representative
-      if (visibleEntryIds.has(representativeId)) {
-        return;
-      }
-      // Find the first visible member to serve as display representative
-      const visibleMembers = Array.from(members).filter((id) => visibleEntryIds.has(id));
-      if (visibleMembers.length > 0) {
-        // Map the first visible member as the display representative for this group
-        displayReps.set(visibleMembers[0], representativeId);
-      }
-    });
-
-    return displayReps;
+    return buildCombatGroupDisplayRepresentatives(combatTrackerGroups, visibleEntryIds);
   }
 
   function highlightTrackerToken(combatantId, shouldHighlight) {
@@ -9741,48 +9537,14 @@ export function mountBoardInteractions(store, routes = {}) {
   }
 
   function removeTokenFromGroups(tokenId) {
-    if (!tokenId) {
-      return;
-    }
-
-    combatGroupMissingCounts.delete(tokenId);
-
-    if (combatTrackerGroups.has(tokenId)) {
-      const groupMembers = combatTrackerGroups.get(tokenId);
-      groupMembers.forEach((memberId) => {
-        if (memberId !== tokenId) {
-          combatantGroupRepresentative.delete(memberId);
-          combatGroupMissingCounts.delete(memberId);
-        }
-      });
-      combatTrackerGroups.delete(tokenId);
-      combatGroupMissingCounts.delete(tokenId);
-    }
-
-    const representativeId = combatantGroupRepresentative.get(tokenId);
-    if (!representativeId) {
-      return;
-    }
-
-    const members = combatTrackerGroups.get(representativeId);
-    if (!members) {
-      combatantGroupRepresentative.delete(tokenId);
-      return;
-    }
-
-    members.delete(tokenId);
-    combatantGroupRepresentative.delete(tokenId);
-
-    if (members.size <= 1) {
-      members.forEach((memberId) => {
-        if (memberId !== representativeId) {
-          combatantGroupRepresentative.delete(memberId);
-          combatGroupMissingCounts.delete(memberId);
-        }
-      });
-      combatTrackerGroups.delete(representativeId);
-      combatGroupMissingCounts.delete(representativeId);
-    }
+    removeTokenFromCombatGroups(
+      {
+        groups: combatTrackerGroups,
+        representatives: combatantGroupRepresentative,
+        missingCounts: combatGroupMissingCounts,
+      },
+      tokenId
+    );
   }
 
   function handleGroupSelectedTokens() {
@@ -9844,9 +9606,11 @@ export function mountBoardInteractions(store, routes = {}) {
   }
 
   function resetCombatGroups() {
-    combatTrackerGroups.clear();
-    combatantGroupRepresentative.clear();
-    combatGroupMissingCounts.clear();
+    resetCombatGroupState({
+      groups: combatTrackerGroups,
+      representatives: combatantGroupRepresentative,
+      missingCounts: combatGroupMissingCounts,
+    });
     lastCombatTrackerEntries = [];
     refreshCombatTracker();
   }
