@@ -1,4 +1,8 @@
-import { isCombatStateNewer } from './combat-state.js';
+import {
+  getCombatStateVersion,
+  isCombatStateNewer,
+  normalizeCombatState,
+} from './combat-state.js';
 
 export function createCombatDirtyFieldTracker(initialFields = []) {
   const fields = new Set();
@@ -139,4 +143,170 @@ export function getCombatStateMaliceSnapshot(snapshot) {
   } catch (error) {
     return null;
   }
+}
+
+export function prepareCombatSnapshotForSync(
+  snapshot,
+  {
+    existingCombatState = null,
+    currentVersion = 0,
+    currentUpdatedAt = 0,
+    dirtyFields = null,
+    isGm = false,
+    lastCombatStateSnapshot = null,
+  } = {}
+) {
+  const existingNormalized = normalizeCombatState(existingCombatState ?? {});
+  const existingHasMaliceValue = hasCombatMaliceValue(existingCombatState);
+  const existingVersion = getCombatStateVersion(existingNormalized);
+  const nextSnapshot = cloneCombatSnapshot(snapshot);
+  const isDirty = (field) => isCombatFieldDirty(dirtyFields, field);
+  const isRemoteNewer = isCombatStateNewer(existingNormalized, {
+    version: currentVersion,
+    updatedAt: currentUpdatedAt,
+  });
+
+  let localStatePatch = null;
+
+  if (isRemoteNewer) {
+    const roundChanged = existingNormalized.round !== nextSnapshot.round;
+    const applyCompletedCombatants = !isDirty('completedCombatantIds');
+    const applyMalice = !isDirty('malice') && (isGm || existingHasMaliceValue);
+    const applyTurnLock = !isDirty('turnLock');
+    const applyGroups = !isDirty('groups');
+
+    nextSnapshot.active = existingNormalized.active;
+    nextSnapshot.round = existingNormalized.round;
+    nextSnapshot.activeCombatantId = existingNormalized.activeCombatantId;
+
+    if (applyCompletedCombatants) {
+      if (roundChanged) {
+        nextSnapshot.completedCombatantIds = [...existingNormalized.completedCombatantIds];
+      } else {
+        nextSnapshot.completedCombatantIds = Array.from(new Set([
+          ...nextSnapshot.completedCombatantIds,
+          ...existingNormalized.completedCombatantIds,
+        ]));
+      }
+    }
+
+    nextSnapshot.startingTeam = existingNormalized.startingTeam;
+    nextSnapshot.currentTeam = existingNormalized.currentTeam;
+    nextSnapshot.lastTeam = existingNormalized.lastTeam;
+    nextSnapshot.turnPhase = existingNormalized.turnPhase;
+    nextSnapshot.roundTurnCount = existingNormalized.roundTurnCount;
+
+    if (!isDirty('malice')) {
+      nextSnapshot.malice = existingNormalized.malice;
+    }
+    if (applyTurnLock) {
+      nextSnapshot.turnLock = cloneNullableObject(existingNormalized.turnLock);
+    }
+
+    nextSnapshot.lastEffect = cloneNullableObject(existingNormalized.lastEffect);
+
+    if (applyGroups) {
+      nextSnapshot.groups = cloneCombatGroups(existingNormalized.groups);
+    }
+
+    if (existingNormalized.sequence > nextSnapshot.sequence) {
+      nextSnapshot.sequence = existingNormalized.sequence + 1;
+    }
+
+    localStatePatch = {
+      active: nextSnapshot.active,
+      round: nextSnapshot.round,
+      activeCombatantId: nextSnapshot.activeCombatantId,
+      completedCombatantIds: [...nextSnapshot.completedCombatantIds],
+      startingTeam: nextSnapshot.startingTeam,
+      currentTeam: nextSnapshot.currentTeam,
+      lastTeam: nextSnapshot.lastTeam,
+      turnPhase: nextSnapshot.turnPhase,
+      roundTurnCount: nextSnapshot.roundTurnCount,
+      malice: nextSnapshot.malice,
+      turnLock: cloneNullableObject(nextSnapshot.turnLock),
+      groups: cloneCombatGroups(nextSnapshot.groups),
+      existingVersion,
+      existingUpdatedAt: existingNormalized.updatedAt,
+      applyCompletedCombatants,
+      applyMalice,
+      applyTurnLock,
+      applyGroups,
+    };
+  }
+
+  if (!isGm) {
+    if (!isDirty('malice')) {
+      if (existingHasMaliceValue) {
+        nextSnapshot.malice = existingNormalized.malice;
+      } else {
+        const fallbackMalice = getCombatStateMaliceSnapshot(lastCombatStateSnapshot);
+        if (fallbackMalice !== null) {
+          nextSnapshot.malice = fallbackMalice;
+        }
+      }
+    }
+    if (!isDirty('groups')) {
+      nextSnapshot.groups = cloneCombatGroups(existingNormalized.groups);
+    }
+  }
+
+  return {
+    snapshot: nextSnapshot,
+    existingNormalized,
+    existingVersion,
+    existingHasMaliceValue,
+    isRemoteNewer,
+    localStatePatch,
+  };
+}
+
+function isCombatFieldDirty(dirtyFields, field) {
+  if (typeof field !== 'string' || !field) {
+    return false;
+  }
+
+  if (typeof dirtyFields === 'function') {
+    return Boolean(dirtyFields(field));
+  }
+
+  if (dirtyFields && typeof dirtyFields.has === 'function') {
+    return Boolean(dirtyFields.has(field));
+  }
+
+  if (
+    dirtyFields &&
+    typeof dirtyFields !== 'string' &&
+    typeof dirtyFields[Symbol.iterator] === 'function'
+  ) {
+    return Array.from(dirtyFields).includes(field);
+  }
+
+  return false;
+}
+
+function cloneCombatSnapshot(snapshot) {
+  const source = snapshot && typeof snapshot === 'object' ? snapshot : {};
+  return {
+    ...source,
+    completedCombatantIds: Array.isArray(source.completedCombatantIds)
+      ? [...source.completedCombatantIds]
+      : [],
+    turnLock: cloneNullableObject(source.turnLock),
+    lastEffect: cloneNullableObject(source.lastEffect),
+    groups: cloneCombatGroups(source.groups),
+  };
+}
+
+function cloneCombatGroups(groups) {
+  return Array.isArray(groups)
+    ? groups.map((group) => ({
+        representativeId: group?.representativeId,
+        memberIds: Array.isArray(group?.memberIds) ? [...group.memberIds] : [],
+      }))
+    : [];
+}
+
+function cloneNullableObject(value) {
+  return value && typeof value === 'object' ? { ...value } : null;
 }

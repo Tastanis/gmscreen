@@ -47,9 +47,7 @@ import {
 import {
   TURN_PHASE,
   createCombatStateSnapshot as buildCombatStateSnapshot,
-  getCombatStateVersion,
   getTurnPhase as getCombatTurnPhase,
-  isCombatStateNewer,
   normalizeCombatGroups,
   normalizeCombatState,
   normalizeCombatTeam,
@@ -61,6 +59,7 @@ import {
   getActiveSceneCombatState,
   getCombatStateMaliceSnapshot,
   hasCombatMaliceValue,
+  prepareCombatSnapshotForSync,
   shouldApplyRemoteCombatState,
 } from '../combat/combat-sync.js';
 import {
@@ -1354,10 +1353,6 @@ export function mountBoardInteractions(store, routes = {}) {
 
   function markCombatFieldDirty(field) {
     dirtyCombatFields.mark(field);
-  }
-
-  function isCombatFieldDirty(field) {
-    return dirtyCombatFields.has(field);
   }
 
   function clearDirtyCombatFields() {
@@ -8339,117 +8334,54 @@ export function mountBoardInteractions(store, routes = {}) {
     }
 
     const existingCombatState = state.boardState?.sceneState?.[activeSceneId]?.combat ?? null;
-    const existingNormalized = normalizeCombatState(existingCombatState ?? {});
-    const existingHasMaliceValue = hasCombatMaliceValue(existingCombatState);
-
-    const snapshot = createCombatStateSnapshot();
-    // Use sequence numbers for reliable ordering, fall back to timestamp for backwards compatibility
-    const existingVersion = getCombatStateVersion(existingNormalized);
-    const isRemoteNewer = isCombatStateNewer(existingNormalized, {
-      version: combatStateVersion,
-      updatedAt: combatStateUpdatedAt,
+    const currentIsGm = isGmUser();
+    const {
+      snapshot,
+      isRemoteNewer,
+      localStatePatch,
+    } = prepareCombatSnapshotForSync(createCombatStateSnapshot(), {
+      existingCombatState,
+      currentVersion: combatStateVersion,
+      currentUpdatedAt: combatStateUpdatedAt,
+      dirtyFields: dirtyCombatFields,
+      isGm: currentIsGm,
+      lastCombatStateSnapshot,
     });
-    if (isRemoteNewer) {
-      // Remote state is newer - incorporate remote changes but preserve locally modified fields
-      // to prevent race conditions where local changes are lost ("popback" issue)
-      const roundChanged = existingNormalized.round !== snapshot.round;
 
-      snapshot.active = existingNormalized.active;
-      snapshot.round = existingNormalized.round;
-      snapshot.activeCombatantId = existingNormalized.activeCombatantId;
+    combatSequence = snapshot.sequence;
 
-      // For completedCombatantIds: if dirty, keep local state; if round changed, use remote;
-      // otherwise merge local and remote to preserve local turn completions
-      if (!isCombatFieldDirty('completedCombatantIds')) {
-        if (roundChanged) {
-          snapshot.completedCombatantIds = [...existingNormalized.completedCombatantIds];
-        } else {
-          // Merge: keep local changes (just-completed combatants) plus any remote changes
-          const mergedCompletedIds = Array.from(new Set([
-            ...snapshot.completedCombatantIds,
-            ...existingNormalized.completedCombatantIds
-          ]));
-          snapshot.completedCombatantIds = mergedCompletedIds;
-        }
-      }
-      // If completedCombatantIds is dirty, keep the local snapshot values (already set)
-
-      snapshot.startingTeam = existingNormalized.startingTeam;
-      snapshot.currentTeam = existingNormalized.currentTeam;
-      snapshot.lastTeam = existingNormalized.lastTeam;
-      snapshot.turnPhase = existingNormalized.turnPhase;
-      snapshot.roundTurnCount = existingNormalized.roundTurnCount;
-
-      // Only overwrite malice from remote if not locally modified
-      if (!isCombatFieldDirty('malice')) {
-        snapshot.malice = existingNormalized.malice;
-      }
-
-      // Only overwrite turnLock from remote if not locally modified
-      if (!isCombatFieldDirty('turnLock')) {
-        snapshot.turnLock = existingNormalized.turnLock;
-      }
-
-      snapshot.lastEffect = existingNormalized.lastEffect;
-
-      // Only overwrite groups from remote if not locally modified
-      if (!isCombatFieldDirty('groups')) {
-        snapshot.groups = existingNormalized.groups;
-      }
-
-      // Preserve the higher sequence number
-      if (existingNormalized.sequence > snapshot.sequence) {
-        snapshot.sequence = existingNormalized.sequence + 1;
-        combatSequence = snapshot.sequence;
-      }
-
-      // Also update local in-memory state to match the snapshot we're saving
-      // This prevents UI from using stale local state when refresh loop runs
-      combatActive = snapshot.active;
-      combatRound = snapshot.round;
-      if (!isCombatFieldDirty('completedCombatantIds')) {
+    if (isRemoteNewer && localStatePatch) {
+      // Also update local in-memory state to match the snapshot we're saving.
+      // This prevents UI from using stale local state when refresh loop runs.
+      combatActive = localStatePatch.active;
+      combatRound = localStatePatch.round;
+      if (localStatePatch.applyCompletedCombatants) {
         completedCombatants.clear();
-        snapshot.completedCombatantIds.forEach((id) => completedCombatants.add(id));
+        localStatePatch.completedCombatantIds.forEach((id) => completedCombatants.add(id));
       }
-      startingCombatTeam = snapshot.startingTeam;
-      currentTurnTeam = snapshot.currentTeam;
-      lastActingTeam = snapshot.lastTeam;
-      turnPhase = snapshot.turnPhase;
-      roundTurnCount = snapshot.roundTurnCount;
-      if (!isCombatFieldDirty('malice') && (isGmUser() || existingHasMaliceValue)) {
-        maliceCount = snapshot.malice;
+      startingCombatTeam = localStatePatch.startingTeam;
+      currentTurnTeam = localStatePatch.currentTeam;
+      lastActingTeam = localStatePatch.lastTeam;
+      turnPhase = localStatePatch.turnPhase;
+      roundTurnCount = localStatePatch.roundTurnCount;
+      if (localStatePatch.applyMalice) {
+        maliceCount = localStatePatch.malice;
       }
-      if (!isCombatFieldDirty('turnLock')) {
-        updateTurnLockState(snapshot.turnLock);
+      if (localStatePatch.applyTurnLock) {
+        updateTurnLockState(localStatePatch.turnLock);
       }
-      if (!isCombatFieldDirty('groups')) {
-        applyCombatGroupsFromState(snapshot.groups);
+      if (localStatePatch.applyGroups) {
+        applyCombatGroupsFromState(localStatePatch.groups);
       }
-      combatStateVersion = existingVersion;
-      combatStateUpdatedAt = existingNormalized.updatedAt || combatStateUpdatedAt;
+      combatStateVersion = localStatePatch.existingVersion;
+      combatStateUpdatedAt = localStatePatch.existingUpdatedAt || combatStateUpdatedAt;
 
       // Use setter to properly update active combatant with highlights and handlers
-      setActiveCombatantId(snapshot.activeCombatantId);
+      setActiveCombatantId(localStatePatch.activeCombatantId);
 
       // Refresh UI to reflect the new state immediately
       updateCombatModeIndicators();
       refreshCombatTracker();
-    }
-    if (!isGmUser()) {
-      // Non-GMs should use remote values for malice and groups UNLESS they just modified them locally
-      if (!isCombatFieldDirty('malice')) {
-        if (existingHasMaliceValue) {
-          snapshot.malice = existingNormalized.malice;
-        } else {
-          const fallbackMalice = getCombatStateMaliceSnapshot(lastCombatStateSnapshot);
-          if (fallbackMalice !== null) {
-            snapshot.malice = fallbackMalice;
-          }
-        }
-      }
-      if (!isCombatFieldDirty('groups')) {
-        snapshot.groups = existingNormalized.groups;
-      }
     }
 
     // Clear dirty combat field tracking after we've incorporated them into the snapshot
