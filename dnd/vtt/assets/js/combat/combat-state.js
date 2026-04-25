@@ -1,3 +1,6 @@
+import { normalizeTurnLock } from './combat-locks.js';
+export { normalizeTurnLock } from './combat-locks.js';
+
 export const TURN_PHASE = Object.freeze({
   IDLE: 'idle',
   PICK: 'pick',
@@ -275,29 +278,6 @@ export function normalizeTurnEffect(raw) {
   }
 
   return effect;
-}
-
-export function normalizeTurnLock(raw) {
-  if (!raw || typeof raw !== 'object') {
-    return null;
-  }
-
-  const holderId = normalizeProfileId(raw.holderId ?? raw.id ?? null);
-  if (!holderId) {
-    return null;
-  }
-
-  const holderName = typeof raw.holderName === 'string' ? raw.holderName.trim() : holderId;
-  const combatantId = typeof raw.combatantId === 'string' ? raw.combatantId.trim() : '';
-  const lockedAtRaw = Number(raw.lockedAt);
-  const lockedAt = Number.isFinite(lockedAtRaw) ? Math.max(0, Math.trunc(lockedAtRaw)) : Date.now();
-
-  return {
-    holderId,
-    holderName,
-    combatantId: combatantId || null,
-    lockedAt,
-  };
 }
 
 function normalizeProfileId(value) {

@@ -55,15 +55,21 @@ import {
   normalizeCombatTeam,
   serializeCombatGroups,
 } from '../combat/combat-state.js';
+import {
+  TURN_LOCK_STALE_TIMEOUT_MS,
+  acquireTurnLock as acquireCombatTurnLock,
+  clearStaleTurnLock as clearStaleCombatTurnLock,
+  createTurnLockState,
+  isTurnLockStale as isCombatTurnLockStale,
+  releaseTurnLock as releaseCombatTurnLock,
+  serializeTurnLockState as serializeCombatTurnLockState,
+  updateTurnLockState as applyTurnLockState,
+} from '../combat/combat-locks.js';
 
 const OVERLAY_LAYER_PREFIX = 'overlay-layer-';
 let overlayLayerSeed = Date.now();
 let overlayLayerSequence = 0;
 let trackerOverflowResizeListenerAttached = false;
-
-// Turn lock timeout: locks older than this are considered stale and auto-released.
-// This prevents orphaned locks when players disconnect without ending their turn.
-const TURN_LOCK_STALE_TIMEOUT_MS = 10 * 60 * 1000; // 10 minutes
 
 // Default scene ID used when no scene is explicitly selected.
 // This allows drawings, templates, and other per-scene data to persist
@@ -845,12 +851,7 @@ export function mountBoardInteractions(store, routes = {}) {
   let activeTurnDialog = null;
   let activeSaveEndsPrompt = null;
   let lastTurnPromptAnchorRect = null;
-  const turnLockState = {
-    holderId: null,
-    holderName: null,
-    combatantId: null,
-    lockedAt: 0,
-  };
+  const turnLockState = createTurnLockState();
   let lastPersistedBoardStateSignature = null;
   let lastPersistedBoardStateHash = null;
   let pendingBoardStateSave = null;
@@ -8487,18 +8488,7 @@ export function mountBoardInteractions(store, routes = {}) {
   }
 
   function updateTurnLockState(lock) {
-    if (!lock || typeof lock !== 'object') {
-      turnLockState.holderId = null;
-      turnLockState.holderName = null;
-      turnLockState.combatantId = null;
-      turnLockState.lockedAt = 0;
-      return;
-    }
-
-    turnLockState.holderId = lock.holderId ?? null;
-    turnLockState.holderName = lock.holderName ?? lock.holderId ?? null;
-    turnLockState.combatantId = lock.combatantId ?? null;
-    turnLockState.lockedAt = Number.isFinite(lock.lockedAt) ? lock.lockedAt : Date.now();
+    applyTurnLockState(turnLockState, lock);
   }
 
   function createCombatStateSnapshot() {
@@ -8523,28 +8513,7 @@ export function mountBoardInteractions(store, routes = {}) {
   }
 
   function serializeTurnLockState() {
-    const holderId = normalizeProfileId(turnLockState.holderId);
-    if (!holderId) {
-      return null;
-    }
-
-    const combatantId =
-      typeof turnLockState.combatantId === 'string' && turnLockState.combatantId
-        ? turnLockState.combatantId
-        : null;
-    const lockedAt = Number.isFinite(turnLockState.lockedAt)
-      ? Math.max(0, Math.trunc(turnLockState.lockedAt))
-      : Date.now();
-
-    return {
-      holderId,
-      holderName:
-        typeof turnLockState.holderName === 'string' && turnLockState.holderName.trim()
-          ? turnLockState.holderName.trim()
-          : holderId,
-      combatantId,
-      lockedAt,
-    };
+    return serializeCombatTurnLockState(turnLockState);
   }
 
   function syncCombatStateToStore() {
@@ -8751,78 +8720,35 @@ export function mountBoardInteractions(store, routes = {}) {
   }
 
   function acquireTurnLock(holderId, holderName, combatantId, options = {}) {
-    const normalizedId = normalizeProfileId(holderId);
-    if (!normalizedId) {
-      return false;
-    }
-
-    const normalizedName =
-      typeof holderName === 'string' && holderName.trim() ? holderName.trim() : normalizedId;
-    const existingHolder = turnLockState.holderId;
-    const wantsForce = options.force === true;
-
-    if (existingHolder && existingHolder !== normalizedId && !wantsForce) {
-      return false;
-    }
-
-    const previousHolder = turnLockState.holderId;
-    const previousCombatantId = turnLockState.combatantId;
-    turnLockState.holderId = normalizedId;
-    turnLockState.holderName = normalizedName;
-    turnLockState.combatantId = typeof combatantId === 'string' && combatantId ? combatantId : null;
-    turnLockState.lockedAt = Date.now();
-    if (
-      turnLockState.holderId !== previousHolder ||
-      turnLockState.combatantId !== previousCombatantId
-    ) {
+    const result = acquireCombatTurnLock(turnLockState, holderId, holderName, combatantId, options);
+    if (result.changed) {
       markCombatFieldDirty('turnLock');
       updateCombatModeIndicators();
     }
-    return true;
+    return result.acquired;
   }
 
   function releaseTurnLock(requesterId = null) {
-    if (!turnLockState.holderId) {
-      return false;
-    }
-    const requester = normalizeProfileId(requesterId);
-    if (turnLockState.holderId !== requester && requester && !isGmUser()) {
-      return false;
-    }
-    const previousHolder = turnLockState.holderId;
-    turnLockState.holderId = null;
-    turnLockState.holderName = null;
-    turnLockState.combatantId = null;
-    turnLockState.lockedAt = 0;
-    if (previousHolder) {
+    const result = releaseCombatTurnLock(turnLockState, requesterId, { isGm: isGmUser() });
+    if (result.changed) {
       markCombatFieldDirty('turnLock');
       updateCombatModeIndicators();
     }
-    return true;
+    return result.released;
   }
 
   function isTurnLockStale(lock = turnLockState) {
-    if (!lock || !lock.holderId) {
-      return false;
-    }
-    const lockedAt = Number.isFinite(lock.lockedAt) ? lock.lockedAt : 0;
-    if (lockedAt <= 0) {
-      return false;
-    }
-    const elapsed = Date.now() - lockedAt;
-    return elapsed > TURN_LOCK_STALE_TIMEOUT_MS;
+    return isCombatTurnLockStale(lock, { staleTimeoutMs: TURN_LOCK_STALE_TIMEOUT_MS });
   }
 
   function clearStaleTurnLock() {
-    if (!isTurnLockStale()) {
+    const result = clearStaleCombatTurnLock(turnLockState, {
+      staleTimeoutMs: TURN_LOCK_STALE_TIMEOUT_MS,
+    });
+    if (!result.cleared) {
       return false;
     }
-    const previousHolder = turnLockState.holderId;
-    const staleCombatantId = turnLockState.combatantId;
-    turnLockState.holderId = null;
-    turnLockState.holderName = null;
-    turnLockState.combatantId = null;
-    turnLockState.lockedAt = 0;
+    const staleCombatantId = result.staleCombatantId;
 
     // If the stale lock was for the currently active combatant, clear that too
     // so the system returns to PICK phase instead of staying stuck in ACTIVE
@@ -8831,7 +8757,7 @@ export function mountBoardInteractions(store, routes = {}) {
       updateTurnPhase();
     }
 
-    if (previousHolder) {
+    if (result.changed) {
       updateCombatModeIndicators();
     }
     return true;
