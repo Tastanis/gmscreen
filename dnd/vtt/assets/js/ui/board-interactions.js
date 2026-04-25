@@ -88,6 +88,10 @@ import {
   removeTokenFromCombatGroups,
   resetCombatGroupState,
 } from '../combat/combat-groups.js';
+import {
+  refreshCombatantStateClasses as refreshRenderedCombatantStateClasses,
+  renderCombatTracker,
+} from '../combat/combat-renderer.js';
 
 const OVERLAY_LAYER_PREFIX = 'overlay-layer-';
 let overlayLayerSeed = Date.now();
@@ -5672,284 +5676,52 @@ export function mountBoardInteractions(store, routes = {}) {
   }
 
   function updateCombatTracker(combatants = [], options = {}) {
-    if (!combatTrackerRoot || !combatTrackerWaiting || !combatTrackerCompleted) {
-      return;
-    }
-
-    const waitingContainer = combatTrackerWaiting;
-    const completedContainer = combatTrackerCompleted;
-    const gmViewing = isGmUser();
-    const rawEntries = Array.isArray(combatants) ? combatants.filter(Boolean) : [];
-    const entries = rawEntries.filter(
-      (entry) => gmViewing || !toBoolean(entry.hidden ?? entry.isHidden ?? false, false)
-    );
-
-    combatTrackerRoot.dataset.viewerRole = gmViewing ? 'gm' : 'player';
-
-    const originalOrder = new Map();
-    entries.forEach((entry, index) => {
-      if (!entry || typeof entry !== 'object') {
-        return;
-      }
-      const id = typeof entry.id === 'string' ? entry.id : null;
-      if (!id) {
-        return;
-      }
-      originalOrder.set(id, index);
+    renderCombatTracker({
+      elements: {
+        root: combatTrackerRoot,
+        waiting: combatTrackerWaiting,
+        completed: combatTrackerCompleted,
+      },
+      combatants,
+      options,
+      state: {
+        combatantTeams,
+        completedCombatants,
+        trackerHoverTokenIds,
+      },
+      callbacks: {
+        isGmUser,
+        toBoolean,
+        getCombatantProfileId,
+        getRepresentativeIdFor,
+        getGroupMembers,
+        getVisibleGroupMembers,
+        buildDisplayRepresentatives,
+        getCombatGroupColorAssignments,
+        getCombatantTeam,
+        getCombatActive: () => combatActive,
+        getActiveCombatantId: () => activeCombatantId,
+        setActiveCombatantId,
+        setLastCombatTrackerEntries: (entries) => {
+          lastCombatTrackerEntries = entries;
+        },
+        setLastCombatTrackerActiveIds: (activeIds) => {
+          lastCombatTrackerActiveIds = activeIds;
+        },
+        pruneCombatGroups,
+        pruneCompletedCombatants,
+        shouldSyncPrunedGroups: () => isGmUser() && !suppressCombatStateSync && !isApplyingState,
+        syncCombatStateToStore,
+        updateBoardTokenHighlight,
+        attachTrackerHoverHandlers,
+        refreshCombatantStateClasses,
+        updateCombatModeIndicators,
+        cancelTrackerOverflowRefresh,
+        refreshTrackerOverflowIndicators,
+        setSectionOverflowState,
+        scheduleTrackerOverflowRefresh,
+      },
     });
-
-    combatantTeams.clear();
-    entries.forEach((entry) => {
-      if (!entry || typeof entry !== 'object') {
-        return;
-      }
-      const id = typeof entry.id === 'string' ? entry.id : null;
-      if (!id) {
-        return;
-      }
-      const team = normalizeCombatTeam(entry.team ?? entry.combatTeam ?? null);
-      combatantTeams.set(id, team);
-    });
-
-    if (!gmViewing) {
-      const playerProfileIds = new Map();
-      const prioritizedPcIds = [];
-      entries.forEach((entry) => {
-        if (!entry || typeof entry !== 'object') {
-          return;
-        }
-        const id = typeof entry.id === 'string' ? entry.id : null;
-        if (!id) {
-          return;
-        }
-        const profileId = getCombatantProfileId(id);
-        if (profileId && !playerProfileIds.has(id)) {
-          playerProfileIds.set(id, profileId);
-          if (prioritizedPcIds.length < 4) {
-            prioritizedPcIds.push(id);
-          }
-        }
-      });
-
-      const prioritizedPcSet = new Set(prioritizedPcIds);
-
-      entries.sort((a, b) => {
-        const aId = typeof a?.id === 'string' ? a.id : '';
-        const bId = typeof b?.id === 'string' ? b.id : '';
-        const aCategory = getPlayerTrackerSortCategory(aId, playerProfileIds, prioritizedPcSet);
-        const bCategory = getPlayerTrackerSortCategory(bId, playerProfileIds, prioritizedPcSet);
-        if (aCategory !== bCategory) {
-          return aCategory - bCategory;
-        }
-        const aIndex = originalOrder.get(aId) ?? 0;
-        const bIndex = originalOrder.get(bId) ?? 0;
-        return aIndex - bIndex;
-      });
-    }
-
-    const activeIds = new Set(
-      options?.activeIds instanceof Set ? Array.from(options.activeIds) : options?.activeIds ?? []
-    );
-    if (!activeIds.size) {
-      rawEntries.forEach((entry) => {
-        if (entry && typeof entry.id === 'string') {
-          activeIds.add(entry.id);
-        }
-      });
-    }
-
-    if (!options?.skipCache) {
-      lastCombatTrackerEntries = entries.map(cloneCombatantEntry).filter(Boolean);
-      lastCombatTrackerActiveIds = new Set(activeIds);
-    } else if (options?.activeIds) {
-      lastCombatTrackerActiveIds = new Set(activeIds);
-    }
-
-    const visibleEntryIds = new Set();
-    entries.forEach((entry) => {
-      if (entry && typeof entry.id === 'string') {
-        visibleEntryIds.add(entry.id);
-      }
-    });
-
-    // For players, build a map of display representatives for groups whose actual
-    // representative is hidden. This allows groups to remain visible when at least
-    // one member is visible, even if the representative is hidden.
-    const displayRepresentatives = gmViewing ? new Map() : buildDisplayRepresentatives(visibleEntryIds);
-
-    if (!options?.skipPrune) {
-      const groupsPruned = gmViewing ? pruneCombatGroups(activeIds) : false;
-      if (gmViewing) {
-        pruneCompletedCombatants(activeIds);
-      }
-
-      // Only sync if groups were pruned and we're not currently applying state from server.
-      // The isApplyingState check prevents recursive state updates during applyStateToBoard.
-      if (groupsPruned && isGmUser() && !suppressCombatStateSync && !isApplyingState) {
-        syncCombatStateToStore();
-      }
-    }
-
-    const groupColorAssignments = getCombatGroupColorAssignments();
-
-    const waitingFragment = document.createDocumentFragment();
-    const completedFragment = document.createDocumentFragment();
-    const renderedRepresentatives = new Set();
-
-    entries.forEach((combatant) => {
-      if (!combatant || typeof combatant !== 'object') {
-        return;
-      }
-
-      const id = typeof combatant.id === 'string' ? combatant.id : null;
-      if (!id) {
-        return;
-      }
-
-      // Check if this combatant is an actual representative or a display representative
-      // (for players when the actual representative is hidden)
-      const actualRepresentativeId = getRepresentativeIdFor(id);
-      const isDisplayRepresentative = displayRepresentatives.has(id);
-      const displayRepForGroup = displayRepresentatives.get(id);
-
-      // For normal cases: only render if this is the actual representative
-      // For display representative cases: render if this entry is the display rep for a hidden group
-      if (!isDisplayRepresentative && (!actualRepresentativeId || actualRepresentativeId !== id)) {
-        return;
-      }
-
-      // Use the actual representative ID for group operations, but use the display rep's
-      // representative ID when the actual representative is hidden
-      const representativeId = isDisplayRepresentative ? displayRepForGroup : actualRepresentativeId;
-
-      if (renderedRepresentatives.has(representativeId)) {
-        return;
-      }
-      renderedRepresentatives.add(representativeId);
-
-      const label = typeof combatant.name === 'string' && combatant.name.trim() ? combatant.name.trim() : 'Token';
-      const token = document.createElement('div');
-      token.className = 'vtt-combat-token';
-      token.dataset.combatantId = representativeId;
-      token.setAttribute('role', 'listitem');
-      token.setAttribute('tabindex', isGmUser() ? '0' : '-1');
-
-      const groupMembers = gmViewing
-        ? getGroupMembers(representativeId)
-        : getVisibleGroupMembers(representativeId, visibleEntryIds);
-      const groupSize = groupMembers.length;
-      const accessibleLabel = groupSize > 1 ? `${label} (group of ${groupSize})` : label;
-      token.setAttribute('aria-label', accessibleLabel);
-      token.title = accessibleLabel;
-
-      const imageUrl = typeof combatant.imageUrl === 'string' ? combatant.imageUrl : '';
-      if (imageUrl) {
-        const img = document.createElement('img');
-        img.src = imageUrl;
-        img.alt = label;
-        token.appendChild(img);
-      } else {
-        const initials = document.createElement('span');
-        initials.className = 'vtt-combat-token__initials';
-        initials.textContent = deriveTokenInitials(label);
-        token.appendChild(initials);
-      }
-
-      if (groupSize > 1) {
-        token.dataset.groupSize = String(groupSize);
-      } else if ('groupSize' in token.dataset) {
-        delete token.dataset.groupSize;
-      }
-
-      const groupColorIndex = groupSize > 1 ? groupColorAssignments.get(representativeId) : null;
-      if (groupColorIndex) {
-        token.dataset.groupColor = String(groupColorIndex);
-      } else if ('groupColor' in token.dataset) {
-        delete token.dataset.groupColor;
-      }
-
-      const team = getCombatantTeam(representativeId);
-      if (team) {
-        token.dataset.combatTeam = team;
-      } else if ('combatTeam' in token.dataset) {
-        delete token.dataset.combatTeam;
-      }
-
-      groupMembers.forEach((memberId) => {
-        if (memberId) {
-          combatantTeams.set(memberId, team);
-        }
-      });
-
-      const isCompleted = combatActive && completedCombatants.has(representativeId);
-      token.dataset.combatState = isCompleted ? 'completed' : 'waiting';
-      applyCombatantStateToNode(token, representativeId);
-
-      if (isCompleted) {
-        completedFragment.appendChild(token);
-      } else {
-        waitingFragment.appendChild(token);
-      }
-    });
-
-    const representativeSet = renderedRepresentatives;
-    if (activeCombatantId && !representativeSet.has(activeCombatantId) && isGmUser()) {
-      setActiveCombatantId(null);
-    }
-
-    // Clear stale tracker hover states before replacing DOM elements.
-    // This fixes highlighting persistence when tracker entries are replaced
-    // without mouseleave events firing.
-    if (trackerHoverTokenIds.size) {
-      const staleIds = Array.from(trackerHoverTokenIds);
-      trackerHoverTokenIds.clear();
-      staleIds.forEach((id) => updateBoardTokenHighlight(id));
-    }
-
-    waitingContainer.innerHTML = '';
-    waitingContainer.appendChild(waitingFragment);
-    waitingContainer.dataset.empty = waitingContainer.children.length ? 'false' : 'true';
-
-    completedContainer.innerHTML = '';
-    completedContainer.appendChild(completedFragment);
-    completedContainer.dataset.empty = completedContainer.children.length ? 'false' : 'true';
-
-    const hasCombatants = waitingContainer.children.length || completedContainer.children.length;
-    combatTrackerRoot.dataset.hasCombatants = hasCombatants ? 'true' : 'false';
-
-    attachTrackerHoverHandlers(waitingContainer);
-    attachTrackerHoverHandlers(completedContainer);
-    refreshCombatantStateClasses();
-    updateCombatModeIndicators();
-
-    if (gmViewing) {
-      cancelTrackerOverflowRefresh();
-      refreshTrackerOverflowIndicators();
-    } else {
-      setSectionOverflowState(waitingContainer, false);
-      setSectionOverflowState(completedContainer, false);
-      scheduleTrackerOverflowRefresh();
-    }
-  }
-
-  function getPlayerTrackerSortCategory(combatantId, playerProfileIds, prioritizedPcSet) {
-    if (typeof combatantId !== 'string' || !combatantId) {
-      return 3;
-    }
-    if (prioritizedPcSet?.has(combatantId)) {
-      return 0;
-    }
-    if (playerProfileIds?.has(combatantId)) {
-      return 1;
-    }
-    const team = combatantTeams.get(combatantId);
-    if (team === 'ally') {
-      return 1;
-    }
-    if (team === 'enemy') {
-      return 2;
-    }
-    return 3;
   }
 
   function setSectionOverflowState(section, overflowed) {
@@ -6000,18 +5772,6 @@ export function mountBoardInteractions(store, routes = {}) {
       trackerOverflowAnimationFrame = null;
       refreshTrackerOverflowIndicators();
     });
-  }
-
-  function cloneCombatantEntry(entry) {
-    if (!entry || typeof entry !== 'object') {
-      return null;
-    }
-
-    const clone = { ...entry };
-    if (entry.hp && typeof entry.hp === 'object') {
-      clone.hp = { ...entry.hp };
-    }
-    return clone;
   }
 
   function refreshCombatTracker() {
@@ -6237,36 +5997,13 @@ export function mountBoardInteractions(store, routes = {}) {
     }
   }
 
-  function applyCombatantStateToNode(node, representativeId) {
-    if (!(node instanceof HTMLElement)) {
-      return;
-    }
-    const isRepresentative = typeof representativeId === 'string' && representativeId !== '';
-    const isActive = combatActive && isRepresentative && representativeId === activeCombatantId;
-    const isCompleted = combatActive && isRepresentative && completedCombatants.has(representativeId);
-
-    node.classList.toggle('is-active', Boolean(isActive));
-    node.classList.toggle('is-completed', Boolean(isCompleted));
-    if (isActive) {
-      node.setAttribute('aria-current', 'true');
-    } else {
-      node.removeAttribute('aria-current');
-    }
-
-    const state = isCompleted ? 'completed' : isActive ? 'active' : 'waiting';
-    node.dataset.combatState = state;
-    node.setAttribute('tabindex', isGmUser() ? '0' : '-1');
-  }
-
   function refreshCombatantStateClasses() {
-    if (!combatTrackerRoot) {
-      return;
-    }
-    Array.from(combatTrackerRoot.querySelectorAll('[data-combatant-id]')).forEach((node) => {
-      if (!(node instanceof HTMLElement)) {
-        return;
-      }
-      applyCombatantStateToNode(node, node.dataset.combatantId || null);
+    refreshRenderedCombatantStateClasses({
+      root: combatTrackerRoot,
+      combatActive,
+      activeCombatantId,
+      completedCombatants,
+      gmViewing: isGmUser(),
     });
   }
 
@@ -9613,21 +9350,6 @@ export function mountBoardInteractions(store, routes = {}) {
     });
     lastCombatTrackerEntries = [];
     refreshCombatTracker();
-  }
-
-  function deriveTokenInitials(label) {
-    const trimmed = label.trim();
-    if (!trimmed) {
-      return '?';
-    }
-
-    const words = trimmed.split(/\s+/).slice(0, 2);
-    const initials = words
-      .map((word) => word.charAt(0))
-      .filter(Boolean)
-      .join('')
-      .toUpperCase();
-    return initials || trimmed.charAt(0).toUpperCase();
   }
 
   function applyTokenOverlays(tokenElement, placement) {
