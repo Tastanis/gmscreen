@@ -2685,6 +2685,11 @@
   margin: 0;
   font-size: 0.92rem;
   font-weight: 600;
+  flex: 1 1 auto;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
 }
 
 .vtt-token-settings__stat-block {
@@ -2717,6 +2722,45 @@
   cursor: not-allowed;
 }
 
+.vtt-token-settings__stack-controls {
+  display: inline-flex;
+  flex-direction: column;
+  gap: 0.1rem;
+  margin-left: auto;
+}
+
+.vtt-token-settings__stack-button {
+  appearance: none;
+  width: 1.35rem;
+  height: 1.05rem;
+  display: grid;
+  place-items: center;
+  padding: 0;
+  border: 1px solid rgba(148, 163, 184, 0.38);
+  border-radius: 4px;
+  background: rgba(148, 163, 184, 0.16);
+  color: rgba(226, 232, 240, 0.92);
+  font-size: 0.66rem;
+  line-height: 1;
+  cursor: pointer;
+  transition: color var(--vtt-transition), background var(--vtt-transition), border-color var(--vtt-transition);
+}
+
+.vtt-token-settings__stack-button:hover:not(:disabled) {
+  background: rgba(148, 163, 184, 0.28);
+  color: #fff;
+}
+
+.vtt-token-settings__stack-button:disabled {
+  opacity: 0.38;
+  cursor: not-allowed;
+}
+
+.vtt-token-settings__stack-button:focus-visible {
+  outline: 2px solid var(--vtt-accent);
+  outline-offset: 2px;
+}
+
 .vtt-token-settings__close {
   appearance: none;
   border: none;
@@ -2728,7 +2772,7 @@
   padding: 0.15rem 0.35rem;
   cursor: pointer;
   transition: color var(--vtt-transition), background var(--vtt-transition);
-  margin-left: auto;
+  margin-left: 0;
 }
 
 .vtt-token-settings__close:hover {

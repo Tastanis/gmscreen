@@ -35,6 +35,11 @@ import { createConditionTooltips } from './condition-tooltips.js';
 import { createMapPings } from './map-pings.js';
 import { createTokenInteractions } from './token-interactions.js';
 import {
+  buildTokenStackOrderUpdate,
+  getPlacementStackOrder,
+  getTokenStackOrderAvailability,
+} from './token-stack-order.js';
+import {
   broadcastStaminaSync,
   subscribeToStaminaSync,
 } from '../services/stamina-sync-service.js';
@@ -5386,11 +5391,12 @@ export function mountBoardInteractions(store, routes = {}) {
     // Pre-compute fog checker once (null when fog inactive or GM viewing)
     const isCellFogged = gmViewing ? null : createFogChecker(state);
 
-    placements.forEach((placement) => {
+    placements.forEach((placement, placementIndex) => {
       const normalized = normalizePlacementForRender(placement);
       if (!normalized) {
         return;
       }
+      const stackOrder = getPlacementStackOrder(placement, placementIndex);
 
       activeCombatantIds.add(normalized.id);
 
@@ -5487,10 +5493,10 @@ export function mountBoardInteractions(store, routes = {}) {
 
       if (previewPositions && previewPositions.has(normalized.id)) {
         token.classList.add('is-dragging');
-        token.style.zIndex = '10';
+        token.style.zIndex = '100000';
       } else {
         token.classList.remove('is-dragging');
-        token.style.zIndex = '';
+        token.style.zIndex = String(stackOrder);
       }
 
       token.dataset.tokenName = normalized.name || '';
@@ -12089,6 +12095,29 @@ export function mountBoardInteractions(store, routes = {}) {
           </button>
         `;
 
+    const stackControlsMarkup = `
+          <div class="vtt-token-settings__stack-controls" aria-label="Token stack order">
+            <button
+              type="button"
+              class="vtt-token-settings__stack-button"
+              data-token-settings-stack="forward"
+              aria-label="Move token forward"
+              title="Move token forward"
+            >
+              <span aria-hidden="true">&#9650;</span>
+            </button>
+            <button
+              type="button"
+              class="vtt-token-settings__stack-button"
+              data-token-settings-stack="backward"
+              aria-label="Move token backward"
+              title="Move token backward"
+            >
+              <span aria-hidden="true">&#9660;</span>
+            </button>
+          </div>
+        `;
+
     const hiddenToggleMarkup = gmUser
       ? `
         <div class="vtt-token-settings__section">
@@ -12114,6 +12143,7 @@ export function mountBoardInteractions(store, routes = {}) {
         <header class="vtt-token-settings__header">
           <h2 class="vtt-token-settings__title" data-token-settings-title>Token Settings</h2>
           ${statBlockButtonMarkup}
+          ${stackControlsMarkup}
           <button type="button" class="vtt-token-settings__close" data-token-settings-close aria-label="Close token settings">×</button>
         </header>
         <div class="vtt-token-settings__section vtt-token-settings__section--conditions">
@@ -12244,6 +12274,8 @@ export function mountBoardInteractions(store, routes = {}) {
       form: element.querySelector('form'),
       title: element.querySelector('[data-token-settings-title]'),
       statBlockButton: element.querySelector('[data-token-settings-stat-block]'),
+      stackForwardButton: element.querySelector('[data-token-settings-stack="forward"]'),
+      stackBackwardButton: element.querySelector('[data-token-settings-stack="backward"]'),
       closeButton: element.querySelector('[data-token-settings-close]'),
       showHpToggle: element.querySelector('[data-token-settings-toggle="hitPoints"]'),
       hpField: element.querySelector('[data-token-settings-field="hitPoints"]'),
@@ -12285,6 +12317,14 @@ export function mountBoardInteractions(store, routes = {}) {
         menu.statBlockButton.setAttribute('aria-hidden', 'false');
       }
     }
+
+    menu.stackForwardButton?.addEventListener('click', () => {
+      handleTokenStackOrderClick('forward');
+    });
+
+    menu.stackBackwardButton?.addEventListener('click', () => {
+      handleTokenStackOrderClick('backward');
+    });
 
     if (menu.conditionSelect) {
       menu.conditionSelect.addEventListener('change', () => {
@@ -12694,6 +12734,57 @@ export function mountBoardInteractions(store, routes = {}) {
     syncTokenSettingsForm(placement);
   }
 
+  function handleTokenStackOrderClick(direction) {
+    if (!activeTokenSettingsId) {
+      return;
+    }
+
+    const state = boardApi.getState?.() ?? {};
+    const placements = getActiveScenePlacements(state);
+    const changes = buildTokenStackOrderUpdate(placements, activeTokenSettingsId, direction);
+    if (!changes.length) {
+      syncTokenStackControls(activeTokenSettingsId);
+      return;
+    }
+
+    const nextOrders = new Map(changes.map((change) => [change.id, change.stackOrder]));
+    const updated = updatePlacementsByIds(changes.map((change) => change.id), (placement) => {
+      if (nextOrders.has(placement.id)) {
+        placement.stackOrder = nextOrders.get(placement.id);
+      }
+    });
+
+    if (!updated) {
+      syncTokenStackControls(activeTokenSettingsId);
+      return;
+    }
+
+    refreshTokenSettings();
+    if (status) {
+      const label = tokenLabel(getPlacementFromStore(activeTokenSettingsId));
+      status.textContent = `Moved ${label} ${direction === 'backward' ? 'backward' : 'forward'} in the stack.`;
+    }
+  }
+
+  function syncTokenStackControls(placementId = activeTokenSettingsId) {
+    if (!tokenSettingsMenu?.stackForwardButton || !tokenSettingsMenu?.stackBackwardButton) {
+      return;
+    }
+
+    const placements = getActiveScenePlacements(boardApi.getState?.() ?? {});
+    const availability = getTokenStackOrderAvailability(placements, placementId);
+    setStackButtonState(tokenSettingsMenu.stackForwardButton, !availability.canMoveForward);
+    setStackButtonState(tokenSettingsMenu.stackBackwardButton, !availability.canMoveBackward);
+  }
+
+  function setStackButtonState(button, disabled) {
+    if (!button) {
+      return;
+    }
+    button.disabled = Boolean(disabled);
+    button.setAttribute('aria-disabled', disabled ? 'true' : 'false');
+  }
+
   function syncTokenSettingsForm(placement) {
     if (!tokenSettingsMenu?.element) {
       return;
@@ -12706,6 +12797,7 @@ export function mountBoardInteractions(store, routes = {}) {
     tokenSettingsMenu.element.setAttribute('aria-label', `${label} settings`);
 
     syncMonsterStatBlockControls(placement);
+    syncTokenStackControls(placement?.id);
 
     syncConditionControls(placement);
 

@@ -361,7 +361,7 @@ export function createTokenInteractions({
           const baseLeft = leftOffset + (pos.column ?? 0) * gridSize;
           const baseTop = topOffset + (pos.row ?? 0) * gridSize;
           el.classList.add('is-dragging');
-          el.style.zIndex = '10';
+          el.style.zIndex = '100000';
           dragElements.set(id, { element: el, baseLeft, baseTop });
         }
       });

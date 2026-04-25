@@ -50,6 +50,7 @@ export function normalizePlacementEntry(entry) {
   const width = Math.max(1, toNonNegativeInt(entry.width ?? entry.columns ?? entry.w ?? 1));
   const height = Math.max(1, toNonNegativeInt(entry.height ?? entry.rows ?? entry.h ?? 1));
   const size = typeof entry.size === 'string' && entry.size ? entry.size : `${width}x${height}`;
+  const stackOrder = toOptionalNonNegativeInt(entry.stackOrder);
 
   const metadataSource =
     (entry.metadata && typeof entry.metadata === 'object' ? entry.metadata : null) ||
@@ -128,6 +129,10 @@ export function normalizePlacementEntry(entry) {
     normalized.monsterId = monsterId;
   }
 
+  if (stackOrder !== null) {
+    normalized.stackOrder = stackOrder;
+  }
+
   if (monster) {
     normalized.monster = monster;
   }
@@ -157,6 +162,23 @@ export function normalizePlacementEntry(entry) {
   }
 
   return normalized;
+}
+
+function toOptionalNonNegativeInt(value) {
+  if (value === null || value === undefined || value === '') {
+    return null;
+  }
+
+  if (typeof value === 'number' && Number.isFinite(value)) {
+    return Math.max(0, Math.trunc(value));
+  }
+
+  const parsed = Number.parseInt(value, 10);
+  if (Number.isFinite(parsed)) {
+    return Math.max(0, parsed);
+  }
+
+  return null;
 }
 
 function normalizeHitPointsValue(value) {
