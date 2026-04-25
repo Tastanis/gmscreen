@@ -1,5 +1,39 @@
 import { isCombatStateNewer } from './combat-state.js';
 
+export function createCombatDirtyFieldTracker(initialFields = []) {
+  const fields = new Set();
+  const source =
+    initialFields && typeof initialFields !== 'string' && typeof initialFields[Symbol.iterator] === 'function'
+      ? Array.from(initialFields)
+      : [];
+
+  source.forEach((field) => {
+    if (typeof field === 'string' && field.trim()) {
+      fields.add(field.trim());
+    }
+  });
+
+  return {
+    mark(field) {
+      if (typeof field === 'string' && field.trim()) {
+        fields.add(field.trim());
+      }
+    },
+    has(field) {
+      return typeof field === 'string' && fields.has(field);
+    },
+    clear() {
+      fields.clear();
+    },
+    snapshot() {
+      return Array.from(fields);
+    },
+    get size() {
+      return fields.size;
+    },
+  };
+}
+
 export function getActiveSceneCombatState(state = {}) {
   const boardState = state?.boardState ?? {};
   const activeSceneIdRaw = boardState.activeSceneId;

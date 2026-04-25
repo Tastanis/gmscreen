@@ -9,6 +9,7 @@ import {
   normalizeCombatGroups,
   normalizeCombatState,
   normalizeCombatTeam,
+  normalizeTurnEffect,
   serializeCombatGroups,
 } from '../combat-state.js';
 
@@ -119,5 +120,28 @@ describe('combat snapshots', () => {
     assert.deepEqual(snapshot.groups, [
       { representativeId: 'leader', memberIds: ['member-1', 'leader'] },
     ]);
+  });
+});
+
+describe('turn effect normalization', () => {
+  test('normalizes synced turn effect payloads', () => {
+    assert.deepEqual(
+      normalizeTurnEffect({
+        type: ' Draw-Steel ',
+        combatantId: ' token-1 ',
+        timestamp: 4567.8,
+        profileId: ' Sharon ',
+      }),
+      {
+        type: 'draw-steel',
+        combatantId: 'token-1',
+        triggeredAt: 4567,
+        initiatorId: 'sharon',
+      }
+    );
+  });
+
+  test('rejects turn effects without a type', () => {
+    assert.equal(normalizeTurnEffect({ combatantId: 'token-1' }), null);
   });
 });

@@ -2,6 +2,7 @@ import { describe, test } from 'node:test';
 import assert from 'node:assert/strict';
 
 import {
+  createCombatDirtyFieldTracker,
   getActiveSceneCombatState,
   getCombatStateMaliceSnapshot,
   hasCombatMaliceValue,
@@ -93,6 +94,28 @@ describe('combat sync freshness checks', () => {
 });
 
 describe('combat sync helpers', () => {
+  test('tracks dirty combat fields without exposing mutable state', () => {
+    const tracker = createCombatDirtyFieldTracker([' malice ', '', 42, 'groups']);
+
+    assert.equal(tracker.size, 2);
+    assert.equal(tracker.has('malice'), true);
+    assert.equal(tracker.has('turnLock'), false);
+
+    tracker.mark('turnLock');
+    tracker.mark('turnLock');
+
+    assert.deepEqual(tracker.snapshot(), ['malice', 'groups', 'turnLock']);
+    assert.equal(tracker.size, 3);
+
+    const snapshot = tracker.snapshot();
+    snapshot.push('completedCombatantIds');
+
+    assert.equal(tracker.has('completedCombatantIds'), false);
+
+    tracker.clear();
+    assert.equal(tracker.size, 0);
+  });
+
   test('detects malice and legacy maliceCount fields', () => {
     assert.equal(hasCombatMaliceValue({ malice: 0 }), true);
     assert.equal(hasCombatMaliceValue({ maliceCount: 2 }), true);

@@ -53,9 +53,11 @@ import {
   normalizeCombatGroups,
   normalizeCombatState,
   normalizeCombatTeam,
+  normalizeTurnEffect,
   serializeCombatGroups,
 } from '../combat/combat-state.js';
 import {
+  createCombatDirtyFieldTracker,
   getActiveSceneCombatState,
   getCombatStateMaliceSnapshot,
   hasCombatMaliceValue,
@@ -1348,10 +1350,10 @@ export function mountBoardInteractions(store, routes = {}) {
   // Track dirty combat state fields to prevent remote state from overwriting local changes
   // This is separate from the general dirty tracking because combat state has special
   // sync logic in syncCombatStateToStore that handles remote vs local state merging
-  const dirtyCombatFields = new Set();
+  const dirtyCombatFields = createCombatDirtyFieldTracker();
 
   function markCombatFieldDirty(field) {
-    if (field) dirtyCombatFields.add(field);
+    dirtyCombatFields.mark(field);
   }
 
   function isCombatFieldDirty(field) {
@@ -6146,56 +6148,10 @@ export function mountBoardInteractions(store, routes = {}) {
   }
 
   function applyCombatGroupsFromState(groups) {
-    const source = Array.isArray(groups)
-      ? groups
-      : groups && typeof groups === 'object'
-      ? Object.entries(groups).map(([representativeId, memberIds]) => ({
-          representativeId,
-          memberIds: Array.isArray(memberIds) ? memberIds : [],
-        }))
-      : [];
-
-    const prepared = [];
-
-    source.forEach((entry) => {
-      if (!entry || typeof entry !== 'object') {
-        return;
-      }
-
-      const representativeSource =
-        typeof entry.representativeId === 'string'
-          ? entry.representativeId
-          : typeof entry.id === 'string'
-          ? entry.id
-          : null;
-      const representativeId = representativeSource ? representativeSource.trim() : '';
-      if (!representativeId) {
-        return;
-      }
-
-      const membersSource = Array.isArray(entry.memberIds)
-        ? entry.memberIds
-        : Array.isArray(entry.members)
-        ? entry.members
-        : Array.isArray(entry.ids)
-        ? entry.ids
-        : [];
-
-      const normalizedMembers = membersSource
-        .map((memberId) => (typeof memberId === 'string' ? memberId.trim() : ''))
-        .filter((memberId) => memberId.length > 0);
-
-      if (!normalizedMembers.includes(representativeId)) {
-        normalizedMembers.push(representativeId);
-      }
-
-      const uniqueMembers = Array.from(new Set(normalizedMembers));
-      if (uniqueMembers.length <= 1) {
-        return;
-      }
-
-      prepared.push({ representativeId, members: new Set(uniqueMembers) });
-    });
+    const prepared = normalizeCombatGroups(groups).map((group) => ({
+      representativeId: group.representativeId,
+      members: new Set(group.memberIds),
+    }));
 
     let changed = combatTrackerGroups.size !== prepared.length;
 
@@ -8315,39 +8271,6 @@ export function mountBoardInteractions(store, routes = {}) {
     } else if (normalized.type === 'draw-steel') {
       showDrawSteelPopup();
     }
-  }
-
-  function normalizeTurnEffect(raw) {
-    if (!raw || typeof raw !== 'object') {
-      return null;
-    }
-
-    const typeRaw = typeof raw.type === 'string' ? raw.type.trim().toLowerCase() : '';
-    if (!typeRaw) {
-      return null;
-    }
-
-    const combatantId = typeof raw.combatantId === 'string' ? raw.combatantId.trim() : '';
-    const triggeredAtSource =
-      raw.triggeredAt ?? raw.timestamp ?? raw.updatedAt ?? raw.time ?? raw.occurredAt ?? null;
-    const triggeredAtRaw = Number(triggeredAtSource);
-    const triggeredAt = Number.isFinite(triggeredAtRaw) ? Math.max(0, Math.trunc(triggeredAtRaw)) : Date.now();
-    const initiatorId = normalizeProfileId(raw.initiatorId ?? raw.profileId ?? null);
-
-    const effect = {
-      type: typeRaw,
-      triggeredAt,
-    };
-
-    if (combatantId) {
-      effect.combatantId = combatantId;
-    }
-
-    if (initiatorId) {
-      effect.initiatorId = initiatorId;
-    }
-
-    return effect;
   }
 
   function getTurnEffectSignature(effect) {
