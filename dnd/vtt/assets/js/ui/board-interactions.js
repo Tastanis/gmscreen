@@ -1350,6 +1350,7 @@ export function mountBoardInteractions(store, routes = {}) {
   let suppressCombatStateSync = false;
   let pendingCombatStateSync = false;
   let combatStateVersion = 0;
+  let combatStateUpdatedAt = 0;
   // Sequence number for combat state sync - increments on each local change
   // Used instead of timestamps to avoid clock drift issues between clients
   let combatSequence = 0;
@@ -2483,7 +2484,9 @@ export function mountBoardInteractions(store, routes = {}) {
    * token move is exactly the lag this phase is supposed to kill.
    */
   function triggerBoardStateResync(reason) {
-    const hasPendingSave = Boolean(pendingBoardStateSave?.promise);
+    const hasPendingSave = Boolean(
+      pendingBoardStateSave?.promise || pendingCombatStateSave?.promise
+    );
     if (hasPendingSave) {
       console.log('[VTT Pusher] Resync deferred until save completes, reason:', reason);
       pendingResyncAfterSave = true;
@@ -2587,7 +2590,9 @@ export function mountBoardInteractions(store, routes = {}) {
       // strict-+1 math we do here against the pre-save version is
       // wrong. Defer to a post-save resync — the GET will reconcile
       // both this broadcast's ops and our own save's effects.
-      const hasPendingSaveOps = Boolean(pendingBoardStateSave?.promise);
+      const hasPendingSaveOps = Boolean(
+        pendingBoardStateSave?.promise || pendingCombatStateSave?.promise
+      );
       if (hasPendingSaveOps) {
         console.log('[VTT Pusher] Deferring ops update due to pending save');
         triggerBoardStateResync('ops-during-save');
@@ -2635,23 +2640,27 @@ export function mountBoardInteractions(store, routes = {}) {
       return;
     }
 
-    // ---- Legacy full-state path -------------------------------------
-    // ALWAYS update version tracking first, regardless of other state
-    // This prevents the poller from applying stale data later
-    if (shouldApplyIncomingVersion(delta.version, currentBoardStateVersion)) {
-      currentBoardStateVersion = delta.version;
-      if (pusherInterface?.setLastAppliedVersion) {
-        pusherInterface.setLastAppliedVersion(delta.version);
-      }
-    }
-
     // Check if a save is actually in flight (promise exists)
     // We should NOT block during drag operations or grace periods - only during actual saves
     // Drag operations: we want to receive updates for tokens we're NOT dragging
     // Grace period: timestamp-based merging handles conflicts correctly
-    const hasPendingSave = Boolean(pendingBoardStateSave?.promise);
+    const hasPendingSave = Boolean(
+      pendingBoardStateSave?.promise || pendingCombatStateSave?.promise
+    );
     if (hasPendingSave) {
-      console.log('[VTT Pusher] Deferring update due to pending save (version tracked)');
+      console.log('[VTT Pusher] Deferring full update due to pending save');
+      triggerBoardStateResync('full-during-save');
+      return;
+    }
+
+    const hasVersion = typeof delta.version === 'number' && Number.isFinite(delta.version);
+    if (hasVersion && !shouldApplyIncomingVersion(delta.version, currentBoardStateVersion)) {
+      console.log(
+        '[VTT Pusher] Skipping stale full broadcast, version:',
+        delta.version,
+        'current:',
+        currentBoardStateVersion
+      );
       return;
     }
 
@@ -2798,6 +2807,13 @@ export function mountBoardInteractions(store, routes = {}) {
     if (updatedState) {
       applyStateToBoard(updatedState);
       applyCombatStateFromBoardState(updatedState);
+    }
+
+    if (hasVersion) {
+      currentBoardStateVersion = delta.version;
+      if (pusherInterface?.setLastAppliedVersion) {
+        pusherInterface.setLastAppliedVersion(delta.version);
+      }
     }
 
     const dragInfo = draggedTokenIds.size > 0 ? ` (skipped ${draggedTokenIds.size} dragged tokens)` : '';
@@ -8242,8 +8258,11 @@ export function mountBoardInteractions(store, routes = {}) {
     // Use sequence numbers for reliable ordering (avoids clock drift between clients)
     // Fall back to timestamp comparison if sequence is not available (backwards compatibility)
     const hasNewerVersion = normalized.sequence > 0
-      ? normalized.sequence > combatStateVersion
-      : (normalized.updatedAt > 0 && normalized.updatedAt > combatStateVersion);
+      ? normalized.sequence > combatStateVersion ||
+        (normalized.sequence === combatStateVersion &&
+          normalized.updatedAt > 0 &&
+          normalized.updatedAt > combatStateUpdatedAt)
+      : (normalized.updatedAt > 0 && normalized.updatedAt > combatStateUpdatedAt);
     const groupsChanged = normalized.groups?.length !== combatTrackerGroups.size ||
       normalized.groups?.some((group) => {
         const existing = combatTrackerGroups.get(group.representativeId);
@@ -8326,6 +8345,7 @@ export function mountBoardInteractions(store, routes = {}) {
       // Use sequence number as the version (or fall back to timestamp for backwards compatibility)
       const appliedVersion = normalized.sequence > 0 ? normalized.sequence : (normalized.updatedAt || Date.now());
       combatStateVersion = appliedVersion;
+      combatStateUpdatedAt = normalized.updatedAt || Date.now();
       // Sync local sequence to match the applied version to prevent duplicate sequence numbers
       if (normalized.sequence > 0 && normalized.sequence > combatSequence) {
         combatSequence = normalized.sequence;
@@ -8741,7 +8761,12 @@ export function mountBoardInteractions(store, routes = {}) {
     const snapshot = createCombatStateSnapshot();
     // Use sequence numbers for reliable ordering, fall back to timestamp for backwards compatibility
     const existingVersion = existingNormalized.sequence > 0 ? existingNormalized.sequence : existingNormalized.updatedAt;
-    const isRemoteNewer = existingVersion && existingVersion > combatStateVersion;
+    const isRemoteNewer = existingNormalized.sequence > 0
+      ? existingNormalized.sequence > combatStateVersion ||
+        (existingNormalized.sequence === combatStateVersion &&
+          existingNormalized.updatedAt > 0 &&
+          existingNormalized.updatedAt > combatStateUpdatedAt)
+      : (existingNormalized.updatedAt > 0 && existingNormalized.updatedAt > combatStateUpdatedAt);
     if (isRemoteNewer) {
       // Remote state is newer - incorporate remote changes but preserve locally modified fields
       // to prevent race conditions where local changes are lost ("popback" issue)
@@ -8819,6 +8844,7 @@ export function mountBoardInteractions(store, routes = {}) {
         applyCombatGroupsFromState(snapshot.groups);
       }
       combatStateVersion = existingVersion;
+      combatStateUpdatedAt = existingNormalized.updatedAt || combatStateUpdatedAt;
 
       // Use setter to properly update active combatant with highlights and handlers
       setActiveCombatantId(snapshot.activeCombatantId);
@@ -8878,15 +8904,23 @@ export function mountBoardInteractions(store, routes = {}) {
           sceneId: activeSceneId,
           timestamp: snapshot.updatedAt,
         };
+        const flushDeferredCombatResync = () => {
+          if (pendingResyncAfterSave) {
+            pendingResyncAfterSave = false;
+            triggerBoardStateResync('post-combat-save-flush');
+          }
+        };
         savePromise
           .then(() => {
             if (pendingCombatStateSave?.promise === savePromise) {
               pendingCombatStateSave = null;
+              flushDeferredCombatResync();
             }
           })
           .catch(() => {
             if (pendingCombatStateSave?.promise === savePromise) {
               pendingCombatStateSave = null;
+              flushDeferredCombatResync();
             }
           });
       }
@@ -8894,6 +8928,7 @@ export function mountBoardInteractions(store, routes = {}) {
 
     // Use sequence number as version (or fall back to timestamp)
     combatStateVersion = snapshot.sequence > 0 ? snapshot.sequence : snapshot.updatedAt;
+    combatStateUpdatedAt = snapshot.updatedAt;
     lastCombatStateSnapshot = serialized;
   }
 

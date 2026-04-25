@@ -524,6 +524,7 @@ function formatCombatState(raw = {}) {
   const startingTeam = sanitizeCombatTeam(raw.startingTeam ?? raw.initialTeam ?? null);
   const currentTeam = sanitizeCombatTeam(raw.currentTeam ?? raw.activeTeam ?? null);
   const lastTeam = sanitizeCombatTeam(raw.lastTeam ?? raw.previousTeam ?? null);
+  const turnPhase = sanitizeTurnPhase(raw.turnPhase ?? raw.phase ?? null, active, activeCombatantId);
   const roundTurnCount = toInt(raw.roundTurnCount, 0);
   const malice = Math.max(0, toInt(raw.malice ?? raw.maliceCount ?? 0, 0));
   const updatedAt = toInt(raw.updatedAt, Date.now());
@@ -543,6 +544,7 @@ function formatCombatState(raw = {}) {
     startingTeam,
     currentTeam,
     lastTeam,
+    turnPhase,
     roundTurnCount,
     malice,
     updatedAt,
@@ -862,6 +864,16 @@ function sanitizeCombatTeam(value) {
     return normalized;
   }
   return null;
+}
+
+function sanitizeTurnPhase(value, active = false, activeCombatantId = '') {
+  if (typeof value === 'string') {
+    const normalized = value.trim().toLowerCase();
+    if (normalized === 'idle' || normalized === 'pick' || normalized === 'active') {
+      return normalized;
+    }
+  }
+  return active ? (activeCombatantId ? 'active' : 'pick') : 'idle';
 }
 
 function sanitizeTurnLock(raw) {

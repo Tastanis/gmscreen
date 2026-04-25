@@ -191,9 +191,13 @@ export function mergeSceneStatePreservingGrid(existingSceneState, incomingSceneS
 
       let keepExisting = false;
       if (existingSeq > 0 && incomingSeq > 0) {
-        keepExisting = existingSeq > incomingSeq;
+        if (existingSeq > incomingSeq) {
+          keepExisting = true;
+        } else if (existingSeq === incomingSeq) {
+          keepExisting = existingTs >= incomingTs;
+        }
       } else if (existingTs > 0 && incomingTs > 0) {
-        keepExisting = existingTs > incomingTs;
+        keepExisting = existingTs >= incomingTs;
       }
 
       if (keepExisting) {

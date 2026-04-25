@@ -106,6 +106,18 @@ test('mergeSceneStatePreservingGrid: keeps newer combat state by sequence', () =
   assert.equal(merged.s.combat.sequence, 5);
 });
 
+test('mergeSceneStatePreservingGrid: breaks equal combat sequence ties by timestamp', () => {
+  const existing = { s: { combat: { sequence: 5, updatedAt: 200, phase: 'newer' } } };
+  const staleIncoming = { s: { combat: { sequence: 5, updatedAt: 100, phase: 'stale' } } };
+  const freshIncoming = { s: { combat: { sequence: 5, updatedAt: 300, phase: 'fresh' } } };
+
+  const staleMerge = mergeSceneStatePreservingGrid(existing, staleIncoming);
+  assert.equal(staleMerge.s.combat.phase, 'newer');
+
+  const freshMerge = mergeSceneStatePreservingGrid(existing, freshIncoming);
+  assert.equal(freshMerge.s.combat.phase, 'fresh');
+});
+
 test('mergeSceneStatePreservingGrid: coerces array revealedCells to object', () => {
   const existing = { s: { fogOfWar: { revealedCells: { '1,1': true } } } };
   const incoming = { s: { fogOfWar: { revealedCells: [] } } };

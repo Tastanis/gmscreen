@@ -515,26 +515,13 @@ if (!defined('VTT_STATE_API_INCLUDE_ONLY')) {
                                     'grid' => normalizeGridSettings([]),
                                 ];
                             }
-                            // Timestamp-based merge: only apply player combat updates
-                            // if they are newer than the existing combat state.
-                            // This prevents stale player data (e.g. from tab-switch
-                            // keepalive saves) from overwriting the GM's latest changes.
+                            // Only apply player combat updates when they are strictly
+                            // newer than the existing combat state. Browser-local
+                            // sequence counters can tie after refresh, so equal
+                            // sequences must be broken by updatedAt instead of
+                            // blindly overwriting the stored state.
                             $existingCombat = $nextState['sceneState'][$sceneId]['combat'] ?? [];
-                            $existingUpdatedAt = is_array($existingCombat) ? (int) ($existingCombat['updatedAt'] ?? 0) : 0;
-                            $existingSequence = is_array($existingCombat) ? (int) ($existingCombat['sequence'] ?? 0) : 0;
-                            $incomingUpdatedAt = is_array($combatState) ? (int) ($combatState['updatedAt'] ?? 0) : 0;
-                            $incomingSequence = is_array($combatState) ? (int) ($combatState['sequence'] ?? 0) : 0;
-
-                            // Use sequence for comparison when available (immune to clock drift),
-                            // fall back to updatedAt timestamp comparison otherwise.
-                            $isNewer = true;
-                            if ($existingSequence > 0 && $incomingSequence > 0) {
-                                $isNewer = $incomingSequence >= $existingSequence;
-                            } elseif ($existingUpdatedAt > 0 && $incomingUpdatedAt > 0) {
-                                $isNewer = $incomingUpdatedAt >= $existingUpdatedAt;
-                            }
-
-                            if ($isNewer) {
+                            if (shouldApplyCombatStatePayload($combatState, $existingCombat)) {
                                 $nextState['sceneState'][$sceneId]['combat'] = $combatState;
                             }
                         }
@@ -578,6 +565,12 @@ if (!defined('VTT_STATE_API_INCLUDE_ONLY')) {
                             if (!isset($nextState['sceneState'][$sceneId]) || !is_array($nextState['sceneState'][$sceneId])) {
                                 $nextState['sceneState'][$sceneId] = $config;
                                 continue;
+                            }
+                            if (isset($config['combat'])) {
+                                $existingCombat = $nextState['sceneState'][$sceneId]['combat'] ?? [];
+                                if (!shouldApplyCombatStatePayload($config['combat'], $existingCombat)) {
+                                    unset($config['combat']);
+                                }
                             }
                             $nextState['sceneState'][$sceneId] = array_merge($nextState['sceneState'][$sceneId], $config);
                         }
@@ -1928,6 +1921,41 @@ function normalizeCombatStatePayload($rawCombat): array
     $state['lastEffect'] = normalizeCombatTurnEffect($rawCombat['lastEffect'] ?? $rawCombat['lastEvent'] ?? null);
 
     return $state;
+}
+
+/**
+ * @param mixed $incomingCombat
+ * @param mixed $existingCombat
+ */
+function shouldApplyCombatStatePayload($incomingCombat, $existingCombat): bool
+{
+    if (!is_array($incomingCombat)) {
+        return false;
+    }
+    if (!is_array($existingCombat) || empty($existingCombat)) {
+        return true;
+    }
+
+    $existingUpdatedAt = (int) ($existingCombat['updatedAt'] ?? 0);
+    $existingSequence = (int) ($existingCombat['sequence'] ?? 0);
+    $incomingUpdatedAt = (int) ($incomingCombat['updatedAt'] ?? 0);
+    $incomingSequence = (int) ($incomingCombat['sequence'] ?? 0);
+
+    if ($existingSequence > 0 && $incomingSequence > 0) {
+        if ($incomingSequence !== $existingSequence) {
+            return $incomingSequence > $existingSequence;
+        }
+        if ($existingUpdatedAt > 0 && $incomingUpdatedAt > 0) {
+            return $incomingUpdatedAt > $existingUpdatedAt;
+        }
+        return false;
+    }
+
+    if ($existingUpdatedAt > 0 && $incomingUpdatedAt > 0) {
+        return $incomingUpdatedAt > $existingUpdatedAt;
+    }
+
+    return true;
 }
 
 /**
