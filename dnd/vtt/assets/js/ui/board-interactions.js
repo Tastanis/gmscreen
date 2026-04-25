@@ -8825,6 +8825,25 @@ export function mountBoardInteractions(store, routes = {}) {
     return Boolean(state?.user?.isGM);
   }
 
+  function getPlacementCombatTeam(placement) {
+    if (!placement || typeof placement !== 'object') {
+      return 'ally';
+    }
+
+    return normalizeCombatTeam(
+      placement.combatTeam ??
+        placement.team ??
+        placement?.tags?.team ??
+        placement?.faction ??
+        placement?.alignment ??
+        null
+    );
+  }
+
+  function shouldHideEnemyHitPointValues(placement) {
+    return !isGmUser() && getPlacementCombatTeam(placement) === 'enemy';
+  }
+
   function getCurrentUserId() {
     const state = boardApi.getState?.();
     const rawName = typeof state?.user?.name === 'string' ? state.user.name : '';
@@ -9369,12 +9388,7 @@ export function mountBoardInteractions(store, routes = {}) {
       return;
     }
 
-    // Determine if HP values (numbers) should be shown
-    // Non-GM users cannot see HP numbers for enemy tokens, only the bar
-    const gmViewing = isGmUser();
-    const team = normalizeCombatTeam(placement.team ?? placement.combatTeam ?? null);
-    const isEnemy = team === 'enemy';
-    const showHpValues = gmViewing || !isEnemy;
+    const showHpValues = !shouldHideEnemyHitPointValues(placement);
 
     if (!hpBar) {
       hpBar = document.createElement('div');
@@ -9398,23 +9412,13 @@ export function mountBoardInteractions(store, routes = {}) {
 
     let valueElement = hpBar.querySelector('.vtt-token__hp-value');
     let tempValueElement = hpBar.querySelector('.vtt-token__hp-temp-value');
-    if (showHpValues) {
-      // Show HP values for GMs or for allied tokens
-      if (!valueElement) {
-        valueElement = document.createElement('span');
-        valueElement.className = 'vtt-token__hp-value';
-        hpBar.appendChild(valueElement);
-      }
-    } else {
-      // Hide HP values for non-GM users viewing enemy tokens
-      if (valueElement) {
-        valueElement.remove();
-        valueElement = null;
-      }
-      if (tempValueElement) {
-        tempValueElement.remove();
-        tempValueElement = null;
-      }
+    if (showHpValues && !valueElement) {
+      valueElement = document.createElement('span');
+      valueElement.className = 'vtt-token__hp-value';
+      hpBar.appendChild(valueElement);
+    } else if (!showHpValues && valueElement) {
+      valueElement.remove();
+      valueElement = null;
     }
 
     const hp = normalizePlacementHitPoints(placement.hp);
@@ -9465,7 +9469,6 @@ export function mountBoardInteractions(store, routes = {}) {
 
     const isEmpty = !hp || (hp.current === '' && hp.max === '');
     hpBar.dataset.empty = isEmpty ? 'true' : 'false';
-    // For accessibility, only include specific HP values if user can see them
     const ariaLabel = isEmpty
       ? 'Hit points not set'
       : showHpValues
@@ -11243,6 +11246,9 @@ export function mountBoardInteractions(store, routes = {}) {
     if (!placement) {
       return null;
     }
+    if (shouldHideEnemyHitPointValues(placement)) {
+      return null;
+    }
     return ensurePlacementHitPoints(placement.hp);
   }
 
@@ -11270,6 +11276,11 @@ export function mountBoardInteractions(store, routes = {}) {
 
     const placement = getPlacementFromStore(activeTokenSettingsId);
     if (!placement) {
+      return false;
+    }
+    if (shouldHideEnemyHitPointValues(placement)) {
+      restoreHitPointsInputValue();
+      hitPointsEditSession = null;
       return false;
     }
 
@@ -12698,27 +12709,37 @@ export function mountBoardInteractions(store, routes = {}) {
 
     syncConditionControls(placement);
 
+    const canShowHitPointValues = !shouldHideEnemyHitPointValues(placement);
     const showHp = Boolean(placement.showHp);
-    if (tokenSettingsMenu.showHpToggle) {
-      tokenSettingsMenu.showHpToggle.checked = showHp;
+    if (!canShowHitPointValues) {
+      hitPointsEditSession = null;
     }
 
-    const hitPoints = ensurePlacementHitPoints(placement.hp);
+    if (tokenSettingsMenu.showHpToggle) {
+      tokenSettingsMenu.showHpToggle.checked = showHp;
+      tokenSettingsMenu.showHpToggle.disabled = false;
+    }
+
+    const hitPoints = canShowHitPointValues
+      ? ensurePlacementHitPoints(placement.hp)
+      : { current: '', max: '' };
 
     if (tokenSettingsMenu.hpCurrentInput) {
       if (!isEditingHitPoints() && tokenSettingsMenu.hpCurrentInput.value !== hitPoints.current) {
         tokenSettingsMenu.hpCurrentInput.value = hitPoints.current;
       }
-      tokenSettingsMenu.hpCurrentInput.disabled = !showHp;
+      tokenSettingsMenu.hpCurrentInput.disabled = !canShowHitPointValues || !showHp;
     }
 
     if (tokenSettingsMenu.hpMaxDisplay) {
       tokenSettingsMenu.hpMaxDisplay.textContent =
-        hitPoints.max === '' ? DEFAULT_HP_PLACEHOLDER : hitPoints.max;
+        canShowHitPointValues && hitPoints.max !== '' ? hitPoints.max : DEFAULT_HP_PLACEHOLDER;
     }
 
     if (tokenSettingsMenu.hpField) {
-      tokenSettingsMenu.hpField.classList.toggle('is-disabled', !showHp);
+      tokenSettingsMenu.hpField.hidden = !canShowHitPointValues;
+      tokenSettingsMenu.hpField.setAttribute('aria-hidden', canShowHitPointValues ? 'false' : 'true');
+      tokenSettingsMenu.hpField.classList.toggle('is-disabled', !canShowHitPointValues || !showHp);
     }
 
     if (tokenSettingsMenu.triggeredToggle) {
