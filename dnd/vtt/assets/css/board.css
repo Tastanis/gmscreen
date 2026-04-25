@@ -1270,6 +1270,10 @@
   cursor: grabbing;
 }
 
+.vtt-board__map-surface[data-grid-calibrating='true'] {
+  cursor: crosshair;
+}
+
 .vtt-board__map-transform {
   position: absolute;
   top: 0;
@@ -1655,8 +1659,9 @@
       to bottom,
       var(--vtt-grid-line-color) var(--vtt-grid-line-width),
       transparent var(--vtt-grid-line-width)
-    );
+  );
   background-size: var(--vtt-grid-size, 64px) var(--vtt-grid-size, 64px);
+  background-position: var(--vtt-grid-origin-x, 0px) var(--vtt-grid-origin-y, 0px);
   pointer-events: none;
   opacity: 0;
   transition: opacity var(--vtt-transition);

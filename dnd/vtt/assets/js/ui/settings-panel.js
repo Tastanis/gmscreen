@@ -1,6 +1,8 @@
 import { renderSceneList } from './scene-manager.js';
 import { renderTokenLibrary } from './token-library.js';
 import { persistBoardState } from '../services/board-state-service.js';
+import { updateSceneGrid } from '../services/scene-service.js';
+import { normalizeGridState } from '../state/normalize/grid.js';
 
 export function mountSettingsPanel(routes, store, user = {}) {
   const panel = document.getElementById('vtt-settings-panel');
@@ -10,8 +12,11 @@ export function mountSettingsPanel(routes, store, user = {}) {
   const closeButton = panel.querySelector('[data-action="close-settings"]');
   const toggleGridButton = panel.querySelector('[data-action="toggle-grid"]');
   const lockGridButton = panel.querySelector('[data-action="lock-grid"]');
+  const calibrateGridButton = panel.querySelector('[data-action="calibrate-grid"]');
   const gridSizeInput = panel.querySelector('[data-grid-size-input]');
   const gridSizeDisplay = panel.querySelector('[data-grid-size-display]');
+  const gridOffsetXDisplay = panel.querySelector('[data-grid-offset-x]');
+  const gridOffsetYDisplay = panel.querySelector('[data-grid-offset-y]');
   const launchers = Array.from(document.querySelectorAll('[data-settings-launch]'));
 
   let isOpen = false;
@@ -79,6 +84,18 @@ export function mountSettingsPanel(routes, store, user = {}) {
   const storeApi = store ?? {};
   const initialState = typeof storeApi.getState === 'function' ? storeApi.getState() : {};
   const isGM = Boolean(user?.isGM ?? initialState?.user?.isGM);
+  let gridSceneSaveTimer = null;
+  let gridSceneSaveSequence = 0;
+  let gridCalibrationActive = false;
+
+  const formatGridNumber = (value) => {
+    const numeric = Number(value);
+    if (!Number.isFinite(numeric)) {
+      return '0';
+    }
+
+    return Number.isInteger(numeric) ? String(numeric) : numeric.toFixed(2).replace(/\.?0+$/, '');
+  };
 
   const persistBoardStateSnapshot = () => {
     if (!routes?.state || typeof storeApi.getState !== 'function') {
@@ -99,11 +116,11 @@ export function mountSettingsPanel(routes, store, user = {}) {
   };
 
   const syncGridControls = (state) => {
-    const gridState = state?.grid ?? {};
-    const parsedSize = Number.parseInt(gridState.size, 10);
-    const size = Number.isFinite(parsedSize) ? parsedSize : 64;
+    const gridState = normalizeGridState(state?.grid ?? {});
+    const size = gridState.size;
     const visible = gridState.visible ?? true;
     const locked = gridState.locked ?? false;
+    const hasMap = Boolean(state?.boardState?.mapUrl);
 
     if (gridSizeInput) {
       gridSizeInput.value = String(size);
@@ -111,7 +128,15 @@ export function mountSettingsPanel(routes, store, user = {}) {
     }
 
     if (gridSizeDisplay) {
-      gridSizeDisplay.textContent = String(size);
+      gridSizeDisplay.textContent = formatGridNumber(size);
+    }
+
+    if (gridOffsetXDisplay) {
+      gridOffsetXDisplay.textContent = formatGridNumber(gridState.offsetX);
+    }
+
+    if (gridOffsetYDisplay) {
+      gridOffsetYDisplay.textContent = formatGridNumber(gridState.offsetY);
     }
 
     if (toggleGridButton) {
@@ -124,6 +149,13 @@ export function mountSettingsPanel(routes, store, user = {}) {
       lockGridButton.classList.toggle('is-active', locked);
       lockGridButton.setAttribute('aria-pressed', String(locked));
     }
+
+    if (calibrateGridButton) {
+      calibrateGridButton.disabled = !isGM || !hasMap || locked;
+      calibrateGridButton.classList.toggle('is-active', gridCalibrationActive);
+      calibrateGridButton.setAttribute('aria-pressed', String(gridCalibrationActive));
+      calibrateGridButton.textContent = gridCalibrationActive ? 'Cancel Align' : 'Align Grid';
+    }
   };
 
   syncGridControls(storeApi.getState?.());
@@ -134,8 +166,70 @@ export function mountSettingsPanel(routes, store, user = {}) {
 
   const ensureGridDraft = (draft) => {
     if (!draft.grid || typeof draft.grid !== 'object') {
-      draft.grid = { size: 64, locked: false, visible: true };
+      draft.grid = normalizeGridState({});
+    } else {
+      draft.grid = normalizeGridState(draft.grid);
     }
+  };
+
+  const persistActiveSceneGrid = (gridState, { debounceMs = 0 } = {}) => {
+    if (!routes?.scenes || typeof storeApi.getState !== 'function') {
+      return;
+    }
+
+    const latest = storeApi.getState();
+    if (!latest?.user?.isGM) {
+      return;
+    }
+
+    const activeSceneId = latest?.boardState?.activeSceneId ?? null;
+    if (!activeSceneId) {
+      return;
+    }
+
+    const normalizedGrid = normalizeGridState(gridState ?? latest.grid ?? {});
+    const sequence = ++gridSceneSaveSequence;
+    const run = async () => {
+      try {
+        const updatedScene = await updateSceneGrid(routes.scenes, activeSceneId, normalizedGrid);
+        if (sequence !== gridSceneSaveSequence || !updatedScene?.id) {
+          return;
+        }
+
+        storeApi.updateState?.((draft) => {
+          if (!draft.scenes || typeof draft.scenes !== 'object') {
+            draft.scenes = { folders: [], items: [] };
+          }
+          draft.scenes.items = Array.isArray(draft.scenes.items) ? draft.scenes.items : [];
+          const index = draft.scenes.items.findIndex((scene) => scene?.id === updatedScene.id);
+          if (index >= 0) {
+            draft.scenes.items[index] = {
+              ...draft.scenes.items[index],
+              ...updatedScene,
+              grid: normalizeGridState(updatedScene.grid ?? normalizedGrid),
+            };
+          }
+        });
+        persistBoardStateSnapshot();
+      } catch (error) {
+        console.warn('[VTT] Failed to persist scene grid', error);
+      }
+    };
+
+    if (gridSceneSaveTimer) {
+      clearTimeout(gridSceneSaveTimer);
+      gridSceneSaveTimer = null;
+    }
+
+    if (debounceMs > 0) {
+      gridSceneSaveTimer = setTimeout(() => {
+        gridSceneSaveTimer = null;
+        run();
+      }, debounceMs);
+      return;
+    }
+
+    run();
   };
 
   const syncGridToActiveScene = (draft) => {
@@ -156,26 +250,35 @@ export function mountSettingsPanel(routes, store, user = {}) {
       return;
     }
 
-    const size = Math.max(8, Number.parseInt(draft.grid.size, 10) || 64);
-    const locked = Boolean(draft.grid.locked);
-    const visible = draft.grid.visible === undefined ? true : Boolean(draft.grid.visible);
+    const grid = normalizeGridState(draft.grid);
+    draft.grid = grid;
 
     const entry = draft.boardState.sceneState[activeSceneId] ?? {};
-    entry.grid = { size, locked, visible };
+    entry.grid = grid;
     draft.boardState.sceneState[activeSceneId] = entry;
+
+    if (draft.scenes && Array.isArray(draft.scenes.items)) {
+      const scene = draft.scenes.items.find((item) => item?.id === activeSceneId);
+      if (scene) {
+        scene.grid = grid;
+      }
+    }
   };
 
   if (gridSizeInput && typeof storeApi.updateState === 'function') {
     gridSizeInput.addEventListener('input', () => {
-      const nextSize = Number.parseInt(gridSizeInput.value, 10);
+      const nextSize = Number.parseFloat(gridSizeInput.value);
       if (!Number.isFinite(nextSize)) return;
+      let nextGrid = null;
 
       storeApi.updateState((draft) => {
         ensureGridDraft(draft);
-        draft.grid.size = Math.max(8, nextSize);
+        draft.grid = normalizeGridState({ ...draft.grid, size: nextSize });
         syncGridToActiveScene(draft);
+        nextGrid = draft.grid;
       });
       persistBoardStateSnapshot();
+      persistActiveSceneGrid(nextGrid, { debounceMs: 350 });
     });
   }
 
@@ -183,10 +286,11 @@ export function mountSettingsPanel(routes, store, user = {}) {
     toggleGridButton.addEventListener('click', () => {
       storeApi.updateState((draft) => {
         ensureGridDraft(draft);
-        draft.grid.visible = !draft.grid.visible;
+        draft.grid = normalizeGridState({ ...draft.grid, visible: !draft.grid.visible });
         syncGridToActiveScene(draft);
       });
       persistBoardStateSnapshot();
+      persistActiveSceneGrid(storeApi.getState?.().grid ?? {});
     });
   }
 
@@ -194,12 +298,23 @@ export function mountSettingsPanel(routes, store, user = {}) {
     lockGridButton.addEventListener('click', () => {
       storeApi.updateState((draft) => {
         ensureGridDraft(draft);
-        draft.grid.locked = !draft.grid.locked;
+        draft.grid = normalizeGridState({ ...draft.grid, locked: !draft.grid.locked });
         syncGridToActiveScene(draft);
       });
       persistBoardStateSnapshot();
+      persistActiveSceneGrid(storeApi.getState?.().grid ?? {});
     });
   }
+
+  calibrateGridButton?.addEventListener('click', () => {
+    const eventName = gridCalibrationActive ? 'vtt:grid-calibration-cancel' : 'vtt:grid-calibration-start';
+    window.dispatchEvent(new CustomEvent(eventName));
+  });
+
+  window.addEventListener('vtt:grid-calibration-state', (event) => {
+    gridCalibrationActive = Boolean(event?.detail?.active);
+    syncGridControls(storeApi.getState?.());
+  });
 
   if (isGM) {
     renderSceneList(routes, storeApi);

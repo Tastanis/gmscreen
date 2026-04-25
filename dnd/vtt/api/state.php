@@ -2521,13 +2521,15 @@ function normalizeFogOfWarPayload($raw): ?array
  */
 function normalizeGridSettings($grid): array
 {
-    $size = 64;
+    $size = 64.0;
     $locked = false;
     $visible = true;
+    $offsetX = 0.0;
+    $offsetY = 0.0;
 
     if (is_array($grid)) {
         if (array_key_exists('size', $grid) && is_numeric($grid['size'])) {
-            $size = max(8, min(320, (int) round((float) $grid['size'])));
+            $size = roundGridSettingValue(max(8.0, min(320.0, (float) $grid['size'])));
         }
 
         if (array_key_exists('locked', $grid)) {
@@ -2537,13 +2539,42 @@ function normalizeGridSettings($grid): array
         if (array_key_exists('visible', $grid)) {
             $visible = (bool) $grid['visible'];
         }
+
+        $offsetX = normalizeGridOffsetSetting($grid['offsetX'] ?? $grid['originX'] ?? $grid['x'] ?? null, $size);
+        $offsetY = normalizeGridOffsetSetting($grid['offsetY'] ?? $grid['originY'] ?? $grid['y'] ?? null, $size);
     }
 
     return [
         'size' => $size,
         'locked' => $locked,
         'visible' => $visible,
+        'offsetX' => $offsetX,
+        'offsetY' => $offsetY,
     ];
+}
+
+function roundGridSettingValue(float $value): float
+{
+    $rounded = round($value, 2);
+    return abs($rounded) < 0.01 ? 0.0 : $rounded;
+}
+
+function normalizeGridOffsetSetting($value, float $size): float
+{
+    if (!is_numeric($value) || $size <= 0) {
+        return 0.0;
+    }
+
+    $offset = fmod((float) $value, $size);
+    if ($offset < 0) {
+        $offset += $size;
+    }
+
+    if ($offset < 0.01 || $offset >= $size - 0.01) {
+        return 0.0;
+    }
+
+    return roundGridSettingValue($offset);
 }
 
 /**

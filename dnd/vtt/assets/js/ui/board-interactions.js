@@ -18,6 +18,14 @@ import {
   persistBoardStateOps,
   persistCombatState,
 } from '../services/board-state-service.js';
+import { updateSceneGrid } from '../services/scene-service.js';
+import {
+  GRID_SIZE_DEFAULT,
+  GRID_SIZE_MAX,
+  GRID_SIZE_MIN,
+  normalizeGridOffset,
+  normalizeGridState,
+} from '../state/normalize/grid.js';
 import { initializePusher, getSocketId, isPusherConnected } from '../services/pusher-service.js';
 import { createBoardStatePoller } from '../services/board-state-poller.js';
 import { applyBoardStateOpsLocally } from '../services/board-state-op-applier.js';
@@ -180,18 +188,19 @@ export async function createOverlayCutoutBlob({
     return null;
   }
 
-  const offsets = view?.gridOffsets ?? {};
-  const offsetLeft = Number.isFinite(offsets.left) ? offsets.left : 0;
-  const offsetTop = Number.isFinite(offsets.top) ? offsets.top : 0;
-  const offsetRight = Number.isFinite(offsets.right) ? offsets.right : 0;
-  const offsetBottom = Number.isFinite(offsets.bottom) ? offsets.bottom : 0;
+  const insets = view?.mapInsets ?? view?.gridOffsets ?? {};
+  const offsetLeft = Number.isFinite(insets.left) ? insets.left : 0;
+  const offsetTop = Number.isFinite(insets.top) ? insets.top : 0;
+  const offsetRight = Number.isFinite(insets.right) ? insets.right : 0;
+  const offsetBottom = Number.isFinite(insets.bottom) ? insets.bottom : 0;
+  const origin = view?.gridOrigin ?? {};
+  const originX = Number.isFinite(origin.x) ? origin.x : 0;
+  const originY = Number.isFinite(origin.y) ? origin.y : 0;
   const gridSize = Math.max(8, Number.isFinite(view?.gridSize) ? view.gridSize : 64);
 
-  // The overlay div is inset by the grid offsets, so the cutout canvas must
-  // match those inner dimensions.  Drawing at the full mapWidth/mapHeight
-  // (which includes the backdrop padding) and then displaying the result
-  // inside the smaller overlay div causes the cutout to shift by the padding
-  // amount.
+  // The overlay div is inset to the map image, so the cutout canvas must
+  // match that inner image area. Grid coordinates start at the calibrated
+  // origin inside this canvas.
   const innerWidth = Math.max(1, mapWidth - offsetLeft - offsetRight);
   const innerHeight = Math.max(1, mapHeight - offsetTop - offsetBottom);
 
@@ -220,10 +229,8 @@ export async function createOverlayCutoutBlob({
 
   normalizedPolygons.forEach((points) => {
     points.forEach((point, index) => {
-      // Coordinates are relative to the inner area (no offset needed) because
-      // the canvas already represents only the grid area.
-      const x = point.column * gridSize;
-      const y = point.row * gridSize;
+      const x = originX + point.column * gridSize;
+      const y = originY + point.row * gridSize;
 
       if (index === 0) {
         context.moveTo(x, y);
@@ -586,13 +593,21 @@ export function mountBoardInteractions(store, routes = {}) {
     lastPointer: { x: 0, y: 0 },
     mapLoaded: false,
     activeMapUrl: null,
-    gridSize: 64,
+    gridSize: GRID_SIZE_DEFAULT,
+    gridOrigin: { x: 0, y: 0 },
+    mapInsets: { top: 0, right: 0, bottom: 0, left: 0 },
     gridOffsets: { top: 0, right: 0, bottom: 0, left: 0 },
     mapPixelSize: { width: 0, height: 0 },
     dragCandidate: null,
     dragState: null,
     selectionBoxState: null,
   };
+
+  const gridCalibration = {
+    active: false,
+    firstPoint: null,
+  };
+  let gridSceneSaveSequence = 0;
 
 
   const tokenLibraryDragState = {
@@ -3624,6 +3639,14 @@ export function mountBoardInteractions(store, routes = {}) {
   mapSurface.addEventListener('dragleave', handleTokenDragLeave, tokenDragListenerOptions);
   mapSurface.addEventListener('dragover', handleTokenDragOver, tokenDragListenerOptions);
   mapSurface.addEventListener('drop', handleTokenDrop, tokenDragListenerOptions);
+  mapSurface.addEventListener('pointerdown', handleGridCalibrationPointerDown, true);
+  document.addEventListener('keydown', handleGridCalibrationKeydown, true);
+  if (typeof window !== 'undefined' && typeof window.addEventListener === 'function') {
+    window.addEventListener('vtt:grid-calibration-start', startGridCalibration);
+    window.addEventListener('vtt:grid-calibration-cancel', () => {
+      stopGridCalibration('Grid alignment canceled.');
+    });
+  }
 
   document.addEventListener('dragend', () => {
     tokenDropDepth = 0;
@@ -3633,14 +3656,19 @@ export function mountBoardInteractions(store, routes = {}) {
   const applyGridState = (gridState = {}) => {
     if (!grid) return;
 
-    const parsedSize = Number.parseInt(gridState.size, 10);
-    const size = Number.isFinite(parsedSize) ? parsedSize : 64;
-    const dimension = `${Math.max(8, size)}px`;
+    const normalizedGrid = normalizeGridState(gridState);
+    const size = normalizedGrid.size;
+    const dimension = `${size}px`;
     grid.style.setProperty('--vtt-grid-size', dimension);
     mapSurface.style.setProperty('--vtt-grid-size', dimension);
-    const isVisible = gridState.visible ?? true;
+    viewState.gridOrigin = {
+      x: normalizedGrid.offsetX,
+      y: normalizedGrid.offsetY,
+    };
+    applyGridOffsets();
+    const isVisible = normalizedGrid.visible;
     grid.classList.toggle('is-visible', Boolean(isVisible));
-    viewState.gridSize = Math.max(8, size);
+    viewState.gridSize = size;
     templateTool.notifyGridChanged();
     overlayTool.notifyGridChanged();
   };
@@ -3696,10 +3724,10 @@ export function mountBoardInteractions(store, routes = {}) {
       if (nextUrl !== viewState.activeMapUrl) {
         loadMap(nextUrl);
       }
+      applyGridState(state.grid ?? {});
       const overlayConfig = resolveSceneOverlayState(state.boardState ?? {}, activeSceneId);
       syncOverlayLayer(overlayConfig);
       overlayTool.notifyOverlayMaskChange(overlayConfig ?? null);
-      applyGridState(state.grid ?? {});
       renderTokens(state, tokenLayer, viewState);
       renderFog(state);
       renderFogSelection();
@@ -3871,6 +3899,245 @@ export function mountBoardInteractions(store, routes = {}) {
       return null;
     }
     return { x: localX, y: localY };
+  }
+
+  function getMapImagePoint(localPoint) {
+    if (!localPoint || !viewState.mapLoaded) {
+      return null;
+    }
+
+    const mapWidth = Number.isFinite(viewState.mapPixelSize?.width) ? viewState.mapPixelSize.width : 0;
+    const mapHeight = Number.isFinite(viewState.mapPixelSize?.height) ? viewState.mapPixelSize.height : 0;
+    const insets = viewState.mapInsets ?? {};
+    const offsetLeft = Number.isFinite(insets.left) ? insets.left : 0;
+    const offsetRight = Number.isFinite(insets.right) ? insets.right : 0;
+    const offsetTop = Number.isFinite(insets.top) ? insets.top : 0;
+    const offsetBottom = Number.isFinite(insets.bottom) ? insets.bottom : 0;
+    const imageWidth = Math.max(0, mapWidth - offsetLeft - offsetRight);
+    const imageHeight = Math.max(0, mapHeight - offsetTop - offsetBottom);
+    if (imageWidth <= 0 || imageHeight <= 0) {
+      return null;
+    }
+
+    const x = localPoint.x - offsetLeft;
+    const y = localPoint.y - offsetTop;
+    if (!Number.isFinite(x) || !Number.isFinite(y) || x < 0 || y < 0 || x > imageWidth || y > imageHeight) {
+      return null;
+    }
+
+    return { x, y, width: imageWidth, height: imageHeight };
+  }
+
+  function formatGridMeasurement(value) {
+    const numeric = Number(value);
+    if (!Number.isFinite(numeric)) {
+      return '0';
+    }
+
+    return Number.isInteger(numeric) ? String(numeric) : numeric.toFixed(2).replace(/\.?0+$/, '');
+  }
+
+  function dispatchGridCalibrationState(active, step = 0) {
+    if (typeof window === 'undefined' || typeof window.dispatchEvent !== 'function') {
+      return;
+    }
+
+    window.dispatchEvent(
+      new CustomEvent('vtt:grid-calibration-state', {
+        detail: { active: Boolean(active), step },
+      })
+    );
+  }
+
+  function stopGridCalibration(message = '') {
+    if (!gridCalibration.active && !gridCalibration.firstPoint) {
+      return;
+    }
+
+    gridCalibration.active = false;
+    gridCalibration.firstPoint = null;
+    mapSurface.removeAttribute('data-grid-calibrating');
+    dispatchGridCalibrationState(false, 0);
+    if (message) {
+      updateStatus(message);
+    }
+  }
+
+  function startGridCalibration() {
+    if (!isGmUser()) {
+      updateStatus('Only the GM can align the grid.');
+      return;
+    }
+
+    if (!viewState.mapLoaded) {
+      updateStatus('Upload or activate a map before aligning the grid.');
+      return;
+    }
+
+    const currentGrid = normalizeGridState(boardApi.getState?.()?.grid ?? {});
+    if (currentGrid.locked) {
+      updateStatus('Unlock the grid before aligning it.');
+      return;
+    }
+
+    gridCalibration.active = true;
+    gridCalibration.firstPoint = null;
+    mapSurface.setAttribute('data-grid-calibrating', 'true');
+    dispatchGridCalibrationState(true, 1);
+    updateStatus('Grid alignment: click the first corner of a known map square.');
+  }
+
+  function calculateGridAlignment(firstPoint, secondPoint, currentGrid = {}) {
+    if (!firstPoint || !secondPoint) {
+      return null;
+    }
+
+    const dx = Math.abs(secondPoint.x - firstPoint.x);
+    const dy = Math.abs(secondPoint.y - firstPoint.y);
+    const candidates = [dx, dy].filter((value) => Number.isFinite(value) && value >= GRID_SIZE_MIN);
+    if (!candidates.length) {
+      return null;
+    }
+
+    const rawSize = candidates.reduce((sum, value) => sum + value, 0) / candidates.length;
+    const size = roundToPrecision(Math.max(GRID_SIZE_MIN, Math.min(GRID_SIZE_MAX, rawSize)), 2);
+    const squareOriginX = Math.min(firstPoint.x, secondPoint.x);
+    const squareOriginY = Math.min(firstPoint.y, secondPoint.y);
+
+    return normalizeGridState({
+      ...currentGrid,
+      size,
+      visible: true,
+      offsetX: normalizeGridOffset(squareOriginX, size),
+      offsetY: normalizeGridOffset(squareOriginY, size),
+    });
+  }
+
+  function syncGridConfigToDraft(draft, sceneId, gridConfig) {
+    const gridState = normalizeGridState(gridConfig);
+    draft.grid = gridState;
+
+    if (sceneId) {
+      const boardDraft = ensureBoardStateDraft(draft);
+      const entry =
+        boardDraft.sceneState[sceneId] && typeof boardDraft.sceneState[sceneId] === 'object'
+          ? boardDraft.sceneState[sceneId]
+          : {};
+      entry.grid = gridState;
+      boardDraft.sceneState[sceneId] = entry;
+
+      if (draft.scenes && Array.isArray(draft.scenes.items)) {
+        const scene = draft.scenes.items.find((item) => item?.id === sceneId);
+        if (scene) {
+          scene.grid = gridState;
+        }
+      }
+    }
+
+    return gridState;
+  }
+
+  async function persistSceneGridConfig(sceneId, gridConfig) {
+    if (!sceneId || !routes?.scenes) {
+      return false;
+    }
+
+    const sequence = ++gridSceneSaveSequence;
+    const normalizedGrid = normalizeGridState(gridConfig);
+    try {
+      const updatedScene = await updateSceneGrid(routes.scenes, sceneId, normalizedGrid);
+      if (sequence !== gridSceneSaveSequence || !updatedScene?.id) {
+        return;
+      }
+
+      boardApi.updateState?.((draft) => {
+        if (!draft.scenes || typeof draft.scenes !== 'object') {
+          draft.scenes = { folders: [], items: [] };
+        }
+        draft.scenes.items = Array.isArray(draft.scenes.items) ? draft.scenes.items : [];
+        const index = draft.scenes.items.findIndex((scene) => scene?.id === updatedScene.id);
+        if (index >= 0) {
+          draft.scenes.items[index] = {
+            ...draft.scenes.items[index],
+            ...updatedScene,
+            grid: normalizeGridState(updatedScene.grid ?? normalizedGrid),
+          };
+        }
+      });
+      return true;
+    } catch (error) {
+      console.warn('[VTT] Failed to persist calibrated scene grid', error);
+      updateStatus('Grid aligned locally, but the scene grid save failed.');
+      return false;
+    }
+  }
+
+  function commitGridCalibration(firstPoint, secondPoint) {
+    const latestState = boardApi.getState?.() ?? {};
+    const activeSceneId = latestState.boardState?.activeSceneId ?? null;
+    const nextGrid = calculateGridAlignment(firstPoint, secondPoint, latestState.grid ?? {});
+    if (!nextGrid) {
+      gridCalibration.firstPoint = null;
+      dispatchGridCalibrationState(true, 1);
+      updateStatus('Grid alignment needs two distinct corners of one square. Click the first corner again.');
+      return;
+    }
+
+    boardApi.updateState?.((draft) => {
+      syncGridConfigToDraft(draft, activeSceneId, nextGrid);
+    });
+
+    if (activeSceneId) {
+      markSceneStateDirty(activeSceneId);
+    }
+    if (activeSceneId && routes?.scenes) {
+      persistSceneGridConfig(activeSceneId, nextGrid).then((saved) => {
+        if (saved) {
+          persistBoardStateSnapshot();
+        }
+      });
+    } else {
+      persistBoardStateSnapshot();
+    }
+
+    stopGridCalibration(
+      `Grid aligned: ${formatGridMeasurement(nextGrid.size)} px, origin ${formatGridMeasurement(nextGrid.offsetX)}, ${formatGridMeasurement(nextGrid.offsetY)}.`
+    );
+  }
+
+  function handleGridCalibrationPointerDown(event) {
+    if (!gridCalibration.active || event.button !== 0) {
+      return;
+    }
+
+    const localPoint = getLocalMapPoint(event);
+    const imagePoint = getMapImagePoint(localPoint);
+    event.preventDefault();
+    event.stopPropagation();
+
+    if (!imagePoint) {
+      updateStatus('Grid alignment: click inside the map image.');
+      return;
+    }
+
+    if (!gridCalibration.firstPoint) {
+      gridCalibration.firstPoint = imagePoint;
+      dispatchGridCalibrationState(true, 2);
+      updateStatus('Grid alignment: click the opposite corner of that square.');
+      return;
+    }
+
+    commitGridCalibration(gridCalibration.firstPoint, imagePoint);
+  }
+
+  function handleGridCalibrationKeydown(event) {
+    if (!gridCalibration.active || event.key !== 'Escape') {
+      return;
+    }
+
+    event.preventDefault();
+    event.stopPropagation();
+    stopGridCalibration('Grid alignment canceled.');
   }
 
   function syncDrawingsFromState(boardState, sceneId) {
@@ -4259,6 +4526,9 @@ export function mountBoardInteractions(store, routes = {}) {
 
   function loadMap(url) {
     const loadToken = ++mapLoadSequence;
+    if (gridCalibration.active) {
+      stopGridCalibration('Grid alignment canceled.');
+    }
     if (mapLoadWatchdogId) {
       clearTimeout(mapLoadWatchdogId);
       mapLoadWatchdogId = null;
@@ -5091,17 +5361,19 @@ export function mountBoardInteractions(store, routes = {}) {
       return '';
     }
 
-    const offsets = view?.gridOffsets ?? {};
-    const offsetLeft = Number.isFinite(offsets.left) ? offsets.left : 0;
-    const offsetRight = Number.isFinite(offsets.right) ? offsets.right : 0;
-    const offsetTop = Number.isFinite(offsets.top) ? offsets.top : 0;
-    const offsetBottom = Number.isFinite(offsets.bottom) ? offsets.bottom : 0;
+    const insets = view?.mapInsets ?? view?.gridOffsets ?? {};
+    const offsetLeft = Number.isFinite(insets.left) ? insets.left : 0;
+    const offsetRight = Number.isFinite(insets.right) ? insets.right : 0;
+    const offsetTop = Number.isFinite(insets.top) ? insets.top : 0;
+    const offsetBottom = Number.isFinite(insets.bottom) ? insets.bottom : 0;
+    const origin = view?.gridOrigin ?? {};
+    const originX = Number.isFinite(origin.x) ? origin.x : 0;
+    const originY = Number.isFinite(origin.y) ? origin.y : 0;
     const gridSize = Math.max(8, Number.isFinite(view?.gridSize) ? view.gridSize : 64);
 
-    // The clip-path is applied to the overlay layer element which is already
-    // inset by the grid offsets via CSS positioning.  Coordinates must be
-    // relative to this inner area, so we do NOT add offsetLeft/offsetTop and
-    // we clamp to the inner dimensions rather than the full map size.
+    // The clip-path is applied to the overlay layer element, which is inset to
+    // the map image. Grid coordinates are relative to the calibrated origin
+    // inside that image, not necessarily the image's top-left corner.
     const innerWidth = Math.max(0, mapWidth - offsetLeft - offsetRight);
     const innerHeight = Math.max(0, mapHeight - offsetTop - offsetBottom);
 
@@ -5115,8 +5387,8 @@ export function mountBoardInteractions(store, routes = {}) {
 
       const path = points
         .map((point, index) => {
-          const px = clamp(roundToPrecision((point.column ?? 0) * gridSize, 2), 0, innerWidth);
-          const py = clamp(roundToPrecision((point.row ?? 0) * gridSize, 2), 0, innerHeight);
+          const px = clamp(roundToPrecision(originX + (point.column ?? 0) * gridSize, 2), 0, innerWidth);
+          const py = clamp(roundToPrecision(originY + (point.row ?? 0) * gridSize, 2), 0, innerHeight);
           if (!Number.isFinite(px) || !Number.isFinite(py)) {
             return null;
           }
@@ -5256,30 +5528,44 @@ export function mountBoardInteractions(store, routes = {}) {
     applyTransform();
   }
 
-  function applyGridOffsets(offsets = {}) {
-    const { top = 0, right = 0, bottom = 0, left = 0 } = offsets;
+  function applyGridOffsets(insets = viewState.mapInsets, origin = viewState.gridOrigin) {
+    const { top = 0, right = 0, bottom = 0, left = 0 } = insets ?? {};
     const sanitize = (value) => (Number.isFinite(value) ? value : 0);
-    const nextOffsets = {
+    const nextInsets = {
       top: sanitize(top),
       right: sanitize(right),
       bottom: sanitize(bottom),
       left: sanitize(left),
     };
+    const nextOrigin = {
+      x: sanitize(origin?.x ?? 0),
+      y: sanitize(origin?.y ?? 0),
+    };
+    const nextOffsets = {
+      top: nextInsets.top + nextOrigin.y,
+      right: nextInsets.right,
+      bottom: nextInsets.bottom,
+      left: nextInsets.left + nextOrigin.x,
+    };
+    viewState.mapInsets = nextInsets;
+    viewState.gridOrigin = nextOrigin;
     viewState.gridOffsets = nextOffsets;
     if (mapOverlay) {
-      mapOverlay.style.setProperty('--vtt-grid-offset-top', `${nextOffsets.top}px`);
-      mapOverlay.style.setProperty('--vtt-grid-offset-right', `${nextOffsets.right}px`);
-      mapOverlay.style.setProperty('--vtt-grid-offset-bottom', `${nextOffsets.bottom}px`);
-      mapOverlay.style.setProperty('--vtt-grid-offset-left', `${nextOffsets.left}px`);
+      mapOverlay.style.setProperty('--vtt-grid-offset-top', `${nextInsets.top}px`);
+      mapOverlay.style.setProperty('--vtt-grid-offset-right', `${nextInsets.right}px`);
+      mapOverlay.style.setProperty('--vtt-grid-offset-bottom', `${nextInsets.bottom}px`);
+      mapOverlay.style.setProperty('--vtt-grid-offset-left', `${nextInsets.left}px`);
     }
     if (!grid) {
       renderTokens(boardApi.getState?.() ?? {}, tokenLayer, viewState);
       return;
     }
-    grid.style.setProperty('--vtt-grid-offset-top', `${nextOffsets.top}px`);
-    grid.style.setProperty('--vtt-grid-offset-right', `${nextOffsets.right}px`);
-    grid.style.setProperty('--vtt-grid-offset-bottom', `${nextOffsets.bottom}px`);
-    grid.style.setProperty('--vtt-grid-offset-left', `${nextOffsets.left}px`);
+    grid.style.setProperty('--vtt-grid-offset-top', `${nextInsets.top}px`);
+    grid.style.setProperty('--vtt-grid-offset-right', `${nextInsets.right}px`);
+    grid.style.setProperty('--vtt-grid-offset-bottom', `${nextInsets.bottom}px`);
+    grid.style.setProperty('--vtt-grid-offset-left', `${nextInsets.left}px`);
+    grid.style.setProperty('--vtt-grid-origin-x', `${nextOrigin.x}px`);
+    grid.style.setProperty('--vtt-grid-origin-y', `${nextOrigin.y}px`);
     renderTokens(boardApi.getState?.() ?? {}, tokenLayer, viewState);
     templateTool.notifyGridChanged();
   }
@@ -15094,9 +15380,12 @@ function createOverlayTool(uploadsEndpoint) {
 
   function gridPointToOverlayLocal(point) {
     const gridSize = Math.max(8, Number.isFinite(viewState.gridSize) ? viewState.gridSize : 64);
+    const origin = viewState.gridOrigin ?? {};
+    const originX = Number.isFinite(origin.x) ? origin.x : 0;
+    const originY = Number.isFinite(origin.y) ? origin.y : 0;
     return {
-      x: (point.column ?? 0) * gridSize,
-      y: (point.row ?? 0) * gridSize,
+      x: originX + (point.column ?? 0) * gridSize,
+      y: originY + (point.row ?? 0) * gridSize,
     };
   }
 

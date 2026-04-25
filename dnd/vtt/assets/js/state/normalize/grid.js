@@ -1,12 +1,59 @@
+export const GRID_SIZE_MIN = 8;
+export const GRID_SIZE_MAX = 320;
+export const GRID_SIZE_DEFAULT = 64;
+
+function toFiniteNumber(value) {
+  if (typeof value === 'string') {
+    const trimmed = value.trim();
+    if (!trimmed) {
+      return null;
+    }
+    const parsed = Number(trimmed);
+    return Number.isFinite(parsed) ? parsed : null;
+  }
+
+  const numeric = Number(value);
+  return Number.isFinite(numeric) ? numeric : null;
+}
+
+function roundGridValue(value) {
+  if (!Number.isFinite(value)) {
+    return 0;
+  }
+
+  const rounded = Math.round(value * 100) / 100;
+  return Object.is(rounded, -0) ? 0 : rounded;
+}
+
+export function normalizeGridOffset(value, size = GRID_SIZE_DEFAULT) {
+  const numeric = toFiniteNumber(value);
+  const gridSize = Number.isFinite(size) && size > 0 ? size : GRID_SIZE_DEFAULT;
+  if (numeric === null) {
+    return 0;
+  }
+
+  const normalized = ((numeric % gridSize) + gridSize) % gridSize;
+  if (normalized >= gridSize - 0.01 || normalized < 0.01) {
+    return 0;
+  }
+
+  return roundGridValue(normalized);
+}
+
 export function normalizeGridState(raw = {}) {
-  const sizeValue = Number.parseInt(raw.size, 10);
-  const size = Number.isFinite(sizeValue) ? sizeValue : Number(raw.size);
-  const resolvedSize = Number.isFinite(size) ? Math.max(8, Math.min(320, Math.trunc(size))) : 64;
+  const source = raw && typeof raw === 'object' ? raw : {};
+  const size = toFiniteNumber(source.size);
+  const resolvedSize =
+    size === null
+      ? GRID_SIZE_DEFAULT
+      : roundGridValue(Math.max(GRID_SIZE_MIN, Math.min(GRID_SIZE_MAX, size)));
 
   return {
     size: resolvedSize,
-    locked: Boolean(raw.locked),
-    visible: raw.visible === undefined ? true : Boolean(raw.visible),
+    locked: Boolean(source.locked),
+    visible: source.visible === undefined ? true : Boolean(source.visible),
+    offsetX: normalizeGridOffset(source.offsetX ?? source.originX ?? source.x ?? 0, resolvedSize),
+    offsetY: normalizeGridOffset(source.offsetY ?? source.originY ?? source.y ?? 0, resolvedSize),
   };
 }
 

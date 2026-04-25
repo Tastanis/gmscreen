@@ -1,4 +1,5 @@
 import { queueSave } from '../state/persistence.js';
+import { normalizeGridState } from '../state/normalize/grid.js';
 
 const SAVE_KEY = 'board-state';
 const COMBAT_SAVE_KEY_PREFIX = 'combat-state';
@@ -629,15 +630,7 @@ function formatOverlayState(raw) {
 }
 
 function normalizeGridPayload(raw = {}) {
-  const sizeValue = Number.parseInt(raw.size, 10);
-  const size = Number.isFinite(sizeValue) ? sizeValue : Number(raw.size);
-  const resolvedSize = Number.isFinite(size) ? Math.max(8, Math.min(320, Math.trunc(size))) : 64;
-
-  return {
-    size: resolvedSize,
-    locked: Boolean(raw.locked),
-    visible: raw.visible === undefined ? true : Boolean(raw.visible),
-  };
+  return normalizeGridState(raw);
 }
 
 function createEmptyOverlayState() {

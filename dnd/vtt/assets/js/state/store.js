@@ -1,5 +1,5 @@
 import { normalizePings } from './normalize/pings.js';
-import { applySceneGridState } from './normalize/grid.js';
+import { applySceneGridState, normalizeGridState } from './normalize/grid.js';
 import { normalizeTemplates } from './normalize/templates.js';
 import { normalizeDrawings } from './normalize/drawings.js';
 import {
@@ -82,7 +82,7 @@ const state = {
     overlay: createEmptyOverlayState(),
     pings: [],
   },
-  grid: { size: 64, locked: false, visible: true },
+  grid: { size: 64, locked: false, visible: true, offsetX: 0, offsetY: 0 },
   user: { isGM: false, name: '' },
 };
 
@@ -114,10 +114,10 @@ export function initializeState(snapshot = {}) {
   );
   syncBoardOverlayState(state.boardState);
   if (snapshot.grid && typeof snapshot.grid === 'object') {
-    state.grid = {
+    state.grid = normalizeGridState({
       ...state.grid,
       ...snapshot.grid,
-    };
+    });
   }
 
   applySceneGridState(state);

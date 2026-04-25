@@ -6,11 +6,18 @@ knows what changed, what remains, and what has been tested.
 
 ## Current Status
 
-- Status: Discovery and planning only.
+- Status: Phase 1 grid alignment foundation implemented.
 - Last updated: 2026-04-25.
-- No VTT behavior has been changed yet.
+- VTT grid state now supports both square size and calibrated origin offsets.
+- GM scene controls now include an Align Grid action that captures two opposite corners
+  of a known map square and calculates grid size plus `offsetX` / `offsetY`.
+- Scene grid changes persist through the scene storage API as well as board scene state.
 - Old overlay system is still active.
-- Tests run for this phase: none; this was a read-only investigation plus this tracker file.
+- No map level, level renderer, or overlay replacement work has started.
+- Tests run for this phase:
+  - `npm test` - passing, 355 tests.
+  - `php -l dnd/vtt/api/scenes.php` and `php -l dnd/vtt/api/state.php` were attempted,
+    but `php` is not available on PATH in this workspace.
 - User decisions captured:
   - Cutouts should work square-by-square, similar to fog editing, but they remove/hide
     parts of only the currently edited map level.
@@ -58,6 +65,52 @@ knows what changed, what remains, and what has been tested.
 - Server board persistence and sync: `dnd/vtt/api/state.php`
 - Scene storage API: `dnd/vtt/api/scenes.php`
 - Board CSS: `dnd/vtt/assets/css/board.css`
+
+## Completed Phase 1: Grid Alignment Foundation
+
+Date completed: 2026-04-25.
+
+Changed files:
+
+- `dnd/vtt/api/scenes.php`
+- `dnd/vtt/api/state.php`
+- `dnd/vtt/assets/css/board.css`
+- `dnd/vtt/assets/js/services/board-state-service.js`
+- `dnd/vtt/assets/js/services/scene-service.js`
+- `dnd/vtt/assets/js/state/normalize/grid.js`
+- `dnd/vtt/assets/js/state/store.js`
+- `dnd/vtt/assets/js/state/__tests__/grid-normalization.test.mjs`
+- `dnd/vtt/assets/js/ui/board-interactions.js`
+- `dnd/vtt/assets/js/ui/scene-manager.js`
+- `dnd/vtt/assets/js/ui/settings-panel.js`
+- `dnd/vtt/components/SettingsPanel.php`
+- `dnd/data/version.json`
+- `docs/vtt-map-levels/IMPLEMENTATION_STATE.md`
+
+Implementation notes:
+
+- Grid state shape is now `{ size, locked, visible, offsetX, offsetY }`.
+- Grid size and offsets are normalized on the client and server; fractional pixel values
+  are preserved to two decimals.
+- Offsets are canonicalized into the current square size, so selecting any known square
+  stores the repeating grid origin rather than that square's absolute map position.
+- Existing map padding remains separate from calibrated grid origin. Tokens, templates,
+  fog, drawings, grid rendering, and overlay mask coordinates use the effective calibrated
+  grid origin.
+- Overlay image positioning remains inset to the map image rather than being shifted by
+  the calibrated grid origin.
+- Scene grid updates use a new `update-scene-grid` scene API action. After the scene grid
+  save succeeds, board state is saved again so polling clients can fetch the updated
+  scene definition; Pusher still does not directly apply grid updates.
+
+Remaining notes:
+
+- Manual GM browser verification is still needed: upload or activate a map, click
+  Align Grid, select two opposite corners of one map square, save/refresh, and confirm
+  the grid remains aligned.
+- Multi-client verification is still needed to confirm another browser picks up the
+  updated scene grid after the post-save board-state bump.
+- PHP syntax linting should be run in an environment with PHP available.
 
 ## Main Findings
 

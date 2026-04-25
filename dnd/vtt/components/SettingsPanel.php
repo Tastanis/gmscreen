@@ -48,6 +48,7 @@ function renderVttSettingsPanel(string $tokenLibraryMarkup = '', bool $isGm = fa
                                 <button class="btn btn--primary" type="button" data-action="upload-map">Upload Map</button>
                                 <button class="btn" type="button" data-action="toggle-grid">Toggle Grid</button>
                                 <button class="btn" type="button" data-action="lock-grid">Lock Grid</button>
+                                <button class="btn" type="button" data-action="calibrate-grid" title="Align the grid from two map square corners">Align Grid</button>
                             </div>
                             <div class="scene-controls__grid">
                                 <div class="scene-controls__grid-label">
@@ -59,13 +60,20 @@ function renderVttSettingsPanel(string $tokenLibraryMarkup = '', bool $isGm = fa
                                 <input
                                     id="vtt-grid-size-input"
                                     type="range"
-                                    min="24"
-                                    max="160"
-                                    step="4"
+                                    min="8"
+                                    max="320"
+                                    step="1"
                                     value="64"
                                     data-grid-size-input
                                     aria-describedby="vtt-grid-size-hint"
                                 />
+                                <div class="scene-controls__grid-label">
+                                    <span>Grid Origin</span>
+                                    <span class="scene-controls__grid-value">
+                                        <span data-grid-offset-x>0</span>,
+                                        <span data-grid-offset-y>0</span> px
+                                    </span>
+                                </div>
                                 <p id="vtt-grid-size-hint" class="scene-controls__hint">
                                     Adjust how large each grid square should appear on the board.
                                 </p>

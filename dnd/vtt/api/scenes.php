@@ -50,6 +50,14 @@ try {
             ]);
         }
 
+        if ($action === 'update-scene-grid') {
+            $scene = updateSceneGrid($payload);
+            respondJson(200, [
+                'success' => true,
+                'data' => $scene,
+            ]);
+        }
+
         respondJson(400, [
             'success' => false,
             'error' => 'Unsupported action.',
@@ -206,24 +214,85 @@ function deleteScene(string $sceneId): void
     persistScenes($storage);
 }
 
+function updateSceneGrid(array $payload): array
+{
+    $sceneId = trim((string) ($payload['sceneId'] ?? $payload['id'] ?? ''));
+    if ($sceneId === '') {
+        respondJson(400, [
+            'success' => false,
+            'error' => 'Scene id is required.',
+        ]);
+    }
+
+    $storage = loadScenesPayload();
+    foreach ($storage['items'] as &$scene) {
+        if (($scene['id'] ?? null) !== $sceneId) {
+            continue;
+        }
+
+        $scene['grid'] = sanitizeGrid($payload['grid'] ?? []);
+        $scene['updatedAt'] = date(DATE_ATOM);
+        $updatedScene = $scene;
+        unset($scene);
+        persistScenes($storage);
+        return $updatedScene;
+    }
+    unset($scene);
+
+    respondJson(404, [
+        'success' => false,
+        'error' => 'Scene not found.',
+    ]);
+}
+
 function sanitizeGrid($grid): array
 {
-    $size = 64;
+    $size = 64.0;
     $locked = false;
     $visible = true;
+    $offsetX = 0.0;
+    $offsetY = 0.0;
 
     if (is_array($grid)) {
-        $sizeValue = isset($grid['size']) ? (int) $grid['size'] : 64;
-        $size = max(8, min(320, $sizeValue));
+        $sizeValue = isset($grid['size']) && is_numeric($grid['size']) ? (float) $grid['size'] : 64.0;
+        $size = roundGridValue(max(8.0, min(320.0, $sizeValue)));
         $locked = isset($grid['locked']) ? (bool) $grid['locked'] : false;
         $visible = isset($grid['visible']) ? (bool) $grid['visible'] : true;
+        $offsetX = normalizeGridOffset($grid['offsetX'] ?? $grid['originX'] ?? $grid['x'] ?? null, $size);
+        $offsetY = normalizeGridOffset($grid['offsetY'] ?? $grid['originY'] ?? $grid['y'] ?? null, $size);
     }
 
     return [
         'size' => $size,
         'locked' => $locked,
         'visible' => $visible,
+        'offsetX' => $offsetX,
+        'offsetY' => $offsetY,
     ];
+}
+
+function roundGridValue(float $value): float
+{
+    $rounded = round($value, 2);
+    return abs($rounded) < 0.01 ? 0.0 : $rounded;
+}
+
+function normalizeGridOffset($value, float $size): float
+{
+    if (!is_numeric($value) || $size <= 0) {
+        return 0.0;
+    }
+
+    $offset = fmod((float) $value, $size);
+    if ($offset < 0) {
+        $offset += $size;
+    }
+
+    if ($offset < 0.01 || $offset >= $size - 0.01) {
+        return 0.0;
+    }
+
+    return roundGridValue($offset);
 }
 
 function persistScenes(array $storage): void

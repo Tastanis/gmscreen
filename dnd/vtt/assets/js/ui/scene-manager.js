@@ -4,6 +4,7 @@ import {
   deleteScene,
 } from '../services/scene-service.js';
 import { persistBoardState } from '../services/board-state-service.js';
+import { normalizeGridState } from '../state/normalize/grid.js';
 
 export function renderSceneList(routes, store) {
   const container = document.getElementById('scene-manager');
@@ -107,18 +108,16 @@ export function renderSceneList(routes, store) {
           scene.grid ?? null
         );
         if (!draft.grid || typeof draft.grid !== 'object') {
-          draft.grid = { size: 64, locked: false, visible: true };
+          draft.grid = normalizeGridConfig({});
         }
         // CRITICAL: Always use the scene's permanent grid property, NOT the synced sceneState grid.
         // Grid is a permanent scene setting that should never be overwritten by sync.
         const sceneGrid = normalizeGridConfig(scene.grid ?? {});
-        draft.grid.size = sceneGrid.size;
-        draft.grid.locked = sceneGrid.locked;
-        draft.grid.visible = sceneGrid.visible;
+        draft.grid = { ...draft.grid, ...sceneGrid };
         // Also update the sceneState entry to match the scene's permanent grid
         // This ensures consistency between the scene definition and the board state
         if (boardDraft.sceneState && boardDraft.sceneState[scene.id]) {
-          boardDraft.sceneState[scene.id].grid = normalizeGridConfig(scene.grid ?? {});
+          boardDraft.sceneState[scene.id].grid = sceneGrid;
         }
       });
 
@@ -530,7 +529,7 @@ export function renderSceneList(routes, store) {
     const currentState = stateApi.getState?.() ?? {};
     const mapUrl = currentState.boardState?.mapUrl ?? null;
     const thumbnailUrl = currentState.boardState?.thumbnailUrl ?? null;
-    const gridState = currentState.grid ?? { size: 64, locked: false, visible: true };
+    const gridState = normalizeGridConfig(currentState.grid ?? {});
 
     if (!mapUrl) {
       showFeedback(feedback, 'Upload a map before saving a scene.', 'error');
@@ -563,17 +562,15 @@ export function renderSceneList(routes, store) {
         boardDraft.thumbnailUrl = scene.thumbnailUrl ?? null;
         ensureSceneBoardStateEntry(boardDraft, scene.id, scene.grid ?? null);
         if (!draft.grid || typeof draft.grid !== 'object') {
-          draft.grid = { size: 64, locked: false, visible: true };
+          draft.grid = normalizeGridConfig({});
         }
         // CRITICAL: Always use the scene's permanent grid property.
         // Grid is saved with the scene and should be the authoritative source.
         const gridConfig = normalizeGridConfig(scene.grid ?? {});
-        draft.grid.size = gridConfig.size;
-        draft.grid.locked = gridConfig.locked;
-        draft.grid.visible = gridConfig.visible;
+        draft.grid = { ...draft.grid, ...gridConfig };
         // Also update the sceneState entry to match the scene's permanent grid
         if (boardDraft.sceneState && boardDraft.sceneState[scene.id]) {
-          boardDraft.sceneState[scene.id].grid = normalizeGridConfig(scene.grid ?? {});
+          boardDraft.sceneState[scene.id].grid = gridConfig;
         }
       });
 
@@ -704,15 +701,7 @@ function ensureSceneBoardStateEntry(boardState, sceneId, fallbackGrid = null) {
 }
 
 function normalizeGridConfig(raw = {}) {
-  const sizeValue = Number.parseInt(raw.size, 10);
-  const size = Number.isFinite(sizeValue) ? sizeValue : Number(raw.size);
-  const resolvedSize = Number.isFinite(size) ? Math.max(8, Math.min(320, Math.trunc(size))) : 64;
-
-  return {
-    size: resolvedSize,
-    locked: Boolean(raw.locked),
-    visible: raw.visible === undefined ? true : Boolean(raw.visible),
-  };
+  return normalizeGridState(raw);
 }
 
 const OVERLAY_LAYER_PREFIX = 'overlay-layer-';

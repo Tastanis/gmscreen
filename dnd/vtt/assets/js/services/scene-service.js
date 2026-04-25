@@ -25,6 +25,21 @@ export async function createScene(endpoint, payload) {
   return data.data;
 }
 
+export async function updateSceneGrid(endpoint, sceneId, grid) {
+  const response = await fetch(endpoint, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ action: 'update-scene-grid', sceneId, grid }),
+  });
+
+  const data = await response.json().catch(() => ({}));
+  if (!response.ok || !data.success) {
+    throw new Error(data.error || 'Unable to update scene grid');
+  }
+
+  return data.data;
+}
+
 export async function createSceneFolder(endpoint, name) {
   const response = await fetch(endpoint, {
     method: 'POST',
