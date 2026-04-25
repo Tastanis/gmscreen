@@ -6,7 +6,7 @@ knows what changed, what remains, and what has been tested.
 
 ## Current Status
 
-- Status: Phase 3 renderer foundation implemented.
+- Status: Phase 4 GM controls implemented.
 - Last updated: 2026-04-25.
 - VTT grid state now supports both square size and calibrated origin offsets.
 - GM scene controls now include an Align Grid action that captures two opposite corners
@@ -17,14 +17,24 @@ knows what changed, what remains, and what has been tested.
   and the old overlay stack.
 - The renderer displays visible persisted map levels with `mapUrl`, `opacity`, and
   `zIndex`, while keeping pointer events disabled so tokens remain clickable.
+- GM scene manager controls now support adding map levels, uploading level images,
+  renaming, deleting, toggling visibility, changing opacity, raising/lowering z-index
+  order, and selecting the active level.
+- Map level controls save through scene-scoped `sceneState[sceneId].mapLevels`; no
+  top-level `mapLevels` field is introduced.
 - Old overlay system is still active.
-- No map level controls, cutout editing, token level support, or overlay replacement work
-  has started.
-- Tests run for this phase:
-  - `npm.cmd test` - passing, 363 tests.
+- No cutout editing, token level support, click blocking, automatic transitions, or
+  overlay replacement work has started.
+- Tests run for the latest phase:
+  - `node dnd/vtt/assets/js/ui/__tests__/scene-manager-map-levels.test.mjs` - passing,
+    3 tests.
+  - `node --test dnd/vtt/assets/js/ui/__tests__/map-level-renderer.test.mjs` - passing,
+    5 tests.
+  - `node --check dnd/vtt/assets/js/ui/scene-manager.js` - passing.
+  - `npm.cmd test` - passing, 366 tests.
   - `git diff --check` - passing.
-  - PHP linting was not run for Phase 3 because no PHP files changed; `php` was still not
-    available on PATH during the previous PHP lint attempt.
+  - PHP linting was not run for Phase 4 because no PHP files changed and `php` remains
+    unavailable on PATH.
 - User decisions captured:
   - Cutouts should work square-by-square, similar to fog editing, but they remove/hide
     parts of only the currently edited map level.
@@ -214,10 +224,56 @@ Remaining notes:
 
 - Manual browser verification is still needed with persisted `mapLevels` data to confirm
   level images visually stack above the base map and below old overlays.
-- Future controls must create/update map levels; Phase 3 only renders data that already
-  exists in scene board state.
+- Phase 4 now creates and updates persisted map levels; Phase 3 itself only rendered
+  data that already existed in scene board state.
 - Cutouts are still data-only for now. Visual cutout masking and click-through behavior
   remain part of the cutout editor phase.
+
+## Completed Phase 4: GM Controls
+
+Date completed: 2026-04-25.
+
+Changed files:
+
+- `dnd/vtt/assets/css/settings.css`
+- `dnd/vtt/assets/js/ui/scene-manager.js`
+- `dnd/vtt/assets/js/ui/__tests__/scene-manager-map-levels.test.mjs`
+- `dnd/data/version.json`
+- `docs/vtt-map-levels/IMPLEMENTATION_STATE.md`
+
+Implementation notes:
+
+- Added a dedicated Map Levels section to each scene item in the GM scene manager.
+- The controls support adding up to the existing 5-level cap, uploading/replacing a
+  level image through the existing uploads endpoint, renaming, deleting, show/hide,
+  opacity, raise/lower ordering, and active level selection.
+- Level ordering is normalized back into `zIndex` values so the renderer's persisted
+  z-index ordering remains the source of truth.
+- Level updates persist only under `sceneState[sceneId].mapLevels`; the old top-level
+  overlay mirror remains untouched.
+- The old overlay controls remain in the scene manager and continue to use their
+  existing upload/edit/visibility flow.
+- Added dependency-free scene-manager tests around map level markup and state helpers.
+
+Tests run for this phase:
+
+- `node dnd/vtt/assets/js/ui/__tests__/scene-manager-map-levels.test.mjs` - passing,
+  3 tests.
+- `node --test dnd/vtt/assets/js/ui/__tests__/map-level-renderer.test.mjs` - passing,
+  5 tests.
+- `node --check dnd/vtt/assets/js/ui/scene-manager.js` - passing.
+- `npm.cmd test` - passing, 366 tests.
+- `git diff --check` - passing.
+- PHP linting was not run because no PHP files changed and `php` is unavailable on PATH.
+
+Remaining notes:
+
+- Manual browser verification is still needed: add two map levels, upload images, adjust
+  opacity/order/visibility, refresh, and confirm the scene-scoped level state persists.
+- Manual multi-client verification is still needed to confirm level changes propagate
+  through the existing board-state sync path.
+- Cutout editing, token level support, click blocking, automatic transitions, and old
+  overlay removal remain future phases.
 
 ## Main Findings
 

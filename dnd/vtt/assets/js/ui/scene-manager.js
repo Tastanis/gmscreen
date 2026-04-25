@@ -6,6 +6,8 @@ import {
 import { persistBoardState } from '../services/board-state-service.js';
 import { normalizeGridState } from '../state/normalize/grid.js';
 import {
+  MAP_LEVEL_ID_PREFIX,
+  MAP_LEVEL_MAX_LEVELS,
   createEmptyMapLevelsState,
   normalizeMapLevelsState,
 } from '../state/normalize/map-levels.js';
@@ -26,6 +28,12 @@ export function renderSceneList(routes, store) {
   let overlayUploadTargetSceneId = null;
   let overlayUploadTargetLayerId = null;
   let overlayUploadPending = false;
+  let mapLevelUploadTargetSceneId = null;
+  let mapLevelUploadTargetLevelId = null;
+  let mapLevelUploadPending = false;
+  let mapLevelUploadPendingSceneId = null;
+
+  const isAssetUploadPending = () => overlayUploadPending || mapLevelUploadPending;
 
   if (!endpoints.scenes) {
     folderButtons.forEach((button) => {
@@ -53,6 +61,10 @@ export function renderSceneList(routes, store) {
       {
         overlayUploadsEnabled: Boolean(overlayInput && endpoints.uploads),
         overlayUploadPending,
+        mapLevelUploadsEnabled: Boolean(overlayInput && endpoints.uploads),
+        mapLevelUploadPending,
+        mapLevelUploadPendingSceneId,
+        assetUploadPending: isAssetUploadPending(),
       }
     );
   };
@@ -128,6 +140,233 @@ export function renderSceneList(routes, store) {
       persistBoardStateSnapshot();
     }
 
+    if (action === 'add-map-level' && sceneId) {
+      const currentState = stateApi.getState?.() ?? {};
+      const sceneState = normalizeSceneState(currentState.scenes);
+      const scene = sceneState.items.find((item) => item.id === sceneId);
+      if (!scene) {
+        return;
+      }
+
+      let levelAdded = false;
+      let limitReached = false;
+      mutateSceneMapLevels(stateApi, sceneId, (mapLevels) => {
+        if (mapLevels.levels.length >= MAP_LEVEL_MAX_LEVELS) {
+          limitReached = true;
+          return false;
+        }
+
+        const orderedLevels = reindexMapLevels(getOrderedMapLevels(mapLevels.levels));
+        const level = createMapLevel(`Level ${orderedLevels.length + 1}`, orderedLevels);
+        orderedLevels.push(level);
+        mapLevels.levels = reindexMapLevels(orderedLevels);
+        mapLevels.activeLevelId = level.id;
+        levelAdded = true;
+        return true;
+      });
+
+      if (levelAdded) {
+        persistBoardStateSnapshot();
+        showFeedback(feedback, 'Map level added.', 'success');
+      } else if (limitReached) {
+        showFeedback(feedback, `Map levels are limited to ${MAP_LEVEL_MAX_LEVELS}.`, 'error');
+      } else {
+        showFeedback(feedback, 'Unable to add map level.', 'error');
+      }
+      return;
+    }
+
+    if (action === 'upload-map-level' && sceneId) {
+      const levelId = target.getAttribute('data-map-level-id');
+      if (!levelId) {
+        return;
+      }
+
+      const currentState = stateApi.getState?.() ?? {};
+      const sceneState = normalizeSceneState(currentState.scenes);
+      const scene = sceneState.items.find((item) => item.id === sceneId);
+      if (!scene) {
+        return;
+      }
+
+      if (!overlayInput || !endpoints.uploads) {
+        showFeedback(feedback, 'Map level uploads are unavailable right now.', 'error');
+        return;
+      }
+
+      if (isAssetUploadPending()) {
+        showFeedback(feedback, 'An image upload is already in progress.', 'info');
+        return;
+      }
+
+      overlayUploadTargetSceneId = null;
+      overlayUploadTargetLayerId = null;
+      mapLevelUploadTargetSceneId = sceneId;
+      mapLevelUploadTargetLevelId = levelId;
+      overlayInput.value = '';
+      overlayInput.click();
+      return;
+    }
+
+    if (action === 'rename-map-level' && sceneId) {
+      const levelId = target.getAttribute('data-map-level-id');
+      if (!levelId) {
+        return;
+      }
+
+      const currentState = stateApi.getState?.() ?? {};
+      const sceneEntry = currentState.boardState?.sceneState?.[sceneId] ?? {};
+      const sceneGrid = sceneEntry.grid ?? getSceneGridFromState(currentState, sceneId);
+      const mapLevels = normalizeMapLevelsState(sceneEntry.mapLevels ?? null, { sceneGrid });
+      const existingLevel = mapLevels.levels.find((level) => level.id === levelId);
+      const currentName = existingLevel?.name ?? '';
+      const name = window.prompt('Map level name', currentName);
+      if (name === null) {
+        return;
+      }
+
+      const trimmed = name.trim();
+      if (!trimmed) {
+        showFeedback(feedback, 'Map level name cannot be empty.', 'error');
+        return;
+      }
+
+      let renamed = false;
+      mutateSceneMapLevels(stateApi, sceneId, (draftLevels) => {
+        const level = draftLevels.levels.find((entry) => entry.id === levelId);
+        if (!level) {
+          return false;
+        }
+
+        level.name = trimmed;
+        renamed = true;
+        return true;
+      });
+
+      if (renamed) {
+        persistBoardStateSnapshot();
+        showFeedback(feedback, 'Map level renamed.', 'success');
+      } else {
+        showFeedback(feedback, 'Unable to rename map level.', 'error');
+      }
+      return;
+    }
+
+    if (action === 'delete-map-level' && sceneId) {
+      const levelId = target.getAttribute('data-map-level-id');
+      if (!levelId) {
+        return;
+      }
+
+      const confirmed = window.confirm('Delete this map level? This cannot be undone.');
+      if (!confirmed) {
+        return;
+      }
+
+      let deleted = false;
+      mutateSceneMapLevels(stateApi, sceneId, (mapLevels) => {
+        const initialLength = mapLevels.levels.length;
+        mapLevels.levels = mapLevels.levels.filter((level) => level.id !== levelId);
+        if (mapLevels.levels.length === initialLength) {
+          return false;
+        }
+
+        mapLevels.levels = reindexMapLevels(getOrderedMapLevels(mapLevels.levels));
+        if (mapLevels.activeLevelId === levelId) {
+          mapLevels.activeLevelId = mapLevels.levels.find((level) => level.id)?.id ?? null;
+        }
+        deleted = true;
+        return true;
+      });
+
+      if (deleted) {
+        persistBoardStateSnapshot();
+        showFeedback(feedback, 'Map level deleted.', 'info');
+      } else {
+        showFeedback(feedback, 'Unable to delete map level.', 'error');
+      }
+      return;
+    }
+
+    if (action === 'toggle-map-level-visibility' && sceneId) {
+      const levelId = target.getAttribute('data-map-level-id');
+      if (!levelId) {
+        return;
+      }
+
+      let toggled = false;
+      mutateSceneMapLevels(stateApi, sceneId, (mapLevels) => {
+        const level = mapLevels.levels.find((entry) => entry.id === levelId);
+        if (!level) {
+          return false;
+        }
+
+        level.visible = level.visible === false;
+        toggled = true;
+        return true;
+      });
+
+      if (toggled) {
+        persistBoardStateSnapshot();
+      }
+      return;
+    }
+
+    if (action === 'select-map-level' && sceneId) {
+      const levelId = target.getAttribute('data-map-level-id');
+      if (!levelId) {
+        return;
+      }
+
+      let selected = false;
+      mutateSceneMapLevels(stateApi, sceneId, (mapLevels) => {
+        if (!mapLevels.levels.some((level) => level.id === levelId)) {
+          return false;
+        }
+
+        mapLevels.activeLevelId = levelId;
+        selected = true;
+        return true;
+      });
+
+      if (selected) {
+        persistBoardStateSnapshot();
+        showFeedback(feedback, 'Active map level selected.', 'info');
+      }
+      return;
+    }
+
+    if ((action === 'raise-map-level' || action === 'lower-map-level') && sceneId) {
+      const levelId = target.getAttribute('data-map-level-id');
+      if (!levelId) {
+        return;
+      }
+
+      let reordered = false;
+      mutateSceneMapLevels(stateApi, sceneId, (mapLevels) => {
+        const orderedLevels = getOrderedMapLevels(mapLevels.levels);
+        const index = orderedLevels.findIndex((level) => level.id === levelId);
+        if (index < 0) {
+          return false;
+        }
+
+        const swapIndex = action === 'raise-map-level' ? index + 1 : index - 1;
+        if (swapIndex < 0 || swapIndex >= orderedLevels.length) {
+          return false;
+        }
+
+        [orderedLevels[index], orderedLevels[swapIndex]] = [orderedLevels[swapIndex], orderedLevels[index]];
+        mapLevels.levels = reindexMapLevels(orderedLevels);
+        reordered = true;
+        return true;
+      });
+
+      if (reordered) {
+        persistBoardStateSnapshot();
+      }
+      return;
+    }
+
     if (action === 'upload-overlay-map' && sceneId) {
       const overlayId = target.getAttribute('data-overlay-id');
       const currentState = stateApi.getState?.() ?? {};
@@ -147,11 +386,13 @@ export function renderSceneList(routes, store) {
         return;
       }
 
-      if (overlayUploadPending) {
-        showFeedback(feedback, 'An overlay upload is already in progress.', 'info');
+      if (isAssetUploadPending()) {
+        showFeedback(feedback, 'An image upload is already in progress.', 'info');
         return;
       }
 
+      mapLevelUploadTargetSceneId = null;
+      mapLevelUploadTargetLevelId = null;
       overlayUploadTargetSceneId = sceneId;
       overlayUploadTargetLayerId = overlayId ?? null;
       overlayInput.value = '';
@@ -425,15 +666,124 @@ export function renderSceneList(routes, store) {
     }
   });
 
+  container.addEventListener('change', (event) => {
+    const opacityInput = event.target.closest('[data-action="set-map-level-opacity"]');
+    if (!opacityInput) {
+      return;
+    }
+
+    const sceneId = opacityInput.getAttribute('data-scene-id');
+    const levelId = opacityInput.getAttribute('data-map-level-id');
+    if (!sceneId || !levelId) {
+      return;
+    }
+
+    const opacity = normalizeMapLevelOpacityInput(opacityInput.value);
+    let updated = false;
+    mutateSceneMapLevels(stateApi, sceneId, (mapLevels) => {
+      const level = mapLevels.levels.find((entry) => entry.id === levelId);
+      if (!level) {
+        return false;
+      }
+
+      level.opacity = opacity;
+      updated = true;
+      return true;
+    });
+
+    if (updated) {
+      persistBoardStateSnapshot();
+    }
+  });
+
   overlayInput?.addEventListener('change', async () => {
     const file = overlayInput.files?.[0] ?? null;
     overlayInput.value = '';
+    const targetMapLevelSceneId = mapLevelUploadTargetSceneId;
+    mapLevelUploadTargetSceneId = null;
+    const targetMapLevelId = mapLevelUploadTargetLevelId;
+    mapLevelUploadTargetLevelId = null;
     const targetSceneId = overlayUploadTargetSceneId;
     overlayUploadTargetSceneId = null;
     const targetLayerId = overlayUploadTargetLayerId;
     overlayUploadTargetLayerId = null;
 
     if (!file) {
+      return;
+    }
+
+    if (targetMapLevelSceneId) {
+      if (!endpoints.uploads) {
+        showFeedback(feedback, 'Map level uploads are unavailable right now.', 'error');
+        return;
+      }
+
+      mapLevelUploadPending = true;
+      mapLevelUploadPendingSceneId = targetMapLevelSceneId;
+      render(stateApi.getState?.());
+
+      try {
+        const url = await uploadOverlayAsset(file, endpoints.uploads);
+        if (!url) {
+          throw new Error('Upload endpoint returned no URL.');
+        }
+
+        let levelUpdated = false;
+        let limitReached = false;
+        mutateSceneMapLevels(stateApi, targetMapLevelSceneId, (mapLevels) => {
+          let resolvedTargetId = targetMapLevelId ?? mapLevels.activeLevelId ?? null;
+
+          if (resolvedTargetId && !mapLevels.levels.some((level) => level.id === resolvedTargetId)) {
+            resolvedTargetId = null;
+          }
+
+          if (!resolvedTargetId) {
+            if (mapLevels.levels.length >= MAP_LEVEL_MAX_LEVELS) {
+              limitReached = true;
+              return false;
+            }
+
+            const orderedLevels = reindexMapLevels(getOrderedMapLevels(mapLevels.levels));
+            const level = createMapLevel(`Level ${orderedLevels.length + 1}`, orderedLevels);
+            orderedLevels.push(level);
+            mapLevels.levels = reindexMapLevels(orderedLevels);
+            resolvedTargetId = level.id;
+          }
+
+          mapLevels.levels = mapLevels.levels.map((level, index) => {
+            if (level.id !== resolvedTargetId) {
+              return level;
+            }
+
+            return {
+              ...level,
+              name: level.name || `Level ${index + 1}`,
+              mapUrl: url,
+              visible: true,
+            };
+          });
+          mapLevels.activeLevelId = resolvedTargetId;
+          levelUpdated = true;
+          return true;
+        });
+
+        if (!levelUpdated) {
+          const message = limitReached
+            ? `Map levels are limited to ${MAP_LEVEL_MAX_LEVELS}.`
+            : 'Unable to apply the uploaded map level.';
+          throw new Error(message);
+        }
+
+        persistBoardStateSnapshot();
+        showFeedback(feedback, 'Map level uploaded successfully.', 'success');
+      } catch (error) {
+        console.error('[VTT] Failed to upload map level', error);
+        showFeedback(feedback, error?.message || 'Unable to upload map level.', 'error');
+      } finally {
+        mapLevelUploadPending = false;
+        mapLevelUploadPendingSceneId = null;
+        render(stateApi.getState?.());
+      }
       return;
     }
 
@@ -711,6 +1061,178 @@ function normalizeGridConfig(raw = {}) {
   return normalizeGridState(raw);
 }
 
+const mapLevelSeed = Date.now();
+let mapLevelSequence = 0;
+
+function mutateSceneMapLevels(stateApi, sceneId, mutator) {
+  if (!sceneId || !stateApi || typeof stateApi.updateState !== 'function' || typeof mutator !== 'function') {
+    return false;
+  }
+
+  let changed = false;
+  stateApi.updateState((draft) => {
+    ensureSceneDraft(draft);
+    const boardDraft = ensureBoardStateDraft(draft);
+    const fallbackGrid = getSceneGridFromDraft(draft, sceneId);
+    const sceneBoardState = ensureSceneBoardStateEntry(boardDraft, sceneId, fallbackGrid);
+    if (!sceneBoardState) {
+      return;
+    }
+
+    const sceneGrid = normalizeGridConfig(sceneBoardState.grid ?? fallbackGrid ?? {});
+    const mapLevels = normalizeMapLevelsState(sceneBoardState.mapLevels ?? null, { sceneGrid });
+    const result = mutator(mapLevels, { draft, boardDraft, sceneBoardState, sceneGrid });
+    if (result === false) {
+      return;
+    }
+
+    sceneBoardState.mapLevels = normalizeMapLevelsState(mapLevels, { sceneGrid });
+    changed = true;
+  });
+
+  return changed;
+}
+
+function getSceneGridFromDraft(draft, sceneId) {
+  const scene = Array.isArray(draft?.scenes?.items)
+    ? draft.scenes.items.find((item) => item?.id === sceneId)
+    : null;
+  return scene?.grid ?? draft?.grid ?? null;
+}
+
+function getSceneGridFromState(state, sceneId) {
+  const scene = Array.isArray(state?.scenes?.items)
+    ? state.scenes.items.find((item) => item?.id === sceneId)
+    : null;
+  return scene?.grid ?? state?.grid ?? null;
+}
+
+function createMapLevelId() {
+  mapLevelSequence += 1;
+  return `${MAP_LEVEL_ID_PREFIX}${mapLevelSeed.toString(36)}-${mapLevelSequence.toString(36)}`;
+}
+
+function createMapLevel(name = '', existingLevels = []) {
+  const safeLevels = Array.isArray(existingLevels) ? existingLevels : [];
+  const trimmed = typeof name === 'string' ? name.trim() : '';
+  return {
+    id: createMapLevelId(),
+    name: ensureUniqueMapLevelName(trimmed || `Level ${safeLevels.length + 1}`, safeLevels),
+    mapUrl: null,
+    visible: true,
+    opacity: 1,
+    zIndex: safeLevels.length,
+    grid: null,
+    cutouts: [],
+    blocksLowerLevelInteraction: true,
+    blocksLowerLevelVision: true,
+    defaultForPlayers: safeLevels.length === 0,
+  };
+}
+
+function ensureUniqueMapLevelName(baseName, existingLevels = []) {
+  const fallback = typeof baseName === 'string' && baseName.trim() ? baseName.trim() : 'Level 1';
+  const normalizedExisting = new Set();
+  const usedNumbers = new Set();
+
+  existingLevels.forEach((level) => {
+    if (!level || typeof level !== 'object') {
+      return;
+    }
+
+    const candidate = typeof level.name === 'string' ? level.name.trim() : '';
+    if (!candidate) {
+      return;
+    }
+
+    normalizedExisting.add(candidate.toLowerCase());
+
+    const prefixMatch = fallbackPrefixMatch(candidate, fallback);
+    if (prefixMatch !== null) {
+      usedNumbers.add(prefixMatch);
+    }
+  });
+
+  if (!normalizedExisting.has(fallback.toLowerCase())) {
+    return fallback;
+  }
+
+  const prefix = deriveNamePrefix(fallback);
+  const prefixPattern = new RegExp(`^${escapeRegExp(prefix)}\\s+(\\d+)$`, 'i');
+
+  existingLevels.forEach((level) => {
+    if (!level || typeof level !== 'object') {
+      return;
+    }
+
+    const candidate = typeof level.name === 'string' ? level.name.trim() : '';
+    const match = candidate.match(prefixPattern);
+    if (match) {
+      const value = Number.parseInt(match[1], 10);
+      if (Number.isFinite(value)) {
+        usedNumbers.add(value);
+      }
+    }
+  });
+
+  let counter = 1;
+  const fallbackMatch = fallback.match(prefixPattern);
+  if (fallbackMatch) {
+    const preferred = Number.parseInt(fallbackMatch[1], 10);
+    if (Number.isFinite(preferred) && preferred > 0) {
+      counter = preferred;
+    }
+  }
+
+  while (
+    usedNumbers.has(counter) || normalizedExisting.has(`${prefix} ${counter}`.toLowerCase())
+  ) {
+    counter += 1;
+  }
+
+  return `${prefix} ${counter}`;
+}
+
+function getOrderedMapLevels(levels = []) {
+  return (Array.isArray(levels) ? levels : [])
+    .map((level, sourceIndex) => ({ level, sourceIndex }))
+    .filter(({ level }) => level && typeof level === 'object')
+    .sort((left, right) => {
+      const leftZ = Number.isFinite(left.level.zIndex) ? left.level.zIndex : left.sourceIndex;
+      const rightZ = Number.isFinite(right.level.zIndex) ? right.level.zIndex : right.sourceIndex;
+      if (leftZ !== rightZ) {
+        return leftZ - rightZ;
+      }
+      return left.sourceIndex - right.sourceIndex;
+    })
+    .map(({ level }) => level);
+}
+
+function reindexMapLevels(levels = []) {
+  return (Array.isArray(levels) ? levels : []).map((level, index) => ({
+    ...level,
+    zIndex: index,
+  }));
+}
+
+function normalizeMapLevelOpacityInput(value) {
+  const numeric = Number(value);
+  if (!Number.isFinite(numeric)) {
+    return 1;
+  }
+  return roundToPrecision(clamp(numeric, 0, 100) / 100, 2);
+}
+
+function formatMapLevelOpacityPercent(value) {
+  const numeric = Number(value);
+  const opacity = Number.isFinite(numeric) ? numeric : 1;
+  return Math.round(clamp(opacity, 0, 1) * 100);
+}
+
+function clamp(value, min, max) {
+  return Math.max(min, Math.min(max, value));
+}
+
 const OVERLAY_LAYER_PREFIX = 'overlay-layer-';
 let overlayLayerSeed = Date.now();
 let overlayLayerSequence = 0;
@@ -854,7 +1376,7 @@ function ensureUniqueOverlayName(baseName, existingLayers = []) {
   }
 
   const prefix = deriveNamePrefix(fallback);
-  const prefixPattern = new RegExp(`^${escapeRegExp(prefix)}\s+(\d+)$`, 'i');
+  const prefixPattern = new RegExp(`^${escapeRegExp(prefix)}\\s+(\\d+)$`, 'i');
 
   existingLayers.forEach((layer) => {
     if (!layer || typeof layer !== 'object') {
@@ -906,7 +1428,7 @@ function deriveNamePrefix(name) {
 
 function fallbackPrefixMatch(candidate, fallback) {
   const prefix = deriveNamePrefix(fallback);
-  const pattern = new RegExp(`^${escapeRegExp(prefix)}\s+(\d+)$`, 'i');
+  const pattern = new RegExp(`^${escapeRegExp(prefix)}\\s+(\\d+)$`, 'i');
   const match = candidate.match(pattern);
   if (!match) {
     return null;
@@ -1231,23 +1753,38 @@ function toggleFolderCollapsed(folderId) {
 function renderSceneItem(scene, activeSceneId, sceneBoardState = {}, options = {}) {
   const isActive = scene.id === activeSceneId;
   const name = escapeHtml(scene.name || 'Untitled Scene');
+  const sceneGrid = normalizeGridConfig(sceneBoardState.grid ?? scene.grid ?? {});
+  const mapLevelsState = normalizeMapLevelsState(sceneBoardState.mapLevels ?? null, { sceneGrid });
   const overlayState = normalizeOverlayConfig(sceneBoardState.overlay ?? {});
   const overlayMapSet = Boolean(overlayState.mapUrl);
   const hasOverlayContent = overlayMapSet || overlayState.layers.some((layer) => maskHasMeaningfulContent(layer.mask));
+  const assetUploadPending = Boolean(options.assetUploadPending);
 
   const overlayUploadDisabled =
-    !options.overlayUploadsEnabled || options.overlayUploadPending || !isActive;
+    !options.overlayUploadsEnabled || assetUploadPending || !isActive;
   const overlayUploadTitle = !options.overlayUploadsEnabled
     ? 'Overlay uploads are unavailable right now.'
     : !isActive
       ? 'Activate the scene before uploading an overlay.'
-      : options.overlayUploadPending
-        ? 'An overlay upload is already in progress.'
+      : assetUploadPending
+        ? 'An image upload is already in progress.'
         : '';
-  const addOverlayDisabled = Boolean(options.overlayUploadPending);
-  const addOverlayTitle = options.overlayUploadPending
-    ? 'Wait for the current overlay upload to finish before adding another overlay.'
+  const addOverlayDisabled = assetUploadPending;
+  const addOverlayTitle = assetUploadPending
+    ? 'Wait for the current image upload to finish before adding another overlay.'
     : '';
+  const addMapLevelDisabled = assetUploadPending || mapLevelsState.levels.length >= MAP_LEVEL_MAX_LEVELS;
+  const addMapLevelTitle = assetUploadPending
+    ? 'Wait for the current image upload to finish before adding another map level.'
+    : mapLevelsState.levels.length >= MAP_LEVEL_MAX_LEVELS
+      ? `Maximum of ${MAP_LEVEL_MAX_LEVELS} map levels reached.`
+      : '';
+  const mapLevelUploadDisabled = !options.mapLevelUploadsEnabled || assetUploadPending;
+  const mapLevelUploadTitle = !options.mapLevelUploadsEnabled
+    ? 'Map level uploads are unavailable right now.'
+    : assetUploadPending
+      ? 'An image upload is already in progress.'
+      : '';
 
   const clearOverlayDisabled = !hasOverlayContent;
   const clearOverlayTitle = hasOverlayContent ? '' : 'No overlay content to clear.';
@@ -1260,6 +1797,29 @@ function renderSceneItem(scene, activeSceneId, sceneBoardState = {}, options = {
           <h4>${name}</h4>
           <span class="scene-item__status">${isActive ? 'Active' : ''}</span>
         </header>
+        <div class="scene-item__levels" data-scene-id="${scene.id}">
+          <div class="scene-level__actions">
+            <span class="scene-level__title">Map Levels</span>
+            <span class="scene-level__count">${mapLevelsState.levels.length}/${MAP_LEVEL_MAX_LEVELS}</span>
+            <button
+              type="button"
+              class="btn btn--small"
+              data-action="add-map-level"
+              data-scene-id="${scene.id}"
+              ${addMapLevelDisabled ? 'disabled' : ''}
+              ${addMapLevelTitle ? ` title="${escapeHtml(addMapLevelTitle)}"` : ''}
+            >
+              Add Level
+            </button>
+            ${options.mapLevelUploadPending && options.mapLevelUploadPendingSceneId === scene.id
+              ? '<span class="scene-level__status" role="status">Uploading level...</span>'
+              : ''}
+          </div>
+          ${renderMapLevelList(scene.id, mapLevelsState, {
+            mapLevelUploadDisabled,
+            mapLevelUploadTitle,
+          })}
+        </div>
         <div class="scene-item__overlays" data-scene-id="${scene.id}">
           <div class="scene-overlay__actions">
             <button
@@ -1273,7 +1833,7 @@ function renderSceneItem(scene, activeSceneId, sceneBoardState = {}, options = {
               Add Overlay
             </button>
             ${options.overlayUploadPending && isActive
-              ? '<span class="scene-overlay__status" role="status">Uploading overlay…</span>'
+              ? '<span class="scene-overlay__status" role="status">Uploading overlay...</span>'
               : ''}
           </div>
           ${renderOverlayList(scene.id, overlayState, {
@@ -1299,6 +1859,135 @@ function renderSceneItem(scene, activeSceneId, sceneBoardState = {}, options = {
         </footer>
       </div>
     </article>
+  `;
+}
+
+function renderMapLevelList(sceneId, mapLevelsState, options = {}) {
+  const levels = getOrderedMapLevels(mapLevelsState?.levels ?? []);
+  if (!levels.length) {
+    return '<p class="scene-level__empty">No map levels added yet.</p>';
+  }
+
+  return `
+    <ul class="scene-level__list">
+      ${levels
+        .map((level, index) => renderMapLevelListItem(sceneId, mapLevelsState, level, index, levels, options))
+        .join('')}
+    </ul>
+  `;
+}
+
+function renderMapLevelListItem(sceneId, mapLevelsState, level, index, levels, options = {}) {
+  const name = escapeHtml(level.name || `Level ${index + 1}`);
+  const visible = level.visible !== false;
+  const isActiveLevel = mapLevelsState.activeLevelId === level.id;
+  const opacityPercent = formatMapLevelOpacityPercent(level.opacity);
+  const hasMap = Boolean(level.mapUrl);
+  const canLower = index > 0;
+  const canRaise = index < levels.length - 1;
+  const uploadDisabled = Boolean(options.mapLevelUploadDisabled);
+  const uploadTitle = options.mapLevelUploadTitle || '';
+
+  return `
+    <li
+      class="scene-level__item${isActiveLevel ? ' is-active' : ''}"
+      data-map-level-id="${level.id}"
+      data-scene-id="${sceneId}"
+      data-map-level-visible="${visible ? 'true' : 'false'}"
+      data-map-level-has-map="${hasMap ? 'true' : 'false'}"
+    >
+      <div class="scene-level__header">
+        <label class="scene-level__visibility" title="Toggle map level visibility.">
+          <input
+            type="checkbox"
+            class="scene-level__checkbox"
+            data-action="toggle-map-level-visibility"
+            data-scene-id="${sceneId}"
+            data-map-level-id="${level.id}"
+            aria-label="${visible ? 'Hide map level' : 'Show map level'}"
+            ${visible ? 'checked' : ''}
+          />
+        </label>
+        <span class="scene-level__name" title="${name}">${name}</span>
+        <span class="scene-level__map-state">${hasMap ? 'Map' : 'No Map'}</span>
+      </div>
+      <label class="scene-level__opacity">
+        <span class="scene-level__opacity-label">Opacity</span>
+        <input
+          type="range"
+          min="0"
+          max="100"
+          step="5"
+          value="${opacityPercent}"
+          data-action="set-map-level-opacity"
+          data-scene-id="${sceneId}"
+          data-map-level-id="${level.id}"
+          aria-label="Map level opacity"
+        />
+        <span class="scene-level__opacity-value">${opacityPercent}%</span>
+      </label>
+      <div class="scene-level__controls">
+        <button
+          type="button"
+          class="btn btn--ghost btn--tiny scene-level__upload"
+          data-action="upload-map-level"
+          data-scene-id="${sceneId}"
+          data-map-level-id="${level.id}"
+          ${uploadDisabled ? 'disabled' : ''}
+          ${uploadTitle ? ` title="${escapeHtml(uploadTitle)}"` : ''}
+        >
+          Upload
+        </button>
+        <button
+          type="button"
+          class="btn btn--ghost btn--tiny scene-level__rename"
+          data-action="rename-map-level"
+          data-scene-id="${sceneId}"
+          data-map-level-id="${level.id}"
+        >
+          Rename
+        </button>
+        <button
+          type="button"
+          class="btn btn--ghost btn--tiny scene-level__select"
+          data-action="select-map-level"
+          data-scene-id="${sceneId}"
+          data-map-level-id="${level.id}"
+          aria-pressed="${isActiveLevel ? 'true' : 'false'}"
+        >
+          Select
+        </button>
+        <button
+          type="button"
+          class="btn btn--ghost btn--tiny scene-level__lower"
+          data-action="lower-map-level"
+          data-scene-id="${sceneId}"
+          data-map-level-id="${level.id}"
+          ${canLower ? '' : 'disabled'}
+        >
+          Lower
+        </button>
+        <button
+          type="button"
+          class="btn btn--ghost btn--tiny scene-level__raise"
+          data-action="raise-map-level"
+          data-scene-id="${sceneId}"
+          data-map-level-id="${level.id}"
+          ${canRaise ? '' : 'disabled'}
+        >
+          Raise
+        </button>
+        <button
+          type="button"
+          class="btn btn--ghost btn--tiny btn--danger scene-level__delete"
+          data-action="delete-map-level"
+          data-scene-id="${sceneId}"
+          data-map-level-id="${level.id}"
+        >
+          Delete
+        </button>
+      </div>
+    </li>
   `;
 }
 
@@ -1481,3 +2170,12 @@ async function readUploadError(response) {
     return '';
   }
 }
+
+export const __testing = {
+  buildSceneMarkup,
+  createMapLevel,
+  getOrderedMapLevels,
+  mutateSceneMapLevels,
+  normalizeMapLevelOpacityInput,
+  reindexMapLevels,
+};
