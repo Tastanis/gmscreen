@@ -56,6 +56,12 @@ import {
   serializeCombatGroups,
 } from '../combat/combat-state.js';
 import {
+  getActiveSceneCombatState,
+  getCombatStateMaliceSnapshot,
+  hasCombatMaliceValue,
+  shouldApplyRemoteCombatState,
+} from '../combat/combat-sync.js';
+import {
   TURN_LOCK_STALE_TIMEOUT_MS,
   acquireTurnLock as acquireCombatTurnLock,
   clearStaleTurnLock as clearStaleCombatTurnLock,
@@ -8226,47 +8232,27 @@ export function mountBoardInteractions(store, routes = {}) {
   }
 
   function applyCombatStateFromBoardState(state = {}) {
-    const boardState = state?.boardState ?? {};
-    const activeSceneIdRaw = boardState.activeSceneId;
-    const activeSceneId =
-      typeof activeSceneIdRaw === 'string'
-        ? activeSceneIdRaw
-        : activeSceneIdRaw != null
-        ? String(activeSceneIdRaw)
-        : '';
-    const activeSceneKey = activeSceneId.trim();
+    const {
+      activeSceneId: activeSceneKey,
+      combatState,
+    } = getActiveSceneCombatState(state);
     if (!activeSceneKey) {
       return;
     }
 
-    const sceneState = boardState.sceneState && typeof boardState.sceneState === 'object' ? boardState.sceneState : {};
-    const combatState = sceneState[activeSceneKey]?.combat ?? {};
-    const hasMaliceValue =
-      combatState &&
-      typeof combatState === 'object' &&
-      (Object.prototype.hasOwnProperty.call(combatState, 'malice') ||
-        Object.prototype.hasOwnProperty.call(combatState, 'maliceCount'));
+    const hasMaliceValue = hasCombatMaliceValue(combatState);
     const normalized = normalizeCombatState(combatState);
 
     // Allow updates on initial load (combatStateVersion === 0) even if sequence matches.
     // Also check if groups have changed - partial group data can arrive initially and
     // we need to apply complete group data when it arrives, even with the same sequence.
-    const isInitialLoad = combatStateVersion === 0;
     // Use sequence numbers for reliable ordering (avoids clock drift between clients)
     // Fall back to timestamp comparison if sequence is not available (backwards compatibility)
-    const hasNewerVersion = isCombatStateNewer(normalized, {
-      version: combatStateVersion,
-      updatedAt: combatStateUpdatedAt,
-    });
-    const groupsChanged = normalized.groups?.length !== combatTrackerGroups.size ||
-      normalized.groups?.some((group) => {
-        const existing = combatTrackerGroups.get(group.representativeId);
-        if (!existing) return true;
-        if (existing.size !== group.memberIds?.length) return true;
-        return group.memberIds?.some((id) => !existing.has(id));
-      });
-
-    if (!isInitialLoad && !hasNewerVersion && !groupsChanged) {
+    if (!shouldApplyRemoteCombatState(normalized, {
+      currentVersion: combatStateVersion,
+      currentUpdatedAt: combatStateUpdatedAt,
+      currentGroups: combatTrackerGroups,
+    })) {
       return;
     }
 
@@ -8374,22 +8360,6 @@ export function mountBoardInteractions(store, routes = {}) {
       } else {
         suppressCombatStateSync = false;
       }
-    }
-  }
-
-  function getCombatStateMaliceSnapshot(snapshot) {
-    if (!snapshot || typeof snapshot !== 'string') {
-      return null;
-    }
-    try {
-      const parsed = JSON.parse(snapshot);
-      if (!parsed || typeof parsed !== 'object') {
-        return null;
-      }
-      const maliceValue = Number(parsed.malice);
-      return Number.isFinite(maliceValue) ? Math.max(0, Math.trunc(maliceValue)) : null;
-    } catch (error) {
-      return null;
     }
   }
 
@@ -8541,11 +8511,7 @@ export function mountBoardInteractions(store, routes = {}) {
 
     const existingCombatState = state.boardState?.sceneState?.[activeSceneId]?.combat ?? null;
     const existingNormalized = normalizeCombatState(existingCombatState ?? {});
-    const existingHasMaliceValue =
-      existingCombatState &&
-      typeof existingCombatState === 'object' &&
-      (Object.prototype.hasOwnProperty.call(existingCombatState, 'malice') ||
-        Object.prototype.hasOwnProperty.call(existingCombatState, 'maliceCount'));
+    const existingHasMaliceValue = hasCombatMaliceValue(existingCombatState);
 
     const snapshot = createCombatStateSnapshot();
     // Use sequence numbers for reliable ordering, fall back to timestamp for backwards compatibility
