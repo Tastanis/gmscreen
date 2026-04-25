@@ -71,6 +71,11 @@ import {
   serializeTurnLockState as serializeCombatTurnLockState,
   updateTurnLockState as applyTurnLockState,
 } from '../combat/combat-locks.js';
+import {
+  getWaitingCombatantsByTeam as buildWaitingCombatantsByTeam,
+  pickNextCombatantId as selectNextCombatantId,
+  validateTurnStartState,
+} from '../combat/combat-turns.js';
 
 const OVERLAY_LAYER_PREFIX = 'overlay-layer-';
 let overlayLayerSeed = Date.now();
@@ -6596,80 +6601,21 @@ export function mountBoardInteractions(store, routes = {}) {
 
     const team = getCombatantTeam(combatantId);
     const currentPhase = getTurnPhase();
-    const isOverride = options.override === true;
-    const isSharonOverride = options.sharonOverride === true;
-
-    const result = {
-      valid: false,
-      requiresConfirmation: false,
-      confirmationType: null,
-      team,
-      currentPhase,
-      expectedTeam: currentTurnTeam,
-    };
-
-    // Can't start turn if combat isn't active
-    if (!combatActive) {
-      return result;
-    }
-
-    // Can't start turn for a token that has already completed
     const representativeId = getRepresentativeIdFor(combatantId) || combatantId;
-    if (completedCombatants.has(representativeId)) {
-      return result;
-    }
-
-    // Check if someone has an active turn lock (authoritative for blocking)
-    // A turn lock means someone is actively taking their turn
-    const hasActiveTurnLock = Boolean(turnLockState.holderId);
-    const lockHeldByDifferentCombatant =
-      hasActiveTurnLock &&
-      typeof turnLockState.combatantId === 'string' &&
-      turnLockState.combatantId !== combatantId;
-
-    // If someone else has the turn lock, they're actively taking their turn
-    if (lockHeldByDifferentCombatant) {
-      if (isOverride || isSharonOverride) {
-        result.valid = true;
-        return result;
-      }
-      result.requiresConfirmation = true;
-      result.confirmationType = 'override_active_turn';
-      return result;
-    }
-
-    // In PICK phase (no active combatant), team members can take their turn
-    // currentTurnTeam is informational for the GM, not a hard blocker for allies
-    if (currentPhase === TURN_PHASE.PICK) {
-      if (team === 'ally') {
-        // Allies can always go during pick phase
-        result.valid = true;
-        return result;
-      }
-      // Enemies during pick phase - only GM should control these
-      // For non-GM users, this would have already been blocked by team !== 'ally' check
-      // in handlePlayerInitiatedTurn, but adding here for completeness
-      if (isOverride || isSharonOverride) {
-        result.valid = true;
-        return result;
-      }
-      result.valid = true;
-      return result;
-    }
-
-    // If we're in ACTIVE phase but for the same combatant, that's valid (re-selecting)
-    if (currentPhase === TURN_PHASE.ACTIVE && activeCombatantId === combatantId) {
-      result.valid = true;
-      return result;
-    }
-
-    // Default: not valid, but allow confirmation to override
-    result.requiresConfirmation = true;
-    if (isOverride || isSharonOverride) {
-      result.valid = true;
-    }
-
-    return result;
+    return validateTurnStartState(
+      {
+        combatActive,
+        combatantId,
+        representativeId,
+        team,
+        currentPhase,
+        currentTurnTeam,
+        activeCombatantId,
+        completedCombatantIds: completedCombatants,
+        turnLockState,
+      },
+      options
+    );
   }
 
   function setActiveCombatantId(nextId) {
@@ -7928,59 +7874,19 @@ export function mountBoardInteractions(store, routes = {}) {
   }
 
   function getWaitingCombatantsByTeam() {
-    const waiting = { ally: [], enemy: [] };
-    const entries = Array.isArray(lastCombatTrackerEntries) ? lastCombatTrackerEntries : [];
-    const seen = new Set();
-
-    entries.forEach((entry) => {
-      if (!entry || typeof entry.id !== 'string') {
-        return;
-      }
-      const representativeId = getRepresentativeIdFor(entry.id);
-      const targetId = representativeId || entry.id;
-      if (seen.has(targetId)) {
-        return;
-      }
-      seen.add(targetId);
-      if (completedCombatants.has(targetId)) {
-        return;
-      }
-      const team = getCombatantTeam(targetId);
-      if (team === 'ally') {
-        waiting.ally.push(targetId);
-      } else {
-        waiting.enemy.push(targetId);
-      }
+    return buildWaitingCombatantsByTeam({
+      entries: lastCombatTrackerEntries,
+      completedCombatantIds: completedCombatants,
+      getRepresentativeIdFor,
+      getCombatantTeam,
     });
-
-    return waiting;
   }
 
   function pickNextCombatantId(preferredTeams = []) {
     const waiting = getWaitingCombatantsByTeam();
-    const order = Array.isArray(preferredTeams) ? preferredTeams : [];
-
-    for (const candidate of order) {
-      const team = normalizeCombatTeam(candidate);
-      const pool = waiting[team];
-      if (pool && pool.length) {
-        currentTurnTeam = team;
-        return pool[0];
-      }
-    }
-
-    if (waiting.ally.length) {
-      currentTurnTeam = 'ally';
-      return waiting.ally[0];
-    }
-
-    if (waiting.enemy.length) {
-      currentTurnTeam = 'enemy';
-      return waiting.enemy[0];
-    }
-
-    currentTurnTeam = null;
-    return null;
+    const next = selectNextCombatantId({ waiting, preferredTeams });
+    currentTurnTeam = next.currentTurnTeam;
+    return next.combatantId;
   }
 
   function focusNextCombatant(preferredTeams = []) {
