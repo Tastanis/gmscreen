@@ -1,22 +1,27 @@
-// Placeholder combat tracker store slice.
-// Intended to integrate with the core VTT state manager via dependency injection.
-export function createCombatTrackerStore(initialState = {}) {
-  const state = {
-    sceneId: null,
-    round: 0,
-    turnIndex: 0,
-    combatants: [],
-    ...initialState
-  };
+import { normalizeCombatState } from '../../../../assets/js/combat/combat-state.js';
 
+export function createCombatTrackerStore(initialState = {}) {
+  let state = normalizeCombatState(initialState);
   const subscribers = new Set();
 
   function getState() {
-    return { ...state };
+    return cloneCombatState(state);
   }
 
   function setState(partial) {
-    Object.assign(state, partial);
+    const patch = partial && typeof partial === 'object' ? partial : {};
+    const nextState = {
+      ...state,
+      ...patch,
+    };
+    if (
+      !Object.prototype.hasOwnProperty.call(patch, 'turnPhase') &&
+      (Object.prototype.hasOwnProperty.call(patch, 'active') ||
+        Object.prototype.hasOwnProperty.call(patch, 'activeCombatantId'))
+    ) {
+      delete nextState.turnPhase;
+    }
+    state = normalizeCombatState(nextState);
     subscribers.forEach((fn) => fn(getState()));
   }
 
@@ -26,4 +31,18 @@ export function createCombatTrackerStore(initialState = {}) {
   }
 
   return { getState, setState, subscribe };
+}
+
+function cloneCombatState(state) {
+  const source = normalizeCombatState(state);
+  return {
+    ...source,
+    completedCombatantIds: [...source.completedCombatantIds],
+    turnLock: source.turnLock ? { ...source.turnLock } : null,
+    lastEffect: source.lastEffect ? { ...source.lastEffect } : null,
+    groups: source.groups.map((group) => ({
+      representativeId: group.representativeId,
+      memberIds: [...group.memberIds],
+    })),
+  };
 }

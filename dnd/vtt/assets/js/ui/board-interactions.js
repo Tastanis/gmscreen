@@ -51,7 +51,6 @@ import {
   normalizeCombatGroups,
   normalizeCombatState,
   normalizeCombatTeam,
-  normalizeTurnEffect,
   serializeCombatGroups,
 } from '../combat/combat-state.js';
 import {
@@ -73,10 +72,22 @@ import {
   updateTurnLockState as applyTurnLockState,
 } from '../combat/combat-locks.js';
 import {
+  advanceCombatRoundState,
+  completeCombatantTurnState,
   getWaitingCombatantsByTeam as buildWaitingCombatantsByTeam,
   pickNextCombatantId as selectNextCombatantId,
   validateTurnStartState,
 } from '../combat/combat-turns.js';
+import {
+  SHARON_PROFILE_ID,
+  TURN_EFFECT_MAX_AGE_MS,
+  TURN_EFFECT_TYPES,
+  getTurnEffectSignature as buildTurnEffectSignature,
+  partitionEndOfTurnConditions,
+  prepareSyncedTurnEffect,
+  recordLocalTurnEffect,
+  shouldTriggerSharonHesitation,
+} from '../combat/combat-effects.js';
 import {
   applyCombatGroupsToState,
   buildCombatGroupDisplayRepresentatives,
@@ -1412,7 +1423,6 @@ export function mountBoardInteractions(store, routes = {}) {
   let lastTurnEffect = null;
   let lastTurnEffectSignature = null;
   let lastProcessedTurnEffectSignature = null;
-  const TURN_EFFECT_MAX_AGE_MS = 10000; // Effects older than 10s are ignored on load
   const sheetSyncQueue = new Map();
   const maliceVictoriesCache = new Map();
   // Sand timer artwork is resolved via CSS data-stage attributes using
@@ -1435,8 +1445,6 @@ export function mountBoardInteractions(store, routes = {}) {
     indigo: ['indigo'],
     zepha: ['zepha'],
   };
-
-  const SHARON_PROFILE_ID = 'sharon';
 
   function formatProfileDisplayName(profileId) {
     if (typeof profileId !== 'string' || !profileId.trim()) {
@@ -6456,10 +6464,17 @@ export function mountBoardInteractions(store, routes = {}) {
   }
 
   function completeActiveCombatant() {
-    if (!activeCombatantId) {
+    const turnCompletion = completeCombatantTurnState({
+      activeCombatantId,
+      completedCombatantIds: completedCombatants,
+      roundTurnCount,
+      getRepresentativeIdFor,
+      getCombatantTeam,
+    });
+    if (!turnCompletion.completed) {
       return;
     }
-    const finishedId = getRepresentativeIdFor(activeCombatantId) || activeCombatantId;
+    const finishedId = turnCompletion.finishedId;
     if (isGmUser()) {
       combatTimerService.endTurn();
     }
@@ -6468,28 +6483,26 @@ export function mountBoardInteractions(store, routes = {}) {
       finishingPlacement?.conditions ?? finishingPlacement?.condition ?? null
     );
     closeTurnPrompt();
-    const finishedTeam = getCombatantTeam(finishedId);
+    const finishedTeam = turnCompletion.finishedTeam;
     if (finishedTeam) {
       lastActingTeam = finishedTeam;
     }
-    completedCombatants.add(finishedId);
+    completedCombatants.clear();
+    turnCompletion.completedCombatantIds.forEach((id) => completedCombatants.add(id));
     markCombatFieldDirty('completedCombatantIds');
-    roundTurnCount = Math.max(0, roundTurnCount + 1);
-
-    // Determine next team (opposing team gets to pick next)
-    const nextTeam = finishedTeam === 'ally' ? 'enemy' : 'ally';
+    roundTurnCount = turnCompletion.roundTurnCount;
 
     // Release the turn lock and transition to PICK phase for the next team
     // The next combatant should only become ACTIVE when they actually start their turn
     releaseTurnLock(getCurrentUserId());
 
     // Transition to PICK phase for the opposing team
-    currentTurnTeam = nextTeam;
+    currentTurnTeam = turnCompletion.nextTeam;
     pendingTurnTransition = null;
     setActiveCombatantId(null);
 
     // Suggest the next combatant via focus (UI only, not active turn)
-    const nextId = pickNextCombatantId([nextTeam, finishedTeam]);
+    const nextId = pickNextCombatantId(turnCompletion.preferredTeams);
     if (nextId) {
       setFocusedCombatantId(nextId);
     }
@@ -7515,7 +7528,7 @@ export function mountBoardInteractions(store, routes = {}) {
     updateCombatModeIndicators();
 
     recordTurnEffect({
-      type: 'draw-steel',
+      type: TURN_EFFECT_TYPES.DRAW_STEEL,
       triggeredAt: Date.now(),
     });
     showDrawSteelPopup();
@@ -7760,58 +7773,47 @@ export function mountBoardInteractions(store, routes = {}) {
   }
 
   function recordTurnEffect(effect) {
-    const normalized = normalizeTurnEffect(effect);
-    if (!normalized) {
+    const result = recordLocalTurnEffect(effect);
+    if (!result.recorded) {
       return;
     }
-    lastTurnEffect = normalized;
-    lastTurnEffectSignature = getTurnEffectSignature(normalized);
+    lastTurnEffect = result.effect;
+    lastTurnEffectSignature = result.signature;
     lastProcessedTurnEffectSignature = lastTurnEffectSignature;
   }
 
   function applyTurnEffectFromState(effect) {
-    const normalized = normalizeTurnEffect(effect);
-    if (!normalized) {
-      return;
-    }
-    const signature = getTurnEffectSignature(normalized);
-    if (signature && signature === lastProcessedTurnEffectSignature) {
-      if (signature !== lastTurnEffectSignature) {
-        lastTurnEffect = normalized;
-        lastTurnEffectSignature = signature;
-      }
+    const result = prepareSyncedTurnEffect(effect, {
+      lastProcessedTurnEffectSignature,
+      lastTurnEffectSignature,
+      maxAgeMs: TURN_EFFECT_MAX_AGE_MS,
+    });
+    if (!result.valid) {
       return;
     }
 
-    lastTurnEffect = normalized;
-    lastTurnEffectSignature = signature;
-    lastProcessedTurnEffectSignature = signature;
+    if (result.shouldStore) {
+      lastTurnEffect = result.effect;
+      lastTurnEffectSignature = result.signature;
+    }
 
-    // Skip showing effects that are too old - prevents replaying on page load
-    const now = Date.now();
-    const effectAge = normalized.triggeredAt ? now - normalized.triggeredAt : Infinity;
-    if (effectAge > TURN_EFFECT_MAX_AGE_MS) {
+    if (result.shouldMarkProcessed) {
+      lastProcessedTurnEffectSignature = result.signature;
+    }
+
+    if (!result.shouldDisplay) {
       return;
     }
 
-    if (normalized.type === 'sharon-hesitation') {
+    if (result.displayType === TURN_EFFECT_TYPES.SHARON_HESITATION) {
       showHesitationPopup();
-    } else if (normalized.type === 'draw-steel') {
+    } else if (result.displayType === TURN_EFFECT_TYPES.DRAW_STEEL) {
       showDrawSteelPopup();
     }
   }
 
   function getTurnEffectSignature(effect) {
-    if (!effect || typeof effect !== 'object') {
-      return '';
-    }
-
-    const type = typeof effect.type === 'string' ? effect.type.trim().toLowerCase() : '';
-    const combatantId = typeof effect.combatantId === 'string' ? effect.combatantId.trim() : '';
-    const triggeredAtRaw = Number(effect.triggeredAt);
-    const triggeredAt = Number.isFinite(triggeredAtRaw) ? Math.max(0, Math.trunc(triggeredAtRaw)) : 0;
-
-    return `${type}:${combatantId}:${triggeredAt}`;
+    return buildTurnEffectSignature(effect);
   }
 
   function updateTurnLockState(lock) {
@@ -8113,34 +8115,38 @@ export function mountBoardInteractions(store, routes = {}) {
   }
 
   function advanceCombatRound() {
-    if (!combatActive) {
+    const roundState = advanceCombatRoundState({
+      combatActive,
+      combatRound,
+      startingTeam: startingCombatTeam,
+      currentTeam: currentTurnTeam,
+    });
+    if (!roundState.advanced) {
       return;
     }
     completedCombatants.clear();
-    setActiveCombatantId(null);
+    roundState.completedCombatantIds.forEach((id) => completedCombatants.add(id));
+    setActiveCombatantId(roundState.activeCombatantId);
     releaseTurnLock();
-    combatRound = Math.max(1, combatRound + 1);
+    combatRound = roundState.round;
     if (isGmUser()) {
       combatTimerService.updateRound(combatRound);
     }
-    roundTurnCount = 0;
+    roundTurnCount = roundState.roundTurnCount;
     if (isGmUser()) {
       const profiles = getUniquePlayerProfiles(boardApi.getState?.() ?? {});
       const maliceIncrease = profiles.length + combatRound;
       setMaliceCount(maliceCount + maliceIncrease);
     }
     resetTriggeredActionsForActiveScene();
-    const preferredTeam = startingCombatTeam ?? currentTurnTeam ?? 'ally';
-    const secondaryTeam = preferredTeam === 'ally' ? 'enemy' : 'ally';
     updateStartCombatButton();
     refreshCombatTracker();
 
     // Determine the team that should go first in the new round
-    const preferredTeamForRound = preferredTeam;
-    currentTurnTeam = preferredTeamForRound;
+    currentTurnTeam = roundState.currentTeam;
 
     // Suggest next combatant via focus (UI only, not active turn)
-    const nextId = pickNextCombatantId([preferredTeam, secondaryTeam]);
+    const nextId = pickNextCombatantId(roundState.preferredTeams);
     if (nextId) {
       setFocusedCombatantId(nextId);
     }
@@ -9173,51 +9179,31 @@ export function mountBoardInteractions(store, routes = {}) {
   function maybeTriggerSpecialTurnEffects(combatantId, options = {}) {
     const initiatorProfileId = normalizeProfileId(options?.initiatorProfileId ?? null);
     const combatantProfileId = normalizeProfileId(getCombatantProfileId(combatantId));
-    if (combatantProfileId !== SHARON_PROFILE_ID) {
-      return;
-    }
-
-    if (initiatorProfileId && initiatorProfileId !== SHARON_PROFILE_ID) {
-      return;
-    }
-
     const expectedTeamRaw =
       typeof options?.expectedTeam === 'string'
         ? options.expectedTeam
         : typeof currentTurnTeam === 'string'
         ? currentTurnTeam
         : null;
-    if (!expectedTeamRaw) {
-      return;
-    }
-
-    const expectedTeam = normalizeCombatTeam(expectedTeamRaw);
-    if (expectedTeam !== 'enemy') {
-      return;
-    }
-
-    const isFirstTurnOfRound = Boolean(options?.isFirstTurnOfRound);
-    if (isFirstTurnOfRound) {
-      return;
-    }
-
     const previousTeamRaw =
       typeof options?.previousTeam === 'string'
         ? options.previousTeam
         : typeof lastActingTeam === 'string'
         ? lastActingTeam
         : null;
-    if (!previousTeamRaw) {
-      return;
-    }
 
-    const previousTeam = normalizeCombatTeam(previousTeamRaw);
-    if (previousTeam !== 'ally') {
+    if (!shouldTriggerSharonHesitation({
+      combatantProfileId,
+      initiatorProfileId,
+      expectedTeam: expectedTeamRaw,
+      previousTeam: previousTeamRaw,
+      isFirstTurnOfRound: Boolean(options?.isFirstTurnOfRound),
+    })) {
       return;
     }
 
     recordTurnEffect({
-      type: 'sharon-hesitation',
+      type: TURN_EFFECT_TYPES.SHARON_HESITATION,
       combatantId,
       triggeredAt: Date.now(),
     });
@@ -13634,17 +13620,10 @@ export function mountBoardInteractions(store, routes = {}) {
         return;
       }
 
-      const removed = [];
-      conditions.forEach((condition) => {
-        if (getConditionDurationType(condition) !== 'end-of-turn') {
-          return;
-        }
-        const linkedId =
-          typeof condition?.duration?.targetTokenId === 'string' ? condition.duration.targetTokenId : '';
-        if (linkedId === targetTokenId) {
-          removed.push(condition);
-        }
+      const cleanup = partitionEndOfTurnConditions(conditions, targetTokenId, {
+        getDurationType: getConditionDurationType,
       });
+      const removed = cleanup.removed;
 
       if (!removed.length) {
         return;
@@ -13652,18 +13631,13 @@ export function mountBoardInteractions(store, routes = {}) {
 
       const updated = updatePlacementById(placementId, (target) => {
         const current = ensurePlacementConditions(target?.conditions ?? target?.condition ?? null);
-        const filtered = current.filter((condition) => {
-          if (getConditionDurationType(condition) !== 'end-of-turn') {
-            return true;
-          }
-          const candidateId =
-            typeof condition?.duration?.targetTokenId === 'string' ? condition.duration.targetTokenId : '';
-          return candidateId !== targetTokenId;
+        const { remaining } = partitionEndOfTurnConditions(current, targetTokenId, {
+          getDurationType: getConditionDurationType,
         });
 
-        if (filtered.length) {
-          target.conditions = filtered;
-          target.condition = filtered[0];
+        if (remaining.length) {
+          target.conditions = remaining;
+          target.condition = remaining[0];
         } else {
           if (target.conditions !== undefined) {
             delete target.conditions;

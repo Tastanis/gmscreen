@@ -1,97 +1,54 @@
 # VTT Workspace Overview
 
-The `/dnd/vtt` directory holds the browser-based tabletop experience that mirrors the GM dashboard. The layout below reflects the current project structure so future additions land in the right place.
+The `/dnd/vtt` directory holds the browser-based tabletop experience that mirrors the GM dashboard.
 
-## Directory Map
-```
+## Main Areas
+
+```text
 vtt/
-├── README.md
-├── api/
-│   ├── scenes.php              # Scene CRUD endpoint
-│   ├── state.php               # Board state snapshot endpoint
-│   ├── state_helpers.php       # Shared utilities consumed by the API endpoints
-│   ├── tokens.php              # Token CRUD endpoint
-│   └── uploads.php             # Image upload endpoint shared with dashboard logic
+├── api/                         # Scene, token, upload, and board-state endpoints
 ├── assets/
-│   ├── css/
-│   │   ├── base.css
-│   │   ├── board.css
-│   │   ├── chat.css
-│   │   ├── layout.css
-│   │   └── settings.css
+│   ├── css/                     # VTT layout and board styling
 │   └── js/
-│       ├── bootstrap.js        # Entry point wiring services, state, and UI modules
-│       ├── services/
-│       │   ├── board-state-service.js
-│       │   ├── chat-service.js
-│       │   ├── combat-timer-service.js
-│       │   ├── scene-service.js
-│       │   └── token-service.js
-│       ├── state/
-│       │   ├── persistence.js
-│       │   └── store.js
-│       ├── ui/
-│       │   ├── __tests__/
-│       │   │   ├── board-interactions.test.mjs
-│       │   │   └── board-state-poller.test.mjs
-│       │   ├── board-interactions.js
-│       │   ├── chat-panel.js
-│       │   ├── combat-timer-report.js
-│       │   ├── dice-roller.js
-│       │   ├── drag-ruler.js
-│       │   ├── scene-manager.js
-│       │   ├── settings-panel.js
-│       │   ├── token-library.js
-│       │   └── token-maker.js
-│       └── vendor/             # Placeholder for third-party bundles (.gitkeep)
-├── bootstrap.php               # Boots shared helpers for layout rendering
-├── combat-tracker/             # Embedded combat tracker module (see nested README)
-│   ├── README.md
-│   ├── api/
-│   │   ├── combat.php
-│   │   └── snapshots.php
-│   ├── assets/
-│   │   ├── css/
-│   │   │   └── combat-tracker.css
-│   │   └── js/
-│   │       └── bootstrap.js
-│   ├── components/
-│   │   └── CombatTrackerPanel.php
-│   ├── storage/
-│   │   ├── .gitkeep
-│   │   └── combat-state.json   # Seeded example state referenced by local dev
-│   └── tests/
-│       ├── api.test.md
-│       └── ui.test.md
-├── components/
-│   ├── ChatPanel.php
-│   ├── SceneBoard.php
-│   ├── SettingsPanel.php
-│   ├── TokenLibrary.php
-│   └── Shared/                 # Shared PHP partials (currently empty placeholder)
-├── config/
-│   └── routes.php              # Centralised route constants for front-end usage
-├── index.php                   # Session guard + layout bootstrapper
-├── storage/
-│   ├── backups/                # Planned JSON backup folder (empty, tracked via .gitkeep)
-│   ├── tokens/                 # Planned per-token data (empty, tracked via .gitkeep)
-│   └── uploads/                # Upload staging area (gitignored, created on demand)
-└── templates/
-    └── layout.php              # PHP layout shell consumed by index.php
+│       ├── bootstrap.js         # Front-end entry point
+│       ├── combat/              # Extracted live combat tracker modules
+│       ├── services/            # PHP API clients and sync helpers
+│       ├── state/               # Local store and persistence helpers
+│       ├── ui/                  # Board, panels, tools, and DOM interactions
+│       └── vendor/              # Placeholder for third-party bundles
+├── bootstrap.php                # Shared PHP layout/bootstrap helpers
+├── combat-tracker/              # Inactive wrapper shell around assets/js/combat
+├── components/                  # PHP view fragments
+├── config/                      # Route constants and configuration
+├── index.php                    # Session guard and layout entry point
+├── storage/                     # Runtime VTT storage and uploads
+└── templates/                   # PHP layout templates
 ```
+
+## Combat Tracker
+
+The live combat tracker is mounted by the board UI and implemented through modules in:
+
+`dnd/vtt/assets/js/combat/`
+
+The canonical persisted combat state is:
+
+`boardState.sceneState[sceneId].combat`
+
+The `dnd/vtt/combat-tracker/` directory is not a second live tracker. It is an inactive wrapper shell retained for a possible future dedicated page, and it must continue to use the same canonical board-state combat field.
 
 ## Integration Notes
-- `index.php` includes `bootstrap.php`, which prepares helper functions and renders template fragments from `templates/layout.php`.
-- PHP view fragments in `components/` produce isolated panels so front-end modules can hydrate specific regions.
-- JavaScript under `assets/js/` is split by responsibility: `services/` talk to the PHP endpoints, `state/` manages the local store, and `ui/` handles DOM interactions including the combat timer report view.
-- Storage directories ship empty or with seed examples so the VTT can write JSON data at runtime without polluting version control.
-- The combat tracker is a self-contained feature living in `combat-tracker/` with its own APIs, assets, storage, and Markdown specs.
+
+- PHP view fragments in `components/` render isolated panels that front-end modules hydrate.
+- JavaScript under `assets/js/` is split by responsibility: services talk to PHP endpoints, state manages the local store, UI handles DOM interactions, and combat modules contain tracker-specific logic.
+- Runtime storage belongs under `dnd/vtt/storage/` or the existing board-state API contract. Do not add separate combat persistence under `dnd/vtt/combat-tracker/storage/`.
 
 ## Testing
+
 Run the UI interaction tests from the repository root:
 
 ```bash
 npm test
 ```
 
-The command executes the Node test runner against the modules in `assets/js/`, including the poller and board interaction suites.
+The command executes the Node test runner against `dnd/vtt/assets/js/**/*.test.mjs`.

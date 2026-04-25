@@ -3,6 +3,8 @@ import assert from 'node:assert/strict';
 
 import { TURN_PHASE } from '../combat-state.js';
 import {
+  advanceCombatRoundState,
+  completeCombatantTurnState,
   getWaitingCombatantsByTeam,
   pickNextCombatantId,
   validateTurnStartState,
@@ -85,6 +87,55 @@ describe('combat turn start validation', () => {
       }).valid,
       true
     );
+  });
+});
+
+describe('combat turn state transitions', () => {
+  test('completes the active representative and hands pick phase to the other team', () => {
+    const result = completeCombatantTurnState({
+      activeCombatantId: 'member-1',
+      completedCombatantIds: new Set(['already-done', 'already-done']),
+      roundTurnCount: 2,
+      getRepresentativeIdFor: (id) => (id === 'member-1' ? 'leader' : id),
+      getCombatantTeam: (id) => (id === 'leader' ? 'ally' : 'enemy'),
+    });
+
+    assert.equal(result.completed, true);
+    assert.equal(result.finishedId, 'leader');
+    assert.equal(result.finishedTeam, 'ally');
+    assert.equal(result.nextTeam, 'enemy');
+    assert.deepEqual(result.preferredTeams, ['enemy', 'ally']);
+    assert.deepEqual(result.completedCombatantIds, ['already-done', 'leader']);
+    assert.equal(result.roundTurnCount, 3);
+  });
+
+  test('complete turn state is a no-op without an active combatant', () => {
+    const result = completeCombatantTurnState({
+      activeCombatantId: null,
+      completedCombatantIds: ['done'],
+      roundTurnCount: 4,
+    });
+
+    assert.equal(result.completed, false);
+    assert.deepEqual(result.completedCombatantIds, ['done']);
+    assert.equal(result.roundTurnCount, 4);
+  });
+
+  test('advance round clears turn-local state and preserves starting team priority', () => {
+    const result = advanceCombatRoundState({
+      combatActive: true,
+      combatRound: 2,
+      startingTeam: 'enemy',
+      currentTeam: 'ally',
+    });
+
+    assert.equal(result.advanced, true);
+    assert.equal(result.round, 3);
+    assert.equal(result.currentTeam, 'enemy');
+    assert.deepEqual(result.preferredTeams, ['enemy', 'ally']);
+    assert.deepEqual(result.completedCombatantIds, []);
+    assert.equal(result.activeCombatantId, null);
+    assert.equal(result.roundTurnCount, 0);
   });
 });
 

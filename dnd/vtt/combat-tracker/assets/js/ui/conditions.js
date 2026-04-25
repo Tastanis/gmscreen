@@ -1,16 +1,8 @@
-// Placeholder condition manager.
-export function renderConditions(root, { store }) {
+// Inactive shell condition manager. Live condition handling remains on the board.
+export function renderConditions(root) {
   if (!root) return () => {};
-
-  root.innerHTML = '<div class="vtt-combat-tracker__conditions">Conditions TBD</div>';
-
-  const unsubscribe = store.subscribe((state) => {
-    const active = state.combatants[state.turnIndex];
-    root.querySelector('.vtt-combat-tracker__conditions').textContent = active?.conditions?.join(', ') || 'No conditions';
-  });
-
+  root.innerHTML = '';
   return () => {
-    unsubscribe();
     root.innerHTML = '';
   };
 }

@@ -1,7 +1,6 @@
-# Combat Tracker UI Test Notes
+# Combat Tracker UI Shell Checks
 
-- [ ] GM view exposes add/remove combatant controls and turn advancement buttons.
-- [ ] Player view hides mutating controls and reflects updates after polling.
-- [ ] Linking a combatant to a token pre-fills portrait/name data.
-- [ ] Condition manager opens from initiative list and displays tooltips on hover.
-- [ ] Tracker layout adapts between narrow sidebar and wider drawer modes.
+- [ ] The live board-mounted tracker still renders waiting and completed combatants.
+- [ ] `dnd/vtt/combat-tracker/assets/js/bootstrap.js` exposes canonical combat modules only.
+- [ ] Shell UI helpers do not advance turns or mutate combat state independently.
+- [ ] A future dedicated page injects board-state dependencies instead of creating a separate store or backend.

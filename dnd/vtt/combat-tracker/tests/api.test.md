@@ -1,6 +1,6 @@
-# Combat Tracker API Test Notes
+# Combat Tracker API Shell Checks
 
-- [ ] `GET /vtt/combat-tracker/api/combat.php` returns current combat state for active scene.
-- [ ] `POST /vtt/combat-tracker/api/combat.php` validates payload shape before writing to storage.
-- [ ] `GET /vtt/combat-tracker/api/snapshots.php` provides read-only observers with throttled updates.
-- [ ] Persistence uses temporary files and atomic renames to avoid corruption.
+- [ ] `GET /vtt/combat-tracker/api/combat.php` returns HTTP 410 and names `boardState.sceneState[sceneId].combat` as canonical.
+- [ ] `GET /vtt/combat-tracker/api/snapshots.php` returns HTTP 410 and names the board-state sync path as canonical.
+- [ ] No code reads from or writes to `dnd/vtt/combat-tracker/storage/`.
+- [ ] Live combat refresh still uses the existing VTT board-state endpoint.
