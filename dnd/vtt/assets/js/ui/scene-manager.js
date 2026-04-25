@@ -5,6 +5,10 @@ import {
 } from '../services/scene-service.js';
 import { persistBoardState } from '../services/board-state-service.js';
 import { normalizeGridState } from '../state/normalize/grid.js';
+import {
+  createEmptyMapLevelsState,
+  normalizeMapLevelsState,
+} from '../state/normalize/map-levels.js';
 
 export function renderSceneList(routes, store) {
   const container = document.getElementById('scene-manager');
@@ -682,8 +686,10 @@ function ensureSceneBoardStateEntry(boardState, sceneId, fallbackGrid = null) {
 
   const existing = boardState.sceneState[key];
   if (existing && typeof existing === 'object') {
-    existing.grid = normalizeGridConfig(existing.grid ?? fallbackGrid ?? {});
+    const grid = normalizeGridConfig(existing.grid ?? fallbackGrid ?? {});
+    existing.grid = grid;
     existing.overlay = normalizeOverlayConfig(existing.overlay ?? {});
+    existing.mapLevels = normalizeMapLevelsState(existing.mapLevels ?? null, { sceneGrid: grid });
     // Do NOT force fogOfWar defaults here. Missing fogOfWar means "not configured"
     // which renders as fog-off. Forcing { enabled: true } would override the user's
     // explicit choice to disable fog whenever any scene action (overlay toggle, etc.)
@@ -694,6 +700,7 @@ function ensureSceneBoardStateEntry(boardState, sceneId, fallbackGrid = null) {
   const entry = {
     grid: normalizeGridConfig(fallbackGrid ?? {}),
     overlay: createEmptyOverlayConfig(),
+    mapLevels: createEmptyMapLevelsState(),
     fogOfWar: { enabled: true, revealedCells: {} },
   };
   boardState.sceneState[key] = entry;

@@ -1,5 +1,6 @@
 import { queueSave } from '../state/persistence.js';
 import { normalizeGridState } from '../state/normalize/grid.js';
+import { normalizeMapLevelsState } from '../state/normalize/map-levels.js';
 
 const SAVE_KEY = 'board-state';
 const COMBAT_SAVE_KEY_PREFIX = 'combat-state';
@@ -391,7 +392,8 @@ function buildPayload(boardState = {}) {
         const grid = normalizeGridPayload(value.grid ?? value);
         const combat = formatCombatState(value.combat ?? value.combatState ?? null);
         const overlay = formatOverlayState(value.overlay ?? null);
-        const entry = { grid, overlay };
+        const mapLevels = normalizeMapLevelsState(value.mapLevels ?? null, { sceneGrid: grid });
+        const entry = { grid, overlay, mapLevels };
         if (combat) {
           entry.combat = combat;
         }

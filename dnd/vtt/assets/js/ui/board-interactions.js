@@ -26,6 +26,7 @@ import {
   normalizeGridOffset,
   normalizeGridState,
 } from '../state/normalize/grid.js';
+import { normalizeMapLevelsState } from '../state/normalize/map-levels.js';
 import { initializePusher, getSocketId, isPusherConnected } from '../services/pusher-service.js';
 import { createBoardStatePoller } from '../services/board-state-poller.js';
 import { applyBoardStateOpsLocally } from '../services/board-state-op-applier.js';
@@ -2819,6 +2820,9 @@ export function mountBoardInteractions(store, routes = {}) {
           // }
           if (state.overlay) {
             draft.boardState.sceneState[sceneId].overlay = state.overlay;
+          }
+          if (state.mapLevels) {
+            draft.boardState.sceneState[sceneId].mapLevels = state.mapLevels;
           }
           if (state.fogOfWar !== undefined) {
             // Trust the incoming fog state from Pusher as authoritative.
@@ -14445,6 +14449,10 @@ export function mountBoardInteractions(store, routes = {}) {
 
     boardDraft.sceneState[key].overlay = normalizeOverlayDraft(
       boardDraft.sceneState[key].overlay ?? {}
+    );
+    boardDraft.sceneState[key].mapLevels = normalizeMapLevelsState(
+      boardDraft.sceneState[key].mapLevels ?? null,
+      { sceneGrid: boardDraft.sceneState[key].grid }
     );
 
     return boardDraft.sceneState[key];

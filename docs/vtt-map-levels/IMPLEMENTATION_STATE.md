@@ -6,17 +6,20 @@ knows what changed, what remains, and what has been tested.
 
 ## Current Status
 
-- Status: Phase 1 grid alignment foundation implemented.
+- Status: Phase 2 map level state model implemented.
 - Last updated: 2026-04-25.
 - VTT grid state now supports both square size and calibrated origin offsets.
 - GM scene controls now include an Align Grid action that captures two opposite corners
   of a known map square and calculates grid size plus `offsetX` / `offsetY`.
 - Scene grid changes persist through the scene storage API as well as board scene state.
+- Scene board state now supports a `mapLevels` model for future multi-level map data.
 - Old overlay system is still active.
-- No map level, level renderer, or overlay replacement work has started.
+- No level renderer, map level controls, cutout editing, token level support, or overlay
+  replacement work has started.
 - Tests run for this phase:
-  - `npm test` - passing, 355 tests.
-  - `php -l dnd/vtt/api/scenes.php` and `php -l dnd/vtt/api/state.php` were attempted,
+  - `npm.cmd test` - passing, 358 tests.
+  - `git diff --check` - passing.
+  - `php -l dnd/vtt/api/state.php` was attempted,
     but `php` is not available on PATH in this workspace.
 - User decisions captured:
   - Cutouts should work square-by-square, similar to fog editing, but they remove/hide
@@ -111,6 +114,57 @@ Remaining notes:
 - Multi-client verification is still needed to confirm another browser picks up the
   updated scene grid after the post-save board-state bump.
 - PHP syntax linting should be run in an environment with PHP available.
+
+## Completed Phase 2: Map Level State Model
+
+Date completed: 2026-04-25.
+
+Changed files:
+
+- `dnd/vtt/api/state.php`
+- `dnd/vtt/assets/js/services/board-state-service.js`
+- `dnd/vtt/assets/js/services/__tests__/board-state-map-levels.test.mjs`
+- `dnd/vtt/assets/js/state/normalize/index.js`
+- `dnd/vtt/assets/js/state/normalize/map-levels.js`
+- `dnd/vtt/assets/js/state/normalize/scene-board-state.js`
+- `dnd/vtt/assets/js/state/__tests__/map-levels-normalization.test.mjs`
+- `dnd/vtt/assets/js/ui/board-interactions.js`
+- `dnd/vtt/assets/js/ui/scene-manager.js`
+- `dnd/data/version.json`
+- `docs/vtt-map-levels/IMPLEMENTATION_STATE.md`
+
+Implementation notes:
+
+- Scene board state entries now normalize `mapLevels` as
+  `{ levels: [], activeLevelId: null }`.
+- Map level entries normalize `id`, `name`, `mapUrl`, `visible`, `opacity`, `zIndex`,
+  `grid`, `cutouts`, `blocksLowerLevelInteraction`, `blocksLowerLevelVision`, and
+  `defaultForPlayers`.
+- The first implementation cap of 5 map levels is enforced by client and server
+  normalization.
+- A level `grid` of `null` means it inherits the scene grid. Explicit level grid data is
+  normalized with the scene grid as fallback.
+- Cutouts are stored as rectangle cell data: `{ column, row, width, height }`, with an
+  optional `id`.
+- Board state persistence serializes `mapLevels` only under each scene's `sceneState`
+  entry, not as a top-level board state field.
+- Pusher full scene-state updates apply `mapLevels` when present. Polling already carries
+  it through the existing scene-state merge path.
+- Server update normalization does not inject an empty `mapLevels` field when a partial
+  scene-state update omits it, so old overlay/combat-only updates do not wipe level data.
+
+Tests run for this phase:
+
+- `npm.cmd test` - passing, 358 tests.
+- `git diff --check` - passing.
+- `php -l dnd/vtt/api/state.php` was attempted, but `php` is not available on PATH in
+  this workspace.
+
+Remaining notes:
+
+- PHP syntax linting should be run in an environment with PHP available.
+- Manual level sync/refresh checks remain for the future controls phase, because Phase 2
+  only adds the persisted state model and does not expose level UI yet.
 
 ## Main Findings
 

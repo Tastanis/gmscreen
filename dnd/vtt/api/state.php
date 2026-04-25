@@ -7,6 +7,7 @@ require_once __DIR__ . '/../lib/PusherClient.php';
 
 const VTT_PING_RETENTION_MS = 10000;
 const VTT_VERSION_FILE = 'board-state-version.json';
+const VTT_MAP_LEVEL_MAX_LEVELS = 5;
 
 /**
  * Phase 3-C: Feature flag for broadcasting delta ops over Pusher instead
@@ -1404,7 +1405,7 @@ function sanitizeBoardStateUpdates(array $raw): array
         if ($rawSceneState === null) {
             $updates['sceneState'] = [];
         } elseif (is_array($rawSceneState)) {
-            $updates['sceneState'] = normalizeSceneStatePayload($rawSceneState);
+            $updates['sceneState'] = normalizeSceneStatePayload($rawSceneState, false);
         } else {
             throw new InvalidArgumentException('Scene state must be an array or object.');
         }
@@ -1786,7 +1787,7 @@ function normalizePingEntry(array $entry): ?array
  * @param array<string|int,mixed> $rawSceneState
  * @return array<string,array<string,mixed>>
  */
-function normalizeSceneStatePayload(array $rawSceneState): array
+function normalizeSceneStatePayload(array $rawSceneState, bool $includeMapLevelDefaults = true): array
 {
     $normalized = [];
 
@@ -1806,6 +1807,12 @@ function normalizeSceneStatePayload(array $rawSceneState): array
             'overlay' => normalizeOverlayPayload($config['overlay'] ?? []),
         ];
 
+        if (array_key_exists('mapLevels', $config)) {
+            $entry['mapLevels'] = normalizeMapLevelsPayload($config['mapLevels'], $entry['grid']);
+        } elseif ($includeMapLevelDefaults) {
+            $entry['mapLevels'] = createEmptyMapLevelsState();
+        }
+
         if (array_key_exists('combat', $config)) {
             $entry['combat'] = normalizeCombatStatePayload($config['combat']);
         }
@@ -1821,6 +1828,322 @@ function normalizeSceneStatePayload(array $rawSceneState): array
     }
 
     return $normalized;
+}
+
+function createEmptyMapLevelsState(): array
+{
+    return [
+        'levels' => [],
+        'activeLevelId' => null,
+    ];
+}
+
+/**
+ * @param mixed $rawMapLevels
+ * @param array<string,mixed> $sceneGrid
+ */
+function normalizeMapLevelsPayload($rawMapLevels, array $sceneGrid = []): array
+{
+    $mapLevels = createEmptyMapLevelsState();
+    if (!is_array($rawMapLevels)) {
+        return $mapLevels;
+    }
+
+    $levelSource = [];
+    if (array_key_exists('levels', $rawMapLevels) && is_array($rawMapLevels['levels'])) {
+        $levelSource = $rawMapLevels['levels'];
+    } elseif (array_key_exists('items', $rawMapLevels) && is_array($rawMapLevels['items'])) {
+        $levelSource = $rawMapLevels['items'];
+    } elseif (isListArray($rawMapLevels)) {
+        $levelSource = $rawMapLevels;
+    }
+
+    foreach (array_slice(array_values($levelSource), 0, VTT_MAP_LEVEL_MAX_LEVELS) as $index => $level) {
+        $normalizedLevel = normalizeMapLevelPayload($level, $index, $sceneGrid);
+        if ($normalizedLevel !== null) {
+            $mapLevels['levels'][] = $normalizedLevel;
+        }
+    }
+
+    normalizeDefaultPlayerMapLevel($mapLevels['levels']);
+
+    $preferred = null;
+    if (array_key_exists('activeLevelId', $rawMapLevels) && is_string($rawMapLevels['activeLevelId'])) {
+        $preferred = trim($rawMapLevels['activeLevelId']);
+    } elseif (array_key_exists('activeLevel', $rawMapLevels) && is_string($rawMapLevels['activeLevel'])) {
+        $preferred = trim($rawMapLevels['activeLevel']);
+    } elseif (array_key_exists('selectedLevelId', $rawMapLevels) && is_string($rawMapLevels['selectedLevelId'])) {
+        $preferred = trim($rawMapLevels['selectedLevelId']);
+    }
+
+    $mapLevels['activeLevelId'] = resolveActiveMapLevelId($preferred, $mapLevels['levels']);
+    return $mapLevels;
+}
+
+/**
+ * @param mixed $rawLevel
+ * @param array<string,mixed> $sceneGrid
+ */
+function normalizeMapLevelPayload($rawLevel, int $index, array $sceneGrid = []): ?array
+{
+    if (!is_array($rawLevel)) {
+        return null;
+    }
+
+    $id = null;
+    if (array_key_exists('id', $rawLevel) && is_string($rawLevel['id'])) {
+        $trimmed = trim($rawLevel['id']);
+        if ($trimmed !== '') {
+            $id = $trimmed;
+        }
+    }
+
+    $name = null;
+    if (array_key_exists('name', $rawLevel) && is_string($rawLevel['name'])) {
+        $trimmed = trim($rawLevel['name']);
+        if ($trimmed !== '') {
+            $name = $trimmed;
+        }
+    }
+
+    $mapUrl = null;
+    if (array_key_exists('mapUrl', $rawLevel) && is_string($rawLevel['mapUrl'])) {
+        $trimmed = trim($rawLevel['mapUrl']);
+        if ($trimmed !== '') {
+            $mapUrl = $trimmed;
+        }
+    }
+
+    $grid = null;
+    if (array_key_exists('grid', $rawLevel) && is_array($rawLevel['grid'])) {
+        $grid = normalizeGridSettings(array_merge($sceneGrid, $rawLevel['grid']));
+    }
+
+    return [
+        'id' => $id ?? generateMapLevelId(),
+        'name' => $name ?? 'Level ' . ($index + 1),
+        'mapUrl' => $mapUrl,
+        'visible' => normalizeMapLevelBoolean($rawLevel['visible'] ?? null, true),
+        'opacity' => normalizeMapLevelOpacity($rawLevel['opacity'] ?? null),
+        'zIndex' => normalizeMapLevelZIndex($rawLevel['zIndex'] ?? null, $index),
+        'grid' => $grid,
+        'cutouts' => normalizeMapLevelCutoutsPayload($rawLevel['cutouts'] ?? []),
+        'blocksLowerLevelInteraction' => normalizeMapLevelBoolean($rawLevel['blocksLowerLevelInteraction'] ?? null, true),
+        'blocksLowerLevelVision' => normalizeMapLevelBoolean($rawLevel['blocksLowerLevelVision'] ?? null, true),
+        'defaultForPlayers' => normalizeMapLevelBoolean($rawLevel['defaultForPlayers'] ?? null, false),
+    ];
+}
+
+function generateMapLevelId(): string
+{
+    return uniqid('map-level-', false);
+}
+
+function normalizeMapLevelOpacity($value): float
+{
+    if (!is_numeric($value)) {
+        return 1.0;
+    }
+
+    return round(max(0.0, min(1.0, (float) $value)), 2);
+}
+
+function normalizeMapLevelZIndex($value, int $fallback = 0): int
+{
+    if (is_numeric($value)) {
+        return (int) ((float) $value);
+    }
+
+    return $fallback;
+}
+
+/**
+ * @param mixed $rawCutouts
+ * @return array<int,array<string,mixed>>
+ */
+function normalizeMapLevelCutoutsPayload($rawCutouts): array
+{
+    if (!is_array($rawCutouts)) {
+        return [];
+    }
+
+    $cutouts = [];
+    foreach ($rawCutouts as $cutout) {
+        $normalized = normalizeMapLevelCutoutPayload($cutout);
+        if ($normalized !== null) {
+            $cutouts[] = $normalized;
+        }
+    }
+
+    return $cutouts;
+}
+
+/**
+ * @param mixed $rawCutout
+ */
+function normalizeMapLevelCutoutPayload($rawCutout): ?array
+{
+    if (!is_array($rawCutout)) {
+        return null;
+    }
+
+    $column = normalizeRequiredMapLevelCellCoordinate(
+        $rawCutout['column'] ?? ($rawCutout['col'] ?? ($rawCutout['x'] ?? null))
+    );
+    $row = normalizeRequiredMapLevelCellCoordinate($rawCutout['row'] ?? ($rawCutout['y'] ?? null));
+    if ($column === null || $row === null) {
+        return null;
+    }
+
+    $cutout = [
+        'column' => $column,
+        'row' => $row,
+        'width' => max(1, normalizeMapLevelDimension($rawCutout['width'] ?? ($rawCutout['columns'] ?? ($rawCutout['w'] ?? null)), 1)),
+        'height' => max(1, normalizeMapLevelDimension($rawCutout['height'] ?? ($rawCutout['rows'] ?? ($rawCutout['h'] ?? null)), 1)),
+    ];
+
+    if (array_key_exists('id', $rawCutout) && is_string($rawCutout['id'])) {
+        $id = trim($rawCutout['id']);
+        if ($id !== '') {
+            $cutout['id'] = $id;
+        }
+    }
+
+    return $cutout;
+}
+
+function normalizeRequiredMapLevelCellCoordinate($value): ?int
+{
+    if (!is_numeric($value)) {
+        return null;
+    }
+
+    return max(0, (int) ((float) $value));
+}
+
+function normalizeMapLevelDimension($value, int $fallback = 1): int
+{
+    if (!is_numeric($value)) {
+        return max(1, $fallback);
+    }
+
+    return max(1, (int) ((float) $value));
+}
+
+function normalizeMapLevelBoolean($value, bool $fallback = false): bool
+{
+    if (is_bool($value)) {
+        return $value;
+    }
+
+    if (is_int($value) || is_float($value)) {
+        return $value != 0;
+    }
+
+    if (is_string($value)) {
+        $normalized = strtolower(trim($value));
+        if ($normalized === '') {
+            return $fallback;
+        }
+        if (in_array($normalized, ['true', '1', 'yes', 'on'], true)) {
+            return true;
+        }
+        if (in_array($normalized, ['false', '0', 'no', 'off'], true)) {
+            return false;
+        }
+    }
+
+    return $fallback;
+}
+
+/**
+ * @param array<int,array<string,mixed>> $levels
+ */
+function normalizeDefaultPlayerMapLevel(array &$levels): void
+{
+    if (count($levels) === 0) {
+        return;
+    }
+
+    $assigned = false;
+    foreach ($levels as &$level) {
+        if (!is_array($level)) {
+            continue;
+        }
+
+        if (!empty($level['defaultForPlayers']) && !$assigned) {
+            $assigned = true;
+            continue;
+        }
+
+        $level['defaultForPlayers'] = false;
+    }
+    unset($level);
+
+    if ($assigned) {
+        return;
+    }
+
+    foreach ($levels as &$level) {
+        $visible = !array_key_exists('visible', $level) || (bool) $level['visible'];
+        if ($visible) {
+            $level['defaultForPlayers'] = true;
+            unset($level);
+            return;
+        }
+    }
+    unset($level);
+
+    $levels[0]['defaultForPlayers'] = true;
+}
+
+/**
+ * @param array<int,array<string,mixed>> $levels
+ */
+function resolveActiveMapLevelId($preferred, array $levels): ?string
+{
+    if (count($levels) === 0) {
+        return null;
+    }
+
+    if (is_string($preferred) && trim($preferred) !== '') {
+        $trimmed = trim($preferred);
+        foreach ($levels as $level) {
+            if (is_array($level) && ($level['id'] ?? null) === $trimmed) {
+                return $trimmed;
+            }
+        }
+    }
+
+    foreach ($levels as $level) {
+        if (is_array($level) && !empty($level['defaultForPlayers']) && isset($level['id'])) {
+            return (string) $level['id'];
+        }
+    }
+
+    foreach ($levels as $level) {
+        $visible = is_array($level) && (!array_key_exists('visible', $level) || (bool) $level['visible']);
+        if ($visible && isset($level['id'])) {
+            return (string) $level['id'];
+        }
+    }
+
+    foreach ($levels as $level) {
+        if (is_array($level) && isset($level['id'])) {
+            return (string) $level['id'];
+        }
+    }
+
+    return null;
+}
+
+function isListArray(array $value): bool
+{
+    if ($value === []) {
+        return true;
+    }
+
+    return array_keys($value) === range(0, count($value) - 1);
 }
 
 /**

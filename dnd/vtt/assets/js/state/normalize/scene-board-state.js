@@ -2,6 +2,7 @@ import { normalizeGridState } from './grid.js';
 import { normalizeCombatStateEntry } from './combat.js';
 import { normalizeOverlayEntry } from './overlay.js';
 import { normalizeFogOfWarEntry } from './fog.js';
+import { normalizeMapLevelsState } from './map-levels.js';
 
 export function normalizeSceneBoardState(raw = {}) {
   if (!raw || typeof raw !== 'object') {
@@ -23,8 +24,9 @@ export function normalizeSceneBoardState(raw = {}) {
     const grid = normalizeGridState(value.grid ?? value);
     const combat = normalizeCombatStateEntry(value.combat ?? value.combatState ?? null);
     const overlay = normalizeOverlayEntry(value.overlay ?? null);
+    const mapLevels = normalizeMapLevelsState(value.mapLevels ?? null, { sceneGrid: grid });
     const fogOfWar = normalizeFogOfWarEntry(value.fogOfWar ?? null);
-    const entry = { grid };
+    const entry = { grid, mapLevels };
 
     if (combat) {
       entry.combat = combat;
