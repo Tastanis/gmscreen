@@ -1506,6 +1506,15 @@
   align-items: center;
   justify-content: space-between;
   gap: calc(0.5rem * var(--vtt-overlay-scale, 1));
+  cursor: grab;
+  user-select: none;
+  touch-action: none;
+}
+
+.vtt-map-level-cutout-editor__header.is-dragging,
+.vtt-map-level-cutout-editor__toolbar.is-dragging
+  .vtt-map-level-cutout-editor__header {
+  cursor: grabbing;
 }
 
 .vtt-map-level-cutout-editor__title {
@@ -1515,6 +1524,7 @@
   font-weight: 700;
   line-height: 1.2;
   text-transform: uppercase;
+  pointer-events: none;
 }
 
 .vtt-map-level-cutout-editor__exit {

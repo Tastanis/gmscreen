@@ -1818,7 +1818,7 @@ export function mountBoardInteractions(store, routes = {}) {
           return;
         }
 
-        mapLevelCutoutTool.editLevel(levelId);
+        mapLevelCutoutTool.editLevel(levelId, { anchorEvent: event });
         return;
       }
 
@@ -3270,6 +3270,14 @@ export function mountBoardInteractions(store, routes = {}) {
     if (overlayEditorActive && event.target &&
         (event.target.closest('.vtt-overlay-editor__toolbar') ||
          event.target.closest('.vtt-overlay-editor__node'))) {
+      return;
+    }
+
+    if (
+      mapLevelCutoutEditorActive &&
+      event.target &&
+      event.target.closest('.vtt-map-level-cutout-editor__toolbar')
+    ) {
       return;
     }
 
@@ -15204,6 +15212,9 @@ function createMapLevelCutoutTool() {
   let selection = null;
   let dragState = null;
   let cutoutSequence = 0;
+  let toolbarPosition = null;
+  let toolbarDragState = null;
+  let toolbarDimensions = { width: 0, height: 0 };
 
   function toggle() {
     if (isActive) {
@@ -15214,7 +15225,7 @@ function createMapLevelCutoutTool() {
     activate(activeLevelId);
   }
 
-  function editLevel(levelId) {
+  function editLevel(levelId, options = {}) {
     const requestedLevelId = typeof levelId === 'string' ? levelId.trim() : '';
     if (!requestedLevelId) {
       return false;
@@ -15229,10 +15240,10 @@ function createMapLevelCutoutTool() {
       deactivate({ restoreRenderer: true, restoreBoardStatus: false });
     }
 
-    return activate(requestedLevelId);
+    return activate(requestedLevelId, options);
   }
 
-  function activate(levelId = null) {
+  function activate(levelId = null, options = {}) {
     if (!isGmUser()) {
       return false;
     }
@@ -15250,6 +15261,7 @@ function createMapLevelCutoutTool() {
     history = [];
     selection = null;
     dragState = null;
+    toolbarPosition = null;
     isActive = true;
     mapLevelCutoutEditorActive = true;
 
@@ -15261,7 +15273,9 @@ function createMapLevelCutoutTool() {
     editor.removeAttribute('hidden');
     editor.dataset.interactive = 'true';
     editor.setAttribute('aria-hidden', 'false');
-    positionToolbarNearViewport();
+    const anchorEvent =
+      options && typeof options === 'object' ? options.anchorEvent : null;
+    positionToolbar(anchorEvent);
     renderDraft();
     setStatus(DEFAULT_STATUS);
     updateStatus(`Editing cutouts for ${context.level.name || 'active map level'}.`);
@@ -15292,6 +15306,10 @@ function createMapLevelCutoutTool() {
     history = [];
     selection = null;
     dragState = null;
+    toolbarPosition = null;
+    toolbarDragState = null;
+    toolbar.classList.remove('is-dragging');
+    toolbarHeader.classList.remove('is-dragging');
     savedCutouts = [];
     draftCutouts = [];
     activeSceneId = null;
@@ -15325,7 +15343,7 @@ function createMapLevelCutoutTool() {
       return;
     }
 
-    positionToolbarNearViewport();
+    positionToolbar();
     renderDraft();
   }
 
@@ -15738,7 +15756,7 @@ function createMapLevelCutoutTool() {
     };
   }
 
-  function positionToolbarNearViewport() {
+  function positionToolbar(anchorEvent = null) {
     const rect = root.getBoundingClientRect?.();
     if (!rect) {
       editor.style.setProperty('--cutout-toolbar-x', '0px');
@@ -15746,11 +15764,174 @@ function createMapLevelCutoutTool() {
       return;
     }
 
-    const scale = Number.isFinite(viewState.scale) && viewState.scale !== 0 ? viewState.scale : 1;
-    const localX = (24 - rect.left) / scale;
-    const localY = (24 - rect.top) / scale;
-    editor.style.setProperty('--cutout-toolbar-x', `${Math.max(0, roundToPrecision(localX, 2))}px`);
-    editor.style.setProperty('--cutout-toolbar-y', `${Math.max(0, roundToPrecision(localY, 2))}px`);
+    const scale =
+      Number.isFinite(viewState.scale) && viewState.scale !== 0 ? viewState.scale : 1;
+    const rootWidth = Number.isFinite(rect.width) ? rect.width / scale : 0;
+    const rootHeight = Number.isFinite(rect.height) ? rect.height / scale : 0;
+
+    const toolbarRect = toolbar.getBoundingClientRect?.();
+    if (toolbarRect && Number.isFinite(toolbarRect.width) && toolbarRect.width > 0) {
+      toolbarDimensions = {
+        width: toolbarRect.width / scale,
+        height: toolbarRect.height / scale,
+      };
+    }
+
+    const maxX = Math.max(0, rootWidth - toolbarDimensions.width);
+    const maxY = Math.max(0, rootHeight - toolbarDimensions.height);
+
+    let localX;
+    let localY;
+    if (anchorEvent &&
+        Number.isFinite(anchorEvent.clientX) &&
+        Number.isFinite(anchorEvent.clientY)) {
+      const offset = 12;
+      localX = (anchorEvent.clientX - rect.left + offset) / scale;
+      localY = (anchorEvent.clientY - rect.top + offset) / scale;
+    } else if (toolbarPosition) {
+      localX = toolbarPosition.x;
+      localY = toolbarPosition.y;
+    } else {
+      localX = (24 - rect.left) / scale;
+      localY = (24 - rect.top) / scale;
+    }
+
+    const safeX = clamp(Number.isFinite(localX) ? localX : 0, 0, maxX);
+    const safeY = clamp(Number.isFinite(localY) ? localY : 0, 0, maxY);
+    applyToolbarPosition(safeX, safeY);
+  }
+
+  function applyToolbarPosition(x, y) {
+    const safeX = Number.isFinite(x) ? x : 0;
+    const safeY = Number.isFinite(y) ? y : 0;
+    toolbarPosition = { x: safeX, y: safeY };
+    editor.style.setProperty('--cutout-toolbar-x', `${roundToPrecision(safeX, 2)}px`);
+    editor.style.setProperty('--cutout-toolbar-y', `${roundToPrecision(safeY, 2)}px`);
+  }
+
+  function handleToolbarPointerDown(event) {
+    if (!isActive) {
+      return;
+    }
+    if (event.button !== undefined && event.button !== 0 && event.pointerType !== 'touch') {
+      return;
+    }
+
+    if (!event.target) {
+      return;
+    }
+
+    if (
+      event.target.closest('.vtt-map-level-cutout-editor__btn') ||
+      event.target.closest('.vtt-map-level-cutout-editor__exit')
+    ) {
+      event.stopPropagation();
+      return;
+    }
+
+    if (!event.target.closest('.vtt-map-level-cutout-editor__header')) {
+      event.stopPropagation();
+      return;
+    }
+
+    const rootRect = root.getBoundingClientRect?.();
+    const toolbarRect = toolbar.getBoundingClientRect?.();
+    if (!rootRect || !toolbarRect) {
+      return;
+    }
+
+    const scale =
+      Number.isFinite(viewState.scale) && viewState.scale !== 0 ? viewState.scale : 1;
+
+    toolbarDimensions = {
+      width: Number.isFinite(toolbarRect.width)
+        ? toolbarRect.width / scale
+        : toolbarDimensions.width,
+      height: Number.isFinite(toolbarRect.height)
+        ? toolbarRect.height / scale
+        : toolbarDimensions.height,
+    };
+
+    toolbarDragState = {
+      pointerId: event.pointerId,
+      offsetX: (event.clientX - toolbarRect.left) / scale,
+      offsetY: (event.clientY - toolbarRect.top) / scale,
+      width: toolbarDimensions.width,
+      height: toolbarDimensions.height,
+    };
+
+    try {
+      toolbar.setPointerCapture?.(event.pointerId);
+    } catch (error) {
+      // Ignore capture errors.
+    }
+
+    toolbar.classList.add('is-dragging');
+    toolbarHeader.classList.add('is-dragging');
+    event.preventDefault();
+    event.stopPropagation();
+  }
+
+  function handleToolbarPointerMove(event) {
+    if (!toolbarDragState || event.pointerId !== toolbarDragState.pointerId) {
+      return;
+    }
+
+    const rootRect = root.getBoundingClientRect?.();
+    if (!rootRect) {
+      return;
+    }
+
+    const scale =
+      Number.isFinite(viewState.scale) && viewState.scale !== 0 ? viewState.scale : 1;
+    const rootWidth = Number.isFinite(rootRect.width) ? rootRect.width / scale : 0;
+    const rootHeight = Number.isFinite(rootRect.height) ? rootRect.height / scale : 0;
+    if (rootWidth <= 0 || rootHeight <= 0) {
+      return;
+    }
+
+    const maxX = Math.max(0, rootWidth - toolbarDragState.width);
+    const maxY = Math.max(0, rootHeight - toolbarDragState.height);
+
+    const proposedX = (event.clientX - rootRect.left) / scale - toolbarDragState.offsetX;
+    const proposedY = (event.clientY - rootRect.top) / scale - toolbarDragState.offsetY;
+
+    const nextX = clamp(Number.isFinite(proposedX) ? proposedX : 0, 0, maxX);
+    const nextY = clamp(Number.isFinite(proposedY) ? proposedY : 0, 0, maxY);
+
+    applyToolbarPosition(nextX, nextY);
+    event.preventDefault();
+    event.stopPropagation();
+  }
+
+  function handleToolbarPointerUp(event) {
+    if (!toolbarDragState || event.pointerId !== toolbarDragState.pointerId) {
+      if (event.target && event.target.closest('.vtt-map-level-cutout-editor__toolbar')) {
+        event.stopPropagation();
+      }
+      return;
+    }
+
+    endToolbarDrag(event.pointerId);
+    event.preventDefault();
+    event.stopPropagation();
+  }
+
+  function handleToolbarPointerCancel(event) {
+    if (toolbarDragState && event.pointerId === toolbarDragState.pointerId) {
+      endToolbarDrag(event.pointerId);
+    }
+  }
+
+  function endToolbarDrag(pointerId) {
+    try {
+      toolbar.releasePointerCapture?.(pointerId);
+    } catch (error) {
+      // Ignore release errors.
+    }
+    toolbarDragState = null;
+    toolbar.classList.remove('is-dragging');
+    toolbarHeader.classList.remove('is-dragging');
   }
 
   function updateControls() {
@@ -15814,6 +15995,14 @@ function createMapLevelCutoutTool() {
   editor.addEventListener('pointermove', handleEditorPointerMove, true);
   editor.addEventListener('pointerup', handleEditorPointerUp, true);
   editor.addEventListener('pointercancel', handleEditorPointerUp, true);
+  toolbar.addEventListener('pointerdown', handleToolbarPointerDown);
+  toolbar.addEventListener('pointermove', handleToolbarPointerMove);
+  toolbar.addEventListener('pointerup', handleToolbarPointerUp);
+  toolbar.addEventListener('pointercancel', handleToolbarPointerCancel);
+  toolbar.addEventListener('lostpointercapture', handleToolbarPointerCancel);
+  toolbar.addEventListener('click', (event) => {
+    event.stopPropagation();
+  });
   exitButton.addEventListener('click', (event) => {
     event.preventDefault();
     event.stopPropagation();
