@@ -886,21 +886,17 @@
 .scene-item__overlays {
   display: flex;
   flex-direction: column;
-  gap: 0.5rem;
-  padding: 0.55rem;
-  border-radius: calc(var(--vtt-radius) - 1px);
-  background: rgba(44, 30, 24, 0.85);
-  box-shadow: inset 0 0 0 1px var(--vtt-panel-border);
+  gap: 0.4rem;
+  padding: 0.4rem 0 0;
+  border-top: 1px solid rgba(213, 155, 90, 0.22);
 }
 
 .scene-item__levels {
   display: flex;
   flex-direction: column;
-  gap: 0.5rem;
-  padding: 0.55rem;
-  border-radius: calc(var(--vtt-radius) - 1px);
-  background: rgba(32, 42, 53, 0.78);
-  box-shadow: inset 0 0 0 1px rgba(110, 150, 190, 0.24);
+  gap: 0.4rem;
+  padding: 0.4rem 0 0;
+  border-top: 1px solid rgba(110, 150, 190, 0.28);
 }
 
 .scene-level__actions {
@@ -938,8 +934,8 @@
   display: flex;
   flex-direction: column;
   align-items: stretch;
-  gap: 0.45rem;
-  padding: 0.5rem 0.65rem;
+  gap: 0.4rem;
+  padding: 0.4rem 0.5rem;
   border-radius: calc(var(--vtt-radius) - 1px);
   background: rgba(35, 51, 64, 0.78);
   box-shadow: inset 0 0 0 1px rgba(110, 150, 190, 0.24);
@@ -1062,18 +1058,21 @@
 }
 
 .scene-level__controls {
-  display: flex;
-  flex-wrap: wrap;
-  align-items: center;
-  justify-content: flex-start;
-  gap: 0.25rem;
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  align-items: stretch;
+  gap: 0.3rem;
   min-width: 0;
 }
 
 .scene-level__controls .btn {
-  flex: 0 0 auto;
-  width: auto;
-  padding: 0.25rem 0.5rem;
+  width: 100%;
+  padding: 0.3rem 0.4rem;
+  white-space: nowrap;
+}
+
+.scene-level__controls .scene-level__delete {
+  grid-column: 1 / -1;
 }
 
 .scene-level__status {
@@ -1110,8 +1109,8 @@
   display: flex;
   flex-direction: column;
   align-items: stretch;
-  gap: 0.45rem;
-  padding: 0.5rem 0.65rem;
+  gap: 0.4rem;
+  padding: 0.4rem 0.5rem;
   border-radius: calc(var(--vtt-radius) - 1px);
   background: rgba(62, 42, 34, 0.65);
   box-shadow: inset 0 0 0 1px var(--vtt-panel-border);
@@ -1201,18 +1200,21 @@
 }
 
 .scene-overlay__controls {
-  display: flex;
-  flex-wrap: wrap;
-  align-items: center;
-  justify-content: flex-start;
-  gap: 0.25rem;
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  align-items: stretch;
+  gap: 0.3rem;
   min-width: 0;
 }
 
 .scene-overlay__controls .btn {
-  flex: 0 0 auto;
-  width: auto;
-  padding: 0.25rem 0.5rem;
+  width: 100%;
+  padding: 0.3rem 0.4rem;
+  white-space: nowrap;
+}
+
+.scene-overlay__controls .scene-overlay__delete {
+  grid-column: 1 / -1;
 }
 
 .scene-overlay__status {
@@ -1243,8 +1245,8 @@
 
 .scene-item__preview {
   position: relative;
-  flex: 0 0 82px;
-  width: 82px;
+  flex: 0 0 64px;
+  width: 64px;
   aspect-ratio: 4 / 3;
   border-radius: calc(var(--vtt-radius) - 1px);
   overflow: hidden;
@@ -1370,7 +1372,7 @@
 }
 
 :root {
-  --vtt-settings-panel-width: 320px;
+  --vtt-settings-panel-width: 380px;
   --vtt-settings-panel-offset: 16px;
 }
 
