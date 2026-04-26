@@ -9,6 +9,36 @@ function renderVttSceneBoard(bool $isGm = false): string
         <header class="vtt-board__header">
             <div class="vtt-board__scene-meta">
                 <h1 id="active-scene-name" class="vtt-board__title">No Active Scene</h1>
+                <?php if ($isGm): ?>
+                <div
+                    class="vtt-board__level-nav"
+                    data-map-level-nav
+                    hidden
+                    aria-hidden="true"
+                    role="group"
+                    aria-label="Map level navigation"
+                >
+                    <button
+                        class="vtt-board__level-button"
+                        type="button"
+                        data-action="view-map-level-down"
+                        aria-label="View lower map level"
+                        title="View lower map level"
+                    >
+                        <span aria-hidden="true">&#9660;</span>
+                    </button>
+                    <span class="vtt-board__level-name" data-map-level-nav-name>Base map</span>
+                    <button
+                        class="vtt-board__level-button"
+                        type="button"
+                        data-action="view-map-level-up"
+                        aria-label="View higher map level"
+                        title="View higher map level"
+                    >
+                        <span aria-hidden="true">&#9650;</span>
+                    </button>
+                </div>
+                <?php endif; ?>
                 <div class="vtt-board__round-tracker" data-round-tracker hidden>
                     <span class="vtt-board__round-label">Round</span>
                     <span class="vtt-board__round-value" data-round-value>1</span>

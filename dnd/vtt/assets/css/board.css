@@ -79,6 +79,71 @@
   font-size: 0.9rem;
 }
 
+.vtt-board__level-nav {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.35rem;
+  max-width: min(100%, 16rem);
+  padding: 0.15rem 0.25rem;
+  border: 1px solid rgba(148, 163, 184, 0.28);
+  border-radius: calc(var(--vtt-radius) * 0.55);
+  background: rgba(15, 23, 42, 0.28);
+}
+
+.vtt-board__level-nav[hidden] {
+  display: none !important;
+}
+
+.vtt-board__level-button {
+  appearance: none;
+  flex: 0 0 auto;
+  width: 1.45rem;
+  height: 1.35rem;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  border: 1px solid rgba(148, 163, 184, 0.38);
+  border-radius: calc(var(--vtt-radius) / 2);
+  background: rgba(148, 163, 184, 0.14);
+  color: var(--vtt-text-muted);
+  cursor: pointer;
+  font-size: 0.68rem;
+  line-height: 1;
+  transition:
+    background var(--vtt-transition),
+    border-color var(--vtt-transition),
+    color var(--vtt-transition),
+    opacity var(--vtt-transition);
+}
+
+.vtt-board__level-button:hover:not(:disabled) {
+  border-color: rgba(191, 219, 254, 0.62);
+  background: rgba(148, 163, 184, 0.24);
+  color: #fff;
+}
+
+.vtt-board__level-button:disabled {
+  cursor: not-allowed;
+  opacity: 0.38;
+}
+
+.vtt-board__level-button:focus-visible {
+  outline: 2px solid var(--vtt-accent);
+  outline-offset: 2px;
+}
+
+.vtt-board__level-name {
+  min-width: 0;
+  max-width: 10rem;
+  overflow: hidden;
+  color: var(--vtt-text-primary);
+  font-size: 0.78rem;
+  font-weight: 700;
+  line-height: 1.2;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
 .vtt-board__tracker {
   display: flex;
   align-items: flex-start;

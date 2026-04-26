@@ -3,6 +3,7 @@ import assert from 'node:assert/strict';
 
 import {
   getAdjacentTokenLevel,
+  getMapLevelNavigationControlState,
   getOrderedTokenMapLevels,
   getPlayerTokenMapLevelVisibility,
   getTokenLevelControlState,
@@ -68,6 +69,25 @@ describe('token level helpers', () => {
     assert.equal(controls.currentLevel?.id, 'ground');
     assert.equal(controls.canMoveDown, false);
     assert.equal(controls.canMoveUp, true);
+  });
+
+  test('builds active map level navigation control state', () => {
+    const mapLevels = {
+      activeLevelId: 'upper',
+      levels: [
+        { id: 'roof', name: 'Roof', zIndex: 2 },
+        { id: 'ground', name: 'Ground', zIndex: 0 },
+        { id: 'upper', name: 'Upper', zIndex: 1 },
+      ],
+    };
+
+    const controls = getMapLevelNavigationControlState(mapLevels);
+
+    assert.equal(controls.hasLevels, true);
+    assert.equal(controls.currentLevel?.id, 'upper');
+    assert.equal(controls.canMoveDown, true);
+    assert.equal(controls.canMoveUp, true);
+    assert.deepEqual(controls.levels.map((level) => level.id), ['ground', 'upper', 'roof']);
   });
 
   test('resolves scene-scoped map level state from board state', () => {

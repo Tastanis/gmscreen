@@ -54,6 +54,7 @@ import {
 } from './token-stack-order.js';
 import {
   getAdjacentTokenLevel,
+  getMapLevelNavigationControlState,
   getOrderedTokenMapLevels,
   getPlayerTokenMapLevelVisibility,
   getTokenLevelControlState,
@@ -485,6 +486,10 @@ export function mountBoardInteractions(store, routes = {}) {
   const emptyState = board?.querySelector('.vtt-board__empty');
   const status = document.getElementById('active-scene-status');
   const sceneName = document.getElementById('active-scene-name');
+  const mapLevelNav = document.querySelector('[data-map-level-nav]');
+  const mapLevelNavName = document.querySelector('[data-map-level-nav-name]');
+  const mapLevelNavDown = document.querySelector('[data-action="view-map-level-down"]');
+  const mapLevelNavUp = document.querySelector('[data-action="view-map-level-up"]');
   const appMain = document.getElementById('vtt-main');
   const combatTrackerRoot = document.querySelector('[data-combat-tracker]');
   const combatTrackerWaiting = combatTrackerRoot?.querySelector('[data-combat-tracker-waiting]');
@@ -1770,6 +1775,16 @@ export function mountBoardInteractions(store, routes = {}) {
       handleGroupSelectedTokens();
     });
   }
+
+  mapLevelNavDown?.addEventListener('click', (event) => {
+    event.preventDefault();
+    handleMapLevelNavigationClick('down');
+  });
+
+  mapLevelNavUp?.addEventListener('click', (event) => {
+    event.preventDefault();
+    handleMapLevelNavigationClick('up');
+  });
 
   if (sceneListContainer) {
     sceneListContainer.addEventListener('click', (event) => {
@@ -4894,6 +4909,94 @@ export function mountBoardInteractions(store, routes = {}) {
     const mapLevels = resolveSceneMapLevelsState(state.boardState ?? {}, sceneId);
     mapLevelRenderer.sync(mapLevels, { sceneGrid: state.grid ?? null, view: viewState });
     mapLevelCutoutTool.notifyMapLevelsChange(mapLevels);
+    syncMapLevelNavigationControls(mapLevels);
+  }
+
+  function syncMapLevelNavigationControls(mapLevelsState = null) {
+    if (!mapLevelNav) {
+      return;
+    }
+
+    const gmUser = isGmUser();
+    const controls = getMapLevelNavigationControlState(mapLevelsState);
+    const visible = gmUser && controls.hasLevels;
+    mapLevelNav.hidden = !visible;
+    mapLevelNav.setAttribute('aria-hidden', visible ? 'false' : 'true');
+
+    if (!visible) {
+      if (mapLevelNavName) {
+        mapLevelNavName.textContent = 'Base map';
+        mapLevelNavName.title = '';
+      }
+      setStackButtonState(mapLevelNavDown, true);
+      setStackButtonState(mapLevelNavUp, true);
+      return;
+    }
+
+    const levelName = controls.currentLevel?.name || 'Map Level';
+    if (mapLevelNavName) {
+      mapLevelNavName.textContent = levelName;
+      mapLevelNavName.title = levelName;
+    }
+
+    setStackButtonState(mapLevelNavDown, !controls.canMoveDown);
+    setStackButtonState(mapLevelNavUp, !controls.canMoveUp);
+  }
+
+  function handleMapLevelNavigationClick(direction = 'up') {
+    if (!isGmUser()) {
+      return;
+    }
+
+    const activeSceneId = getActiveSceneId();
+    if (!activeSceneId || typeof boardApi.updateState !== 'function') {
+      return;
+    }
+
+    const state = boardApi.getState?.() ?? {};
+    const mapLevels = resolveSceneTokenLevelState(state, activeSceneId);
+    const controls = getMapLevelNavigationControlState(mapLevels);
+    const targetLevel = getAdjacentTokenLevel(mapLevels, controls.currentLevelId, direction);
+    if (!targetLevel?.id) {
+      syncMapLevelNavigationControls(mapLevels);
+      return;
+    }
+
+    let updated = false;
+    boardApi.updateState?.((draft) => {
+      const sceneEntry = ensureSceneStateDraftEntry(draft, activeSceneId);
+      if (!sceneEntry) {
+        return;
+      }
+
+      const normalizedMapLevels = normalizeMapLevelsState(sceneEntry.mapLevels ?? null, {
+        sceneGrid: sceneEntry.grid ?? null,
+      });
+      if (
+        normalizedMapLevels.activeLevelId === targetLevel.id ||
+        !normalizedMapLevels.levels.some((level) => level?.id === targetLevel.id)
+      ) {
+        return;
+      }
+
+      normalizedMapLevels.activeLevelId = targetLevel.id;
+      sceneEntry.mapLevels = normalizedMapLevels;
+      updated = true;
+    });
+
+    if (!updated) {
+      syncMapLevelNavigationControls(mapLevels);
+      return;
+    }
+
+    markSceneStateDirty(activeSceneId);
+    persistBoardStateSnapshot();
+
+    const latestState = boardApi.getState?.() ?? {};
+    syncMapLevelsForState(latestState, activeSceneId);
+    if (status) {
+      status.textContent = `Viewing ${targetLevel.name || 'map level'}.`;
+    }
   }
 
   function syncOverlayLayer(rawOverlay) {

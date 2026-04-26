@@ -245,6 +245,21 @@ export function getTokenLevelControlState(mapLevelsState = null, placement = {})
   };
 }
 
+export function getMapLevelNavigationControlState(mapLevelsState = null) {
+  const levels = getOrderedTokenMapLevels(mapLevelsState?.levels ?? []);
+  const currentLevelId = resolveTokenLevelId({}, mapLevelsState);
+  const currentLevel = levels.find((level) => level.id === currentLevelId) ?? null;
+
+  return {
+    hasLevels: levels.length > 0,
+    levels,
+    currentLevel,
+    currentLevelId,
+    canMoveDown: Boolean(getAdjacentTokenLevel(mapLevelsState, currentLevelId, 'down')),
+    canMoveUp: Boolean(getAdjacentTokenLevel(mapLevelsState, currentLevelId, 'up')),
+  };
+}
+
 function createTokenMapLevelVisibilityResult({
   visible,
   fullyVisible = false,

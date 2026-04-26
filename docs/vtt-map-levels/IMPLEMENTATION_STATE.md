@@ -6,7 +6,7 @@ knows what changed, what remains, and what has been tested.
 
 ## Current Status
 
-- Status: Cutout-aware lower-level token visibility and interaction implemented.
+- Status: GM board-header map level navigation implemented after Phase 6B.
 - Last updated: 2026-04-26.
 - VTT grid state now supports both square size and calibrated origin offsets.
 - GM scene controls now include an Align Grid action that captures two opposite corners
@@ -31,6 +31,10 @@ knows what changed, what remains, and what has been tested.
 - GM token settings now show manual level up/down controls when the active scene has
   map levels, moving the token between z-index ordered levels through the normal
   placement update sync path.
+- GM board header now shows simple map level down/up navigation near the active scene
+  name when the active scene has map levels.
+- GM board-header level navigation updates scene-scoped `mapLevels.activeLevelId` through
+  the existing board-state save/sync path.
 - Rendered token DOM now carries the resolved map level id used by level-aware filtering
   and hit testing.
 - Non-GM token and aura rendering now filters placements to the active visible map level
@@ -46,25 +50,19 @@ knows what changed, what remains, and what has been tested.
 - Map level controls save through scene-scoped `sceneState[sceneId].mapLevels`; no
   top-level `mapLevels` field is introduced.
 - Old overlay system is still active.
-- Player-level navigation, automatic transitions, and overlay replacement work have not
-  started.
+- Player-specific level navigation, automatic transitions, and overlay replacement work
+  have not started.
 - Tests run for the latest phase:
-  - `node dnd/vtt/assets/js/ui/__tests__/token-levels.test.mjs` - passing, 11 tests.
-  - `node dnd/vtt/assets/js/state/__tests__/placement-normalization.test.mjs` -
-    passing, 5 tests.
-  - `node dnd/vtt/assets/js/ui/__tests__/scene-manager-map-levels.test.mjs` - passing,
-    3 tests.
-  - `node dnd/vtt/assets/js/ui/__tests__/map-level-renderer.test.mjs` - passing, 6 tests.
+  - Browser verification was attempted but blocked because no PHP server was reachable
+    on `localhost:8000`, `localhost:8080`, or `localhost:3000`; `php` is unavailable on
+    PATH; and the in-app browser Node REPL requires Node >= 22.22 while this environment
+    resolves Node 22.20.
+  - `node dnd/vtt/assets/js/ui/__tests__/token-levels.test.mjs` - passing, 12 tests.
   - `node --check dnd/vtt/assets/js/ui/token-levels.js` - passing.
-  - `node --check dnd/vtt/assets/js/ui/map-level-renderer.js` - passing.
-  - `node --check dnd/vtt/assets/js/ui/scene-manager.js` - passing.
   - `node --check dnd/vtt/assets/js/ui/board-interactions.js` - passing.
-  - `node --check dnd/vtt/assets/js/ui/token-interactions.js` - passing.
-  - `node --check dnd/vtt/assets/js/state/normalize/placements.js` - passing.
-  - `npm.cmd test` - passing, 381 tests.
+  - `npm.cmd test` - passing, 382 tests after Phase 6C.
   - `git diff --check` - passing.
-  - PHP linting was not run for Phase 6 because no PHP files changed and `php` remains
-    unavailable on PATH.
+  - PHP linting was not run because `php` remains unavailable on PATH.
 - User decisions captured:
   - Cutouts should work square-by-square, similar to fog editing, but they remove/hide
     parts of only the currently edited map level.
@@ -487,6 +485,53 @@ Remaining notes:
   and clicks that token only through the cutout.
 - Manual multi-client verification is still needed to confirm cutout edits and token
   level changes combine correctly through the existing board-state sync path.
+
+## Completed Phase 6C: GM Board-Header Level Navigation
+
+Date completed: 2026-04-26.
+
+Changed files:
+
+- `dnd/vtt/components/SceneBoard.php`
+- `dnd/vtt/assets/css/board.css`
+- `dnd/vtt/assets/js/ui/board-interactions.js`
+- `dnd/vtt/assets/js/ui/token-levels.js`
+- `dnd/vtt/assets/js/ui/__tests__/token-levels.test.mjs`
+- `dnd/data/version.json`
+- `docs/vtt-map-levels/IMPLEMENTATION_STATE.md`
+
+Implementation notes:
+
+- Added GM-only map level down/up controls in the board header next to the active scene
+  name. The controls are hidden unless the active scene has map levels.
+- The board-header controls display the active map level name, disable at the bottom/top
+  of the z-index ordered level stack, and update the scene-scoped
+  `sceneState[sceneId].mapLevels.activeLevelId`.
+- Header navigation persists through the existing scene-state dirty tracking and
+  board-state save path. It does not remove old overlays and does not create automatic
+  transition zones.
+- Added a pure helper for active map level navigation control state, covered by the
+  token-level helper tests.
+
+Tests run for this phase:
+
+- `node --check dnd/vtt/assets/js/ui/token-levels.js` - passing.
+- `node --check dnd/vtt/assets/js/ui/board-interactions.js` - passing.
+- `node dnd/vtt/assets/js/ui/__tests__/token-levels.test.mjs` - passing, 12 tests.
+- `npm.cmd test` - passing, 382 tests.
+- `git diff --check` - passing.
+- PHP linting was not run because `php` remains unavailable on PATH.
+
+Remaining notes:
+
+- Manual browser verification is still blocked in this environment: no PHP server was
+  reachable on `localhost:8000`, `localhost:8080`, or `localhost:3000`; `php` is
+  unavailable on PATH; and the in-app browser Node REPL requires Node >= 22.22 while this
+  environment resolves Node 22.20.
+- Once a browser/server is available, verify that GM header level navigation changes the
+  active level, refreshes/persists `activeLevelId`, and combines correctly with cutout
+  lower-token visibility/click-through.
+- Player-specific level navigation and Phase 7 transition zones have not started.
 
 ## Main Findings
 
