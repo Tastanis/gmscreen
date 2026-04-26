@@ -9,6 +9,16 @@ function renderVttSceneBoard(bool $isGm = false): string
         <header class="vtt-board__header">
             <div class="vtt-board__scene-meta">
                 <h1 id="active-scene-name" class="vtt-board__title">No Active Scene</h1>
+                <p
+                    class="vtt-board__level-indicator"
+                    data-map-level-indicator
+                    hidden
+                    aria-hidden="true"
+                    aria-live="polite"
+                >
+                    <span class="vtt-board__level-indicator-label">Level:</span>
+                    <span class="vtt-board__level-indicator-value" data-map-level-indicator-value>&mdash;</span>
+                </p>
                 <?php if ($isGm): ?>
                 <div
                     class="vtt-board__level-nav"

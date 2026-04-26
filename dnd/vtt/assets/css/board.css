@@ -144,6 +144,33 @@
   white-space: nowrap;
 }
 
+.vtt-board__level-indicator {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.35rem;
+  margin: 0;
+  padding: 0.15rem 0.5rem;
+  border: 1px solid rgba(148, 163, 184, 0.28);
+  border-radius: calc(var(--vtt-radius) * 0.55);
+  background: rgba(15, 23, 42, 0.28);
+  color: var(--vtt-text-primary);
+  font-size: 0.78rem;
+  line-height: 1.2;
+}
+
+.vtt-board__level-indicator[hidden] {
+  display: none !important;
+}
+
+.vtt-board__level-indicator-label {
+  color: var(--vtt-text-muted);
+  font-weight: 600;
+}
+
+.vtt-board__level-indicator-value {
+  font-weight: 700;
+}
+
 .vtt-board__tracker {
   display: flex;
   align-items: flex-start;

@@ -8,6 +8,7 @@ import {
   normalizeClaimedTokensMap,
   normalizeUserLevelStateEntry,
   normalizeUserLevelStateMap,
+  resolveActiveLevelIdForUser,
   resolvePlacementLevelId,
 } from '../normalize/map-levels.js';
 import { normalizeSceneBoardState } from '../normalize/scene-board-state.js';
@@ -166,3 +167,104 @@ describe('Levels v2 — scene-board-state normalization preserves new fields', (
     assert.deepEqual(normalized['scene-1'].userLevelState, {});
   });
 });
+
+describe('Levels v2 — resolveActiveLevelIdForUser', () => {
+  test('returns BASE_MAP_LEVEL_ID when no scene state is provided', () => {
+    assert.equal(
+      resolveActiveLevelIdForUser({ userId: 'gm' }),
+      BASE_MAP_LEVEL_ID,
+    );
+  });
+
+  test('returns BASE_MAP_LEVEL_ID when the user has no entry', () => {
+    const sceneState = { userLevelState: {} };
+    assert.equal(
+      resolveActiveLevelIdForUser({ sceneState, userId: 'sharon' }),
+      BASE_MAP_LEVEL_ID,
+    );
+  });
+
+  test('returns the stored level id from userLevelState (lowercased userId match)', () => {
+    const sceneState = {
+      userLevelState: { gm: { levelId: 'map-level-a', source: 'manual', updatedAt: 1 } },
+    };
+    assert.equal(
+      resolveActiveLevelIdForUser({ sceneState, userId: 'GM' }),
+      'map-level-a',
+    );
+  });
+
+  test('rejects an unknown level id when validLevelIds is provided', () => {
+    const sceneState = {
+      userLevelState: { gm: { levelId: 'gone', source: 'manual', updatedAt: 1 } },
+    };
+    assert.equal(
+      resolveActiveLevelIdForUser({
+        sceneState,
+        userId: 'gm',
+        validLevelIds: ['level-0', 'map-level-a'],
+      }),
+      BASE_MAP_LEVEL_ID,
+    );
+  });
+
+  test('falls back to the most recent claimed token level', () => {
+    const sceneState = {
+      claimedTokens: { 't1': 'indigo', 't2': 'indigo' },
+      userLevelState: {},
+    };
+    const placements = [
+      { id: 't1', levelId: 'map-level-a', _lastModified: 100 },
+      { id: 't2', levelId: 'map-level-b', _lastModified: 500 },
+    ];
+    assert.equal(
+      resolveActiveLevelIdForUser({
+        sceneState,
+        userId: 'indigo',
+        placements,
+        validLevelIds: ['level-0', 'map-level-a', 'map-level-b'],
+      }),
+      'map-level-b',
+    );
+  });
+
+  test('userLevelState takes priority over claimed token level', () => {
+    const sceneState = {
+      claimedTokens: { 't1': 'indigo' },
+      userLevelState: {
+        indigo: { levelId: 'map-level-x', source: 'manual', updatedAt: 200 },
+      },
+    };
+    const placements = [
+      { id: 't1', levelId: 'map-level-a', _lastModified: 999 },
+    ];
+    assert.equal(
+      resolveActiveLevelIdForUser({
+        sceneState,
+        userId: 'indigo',
+        placements,
+        validLevelIds: ['level-0', 'map-level-a', 'map-level-x'],
+      }),
+      'map-level-x',
+    );
+  });
+
+  test('claim fallback skips other users tokens', () => {
+    const sceneState = {
+      claimedTokens: { 't1': 'sharon' },
+      userLevelState: {},
+    };
+    const placements = [
+      { id: 't1', levelId: 'map-level-a', _lastModified: 1 },
+    ];
+    assert.equal(
+      resolveActiveLevelIdForUser({
+        sceneState,
+        userId: 'indigo',
+        placements,
+      }),
+      BASE_MAP_LEVEL_ID,
+    );
+  });
+});
+

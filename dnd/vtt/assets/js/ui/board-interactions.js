@@ -26,7 +26,12 @@ import {
   normalizeGridOffset,
   normalizeGridState,
 } from '../state/normalize/grid.js';
-import { normalizeMapLevelsState } from '../state/normalize/map-levels.js';
+import {
+  BASE_MAP_LEVEL_ID,
+  buildLevelViewModel,
+  normalizeMapLevelsState,
+  resolveActiveLevelIdForUser,
+} from '../state/normalize/map-levels.js';
 import { initializePusher, getSocketId, isPusherConnected } from '../services/pusher-service.js';
 import { createBoardStatePoller } from '../services/board-state-poller.js';
 import { applyBoardStateOpsLocally } from '../services/board-state-op-applier.js';
@@ -490,6 +495,8 @@ export function mountBoardInteractions(store, routes = {}) {
   const mapLevelNavName = document.querySelector('[data-map-level-nav-name]');
   const mapLevelNavDown = document.querySelector('[data-action="view-map-level-down"]');
   const mapLevelNavUp = document.querySelector('[data-action="view-map-level-up"]');
+  const mapLevelIndicator = document.querySelector('[data-map-level-indicator]');
+  const mapLevelIndicatorValue = document.querySelector('[data-map-level-indicator-value]');
   const appMain = document.getElementById('vtt-main');
   const combatTrackerRoot = document.querySelector('[data-combat-tracker]');
   const combatTrackerWaiting = combatTrackerRoot?.querySelector('[data-combat-tracker-waiting]');
@@ -1604,7 +1611,17 @@ export function mountBoardInteractions(store, routes = {}) {
         : {};
       const sceneGrid = sceneEntry.grid ?? null;
       const mapLevels = normalizeMapLevelsState(sceneEntry.mapLevels ?? null, { sceneGrid });
-      const activeLevelId = getActiveMapLevelId(sceneEntry.mapLevels ?? null, sceneGrid);
+      // Levels v2: cutout edit affordances follow the GM's per-user
+      // viewer level. Fall back to the legacy `activeLevelId` for older
+      // scenes that have not yet been touched in v2.
+      const viewerLevelId = getViewerLevelIdForCurrentUser(
+        boardApi.getState?.() ?? {},
+        sceneId,
+      );
+      const legacyActiveLevelId = getActiveMapLevelId(sceneEntry.mapLevels ?? null, sceneGrid);
+      const activeLevelId = viewerLevelId && viewerLevelId !== BASE_MAP_LEVEL_ID
+        ? viewerLevelId
+        : legacyActiveLevelId;
       const level = mapLevels.levels.find((entry) => entry.id === levelId) ?? null;
       const hasMap = typeof level?.mapUrl === 'string' && level.mapUrl.trim().length > 0;
       const isVisible = level ? level.visible !== false : false;
@@ -4914,20 +4931,94 @@ export function mountBoardInteractions(store, routes = {}) {
     return boardState.overlay ?? null;
   }
 
-  function syncMapLevelsForState(state = {}, sceneId = null) {
-    const mapLevels = resolveSceneMapLevelsState(state.boardState ?? {}, sceneId);
-    mapLevelRenderer.sync(mapLevels, { sceneGrid: state.grid ?? null, view: viewState });
-    mapLevelCutoutTool.notifyMapLevelsChange(mapLevels);
-    syncMapLevelNavigationControls(mapLevels);
+  // Levels v2: resolve the per-user viewer level for a scene. The GM
+  // navigation, the renderer's "active" metadata, and the player-visible
+  // level indicator all read from this so each user sees their own
+  // level (driven by `userLevelState[userId]`) rather than the legacy
+  // scene-global `mapLevels.activeLevelId`.
+  function getViewerLevelIdForCurrentUser(state = {}, sceneId = null) {
+    const userId = getCurrentUserId();
+    if (!sceneId) {
+      return BASE_MAP_LEVEL_ID;
+    }
+    const boardState = state?.boardState && typeof state.boardState === 'object'
+      ? state.boardState
+      : {};
+    const sceneStateEntries = boardState.sceneState && typeof boardState.sceneState === 'object'
+      ? boardState.sceneState
+      : {};
+    const sceneEntry = sceneStateEntries[sceneId] && typeof sceneStateEntries[sceneId] === 'object'
+      ? sceneStateEntries[sceneId]
+      : null;
+    const placements = Array.isArray(boardState.placements?.[sceneId])
+      ? boardState.placements[sceneId]
+      : [];
+    const normalizedMapLevels = normalizeMapLevelsState(sceneEntry?.mapLevels ?? null, {
+      sceneGrid: sceneEntry?.grid ?? null,
+    });
+    const validLevelIds = [BASE_MAP_LEVEL_ID];
+    normalizedMapLevels.levels.forEach((level) => {
+      if (level && typeof level.id === 'string' && level.id) {
+        validLevelIds.push(level.id);
+      }
+    });
+    return resolveActiveLevelIdForUser({
+      sceneState: sceneEntry,
+      userId,
+      placements,
+      validLevelIds,
+    });
   }
 
-  function syncMapLevelNavigationControls(mapLevelsState = null) {
+  function getViewerLevelDisplayName(state = {}, sceneId = null, viewerLevelId = null) {
+    if (!sceneId || typeof viewerLevelId !== 'string' || !viewerLevelId) {
+      return null;
+    }
+    if (viewerLevelId === BASE_MAP_LEVEL_ID) {
+      return 'Level 0';
+    }
+    const boardState = state?.boardState && typeof state.boardState === 'object'
+      ? state.boardState
+      : {};
+    const sceneStateEntries = boardState.sceneState && typeof boardState.sceneState === 'object'
+      ? boardState.sceneState
+      : {};
+    const sceneEntry = sceneStateEntries[sceneId] && typeof sceneStateEntries[sceneId] === 'object'
+      ? sceneStateEntries[sceneId]
+      : null;
+    const viewModel = buildLevelViewModel({
+      mapLevels: normalizeMapLevelsState(sceneEntry?.mapLevels ?? null, {
+        sceneGrid: sceneEntry?.grid ?? null,
+      }),
+      sceneGrid: sceneEntry?.grid ?? null,
+    });
+    const match = viewModel.find((entry) => entry.id === viewerLevelId);
+    if (match) {
+      return match.displayLabel || match.name || null;
+    }
+    return null;
+  }
+
+  function syncMapLevelsForState(state = {}, sceneId = null) {
+    const mapLevels = resolveSceneMapLevelsState(state.boardState ?? {}, sceneId);
+    const viewerLevelId = getViewerLevelIdForCurrentUser(state, sceneId);
+    mapLevelRenderer.sync(mapLevels, {
+      sceneGrid: state.grid ?? null,
+      view: viewState,
+      activeLevelId: viewerLevelId,
+    });
+    mapLevelCutoutTool.notifyMapLevelsChange(mapLevels);
+    syncMapLevelNavigationControls(mapLevels, { currentLevelId: viewerLevelId });
+    syncMapLevelIndicator(state, sceneId, viewerLevelId);
+  }
+
+  function syncMapLevelNavigationControls(mapLevelsState = null, options = {}) {
     if (!mapLevelNav) {
       return;
     }
 
     const gmUser = isGmUser();
-    const controls = getMapLevelNavigationControlState(mapLevelsState);
+    const controls = getMapLevelNavigationControlState(mapLevelsState, options);
     const visible = gmUser && controls.hasLevels;
     mapLevelNav.hidden = !visible;
     mapLevelNav.setAttribute('aria-hidden', visible ? 'false' : 'true');
@@ -4952,6 +5043,38 @@ export function mountBoardInteractions(store, routes = {}) {
     setStackButtonState(mapLevelNavUp, !controls.canMoveUp);
   }
 
+  function syncMapLevelIndicator(state = {}, sceneId = null, viewerLevelId = null) {
+    if (!mapLevelIndicator) {
+      return;
+    }
+
+    const resolvedLevelId = viewerLevelId ?? getViewerLevelIdForCurrentUser(state, sceneId);
+    if (!sceneId || !resolvedLevelId) {
+      mapLevelIndicator.hidden = true;
+      mapLevelIndicator.setAttribute('aria-hidden', 'true');
+      if (mapLevelIndicatorValue) {
+        mapLevelIndicatorValue.textContent = '\u2014';
+      }
+      return;
+    }
+
+    const displayName = getViewerLevelDisplayName(state, sceneId, resolvedLevelId);
+    if (!displayName) {
+      mapLevelIndicator.hidden = true;
+      mapLevelIndicator.setAttribute('aria-hidden', 'true');
+      if (mapLevelIndicatorValue) {
+        mapLevelIndicatorValue.textContent = '\u2014';
+      }
+      return;
+    }
+
+    mapLevelIndicator.hidden = false;
+    mapLevelIndicator.setAttribute('aria-hidden', 'false');
+    if (mapLevelIndicatorValue) {
+      mapLevelIndicatorValue.textContent = displayName;
+    }
+  }
+
   function handleMapLevelNavigationClick(direction = 'up') {
     if (!isGmUser()) {
       return;
@@ -4964,13 +5087,23 @@ export function mountBoardInteractions(store, routes = {}) {
 
     const state = boardApi.getState?.() ?? {};
     const mapLevels = resolveSceneTokenLevelState(state, activeSceneId);
-    const controls = getMapLevelNavigationControlState(mapLevels);
+    // Levels v2: GM browsing operates on the GM's own per-user level
+    // (`userLevelState[gmId]`), not the legacy scene-global active id.
+    const currentLevelId = getViewerLevelIdForCurrentUser(state, activeSceneId);
+    const controls = getMapLevelNavigationControlState(mapLevels, { currentLevelId });
     const targetLevel = getAdjacentTokenLevel(mapLevels, controls.currentLevelId, direction);
     if (!targetLevel?.id) {
-      syncMapLevelNavigationControls(mapLevels);
+      syncMapLevelNavigationControls(mapLevels, { currentLevelId });
       return;
     }
 
+    const gmUserId = getCurrentUserId();
+    if (!gmUserId) {
+      syncMapLevelNavigationControls(mapLevels, { currentLevelId });
+      return;
+    }
+
+    const updatedAt = Date.now();
     let updated = false;
     boardApi.updateState?.((draft) => {
       const sceneEntry = ensureSceneStateDraftEntry(draft, activeSceneId);
@@ -4978,28 +5111,38 @@ export function mountBoardInteractions(store, routes = {}) {
         return;
       }
 
-      const normalizedMapLevels = normalizeMapLevelsState(sceneEntry.mapLevels ?? null, {
-        sceneGrid: sceneEntry.grid ?? null,
-      });
-      if (
-        normalizedMapLevels.activeLevelId === targetLevel.id ||
-        !normalizedMapLevels.levels.some((level) => level?.id === targetLevel.id)
-      ) {
+      if (!sceneEntry.userLevelState || typeof sceneEntry.userLevelState !== 'object') {
+        sceneEntry.userLevelState = {};
+      }
+      const existing = sceneEntry.userLevelState[gmUserId];
+      if (existing && existing.levelId === targetLevel.id && existing.source === 'manual') {
         return;
       }
-
-      normalizedMapLevels.activeLevelId = targetLevel.id;
-      sceneEntry.mapLevels = normalizedMapLevels;
+      sceneEntry.userLevelState[gmUserId] = {
+        levelId: targetLevel.id,
+        source: 'manual',
+        updatedAt,
+      };
       updated = true;
     });
 
     if (!updated) {
-      syncMapLevelNavigationControls(mapLevels);
+      syncMapLevelNavigationControls(mapLevels, { currentLevelId });
       return;
     }
 
     markSceneStateDirty(activeSceneId);
-    persistBoardStateSnapshot();
+    // Levels v2: broadcast the GM's per-user level change as a
+    // `user-level.set` op so other clients pick it up via the existing
+    // op applier path. The op applier mirrors the local mutation above.
+    const userLevelOp = {
+      type: 'user-level.set',
+      sceneId: activeSceneId,
+      userId: gmUserId,
+      levelId: targetLevel.id,
+      source: 'manual',
+    };
+    persistBoardStateSnapshot({}, [userLevelOp]);
 
     const latestState = boardApi.getState?.() ?? {};
     syncMapLevelsForState(latestState, activeSceneId);
@@ -15393,7 +15536,22 @@ function createMapLevelCutoutTool() {
       : {};
     const sceneGrid = sceneEntry.grid ?? state.grid ?? null;
     const mapLevels = normalizeMapLevelsState(sceneEntry.mapLevels ?? null, { sceneGrid });
-    const activeId = typeof mapLevels.activeLevelId === 'string' ? mapLevels.activeLevelId : '';
+    // Levels v2: cutout editing follows the GM's per-user viewer level
+    // (`userLevelState[gmId]`) rather than the legacy scene-global
+    // `mapLevels.activeLevelId`. When the GM has not yet browsed in v2,
+    // `getViewerLevelIdForCurrentUser` returns BASE_MAP_LEVEL_ID — which
+    // is not a stored level — so we fall back to the legacy active id
+    // so existing scenes still surface the right cutout-edit context.
+    // Per §5.1 the cutout editor is intentionally disabled on Level 0,
+    // so once Step 3 lets the GM explicitly browse to Level 0 we can
+    // drop this fallback.
+    const viewerLevelId = getViewerLevelIdForCurrentUser(state, sceneId);
+    const isBaseViewer = viewerLevelId === BASE_MAP_LEVEL_ID;
+    const activeId = !isBaseViewer && typeof viewerLevelId === 'string' && viewerLevelId
+      ? viewerLevelId
+      : typeof mapLevels.activeLevelId === 'string'
+        ? mapLevels.activeLevelId
+        : '';
     const requestedId = typeof levelId === 'string' && levelId.trim()
       ? levelId.trim()
       : activeId;

@@ -307,6 +307,38 @@ describe('map level renderer', () => {
     assert.equal(renderer.element.querySelector('[data-map-level-id="upper"]'), null);
   });
 
+  test('honors an explicit activeLevelId override on sync (Levels v2)', () => {
+    // Levels v2: per-user viewer level is plumbed through `sync` so the
+    // rendered `dataset.activeMapLevelId` reflects the current user's
+    // `userLevelState` entry instead of the legacy
+    // `mapLevels.activeLevelId` from scene state. `level-0` is a valid
+    // override even though it isn't part of `mapLevels.levels`.
+    const { renderer } = createRendererHarness();
+
+    renderer.sync(
+      {
+        activeLevelId: 'upper',
+        levels: [
+          { id: 'upper', mapUrl: '/maps/upper.png', zIndex: 1 },
+        ],
+      },
+      { activeLevelId: 'level-0' }
+    );
+
+    assert.equal(renderer.element.dataset.activeMapLevelId, 'level-0');
+  });
+
+  test('falls back to mapLevels.activeLevelId when no override is supplied', () => {
+    const { renderer } = createRendererHarness();
+
+    renderer.sync({
+      activeLevelId: 'upper',
+      levels: [{ id: 'upper', mapUrl: '/maps/upper.png', zIndex: 1 }],
+    });
+
+    assert.equal(renderer.element.dataset.activeMapLevelId, 'upper');
+  });
+
   test('reset clears rendered levels and hides the stack', () => {
     const { renderer } = createRendererHarness();
 

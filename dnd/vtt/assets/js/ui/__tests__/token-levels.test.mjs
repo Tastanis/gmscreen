@@ -90,6 +90,44 @@ describe('token level helpers', () => {
     assert.deepEqual(controls.levels.map((level) => level.id), ['ground', 'upper', 'roof']);
   });
 
+  test('navigation control state honors an explicit currentLevelId override', () => {
+    // Levels v2: GM browsing supplies its per-user level via the
+    // `currentLevelId` option so the nav reflects `userLevelState[gmId]`
+    // instead of the legacy scene-global active id.
+    const mapLevels = {
+      activeLevelId: 'upper',
+      levels: [
+        { id: 'ground', name: 'Ground', zIndex: 0 },
+        { id: 'upper', name: 'Upper', zIndex: 1 },
+        { id: 'roof', name: 'Roof', zIndex: 2 },
+      ],
+    };
+
+    const controls = getMapLevelNavigationControlState(mapLevels, {
+      currentLevelId: 'ground',
+    });
+    assert.equal(controls.currentLevel?.id, 'ground');
+    assert.equal(controls.canMoveDown, false);
+    assert.equal(controls.canMoveUp, true);
+  });
+
+  test('navigation control state ignores an unknown currentLevelId override', () => {
+    const mapLevels = {
+      activeLevelId: 'upper',
+      levels: [
+        { id: 'ground', name: 'Ground', zIndex: 0 },
+        { id: 'upper', name: 'Upper', zIndex: 1 },
+      ],
+    };
+
+    const controls = getMapLevelNavigationControlState(mapLevels, {
+      currentLevelId: 'level-0',
+    });
+    // Falls back to the scene's legacy active id when the override is
+    // not one of the stored Level 1+ entries.
+    assert.equal(controls.currentLevel?.id, 'upper');
+  });
+
   test('resolves scene-scoped map level state from board state', () => {
     const mapLevels = resolveSceneTokenLevelState({
       boardState: {
