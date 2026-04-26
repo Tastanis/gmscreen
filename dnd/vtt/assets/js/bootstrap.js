@@ -55,10 +55,12 @@ async function bootstrap() {
     user: userContext,
   });
 
-  mountSettingsPanel(routes, { getState, subscribe, updateState }, userContext);
+  const storeApi = { getState, subscribe, updateState };
+
+  mountSettingsPanel(routes, storeApi, userContext);
   const chatParticipants = Array.isArray(config.chatParticipants) ? config.chatParticipants : [];
   mountChatPanel(routes, userContext, chatParticipants);
-  mountBoardInteractions({ getState, subscribe, updateState }, routes);
+  mountBoardInteractions(storeApi, routes);
   mountDragRuler();
   mountDrawingTool({
     onDrawingChange: (drawings) => {

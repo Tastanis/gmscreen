@@ -2030,8 +2030,9 @@ export function mountBoardInteractions(store, routes = {}) {
     let useDelta = false;
 
     if (!useOpsPath) {
-      // Use delta-only saves when we have dirty tracking info
-      useDelta = hasDirtyState();
+      // Use delta-only saves when we have dirty tracking info, unless a
+      // caller with no dirty-tracking context needs to flush a full snapshot.
+      useDelta = options?.forceFullSnapshot === true ? false : hasDirtyState();
       snapshot = buildBoardStateSnapshotForPersistence(boardState, { isGm: isGmUser, deltaOnly: useDelta });
       if (!snapshot) {
         console.warn('[VTT] Cannot persist board state: failed to build snapshot');
@@ -3927,8 +3928,8 @@ export function mountBoardInteractions(store, routes = {}) {
   };
 
   // Expose persist so fog-of-war.js can flush dirty state to the server
-  boardApi._persistBoardState = () => {
-    persistBoardStateSnapshot();
+  boardApi._persistBoardState = (options = {}, opsOverride = null) => {
+    return persistBoardStateSnapshot(options, opsOverride);
   };
 
   applyStateToBoard(boardApi.getState?.() ?? {});

@@ -107,12 +107,43 @@ export function mountSettingsPanel(routes, store, user = {}) {
       return;
     }
 
+    if (typeof storeApi._markSceneStateDirty === 'function') {
+      const activeSceneId = latest?.boardState?.activeSceneId ?? null;
+      if (activeSceneId) {
+        storeApi._markSceneStateDirty(activeSceneId);
+      }
+    }
+
+    if (typeof storeApi._persistBoardState === 'function') {
+      return storeApi._persistBoardState({ forceFullSnapshot: true });
+    }
+
     const boardState = latest?.boardState ?? null;
     if (!boardState || typeof boardState !== 'object') {
       return;
     }
 
-    persistBoardState(routes.state, boardState);
+    const savePromise = persistBoardState(routes.state, boardState);
+    if (savePromise && typeof savePromise.then === 'function') {
+      savePromise.then((result) => {
+        const numericVersion =
+          typeof result?.data?._version === 'number'
+            ? result.data._version
+            : Number.parseInt(result?.data?._version, 10);
+        if (!result?.success || !Number.isFinite(numericVersion) || numericVersion <= 0) {
+          return result;
+        }
+
+        storeApi.updateState?.((draft) => {
+          if (!draft.boardState || typeof draft.boardState !== 'object') {
+            draft.boardState = {};
+          }
+          draft.boardState._version = Math.trunc(numericVersion);
+        });
+        return result;
+      });
+    }
+    return savePromise;
   };
 
   const syncGridControls = (state) => {

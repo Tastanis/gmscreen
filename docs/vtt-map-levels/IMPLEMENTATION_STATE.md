@@ -6,7 +6,8 @@ knows what changed, what remains, and what has been tested.
 
 ## Current Status
 
-- Status: GM board-header map level navigation implemented after Phase 6B.
+- Status: GM board-header map level navigation implemented; map-level upload 409 save
+  conflict fix applied.
 - Last updated: 2026-04-26.
 - VTT grid state now supports both square size and calibrated origin offsets.
 - GM scene controls now include an Align Grid action that captures two opposite corners
@@ -20,6 +21,9 @@ knows what changed, what remains, and what has been tested.
 - GM scene manager controls now support adding map levels, uploading level images,
   renaming, deleting, toggling visibility, changing opacity, raising/lowering z-index
   order, and selecting the active level.
+- GM scene manager and settings saves now share the board persistence path so successful
+  saves advance the client's board `_version`; this prevents repeated 409 conflicts after
+  uploading or editing more than one map level.
 - GM scene manager controls now expose a Cutouts action for the active visible map
   level on the active scene.
 - GM board editing now supports grid-square rectangle selection for the active map
@@ -53,14 +57,18 @@ knows what changed, what remains, and what has been tested.
 - Player-specific level navigation, automatic transitions, and overlay replacement work
   have not started.
 - Tests run for the latest phase:
-  - Browser verification was attempted but blocked because no PHP server was reachable
-    on `localhost:8000`, `localhost:8080`, or `localhost:3000`; `php` is unavailable on
-    PATH; and the in-app browser Node REPL requires Node >= 22.22 while this environment
-    resolves Node 22.20.
-  - `node dnd/vtt/assets/js/ui/__tests__/token-levels.test.mjs` - passing, 12 tests.
-  - `node --check dnd/vtt/assets/js/ui/token-levels.js` - passing.
+  - Manual browser verification of the deployed site is still needed after upload because
+    this workspace does not have a reachable PHP server.
+  - `node --check dnd/vtt/assets/js/bootstrap.js` - passing.
   - `node --check dnd/vtt/assets/js/ui/board-interactions.js` - passing.
-  - `npm.cmd test` - passing, 382 tests after Phase 6C.
+  - `node --check dnd/vtt/assets/js/ui/scene-manager.js` - passing.
+  - `node --check dnd/vtt/assets/js/ui/settings-panel.js` - passing.
+  - `node dnd/vtt/assets/js/ui/__tests__/scene-manager-map-levels.test.mjs` - passing,
+    3 tests.
+  - `node dnd/vtt/assets/js/ui/__tests__/token-levels.test.mjs` - passing, 12 tests.
+  - `node --test dnd/vtt/assets/js/ui/__tests__/map-level-renderer.test.mjs` - passing,
+    6 tests.
+  - `npm.cmd test` - passing, 382 tests after the save-conflict fix.
   - `git diff --check` - passing.
   - PHP linting was not run because `php` remains unavailable on PATH.
 - User decisions captured:

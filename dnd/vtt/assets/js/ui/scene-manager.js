@@ -72,9 +72,17 @@ export function renderSceneList(routes, store) {
   render(stateApi.getState?.());
   stateApi.subscribe?.((nextState) => render(nextState));
 
-  const persistBoardStateSnapshot = () => {
+  const persistBoardStateSnapshot = (dirtySceneId = null) => {
     if (!endpoints.state || typeof stateApi.getState !== 'function') {
       return;
+    }
+
+    if (typeof stateApi._markSceneStateDirty === 'function' && dirtySceneId) {
+      stateApi._markSceneStateDirty(dirtySceneId);
+    }
+
+    if (typeof stateApi._persistBoardState === 'function') {
+      return stateApi._persistBoardState({ forceFullSnapshot: true });
     }
 
     const latest = stateApi.getState?.();
@@ -83,7 +91,24 @@ export function renderSceneList(routes, store) {
       return;
     }
 
-    persistBoardState(endpoints.state, boardState);
+    const savePromise = persistBoardState(endpoints.state, boardState);
+    if (savePromise && typeof savePromise.then === 'function') {
+      savePromise.then((result) => {
+        const version = normalizeBoardStateVersion(result?.data?._version);
+        if (!result?.success || version <= 0) {
+          return result;
+        }
+
+        stateApi.updateState?.((draft) => {
+          if (!draft.boardState || typeof draft.boardState !== 'object') {
+            draft.boardState = {};
+          }
+          draft.boardState._version = version;
+        });
+        return result;
+      });
+    }
+    return savePromise;
   };
 
   container.addEventListener('click', async (event) => {
@@ -1227,6 +1252,11 @@ function formatMapLevelOpacityPercent(value) {
   const numeric = Number(value);
   const opacity = Number.isFinite(numeric) ? numeric : 1;
   return Math.round(clamp(opacity, 0, 1) * 100);
+}
+
+function normalizeBoardStateVersion(value) {
+  const numeric = typeof value === 'number' ? value : Number.parseInt(value, 10);
+  return Number.isFinite(numeric) ? Math.max(0, Math.trunc(numeric)) : 0;
 }
 
 function clamp(value, min, max) {
