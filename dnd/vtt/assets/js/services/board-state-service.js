@@ -1,6 +1,10 @@
 import { queueSave } from '../state/persistence.js';
 import { normalizeGridState } from '../state/normalize/grid.js';
-import { normalizeMapLevelsState } from '../state/normalize/map-levels.js';
+import {
+  normalizeClaimedTokensMap,
+  normalizeMapLevelsState,
+  normalizeUserLevelStateMap,
+} from '../state/normalize/map-levels.js';
 
 const SAVE_KEY = 'board-state';
 const COMBAT_SAVE_KEY_PREFIX = 'combat-state';
@@ -122,6 +126,33 @@ function boardStateOpDedupKey(op) {
       return null;
     }
     return `drawing.remove:${sceneId}:${drawingId}`;
+  }
+  // Levels v2 ops. Per-(scene, placement) keys for claim ops and per-(scene,
+  // user) keys for user-level ops so rapid repeats coalesce; the activate op
+  // is broadcast-style so it has no per-user key (later wins on the scene).
+  if (op.type === 'claim.set') {
+    const placementId = typeof op.placementId === 'string' ? op.placementId.trim() : '';
+    if (!placementId) {
+      return null;
+    }
+    return `claim.set:${sceneId}:${placementId}`;
+  }
+  if (op.type === 'claim.clear') {
+    const placementId = typeof op.placementId === 'string' ? op.placementId.trim() : '';
+    if (!placementId) {
+      return null;
+    }
+    return `claim.clear:${sceneId}:${placementId}`;
+  }
+  if (op.type === 'user-level.set') {
+    const userId = typeof op.userId === 'string' ? op.userId.trim().toLowerCase() : '';
+    if (!userId) {
+      return null;
+    }
+    return `user-level.set:${sceneId}:${userId}`;
+  }
+  if (op.type === 'user-level.activate') {
+    return `user-level.activate:${sceneId}`;
   }
   return null;
 }
@@ -393,7 +424,11 @@ function buildPayload(boardState = {}) {
         const combat = formatCombatState(value.combat ?? value.combatState ?? null);
         const overlay = formatOverlayState(value.overlay ?? null);
         const mapLevels = normalizeMapLevelsState(value.mapLevels ?? null, { sceneGrid: grid });
-        const entry = { grid, overlay, mapLevels };
+        // Levels v2: preserve per-scene claim and active-level state so
+        // snapshot saves do not silently drop the new fields.
+        const claimedTokens = normalizeClaimedTokensMap(value.claimedTokens ?? null);
+        const userLevelState = normalizeUserLevelStateMap(value.userLevelState ?? null);
+        const entry = { grid, overlay, mapLevels, claimedTokens, userLevelState };
         if (combat) {
           entry.combat = combat;
         }

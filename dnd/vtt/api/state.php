@@ -385,7 +385,16 @@ if (!defined('VTT_STATE_API_INCLUDE_ONLY')) {
                 // timestamp-merge (which cannot delete) by sending a
                 // `placement.remove` op directly.
                 if (!empty($ops)) {
-                    $opContext = ['isGm' => $isGm];
+                    // Levels v2: include the caller's normalized profile id so
+                    // permission-gated ops (claim.set, user-level.set) can
+                    // verify a non-GM is only writing their own state.
+                    $callerUserId = isset($auth['user']) && is_string($auth['user'])
+                        ? strtolower(trim($auth['user']))
+                        : '';
+                    $opContext = [
+                        'isGm' => $isGm,
+                        'userId' => $callerUserId,
+                    ];
                     foreach ($ops as $op) {
                         $nextState = applyBoardStateOp($nextState, $op, $opContext);
                     }
@@ -1330,9 +1339,242 @@ function applyBoardStateOp(array $state, array $op, array $context = []): array
         return $state;
     }
 
+    // Levels v2: per-scene claim of a token to a user.
+    if ($type === 'claim.set') {
+        $sceneId = isset($op['sceneId']) && is_string($op['sceneId']) ? trim($op['sceneId']) : '';
+        if ($sceneId === '') {
+            return $state;
+        }
+        $placementId = extractBoardStateOpPlacementId($op);
+        if ($placementId === '') {
+            return $state;
+        }
+        $targetUserId = isset($op['userId']) && is_string($op['userId'])
+            ? strtolower(trim($op['userId']))
+            : '';
+        if ($targetUserId === '') {
+            return $state;
+        }
+        // Non-GM may only claim a token for themselves.
+        $callerUserId = isset($context['userId']) && is_string($context['userId'])
+            ? strtolower(trim($context['userId']))
+            : '';
+        if (!$isGm && $targetUserId !== $callerUserId) {
+            return $state;
+        }
+        // Validate that the placement actually exists in the scene.
+        if (!boardStatePlacementExists($state, $sceneId, $placementId)) {
+            return $state;
+        }
+        $state = ensureBoardStateSceneEntry($state, $sceneId);
+        if (!isset($state['sceneState'][$sceneId]['claimedTokens']) || !is_array($state['sceneState'][$sceneId]['claimedTokens'])) {
+            $state['sceneState'][$sceneId]['claimedTokens'] = [];
+        }
+        $state['sceneState'][$sceneId]['claimedTokens'][$placementId] = $targetUserId;
+        return $state;
+    }
+
+    if ($type === 'claim.clear') {
+        $sceneId = isset($op['sceneId']) && is_string($op['sceneId']) ? trim($op['sceneId']) : '';
+        if ($sceneId === '') {
+            return $state;
+        }
+        $placementId = extractBoardStateOpPlacementId($op);
+        if ($placementId === '') {
+            return $state;
+        }
+        if (!isset($state['sceneState'][$sceneId]['claimedTokens']) || !is_array($state['sceneState'][$sceneId]['claimedTokens'])) {
+            return $state;
+        }
+        $existingClaim = $state['sceneState'][$sceneId]['claimedTokens'][$placementId] ?? null;
+        if ($existingClaim === null) {
+            return $state;
+        }
+        // Non-GM may only clear their own claim. They may take ownership of a
+        // claim by sending claim.set instead.
+        $callerUserId = isset($context['userId']) && is_string($context['userId'])
+            ? strtolower(trim($context['userId']))
+            : '';
+        if (!$isGm && $existingClaim !== $callerUserId) {
+            return $state;
+        }
+        unset($state['sceneState'][$sceneId]['claimedTokens'][$placementId]);
+        return $state;
+    }
+
+    if ($type === 'user-level.set') {
+        $sceneId = isset($op['sceneId']) && is_string($op['sceneId']) ? trim($op['sceneId']) : '';
+        if ($sceneId === '') {
+            return $state;
+        }
+        $targetUserId = isset($op['userId']) && is_string($op['userId'])
+            ? strtolower(trim($op['userId']))
+            : '';
+        if ($targetUserId === '') {
+            return $state;
+        }
+        $levelId = isset($op['levelId']) && is_string($op['levelId']) ? trim($op['levelId']) : '';
+        if ($levelId === '') {
+            return $state;
+        }
+        // Non-GM may only write their own active-level state.
+        $callerUserId = isset($context['userId']) && is_string($context['userId'])
+            ? strtolower(trim($context['userId']))
+            : '';
+        if (!$isGm && $targetUserId !== $callerUserId) {
+            return $state;
+        }
+        // Validate that the target level exists in the scene's stored levels
+        // or is the virtual base level. The base level constant matches
+        // BASE_MAP_LEVEL_ID on the client.
+        if (!boardStateLevelIdIsValid($state, $sceneId, $levelId)) {
+            return $state;
+        }
+        $sourceRaw = $op['source'] ?? '';
+        $source = is_string($sourceRaw) ? strtolower(trim($sourceRaw)) : '';
+        if ($source !== 'manual' && $source !== 'activate' && $source !== 'claim') {
+            $source = 'manual';
+        }
+        $entry = [
+            'levelId' => $levelId,
+            'source' => $source,
+            'updatedAt' => (int) round(microtime(true) * 1000),
+        ];
+        $tokenIdRaw = $op['tokenId'] ?? null;
+        if (is_string($tokenIdRaw)) {
+            $tokenId = trim($tokenIdRaw);
+            if ($tokenId !== '') {
+                $entry['tokenId'] = $tokenId;
+            }
+        }
+        $state = ensureBoardStateSceneEntry($state, $sceneId);
+        if (!isset($state['sceneState'][$sceneId]['userLevelState']) || !is_array($state['sceneState'][$sceneId]['userLevelState'])) {
+            $state['sceneState'][$sceneId]['userLevelState'] = [];
+        }
+        $state['sceneState'][$sceneId]['userLevelState'][$targetUserId] = $entry;
+        return $state;
+    }
+
+    if ($type === 'user-level.activate') {
+        // GM-only batch write: pull every supplied user to a single level.
+        if (!$isGm) {
+            return $state;
+        }
+        $sceneId = isset($op['sceneId']) && is_string($op['sceneId']) ? trim($op['sceneId']) : '';
+        if ($sceneId === '') {
+            return $state;
+        }
+        $levelId = isset($op['levelId']) && is_string($op['levelId']) ? trim($op['levelId']) : '';
+        if ($levelId === '') {
+            return $state;
+        }
+        if (!boardStateLevelIdIsValid($state, $sceneId, $levelId)) {
+            return $state;
+        }
+        if (!isset($op['userIds']) || !is_array($op['userIds'])) {
+            return $state;
+        }
+        $userIds = [];
+        foreach ($op['userIds'] as $userIdRaw) {
+            if (!is_string($userIdRaw)) {
+                continue;
+            }
+            $userId = strtolower(trim($userIdRaw));
+            if ($userId === '' || in_array($userId, $userIds, true)) {
+                continue;
+            }
+            $userIds[] = $userId;
+        }
+        if (empty($userIds)) {
+            return $state;
+        }
+        $state = ensureBoardStateSceneEntry($state, $sceneId);
+        if (!isset($state['sceneState'][$sceneId]['userLevelState']) || !is_array($state['sceneState'][$sceneId]['userLevelState'])) {
+            $state['sceneState'][$sceneId]['userLevelState'] = [];
+        }
+        $updatedAt = (int) round(microtime(true) * 1000);
+        foreach ($userIds as $userId) {
+            $state['sceneState'][$sceneId]['userLevelState'][$userId] = [
+                'levelId' => $levelId,
+                'source' => 'activate',
+                'updatedAt' => $updatedAt,
+            ];
+        }
+        return $state;
+    }
+
     // Unknown op types are silently ignored so older servers can
     // tolerate payloads from newer clients.
     return $state;
+}
+
+/**
+ * Levels v2: ensure a scene state entry exists in $state so claim/user-level
+ * ops can write into it without first requiring a snapshot save to seed the
+ * scene.
+ *
+ * @param array<string,mixed> $state
+ * @return array<string,mixed>
+ */
+function ensureBoardStateSceneEntry(array $state, string $sceneId): array
+{
+    if (!isset($state['sceneState']) || !is_array($state['sceneState'])) {
+        $state['sceneState'] = [];
+    }
+    if (!isset($state['sceneState'][$sceneId]) || !is_array($state['sceneState'][$sceneId])) {
+        $state['sceneState'][$sceneId] = [];
+    }
+    return $state;
+}
+
+/**
+ * Levels v2: check whether a placement with the given id exists in the
+ * scene's placements list. Used to validate claim ops before applying.
+ *
+ * @param array<string,mixed> $state
+ */
+function boardStatePlacementExists(array $state, string $sceneId, string $placementId): bool
+{
+    if (!isset($state['placements'][$sceneId]) || !is_array($state['placements'][$sceneId])) {
+        return false;
+    }
+    foreach ($state['placements'][$sceneId] as $entry) {
+        if (!is_array($entry)) {
+            continue;
+        }
+        $entryId = extractBoardEntryIdentifier($entry);
+        if ($entryId === $placementId) {
+            return true;
+        }
+    }
+    return false;
+}
+
+/**
+ * Levels v2: a level id is valid for a scene if it is the base level
+ * sentinel ("level-0") or matches an id in the scene's stored mapLevels.
+ *
+ * @param array<string,mixed> $state
+ */
+function boardStateLevelIdIsValid(array $state, string $sceneId, string $levelId): bool
+{
+    if ($levelId === 'level-0') {
+        return true;
+    }
+    $levels = $state['sceneState'][$sceneId]['mapLevels']['levels'] ?? null;
+    if (!is_array($levels)) {
+        return false;
+    }
+    foreach ($levels as $level) {
+        if (!is_array($level)) {
+            continue;
+        }
+        $idRaw = $level['id'] ?? null;
+        if (is_string($idRaw) && trim($idRaw) === $levelId) {
+            return true;
+        }
+    }
+    return false;
 }
 
 /**
@@ -1824,10 +2066,118 @@ function normalizeSceneStatePayload(array $rawSceneState, bool $includeMapLevelD
             }
         }
 
+        // Levels v2: per-scene claim and active-level state. Preserved here so
+        // saves do not silently drop them. The op-apply path is the only
+        // legitimate writer; snapshot saves should ship the canonical state
+        // exactly as the client holds it.
+        if (array_key_exists('claimedTokens', $config)) {
+            $entry['claimedTokens'] = normalizeClaimedTokensPayload($config['claimedTokens']);
+        }
+
+        if (array_key_exists('userLevelState', $config)) {
+            $entry['userLevelState'] = normalizeUserLevelStatePayload($config['userLevelState']);
+        }
+
         $normalized[$key] = $entry;
     }
 
     return $normalized;
+}
+
+/**
+ * Levels v2: normalize the per-scene `claimedTokens` map. Keys are placement
+ * ids; values are normalized profile ids (lowercased).
+ *
+ * @param mixed $raw
+ * @return array<string,string>
+ */
+function normalizeClaimedTokensPayload($raw): array
+{
+    if (!is_array($raw)) {
+        return [];
+    }
+    $out = [];
+    foreach ($raw as $placementId => $userId) {
+        if (!is_string($placementId)) {
+            continue;
+        }
+        $placementKey = trim($placementId);
+        if ($placementKey === '') {
+            continue;
+        }
+        if (!is_string($userId)) {
+            continue;
+        }
+        $userKey = strtolower(trim($userId));
+        if ($userKey === '') {
+            continue;
+        }
+        $out[$placementKey] = $userKey;
+    }
+    return $out;
+}
+
+/**
+ * Levels v2: normalize the per-scene `userLevelState` map. Keys are
+ * normalized profile ids; values are objects with `levelId`, `source`,
+ * optional `tokenId`, and `updatedAt`.
+ *
+ * @param mixed $raw
+ * @return array<string,array<string,mixed>>
+ */
+function normalizeUserLevelStatePayload($raw): array
+{
+    if (!is_array($raw)) {
+        return [];
+    }
+    $out = [];
+    foreach ($raw as $userId => $entry) {
+        if (!is_string($userId)) {
+            continue;
+        }
+        $userKey = strtolower(trim($userId));
+        if ($userKey === '') {
+            continue;
+        }
+        if (!is_array($entry)) {
+            continue;
+        }
+        $levelIdRaw = $entry['levelId'] ?? null;
+        if (!is_string($levelIdRaw)) {
+            continue;
+        }
+        $levelId = trim($levelIdRaw);
+        if ($levelId === '') {
+            continue;
+        }
+        $sourceRaw = $entry['source'] ?? '';
+        $source = is_string($sourceRaw) ? strtolower(trim($sourceRaw)) : '';
+        if ($source !== 'manual' && $source !== 'activate' && $source !== 'claim') {
+            $source = 'manual';
+        }
+        $updatedAtRaw = $entry['updatedAt'] ?? 0;
+        $updatedAt = 0;
+        if (is_int($updatedAtRaw) || is_float($updatedAtRaw)) {
+            $updatedAt = max(0, (int) $updatedAtRaw);
+        } elseif (is_string($updatedAtRaw) && is_numeric($updatedAtRaw)) {
+            $updatedAt = max(0, (int) $updatedAtRaw);
+        }
+
+        $record = [
+            'levelId' => $levelId,
+            'source' => $source,
+            'updatedAt' => $updatedAt,
+        ];
+        $tokenIdRaw = $entry['tokenId'] ?? null;
+        if (is_string($tokenIdRaw)) {
+            $tokenId = trim($tokenIdRaw);
+            if ($tokenId !== '') {
+                $record['tokenId'] = $tokenId;
+            }
+        }
+        $out[$userKey] = $record;
+    }
+    return $out;
 }
 
 function createEmptyMapLevelsState(): array
