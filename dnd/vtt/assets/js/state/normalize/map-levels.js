@@ -4,6 +4,12 @@ import { roundToPrecision, toBoolean, toNonNegativeInt } from './helpers.js';
 export const MAP_LEVEL_MAX_LEVELS = 5;
 export const MAP_LEVEL_ID_PREFIX = 'map-level-';
 
+// Levels v2: the first uploaded scene map is treated as Level 0. It is not
+// persisted in `mapLevels.levels` (which still stores Level 1+ only); it is
+// derived from the scene's base map URL when building the level view model.
+// Placements without an explicit `levelId` resolve to this id.
+export const BASE_MAP_LEVEL_ID = 'level-0';
+
 const mapLevelSeed = Date.now();
 let mapLevelSequence = 0;
 
@@ -161,6 +167,178 @@ function normalizeDefaultPlayerLevel(levels) {
       firstVisible.defaultForPlayers = true;
     }
   }
+}
+
+/**
+ * Levels v2 helper: resolve a placement's stored level id. Missing, blank,
+ * or null values map to BASE_MAP_LEVEL_ID. This is intentionally separate
+ * from `resolveActiveLevelId` because the user's active level must never be
+ * used as a fallback for a token that lacks `levelId` — that would let
+ * old tokens "follow" users between levels.
+ */
+export function resolvePlacementLevelId(placement) {
+  if (!placement || typeof placement !== 'object') {
+    return BASE_MAP_LEVEL_ID;
+  }
+  const raw = placement.levelId;
+  if (typeof raw !== 'string') {
+    return BASE_MAP_LEVEL_ID;
+  }
+  const trimmed = raw.trim();
+  return trimmed || BASE_MAP_LEVEL_ID;
+}
+
+/**
+ * Levels v2 helper: build the per-scene level view model. Returns an
+ * ordered list with the virtual Level 0 entry first (derived from the
+ * scene's base map URL) followed by stored Level 1+ entries sorted by
+ * zIndex. Used by the renderer, the level selector, and visibility code
+ * so they can treat Level 0 like any other level.
+ */
+export function buildLevelViewModel({ baseMapUrl = null, mapLevels = null, sceneGrid = null } = {}) {
+  const trimmedBase = typeof baseMapUrl === 'string' ? baseMapUrl.trim() : '';
+  const baseEntry = {
+    id: BASE_MAP_LEVEL_ID,
+    name: 'Level 0',
+    mapUrl: trimmedBase || null,
+    visible: true,
+    opacity: 1,
+    zIndex: -1,
+    grid: sceneGrid && typeof sceneGrid === 'object' ? sceneGrid : null,
+    cutouts: [],
+    blocksLowerLevelInteraction: false,
+    blocksLowerLevelVision: false,
+    defaultForPlayers: false,
+    isBaseLevel: true,
+  };
+
+  const storedLevels = Array.isArray(mapLevels?.levels) ? mapLevels.levels : [];
+  const storedSorted = storedLevels
+    .filter((level) => level && typeof level === 'object' && level.id)
+    .slice()
+    .sort((a, b) => {
+      const aZ = Number.isFinite(a?.zIndex) ? a.zIndex : 0;
+      const bZ = Number.isFinite(b?.zIndex) ? b.zIndex : 0;
+      return aZ - bZ;
+    })
+    .map((level, index) => ({
+      ...level,
+      // Display labels for stored levels start at "Level 1".
+      displayLabel: typeof level.name === 'string' && level.name.trim()
+        ? level.name
+        : `Level ${index + 1}`,
+      isBaseLevel: false,
+    }));
+
+  return [baseEntry, ...storedSorted];
+}
+
+/**
+ * Levels v2 helper: validate a level id against a built view model.
+ * Returns the id if it exists in the view model, otherwise null.
+ */
+export function levelIdExistsInViewModel(levelId, viewModel = []) {
+  if (typeof levelId !== 'string') {
+    return false;
+  }
+  const trimmed = levelId.trim();
+  if (!trimmed) {
+    return false;
+  }
+  if (!Array.isArray(viewModel)) {
+    return false;
+  }
+  return viewModel.some((entry) => entry && entry.id === trimmed);
+}
+
+const USER_LEVEL_STATE_SOURCES = new Set(['manual', 'activate', 'claim']);
+
+/**
+ * Levels v2: normalize a single user's active-level entry. Returns null
+ * when the input cannot be coerced into a valid record so the caller can
+ * drop it from the map.
+ */
+export function normalizeUserLevelStateEntry(raw) {
+  if (!raw || typeof raw !== 'object') {
+    return null;
+  }
+  const levelIdSource = typeof raw.levelId === 'string' ? raw.levelId.trim() : '';
+  if (!levelIdSource) {
+    return null;
+  }
+  const sourceSource = typeof raw.source === 'string' ? raw.source.trim().toLowerCase() : '';
+  const source = USER_LEVEL_STATE_SOURCES.has(sourceSource) ? sourceSource : 'manual';
+  const tokenIdSource = typeof raw.tokenId === 'string' ? raw.tokenId.trim() : '';
+  const updatedAtRaw = Number(raw.updatedAt);
+  const updatedAt = Number.isFinite(updatedAtRaw) ? Math.max(0, Math.trunc(updatedAtRaw)) : 0;
+
+  const entry = {
+    levelId: levelIdSource,
+    source,
+    updatedAt,
+  };
+  if (tokenIdSource) {
+    entry.tokenId = tokenIdSource;
+  }
+  return entry;
+}
+
+/**
+ * Levels v2: normalize the full per-user active-level map for a scene.
+ * Keys are normalized profile ids; values are entry records as produced by
+ * `normalizeUserLevelStateEntry`. Invalid entries are dropped silently.
+ */
+export function normalizeUserLevelStateMap(raw) {
+  if (!raw || typeof raw !== 'object') {
+    return {};
+  }
+  const out = {};
+  Object.keys(raw).forEach((key) => {
+    if (typeof key !== 'string') {
+      return;
+    }
+    const normalizedKey = key.trim().toLowerCase();
+    if (!normalizedKey) {
+      return;
+    }
+    const entry = normalizeUserLevelStateEntry(raw[key]);
+    if (!entry) {
+      return;
+    }
+    out[normalizedKey] = entry;
+  });
+  return out;
+}
+
+/**
+ * Levels v2: normalize the per-scene `claimedTokens` map. Keys are
+ * placement ids, values are normalized profile ids. Invalid entries are
+ * dropped silently.
+ */
+export function normalizeClaimedTokensMap(raw) {
+  if (!raw || typeof raw !== 'object') {
+    return {};
+  }
+  const out = {};
+  Object.keys(raw).forEach((key) => {
+    if (typeof key !== 'string') {
+      return;
+    }
+    const placementId = key.trim();
+    if (!placementId) {
+      return;
+    }
+    const value = raw[key];
+    if (typeof value !== 'string') {
+      return;
+    }
+    const userId = value.trim().toLowerCase();
+    if (!userId) {
+      return;
+    }
+    out[placementId] = userId;
+  });
+  return out;
 }
 
 function resolveActiveLevelId(preferredId, levels = []) {

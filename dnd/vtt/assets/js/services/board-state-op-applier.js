@@ -12,14 +12,18 @@
  * become a single committed state transition.
  *
  * Op shapes:
- *   { type: 'placement.move',   sceneId, placementId, x, y }
- *   { type: 'placement.add',    sceneId, placement: { id, ... } }
- *   { type: 'placement.remove', sceneId, placementId }
- *   { type: 'placement.update', sceneId, placementId, patch: { ... } }
- *   { type: 'template.upsert',  sceneId, template: { id, ... } }
- *   { type: 'template.remove',  sceneId, templateId }
- *   { type: 'drawing.add',      sceneId, drawing:  { id, ... } }
- *   { type: 'drawing.remove',   sceneId, drawingId }
+ *   { type: 'placement.move',     sceneId, placementId, x, y }
+ *   { type: 'placement.add',      sceneId, placement: { id, ... } }
+ *   { type: 'placement.remove',   sceneId, placementId }
+ *   { type: 'placement.update',   sceneId, placementId, patch: { ... } }
+ *   { type: 'template.upsert',    sceneId, template: { id, ... } }
+ *   { type: 'template.remove',    sceneId, templateId }
+ *   { type: 'drawing.add',        sceneId, drawing:  { id, ... } }
+ *   { type: 'drawing.remove',     sceneId, drawingId }
+ *   { type: 'claim.set',          sceneId, placementId, userId }
+ *   { type: 'claim.clear',        sceneId, placementId }
+ *   { type: 'user-level.set',     sceneId, userId, levelId, source?, tokenId? }
+ *   { type: 'user-level.activate',sceneId, levelId, userIds: [...] }
  *
  * Unknown or malformed ops are silently ignored — the function returns
  * the boardState unchanged for that op. This matches the server's
@@ -217,6 +221,79 @@ export function applyBoardStateOpLocally(boardState, op) {
     return true;
   }
 
+  // Levels v2: per-scene claim of a token to a user.
+  if (type === 'claim.set') {
+    const placementId = extractOpEntityId(op, 'placementId');
+    if (!placementId) return false;
+    const userId = normalizeProfileIdField(op.userId);
+    if (!userId) return false;
+    const sceneState = ensureSceneStateEntry(boardState, sceneId);
+    if (!sceneState.claimedTokens || typeof sceneState.claimedTokens !== 'object') {
+      sceneState.claimedTokens = {};
+    }
+    if (sceneState.claimedTokens[placementId] === userId) {
+      return false;
+    }
+    sceneState.claimedTokens[placementId] = userId;
+    return true;
+  }
+
+  if (type === 'claim.clear') {
+    const placementId = extractOpEntityId(op, 'placementId');
+    if (!placementId) return false;
+    const sceneState = boardState?.sceneState?.[sceneId];
+    if (!sceneState || typeof sceneState !== 'object') return false;
+    const claims = sceneState.claimedTokens;
+    if (!claims || typeof claims !== 'object') return false;
+    if (!(placementId in claims)) return false;
+    delete claims[placementId];
+    return true;
+  }
+
+  if (type === 'user-level.set') {
+    const userId = normalizeProfileIdField(op.userId);
+    if (!userId) return false;
+    const levelId = typeof op.levelId === 'string' ? op.levelId.trim() : '';
+    if (!levelId) return false;
+    const sceneState = ensureSceneStateEntry(boardState, sceneId);
+    if (!sceneState.userLevelState || typeof sceneState.userLevelState !== 'object') {
+      sceneState.userLevelState = {};
+    }
+    const entry = buildUserLevelEntry({
+      levelId,
+      source: op.source,
+      tokenId: op.tokenId,
+    });
+    sceneState.userLevelState[userId] = entry;
+    return true;
+  }
+
+  if (type === 'user-level.activate') {
+    const levelId = typeof op.levelId === 'string' ? op.levelId.trim() : '';
+    if (!levelId) return false;
+    const userIds = Array.isArray(op.userIds)
+      ? op.userIds
+          .map((id) => normalizeProfileIdField(id))
+          .filter((id) => id)
+      : [];
+    if (userIds.length === 0) return false;
+    const sceneState = ensureSceneStateEntry(boardState, sceneId);
+    if (!sceneState.userLevelState || typeof sceneState.userLevelState !== 'object') {
+      sceneState.userLevelState = {};
+    }
+    let mutated = false;
+    const updatedAt = Date.now();
+    userIds.forEach((userId) => {
+      sceneState.userLevelState[userId] = {
+        levelId,
+        source: 'activate',
+        updatedAt,
+      };
+      mutated = true;
+    });
+    return mutated;
+  }
+
   // Unknown op type — ignored so the client tolerates payloads from
   // newer servers without crashing.
   return false;
@@ -275,4 +352,37 @@ function entryId(entry) {
     return String(raw);
   }
   return '';
+}
+
+function normalizeProfileIdField(value) {
+  if (typeof value !== 'string') return '';
+  const trimmed = value.trim().toLowerCase();
+  return trimmed;
+}
+
+function ensureSceneStateEntry(boardState, sceneId) {
+  if (!boardState.sceneState || typeof boardState.sceneState !== 'object') {
+    boardState.sceneState = {};
+  }
+  const existing = boardState.sceneState[sceneId];
+  if (!existing || typeof existing !== 'object') {
+    boardState.sceneState[sceneId] = {};
+  }
+  return boardState.sceneState[sceneId];
+}
+
+const USER_LEVEL_OP_SOURCES = new Set(['manual', 'activate', 'claim']);
+
+function buildUserLevelEntry({ levelId, source, tokenId }) {
+  const sourceRaw = typeof source === 'string' ? source.trim().toLowerCase() : '';
+  const normalizedSource = USER_LEVEL_OP_SOURCES.has(sourceRaw) ? sourceRaw : 'manual';
+  const entry = {
+    levelId,
+    source: normalizedSource,
+    updatedAt: Date.now(),
+  };
+  if (typeof tokenId === 'string' && tokenId.trim()) {
+    entry.tokenId = tokenId.trim();
+  }
+  return entry;
 }
