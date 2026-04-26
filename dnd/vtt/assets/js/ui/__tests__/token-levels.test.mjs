@@ -128,6 +128,91 @@ describe('token level helpers', () => {
     assert.equal(controls.currentLevel?.id, 'upper');
   });
 
+  test('navigation control state includes the virtual Level 0 when requested', () => {
+    // Levels v2 (§5.1): GM nav passes `includeBaseLevel: true` so the
+    // up/down controls can step into and out of the base map.
+    const mapLevels = {
+      activeLevelId: null,
+      levels: [
+        { id: 'upper', name: 'Upper', zIndex: 1 },
+        { id: 'roof', name: 'Roof', zIndex: 2 },
+      ],
+    };
+
+    const onBase = getMapLevelNavigationControlState(mapLevels, {
+      currentLevelId: 'level-0',
+      includeBaseLevel: true,
+    });
+    assert.equal(onBase.currentLevel?.id, 'level-0');
+    assert.equal(onBase.currentLevel?.name, 'Level 0');
+    assert.deepEqual(onBase.levels.map((level) => level.id), ['level-0', 'upper', 'roof']);
+    assert.equal(onBase.canMoveDown, false);
+    assert.equal(onBase.canMoveUp, true);
+
+    const onUpper = getMapLevelNavigationControlState(mapLevels, {
+      currentLevelId: 'upper',
+      includeBaseLevel: true,
+    });
+    assert.equal(onUpper.canMoveDown, true);
+    assert.equal(onUpper.canMoveUp, true);
+  });
+
+  test('adjacent token level steps into and out of Level 0 when included', () => {
+    const mapLevels = {
+      activeLevelId: null,
+      levels: [
+        { id: 'upper', name: 'Upper', zIndex: 1 },
+        { id: 'roof', name: 'Roof', zIndex: 2 },
+      ],
+    };
+
+    assert.equal(
+      getAdjacentTokenLevel(mapLevels, 'upper', 'down', { includeBaseLevel: true })?.id,
+      'level-0',
+    );
+    assert.equal(
+      getAdjacentTokenLevel(mapLevels, 'level-0', 'up', { includeBaseLevel: true })?.id,
+      'upper',
+    );
+    assert.equal(
+      getAdjacentTokenLevel(mapLevels, 'level-0', 'down', { includeBaseLevel: true }),
+      null,
+    );
+  });
+
+  test('token level controls expose Level 0 as a valid target', () => {
+    // §5.1: token-settings move buttons let the GM move a token to or
+    // from Level 0. A placement with no `levelId` (legacy data) is
+    // treated as already on Level 0.
+    const mapLevels = {
+      activeLevelId: null,
+      levels: [
+        { id: 'upper', name: 'Upper', zIndex: 1 },
+      ],
+    };
+
+    const legacy = getTokenLevelControlState(mapLevels, { id: 'legacy' }, {
+      includeBaseLevel: true,
+    });
+    assert.equal(legacy.currentLevel?.id, 'level-0');
+    assert.equal(legacy.canMoveDown, false);
+    assert.equal(legacy.canMoveUp, true);
+
+    const explicit = getTokenLevelControlState(mapLevels, {
+      id: 'explicit',
+      levelId: 'level-0',
+    }, { includeBaseLevel: true });
+    assert.equal(explicit.currentLevel?.id, 'level-0');
+
+    const onUpper = getTokenLevelControlState(mapLevels, {
+      id: 'on-upper',
+      levelId: 'upper',
+    }, { includeBaseLevel: true });
+    assert.equal(onUpper.currentLevel?.id, 'upper');
+    assert.equal(onUpper.canMoveDown, true);
+    assert.equal(onUpper.canMoveUp, false);
+  });
+
   test('resolves scene-scoped map level state from board state', () => {
     const mapLevels = resolveSceneTokenLevelState({
       boardState: {

@@ -31,6 +31,7 @@ import {
   buildLevelViewModel,
   normalizeMapLevelsState,
   resolveActiveLevelIdForUser,
+  resolvePlacementLevelId,
 } from '../state/normalize/map-levels.js';
 import { initializePusher, getSocketId, isPusherConnected } from '../services/pusher-service.js';
 import { createBoardStatePoller } from '../services/board-state-poller.js';
@@ -1548,24 +1549,23 @@ export function mountBoardInteractions(store, routes = {}) {
     return typeof activeLayerId === 'string' && activeLayerId ? activeLayerId : null;
   }
 
-  function getActiveMapLevelId(rawMapLevels, sceneGrid = null) {
-    if (!rawMapLevels || typeof rawMapLevels !== 'object') {
-      return null;
-    }
-
-    const mapLevels = normalizeMapLevelsState(rawMapLevels, { sceneGrid });
-    const activeLevelId = mapLevels?.activeLevelId ?? null;
-    return typeof activeLevelId === 'string' && activeLevelId ? activeLevelId : null;
-  }
-
   function getActiveSceneTokenLevelState(state = boardApi.getState?.() ?? {}) {
     const activeSceneId = state?.boardState?.activeSceneId ?? null;
     return resolveSceneTokenLevelState(state, activeSceneId);
   }
 
   function getActiveTokenPlacementLevelId(state = boardApi.getState?.() ?? {}) {
-    const mapLevels = getActiveSceneTokenLevelState(state);
-    return resolveTokenLevelId({}, mapLevels);
+    // Levels v2 (§5.1): new tokens land on the user's active level — for
+    // the GM that's whichever level the up/down nav is on, for players
+    // it's their resolved per-user level (claim-driven or activate-pulled).
+    // The user's active level may be `BASE_MAP_LEVEL_ID`, which is a
+    // valid placement target now that Level 0 is a real, addressable
+    // level.
+    const activeSceneId = state?.boardState?.activeSceneId ?? null;
+    if (!activeSceneId) {
+      return null;
+    }
+    return getViewerLevelIdForCurrentUser(state, activeSceneId);
   }
 
   function syncCutoutToggleButtons() {
@@ -1611,17 +1611,17 @@ export function mountBoardInteractions(store, routes = {}) {
         : {};
       const sceneGrid = sceneEntry.grid ?? null;
       const mapLevels = normalizeMapLevelsState(sceneEntry.mapLevels ?? null, { sceneGrid });
-      // Levels v2: cutout edit affordances follow the GM's per-user
-      // viewer level. Fall back to the legacy `activeLevelId` for older
-      // scenes that have not yet been touched in v2.
+      // Levels v2 (§5.1): cutout edit affordances follow the GM's
+      // per-user viewer level. When the GM is on Level 0 (the base map)
+      // no stored level should be marked as the cutout-edit target,
+      // because the base map cannot have cutouts.
       const viewerLevelId = getViewerLevelIdForCurrentUser(
         boardApi.getState?.() ?? {},
         sceneId,
       );
-      const legacyActiveLevelId = getActiveMapLevelId(sceneEntry.mapLevels ?? null, sceneGrid);
       const activeLevelId = viewerLevelId && viewerLevelId !== BASE_MAP_LEVEL_ID
         ? viewerLevelId
-        : legacyActiveLevelId;
+        : '';
       const level = mapLevels.levels.find((entry) => entry.id === levelId) ?? null;
       const hasMap = typeof level?.mapUrl === 'string' && level.mapUrl.trim().length > 0;
       const isVisible = level ? level.visible !== false : false;
@@ -5008,7 +5008,13 @@ export function mountBoardInteractions(store, routes = {}) {
       activeLevelId: viewerLevelId,
     });
     mapLevelCutoutTool.notifyMapLevelsChange(mapLevels);
-    syncMapLevelNavigationControls(mapLevels, { currentLevelId: viewerLevelId });
+    // Levels v2 (§5.1): the level nav must include the virtual Level 0
+    // so the GM can browse to and from the base map. The control-state
+    // helper synthesizes Level 0 when `includeBaseLevel: true`.
+    syncMapLevelNavigationControls(mapLevels, {
+      currentLevelId: viewerLevelId,
+      includeBaseLevel: true,
+    });
     syncMapLevelIndicator(state, sceneId, viewerLevelId);
   }
 
@@ -5089,11 +5095,18 @@ export function mountBoardInteractions(store, routes = {}) {
     const mapLevels = resolveSceneTokenLevelState(state, activeSceneId);
     // Levels v2: GM browsing operates on the GM's own per-user level
     // (`userLevelState[gmId]`), not the legacy scene-global active id.
+    // The nav includes the virtual Level 0 entry, so up/down can step
+    // into and out of the base map.
     const currentLevelId = getViewerLevelIdForCurrentUser(state, activeSceneId);
-    const controls = getMapLevelNavigationControlState(mapLevels, { currentLevelId });
-    const targetLevel = getAdjacentTokenLevel(mapLevels, controls.currentLevelId, direction);
+    const controls = getMapLevelNavigationControlState(mapLevels, {
+      currentLevelId,
+      includeBaseLevel: true,
+    });
+    const targetLevel = getAdjacentTokenLevel(mapLevels, controls.currentLevelId, direction, {
+      includeBaseLevel: true,
+    });
     if (!targetLevel?.id) {
-      syncMapLevelNavigationControls(mapLevels, { currentLevelId });
+      syncMapLevelNavigationControls(mapLevels, { currentLevelId, includeBaseLevel: true });
       return;
     }
 
@@ -5127,7 +5140,7 @@ export function mountBoardInteractions(store, routes = {}) {
     });
 
     if (!updated) {
-      syncMapLevelNavigationControls(mapLevels, { currentLevelId });
+      syncMapLevelNavigationControls(mapLevels, { currentLevelId, includeBaseLevel: true });
       return;
     }
 
@@ -13808,8 +13821,15 @@ export function mountBoardInteractions(store, routes = {}) {
     }
 
     const mapLevels = resolveSceneTokenLevelState(state, activeSceneId);
-    const currentLevelId = resolveTokenLevelId(placement, mapLevels);
-    const targetLevel = getAdjacentTokenLevel(mapLevels, currentLevelId, direction);
+    // Levels v2 (§5.1): the token-settings level controls let the GM
+    // move tokens between Level 0 and the stored Level 1+. Resolve the
+    // current level via `resolvePlacementLevelId` so a token already on
+    // Level 0 (`levelId === BASE_MAP_LEVEL_ID`, or missing/blank legacy
+    // data) is recognized as such.
+    const currentLevelId = resolvePlacementLevelId(placement);
+    const targetLevel = getAdjacentTokenLevel(mapLevels, currentLevelId, direction, {
+      includeBaseLevel: true,
+    });
     if (!targetLevel?.id) {
       syncTokenLevelControls(placement);
       return;
@@ -13860,7 +13880,12 @@ export function mountBoardInteractions(store, routes = {}) {
     const state = boardApi.getState?.() ?? {};
     const activeSceneId = state.boardState?.activeSceneId ?? null;
     const mapLevels = resolveSceneTokenLevelState(state, activeSceneId);
-    const controls = getTokenLevelControlState(mapLevels, placement ?? {});
+    // Levels v2 (§5.1): the token-settings level controls expose the
+    // virtual Level 0 alongside stored Level 1+, so the GM can move
+    // tokens onto/off the base map.
+    const controls = getTokenLevelControlState(mapLevels, placement ?? {}, {
+      includeBaseLevel: true,
+    });
     tokenSettingsMenu.levelSection.hidden = !controls.hasLevels;
     tokenSettingsMenu.levelSection.setAttribute('aria-hidden', controls.hasLevels ? 'false' : 'true');
     if (!controls.hasLevels) {
@@ -15536,22 +15561,17 @@ function createMapLevelCutoutTool() {
       : {};
     const sceneGrid = sceneEntry.grid ?? state.grid ?? null;
     const mapLevels = normalizeMapLevelsState(sceneEntry.mapLevels ?? null, { sceneGrid });
-    // Levels v2: cutout editing follows the GM's per-user viewer level
-    // (`userLevelState[gmId]`) rather than the legacy scene-global
-    // `mapLevels.activeLevelId`. When the GM has not yet browsed in v2,
-    // `getViewerLevelIdForCurrentUser` returns BASE_MAP_LEVEL_ID — which
-    // is not a stored level — so we fall back to the legacy active id
-    // so existing scenes still surface the right cutout-edit context.
-    // Per §5.1 the cutout editor is intentionally disabled on Level 0,
-    // so once Step 3 lets the GM explicitly browse to Level 0 we can
-    // drop this fallback.
+    // Levels v2 (§5.1): cutout editing follows the GM's per-user viewer
+    // level (`userLevelState[gmId]`). Level 0 is the base map and has no
+    // cutouts, so the editor is disabled when the GM is viewing it.
+    // When the GM has never browsed in v2 (no entry in `userLevelState`),
+    // the resolver returns `BASE_MAP_LEVEL_ID` and the editor is
+    // intentionally inactive until the GM moves to a stored level.
     const viewerLevelId = getViewerLevelIdForCurrentUser(state, sceneId);
-    const isBaseViewer = viewerLevelId === BASE_MAP_LEVEL_ID;
-    const activeId = !isBaseViewer && typeof viewerLevelId === 'string' && viewerLevelId
-      ? viewerLevelId
-      : typeof mapLevels.activeLevelId === 'string'
-        ? mapLevels.activeLevelId
-        : '';
+    if (!viewerLevelId || viewerLevelId === BASE_MAP_LEVEL_ID) {
+      return null;
+    }
+    const activeId = viewerLevelId;
     const requestedId = typeof levelId === 'string' && levelId.trim()
       ? levelId.trim()
       : activeId;
