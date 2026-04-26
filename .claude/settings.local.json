@@ -33,7 +33,15 @@
       "Read(//tmp/**)",
       "Read(//c/c/Users/tasta/OneDrive/Documents/GitHub/gmscreen/.claude/worktrees/**)",
       "Bash(node -e \"import\\('./dnd/vtt/assets/js/state/normalize/map-levels.js'\\).then\\(m => console.log\\(Object.keys\\(m\\).filter\\(k => k.startsWith\\('resolve'\\) || k.startsWith\\('build'\\) || k.startsWith\\('BASE'\\)\\)\\)\\)\")",
-      "Bash(node --check dnd/vtt/assets/js/ui/board-interactions.js)"
+      "Bash(node --check dnd/vtt/assets/js/ui/board-interactions.js)",
+      "Bash(npx --no-install node --test \"dnd/vtt/assets/js/ui/__tests__/token-levels.test.mjs\")",
+      "Bash(gh pr *)",
+      "Read(//c/Program Files/**)",
+      "Read(//usr/local/**)",
+      "Bash(command -v gh)",
+      "PowerShell(gh --version)",
+      "PowerShell($candidates = @\\(\"$env:LOCALAPPDATA\\\\GitHubDesktop\\\\bin\\\\gh.exe\",\"$env:LOCALAPPDATA\\\\Programs\\\\GitHub CLI\\\\gh.exe\",\"$env:ProgramFiles\\\\GitHub CLI\\\\gh.exe\",\"${env:ProgramFiles\\(x86\\)}\\\\GitHub CLI\\\\gh.exe\"\\); foreach \\($c in $candidates\\) { if \\(Test-Path $c\\) { Write-Output $c } })",
+      "PowerShell(Get-ChildItem -Path \"$env:ProgramFiles\",\"${env:ProgramFiles\\(x86\\)}\",\"$env:LOCALAPPDATA\",\"$env:APPDATA\" -Filter gh.exe -Recurse -ErrorAction SilentlyContinue -Depth 4 | Select-Object -First 5 -ExpandProperty FullName)"
     ],
     "deny": []
   }

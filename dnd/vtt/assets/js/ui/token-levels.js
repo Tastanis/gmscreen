@@ -1,4 +1,8 @@
-import { normalizeMapLevelsState } from '../state/normalize/map-levels.js';
+import {
+  BASE_MAP_LEVEL_ID,
+  normalizeMapLevelsState,
+  resolvePlacementLevelId,
+} from '../state/normalize/map-levels.js';
 
 export function normalizeTokenLevelId(value) {
   if (typeof value !== 'string') {
@@ -22,6 +26,35 @@ export function getOrderedTokenMapLevels(levels = []) {
       return left.sourceIndex - right.sourceIndex;
     })
     .map(({ level }) => level);
+}
+
+// Levels v2: synthesize a virtual Level 0 entry for nav/control helpers.
+// Level 0 is not persisted in `mapLevels.levels` (which still stores Level
+// 1+ only); it is the scene's base map URL surfaced as a real, addressable
+// level. Callers that opt into `includeBaseLevel` get this entry prepended
+// to the ordered list so up/down navigation and token-settings move
+// controls can target it.
+function buildVirtualBaseLevelEntry() {
+  return {
+    id: BASE_MAP_LEVEL_ID,
+    name: 'Level 0',
+    visible: true,
+    opacity: 1,
+    zIndex: -Infinity,
+    cutouts: [],
+    blocksLowerLevelInteraction: false,
+    blocksLowerLevelVision: false,
+    defaultForPlayers: false,
+    isBaseLevel: true,
+  };
+}
+
+function getOrderedTokenMapLevelsWithBase(rawLevels = [], options = {}) {
+  const stored = getOrderedTokenMapLevels(rawLevels);
+  if (!options || !options.includeBaseLevel) {
+    return stored;
+  }
+  return [buildVirtualBaseLevelEntry(), ...stored];
 }
 
 export function resolveSceneTokenLevelState(state = {}, sceneId = null) {
@@ -208,14 +241,26 @@ export function isPlacementInteractableOnPlayerMapLevel(placement = {}, mapLevel
   }).visible;
 }
 
-export function getAdjacentTokenLevel(mapLevelsState = null, currentLevelId = null, direction = 'up') {
-  const levels = getOrderedTokenMapLevels(mapLevelsState?.levels ?? []);
+export function getAdjacentTokenLevel(
+  mapLevelsState = null,
+  currentLevelId = null,
+  direction = 'up',
+  options = {},
+) {
+  // Levels v2: callers (GM nav, token-settings move) pass
+  // `includeBaseLevel: true` so up/down navigation can step into and out
+  // of the virtual Level 0 entry. Callers that only browse stored
+  // Level 1+ keep the prior behavior.
+  const levels = getOrderedTokenMapLevelsWithBase(mapLevelsState?.levels ?? [], options);
   if (levels.length < 2) {
     return null;
   }
 
-  const resolvedCurrentId = normalizeTokenLevelId(currentLevelId) ??
-    resolveTokenLevelId({}, mapLevelsState);
+  const normalizedCurrentId = normalizeTokenLevelId(currentLevelId);
+  let resolvedCurrentId = normalizedCurrentId;
+  if (!resolvedCurrentId || !levels.some((level) => level.id === resolvedCurrentId)) {
+    resolvedCurrentId = resolveTokenLevelId({}, mapLevelsState);
+  }
   const currentIndex = levels.findIndex((level) => level.id === resolvedCurrentId);
   if (currentIndex < 0) {
     return null;
@@ -230,9 +275,17 @@ export function getAdjacentTokenLevel(mapLevelsState = null, currentLevelId = nu
   return levels[targetIndex] ?? null;
 }
 
-export function getTokenLevelControlState(mapLevelsState = null, placement = {}) {
-  const levels = getOrderedTokenMapLevels(mapLevelsState?.levels ?? []);
-  const currentLevelId = resolveTokenLevelId(placement, mapLevelsState);
+export function getTokenLevelControlState(mapLevelsState = null, placement = {}, options = {}) {
+  const levels = getOrderedTokenMapLevelsWithBase(mapLevelsState?.levels ?? [], options);
+  // Levels v2: when Level 0 is in the navigation set, resolve a
+  // placement's level via `resolvePlacementLevelId` so a token with
+  // `levelId === BASE_MAP_LEVEL_ID` (or missing/blank) is recognized as
+  // sitting on Level 0. The legacy `resolveTokenLevelId` would fall
+  // through to a stored Level 1+ entry instead.
+  const includeBase = Boolean(options?.includeBaseLevel);
+  const currentLevelId = includeBase
+    ? resolvePlacementLevelId(placement)
+    : resolveTokenLevelId(placement, mapLevelsState);
   const currentLevel = levels.find((level) => level.id === currentLevelId) ?? null;
 
   return {
@@ -240,13 +293,13 @@ export function getTokenLevelControlState(mapLevelsState = null, placement = {})
     levels,
     currentLevel,
     currentLevelId,
-    canMoveDown: Boolean(getAdjacentTokenLevel(mapLevelsState, currentLevelId, 'down')),
-    canMoveUp: Boolean(getAdjacentTokenLevel(mapLevelsState, currentLevelId, 'up')),
+    canMoveDown: Boolean(getAdjacentTokenLevel(mapLevelsState, currentLevelId, 'down', options)),
+    canMoveUp: Boolean(getAdjacentTokenLevel(mapLevelsState, currentLevelId, 'up', options)),
   };
 }
 
 export function getMapLevelNavigationControlState(mapLevelsState = null, options = {}) {
-  const levels = getOrderedTokenMapLevels(mapLevelsState?.levels ?? []);
+  const levels = getOrderedTokenMapLevelsWithBase(mapLevelsState?.levels ?? [], options);
   // Levels v2: callers (e.g. the GM nav) may pass an explicit
   // `currentLevelId` resolved from the per-user `userLevelState` so the
   // nav reflects the GM's per-user level instead of the legacy
@@ -265,8 +318,8 @@ export function getMapLevelNavigationControlState(mapLevelsState = null, options
     levels,
     currentLevel,
     currentLevelId,
-    canMoveDown: Boolean(getAdjacentTokenLevel(mapLevelsState, currentLevelId, 'down')),
-    canMoveUp: Boolean(getAdjacentTokenLevel(mapLevelsState, currentLevelId, 'up')),
+    canMoveDown: Boolean(getAdjacentTokenLevel(mapLevelsState, currentLevelId, 'down', options)),
+    canMoveUp: Boolean(getAdjacentTokenLevel(mapLevelsState, currentLevelId, 'up', options)),
   };
 }
 
