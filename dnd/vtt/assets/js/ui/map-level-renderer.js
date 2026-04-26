@@ -19,11 +19,12 @@ export function createMapLevelRenderer({
   const levelElements = new Map();
   let lastSignature = null;
 
-  function sync(rawMapLevels = null, { sceneGrid = null } = {}) {
+  function sync(rawMapLevels = null, { sceneGrid = null, view = null } = {}) {
     const mapLevels = normalizeMapLevelsState(rawMapLevels, { sceneGrid });
     const renderableLevels = getRenderableMapLevels(mapLevels);
     const signature = safeStableStringify({
       activeLevelId: mapLevels.activeLevelId,
+      cutoutView: buildMapLevelCutoutViewSignature(view),
       levels: renderableLevels,
     });
 
@@ -69,6 +70,7 @@ export function createMapLevelRenderer({
       element.style.backgroundImage = buildCssUrl(level.mapUrl);
       element.style.opacity = String(level.opacity);
       element.style.zIndex = String(level.zIndex);
+      applyMapLevelCutoutMask(element, level.cutouts, view);
       element.hidden = false;
       element.removeAttribute('hidden');
 
@@ -97,6 +99,81 @@ export function createMapLevelRenderer({
     sync,
     reset,
   };
+}
+
+export function applyMapLevelCutoutMask(element, cutouts = [], view = null) {
+  if (!element) {
+    return false;
+  }
+
+  clearMapLevelCutoutMask(element);
+  const mask = buildMapLevelCutoutMask(cutouts, view);
+  if (!mask) {
+    element.dataset.mapLevelHasCutoutMask = 'false';
+    return false;
+  }
+
+  element.dataset.mapLevelHasCutoutMask = 'true';
+  element.style.maskImage = mask;
+  element.style.webkitMaskImage = mask;
+  element.style.maskRepeat = 'no-repeat';
+  element.style.webkitMaskRepeat = 'no-repeat';
+  element.style.maskSize = '100% 100%';
+  element.style.webkitMaskSize = '100% 100%';
+  return true;
+}
+
+export function clearMapLevelCutoutMask(element) {
+  if (!element) {
+    return;
+  }
+
+  element.style.maskImage = '';
+  element.style.webkitMaskImage = '';
+  element.style.maskRepeat = '';
+  element.style.webkitMaskRepeat = '';
+  element.style.maskSize = '';
+  element.style.webkitMaskSize = '';
+  delete element.dataset.mapLevelHasCutoutMask;
+}
+
+export function buildMapLevelCutoutMask(cutouts = [], view = null) {
+  const metrics = resolveMapLevelCutoutMetrics(view);
+  if (!metrics || !Array.isArray(cutouts) || cutouts.length === 0) {
+    return '';
+  }
+
+  const rectangles = cutouts
+    .map((cutout) => buildMapLevelCutoutRectangle(cutout, metrics))
+    .filter(Boolean);
+
+  if (!rectangles.length) {
+    return '';
+  }
+
+  const outer = [
+    'M 0 0',
+    `H ${formatSvgNumber(metrics.innerWidth)}`,
+    `V ${formatSvgNumber(metrics.innerHeight)}`,
+    'H 0 Z',
+  ].join(' ');
+  const holes = rectangles
+    .map((rect) =>
+      [
+        `M ${formatSvgNumber(rect.x)} ${formatSvgNumber(rect.y)}`,
+        `H ${formatSvgNumber(rect.x + rect.width)}`,
+        `V ${formatSvgNumber(rect.y + rect.height)}`,
+        `H ${formatSvgNumber(rect.x)} Z`,
+      ].join(' ')
+    )
+    .join(' ');
+  const svg = [
+    `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 ${formatSvgNumber(metrics.innerWidth)} ${formatSvgNumber(metrics.innerHeight)}">`,
+    `<path fill="white" fill-rule="evenodd" d="${outer} ${holes}"/>`,
+    '</svg>',
+  ].join('');
+
+  return `url("data:image/svg+xml,${encodeURIComponent(svg)}")`;
 }
 
 export function getRenderableMapLevels(mapLevelsState = null) {
@@ -209,6 +286,7 @@ function clearRenderedLevels({ root, stack, levelElements }) {
   root.hidden = true;
   root.setAttribute('hidden', '');
   levelElements.forEach((element) => {
+    clearMapLevelCutoutMask(element);
     element.remove();
   });
   levelElements.clear();
@@ -254,4 +332,110 @@ function safeStableStringify(value) {
   } catch (error) {
     return null;
   }
+}
+
+function buildMapLevelCutoutViewSignature(view = null) {
+  const metrics = resolveMapLevelCutoutMetrics(view);
+  if (!metrics) {
+    return null;
+  }
+
+  return {
+    innerWidth: metrics.innerWidth,
+    innerHeight: metrics.innerHeight,
+    originX: metrics.originX,
+    originY: metrics.originY,
+    gridSize: metrics.gridSize,
+  };
+}
+
+function resolveMapLevelCutoutMetrics(view = null) {
+  if (!view || typeof view !== 'object') {
+    return null;
+  }
+
+  const mapPixelSize = view.mapPixelSize && typeof view.mapPixelSize === 'object'
+    ? view.mapPixelSize
+    : {};
+  const mapWidth = toFiniteNumber(mapPixelSize.width, 0);
+  const mapHeight = toFiniteNumber(mapPixelSize.height, 0);
+  if (mapWidth <= 0 || mapHeight <= 0) {
+    return null;
+  }
+
+  const insets = view.mapInsets && typeof view.mapInsets === 'object'
+    ? view.mapInsets
+    : view.gridOffsets && typeof view.gridOffsets === 'object'
+      ? view.gridOffsets
+      : {};
+  const left = toFiniteNumber(insets.left, 0);
+  const right = toFiniteNumber(insets.right, 0);
+  const top = toFiniteNumber(insets.top, 0);
+  const bottom = toFiniteNumber(insets.bottom, 0);
+  const innerWidth = Math.max(0, mapWidth - left - right);
+  const innerHeight = Math.max(0, mapHeight - top - bottom);
+  if (innerWidth <= 0 || innerHeight <= 0) {
+    return null;
+  }
+
+  const origin = view.gridOrigin && typeof view.gridOrigin === 'object' ? view.gridOrigin : {};
+  return {
+    innerWidth,
+    innerHeight,
+    originX: toFiniteNumber(origin.x, 0),
+    originY: toFiniteNumber(origin.y, 0),
+    gridSize: Math.max(8, toFiniteNumber(view.gridSize, 64)),
+  };
+}
+
+function buildMapLevelCutoutRectangle(cutout = {}, metrics) {
+  if (!cutout || typeof cutout !== 'object' || !metrics) {
+    return null;
+  }
+
+  const column = Math.max(0, Math.trunc(toFiniteNumber(cutout.column ?? cutout.col ?? cutout.x, NaN)));
+  const row = Math.max(0, Math.trunc(toFiniteNumber(cutout.row ?? cutout.y, NaN)));
+  if (!Number.isFinite(column) || !Number.isFinite(row)) {
+    return null;
+  }
+
+  const width = Math.max(1, Math.trunc(toFiniteNumber(cutout.width ?? cutout.columns ?? cutout.w, 1)));
+  const height = Math.max(1, Math.trunc(toFiniteNumber(cutout.height ?? cutout.rows ?? cutout.h, 1)));
+  const x1 = clamp(metrics.originX + column * metrics.gridSize, 0, metrics.innerWidth);
+  const y1 = clamp(metrics.originY + row * metrics.gridSize, 0, metrics.innerHeight);
+  const x2 = clamp(metrics.originX + (column + width) * metrics.gridSize, 0, metrics.innerWidth);
+  const y2 = clamp(metrics.originY + (row + height) * metrics.gridSize, 0, metrics.innerHeight);
+  const rectWidth = x2 - x1;
+  const rectHeight = y2 - y1;
+  if (rectWidth <= 0 || rectHeight <= 0) {
+    return null;
+  }
+
+  return {
+    x: roundToPrecision(x1, 2),
+    y: roundToPrecision(y1, 2),
+    width: roundToPrecision(rectWidth, 2),
+    height: roundToPrecision(rectHeight, 2),
+  };
+}
+
+function toFiniteNumber(value, fallback) {
+  const numeric = Number(value);
+  return Number.isFinite(numeric) ? numeric : fallback;
+}
+
+function clamp(value, min, max) {
+  return Math.min(Math.max(value, min), max);
+}
+
+function roundToPrecision(value, precision = 2) {
+  if (!Number.isFinite(value)) {
+    return 0;
+  }
+  const factor = 10 ** Math.max(0, Math.trunc(precision));
+  return Math.round(value * factor) / factor;
+}
+
+function formatSvgNumber(value) {
+  return String(roundToPrecision(value, 2));
 }

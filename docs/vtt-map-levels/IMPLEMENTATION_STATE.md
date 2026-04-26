@@ -6,7 +6,7 @@ knows what changed, what remains, and what has been tested.
 
 ## Current Status
 
-- Status: Phase 4 GM controls implemented.
+- Status: Phase 5 cutout editor implemented.
 - Last updated: 2026-04-25.
 - VTT grid state now supports both square size and calibrated origin offsets.
 - GM scene controls now include an Align Grid action that captures two opposite corners
@@ -20,20 +20,28 @@ knows what changed, what remains, and what has been tested.
 - GM scene manager controls now support adding map levels, uploading level images,
   renaming, deleting, toggling visibility, changing opacity, raising/lowering z-index
   order, and selecting the active level.
+- GM scene manager controls now expose a Cutouts action for the active visible map
+  level on the active scene.
+- GM board editing now supports grid-square rectangle selection for the active map
+  level only, with Remove, Undo, Reset, and Apply controls.
+- The map level renderer now applies saved cutout rectangles as data-driven SVG masks
+  so removed squares visually reveal lower map levels.
 - Map level controls save through scene-scoped `sceneState[sceneId].mapLevels`; no
   top-level `mapLevels` field is introduced.
 - Old overlay system is still active.
-- No cutout editing, token level support, click blocking, automatic transitions, or
-  overlay replacement work has started.
+- Token level support, normal-play click blocking, automatic transitions, and overlay
+  replacement work have not started.
 - Tests run for the latest phase:
   - `node dnd/vtt/assets/js/ui/__tests__/scene-manager-map-levels.test.mjs` - passing,
     3 tests.
   - `node --test dnd/vtt/assets/js/ui/__tests__/map-level-renderer.test.mjs` - passing,
-    5 tests.
+    6 tests.
+  - `node --check dnd/vtt/assets/js/ui/map-level-renderer.js` - passing.
   - `node --check dnd/vtt/assets/js/ui/scene-manager.js` - passing.
-  - `npm.cmd test` - passing, 366 tests.
+  - `node --check dnd/vtt/assets/js/ui/board-interactions.js` - passing.
+  - `npm.cmd test` - passing, 367 tests.
   - `git diff --check` - passing.
-  - PHP linting was not run for Phase 4 because no PHP files changed and `php` remains
+  - PHP linting was not run for Phase 5 because no PHP files changed and `php` remains
     unavailable on PATH.
 - User decisions captured:
   - Cutouts should work square-by-square, similar to fog editing, but they remove/hide
@@ -272,8 +280,67 @@ Remaining notes:
   opacity/order/visibility, refresh, and confirm the scene-scoped level state persists.
 - Manual multi-client verification is still needed to confirm level changes propagate
   through the existing board-state sync path.
-- Cutout editing, token level support, click blocking, automatic transitions, and old
-  overlay removal remain future phases.
+- Token level support, click blocking, automatic transitions, and old overlay removal
+  remained future phases after Phase 4.
+
+## Completed Phase 5: Cutout Editor
+
+Date completed: 2026-04-25.
+
+Changed files:
+
+- `dnd/vtt/assets/css/board.css`
+- `dnd/vtt/assets/js/ui/board-interactions.js`
+- `dnd/vtt/assets/js/ui/map-level-renderer.js`
+- `dnd/vtt/assets/js/ui/scene-manager.js`
+- `dnd/vtt/assets/js/ui/__tests__/map-level-renderer.test.mjs`
+- `dnd/vtt/assets/js/ui/__tests__/scene-manager-map-levels.test.mjs`
+- `dnd/data/version.json`
+- `docs/vtt-map-levels/IMPLEMENTATION_STATE.md`
+
+Implementation notes:
+
+- Added a Cutouts button to active-scene map level controls. It is enabled only for the
+  active visible map level with an uploaded map image.
+- Added a GM-only map level cutout edit mode on the board. The GM drags a rectangle over
+  grid cells, clicks Remove to stage the cutout, can Undo staged removals while the editor
+  remains open, and clicks Apply to persist the draft.
+- Reset reverts the open editor draft to the last saved cutouts. Closing the editor without
+  applying discards unapplied draft cutouts.
+- Cutouts persist as rectangle cell data under the active level's
+  `sceneState[sceneId].mapLevels.levels[].cutouts` array.
+- The renderer converts saved cutout rectangles into SVG mask data URLs using the calibrated
+  shared grid origin and current map insets, so removed squares visually reveal lower map
+  levels.
+- Normal play-mode pointer behavior is unchanged: the map level stack still has pointer
+  events disabled unless the GM cutout editor is actively open.
+- Old overlay editing/rendering remains active and separate. Opening one edit mode closes
+  the other to avoid competing board pointer handlers.
+- Token `levelId`, lower-level click blocking, automatic transitions, and old overlay
+  replacement remain deferred.
+
+Tests run for this phase:
+
+- `node dnd/vtt/assets/js/ui/__tests__/scene-manager-map-levels.test.mjs` - passing,
+  3 tests.
+- `node --test dnd/vtt/assets/js/ui/__tests__/map-level-renderer.test.mjs` - passing,
+  6 tests.
+- `node --check dnd/vtt/assets/js/ui/map-level-renderer.js` - passing.
+- `node --check dnd/vtt/assets/js/ui/scene-manager.js` - passing.
+- `node --check dnd/vtt/assets/js/ui/board-interactions.js` - passing.
+- `npm.cmd test` - passing, 367 tests.
+- `git diff --check` - passing.
+- PHP linting was not run because no PHP files changed and `php` is unavailable on PATH.
+
+Remaining notes:
+
+- Manual browser verification is still needed: add at least two map levels, select the upper
+  visible level, drag a rectangle in Cutouts mode, Remove, Undo, Remove again, Apply, refresh,
+  and confirm the cutout persists and lower levels show through.
+- Manual multi-client verification is still needed to confirm applied cutouts propagate
+  through the existing board-state sync path.
+- Normal-play click-through and token visibility by level remain future work, so tokens are
+  not yet filtered or click-blocked by cutouts.
 
 ## Main Findings
 

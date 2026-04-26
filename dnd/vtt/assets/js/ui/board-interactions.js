@@ -712,6 +712,8 @@ export function mountBoardInteractions(store, routes = {}) {
   const combatTimerService = createCombatTimerService();
   let overlayEditorActive = false;
   const overlayTool = createOverlayTool(routes?.uploads);
+  let mapLevelCutoutEditorActive = false;
+  const mapLevelCutoutTool = createMapLevelCutoutTool();
   const templateTool = createTemplateTool();
   const mapPings = createMapPings({
     getBoardElement: () => board,
@@ -1524,6 +1526,16 @@ export function mountBoardInteractions(store, routes = {}) {
     return typeof activeLayerId === 'string' && activeLayerId ? activeLayerId : null;
   }
 
+  function getActiveMapLevelId(rawMapLevels, sceneGrid = null) {
+    if (!rawMapLevels || typeof rawMapLevels !== 'object') {
+      return null;
+    }
+
+    const mapLevels = normalizeMapLevelsState(rawMapLevels, { sceneGrid });
+    const activeLevelId = mapLevels?.activeLevelId ?? null;
+    return typeof activeLevelId === 'string' && activeLevelId ? activeLevelId : null;
+  }
+
   function syncCutoutToggleButtons() {
     if (!sceneListContainer) {
       return;
@@ -1548,7 +1560,46 @@ export function mountBoardInteractions(store, routes = {}) {
       button.setAttribute('aria-pressed', pressed);
     });
 
+    syncMapLevelCutoutButtons(sceneState, activeSceneId);
     syncOverlayVisibilityButtons(sceneState, activeSceneId);
+  }
+
+  function syncMapLevelCutoutButtons(sceneState = {}, activeSceneId = null) {
+    if (!sceneListContainer) {
+      return;
+    }
+
+    const buttons = sceneListContainer.querySelectorAll('[data-action="edit-map-level-cutouts"]');
+    buttons.forEach((button) => {
+      const sceneId = button.getAttribute('data-scene-id');
+      const levelId = button.getAttribute('data-map-level-id');
+      const isActiveScene = Boolean(activeSceneId && sceneId && sceneId === activeSceneId);
+      const sceneEntry = sceneId && sceneState[sceneId] && typeof sceneState[sceneId] === 'object'
+        ? sceneState[sceneId]
+        : {};
+      const sceneGrid = sceneEntry.grid ?? null;
+      const mapLevels = normalizeMapLevelsState(sceneEntry.mapLevels ?? null, { sceneGrid });
+      const activeLevelId = getActiveMapLevelId(sceneEntry.mapLevels ?? null, sceneGrid);
+      const level = mapLevels.levels.find((entry) => entry.id === levelId) ?? null;
+      const hasMap = typeof level?.mapUrl === 'string' && level.mapUrl.trim().length > 0;
+      const isVisible = level ? level.visible !== false : false;
+      const isActiveLevel = Boolean(levelId && activeLevelId && levelId === activeLevelId);
+      const pressed =
+        mapLevelCutoutEditorActive &&
+        isActiveScene &&
+        isActiveLevel &&
+        typeof mapLevelCutoutTool?.isEditingLevel === 'function' &&
+        mapLevelCutoutTool.isEditingLevel(levelId)
+          ? 'true'
+          : 'false';
+
+      button.setAttribute('aria-pressed', pressed);
+      if (!isActiveScene || !isActiveLevel || !hasMap || !isVisible) {
+        button.setAttribute('disabled', 'disabled');
+      } else {
+        button.removeAttribute('disabled');
+      }
+    });
   }
 
   function syncOverlayVisibilityButtons(sceneState = {}, activeSceneId = null) {
@@ -1702,6 +1753,40 @@ export function mountBoardInteractions(store, routes = {}) {
 
   if (sceneListContainer) {
     sceneListContainer.addEventListener('click', (event) => {
+      const mapLevelCutoutButton = event.target.closest('[data-action="edit-map-level-cutouts"]');
+      if (mapLevelCutoutButton) {
+        if (mapLevelCutoutButton.disabled) {
+          return;
+        }
+
+        event.preventDefault();
+        if (!isGmUser()) {
+          return;
+        }
+
+        const sceneId = mapLevelCutoutButton.getAttribute('data-scene-id');
+        const levelId = mapLevelCutoutButton.getAttribute('data-map-level-id');
+        const activeSceneId = getActiveSceneId();
+        if (!sceneId || !levelId || !activeSceneId || sceneId !== activeSceneId) {
+          return;
+        }
+
+        if (overlayEditorActive) {
+          overlayTool.toggle();
+        }
+
+        if (
+          typeof mapLevelCutoutTool.isEditingLevel === 'function' &&
+          mapLevelCutoutTool.isEditingLevel(levelId)
+        ) {
+          mapLevelCutoutTool.toggle();
+          return;
+        }
+
+        mapLevelCutoutTool.editLevel(levelId);
+        return;
+      }
+
       const editButton = event.target.closest('[data-action="edit-overlay-layer"]');
       if (editButton) {
         if (editButton.disabled) {
@@ -1718,6 +1803,10 @@ export function mountBoardInteractions(store, routes = {}) {
         const activeSceneId = getActiveSceneId();
         if (!sceneId || !overlayId || !activeSceneId || sceneId !== activeSceneId) {
           return;
+        }
+
+        if (mapLevelCutoutEditorActive) {
+          mapLevelCutoutTool.reset();
         }
 
         if (typeof overlayTool.isEditingLayer === 'function' && overlayTool.isEditingLayer(overlayId)) {
@@ -1743,6 +1832,10 @@ export function mountBoardInteractions(store, routes = {}) {
       const activeSceneId = getActiveSceneId();
       if (!sceneId || !activeSceneId || sceneId !== activeSceneId) {
         return;
+      }
+
+      if (mapLevelCutoutEditorActive) {
+        mapLevelCutoutTool.reset();
       }
 
       overlayTool.toggle();
@@ -3683,6 +3776,7 @@ export function mountBoardInteractions(store, routes = {}) {
     viewState.gridSize = size;
     templateTool.notifyGridChanged();
     overlayTool.notifyGridChanged();
+    mapLevelCutoutTool.notifyGridChanged();
   };
 
   const applyStateToBoard = (state = {}) => {
@@ -3698,6 +3792,7 @@ export function mountBoardInteractions(store, routes = {}) {
       const activeSceneId = state.boardState?.activeSceneId ?? null;
       if (activeSceneId !== lastActiveSceneId) {
         lastActiveSceneId = activeSceneId;
+        mapLevelCutoutTool.reset();
         selectedTokenIds.clear();
         notifySelectionChanged();
         resetCombatGroups();
@@ -4549,6 +4644,7 @@ export function mountBoardInteractions(store, routes = {}) {
     viewState.activeMapUrl = url || null;
     viewState.mapLoaded = false;
     lastOverlaySignature = null;
+    mapLevelCutoutTool.reset();
     mapLevelRenderer.reset();
     clearDragCandidate();
     if (viewState.dragState) {
@@ -4583,6 +4679,7 @@ export function mountBoardInteractions(store, routes = {}) {
       resetCombatGroups();
       renderTokens(boardApi.getState?.() ?? {}, tokenLayer, viewState);
       templateTool.reset();
+      mapLevelCutoutTool.reset();
       overlayTool.reset();
       return;
     }
@@ -4648,6 +4745,7 @@ export function mountBoardInteractions(store, routes = {}) {
       viewState.mapPixelSize = { width: 0, height: 0 };
       renderTokens(boardApi.getState?.() ?? {}, tokenLayer, viewState);
       templateTool.reset();
+      mapLevelCutoutTool.reset();
       overlayTool.reset();
     };
     mapImage.onload = handleMapImageLoad;
@@ -4769,7 +4867,8 @@ export function mountBoardInteractions(store, routes = {}) {
 
   function syncMapLevelsForState(state = {}, sceneId = null) {
     const mapLevels = resolveSceneMapLevelsState(state.boardState ?? {}, sceneId);
-    mapLevelRenderer.sync(mapLevels, { sceneGrid: state.grid ?? null });
+    mapLevelRenderer.sync(mapLevels, { sceneGrid: state.grid ?? null, view: viewState });
+    mapLevelCutoutTool.notifyMapLevelsChange(mapLevels);
   }
 
   function syncOverlayLayer(rawOverlay) {
@@ -14480,6 +14579,740 @@ export function mountBoardInteractions(store, routes = {}) {
     return boardDraft.sceneState[key];
   }
 
+function createMapLevelCutoutTool() {
+  const root = mapLevelRenderer.element;
+  if (!root || !mapSurface) {
+    return {
+      toggle() {},
+      editLevel() {},
+      reset() {},
+      notifyGridChanged() {},
+      notifyMapLevelsChange() {},
+      isEditingLevel() {
+        return false;
+      },
+    };
+  }
+
+  const editor = document.createElement('div');
+  editor.className = 'vtt-map-level-cutout-editor';
+  editor.hidden = true;
+  editor.setAttribute('aria-hidden', 'true');
+
+  const handlesLayer = document.createElement('div');
+  handlesLayer.className = 'vtt-map-level-cutout-editor__handles';
+
+  const toolbar = document.createElement('div');
+  toolbar.className = 'vtt-map-level-cutout-editor__toolbar';
+
+  const toolbarHeader = document.createElement('div');
+  toolbarHeader.className = 'vtt-map-level-cutout-editor__header';
+
+  const toolbarTitle = document.createElement('span');
+  toolbarTitle.className = 'vtt-map-level-cutout-editor__title';
+  toolbarTitle.textContent = 'Level Cutouts';
+
+  const exitButton = document.createElement('button');
+  exitButton.type = 'button';
+  exitButton.className = 'vtt-map-level-cutout-editor__exit';
+  exitButton.setAttribute('aria-label', 'Close level cutout editor');
+  exitButton.textContent = '\u00D7';
+
+  toolbarHeader.append(toolbarTitle, exitButton);
+
+  const controls = document.createElement('div');
+  controls.className = 'vtt-map-level-cutout-editor__controls';
+
+  const removeButton = document.createElement('button');
+  removeButton.type = 'button';
+  removeButton.className =
+    'vtt-map-level-cutout-editor__btn vtt-map-level-cutout-editor__btn--danger';
+  removeButton.textContent = 'Remove';
+
+  const undoButton = document.createElement('button');
+  undoButton.type = 'button';
+  undoButton.className = 'vtt-map-level-cutout-editor__btn';
+  undoButton.textContent = 'Undo';
+
+  const applyButton = document.createElement('button');
+  applyButton.type = 'button';
+  applyButton.className =
+    'vtt-map-level-cutout-editor__btn vtt-map-level-cutout-editor__btn--primary';
+  applyButton.textContent = 'Apply';
+
+  const resetButton = document.createElement('button');
+  resetButton.type = 'button';
+  resetButton.className = 'vtt-map-level-cutout-editor__btn';
+  resetButton.textContent = 'Reset';
+
+  controls.append(removeButton, undoButton, applyButton, resetButton);
+
+  const statusLabel = document.createElement('p');
+  statusLabel.className = 'vtt-map-level-cutout-editor__status';
+  statusLabel.hidden = true;
+
+  toolbar.append(toolbarHeader, controls, statusLabel);
+  editor.append(handlesLayer, toolbar);
+  root.append(editor);
+
+  const DEFAULT_STATUS = 'Drag grid squares, then Remove to stage a cutout.';
+  const STAGED_STATUS = 'Cutout staged. Apply to save or Undo.';
+  let isActive = false;
+  let activeSceneId = null;
+  let activeLevelId = null;
+  let savedCutouts = [];
+  let draftCutouts = [];
+  let history = [];
+  let selection = null;
+  let dragState = null;
+  let cutoutSequence = 0;
+
+  function toggle() {
+    if (isActive) {
+      deactivate();
+      return;
+    }
+
+    activate(activeLevelId);
+  }
+
+  function editLevel(levelId) {
+    const requestedLevelId = typeof levelId === 'string' ? levelId.trim() : '';
+    if (!requestedLevelId) {
+      return false;
+    }
+
+    if (isActive && activeLevelId === requestedLevelId) {
+      deactivate();
+      return true;
+    }
+
+    if (isActive) {
+      deactivate({ restoreRenderer: true, restoreBoardStatus: false });
+    }
+
+    return activate(requestedLevelId);
+  }
+
+  function activate(levelId = null) {
+    if (!isGmUser()) {
+      return false;
+    }
+
+    const context = resolveEditableMapLevel(levelId);
+    if (!context) {
+      updateStatus('Select the active map level before editing cutouts.');
+      return false;
+    }
+
+    activeSceneId = context.sceneId;
+    activeLevelId = context.level.id;
+    savedCutouts = cloneCutouts(context.level.cutouts);
+    draftCutouts = cloneCutouts(savedCutouts);
+    history = [];
+    selection = null;
+    dragState = null;
+    isActive = true;
+    mapLevelCutoutEditorActive = true;
+
+    root.hidden = false;
+    root.removeAttribute('hidden');
+    root.dataset.cutoutEditing = 'true';
+    mapSurface.dataset.mapLevelCutoutEditing = 'true';
+    editor.hidden = false;
+    editor.removeAttribute('hidden');
+    editor.dataset.interactive = 'true';
+    editor.setAttribute('aria-hidden', 'false');
+    positionToolbarNearViewport();
+    renderDraft();
+    setStatus(DEFAULT_STATUS);
+    updateStatus(`Editing cutouts for ${context.level.name || 'active map level'}.`);
+    syncCutoutToggleButtons();
+    return true;
+  }
+
+  function deactivate(options = {}) {
+    if (!isActive) {
+      return;
+    }
+
+    const {
+      restoreRenderer = true,
+      restoreBoardStatus = true,
+    } = options && typeof options === 'object' ? options : {};
+    const sceneId = activeSceneId;
+
+    isActive = false;
+    mapLevelCutoutEditorActive = false;
+    editor.hidden = true;
+    editor.setAttribute('hidden', '');
+    editor.setAttribute('aria-hidden', 'true');
+    delete editor.dataset.interactive;
+    delete root.dataset.cutoutEditing;
+    delete mapSurface.dataset.mapLevelCutoutEditing;
+    handlesLayer.replaceChildren();
+    history = [];
+    selection = null;
+    dragState = null;
+    savedCutouts = [];
+    draftCutouts = [];
+    activeSceneId = null;
+    activeLevelId = null;
+    setStatus('');
+
+    if (restoreRenderer) {
+      syncMapLevelsForState(boardApi.getState?.() ?? {}, sceneId);
+    }
+    if (restoreBoardStatus) {
+      restoreStatus(() => true);
+    }
+    syncCutoutToggleButtons();
+  }
+
+  function resetTool() {
+    deactivate({ restoreRenderer: true, restoreBoardStatus: false });
+  }
+
+  function isEditingLevel(levelId = null) {
+    if (!isActive) {
+      return false;
+    }
+
+    const requested = typeof levelId === 'string' ? levelId.trim() : '';
+    return requested ? activeLevelId === requested : true;
+  }
+
+  function notifyGridChanged() {
+    if (!isActive) {
+      return;
+    }
+
+    positionToolbarNearViewport();
+    renderDraft();
+  }
+
+  function notifyMapLevelsChange() {
+    if (!isActive) {
+      return;
+    }
+
+    const context = resolveEditableMapLevel(activeLevelId);
+    if (!context) {
+      deactivate({ restoreRenderer: false, restoreBoardStatus: true });
+      return;
+    }
+
+    const nextSavedCutouts = cloneCutouts(context.level.cutouts);
+    if (!isDirty()) {
+      savedCutouts = nextSavedCutouts;
+      draftCutouts = cloneCutouts(savedCutouts);
+      history = [];
+    } else {
+      savedCutouts = nextSavedCutouts;
+    }
+
+    renderDraft();
+    syncCutoutToggleButtons();
+  }
+
+  function resolveEditableMapLevel(levelId = null) {
+    if (!viewState.mapLoaded) {
+      return null;
+    }
+
+    const state = boardApi.getState?.() ?? {};
+    const boardState = state.boardState && typeof state.boardState === 'object'
+      ? state.boardState
+      : {};
+    const sceneId = typeof boardState.activeSceneId === 'string' ? boardState.activeSceneId : '';
+    if (!sceneId) {
+      return null;
+    }
+
+    const sceneState = boardState.sceneState && typeof boardState.sceneState === 'object'
+      ? boardState.sceneState
+      : {};
+    const sceneEntry = sceneState[sceneId] && typeof sceneState[sceneId] === 'object'
+      ? sceneState[sceneId]
+      : {};
+    const sceneGrid = sceneEntry.grid ?? state.grid ?? null;
+    const mapLevels = normalizeMapLevelsState(sceneEntry.mapLevels ?? null, { sceneGrid });
+    const activeId = typeof mapLevels.activeLevelId === 'string' ? mapLevels.activeLevelId : '';
+    const requestedId = typeof levelId === 'string' && levelId.trim()
+      ? levelId.trim()
+      : activeId;
+
+    if (!requestedId || requestedId !== activeId) {
+      return null;
+    }
+
+    const level = mapLevels.levels.find((entry) => entry.id === requestedId) ?? null;
+    const hasMap = typeof level?.mapUrl === 'string' && level.mapUrl.trim().length > 0;
+    if (!level || !hasMap || level.visible === false) {
+      return null;
+    }
+
+    return { state, boardState, sceneId, sceneGrid, mapLevels, level };
+  }
+
+  function handleEditorPointerDown(event) {
+    if (!isActive || event.button !== 0) {
+      return;
+    }
+    if (event.target && event.target.closest('.vtt-map-level-cutout-editor__toolbar')) {
+      return;
+    }
+
+    const cell = getCutoutCellFromEvent(event);
+    if (!cell) {
+      return;
+    }
+
+    event.preventDefault();
+    event.stopPropagation();
+    dragState = {
+      pointerId: event.pointerId,
+      start: cell,
+      current: cell,
+    };
+    selection = buildSelectionFromCells(dragState.start, dragState.current);
+    try {
+      editor.setPointerCapture?.(event.pointerId);
+    } catch (error) {
+      // Ignore pointer capture issues.
+    }
+    renderDraft();
+  }
+
+  function handleEditorPointerMove(event) {
+    if (!dragState || event.pointerId !== dragState.pointerId || !isActive) {
+      return;
+    }
+
+    const cell = getCutoutCellFromEvent(event);
+    if (!cell) {
+      return;
+    }
+
+    event.preventDefault();
+    event.stopPropagation();
+    dragState.current = cell;
+    selection = buildSelectionFromCells(dragState.start, dragState.current);
+    renderDraft();
+  }
+
+  function handleEditorPointerUp(event) {
+    if (!dragState || event.pointerId !== dragState.pointerId) {
+      return;
+    }
+
+    event.preventDefault();
+    event.stopPropagation();
+    try {
+      editor.releasePointerCapture?.(event.pointerId);
+    } catch (error) {
+      // Ignore pointer release issues.
+    }
+    dragState = null;
+    if (selection) {
+      setStatus('Selection ready. Remove stages it as a cutout.');
+    }
+    updateControls();
+  }
+
+  function getCutoutCellFromEvent(event) {
+    const localPoint = getLocalMapPoint(event);
+    if (!localPoint) {
+      return null;
+    }
+
+    const gridPoint = mapPointToGrid(localPoint, viewState);
+    if (!gridPoint) {
+      return null;
+    }
+
+    const bounds = resolveGridBounds(viewState);
+    if (!Number.isFinite(bounds.columns) || !Number.isFinite(bounds.rows) ||
+        bounds.columns <= 0 || bounds.rows <= 0) {
+      return null;
+    }
+
+    const maxColumn = Math.max(0, Math.ceil(bounds.columns) - 1);
+    const maxRow = Math.max(0, Math.ceil(bounds.rows) - 1);
+    return {
+      column: clamp(Math.floor(gridPoint.column), 0, maxColumn),
+      row: clamp(Math.floor(gridPoint.row), 0, maxRow),
+    };
+  }
+
+  function buildSelectionFromCells(start, current) {
+    if (!start || !current) {
+      return null;
+    }
+
+    const column = Math.min(start.column, current.column);
+    const row = Math.min(start.row, current.row);
+    const width = Math.abs(current.column - start.column) + 1;
+    const height = Math.abs(current.row - start.row) + 1;
+    return normalizeCutout({ column, row, width, height });
+  }
+
+  function removeSelection() {
+    if (!isActive || !selection) {
+      return;
+    }
+
+    const cutout = normalizeCutout({
+      ...selection,
+      id: createCutoutId(),
+    });
+    if (!cutout) {
+      return;
+    }
+
+    history.push(cloneCutouts(draftCutouts));
+    draftCutouts = cloneCutouts([...draftCutouts, cutout]);
+    selection = null;
+    setStatus(STAGED_STATUS);
+    renderDraft();
+  }
+
+  function undoLastCutout() {
+    if (!isActive || history.length === 0) {
+      return;
+    }
+
+    draftCutouts = cloneCutouts(history.pop() ?? []);
+    selection = null;
+    setStatus(history.length ? STAGED_STATUS : DEFAULT_STATUS);
+    renderDraft();
+  }
+
+  function applyChanges() {
+    if (!isActive) {
+      return;
+    }
+
+    if (!isDirty()) {
+      setStatus('No cutout changes to apply.');
+      updateControls();
+      return;
+    }
+
+    const changed = updateActiveLevelCutouts(draftCutouts);
+    if (!changed) {
+      setStatus('Unable to update cutouts for the active map level.');
+      updateControls();
+      return;
+    }
+
+    savedCutouts = cloneCutouts(draftCutouts);
+    history = [];
+    selection = null;
+    setStatus('Cutouts applied.');
+    renderDraft();
+    markSceneStateDirty(activeSceneId);
+    persistBoardStateSnapshot();
+    syncCutoutToggleButtons();
+  }
+
+  function resetDraft() {
+    if (!isActive) {
+      return;
+    }
+
+    draftCutouts = cloneCutouts(savedCutouts);
+    history = [];
+    selection = null;
+    setStatus(DEFAULT_STATUS);
+    renderDraft();
+  }
+
+  function updateActiveLevelCutouts(nextCutouts) {
+    if (typeof boardApi.updateState !== 'function' || !activeSceneId || !activeLevelId) {
+      return false;
+    }
+
+    let updated = false;
+    boardApi.updateState?.((draft) => {
+      const sceneEntry = ensureSceneStateDraftEntry(draft, activeSceneId);
+      if (!sceneEntry) {
+        return;
+      }
+
+      const mapLevels = normalizeMapLevelsState(sceneEntry.mapLevels ?? null, {
+        sceneGrid: sceneEntry.grid ?? null,
+      });
+      if (mapLevels.activeLevelId !== activeLevelId) {
+        return;
+      }
+
+      const level = mapLevels.levels.find((entry) => entry.id === activeLevelId);
+      if (!level) {
+        return;
+      }
+
+      level.cutouts = cloneCutouts(nextCutouts);
+      sceneEntry.mapLevels = mapLevels;
+      updated = true;
+    });
+
+    return updated;
+  }
+
+  function renderDraft() {
+    handlesLayer.replaceChildren();
+
+    if (!isActive) {
+      return;
+    }
+
+    const fragment = document.createDocumentFragment();
+    draftCutouts.forEach((cutout) => {
+      const rect = resolveCutoutPixelRect(cutout);
+      if (!rect) {
+        return;
+      }
+
+      const element = document.createElement('div');
+      element.className = 'vtt-map-level-cutout-editor__cutout';
+      element.style.left = `${rect.x}px`;
+      element.style.top = `${rect.y}px`;
+      element.style.width = `${rect.width}px`;
+      element.style.height = `${rect.height}px`;
+      fragment.append(element);
+    });
+
+    if (selection) {
+      const rect = resolveCutoutPixelRect(selection);
+      if (rect) {
+        const selectionElement = document.createElement('div');
+        selectionElement.className = 'vtt-map-level-cutout-editor__selection';
+        selectionElement.style.left = `${rect.x}px`;
+        selectionElement.style.top = `${rect.y}px`;
+        selectionElement.style.width = `${rect.width}px`;
+        selectionElement.style.height = `${rect.height}px`;
+        fragment.append(selectionElement);
+      }
+    }
+
+    handlesLayer.append(fragment);
+    applyPreviewMask();
+    updateControls();
+  }
+
+  function applyPreviewMask() {
+    if (!isActive || !activeSceneId || !activeLevelId) {
+      return;
+    }
+
+    const state = boardApi.getState?.() ?? {};
+    const boardState = state.boardState && typeof state.boardState === 'object'
+      ? state.boardState
+      : {};
+    const sceneState = boardState.sceneState && typeof boardState.sceneState === 'object'
+      ? boardState.sceneState
+      : {};
+    const sceneEntry = sceneState[activeSceneId] && typeof sceneState[activeSceneId] === 'object'
+      ? sceneState[activeSceneId]
+      : {};
+    const sceneGrid = sceneEntry.grid ?? state.grid ?? null;
+    const mapLevels = normalizeMapLevelsState(sceneEntry.mapLevels ?? null, { sceneGrid });
+    const level = mapLevels.levels.find((entry) => entry.id === activeLevelId);
+    if (!level) {
+      return;
+    }
+
+    level.cutouts = cloneCutouts(draftCutouts);
+    mapLevelRenderer.sync(mapLevels, { sceneGrid: state.grid ?? sceneGrid, view: viewState });
+  }
+
+  function resolveCutoutPixelRect(cutout) {
+    const normalized = normalizeCutout(cutout);
+    const metrics = resolveCutoutEditorMetrics();
+    if (!normalized || !metrics) {
+      return null;
+    }
+
+    const x1 = clamp(
+      metrics.originX + normalized.column * metrics.gridSize,
+      0,
+      metrics.innerWidth
+    );
+    const y1 = clamp(
+      metrics.originY + normalized.row * metrics.gridSize,
+      0,
+      metrics.innerHeight
+    );
+    const x2 = clamp(
+      metrics.originX + (normalized.column + normalized.width) * metrics.gridSize,
+      0,
+      metrics.innerWidth
+    );
+    const y2 = clamp(
+      metrics.originY + (normalized.row + normalized.height) * metrics.gridSize,
+      0,
+      metrics.innerHeight
+    );
+    const width = x2 - x1;
+    const height = y2 - y1;
+    if (width <= 0 || height <= 0) {
+      return null;
+    }
+
+    return {
+      x: roundToPrecision(x1, 2),
+      y: roundToPrecision(y1, 2),
+      width: roundToPrecision(width, 2),
+      height: roundToPrecision(height, 2),
+    };
+  }
+
+  function resolveCutoutEditorMetrics() {
+    const mapWidth = Number.isFinite(viewState.mapPixelSize?.width)
+      ? viewState.mapPixelSize.width
+      : 0;
+    const mapHeight = Number.isFinite(viewState.mapPixelSize?.height)
+      ? viewState.mapPixelSize.height
+      : 0;
+    if (mapWidth <= 0 || mapHeight <= 0) {
+      return null;
+    }
+
+    const insets = viewState.mapInsets ?? {};
+    const left = Number.isFinite(insets.left) ? insets.left : 0;
+    const right = Number.isFinite(insets.right) ? insets.right : 0;
+    const top = Number.isFinite(insets.top) ? insets.top : 0;
+    const bottom = Number.isFinite(insets.bottom) ? insets.bottom : 0;
+    const innerWidth = Math.max(0, mapWidth - left - right);
+    const innerHeight = Math.max(0, mapHeight - top - bottom);
+    if (innerWidth <= 0 || innerHeight <= 0) {
+      return null;
+    }
+
+    const origin = viewState.gridOrigin ?? {};
+    return {
+      innerWidth,
+      innerHeight,
+      originX: Number.isFinite(origin.x) ? origin.x : 0,
+      originY: Number.isFinite(origin.y) ? origin.y : 0,
+      gridSize: Math.max(8, Number.isFinite(viewState.gridSize) ? viewState.gridSize : 64),
+    };
+  }
+
+  function positionToolbarNearViewport() {
+    const rect = root.getBoundingClientRect?.();
+    if (!rect) {
+      editor.style.setProperty('--cutout-toolbar-x', '0px');
+      editor.style.setProperty('--cutout-toolbar-y', '0px');
+      return;
+    }
+
+    const scale = Number.isFinite(viewState.scale) && viewState.scale !== 0 ? viewState.scale : 1;
+    const localX = (24 - rect.left) / scale;
+    const localY = (24 - rect.top) / scale;
+    editor.style.setProperty('--cutout-toolbar-x', `${Math.max(0, roundToPrecision(localX, 2))}px`);
+    editor.style.setProperty('--cutout-toolbar-y', `${Math.max(0, roundToPrecision(localY, 2))}px`);
+  }
+
+  function updateControls() {
+    removeButton.disabled = !isActive || !selection;
+    undoButton.disabled = !isActive || history.length === 0;
+    applyButton.disabled = !isActive || !isDirty();
+    resetButton.disabled = !isActive || (!isDirty() && !selection);
+  }
+
+  function setStatus(message) {
+    const next = typeof message === 'string' ? message.trim() : '';
+    statusLabel.textContent = next;
+    statusLabel.hidden = !next;
+  }
+
+  function isDirty() {
+    return cutoutSignature(draftCutouts) !== cutoutSignature(savedCutouts);
+  }
+
+  function cloneCutouts(cutouts = []) {
+    return (Array.isArray(cutouts) ? cutouts : [])
+      .map((cutout) => normalizeCutout(cutout))
+      .filter(Boolean);
+  }
+
+  function normalizeCutout(cutout = {}) {
+    if (!cutout || typeof cutout !== 'object') {
+      return null;
+    }
+
+    const column = Number(cutout.column ?? cutout.col ?? cutout.x);
+    const row = Number(cutout.row ?? cutout.y);
+    if (!Number.isFinite(column) || !Number.isFinite(row)) {
+      return null;
+    }
+
+    const normalized = {
+      column: Math.max(0, Math.trunc(column)),
+      row: Math.max(0, Math.trunc(row)),
+      width: Math.max(1, Math.trunc(Number(cutout.width ?? cutout.columns ?? cutout.w) || 1)),
+      height: Math.max(1, Math.trunc(Number(cutout.height ?? cutout.rows ?? cutout.h) || 1)),
+    };
+
+    if (typeof cutout.id === 'string' && cutout.id.trim()) {
+      normalized.id = cutout.id.trim();
+    }
+
+    return normalized;
+  }
+
+  function cutoutSignature(cutouts = []) {
+    return safeStableStringify(cloneCutouts(cutouts)) ?? '[]';
+  }
+
+  function createCutoutId() {
+    cutoutSequence += 1;
+    return `map-level-cutout-${Date.now().toString(36)}-${cutoutSequence.toString(36)}`;
+  }
+
+  editor.addEventListener('pointerdown', handleEditorPointerDown, true);
+  editor.addEventListener('pointermove', handleEditorPointerMove, true);
+  editor.addEventListener('pointerup', handleEditorPointerUp, true);
+  editor.addEventListener('pointercancel', handleEditorPointerUp, true);
+  exitButton.addEventListener('click', (event) => {
+    event.preventDefault();
+    event.stopPropagation();
+    deactivate();
+  });
+  removeButton.addEventListener('click', (event) => {
+    event.preventDefault();
+    event.stopPropagation();
+    removeSelection();
+  });
+  undoButton.addEventListener('click', (event) => {
+    event.preventDefault();
+    event.stopPropagation();
+    undoLastCutout();
+  });
+  applyButton.addEventListener('click', (event) => {
+    event.preventDefault();
+    event.stopPropagation();
+    applyChanges();
+  });
+  resetButton.addEventListener('click', (event) => {
+    event.preventDefault();
+    event.stopPropagation();
+    resetDraft();
+  });
+
+  updateControls();
+
+  return {
+    toggle,
+    editLevel,
+    reset: resetTool,
+    notifyGridChanged,
+    notifyMapLevelsChange,
+    isEditingLevel,
+  };
+}
 
 function createOverlayTool(uploadsEndpoint) {
   if (!mapOverlay || !mapSurface) {

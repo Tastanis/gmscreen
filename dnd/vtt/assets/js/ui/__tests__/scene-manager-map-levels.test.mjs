@@ -27,7 +27,14 @@ describe('scene manager map level controls', () => {
         activeLevelId: 'upper',
         levels: [
           { id: 'ground', name: 'Ground', mapUrl: '/maps/ground.png', opacity: 1, zIndex: 0 },
-          { id: 'upper', name: 'Upper', mapUrl: '/maps/upper.png', opacity: 0.65, zIndex: 1 },
+          {
+            id: 'upper',
+            name: 'Upper',
+            mapUrl: '/maps/upper.png',
+            opacity: 0.65,
+            zIndex: 1,
+            cutouts: [{ column: 1, row: 1, width: 1, height: 2 }],
+          },
         ],
       },
     });
@@ -49,6 +56,8 @@ describe('scene manager map level controls', () => {
     assert.match(markup, /data-action="add-map-level"/);
     assert.match(markup, /data-action="upload-map-level"/);
     assert.match(markup, /data-action="set-map-level-opacity"/);
+    assert.match(markup, /data-action="edit-map-level-cutouts"/);
+    assert.match(markup, /Cutouts\(1\)|Cutouts \(1\)/);
     assert.match(markup, /value="65"/);
     assert.match(markup, /data-action="add-overlay-layer"/);
     assert.match(markup, /data-action="clear-overlay"/);

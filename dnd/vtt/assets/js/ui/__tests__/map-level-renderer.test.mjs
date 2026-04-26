@@ -4,6 +4,7 @@ import assert from 'node:assert/strict';
 import {
   MAP_LEVEL_CLASS,
   MAP_LEVEL_STACK_ID,
+  buildMapLevelCutoutMask,
   buildCssUrl,
   createMapLevelRenderer,
   getRenderableMapLevels,
@@ -249,6 +250,38 @@ describe('map level renderer', () => {
     assert.equal(levels[1].style.zIndex, '10');
   });
 
+  test('applies saved cutout rectangles as a mask using the shared grid metrics', () => {
+    const { renderer } = createRendererHarness();
+    const view = {
+      mapPixelSize: { width: 240, height: 200 },
+      mapInsets: { top: 10, right: 20, bottom: 10, left: 20 },
+      gridOrigin: { x: 4, y: 6 },
+      gridSize: 32,
+    };
+
+    renderer.sync(
+      {
+        levels: [
+          {
+            id: 'upper',
+            name: 'Upper',
+            mapUrl: '/maps/upper.png',
+            cutouts: [{ column: 1, row: 2, width: 2, height: 1 }],
+          },
+        ],
+      },
+      { view }
+    );
+
+    const level = renderer.element.querySelector('[data-map-level-id="upper"]');
+    assert.equal(level.dataset.mapLevelCutoutCount, '1');
+    assert.equal(level.dataset.mapLevelHasCutoutMask, 'true');
+    assert.equal(level.style.maskRepeat, 'no-repeat');
+    assert.equal(level.style.maskSize, '100% 100%');
+    assert.match(decodeMaskUrl(level.style.maskImage), /viewBox="0 0 200 180"/);
+    assert.match(decodeMaskUrl(level.style.maskImage), /M 36 70 H 100 V 102 H 36 Z/);
+  });
+
   test('reuses existing level elements and removes stale levels on resync', () => {
     const { renderer } = createRendererHarness();
 
@@ -313,5 +346,12 @@ describe('map level renderer', () => {
 
     assert.equal(buildCssUrl('/maps/a"b\\c.png'), 'url("/maps/a\\"b\\\\c.png")');
     assert.equal(resolveSceneMapLevelsState({ mapLevels: { levels: [] } }, 'missing'), null);
+    assert.equal(buildMapLevelCutoutMask([{ column: 1, row: 1 }], null), '');
   });
 });
+
+function decodeMaskUrl(maskValue) {
+  const match = String(maskValue).match(/^url\("data:image\/svg\+xml,([^"]+)"\)$/);
+  assert.ok(match, `Expected an encoded SVG mask URL, received ${maskValue}`);
+  return decodeURIComponent(match[1]);
+}

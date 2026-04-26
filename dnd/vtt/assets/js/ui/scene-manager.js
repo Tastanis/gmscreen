@@ -1816,6 +1816,7 @@ function renderSceneItem(scene, activeSceneId, sceneBoardState = {}, options = {
               : ''}
           </div>
           ${renderMapLevelList(scene.id, mapLevelsState, {
+            isActiveScene: isActive,
             mapLevelUploadDisabled,
             mapLevelUploadTitle,
           })}
@@ -1887,6 +1888,17 @@ function renderMapLevelListItem(sceneId, mapLevelsState, level, index, levels, o
   const canRaise = index < levels.length - 1;
   const uploadDisabled = Boolean(options.mapLevelUploadDisabled);
   const uploadTitle = options.mapLevelUploadTitle || '';
+  const cutoutCount = Array.isArray(level.cutouts) ? level.cutouts.length : 0;
+  const cutoutDisabled = !options.isActiveScene || !isActiveLevel || !hasMap || !visible;
+  const cutoutTitle = !options.isActiveScene
+    ? 'Activate this scene to edit level cutouts.'
+    : !isActiveLevel
+      ? 'Select this level before editing cutouts.'
+      : !hasMap
+        ? 'Upload a map image before editing cutouts.'
+        : !visible
+          ? 'Show this level before editing cutouts.'
+          : '';
 
   return `
     <li
@@ -1956,6 +1968,19 @@ function renderMapLevelListItem(sceneId, mapLevelsState, level, index, levels, o
           aria-pressed="${isActiveLevel ? 'true' : 'false'}"
         >
           Select
+        </button>
+        <button
+          type="button"
+          class="btn btn--ghost btn--tiny scene-level__cutouts"
+          data-action="edit-map-level-cutouts"
+          data-scene-id="${sceneId}"
+          data-map-level-id="${level.id}"
+          data-map-level-cutout-count="${cutoutCount}"
+          aria-pressed="false"
+          ${cutoutDisabled ? 'disabled' : ''}
+          ${cutoutTitle ? ` title="${escapeHtml(cutoutTitle)}"` : ''}
+        >
+          Cutouts${cutoutCount ? ` (${cutoutCount})` : ''}
         </button>
         <button
           type="button"
