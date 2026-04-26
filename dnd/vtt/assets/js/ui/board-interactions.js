@@ -54,7 +54,10 @@ import {
 } from './token-stack-order.js';
 import {
   getAdjacentTokenLevel,
+  getOrderedTokenMapLevels,
+  getPlayerTokenMapLevelVisibility,
   getTokenLevelControlState,
+  isPlacementInteractableOnPlayerMapLevel,
   resolveSceneTokenLevelState,
   resolveTokenLevelId,
 } from './token-levels.js';
@@ -129,6 +132,7 @@ import {
 } from '../combat/combat-renderer.js';
 
 const OVERLAY_LAYER_PREFIX = 'overlay-layer-';
+const TOKEN_LEVEL_STACK_STRIDE = 10000;
 let overlayLayerSeed = Date.now();
 let overlayLayerSequence = 0;
 let trackerOverflowResizeListenerAttached = false;
@@ -5829,7 +5833,6 @@ export function mountBoardInteractions(store, routes = {}) {
       if (!normalized) {
         return;
       }
-      const levelId = resolveTokenLevelId(placement, tokenLevelState);
       const stackOrder = getPlacementStackOrder(placement, placementIndex);
 
       activeCombatantIds.add(normalized.id);
@@ -5837,26 +5840,6 @@ export function mountBoardInteractions(store, routes = {}) {
       if (!gmViewing && normalized.hidden) {
         return;
       }
-
-      // Hide tokens that are wholly under fog of war for non-GM users.
-      // Check every cell the token occupies; if ALL are fogged, skip rendering.
-      if (isCellFogged) {
-        let allFogged = true;
-        for (let dc = 0; dc < normalized.width && allFogged; dc++) {
-          for (let dr = 0; dr < normalized.height && allFogged; dr++) {
-            if (!isCellFogged(normalized.column + dc, normalized.row + dr)) {
-              allFogged = false;
-            }
-          }
-        }
-        if (allFogged) {
-          return;
-        }
-      }
-
-      trackerEntries.push(normalized);
-
-      renderedIds.add(normalized.id);
 
       let column = normalized.column;
       let row = normalized.row;
@@ -5871,7 +5854,45 @@ export function mountBoardInteractions(store, routes = {}) {
         height = Math.max(1, toNonNegativeNumber(preview.height ?? height, height));
       }
 
-      renderedPlacements.push({ id: normalized.id, column, row, width, height, levelId });
+      const levelPlacement = { ...placement, column, row, width, height };
+      const levelId = resolveTokenLevelId(levelPlacement, tokenLevelState);
+      const tokenLevelVisibility = gmViewing
+        ? null
+        : getPlayerTokenMapLevelVisibility(levelPlacement, tokenLevelState);
+      if (!gmViewing && !tokenLevelVisibility?.visible) {
+        return;
+      }
+
+      // Hide tokens that are wholly under fog of war for non-GM users.
+      // Check every cell the token occupies; if ALL are fogged, skip rendering.
+      if (isCellFogged) {
+        let allFogged = true;
+        for (let dc = 0; dc < width && allFogged; dc++) {
+          for (let dr = 0; dr < height && allFogged; dr++) {
+            if (!isCellFogged(column + dc, row + dr)) {
+              allFogged = false;
+            }
+          }
+        }
+        if (allFogged) {
+          return;
+        }
+      }
+
+      trackerEntries.push(normalized);
+      renderedIds.add(normalized.id);
+
+      const tokenZIndex = getTokenRenderStackOrder(stackOrder, levelId, tokenLevelState);
+      renderedPlacements.push({
+        id: normalized.id,
+        column,
+        row,
+        width,
+        height,
+        levelId,
+        sortOrder: tokenZIndex,
+        visibleCells: tokenLevelVisibility?.visibleCells ?? null,
+      });
 
       let token = existingNodes.get(normalized.id);
       if (token) {
@@ -5889,6 +5910,13 @@ export function mountBoardInteractions(store, routes = {}) {
       const top = topOffset + row * gridSize;
       const baseTransform = `translate3d(${left}px, ${top}px, 0)`;
       token.style.transform = baseTransform;
+      applyTokenMapLevelVisibilityMask(token, tokenLevelVisibility, {
+        column,
+        row,
+        width,
+        height,
+        gridSize,
+      });
 
       token.classList.toggle('vtt-token--hidden', Boolean(normalized.hidden));
 
@@ -5931,7 +5959,7 @@ export function mountBoardInteractions(store, routes = {}) {
         token.style.zIndex = '100000';
       } else {
         token.classList.remove('is-dragging');
-        token.style.zIndex = String(stackOrder);
+        token.style.zIndex = String(tokenZIndex);
       }
 
       token.dataset.tokenName = normalized.name || '';
@@ -5946,6 +5974,15 @@ export function mountBoardInteractions(store, routes = {}) {
 
       fragment.appendChild(token);
       renderedCount += 1;
+    });
+
+    renderedPlacements.sort((left, right) => {
+      const leftOrder = Number.isFinite(left?.sortOrder) ? left.sortOrder : 0;
+      const rightOrder = Number.isFinite(right?.sortOrder) ? right.sortOrder : 0;
+      if (leftOrder !== rightOrder) {
+        return leftOrder - rightOrder;
+      }
+      return 0;
     });
 
     if (selectedTokenIds.size) {
@@ -6031,6 +6068,7 @@ export function mountBoardInteractions(store, routes = {}) {
 
     const gmViewing = isGmUser();
     const isCellFogged = gmViewing ? null : createFogChecker(state);
+    const tokenLevelState = getActiveSceneTokenLevelState(state);
 
     placements.forEach((placement) => {
       const normalized = normalizePlacementForRender(placement);
@@ -6040,6 +6078,22 @@ export function mountBoardInteractions(store, routes = {}) {
 
       // Skip hidden tokens for non-GM
       if (!gmViewing && normalized.hidden) {
+        return;
+      }
+
+      if (
+        !gmViewing &&
+        !getPlayerTokenMapLevelVisibility(
+          {
+            ...placement,
+            column: normalized.column,
+            row: normalized.row,
+            width: normalized.width,
+            height: normalized.height,
+          },
+          tokenLevelState
+        ).visible
+      ) {
         return;
       }
 
@@ -6122,6 +6176,133 @@ export function mountBoardInteractions(store, routes = {}) {
     });
 
     layer.hidden = auraCount === 0;
+  }
+
+  function getTokenRenderStackOrder(stackOrder, levelId, mapLevelsState = null) {
+    const normalizedStackOrder = Number.isFinite(stackOrder) ? Math.max(0, Math.trunc(stackOrder)) : 0;
+    const levels = getOrderedTokenMapLevels(mapLevelsState?.levels ?? []);
+    if (!levels.length || !levelId) {
+      return normalizedStackOrder;
+    }
+
+    const levelIndex = levels.findIndex((level) => level?.id === levelId);
+    if (levelIndex < 0) {
+      return normalizedStackOrder;
+    }
+
+    return levelIndex * TOKEN_LEVEL_STACK_STRIDE + normalizedStackOrder;
+  }
+
+  function applyTokenMapLevelVisibilityMask(token, visibility, { column, row, width, height, gridSize } = {}) {
+    clearTokenMapLevelVisibilityMask(token);
+    if (
+      !token ||
+      !visibility ||
+      visibility.fullyVisible ||
+      !Array.isArray(visibility.visibleCells) ||
+      visibility.visibleCells.length === 0
+    ) {
+      return;
+    }
+
+    const mask = buildTokenMapLevelVisibilityMask(visibility.visibleCells, {
+      column,
+      row,
+      width,
+      height,
+      gridSize,
+    });
+    if (!mask) {
+      return;
+    }
+
+    token.dataset.mapLevelVisibility = 'partial';
+    token.style.maskImage = mask;
+    token.style.webkitMaskImage = mask;
+    token.style.maskRepeat = 'no-repeat';
+    token.style.webkitMaskRepeat = 'no-repeat';
+    token.style.maskSize = '100% 100%';
+    token.style.webkitMaskSize = '100% 100%';
+  }
+
+  function clearTokenMapLevelVisibilityMask(token) {
+    if (!token) {
+      return;
+    }
+
+    delete token.dataset.mapLevelVisibility;
+    token.style.maskImage = '';
+    token.style.webkitMaskImage = '';
+    token.style.maskRepeat = '';
+    token.style.webkitMaskRepeat = '';
+    token.style.maskSize = '';
+    token.style.webkitMaskSize = '';
+  }
+
+  function buildTokenMapLevelVisibilityMask(cells = [], { column, row, width, height, gridSize } = {}) {
+    const tokenColumn = Number.isFinite(column) ? column : 0;
+    const tokenRow = Number.isFinite(row) ? row : 0;
+    const tokenWidth = Math.max(1, Number.isFinite(width) ? width : 1);
+    const tokenHeight = Math.max(1, Number.isFinite(height) ? height : 1);
+    const size = Math.max(8, Number.isFinite(gridSize) ? gridSize : 64);
+    const pixelWidth = tokenWidth * size;
+    const pixelHeight = tokenHeight * size;
+    if (!pixelWidth || !pixelHeight) {
+      return '';
+    }
+
+    const rectangles = cells
+      .map((cell) => {
+        const cellColumn = Number.isFinite(cell?.column) ? cell.column : null;
+        const cellRow = Number.isFinite(cell?.row) ? cell.row : null;
+        if (cellColumn === null || cellRow === null) {
+          return null;
+        }
+
+        const localColumn = cellColumn - tokenColumn;
+        const localRow = cellRow - tokenRow;
+        if (
+          localColumn < 0 ||
+          localRow < 0 ||
+          localColumn >= tokenWidth ||
+          localRow >= tokenHeight
+        ) {
+          return null;
+        }
+
+        return {
+          x: localColumn * size,
+          y: localRow * size,
+          width: size,
+          height: size,
+        };
+      })
+      .filter(Boolean);
+
+    if (!rectangles.length) {
+      return '';
+    }
+
+    const rectMarkup = rectangles
+      .map((rect) =>
+        `<rect x="${formatTokenMaskNumber(rect.x)}" y="${formatTokenMaskNumber(rect.y)}" width="${formatTokenMaskNumber(rect.width)}" height="${formatTokenMaskNumber(rect.height)}" fill="white"/>`
+      )
+      .join('');
+    const svg = [
+      `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 ${formatTokenMaskNumber(pixelWidth)} ${formatTokenMaskNumber(pixelHeight)}">`,
+      rectMarkup,
+      '</svg>',
+    ].join('');
+
+    return `url("data:image/svg+xml,${encodeURIComponent(svg)}")`;
+  }
+
+  function formatTokenMaskNumber(value) {
+    if (!Number.isFinite(value)) {
+      return '0';
+    }
+
+    return String(Math.round(value * 100) / 100);
   }
 
   function updateCombatTracker(combatants = [], options = {}) {
@@ -9991,6 +10172,10 @@ export function mountBoardInteractions(store, routes = {}) {
     if (!indicator) {
       return;
     }
+    const tokenElement = indicator.closest('.vtt-token');
+    if (!isTokenElementInteractableAtEvent(tokenElement, event)) {
+      return;
+    }
     event.preventDefault();
     event.stopPropagation();
   }
@@ -10000,9 +10185,12 @@ export function mountBoardInteractions(store, routes = {}) {
     if (!indicator) {
       return;
     }
+    const tokenElement = indicator.closest('.vtt-token');
+    if (!isTokenElementInteractableAtEvent(tokenElement, event)) {
+      return;
+    }
     event.preventDefault();
     event.stopPropagation();
-    const tokenElement = indicator.closest('.vtt-token');
     const placementId = tokenElement?.dataset?.placementId ?? null;
     if (!placementId) {
       return;
@@ -10018,14 +10206,65 @@ export function mountBoardInteractions(store, routes = {}) {
     if (!indicator) {
       return;
     }
+    const tokenElement = indicator.closest('.vtt-token');
+    if (!isTokenElementVisibleToPlayer(tokenElement)) {
+      return;
+    }
     event.preventDefault();
     event.stopPropagation();
-    const tokenElement = indicator.closest('.vtt-token');
     const placementId = tokenElement?.dataset?.placementId ?? null;
     if (!placementId) {
       return;
     }
     toggleTriggeredActionState(placementId);
+  }
+
+  function isTokenElementInteractableAtEvent(tokenElement, event) {
+    if (isGmUser()) {
+      return true;
+    }
+
+    const placementId = tokenElement?.dataset?.placementId ?? null;
+    if (!placementId) {
+      return false;
+    }
+
+    const hitPlacement = findRenderedPlacementAtPoint(event);
+    return hitPlacement?.id === placementId;
+  }
+
+  function isTokenElementVisibleToPlayer(tokenElement) {
+    if (isGmUser()) {
+      return true;
+    }
+
+    const placementId = tokenElement?.dataset?.placementId ?? null;
+    if (!placementId) {
+      return false;
+    }
+
+    const placement = getPlacementFromStore(placementId);
+    if (!placement) {
+      return false;
+    }
+
+    const state = boardApi.getState?.() ?? {};
+    const normalized = normalizePlacementForRender(placement);
+    if (normalized?.hidden) {
+      return false;
+    }
+
+    const tokenLevelState = getActiveSceneTokenLevelState(state);
+    const placementForLevel = normalized
+      ? {
+          ...placement,
+          column: normalized.column,
+          row: normalized.row,
+          width: normalized.width,
+          height: normalized.height,
+        }
+      : placement;
+    return getPlayerTokenMapLevelVisibility(placementForLevel, tokenLevelState).visible;
   }
 
   function findRenderedPlacementAtPoint(event) {
@@ -10079,6 +10318,13 @@ export function mountBoardInteractions(store, routes = {}) {
 
     const pointX = localX - offsetLeft;
     const pointY = localY - offsetTop;
+    const pointCell = {
+      column: Math.floor(pointX / gridSize),
+      row: Math.floor(pointY / gridSize),
+    };
+    const gmViewing = isGmUser();
+    const state = gmViewing ? null : boardApi.getState?.() ?? {};
+    const tokenLevelState = gmViewing ? null : getActiveSceneTokenLevelState(state);
 
     for (let index = renderedPlacements.length - 1; index >= 0; index -= 1) {
       const placement = renderedPlacements[index];
@@ -10097,10 +10343,18 @@ export function mountBoardInteractions(store, routes = {}) {
       const bottom = top + height * gridSize;
 
       if (pointX >= left && pointX < right && pointY >= top && pointY < bottom) {
-        // For non-GM users, skip tokens hidden by fog of war
-        if (isPositionFogged(boardApi.getState?.() ?? {}, column, row)) {
+        if (
+          !gmViewing &&
+          !isPlacementInteractableOnPlayerMapLevel(placement, tokenLevelState, { point: pointCell })
+        ) {
           continue;
         }
+
+        // For non-GM users, skip tokens hidden by fog of war
+        if (!gmViewing && isPositionFogged(state, pointCell.column, pointCell.row)) {
+          continue;
+        }
+
         return placement;
       }
     }
@@ -13040,6 +13294,38 @@ export function mountBoardInteractions(store, routes = {}) {
     const placement = getPlacementFromStore(placementId);
     if (!placement) {
       return false;
+    }
+
+    if (!isGmUser()) {
+      const state = boardApi.getState?.() ?? {};
+      const normalized = normalizePlacementForRender(placement);
+      const tokenLevelState = getActiveSceneTokenLevelState(state);
+      const placementForLevel = normalized
+        ? {
+            ...placement,
+            column: normalized.column,
+            row: normalized.row,
+            width: normalized.width,
+            height: normalized.height,
+          }
+        : placement;
+      let canOpen = getPlayerTokenMapLevelVisibility(placementForLevel, tokenLevelState).visible;
+      if (Number.isFinite(clientX) && Number.isFinite(clientY)) {
+        const localPoint = getLocalMapPoint({ clientX, clientY });
+        const gridPoint = localPoint ? mapPointToGrid(localPoint) : null;
+        if (gridPoint) {
+          canOpen = isPlacementInteractableOnPlayerMapLevel(placementForLevel, tokenLevelState, {
+            point: {
+              column: Math.floor(gridPoint.column),
+              row: Math.floor(gridPoint.row),
+            },
+          });
+        }
+      }
+
+      if (normalized?.hidden || !canOpen) {
+        return false;
+      }
     }
 
     activeTokenSettingsId = placementId;

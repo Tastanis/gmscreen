@@ -6,7 +6,7 @@ knows what changed, what remains, and what has been tested.
 
 ## Current Status
 
-- Status: Initial Phase 6 token level support implemented.
+- Status: Cutout-aware lower-level token visibility and interaction implemented.
 - Last updated: 2026-04-26.
 - VTT grid state now supports both square size and calibrated origin offsets.
 - GM scene controls now include an Align Grid action that captures two opposite corners
@@ -31,15 +31,25 @@ knows what changed, what remains, and what has been tested.
 - GM token settings now show manual level up/down controls when the active scene has
   map levels, moving the token between z-index ordered levels through the normal
   placement update sync path.
-- Rendered token DOM now carries the resolved map level id for future filtering and
-  click-blocking work.
+- Rendered token DOM now carries the resolved map level id used by level-aware filtering
+  and hit testing.
+- Non-GM token and aura rendering now filters placements to the active visible map level
+  when map levels exist, while legacy no-level scenes keep their previous behavior.
+- Non-GM direct token settings opening is guarded against hidden tokens and tokens outside
+  the active visible map level.
+- Non-GM lower-level token and aura rendering now allows lower tokens only where every
+  blocking higher level between the token and active level is cut out or transparent.
+- Partially exposed lower-level tokens get a per-token SVG mask so only exposed grid cells
+  render above the active map level.
+- Non-GM token hit testing, right-click settings, triggered-action clicks, and marquee
+  selection now reject lower-token interaction through solid higher-level cells.
 - Map level controls save through scene-scoped `sceneState[sceneId].mapLevels`; no
   top-level `mapLevels` field is introduced.
 - Old overlay system is still active.
-- Player-level navigation, token visibility/interactability filtering, lower-level
-  click blocking, automatic transitions, and overlay replacement work have not started.
+- Player-level navigation, automatic transitions, and overlay replacement work have not
+  started.
 - Tests run for the latest phase:
-  - `node dnd/vtt/assets/js/ui/__tests__/token-levels.test.mjs` - passing, 5 tests.
+  - `node dnd/vtt/assets/js/ui/__tests__/token-levels.test.mjs` - passing, 11 tests.
   - `node dnd/vtt/assets/js/state/__tests__/placement-normalization.test.mjs` -
     passing, 5 tests.
   - `node dnd/vtt/assets/js/ui/__tests__/scene-manager-map-levels.test.mjs` - passing,
@@ -49,8 +59,9 @@ knows what changed, what remains, and what has been tested.
   - `node --check dnd/vtt/assets/js/ui/map-level-renderer.js` - passing.
   - `node --check dnd/vtt/assets/js/ui/scene-manager.js` - passing.
   - `node --check dnd/vtt/assets/js/ui/board-interactions.js` - passing.
+  - `node --check dnd/vtt/assets/js/ui/token-interactions.js` - passing.
   - `node --check dnd/vtt/assets/js/state/normalize/placements.js` - passing.
-  - `npm.cmd test` - passing, 375 tests.
+  - `npm.cmd test` - passing, 381 tests.
   - `git diff --check` - passing.
   - PHP linting was not run for Phase 6 because no PHP files changed and `php` remains
     unavailable on PATH.
@@ -380,12 +391,16 @@ Implementation notes:
   `placement.update` operation, so it reuses existing board-state sync.
 - Rendered tokens now include `data-map-level-id` based on the explicit token level or
   the scene's active/default level fallback.
-- This phase intentionally does not add player level navigation, token filtering,
-  lower-level click blocking, automatic transitions, or old overlay removal.
+- Non-GM token and aura rendering now includes only tokens on the active visible map level
+  when map levels exist; old scenes without map levels continue to render normally.
+- The existing rendered-placement hit test now receives only player-visible level tokens,
+  and direct non-GM token settings opening is blocked for hidden/off-level tokens.
+- This phase intentionally does not add player level navigation, lower-level cutout
+  click-through behavior, automatic transitions, or old overlay removal.
 
 Tests run for this phase:
 
-- `node dnd/vtt/assets/js/ui/__tests__/token-levels.test.mjs` - passing, 5 tests.
+- `node dnd/vtt/assets/js/ui/__tests__/token-levels.test.mjs` - passing, 7 tests.
 - `node dnd/vtt/assets/js/state/__tests__/placement-normalization.test.mjs` - passing,
   5 tests.
 - `node dnd/vtt/assets/js/ui/__tests__/map-level-renderer.test.mjs` - passing, 6 tests.
@@ -396,7 +411,7 @@ Tests run for this phase:
 - `node --check dnd/vtt/assets/js/state/normalize/placements.js` - passing.
 - `node --check dnd/vtt/assets/js/ui/map-level-renderer.js` - passing.
 - `node --check dnd/vtt/assets/js/ui/scene-manager.js` - passing.
-- `npm.cmd test` - passing, 375 tests.
+- `npm.cmd test` - passing, 377 tests.
 - `git diff --check` - passing.
 - `node --test ...` for the new focused tests was attempted first, but the Windows
   sandbox blocked the Node test runner child process with `spawn EPERM`; the same test
@@ -411,8 +426,67 @@ Remaining notes:
   confirm `levelId` persists.
 - Manual multi-client verification is still needed to confirm level movement propagates
   through the existing placement update sync path.
-- Tokens are still rendered and clickable regardless of level until the future filtering
-  and click-blocking phase.
+- Basic active-level player filtering is complete; cutout-aware lower-level visibility and
+  click-through behavior was completed in the follow-up Phase 6B.
+
+## Completed Phase 6B: Cutout-Aware Lower-Level Tokens
+
+Date completed: 2026-04-26.
+
+Changed files:
+
+- `dnd/vtt/assets/js/ui/board-interactions.js`
+- `dnd/vtt/assets/js/ui/token-interactions.js`
+- `dnd/vtt/assets/js/ui/token-levels.js`
+- `dnd/vtt/assets/js/ui/__tests__/token-levels.test.mjs`
+- `dnd/data/version.json`
+- `docs/vtt-map-levels/IMPLEMENTATION_STATE.md`
+
+Implementation notes:
+
+- Non-GM token visibility now includes the active visible level plus lower-level tokens
+  whose occupied grid cells are open through all blocking higher levels up to the active
+  level.
+- A higher level blocks lower-token vision or interaction only when it is visible, has a
+  map image, has opacity above zero, and its relevant block flag is enabled. Saved cutout
+  rectangles make matching cells transparent for lower-token visibility and click-through.
+- Multi-cell lower tokens can be partially visible. The token DOM gets a generated SVG
+  mask for the exposed cells so solid upper squares do not show the covered parts.
+- Non-GM token hit testing now checks the clicked grid cell against interaction cutouts
+  before selecting, dragging, opening settings, applying damage/healing, or toggling
+  triggered-action buttons.
+- Drag-marquee selection respects exposed lower-token cells instead of selecting a lower
+  token through a solid upper square.
+- Token render z-index now includes map-level order so higher-level tokens stack above
+  lower-level tokens while keeping existing token stack order within each level.
+- Old overlays remain active, and no automatic level transitions were added.
+
+Tests run for this phase:
+
+- `node dnd/vtt/assets/js/ui/__tests__/token-levels.test.mjs` - passing, 11 tests.
+- `node dnd/vtt/assets/js/state/__tests__/placement-normalization.test.mjs` - passing,
+  5 tests.
+- `node dnd/vtt/assets/js/ui/__tests__/map-level-renderer.test.mjs` - passing, 6 tests.
+- `node dnd/vtt/assets/js/ui/__tests__/scene-manager-map-levels.test.mjs` - passing,
+  3 tests.
+- `node --check dnd/vtt/assets/js/ui/token-levels.js` - passing.
+- `node --check dnd/vtt/assets/js/ui/board-interactions.js` - passing.
+- `node --check dnd/vtt/assets/js/ui/token-interactions.js` - passing.
+- `node --check dnd/vtt/assets/js/state/normalize/placements.js` - passing.
+- `node --check dnd/vtt/assets/js/ui/map-level-renderer.js` - passing.
+- `node --check dnd/vtt/assets/js/ui/scene-manager.js` - passing.
+- `npm.cmd test` - passing, 381 tests.
+- `git diff --check` - passing.
+- PHP linting was not run because no PHP files changed and `php` remains unavailable
+  on PATH.
+
+Remaining notes:
+
+- Manual browser verification is still needed: with two or more visible map levels, add
+  a cutout on the upper level, place a token below it, and confirm the player view sees
+  and clicks that token only through the cutout.
+- Manual multi-client verification is still needed to confirm cutout edits and token
+  level changes combine correctly through the existing board-state sync path.
 
 ## Main Findings
 

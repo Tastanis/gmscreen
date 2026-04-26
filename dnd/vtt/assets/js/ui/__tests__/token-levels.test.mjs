@@ -4,7 +4,11 @@ import assert from 'node:assert/strict';
 import {
   getAdjacentTokenLevel,
   getOrderedTokenMapLevels,
+  getPlayerTokenMapLevelVisibility,
   getTokenLevelControlState,
+  isPlacementInteractableOnPlayerMapLevel,
+  isPlacementOnPlayerVisibleMapLevel,
+  resolvePlayerActiveMapLevelId,
   resolveSceneTokenLevelState,
   resolveTokenLevelId,
 } from '../token-levels.js';
@@ -83,5 +87,134 @@ describe('token level helpers', () => {
 
     assert.equal(mapLevels.activeLevelId, 'upper');
     assert.equal(mapLevels.levels[0].id, 'upper');
+  });
+
+  test('resolves the player active level only when it is visible', () => {
+    const mapLevels = {
+      activeLevelId: 'upper',
+      levels: [
+        { id: 'ground', name: 'Ground', visible: true, defaultForPlayers: true, zIndex: 0 },
+        { id: 'upper', name: 'Upper', visible: false, zIndex: 1 },
+      ],
+    };
+
+    assert.equal(resolvePlayerActiveMapLevelId(mapLevels), null);
+    assert.equal(resolvePlayerActiveMapLevelId({ ...mapLevels, activeLevelId: null }), 'ground');
+  });
+
+  test('filters player-visible placements to the active visible map level', () => {
+    const mapLevels = {
+      activeLevelId: 'upper',
+      levels: [
+        { id: 'ground', name: 'Ground', visible: true, mapUrl: '/ground.png', zIndex: 0 },
+        { id: 'upper', name: 'Upper', visible: true, mapUrl: '/upper.png', zIndex: 1 },
+      ],
+    };
+
+    assert.equal(isPlacementOnPlayerVisibleMapLevel({ id: 'a', levelId: 'upper' }, mapLevels), true);
+    assert.equal(isPlacementOnPlayerVisibleMapLevel({ id: 'b', levelId: 'ground' }, mapLevels), false);
+    assert.equal(isPlacementOnPlayerVisibleMapLevel({ id: 'legacy' }, mapLevels), true);
+    assert.equal(isPlacementOnPlayerVisibleMapLevel({ id: 'no-levels' }, { levels: [] }), true);
+  });
+
+  test('reveals lower-level placements only through blocking level cutouts', () => {
+    const mapLevels = {
+      activeLevelId: 'upper',
+      levels: [
+        { id: 'ground', name: 'Ground', visible: true, mapUrl: '/ground.png', zIndex: 0 },
+        {
+          id: 'upper',
+          name: 'Upper',
+          visible: true,
+          mapUrl: '/upper.png',
+          zIndex: 1,
+          cutouts: [{ column: 2, row: 3, width: 1, height: 1 }],
+        },
+      ],
+    };
+
+    assert.equal(isPlacementOnPlayerVisibleMapLevel({ id: 'open', levelId: 'ground', column: 2, row: 3 }, mapLevels), true);
+    assert.equal(isPlacementOnPlayerVisibleMapLevel({ id: 'covered', levelId: 'ground', column: 1, row: 3 }, mapLevels), false);
+    assert.equal(isPlacementOnPlayerVisibleMapLevel({ id: 'upper', levelId: 'upper', column: 1, row: 3 }, mapLevels), true);
+  });
+
+  test('requires cutouts through every blocking level above a lower placement', () => {
+    const mapLevels = {
+      activeLevelId: 'roof',
+      levels: [
+        { id: 'ground', visible: true, mapUrl: '/ground.png', zIndex: 0 },
+        {
+          id: 'middle',
+          visible: true,
+          mapUrl: '/middle.png',
+          zIndex: 1,
+          cutouts: [{ column: 4, row: 4, width: 1, height: 1 }],
+        },
+        {
+          id: 'roof',
+          visible: true,
+          mapUrl: '/roof.png',
+          zIndex: 2,
+          cutouts: [{ column: 5, row: 4, width: 1, height: 1 }],
+        },
+      ],
+    };
+
+    assert.equal(isPlacementOnPlayerVisibleMapLevel({ id: 'blocked-by-roof', levelId: 'ground', column: 4, row: 4 }, mapLevels), false);
+    assert.equal(isPlacementOnPlayerVisibleMapLevel({ id: 'blocked-by-middle', levelId: 'ground', column: 5, row: 4 }, mapLevels), false);
+
+    mapLevels.levels[1].cutouts.push({ column: 5, row: 4, width: 1, height: 1 });
+    assert.equal(isPlacementOnPlayerVisibleMapLevel({ id: 'open-through-both', levelId: 'ground', column: 5, row: 4 }, mapLevels), true);
+  });
+
+  test('tracks partially visible cells for lower multi-cell placements', () => {
+    const mapLevels = {
+      activeLevelId: 'upper',
+      levels: [
+        { id: 'ground', visible: true, mapUrl: '/ground.png', zIndex: 0 },
+        {
+          id: 'upper',
+          visible: true,
+          mapUrl: '/upper.png',
+          zIndex: 1,
+          cutouts: [{ column: 3, row: 2, width: 1, height: 2 }],
+        },
+      ],
+    };
+
+    const visibility = getPlayerTokenMapLevelVisibility(
+      { id: 'large', levelId: 'ground', column: 2, row: 2, width: 2, height: 2 },
+      mapLevels
+    );
+
+    assert.equal(visibility.visible, true);
+    assert.equal(visibility.fullyVisible, false);
+    assert.deepEqual(visibility.visibleCells, [
+      { column: 3, row: 2 },
+      { column: 3, row: 3 },
+    ]);
+  });
+
+  test('uses interaction blockers separately from vision blockers', () => {
+    const mapLevels = {
+      activeLevelId: 'upper',
+      levels: [
+        { id: 'ground', visible: true, mapUrl: '/ground.png', zIndex: 0 },
+        {
+          id: 'upper',
+          visible: true,
+          mapUrl: '/upper.png',
+          zIndex: 1,
+          blocksLowerLevelVision: false,
+          blocksLowerLevelInteraction: true,
+          cutouts: [{ column: 8, row: 8, width: 1, height: 1 }],
+        },
+      ],
+    };
+
+    const placement = { id: 'ground-token', levelId: 'ground', column: 7, row: 8 };
+    assert.equal(isPlacementOnPlayerVisibleMapLevel(placement, mapLevels), true);
+    assert.equal(isPlacementInteractableOnPlayerMapLevel(placement, mapLevels, { point: { column: 7, row: 8 } }), false);
+    assert.equal(isPlacementInteractableOnPlayerMapLevel({ ...placement, column: 8 }, mapLevels, { point: { column: 8, row: 8 } }), true);
   });
 });

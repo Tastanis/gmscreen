@@ -144,6 +144,27 @@ export function createTokenInteractions({
         return;
       }
 
+      if (Array.isArray(placement.visibleCells) && placement.visibleCells.length > 0) {
+        const overlapsVisibleCell = placement.visibleCells.some((cell) => {
+          const cellColumn = Number.isFinite(cell?.column) ? cell.column : null;
+          const cellRow = Number.isFinite(cell?.row) ? cell.row : null;
+          if (cellColumn === null || cellRow === null) {
+            return false;
+          }
+
+          const cellLeft = cellColumn * gridSize + offsets.left;
+          const cellTop = cellRow * gridSize + offsets.top;
+          const cellRight = cellLeft + gridSize;
+          const cellBottom = cellTop + gridSize;
+          return cellRight > minX && cellLeft < maxX && cellBottom > minY && cellTop < maxY;
+        });
+
+        if (overlapsVisibleCell) {
+          matching.push(placement);
+        }
+        return;
+      }
+
       const tokenWidth = (placement.width ?? 1) * gridSize;
       const tokenHeight = (placement.height ?? 1) * gridSize;
       const tokenLeft = (placement.column ?? 0) * gridSize + offsets.left;
