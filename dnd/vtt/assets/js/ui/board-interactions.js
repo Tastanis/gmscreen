@@ -53,6 +53,12 @@ import {
   getTokenStackOrderAvailability,
 } from './token-stack-order.js';
 import {
+  getAdjacentTokenLevel,
+  getTokenLevelControlState,
+  resolveSceneTokenLevelState,
+  resolveTokenLevelId,
+} from './token-levels.js';
+import {
   broadcastStaminaSync,
   subscribeToStaminaSync,
 } from '../services/stamina-sync-service.js';
@@ -1534,6 +1540,16 @@ export function mountBoardInteractions(store, routes = {}) {
     const mapLevels = normalizeMapLevelsState(rawMapLevels, { sceneGrid });
     const activeLevelId = mapLevels?.activeLevelId ?? null;
     return typeof activeLevelId === 'string' && activeLevelId ? activeLevelId : null;
+  }
+
+  function getActiveSceneTokenLevelState(state = boardApi.getState?.() ?? {}) {
+    const activeSceneId = state?.boardState?.activeSceneId ?? null;
+    return resolveSceneTokenLevelState(state, activeSceneId);
+  }
+
+  function getActiveTokenPlacementLevelId(state = boardApi.getState?.() ?? {}) {
+    const mapLevels = getActiveSceneTokenLevelState(state);
+    return resolveTokenLevelId({}, mapLevels);
   }
 
   function syncCutoutToggleButtons() {
@@ -3659,6 +3675,11 @@ export function mountBoardInteractions(store, routes = {}) {
         status.textContent = 'Unable to place token inside the map bounds.';
       }
       return;
+    }
+
+    const levelId = getActiveTokenPlacementLevelId(state);
+    if (levelId) {
+      placement.levelId = levelId;
     }
 
     // Add timestamp for conflict resolution
@@ -5801,12 +5822,14 @@ export function mountBoardInteractions(store, routes = {}) {
     const groupColorAssignments = getCombatGroupColorAssignments();
     // Pre-compute fog checker once (null when fog inactive or GM viewing)
     const isCellFogged = gmViewing ? null : createFogChecker(state);
+    const tokenLevelState = getActiveSceneTokenLevelState(state);
 
     placements.forEach((placement, placementIndex) => {
       const normalized = normalizePlacementForRender(placement);
       if (!normalized) {
         return;
       }
+      const levelId = resolveTokenLevelId(placement, tokenLevelState);
       const stackOrder = getPlacementStackOrder(placement, placementIndex);
 
       activeCombatantIds.add(normalized.id);
@@ -5848,7 +5871,7 @@ export function mountBoardInteractions(store, routes = {}) {
         height = Math.max(1, toNonNegativeNumber(preview.height ?? height, height));
       }
 
-      renderedPlacements.push({ id: normalized.id, column, row, width, height });
+      renderedPlacements.push({ id: normalized.id, column, row, width, height, levelId });
 
       let token = existingNodes.get(normalized.id);
       if (token) {
@@ -5859,6 +5882,7 @@ export function mountBoardInteractions(store, routes = {}) {
       }
 
       token.dataset.placementId = normalized.id;
+      token.dataset.mapLevelId = levelId ?? '';
       token.style.width = `${width * gridSize}px`;
       token.style.height = `${height * gridSize}px`;
       const left = leftOffset + column * gridSize;
@@ -10117,6 +10141,9 @@ export function mountBoardInteractions(store, routes = {}) {
     const height = Math.max(1, toNonNegativeNumber(placement.height ?? placement.rows ?? 1));
     const name = typeof placement.name === 'string' ? placement.name : '';
     const imageUrl = typeof placement.imageUrl === 'string' ? placement.imageUrl : '';
+    const levelId = typeof placement.levelId === 'string' && placement.levelId.trim()
+      ? placement.levelId.trim()
+      : null;
     const hp = normalizePlacementHitPoints(
       placement.hp ??
         placement.hitPoints ??
@@ -10161,6 +10188,7 @@ export function mountBoardInteractions(store, routes = {}) {
       height,
       name,
       imageUrl,
+      levelId,
       hp,
       showHp,
       showTriggeredAction,
@@ -12542,6 +12570,37 @@ export function mountBoardInteractions(store, routes = {}) {
       `
       : '';
 
+    const levelControlsMarkup = gmUser
+      ? `
+        <div class="vtt-token-settings__section" data-token-settings-level-section hidden>
+          <div class="vtt-token-settings__row vtt-token-settings__row--level">
+            <span class="vtt-token-settings__level-label">Level</span>
+            <span class="vtt-token-settings__level-name" data-token-settings-level-name>Base</span>
+            <div class="vtt-token-settings__level-controls" aria-label="Token map level">
+              <button
+                type="button"
+                class="vtt-token-settings__level-button"
+                data-token-settings-level="down"
+                aria-label="Move token down one map level"
+                title="Move token down one map level"
+              >
+                <span aria-hidden="true">&#9660;</span>
+              </button>
+              <button
+                type="button"
+                class="vtt-token-settings__level-button"
+                data-token-settings-level="up"
+                aria-label="Move token up one map level"
+                title="Move token up one map level"
+              >
+                <span aria-hidden="true">&#9650;</span>
+              </button>
+            </div>
+          </div>
+        </div>
+      `
+      : '';
+
     const sizeOptions = ['1x1', '2x2', '3x3', '4x4', '5x5']
       .map((label) => {
         const size = parseInt(label, 10);
@@ -12675,6 +12734,7 @@ export function mountBoardInteractions(store, routes = {}) {
             />
           </div>
         </div>
+        ${levelControlsMarkup}
         ${hiddenToggleMarkup}
       </form>
     `;
@@ -12701,6 +12761,10 @@ export function mountBoardInteractions(store, routes = {}) {
       conditionList: element.querySelector('[data-token-settings-condition-list]'),
       hiddenToggle: element.querySelector('[data-token-settings-toggle="hidden"]'),
       sizeSelect: element.querySelector('[data-token-settings-size-select]'),
+      levelSection: element.querySelector('[data-token-settings-level-section]'),
+      levelName: element.querySelector('[data-token-settings-level-name]'),
+      levelDownButton: element.querySelector('[data-token-settings-level="down"]'),
+      levelUpButton: element.querySelector('[data-token-settings-level="up"]'),
       auraToggle: element.querySelector('[data-token-settings-toggle="aura"]'),
       auraField: element.querySelector('[data-token-settings-field="aura"]'),
       auraRadiusInput: element.querySelector('[data-token-settings-input="auraRadius"]'),
@@ -12735,6 +12799,14 @@ export function mountBoardInteractions(store, routes = {}) {
 
     menu.stackBackwardButton?.addEventListener('click', () => {
       handleTokenStackOrderClick('backward');
+    });
+
+    menu.levelDownButton?.addEventListener('click', () => {
+      handleTokenLevelMoveClick('down');
+    });
+
+    menu.levelUpButton?.addEventListener('click', () => {
+      handleTokenLevelMoveClick('up');
     });
 
     if (menu.conditionSelect) {
@@ -13177,6 +13249,50 @@ export function mountBoardInteractions(store, routes = {}) {
     }
   }
 
+  function handleTokenLevelMoveClick(direction) {
+    if (!activeTokenSettingsId || !isGmUser()) {
+      return;
+    }
+
+    const state = boardApi.getState?.() ?? {};
+    const activeSceneId = state.boardState?.activeSceneId ?? null;
+    if (!activeSceneId) {
+      return;
+    }
+
+    const placement = getPlacementFromStore(activeTokenSettingsId);
+    if (!placement) {
+      closeTokenSettings();
+      return;
+    }
+
+    const mapLevels = resolveSceneTokenLevelState(state, activeSceneId);
+    const currentLevelId = resolveTokenLevelId(placement, mapLevels);
+    const targetLevel = getAdjacentTokenLevel(mapLevels, currentLevelId, direction);
+    if (!targetLevel?.id) {
+      syncTokenLevelControls(placement);
+      return;
+    }
+
+    const updated = updatePlacementById(activeTokenSettingsId, (target) => {
+      target.levelId = targetLevel.id;
+    });
+    if (!updated) {
+      syncTokenLevelControls(placement);
+      return;
+    }
+
+    refreshTokenSettings();
+    renderTokens(boardApi.getState?.() ?? {}, tokenLayer, viewState);
+    renderAuras(boardApi.getState?.() ?? {}, auraLayer, viewState);
+
+    if (status) {
+      const label = tokenLabel(getPlacementFromStore(activeTokenSettingsId));
+      const levelName = targetLevel.name || 'map level';
+      status.textContent = `Moved ${label} to ${levelName}.`;
+    }
+  }
+
   function syncTokenStackControls(placementId = activeTokenSettingsId) {
     if (!tokenSettingsMenu?.stackForwardButton || !tokenSettingsMenu?.stackBackwardButton) {
       return;
@@ -13186,6 +13302,37 @@ export function mountBoardInteractions(store, routes = {}) {
     const availability = getTokenStackOrderAvailability(placements, placementId);
     setStackButtonState(tokenSettingsMenu.stackForwardButton, !availability.canMoveForward);
     setStackButtonState(tokenSettingsMenu.stackBackwardButton, !availability.canMoveBackward);
+  }
+
+  function syncTokenLevelControls(placement = null) {
+    if (!tokenSettingsMenu?.levelSection) {
+      return;
+    }
+
+    const gmUser = isGmUser();
+    if (!gmUser) {
+      tokenSettingsMenu.levelSection.hidden = true;
+      tokenSettingsMenu.levelSection.setAttribute('aria-hidden', 'true');
+      return;
+    }
+
+    const state = boardApi.getState?.() ?? {};
+    const activeSceneId = state.boardState?.activeSceneId ?? null;
+    const mapLevels = resolveSceneTokenLevelState(state, activeSceneId);
+    const controls = getTokenLevelControlState(mapLevels, placement ?? {});
+    tokenSettingsMenu.levelSection.hidden = !controls.hasLevels;
+    tokenSettingsMenu.levelSection.setAttribute('aria-hidden', controls.hasLevels ? 'false' : 'true');
+    if (!controls.hasLevels) {
+      return;
+    }
+
+    if (tokenSettingsMenu.levelName) {
+      tokenSettingsMenu.levelName.textContent = controls.currentLevel?.name || 'Map Level';
+      tokenSettingsMenu.levelName.title = controls.currentLevel?.name || '';
+    }
+
+    setStackButtonState(tokenSettingsMenu.levelDownButton, !controls.canMoveDown);
+    setStackButtonState(tokenSettingsMenu.levelUpButton, !controls.canMoveUp);
   }
 
   function setStackButtonState(button, disabled) {
@@ -13209,6 +13356,7 @@ export function mountBoardInteractions(store, routes = {}) {
 
     syncMonsterStatBlockControls(placement);
     syncTokenStackControls(placement?.id);
+    syncTokenLevelControls(placement);
 
     syncConditionControls(placement);
 

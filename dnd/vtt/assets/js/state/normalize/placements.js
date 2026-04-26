@@ -51,6 +51,11 @@ export function normalizePlacementEntry(entry) {
   const height = Math.max(1, toNonNegativeInt(entry.height ?? entry.rows ?? entry.h ?? 1));
   const size = typeof entry.size === 'string' && entry.size ? entry.size : `${width}x${height}`;
   const stackOrder = toOptionalNonNegativeInt(entry.stackOrder);
+  const levelId =
+    normalizePlacementLevelId(entry.levelId) ??
+    normalizePlacementLevelId(entry.mapLevelId) ??
+    normalizePlacementLevelId(entry.mapLevel) ??
+    normalizePlacementLevelId(entry.floorId);
 
   const metadataSource =
     (entry.metadata && typeof entry.metadata === 'object' ? entry.metadata : null) ||
@@ -133,6 +138,10 @@ export function normalizePlacementEntry(entry) {
     normalized.stackOrder = stackOrder;
   }
 
+  if (levelId) {
+    normalized.levelId = levelId;
+  }
+
   if (monster) {
     normalized.monster = monster;
   }
@@ -179,6 +188,15 @@ function toOptionalNonNegativeInt(value) {
   }
 
   return null;
+}
+
+function normalizePlacementLevelId(value) {
+  if (typeof value !== 'string') {
+    return null;
+  }
+
+  const trimmed = value.trim();
+  return trimmed || null;
 }
 
 function normalizeHitPointsValue(value) {

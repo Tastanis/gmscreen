@@ -6,8 +6,8 @@ knows what changed, what remains, and what has been tested.
 
 ## Current Status
 
-- Status: Phase 5 cutout editor implemented.
-- Last updated: 2026-04-25.
+- Status: Initial Phase 6 token level support implemented.
+- Last updated: 2026-04-26.
 - VTT grid state now supports both square size and calibrated origin offsets.
 - GM scene controls now include an Align Grid action that captures two opposite corners
   of a known map square and calculates grid size plus `offsetX` / `offsetY`.
@@ -26,22 +26,33 @@ knows what changed, what remains, and what has been tested.
   level only, with Remove, Undo, Reset, and Apply controls.
 - The map level renderer now applies saved cutout rectangles as data-driven SVG masks
   so removed squares visually reveal lower map levels.
+- Token placements now preserve a `levelId` field.
+- New dropped tokens are assigned to the active scene map level when one exists.
+- GM token settings now show manual level up/down controls when the active scene has
+  map levels, moving the token between z-index ordered levels through the normal
+  placement update sync path.
+- Rendered token DOM now carries the resolved map level id for future filtering and
+  click-blocking work.
 - Map level controls save through scene-scoped `sceneState[sceneId].mapLevels`; no
   top-level `mapLevels` field is introduced.
 - Old overlay system is still active.
-- Token level support, normal-play click blocking, automatic transitions, and overlay
-  replacement work have not started.
+- Player-level navigation, token visibility/interactability filtering, lower-level
+  click blocking, automatic transitions, and overlay replacement work have not started.
 - Tests run for the latest phase:
+  - `node dnd/vtt/assets/js/ui/__tests__/token-levels.test.mjs` - passing, 5 tests.
+  - `node dnd/vtt/assets/js/state/__tests__/placement-normalization.test.mjs` -
+    passing, 5 tests.
   - `node dnd/vtt/assets/js/ui/__tests__/scene-manager-map-levels.test.mjs` - passing,
     3 tests.
-  - `node --test dnd/vtt/assets/js/ui/__tests__/map-level-renderer.test.mjs` - passing,
-    6 tests.
+  - `node dnd/vtt/assets/js/ui/__tests__/map-level-renderer.test.mjs` - passing, 6 tests.
+  - `node --check dnd/vtt/assets/js/ui/token-levels.js` - passing.
   - `node --check dnd/vtt/assets/js/ui/map-level-renderer.js` - passing.
   - `node --check dnd/vtt/assets/js/ui/scene-manager.js` - passing.
   - `node --check dnd/vtt/assets/js/ui/board-interactions.js` - passing.
-  - `npm.cmd test` - passing, 367 tests.
+  - `node --check dnd/vtt/assets/js/state/normalize/placements.js` - passing.
+  - `npm.cmd test` - passing, 375 tests.
   - `git diff --check` - passing.
-  - PHP linting was not run for Phase 5 because no PHP files changed and `php` remains
+  - PHP linting was not run for Phase 6 because no PHP files changed and `php` remains
     unavailable on PATH.
 - User decisions captured:
   - Cutouts should work square-by-square, similar to fog editing, but they remove/hide
@@ -341,6 +352,67 @@ Remaining notes:
   through the existing board-state sync path.
 - Normal-play click-through and token visibility by level remain future work, so tokens are
   not yet filtered or click-blocked by cutouts.
+
+## Completed Phase 6: Token Level Support
+
+Date completed: 2026-04-26.
+
+Changed files:
+
+- `dnd/vtt/assets/css/board.css`
+- `dnd/vtt/assets/js/state/normalize/placements.js`
+- `dnd/vtt/assets/js/state/__tests__/placement-normalization.test.mjs`
+- `dnd/vtt/assets/js/ui/board-interactions.js`
+- `dnd/vtt/assets/js/ui/token-levels.js`
+- `dnd/vtt/assets/js/ui/__tests__/token-levels.test.mjs`
+- `dnd/data/version.json`
+- `docs/vtt-map-levels/IMPLEMENTATION_STATE.md`
+
+Implementation notes:
+
+- Placement normalization preserves non-empty `levelId` values and accepts legacy
+  aliases such as `mapLevelId`, while old placements without a level remain compatible.
+- New token drops assign `levelId` from the active scene map level when any map levels
+  exist.
+- GM token settings now include a level row with up/down controls. Buttons are shown
+  only for GMs and only when the active scene has map levels.
+- Token level movement uses z-index ordered map levels and persists as a normal
+  `placement.update` operation, so it reuses existing board-state sync.
+- Rendered tokens now include `data-map-level-id` based on the explicit token level or
+  the scene's active/default level fallback.
+- This phase intentionally does not add player level navigation, token filtering,
+  lower-level click blocking, automatic transitions, or old overlay removal.
+
+Tests run for this phase:
+
+- `node dnd/vtt/assets/js/ui/__tests__/token-levels.test.mjs` - passing, 5 tests.
+- `node dnd/vtt/assets/js/state/__tests__/placement-normalization.test.mjs` - passing,
+  5 tests.
+- `node dnd/vtt/assets/js/ui/__tests__/map-level-renderer.test.mjs` - passing, 6 tests.
+- `node dnd/vtt/assets/js/ui/__tests__/scene-manager-map-levels.test.mjs` - passing,
+  3 tests.
+- `node --check dnd/vtt/assets/js/ui/token-levels.js` - passing.
+- `node --check dnd/vtt/assets/js/ui/board-interactions.js` - passing.
+- `node --check dnd/vtt/assets/js/state/normalize/placements.js` - passing.
+- `node --check dnd/vtt/assets/js/ui/map-level-renderer.js` - passing.
+- `node --check dnd/vtt/assets/js/ui/scene-manager.js` - passing.
+- `npm.cmd test` - passing, 375 tests.
+- `git diff --check` - passing.
+- `node --test ...` for the new focused tests was attempted first, but the Windows
+  sandbox blocked the Node test runner child process with `spawn EPERM`; the same test
+  files pass when executed directly with `node`.
+- PHP linting was not run because no PHP files changed and `php` remains unavailable
+  on PATH.
+
+Remaining notes:
+
+- Manual browser verification is still needed: create at least two map levels, select
+  each as active, drop tokens, right-click a token as GM, move it up/down, refresh, and
+  confirm `levelId` persists.
+- Manual multi-client verification is still needed to confirm level movement propagates
+  through the existing placement update sync path.
+- Tokens are still rendered and clickable regardless of level until the future filtering
+  and click-blocking phase.
 
 ## Main Findings
 
