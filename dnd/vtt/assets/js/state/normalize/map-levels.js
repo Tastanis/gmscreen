@@ -311,6 +311,84 @@ export function normalizeUserLevelStateMap(raw) {
 }
 
 /**
+ * Levels v2 helper: resolve a user's active level id for a scene,
+ * following the priority chain in §4.2 of LEVELS_V2_PLAN.md:
+ *   1. Valid `userLevelState[userId].levelId`
+ *   2. Most recently modified claimed token's level (when claims drive
+ *      view-follow). Requires `placements` to look up token levels.
+ *   3. `BASE_MAP_LEVEL_ID`.
+ *
+ * The signature accepts a per-scene `sceneState` entry plus the user id.
+ * `placements` is the per-scene placement list (boardState.placements[sceneId]).
+ * `validLevelIds`, when provided, restricts resolution to known level ids
+ * (including `BASE_MAP_LEVEL_ID`). Unknown/invalid stored ids fall through
+ * to claim/base resolution. When `validLevelIds` is null/empty the
+ * stored id is returned as-is unless it is missing, in which case we
+ * still fall through.
+ *
+ * The resolver is intentionally separate from
+ * `resolvePlacementLevelId(placement)`: a placement's stored level must
+ * not be replaced by the user's active level (see §4.1).
+ */
+export function resolveActiveLevelIdForUser({
+  sceneState = null,
+  userId = null,
+  placements = null,
+  validLevelIds = null,
+} = {}) {
+  const userKey = typeof userId === 'string' ? userId.trim().toLowerCase() : '';
+  const validSet = Array.isArray(validLevelIds)
+    ? new Set(validLevelIds.filter((id) => typeof id === 'string' && id))
+    : null;
+  const isValidLevelId = (levelId) => {
+    if (typeof levelId !== 'string' || !levelId) {
+      return false;
+    }
+    if (!validSet || validSet.size === 0) {
+      return true;
+    }
+    return validSet.has(levelId);
+  };
+
+  if (userKey && sceneState && typeof sceneState === 'object') {
+    const userLevelState = sceneState.userLevelState;
+    if (userLevelState && typeof userLevelState === 'object') {
+      const entry = userLevelState[userKey];
+      if (entry && typeof entry === 'object') {
+        const levelId = typeof entry.levelId === 'string' ? entry.levelId.trim() : '';
+        if (levelId && isValidLevelId(levelId)) {
+          return levelId;
+        }
+      }
+    }
+
+    const claims = sceneState.claimedTokens;
+    if (claims && typeof claims === 'object' && Array.isArray(placements)) {
+      let bestLevelId = null;
+      let bestModified = -Infinity;
+      for (const placement of placements) {
+        if (!placement || typeof placement !== 'object') continue;
+        const placementId = typeof placement.id === 'string' ? placement.id : '';
+        if (!placementId) continue;
+        if (claims[placementId] !== userKey) continue;
+        const modified = Number(placement._lastModified);
+        const score = Number.isFinite(modified) ? modified : 0;
+        if (score < bestModified) continue;
+        const placementLevelId = resolvePlacementLevelId(placement);
+        if (!isValidLevelId(placementLevelId)) continue;
+        bestLevelId = placementLevelId;
+        bestModified = score;
+      }
+      if (bestLevelId) {
+        return bestLevelId;
+      }
+    }
+  }
+
+  return BASE_MAP_LEVEL_ID;
+}
+
+/**
  * Levels v2: normalize the per-scene `claimedTokens` map. Keys are
  * placement ids, values are normalized profile ids. Invalid entries are
  * dropped silently.

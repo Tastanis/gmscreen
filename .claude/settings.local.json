@@ -30,7 +30,10 @@
       "mcp__playwright__browser_console_messages",
       "mcp__playwright__browser_handle_dialog",
       "Bash(npm test *)",
-      "Read(//tmp/**)"
+      "Read(//tmp/**)",
+      "Read(//c/c/Users/tasta/OneDrive/Documents/GitHub/gmscreen/.claude/worktrees/**)",
+      "Bash(node -e \"import\\('./dnd/vtt/assets/js/state/normalize/map-levels.js'\\).then\\(m => console.log\\(Object.keys\\(m\\).filter\\(k => k.startsWith\\('resolve'\\) || k.startsWith\\('build'\\) || k.startsWith\\('BASE'\\)\\)\\)\\)\")",
+      "Bash(node --check dnd/vtt/assets/js/ui/board-interactions.js)"
     ],
     "deny": []
   }

@@ -245,9 +245,19 @@ export function getTokenLevelControlState(mapLevelsState = null, placement = {})
   };
 }
 
-export function getMapLevelNavigationControlState(mapLevelsState = null) {
+export function getMapLevelNavigationControlState(mapLevelsState = null, options = {}) {
   const levels = getOrderedTokenMapLevels(mapLevelsState?.levels ?? []);
-  const currentLevelId = resolveTokenLevelId({}, mapLevelsState);
+  // Levels v2: callers (e.g. the GM nav) may pass an explicit
+  // `currentLevelId` resolved from the per-user `userLevelState` so the
+  // nav reflects the GM's per-user level instead of the legacy
+  // `mapLevels.activeLevelId`. When omitted we keep the prior behavior.
+  const overrideId = normalizeTokenLevelId(options?.currentLevelId);
+  let currentLevelId;
+  if (overrideId && levels.some((level) => level.id === overrideId)) {
+    currentLevelId = overrideId;
+  } else {
+    currentLevelId = resolveTokenLevelId({}, mapLevelsState);
+  }
   const currentLevel = levels.find((level) => level.id === currentLevelId) ?? null;
 
   return {

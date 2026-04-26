@@ -19,11 +19,17 @@ export function createMapLevelRenderer({
   const levelElements = new Map();
   let lastSignature = null;
 
-  function sync(rawMapLevels = null, { sceneGrid = null, view = null } = {}) {
+  function sync(rawMapLevels = null, { sceneGrid = null, view = null, activeLevelId = undefined } = {}) {
     const mapLevels = normalizeMapLevelsState(rawMapLevels, { sceneGrid });
     const renderableLevels = getRenderableMapLevels(mapLevels);
+    // Levels v2: callers may supply an explicit `activeLevelId` resolved
+    // from per-user `userLevelState` so the rendered "active" metadata
+    // reflects the viewer's level. `undefined` falls back to the legacy
+    // `mapLevels.activeLevelId` value; an explicit empty string clears.
+    const resolvedActiveLevelId =
+      activeLevelId === undefined ? mapLevels.activeLevelId ?? '' : activeLevelId ?? '';
     const signature = safeStableStringify({
-      activeLevelId: mapLevels.activeLevelId,
+      activeLevelId: resolvedActiveLevelId,
       cutoutView: buildMapLevelCutoutViewSignature(view),
       levels: renderableLevels,
     });
@@ -33,7 +39,7 @@ export function createMapLevelRenderer({
     }
     lastSignature = signature;
 
-    root.dataset.activeMapLevelId = mapLevels.activeLevelId ?? '';
+    root.dataset.activeMapLevelId = resolvedActiveLevelId || '';
     root.dataset.mapLevelCount = String(renderableLevels.length);
 
     if (renderableLevels.length === 0) {
