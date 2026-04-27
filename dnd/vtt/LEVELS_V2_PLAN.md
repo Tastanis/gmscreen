@@ -933,4 +933,44 @@ The pre-Levels-v2 "map overlay" system has been removed end-to-end. This was the
 
 **Test status:** 488 of 488 tests pass (down from 493 because the obsolete `overlay-dirty-tracking.test.mjs` file was deleted; the rest of the suite is unchanged).
 
+---
+
+## Manual Verification Log (2026-04-27)
+
+User-confirmed working in browser:
+- **Step 1 — Constants, normalization, ops:** all checks pass.
+- **Step 2 — Per-user active level:** all checks pass.
+- **Step 3 — Level 0 placement:** all checks pass.
+- **Step 4 — Activate:** all checks pass (one minor UX ambiguity — user wasn't sure where the "Pulled all players to Level N." status message renders, but the behavior is otherwise correct).
+- **Step 5.1 — Same-level rendering:** confirmed (100% size, no arrow indicator).
+
+Steps 5.2+ through 9 not yet manually verified.
+
+### Bug fixes from manual verification
+
+**Bug A — Cutout editor refuses to apply when a higher level exists**
+
+Reported as: "If I have a level, I can cut it out fine. If I add another level on top of it, I can no longer cut out the levels below it, even if I am on that level. Status reads 'Unable to update cutouts for the active map level.'"
+
+Root cause: `updateActiveLevelCutouts` in `board-interactions.js` (the writer the cutout editor's `applyChanges` calls) gated on `mapLevels.activeLevelId !== activeLevelId`. Step 2 froze writes to `mapLevels.activeLevelId` from the GM nav path, so the field is no longer kept in sync with the GM's per-user viewer level. Level-create paths still write the field (setting it to the newly created level's id), so creating Level 2 on top of Level 1 leaves `activeLevelId` pointing at Level 2 forever — even after the GM nav-down to Level 1. The editor opens correctly on Level 1 (the entry point `resolveEditableMapLevel` was correctly migrated to `getViewerLevelIdForCurrentUser` in Step 3), but the apply path's stale-field check rejects the write.
+
+Fix: removed the `mapLevels.activeLevelId !== activeLevelId` check from `updateActiveLevelCutouts`. The local `activeLevelId` (set in `activate()` from `resolveEditableMapLevel`) is the canonical edit target; we only need to verify the level still exists in `mapLevels.levels`, which the existing `find()` already does.
+
+**Bug B — 409 Conflict and stamina sync failure on PC token drop**
+
+Reported as: every PC drop produces a `POST /api/state.php` 409 Conflict followed by "[VTT] Board state save rejected as stale; applying server state.". Stamina sometimes fails to sync after the drop.
+
+Root cause: race between two `persistBoardStateSnapshot` calls fired ~simultaneously by `handleTokenDrop`:
+1. The drop's persist (placement.add op or snapshot) fires immediately.
+2. `fetchAndApplyCharacterStamina` runs in parallel, awaits the sheet endpoint, then calls `updatePlacementById` which internally fires a SECOND `persistBoardStateSnapshot`.
+
+The second persist captures `currentBoardStateVersion` at call time. Since the drop save's response hasn't arrived yet, `currentBoardStateVersion` hasn't been bumped, so save B carries the same version as save A. The persistence layer's `coalesce: true` (the default for `queueSave`) aborts save A's in-flight fetch when save B arrives — but the server has already processed A and bumped its version. Save B is sent with the now-stale version → 409 Conflict. The conflict handler (`applyBoardStateConflictSnapshot`) reloads server state, which doesn't yet have the stamina fields, so the stamina update is silently dropped.
+
+Fix:
+- `handleTokenDrop` now captures the drop save's promise (`dropSavePromise = persistBoardStateSnapshot(...)`) and forwards it to `fetchAndApplyCharacterStamina`.
+- `fetchAndApplyCharacterStamina` accepts a new `pendingSavePromise` parameter and `await`s it after the sheet fetch but before calling `updatePlacementById`. This guarantees the drop save's response has updated `currentBoardStateVersion` before the stamina save builds its payload, so version conflict cannot occur.
+- Errors from the awaited save are swallowed: a failed prior save is not a reason to abandon the stamina update; the next dirty-flush cycle will retry naturally.
+
+**Test status after fixes:** 488 of 488 tests still pass. The cutout fix touches a path that has no direct unit test coverage (cutout editor is inside an IIFE in board-interactions.js); the stamina fix adds an `await` around an existing function flow and changes the call signature in `handleTokenDrop` only.
+
 
