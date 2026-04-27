@@ -44,6 +44,10 @@ export function createTokenInteractions({
   ensureScenePlacementDraft,
   toNonNegativeNumber,
   persistBoardStateSnapshot,
+  // Levels v2 (§5.6): post-commit fall detection. Optional; when omitted
+  // commits run with no fall handling (matches pre-v2 behavior).
+  processPlacementFalls = null,
+  triggerTokenFallAnimations = null,
   windowRef = typeof window === 'undefined' ? undefined : window,
 } = {}) {
   let dragRenderRafId = null;
@@ -762,13 +766,34 @@ export function createTokenInteractions({
       persistBoardStateSnapshot({}, placementMoveOps);
     }
 
+    // Levels v2 (§5.6): drag commit triggers raw-cutout fall detection
+    // for the just-moved tokens. processPlacementFalls handles chained
+    // falls, persists the level change as a `placement.update` op, and
+    // mirrors the claimant's userLevelState. The animation is fired on
+    // the post-render token DOM via triggerTokenFallAnimations after the
+    // renderTokens call below paints the new size/indicator.
+    let fallenIds = [];
+    if (movedCount && typeof processPlacementFalls === 'function') {
+      const result = processPlacementFalls(activeSceneId, movedIds);
+      if (Array.isArray(result)) {
+        fallenIds = result;
+      }
+    }
+
     const statusEl = getStatusElement();
     if (movedCount && statusEl) {
       const noun = movedCount === 1 ? 'token' : 'tokens';
-      statusEl.textContent = `Moved ${movedCount} ${noun}.`;
+      const fellNoun = fallenIds.length === 1 ? 'token' : 'tokens';
+      statusEl.textContent = fallenIds.length
+        ? `Moved ${movedCount} ${noun}; ${fallenIds.length} ${fellNoun} fell.`
+        : `Moved ${movedCount} ${noun}.`;
     }
 
     renderTokens(boardApi.getState?.() ?? {}, tokenLayer, viewState);
+
+    if (fallenIds.length && typeof triggerTokenFallAnimations === 'function') {
+      triggerTokenFallAnimations(fallenIds);
+    }
   }
 
   function clearDragCandidate(pointerId = null) {

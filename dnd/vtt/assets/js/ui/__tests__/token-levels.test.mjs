@@ -3,12 +3,14 @@ import assert from 'node:assert/strict';
 
 import {
   getAdjacentTokenLevel,
+  getFallingDestinationLevelId,
   getMapLevelDistanceScale,
   getMapLevelNavigationControlState,
   getOrderedTokenMapLevels,
   getPlayerTokenMapLevelVisibility,
   getTokenLevelControlState,
   getTokenLevelPresentation,
+  isPlacementFullyInsideRawCutouts,
   isPlacementInteractableOnPlayerMapLevel,
   isPlacementOnPlayerVisibleMapLevel,
   resolvePlayerActiveMapLevelId,
@@ -689,5 +691,217 @@ describe('Levels v2 token presentation', () => {
       { viewerLevelId: 'upper', gmViewing: true },
     );
     assert.equal(orphan.visible, false);
+  });
+});
+
+// Levels v2 §5.6: falling — raw-cutout containment, chained fall
+// resolution, and edge-buffer non-trigger.
+describe('Levels v2 falling detection', () => {
+  test('isPlacementFullyInsideRawCutouts: single-cell token entirely inside a cutout returns true', () => {
+    const level = {
+      id: 'upper',
+      cutouts: [{ column: 5, row: 5, width: 1, height: 1 }],
+    };
+    const placement = { id: 't', column: 5, row: 5, width: 1, height: 1 };
+    assert.equal(isPlacementFullyInsideRawCutouts(placement, level), true);
+  });
+
+  test('isPlacementFullyInsideRawCutouts: edge-of-cutout placement does NOT trigger', () => {
+    // The §5.6 rule is "every occupied cell sits inside the raw cutout
+    // area" — edge-of-cutout placement should NOT fall. Step 5's edge
+    // expansion (8-neighborhood) is for visibility only.
+    const level = {
+      id: 'upper',
+      cutouts: [{ column: 5, row: 5, width: 2, height: 2 }],
+    };
+    const adjacent = { id: 't', column: 4, row: 5, width: 1, height: 1 };
+    const corner = { id: 't', column: 4, row: 4, width: 1, height: 1 };
+    assert.equal(isPlacementFullyInsideRawCutouts(adjacent, level), false);
+    assert.equal(isPlacementFullyInsideRawCutouts(corner, level), false);
+  });
+
+  test('isPlacementFullyInsideRawCutouts: multi-cell token partially over a cutout returns false', () => {
+    const level = {
+      id: 'upper',
+      cutouts: [{ column: 5, row: 5, width: 1, height: 1 }],
+    };
+    const placement = { id: 't', column: 5, row: 5, width: 2, height: 2 };
+    assert.equal(isPlacementFullyInsideRawCutouts(placement, level), false);
+  });
+
+  test('isPlacementFullyInsideRawCutouts: multi-cell token fully covered by a wide cutout returns true', () => {
+    const level = {
+      id: 'upper',
+      cutouts: [{ column: 5, row: 5, width: 3, height: 3 }],
+    };
+    const placement = { id: 't', column: 6, row: 6, width: 2, height: 2 };
+    assert.equal(isPlacementFullyInsideRawCutouts(placement, level), true);
+  });
+
+  test('isPlacementFullyInsideRawCutouts: missing or empty cutouts returns false', () => {
+    const placement = { id: 't', column: 0, row: 0, width: 1, height: 1 };
+    assert.equal(isPlacementFullyInsideRawCutouts(placement, null), false);
+    assert.equal(isPlacementFullyInsideRawCutouts(placement, {}), false);
+    assert.equal(isPlacementFullyInsideRawCutouts(placement, { cutouts: [] }), false);
+  });
+
+  test('getFallingDestinationLevelId: single fall from Level 1 to Level 0', () => {
+    const mapLevels = {
+      levels: [
+        {
+          id: 'upper',
+          name: 'Upper',
+          mapUrl: '/u.png',
+          zIndex: 1,
+          cutouts: [{ column: 4, row: 4, width: 1, height: 1 }],
+        },
+      ],
+    };
+    const placement = { id: 't', levelId: 'upper', column: 4, row: 4, width: 1, height: 1 };
+    assert.equal(getFallingDestinationLevelId(placement, mapLevels), 'level-0');
+  });
+
+  test('getFallingDestinationLevelId: chained fall from Level 2 through Level 1 to Level 0', () => {
+    // Cutouts on both upper levels stack so a token landing on the cell
+    // falls through both. Step 5 visibility uses edge expansion; falling
+    // uses raw cells only — confirm the helper walks the chain via raw
+    // containment.
+    const mapLevels = {
+      levels: [
+        {
+          id: 'level1',
+          name: 'Level 1',
+          mapUrl: '/1.png',
+          zIndex: 1,
+          cutouts: [{ column: 7, row: 3, width: 1, height: 1 }],
+        },
+        {
+          id: 'level2',
+          name: 'Level 2',
+          mapUrl: '/2.png',
+          zIndex: 2,
+          cutouts: [{ column: 7, row: 3, width: 1, height: 1 }],
+        },
+      ],
+    };
+    const placement = { id: 't', levelId: 'level2', column: 7, row: 3, width: 1, height: 1 };
+    assert.equal(getFallingDestinationLevelId(placement, mapLevels), 'level-0');
+  });
+
+  test('getFallingDestinationLevelId: chained fall stops at the first level WITHOUT a cutout', () => {
+    const mapLevels = {
+      levels: [
+        // Level 1: NO cutout at the placement column — chain stops here.
+        {
+          id: 'level1',
+          name: 'Level 1',
+          mapUrl: '/1.png',
+          zIndex: 1,
+          cutouts: [{ column: 0, row: 0, width: 1, height: 1 }],
+        },
+        // Level 2: cutout under the placement.
+        {
+          id: 'level2',
+          name: 'Level 2',
+          mapUrl: '/2.png',
+          zIndex: 2,
+          cutouts: [{ column: 7, row: 3, width: 1, height: 1 }],
+        },
+      ],
+    };
+    const placement = { id: 't', levelId: 'level2', column: 7, row: 3, width: 1, height: 1 };
+    assert.equal(getFallingDestinationLevelId(placement, mapLevels), 'level1');
+  });
+
+  test('getFallingDestinationLevelId: token already on Level 0 never falls', () => {
+    const mapLevels = {
+      levels: [
+        {
+          id: 'upper',
+          name: 'Upper',
+          mapUrl: '/u.png',
+          zIndex: 1,
+          cutouts: [{ column: 0, row: 0, width: 5, height: 5 }],
+        },
+      ],
+    };
+    const placement = { id: 't', levelId: 'level-0', column: 1, row: 1, width: 1, height: 1 };
+    assert.equal(getFallingDestinationLevelId(placement, mapLevels), null);
+  });
+
+  test('getFallingDestinationLevelId: token with missing levelId is treated as Level 0 and never falls', () => {
+    const mapLevels = {
+      levels: [
+        {
+          id: 'upper',
+          name: 'Upper',
+          mapUrl: '/u.png',
+          zIndex: 1,
+          cutouts: [{ column: 0, row: 0, width: 5, height: 5 }],
+        },
+      ],
+    };
+    // Legacy placements with no levelId resolve to Level 0 per
+    // resolvePlacementLevelId; they should not be re-classified as
+    // upper-level just because they sit over a cutout above them.
+    const placement = { id: 't', column: 1, row: 1, width: 1, height: 1 };
+    assert.equal(getFallingDestinationLevelId(placement, mapLevels), null);
+  });
+
+  test('getFallingDestinationLevelId: edge-of-cutout placement does not fall', () => {
+    const mapLevels = {
+      levels: [
+        {
+          id: 'upper',
+          name: 'Upper',
+          mapUrl: '/u.png',
+          zIndex: 1,
+          cutouts: [{ column: 5, row: 5, width: 2, height: 2 }],
+        },
+      ],
+    };
+    // Adjacent to but not inside the cutout.
+    const placement = { id: 't', levelId: 'upper', column: 4, row: 5, width: 1, height: 1 };
+    assert.equal(getFallingDestinationLevelId(placement, mapLevels), null);
+  });
+
+  test('getFallingDestinationLevelId: multi-cell partial overlap does not fall', () => {
+    const mapLevels = {
+      levels: [
+        {
+          id: 'upper',
+          name: 'Upper',
+          mapUrl: '/u.png',
+          zIndex: 1,
+          cutouts: [{ column: 5, row: 5, width: 1, height: 1 }],
+        },
+      ],
+    };
+    // 2x2 token covers (5,5), (6,5), (5,6), (6,6) but the cutout is
+    // only (5,5). Partial — does not fall.
+    const placement = { id: 't', levelId: 'upper', column: 5, row: 5, width: 2, height: 2 };
+    assert.equal(getFallingDestinationLevelId(placement, mapLevels), null);
+  });
+
+  test('getFallingDestinationLevelId: returns null when no levels exist', () => {
+    const placement = { id: 't', levelId: 'upper', column: 0, row: 0, width: 1, height: 1 };
+    assert.equal(getFallingDestinationLevelId(placement, { levels: [] }), null);
+    assert.equal(getFallingDestinationLevelId(placement, null), null);
+  });
+
+  test('getFallingDestinationLevelId: returns null when current level is unknown', () => {
+    const mapLevels = {
+      levels: [
+        {
+          id: 'upper',
+          name: 'Upper',
+          mapUrl: '/u.png',
+          zIndex: 1,
+          cutouts: [{ column: 0, row: 0, width: 5, height: 5 }],
+        },
+      ],
+    };
+    const placement = { id: 't', levelId: 'phantom', column: 1, row: 1, width: 1, height: 1 };
+    assert.equal(getFallingDestinationLevelId(placement, mapLevels), null);
   });
 });
