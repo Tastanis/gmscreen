@@ -41,7 +41,10 @@
       "Bash(command -v gh)",
       "PowerShell(gh --version)",
       "PowerShell($candidates = @\\(\"$env:LOCALAPPDATA\\\\GitHubDesktop\\\\bin\\\\gh.exe\",\"$env:LOCALAPPDATA\\\\Programs\\\\GitHub CLI\\\\gh.exe\",\"$env:ProgramFiles\\\\GitHub CLI\\\\gh.exe\",\"${env:ProgramFiles\\(x86\\)}\\\\GitHub CLI\\\\gh.exe\"\\); foreach \\($c in $candidates\\) { if \\(Test-Path $c\\) { Write-Output $c } })",
-      "PowerShell(Get-ChildItem -Path \"$env:ProgramFiles\",\"${env:ProgramFiles\\(x86\\)}\",\"$env:LOCALAPPDATA\",\"$env:APPDATA\" -Filter gh.exe -Recurse -ErrorAction SilentlyContinue -Depth 4 | Select-Object -First 5 -ExpandProperty FullName)"
+      "PowerShell(Get-ChildItem -Path \"$env:ProgramFiles\",\"${env:ProgramFiles\\(x86\\)}\",\"$env:LOCALAPPDATA\",\"$env:APPDATA\" -Filter gh.exe -Recurse -ErrorAction SilentlyContinue -Depth 4 | Select-Object -First 5 -ExpandProperty FullName)",
+      "Bash(node --test \"dnd/vtt/assets/js/state/__tests__/map-levels-v2-normalization.test.mjs\")",
+      "Bash(node -e \"import\\('./dnd/vtt/assets/js/state/normalize/map-levels.js'\\).then\\(m => console.log\\(Object.keys\\(m\\).sort\\(\\).join\\('\\\\n'\\)\\)\\)\")",
+      "Bash(node --check \"dnd/vtt/assets/js/ui/board-interactions.js\")"
     ],
     "deny": []
   }

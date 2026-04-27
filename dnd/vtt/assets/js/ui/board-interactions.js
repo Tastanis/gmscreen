@@ -29,7 +29,9 @@ import {
 import {
   BASE_MAP_LEVEL_ID,
   KNOWN_LEVEL_USER_IDS,
+  PLAYER_CHARACTER_USER_IDS,
   buildLevelViewModel,
+  getClaimedUserIdForPlacement,
   normalizeMapLevelsState,
   resolveActiveLevelIdForUser,
   resolvePlacementLevelId,
@@ -3768,6 +3770,14 @@ export function mountBoardInteractions(store, routes = {}) {
     // For PC folder tokens, fetch and apply character sheet stamina
     if (isTokenSourcePlayerVisible(template)) {
       fetchAndApplyCharacterStamina(placement.id, activeSceneId);
+      // Levels v2 (§5.4): PC tokens auto-claim to the matching profile id
+      // the first time they are dragged into a scene. We only run this on
+      // a fresh drop, so the "first time" guard is implicit. The PC alias
+      // matcher is the same one used by the combat-team profile resolver.
+      const inferredProfileId = matchProfileByName(template?.name ?? '');
+      if (inferredProfileId && PLAYER_CHARACTER_USER_IDS.includes(inferredProfileId)) {
+        autoClaimPlacement(activeSceneId, placement.id, inferredProfileId);
+      }
     }
 
     if (status) {
@@ -3775,6 +3785,39 @@ export function mountBoardInteractions(store, routes = {}) {
       status.textContent = `Placed ${label} on the scene.`;
     }
   };
+
+  function autoClaimPlacement(sceneId, placementId, userId) {
+    if (
+      typeof sceneId !== 'string' || !sceneId
+      || typeof placementId !== 'string' || !placementId
+      || typeof userId !== 'string' || !userId
+      || typeof boardApi.updateState !== 'function'
+    ) {
+      return;
+    }
+    let mutated = false;
+    boardApi.updateState?.((draft) => {
+      const sceneEntry = ensureSceneStateDraftEntry(draft, sceneId);
+      if (!sceneEntry) {
+        return;
+      }
+      if (!sceneEntry.claimedTokens || typeof sceneEntry.claimedTokens !== 'object') {
+        sceneEntry.claimedTokens = {};
+      }
+      if (sceneEntry.claimedTokens[placementId] === userId) {
+        return;
+      }
+      sceneEntry.claimedTokens[placementId] = userId;
+      mutated = true;
+    });
+    if (!mutated) {
+      return;
+    }
+    markSceneStateDirty(sceneId);
+    persistBoardStateSnapshot({}, [
+      { type: 'claim.set', sceneId, placementId, userId },
+    ]);
+  }
 
   const tokenDragListenerOptions = { capture: true };
 
@@ -6172,6 +6215,11 @@ export function mountBoardInteractions(store, routes = {}) {
     const isCellFogged = gmViewing ? null : createFogChecker(state);
     const tokenLevelState = getActiveSceneTokenLevelState(state);
     const viewerLevelId = activeSceneKey ? getViewerLevelIdForCurrentUser(state, activeSceneKey) : null;
+    // Levels v2 (§5.4): the per-scene `claimedTokens` map drives the colored
+    // ring on PC tokens. Look the scene entry up once outside the loop.
+    const activeSceneEntry = activeSceneKey
+      ? state?.boardState?.sceneState?.[activeSceneKey] ?? null
+      : null;
 
     placements.forEach((placement, placementIndex) => {
       const normalized = normalizePlacementForRender(placement);
@@ -6269,6 +6317,8 @@ export function mountBoardInteractions(store, routes = {}) {
       token.style.transformOrigin = '50% 50%';
       clearTokenMapLevelVisibilityMask(token);
       applyTokenLevelPresentation(token, presentation);
+      const claimedUserId = getClaimedUserIdForPlacement(activeSceneEntry, normalized.id);
+      applyTokenClaimPresentation(token, claimedUserId);
 
       token.classList.toggle('vtt-token--hidden', Boolean(normalized.hidden));
 
@@ -6615,6 +6665,35 @@ export function mountBoardInteractions(store, routes = {}) {
     if (arrow) {
       arrow.textContent = direction === 'above' ? '\u25B2' : '\u25BC';
     }
+  }
+
+  // Levels v2 (§5.4): paint a colored ring on tokens claimed by a player so
+  // every viewer can see whose token is whose at a glance. Color is driven
+  // entirely from CSS via `data-claimed-by` so the palette is centralized
+  // (Indigo = purple, Sharon = light grey, Frunk = red, Zepha = brown-orange).
+  // Unclaimed tokens (or any non-PC claimant) get no ring.
+  function applyTokenClaimPresentation(token, claimedUserId) {
+    if (!token) {
+      return;
+    }
+    const ring = token.querySelector('.vtt-token__claim-ring');
+    const userKey = typeof claimedUserId === 'string' ? claimedUserId.trim().toLowerCase() : '';
+    if (!userKey || !PLAYER_CHARACTER_USER_IDS.includes(userKey)) {
+      delete token.dataset.claimedBy;
+      if (ring) {
+        ring.remove();
+      }
+      return;
+    }
+    token.dataset.claimedBy = userKey;
+    let ringEl = ring;
+    if (!ringEl) {
+      ringEl = document.createElement('div');
+      ringEl.className = 'vtt-token__claim-ring';
+      ringEl.setAttribute('aria-hidden', 'true');
+      token.insertBefore(ringEl, token.firstChild);
+    }
+    ringEl.dataset.claimedBy = userKey;
   }
 
   function applyTokenMapLevelVisibilityMask(token, visibility, { column, row, width, height, gridSize } = {}) {
@@ -13304,6 +13383,47 @@ export function mountBoardInteractions(store, routes = {}) {
       `
       : '';
 
+    // Levels v2 (§5.4): the GM gets a dropdown that assigns the token to any
+    // PC profile or releases it back to unclaimed. Players get a single
+    // toggle button — Claim, Take (when another player holds it), or
+    // Unclaim. Both surfaces share the same status row so the current
+    // claimant is visible regardless of who is viewing.
+    const playerClaimOptionsMarkup = PLAYER_CHARACTER_USER_IDS
+      .map((profileId) => {
+        const label = escapeHtml(formatProfileDisplayName(profileId));
+        return `<option value="${escapeHtml(profileId)}">${label}</option>`;
+      })
+      .join('');
+    const claimControlsMarkup = `
+        <div class="vtt-token-settings__section" data-token-settings-claim-section hidden>
+          <div class="vtt-token-settings__row vtt-token-settings__row--claim">
+            <span class="vtt-token-settings__claim-label">Claimed by</span>
+            <span class="vtt-token-settings__claim-name" data-token-settings-claim-name>Unclaimed</span>
+            ${gmUser
+              ? `
+            <select
+              class="vtt-token-settings__claim-select"
+              data-token-settings-claim-select
+              aria-label="Assign token to player"
+            >
+              <option value="">Unclaimed</option>
+              ${playerClaimOptionsMarkup}
+            </select>
+              `
+              : `
+            <button
+              type="button"
+              class="vtt-token-settings__claim-button"
+              data-token-settings-claim-toggle
+              hidden
+            >
+              Claim
+            </button>
+              `}
+          </div>
+        </div>
+      `;
+
     const sizeOptions = ['1x1', '2x2', '3x3', '4x4', '5x5']
       .map((label) => {
         const size = parseInt(label, 10);
@@ -13438,6 +13558,7 @@ export function mountBoardInteractions(store, routes = {}) {
           </div>
         </div>
         ${levelControlsMarkup}
+        ${claimControlsMarkup}
         ${hiddenToggleMarkup}
       </form>
     `;
@@ -13468,6 +13589,10 @@ export function mountBoardInteractions(store, routes = {}) {
       levelName: element.querySelector('[data-token-settings-level-name]'),
       levelDownButton: element.querySelector('[data-token-settings-level="down"]'),
       levelUpButton: element.querySelector('[data-token-settings-level="up"]'),
+      claimSection: element.querySelector('[data-token-settings-claim-section]'),
+      claimName: element.querySelector('[data-token-settings-claim-name]'),
+      claimSelect: element.querySelector('[data-token-settings-claim-select]'),
+      claimToggleButton: element.querySelector('[data-token-settings-claim-toggle]'),
       auraToggle: element.querySelector('[data-token-settings-toggle="aura"]'),
       auraField: element.querySelector('[data-token-settings-field="aura"]'),
       auraRadiusInput: element.querySelector('[data-token-settings-input="auraRadius"]'),
@@ -13510,6 +13635,14 @@ export function mountBoardInteractions(store, routes = {}) {
 
     menu.levelUpButton?.addEventListener('click', () => {
       handleTokenLevelMoveClick('up');
+    });
+
+    menu.claimSelect?.addEventListener('change', () => {
+      handleTokenClaimSelectChange(menu.claimSelect.value);
+    });
+
+    menu.claimToggleButton?.addEventListener('click', () => {
+      handleTokenClaimToggleClick();
     });
 
     if (menu.conditionSelect) {
@@ -14031,11 +14164,22 @@ export function mountBoardInteractions(store, routes = {}) {
 
     const updated = updatePlacementById(activeTokenSettingsId, (target) => {
       target.levelId = targetLevel.id;
+      target._lastModified = Date.now();
     });
     if (!updated) {
       syncTokenLevelControls(placement);
       return;
     }
+
+    // Levels v2 (§4.2): if the moved token is claimed, the same logical
+    // mutation must also update that claimant's `userLevelState` so reload
+    // persistence and "follow your token" stay coherent. Activate-pulled
+    // entries get overwritten by the new `claim`-source entry.
+    applyClaimDrivenUserLevelUpdate({
+      sceneId: activeSceneId,
+      placementId: activeTokenSettingsId,
+      levelId: targetLevel.id,
+    });
 
     refreshTokenSettings();
     renderTokens(boardApi.getState?.() ?? {}, tokenLayer, viewState);
@@ -14046,6 +14190,70 @@ export function mountBoardInteractions(store, routes = {}) {
       const levelName = targetLevel.name || 'map level';
       status.textContent = `Moved ${label} to ${levelName}.`;
     }
+  }
+
+  // Levels v2 (§4.2): push a `user-level.set` op (with `source: 'claim'`
+  // and `tokenId`) for the claimant of the supplied placement, and mirror
+  // the entry into local state so the originating client's view-follow
+  // resolves immediately without waiting for the broadcast round-trip.
+  // No-op when the placement is unclaimed, or when the new level matches
+  // the claimant's existing userLevelState entry.
+  function applyClaimDrivenUserLevelUpdate({ sceneId, placementId, levelId }) {
+    if (
+      typeof sceneId !== 'string' || !sceneId
+      || typeof placementId !== 'string' || !placementId
+      || typeof levelId !== 'string' || !levelId
+      || typeof boardApi.updateState !== 'function'
+    ) {
+      return;
+    }
+    const state = boardApi.getState?.() ?? {};
+    const sceneEntry = state.boardState?.sceneState?.[sceneId] ?? null;
+    const claimedUserId = getClaimedUserIdForPlacement(sceneEntry, placementId);
+    if (!claimedUserId) {
+      return;
+    }
+    const updatedAt = Date.now();
+    let mutated = false;
+    boardApi.updateState?.((draft) => {
+      const draftScene = ensureSceneStateDraftEntry(draft, sceneId);
+      if (!draftScene) {
+        return;
+      }
+      if (!draftScene.userLevelState || typeof draftScene.userLevelState !== 'object') {
+        draftScene.userLevelState = {};
+      }
+      const existing = draftScene.userLevelState[claimedUserId];
+      if (
+        existing
+        && existing.levelId === levelId
+        && existing.source === 'claim'
+        && existing.tokenId === placementId
+      ) {
+        return;
+      }
+      draftScene.userLevelState[claimedUserId] = {
+        levelId,
+        source: 'claim',
+        tokenId: placementId,
+        updatedAt,
+      };
+      mutated = true;
+    });
+    if (!mutated) {
+      return;
+    }
+    markSceneStateDirty(sceneId);
+    persistBoardStateSnapshot({}, [
+      {
+        type: 'user-level.set',
+        sceneId,
+        userId: claimedUserId,
+        levelId,
+        source: 'claim',
+        tokenId: placementId,
+      },
+    ]);
   }
 
   function syncTokenStackControls(placementId = activeTokenSettingsId) {
@@ -14095,6 +14303,173 @@ export function mountBoardInteractions(store, routes = {}) {
     setStackButtonState(tokenSettingsMenu.levelUpButton, !controls.canMoveUp);
   }
 
+  // Levels v2 (§5.4): keep the token-settings claim row in sync with the
+  // current claim. The GM gets a select; players get a single Claim/Take/
+  // Unclaim button. Both surfaces show the current claimant's name.
+  function syncTokenClaimControls(placement = null) {
+    if (!tokenSettingsMenu?.claimSection) {
+      return;
+    }
+    if (!placement || typeof placement !== 'object' || !placement.id) {
+      tokenSettingsMenu.claimSection.hidden = true;
+      tokenSettingsMenu.claimSection.setAttribute('aria-hidden', 'true');
+      return;
+    }
+
+    tokenSettingsMenu.claimSection.hidden = false;
+    tokenSettingsMenu.claimSection.setAttribute('aria-hidden', 'false');
+
+    const claimedUserId = getClaimedUserIdForActivePlacement(placement.id);
+    if (tokenSettingsMenu.claimName) {
+      tokenSettingsMenu.claimName.textContent = claimedUserId
+        ? formatProfileDisplayName(claimedUserId)
+        : 'Unclaimed';
+      tokenSettingsMenu.claimName.dataset.claimedBy = claimedUserId ?? '';
+    }
+
+    if (tokenSettingsMenu.claimSelect) {
+      tokenSettingsMenu.claimSelect.value = claimedUserId ?? '';
+    }
+
+    if (tokenSettingsMenu.claimToggleButton) {
+      const button = tokenSettingsMenu.claimToggleButton;
+      const userId = getCurrentUserId();
+      const canPlayerClaim = !isGmUser()
+        && typeof userId === 'string'
+        && PLAYER_CHARACTER_USER_IDS.includes(userId);
+      if (!canPlayerClaim) {
+        button.hidden = true;
+        button.setAttribute('aria-hidden', 'true');
+      } else {
+        button.hidden = false;
+        button.setAttribute('aria-hidden', 'false');
+        if (claimedUserId === userId) {
+          button.textContent = 'Unclaim';
+          button.dataset.claimAction = 'clear';
+        } else if (claimedUserId) {
+          button.textContent = 'Take Claim';
+          button.dataset.claimAction = 'take';
+        } else {
+          button.textContent = 'Claim';
+          button.dataset.claimAction = 'set';
+        }
+      }
+    }
+  }
+
+  function getClaimedUserIdForActivePlacement(placementId) {
+    if (typeof placementId !== 'string' || !placementId) {
+      return null;
+    }
+    const state = boardApi.getState?.() ?? {};
+    const activeSceneId = state.boardState?.activeSceneId ?? null;
+    if (!activeSceneId) {
+      return null;
+    }
+    const sceneEntry = state.boardState?.sceneState?.[activeSceneId] ?? null;
+    return getClaimedUserIdForPlacement(sceneEntry, placementId);
+  }
+
+  function handleTokenClaimSelectChange(rawValue) {
+    if (!isGmUser() || !activeTokenSettingsId) {
+      return;
+    }
+    const targetUserId = typeof rawValue === 'string' ? rawValue.trim().toLowerCase() : '';
+    if (targetUserId && !PLAYER_CHARACTER_USER_IDS.includes(targetUserId)) {
+      // Defensive: select options are constrained, but bail if a stray
+      // value sneaks in so we never broadcast an invalid claim.
+      syncTokenClaimControls(getPlacementFromStore(activeTokenSettingsId));
+      return;
+    }
+    if (targetUserId) {
+      submitTokenClaimChange(activeTokenSettingsId, targetUserId);
+    } else {
+      submitTokenClaimChange(activeTokenSettingsId, null);
+    }
+  }
+
+  function handleTokenClaimToggleClick() {
+    if (!activeTokenSettingsId) {
+      return;
+    }
+    const userId = getCurrentUserId();
+    if (!userId || !PLAYER_CHARACTER_USER_IDS.includes(userId)) {
+      return;
+    }
+    const claimedUserId = getClaimedUserIdForActivePlacement(activeTokenSettingsId);
+    if (claimedUserId === userId) {
+      submitTokenClaimChange(activeTokenSettingsId, null);
+    } else {
+      submitTokenClaimChange(activeTokenSettingsId, userId);
+    }
+  }
+
+  // Levels v2 (§5.4): single mutation point for claim changes from the
+  // token-settings UI. `targetUserId === null` clears the claim (claim.clear);
+  // otherwise it writes a new claim (claim.set, replacing any existing one).
+  // The op applier mirror-writes are no-ops on the originating client; the
+  // ops broadcast picks up remote clients via Pusher.
+  function submitTokenClaimChange(placementId, targetUserId) {
+    if (typeof placementId !== 'string' || !placementId) {
+      return;
+    }
+    const activeSceneId = getActiveSceneId();
+    if (!activeSceneId || typeof boardApi.updateState !== 'function') {
+      return;
+    }
+    const currentClaim = getClaimedUserIdForActivePlacement(placementId);
+    if (currentClaim === (targetUserId ?? null)) {
+      syncTokenClaimControls(getPlacementFromStore(placementId));
+      return;
+    }
+
+    let mutated = false;
+    boardApi.updateState?.((draft) => {
+      const sceneEntry = ensureSceneStateDraftEntry(draft, activeSceneId);
+      if (!sceneEntry) {
+        return;
+      }
+      if (!sceneEntry.claimedTokens || typeof sceneEntry.claimedTokens !== 'object') {
+        sceneEntry.claimedTokens = {};
+      }
+      if (targetUserId) {
+        if (sceneEntry.claimedTokens[placementId] === targetUserId) {
+          return;
+        }
+        sceneEntry.claimedTokens[placementId] = targetUserId;
+        mutated = true;
+      } else if (placementId in sceneEntry.claimedTokens) {
+        delete sceneEntry.claimedTokens[placementId];
+        mutated = true;
+      }
+    });
+
+    if (!mutated) {
+      syncTokenClaimControls(getPlacementFromStore(placementId));
+      return;
+    }
+
+    markSceneStateDirty(activeSceneId);
+    const op = targetUserId
+      ? { type: 'claim.set', sceneId: activeSceneId, placementId, userId: targetUserId }
+      : { type: 'claim.clear', sceneId: activeSceneId, placementId };
+    persistBoardStateSnapshot({}, [op]);
+
+    const placement = getPlacementFromStore(placementId);
+    syncTokenClaimControls(placement);
+    renderTokens(boardApi.getState?.() ?? {}, tokenLayer, viewState);
+
+    if (status) {
+      const label = tokenLabel(placement);
+      if (targetUserId) {
+        const ownerLabel = formatProfileDisplayName(targetUserId);
+        status.textContent = `Claimed ${label} for ${ownerLabel}.`;
+      } else {
+        status.textContent = `Released ${label} to unclaimed.`;
+      }
+    }
+  }
+
   function setStackButtonState(button, disabled) {
     if (!button) {
       return;
@@ -14117,6 +14492,7 @@ export function mountBoardInteractions(store, routes = {}) {
     syncMonsterStatBlockControls(placement);
     syncTokenStackControls(placement?.id);
     syncTokenLevelControls(placement);
+    syncTokenClaimControls(placement);
 
     syncConditionControls(placement);
 
