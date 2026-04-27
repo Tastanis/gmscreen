@@ -10,6 +10,18 @@ export const MAP_LEVEL_ID_PREFIX = 'map-level-';
 // Placements without an explicit `levelId` resolve to this id.
 export const BASE_MAP_LEVEL_ID = 'level-0';
 
+// Levels v2 (§5.3): the GM's Activate button pulls every known user to the
+// GM's current viewing level. The roster is the configured chat/player set
+// (see dnd/index.php password map) normalized to lowercase profile ids — not
+// only currently connected websocket clients — so reloads stay consistent.
+export const KNOWN_LEVEL_USER_IDS = Object.freeze([
+  'gm',
+  'frunk',
+  'sharon',
+  'indigo',
+  'zepha',
+]);
+
 const mapLevelSeed = Date.now();
 let mapLevelSequence = 0;
 
