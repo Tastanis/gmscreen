@@ -47,6 +47,13 @@ function renderVttSceneBoard(bool $isGm = false): string
                     >
                         <span aria-hidden="true">&#9650;</span>
                     </button>
+                    <button
+                        class="vtt-board__level-activate"
+                        type="button"
+                        data-action="activate-map-level"
+                        aria-label="Pull all players to this level"
+                        title="Pull all players to this level"
+                    >Activate</button>
                 </div>
                 <?php endif; ?>
                 <div class="vtt-board__round-tracker" data-round-tracker hidden>

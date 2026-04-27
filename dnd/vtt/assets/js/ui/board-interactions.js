@@ -28,6 +28,7 @@ import {
 } from '../state/normalize/grid.js';
 import {
   BASE_MAP_LEVEL_ID,
+  KNOWN_LEVEL_USER_IDS,
   buildLevelViewModel,
   normalizeMapLevelsState,
   resolveActiveLevelIdForUser,
@@ -496,6 +497,7 @@ export function mountBoardInteractions(store, routes = {}) {
   const mapLevelNavName = document.querySelector('[data-map-level-nav-name]');
   const mapLevelNavDown = document.querySelector('[data-action="view-map-level-down"]');
   const mapLevelNavUp = document.querySelector('[data-action="view-map-level-up"]');
+  const mapLevelActivateButton = document.querySelector('[data-action="activate-map-level"]');
   const mapLevelIndicator = document.querySelector('[data-map-level-indicator]');
   const mapLevelIndicatorValue = document.querySelector('[data-map-level-indicator-value]');
   const appMain = document.getElementById('vtt-main');
@@ -1801,6 +1803,11 @@ export function mountBoardInteractions(store, routes = {}) {
   mapLevelNavUp?.addEventListener('click', (event) => {
     event.preventDefault();
     handleMapLevelNavigationClick('up');
+  });
+
+  mapLevelActivateButton?.addEventListener('click', (event) => {
+    event.preventDefault();
+    handleMapLevelActivateClick();
   });
 
   if (sceneListContainer) {
@@ -5161,6 +5168,74 @@ export function mountBoardInteractions(store, routes = {}) {
     syncMapLevelsForState(latestState, activeSceneId);
     if (status) {
       status.textContent = `Viewing ${targetLevel.name || 'map level'}.`;
+    }
+  }
+
+  // Levels v2 (§5.3): GM-only Activate. Pulls every known user (the
+  // configured chat/player roster, not just connected sockets) to the
+  // GM's current viewing level. Tokens are not moved; the next
+  // claimed-token level change overrides activate for that player.
+  function handleMapLevelActivateClick() {
+    if (!isGmUser()) {
+      return;
+    }
+
+    const activeSceneId = getActiveSceneId();
+    if (!activeSceneId || typeof boardApi.updateState !== 'function') {
+      return;
+    }
+
+    const state = boardApi.getState?.() ?? {};
+    const targetLevelId = getViewerLevelIdForCurrentUser(state, activeSceneId);
+    if (!targetLevelId) {
+      return;
+    }
+
+    const userIds = KNOWN_LEVEL_USER_IDS.slice();
+    if (userIds.length === 0) {
+      return;
+    }
+
+    const updatedAt = Date.now();
+    let mutated = false;
+    boardApi.updateState?.((draft) => {
+      const sceneEntry = ensureSceneStateDraftEntry(draft, activeSceneId);
+      if (!sceneEntry) {
+        return;
+      }
+
+      if (!sceneEntry.userLevelState || typeof sceneEntry.userLevelState !== 'object') {
+        sceneEntry.userLevelState = {};
+      }
+      userIds.forEach((userId) => {
+        sceneEntry.userLevelState[userId] = {
+          levelId: targetLevelId,
+          source: 'activate',
+          updatedAt,
+        };
+      });
+      mutated = true;
+    });
+
+    if (!mutated) {
+      return;
+    }
+
+    markSceneStateDirty(activeSceneId);
+    const activateOp = {
+      type: 'user-level.activate',
+      sceneId: activeSceneId,
+      levelId: targetLevelId,
+      userIds,
+    };
+    persistBoardStateSnapshot({}, [activateOp]);
+
+    const latestState = boardApi.getState?.() ?? {};
+    syncMapLevelsForState(latestState, activeSceneId);
+    if (status) {
+      const levelName = getViewerLevelDisplayName(latestState, activeSceneId, targetLevelId)
+        || 'map level';
+      status.textContent = `Pulled all players to ${levelName}.`;
     }
   }
 

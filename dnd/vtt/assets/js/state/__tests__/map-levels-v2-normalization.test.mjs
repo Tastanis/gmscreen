@@ -3,6 +3,7 @@ import assert from 'node:assert/strict';
 
 import {
   BASE_MAP_LEVEL_ID,
+  KNOWN_LEVEL_USER_IDS,
   buildLevelViewModel,
   levelIdExistsInViewModel,
   normalizeClaimedTokensMap,
@@ -32,6 +33,19 @@ describe('Levels v2 — base level constant and placement resolution', () => {
 
   test('resolvePlacementLevelId trims and returns a stored level id', () => {
     assert.equal(resolvePlacementLevelId({ levelId: '  map-level-a  ' }), 'map-level-a');
+  });
+});
+
+describe('Levels v2 — KNOWN_LEVEL_USER_IDS roster', () => {
+  test('lists the configured chat/player roster as lowercase profile ids', () => {
+    // Step 4 (§5.3): Activate must pull every known user, not only
+    // currently connected websocket clients. The roster mirrors the
+    // password→user map in dnd/index.php normalized to lowercase.
+    assert.deepEqual(KNOWN_LEVEL_USER_IDS, ['gm', 'frunk', 'sharon', 'indigo', 'zepha']);
+  });
+
+  test('is frozen so callers cannot mutate the shared roster', () => {
+    assert.equal(Object.isFrozen(KNOWN_LEVEL_USER_IDS), true);
   });
 });
 
