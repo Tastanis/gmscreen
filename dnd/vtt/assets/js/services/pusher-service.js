@@ -259,7 +259,6 @@ function handleStateUpdated(data) {
     sceneState,
     activeSceneId,
     mapUrl,
-    overlay,
   } = data;
 
   // Version check - skip if we've already applied a newer version.
@@ -350,9 +349,6 @@ function handleStateUpdated(data) {
     }
     if (mapUrl !== undefined) {
       delta.mapUrl = mapUrl;
-    }
-    if (overlay !== undefined) {
-      delta.overlay = overlay;
     }
   }
 

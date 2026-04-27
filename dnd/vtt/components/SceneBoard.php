@@ -163,7 +163,6 @@ function renderVttSceneBoard(bool $isGm = false): string
                         <div id="vtt-map-backdrop" class="vtt-board__map-backdrop">
                             <img id="vtt-map-image" class="vtt-board__map-image" alt="Scene map" hidden />
                         </div>
-                        <div id="vtt-map-overlay" class="vtt-board__map-overlay" aria-hidden="true" hidden></div>
                         <div id="vtt-grid-overlay" class="vtt-board__grid" aria-hidden="true"></div>
                         <div id="vtt-aura-layer" class="vtt-board__auras" aria-hidden="true" hidden></div>
                         <div id="vtt-template-layer" class="vtt-board__templates" aria-hidden="true"></div>

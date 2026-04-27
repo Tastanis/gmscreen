@@ -898,4 +898,39 @@ Behavioral consequences for downstream work:
 
 **Follow-up fix (2026-04-27):** After the Option A fix above landed, the auto-claim ring still flashed-and-disappeared on PC drop. Root cause: `fetchAndApplyCharacterStamina` in `board-interactions.js` was firing two saves back-to-back — `updatePlacementById` (which internally persists a `placement.update` delta) and a bare `persistBoardStateSnapshot()` immediately after. Both saves shared the same client `_version` and raced the original batched `[placement.add, claim.set]` save from `handleTokenDrop`. Whichever lost the lock got a 409, and the conflict handler's full-sync overwrite wiped the just-applied claim from local state. Fix was to delete the redundant bare `persistBoardStateSnapshot()` call — the `updatePlacementById` call already persists a proper delta op. The underlying 409-drop-without-retry plumbing issue (Option B) still remains open and unrelated.
 
+### 2026-04-27 — Manual test pass (GM browser)
+
+GM walked through the test checklist. Confirmed working:
+
+- **Step 1:** 1.1 (existing scene tokens render), 1.2 (claims/level state survive reload), 1.3 (claim broadcast across browsers).
+- **Step 2:** 2.1 (GM nav doesn't move players), 2.2 (Level: N indicator visible), 2.3 (GM nav persists across reload), 2.4 (player defaults to Level 0), 2.5 (cutout edit follows GM viewing level).
+- **Step 3:** 3.1 (selector lists Level 0), 3.2 (nav steps into Level 0), 3.3 (new token on Level 0 lands there), 3.5 (cutout editor disabled on Level 0), 3.6 (no delete button on Level 0), 3.7 (legacy tokens appear on Level 0).
+
+**Observed bug (3.4 — token-settings level move):** First click of the up/down arrow in the right-click token settings panel returned `409 Conflict` from `state.php` and didn't apply. Subsequent clicks were sluggish but eventually worked. Stack: `persist (persistence.js:191) ← persistBoardState (board-state-service.js:206) ← persistBoardStateSnapshot (board-interactions.js:2168) ← updatePlacementById (board-interactions.js:12318) ← handleTokenLevelMoveClick (board-interactions.js:14227)`.
+
+**Root cause:** The Levels v2 op-only call sites (`handleMapLevelNavigationClick`, `handleMapLevelActivateClick`, `applyClaimDrivenUserLevelUpdate`, `submitTokenClaimChange`, and the auto-claim branch of `handleTokenDrop`) all call `markSceneStateDirty(sceneId)` before broadcasting their op. `clearDirtyTrackingForOps` only knows about `placement.*`, `template.*`, and `drawing.*` — it does not clear `dirtySceneState` for `user-level.*` or `claim.*` ops. So after a GM nav the dirty mark survives forever. The next call to `updatePlacementById` (token-settings level move) sees `hasNonPlacementDirtyState() === true` and falls down the **snapshot** path. Snapshot saves still get the v1 stale-version check (the `db46dc8` ops-only bypass doesn't apply), and if the client is even one version behind, server returns 409.
+
+**Fix landed (2026-04-27):** `clearDirtyTrackingForOps` now recognizes the four v2 op types (`user-level.set`, `user-level.activate`, `claim.set`, `claim.clear`) and clears `dirtySceneState[sceneId]` after a successful (or 409-recovered) ops save. The dirty mark is preserved for the in-flight window so an `escape: true` fallback to snapshot still includes the change; on success the mark is cleared so subsequent placement ops can take the ops-only path (where `db46dc8` bypasses 409s). Verified by following test 3.4 with a token-settings level-move directly after a GM nav — no more 409.
+
+### 2026-04-27 — Old overlay system deleted (Phase A–D)
+
+The pre-Levels-v2 "map overlay" system has been removed end-to-end. This was the original mechanism for adding a single semi-transparent map layer with polygon cutouts on top of the base map; the Levels v2 system supersedes it entirely.
+
+**Removed (~5000 lines net):**
+- **UI surface (Phase A):** `Add Overlay`, `Clear Overlay`, `Upload Overlay`, `Edit Overlay`, `Delete Overlay`, `Toggle Overlay Visibility` buttons in the scene manager. Click handlers and `vtt-overlay-upload-input` event wiring. (`scene-manager.js`)
+- **DOM + tool (Phase B):** `<div id="vtt-map-overlay">` from `SceneBoard.php`. The 1240-line `createOverlayTool` factory, `createOverlayCutoutBlob`, `overlayUploadHelpers`, mapOverlay drop proxies, layer rendering (`syncOverlayLayer`, `teardownOverlayLayer`, `applyMaskToOverlayElement`, etc.), `cloneOverlayState`, `resolveSceneOverlayState`, `getActiveOverlayLayerId`, `syncOverlayVisibilityButtons`, snapshot/apply paths, `dirtyTopLevel.has('overlay')`. (`board-interactions.js`)
+- **Client data layer (Phase C):** `state/normalize/overlay.js` (entire 302-line module deleted). `markOverlayDirty` and the `overlayDirty` / `captureOverlaySignature` / `overlaySignatureChanged` plumbing in `store.js`. `normalizeOverlayConfig` and ~400 lines of inline overlay helpers in `scene-manager.js`. `overlay` field in scene-board-state normalizer, payload builder, merge helpers, pusher delta plumbing, bootstrap snapshot reader. The `overlay-dirty-tracking.test.mjs` file (obsolete).
+- **Server (Phase D):** `normalizeOverlayPayload` and dependents (340 lines: `createEmptyOverlayState`, `createEmptyOverlayMask`, `normalizeOverlayLayerPayload`, `resolveOverlayActiveLayerId`, `maskHasMeaningfulContent`, `normalizeOverlayMaskPayload`, `normalizeOverlayMaskPoint`, etc.) in `state.php`. The `overlay` field in `applyBoardState`, `normalizeBoardState`, `normalizeSceneStatePayload`, and the Pusher broadcast envelope.
+- **CSS (Phase D):** `vtt-board__map-overlay`, `vtt-overlay-editor` and 50+ children, `data-overlay-editing` rules, `scene-overlay__*` rules, `scene-item__overlays` rule.
+
+**Intentionally kept (different concept, despite the "overlay" name):**
+- `--vtt-overlay-scale` CSS variable — toolbar/UI element sizing (Levels v2's cutout editor uses it).
+- `vtt-grid-overlay` — the grid SVG layer.
+- `vtt-custom-condition-overlay`, dice-roller modal `overlay`, drag-ruler SVG `overlay` — UI/dialog overlays.
+- `placement.overlays.hitPoints` / `placement.overlays.conditions` — per-token HP/condition badge metadata.
+- `vtt-overlay-upload-input` — the file picker element ID. The element is now used for map-level uploads only; renaming would touch HTML, CSS, and JS in lockstep, so the misleading ID is intentionally left in place. Internal-only.
+- `'overlay'` Pusher channel name in `config/pusher.php` — comment notes it's been repurposed for fog-of-war broadcasts.
+
+**Test status:** 488 of 488 tests pass (down from 493 because the obsolete `overlay-dirty-tracking.test.mjs` file was deleted; the rest of the suite is unchanged).
+
 

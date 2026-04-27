@@ -13,11 +13,6 @@ import {
   restrictPlacementsToPlayerView,
 } from './normalize/placements.js';
 import {
-  normalizeOverlayEntry,
-  syncBoardOverlayState,
-  createEmptyOverlayState,
-} from './normalize/overlay.js';
-import {
   PLAYER_VISIBLE_TOKEN_FOLDER,
   normalizePlayerTokenFolderName,
   normalizeTokens,
@@ -35,39 +30,6 @@ export {
 
 const listeners = new Set();
 
-let overlayDirty = true;
-
-export function markOverlayDirty() {
-  overlayDirty = true;
-}
-
-function captureOverlaySignature(boardState) {
-  const perSceneOverlay = new Map();
-  const sceneState = boardState?.sceneState;
-  if (sceneState && typeof sceneState === 'object') {
-    for (const id of Object.keys(sceneState)) {
-      perSceneOverlay.set(id, sceneState[id]?.overlay ?? null);
-    }
-  }
-  return {
-    activeSceneId: boardState?.activeSceneId ?? null,
-    overlay: boardState?.overlay ?? null,
-    sceneStateRef: boardState?.sceneState ?? null,
-    perSceneOverlay,
-  };
-}
-
-function overlaySignatureChanged(before, after) {
-  if (before.activeSceneId !== after.activeSceneId) return true;
-  if (before.overlay !== after.overlay) return true;
-  if (before.sceneStateRef !== after.sceneStateRef) return true;
-  if (before.perSceneOverlay.size !== after.perSceneOverlay.size) return true;
-  for (const [id, overlayRef] of after.perSceneOverlay) {
-    if (before.perSceneOverlay.get(id) !== overlayRef) return true;
-  }
-  return false;
-}
-
 const state = {
   scenes: { folders: [], items: [] },
   tokens: { folders: [], items: [] },
@@ -79,7 +41,6 @@ const state = {
     sceneState: {},
     templates: {},
     drawings: {},
-    overlay: createEmptyOverlayState(),
     pings: [],
   },
   grid: { size: 64, locked: false, visible: true, offsetX: 0, offsetY: 0 },
@@ -106,13 +67,9 @@ export function initializeState(snapshot = {}) {
   state.boardState.drawings = normalizeDrawings(
     boardSnapshot.drawings ?? state.boardState.drawings ?? {}
   );
-  state.boardState.overlay = normalizeOverlayEntry(
-    boardSnapshot.overlay ?? state.boardState.overlay ?? {}
-  );
   state.boardState.pings = normalizePings(
     boardSnapshot.pings ?? state.boardState.pings ?? []
   );
-  syncBoardOverlayState(state.boardState);
   if (snapshot.grid && typeof snapshot.grid === 'object') {
     state.grid = normalizeGridState({
       ...state.grid,
@@ -139,7 +96,6 @@ export function initializeState(snapshot = {}) {
     state.boardState.placements = restrictPlacementsToPlayerView(state.boardState.placements);
     state.tokens = restrictTokensToPlayerView(state.tokens);
   }
-  overlayDirty = false;
   notify();
 }
 
@@ -153,24 +109,13 @@ export function subscribe(listener) {
 }
 
 export function updateState(updater) {
-  const beforeOverlay = captureOverlaySignature(state.boardState);
   updater(state);
-  const afterOverlay = captureOverlaySignature(state.boardState);
 
-  // Preserve fogOfWar data across syncBoardOverlayState AND notify().
-  // The overlay normalization rebuilds overlay objects on each scene entry,
-  // and subscribers triggered by notify() (e.g. poller merge, Pusher sync)
-  // can call updateState again and replace draft.boardState entirely.
-  // We deep-copy fogOfWar before those steps and restore afterwards.
+  // Preserve fogOfWar data across notify(). Subscribers triggered by
+  // notify() (e.g. poller merge, Pusher sync) can call updateState again
+  // and replace draft.boardState entirely. Deep-copy fogOfWar before
+  // those steps and restore afterwards.
   const fogSnap = captureFogOfWarSnapshot(state.boardState);
-
-  // Only rebuild overlay state when the overlay / active scene / sceneState
-  // slice actually changed since the updater started (or a caller
-  // explicitly marked it dirty). Previously ran on every updateState.
-  if (overlayDirty || overlaySignatureChanged(beforeOverlay, afterOverlay)) {
-    syncBoardOverlayState(state.boardState);
-    overlayDirty = false;
-  }
 
   restoreFogOfWarSnapshot(state.boardState, fogSnap);
 

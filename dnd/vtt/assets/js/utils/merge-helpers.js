@@ -137,7 +137,7 @@ export function mergeSceneKeyedSection(existingSection, incomingSection, { fullS
 /**
  * Merge sceneState while preserving grid settings from existing state.
  * Grid size is a permanent scene setting that should NOT be overwritten by sync.
- * Only combat, overlay, and other transient state should be synced.
+ * Only combat and other transient state should be synced.
  * @param {Object} existingSceneState - Current scene state
  * @param {Object} incomingSceneState - Incoming scene state from server
  * @returns {Object} Merged scene state with preserved grid settings
@@ -251,7 +251,6 @@ export function mergeBoardStateSnapshot(existing, incoming) {
       sceneState: cloneSectionSimple(incoming.sceneState),
       templates: cloneSectionSimple(incoming.templates),
       drawings: cloneSectionSimple(incoming.drawings),
-      overlay: cloneSectionSimple(incoming.overlay),
       pings: cloneArraySimple(incoming.pings),
       metadata: cloneSectionSimple(incoming.metadata ?? incoming.meta),
     };
@@ -265,7 +264,6 @@ export function mergeBoardStateSnapshot(existing, incoming) {
     sceneState: mergeSceneStatePreservingGrid(existing.sceneState, incoming.sceneState),
     templates: mergeSceneKeyedSection(existing.templates, incoming.templates, mergeOptions),
     drawings: mergeSceneKeyedSection(existing.drawings, incoming.drawings, mergeOptions),
-    overlay: cloneSectionSimple(incoming.overlay),
     pings: cloneArraySimple(incoming.pings),
   };
 

@@ -148,10 +148,7 @@ import {
   renderCombatTracker,
 } from '../combat/combat-renderer.js';
 
-const OVERLAY_LAYER_PREFIX = 'overlay-layer-';
 const TOKEN_LEVEL_STACK_STRIDE = 10000;
-let overlayLayerSeed = Date.now();
-let overlayLayerSequence = 0;
 let trackerOverflowResizeListenerAttached = false;
 
 // Default scene ID used when no scene is explicitly selected.
@@ -166,124 +163,6 @@ let isApplyingState = false;
 
 // Re-exported so existing tests importing from board-interactions.js keep working.
 export { createBoardStatePoller };
-
-export async function createOverlayCutoutBlob({
-  mapUrl,
-  polygons,
-  polygon,
-  view = {},
-  documentRef = typeof document !== 'undefined' ? document : null,
-} = {}) {
-  const url = typeof mapUrl === 'string' ? mapUrl.trim() : '';
-  const normalizedPolygons = [];
-
-  const appendPolygon = (entry) => {
-    const points = Array.isArray(entry?.points) ? entry.points : [];
-    const normalizedPoints = points
-      .map((point) => {
-        const column = Number(point?.column ?? point?.x);
-        const row = Number(point?.row ?? point?.y);
-        return Number.isFinite(column) && Number.isFinite(row)
-          ? { column, row }
-          : null;
-      })
-      .filter(Boolean);
-
-    if (normalizedPoints.length >= 3) {
-      normalizedPolygons.push(normalizedPoints);
-    }
-  };
-
-  if (Array.isArray(polygons)) {
-    polygons.forEach(appendPolygon);
-  } else if (polygon) {
-    appendPolygon(polygon);
-  }
-
-  if (!documentRef || !url || normalizedPolygons.length === 0) {
-    return null;
-  }
-
-  const image = await loadImageForCutout(url, documentRef).catch(() => null);
-  if (!image) {
-    return null;
-  }
-
-  const mapWidth = Number.isFinite(view?.mapPixelSize?.width)
-    ? view.mapPixelSize.width
-    : image.naturalWidth || image.width || 0;
-  const mapHeight = Number.isFinite(view?.mapPixelSize?.height)
-    ? view.mapPixelSize.height
-    : image.naturalHeight || image.height || 0;
-
-  if (!mapWidth || !mapHeight) {
-    return null;
-  }
-
-  const insets = view?.mapInsets ?? view?.gridOffsets ?? {};
-  const offsetLeft = Number.isFinite(insets.left) ? insets.left : 0;
-  const offsetTop = Number.isFinite(insets.top) ? insets.top : 0;
-  const offsetRight = Number.isFinite(insets.right) ? insets.right : 0;
-  const offsetBottom = Number.isFinite(insets.bottom) ? insets.bottom : 0;
-  const origin = view?.gridOrigin ?? {};
-  const originX = Number.isFinite(origin.x) ? origin.x : 0;
-  const originY = Number.isFinite(origin.y) ? origin.y : 0;
-  const gridSize = Math.max(8, Number.isFinite(view?.gridSize) ? view.gridSize : 64);
-
-  // The overlay div is inset to the map image, so the cutout canvas must
-  // match that inner image area. Grid coordinates start at the calibrated
-  // origin inside this canvas.
-  const innerWidth = Math.max(1, mapWidth - offsetLeft - offsetRight);
-  const innerHeight = Math.max(1, mapHeight - offsetTop - offsetBottom);
-
-  const canvas = documentRef.createElement('canvas');
-  canvas.width = innerWidth;
-  canvas.height = innerHeight;
-
-  const context = canvas.getContext('2d');
-  if (!context) {
-    return null;
-  }
-
-  context.clearRect(0, 0, innerWidth, innerHeight);
-  // Draw the source image offset so that only the inner (non-padding) portion
-  // of the map lands on the canvas.  The image is scaled to mapWidth×mapHeight
-  // (the full map including padding) and placed at (-offsetLeft, -offsetTop) so
-  // the visible canvas window captures just the grid area.
-  context.drawImage(image, -offsetLeft, -offsetTop, mapWidth, mapHeight);
-
-  context.save();
-  context.globalCompositeOperation = 'destination-in';
-  context.fillStyle = '#fff';
-  context.beginPath();
-
-  let hasPath = false;
-
-  normalizedPolygons.forEach((points) => {
-    points.forEach((point, index) => {
-      const x = originX + point.column * gridSize;
-      const y = originY + point.row * gridSize;
-
-      if (index === 0) {
-        context.moveTo(x, y);
-      } else {
-        context.lineTo(x, y);
-      }
-    });
-
-    context.closePath();
-    hasPath = true;
-  });
-
-  if (hasPath) {
-    context.fill();
-  }
-
-  context.restore();
-
-  const blob = await canvasToBlob(canvas, 'image/png');
-  return blob;
-}
 
 export async function uploadMap(file, endpoint, fileName, options) {
   if (!endpoint) {
@@ -320,41 +199,6 @@ export async function uploadMap(file, endpoint, fileName, options) {
   const url = typeof payload?.data?.url === 'string' ? payload.data.url.trim() : '';
   const thumbnailUrl = typeof payload?.data?.thumbnailUrl === 'string' ? payload.data.thumbnailUrl.trim() : '';
   return { url: url || null, thumbnailUrl: thumbnailUrl || null };
-}
-
-export const overlayUploadHelpers = {
-  createOverlayCutoutBlob,
-  uploadMap,
-};
-
-async function canvasToBlob(canvas, type = 'image/png') {
-  if (typeof canvas?.toBlob === 'function') {
-    return new Promise((resolve) => {
-      canvas.toBlob((blob) => {
-        resolve(blob);
-      }, type);
-    });
-  }
-
-  if (typeof canvas?.convertToBlob === 'function') {
-    try {
-      return await canvas.convertToBlob({ type });
-    } catch (error) {
-      return null;
-    }
-  }
-
-  return null;
-}
-
-async function loadImageForCutout(url, documentRef) {
-  return new Promise((resolve, reject) => {
-    const image = documentRef.createElement('img');
-    image.crossOrigin = 'anonymous';
-    image.onload = () => resolve(image);
-    image.onerror = () => reject(new Error('Failed to load image'));
-    image.src = url;
-  });
 }
 
 async function safeReadError(response) {
@@ -488,9 +332,6 @@ export function mountBoardInteractions(store, routes = {}) {
   const board = document.getElementById('vtt-board-canvas');
   const mapSurface = document.getElementById('vtt-map-surface');
   const mapTransform = document.getElementById('vtt-map-transform');
-  let mapOverlay = document.getElementById('vtt-map-overlay');
-  let overlayStack = mapOverlay?.querySelector('.vtt-board__map-overlay-stack') ?? null;
-  const overlayLayerElements = new Map();
   const grid = document.getElementById('vtt-grid-overlay');
   const tokenLayer = document.getElementById('vtt-token-layer');
   const auraLayer = document.getElementById('vtt-aura-layer');
@@ -539,24 +380,6 @@ export function mountBoardInteractions(store, routes = {}) {
   const maliceRemoveCount = malicePanel?.querySelector('[data-malice-remove-count]');
   const maliceAddCount = malicePanel?.querySelector('[data-malice-add-count]');
   if (!board || !mapSurface || !mapTransform || !mapBackdrop || !mapImage || !templateLayer) return;
-  if (!mapOverlay && mapTransform) {
-    mapOverlay = document.createElement('div');
-    mapOverlay.id = 'vtt-map-overlay';
-    mapOverlay.className = 'vtt-board__map-overlay';
-    mapOverlay.setAttribute('aria-hidden', 'true');
-    mapOverlay.hidden = true;
-    const overlayInsertTarget = grid ?? templateLayer;
-    if (overlayInsertTarget && overlayInsertTarget.parentNode === mapTransform) {
-      mapTransform.insertBefore(mapOverlay, overlayInsertTarget);
-    } else {
-      mapTransform.appendChild(mapOverlay);
-    }
-  }
-  if (mapOverlay && !overlayStack) {
-    overlayStack = document.createElement('div');
-    overlayStack.className = 'vtt-board__map-overlay-stack';
-    mapOverlay.prepend(overlayStack);
-  }
   if (!pingLayer && mapTransform) {
     pingLayer = document.createElement('div');
     pingLayer.id = 'vtt-ping-layer';
@@ -568,10 +391,9 @@ export function mountBoardInteractions(store, routes = {}) {
       mapTransform.appendChild(pingLayer);
     }
   }
-  if (!mapOverlay) return;
   const mapLevelRenderer = createMapLevelRenderer({
     mapTransform,
-    insertBefore: mapOverlay,
+    insertBefore: grid ?? templateLayer,
   });
 
   if (
@@ -658,7 +480,6 @@ export function mountBoardInteractions(store, routes = {}) {
     usesFallbackPayload: false,
   };
 
-  let overlayDropProxyActive = false;
   let lastBoardStateHeartbeatSignature = null;
   let lastBoardStateHeartbeatAt = 0;
   const BOARD_STATE_HEARTBEAT_DEBOUNCE_MS = 2000;
@@ -744,8 +565,6 @@ export function mountBoardInteractions(store, routes = {}) {
 
   const boardApi = store ?? {};
   const combatTimerService = createCombatTimerService();
-  let overlayEditorActive = false;
-  const overlayTool = createOverlayTool(routes?.uploads);
   let mapLevelCutoutEditorActive = false;
   const mapLevelCutoutTool = createMapLevelCutoutTool();
   const templateTool = createTemplateTool();
@@ -784,7 +603,6 @@ export function mountBoardInteractions(store, routes = {}) {
   let mapLoadSequence = 0;
   let mapLoadWatchdogId = null;
   let lastActiveSceneId = null;
-  let lastOverlaySignature = null;
   const movementQueue = [];
   let movementScheduled = false;
   const MAX_QUEUED_MOVEMENTS = 12;
@@ -1097,6 +915,21 @@ export function mountBoardInteractions(store, routes = {}) {
       if (op.type === 'drawing.remove') {
         const drawingId = typeof op.drawingId === 'string' ? op.drawingId.trim() : '';
         clearDirtyEntity(dirtyDrawings, sceneId, drawingId);
+        return;
+      }
+      // Levels v2: scene-state-affecting ops carry their own canonical
+      // payload, so once the op flushes the per-scene dirty mark added
+      // by the call site is redundant. Clearing it here lets subsequent
+      // placement ops take the delta path (which bypasses 409s via the
+      // ops-only server rule); leaving it set forced those calls down
+      // the snapshot path and reintroduced stale-version conflicts.
+      if (
+        op.type === 'user-level.set'
+        || op.type === 'user-level.activate'
+        || op.type === 'claim.set'
+        || op.type === 'claim.clear'
+      ) {
+        dirtySceneState.delete(sceneId);
       }
     });
   }
@@ -1150,7 +983,7 @@ export function mountBoardInteractions(store, routes = {}) {
       });
     }
 
-    ['activeSceneId', 'mapUrl', 'overlay'].forEach((field) => {
+    ['activeSceneId', 'mapUrl'].forEach((field) => {
       if (Object.prototype.hasOwnProperty.call(snapshot, field)) {
         dirtyTopLevel.delete(field);
       }
@@ -1559,16 +1392,6 @@ export function mountBoardInteractions(store, routes = {}) {
     return typeof activeSceneId === 'string' && activeSceneId ? activeSceneId : null;
   }
 
-  function getActiveOverlayLayerId(rawOverlay) {
-    if (!rawOverlay || typeof rawOverlay !== 'object') {
-      return null;
-    }
-
-    const overlay = normalizeOverlayState(rawOverlay);
-    const activeLayerId = overlay?.activeLayerId ?? null;
-    return typeof activeLayerId === 'string' && activeLayerId ? activeLayerId : null;
-  }
-
   function getActiveSceneTokenLevelState(state = boardApi.getState?.() ?? {}) {
     const activeSceneId = state?.boardState?.activeSceneId ?? null;
     return resolveSceneTokenLevelState(state, activeSceneId);
@@ -1599,21 +1422,8 @@ export function mountBoardInteractions(store, routes = {}) {
       ? boardState.sceneState
       : {};
     const activeSceneId = typeof boardState.activeSceneId === 'string' ? boardState.activeSceneId : null;
-    const buttons = sceneListContainer.querySelectorAll('[data-action="edit-overlay-layer"]');
-    const activeLayerId = getActiveOverlayLayerId(boardState.overlay ?? null);
-    buttons.forEach((button) => {
-      const sceneId = button.getAttribute('data-scene-id');
-      const overlayId = button.getAttribute('data-overlay-id');
-      const isActiveScene = activeSceneId && sceneId && sceneId === activeSceneId;
-      const pressed =
-        overlayEditorActive && isActiveScene && overlayId && overlayId === activeLayerId
-          ? 'true'
-          : 'false';
-      button.setAttribute('aria-pressed', pressed);
-    });
 
     syncMapLevelCutoutButtons(sceneState, activeSceneId);
-    syncOverlayVisibilityButtons(sceneState, activeSceneId);
   }
 
   function syncMapLevelCutoutButtons(sceneState = {}, activeSceneId = null) {
@@ -1657,33 +1467,6 @@ export function mountBoardInteractions(store, routes = {}) {
 
       button.setAttribute('aria-pressed', pressed);
       if (!isActiveScene || !isActiveLevel || !hasMap || !isVisible) {
-        button.setAttribute('disabled', 'disabled');
-      } else {
-        button.removeAttribute('disabled');
-      }
-    });
-  }
-
-  function syncOverlayVisibilityButtons(sceneState = {}, activeSceneId = null) {
-    if (!sceneListContainer) {
-      return;
-    }
-
-    const buttons = sceneListContainer.querySelectorAll('[data-action="toggle-overlay-layer-visibility"]');
-    buttons.forEach((button) => {
-      const sceneId = button.getAttribute('data-scene-id');
-      const overlayId = button.getAttribute('data-overlay-id');
-      const sceneEntry = sceneId && sceneState[sceneId] && typeof sceneState[sceneId] === 'object'
-        ? sceneState[sceneId]
-        : {};
-      const overlayEntry = normalizeOverlayDraft(sceneEntry.overlay ?? {});
-      const layer = overlayEntry.layers.find((entry) => entry.id === overlayId);
-      const layerVisible = layer ? layer.visible !== false && normalizeOverlayMask(layer.mask).visible !== false : false;
-      button.setAttribute('aria-pressed', layerVisible ? 'true' : 'false');
-      button.dataset.overlayVisible = layerVisible ? 'true' : 'false';
-
-      const isActiveScene = Boolean(activeSceneId && sceneId && sceneId === activeSceneId);
-      if (!isActiveScene) {
         button.setAttribute('disabled', 'disabled');
       } else {
         button.removeAttribute('disabled');
@@ -1848,10 +1631,6 @@ export function mountBoardInteractions(store, routes = {}) {
           return;
         }
 
-        if (overlayEditorActive) {
-          overlayTool.toggle();
-        }
-
         if (
           typeof mapLevelCutoutTool.isEditingLevel === 'function' &&
           mapLevelCutoutTool.isEditingLevel(levelId)
@@ -1861,61 +1640,7 @@ export function mountBoardInteractions(store, routes = {}) {
         }
 
         mapLevelCutoutTool.editLevel(levelId, { anchorEvent: event });
-        return;
       }
-
-      const editButton = event.target.closest('[data-action="edit-overlay-layer"]');
-      if (editButton) {
-        if (editButton.disabled) {
-          return;
-        }
-
-        event.preventDefault();
-        if (!isGmUser()) {
-          return;
-        }
-
-        const sceneId = editButton.getAttribute('data-scene-id');
-        const overlayId = editButton.getAttribute('data-overlay-id');
-        const activeSceneId = getActiveSceneId();
-        if (!sceneId || !overlayId || !activeSceneId || sceneId !== activeSceneId) {
-          return;
-        }
-
-        if (mapLevelCutoutEditorActive) {
-          mapLevelCutoutTool.reset();
-        }
-
-        if (typeof overlayTool.isEditingLayer === 'function' && overlayTool.isEditingLayer(overlayId)) {
-          overlayTool.toggle();
-          return;
-        }
-
-        overlayTool.editLayer(overlayId);
-        return;
-      }
-
-      const button = event.target.closest('[data-action="toggle-overlay-editor"]');
-      if (!button || button.disabled) {
-        return;
-      }
-
-      event.preventDefault();
-      if (!isGmUser()) {
-        return;
-      }
-
-      const sceneId = button.getAttribute('data-scene-id');
-      const activeSceneId = getActiveSceneId();
-      if (!sceneId || !activeSceneId || sceneId !== activeSceneId) {
-        return;
-      }
-
-      if (mapLevelCutoutEditorActive) {
-        mapLevelCutoutTool.reset();
-      }
-
-      overlayTool.toggle();
     });
 
     if (typeof MutationObserver === 'function') {
@@ -2478,9 +2203,6 @@ export function mountBoardInteractions(store, routes = {}) {
       if (dirtyTopLevel.has('mapUrl') && isGm) {
         snapshot.mapUrl = boardState.mapUrl ?? null;
       }
-      if (dirtyTopLevel.has('overlay') && isGm) {
-        snapshot.overlay = cloneOverlayState(boardState.overlay);
-      }
 
       return snapshot;
     }
@@ -2501,7 +2223,6 @@ export function mountBoardInteractions(store, routes = {}) {
     if (isGm) {
       snapshot.mapUrl = boardState.mapUrl ?? null;
       snapshot.sceneState = cloneBoardSection(boardState.sceneState);
-      snapshot.overlay = cloneOverlayState(boardState.overlay);
     }
 
     return snapshot;
@@ -2997,9 +2718,6 @@ export function mountBoardInteractions(store, routes = {}) {
           // if (state.grid) {
           //   draft.boardState.sceneState[sceneId].grid = state.grid;
           // }
-          if (state.overlay) {
-            draft.boardState.sceneState[sceneId].overlay = state.overlay;
-          }
           if (state.mapLevels) {
             draft.boardState.sceneState[sceneId].mapLevels = state.mapLevels;
           }
@@ -3026,9 +2744,6 @@ export function mountBoardInteractions(store, routes = {}) {
       }
       if (delta.mapUrl !== undefined) {
         draft.boardState.mapUrl = delta.mapUrl;
-      }
-      if (delta.overlay !== undefined) {
-        draft.boardState.overlay = delta.overlay;
       }
 
       // Update version in board state
@@ -3127,14 +2842,6 @@ export function mountBoardInteractions(store, routes = {}) {
     }
   }
 
-  function cloneOverlayState(section) {
-    if (!section || typeof section !== 'object') {
-      return { mapUrl: null, mask: createEmptyOverlayMask() };
-    }
-
-    return normalizeOverlayDraft(section);
-  }
-
   function hashBoardStateSnapshot(snapshot) {
     if (!snapshot || typeof snapshot !== 'object') {
       return null;
@@ -3148,7 +2855,6 @@ export function mountBoardInteractions(store, routes = {}) {
       sceneState: cloneBoardSection(snapshot.sceneState),
       templates: cloneBoardSection(snapshot.templates),
       drawings: cloneBoardSection(snapshot.drawings),
-      overlay: cloneOverlayState(snapshot.overlay),
       pings: mapPings.clonePingEntries(snapshot.pings),
     };
 
@@ -3244,7 +2950,7 @@ export function mountBoardInteractions(store, routes = {}) {
 
       try {
         setUploadingState(true);
-        const uploadResult = await overlayUploadHelpers.uploadMap(file, routes.uploads);
+        const uploadResult = await uploadMap(file, routes.uploads);
         const url = uploadResult?.url ?? null;
         if (!url) {
           throw new Error('Upload endpoint returned no URL.');
@@ -3307,13 +3013,6 @@ export function mountBoardInteractions(store, routes = {}) {
       return;
     }
 
-    // When the overlay editor is active, let its handlers manage pointer events
-    // for clicks within the editor (toolbar buttons, drag handle, etc.).
-    if (overlayEditorActive && event.target &&
-        (event.target.closest('.vtt-overlay-editor__toolbar') ||
-         event.target.closest('.vtt-overlay-editor__node'))) {
-      return;
-    }
 
     if (
       mapLevelCutoutEditorActive &&
@@ -3661,8 +3360,7 @@ export function mountBoardInteractions(store, routes = {}) {
   };
 
   const isWithinMapSurface = (target) =>
-    target instanceof Node &&
-    (mapSurface.contains(target) || (overlayDropProxyActive && mapOverlay?.contains(target)));
+    target instanceof Node && mapSurface.contains(target);
 
   const handleTokenDragEnter = (event) => {
     if (!isTokenDragEvent(event)) {
@@ -3838,42 +3536,6 @@ export function mountBoardInteractions(store, routes = {}) {
 
   const tokenDragListenerOptions = { capture: true };
 
-  let overlayDropProxyListenersAttached = false;
-
-  function attachOverlayDropProxies() {
-    if (!mapOverlay) {
-      overlayDropProxyActive = false;
-      overlayDropProxyListenersAttached = false;
-      return;
-    }
-    if (overlayDropProxyListenersAttached) {
-      overlayDropProxyActive = true;
-      return;
-    }
-
-    mapOverlay.addEventListener('dragenter', handleTokenDragEnter, tokenDragListenerOptions);
-    mapOverlay.addEventListener('dragleave', handleTokenDragLeave, tokenDragListenerOptions);
-    mapOverlay.addEventListener('dragover', handleTokenDragOver, tokenDragListenerOptions);
-    mapOverlay.addEventListener('drop', handleTokenDrop, tokenDragListenerOptions);
-    overlayDropProxyActive = true;
-    overlayDropProxyListenersAttached = true;
-  }
-
-  function detachOverlayDropProxies() {
-    if (!overlayDropProxyListenersAttached || !mapOverlay) {
-      overlayDropProxyActive = false;
-      overlayDropProxyListenersAttached = false;
-      return;
-    }
-
-    mapOverlay.removeEventListener('dragenter', handleTokenDragEnter, tokenDragListenerOptions);
-    mapOverlay.removeEventListener('dragleave', handleTokenDragLeave, tokenDragListenerOptions);
-    mapOverlay.removeEventListener('dragover', handleTokenDragOver, tokenDragListenerOptions);
-    mapOverlay.removeEventListener('drop', handleTokenDrop, tokenDragListenerOptions);
-    overlayDropProxyActive = false;
-    overlayDropProxyListenersAttached = false;
-  }
-
   mapSurface.addEventListener('dragenter', handleTokenDragEnter, tokenDragListenerOptions);
   mapSurface.addEventListener('dragleave', handleTokenDragLeave, tokenDragListenerOptions);
   mapSurface.addEventListener('dragover', handleTokenDragOver, tokenDragListenerOptions);
@@ -3909,7 +3571,6 @@ export function mountBoardInteractions(store, routes = {}) {
     grid.classList.toggle('is-visible', Boolean(isVisible));
     viewState.gridSize = size;
     templateTool.notifyGridChanged();
-    overlayTool.notifyGridChanged();
     mapLevelCutoutTool.notifyGridChanged();
   };
 
@@ -3971,14 +3632,10 @@ export function mountBoardInteractions(store, routes = {}) {
       }
       applyGridState(state.grid ?? {});
       syncMapLevelsForState(state, activeSceneId);
-      const overlayConfig = resolveSceneOverlayState(state.boardState ?? {}, activeSceneId);
-      syncOverlayLayer(overlayConfig);
-      overlayTool.notifyOverlayMaskChange(overlayConfig ?? null);
       renderTokens(state, tokenLayer, viewState);
       renderFog(state);
       renderFogSelection();
       templateTool.notifyMapState();
-      overlayTool.notifyMapState();
       applyCombatStateFromBoardState(state);
       mapPings.processIncomingPings(state.boardState?.pings ?? [], activeSceneId);
       // Levels v2 §5.2: pan the view to a claim-sourced level update.
@@ -4783,7 +4440,6 @@ export function mountBoardInteractions(store, routes = {}) {
     }
     viewState.activeMapUrl = url || null;
     viewState.mapLoaded = false;
-    lastOverlaySignature = null;
     mapLevelCutoutTool.reset();
     mapLevelRenderer.reset();
     clearDragCandidate();
@@ -4804,9 +4460,6 @@ export function mountBoardInteractions(store, routes = {}) {
     if (grid) {
       grid.hidden = !url;
     }
-    if (!url) {
-      teardownOverlayLayer();
-    }
     resetView();
     applyGridOffsets();
 
@@ -4820,7 +4473,6 @@ export function mountBoardInteractions(store, routes = {}) {
       renderTokens(boardApi.getState?.() ?? {}, tokenLayer, viewState);
       templateTool.reset();
       mapLevelCutoutTool.reset();
-      overlayTool.reset();
       return;
     }
 
@@ -4852,8 +4504,6 @@ export function mountBoardInteractions(store, routes = {}) {
       const latestState = boardApi.getState?.() ?? {};
       const activeSceneId = latestState.boardState?.activeSceneId ?? null;
       syncMapLevelsForState(latestState, activeSceneId);
-      const overlayState = resolveSceneOverlayState(latestState.boardState ?? {}, activeSceneId);
-      syncOverlayLayer(overlayState);
       if (status) {
         status.textContent = 'Right-click and drag to pan. Use the mouse wheel to zoom.';
       }
@@ -4877,7 +4527,6 @@ export function mountBoardInteractions(store, routes = {}) {
       if (grid) {
         grid.hidden = true;
       }
-      teardownOverlayLayer();
       emptyState?.removeAttribute('hidden');
       if (status) {
         status.textContent = 'Unable to display the uploaded map.';
@@ -4886,7 +4535,6 @@ export function mountBoardInteractions(store, routes = {}) {
       renderTokens(boardApi.getState?.() ?? {}, tokenLayer, viewState);
       templateTool.reset();
       mapLevelCutoutTool.reset();
-      overlayTool.reset();
     };
     mapImage.onload = handleMapImageLoad;
     mapImage.onerror = handleMapImageError;
@@ -4985,24 +4633,6 @@ export function mountBoardInteractions(store, routes = {}) {
     scheduleMicrotask(() => {
       ensureImageReady().catch(() => {});
     });
-  }
-
-  function resolveSceneOverlayState(boardState = {}, sceneId = null) {
-    if (!boardState || typeof boardState !== 'object') {
-      return null;
-    }
-
-    const sceneEntries =
-      boardState.sceneState && typeof boardState.sceneState === 'object'
-        ? boardState.sceneState
-        : {};
-
-    const key = typeof sceneId === 'string' ? sceneId : '';
-    if (key && sceneEntries[key] && typeof sceneEntries[key] === 'object') {
-      return sceneEntries[key].overlay ?? null;
-    }
-
-    return boardState.overlay ?? null;
   }
 
   // Levels v2: resolve the per-user viewer level for a scene. The GM
@@ -5347,661 +4977,6 @@ export function mountBoardInteractions(store, routes = {}) {
     }
   }
 
-  function syncOverlayLayer(rawOverlay) {
-    if (!mapOverlay || !overlayStack) {
-      return;
-    }
-
-    const overlay = normalizeOverlayState(rawOverlay);
-    const signature = safeStableStringify(overlay);
-    if (signature === lastOverlaySignature) {
-      return;
-    }
-
-    lastOverlaySignature = signature;
-
-    const layers = Array.isArray(overlay.layers)
-      ? overlay.layers.filter((layer) => {
-          if (!layer || typeof layer !== 'object') {
-            return false;
-          }
-          const url = typeof layer.mapUrl === 'string' ? layer.mapUrl.trim() : '';
-          if (url) {
-            return true;
-          }
-          const mask = layer.mask && typeof layer.mask === 'object' ? layer.mask : null;
-          const hasMaskPolygons = Array.isArray(mask?.polygons)
-            ? mask.polygons.some((polygon) => Array.isArray(polygon?.points) && polygon.points.length)
-            : false;
-          if (hasMaskPolygons) {
-            return true;
-          }
-          return overlayEditorActive && overlay.activeLayerId === layer.id;
-        })
-      : [];
-
-    if (!layers.length) {
-      teardownOverlayLayer();
-      return;
-    }
-
-    mapOverlay.dataset.activeOverlayLayerId = overlay.activeLayerId ?? '';
-
-    const fragment = document.createDocumentFragment();
-    const retained = new Set();
-    let hasVisibleLayer = false;
-
-    layers.forEach((layer, index) => {
-      const mapUrl = typeof layer.mapUrl === 'string' ? layer.mapUrl.trim() : '';
-      const baseVisible = layer.visible !== false;
-      const hasMap = Boolean(mapUrl);
-
-      let element = overlayLayerElements.get(layer.id);
-      if (!element || element.parentNode !== overlayStack) {
-        element = document.createElement('div');
-        element.className = 'vtt-board__map-overlay-layer';
-        element.dataset.overlayLayerId = layer.id;
-        overlayLayerElements.set(layer.id, element);
-      }
-
-      retained.add(layer.id);
-      element.dataset.overlayLayerIndex = String(index);
-      element.dataset.overlayLayerBaseVisible = baseVisible ? 'true' : 'false';
-      element.dataset.overlayHasMap = hasMap ? 'true' : 'false';
-      element.style.backgroundImage = hasMap ? buildCssUrl(mapUrl) || '' : '';
-
-      const maskAllowsDisplay = applyMaskToOverlayElement(element, layer.mask, {
-        allowDuringEditing: overlayEditorActive && overlay.activeLayerId === layer.id,
-      });
-
-      const finalVisible = baseVisible && hasMap && maskAllowsDisplay;
-      setOverlayLayerVisibility(element, finalVisible);
-      if (finalVisible) {
-        hasVisibleLayer = true;
-      }
-
-      fragment.append(element);
-    });
-
-    overlayLayerElements.forEach((element, id) => {
-      if (!retained.has(id)) {
-        if (element.parentNode === overlayStack) {
-          element.remove();
-        }
-        overlayLayerElements.delete(id);
-      }
-    });
-
-    overlayStack.replaceChildren(fragment);
-
-    if (!hasVisibleLayer && !overlayEditorActive) {
-      mapOverlay.hidden = true;
-      mapOverlay.setAttribute('hidden', '');
-    } else {
-      mapOverlay.hidden = false;
-      mapOverlay.removeAttribute('hidden');
-    }
-  }
-
-  function teardownOverlayLayer() {
-    if (!mapOverlay || !overlayStack) {
-      return;
-    }
-
-    if (!overlayEditorActive) {
-      mapOverlay.hidden = true;
-      mapOverlay.setAttribute('hidden', '');
-    }
-
-    mapOverlay.dataset.activeOverlayLayerId = '';
-    overlayLayerElements.forEach((element) => {
-      clearOverlayMask(element);
-      element.style.backgroundImage = '';
-      setOverlayLayerVisibility(element, false);
-      if (element.parentNode === overlayStack) {
-        element.remove();
-      }
-    });
-    overlayLayerElements.clear();
-  }
-
-  function applyMaskToOverlayElement(element, mask = {}, options = {}) {
-    if (!element) {
-      return false;
-    }
-
-    const { allowDuringEditing = false } =
-      options && typeof options === 'object' ? options : {};
-
-    clearOverlayMask(element);
-    const normalizedMask = normalizeOverlayMask(mask);
-    element.dataset.overlayMask = JSON.stringify(normalizedMask);
-    const maskVisible = normalizedMask.visible !== false;
-    element.dataset.overlayMaskVisible = maskVisible ? 'true' : 'false';
-
-    if (!maskVisible && !allowDuringEditing) {
-      element.setAttribute('data-overlay-mask-hidden', 'true');
-      return false;
-    }
-
-    element.removeAttribute('data-overlay-mask-hidden');
-
-    const maskUrl = typeof normalizedMask.url === 'string' ? normalizedMask.url.trim() : '';
-    if (maskUrl) {
-      const cssUrl = buildCssUrl(maskUrl);
-      if (cssUrl) {
-        element.style.maskImage = cssUrl;
-        element.style.webkitMaskImage = cssUrl;
-        element.style.maskRepeat = 'no-repeat';
-        element.style.webkitMaskRepeat = 'no-repeat';
-        element.style.maskSize = '100% 100%';
-        element.style.webkitMaskSize = '100% 100%';
-      }
-      return true;
-    }
-
-    const clipPath = buildClipPathFromPolygons(normalizedMask.polygons, viewState);
-    if (clipPath) {
-      element.style.clipPath = clipPath;
-      element.style.webkitClipPath = clipPath;
-    }
-
-    return true;
-  }
-
-  function clearOverlayMask(element) {
-    if (!element) {
-      return;
-    }
-
-    element.style.removeProperty('mask-image');
-    element.style.removeProperty('-webkit-mask-image');
-    element.style.removeProperty('mask-repeat');
-    element.style.removeProperty('-webkit-mask-repeat');
-    element.style.removeProperty('mask-size');
-    element.style.removeProperty('-webkit-mask-size');
-    element.style.removeProperty('clip-path');
-    element.style.removeProperty('-webkit-clip-path');
-    delete element.dataset.overlayMask;
-    delete element.dataset.overlayMaskVisible;
-    element.removeAttribute('data-overlay-mask-hidden');
-  }
-
-  function setOverlayLayerVisibility(element, visible) {
-    if (!element) {
-      return;
-    }
-
-    element.dataset.overlayVisible = visible ? 'true' : 'false';
-    if (visible) {
-      element.hidden = false;
-      element.removeAttribute('hidden');
-    } else {
-      element.hidden = true;
-      element.setAttribute('hidden', '');
-    }
-  }
-
-  function applyOverlayMaskToLayer(layerId, mask, options = {}) {
-    if (!layerId) {
-      return false;
-    }
-
-    const element = overlayLayerElements.get(layerId);
-    if (!element || element.parentNode !== overlayStack) {
-      return false;
-    }
-
-    const baseVisible = element.dataset.overlayLayerBaseVisible !== 'false';
-    const hasMap = element.dataset.overlayHasMap === 'true';
-    const maskAllowsDisplay = applyMaskToOverlayElement(element, mask, options);
-    const finalVisible = baseVisible && hasMap && maskAllowsDisplay;
-    setOverlayLayerVisibility(element, finalVisible);
-    return true;
-  }
-
-  function normalizeOverlayState(raw = null) {
-    if (!raw || typeof raw !== 'object') {
-      return createEmptyOverlayState();
-    }
-
-    const overlay = createEmptyOverlayState();
-    const mapUrl = typeof raw.mapUrl === 'string' ? raw.mapUrl.trim() : '';
-    if (mapUrl) {
-      overlay.mapUrl = mapUrl;
-    }
-
-    const layerSource = Array.isArray(raw.layers)
-      ? raw.layers
-      : Array.isArray(raw.items)
-      ? raw.items
-      : [];
-
-    overlay.layers = layerSource
-      .map((entry, index) => normalizeOverlayLayer(entry, index))
-      .filter(Boolean);
-
-    if (overlay.mapUrl) {
-      const preferredId = raw.activeLayerId ?? raw.activeLayer ?? raw.selectedLayerId ?? null;
-      let assigned = false;
-      overlay.layers = overlay.layers.map((layer, index) => {
-        if (layer.mapUrl) {
-          return layer;
-        }
-
-        if (!assigned && (layer.id === preferredId || index === 0)) {
-          assigned = true;
-          return { ...layer, mapUrl: overlay.mapUrl };
-        }
-
-        return layer;
-      });
-    }
-
-    const legacyMask = normalizeOverlayMask(raw.mask ?? null);
-    if (!overlay.layers.length && maskHasMeaningfulOverlayContent(legacyMask)) {
-      const legacyLayer = normalizeOverlayLayer(
-        {
-          id: typeof raw.id === 'string' ? raw.id : undefined,
-          name: typeof raw.name === 'string' ? raw.name : undefined,
-          visible: raw.visible,
-          mask: legacyMask,
-        },
-        0
-      );
-      if (legacyLayer) {
-        overlay.layers.push(legacyLayer);
-      }
-    }
-
-    overlay.activeLayerId = resolveOverlayActiveLayerId(
-      raw.activeLayerId ?? raw.activeLayer ?? raw.selectedLayerId,
-      overlay.layers
-    );
-    rebuildOverlayAggregate(overlay);
-    return overlay;
-  }
-
-  function createEmptyOverlayState() {
-    return { mapUrl: null, mask: createEmptyOverlayMask(), layers: [], activeLayerId: null };
-  }
-
-  function createOverlayLayer(name = '', existingLayers = []) {
-    const trimmed = typeof name === 'string' ? name.trim() : '';
-    const safeLayers = Array.isArray(existingLayers) ? existingLayers : [];
-    const resolvedName = ensureUniqueOverlayName(trimmed || 'Overlay', safeLayers);
-    return {
-      id: createOverlayLayerId(),
-      name: resolvedName,
-      visible: true,
-      mask: createEmptyOverlayMask(),
-      mapUrl: null,
-    };
-  }
-
-  function ensureUniqueOverlayName(baseName, existingLayers = []) {
-    const fallback = typeof baseName === 'string' && baseName.trim() ? baseName.trim() : 'Overlay';
-    const normalizedExisting = new Set();
-    const usedNumbers = new Set();
-
-    existingLayers.forEach((layer) => {
-      if (!layer || typeof layer !== 'object') {
-        return;
-      }
-
-      const candidate = typeof layer.name === 'string' ? layer.name.trim() : '';
-      if (!candidate) {
-        return;
-      }
-
-      normalizedExisting.add(candidate.toLowerCase());
-
-      const prefixMatch = fallbackPrefixMatch(candidate, fallback);
-      if (prefixMatch !== null) {
-        usedNumbers.add(prefixMatch);
-      }
-    });
-
-    if (!normalizedExisting.has(fallback.toLowerCase())) {
-      return fallback;
-    }
-
-    const prefix = deriveNamePrefix(fallback);
-    const prefixPattern = new RegExp(`^${escapeRegExp(prefix)}\s+(\d+)$`, 'i');
-
-    existingLayers.forEach((layer) => {
-      if (!layer || typeof layer !== 'object') {
-        return;
-      }
-
-      const candidate = typeof layer.name === 'string' ? layer.name.trim() : '';
-      if (!candidate) {
-        return;
-      }
-
-      const match = candidate.match(prefixPattern);
-      if (match) {
-        const value = Number.parseInt(match[1], 10);
-        if (Number.isFinite(value)) {
-          usedNumbers.add(value);
-        }
-      }
-    });
-
-    let counter = 1;
-    const fallbackMatch = fallback.match(prefixPattern);
-    if (fallbackMatch) {
-      const preferred = Number.parseInt(fallbackMatch[1], 10);
-      if (Number.isFinite(preferred) && preferred > 0) {
-        counter = preferred;
-      }
-    }
-
-    while (
-      usedNumbers.has(counter) || normalizedExisting.has(`${prefix} ${counter}`.toLowerCase())
-    ) {
-      counter += 1;
-    }
-
-    return `${prefix} ${counter}`;
-  }
-
-  function deriveNamePrefix(name) {
-    const match = name.match(/^(.*?)(?:\s+\d+)?$/);
-    if (match) {
-      const prefix = match[1].trim();
-      if (prefix) {
-        return prefix;
-      }
-    }
-    return 'Overlay';
-  }
-
-  function fallbackPrefixMatch(candidate, fallback) {
-    const prefix = deriveNamePrefix(fallback);
-    const pattern = new RegExp(`^${escapeRegExp(prefix)}\s+(\d+)$`, 'i');
-    const match = candidate.match(pattern);
-    if (!match) {
-      return null;
-    }
-
-    const value = Number.parseInt(match[1], 10);
-    return Number.isFinite(value) && value > 0 ? value : null;
-  }
-
-  function createOverlayLayerId() {
-    overlayLayerSequence += 1;
-    return `${OVERLAY_LAYER_PREFIX}${overlayLayerSeed.toString(36)}-${overlayLayerSequence.toString(36)}`;
-  }
-
-  function normalizeOverlayLayer(raw = {}, index = 0) {
-    if (!raw || typeof raw !== 'object') {
-      return null;
-    }
-
-    const mask = normalizeOverlayMask(raw.mask ?? raw);
-    const idSource = typeof raw.id === 'string' ? raw.id.trim() : '';
-    const nameSource = typeof raw.name === 'string' ? raw.name.trim() : '';
-    const visible = raw.visible === undefined ? true : Boolean(raw.visible);
-    const mapUrlSource = typeof raw.mapUrl === 'string' ? raw.mapUrl.trim() : '';
-    const id = idSource || createOverlayLayerId();
-    const name = nameSource || `Overlay ${index + 1}`;
-
-    return {
-      id,
-      name,
-      visible,
-      mask,
-      mapUrl: mapUrlSource || null,
-    };
-  }
-
-  function rebuildOverlayAggregate(overlay) {
-    if (!overlay || typeof overlay !== 'object') {
-      return createEmptyOverlayState();
-    }
-
-    overlay.mask = buildAggregateMask(Array.isArray(overlay.layers) ? overlay.layers : []);
-    overlay.activeLayerId = resolveOverlayActiveLayerId(overlay.activeLayerId, overlay.layers);
-    overlay.mapUrl = resolveOverlayMapUrl(overlay.layers, overlay.activeLayerId);
-    return overlay;
-  }
-
-  function resolveOverlayMapUrl(layers = [], activeLayerId = null) {
-    if (!Array.isArray(layers) || layers.length === 0) {
-      return null;
-    }
-
-    if (activeLayerId) {
-      const activeLayer = layers.find((layer) => layer && layer.id === activeLayerId);
-      if (activeLayer?.mapUrl) {
-        return activeLayer.mapUrl;
-      }
-    }
-
-    const visibleLayer = layers.find((layer) => layer && layer.visible !== false && layer.mapUrl);
-    if (visibleLayer?.mapUrl) {
-      return visibleLayer.mapUrl;
-    }
-
-    const firstWithMap = layers.find((layer) => layer?.mapUrl);
-    return firstWithMap?.mapUrl ?? null;
-  }
-
-  function buildAggregateMask(layers = []) {
-    const aggregate = createEmptyOverlayMask();
-    let hasVisibleLayer = false;
-
-    layers.forEach((layer) => {
-      if (!layer || typeof layer !== 'object' || layer.visible === false) {
-        return;
-      }
-
-      const mask = normalizeOverlayMask(layer.mask ?? {});
-      if (mask.visible === false) {
-        return;
-      }
-
-      hasVisibleLayer = true;
-      if (!aggregate.url && mask.url) {
-        aggregate.url = mask.url;
-      }
-
-      if (Array.isArray(mask.polygons)) {
-        mask.polygons.forEach((polygon) => {
-          const points = Array.isArray(polygon?.points) ? polygon.points : [];
-          if (points.length >= 3) {
-            aggregate.polygons.push({ points: points.map((point) => ({ ...point })) });
-          }
-        });
-      }
-    });
-
-    aggregate.visible = hasVisibleLayer;
-    return aggregate;
-  }
-
-  function resolveOverlayActiveLayerId(preferredId, layers = []) {
-    const entries = Array.isArray(layers) ? layers : [];
-    if (!entries.length) {
-      return null;
-    }
-
-    if (typeof preferredId === 'string') {
-      const trimmed = preferredId.trim();
-      if (trimmed) {
-        const preferredLayer = entries.find((layer) => layer && layer.id === trimmed);
-        if (preferredLayer && preferredLayer.visible !== false) {
-          return preferredLayer.id;
-        }
-      }
-    }
-
-    const visibleLayer = entries.find((layer) => layer && layer.visible !== false && layer.id);
-    if (visibleLayer) {
-      return visibleLayer.id;
-    }
-
-    const fallback = entries.find((layer) => layer && layer.id);
-    return fallback ? fallback.id : null;
-  }
-
-  function createEmptyOverlayMask() {
-    return { visible: true, polygons: [] };
-  }
-
-  function normalizeOverlayMask(raw = null) {
-    if (!raw || typeof raw !== 'object') {
-      return createEmptyOverlayMask();
-    }
-
-    const normalized = {
-      visible: normalizeOverlayMaskVisibility(raw.visible),
-      polygons: [],
-    };
-
-    if (typeof raw.url === 'string') {
-      const trimmed = raw.url.trim();
-      if (trimmed) {
-        normalized.url = trimmed;
-      }
-    }
-
-    const sourcePolygons = Array.isArray(raw.polygons) ? raw.polygons : [];
-    sourcePolygons.forEach((entry) => {
-      const rawPoints = Array.isArray(entry?.points) ? entry.points : Array.isArray(entry) ? entry : [];
-      if (!Array.isArray(rawPoints)) {
-        return;
-      }
-
-      const points = rawPoints.map(normalizeOverlayMaskPoint).filter(Boolean);
-      if (points.length >= 3) {
-        normalized.polygons.push({ points });
-      }
-    });
-
-    return normalized;
-  }
-
-  function maskHasMeaningfulOverlayContent(mask = {}) {
-    if (!mask || typeof mask !== 'object') {
-      return false;
-    }
-
-    if (typeof mask.url === 'string' && mask.url.trim()) {
-      return true;
-    }
-
-    return Array.isArray(mask.polygons) ? mask.polygons.length > 0 : false;
-  }
-
-  function normalizeOverlayMaskVisibility(value) {
-    if (value === undefined) {
-      return true;
-    }
-
-    if (typeof value === 'boolean') {
-      return value;
-    }
-
-    if (typeof value === 'number') {
-      return value !== 0;
-    }
-
-    if (typeof value === 'string') {
-      const normalized = value.trim().toLowerCase();
-      if (!normalized) {
-        return true;
-      }
-      if (normalized === 'false' || normalized === '0' || normalized === 'off' || normalized === 'no') {
-        return false;
-      }
-      if (normalized === 'true' || normalized === '1' || normalized === 'on' || normalized === 'yes') {
-        return true;
-      }
-    }
-
-    return Boolean(value);
-  }
-
-  function overlayMaskSignature(mask = null) {
-    return safeStableStringify(normalizeOverlayMask(mask));
-  }
-
-  function normalizeOverlayMaskPoint(point) {
-    if (!point || typeof point !== 'object') {
-      return null;
-    }
-
-    const column = Number(point.column ?? point.x);
-    const row = Number(point.row ?? point.y);
-    if (!Number.isFinite(column) || !Number.isFinite(row)) {
-      return null;
-    }
-
-    return {
-      column: roundToPrecision(column, 4),
-      row: roundToPrecision(row, 4),
-    };
-  }
-
-  function buildClipPathFromPolygons(polygons = [], view = viewState) {
-    if (!Array.isArray(polygons) || polygons.length === 0) {
-      return '';
-    }
-
-    const mapWidth = Number.isFinite(view?.mapPixelSize?.width) ? view.mapPixelSize.width : 0;
-    const mapHeight = Number.isFinite(view?.mapPixelSize?.height) ? view.mapPixelSize.height : 0;
-    if (mapWidth <= 0 || mapHeight <= 0) {
-      return '';
-    }
-
-    const insets = view?.mapInsets ?? view?.gridOffsets ?? {};
-    const offsetLeft = Number.isFinite(insets.left) ? insets.left : 0;
-    const offsetRight = Number.isFinite(insets.right) ? insets.right : 0;
-    const offsetTop = Number.isFinite(insets.top) ? insets.top : 0;
-    const offsetBottom = Number.isFinite(insets.bottom) ? insets.bottom : 0;
-    const origin = view?.gridOrigin ?? {};
-    const originX = Number.isFinite(origin.x) ? origin.x : 0;
-    const originY = Number.isFinite(origin.y) ? origin.y : 0;
-    const gridSize = Math.max(8, Number.isFinite(view?.gridSize) ? view.gridSize : 64);
-
-    // The clip-path is applied to the overlay layer element, which is inset to
-    // the map image. Grid coordinates are relative to the calibrated origin
-    // inside that image, not necessarily the image's top-left corner.
-    const innerWidth = Math.max(0, mapWidth - offsetLeft - offsetRight);
-    const innerHeight = Math.max(0, mapHeight - offsetTop - offsetBottom);
-
-    const commands = [];
-
-    polygons.forEach((polygon) => {
-      const points = Array.isArray(polygon?.points) ? polygon.points : [];
-      if (points.length < 3) {
-        return;
-      }
-
-      const path = points
-        .map((point, index) => {
-          const px = clamp(roundToPrecision(originX + (point.column ?? 0) * gridSize, 2), 0, innerWidth);
-          const py = clamp(roundToPrecision(originY + (point.row ?? 0) * gridSize, 2), 0, innerHeight);
-          if (!Number.isFinite(px) || !Number.isFinite(py)) {
-            return null;
-          }
-          return `${index === 0 ? 'M' : 'L'} ${px} ${py}`;
-        })
-        .filter(Boolean);
-
-      if (path.length >= 3) {
-        commands.push(`${path.join(' ')} Z`);
-      }
-    });
-
-    if (!commands.length) {
-      return '';
-    }
-
-    return `path('${commands.join(' ')}')`;
-  }
 
   function resolveGridBounds(view = viewState) {
     const mapWidth = Number.isFinite(view?.mapPixelSize?.width) ? view.mapPixelSize.width : 0;
@@ -6108,9 +5083,6 @@ export function mountBoardInteractions(store, routes = {}) {
     mapTransform.style.setProperty('--vtt-map-scale', String(viewState.scale));
     const overlayScale = viewState.scale ? 1 / viewState.scale : 1;
     mapTransform.style.setProperty('--vtt-overlay-scale', String(overlayScale));
-    if (mapOverlay) {
-      mapOverlay.style.setProperty('--vtt-overlay-scale', String(overlayScale));
-    }
     if (grid) {
       const lineWidth = Math.max(1, 1 / viewState.scale);
       grid.style.setProperty('--vtt-grid-line-width', `${lineWidth}px`);
@@ -6145,12 +5117,6 @@ export function mountBoardInteractions(store, routes = {}) {
     viewState.mapInsets = nextInsets;
     viewState.gridOrigin = nextOrigin;
     viewState.gridOffsets = nextOffsets;
-    if (mapOverlay) {
-      mapOverlay.style.setProperty('--vtt-grid-offset-top', `${nextInsets.top}px`);
-      mapOverlay.style.setProperty('--vtt-grid-offset-right', `${nextInsets.right}px`);
-      mapOverlay.style.setProperty('--vtt-grid-offset-bottom', `${nextInsets.bottom}px`);
-      mapOverlay.style.setProperty('--vtt-grid-offset-left', `${nextInsets.left}px`);
-    }
     if (mapLevelRenderer.element) {
       mapLevelRenderer.element.style.setProperty('--vtt-grid-offset-top', `${nextInsets.top}px`);
       mapLevelRenderer.element.style.setProperty('--vtt-grid-offset-right', `${nextInsets.right}px`);
@@ -15900,68 +14866,6 @@ export function mountBoardInteractions(store, routes = {}) {
     activeConditionPrompt = null;
   }
 
-  function normalizeOverlayDraft(raw = {}) {
-    if (!raw || typeof raw !== 'object') {
-      return createEmptyOverlayState();
-    }
-
-    const overlay = createEmptyOverlayState();
-    const mapUrl = typeof raw.mapUrl === 'string' ? raw.mapUrl.trim() : '';
-    if (mapUrl) {
-      overlay.mapUrl = mapUrl;
-    }
-
-    const layerSource = Array.isArray(raw.layers)
-      ? raw.layers
-      : Array.isArray(raw.items)
-      ? raw.items
-      : [];
-
-    overlay.layers = layerSource
-      .map((entry, index) => normalizeOverlayLayer(entry, index))
-      .filter(Boolean);
-
-    if (overlay.mapUrl) {
-      const preferredId = raw.activeLayerId ?? raw.activeLayer ?? raw.selectedLayerId ?? null;
-      let assigned = false;
-      overlay.layers = overlay.layers.map((layer, index) => {
-        if (layer.mapUrl) {
-          return layer;
-        }
-
-        if (!assigned && (layer.id === preferredId || index === 0)) {
-          assigned = true;
-          return { ...layer, mapUrl: overlay.mapUrl };
-        }
-
-        return layer;
-      });
-    }
-
-    const legacyMask = normalizeOverlayMask(raw.mask ?? null);
-    if (!overlay.layers.length && maskHasMeaningfulOverlayContent(legacyMask)) {
-      const legacyLayer = normalizeOverlayLayer(
-        {
-          id: typeof raw.id === 'string' ? raw.id : undefined,
-          name: typeof raw.name === 'string' ? raw.name : undefined,
-          visible: raw.visible,
-          mask: legacyMask,
-        },
-        0
-      );
-      if (legacyLayer) {
-        overlay.layers.push(legacyLayer);
-      }
-    }
-
-    overlay.activeLayerId = resolveOverlayActiveLayerId(
-      raw.activeLayerId ?? raw.activeLayer ?? raw.selectedLayerId,
-      overlay.layers
-    );
-    rebuildOverlayAggregate(overlay);
-    return overlay;
-  }
-
   function ensureScenePlacementDraft(draft, sceneId) {
     const boardDraft = ensureBoardStateDraft(draft);
 
@@ -16001,7 +14905,6 @@ export function mountBoardInteractions(store, routes = {}) {
         sceneState: {},
         templates: {},
         drawings: {},
-        overlay: createEmptyOverlayState(),
       };
     }
 
@@ -16019,12 +14922,6 @@ export function mountBoardInteractions(store, routes = {}) {
 
     if (!draft.boardState.drawings || typeof draft.boardState.drawings !== 'object') {
       draft.boardState.drawings = {};
-    }
-
-    if (!draft.boardState.overlay || typeof draft.boardState.overlay !== 'object') {
-      draft.boardState.overlay = createEmptyOverlayState();
-    } else {
-      draft.boardState.overlay = normalizeOverlayDraft(draft.boardState.overlay);
     }
 
     return draft.boardState;
@@ -16070,9 +14967,6 @@ export function mountBoardInteractions(store, routes = {}) {
       };
     }
 
-    boardDraft.sceneState[key].overlay = normalizeOverlayDraft(
-      boardDraft.sceneState[key].overlay ?? {}
-    );
     boardDraft.sceneState[key].mapLevels = normalizeMapLevelsState(
       boardDraft.sceneState[key].mapLevels ?? null,
       { sceneGrid: boardDraft.sceneState[key].grid }
@@ -17007,1247 +15901,6 @@ function createMapLevelCutoutTool() {
   };
 }
 
-function createOverlayTool(uploadsEndpoint) {
-  if (!mapOverlay || !mapSurface) {
-    return {
-      toggle() {},
-      reset() {},
-      notifyGridChanged() {},
-      notifyMapState() {},
-      notifyOverlayMaskChange() {},
-    };
-  }
-
-  const editor = document.createElement('div');
-  editor.className = 'vtt-overlay-editor';
-  editor.hidden = true;
-
-  const toolbar = document.createElement('div');
-  toolbar.className = 'vtt-overlay-editor__toolbar';
-  toolbar.addEventListener('pointerdown', handleToolbarPointerDown);
-  toolbar.addEventListener('pointermove', handleToolbarPointerMove);
-  toolbar.addEventListener('pointerup', handleToolbarPointerUp);
-  toolbar.addEventListener('pointercancel', handleToolbarPointerCancel);
-  toolbar.addEventListener('lostpointercapture', handleToolbarPointerCancel);
-
-  const toolbarHeader = document.createElement('div');
-  toolbarHeader.className = 'vtt-overlay-editor__header';
-
-  const dragHandle = document.createElement('div');
-  dragHandle.className = 'vtt-overlay-editor__drag-handle';
-
-  const exitButton = document.createElement('button');
-  exitButton.type = 'button';
-  exitButton.className = 'vtt-overlay-editor__exit';
-  exitButton.setAttribute('aria-label', 'Close overlay editor');
-  exitButton.textContent = '\u00D7';
-  exitButton.addEventListener('click', (event) => {
-    event.preventDefault();
-    event.stopPropagation();
-    toggle();
-  });
-
-  toolbarHeader.append(dragHandle, exitButton);
-
-  const controls = document.createElement('div');
-  controls.className = 'vtt-overlay-editor__controls';
-
-  const closeButton = document.createElement('button');
-  closeButton.type = 'button';
-  closeButton.className = 'vtt-overlay-editor__btn';
-  closeButton.textContent = 'Close Shape';
-
-  const commitButton = document.createElement('button');
-  commitButton.type = 'button';
-  commitButton.className = 'vtt-overlay-editor__btn vtt-overlay-editor__btn--primary';
-  commitButton.textContent = 'Apply Mask';
-
-  const resetButton = document.createElement('button');
-  resetButton.type = 'button';
-  resetButton.className = 'vtt-overlay-editor__btn';
-  resetButton.textContent = 'Reset';
-
-  const clearButton = document.createElement('button');
-  clearButton.type = 'button';
-  clearButton.className =
-    'vtt-overlay-editor__btn vtt-overlay-editor__btn--danger vtt-overlay-editor__btn--full';
-  clearButton.textContent = 'Delete Overlay';
-
-  controls.append(closeButton, commitButton, resetButton, clearButton);
-
-  const statusLabel = document.createElement('p');
-  statusLabel.className = 'vtt-overlay-editor__status';
-  statusLabel.hidden = true;
-
-  toolbar.append(toolbarHeader, controls, statusLabel);
-  editor.append(toolbar);
-
-  const handlesLayer = document.createElement('div');
-  handlesLayer.className = 'vtt-overlay-editor__handles';
-  editor.append(handlesLayer);
-
-  mapOverlay.append(editor);
-
-  const DEFAULT_STATUS = '';
-  const CLOSED_STATUS = 'Shape closed. Apply the mask to commit your changes.';
-  const INSUFFICIENT_POINTS_STATUS =
-    'A closed shape needs at least three valid points before starting another one.';
-
-  let isActive = false;
-  let nodes = [];
-  let isClosed = false;
-  let additionalPolygons = [];
-  let persistedPrimaryPolygon = null;
-  let dragState = null;
-  let toolbarPosition = null;
-  let toolbarDragState = null;
-  let toolbarMeasurementFrame = null;
-  let toolbarDimensions = { width: 0, height: 0 };
-  let persistedOverlay = createEmptyOverlayState();
-  let persistedMask = createEmptyOverlayMask();
-  let persistedSignature = overlayMaskSignature(persistedMask);
-  let persistedMapUrl = null;
-  let overlayHiddenSnapshot = null;
-
-  function getPersistedActiveLayer() {
-    const layers = Array.isArray(persistedOverlay.layers) ? persistedOverlay.layers : [];
-    if (!layers.length) {
-      const created = createOverlayLayer(`Overlay ${layers.length + 1}`, layers);
-      persistedOverlay.layers = [created];
-      persistedOverlay.activeLayerId = created.id;
-      return created;
-    }
-
-    const activeId = persistedOverlay.activeLayerId;
-    let layer = layers.find((entry) => entry.id === activeId);
-    if (!layer) {
-      layer = layers[0];
-      persistedOverlay.activeLayerId = layer.id;
-    }
-    return layer;
-  }
-
-  function ensurePersistedActiveLayer() {
-    const layer = getPersistedActiveLayer();
-    if (!persistedOverlay.layers.includes(layer)) {
-      persistedOverlay.layers.push(layer);
-    }
-    return layer;
-  }
-
-  function applyOverlayDraftToDom(activeMaskOverride = null, options = {}) {
-    syncOverlayLayer(persistedOverlay);
-    const layers = Array.isArray(persistedOverlay.layers) ? persistedOverlay.layers : [];
-    const activeId = persistedOverlay.activeLayerId;
-    layers.forEach((layer) => {
-      if (!layer || typeof layer !== 'object') {
-        return;
-      }
-
-      const baseMask = layer.id === activeId && activeMaskOverride ? activeMaskOverride : layer.mask;
-      const allowDuringEditing =
-        options?.allowDuringEditing === true && layer.id === activeId;
-      applyOverlayMaskToLayer(layer.id, baseMask ?? {}, { allowDuringEditing });
-    });
-  }
-
-  function cloneOverlayPolygon(polygon) {
-    if (!polygon || typeof polygon !== 'object') {
-      return null;
-    }
-
-    const points = Array.isArray(polygon.points)
-      ? polygon.points
-          .map((point) => {
-            const column = Number(point?.column ?? 0);
-            const row = Number(point?.row ?? 0);
-            if (!Number.isFinite(column) || !Number.isFinite(row)) {
-              return null;
-            }
-            return {
-              column: roundToPrecision(column, 4),
-              row: roundToPrecision(row, 4),
-            };
-          })
-          .filter(Boolean)
-      : [];
-
-    if (points.length < 3) {
-      return null;
-    }
-
-    return { points };
-  }
-
-  function scheduleToolbarMeasurement() {
-    if (!mapOverlay || !toolbar) {
-      return;
-    }
-    const win = typeof window !== 'undefined' ? window : null;
-    if (toolbarMeasurementFrame !== null && typeof win?.cancelAnimationFrame === 'function') {
-      win.cancelAnimationFrame(toolbarMeasurementFrame);
-      toolbarMeasurementFrame = null;
-    }
-
-    const measure = () => {
-      toolbarMeasurementFrame = null;
-      measureToolbarPosition();
-    };
-
-    if (typeof win?.requestAnimationFrame === 'function') {
-      toolbarMeasurementFrame = win.requestAnimationFrame(measure);
-    } else {
-      measure();
-    }
-  }
-
-  function measureToolbarPosition() {
-    if (!mapOverlay || !toolbar) {
-      return;
-    }
-
-    const overlayRect = mapOverlay.getBoundingClientRect?.();
-    const toolbarRect = toolbar.getBoundingClientRect?.();
-    if (!overlayRect || !toolbarRect) {
-      return;
-    }
-
-    const scale =
-      Number.isFinite(viewState.scale) && viewState.scale !== 0 ? viewState.scale : 1;
-
-    const overlayWidth = Number.isFinite(overlayRect.width)
-      ? overlayRect.width / scale
-      : 0;
-    const overlayHeight = Number.isFinite(overlayRect.height)
-      ? overlayRect.height / scale
-      : 0;
-    if (overlayWidth <= 0 || overlayHeight <= 0) {
-      return;
-    }
-
-    const toolbarWidth = Number.isFinite(toolbarRect.width)
-      ? toolbarRect.width / scale
-      : toolbarDimensions.width;
-    const toolbarHeight = Number.isFinite(toolbarRect.height)
-      ? toolbarRect.height / scale
-      : toolbarDimensions.height;
-
-    toolbarDimensions = {
-      width: Math.max(0, toolbarWidth),
-      height: Math.max(0, toolbarHeight),
-    };
-
-    let nextX;
-    let nextY;
-
-    if (toolbarPosition) {
-      nextX = toolbarPosition.x;
-      nextY = toolbarPosition.y;
-    } else {
-      const rawX = toolbarRect.left - overlayRect.left;
-      const rawY = toolbarRect.top - overlayRect.top;
-      nextX = Number.isFinite(rawX) ? rawX / scale : 0;
-      nextY = Number.isFinite(rawY) ? rawY / scale : 0;
-    }
-
-    const maxX = Math.max(0, overlayWidth - toolbarDimensions.width);
-    const maxY = Math.max(0, overlayHeight - toolbarDimensions.height);
-
-    nextX = clamp(Number.isFinite(nextX) ? nextX : 0, 0, maxX);
-    nextY = clamp(Number.isFinite(nextY) ? nextY : 0, 0, maxY);
-
-    applyToolbarPosition(nextX, nextY);
-  }
-
-  function applyToolbarPosition(x, y) {
-    const safeX = Number.isFinite(x) ? x : 0;
-    const safeY = Number.isFinite(y) ? y : 0;
-    toolbarPosition = { x: safeX, y: safeY };
-    editor.style.setProperty('--overlay-toolbar-x', `${safeX}px`);
-    editor.style.setProperty('--overlay-toolbar-y', `${safeY}px`);
-  }
-
-  function ensureToolbarPosition() {
-    if (!mapOverlay || !toolbar) {
-      return;
-    }
-    scheduleToolbarMeasurement();
-  }
-
-  function handleToolbarPointerDown(event) {
-    if (!isActive) {
-      return;
-    }
-    if (event.button !== undefined && event.button !== 0 && event.pointerType !== 'touch') {
-      return;
-    }
-    if (event.target && event.target.closest('.vtt-overlay-editor__btn')) {
-      return;
-    }
-
-    const handleTarget = event.target?.closest('.vtt-overlay-editor__drag-handle');
-    if (!handleTarget) {
-      return;
-    }
-
-    if (!mapOverlay) {
-      return;
-    }
-
-    const overlayRect = mapOverlay.getBoundingClientRect?.();
-    const toolbarRect = toolbar.getBoundingClientRect?.();
-    if (!overlayRect || !toolbarRect) {
-      return;
-    }
-
-    const scale =
-      Number.isFinite(viewState.scale) && viewState.scale !== 0 ? viewState.scale : 1;
-
-    toolbarDimensions = {
-      width: Number.isFinite(toolbarRect.width)
-        ? toolbarRect.width / scale
-        : toolbarDimensions.width,
-      height: Number.isFinite(toolbarRect.height)
-        ? toolbarRect.height / scale
-        : toolbarDimensions.height,
-    };
-
-    toolbarDragState = {
-      pointerId: event.pointerId,
-      offsetX: (event.clientX - toolbarRect.left) / scale,
-      offsetY: (event.clientY - toolbarRect.top) / scale,
-      width: toolbarDimensions.width,
-      height: toolbarDimensions.height,
-      handle: handleTarget,
-    };
-
-    try {
-      toolbar.setPointerCapture?.(event.pointerId);
-    } catch (error) {
-      // Ignore capture errors.
-    }
-
-    if (handleTarget && typeof handleTarget.setPointerCapture === 'function') {
-      try {
-        handleTarget.setPointerCapture(event.pointerId);
-      } catch (error) {
-        // Ignore capture errors.
-      }
-    }
-
-    toolbar.classList.add('is-dragging');
-    handleTarget?.classList.add('is-dragging');
-    event.preventDefault();
-    event.stopPropagation();
-  }
-
-  function handleToolbarPointerMove(event) {
-    if (!toolbarDragState || event.pointerId !== toolbarDragState.pointerId) {
-      return;
-    }
-
-    const overlayRect = mapOverlay.getBoundingClientRect?.();
-    if (!overlayRect) {
-      return;
-    }
-
-    const scale =
-      Number.isFinite(viewState.scale) && viewState.scale !== 0 ? viewState.scale : 1;
-
-    const overlayWidth = Number.isFinite(overlayRect.width) ? overlayRect.width / scale : 0;
-    const overlayHeight = Number.isFinite(overlayRect.height) ? overlayRect.height / scale : 0;
-    if (overlayWidth <= 0 || overlayHeight <= 0) {
-      return;
-    }
-
-    const maxX = Math.max(0, overlayWidth - toolbarDragState.width);
-    const maxY = Math.max(0, overlayHeight - toolbarDragState.height);
-
-    const proposedX =
-      (event.clientX - overlayRect.left) / scale - toolbarDragState.offsetX;
-    const proposedY =
-      (event.clientY - overlayRect.top) / scale - toolbarDragState.offsetY;
-
-    const nextX = clamp(Number.isFinite(proposedX) ? proposedX : 0, 0, maxX);
-    const nextY = clamp(Number.isFinite(proposedY) ? proposedY : 0, 0, maxY);
-
-    applyToolbarPosition(nextX, nextY);
-    event.preventDefault();
-    event.stopPropagation();
-  }
-
-  function handleToolbarPointerUp(event) {
-    if (!toolbarDragState || event.pointerId !== toolbarDragState.pointerId) {
-      return;
-    }
-
-    endToolbarDrag(event.pointerId);
-    event.preventDefault();
-    event.stopPropagation();
-  }
-
-  function handleToolbarPointerCancel(event) {
-    if (toolbarDragState && event.pointerId === toolbarDragState.pointerId) {
-      endToolbarDrag(event.pointerId);
-    }
-  }
-
-  function endToolbarDrag(pointerId) {
-    try {
-      toolbar.releasePointerCapture?.(pointerId);
-    } catch (error) {
-      // Ignore release errors.
-    }
-
-    if (toolbarDragState?.handle) {
-      try {
-        toolbarDragState.handle.releasePointerCapture?.(pointerId);
-      } catch (error) {
-        // Ignore release errors.
-      }
-      toolbarDragState.handle.classList.remove('is-dragging');
-    }
-
-    toolbarDragState = null;
-    toolbar.classList.remove('is-dragging');
-    scheduleToolbarMeasurement();
-  }
-
-  function toggle() {
-    if (isActive) {
-      deactivate();
-    } else {
-      activate();
-    }
-  }
-
-  function isEditingLayer(layerId = null) {
-    if (!isActive) {
-      return false;
-    }
-
-    const activeLayer = getPersistedActiveLayer();
-    if (!activeLayer) {
-      return false;
-    }
-
-    if (typeof layerId === 'string' && layerId.trim()) {
-      return activeLayer.id === layerId.trim();
-    }
-
-    return true;
-  }
-
-  function editLayer(layerId) {
-    if (typeof layerId === 'string' && layerId.trim()) {
-      persistedOverlay.activeLayerId = layerId.trim();
-      const activeLayer = getPersistedActiveLayer();
-      persistedMask = normalizeOverlayMask(activeLayer?.mask ?? {});
-      persistedSignature = overlayMaskSignature(persistedMask);
-      setNodesFromMask(persistedMask);
-      renderHandles();
-      applyPreviewMask();
-      updateControls();
-    }
-
-    if (!isActive) {
-      activate();
-    }
-
-    syncCutoutToggleButtons();
-  }
-
-  function activate() {
-    if (!isGmUser()) {
-      return;
-    }
-
-    ensurePersistedActiveLayer();
-    overlayHiddenSnapshot = mapOverlay.hasAttribute('hidden');
-    mapOverlay.removeAttribute('hidden');
-    mapOverlay.hidden = false;
-    if (mapSurface) {
-      mapSurface.dataset.overlayEditing = 'true';
-    }
-    isActive = true;
-    editor.hidden = false;
-    editor.dataset.interactive = 'true';
-    mapOverlay.dataset.overlayEditing = 'true';
-    attachOverlayDropProxies();
-    setButtonState(true);
-    setStatus(DEFAULT_STATUS);
-    if (!toolbarPosition) {
-      // Position the toolbar near the left side of the user's current viewport,
-      // not at the map origin which may be far off-screen when zoomed in.
-      const overlayRect = mapOverlay.getBoundingClientRect?.();
-      const scale =
-        Number.isFinite(viewState.scale) && viewState.scale !== 0 ? viewState.scale : 1;
-      if (overlayRect) {
-        const viewportX = 16;
-        const viewportY = Math.max(16, (overlayRect.height > 0 ? overlayRect.height * 0.05 : 16));
-        const localX = (viewportX - overlayRect.left) / scale;
-        const localY = (viewportY - overlayRect.top) / scale;
-        applyToolbarPosition(
-          Math.max(0, Number.isFinite(localX) ? localX : 0),
-          Math.max(0, Number.isFinite(localY) ? localY : 0),
-        );
-      } else {
-        applyToolbarPosition(0, 0);
-      }
-    }
-    renderHandles();
-    applyPreviewMask();
-    updateControls();
-    ensureToolbarPosition();
-  }
-
-  function deactivate() {
-    // Auto-commit any drawn shapes so they persist after closing the editor.
-    // If the current polygon is open but has 3+ nodes, close it first.
-    if (nodes.length >= 3 && !isClosed) {
-      isClosed = true;
-    }
-    if (isDirty() && isClosed && nodes.length >= 3) {
-      const preview = buildPreviewMask();
-      const changed = updateSceneOverlay((overlayEntry, activeLayer) => {
-        activeLayer.mask = normalizeOverlayMask(preview);
-      });
-      if (changed) {
-        setNodesFromMask(persistedMask);
-        persistBoardStateSnapshot();
-      }
-    }
-
-    isActive = false;
-    editor.hidden = true;
-    delete editor.dataset.interactive;
-    if (mapSurface) {
-      delete mapSurface.dataset.overlayEditing;
-    }
-    delete mapOverlay.dataset.overlayEditing;
-    detachOverlayDropProxies();
-    dragState = null;
-    setButtonState(false);
-    setStatus('');
-    applyOverlayDraftToDom();
-    updateControls();
-    if (!hasOverlayMap() && overlayHiddenSnapshot) {
-      mapOverlay.hidden = true;
-    }
-    overlayHiddenSnapshot = null;
-  }
-
-  function resetTool() {
-    deactivate();
-    nodes = [];
-    isClosed = false;
-    additionalPolygons = [];
-    persistedPrimaryPolygon = null;
-    dragState = null;
-    persistedOverlay = createEmptyOverlayState();
-    persistedMask = createEmptyOverlayMask();
-    persistedSignature = overlayMaskSignature(persistedMask);
-    persistedMapUrl = null;
-    handlesLayer.innerHTML = '';
-    applyOverlayDraftToDom();
-    ensureToolbarPosition();
-  }
-
-  function notifyGridChanged() {
-    if (!isActive && nodes.length === 0) {
-      return;
-    }
-    renderHandles();
-    ensureToolbarPosition();
-  }
-
-  function notifyMapState() {
-    const state = boardApi.getState?.();
-    if (!state) {
-      return;
-    }
-
-    const activeSceneId = state.boardState?.activeSceneId ?? null;
-    if (!activeSceneId) {
-      notifyOverlayMaskChange(null);
-      return;
-    }
-
-    const overlayEntry = resolveSceneOverlayState(state.boardState ?? {}, activeSceneId);
-    notifyOverlayMaskChange(overlayEntry ?? null);
-    syncCutoutToggleButtons();
-    ensureToolbarPosition();
-  }
-
-  function notifyOverlayMaskChange(overlayEntry) {
-    const normalized = normalizeOverlayDraft(overlayEntry ?? {});
-    persistedOverlay = normalized;
-
-    const activeLayer = getPersistedActiveLayer();
-    persistedMapUrl = activeLayer?.mapUrl ?? null;
-    const normalizedMask = normalizeOverlayMask(activeLayer?.mask ?? {});
-    const signature = overlayMaskSignature(normalizedMask);
-
-    if (signature === persistedSignature) {
-      if (!isActive && nodes.length === 0 && additionalPolygons.length === 0) {
-        setNodesFromMask(normalizedMask);
-        renderHandles();
-      }
-      applyPreviewMask();
-      updateControls();
-      syncCutoutToggleButtons();
-      return;
-    }
-
-    persistedMask = normalizedMask;
-    persistedSignature = signature;
-
-    if (!isActive || !isDirty()) {
-      setNodesFromMask(persistedMask);
-      renderHandles();
-    }
-    applyPreviewMask();
-    updateControls();
-    syncCutoutToggleButtons();
-  }
-
-  function setNodesFromMask(mask) {
-    const normalized = normalizeOverlayMask(mask);
-    const polygons = Array.isArray(normalized.polygons) ? normalized.polygons : [];
-
-    nodes = [];
-    isClosed = false;
-    persistedPrimaryPolygon = null;
-    additionalPolygons = [];
-
-    if (polygons.length === 0) {
-      return;
-    }
-
-    const primaryClone = cloneOverlayPolygon(polygons[0]);
-    if (primaryClone) {
-      persistedPrimaryPolygon = primaryClone;
-      nodes = primaryClone.points.map((point) => ({ column: point.column, row: point.row }));
-      isClosed = nodes.length >= 3;
-    }
-
-    additionalPolygons = polygons
-      .slice(1)
-      .map((polygon) => cloneOverlayPolygon(polygon))
-      .filter(Boolean);
-  }
-
-  function renderHandles() {
-    handlesLayer.innerHTML = '';
-
-    if (!isActive) {
-      return;
-    }
-
-    const fragment = document.createDocumentFragment();
-
-    const appendPolygonHandles = (points, options = {}) => {
-      const { closed = false, readonly = false } = options;
-      if (!Array.isArray(points) || points.length === 0) {
-        return;
-      }
-
-      const createSegment = (start, end) => {
-        const element = document.createElement('div');
-        element.className = 'vtt-overlay-editor__segment';
-        if (readonly) {
-          element.classList.add('vtt-overlay-editor__segment--readonly');
-        }
-        const startLocal = gridPointToOverlayLocal(start);
-        const endLocal = gridPointToOverlayLocal(end);
-        const dx = endLocal.x - startLocal.x;
-        const dy = endLocal.y - startLocal.y;
-        const length = Math.sqrt(dx * dx + dy * dy);
-        const angle = Math.atan2(dy, dx);
-        element.style.width = `${length}px`;
-        element.style.transform = `translate(${startLocal.x}px, ${startLocal.y}px) rotate(${angle}rad)`;
-        fragment.append(element);
-      };
-
-      for (let index = 0; index < points.length - 1; index += 1) {
-        createSegment(points[index], points[index + 1]);
-      }
-
-      if (closed && points.length >= 3) {
-        createSegment(points[points.length - 1], points[0]);
-      }
-
-      points.forEach((point, index) => {
-        const element = document.createElement('div');
-        element.className = 'vtt-overlay-editor__node';
-        if (readonly) {
-          element.classList.add('vtt-overlay-editor__node--readonly');
-        } else {
-          element.dataset.index = String(index);
-          if (index === 0) {
-            element.classList.add('is-start');
-          }
-        }
-
-        const local = gridPointToOverlayLocal(point);
-        element.style.left = `${local.x}px`;
-        element.style.top = `${local.y}px`;
-
-        if (!readonly) {
-          element.addEventListener('contextmenu', (event) => {
-            event.preventDefault();
-          });
-          element.addEventListener('pointerdown', handleNodePointerDown);
-          element.addEventListener('pointermove', handleNodePointerMove);
-          element.addEventListener('pointerup', handleNodePointerUp);
-          element.addEventListener('pointercancel', handleNodePointerUp);
-          element.addEventListener('dblclick', handleNodeDoubleClick);
-        }
-
-        fragment.append(element);
-      });
-    };
-
-    additionalPolygons.forEach((polygon) => {
-      appendPolygonHandles(Array.isArray(polygon?.points) ? polygon.points : [], {
-        closed: true,
-        readonly: true,
-      });
-    });
-
-    appendPolygonHandles(nodes, { closed: isClosed && nodes.length >= 3, readonly: false });
-
-    handlesLayer.append(fragment);
-  }
-
-  function handleNodePointerDown(event) {
-    if (!isActive) {
-      return;
-    }
-    const target = event.currentTarget;
-    const index = Number.parseInt(target?.dataset?.index ?? '', 10);
-    if (!Number.isInteger(index)) {
-      return;
-    }
-
-    if (event.button === 2) {
-      event.preventDefault();
-      event.stopPropagation();
-      try {
-        target?.releasePointerCapture?.(event.pointerId);
-      } catch (error) {
-        // Ignore capture release issues.
-      }
-      dragState = null;
-      removeNodeAtIndex(index);
-      return;
-    }
-
-    if (event.button !== 0) {
-      return;
-    }
-
-    event.preventDefault();
-    event.stopPropagation();
-
-    dragState = { index, pointerId: event.pointerId };
-    try {
-      target.setPointerCapture?.(event.pointerId);
-    } catch (error) {
-      // Ignore capture errors.
-    }
-  }
-
-  function handleNodePointerMove(event) {
-    if (!dragState || event.pointerId !== dragState.pointerId || !isActive) {
-      return;
-    }
-
-    const localPoint = getLocalMapPoint(event);
-    if (!localPoint) {
-      return;
-    }
-
-    const gridPoint = mapPointToGrid(localPoint, viewState);
-    if (!gridPoint) {
-      return;
-    }
-
-    event.preventDefault();
-    event.stopPropagation();
-
-    const snapped = snapOverlayPoint(gridPoint, event.shiftKey);
-    const clamped = clampOverlayPoint(snapped);
-    nodes[dragState.index] = clamped;
-    renderHandles();
-    applyPreviewMask();
-    updateControls();
-  }
-
-  function handleNodePointerUp(event) {
-    if (!dragState || event.pointerId !== dragState.pointerId) {
-      return;
-    }
-
-    event.preventDefault();
-    event.stopPropagation();
-
-    try {
-      event.currentTarget?.releasePointerCapture?.(event.pointerId);
-    } catch (error) {
-      // ignore
-    }
-
-    dragState = null;
-    applyPreviewMask();
-    updateControls();
-  }
-
-  function removeNodeAtIndex(index) {
-    if (!Number.isInteger(index) || index < 0 || index >= nodes.length) {
-      return;
-    }
-
-    nodes.splice(index, 1);
-
-    const wasClosed = isClosed;
-    isClosed = wasClosed && nodes.length >= 3;
-
-    if (isClosed) {
-      setStatus(CLOSED_STATUS);
-    } else {
-      setStatus(DEFAULT_STATUS);
-    }
-
-    renderHandles();
-    applyPreviewMask();
-    updateControls();
-  }
-
-  function handleNodeDoubleClick(event) {
-    if (!isActive) {
-      return;
-    }
-    const index = Number.parseInt(event.currentTarget?.dataset?.index ?? '', 10);
-    if (!Number.isInteger(index) || index !== 0) {
-      return;
-    }
-    event.preventDefault();
-    event.stopPropagation();
-    if (nodes.length >= 3) {
-      isClosed = true;
-      setStatus(CLOSED_STATUS);
-      renderHandles();
-      applyPreviewMask();
-      updateControls();
-    }
-  }
-
-  function handleSurfacePointerDown(event) {
-    if (!isActive || event.button !== 0) {
-      return;
-    }
-    if (event.target && event.target.closest('.vtt-overlay-editor__node')) {
-      return;
-    }
-    if (event.target && event.target.closest('.vtt-overlay-editor__toolbar')) {
-      return;
-    }
-
-    if (toolbar && typeof toolbar.getBoundingClientRect === 'function') {
-      const rect = toolbar.getBoundingClientRect();
-      const pointerX = Number.isFinite(event.clientX) ? event.clientX : null;
-      const pointerY = Number.isFinite(event.clientY) ? event.clientY : null;
-      if (
-        rect &&
-        pointerX !== null &&
-        pointerY !== null &&
-        pointerX >= rect.left &&
-        pointerX <= rect.right &&
-        pointerY >= rect.top &&
-        pointerY <= rect.bottom
-      ) {
-        return;
-      }
-    }
-
-    const localPoint = getLocalMapPoint(event);
-    if (!localPoint) {
-      return;
-    }
-
-    const gridPoint = mapPointToGrid(localPoint, viewState);
-    if (!gridPoint) {
-      return;
-    }
-
-    event.preventDefault();
-    event.stopPropagation();
-
-    const snapped = snapOverlayPoint(gridPoint, event.shiftKey);
-    const clamped = clampOverlayPoint(snapped);
-
-    if (isClosed && nodes.length >= 3) {
-      const completedPolygon = cloneOverlayPolygon({ points: nodes });
-      if (completedPolygon) {
-        additionalPolygons = [...additionalPolygons, completedPolygon];
-        persistedPrimaryPolygon = null;
-        nodes = [];
-        isClosed = false;
-        setStatus(DEFAULT_STATUS);
-      } else {
-        setStatus(INSUFFICIENT_POINTS_STATUS);
-        updateControls();
-        return;
-      }
-    }
-
-    nodes.push(clamped);
-    isClosed = false;
-    renderHandles();
-    applyPreviewMask();
-    updateControls();
-  }
-
-  function snapOverlayPoint(point, shiftKey = false) {
-    const step = shiftKey ? 0.5 : 0.25;
-    const snapValue = (value) => {
-      const numeric = Number(value ?? 0);
-      if (!Number.isFinite(numeric)) {
-        return 0;
-      }
-      return Math.round(numeric / step) * step;
-    };
-    return {
-      column: roundToPrecision(snapValue(point.column), 4),
-      row: roundToPrecision(snapValue(point.row), 4),
-    };
-  }
-
-  function clampOverlayPoint(point) {
-    const bounds = resolveGridBounds(viewState);
-    const maxColumn = Math.max(0, Number.isFinite(bounds.columns) ? bounds.columns : 0);
-    const maxRow = Math.max(0, Number.isFinite(bounds.rows) ? bounds.rows : 0);
-    return {
-      column: clamp(Number(point.column ?? 0), 0, maxColumn),
-      row: clamp(Number(point.row ?? 0), 0, maxRow),
-    };
-  }
-
-  function gridPointToOverlayLocal(point) {
-    const gridSize = Math.max(8, Number.isFinite(viewState.gridSize) ? viewState.gridSize : 64);
-    const origin = viewState.gridOrigin ?? {};
-    const originX = Number.isFinite(origin.x) ? origin.x : 0;
-    const originY = Number.isFinite(origin.y) ? origin.y : 0;
-    return {
-      x: originX + (point.column ?? 0) * gridSize,
-      y: originY + (point.row ?? 0) * gridSize,
-    };
-  }
-
-  function setButtonState(pressed) {
-    overlayEditorActive = Boolean(pressed);
-    lastOverlaySignature = null;
-    syncOverlayLayer(persistedOverlay);
-    syncCutoutToggleButtons();
-  }
-
-  function setStatus(message) {
-    const nextMessage = message || DEFAULT_STATUS;
-    if (statusLabel) {
-      statusLabel.textContent = nextMessage;
-      statusLabel.hidden = !nextMessage;
-    }
-    ensureToolbarPosition();
-  }
-
-  function isDirty() {
-    if (!isActive) {
-      return false;
-    }
-    const preview = buildPreviewMask();
-    return overlayMaskSignature(preview) !== persistedSignature;
-  }
-
-  function buildPreviewMask() {
-    const base = normalizeOverlayMask(persistedMask);
-    const mask = {
-      visible: base.visible,
-      polygons: additionalPolygons.map((polygon) => ({
-        points: polygon.points.map((point) => ({
-          column: roundToPrecision(point.column, 4),
-          row: roundToPrecision(point.row, 4),
-        })),
-      })),
-    };
-    if (base.url) {
-      mask.url = base.url;
-    }
-
-    if (isClosed && nodes.length >= 3) {
-      mask.polygons.unshift({
-        points: nodes.map((node) => ({
-          column: roundToPrecision(node.column, 4),
-          row: roundToPrecision(node.row, 4),
-        })),
-      });
-    } else if (nodes.length === 0 && persistedPrimaryPolygon) {
-      mask.polygons.unshift({
-        points: persistedPrimaryPolygon.points.map((point) => ({
-          column: roundToPrecision(point.column, 4),
-          row: roundToPrecision(point.row, 4),
-        })),
-      });
-    }
-
-    return mask;
-  }
-
-  function applyPreviewMask() {
-    const allowDuringEditing = overlayEditorActive;
-
-    // While the editor is active, do NOT apply the clip-path preview to the
-    // overlay layer.  The polygon outlines drawn on the handles layer already
-    // show the user what area they have selected.  Applying the clip-path
-    // immediately hides everything outside the polygon which makes it nearly
-    // impossible to draw additional shapes or see the rest of the map.
-    // The clip-path is only applied when the user clicks "Apply Mask".
-    if (isActive) {
-      applyOverlayDraftToDom(null, { allowDuringEditing });
-    } else if (additionalPolygons.length > 0 || (isClosed && nodes.length >= 3)) {
-      const preview = buildPreviewMask();
-      applyOverlayDraftToDom(preview, { allowDuringEditing });
-    } else {
-      applyOverlayDraftToDom(null, { allowDuringEditing });
-    }
-  }
-
-  function updateControls() {
-    const hasNodes = nodes.length >= 3;
-    closeButton.disabled = !hasNodes || isClosed;
-    commitButton.disabled = !isActive || !isClosed || !hasNodes || !isDirty();
-    resetButton.disabled = !isActive || (!isDirty() && !dragState);
-    clearButton.disabled = !hasPersistedOverlay();
-    ensureToolbarPosition();
-  }
-
-  function hasPersistedOverlay() {
-    if (persistedMapUrl) {
-      return true;
-    }
-    const layers = Array.isArray(persistedOverlay.layers) ? persistedOverlay.layers : [];
-    return layers.some(
-      (layer) => layer && layer.visible !== false && maskHasMeaningfulOverlayContent(layer.mask)
-    );
-  }
-
-  function hasOverlayMap() {
-    return Boolean(persistedMapUrl);
-  }
-
-  async function commitChanges() {
-    if (!isClosed || nodes.length < 3) {
-      setStatus('Add at least three nodes and close the shape before applying the mask.');
-      return;
-    }
-
-    const preview = buildPreviewMask();
-    const polygons = Array.isArray(preview?.polygons) ? preview.polygons : [];
-    const validPolygons = polygons.filter(
-      (polygon) => Array.isArray(polygon?.points) && polygon.points.length >= 3
-    );
-    const canPersistCutout =
-      Boolean(uploadsEndpoint) &&
-      Boolean(persistedMapUrl) &&
-      validPolygons.length > 0;
-
-    if (canPersistCutout) {
-      try {
-        setStatus('Saving overlay cutout…');
-        const blob = await overlayUploadHelpers.createOverlayCutoutBlob({
-          mapUrl: persistedMapUrl,
-          polygons: validPolygons,
-          view: viewState,
-        });
-
-        if (blob) {
-          const fileName = `overlay-cutout-${Date.now()}.png`;
-          const uploadedResult = await overlayUploadHelpers.uploadMap(
-            blob,
-            uploadsEndpoint,
-            fileName,
-            { noResize: true }
-          );
-          const uploadedUrl = uploadedResult?.url ?? null;
-
-          if (uploadedUrl) {
-            const changed = updateSceneOverlay((overlayEntry, activeLayer) => {
-              activeLayer.mapUrl = uploadedUrl;
-              activeLayer.mask = createEmptyOverlayMask();
-            });
-
-            if (changed) {
-              setNodesFromMask(persistedMask);
-              renderHandles();
-              applyPreviewMask();
-              updateControls();
-              setStatus('Overlay cutout applied.');
-              persistBoardStateSnapshot();
-              return;
-            }
-          }
-        }
-      } catch (error) {
-        console.warn('[VTT] Failed to persist overlay cutout', error);
-      }
-    }
-
-    const changed = updateSceneOverlay((overlayEntry, activeLayer) => {
-      activeLayer.mask = normalizeOverlayMask(preview);
-    });
-
-    if (!changed) {
-      setStatus('Unable to update the overlay for this scene.');
-      return;
-    }
-
-    setNodesFromMask(persistedMask);
-    renderHandles();
-    applyPreviewMask();
-    updateControls();
-    setStatus('Overlay mask applied.');
-    persistBoardStateSnapshot();
-  }
-
-  function restorePersistedMask() {
-    setNodesFromMask(persistedMask);
-    renderHandles();
-    applyPreviewMask();
-    updateControls();
-    setStatus('Overlay reset to the last saved shape.');
-    persistBoardStateSnapshot();
-  }
-
-  function clearOverlay() {
-    const changed = updateSceneOverlay((overlayEntry, activeLayer) => {
-      overlayEntry.layers = overlayEntry.layers.filter((layer) => layer.id !== activeLayer.id);
-      if (overlayEntry.layers.length === 0) {
-        const replacement = createOverlayLayer(`Overlay 1`, overlayEntry.layers);
-        overlayEntry.layers.push(replacement);
-        overlayEntry.activeLayerId = replacement.id;
-      } else {
-        overlayEntry.activeLayerId = overlayEntry.layers[0].id;
-      }
-    });
-
-    if (!changed) {
-      setStatus('Unable to delete the overlay for this scene.');
-      return;
-    }
-
-    nodes = [];
-    isClosed = false;
-    additionalPolygons = [];
-    persistedPrimaryPolygon = null;
-    handlesLayer.innerHTML = '';
-    applyPreviewMask();
-    updateControls();
-    setStatus('Overlay deleted.');
-    persistBoardStateSnapshot();
-  }
-
-  function closePolygon() {
-    if (nodes.length < 3) {
-      setStatus('Add at least three nodes before closing the shape.');
-      return;
-    }
-    isClosed = true;
-    setStatus(CLOSED_STATUS);
-    renderHandles();
-    applyPreviewMask();
-    updateControls();
-  }
-
-  function updateSceneOverlay(mutator) {
-    if (typeof boardApi.updateState !== 'function') {
-      return false;
-    }
-
-    let updated = false;
-    boardApi.updateState?.((draft) => {
-      const boardDraft = ensureBoardStateDraft(draft);
-      const activeSceneId = boardDraft.activeSceneId;
-      if (!activeSceneId) {
-        return;
-      }
-
-      const sceneEntry = ensureSceneStateDraftEntry(draft, activeSceneId);
-      const overlayEntry = normalizeOverlayDraft(sceneEntry.overlay ?? {});
-      if (!Array.isArray(overlayEntry.layers) || overlayEntry.layers.length === 0) {
-        const layer = createOverlayLayer(`Overlay ${overlayEntry.layers.length + 1}`, overlayEntry.layers);
-        overlayEntry.layers.push(layer);
-        overlayEntry.activeLayerId = layer.id;
-      }
-
-      const activeLayer = overlayEntry.layers.find((layer) => layer.id === overlayEntry.activeLayerId);
-      if (!activeLayer) {
-        return;
-      }
-
-      const result = mutator(overlayEntry, activeLayer, boardDraft);
-      if (result === false) {
-        return;
-      }
-
-      rebuildOverlayAggregate(overlayEntry);
-      sceneEntry.overlay = overlayEntry;
-      boardDraft.overlay = normalizeOverlayDraft(overlayEntry);
-      persistedOverlay = normalizeOverlayDraft(overlayEntry);
-      const persistedLayer = getPersistedActiveLayer();
-      persistedMask = normalizeOverlayMask(persistedLayer.mask ?? {});
-      persistedSignature = overlayMaskSignature(persistedMask);
-      persistedMapUrl = persistedLayer?.mapUrl ?? null;
-      updated = true;
-    });
-
-    return updated;
-  }
-
-  mapSurface.addEventListener('pointerdown', handleSurfacePointerDown, true);
-
-  closeButton.addEventListener('click', (event) => {
-    event.preventDefault();
-    if (!isActive) {
-      activate();
-    }
-    closePolygon();
-  });
-
-  commitButton.addEventListener('click', (event) => {
-    event.preventDefault();
-    commitChanges();
-  });
-
-  resetButton.addEventListener('click', (event) => {
-    event.preventDefault();
-    restorePersistedMask();
-  });
-
-  clearButton.addEventListener('click', (event) => {
-    event.preventDefault();
-    clearOverlay();
-  });
-
-  return {
-    toggle,
-    editLayer,
-    reset: resetTool,
-    notifyGridChanged,
-    notifyMapState,
-    notifyOverlayMaskChange,
-    isEditingLayer,
-  };
-}
 
 function createTemplateTool() {
   const layer = templateLayer;

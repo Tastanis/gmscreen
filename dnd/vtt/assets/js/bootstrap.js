@@ -234,11 +234,6 @@ function normalizeBoardStateSnapshot(raw = {}) {
     snapshot.drawings = cloneBoardSection(raw.drawings);
   }
 
-  if (Object.prototype.hasOwnProperty.call(raw, 'overlay')) {
-    const overlay = cloneBoardSection(raw.overlay);
-    snapshot.overlay = overlay && typeof overlay === 'object' ? overlay : {};
-  }
-
   if (Object.prototype.hasOwnProperty.call(raw, 'pings')) {
     snapshot.pings = Array.isArray(raw.pings) ? [...raw.pings] : [];
   }

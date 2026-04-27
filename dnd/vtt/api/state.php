@@ -819,9 +819,6 @@ if (!defined('VTT_STATE_API_INCLUDE_ONLY')) {
                 if (isset($updates['mapUrl'])) {
                     $broadcastData['mapUrl'] = $updates['mapUrl'];
                 }
-                if (isset($updates['overlay'])) {
-                    $broadcastData['overlay'] = $updates['overlay'];
-                }
                 // Propagate the erase/clear full-replace marker to receivers.
                 // The server applies `_replaceDrawings` by replacing each
                 // listed scene's drawing array wholesale; without this hint
@@ -1687,17 +1684,6 @@ function sanitizeBoardStateUpdates(array $raw): array
         }
     }
 
-    if (array_key_exists('overlay', $raw)) {
-        $rawOverlay = $raw['overlay'];
-        if ($rawOverlay === null) {
-            $updates['overlay'] = normalizeOverlayPayload([]);
-        } elseif (is_array($rawOverlay)) {
-            $updates['overlay'] = normalizeOverlayPayload($rawOverlay);
-        } else {
-            throw new InvalidArgumentException('Overlay must be an array or object.');
-        }
-    }
-
     if (array_key_exists('pings', $raw)) {
         $rawPings = $raw['pings'];
         if ($rawPings === null) {
@@ -1725,7 +1711,6 @@ function normalizeBoardState($raw): array
         'sceneState' => [],
         'templates' => [],
         'drawings' => [],
-        'overlay' => normalizeOverlayPayload([]),
         'pings' => [],
     ];
 
@@ -1767,10 +1752,6 @@ function normalizeBoardState($raw): array
 
     if (array_key_exists('drawings', $raw) && is_array($raw['drawings'])) {
         $state['drawings'] = normalizeDrawingsPayload($raw['drawings']);
-    }
-
-    if (array_key_exists('overlay', $raw) && is_array($raw['overlay'])) {
-        $state['overlay'] = normalizeOverlayPayload($raw['overlay']);
     }
 
     if (array_key_exists('pings', $raw) && is_array($raw['pings'])) {
@@ -2058,7 +2039,6 @@ function normalizeSceneStatePayload(array $rawSceneState, bool $includeMapLevelD
         $gridSource = $config['grid'] ?? $config;
         $entry = [
             'grid' => normalizeGridSettings($gridSource),
-            'overlay' => normalizeOverlayPayload($config['overlay'] ?? []),
         ];
 
         if (array_key_exists('mapLevels', $config)) {
@@ -2823,346 +2803,6 @@ function extractCombatUpdates(array $sceneStateUpdates): array
     return $updates;
 }
 
-/**
- * @param array<string,mixed> $rawOverlay
- */
-function normalizeOverlayPayload($rawOverlay): array
-{
-    $overlay = createEmptyOverlayState();
-
-    if (!is_array($rawOverlay)) {
-        return $overlay;
-    }
-
-    if (array_key_exists('mapUrl', $rawOverlay) && is_string($rawOverlay['mapUrl'])) {
-        $trimmed = trim($rawOverlay['mapUrl']);
-        $overlay['mapUrl'] = $trimmed === '' ? null : $trimmed;
-    }
-
-    $layerSource = [];
-    if (array_key_exists('layers', $rawOverlay) && is_array($rawOverlay['layers'])) {
-        $layerSource = $rawOverlay['layers'];
-    } elseif (array_key_exists('items', $rawOverlay) && is_array($rawOverlay['items'])) {
-        $layerSource = $rawOverlay['items'];
-    }
-
-    foreach (array_values($layerSource) as $index => $layer) {
-        $normalizedLayer = normalizeOverlayLayerPayload($layer, $index);
-        if ($normalizedLayer !== null) {
-            $overlay['layers'][] = $normalizedLayer;
-        }
-    }
-
-    $legacyMask = array_key_exists('mask', $rawOverlay)
-        ? normalizeOverlayMaskPayload($rawOverlay['mask'])
-        : createEmptyOverlayMask();
-
-    if (
-        count($overlay['layers']) === 0
-        && (maskHasMeaningfulContent($legacyMask) || array_key_exists('name', $rawOverlay) || array_key_exists('visible', $rawOverlay))
-    ) {
-        $overlay['layers'][] = normalizeOverlayLayerPayload(
-            [
-                'id' => array_key_exists('id', $rawOverlay) && is_string($rawOverlay['id']) ? $rawOverlay['id'] : null,
-                'name' => array_key_exists('name', $rawOverlay) ? $rawOverlay['name'] : null,
-                'visible' => array_key_exists('visible', $rawOverlay) ? $rawOverlay['visible'] : null,
-                'mask' => $legacyMask,
-            ],
-            0
-        ) ?? createEmptyOverlayLayer(0);
-    }
-
-    $preferred = null;
-    if (array_key_exists('activeLayerId', $rawOverlay) && is_string($rawOverlay['activeLayerId'])) {
-        $preferred = trim($rawOverlay['activeLayerId']);
-    } elseif (array_key_exists('activeLayer', $rawOverlay) && is_string($rawOverlay['activeLayer'])) {
-        $preferred = trim($rawOverlay['activeLayer']);
-    } elseif (array_key_exists('selectedLayerId', $rawOverlay) && is_string($rawOverlay['selectedLayerId'])) {
-        $preferred = trim($rawOverlay['selectedLayerId']);
-    }
-
-    $overlay['activeLayerId'] = resolveOverlayActiveLayerId($preferred, $overlay['layers']);
-    $overlay['mask'] = buildAggregateOverlayMask($overlay['layers']);
-
-    return $overlay;
-}
-
-function createEmptyOverlayMask(): array
-{
-    return ['visible' => true, 'polygons' => []];
-}
-
-function createEmptyOverlayState(): array
-{
-    return [
-        'mapUrl' => null,
-        'mask' => createEmptyOverlayMask(),
-        'layers' => [],
-        'activeLayerId' => null,
-    ];
-}
-
-function createEmptyOverlayLayer(int $index = 0): array
-{
-    return [
-        'id' => generateOverlayLayerId(),
-        'name' => 'Overlay ' . ($index + 1),
-        'visible' => true,
-        'mask' => createEmptyOverlayMask(),
-        'mapUrl' => null,
-    ];
-}
-
-function normalizeOverlayLayerPayload($rawLayer, int $index = 0): ?array
-{
-    if (!is_array($rawLayer)) {
-        return null;
-    }
-
-    $id = null;
-    if (array_key_exists('id', $rawLayer) && is_string($rawLayer['id'])) {
-        $trimmed = trim($rawLayer['id']);
-        if ($trimmed !== '') {
-            $id = $trimmed;
-        }
-    }
-
-    $name = null;
-    if (array_key_exists('name', $rawLayer) && is_string($rawLayer['name'])) {
-        $name = trim($rawLayer['name']);
-    }
-
-    $visible = true;
-    if (array_key_exists('visible', $rawLayer)) {
-        $visible = (bool) $rawLayer['visible'];
-    }
-
-    $mapUrl = null;
-    if (array_key_exists('mapUrl', $rawLayer) && is_string($rawLayer['mapUrl'])) {
-        $trimmedMap = trim($rawLayer['mapUrl']);
-        if ($trimmedMap !== '') {
-            $mapUrl = $trimmedMap;
-        }
-    }
-
-    $mask = array_key_exists('mask', $rawLayer)
-        ? normalizeOverlayMaskPayload($rawLayer['mask'])
-        : normalizeOverlayMaskPayload($rawLayer);
-
-    $layerId = $id ?? generateOverlayLayerId();
-    $layerName = $name !== null && $name !== '' ? $name : 'Overlay ' . ($index + 1);
-
-    return [
-        'id' => $layerId,
-        'name' => $layerName,
-        'visible' => $visible,
-        'mask' => $mask,
-        'mapUrl' => $mapUrl,
-    ];
-}
-
-function generateOverlayLayerId(): string
-{
-    return uniqid('overlay-layer-', false);
-}
-
-/**
- * @param array<int,array<string,mixed>> $layers
- */
-function resolveOverlayActiveLayerId($preferred, array $layers): ?string
-{
-    if (count($layers) === 0) {
-        return null;
-    }
-
-    if (is_string($preferred)) {
-        $trimmed = trim($preferred);
-        if ($trimmed !== '') {
-            foreach ($layers as $layer) {
-                if (!is_array($layer) || !isset($layer['id']) || $layer['id'] !== $trimmed) {
-                    continue;
-                }
-
-                $visible = !array_key_exists('visible', $layer) || (bool) $layer['visible'] === true;
-                if ($visible) {
-                    return $trimmed;
-                }
-
-                break;
-            }
-        }
-    }
-
-    foreach ($layers as $layer) {
-        if (!is_array($layer)) {
-            continue;
-        }
-
-        $visible = !array_key_exists('visible', $layer) || (bool) $layer['visible'] === true;
-        if ($visible && isset($layer['id'])) {
-            return (string) $layer['id'];
-        }
-    }
-
-    foreach ($layers as $layer) {
-        if (is_array($layer) && isset($layer['id'])) {
-            return (string) $layer['id'];
-        }
-    }
-
-    return null;
-}
-
-/**
- * @param array<int,array<string,mixed>> $layers
- */
-function buildAggregateOverlayMask(array $layers): array
-{
-    $aggregate = createEmptyOverlayMask();
-    $hasVisibleLayer = false;
-
-    foreach ($layers as $layer) {
-        if (!is_array($layer)) {
-            continue;
-        }
-
-        $layerVisible = array_key_exists('visible', $layer) ? (bool) $layer['visible'] : true;
-        if (!$layerVisible) {
-            continue;
-        }
-
-        $mask = array_key_exists('mask', $layer)
-            ? normalizeOverlayMaskPayload($layer['mask'])
-            : createEmptyOverlayMask();
-
-        if (array_key_exists('visible', $mask) && !$mask['visible']) {
-            continue;
-        }
-
-        $hasVisibleLayer = true;
-        if (!array_key_exists('url', $aggregate) && array_key_exists('url', $mask)) {
-            $aggregate['url'] = $mask['url'];
-        }
-
-        if (array_key_exists('polygons', $mask) && is_array($mask['polygons'])) {
-            foreach ($mask['polygons'] as $polygon) {
-                if (!is_array($polygon)) {
-                    continue;
-                }
-
-                $points = [];
-                if (array_key_exists('points', $polygon) && is_array($polygon['points'])) {
-                    foreach ($polygon['points'] as $point) {
-                        $normalizedPoint = normalizeOverlayMaskPoint($point);
-                        if ($normalizedPoint !== null) {
-                            $points[] = $normalizedPoint;
-                        }
-                    }
-                }
-
-                if (count($points) >= 3) {
-                    $aggregate['polygons'][] = ['points' => $points];
-                }
-            }
-        }
-    }
-
-    $aggregate['visible'] = $hasVisibleLayer;
-    return $aggregate;
-}
-
-function maskHasMeaningfulContent(array $mask): bool
-{
-    if (array_key_exists('url', $mask) && is_string($mask['url']) && trim($mask['url']) !== '') {
-        return true;
-    }
-
-    if (!array_key_exists('polygons', $mask) || !is_array($mask['polygons'])) {
-        return false;
-    }
-
-    foreach ($mask['polygons'] as $polygon) {
-        if (is_array($polygon) && array_key_exists('points', $polygon) && is_array($polygon['points'])) {
-            if (count($polygon['points']) >= 3) {
-                return true;
-            }
-        }
-    }
-
-    return false;
-}
-
-function normalizeOverlayMaskPayload($rawMask): array
-{
-    $mask = createEmptyOverlayMask();
-
-    if (!is_array($rawMask)) {
-        return $mask;
-    }
-
-    if (array_key_exists('visible', $rawMask)) {
-        $mask['visible'] = (bool) $rawMask['visible'];
-    }
-
-    if (array_key_exists('url', $rawMask) && is_string($rawMask['url'])) {
-        $trimmed = trim($rawMask['url']);
-        if ($trimmed !== '') {
-            $mask['url'] = $trimmed;
-        }
-    }
-
-    $polygons = [];
-    if (array_key_exists('polygons', $rawMask) && is_array($rawMask['polygons'])) {
-        foreach ($rawMask['polygons'] as $polygon) {
-            $pointsSource = null;
-            if (is_array($polygon)) {
-                if (array_key_exists('points', $polygon) && is_array($polygon['points'])) {
-                    $pointsSource = $polygon['points'];
-                } elseif (array_keys($polygon) === range(0, count($polygon) - 1)) {
-                    $pointsSource = $polygon;
-                }
-            }
-
-            if (!is_array($pointsSource)) {
-                continue;
-            }
-
-            $points = [];
-            foreach ($pointsSource as $point) {
-                $normalizedPoint = normalizeOverlayMaskPoint($point);
-                if ($normalizedPoint !== null) {
-                    $points[] = $normalizedPoint;
-                }
-            }
-
-            if (count($points) >= 3) {
-                $polygons[] = ['points' => $points];
-            }
-        }
-    }
-
-    if (!empty($polygons)) {
-        $mask['polygons'] = $polygons;
-    }
-
-    return $mask;
-}
-
-function normalizeOverlayMaskPoint($point): ?array
-{
-    if (!is_array($point)) {
-        return null;
-    }
-
-    $column = coerceFloat($point['column'] ?? ($point['x'] ?? null), null, 4);
-    $row = coerceFloat($point['row'] ?? ($point['y'] ?? null), null, 4);
-
-    if ($column === null || $row === null) {
-        return null;
-    }
-
-    return ['column' => $column, 'row' => $row];
-}
 
 /**
  * @param mixed $raw
