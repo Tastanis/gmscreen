@@ -35,6 +35,9 @@ foreach ($chatParticipantsMap as $participantId => $participantLabel) {
     );
 }
 
+require_once __DIR__ . '/includes/chat_pusher.php';
+$chatPusherConfig = getChatPusherClientConfig();
+
 // Define character list
 $characters = array('frunk', 'sharon', 'indigo', 'zepha');
 
@@ -912,6 +915,9 @@ $defaultInventoryTab = $is_gm ? 'frunk' : $user;
     <link rel="stylesheet" href="Halloween/theme.css" id="halloween-theme" disabled>
     <link rel="stylesheet" href="Christmas/theme.css" id="christmas-theme" disabled>
     <link rel="stylesheet" href="Frunk/theme.css" id="frunk-theme" disabled>
+<?php if ($chatPusherConfig !== null): ?>
+    <script src="https://js.pusher.com/8.4.0/pusher.min.js"></script>
+<?php endif; ?>
 </head>
 <body class="dashboard-page">
     <!-- Top Navigation Bar -->
@@ -1440,6 +1446,7 @@ $defaultInventoryTab = $is_gm ? 'frunk' : $user;
         let currentCharacter = '<?php echo $currentCharacter; ?>';
         window.currentCharacter = currentCharacter;
         window.chatParticipants = chatParticipants;
+        window.chatPusherConfig = <?php echo json_encode($chatPusherConfig); ?>;
         let characterData = {};
         let currentClubIndex = 0;
         let currentPastClassIndex = -1;

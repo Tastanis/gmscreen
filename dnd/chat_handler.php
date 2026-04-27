@@ -2,6 +2,8 @@
 // Chat handler for dashboard real-time messaging
 // Handles chat_send, chat_fetch, and chat_upload actions
 
+require_once __DIR__ . '/includes/chat_pusher.php';
+
 if (PHP_SAPI !== 'cli') {
     if (session_status() === PHP_SESSION_NONE) {
         session_start();
@@ -537,6 +539,8 @@ function handleChatSend($dataFile, $maxMessages, array $validParticipants) {
         exit;
     }
 
+    broadcastChatUpdate($messageType === 'whisper' ? 'whisper' : 'message');
+
     echo json_encode(['success' => true, 'message' => $entry]);
     exit;
 }
@@ -600,6 +604,8 @@ function handleChatClear($dataFile)
         echo json_encode(['success' => false, 'error' => 'Failed to clear chat history.']);
         exit;
     }
+
+    broadcastChatUpdate('clear');
 
     echo json_encode(['success' => true]);
     exit;
@@ -682,6 +688,8 @@ function handleRollStatusUpdate($dataFile)
         echo json_encode(['success' => false, 'error' => 'Failed to update message']);
         exit;
     }
+
+    broadcastChatUpdate('roll-status');
 
     echo json_encode([
         'success' => true,

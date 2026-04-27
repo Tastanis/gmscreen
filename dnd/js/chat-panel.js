@@ -1,6 +1,11 @@
 (function () {
-    // Chat polling interval - lowered for faster message sync
-    const FETCH_INTERVAL_MS = 1500;
+    // When Pusher is connected, polling is just a safety net for missed
+    // events; we slow to 30s to keep socket-pool pressure off chat
+    // (avoids ERR_INSUFFICIENT_RESOURCES on busy VTT tabs). When Pusher
+    // is unavailable we fall back to the legacy fast-poll cadence so
+    // chat still feels live.
+    const FETCH_INTERVAL_PUSHER_MS = 30000;
+    const FETCH_INTERVAL_FALLBACK_MS = 1500;
     const MAX_MESSAGES = 100;
     let escapeListenerAttached = false;
     const CHAT_ENDPOINT = (typeof window !== 'undefined' && window.chatHandlerUrl)
@@ -131,6 +136,10 @@
         let isOpen = false;
         let fetchTimer = null;
         let fetchInProgress = false;
+        let fetchIntervalMs = FETCH_INTERVAL_FALLBACK_MS;
+        let chatPusherClient = null;
+        let chatPusherChannel = null;
+        let chatPusherWasConnected = false;
         let latestServerTimestamp = '';
         let messages = [];
         let lightboxElements = null;
@@ -1681,7 +1690,66 @@
 
         function ensureInterval() {
             if (fetchTimer === null) {
-                fetchTimer = window.setInterval(fetchMessages, FETCH_INTERVAL_MS);
+                fetchTimer = window.setInterval(fetchMessages, fetchIntervalMs);
+            }
+        }
+
+        function setFetchCadence(nextMs) {
+            if (typeof nextMs !== 'number' || nextMs <= 0 || nextMs === fetchIntervalMs) {
+                return;
+            }
+            fetchIntervalMs = nextMs;
+            if (fetchTimer !== null) {
+                window.clearInterval(fetchTimer);
+                fetchTimer = null;
+                ensureInterval();
+            }
+        }
+
+        function initChatPusher() {
+            const config = (typeof window !== 'undefined' && window.chatPusherConfig)
+                ? window.chatPusherConfig
+                : null;
+            if (!config || !config.key || !config.channel) {
+                return;
+            }
+            if (typeof window === 'undefined' || typeof window.Pusher !== 'function') {
+                return;
+            }
+
+            try {
+                chatPusherClient = new window.Pusher(config.key, {
+                    cluster: config.cluster || 'us3',
+                    forceTLS: true,
+                    disableStats: true,
+                });
+
+                chatPusherChannel = chatPusherClient.subscribe(config.channel);
+                chatPusherChannel.bind('chat-updated', () => {
+                    fetchMessages();
+                });
+
+                chatPusherClient.connection.bind('connected', () => {
+                    // Safety-net cadence is sufficient once the websocket
+                    // is alive — pushed events drive the UI.
+                    setFetchCadence(FETCH_INTERVAL_PUSHER_MS);
+                    // On *re*-connect (not the initial connect), catch up
+                    // on any messages that landed during the gap.
+                    if (chatPusherWasConnected) {
+                        fetchMessages();
+                    }
+                    chatPusherWasConnected = true;
+                });
+
+                // If the websocket goes away, fall back to fast polling so
+                // chat keeps flowing while reconnect is in progress.
+                const handleDrop = () => setFetchCadence(FETCH_INTERVAL_FALLBACK_MS);
+                chatPusherClient.connection.bind('disconnected', handleDrop);
+                chatPusherClient.connection.bind('unavailable', handleDrop);
+                chatPusherClient.connection.bind('failed', handleDrop);
+            } catch (error) {
+                chatPusherClient = null;
+                chatPusherChannel = null;
             }
         }
 
@@ -2416,6 +2484,7 @@
 
         setOpen(false);
         renderMessages();
+        initChatPusher();
         ensureInterval();
         fetchMessages();
 
