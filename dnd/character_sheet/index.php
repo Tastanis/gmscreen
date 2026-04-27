@@ -24,6 +24,9 @@ foreach ($chatParticipantsMap as $participantId => $participantLabel) {
   );
 }
 
+require_once __DIR__ . '/../includes/chat_pusher.php';
+$chatPusherConfig = getChatPusherClientConfig();
+
 // Include navigation bar
 require_once '../includes/strix-nav.php';
 ?>
@@ -36,6 +39,9 @@ require_once '../includes/strix-nav.php';
   <link rel="stylesheet" href="../css/chat-panel.css?v=<?php echo (int) $assetVersion; ?>" />
   <link rel="stylesheet" href="styles.css?v=<?php echo (int) $assetVersion; ?>" />
   <script type="module" src="sheet.js?v=<?php echo (int) $assetVersion; ?>"></script>
+<?php if ($chatPusherConfig !== null): ?>
+  <script src="https://js.pusher.com/8.4.0/pusher.min.js"></script>
+<?php endif; ?>
 </head>
 <body class="character-sheet-page" data-character="<?php echo htmlspecialchars($activeCharacter, ENT_QUOTES, 'UTF-8'); ?>">
   <?php renderStrixNav('charactersheet'); ?>
@@ -126,6 +132,7 @@ require_once '../includes/strix-nav.php';
   <script>
     window.chatHandlerUrl = '/dnd/chat_handler.php';
     window.chatParticipants = <?php echo json_encode($chatParticipantList, JSON_HEX_TAG | JSON_HEX_APOS | JSON_HEX_QUOT | JSON_HEX_AMP); ?>;
+    window.chatPusherConfig = <?php echo json_encode($chatPusherConfig, JSON_HEX_TAG | JSON_HEX_APOS | JSON_HEX_QUOT | JSON_HEX_AMP); ?>;
     window.characterSheetChatConfig = {
       isGM: <?php echo $isGm ? 'true' : 'false'; ?>,
       currentUser: <?php echo json_encode($currentUser, JSON_HEX_TAG | JSON_HEX_APOS | JSON_HEX_QUOT | JSON_HEX_AMP); ?>

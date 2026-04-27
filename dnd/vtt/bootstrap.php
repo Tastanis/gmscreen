@@ -175,6 +175,7 @@ function getVttBootstrapConfig(?array $authContext = null): array
 
     // Load Pusher config if available
     $pusherConfig = null;
+    $chatPusherConfig = null;
     $pusherConfigPath = __DIR__ . '/config/pusher.php';
     if (is_file($pusherConfigPath)) {
         $pusherData = require $pusherConfigPath;
@@ -184,6 +185,14 @@ function getVttBootstrapConfig(?array $authContext = null): array
                 'cluster' => $pusherData['cluster'] ?? 'us3',
                 'channel' => $pusherData['channel'] ?? 'vtt-board',
             ];
+            $chatChannel = $pusherData['chat_channel'] ?? 'dnd-chat';
+            if (!empty($pusherData['key']) && $chatChannel !== '') {
+                $chatPusherConfig = [
+                    'key' => $pusherData['key'],
+                    'cluster' => $pusherData['cluster'] ?? 'us3',
+                    'channel' => $chatChannel,
+                ];
+            }
         }
     }
 
@@ -198,6 +207,7 @@ function getVttBootstrapConfig(?array $authContext = null): array
         'chatParticipants' => loadChatParticipants(),
         'chatHandlerUrl' => $routes['chat'] ?? '/dnd/chat_handler.php',
         'pusher' => $pusherConfig,
+        'chatPusher' => $chatPusherConfig,
     ];
 }
 

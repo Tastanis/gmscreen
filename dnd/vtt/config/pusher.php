@@ -26,6 +26,12 @@ return [
     // Channel name for VTT board state updates
     'channel' => 'vtt-board',
 
+    // Channel name for dashboard/VTT/character-sheet chat updates.
+    // Carries `chat-updated` notification events (no payload) emitted on
+    // chat send / clear / roll-status changes. Subscribers refetch via the
+    // chat HTTP endpoint, which preserves whisper visibility filtering.
+    'chat_channel' => 'dnd-chat',
+
     // HTTP request timeout in seconds
     'timeout' => 5,
 

@@ -44,6 +44,9 @@ require_once __DIR__ . '/../../includes/strix-nav.php';
             cluster: 'us3',
             channel: 'vtt-board'
         };
+        // Pusher chat channel — `chat-updated` notifications drive
+        // immediate refetch instead of 1.5s polling.
+        window.chatPusherConfig = <?= json_encode($config['chatPusher'] ?? null, JSON_HEX_TAG | JSON_HEX_APOS | JSON_HEX_QUOT | JSON_HEX_AMP) ?>;
     </script>
     <script src="../js/chat-panel.js?v=<?= $assetVersion ?>"></script>
     <script type="module" src="assets/js/bootstrap.js?v=<?= $assetVersion ?>"></script>
