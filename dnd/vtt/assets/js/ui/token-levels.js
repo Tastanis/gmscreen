@@ -433,6 +433,247 @@ function isCellOpenThroughHigherMapLevels(levels, startIndex, endIndex, cell, mo
   return true;
 }
 
+// Levels v2 §5.5.4: scale below-level tokens by 10% per level of distance,
+// floored at 50%. Same-level and above-level tokens render at 100%.
+export function getMapLevelDistanceScale(direction, distance) {
+  if (direction !== 'below') {
+    return 1;
+  }
+  const steps = Math.max(0, Math.trunc(Number.isFinite(distance) ? distance : 0));
+  if (steps <= 0) {
+    return 1;
+  }
+  return Math.max(0.5, 1 - steps * 0.1);
+}
+
+// Build the level list used by the v2 presentation pipeline:
+// `[Level 0, ...stored Level 1+]` ordered by zIndex.
+function getOrderedLevelsWithBase(rawLevels = []) {
+  return [buildVirtualBaseLevelEntry(), ...getOrderedTokenMapLevels(rawLevels)];
+}
+
+// Levels v2 §5.5.4 step 5: expanded cutout cells are the raw cutout cells
+// plus every cell sharing an edge or corner with a raw cell (8-neighborhood).
+// Returned as a Set keyed by `${column},${row}` so callers can do O(1) lookups
+// when intersecting across multiple blocking levels.
+function buildExpandedCutoutCellSet(level) {
+  const result = new Set();
+  const cutouts = Array.isArray(level?.cutouts) ? level.cutouts : [];
+  cutouts.forEach((cutout) => {
+    const column = normalizeNonNegativeInt(cutout?.column ?? cutout?.col ?? cutout?.x, null);
+    const row = normalizeNonNegativeInt(cutout?.row ?? cutout?.y, null);
+    if (column === null || row === null) {
+      return;
+    }
+    const width = Math.max(1, normalizeNonNegativeInt(cutout?.width ?? cutout?.columns ?? cutout?.w, 1));
+    const height = Math.max(1, normalizeNonNegativeInt(cutout?.height ?? cutout?.rows ?? cutout?.h, 1));
+
+    for (let dx = -1; dx < width + 1; dx += 1) {
+      for (let dy = -1; dy < height + 1; dy += 1) {
+        const cellColumn = column + dx;
+        const cellRow = row + dy;
+        if (cellColumn < 0 || cellRow < 0) {
+          continue;
+        }
+        result.add(`${cellColumn},${cellRow}`);
+      }
+    }
+  });
+  return result;
+}
+
+// Levels v2 §5.5: compute a token's presentation relative to a viewer level.
+// Inputs:
+//   - placement: token data (column/row/width/height/levelId).
+//   - mapLevelsState: scene's normalized map levels (Level 1+ only; Level 0
+//     is virtual and always prepended internally).
+//   - options.viewerLevelId: the per-user resolved active level. Defaults
+//     to Level 0 when missing or unknown.
+//   - options.gmViewing: GM bypass — every token is visible regardless of
+//     cutouts (§5.5.2/§5.5.3).
+//   - options.mode: 'vision' (default) or 'interaction' for click-through
+//     gating; matches the Step 1 blocker semantics.
+//   - options.cells: optional explicit cell list (used by interaction
+//     point checks).
+// Returns presentation metadata: {visible, fullyVisible, hasLevels,
+// sameLevel, direction, distance, scale, indicator, levelId,
+// activeLevelId, levelIndex, activeLevelIndex, bounds, visibleCells}.
+// `visibleCells` is non-null only when same-level partial-cell visibility
+// applies (legacy partial-mask behavior). Cross-level visibility is binary
+// per §5.5.4.
+export function getTokenLevelPresentation(placement = {}, mapLevelsState = null, options = {}) {
+  const levels = getOrderedLevelsWithBase(mapLevelsState?.levels ?? []);
+  const placementLevelId = resolvePlacementLevelId(placement);
+  const placementLevelIndex = levels.findIndex((level) => level.id === placementLevelId);
+
+  const viewerOverride = normalizeTokenLevelId(options?.viewerLevelId);
+  const viewerLevelId = viewerOverride && levels.some((level) => level.id === viewerOverride)
+    ? viewerOverride
+    : BASE_MAP_LEVEL_ID;
+  const viewerLevelIndex = levels.findIndex((level) => level.id === viewerLevelId);
+
+  if (placementLevelIndex < 0 || viewerLevelIndex < 0) {
+    return createTokenLevelPresentationResult({
+      visible: false,
+      hasLevels: levels.length > 1,
+      levelId: placementLevelId,
+      activeLevelId: viewerLevelId,
+      levelIndex: placementLevelIndex,
+      activeLevelIndex: viewerLevelIndex,
+    });
+  }
+
+  const direction =
+    placementLevelIndex === viewerLevelIndex
+      ? 'same'
+      : placementLevelIndex > viewerLevelIndex
+        ? 'above'
+        : 'below';
+  const distance = Math.abs(placementLevelIndex - viewerLevelIndex);
+  const scale = getMapLevelDistanceScale(direction, distance);
+  const indicator = direction === 'same' ? null : { direction, distance };
+  const gmViewing = Boolean(options?.gmViewing);
+  const placementBounds = normalizePlacementBounds(placement);
+
+  if (direction === 'same') {
+    return createTokenLevelPresentationResult({
+      visible: true,
+      fullyVisible: true,
+      hasLevels: true,
+      sameLevel: true,
+      direction,
+      distance: 0,
+      scale: 1,
+      indicator: null,
+      levelId: placementLevelId,
+      activeLevelId: viewerLevelId,
+      levelIndex: placementLevelIndex,
+      activeLevelIndex: viewerLevelIndex,
+      bounds: placementBounds,
+    });
+  }
+
+  if (gmViewing) {
+    return createTokenLevelPresentationResult({
+      visible: true,
+      fullyVisible: true,
+      hasLevels: true,
+      direction,
+      distance,
+      scale,
+      indicator,
+      levelId: placementLevelId,
+      activeLevelId: viewerLevelId,
+      levelIndex: placementLevelIndex,
+      activeLevelIndex: viewerLevelIndex,
+      bounds: placementBounds,
+    });
+  }
+
+  const lower = Math.min(placementLevelIndex, viewerLevelIndex);
+  const higher = Math.max(placementLevelIndex, viewerLevelIndex);
+  const mode = options?.mode === 'interaction' ? 'interaction' : 'vision';
+  const blockingExpandedSets = [];
+  for (let index = lower + 1; index <= higher; index += 1) {
+    const level = levels[index];
+    if (!doesMapLevelBlockLowerLevels(level, mode)) {
+      continue;
+    }
+    blockingExpandedSets.push(buildExpandedCutoutCellSet(level));
+  }
+
+  if (!blockingExpandedSets.length) {
+    return createTokenLevelPresentationResult({
+      visible: true,
+      fullyVisible: true,
+      hasLevels: true,
+      direction,
+      distance,
+      scale,
+      indicator,
+      levelId: placementLevelId,
+      activeLevelId: viewerLevelId,
+      levelIndex: placementLevelIndex,
+      activeLevelIndex: viewerLevelIndex,
+      bounds: placementBounds,
+    });
+  }
+
+  const cells = Array.isArray(options?.cells)
+    ? normalizePlacementCells(options.cells, placementBounds)
+    : getPlacementCells(placementBounds);
+
+  if (!cells.length) {
+    return createTokenLevelPresentationResult({
+      visible: false,
+      hasLevels: true,
+      direction,
+      distance,
+      scale,
+      indicator: null,
+      levelId: placementLevelId,
+      activeLevelId: viewerLevelId,
+      levelIndex: placementLevelIndex,
+      activeLevelIndex: viewerLevelIndex,
+      bounds: placementBounds,
+    });
+  }
+
+  const anyVisible = cells.some((cell) => {
+    const key = `${cell.column},${cell.row}`;
+    return blockingExpandedSets.every((set) => set.has(key));
+  });
+
+  return createTokenLevelPresentationResult({
+    visible: anyVisible,
+    fullyVisible: anyVisible,
+    hasLevels: true,
+    direction,
+    distance,
+    scale,
+    indicator: anyVisible ? indicator : null,
+    levelId: placementLevelId,
+    activeLevelId: viewerLevelId,
+    levelIndex: placementLevelIndex,
+    activeLevelIndex: viewerLevelIndex,
+    bounds: placementBounds,
+  });
+}
+
+function createTokenLevelPresentationResult({
+  visible,
+  fullyVisible = false,
+  hasLevels = false,
+  sameLevel = false,
+  direction = 'same',
+  distance = 0,
+  scale = 1,
+  indicator = null,
+  levelId = null,
+  activeLevelId = null,
+  levelIndex = -1,
+  activeLevelIndex = -1,
+  bounds = null,
+  visibleCells = null,
+} = {}) {
+  return {
+    visible: Boolean(visible),
+    fullyVisible: Boolean(fullyVisible),
+    hasLevels: Boolean(hasLevels),
+    sameLevel: Boolean(sameLevel),
+    direction,
+    distance: Math.max(0, Math.trunc(Number.isFinite(distance) ? distance : 0)),
+    scale: Number.isFinite(scale) && scale > 0 ? scale : 1,
+    indicator: indicator && typeof indicator === 'object' ? indicator : null,
+    levelId,
+    activeLevelId,
+    levelIndex,
+    activeLevelIndex,
+    bounds,
+    visibleCells: Array.isArray(visibleCells) ? visibleCells : null,
+  };
+}
+
 function doesMapLevelBlockLowerLevels(level, mode) {
   if (!level || typeof level !== 'object' || level.visible === false) {
     return false;
