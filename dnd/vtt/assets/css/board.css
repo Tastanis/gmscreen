@@ -2730,9 +2730,56 @@
   background: radial-gradient(circle at 30% 30%, rgba(255, 255, 255, 0.3), rgba(15, 23, 42, 0.85));
   pointer-events: auto;
   transform: translate3d(0, 0, 0);
+  transform-origin: 50% 50%;
   transition: transform 180ms ease, width 180ms ease, height 180ms ease;
   will-change: transform;
   z-index: 0;
+}
+
+/* Levels v2 §5.5.2/§5.5.3: cross-level arrow indicators. Below-level tokens
+   carry a green down-arrow + distance; above-level tokens carry a red
+   up-arrow + distance. Same-level tokens have no badge. The indicator sits
+   in the top-right of the token and inherits the token's transform (so it
+   shrinks with below-level tokens, which is the intended readability:
+   distant-below tokens are smaller, including their badge). */
+.vtt-token__level-indicator {
+  position: absolute;
+  top: calc(var(--tok-unit) * -6);
+  right: calc(var(--tok-unit) * -6);
+  display: inline-flex;
+  align-items: center;
+  gap: calc(var(--tok-unit) * 2);
+  padding: calc(var(--tok-unit) * 2) calc(var(--tok-unit) * 4);
+  border-radius: 999px;
+  font-size: calc(var(--tok-unit) * 11);
+  font-weight: 700;
+  line-height: 1;
+  letter-spacing: 0.02em;
+  color: #f8fafc;
+  background: rgba(15, 23, 42, 0.85);
+  box-shadow: 0 4px 10px rgba(15, 23, 42, 0.45);
+  pointer-events: none;
+  z-index: 4;
+}
+
+.vtt-token__level-indicator[data-direction='below'] {
+  color: #ecfccb;
+  background: rgba(22, 101, 52, 0.92);
+  box-shadow: 0 4px 10px rgba(22, 101, 52, 0.45);
+}
+
+.vtt-token__level-indicator[data-direction='above'] {
+  color: #fee2e2;
+  background: rgba(127, 29, 29, 0.92);
+  box-shadow: 0 4px 10px rgba(127, 29, 29, 0.45);
+}
+
+.vtt-token__level-indicator-arrow {
+  font-size: calc(var(--tok-unit) * 9);
+}
+
+.vtt-token__level-indicator-distance {
+  font-variant-numeric: tabular-nums;
 }
 
 .vtt-token[data-group-color]::before {

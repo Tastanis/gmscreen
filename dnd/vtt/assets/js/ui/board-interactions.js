@@ -65,6 +65,7 @@ import {
   getOrderedTokenMapLevels,
   getPlayerTokenMapLevelVisibility,
   getTokenLevelControlState,
+  getTokenLevelPresentation,
   isPlacementInteractableOnPlayerMapLevel,
   resolveSceneTokenLevelState,
   resolveTokenLevelId,
@@ -6170,6 +6171,7 @@ export function mountBoardInteractions(store, routes = {}) {
     // Pre-compute fog checker once (null when fog inactive or GM viewing)
     const isCellFogged = gmViewing ? null : createFogChecker(state);
     const tokenLevelState = getActiveSceneTokenLevelState(state);
+    const viewerLevelId = activeSceneKey ? getViewerLevelIdForCurrentUser(state, activeSceneKey) : null;
 
     placements.forEach((placement, placementIndex) => {
       const normalized = normalizePlacementForRender(placement);
@@ -6198,13 +6200,15 @@ export function mountBoardInteractions(store, routes = {}) {
       }
 
       const levelPlacement = { ...placement, column, row, width, height };
-      const levelId = resolveTokenLevelId(levelPlacement, tokenLevelState);
-      const tokenLevelVisibility = gmViewing
-        ? null
-        : getPlayerTokenMapLevelVisibility(levelPlacement, tokenLevelState);
-      if (!gmViewing && !tokenLevelVisibility?.visible) {
+      const presentation = getTokenLevelPresentation(levelPlacement, tokenLevelState, {
+        viewerLevelId,
+        gmViewing,
+        mode: 'vision',
+      });
+      if (!presentation.visible) {
         return;
       }
+      const levelId = presentation.levelId ?? resolveTokenLevelId(levelPlacement, tokenLevelState);
 
       // Hide tokens that are wholly under fog of war for non-GM users.
       // Check every cell the token occupies; if ALL are fogged, skip rendering.
@@ -6226,6 +6230,9 @@ export function mountBoardInteractions(store, routes = {}) {
       renderedIds.add(normalized.id);
 
       const tokenZIndex = getTokenRenderStackOrder(stackOrder, levelId, tokenLevelState);
+      const presentationScale = Number.isFinite(presentation.scale) && presentation.scale > 0
+        ? presentation.scale
+        : 1;
       renderedPlacements.push({
         id: normalized.id,
         column,
@@ -6234,7 +6241,13 @@ export function mountBoardInteractions(store, routes = {}) {
         height,
         levelId,
         sortOrder: tokenZIndex,
-        visibleCells: tokenLevelVisibility?.visibleCells ?? null,
+        visibleCells: null,
+        scale: presentationScale,
+        scaleOriginX: 0.5,
+        scaleOriginY: 0.5,
+        levelDirection: presentation.direction,
+        levelDistance: presentation.distance,
+        sameLevel: presentation.sameLevel,
       });
 
       let token = existingNodes.get(normalized.id);
@@ -6251,15 +6264,11 @@ export function mountBoardInteractions(store, routes = {}) {
       token.style.height = `${height * gridSize}px`;
       const left = leftOffset + column * gridSize;
       const top = topOffset + row * gridSize;
-      const baseTransform = `translate3d(${left}px, ${top}px, 0)`;
+      const baseTransform = buildTokenLevelTransform(left, top, presentationScale);
       token.style.transform = baseTransform;
-      applyTokenMapLevelVisibilityMask(token, tokenLevelVisibility, {
-        column,
-        row,
-        width,
-        height,
-        gridSize,
-      });
+      token.style.transformOrigin = '50% 50%';
+      clearTokenMapLevelVisibilityMask(token);
+      applyTokenLevelPresentation(token, presentation);
 
       token.classList.toggle('vtt-token--hidden', Boolean(normalized.hidden));
 
@@ -6412,6 +6421,8 @@ export function mountBoardInteractions(store, routes = {}) {
     const gmViewing = isGmUser();
     const isCellFogged = gmViewing ? null : createFogChecker(state);
     const tokenLevelState = getActiveSceneTokenLevelState(state);
+    const auraSceneKey = state?.boardState?.activeSceneId ?? null;
+    const auraViewerLevelId = auraSceneKey ? getViewerLevelIdForCurrentUser(state, auraSceneKey) : null;
 
     placements.forEach((placement) => {
       const normalized = normalizePlacementForRender(placement);
@@ -6426,7 +6437,7 @@ export function mountBoardInteractions(store, routes = {}) {
 
       if (
         !gmViewing &&
-        !getPlayerTokenMapLevelVisibility(
+        !getTokenLevelPresentation(
           {
             ...placement,
             column: normalized.column,
@@ -6434,7 +6445,12 @@ export function mountBoardInteractions(store, routes = {}) {
             width: normalized.width,
             height: normalized.height,
           },
-          tokenLevelState
+          tokenLevelState,
+          {
+            viewerLevelId: auraViewerLevelId,
+            gmViewing: false,
+            mode: 'vision',
+          },
         ).visible
       ) {
         return;
@@ -6534,6 +6550,71 @@ export function mountBoardInteractions(store, routes = {}) {
     }
 
     return levelIndex * TOKEN_LEVEL_STACK_STRIDE + normalizedStackOrder;
+  }
+
+  // Levels v2 §5.5: build the token transform string with the per-level
+  // scale baked in. Drag math reads scale from `dragElements` so the
+  // translate3d update preserves the cross-level shrink while the user
+  // drags. `transform-origin: 50% 50%` keeps the scaled token centered on
+  // its grid cell so hit testing matches.
+  function buildTokenLevelTransform(left, top, scale) {
+    const safeScale = Number.isFinite(scale) && scale > 0 ? scale : 1;
+    if (safeScale === 1) {
+      return `translate3d(${left}px, ${top}px, 0)`;
+    }
+    return `translate3d(${left}px, ${top}px, 0) scale(${safeScale})`;
+  }
+
+  // Levels v2 §5.5.2/§5.5.3: paint the level direction badge — green
+  // down-arrow + distance for tokens below the viewer, red up-arrow +
+  // distance for tokens above. Same-level tokens carry no badge. The badge
+  // sits inside the token element so it inherits the parent transform
+  // (including scale), but `vector-effect`-style sizing is handled in CSS
+  // via the `--vtt-token-level-distance` custom property.
+  function applyTokenLevelPresentation(token, presentation) {
+    if (!token) {
+      return;
+    }
+    const direction = presentation?.direction ?? 'same';
+    if (direction === 'same' || !presentation?.indicator) {
+      delete token.dataset.mapLevelDirection;
+      delete token.dataset.mapLevelDistance;
+      const existing = token.querySelector('.vtt-token__level-indicator');
+      if (existing) {
+        existing.remove();
+      }
+      return;
+    }
+
+    const distance = Math.max(
+      1,
+      Math.trunc(Number.isFinite(presentation.distance) ? presentation.distance : 1),
+    );
+    token.dataset.mapLevelDirection = direction;
+    token.dataset.mapLevelDistance = String(distance);
+
+    let indicator = token.querySelector('.vtt-token__level-indicator');
+    if (!indicator) {
+      indicator = document.createElement('div');
+      indicator.className = 'vtt-token__level-indicator';
+      const arrow = document.createElement('span');
+      arrow.className = 'vtt-token__level-indicator-arrow';
+      arrow.setAttribute('aria-hidden', 'true');
+      indicator.appendChild(arrow);
+      const distanceLabel = document.createElement('span');
+      distanceLabel.className = 'vtt-token__level-indicator-distance';
+      indicator.appendChild(distanceLabel);
+      token.appendChild(indicator);
+    }
+    indicator.dataset.direction = direction;
+    const distanceLabel = indicator.querySelector('.vtt-token__level-indicator-distance');
+    if (distanceLabel) {
+      distanceLabel.textContent = String(distance);
+    }
+    const arrow = indicator.querySelector('.vtt-token__level-indicator-arrow');
+    if (arrow) {
+      arrow.textContent = direction === 'above' ? '\u25B2' : '\u25BC';
+    }
   }
 
   function applyTokenMapLevelVisibilityMask(token, visibility, { column, row, width, height, gridSize } = {}) {
@@ -10607,7 +10688,13 @@ export function mountBoardInteractions(store, routes = {}) {
           height: normalized.height,
         }
       : placement;
-    return getPlayerTokenMapLevelVisibility(placementForLevel, tokenLevelState).visible;
+    const activeSceneKey = state?.boardState?.activeSceneId ?? null;
+    const viewerLevelId = activeSceneKey ? getViewerLevelIdForCurrentUser(state, activeSceneKey) : null;
+    return getTokenLevelPresentation(placementForLevel, tokenLevelState, {
+      viewerLevelId,
+      gmViewing: false,
+      mode: 'vision',
+    }).visible;
   }
 
   function findRenderedPlacementAtPoint(event) {
@@ -10666,8 +10753,10 @@ export function mountBoardInteractions(store, routes = {}) {
       row: Math.floor(pointY / gridSize),
     };
     const gmViewing = isGmUser();
-    const state = gmViewing ? null : boardApi.getState?.() ?? {};
-    const tokenLevelState = gmViewing ? null : getActiveSceneTokenLevelState(state);
+    const state = boardApi.getState?.() ?? {};
+    const tokenLevelState = getActiveSceneTokenLevelState(state);
+    const activeSceneKey = state?.boardState?.activeSceneId ?? null;
+    const viewerLevelId = activeSceneKey ? getViewerLevelIdForCurrentUser(state, activeSceneKey) : null;
 
     for (let index = renderedPlacements.length - 1; index >= 0; index -= 1) {
       const placement = renderedPlacements[index];
@@ -10679,18 +10768,35 @@ export function mountBoardInteractions(store, routes = {}) {
       const row = Number.isFinite(placement.row) ? placement.row : 0;
       const width = Math.max(1, Number.isFinite(placement.width) ? placement.width : 1);
       const height = Math.max(1, Number.isFinite(placement.height) ? placement.height : 1);
-
-      const left = column * gridSize;
-      const top = row * gridSize;
-      const right = left + width * gridSize;
-      const bottom = top + height * gridSize;
+      // Levels v2 §5.5.5: hit area follows the rendered scale so shrunk
+      // below-level tokens can only be clicked on their visible footprint.
+      // We scale around the token's center to match the CSS
+      // `transform-origin: 50% 50%`.
+      const scale = Number.isFinite(placement.scale) && placement.scale > 0 ? placement.scale : 1;
+      const cellWidth = width * gridSize;
+      const cellHeight = height * gridSize;
+      const cellLeft = column * gridSize;
+      const cellTop = row * gridSize;
+      const centerX = cellLeft + cellWidth / 2;
+      const centerY = cellTop + cellHeight / 2;
+      const halfW = (cellWidth / 2) * scale;
+      const halfH = (cellHeight / 2) * scale;
+      const left = centerX - halfW;
+      const right = centerX + halfW;
+      const top = centerY - halfH;
+      const bottom = centerY + halfH;
 
       if (pointX >= left && pointX < right && pointY >= top && pointY < bottom) {
-        if (
-          !gmViewing &&
-          !isPlacementInteractableOnPlayerMapLevel(placement, tokenLevelState, { point: pointCell })
-        ) {
-          continue;
+        if (!gmViewing) {
+          const interactable = getTokenLevelPresentation(placement, tokenLevelState, {
+            viewerLevelId,
+            gmViewing: false,
+            mode: 'interaction',
+            cells: [pointCell],
+          }).visible;
+          if (!interactable) {
+            continue;
+          }
         }
 
         // For non-GM users, skip tokens hidden by fog of war
@@ -13652,17 +13758,30 @@ export function mountBoardInteractions(store, routes = {}) {
             height: normalized.height,
           }
         : placement;
-      let canOpen = getPlayerTokenMapLevelVisibility(placementForLevel, tokenLevelState).visible;
+      const settingsSceneKey = state?.boardState?.activeSceneId ?? null;
+      const settingsViewerLevelId = settingsSceneKey
+        ? getViewerLevelIdForCurrentUser(state, settingsSceneKey)
+        : null;
+      let canOpen = getTokenLevelPresentation(placementForLevel, tokenLevelState, {
+        viewerLevelId: settingsViewerLevelId,
+        gmViewing: false,
+        mode: 'vision',
+      }).visible;
       if (Number.isFinite(clientX) && Number.isFinite(clientY)) {
         const localPoint = getLocalMapPoint({ clientX, clientY });
         const gridPoint = localPoint ? mapPointToGrid(localPoint) : null;
         if (gridPoint) {
-          canOpen = isPlacementInteractableOnPlayerMapLevel(placementForLevel, tokenLevelState, {
-            point: {
-              column: Math.floor(gridPoint.column),
-              row: Math.floor(gridPoint.row),
-            },
-          });
+          canOpen = getTokenLevelPresentation(placementForLevel, tokenLevelState, {
+            viewerLevelId: settingsViewerLevelId,
+            gmViewing: false,
+            mode: 'interaction',
+            cells: [
+              {
+                column: Math.floor(gridPoint.column),
+                row: Math.floor(gridPoint.row),
+              },
+            ],
+          }).visible;
         }
       }
 

@@ -165,12 +165,22 @@ export function createTokenInteractions({
         return;
       }
 
-      const tokenWidth = (placement.width ?? 1) * gridSize;
-      const tokenHeight = (placement.height ?? 1) * gridSize;
-      const tokenLeft = (placement.column ?? 0) * gridSize + offsets.left;
-      const tokenTop = (placement.row ?? 0) * gridSize + offsets.top;
-      const tokenRight = tokenLeft + tokenWidth;
-      const tokenBottom = tokenTop + tokenHeight;
+      // Levels v2 §5.5.5: marquee hit box scales around the cell center to
+      // match the rendered token's footprint, so a shrunk below-level token
+      // can only be lassoed when the box overlaps its visible area.
+      const cellWidth = (placement.width ?? 1) * gridSize;
+      const cellHeight = (placement.height ?? 1) * gridSize;
+      const cellLeft = (placement.column ?? 0) * gridSize + offsets.left;
+      const cellTop = (placement.row ?? 0) * gridSize + offsets.top;
+      const scale = Number.isFinite(placement.scale) && placement.scale > 0 ? placement.scale : 1;
+      const halfW = (cellWidth / 2) * scale;
+      const halfH = (cellHeight / 2) * scale;
+      const centerX = cellLeft + cellWidth / 2;
+      const centerY = cellTop + cellHeight / 2;
+      const tokenLeft = centerX - halfW;
+      const tokenTop = centerY - halfH;
+      const tokenRight = centerX + halfW;
+      const tokenBottom = centerY + halfH;
 
       const overlapsX = tokenRight > minX && tokenLeft < maxX;
       const overlapsY = tokenBottom > minY && tokenTop < maxY;
@@ -376,14 +386,26 @@ export function createTokenInteractions({
     const topOffset = Number.isFinite(offsets.top) ? offsets.top : 0;
     dragElements = new Map();
     if (tokenLayer) {
+      const renderedById = new Map();
+      const renderedList = getRenderedPlacements?.() ?? [];
+      renderedList.forEach((entry) => {
+        if (entry && typeof entry === 'object' && entry.id) {
+          renderedById.set(entry.id, entry);
+        }
+      });
       preview.forEach((pos, id) => {
         const el = tokenLayer.querySelector(`[data-placement-id="${id}"]`);
         if (el instanceof HTMLElement) {
           const baseLeft = leftOffset + (pos.column ?? 0) * gridSize;
           const baseTop = topOffset + (pos.row ?? 0) * gridSize;
+          // Levels v2: preserve the per-level scale on the dragged element
+          // so a below-level token stays shrunk while it follows the
+          // pointer. updateTokenDrag re-applies this with translate3d.
+          const rendered = renderedById.get(id);
+          const scale = Number.isFinite(rendered?.scale) && rendered.scale > 0 ? rendered.scale : 1;
           el.classList.add('is-dragging');
           el.style.zIndex = '100000';
-          dragElements.set(id, { element: el, baseLeft, baseTop });
+          dragElements.set(id, { element: el, baseLeft, baseTop, scale });
         }
       });
     }
@@ -478,7 +500,10 @@ export function createTokenInteractions({
         }
         const left = lo + (pos.column ?? 0) * gridSize;
         const top = to + (pos.row ?? 0) * gridSize;
-        cached.element.style.transform = `translate3d(${left}px, ${top}px, 0)`;
+        const scale = Number.isFinite(cached.scale) && cached.scale > 0 ? cached.scale : 1;
+        cached.element.style.transform = scale === 1
+          ? `translate3d(${left}px, ${top}px, 0)`
+          : `translate3d(${left}px, ${top}px, 0) scale(${scale})`;
       });
     } else {
       // Fallback: no cached elements, use original render path

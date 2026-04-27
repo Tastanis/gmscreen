@@ -3,10 +3,12 @@ import assert from 'node:assert/strict';
 
 import {
   getAdjacentTokenLevel,
+  getMapLevelDistanceScale,
   getMapLevelNavigationControlState,
   getOrderedTokenMapLevels,
   getPlayerTokenMapLevelVisibility,
   getTokenLevelControlState,
+  getTokenLevelPresentation,
   isPlacementInteractableOnPlayerMapLevel,
   isPlacementOnPlayerVisibleMapLevel,
   resolvePlayerActiveMapLevelId,
@@ -359,5 +361,333 @@ describe('token level helpers', () => {
     assert.equal(isPlacementOnPlayerVisibleMapLevel(placement, mapLevels), true);
     assert.equal(isPlacementInteractableOnPlayerMapLevel(placement, mapLevels, { point: { column: 7, row: 8 } }), false);
     assert.equal(isPlacementInteractableOnPlayerMapLevel({ ...placement, column: 8 }, mapLevels, { point: { column: 8, row: 8 } }), true);
+  });
+});
+
+describe('Levels v2 token presentation', () => {
+  // §5.5.2: below-level scaling clamps at 50%; above-level stays 100%.
+  test('getMapLevelDistanceScale returns the correct scale for direction/distance', () => {
+    assert.equal(getMapLevelDistanceScale('same', 0), 1);
+    assert.equal(getMapLevelDistanceScale('above', 1), 1);
+    assert.equal(getMapLevelDistanceScale('above', 5), 1);
+    assert.equal(Math.round(getMapLevelDistanceScale('below', 1) * 100) / 100, 0.9);
+    assert.equal(Math.round(getMapLevelDistanceScale('below', 2) * 100) / 100, 0.8);
+    assert.equal(Math.round(getMapLevelDistanceScale('below', 4) * 100) / 100, 0.6);
+    assert.equal(getMapLevelDistanceScale('below', 5), 0.5);
+    assert.equal(getMapLevelDistanceScale('below', 12), 0.5);
+  });
+
+  test('same-level placement returns full visibility, no indicator, scale 1', () => {
+    const mapLevels = {
+      levels: [
+        { id: 'upper', name: 'Upper', visible: true, mapUrl: '/u.png', zIndex: 1 },
+      ],
+    };
+    const presentation = getTokenLevelPresentation(
+      { id: 't', levelId: 'upper', column: 1, row: 1 },
+      mapLevels,
+      { viewerLevelId: 'upper', gmViewing: false },
+    );
+    assert.equal(presentation.visible, true);
+    assert.equal(presentation.fullyVisible, true);
+    assert.equal(presentation.sameLevel, true);
+    assert.equal(presentation.direction, 'same');
+    assert.equal(presentation.distance, 0);
+    assert.equal(presentation.scale, 1);
+    assert.equal(presentation.indicator, null);
+  });
+
+  test('GM bypass: above and below tokens are always visible regardless of cutouts', () => {
+    const mapLevels = {
+      levels: [
+        // Level 1+ that fully blocks vision (no cutouts).
+        { id: 'upper', name: 'Upper', visible: true, mapUrl: '/u.png', zIndex: 1 },
+      ],
+    };
+    const aboveAsGm = getTokenLevelPresentation(
+      { id: 'above', levelId: 'upper', column: 5, row: 5 },
+      mapLevels,
+      { viewerLevelId: 'level-0', gmViewing: true },
+    );
+    assert.equal(aboveAsGm.visible, true);
+    assert.equal(aboveAsGm.direction, 'above');
+    assert.equal(aboveAsGm.distance, 1);
+    assert.equal(aboveAsGm.scale, 1);
+    assert.deepEqual(aboveAsGm.indicator, { direction: 'above', distance: 1 });
+
+    const belowAsGm = getTokenLevelPresentation(
+      { id: 'below', levelId: 'level-0', column: 5, row: 5 },
+      mapLevels,
+      { viewerLevelId: 'upper', gmViewing: true },
+    );
+    assert.equal(belowAsGm.visible, true);
+    assert.equal(belowAsGm.direction, 'below');
+    assert.equal(belowAsGm.distance, 1);
+    assert.equal(Math.round(belowAsGm.scale * 100) / 100, 0.9);
+    assert.deepEqual(belowAsGm.indicator, { direction: 'below', distance: 1 });
+  });
+
+  test('player below-level: edge rule reveals tokens whose cells are within one square of a cutout', () => {
+    // Viewer on Upper looking down at Level 0. Upper has a 1x1 cutout at (5, 5).
+    // Expanded cutout cells (3x3 around the raw cutout) span (4..6, 4..6).
+    const mapLevels = {
+      levels: [
+        {
+          id: 'upper',
+          name: 'Upper',
+          visible: true,
+          mapUrl: '/u.png',
+          zIndex: 1,
+          cutouts: [{ column: 5, row: 5, width: 1, height: 1 }],
+        },
+      ],
+    };
+
+    const inside = getTokenLevelPresentation(
+      { id: 'inside', levelId: 'level-0', column: 5, row: 5 },
+      mapLevels,
+      { viewerLevelId: 'upper', gmViewing: false },
+    );
+    assert.equal(inside.visible, true);
+    assert.equal(inside.direction, 'below');
+
+    const adjacent = getTokenLevelPresentation(
+      { id: 'adjacent', levelId: 'level-0', column: 4, row: 5 },
+      mapLevels,
+      { viewerLevelId: 'upper', gmViewing: false },
+    );
+    assert.equal(adjacent.visible, true, 'edge cell must reveal token');
+
+    const corner = getTokenLevelPresentation(
+      { id: 'corner', levelId: 'level-0', column: 4, row: 4 },
+      mapLevels,
+      { viewerLevelId: 'upper', gmViewing: false },
+    );
+    assert.equal(corner.visible, true, 'diagonal/corner cell must reveal token');
+
+    const farAway = getTokenLevelPresentation(
+      { id: 'far', levelId: 'level-0', column: 1, row: 1 },
+      mapLevels,
+      { viewerLevelId: 'upper', gmViewing: false },
+    );
+    assert.equal(farAway.visible, false, 'cells outside expanded cutout stay hidden');
+  });
+
+  test('player above-level visibility uses the same edge rule mirrored upward', () => {
+    // Viewer on Level 0 looking up at Upper. The blocking level is Upper
+    // (the higher level), so its expanded cutout determines visibility.
+    const mapLevels = {
+      levels: [
+        {
+          id: 'upper',
+          name: 'Upper',
+          visible: true,
+          mapUrl: '/u.png',
+          zIndex: 1,
+          cutouts: [{ column: 5, row: 5, width: 1, height: 1 }],
+        },
+      ],
+    };
+
+    const above = getTokenLevelPresentation(
+      { id: 'above', levelId: 'upper', column: 4, row: 6 },
+      mapLevels,
+      { viewerLevelId: 'level-0', gmViewing: false },
+    );
+    assert.equal(above.visible, true);
+    assert.equal(above.direction, 'above');
+    assert.equal(above.distance, 1);
+    assert.equal(above.scale, 1);
+    assert.deepEqual(above.indicator, { direction: 'above', distance: 1 });
+
+    const blocked = getTokenLevelPresentation(
+      { id: 'above-blocked', levelId: 'upper', column: 0, row: 0 },
+      mapLevels,
+      { viewerLevelId: 'level-0', gmViewing: false },
+    );
+    assert.equal(blocked.visible, false);
+  });
+
+  test('multi-level edge intersection requires every blocking level to overlap', () => {
+    // Viewer Level 2, token Level 0. Two blocking levels (Upper and Roof)
+    // must both have an expanded cutout covering at least one of the
+    // token's occupied cells.
+    const mapLevels = {
+      levels: [
+        {
+          id: 'upper',
+          name: 'Upper',
+          visible: true,
+          mapUrl: '/u.png',
+          zIndex: 1,
+          cutouts: [{ column: 5, row: 5, width: 1, height: 1 }],
+        },
+        {
+          id: 'roof',
+          name: 'Roof',
+          visible: true,
+          mapUrl: '/r.png',
+          zIndex: 2,
+          cutouts: [{ column: 7, row: 5, width: 1, height: 1 }],
+        },
+      ],
+    };
+
+    const noOverlap = getTokenLevelPresentation(
+      { id: 'no-overlap', levelId: 'level-0', column: 5, row: 5 },
+      mapLevels,
+      { viewerLevelId: 'roof', gmViewing: false },
+    );
+    // Expanded Upper covers (4..6, 4..6); expanded Roof covers (6..8, 4..6).
+    // Cell (5,5) is in Upper's expanded set but not Roof's, so blocked.
+    assert.equal(noOverlap.visible, false);
+
+    const intersection = getTokenLevelPresentation(
+      { id: 'overlap', levelId: 'level-0', column: 6, row: 5 },
+      mapLevels,
+      { viewerLevelId: 'roof', gmViewing: false },
+    );
+    // Cell (6,5) is inside both expanded cutouts.
+    assert.equal(intersection.visible, true);
+    assert.equal(intersection.direction, 'below');
+    assert.equal(intersection.distance, 2);
+    assert.equal(Math.round(intersection.scale * 100) / 100, 0.8);
+  });
+
+  test('non-blocking levels (hidden, opacity 0, blocksLowerLevelVision=false) are skipped', () => {
+    const mapLevels = {
+      levels: [
+        {
+          id: 'transparent',
+          name: 'Transparent',
+          visible: true,
+          mapUrl: '/t.png',
+          zIndex: 1,
+          opacity: 0,
+          cutouts: [],
+        },
+      ],
+    };
+    const presentation = getTokenLevelPresentation(
+      { id: 'token', levelId: 'level-0', column: 12, row: 12 },
+      mapLevels,
+      { viewerLevelId: 'transparent', gmViewing: false },
+    );
+    // No blocking levels remaining → path is open per §5.5.4 step 7.
+    assert.equal(presentation.visible, true);
+    assert.equal(presentation.direction, 'below');
+  });
+
+  test('placement on Level 0 (legacy missing levelId) is recognized as the base level', () => {
+    const mapLevels = {
+      levels: [
+        { id: 'upper', name: 'Upper', visible: true, mapUrl: '/u.png', zIndex: 1 },
+      ],
+    };
+    const legacy = getTokenLevelPresentation(
+      { id: 'legacy', column: 1, row: 1 },
+      mapLevels,
+      { viewerLevelId: 'level-0', gmViewing: false },
+    );
+    assert.equal(legacy.levelId, 'level-0');
+    assert.equal(legacy.sameLevel, true);
+    assert.equal(legacy.visible, true);
+  });
+
+  test('viewer falls back to Level 0 when viewerLevelId is missing or unknown', () => {
+    const mapLevels = {
+      levels: [
+        { id: 'upper', name: 'Upper', visible: true, mapUrl: '/u.png', zIndex: 1 },
+      ],
+    };
+    const missing = getTokenLevelPresentation(
+      { id: 'token', levelId: 'upper', column: 0, row: 0 },
+      mapLevels,
+      { gmViewing: true },
+    );
+    assert.equal(missing.activeLevelId, 'level-0');
+    assert.equal(missing.direction, 'above');
+
+    const unknown = getTokenLevelPresentation(
+      { id: 'token', levelId: 'upper', column: 0, row: 0 },
+      mapLevels,
+      { viewerLevelId: 'does-not-exist', gmViewing: true },
+    );
+    assert.equal(unknown.activeLevelId, 'level-0');
+    assert.equal(unknown.direction, 'above');
+  });
+
+  test('multi-cell placement is binary: any visible cell shows the whole token', () => {
+    // §5.5.4 final paragraph: cross-level visibility is binary in v2.
+    const mapLevels = {
+      levels: [
+        {
+          id: 'upper',
+          name: 'Upper',
+          visible: true,
+          mapUrl: '/u.png',
+          zIndex: 1,
+          cutouts: [{ column: 3, row: 3, width: 1, height: 1 }],
+        },
+      ],
+    };
+    // 2x2 token at (2,2)-(3,3). Cell (3,3) is in expanded cutout (cells 2..4 around (3,3)).
+    const presentation = getTokenLevelPresentation(
+      { id: 'big', levelId: 'level-0', column: 2, row: 2, width: 2, height: 2 },
+      mapLevels,
+      { viewerLevelId: 'upper', gmViewing: false },
+    );
+    assert.equal(presentation.visible, true);
+    assert.equal(presentation.fullyVisible, true);
+    // visibleCells is null per the binary v2 rule (no partial mask).
+    assert.equal(presentation.visibleCells, null);
+  });
+
+  test('interaction mode uses interaction blockers separately from vision', () => {
+    const mapLevels = {
+      levels: [
+        {
+          id: 'upper',
+          name: 'Upper',
+          visible: true,
+          mapUrl: '/u.png',
+          zIndex: 1,
+          blocksLowerLevelVision: false,
+          blocksLowerLevelInteraction: true,
+          cutouts: [{ column: 5, row: 5, width: 1, height: 1 }],
+        },
+      ],
+    };
+    const placement = { id: 'ground', levelId: 'level-0', column: 0, row: 0 };
+    // Vision: Upper does not block vision → token visible.
+    const vision = getTokenLevelPresentation(placement, mapLevels, {
+      viewerLevelId: 'upper',
+      gmViewing: false,
+      mode: 'vision',
+    });
+    assert.equal(vision.visible, true);
+    // Interaction: Upper blocks interaction. Cell (0,0) is outside the
+    // expanded cutout, so the token cannot be clicked.
+    const interaction = getTokenLevelPresentation(placement, mapLevels, {
+      viewerLevelId: 'upper',
+      gmViewing: false,
+      mode: 'interaction',
+      cells: [{ column: 0, row: 0 }],
+    });
+    assert.equal(interaction.visible, false);
+  });
+
+  test('placement referencing a deleted level reports not visible', () => {
+    const mapLevels = {
+      levels: [
+        { id: 'upper', name: 'Upper', visible: true, mapUrl: '/u.png', zIndex: 1 },
+      ],
+    };
+    const orphan = getTokenLevelPresentation(
+      { id: 'orphan', levelId: 'gone', column: 0, row: 0 },
+      mapLevels,
+      { viewerLevelId: 'upper', gmViewing: true },
+    );
+    assert.equal(orphan.visible, false);
   });
 });
