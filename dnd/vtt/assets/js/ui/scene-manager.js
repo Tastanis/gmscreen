@@ -6,6 +6,7 @@ import {
 import { persistBoardState } from '../services/board-state-service.js';
 import { normalizeGridState } from '../state/normalize/grid.js';
 import {
+  BASE_MAP_LEVEL_ID,
   MAP_LEVEL_ID_PREFIX,
   MAP_LEVEL_MAX_LEVELS,
   createEmptyMapLevelsState,
@@ -288,24 +289,9 @@ export function renderSceneList(routes, store) {
         return;
       }
 
-      let deleted = false;
-      mutateSceneMapLevels(stateApi, sceneId, (mapLevels) => {
-        const initialLength = mapLevels.levels.length;
-        mapLevels.levels = mapLevels.levels.filter((level) => level.id !== levelId);
-        if (mapLevels.levels.length === initialLength) {
-          return false;
-        }
-
-        mapLevels.levels = reindexMapLevels(getOrderedMapLevels(mapLevels.levels));
-        if (mapLevels.activeLevelId === levelId) {
-          mapLevels.activeLevelId = mapLevels.levels.find((level) => level.id)?.id ?? null;
-        }
-        deleted = true;
-        return true;
-      });
-
-      if (deleted) {
-        persistBoardStateSnapshot();
+      const result = deleteSceneMapLevelCascade(stateApi, sceneId, levelId);
+      if (result) {
+        persistBoardStateSnapshot(sceneId);
         showFeedback(feedback, 'Map level deleted.', 'info');
       } else {
         showFeedback(feedback, 'Unable to delete map level.', 'error');
@@ -1088,6 +1074,132 @@ function normalizeGridConfig(raw = {}) {
 
 const mapLevelSeed = Date.now();
 let mapLevelSequence = 0;
+
+// Levels v2 (§5.7): Delete a stored map level and remap any references that
+// still point at it so deletion never strands tokens or leaves broken refs.
+//
+// Behavior:
+//   - Returns null when sceneId/levelId are missing, when the target is the
+//     virtual base level (`level-0` is not deletable by construction), or when
+//     the level was not present in the scene's stored levels.
+//   - Fallback level is the nearest existing lower stored level (immediately
+//     below the deleted one in the ordered stack), or `BASE_MAP_LEVEL_ID` when
+//     no lower stored level exists. Surviving stored ids stay stable; only
+//     `zIndex` is recomputed via `reindexMapLevels`.
+//   - Placements on the deleted level are remapped to the fallback and stamped
+//     with `_lastModified` so the claim-fallback resolver sees them as recent.
+//   - `userLevelState` entries pointing at the deleted level are remapped to
+//     the fallback (preserving `source` / `tokenId`).
+//   - Claim-driven invariant from §4.2: every remapped claimed placement
+//     overwrites its claimant's `userLevelState` to `{levelId: fallback,
+//     source: 'claim', tokenId: <placementId>, updatedAt}`.
+function deleteSceneMapLevelCascade(stateApi, sceneId, levelId) {
+  if (!sceneId || typeof levelId !== 'string' || !levelId || levelId === BASE_MAP_LEVEL_ID) {
+    return null;
+  }
+
+  let summary = null;
+
+  mutateSceneMapLevels(stateApi, sceneId, (mapLevels, ctx) => {
+    const initialLength = mapLevels.levels.length;
+    const orderedBefore = getOrderedMapLevels(mapLevels.levels);
+    const deletedIndex = orderedBefore.findIndex((level) => level && level.id === levelId);
+    if (deletedIndex < 0) {
+      return false;
+    }
+
+    const fallbackLevelId = deletedIndex > 0
+      ? (orderedBefore[deletedIndex - 1]?.id ?? BASE_MAP_LEVEL_ID)
+      : BASE_MAP_LEVEL_ID;
+
+    mapLevels.levels = mapLevels.levels.filter((level) => level && level.id !== levelId);
+    if (mapLevels.levels.length === initialLength) {
+      return false;
+    }
+
+    mapLevels.levels = reindexMapLevels(getOrderedMapLevels(mapLevels.levels));
+    if (mapLevels.activeLevelId === levelId) {
+      mapLevels.activeLevelId = mapLevels.levels.find((level) => level && level.id)?.id ?? null;
+    }
+
+    const remapTimestamp = Date.now();
+    const remappedPlacementIds = [];
+    const placements = ctx?.boardDraft?.placements?.[sceneId];
+    if (Array.isArray(placements)) {
+      placements.forEach((placement) => {
+        if (!placement || typeof placement !== 'object') {
+          return;
+        }
+        const stored = typeof placement.levelId === 'string' ? placement.levelId.trim() : '';
+        if (stored !== levelId) {
+          return;
+        }
+        placement.levelId = fallbackLevelId;
+        placement._lastModified = remapTimestamp;
+        if (typeof placement.id === 'string' && placement.id) {
+          remappedPlacementIds.push(placement.id);
+        }
+      });
+    }
+
+    if (!ctx?.sceneBoardState) {
+      summary = { fallbackLevelId, remappedPlacementIds, remappedUserIds: [], remappedClaimUserIds: [] };
+      return true;
+    }
+    if (!ctx.sceneBoardState.userLevelState || typeof ctx.sceneBoardState.userLevelState !== 'object') {
+      ctx.sceneBoardState.userLevelState = {};
+    }
+    const userLevelState = ctx.sceneBoardState.userLevelState;
+
+    const remappedUserIds = [];
+    Object.entries(userLevelState).forEach(([userId, entry]) => {
+      if (!entry || typeof entry !== 'object') {
+        return;
+      }
+      if (entry.levelId !== levelId) {
+        return;
+      }
+      userLevelState[userId] = {
+        ...entry,
+        levelId: fallbackLevelId,
+        updatedAt: remapTimestamp,
+      };
+      remappedUserIds.push(userId);
+    });
+
+    const remappedClaimUserIds = [];
+    const claimedTokens = ctx.sceneBoardState.claimedTokens;
+    if (claimedTokens && typeof claimedTokens === 'object' && remappedPlacementIds.length) {
+      remappedPlacementIds.forEach((placementId) => {
+        const raw = claimedTokens[placementId];
+        if (typeof raw !== 'string') {
+          return;
+        }
+        const claimant = raw.trim().toLowerCase();
+        if (!claimant) {
+          return;
+        }
+        userLevelState[claimant] = {
+          levelId: fallbackLevelId,
+          source: 'claim',
+          tokenId: placementId,
+          updatedAt: remapTimestamp,
+        };
+        remappedClaimUserIds.push(claimant);
+      });
+    }
+
+    summary = {
+      fallbackLevelId,
+      remappedPlacementIds,
+      remappedUserIds,
+      remappedClaimUserIds,
+    };
+    return true;
+  });
+
+  return summary;
+}
 
 function mutateSceneMapLevels(stateApi, sceneId, mutator) {
   if (!sceneId || !stateApi || typeof stateApi.updateState !== 'function' || typeof mutator !== 'function') {
@@ -2229,6 +2341,7 @@ async function readUploadError(response) {
 export const __testing = {
   buildSceneMarkup,
   createMapLevel,
+  deleteSceneMapLevelCascade,
   getOrderedMapLevels,
   mutateSceneMapLevels,
   normalizeMapLevelOpacityInput,
