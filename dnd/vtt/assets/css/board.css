@@ -2835,6 +2835,49 @@
   opacity: 0.35;
 }
 
+/* Levels v2 (§5.6): falling animation — scale up by 5%, quick wobble,
+ * scale down so the token reads as dropping away. The keyframes target
+ * the inner image so the token's outer positional transform (translate +
+ * cross-level scale) is preserved. The animation plays once per fall
+ * chain via the JS class toggle in token-fall-animation.js. Duration
+ * stays in lockstep with TOKEN_FALL_DURATION_MS. */
+.vtt-token--falling .vtt-token__image,
+.vtt-token--falling.vtt-token--placeholder::before {
+  animation: vtt-token-fall var(--vtt-token-fall-duration, 1s) ease-in-out;
+  transform-origin: 50% 50%;
+}
+
+@keyframes vtt-token-fall {
+  0% {
+    transform: scale(1) rotate(0deg);
+    opacity: 1;
+  }
+  15% {
+    transform: scale(1.05) rotate(-3deg);
+    opacity: 1;
+  }
+  30% {
+    transform: scale(1.05) rotate(4deg);
+    opacity: 1;
+  }
+  45% {
+    transform: scale(1.03) rotate(-2deg);
+    opacity: 1;
+  }
+  60% {
+    transform: scale(1) rotate(0deg);
+    opacity: 1;
+  }
+  85% {
+    transform: scale(0.55) rotate(0deg);
+    opacity: 0.5;
+  }
+  100% {
+    transform: scale(1) rotate(0deg);
+    opacity: 1;
+  }
+}
+
 .vtt-token[data-combat-team='ally'] {
   border-color: rgba(74, 222, 128, 0.9);
   box-shadow: 0 10px 24px rgba(22, 101, 52, 0.45);

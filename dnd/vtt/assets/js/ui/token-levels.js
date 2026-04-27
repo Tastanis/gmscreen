@@ -674,6 +674,62 @@ function createTokenLevelPresentationResult({
   };
 }
 
+// Levels v2 §5.6: a placement falls when every occupied cell sits inside a
+// raw cutout (no edge-buffer expansion) on the placement's current level.
+// Returns false for Level 0 since the base map has no cutouts. Returns
+// false for placements on unknown/missing levels — falling only applies to
+// stored Level 1+ entries.
+export function isPlacementFullyInsideRawCutouts(placement = {}, level = null) {
+  if (!level || typeof level !== 'object') {
+    return false;
+  }
+  if (!Array.isArray(level.cutouts) || level.cutouts.length === 0) {
+    return false;
+  }
+  const bounds = normalizePlacementBounds(placement);
+  const cells = getPlacementCells(bounds);
+  if (!cells.length) {
+    return false;
+  }
+  return cells.every((cell) => isMapLevelCutOutAtCell(level, cell));
+}
+
+// Levels v2 §5.6: walk the level chain downward as long as the placement is
+// fully inside the raw cutouts of its current level. The animation plays
+// once at the start of a chain; this helper returns the FINAL resting
+// levelId so callers can persist it as one logical mutation. Returns null
+// when the placement does not fall (already on Level 0, current level
+// unknown, or position not entirely inside the raw cutouts).
+//
+// `mapLevelsState` is the normalized map levels state (`mapLevels` slice
+// from scene state); the helper builds the full ordered list with Level 0
+// prepended internally.
+export function getFallingDestinationLevelId(placement = {}, mapLevelsState = null) {
+  const levels = getOrderedLevelsWithBase(mapLevelsState?.levels ?? []);
+  if (levels.length <= 1) {
+    return null;
+  }
+  const placementLevelId = resolvePlacementLevelId(placement);
+  const startIdx = levels.findIndex((level) => level.id === placementLevelId);
+  if (startIdx <= 0) {
+    return null;
+  }
+
+  let restingIdx = startIdx;
+  while (restingIdx > 0) {
+    const level = levels[restingIdx];
+    if (!isPlacementFullyInsideRawCutouts(placement, level)) {
+      break;
+    }
+    restingIdx -= 1;
+  }
+
+  if (restingIdx === startIdx) {
+    return null;
+  }
+  return levels[restingIdx].id;
+}
+
 function doesMapLevelBlockLowerLevels(level, mode) {
   if (!level || typeof level !== 'object' || level.visible === false) {
     return false;

@@ -67,6 +67,7 @@ import {
 } from './token-stack-order.js';
 import {
   getAdjacentTokenLevel,
+  getFallingDestinationLevelId,
   getMapLevelNavigationControlState,
   getOrderedTokenMapLevels,
   getPlayerTokenMapLevelVisibility,
@@ -76,6 +77,7 @@ import {
   resolveSceneTokenLevelState,
   resolveTokenLevelId,
 } from './token-levels.js';
+import { playTokenFallAnimation } from './token-fall-animation.js';
 import {
   broadcastStaminaSync,
   subscribeToStaminaSync,
@@ -817,6 +819,12 @@ export function mountBoardInteractions(store, routes = {}) {
     toNonNegativeNumber: (value, fallback) => toNonNegativeNumber(value, fallback),
     persistBoardStateSnapshot: (options, opsOverride) =>
       persistBoardStateSnapshot(options, opsOverride),
+    // Levels v2 (§5.6): drag commits route here so dropped tokens that
+    // land entirely over a cutout fall to the next valid level.
+    processPlacementFalls: (sceneId, placementIds) =>
+      processPlacementFalls(sceneId, placementIds),
+    triggerTokenFallAnimations: (placementIds) =>
+      triggerTokenFallAnimations(placementIds),
   });
   const {
     startSelectionBox,
@@ -14235,14 +14243,30 @@ export function mountBoardInteractions(store, routes = {}) {
       levelId: targetLevel.id,
     });
 
+    // Levels v2 (§5.6): if the GM moved a token to a level whose cutout
+    // sits entirely under the token's footprint, the token falls. Chained
+    // falls resolve to the final resting level inside processPlacementFalls.
+    const fallenIds = processPlacementFalls(activeSceneId, [activeTokenSettingsId]);
+
     refreshTokenSettings();
     renderTokens(boardApi.getState?.() ?? {}, tokenLayer, viewState);
     renderAuras(boardApi.getState?.() ?? {}, auraLayer, viewState);
+    triggerTokenFallAnimations(fallenIds);
 
     if (status) {
       const label = tokenLabel(getPlacementFromStore(activeTokenSettingsId));
-      const levelName = targetLevel.name || 'map level';
-      status.textContent = `Moved ${label} to ${levelName}.`;
+      const finalPlacement = getPlacementFromStore(activeTokenSettingsId);
+      const finalLevelId = resolvePlacementLevelId(finalPlacement);
+      const levelName = (() => {
+        if (fallenIds.length && finalLevelId) {
+          const levelView = getViewerLevelDisplayName(state, activeSceneId, finalLevelId);
+          return levelView || targetLevel.name || 'map level';
+        }
+        return targetLevel.name || 'map level';
+      })();
+      status.textContent = fallenIds.length
+        ? `${label} fell to ${levelName}.`
+        : `Moved ${label} to ${levelName}.`;
     }
   }
 
@@ -14308,6 +14332,146 @@ export function mountBoardInteractions(store, routes = {}) {
         tokenId: placementId,
       },
     ]);
+  }
+
+  // Levels v2 (§5.6): after a token movement (drag commit or level-move),
+  // detect placements that landed entirely inside the raw cutouts of their
+  // current level and drop them to the next valid level. Chained falls are
+  // applied in `getFallingDestinationLevelId` (which walks down until the
+  // resting level). Persists the level change as one logical mutation per
+  // placement, mirrors claimant `userLevelState` updates, and returns the
+  // list of placement ids that fell so callers can trigger the animation
+  // after their re-render.
+  function processPlacementFalls(sceneId, placementIds) {
+    if (
+      typeof sceneId !== 'string' || !sceneId
+      || !Array.isArray(placementIds) || !placementIds.length
+      || typeof boardApi.updateState !== 'function'
+    ) {
+      return [];
+    }
+    const state = boardApi.getState?.() ?? {};
+    const mapLevels = resolveSceneTokenLevelState(state, sceneId);
+    const placements = state.boardState?.placements?.[sceneId] ?? [];
+    if (!Array.isArray(placements) || !placements.length) {
+      return [];
+    }
+
+    const fallTargets = [];
+    placementIds.forEach((placementId) => {
+      if (typeof placementId !== 'string' || !placementId) {
+        return;
+      }
+      const placement = placements.find((entry) => entry?.id === placementId);
+      if (!placement) {
+        return;
+      }
+      const toLevelId = getFallingDestinationLevelId(placement, mapLevels);
+      if (!toLevelId) {
+        return;
+      }
+      fallTargets.push({
+        placementId,
+        fromLevelId: resolvePlacementLevelId(placement),
+        toLevelId,
+      });
+    });
+
+    if (!fallTargets.length) {
+      return [];
+    }
+
+    const fallTimestamp = Date.now();
+    const ops = [];
+    let mutated = false;
+
+    boardApi.updateState?.((draft) => {
+      const drafts = ensureScenePlacementDraft(draft, sceneId);
+      if (!Array.isArray(drafts) || !drafts.length) {
+        return;
+      }
+      fallTargets.forEach(({ placementId, toLevelId }) => {
+        const idx = drafts.findIndex((entry) => entry?.id === placementId);
+        if (idx < 0) {
+          return;
+        }
+        const target = drafts[idx];
+        if (!target || typeof target !== 'object') {
+          return;
+        }
+        target.levelId = toLevelId;
+        target._lastModified = fallTimestamp;
+        mutated = true;
+        ops.push({
+          type: 'placement.update',
+          sceneId,
+          placementId,
+          patch: { levelId: toLevelId },
+        });
+      });
+    });
+
+    if (!mutated) {
+      return [];
+    }
+
+    fallTargets.forEach(({ placementId }) => {
+      markPlacementDirty(sceneId, placementId);
+    });
+
+    if (ops.length > 0) {
+      persistBoardStateSnapshot({}, ops);
+    }
+
+    // Levels v2 (§4.2 + §5.6): when a claimed token falls, the same
+    // logical mutation must update the claimant's `userLevelState` so
+    // their view follows. `applyClaimDrivenUserLevelUpdate` short-circuits
+    // for unclaimed placements and emits its own `user-level.set` op.
+    fallTargets.forEach(({ placementId, toLevelId }) => {
+      applyClaimDrivenUserLevelUpdate({
+        sceneId,
+        placementId,
+        levelId: toLevelId,
+      });
+    });
+
+    return fallTargets.map((entry) => entry.placementId);
+  }
+
+  // Levels v2 (§5.6): play the fall animation on the rendered token DOM
+  // for each fallen placement id. Schedules via requestAnimationFrame so
+  // the caller's renderTokens has already painted the post-fall element
+  // (correct level scale + indicator) before the wobble starts.
+  function triggerTokenFallAnimations(placementIds) {
+    if (!Array.isArray(placementIds) || !placementIds.length || !tokenLayer) {
+      return;
+    }
+    const ids = placementIds.filter((id) => typeof id === 'string' && id);
+    if (!ids.length) {
+      return;
+    }
+    const schedule = typeof requestAnimationFrame === 'function'
+      ? requestAnimationFrame
+      : (callback) => setTimeout(callback, 0);
+    schedule(() => {
+      const nodes = tokenLayer.querySelectorAll('[data-placement-id]');
+      const tokensById = new Map();
+      nodes.forEach((node) => {
+        if (!(node instanceof HTMLElement)) {
+          return;
+        }
+        const id = node.dataset.placementId;
+        if (id) {
+          tokensById.set(id, node);
+        }
+      });
+      ids.forEach((id) => {
+        const tokenEl = tokensById.get(id);
+        if (tokenEl) {
+          playTokenFallAnimation(tokenEl).catch(() => {});
+        }
+      });
+    });
   }
 
   function syncTokenStackControls(placementId = activeTokenSettingsId) {
