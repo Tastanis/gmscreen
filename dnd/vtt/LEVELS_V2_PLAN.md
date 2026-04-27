@@ -876,4 +876,24 @@ Behavioral consequences for downstream work:
 - Claims attached to placement ids survive deletion (per §5.7 "Claims remain attached to placement ids"). The cascade never touches `claimedTokens` — only `userLevelState`. A claimed token on a deleted level keeps its claim and lands on the fallback level with the claim intact, and the claimant's state is updated to follow.
 - If both Pass A and Pass B apply to the same user (the user's previous entry was a `source: 'claim'` entry on the deleted level for a placement that just got remapped), the final state is identical between the two passes — both write `levelId: fallbackLevelId` and the same `source`/`tokenId`. Pass B simply rewrites with a fresh `updatedAt`. No correctness issue, just a minor redundancy on that specific path.
 
+---
+
+## 13. Manual Testing Notes / Bugs Surfaced
+
+### 2026-04-27 — Step 6 (claims) manual test: claim ops silently lost on version conflict
+
+**Symptom (reported by GM during test):** Dropped a Frunk-named token, opened token settings, picked "Frunk" from the GM claim dropdown — claim status remained "Unclaimed". Player (Frunk) tried clicking the player Claim button — same result. Console showed two `409 Conflict` POSTs to `dnd/vtt/api/state.php` and `[VTT] Board state save rejected as stale; applying server state.` Chat panel was concurrently throwing `ERR_INSUFFICIENT_RESOURCES` — likely unrelated, but suggests the page had many in-flight requests.
+
+**Root cause (suspected, needs confirmation):** When the client's `_version` is behind the server's, `state.php` (line ~364) returns a 409 conflict before applying any ops in the payload. On the client, `submitTokenClaimChange` mutates local state and sends a `claim.set` op via `persistBoardStateSnapshot({}, [op])`. On 409, the conflict handler at `board-interactions.js:~2245` calls `clearDirtyTrackingForSave` and `applyBoardStateConflictSnapshot` — which **drops the failed op without retrying** and overwrites the local mutation with the server's snapshot. Result: the claim is silently lost, both locally and on the server. Same code path drives `autoClaimPlacement` (PC drag-in auto-claim), so PC auto-claim is also vulnerable.
+
+**Workaround for testing:** Hard refresh (Ctrl+F5) before retesting claim. Refresh resyncs `currentBoardStateVersion` to the server's current version, so the next claim op should land. If repeated 409s occur, another tab/client is bumping the version concurrently.
+
+**Suggested fix (not yet implemented):**
+1. On op-only saves that hit 409, after applying the conflict snapshot, **re-apply the failed op locally and re-broadcast it** with the fresh `_version`. This requires keeping the op list around through the conflict handler instead of dropping it via `clearDirtyTrackingForSave`.
+2. Alternative: server-side, separate the version check for snapshot-merge from the version check for ops. Ops like `claim.set` are idempotent and don't depend on the client having the latest snapshot; the server could apply them even on a stale `_version` and just refuse the snapshot half.
+
+**Adjacent observation:** PC auto-claim only runs when `isTokenSourcePlayerVisible(template)` is true — i.e. the token must be dragged from the PC folder, not a generic token renamed "Frunk". Working as designed, but worth documenting because a tester dragging a generic token expecting auto-claim will see no claim ring.
+
+**Fix landed (2026-04-27, Option A):** PC auto-claim is now batched with `placement.add` into a single ops payload inside `handleTokenDrop`. Both ops apply under one server lock — no separate save round-trip, no version race. The standalone `autoClaimPlacement` helper was removed (single caller). The §5.4 "first time only" guard is preserved because `handleTokenDrop` only fires on a fresh drag-into-scene. Local mutation still happens up-front so the snapshot fallback path (when delta-saves is off or non-placement state is dirty) picks up the claim too. The broader 409-drop-without-retry issue (manual claim, etc.) is **not** addressed by this fix — that is the Option B fix and remains open.
+
 
