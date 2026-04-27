@@ -3770,6 +3770,20 @@ export function mountBoardInteractions(store, routes = {}) {
     // fall back to the legacy snapshot path to avoid losing those
     // changes. This guard is applied at every commit-3 call site for
     // the same reason.
+    // Levels v2 (§5.4): PC tokens auto-claim to the matching profile id the
+    // first time they are dragged into a scene. The claim must be batched
+    // with placement.add into a single ops payload — sending claim.set as a
+    // separate save races the placement.add response (the server bumps the
+    // version on add, so the second save's tracked version is stale and 409s,
+    // silently dropping the auto-claim). One payload, one server lock, no race.
+    let autoClaimUserId = null;
+    if (isTokenSourcePlayerVisible(template)) {
+      const inferredProfileId = matchProfileByName(template?.name ?? '');
+      if (inferredProfileId && PLAYER_CHARACTER_USER_IDS.includes(inferredProfileId)) {
+        autoClaimUserId = inferredProfileId;
+      }
+    }
+
     let tokenAddOps = null;
     if (USE_DELTA_SAVES && !hasNonPlacementDirtyState()) {
       tokenAddOps = [
@@ -3780,19 +3794,40 @@ export function mountBoardInteractions(store, routes = {}) {
         },
       ];
     }
+
+    if (autoClaimUserId) {
+      let claimMutated = false;
+      boardApi.updateState?.((draft) => {
+        const sceneEntry = ensureSceneStateDraftEntry(draft, activeSceneId);
+        if (!sceneEntry) {
+          return;
+        }
+        if (!sceneEntry.claimedTokens || typeof sceneEntry.claimedTokens !== 'object') {
+          sceneEntry.claimedTokens = {};
+        }
+        if (sceneEntry.claimedTokens[placement.id] !== autoClaimUserId) {
+          sceneEntry.claimedTokens[placement.id] = autoClaimUserId;
+          claimMutated = true;
+        }
+      });
+      if (claimMutated) {
+        markSceneStateDirty(activeSceneId);
+        if (tokenAddOps) {
+          tokenAddOps.push({
+            type: 'claim.set',
+            sceneId: activeSceneId,
+            placementId: placement.id,
+            userId: autoClaimUserId,
+          });
+        }
+      }
+    }
+
     persistBoardStateSnapshot({}, tokenAddOps);
 
-    // For PC folder tokens, fetch and apply character sheet stamina
+    // For PC folder tokens, fetch and apply character sheet stamina.
     if (isTokenSourcePlayerVisible(template)) {
       fetchAndApplyCharacterStamina(placement.id, activeSceneId);
-      // Levels v2 (§5.4): PC tokens auto-claim to the matching profile id
-      // the first time they are dragged into a scene. We only run this on
-      // a fresh drop, so the "first time" guard is implicit. The PC alias
-      // matcher is the same one used by the combat-team profile resolver.
-      const inferredProfileId = matchProfileByName(template?.name ?? '');
-      if (inferredProfileId && PLAYER_CHARACTER_USER_IDS.includes(inferredProfileId)) {
-        autoClaimPlacement(activeSceneId, placement.id, inferredProfileId);
-      }
     }
 
     if (status) {
@@ -3800,39 +3835,6 @@ export function mountBoardInteractions(store, routes = {}) {
       status.textContent = `Placed ${label} on the scene.`;
     }
   };
-
-  function autoClaimPlacement(sceneId, placementId, userId) {
-    if (
-      typeof sceneId !== 'string' || !sceneId
-      || typeof placementId !== 'string' || !placementId
-      || typeof userId !== 'string' || !userId
-      || typeof boardApi.updateState !== 'function'
-    ) {
-      return;
-    }
-    let mutated = false;
-    boardApi.updateState?.((draft) => {
-      const sceneEntry = ensureSceneStateDraftEntry(draft, sceneId);
-      if (!sceneEntry) {
-        return;
-      }
-      if (!sceneEntry.claimedTokens || typeof sceneEntry.claimedTokens !== 'object') {
-        sceneEntry.claimedTokens = {};
-      }
-      if (sceneEntry.claimedTokens[placementId] === userId) {
-        return;
-      }
-      sceneEntry.claimedTokens[placementId] = userId;
-      mutated = true;
-    });
-    if (!mutated) {
-      return;
-    }
-    markSceneStateDirty(sceneId);
-    persistBoardStateSnapshot({}, [
-      { type: 'claim.set', sceneId, placementId, userId },
-    ]);
-  }
 
   const tokenDragListenerOptions = { capture: true };
 
