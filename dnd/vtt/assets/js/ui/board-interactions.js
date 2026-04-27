@@ -52,6 +52,10 @@ import { mountFogOfWar, renderFog, renderFogSelection, isFogSelectActive, isPosi
 import { createConditionTooltips } from './condition-tooltips.js';
 import { createMapPings } from './map-pings.js';
 import {
+  computePlacementNormalizedCenter,
+  createLevelViewFollowTracker,
+} from './level-view-follow.js';
+import {
   createMapLevelRenderer,
   resolveSceneMapLevelsState,
 } from './map-level-renderer.js';
@@ -756,6 +760,9 @@ export function mountBoardInteractions(store, routes = {}) {
     markPingsDirty: () => markPingsDirty(),
     persistBoardStateSnapshot: () => persistBoardStateSnapshot(),
   });
+  // Levels v2 §5.2: track the current user's claim-sourced userLevelState
+  // so claim-driven level changes pan the view to the claimed token.
+  const levelViewFollowTracker = createLevelViewFollowTracker();
   const TOKEN_DRAG_TYPE = 'application/x-vtt-token-template';
   const TOKEN_DRAG_FALLBACK_TYPE = 'text/plain';
   const MAP_LOAD_WATCHDOG_DELAY_MS = 5000;
@@ -3910,6 +3917,10 @@ export function mountBoardInteractions(store, routes = {}) {
       if (activeSceneId !== lastActiveSceneId) {
         lastActiveSceneId = activeSceneId;
         mapLevelCutoutTool.reset();
+        // Levels v2 §5.2: drop the previous scene's view-follow baseline so
+        // entering a new scene establishes a fresh baseline (no auto-pan on
+        // first observation).
+        levelViewFollowTracker.reset();
         selectedTokenIds.clear();
         notifySelectionChanged();
         resetCombatGroups();
@@ -3960,6 +3971,8 @@ export function mountBoardInteractions(store, routes = {}) {
       overlayTool.notifyMapState();
       applyCombatStateFromBoardState(state);
       mapPings.processIncomingPings(state.boardState?.pings ?? [], activeSceneId);
+      // Levels v2 §5.2: pan the view to a claim-sourced level update.
+      maybeFollowClaimedTokenView(state, activeSceneId);
       // Use the active scene ID or fall back to the default scene ID.
       // This ensures drawings sync even when no scene is explicitly selected.
       syncDrawingsFromState(state.boardState, activeSceneId || DEFAULT_SCENE_ID);
@@ -5048,6 +5061,47 @@ export function mountBoardInteractions(store, routes = {}) {
       return match.displayLabel || match.name || null;
     }
     return null;
+  }
+
+  // Levels v2 §5.2: when the current user's per-scene userLevelState is
+  // updated by a claim-driven level change (source: 'claim' with a
+  // `tokenId`), pan the view to that token so the player automatically
+  // follows their character/NPC across levels. The tracker filters first
+  // observations so opening a scene does not auto-pan.
+  function maybeFollowClaimedTokenView(state = {}, sceneId = null) {
+    if (typeof sceneId !== 'string' || !sceneId) {
+      return;
+    }
+    const userId = getCurrentUserId();
+    if (!userId) {
+      return;
+    }
+    const sceneEntry = state?.boardState?.sceneState?.[sceneId];
+    const userLevelEntry = sceneEntry && typeof sceneEntry === 'object'
+      ? sceneEntry?.userLevelState?.[userId] ?? null
+      : null;
+    const fresh = levelViewFollowTracker.consume({ sceneId, userLevelEntry });
+    if (!fresh) {
+      return;
+    }
+    const placements = state?.boardState?.placements?.[sceneId];
+    if (!Array.isArray(placements)) {
+      return;
+    }
+    const tokenId = userLevelEntry?.tokenId;
+    const placement = placements.find((entry) => entry && entry.id === tokenId);
+    if (!placement) {
+      return;
+    }
+    const center = computePlacementNormalizedCenter(placement, {
+      gridSize: viewState?.gridSize,
+      mapPixelSize: viewState?.mapPixelSize,
+      gridOffsets: viewState?.gridOffsets,
+    });
+    if (!center) {
+      return;
+    }
+    mapPings.centerViewOnPoint(center);
   }
 
   function syncMapLevelsForState(state = {}, sceneId = null) {
