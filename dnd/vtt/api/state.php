@@ -361,7 +361,19 @@ if (!defined('VTT_STATE_API_INCLUDE_ONLY')) {
                 $nextState['_version'] = $previousVersion;
                 $isGm = (bool) ($auth['isGM'] ?? false);
 
-                if ($clientVersion !== null && $clientVersion > 0 && $clientVersion < $previousVersion) {
+                // Delta ops are intentionally small, typed mutations applied to
+                // the current canonical state while the board-state lock is
+                // held. Reject stale full snapshots, but let ops-only payloads
+                // proceed even when their client version is behind: this
+                // allows back-to-back saves such as placement.add followed by
+                // placement.update/user-level.set to merge instead of 409ing.
+                $isOpsOnlyPayload = !empty($ops) && empty($updates);
+                if (
+                    !$isOpsOnlyPayload
+                    && $clientVersion !== null
+                    && $clientVersion > 0
+                    && $clientVersion < $previousVersion
+                ) {
                     $currentState = $isGm ? $nextState : filterPlacementsForPlayerView($nextState);
                     $currentState['_version'] = $previousVersion;
                     return [
