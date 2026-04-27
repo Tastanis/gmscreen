@@ -12943,8 +12943,6 @@ export function mountBoardInteractions(store, routes = {}) {
           target.overlays.hitPoints.value = target.hp;
         }
       });
-
-      persistBoardStateSnapshot();
     } catch (error) {
       console.warn('[VTT] Failed to fetch character stamina for placement', error);
     }
