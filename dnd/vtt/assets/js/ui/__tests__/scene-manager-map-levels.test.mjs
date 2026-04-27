@@ -21,7 +21,7 @@ afterEach(() => {
 });
 
 describe('scene manager map level controls', () => {
-  test('renders map level controls without removing old overlay controls', () => {
+  test('renders map level controls', () => {
     const state = createInitialState({
       mapLevels: {
         activeLevelId: 'upper',
@@ -44,8 +44,6 @@ describe('scene manager map level controls', () => {
       'scene-1',
       state.boardState.sceneState,
       {
-        overlayUploadsEnabled: true,
-        overlayUploadPending: false,
         mapLevelUploadsEnabled: true,
         mapLevelUploadPending: false,
         assetUploadPending: false,
@@ -59,8 +57,9 @@ describe('scene manager map level controls', () => {
     assert.match(markup, /data-action="edit-map-level-cutouts"/);
     assert.match(markup, /Cutouts\(1\)|Cutouts \(1\)/);
     assert.match(markup, /value="65"/);
-    assert.match(markup, /data-action="add-overlay-layer"/);
-    assert.match(markup, /data-action="clear-overlay"/);
+    // Old overlay controls (add-overlay-layer, clear-overlay) are removed.
+    assert.doesNotMatch(markup, /data-action="add-overlay-layer"/);
+    assert.doesNotMatch(markup, /data-action="clear-overlay"/);
   });
 
   test('adds scene-scoped map levels up to the configured cap', () => {

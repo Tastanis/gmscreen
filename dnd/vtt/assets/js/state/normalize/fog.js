@@ -49,9 +49,8 @@ export function captureFogOfWarSnapshot(boardState) {
 }
 
 /**
- * After overlay normalization, verify that each scene entry still has its
- * fogOfWar data.  If it was dropped (e.g. the entry was rebuilt as a new
- * object), re-attach the captured reference.
+ * Verify that each scene entry still has its fogOfWar data. If it was dropped
+ * (e.g. the entry was rebuilt as a new object), re-attach the captured reference.
  */
 export function restoreFogOfWarSnapshot(boardState, snap) {
   if (!snap || !snap.size) return;

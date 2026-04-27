@@ -627,13 +627,12 @@ test('mergeBoardStateSnapshot preserves fogOfWar when incoming has no fogOfWar',
     },
   };
 
-  // Incoming state has overlay changes but no fogOfWar data
+  // Incoming state has no fogOfWar data
   const incoming = {
     activeSceneId: 'scene-1',
     sceneState: {
       'scene-1': {
         grid: { size: 64, locked: false, visible: true },
-        overlay: { mapUrl: 'overlay.png', layers: [] },
       },
     },
   };
@@ -698,11 +697,10 @@ test('mergeBoardStateSnapshot uses incoming fogOfWar when present', async () => 
   );
 });
 
-test('mergeBoardStateSnapshot preserves fogOfWar during overlay toggle cycle', async () => {
+test('mergeBoardStateSnapshot preserves fogOfWar during a partial sceneState save', async () => {
   const { mergeBoardStateSnapshot } = await import('../board-interactions.js');
 
-  // Simulate: user has fog setup, then toggles overlay visibility
-  // This creates a delta save that only includes overlay changes
+  // Simulate: user has fog setup, then a delta save changes a different sceneState field
   const existing = {
     activeSceneId: 'scene-1',
     sceneState: {
@@ -712,18 +710,16 @@ test('mergeBoardStateSnapshot preserves fogOfWar during overlay toggle cycle', a
           enabled: true,
           revealedCells: { '1,1': true, '2,2': true, '3,3': true },
         },
-        overlay: { layers: [{ id: 'l1', visible: true }] },
       },
     },
   };
 
-  // Delta save: overlay changed but no fogOfWar included
+  // Delta save: no fogOfWar included
   const incoming = {
     activeSceneId: 'scene-1',
     sceneState: {
       'scene-1': {
         grid: { size: 64, locked: false, visible: true },
-        overlay: { layers: [{ id: 'l1', visible: false }] },
       },
     },
   };
@@ -731,19 +727,12 @@ test('mergeBoardStateSnapshot preserves fogOfWar during overlay toggle cycle', a
   const merged = mergeBoardStateSnapshot(existing, incoming);
 
   // fogOfWar MUST be preserved
-  assert.ok(merged.sceneState['scene-1'].fogOfWar, 'fogOfWar must survive overlay toggle');
+  assert.ok(merged.sceneState['scene-1'].fogOfWar, 'fogOfWar must survive partial sceneState save');
   assert.equal(merged.sceneState['scene-1'].fogOfWar.enabled, true);
   assert.deepStrictEqual(
     merged.sceneState['scene-1'].fogOfWar.revealedCells,
     { '1,1': true, '2,2': true, '3,3': true },
-    'all revealed cells must survive overlay toggle'
-  );
-
-  // Overlay should reflect the incoming change
-  assert.equal(
-    merged.sceneState['scene-1'].overlay.layers[0].visible,
-    false,
-    'overlay visibility should be updated from incoming'
+    'all revealed cells must survive partial sceneState save'
   );
 });
 

@@ -9,6 +9,5 @@ export * from './combat.js';
 export * from './scenes.js';
 export * from './tokens.js';
 export * from './placements.js';
-export * from './overlay.js';
 export * from './map-levels.js';
 export * from './scene-board-state.js';

@@ -193,30 +193,28 @@ function createRendererHarness() {
   mapTransform.id = 'vtt-map-transform';
   const backdrop = documentRef.createElement('div');
   backdrop.id = 'vtt-map-backdrop';
-  const overlay = documentRef.createElement('div');
-  overlay.id = 'vtt-map-overlay';
   const grid = documentRef.createElement('div');
   grid.id = 'vtt-grid-overlay';
-  mapTransform.append(backdrop, overlay, grid);
+  mapTransform.append(backdrop, grid);
   documentRef.body.append(mapTransform);
 
   const renderer = createMapLevelRenderer({
     mapTransform,
-    insertBefore: overlay,
+    insertBefore: grid,
     documentRef,
   });
 
-  return { documentRef, mapTransform, overlay, renderer };
+  return { documentRef, mapTransform, grid, renderer };
 }
 
 describe('map level renderer', () => {
-  test('mounts a dedicated pointer-disabled level stack before the old overlay', () => {
-    const { mapTransform, overlay, renderer } = createRendererHarness();
+  test('mounts a dedicated pointer-disabled level stack before the grid', () => {
+    const { mapTransform, grid, renderer } = createRendererHarness();
     const root = renderer.element;
 
     assert.equal(root.id, MAP_LEVEL_STACK_ID);
     assert.equal(root.parentNode, mapTransform);
-    assert.equal(root.nextElementSibling, overlay);
+    assert.equal(root.nextElementSibling, grid);
     assert.equal(root.getAttribute('aria-hidden'), 'true');
     assert.equal(root.style.pointerEvents, 'none');
     assert.equal(root.hidden, true);
