@@ -2795,6 +2795,46 @@
   z-index: -1;
 }
 
+/* Levels v2 (§5.4): claim ring marks which player owns a PC token. Sits
+ * behind the image so selection (which uses border + box-shadow on the
+ * .vtt-token element itself) draws on top, and fades while the token is
+ * selected so the selection halo always reads first. Color per profile:
+ * Indigo = purple, Sharon = light grey, Frunk = red, Zepha = brown-orange.
+ */
+.vtt-token__claim-ring {
+  position: absolute;
+  inset: -8px;
+  border-radius: 50%;
+  pointer-events: none;
+  z-index: -1;
+  box-shadow:
+    0 0 0 3px var(--vtt-claim-color, transparent),
+    0 0 14px 4px color-mix(in srgb, var(--vtt-claim-color, transparent) 70%, transparent);
+  transition: opacity 160ms ease;
+  opacity: 0.85;
+}
+
+.vtt-token__claim-ring[data-claimed-by='indigo'] {
+  --vtt-claim-color: #a855f7;
+}
+
+.vtt-token__claim-ring[data-claimed-by='sharon'] {
+  --vtt-claim-color: #d4d4d8;
+}
+
+.vtt-token__claim-ring[data-claimed-by='frunk'] {
+  --vtt-claim-color: #ef4444;
+}
+
+.vtt-token__claim-ring[data-claimed-by='zepha'] {
+  --vtt-claim-color: #c2410c;
+}
+
+.vtt-token.is-selected .vtt-token__claim-ring,
+.vtt-token.is-hover-highlight .vtt-token__claim-ring {
+  opacity: 0.35;
+}
+
 .vtt-token[data-combat-team='ally'] {
   border-color: rgba(74, 222, 128, 0.9);
   box-shadow: 0 10px 24px rgba(22, 101, 52, 0.45);
@@ -3235,6 +3275,73 @@
 }
 
 .vtt-token-settings__level-button:focus-visible {
+  outline: 2px solid var(--vtt-accent);
+  outline-offset: 2px;
+}
+
+/* Levels v2 (§5.4): claim row in the token-settings panel — same chrome
+ * scale as the level row so the two read as a matched pair.
+ */
+.vtt-token-settings__row--claim {
+  align-items: center;
+  gap: 0.45rem;
+}
+
+.vtt-token-settings__claim-label {
+  color: var(--vtt-text-muted);
+  font-size: 0.76rem;
+  font-weight: 600;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+}
+
+.vtt-token-settings__claim-name {
+  flex: 1 1 auto;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  color: var(--vtt-text-primary);
+  font-size: 0.82rem;
+  font-weight: 600;
+}
+
+.vtt-token-settings__claim-select {
+  appearance: none;
+  border: 1px solid rgba(148, 163, 184, 0.4);
+  border-radius: calc(var(--vtt-radius) / 2);
+  background: rgba(15, 23, 42, 0.55);
+  color: var(--vtt-text-primary);
+  font-size: 0.78rem;
+  padding: 0.18rem 0.4rem;
+  cursor: pointer;
+}
+
+.vtt-token-settings__claim-select:focus-visible {
+  outline: 2px solid var(--vtt-accent);
+  outline-offset: 2px;
+}
+
+.vtt-token-settings__claim-button {
+  appearance: none;
+  border: 1px solid rgba(148, 163, 184, 0.4);
+  border-radius: calc(var(--vtt-radius) / 2);
+  background: rgba(148, 163, 184, 0.16);
+  color: var(--vtt-text-primary);
+  font-size: 0.78rem;
+  font-weight: 600;
+  letter-spacing: 0.02em;
+  padding: 0.22rem 0.6rem;
+  cursor: pointer;
+  transition: background var(--vtt-transition), color var(--vtt-transition);
+}
+
+.vtt-token-settings__claim-button:hover:not(:disabled) {
+  background: rgba(148, 163, 184, 0.28);
+  color: #fff;
+}
+
+.vtt-token-settings__claim-button:focus-visible {
   outline: 2px solid var(--vtt-accent);
   outline-offset: 2px;
 }

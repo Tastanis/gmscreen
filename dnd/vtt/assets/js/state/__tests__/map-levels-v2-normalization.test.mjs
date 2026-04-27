@@ -4,7 +4,9 @@ import assert from 'node:assert/strict';
 import {
   BASE_MAP_LEVEL_ID,
   KNOWN_LEVEL_USER_IDS,
+  PLAYER_CHARACTER_USER_IDS,
   buildLevelViewModel,
+  getClaimedUserIdForPlacement,
   levelIdExistsInViewModel,
   normalizeClaimedTokensMap,
   normalizeUserLevelStateEntry,
@@ -279,6 +281,67 @@ describe('Levels v2 — resolveActiveLevelIdForUser', () => {
       }),
       BASE_MAP_LEVEL_ID,
     );
+  });
+});
+
+describe('Levels v2 — PLAYER_CHARACTER_USER_IDS roster (Step 6)', () => {
+  test('lists the four PCs in the documented order without the GM', () => {
+    // Step 6 (§5.4): PC auto-claim and the GM claim assignment dropdown
+    // both iterate this list. The GM is intentionally omitted because the
+    // plan treats unclaimed and GM-owned as equivalent — there is no
+    // "claim for GM" action.
+    assert.deepEqual(PLAYER_CHARACTER_USER_IDS, ['frunk', 'sharon', 'indigo', 'zepha']);
+  });
+
+  test('is frozen so callers cannot mutate the shared roster', () => {
+    assert.equal(Object.isFrozen(PLAYER_CHARACTER_USER_IDS), true);
+  });
+
+  test('every PC roster id appears in KNOWN_LEVEL_USER_IDS', () => {
+    PLAYER_CHARACTER_USER_IDS.forEach((id) => {
+      assert.ok(
+        KNOWN_LEVEL_USER_IDS.includes(id),
+        `Expected KNOWN_LEVEL_USER_IDS to include ${id}`,
+      );
+    });
+  });
+});
+
+describe('Levels v2 — getClaimedUserIdForPlacement (Step 6)', () => {
+  test('returns null when no scene state is provided', () => {
+    assert.equal(getClaimedUserIdForPlacement(null, 'placement-1'), null);
+    assert.equal(getClaimedUserIdForPlacement({}, 'placement-1'), null);
+  });
+
+  test('returns null when claimedTokens is missing or not an object', () => {
+    assert.equal(getClaimedUserIdForPlacement({ claimedTokens: null }, 'p'), null);
+    assert.equal(getClaimedUserIdForPlacement({ claimedTokens: 'nope' }, 'p'), null);
+  });
+
+  test('returns null when the placement id is not claimed', () => {
+    const sceneState = { claimedTokens: { 'other': 'indigo' } };
+    assert.equal(getClaimedUserIdForPlacement(sceneState, 'placement-1'), null);
+  });
+
+  test('returns the normalized lowercase user id when claimed', () => {
+    const sceneState = { claimedTokens: { 'placement-1': 'Indigo' } };
+    assert.equal(getClaimedUserIdForPlacement(sceneState, 'placement-1'), 'indigo');
+  });
+
+  test('returns null for blank placement ids', () => {
+    const sceneState = { claimedTokens: { '': 'indigo' } };
+    assert.equal(getClaimedUserIdForPlacement(sceneState, ''), null);
+    assert.equal(getClaimedUserIdForPlacement(sceneState, '   '), null);
+  });
+
+  test('trims placement id input before lookup', () => {
+    const sceneState = { claimedTokens: { 'placement-1': 'sharon' } };
+    assert.equal(getClaimedUserIdForPlacement(sceneState, '  placement-1  '), 'sharon');
+  });
+
+  test('drops blank stored values to null', () => {
+    const sceneState = { claimedTokens: { 'placement-1': '   ' } };
+    assert.equal(getClaimedUserIdForPlacement(sceneState, 'placement-1'), null);
   });
 });
 

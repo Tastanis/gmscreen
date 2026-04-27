@@ -22,6 +22,18 @@ export const KNOWN_LEVEL_USER_IDS = Object.freeze([
   'zepha',
 ]);
 
+// Levels v2 (§5.4): the four player-character profile ids in claim order. The
+// GM's claim assignment dropdown iterates this list; PC auto-claim on first
+// drag matches a token name against this set. `KNOWN_LEVEL_USER_IDS` includes
+// `'gm'` for Activate's roster purpose, but the GM is never a claim target —
+// unclaimed and GM-owned are equivalent per the plan.
+export const PLAYER_CHARACTER_USER_IDS = Object.freeze([
+  'frunk',
+  'sharon',
+  'indigo',
+  'zepha',
+]);
+
 const mapLevelSeed = Date.now();
 let mapLevelSequence = 0;
 
@@ -429,6 +441,36 @@ export function normalizeClaimedTokensMap(raw) {
     out[placementId] = userId;
   });
   return out;
+}
+
+/**
+ * Levels v2 (§5.4): resolve the claimant profile id for a placement from a
+ * scene's `claimedTokens` map. Returns a normalized lowercase profile id, or
+ * null when the placement is unclaimed (which the plan treats as GM-owned for
+ * display and permission purposes).
+ *
+ * Accepts the per-scene `sceneState` entry (the same object passed to
+ * `resolveActiveLevelIdForUser`) so callers do not need to know the storage
+ * shape; an unstructured/missing scene entry resolves to null.
+ */
+export function getClaimedUserIdForPlacement(sceneState, placementId) {
+  if (!sceneState || typeof sceneState !== 'object') {
+    return null;
+  }
+  const placementKey = typeof placementId === 'string' ? placementId.trim() : '';
+  if (!placementKey) {
+    return null;
+  }
+  const claims = sceneState.claimedTokens;
+  if (!claims || typeof claims !== 'object') {
+    return null;
+  }
+  const value = claims[placementKey];
+  if (typeof value !== 'string') {
+    return null;
+  }
+  const userId = value.trim().toLowerCase();
+  return userId || null;
 }
 
 function resolveActiveLevelId(preferredId, levels = []) {
