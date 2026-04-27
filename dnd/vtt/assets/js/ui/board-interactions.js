@@ -3521,11 +3521,20 @@ export function mountBoardInteractions(store, routes = {}) {
       }
     }
 
-    persistBoardStateSnapshot({}, tokenAddOps);
+    const dropSavePromise = persistBoardStateSnapshot({}, tokenAddOps);
 
     // For PC folder tokens, fetch and apply character sheet stamina.
+    // Levels v2 follow-up: pass the drop save's promise so the stamina
+    // sync awaits the placement.add round-trip before persisting its own
+    // update. Without this gate, the stamina fetch returns and triggers
+    // `updatePlacementById` (which internally calls
+    // `persistBoardStateSnapshot`) before the drop save has updated
+    // `currentBoardStateVersion`. The second save then carries a stale
+    // version and 409s; the conflict-recovery snapshot reload pulls
+    // server state that does not yet have the stamina fields, so the
+    // stamina silently fails to sync.
     if (isTokenSourcePlayerVisible(template)) {
-      fetchAndApplyCharacterStamina(placement.id, activeSceneId);
+      fetchAndApplyCharacterStamina(placement.id, activeSceneId, dropSavePromise);
     }
 
     if (status) {
@@ -11838,7 +11847,7 @@ export function mountBoardInteractions(store, routes = {}) {
    * Fetches stamina from character sheet for a PC placement and updates it.
    * Called when placing a PC token to ensure stamina is pulled from character sheet.
    */
-  async function fetchAndApplyCharacterStamina(placementId, sceneId) {
+  async function fetchAndApplyCharacterStamina(placementId, sceneId, pendingSavePromise = null) {
     if (!placementId || !sceneId) {
       return;
     }
@@ -11892,6 +11901,25 @@ export function mountBoardInteractions(store, routes = {}) {
 
       if (currentStamina === undefined && staminaMax === undefined) {
         return;
+      }
+
+      // Levels v2 follow-up: when called from `handleTokenDrop`, the
+      // caller passes the drop's `persistBoardStateSnapshot` promise so
+      // we can wait for the placement.add round-trip to complete before
+      // persisting our own update. Without this, our `updatePlacementById`
+      // (which internally re-enters `persistBoardStateSnapshot`) carries
+      // the same `currentBoardStateVersion` as the drop save (the drop
+      // response hasn't bumped it yet), and `coalesce: true` aborts the
+      // in-flight drop save so the bumped version never lands client-side
+      // — causing a 409 on the second save and clobbering stamina via
+      // the conflict-recovery snapshot reload.
+      if (pendingSavePromise && typeof pendingSavePromise.then === 'function') {
+        try {
+          await pendingSavePromise;
+        } catch (waitError) {
+          // Swallow: a failed prior save is not a reason to abandon the
+          // stamina update. The next dirty-flush cycle will retry.
+        }
       }
 
       // Update the placement with character sheet stamina
@@ -15459,10 +15487,13 @@ function createMapLevelCutoutTool() {
       const mapLevels = normalizeMapLevelsState(sceneEntry.mapLevels ?? null, {
         sceneGrid: sceneEntry.grid ?? null,
       });
-      if (mapLevels.activeLevelId !== activeLevelId) {
-        return;
-      }
-
+      // Levels v2: do NOT gate on `mapLevels.activeLevelId`. That field is
+      // legacy and is no longer kept in sync with the GM's current viewer
+      // level (Step 2 froze writes from GM nav; only level-create paths
+      // still touch it). The cutout editor's local `activeLevelId` is the
+      // level the editor opened against — set in `activate()` from the
+      // GM's per-user viewer level via `resolveEditableMapLevel`. We only
+      // need to verify the level still exists in `mapLevels.levels`.
       const level = mapLevels.levels.find((entry) => entry.id === activeLevelId);
       if (!level) {
         return;
