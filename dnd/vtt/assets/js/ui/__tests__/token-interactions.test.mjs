@@ -247,3 +247,61 @@ test('token drag finalizes measurement when measure mode is active', () => {
   assert.equal(calls.cancel, 0);
   assert.deepEqual(calls.finalize, [{ column: 2, row: 1, mapX: 160, mapY: 96 }]);
 });
+
+test('updateTokenDrag tracks cursor on cursorSquare and leaves previewPositions at originals', () => {
+  const { ti, viewState, placements } = createTokenDragHarness({ measureActive: false });
+  const startEvent = { pointerId: 1, clientX: 64, clientY: 64, localX: 64, localY: 64 };
+
+  ti.prepareTokenDrag(startEvent, placements[0]);
+  ti.beginTokenDrag(startEvent);
+
+  // After begin, both maps point at the original square (no cursor offset yet
+  // because beginTokenDrag's event localX/Y matches startPointer).
+  assert.deepEqual(viewState.dragState.previewPositions.get('token-1'), {
+    column: 1,
+    row: 1,
+    width: 1,
+    height: 1,
+  });
+  assert.deepEqual(viewState.dragState.cursorSquare.get('token-1'), {
+    column: 1,
+    row: 1,
+    width: 1,
+    height: 1,
+  });
+
+  ti.updateTokenDrag({ pointerId: 1, buttons: 1, localX: 192, localY: 64 });
+
+  // updateTokenDrag must mutate cursorSquare only — previewPositions has to
+  // stay at the originals so any mid-drag renderTokens call (e.g. from a
+  // 409 conflict snapshot) doesn't drag the original token under the cursor.
+  assert.deepEqual(viewState.dragState.cursorSquare.get('token-1'), {
+    column: 3,
+    row: 1,
+    width: 1,
+    height: 1,
+  });
+  assert.deepEqual(viewState.dragState.previewPositions.get('token-1'), {
+    column: 1,
+    row: 1,
+    width: 1,
+    height: 1,
+  });
+  assert.equal(viewState.dragState.hasMoved, true);
+});
+
+test('endTokenDrag promotes cursorSquare into previewPositions before commit', () => {
+  const { ti, placements, calls } = createTokenDragHarness({ measureActive: true });
+  const startEvent = { pointerId: 1, clientX: 64, clientY: 64, localX: 64, localY: 64 };
+
+  ti.prepareTokenDrag(startEvent, placements[0]);
+  ti.beginTokenDrag(startEvent);
+  ti.updateTokenDrag({ pointerId: 1, buttons: 1, localX: 256, localY: 192 });
+
+  ti.endTokenDrag({ commit: true, pointerId: 1 });
+
+  // The commit path reads previewPositions; finalizeExternalMeasurement is
+  // called with the cursor-aligned position the user landed on, which proves
+  // cursorSquare was promoted into previewPositions before commitDragPreview.
+  assert.deepEqual(calls.finalize, [{ column: 4, row: 3, mapX: 288, mapY: 224 }]);
+});

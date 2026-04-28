@@ -5260,6 +5260,12 @@ export function mountBoardInteractions(store, routes = {}) {
         layer.removeChild(child);
         return;
       }
+      // Drag-ghost clones intentionally lack data-placement-id (so DOM
+      // queries don't double-match them). Leave them alone here — they
+      // own their own transform and lifecycle (endTokenDrag removes them).
+      if (child.dataset?.vttDragGhost === '1') {
+        return;
+      }
       const id = child.dataset?.placementId;
       if (id) {
         existingNodes.set(id, child);
@@ -5484,9 +5490,13 @@ export function mountBoardInteractions(store, routes = {}) {
       node.remove();
     });
 
-    while (layer.firstChild) {
-      layer.removeChild(layer.firstChild);
-    }
+    // Clear remaining children but preserve drag-ghost clones (see above).
+    Array.from(layer.children).forEach((child) => {
+      if (child instanceof HTMLElement && child.dataset?.vttDragGhost === '1') {
+        return;
+      }
+      layer.removeChild(child);
+    });
 
     if (renderedCount > 0) {
       layer.appendChild(fragment);

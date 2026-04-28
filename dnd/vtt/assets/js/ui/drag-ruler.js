@@ -698,8 +698,12 @@ function createOverlay(container) {
   marker.setAttribute('viewBox', '0 0 10 10');
   marker.setAttribute('refX', '8');
   marker.setAttribute('refY', '5');
-  marker.setAttribute('markerWidth', '4');
-  marker.setAttribute('markerHeight', '4');
+  // markerUnits="strokeWidth" multiplies these by the path's stroke-width,
+  // which is `gridSize * ARROW_STROKE_RATIO`. Keep the head at ~0.6 of a
+  // grid square so it reads as an arrow without dwarfing the destination
+  // cell on long shots.
+  marker.setAttribute('markerWidth', '2');
+  marker.setAttribute('markerHeight', '2');
   marker.setAttribute('orient', 'auto-start-reverse');
   marker.setAttribute('markerUnits', 'strokeWidth');
 

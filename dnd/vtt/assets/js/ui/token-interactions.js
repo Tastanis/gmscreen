@@ -342,12 +342,26 @@ export function createTokenInteractions({
       });
     });
 
+    // The ghost should spawn under the cursor, not at the original square.
+    // On a fast drag the activation event is already a couple of squares
+    // away from `startPointer`; using the original-square transform here
+    // would render the ghost there for a frame before updateTokenDrag —
+    // called in the same task — translates it to the cursor.
+    const initialCursorPreview =
+      computePreviewFromEvent(event, candidate) ?? clonePreviewMap(preview);
+
     viewState.dragState = {
       pointerId: candidate.pointerId,
       startPointer: candidate.startPointer,
       tokens: candidate.tokens.map((token) => ({ ...token })),
       originalPositions: candidate.originalPositions,
+      // previewPositions stays at the original positions for the duration of
+      // the drag so renderTokens (which reads it) keeps drawing the real
+      // token at its starting square. cursorSquare tracks the live cursor
+      // square and is copied into previewPositions in endTokenDrag right
+      // before commitDragPreview runs.
       previewPositions: preview,
+      cursorSquare: initialCursorPreview,
       hasMoved: false,
       measurement: null,
       startTime: Date.now(),
@@ -378,12 +392,11 @@ export function createTokenInteractions({
       // Ignore capture issues for unsupported browsers
     }
 
-    applyDragPreview(preview, false);
+    // No initial applyDragPreview/renderTokens call: previewPositions matches
+    // the rendered positions already, and the ghost is positioned directly
+    // below. Skipping the rAF render here is what keeps the just-appended
+    // ghost from being wiped by the renderTokens cleanup pass.
 
-    // Capture DOM references for CSS-transform-based drag rendering.
-    // After applyDragPreview triggers renderTokens, the elements are positioned
-    // at their original grid locations. We store those base positions so
-    // updateTokenDrag can apply translate3d offsets directly.
     const gridSize = Math.max(8, Number.isFinite(viewState.gridSize) ? viewState.gridSize : 64);
     const offsets = viewState.gridOffsets ?? {};
     const leftOffset = Number.isFinite(offsets.left) ? offsets.left : 0;
@@ -408,6 +421,12 @@ export function createTokenInteractions({
           const rendered = renderedById.get(id);
           const scale = Number.isFinite(rendered?.scale) && rendered.scale > 0 ? rendered.scale : 1;
 
+          // Spawn the ghost at the cursor-aligned position so a fast drag
+          // doesn't show a brief flash at the original square.
+          const cursorPos = initialCursorPreview.get(id) ?? pos;
+          const ghostLeft = leftOffset + (cursorPos.column ?? 0) * gridSize;
+          const ghostTop = topOffset + (cursorPos.row ?? 0) * gridSize;
+
           // Ghost-drag UX: the original token stays pinned at its starting
           // square (so the measurement arrow's tail anchors there), and a
           // translucent clone follows the cursor as the drag preview. On
@@ -417,16 +436,22 @@ export function createTokenInteractions({
           const cloned = el.cloneNode(true);
           if (cloned instanceof HTMLElement) {
             // Strip identity attributes so DOM queries (`[data-placement-id]`,
-            // ID selectors, etc.) don't accidentally match the ghost.
+            // ID selectors, etc.) don't accidentally match the ghost. The
+            // sentinel `data-vtt-drag-ghost` lets renderTokens detect and
+            // skip the ghost during its child-cleanup passes — without it,
+            // a single renderTokens call (e.g. from a 409 conflict snapshot)
+            // would silently delete the ghost and the original token would
+            // start sliding under the cursor instead.
             cloned.removeAttribute('data-placement-id');
             cloned.removeAttribute('id');
+            cloned.dataset.vttDragGhost = '1';
             cloned.classList.add('vtt-token--drag-ghost');
             cloned.classList.add('is-dragging');
             cloned.style.zIndex = '100000';
             cloned.style.pointerEvents = 'none';
             cloned.style.transform = scale === 1
-              ? `translate3d(${baseLeft}px, ${baseTop}px, 0)`
-              : `translate3d(${baseLeft}px, ${baseTop}px, 0) scale(${scale})`;
+              ? `translate3d(${ghostLeft}px, ${ghostTop}px, 0)`
+              : `translate3d(${ghostLeft}px, ${ghostTop}px, 0) scale(${scale})`;
             tokenLayer.appendChild(cloned);
             ghost = cloned;
           }
@@ -437,6 +462,63 @@ export function createTokenInteractions({
     }
 
     return true;
+  }
+
+  // Translate a pointer event into a cursor-aligned preview map keyed by
+  // token id. Pulls token + original-position data from a candidate or
+  // dragState (both expose the same shape: tokens[], originalPositions,
+  // startPointer). Returns null if the pointer can't be mapped or grid
+  // metrics are bogus — the caller should fall back to original positions.
+  function computePreviewFromEvent(event, source) {
+    if (!event || !source || !source.startPointer || !Array.isArray(source.tokens)) {
+      return null;
+    }
+    const pointer = getLocalMapPoint(event);
+    if (!pointer) {
+      return null;
+    }
+    const gridSize = Math.max(8, Number.isFinite(viewState.gridSize) ? viewState.gridSize : 64);
+    if (!Number.isFinite(gridSize) || gridSize <= 0) {
+      return null;
+    }
+    const deltaX = (pointer.x - source.startPointer.x) / gridSize;
+    const deltaY = (pointer.y - source.startPointer.y) / gridSize;
+    if (!Number.isFinite(deltaX) || !Number.isFinite(deltaY)) {
+      return null;
+    }
+
+    const next = new Map();
+    source.tokens.forEach((token) => {
+      if (!token || !token.id) {
+        return;
+      }
+      const origin = source.originalPositions?.get(token.id);
+      if (!origin) {
+        return;
+      }
+      const width = Math.max(1, toNonNegativeNumber(origin.width ?? token.width ?? 1, 1));
+      const height = Math.max(1, toNonNegativeNumber(origin.height ?? token.height ?? 1, 1));
+      const baseColumn = toNonNegativeNumber(origin.column ?? token.column ?? 0, 0);
+      const baseRow = toNonNegativeNumber(origin.row ?? token.row ?? 0, 0);
+      const clamped = clampPlacementToBounds(baseColumn + deltaX, baseRow + deltaY, width, height);
+      next.set(token.id, {
+        column: clamped.column,
+        row: clamped.row,
+        width,
+        height,
+      });
+    });
+    return next;
+  }
+
+  function clonePreviewMap(source) {
+    const cloned = new Map();
+    if (source instanceof Map) {
+      source.forEach((value, key) => {
+        cloned.set(key, { ...value });
+      });
+    }
+    return cloned;
   }
 
   function updateTokenDrag(event) {
@@ -450,60 +532,29 @@ export function createTokenInteractions({
       return;
     }
 
-    const pointer = getLocalMapPoint(event);
-    if (!pointer) {
+    const nextPreview = computePreviewFromEvent(event, dragState);
+    if (!nextPreview || !nextPreview.size) {
       return;
     }
 
-    const gridSize = Math.max(8, Number.isFinite(viewState.gridSize) ? viewState.gridSize : 64);
-    if (!Number.isFinite(gridSize) || gridSize <= 0) {
-      return;
-    }
-
-    const deltaX = (pointer.x - dragState.startPointer.x) / gridSize;
-    const deltaY = (pointer.y - dragState.startPointer.y) / gridSize;
-    if (!Number.isFinite(deltaX) || !Number.isFinite(deltaY)) {
-      return;
-    }
-
-    const nextPreview = new Map();
+    // `changed` tracks whether the cursor square moved since the last
+    // pointermove — used both to flip hasMoved and to gate the fallback
+    // render path.
     let changed = false;
-
-    dragState.tokens.forEach((token) => {
-      if (!token || !token.id) {
-        return;
-      }
-      const origin = dragState.originalPositions.get(token.id);
-      if (!origin) {
-        return;
-      }
-      const width = Math.max(1, toNonNegativeNumber(origin.width ?? token.width ?? 1, 1));
-      const height = Math.max(1, toNonNegativeNumber(origin.height ?? token.height ?? 1, 1));
-      const baseColumn = toNonNegativeNumber(origin.column ?? token.column ?? 0, 0);
-      const baseRow = toNonNegativeNumber(origin.row ?? token.row ?? 0, 0);
-      const nextColumn = baseColumn + deltaX;
-      const nextRow = baseRow + deltaY;
-      const clamped = clampPlacementToBounds(nextColumn, nextRow, width, height);
-      const previous = dragState.previewPositions?.get(token.id);
-      if (!previous || previous.column !== clamped.column || previous.row !== clamped.row) {
+    nextPreview.forEach((next, id) => {
+      const previous = dragState.cursorSquare?.get(id);
+      if (!previous || previous.column !== next.column || previous.row !== next.row) {
         changed = true;
       }
-      nextPreview.set(token.id, {
-        column: clamped.column,
-        row: clamped.row,
-        width,
-        height,
-      });
     });
 
-    if (!nextPreview.size) {
-      return;
-    }
-
-    // Update previewPositions and hasMoved for commit, measurement sync, etc.
-    // but skip the renderTokens() call — apply CSS transforms directly instead.
+    // Track cursor coords on a separate field; previewPositions stays
+    // pointing at the original positions until endTokenDrag promotes
+    // cursorSquare into it. This keeps any renderTokens call mid-drag
+    // (e.g. from a 409 conflict snapshot recovery) from re-rendering
+    // the original token at the cursor.
     if (viewState.dragState) {
-      viewState.dragState.previewPositions = nextPreview;
+      viewState.dragState.cursorSquare = nextPreview;
       if (changed) {
         viewState.dragState.hasMoved = true;
       }
@@ -512,10 +563,13 @@ export function createTokenInteractions({
       }
     }
 
-    // Apply CSS transform directly on dragged elements (GPU-composited, no layout).
-    // Position is derived from the same previewPositions grid coords that commitDragPreview
-    // will read, guaranteeing visual matches commit.
+    // Apply CSS transform directly on dragged elements (GPU-composited, no
+    // layout). When dragElements is empty (e.g. test harness with no real
+    // tokenLayer, or a token whose DOM element vanished mid-drag), skip the
+    // visual transform — the state still flows through cursorSquare and
+    // gets committed at endTokenDrag.
     if (dragElements && dragElements.size) {
+      const gridSize = Math.max(8, Number.isFinite(viewState.gridSize) ? viewState.gridSize : 64);
       const offsets = viewState.gridOffsets ?? {};
       const lo = Number.isFinite(offsets.left) ? offsets.left : 0;
       const to = Number.isFinite(offsets.top) ? offsets.top : 0;
@@ -536,9 +590,6 @@ export function createTokenInteractions({
           ? `translate3d(${left}px, ${top}px, 0)`
           : `translate3d(${left}px, ${top}px, 0) scale(${scale})`;
       });
-    } else {
-      // Fallback: no cached elements, use original render path
-      applyDragPreview(nextPreview, changed);
     }
   }
 
@@ -563,6 +614,15 @@ export function createTokenInteractions({
       mapSurface.releasePointerCapture?.(dragState.pointerId);
     } catch (error) {
       // Ignore release errors
+    }
+
+    // Promote the live cursor square into previewPositions so the existing
+    // commit path (which reads previewPositions) sees the user's final
+    // position. During the drag we deliberately keep previewPositions
+    // pointing at the original positions to avoid mid-drag renderTokens
+    // calls dragging the real token under the cursor.
+    if (dragState.cursorSquare instanceof Map && dragState.cursorSquare.size) {
+      dragState.previewPositions = dragState.cursorSquare;
     }
 
     const preview = dragState.previewPositions;
