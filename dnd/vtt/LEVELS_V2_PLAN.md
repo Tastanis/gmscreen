@@ -973,4 +973,14 @@ Fix:
 
 **Test status after fixes:** 488 of 488 tests still pass. The cutout fix touches a path that has no direct unit test coverage (cutout editor is inside an IIFE in board-interactions.js); the stamina fix adds an `await` around an existing function flow and changes the call signature in `handleTokenDrop` only.
 
+**Bug C — 409 Conflict / "popback" on rapid scene-manager actions (2026-04-27)**
+
+Reported as: rapid level add/delete or layer-visibility toggling produces a `POST /api/state.php` 409 Conflict and the most recent change visibly reverts ("pops back"). Stack trace shows the failing save coming from `scene-manager.js:81` → `scene-manager.js:314` (`toggle-map-level-visibility`) and similar `mutateSceneMapLevels` paths.
+
+Root cause: scene-manager (and settings-panel and any other forceFullSnapshot caller) routes through `_persistBoardState({ forceFullSnapshot: true })`. When two such saves fire close together, the persistence layer's `coalesce: true` aborts the in-flight fetch of save A and sends save B with whatever `currentBoardStateVersion` was captured at queue time. The server may have already processed save A and bumped its version (the abort only cancels the *response*, not the request). Save B then arrives with a now-stale `_version` → 409. The conflict handler calls `applyBoardStateConflictSnapshot(result.data)` which **overwrites local boardState with the server snapshot** — and the server snapshot does not yet reflect save B's mutation, so the user sees the action revert.
+
+Fix landed in `board-interactions.js`: introduced `snapshotSaveQueue` (a Promise chain) and split `persistBoardStateSnapshot` into a thin wrapper plus the existing `doPersistBoardStateSnapshot`. When a caller passes `forceFullSnapshot: true`, the wrapper appends the new save to the queue so each forceFullSnapshot save waits for the prior one's response before being built and sent. By the time `doPersistBoardStateSnapshot` runs, `currentBoardStateVersion` reflects the prior server response (or the conflict snapshot's incoming version on a 409), so the next save carries an up-to-date version. Ops/delta saves keep their fast `coalesce: true` path because the `db64ca8` ops bypass already handles stale versions for them. The escape hatch from ops to snapshot (when `opsResult.escape === true`) re-enters through `doPersistBoardStateSnapshot` directly, since the caller is already inside a queued task. The keepalive flush continues to use the unqueued path because it doesn't pass `forceFullSnapshot`.
+
+**Test status after fix:** 488 of 488 tests still pass. The change is scoped to `persistBoardStateSnapshot` inside the IIFE in `board-interactions.js`; no public surface or test mock changed.
+
 
