@@ -407,9 +407,31 @@ export function createTokenInteractions({
           // pointer. updateTokenDrag re-applies this with translate3d.
           const rendered = renderedById.get(id);
           const scale = Number.isFinite(rendered?.scale) && rendered.scale > 0 ? rendered.scale : 1;
-          el.classList.add('is-dragging');
-          el.style.zIndex = '100000';
-          dragElements.set(id, { element: el, baseLeft, baseTop, scale });
+
+          // Ghost-drag UX: the original token stays pinned at its starting
+          // square (so the measurement arrow's tail anchors there), and a
+          // translucent clone follows the cursor as the drag preview. On
+          // drop, the ghost is removed and the real token teleports to the
+          // committed position via the existing renderTokens() pass.
+          let ghost = null;
+          const cloned = el.cloneNode(true);
+          if (cloned instanceof HTMLElement) {
+            // Strip identity attributes so DOM queries (`[data-placement-id]`,
+            // ID selectors, etc.) don't accidentally match the ghost.
+            cloned.removeAttribute('data-placement-id');
+            cloned.removeAttribute('id');
+            cloned.classList.add('vtt-token--drag-ghost');
+            cloned.classList.add('is-dragging');
+            cloned.style.zIndex = '100000';
+            cloned.style.pointerEvents = 'none';
+            cloned.style.transform = scale === 1
+              ? `translate3d(${baseLeft}px, ${baseTop}px, 0)`
+              : `translate3d(${baseLeft}px, ${baseTop}px, 0) scale(${scale})`;
+            tokenLayer.appendChild(cloned);
+            ghost = cloned;
+          }
+
+          dragElements.set(id, { element: el, ghost, baseLeft, baseTop, scale });
         }
       });
     }
@@ -505,7 +527,12 @@ export function createTokenInteractions({
         const left = lo + (pos.column ?? 0) * gridSize;
         const top = to + (pos.row ?? 0) * gridSize;
         const scale = Number.isFinite(cached.scale) && cached.scale > 0 ? cached.scale : 1;
-        cached.element.style.transform = scale === 1
+        // Move the ghost clone to follow the pointer; the original element
+        // stays anchored at its starting square. If the ghost couldn't be
+        // created for some reason, fall back to moving the original so
+        // the drag still functions.
+        const target = cached.ghost ?? cached.element;
+        target.style.transform = scale === 1
           ? `translate3d(${left}px, ${top}px, 0)`
           : `translate3d(${left}px, ${top}px, 0) scale(${scale})`;
       });
@@ -565,8 +592,13 @@ export function createTokenInteractions({
 
     // Clear CSS-transform drag elements before final render so renderTokens
     // applies authoritative positions from state without leftover transforms.
+    // In ghost-drag mode the original was never modified, but we still defensively
+    // strip is-dragging in case a fallback path applied it.
     if (dragElements) {
-      dragElements.forEach(({ element }) => {
+      dragElements.forEach(({ element, ghost }) => {
+        if (ghost && ghost.parentNode) {
+          ghost.parentNode.removeChild(ghost);
+        }
         element.classList.remove('is-dragging');
         element.style.zIndex = '';
       });
