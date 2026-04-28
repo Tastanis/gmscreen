@@ -1263,28 +1263,17 @@ function renderMapLevelListItem(sceneId, mapLevelsState, level, index, levels, o
       <div class="scene-level__header">
         <button
           type="button"
-          class="btn btn--ghost btn--tiny scene-level__display-mode"
+          class="btn btn--tiny scene-level__display-mode${displayMode === 'always' ? ' is-active' : ''}"
           data-action="cycle-map-level-display-mode"
           data-scene-id="${sceneId}"
           data-map-level-id="${level.id}"
           data-map-level-display-mode="${displayMode}"
           aria-label="Map level display mode: ${modeLabel}. Click to toggle."
+          aria-pressed="${displayMode === 'always' ? 'true' : 'false'}"
           title="${escapeHtml(modeTitle)}"
         >
           ${modeLabel}
         </button>
-        <label class="scene-level__hide" title="Hide this level for everyone (overrides display mode).">
-          <input
-            type="checkbox"
-            class="scene-level__checkbox scene-level__hide-checkbox"
-            data-action="toggle-map-level-hide"
-            data-scene-id="${sceneId}"
-            data-map-level-id="${level.id}"
-            aria-label="${hidden ? 'Unhide map level' : 'Hide map level'}"
-            ${hidden ? 'checked' : ''}
-          />
-          <span class="scene-level__hide-label">Hide</span>
-        </label>
         <span class="scene-level__name" title="${name}">${name}</span>
         <span class="scene-level__map-state">${hasMap ? 'Map' : 'No Map'}</span>
       </div>
@@ -1356,6 +1345,17 @@ function renderMapLevelListItem(sceneId, mapLevelsState, level, index, levels, o
           ${canRaise ? '' : 'disabled'}
         >
           Raise
+        </button>
+        <button
+          type="button"
+          class="btn btn--ghost btn--tiny scene-level__hide"
+          data-action="toggle-map-level-hide"
+          data-scene-id="${sceneId}"
+          data-map-level-id="${level.id}"
+          aria-pressed="${hidden ? 'true' : 'false'}"
+          title="Hide this level for everyone (overrides display mode)."
+        >
+          ${hidden ? 'Unhide' : 'Hide'}
         </button>
         <button
           type="button"

@@ -150,7 +150,7 @@ describe('scene manager map level controls', () => {
     assert.equal(Object.prototype.hasOwnProperty.call(level, 'visible'), false);
   });
 
-  test('Levels v3: scene markup renders the mode toggle button and the hide checkbox', () => {
+  test('Levels v3: scene markup renders the mode toggle button and the hide button', () => {
     const state = createInitialState({
       mapLevels: {
         activeLevelId: 'upper',
@@ -178,6 +178,9 @@ describe('scene manager map level controls', () => {
     assert.match(markup, /data-action="cycle-map-level-display-mode"/);
     assert.match(markup, /data-action="toggle-map-level-hide"/);
     assert.match(markup, /data-map-level-display-mode="always"/);
+    // Hide is a button now, not a checkbox.
+    assert.doesNotMatch(markup, /type="checkbox"[^>]*data-action="toggle-map-level-hide"/);
+    assert.doesNotMatch(markup, /scene-level__hide-checkbox/);
     // Old single visibility checkbox is gone.
     assert.doesNotMatch(markup, /data-action="toggle-map-level-visibility"/);
   });

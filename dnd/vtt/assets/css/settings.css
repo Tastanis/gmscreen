@@ -954,72 +954,29 @@
   min-width: 0;
 }
 
-.scene-level__visibility,
-.scene-level__hide {
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  flex: 0 0 auto;
-  gap: 0.25rem;
-}
-
-.scene-level__hide-label {
-  font-size: 0.7rem;
-  color: var(--vtt-text-secondary);
-  text-transform: uppercase;
-  letter-spacing: 0.04em;
-}
-
 .scene-level__display-mode {
   flex: 0 0 auto;
-  min-width: 3.4rem;
+  min-width: 3.6rem;
   font-size: 0.7rem;
   text-transform: uppercase;
   letter-spacing: 0.04em;
+  background: rgba(125, 200, 230, 0.14);
+  border-color: rgba(125, 200, 230, 0.45);
+  color: var(--vtt-text-primary);
 }
 
-.scene-level__checkbox {
-  appearance: none;
-  width: 28px;
-  height: 18px;
-  border-radius: var(--vtt-radius);
-  background: rgba(125, 200, 230, 0.16);
-  border: 1px solid rgba(125, 200, 230, 0.5);
-  position: relative;
-  cursor: pointer;
-  transition: background var(--vtt-transition), border-color var(--vtt-transition);
+.scene-level__display-mode:hover {
+  background: rgba(125, 200, 230, 0.26);
 }
 
-.scene-level__checkbox::after {
-  content: '';
-  position: absolute;
-  top: 3px;
-  left: 3px;
-  width: 10px;
-  height: 10px;
-  border-radius: calc(var(--vtt-radius) - 2px);
-  background: #e7f8ff;
-  transition: transform var(--vtt-transition), background var(--vtt-transition);
+.scene-level__display-mode[data-map-level-display-mode='always'] {
+  background: rgba(213, 155, 90, 0.32);
+  border-color: rgba(213, 155, 90, 0.7);
+  color: #fff;
 }
 
-.scene-level__checkbox:checked {
-  background: rgba(125, 200, 230, 0.38);
-  border-color: rgba(125, 200, 230, 0.88);
-}
-
-.scene-level__checkbox:checked::after {
-  transform: translateX(12px);
-  background: #f8fdff;
-}
-
-.scene-level__checkbox:disabled {
-  cursor: not-allowed;
-  opacity: 0.4;
-}
-
-.scene-level__checkbox:focus-visible {
-  outline: 2px solid rgba(186, 230, 253, 0.85);
-  outline-offset: 2px;
+.scene-level__display-mode[data-map-level-display-mode='always']:hover {
+  background: rgba(213, 155, 90, 0.42);
 }
 
 .scene-level__name {
