@@ -151,19 +151,49 @@ function getVttBootstrapConfig(?array $authContext = null): array
     $tokens = loadVttTokens();
     $boardState = loadVttJson('board-state.json');
 
-    // Normalize fogOfWar.revealedCells to ensure it's always a JSON object, not an array.
+    // Normalize fogOfWar revealedCells to ensure they're always JSON objects, not arrays.
     // PHP's json_encode() turns empty PHP arrays into [] (JSON array) instead of {} (JSON object).
     // JavaScript treats [] as an Array, so setting arr["36,66"] = true creates an expando property
     // that JSON.stringify() silently drops (non-numeric keys on arrays are ignored).
+    // Per-level shape: fogOfWar.byLevel[levelId] = { enabled, revealedCells }.
     if (is_array($boardState) && isset($boardState['sceneState']) && is_array($boardState['sceneState'])) {
         foreach ($boardState['sceneState'] as &$scene) {
-            if (is_array($scene) && isset($scene['fogOfWar']) && is_array($scene['fogOfWar'])) {
-                if (!isset($scene['fogOfWar']['revealedCells'])
-                    || !is_array($scene['fogOfWar']['revealedCells'])
-                    || empty($scene['fogOfWar']['revealedCells'])) {
-                    $scene['fogOfWar']['revealedCells'] = new \stdClass();
-                }
+            if (!is_array($scene) || !isset($scene['fogOfWar']) || !is_array($scene['fogOfWar'])) {
+                continue;
             }
+            $fog = &$scene['fogOfWar'];
+
+            // Migrate legacy { enabled, revealedCells } at the top level into byLevel['level-0'].
+            $hasLegacy = array_key_exists('enabled', $fog) || array_key_exists('revealedCells', $fog);
+            $hasByLevel = isset($fog['byLevel']) && is_array($fog['byLevel']);
+            if ($hasLegacy && !$hasByLevel) {
+                $legacyCells = (isset($fog['revealedCells']) && is_array($fog['revealedCells']))
+                    ? $fog['revealedCells']
+                    : [];
+                $fog['byLevel'] = [
+                    'level-0' => [
+                        'enabled' => !empty($fog['enabled']),
+                        'revealedCells' => empty($legacyCells) ? new \stdClass() : $legacyCells,
+                    ],
+                ];
+                unset($fog['enabled'], $fog['revealedCells']);
+                $hasByLevel = true;
+            }
+
+            if ($hasByLevel) {
+                foreach ($fog['byLevel'] as &$levelEntry) {
+                    if (!is_array($levelEntry)) continue;
+                    if (!isset($levelEntry['revealedCells'])
+                        || !is_array($levelEntry['revealedCells'])
+                        || empty($levelEntry['revealedCells'])) {
+                        $levelEntry['revealedCells'] = new \stdClass();
+                    }
+                }
+                unset($levelEntry);
+            } else {
+                $fog['byLevel'] = new \stdClass();
+            }
+            unset($fog);
         }
         unset($scene);
     }

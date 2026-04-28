@@ -2849,7 +2849,7 @@ function extractCombatUpdates(array $sceneStateUpdates): array
  * @param mixed $raw
  * @return array<string,mixed>|null
  */
-function normalizeFogOfWarPayload($raw): ?array
+function normalizeLevelFogEntry($raw): ?array
 {
     if (!is_array($raw)) {
         return null;
@@ -2879,6 +2879,52 @@ function normalizeFogOfWarPayload($raw): ?array
     return [
         'enabled' => $enabled,
         'revealedCells' => empty($revealedCells) ? new \stdClass() : $revealedCells,
+    ];
+}
+
+/**
+ * Per-level fog. New shape: { byLevel: { [levelId]: { enabled, revealedCells } } }.
+ * Legacy { enabled, revealedCells } at the top level migrates to Level 0.
+ *
+ * @param mixed $raw
+ * @return array<string,mixed>|null
+ */
+function normalizeFogOfWarPayload($raw): ?array
+{
+    if (!is_array($raw)) {
+        return null;
+    }
+
+    $byLevel = [];
+
+    if (isset($raw['byLevel']) && is_array($raw['byLevel'])) {
+        foreach ($raw['byLevel'] as $levelId => $levelRaw) {
+            if (!is_string($levelId)) {
+                continue;
+            }
+            $key = trim($levelId);
+            if ($key === '') {
+                continue;
+            }
+            $entry = normalizeLevelFogEntry($levelRaw);
+            if ($entry !== null) {
+                $byLevel[$key] = $entry;
+            }
+        }
+    }
+
+    if (empty($byLevel)) {
+        $legacy = normalizeLevelFogEntry($raw);
+        if ($legacy !== null) {
+            $hasCells = is_array($legacy['revealedCells']) && !empty($legacy['revealedCells']);
+            if (!empty($legacy['enabled']) || $hasCells) {
+                $byLevel['level-0'] = $legacy;
+            }
+        }
+    }
+
+    return [
+        'byLevel' => empty($byLevel) ? new \stdClass() : $byLevel,
     ];
 }
 

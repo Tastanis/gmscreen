@@ -207,18 +207,50 @@ export function mergeSceneStatePreservingGrid(existingSceneState, incomingSceneS
 
     // fogOfWar: trust incoming (server) as authoritative so the GM can
     // re-add fog. Only fall back to existing when incoming has none.
+    // Per-level shape: { byLevel: { [levelId]: { enabled, revealedCells } } }.
+    // We merge by level so a save touching one level does not drop others.
     if (existingEntry && typeof existingEntry === 'object' && existingEntry.fogOfWar &&
         typeof existingEntry.fogOfWar === 'object') {
+      const existingFog = existingEntry.fogOfWar;
       if (!mergedEntry.fogOfWar || typeof mergedEntry.fogOfWar !== 'object') {
-        mergedEntry.fogOfWar = JSON.parse(JSON.stringify(existingEntry.fogOfWar));
-      } else if (Array.isArray(mergedEntry.fogOfWar.revealedCells)) {
-        // PHP encodes empty {} as [] — coerce back to a plain object.
-        mergedEntry.fogOfWar.revealedCells = {};
+        mergedEntry.fogOfWar = JSON.parse(JSON.stringify(existingFog));
+      } else {
+        if (!mergedEntry.fogOfWar.byLevel || typeof mergedEntry.fogOfWar.byLevel !== 'object'
+            || Array.isArray(mergedEntry.fogOfWar.byLevel)) {
+          mergedEntry.fogOfWar.byLevel = {};
+        }
+        const existingByLevel = (existingFog.byLevel && typeof existingFog.byLevel === 'object'
+          && !Array.isArray(existingFog.byLevel))
+          ? existingFog.byLevel
+          : {};
+        Object.keys(existingByLevel).forEach((levelId) => {
+          const incomingLevel = mergedEntry.fogOfWar.byLevel[levelId];
+          const incomingHasContent = incomingLevel && typeof incomingLevel === 'object'
+            && (incomingLevel.enabled
+              || (incomingLevel.revealedCells
+                && typeof incomingLevel.revealedCells === 'object'
+                && !Array.isArray(incomingLevel.revealedCells)
+                && Object.keys(incomingLevel.revealedCells).length > 0));
+          if (!incomingHasContent) {
+            mergedEntry.fogOfWar.byLevel[levelId] = JSON.parse(JSON.stringify(existingByLevel[levelId]));
+          }
+        });
       }
     }
 
-    if (mergedEntry.fogOfWar && Array.isArray(mergedEntry.fogOfWar.revealedCells)) {
-      mergedEntry.fogOfWar.revealedCells = {};
+    // Coerce PHP-encoded [] back to {} for revealedCells on every level.
+    if (mergedEntry.fogOfWar && typeof mergedEntry.fogOfWar === 'object') {
+      if (Array.isArray(mergedEntry.fogOfWar.byLevel)) {
+        mergedEntry.fogOfWar.byLevel = {};
+      }
+      if (mergedEntry.fogOfWar.byLevel && typeof mergedEntry.fogOfWar.byLevel === 'object') {
+        Object.keys(mergedEntry.fogOfWar.byLevel).forEach((levelId) => {
+          const entry = mergedEntry.fogOfWar.byLevel[levelId];
+          if (entry && typeof entry === 'object' && Array.isArray(entry.revealedCells)) {
+            entry.revealedCells = {};
+          }
+        });
+      }
     }
 
     merged[sceneId] = mergedEntry;
