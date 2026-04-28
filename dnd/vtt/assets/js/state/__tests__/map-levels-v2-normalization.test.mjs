@@ -14,6 +14,7 @@ import {
   resolveActiveLevelIdForUser,
   resolvePcTokenLevelIdForUser,
   resolvePlacementLevelId,
+  resolveTopmostLevelId,
 } from '../normalize/map-levels.js';
 import { normalizeSceneBoardState } from '../normalize/scene-board-state.js';
 
@@ -100,6 +101,32 @@ describe('Levels v2 — buildLevelViewModel', () => {
     assert.equal(levelIdExistsInViewModel('a', view), true);
     assert.equal(levelIdExistsInViewModel('missing', view), false);
     assert.equal(levelIdExistsInViewModel('', view), false);
+  });
+});
+
+describe('Levels v2 — resolveTopmostLevelId', () => {
+  test('returns the highest-zIndex stored level id', () => {
+    assert.equal(
+      resolveTopmostLevelId({
+        baseMapUrl: '/m.png',
+        mapLevels: {
+          levels: [
+            { id: 'low', zIndex: 0 },
+            { id: 'top', zIndex: 5 },
+            { id: 'mid', zIndex: 2 },
+          ],
+        },
+      }),
+      'top'
+    );
+  });
+
+  test('falls back to BASE_MAP_LEVEL_ID when no stored levels exist', () => {
+    assert.equal(
+      resolveTopmostLevelId({ baseMapUrl: null, mapLevels: { levels: [] } }),
+      BASE_MAP_LEVEL_ID
+    );
+    assert.equal(resolveTopmostLevelId({}), BASE_MAP_LEVEL_ID);
   });
 });
 
