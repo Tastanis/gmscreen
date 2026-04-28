@@ -2265,7 +2265,8 @@ function normalizeMapLevelPayload($rawLevel, int $index, array $sceneGrid = []):
         'id' => $id ?? generateMapLevelId(),
         'name' => $name ?? 'Level ' . ($index + 1),
         'mapUrl' => $mapUrl,
-        'visible' => normalizeMapLevelBoolean($rawLevel['visible'] ?? null, true),
+        'displayMode' => normalizeMapLevelDisplayMode($rawLevel['displayMode'] ?? null),
+        'hidden' => resolveMapLevelHidden($rawLevel),
         'opacity' => normalizeMapLevelOpacity($rawLevel['opacity'] ?? null),
         'zIndex' => normalizeMapLevelZIndex($rawLevel['zIndex'] ?? null, $index),
         'grid' => $grid,
@@ -2274,6 +2275,43 @@ function normalizeMapLevelPayload($rawLevel, int $index, array $sceneGrid = []):
         'blocksLowerLevelVision' => normalizeMapLevelBoolean($rawLevel['blocksLowerLevelVision'] ?? null, true),
         'defaultForPlayers' => normalizeMapLevelBoolean($rawLevel['defaultForPlayers'] ?? null, false),
     ];
+}
+
+/**
+ * Levels v3 display mode normalizer (mirrors the JS-side helper).
+ * Replaces the old `visible` boolean with a string discriminator.
+ *   - 'auto'   : render only for viewers at or above this level's zIndex.
+ *   - 'always' : render for every viewer (legacy "on" behavior).
+ * Anything else falls back to 'auto' (the new default).
+ */
+function normalizeMapLevelDisplayMode($value): string
+{
+    if (is_string($value)) {
+        $normalized = strtolower(trim($value));
+        if ($normalized === 'auto' || $normalized === 'always') {
+            return $normalized;
+        }
+    }
+    return 'auto';
+}
+
+/**
+ * Migration: old saves stored `visible: true|false`. New model uses
+ * `hidden` (inverse) plus `displayMode`. Trust `hidden` when present;
+ * otherwise fall back to legacy `visible` so previously-hidden levels
+ * stay hidden through the schema change.
+ *
+ * @param array<string,mixed> $rawLevel
+ */
+function resolveMapLevelHidden(array $rawLevel): bool
+{
+    if (array_key_exists('hidden', $rawLevel)) {
+        return normalizeMapLevelBoolean($rawLevel['hidden'], false);
+    }
+    if (array_key_exists('visible', $rawLevel)) {
+        return !normalizeMapLevelBoolean($rawLevel['visible'], true);
+    }
+    return false;
 }
 
 function generateMapLevelId(): string
@@ -2427,8 +2465,10 @@ function normalizeDefaultPlayerMapLevel(array &$levels): void
     }
 
     foreach ($levels as &$level) {
-        $visible = !array_key_exists('visible', $level) || (bool) $level['visible'];
-        if ($visible) {
+        $notHidden = !is_array($level)
+            || !array_key_exists('hidden', $level)
+            || !(bool) $level['hidden'];
+        if ($notHidden) {
             $level['defaultForPlayers'] = true;
             unset($level);
             return;
@@ -2464,8 +2504,9 @@ function resolveActiveMapLevelId($preferred, array $levels): ?string
     }
 
     foreach ($levels as $level) {
-        $visible = is_array($level) && (!array_key_exists('visible', $level) || (bool) $level['visible']);
-        if ($visible && isset($level['id'])) {
+        $notHidden = is_array($level)
+            && (!array_key_exists('hidden', $level) || !(bool) $level['hidden']);
+        if ($notHidden && isset($level['id'])) {
             return (string) $level['id'];
         }
     }

@@ -220,11 +220,16 @@ describe('map level renderer', () => {
     assert.equal(root.hidden, true);
   });
 
-  test('renders visible map levels in z-index order and leaves hidden levels out', () => {
+  test('renders non-hidden map levels in z-index order and leaves hidden levels out', () => {
+    // Levels v3: input goes through normalizeMapLevelsState which migrates
+    // the legacy `visible: false` flag to `hidden: true`. The renderer
+    // then skips hidden levels for everyone. With the viewer on the
+    // top-most stored level (`roof`), Auto-mode levels at or below it
+    // are still drawn.
     const { renderer } = createRendererHarness();
 
     renderer.sync({
-      activeLevelId: 'upper',
+      activeLevelId: 'roof',
       levels: [
         { id: 'roof', name: 'Roof', mapUrl: '/maps/roof.png', zIndex: 10, opacity: 0.5 },
         { id: 'hidden', mapUrl: '/maps/hidden.png', visible: false, zIndex: 0 },
@@ -236,7 +241,7 @@ describe('map level renderer', () => {
     const levels = Array.from(root.querySelectorAll(`.${MAP_LEVEL_CLASS}`));
 
     assert.equal(root.hidden, false);
-    assert.equal(root.dataset.activeMapLevelId, 'upper');
+    assert.equal(root.dataset.activeMapLevelId, 'roof');
     assert.equal(root.dataset.mapLevelCount, '2');
     assert.deepEqual(
       levels.map((element) => element.dataset.mapLevelId),
@@ -246,6 +251,51 @@ describe('map level renderer', () => {
     assert.equal(levels[0].style.opacity, '0.75');
     assert.equal(levels[0].style.pointerEvents, 'none');
     assert.equal(levels[1].style.zIndex, '10');
+  });
+
+  test('Levels v3: Auto-mode levels above the viewer are hidden; Always-mode levels render anyway', () => {
+    // Viewer on level zIndex 1. `roof` (auto, zIndex 10) sits above and
+    // must NOT render. `beacon` (always, zIndex 5) also sits above but
+    // forces rendering for every viewer. `upper` is on the viewer's
+    // level and renders. Hidden flag overrides everything.
+    const { renderer } = createRendererHarness();
+
+    renderer.sync({
+      activeLevelId: 'upper',
+      levels: [
+        { id: 'upper', mapUrl: '/u.png', zIndex: 1, displayMode: 'auto', hidden: false },
+        { id: 'roof', mapUrl: '/r.png', zIndex: 10, displayMode: 'auto', hidden: false },
+        { id: 'beacon', mapUrl: '/b.png', zIndex: 5, displayMode: 'always', hidden: false },
+        { id: 'gone', mapUrl: '/g.png', zIndex: 2, displayMode: 'always', hidden: true },
+      ],
+    });
+
+    const root = renderer.element;
+    const levels = Array.from(root.querySelectorAll(`.${MAP_LEVEL_CLASS}`));
+    assert.deepEqual(
+      levels.map((element) => element.dataset.mapLevelId),
+      ['upper', 'beacon']
+    );
+  });
+
+  test('Levels v3: viewer on the base map sees no Auto-mode stored levels', () => {
+    // Base map has no entry in `mapLevels.levels`; passing its sentinel
+    // resolves the viewer's effective zIndex to -Infinity, which is
+    // strictly below every stored level. Auto-mode entries are filtered
+    // out, leaving only Always-mode entries.
+    const { renderer } = createRendererHarness();
+
+    renderer.sync({
+      activeLevelId: 'level-0',
+      levels: [
+        { id: 'a', mapUrl: '/a.png', zIndex: 0, displayMode: 'auto', hidden: false },
+        { id: 'b', mapUrl: '/b.png', zIndex: 1, displayMode: 'always', hidden: false },
+      ],
+    }, { activeLevelId: 'level-0' });
+
+    const root = renderer.element;
+    const levels = Array.from(root.querySelectorAll(`.${MAP_LEVEL_CLASS}`));
+    assert.deepEqual(levels.map((element) => element.dataset.mapLevelId), ['b']);
   });
 
   test('applies saved cutout rectangles as a mask using the shared grid metrics', () => {
@@ -350,12 +400,15 @@ describe('map level renderer', () => {
   });
 
   test('helper functions keep rendering scene-scoped and URL-safe', () => {
+    // `displayMode: 'always'` mirrors the old `visible: true` default for
+    // raw (un-normalized) test inputs: the level renders regardless of
+    // viewer level. `hidden: true` skips the level for everyone.
     assert.deepEqual(
       getRenderableMapLevels({
         levels: [
-          { id: 'b', mapUrl: '/b.png', visible: true, zIndex: 2 },
-          { id: 'hidden', mapUrl: '/hidden.png', visible: false, zIndex: 0 },
-          { id: 'a', mapUrl: '/a.png', visible: true, zIndex: 1 },
+          { id: 'b', mapUrl: '/b.png', displayMode: 'always', zIndex: 2 },
+          { id: 'gone', mapUrl: '/gone.png', hidden: true, zIndex: 0 },
+          { id: 'a', mapUrl: '/a.png', displayMode: 'always', zIndex: 1 },
         ],
       }).map((level) => level.id),
       ['a', 'b']

@@ -292,7 +292,7 @@ export function renderSceneList(routes, store) {
       return;
     }
 
-    if (action === 'toggle-map-level-visibility' && sceneId) {
+    if (action === 'cycle-map-level-display-mode' && sceneId) {
       const levelId = target.getAttribute('data-map-level-id');
       if (!levelId) {
         return;
@@ -305,7 +305,31 @@ export function renderSceneList(routes, store) {
           return false;
         }
 
-        level.visible = level.visible === false;
+        level.displayMode = level.displayMode === 'always' ? 'auto' : 'always';
+        toggled = true;
+        return true;
+      });
+
+      if (toggled) {
+        persistBoardStateSnapshot();
+      }
+      return;
+    }
+
+    if (action === 'toggle-map-level-hide' && sceneId) {
+      const levelId = target.getAttribute('data-map-level-id');
+      if (!levelId) {
+        return;
+      }
+
+      let toggled = false;
+      mutateSceneMapLevels(stateApi, sceneId, (mapLevels) => {
+        const level = mapLevels.levels.find((entry) => entry.id === levelId);
+        if (!level) {
+          return false;
+        }
+
+        level.hidden = level.hidden !== true;
         toggled = true;
         return true;
       });
@@ -863,7 +887,8 @@ function createMapLevel(name = '', existingLevels = []) {
     id: createMapLevelId(),
     name: ensureUniqueMapLevelName(trimmed || `Level ${safeLevels.length + 1}`, safeLevels),
     mapUrl: null,
-    visible: true,
+    displayMode: 'auto',
+    hidden: false,
     opacity: 1,
     zIndex: safeLevels.length,
     grid: null,
@@ -1201,7 +1226,8 @@ function renderMapLevelList(sceneId, mapLevelsState, options = {}) {
 
 function renderMapLevelListItem(sceneId, mapLevelsState, level, index, levels, options = {}) {
   const name = escapeHtml(level.name || `Level ${index + 1}`);
-  const visible = level.visible !== false;
+  const hidden = level.hidden === true;
+  const displayMode = level.displayMode === 'always' ? 'always' : 'auto';
   const isActiveLevel = mapLevelsState.activeLevelId === level.id;
   const opacityPercent = formatMapLevelOpacityPercent(level.opacity);
   const hasMap = Boolean(level.mapUrl);
@@ -1210,36 +1236,54 @@ function renderMapLevelListItem(sceneId, mapLevelsState, level, index, levels, o
   const uploadDisabled = Boolean(options.mapLevelUploadDisabled);
   const uploadTitle = options.mapLevelUploadTitle || '';
   const cutoutCount = Array.isArray(level.cutouts) ? level.cutouts.length : 0;
-  const cutoutDisabled = !options.isActiveScene || !isActiveLevel || !hasMap || !visible;
+  const cutoutDisabled = !options.isActiveScene || !isActiveLevel || !hasMap || hidden;
   const cutoutTitle = !options.isActiveScene
     ? 'Activate this scene to edit level cutouts.'
     : !isActiveLevel
       ? 'Switch to this level using the up/down nav before editing cutouts.'
       : !hasMap
         ? 'Upload a map image before editing cutouts.'
-        : !visible
-          ? 'Show this level before editing cutouts.'
+        : hidden
+          ? 'Unhide this level before editing cutouts.'
           : '';
+  const modeLabel = displayMode === 'always' ? 'Always' : 'Auto';
+  const modeTitle = displayMode === 'always'
+    ? 'Always: this level renders for every viewer regardless of their current level. Click to switch to Auto.'
+    : 'Auto: this level only renders for viewers at or above its zIndex. Viewers below see through it (cutouts still gate token vision). Click to switch to Always.';
 
   return `
     <li
       class="scene-level__item${isActiveLevel ? ' is-active' : ''}"
       data-map-level-id="${level.id}"
       data-scene-id="${sceneId}"
-      data-map-level-visible="${visible ? 'true' : 'false'}"
+      data-map-level-display-mode="${displayMode}"
+      data-map-level-hidden="${hidden ? 'true' : 'false'}"
       data-map-level-has-map="${hasMap ? 'true' : 'false'}"
     >
       <div class="scene-level__header">
-        <label class="scene-level__visibility" title="Toggle map level visibility.">
+        <button
+          type="button"
+          class="btn btn--ghost btn--tiny scene-level__display-mode"
+          data-action="cycle-map-level-display-mode"
+          data-scene-id="${sceneId}"
+          data-map-level-id="${level.id}"
+          data-map-level-display-mode="${displayMode}"
+          aria-label="Map level display mode: ${modeLabel}. Click to toggle."
+          title="${escapeHtml(modeTitle)}"
+        >
+          ${modeLabel}
+        </button>
+        <label class="scene-level__hide" title="Hide this level for everyone (overrides display mode).">
           <input
             type="checkbox"
-            class="scene-level__checkbox"
-            data-action="toggle-map-level-visibility"
+            class="scene-level__checkbox scene-level__hide-checkbox"
+            data-action="toggle-map-level-hide"
             data-scene-id="${sceneId}"
             data-map-level-id="${level.id}"
-            aria-label="${visible ? 'Hide map level' : 'Show map level'}"
-            ${visible ? 'checked' : ''}
+            aria-label="${hidden ? 'Unhide map level' : 'Hide map level'}"
+            ${hidden ? 'checked' : ''}
           />
+          <span class="scene-level__hide-label">Hide</span>
         </label>
         <span class="scene-level__name" title="${name}">${name}</span>
         <span class="scene-level__map-state">${hasMap ? 'Map' : 'No Map'}</span>

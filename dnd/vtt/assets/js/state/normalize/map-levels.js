@@ -4,6 +4,17 @@ import { roundToPrecision, toBoolean, toNonNegativeInt } from './helpers.js';
 export const MAP_LEVEL_MAX_LEVELS = 5;
 export const MAP_LEVEL_ID_PREFIX = 'map-level-';
 
+// Levels v3 display modes (replaces the old `visible` boolean):
+//   - 'auto'   (default): the level image renders only for viewers whose
+//                         own level is at or above this level's zIndex.
+//                         Viewers below see through it — token-visibility
+//                         still gated by the level's cutouts.
+//   - 'always': the level image renders for every viewer regardless of
+//                         their level (legacy "on" overlay behavior).
+// `hidden: true` overrides both modes and skips the level for everyone.
+export const MAP_LEVEL_DISPLAY_MODES = Object.freeze(['auto', 'always']);
+export const MAP_LEVEL_DEFAULT_DISPLAY_MODE = 'auto';
+
 // Levels v2: the first uploaded scene map is treated as Level 0. It is not
 // persisted in `mapLevels.levels` (which still stores Level 1+ only); it is
 // derived from the scene's base map URL when building the level view model.
@@ -83,7 +94,8 @@ export function normalizeMapLevelEntry(raw = {}, index = 0, sceneGrid = null) {
     id: idSource || createMapLevelId(),
     name: nameSource || `Level ${index + 1}`,
     mapUrl: mapUrlSource || null,
-    visible: toBoolean(raw.visible, true),
+    displayMode: normalizeMapLevelDisplayMode(raw.displayMode),
+    hidden: resolveMapLevelHidden(raw),
     opacity: normalizeMapLevelOpacity(raw.opacity),
     zIndex: normalizeMapLevelZIndex(raw.zIndex, index),
     grid: hasOwnGrid ? normalizeGridState({ ...(sceneGrid ?? {}), ...raw.grid }) : null,
@@ -92,6 +104,30 @@ export function normalizeMapLevelEntry(raw = {}, index = 0, sceneGrid = null) {
     blocksLowerLevelVision: toBoolean(raw.blocksLowerLevelVision, true),
     defaultForPlayers: toBoolean(raw.defaultForPlayers, false),
   };
+}
+
+export function normalizeMapLevelDisplayMode(value) {
+  if (typeof value === 'string') {
+    const trimmed = value.trim().toLowerCase();
+    if (MAP_LEVEL_DISPLAY_MODES.includes(trimmed)) {
+      return trimmed;
+    }
+  }
+  return MAP_LEVEL_DEFAULT_DISPLAY_MODE;
+}
+
+// Migration: old saves stored `visible: true|false`. New model uses
+// `hidden` (inverse) plus `displayMode`. When `hidden` is provided we
+// trust it; otherwise fall back to the legacy `visible` field so
+// previously-hidden levels stay hidden after the schema change.
+function resolveMapLevelHidden(raw) {
+  if (raw && Object.prototype.hasOwnProperty.call(raw, 'hidden')) {
+    return toBoolean(raw.hidden, false);
+  }
+  if (raw && Object.prototype.hasOwnProperty.call(raw, 'visible')) {
+    return !toBoolean(raw.visible, true);
+  }
+  return false;
 }
 
 function createMapLevelId() {
@@ -186,7 +222,7 @@ function normalizeDefaultPlayerLevel(levels) {
   });
 
   if (!assigned) {
-    const firstVisible = levels.find((level) => level && level.visible !== false) ?? levels[0];
+    const firstVisible = levels.find((level) => level && level.hidden !== true) ?? levels[0];
     if (firstVisible) {
       firstVisible.defaultForPlayers = true;
     }
@@ -225,7 +261,8 @@ export function buildLevelViewModel({ baseMapUrl = null, mapLevels = null, scene
     id: BASE_MAP_LEVEL_ID,
     name: 'Level 0',
     mapUrl: trimmedBase || null,
-    visible: true,
+    displayMode: 'always',
+    hidden: false,
     opacity: 1,
     zIndex: -1,
     grid: sceneGrid && typeof sceneGrid === 'object' ? sceneGrid : null,
@@ -491,7 +528,7 @@ function resolveActiveLevelId(preferredId, levels = []) {
     return defaultLevel.id;
   }
 
-  const visibleLevel = entries.find((level) => level && level.visible !== false && level.id);
+  const visibleLevel = entries.find((level) => level && level.hidden !== true && level.id);
   if (visibleLevel) {
     return visibleLevel.id;
   }

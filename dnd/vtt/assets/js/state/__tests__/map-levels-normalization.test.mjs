@@ -50,7 +50,8 @@ describe('map level normalization', () => {
       id: 'base',
       name: 'Level 1',
       mapUrl: '/maps/base.png',
-      visible: true,
+      displayMode: 'auto',
+      hidden: false,
       opacity: 1,
       zIndex: 2,
       grid: { size: 80, locked: true, visible: false, offsetX: 12, offsetY: 16 },
@@ -60,9 +61,32 @@ describe('map level normalization', () => {
       defaultForPlayers: false,
     });
 
+    // Levels v3: legacy `visible: '0'` migrates to `hidden: true` so
+    // previously-hidden levels stay hidden through the schema change.
     assert.equal(normalized.levels[1].defaultForPlayers, true);
-    assert.equal(normalized.levels[1].visible, false);
+    assert.equal(normalized.levels[1].hidden, true);
+    assert.equal(normalized.levels[1].displayMode, 'auto');
     assert.equal(normalized.levels[1].opacity, 0);
+  });
+
+  test('Levels v3: explicit displayMode/hidden survive normalization and override legacy `visible`', () => {
+    const normalized = normalizeMapLevelsState({
+      levels: [
+        { id: 'a', mapUrl: '/a.png', displayMode: 'always', hidden: false, visible: false },
+        { id: 'b', mapUrl: '/b.png', displayMode: 'AUTO', hidden: 'true' },
+        { id: 'c', mapUrl: '/c.png', displayMode: 'bogus' },
+      ],
+    });
+
+    // `hidden` wins over the legacy `visible` field when both are present.
+    assert.equal(normalized.levels[0].displayMode, 'always');
+    assert.equal(normalized.levels[0].hidden, false);
+    // String coercion: case-insensitive mode + truthy hidden.
+    assert.equal(normalized.levels[1].displayMode, 'auto');
+    assert.equal(normalized.levels[1].hidden, true);
+    // Unknown mode falls back to the new default.
+    assert.equal(normalized.levels[2].displayMode, 'auto');
+    assert.equal(normalized.levels[2].hidden, false);
   });
 
   test('adds mapLevels to each normalized scene board state entry', () => {
@@ -81,7 +105,8 @@ describe('map level normalization', () => {
           id: 'ground',
           name: 'Level 1',
           mapUrl: '/maps/ground.png',
-          visible: true,
+          displayMode: 'auto',
+          hidden: false,
           opacity: 1,
           zIndex: 0,
           grid: null,
