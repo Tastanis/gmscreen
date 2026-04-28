@@ -7,6 +7,8 @@
  * arr["36,66"] = true creates an "expando property" that JSON.stringify()
  * silently drops (non-numeric keys on arrays are ignored). Since getState()
  * uses JSON.parse(JSON.stringify(state)), all fog cells vanish.
+ *
+ * Per-level shape: fogOfWar.byLevel[levelId] = { enabled, revealedCells }.
  */
 
 import { test, describe } from 'node:test';
@@ -24,15 +26,15 @@ import { mergeBoardStateSnapshot } from '../../ui/board-interactions.js';
 // store.js — normalizeFogOfWarEntry (via initializeState)
 // ---------------------------------------------------------------------------
 
-describe('store normalization: array revealedCells coercion', () => {
-  test('initializeState coerces revealedCells array to empty object', () => {
+describe('store normalization: legacy migration + array coercion', () => {
+  test('legacy { enabled, revealedCells } migrates to byLevel["level-0"]', () => {
     initializeState({
       boardState: {
         activeSceneId: 'scene-1',
         sceneState: {
           'scene-1': {
             grid: { size: 64, locked: false, visible: true },
-            fogOfWar: { enabled: true, revealedCells: [] },
+            fogOfWar: { enabled: true, revealedCells: { '5,5': true } },
           },
         },
       },
@@ -41,11 +43,38 @@ describe('store normalization: array revealedCells coercion', () => {
 
     const state = getState();
     const fog = state.boardState.sceneState['scene-1'].fogOfWar;
-    assert.ok(fog, 'fogOfWar should exist');
-    assert.equal(fog.enabled, true);
-    assert.ok(!Array.isArray(fog.revealedCells), 'revealedCells must not be an array');
-    assert.equal(typeof fog.revealedCells, 'object');
-    assert.deepEqual(fog.revealedCells, {}, 'empty array should become empty object');
+    assert.ok(fog && fog.byLevel, 'byLevel should exist');
+    const level0 = fog.byLevel['level-0'];
+    assert.ok(level0, 'legacy fog should migrate to Level 0');
+    assert.equal(level0.enabled, true);
+    assert.equal(level0.revealedCells['5,5'], true);
+  });
+
+  test('initializeState coerces byLevel revealedCells array to empty object', () => {
+    initializeState({
+      boardState: {
+        activeSceneId: 'scene-1',
+        sceneState: {
+          'scene-1': {
+            grid: { size: 64, locked: false, visible: true },
+            fogOfWar: {
+              byLevel: {
+                'level-0': { enabled: true, revealedCells: [] },
+              },
+            },
+          },
+        },
+      },
+      user: { isGM: true, name: 'GM' },
+    });
+
+    const state = getState();
+    const level0 = state.boardState.sceneState['scene-1'].fogOfWar.byLevel['level-0'];
+    assert.ok(level0, 'level-0 fog should exist');
+    assert.equal(level0.enabled, true);
+    assert.ok(!Array.isArray(level0.revealedCells), 'revealedCells must not be an array');
+    assert.equal(typeof level0.revealedCells, 'object');
+    assert.deepEqual(level0.revealedCells, {}, 'empty array should become empty object');
   });
 
   test('cells added after array coercion survive getState round-trip', () => {
@@ -55,29 +84,32 @@ describe('store normalization: array revealedCells coercion', () => {
         sceneState: {
           'scene-1': {
             grid: { size: 64, locked: false, visible: true },
-            fogOfWar: { enabled: true, revealedCells: [] },
+            fogOfWar: {
+              byLevel: {
+                'level-0': { enabled: true, revealedCells: [] },
+              },
+            },
           },
         },
       },
       user: { isGM: true, name: 'GM' },
     });
 
-    // Simulate applyFogChange adding cells
     updateState((draft) => {
-      const fog = draft.boardState.sceneState['scene-1'].fogOfWar;
-      if (!fog.revealedCells || typeof fog.revealedCells !== 'object' || Array.isArray(fog.revealedCells)) {
-        fog.revealedCells = {};
+      const level0 = draft.boardState.sceneState['scene-1'].fogOfWar.byLevel['level-0'];
+      if (!level0.revealedCells || typeof level0.revealedCells !== 'object'
+          || Array.isArray(level0.revealedCells)) {
+        level0.revealedCells = {};
       }
-      fog.revealedCells['36,66'] = true;
-      fog.revealedCells['0,0'] = true;
+      level0.revealedCells['36,66'] = true;
+      level0.revealedCells['0,0'] = true;
     });
 
     const state = getState();
-    const fog = state.boardState.sceneState['scene-1'].fogOfWar;
-    assert.equal(Object.keys(fog.revealedCells).length, 2,
-      'should have 2 revealed cells after adding to coerced object');
-    assert.equal(fog.revealedCells['36,66'], true);
-    assert.equal(fog.revealedCells['0,0'], true);
+    const level0 = state.boardState.sceneState['scene-1'].fogOfWar.byLevel['level-0'];
+    assert.equal(Object.keys(level0.revealedCells).length, 2);
+    assert.equal(level0.revealedCells['36,66'], true);
+    assert.equal(level0.revealedCells['0,0'], true);
   });
 
   test('JSON.parse(JSON.stringify()) preserves cells after coercion', () => {
@@ -87,7 +119,11 @@ describe('store normalization: array revealedCells coercion', () => {
         sceneState: {
           'scene-1': {
             grid: { size: 64, locked: false, visible: true },
-            fogOfWar: { enabled: true, revealedCells: [] },
+            fogOfWar: {
+              byLevel: {
+                'level-0': { enabled: true, revealedCells: [] },
+              },
+            },
           },
         },
       },
@@ -95,21 +131,20 @@ describe('store normalization: array revealedCells coercion', () => {
     });
 
     updateState((draft) => {
-      const fog = draft.boardState.sceneState['scene-1'].fogOfWar;
-      if (Array.isArray(fog.revealedCells)) fog.revealedCells = {};
-      fog.revealedCells['5,10'] = true;
-      fog.revealedCells['20,30'] = true;
+      const level0 = draft.boardState.sceneState['scene-1'].fogOfWar.byLevel['level-0'];
+      if (Array.isArray(level0.revealedCells)) level0.revealedCells = {};
+      level0.revealedCells['5,10'] = true;
+      level0.revealedCells['20,30'] = true;
     });
 
-    // This is exactly what getState() does internally
     const state = getState();
     const roundTripped = JSON.parse(JSON.stringify(state));
-    const fog = roundTripped.boardState.sceneState['scene-1'].fogOfWar;
+    const level0 = roundTripped.boardState.sceneState['scene-1'].fogOfWar.byLevel['level-0'];
 
-    assert.ok(!Array.isArray(fog.revealedCells), 'round-tripped revealedCells must not be array');
-    assert.equal(Object.keys(fog.revealedCells).length, 2);
-    assert.equal(fog.revealedCells['5,10'], true);
-    assert.equal(fog.revealedCells['20,30'], true);
+    assert.ok(!Array.isArray(level0.revealedCells), 'round-tripped revealedCells must not be array');
+    assert.equal(Object.keys(level0.revealedCells).length, 2);
+    assert.equal(level0.revealedCells['5,10'], true);
+    assert.equal(level0.revealedCells['20,30'], true);
   });
 });
 
@@ -119,25 +154,20 @@ describe('store normalization: array revealedCells coercion', () => {
 
 describe('original bug demonstration', () => {
   test('expando properties on arrays are lost by JSON.stringify', () => {
-    // This is exactly what happened before the fix
     const arr = [];
     arr['36,66'] = true;
     arr['0,0'] = true;
 
-    // Object.keys sees the expando properties
     assert.equal(Object.keys(arr).length, 2, 'Object.keys sees expando properties');
 
-    // But JSON.stringify silently drops them
     const json = JSON.stringify(arr);
     assert.equal(json, '[]', 'JSON.stringify drops non-numeric array keys');
 
-    // After round-trip, the data is gone
     const parsed = JSON.parse(json);
     assert.equal(Object.keys(parsed).length, 0, 'data is lost after round-trip');
   });
 
   test('plain objects preserve string keys through JSON round-trip', () => {
-    // This is the correct behavior after the fix
     const obj = {};
     obj['36,66'] = true;
     obj['0,0'] = true;
@@ -155,14 +185,18 @@ describe('original bug demonstration', () => {
 // mergeBoardStateSnapshot — mergeSceneStatePreservingGrid array coercion
 // ---------------------------------------------------------------------------
 
-describe('mergeBoardStateSnapshot: array revealedCells coercion', () => {
-  test('incoming array revealedCells is coerced to object during merge', () => {
+describe('mergeBoardStateSnapshot: per-level array revealedCells coercion', () => {
+  test('incoming array revealedCells on a level is coerced to object', () => {
     const existing = {
       activeSceneId: 'scene-1',
       sceneState: {
         'scene-1': {
           grid: { size: 64, locked: false, visible: true },
-          fogOfWar: { enabled: true, revealedCells: { '5,5': true } },
+          fogOfWar: {
+            byLevel: {
+              'level-0': { enabled: true, revealedCells: { '5,5': true } },
+            },
+          },
         },
       },
       placements: {},
@@ -175,9 +209,11 @@ describe('mergeBoardStateSnapshot: array revealedCells coercion', () => {
       sceneState: {
         'scene-1': {
           grid: { size: 64, locked: false, visible: true },
-          // Server returns [] for empty revealedCells (the PHP bug)
-          // This means the GM has re-fogged everything — no cells should be revealed
-          fogOfWar: { enabled: true, revealedCells: [] },
+          fogOfWar: {
+            byLevel: {
+              'level-0': { enabled: true, revealedCells: [] },
+            },
+          },
         },
       },
       placements: {},
@@ -186,24 +222,28 @@ describe('mergeBoardStateSnapshot: array revealedCells coercion', () => {
     };
 
     const merged = mergeBoardStateSnapshot(existing, incoming);
-    const fog = merged.sceneState['scene-1'].fogOfWar;
+    const level0 = merged.sceneState['scene-1'].fogOfWar.byLevel['level-0'];
 
-    assert.ok(!Array.isArray(fog.revealedCells),
+    assert.ok(!Array.isArray(level0.revealedCells),
       'merged revealedCells must not be an array');
-    assert.equal(typeof fog.revealedCells, 'object');
-    // Server state is authoritative — empty incoming means GM re-fogged everything.
-    // Previously this used a union merge which prevented fog from being added back.
-    assert.deepStrictEqual(fog.revealedCells, {},
-      'empty incoming revealedCells means all cells are fogged');
+    assert.equal(typeof level0.revealedCells, 'object');
+    // Incoming is authoritative for that level — empty incoming means GM re-fogged
+    // everything on Level 0.
+    assert.deepStrictEqual(level0.revealedCells, {});
   });
 
-  test('both sides have array revealedCells — result is always object', () => {
+  test('per-level merge: existing levels not in incoming are preserved', () => {
     const existing = {
       activeSceneId: 'scene-1',
       sceneState: {
         'scene-1': {
           grid: { size: 64, locked: false, visible: true },
-          fogOfWar: { enabled: true, revealedCells: [] },
+          fogOfWar: {
+            byLevel: {
+              'level-0': { enabled: true, revealedCells: { '1,1': true } },
+              'level-A': { enabled: true, revealedCells: { '2,2': true } },
+            },
+          },
         },
       },
       placements: {},
@@ -216,7 +256,12 @@ describe('mergeBoardStateSnapshot: array revealedCells coercion', () => {
       sceneState: {
         'scene-1': {
           grid: { size: 64, locked: false, visible: true },
-          fogOfWar: { enabled: true, revealedCells: [] },
+          fogOfWar: {
+            // Only level-0 in incoming — level-A should be preserved from existing.
+            byLevel: {
+              'level-0': { enabled: true, revealedCells: { '1,1': true, '3,3': true } },
+            },
+          },
         },
       },
       placements: {},
@@ -225,14 +270,14 @@ describe('mergeBoardStateSnapshot: array revealedCells coercion', () => {
     };
 
     const merged = mergeBoardStateSnapshot(existing, incoming);
-    const fog = merged.sceneState['scene-1'].fogOfWar;
-
-    assert.ok(!Array.isArray(fog.revealedCells),
-      'revealedCells must be a plain object even when both sides are arrays');
-    assert.deepEqual(fog.revealedCells, {});
+    const byLevel = merged.sceneState['scene-1'].fogOfWar.byLevel;
+    assert.deepStrictEqual(byLevel['level-0'].revealedCells, { '1,1': true, '3,3': true },
+      'level-0 should reflect incoming');
+    assert.ok(byLevel['level-A'], 'level-A should survive partial save');
+    assert.deepStrictEqual(byLevel['level-A'].revealedCells, { '2,2': true });
   });
 
-  test('new map with no fog data gets correct structure after merge', () => {
+  test('new scene with byLevel arrays gets correct structure after merge', () => {
     const existing = {
       activeSceneId: 'new-scene',
       sceneState: {},
@@ -246,7 +291,11 @@ describe('mergeBoardStateSnapshot: array revealedCells coercion', () => {
       sceneState: {
         'new-scene': {
           grid: { size: 64, locked: false, visible: true },
-          fogOfWar: { enabled: true, revealedCells: [] },
+          fogOfWar: {
+            byLevel: {
+              'level-0': { enabled: true, revealedCells: [] },
+            },
+          },
         },
       },
       placements: {},
@@ -255,10 +304,10 @@ describe('mergeBoardStateSnapshot: array revealedCells coercion', () => {
     };
 
     const merged = mergeBoardStateSnapshot(existing, incoming);
-    const fog = merged.sceneState['new-scene'].fogOfWar;
+    const level0 = merged.sceneState['new-scene'].fogOfWar.byLevel['level-0'];
 
-    assert.ok(fog, 'fogOfWar should exist');
-    assert.ok(!Array.isArray(fog.revealedCells),
+    assert.ok(level0, 'level-0 fog should exist');
+    assert.ok(!Array.isArray(level0.revealedCells),
       'revealedCells on new map must be a plain object');
   });
 });

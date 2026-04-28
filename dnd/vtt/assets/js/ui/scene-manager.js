@@ -693,7 +693,7 @@ function ensureSceneBoardStateEntry(boardState, sceneId, fallbackGrid = null) {
   const entry = {
     grid: normalizeGridConfig(fallbackGrid ?? {}),
     mapLevels: createEmptyMapLevelsState(),
-    fogOfWar: { enabled: true, revealedCells: {} },
+    fogOfWar: { byLevel: {} },
   };
   boardState.sceneState[key] = entry;
   return entry;

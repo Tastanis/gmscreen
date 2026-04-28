@@ -2752,12 +2752,19 @@ export function mountBoardInteractions(store, routes = {}) {
             // data reflects the GM's latest changes. Using a union here
             // would prevent the GM from adding fog back because deleted
             // cells would be restored from the player's existing state.
+            // Per-level shape: { byLevel: { [levelId]: { enabled, revealedCells } } }.
             const incomingFog = state.fogOfWar && typeof state.fogOfWar === 'object'
-              ? state.fogOfWar : { enabled: false, revealedCells: {} };
-            // Coerce arrays from PHP's json_encode (empty {} → []) to plain objects
-            if (Array.isArray(incomingFog.revealedCells)) {
-              incomingFog.revealedCells = {};
+              ? state.fogOfWar : { byLevel: {} };
+            if (!incomingFog.byLevel || typeof incomingFog.byLevel !== 'object'
+                || Array.isArray(incomingFog.byLevel)) {
+              incomingFog.byLevel = {};
             }
+            Object.keys(incomingFog.byLevel).forEach((lvlId) => {
+              const entry = incomingFog.byLevel[lvlId];
+              if (entry && typeof entry === 'object' && Array.isArray(entry.revealedCells)) {
+                entry.revealedCells = {};
+              }
+            });
             draft.boardState.sceneState[sceneId].fogOfWar = incomingFog;
           }
         });
@@ -3708,6 +3715,7 @@ export function mountBoardInteractions(store, routes = {}) {
     boardApi,
     viewState,
     isGm: Boolean(userState.isGM),
+    getActiveLevelId: (state, sceneId) => getViewerLevelIdForCurrentUser(state, sceneId),
   });
 
   // Expose a helper so fog-of-war.js can mark scene state dirty for saving
@@ -5281,10 +5289,11 @@ export function mountBoardInteractions(store, routes = {}) {
     const trackerEntries = [];
     const activeCombatantIds = new Set();
     const groupColorAssignments = getCombatGroupColorAssignments();
-    // Pre-compute fog checker once (null when fog inactive or GM viewing)
-    const isCellFogged = gmViewing ? null : createFogChecker(state);
     const tokenLevelState = getActiveSceneTokenLevelState(state);
     const viewerLevelId = activeSceneKey ? getViewerLevelIdForCurrentUser(state, activeSceneKey) : null;
+    // Pre-compute fog checker once (null when fog inactive or GM viewing).
+    // Per-level fog: gate on the viewer's current level.
+    const isCellFogged = gmViewing ? null : createFogChecker(state, viewerLevelId);
     // Levels v2 (§5.4): the per-scene `claimedTokens` map drives the colored
     // ring on PC tokens. Look the scene entry up once outside the loop.
     const activeSceneEntry = activeSceneKey
@@ -5543,10 +5552,10 @@ export function mountBoardInteractions(store, routes = {}) {
     let auraCount = 0;
 
     const gmViewing = isGmUser();
-    const isCellFogged = gmViewing ? null : createFogChecker(state);
     const tokenLevelState = getActiveSceneTokenLevelState(state);
     const auraSceneKey = state?.boardState?.activeSceneId ?? null;
     const auraViewerLevelId = auraSceneKey ? getViewerLevelIdForCurrentUser(state, auraSceneKey) : null;
+    const isCellFogged = gmViewing ? null : createFogChecker(state, auraViewerLevelId);
 
     placements.forEach((placement) => {
       const normalized = normalizePlacementForRender(placement);
@@ -9952,8 +9961,8 @@ export function mountBoardInteractions(store, routes = {}) {
           }
         }
 
-        // For non-GM users, skip tokens hidden by fog of war
-        if (!gmViewing && isPositionFogged(state, pointCell.column, pointCell.row)) {
+        // For non-GM users, skip tokens hidden by fog of war on the viewer's level.
+        if (!gmViewing && isPositionFogged(state, pointCell.column, pointCell.row, viewerLevelId)) {
           continue;
         }
 

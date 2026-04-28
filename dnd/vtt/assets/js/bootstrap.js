@@ -140,28 +140,48 @@ async function hydrateFromServer(routes, userContext) {
             ...normalizedBoard,
           };
           // Re-merge fogOfWar from existing scene entries that had cells.
+          // Per-level shape: walk byLevel[levelId].revealedCells.
           if (existingSceneState && typeof existingSceneState === 'object' &&
               nextBoardState.sceneState && typeof nextBoardState.sceneState === 'object') {
             Object.keys(existingSceneState).forEach((sid) => {
               const existingFog = existingSceneState[sid]?.fogOfWar;
               if (!existingFog || typeof existingFog !== 'object') return;
-              const existingCells = existingFog.revealedCells;
-              if (!existingCells || typeof existingCells !== 'object' ||
-                  Object.keys(existingCells).length === 0) return;
+              const existingByLevel = existingFog.byLevel;
+              if (!existingByLevel || typeof existingByLevel !== 'object') return;
+
               const target = nextBoardState.sceneState[sid];
               if (!target || typeof target !== 'object') return;
               if (!target.fogOfWar || typeof target.fogOfWar !== 'object') {
                 target.fogOfWar = JSON.parse(JSON.stringify(existingFog));
-              } else {
-                if (!target.fogOfWar.revealedCells || typeof target.fogOfWar.revealedCells !== 'object') {
-                  target.fogOfWar.revealedCells = {};
+                return;
+              }
+              if (!target.fogOfWar.byLevel || typeof target.fogOfWar.byLevel !== 'object'
+                  || Array.isArray(target.fogOfWar.byLevel)) {
+                target.fogOfWar.byLevel = {};
+              }
+
+              Object.keys(existingByLevel).forEach((levelId) => {
+                const existingLevel = existingByLevel[levelId];
+                if (!existingLevel || typeof existingLevel !== 'object') return;
+                const existingCells = existingLevel.revealedCells;
+                if (!existingCells || typeof existingCells !== 'object'
+                    || Object.keys(existingCells).length === 0) return;
+
+                let targetLevel = target.fogOfWar.byLevel[levelId];
+                if (!targetLevel || typeof targetLevel !== 'object') {
+                  target.fogOfWar.byLevel[levelId] = JSON.parse(JSON.stringify(existingLevel));
+                  return;
+                }
+                if (!targetLevel.revealedCells || typeof targetLevel.revealedCells !== 'object'
+                    || Array.isArray(targetLevel.revealedCells)) {
+                  targetLevel.revealedCells = {};
                 }
                 Object.keys(existingCells).forEach((key) => {
-                  if (!(key in target.fogOfWar.revealedCells)) {
-                    target.fogOfWar.revealedCells[key] = true;
+                  if (!(key in targetLevel.revealedCells)) {
+                    targetLevel.revealedCells[key] = true;
                   }
                 });
-              }
+              });
             });
           }
           if (!currentIsGM) {

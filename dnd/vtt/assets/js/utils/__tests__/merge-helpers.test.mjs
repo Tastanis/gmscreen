@@ -118,12 +118,25 @@ test('mergeSceneStatePreservingGrid: breaks equal combat sequence ties by timest
   assert.equal(freshMerge.s.combat.phase, 'fresh');
 });
 
-test('mergeSceneStatePreservingGrid: coerces array revealedCells to object', () => {
-  const existing = { s: { fogOfWar: { revealedCells: { '1,1': true } } } };
-  const incoming = { s: { fogOfWar: { revealedCells: [] } } };
+test('mergeSceneStatePreservingGrid: coerces array revealedCells to object (per-level)', () => {
+  const existing = {
+    s: {
+      fogOfWar: {
+        byLevel: { 'level-0': { enabled: true, revealedCells: { '1,1': true } } },
+      },
+    },
+  };
+  const incoming = {
+    s: {
+      fogOfWar: {
+        byLevel: { 'level-0': { enabled: true, revealedCells: [] } },
+      },
+    },
+  };
   const merged = mergeSceneStatePreservingGrid(existing, incoming);
-  assert.equal(Array.isArray(merged.s.fogOfWar.revealedCells), false);
-  assert.equal(typeof merged.s.fogOfWar.revealedCells, 'object');
+  const level0 = merged.s.fogOfWar.byLevel['level-0'];
+  assert.equal(Array.isArray(level0.revealedCells), false);
+  assert.equal(typeof level0.revealedCells, 'object');
 });
 
 test('mergeBoardStateSnapshot: returns existing when incoming is not an object', () => {

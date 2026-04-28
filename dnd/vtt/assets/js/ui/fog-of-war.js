@@ -1,18 +1,33 @@
 /**
- * Fog of War module.
+ * Fog of War module — per-level.
  *
- * Renders a grid-aligned darkness overlay on a <canvas> element that sits
- * above the token layer. The GM sees a translucent overlay; players see
- * opaque black.  PC-folder tokens automatically reveal their grid cells.
+ * Each level in a scene has its own fog layer:
  *
- * Data is stored per-scene in boardState.sceneState[sceneId].fogOfWar:
- *   { enabled: boolean, revealedCells: { "col,row": true, ... } }
+ *   boardState.sceneState[sceneId].fogOfWar = {
+ *     byLevel: {
+ *       [levelId]: { enabled: boolean, revealedCells: { "col,row": true } }
+ *     }
+ *   }
+ *
+ * The viewer sees fog for whichever level they're currently on. The GM panel
+ * (Enabled toggle, Select Area, Clear Fog, Add Fog) acts on whichever level
+ * the GM is currently viewing.
+ *
+ * Cutout cascade: when fog is revealed on a square that sits over a cutout,
+ * the same square is auto-revealed on the level immediately below — and if
+ * that level also has a cutout there, it cascades further down. "Add Fog"
+ * does NOT cascade (one-way).
  */
 
 import {
   PLAYER_VISIBLE_TOKEN_FOLDER,
   normalizePlayerTokenFolderName,
 } from '../state/store.js';
+import {
+  BASE_MAP_LEVEL_ID,
+  resolvePlacementLevelId,
+  buildLevelViewModel,
+} from '../state/normalize/map-levels.js';
 
 // ── Constants ────────────────────────────────────────────────────
 
@@ -23,7 +38,7 @@ const SELECTION_FILL = 'rgba(70,160,255,0.25)';
 const SELECTION_STROKE = 'rgba(70,160,255,0.8)';
 
 // ── Debug logging (check F12 console) ────────────────────────────
-const FOG_DEBUG = false; // set to false to silence fog diagnostics
+const FOG_DEBUG = false;
 function fogLog(...args) {
   if (FOG_DEBUG) console.log('[FOG DEBUG]', ...args);
 }
@@ -40,44 +55,34 @@ let selCtx = null;
 let panelEl = null;
 
 let boardApi = null;
-let viewStateRef = null;  // reference to the live viewState object
+let viewStateRef = null;
 let isGm = false;
+
+// Resolves the viewer/editor's active level for a given scene. Set at mount.
+let getActiveLevelId = () => BASE_MAP_LEVEL_ID;
 
 // Fog-select interaction state
 let fogSelectActive = false;
-let selectionStart = null;   // {col, row} grid coords of anchor corner
-let selectionEnd = null;     // {col, row} grid coords of drag corner
-let selectedCells = new Set(); // set of "col,row" strings currently highlighted
+let selectionStart = null;
+let selectionEnd = null;
+let selectedCells = new Set();
 let pointerDownForFog = false;
 
 // ── Public API ───────────────────────────────────────────────────
 
-/**
- * Mount the fog-of-war system.  Called once at startup from bootstrap/board-interactions.
- */
 export function mountFogOfWar(options = {}) {
   boardApi = options.boardApi ?? null;
   viewStateRef = options.viewState ?? null;
   isGm = Boolean(options.isGm);
+  if (typeof options.getActiveLevelId === 'function') {
+    getActiveLevelId = options.getActiveLevelId;
+  }
 
   fogCanvas = document.getElementById('vtt-fog-layer');
   selCanvas = document.getElementById('vtt-fog-selection-layer');
 
   if (fogCanvas) fogCtx = fogCanvas.getContext('2d');
   if (selCanvas) selCtx = selCanvas.getContext('2d');
-
-  fogLog('mountFogOfWar:', {
-    isGm,
-    hasBoardApi: !!boardApi,
-    hasViewState: !!viewStateRef,
-    hasFogCanvas: !!fogCanvas,
-    hasFogCtx: !!fogCtx,
-    hasSelCanvas: !!selCanvas,
-    hasSelCtx: !!selCtx,
-  });
-
-  if (!selCanvas) fogWarn('vtt-fog-selection-layer element NOT found in DOM');
-  if (!fogCanvas) fogWarn('vtt-fog-layer element NOT found in DOM');
 
   if (isGm) {
     mountPanel();
@@ -86,7 +91,7 @@ export function mountFogOfWar(options = {}) {
 }
 
 /**
- * Re-render the fog overlay.  Called whenever the board state changes.
+ * Re-render the fog overlay for the viewer's current level.
  */
 export function renderFog(state) {
   if (!fogCanvas || !fogCtx) return;
@@ -94,31 +99,23 @@ export function renderFog(state) {
   const activeSceneId = state?.boardState?.activeSceneId ?? null;
   if (!activeSceneId) {
     clearCanvas(fogCtx, fogCanvas);
-    return;
-  }
-
-  const fogState = getFogState(state, activeSceneId);
-  if (!fogState || !fogState.enabled) {
-    fogLog('renderFog: fog OFF for scene', activeSceneId, '— fogState:', fogState);
-    clearCanvas(fogCtx, fogCanvas);
     syncPanelToggle(false);
     return;
   }
 
-  syncPanelToggle(true);
+  const activeLevelId = resolveActiveLevelId(state, activeSceneId);
+  const levelFog = getLevelFog(state, activeSceneId, activeLevelId);
+  const enabled = Boolean(levelFog && levelFog.enabled);
+
+  syncPanelToggle(enabled);
 
   const view = viewStateRef ?? {};
-  const gridSize = Math.max(8, Number.isFinite(view.gridSize) ? view.gridSize : 64);
   const mapW = Number.isFinite(view.mapPixelSize?.width) ? view.mapPixelSize.width : 0;
   const mapH = Number.isFinite(view.mapPixelSize?.height) ? view.mapPixelSize.height : 0;
   if (mapW <= 0 || mapH <= 0) {
     clearCanvas(fogCtx, fogCanvas);
     return;
   }
-
-  const offsets = view.gridOffsets ?? {};
-  const offsetLeft = Number.isFinite(offsets.left) ? offsets.left : 0;
-  const offsetTop = Number.isFinite(offsets.top) ? offsets.top : 0;
 
   // Size the canvas to the map
   if (fogCanvas.width !== mapW || fogCanvas.height !== mapH) {
@@ -128,19 +125,52 @@ export function renderFog(state) {
   fogCanvas.style.width = mapW + 'px';
   fogCanvas.style.height = mapH + 'px';
 
-  const cols = Math.ceil((mapW - offsetLeft) / gridSize);
-  const rows = Math.ceil((mapH - offsetTop) / gridSize);
+  if (!enabled) {
+    fogCtx.clearRect(0, 0, mapW, mapH);
+    return;
+  }
 
-  const revealed = fogState.revealedCells ?? {};
+  const gridSize = Math.max(8, Number.isFinite(view.gridSize) ? view.gridSize : 64);
+  const offsets = view.gridOffsets ?? {};
+  const offsetLeft = Number.isFinite(offsets.left) ? offsets.left : 0;
+  const offsetTop = Number.isFinite(offsets.top) ? offsets.top : 0;
+  const offsetRight = Number.isFinite(offsets.right) ? offsets.right : 0;
+  const offsetBottom = Number.isFinite(offsets.bottom) ? offsets.bottom : 0;
 
-  // Build set of cells auto-revealed by PC tokens
-  const pcCells = buildPcRevealedCells(state, activeSceneId);
+  const innerWidth = Math.max(0, mapW - offsetLeft - offsetRight);
+  const innerHeight = Math.max(0, mapH - offsetTop - offsetBottom);
+  const cols = Math.floor(innerWidth / gridSize);
+  const rows = Math.floor(innerHeight / gridSize);
+
+  const gridRight = offsetLeft + cols * gridSize;
+  const gridBottom = offsetTop + rows * gridSize;
+
+  const revealed = levelFog.revealedCells ?? {};
+  const pcCells = buildPcRevealedCells(state, activeSceneId, activeLevelId);
 
   const alpha = isGm ? GM_FOG_ALPHA : PLAYER_FOG_ALPHA;
 
   fogCtx.clearRect(0, 0, mapW, mapH);
   fogCtx.fillStyle = `rgba(${FOG_COLOR},${alpha})`;
 
+  // Border bands — anything outside the gridded area is unreachable, so it
+  // always reads as fogged. Painting these covers the previously-visible
+  // strips at the top/left/right/bottom of the map when a non-zero grid
+  // origin shifts the addressable grid inward.
+  if (offsetLeft > 0) {
+    fogCtx.fillRect(0, 0, offsetLeft, mapH);
+  }
+  if (gridRight < mapW) {
+    fogCtx.fillRect(gridRight, 0, mapW - gridRight, mapH);
+  }
+  if (offsetTop > 0) {
+    fogCtx.fillRect(offsetLeft, 0, gridRight - offsetLeft, offsetTop);
+  }
+  if (gridBottom < mapH) {
+    fogCtx.fillRect(offsetLeft, gridBottom, gridRight - offsetLeft, mapH - gridBottom);
+  }
+
+  // Addressable cells.
   for (let c = 0; c < cols; c++) {
     for (let r = 0; r < rows; r++) {
       const key = c + ',' + r;
@@ -157,16 +187,12 @@ export function renderFog(state) {
  * Render the selection highlight overlay (separate canvas).
  */
 export function renderFogSelection() {
-  if (!selCanvas || !selCtx) {
-    fogWarn('renderFogSelection: missing canvas/ctx — selCanvas:', !!selCanvas, 'selCtx:', !!selCtx);
-    return;
-  }
+  if (!selCanvas || !selCtx) return;
 
   const view = viewStateRef ?? {};
   const mapW = Number.isFinite(view.mapPixelSize?.width) ? view.mapPixelSize.width : 0;
   const mapH = Number.isFinite(view.mapPixelSize?.height) ? view.mapPixelSize.height : 0;
   if (mapW <= 0 || mapH <= 0) {
-    fogWarn('renderFogSelection: mapPixelSize invalid — clearing canvas. mapW:', mapW, 'mapH:', mapH);
     clearCanvas(selCtx, selCanvas);
     return;
   }
@@ -205,44 +231,44 @@ export function renderFogSelection() {
 }
 
 /**
- * Returns true if a placement at the given grid position is hidden by fog
- * for a non-GM user.  Used by board-interactions to block token clicks.
+ * Returns true if a placement at the given grid position on the given level
+ * is hidden by fog for a non-GM user. Used to block token clicks.
  */
-export function isPositionFogged(state, col, row) {
+export function isPositionFogged(state, col, row, levelId) {
   if (isGm) return false;
 
   const activeSceneId = state?.boardState?.activeSceneId ?? null;
   if (!activeSceneId) return false;
 
-  const fogState = getFogState(state, activeSceneId);
-  if (!fogState || !fogState.enabled) return false;
+  const lvlId = levelId || resolveActiveLevelId(state, activeSceneId);
+  const levelFog = getLevelFog(state, activeSceneId, lvlId);
+  if (!levelFog || !levelFog.enabled) return false;
 
   const key = Math.floor(col) + ',' + Math.floor(row);
-  const revealed = fogState.revealedCells ?? {};
-  if (revealed[key]) return false;
+  if (levelFog.revealedCells && levelFog.revealedCells[key]) return false;
 
-  // Check PC auto-reveal
-  const pcCells = buildPcRevealedCells(state, activeSceneId);
+  const pcCells = buildPcRevealedCells(state, activeSceneId, lvlId);
   if (pcCells.has(key)) return false;
 
   return true;
 }
 
 /**
- * Create a fog-check function with pre-computed data for efficient batch
- * checks (e.g. during token rendering).  Returns null when fog is inactive.
+ * Pre-compute a fog checker for a given level for use during batch rendering.
+ * Returns null when fog is inactive on that level.
  */
-export function createFogChecker(state) {
+export function createFogChecker(state, levelId) {
   if (isGm) return null;
 
   const activeSceneId = state?.boardState?.activeSceneId ?? null;
   if (!activeSceneId) return null;
 
-  const fogState = getFogState(state, activeSceneId);
-  if (!fogState || !fogState.enabled) return null;
+  const lvlId = levelId || resolveActiveLevelId(state, activeSceneId);
+  const levelFog = getLevelFog(state, activeSceneId, lvlId);
+  if (!levelFog || !levelFog.enabled) return null;
 
-  const revealed = fogState.revealedCells ?? {};
-  const pcCells = buildPcRevealedCells(state, activeSceneId);
+  const revealed = levelFog.revealedCells ?? {};
+  const pcCells = buildPcRevealedCells(state, activeSceneId, lvlId);
 
   return (col, row) => {
     const key = Math.floor(col) + ',' + Math.floor(row);
@@ -250,55 +276,92 @@ export function createFogChecker(state) {
   };
 }
 
-/**
- * Returns true if fog-select mode is currently active.
- */
 export function isFogSelectActive() {
   return fogSelectActive;
 }
 
 /**
- * Toggle fog enabled/disabled for the given scene.
+ * Toggle fog enabled/disabled for a specific level within a scene.
  */
-export function toggleFogForScene(sceneId, enabled, options = {}) {
-  fogLog('toggleFogForScene:', sceneId, 'enabled:', enabled);
-  if (!boardApi || !sceneId) return;
-
+export function toggleFogForLevel(sceneId, levelId, enabled, options = {}) {
+  if (!boardApi || !sceneId || !levelId) return;
   const markDirty = options.markSceneStateDirty;
 
   boardApi.updateState((draft) => {
-    if (!draft.boardState.sceneState) {
-      draft.boardState.sceneState = {};
-    }
-    if (!draft.boardState.sceneState[sceneId]) {
-      draft.boardState.sceneState[sceneId] = { grid: { size: 64, locked: false, visible: true } };
-    }
-    if (!draft.boardState.sceneState[sceneId].fogOfWar) {
-      draft.boardState.sceneState[sceneId].fogOfWar = { enabled: false, revealedCells: {} };
-    }
-    draft.boardState.sceneState[sceneId].fogOfWar.enabled = Boolean(enabled);
-    // When enabling, start fully fogged (revealedCells stays as-is or empty)
+    const sceneEntry = ensureSceneEntry(draft, sceneId);
+    const levelEntry = ensureLevelFogEntry(sceneEntry, levelId);
+    levelEntry.enabled = Boolean(enabled);
   });
 
   if (typeof markDirty === 'function') markDirty(sceneId);
 }
 
 /**
- * Get the current fog state for a scene.
+ * Get the fog state for a specific level within a scene.
  */
+export function getFogStateForLevel(state, sceneId, levelId) {
+  return getLevelFog(state, sceneId, levelId);
+}
+
+// Back-compat alias kept for any callers still using the old name.
 export function getFogStateForScene(state, sceneId) {
-  return getFogState(state, sceneId);
+  const lvlId = resolveActiveLevelId(state, sceneId);
+  return getLevelFog(state, sceneId, lvlId);
 }
 
 // ── Internal helpers ─────────────────────────────────────────────
 
-function getFogState(state, sceneId) {
-  if (!sceneId) return null;
+function resolveActiveLevelId(state, sceneId) {
+  try {
+    const id = getActiveLevelId(state, sceneId);
+    return typeof id === 'string' && id ? id : BASE_MAP_LEVEL_ID;
+  } catch (e) {
+    return BASE_MAP_LEVEL_ID;
+  }
+}
+
+function getLevelFog(state, sceneId, levelId) {
+  if (!sceneId || !levelId) return null;
   const sceneState = state?.boardState?.sceneState;
   if (!sceneState || typeof sceneState !== 'object') return null;
   const entry = sceneState[sceneId];
   if (!entry || typeof entry !== 'object') return null;
-  return entry.fogOfWar ?? null;
+  const fog = entry.fogOfWar;
+  if (!fog || typeof fog !== 'object') return null;
+  const byLevel = fog.byLevel;
+  if (!byLevel || typeof byLevel !== 'object') return null;
+  const levelEntry = byLevel[levelId];
+  if (!levelEntry || typeof levelEntry !== 'object') return null;
+  return levelEntry;
+}
+
+function ensureSceneEntry(draft, sceneId) {
+  if (!draft.boardState.sceneState) draft.boardState.sceneState = {};
+  if (!draft.boardState.sceneState[sceneId] || typeof draft.boardState.sceneState[sceneId] !== 'object') {
+    draft.boardState.sceneState[sceneId] = { grid: { size: 64, locked: false, visible: true } };
+  }
+  const entry = draft.boardState.sceneState[sceneId];
+  if (!entry.fogOfWar || typeof entry.fogOfWar !== 'object') {
+    entry.fogOfWar = { byLevel: {} };
+  }
+  if (!entry.fogOfWar.byLevel || typeof entry.fogOfWar.byLevel !== 'object'
+      || Array.isArray(entry.fogOfWar.byLevel)) {
+    entry.fogOfWar.byLevel = {};
+  }
+  return entry;
+}
+
+function ensureLevelFogEntry(sceneEntry, levelId) {
+  const byLevel = sceneEntry.fogOfWar.byLevel;
+  if (!byLevel[levelId] || typeof byLevel[levelId] !== 'object') {
+    byLevel[levelId] = { enabled: false, revealedCells: {} };
+  }
+  const levelEntry = byLevel[levelId];
+  if (!levelEntry.revealedCells || typeof levelEntry.revealedCells !== 'object'
+      || Array.isArray(levelEntry.revealedCells)) {
+    levelEntry.revealedCells = {};
+  }
+  return levelEntry;
 }
 
 function clearCanvas(ctx, canvas) {
@@ -307,11 +370,13 @@ function clearCanvas(ctx, canvas) {
 }
 
 /**
- * Build a Set of "col,row" keys for cells occupied by PC-folder tokens.
+ * PC tokens auto-reveal the cells they occupy. With per-level fog this only
+ * applies to the level the PC is on — a PC on Level 3 does not reveal
+ * Level 2's fog beneath them.
  */
-function buildPcRevealedCells(state, activeSceneId) {
+function buildPcRevealedCells(state, activeSceneId, levelId) {
   const cells = new Set();
-  if (!state || !activeSceneId) return cells;
+  if (!state || !activeSceneId || !levelId) return cells;
 
   const placements = state.boardState?.placements?.[activeSceneId];
   if (!Array.isArray(placements)) return cells;
@@ -320,7 +385,6 @@ function buildPcRevealedCells(state, activeSceneId) {
   const playerFolderKey = normalizePlayerTokenFolderName(PLAYER_VISIBLE_TOKEN_FOLDER);
   if (!playerFolderKey) return cells;
 
-  // Build a set of folder IDs that match the PC folder name
   const pcFolderIds = new Set();
   (tokens.folders ?? []).forEach((folder) => {
     if (!folder || typeof folder !== 'object') return;
@@ -330,14 +394,12 @@ function buildPcRevealedCells(state, activeSceneId) {
     }
   });
 
-  // Build a set of token IDs that belong to PC folders
   const pcTokenIds = new Set();
   (tokens.items ?? []).forEach((token) => {
     if (!token || typeof token !== 'object') return;
     if (token.folderId && pcFolderIds.has(token.folderId)) {
       pcTokenIds.add(token.id);
     }
-    // Also check inline folder name
     if (token.folder && typeof token.folder.name === 'string') {
       if (normalizePlayerTokenFolderName(token.folder.name) === playerFolderKey) {
         pcTokenIds.add(token.id);
@@ -347,8 +409,9 @@ function buildPcRevealedCells(state, activeSceneId) {
 
   placements.forEach((placement) => {
     if (!placement || typeof placement !== 'object') return;
+    if (resolvePlacementLevelId(placement) !== levelId) return;
+
     const tokenId = typeof placement.tokenId === 'string' ? placement.tokenId : '';
-    // Check if this placement's token is in a PC folder
     const isPc = pcTokenIds.has(tokenId) || placement.combatTeam === 'ally';
     if (!isPc) return;
 
@@ -367,6 +430,92 @@ function buildPcRevealedCells(state, activeSceneId) {
   return cells;
 }
 
+// ── Cutout cascade ───────────────────────────────────────────────
+
+/**
+ * Build the per-scene level view model: ordered list of levels (Level 0
+ * first, then stored levels by zIndex ascending) including their cutouts.
+ */
+function getLevelViewModel(state, sceneId) {
+  if (!sceneId) return [];
+  const sceneEntry = state?.boardState?.sceneState?.[sceneId];
+  const sceneList = state?.scenes?.items ?? [];
+  const sceneDef = sceneList.find((s) => s && s.id === sceneId) ?? null;
+  return buildLevelViewModel({
+    baseMapUrl: sceneDef?.mapUrl ?? null,
+    mapLevels: sceneEntry?.mapLevels ?? null,
+    sceneGrid: sceneEntry?.grid ?? null,
+  });
+}
+
+export function levelHasCutoutAt(level, col, row) {
+  if (!level || !Array.isArray(level.cutouts)) return false;
+  return level.cutouts.some((cutout) => {
+    if (!cutout || typeof cutout !== 'object') return false;
+    const cCol = Math.floor(Number(cutout.column ?? 0));
+    const cRow = Math.floor(Number(cutout.row ?? 0));
+    const cW = Math.max(1, Math.floor(Number(cutout.width ?? 1)));
+    const cH = Math.max(1, Math.floor(Number(cutout.height ?? 1)));
+    return col >= cCol && col < cCol + cW && row >= cRow && row < cRow + cH;
+  });
+}
+
+/**
+ * For a given level, return the level immediately below it (highest zIndex
+ * less than this level's zIndex). Returns null if there is no level below.
+ */
+function levelDirectlyBelow(viewModel, levelId) {
+  const current = viewModel.find((lvl) => lvl && lvl.id === levelId);
+  if (!current) return null;
+  const currentZ = Number.isFinite(current.zIndex) ? current.zIndex : 0;
+  let best = null;
+  let bestZ = -Infinity;
+  viewModel.forEach((lvl) => {
+    if (!lvl || lvl.id === levelId) return;
+    const z = Number.isFinite(lvl.zIndex) ? lvl.zIndex : 0;
+    if (z < currentZ && z > bestZ) {
+      best = lvl;
+      bestZ = z;
+    }
+  });
+  return best;
+}
+
+/**
+ * For each (col, row) reveal happening on `originLevelId`, walk down through
+ * cutouts and write reveals into each lower level whose own column over the
+ * cell is gated by a cutout. Mutates `byLevel` in place.
+ */
+export function cascadeReveals(byLevel, viewModel, originLevelId, cellKeys) {
+  if (!Array.isArray(viewModel) || viewModel.length === 0) return;
+  if (!cellKeys || cellKeys.length === 0) return;
+
+  cellKeys.forEach((key) => {
+    const [cStr, rStr] = key.split(',');
+    const col = parseInt(cStr, 10);
+    const row = parseInt(rStr, 10);
+    if (!Number.isFinite(col) || !Number.isFinite(row)) return;
+
+    let currentLevel = viewModel.find((lvl) => lvl && lvl.id === originLevelId);
+    while (currentLevel && levelHasCutoutAt(currentLevel, col, row)) {
+      const below = levelDirectlyBelow(viewModel, currentLevel.id);
+      if (!below) break;
+
+      if (!byLevel[below.id] || typeof byLevel[below.id] !== 'object') {
+        byLevel[below.id] = { enabled: false, revealedCells: {} };
+      }
+      const target = byLevel[below.id];
+      if (!target.revealedCells || typeof target.revealedCells !== 'object'
+          || Array.isArray(target.revealedCells)) {
+        target.revealedCells = {};
+      }
+      target.revealedCells[key] = true;
+
+      currentLevel = below;
+    }
+  });
+}
+
 // ── Panel (GM only) ──────────────────────────────────────────────
 
 function mountPanel() {
@@ -376,7 +525,6 @@ function mountPanel() {
     document.getElementById('vtt-app')?.appendChild(panelEl);
   }
 
-  // Launcher button
   const launcher = document.querySelector('[data-settings-launch="fog"]');
   const syncLauncherActive = (open) => {
     if (!launcher) return;
@@ -392,21 +540,20 @@ function mountPanel() {
     });
   }
 
-  // Close button
   panelEl.querySelector('[data-fog-close]')?.addEventListener('click', () => {
     panelEl.hidden = true;
     syncLauncherActive(false);
     deactivateFogSelect();
   });
 
-  // Toggle switch
   const toggleInput = panelEl.querySelector('[data-fog-toggle]');
   if (toggleInput) {
     toggleInput.addEventListener('change', () => {
       const state = boardApi?.getState?.() ?? {};
       const sceneId = state.boardState?.activeSceneId;
       if (!sceneId) return;
-      toggleFogForScene(sceneId, toggleInput.checked, {
+      const levelId = resolveActiveLevelId(state, sceneId);
+      toggleFogForLevel(sceneId, levelId, toggleInput.checked, {
         markSceneStateDirty: boardApi._markSceneStateDirty,
       });
       if (typeof boardApi._persistBoardState === 'function') {
@@ -415,10 +562,8 @@ function mountPanel() {
     });
   }
 
-  // Select button
   panelEl.querySelector('[data-fog-select]')?.addEventListener('click', () => {
     fogSelectActive = !fogSelectActive;
-    fogLog('Select Area toggled:', fogSelectActive);
     updateSelectButtonState();
     if (!fogSelectActive) {
       clearFogSelection();
@@ -426,12 +571,10 @@ function mountPanel() {
     updateActionButtonStates();
   });
 
-  // Clear Fog button
   panelEl.querySelector('[data-fog-clear]')?.addEventListener('click', () => {
     applyFogChange(false);
   });
 
-  // Add Fog button
   panelEl.querySelector('[data-fog-add]')?.addEventListener('click', () => {
     applyFogChange(true);
   });
@@ -450,7 +593,7 @@ function createPanelElement() {
       <button type="button" class="vtt-fog-panel__close" data-fog-close>&times;</button>
     </div>
     <div class="vtt-fog-panel__toggle-row">
-      <span class="vtt-fog-panel__toggle-label">Enabled</span>
+      <span class="vtt-fog-panel__toggle-label">Enabled (this level)</span>
       <label class="vtt-fog-toggle">
         <input type="checkbox" data-fog-toggle />
         <span class="vtt-fog-toggle__slider"></span>
@@ -523,60 +666,37 @@ function clearFogSelection() {
 }
 
 /**
- * Apply fog change (reveal or cover) to all selected cells.
+ * Apply fog change (reveal or cover) to all selected cells on the GM's
+ * current level. Revealing cascades through cutouts to lower levels;
+ * covering does NOT cascade.
  */
 function applyFogChange(addFog) {
-  fogLog('applyFogChange called — addFog:', addFog, 'selectedCells:', selectedCells.size);
-  if (selectedCells.size === 0) {
-    fogWarn('applyFogChange: no cells selected — aborting');
-    return;
-  }
+  if (selectedCells.size === 0) return;
 
   const state = boardApi?.getState?.() ?? {};
   const sceneId = state.boardState?.activeSceneId;
-  if (!sceneId) {
-    fogWarn('applyFogChange: no activeSceneId — aborting');
-    return;
-  }
+  if (!sceneId) return;
 
-  fogLog('applyFogChange: scene:', sceneId, 'cells:', Array.from(selectedCells).slice(0, 10).join('; '),
-    selectedCells.size > 10 ? `... (${selectedCells.size} total)` : '');
-
+  const levelId = resolveActiveLevelId(state, sceneId);
   const cellKeys = Array.from(selectedCells);
+  const viewModel = getLevelViewModel(state, sceneId);
 
   boardApi.updateState((draft) => {
-    if (!draft.boardState.sceneState) draft.boardState.sceneState = {};
-    if (!draft.boardState.sceneState[sceneId]) {
-      draft.boardState.sceneState[sceneId] = { grid: { size: 64, locked: false, visible: true } };
-    }
-    if (!draft.boardState.sceneState[sceneId].fogOfWar) {
-      draft.boardState.sceneState[sceneId].fogOfWar = { enabled: true, revealedCells: {} };
-    }
-
-    const fog = draft.boardState.sceneState[sceneId].fogOfWar;
-    if (!fog.revealedCells || typeof fog.revealedCells !== 'object' || Array.isArray(fog.revealedCells)) {
-      fog.revealedCells = {};
-    }
+    const sceneEntry = ensureSceneEntry(draft, sceneId);
+    const levelEntry = ensureLevelFogEntry(sceneEntry, levelId);
 
     cellKeys.forEach((key) => {
       if (addFog) {
-        delete fog.revealedCells[key];
+        delete levelEntry.revealedCells[key];
       } else {
-        fog.revealedCells[key] = true;
+        levelEntry.revealedCells[key] = true;
       }
     });
 
-    fogLog('applyFogChange: after update — fog.enabled:', fog.enabled,
-      'revealedCells count:', Object.keys(fog.revealedCells).length);
+    if (!addFog) {
+      cascadeReveals(sceneEntry.fogOfWar.byLevel, viewModel, levelId, cellKeys);
+    }
   });
-
-  // Verify the state was actually updated
-  const afterState = boardApi?.getState?.() ?? {};
-  const afterFog = afterState.boardState?.sceneState?.[sceneId]?.fogOfWar;
-  fogLog('applyFogChange: post-update verification — fogState:', afterFog ? {
-    enabled: afterFog.enabled,
-    revealedCount: afterFog.revealedCells ? Object.keys(afterFog.revealedCells).length : 0,
-  } : null);
 
   if (typeof boardApi._markSceneStateDirty === 'function') {
     boardApi._markSceneStateDirty(sceneId);
@@ -592,12 +712,8 @@ function applyFogChange(addFog) {
 
 function mountFogSelectInteraction() {
   const mapSurface = document.getElementById('vtt-map-surface');
-  if (!mapSurface) {
-    fogWarn('mountFogSelectInteraction: vtt-map-surface not found — fog selection will not work');
-    return;
-  }
+  if (!mapSurface) return;
 
-  fogLog('mountFogSelectInteraction: attaching pointerdown/move/up/cancel on', mapSurface.id);
   mapSurface.addEventListener('pointerdown', handleFogPointerDown, false);
   mapSurface.addEventListener('pointermove', handleFogPointerMove, false);
   mapSurface.addEventListener('pointerup', handleFogPointerUp, false);
@@ -605,25 +721,12 @@ function mountFogSelectInteraction() {
 }
 
 function handleFogPointerDown(event) {
-  fogLog('pointerdown on map surface — fogSelectActive:', fogSelectActive, 'button:', event.button);
   if (!fogSelectActive) return;
-  // Only handle left-click for fog selection
   if (event.button !== 0) return;
 
   const gridPos = pointerToGridCell(event);
-  fogLog('pointerToGridCell result:', gridPos);
-  if (!gridPos) {
-    fogWarn('pointerToGridCell returned null — selection aborted. viewState:', JSON.stringify({
-      scale: viewStateRef?.scale,
-      translation: viewStateRef?.translation,
-      gridSize: viewStateRef?.gridSize,
-      gridOffsets: viewStateRef?.gridOffsets,
-      mapPixelSize: viewStateRef?.mapPixelSize,
-    }));
-    return;
-  }
+  if (!gridPos) return;
 
-  // Prevent the default board interactions from also firing
   event.stopPropagation();
   event.preventDefault();
 
@@ -631,7 +734,6 @@ function handleFogPointerDown(event) {
   selectionStart = gridPos;
   selectionEnd = gridPos;
   updateSelectedCellsFromRect();
-  fogLog('selectedCells after pointerdown:', selectedCells.size, 'cells');
   renderFogSelection();
   updateActionButtonStates();
 }
@@ -648,11 +750,9 @@ function handleFogPointerMove(event) {
   updateActionButtonStates();
 }
 
-function handleFogPointerUp(event) {
+function handleFogPointerUp() {
   if (!pointerDownForFog) return;
   pointerDownForFog = false;
-
-  // Keep selection visible so user can click Clear/Add buttons
   updateActionButtonStates();
 }
 
@@ -662,9 +762,6 @@ function handleFogPointerCancel() {
   clearFogSelection();
 }
 
-/**
- * Convert a pointer event to grid cell {col, row}.
- */
 function pointerToGridCell(event) {
   const mapSurface = document.getElementById('vtt-map-surface');
   if (!mapSurface) return null;
@@ -695,9 +792,6 @@ function pointerToGridCell(event) {
   return { col, row };
 }
 
-/**
- * Fill selectedCells from the rectangle defined by selectionStart → selectionEnd.
- */
 function updateSelectedCellsFromRect() {
   selectedCells.clear();
   if (!selectionStart || !selectionEnd) return;
@@ -714,31 +808,4 @@ function updateSelectedCellsFromRect() {
       }
     }
   }
-}
-
-// ── Normalize fog data (used by store.js) ────────────────────────
-
-export function normalizeFogOfWarState(raw) {
-  if (!raw || typeof raw !== 'object') {
-    return null;
-  }
-
-  const enabled = Boolean(raw.enabled);
-  const revealedCells = {};
-
-  if (raw.revealedCells && typeof raw.revealedCells === 'object') {
-    Object.keys(raw.revealedCells).forEach((key) => {
-      // Validate key format: "col,row" where both are non-negative integers
-      const parts = key.split(',');
-      if (parts.length === 2) {
-        const col = parseInt(parts[0], 10);
-        const row = parseInt(parts[1], 10);
-        if (Number.isFinite(col) && Number.isFinite(row) && col >= 0 && row >= 0) {
-          revealedCells[col + ',' + row] = true;
-        }
-      }
-    });
-  }
-
-  return { enabled, revealedCells };
 }
