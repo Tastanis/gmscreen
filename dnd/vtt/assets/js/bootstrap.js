@@ -21,6 +21,11 @@ import { mountMemoryMonitor } from './ui/memory-monitor.js'; // [REMOVABLE] Memo
 import { fetchScenes } from './services/scene-service.js';
 import { fetchTokens } from './services/token-service.js';
 import { fetchBoardState } from './services/board-state-service.js';
+import {
+  BASE_MAP_LEVEL_ID,
+  normalizeMapLevelsState,
+  resolvePcTokenLevelIdForUser,
+} from './state/normalize/map-levels.js';
 
 async function bootstrap() {
   const config = window.vttConfig ?? {};
@@ -171,6 +176,7 @@ async function hydrateFromServer(routes, userContext) {
               authorIsGm: false,
               authorRole: 'player',
             };
+            applyPcTokenLevelOverride(nextBoardState, currentState?.user?.name);
           }
           draft.boardState = nextBoardState;
         }
@@ -179,6 +185,54 @@ async function hydrateFromServer(routes, userContext) {
   } catch (error) {
     console.warn('[VTT] Failed to hydrate data', error);
   }
+}
+
+// On player login, snap the viewer to the level of their claimed PC token
+// so a stale `userLevelState[userId]` (mutated by a GM Activate while the
+// player was away) does not strand them on the wrong level. The override
+// only fires here, on page load — once it writes a fresh entry, the normal
+// resolver chain handles in-session navigation. We skip silently when the
+// player has zero or 2+ PC-named claims (the existing chain handles those).
+function applyPcTokenLevelOverride(nextBoardState, userName) {
+  const userKey = typeof userName === 'string' ? userName.trim().toLowerCase() : '';
+  if (!userKey) return;
+  const sceneId =
+    typeof nextBoardState?.activeSceneId === 'string' ? nextBoardState.activeSceneId : '';
+  if (!sceneId) return;
+  if (!nextBoardState.sceneState || typeof nextBoardState.sceneState !== 'object') {
+    nextBoardState.sceneState = {};
+  }
+  const sceneEntry =
+    nextBoardState.sceneState[sceneId] && typeof nextBoardState.sceneState[sceneId] === 'object'
+      ? nextBoardState.sceneState[sceneId]
+      : null;
+  if (!sceneEntry) return;
+  const placements = Array.isArray(nextBoardState.placements?.[sceneId])
+    ? nextBoardState.placements[sceneId]
+    : [];
+  const normalizedMapLevels = normalizeMapLevelsState(sceneEntry.mapLevels ?? null, {
+    sceneGrid: sceneEntry.grid ?? null,
+  });
+  const validLevelIds = [BASE_MAP_LEVEL_ID];
+  normalizedMapLevels.levels.forEach((level) => {
+    if (level && typeof level.id === 'string' && level.id) {
+      validLevelIds.push(level.id);
+    }
+  });
+  const pcLevelId = resolvePcTokenLevelIdForUser({
+    sceneState: sceneEntry,
+    userId: userKey,
+    placements,
+    validLevelIds,
+  });
+  if (!pcLevelId) return;
+  if (!sceneEntry.userLevelState || typeof sceneEntry.userLevelState !== 'object') {
+    sceneEntry.userLevelState = {};
+  }
+  sceneEntry.userLevelState[userKey] = {
+    levelId: pcLevelId,
+    _lastModified: Date.now(),
+  };
 }
 
 document.addEventListener('DOMContentLoaded', bootstrap);

@@ -12,6 +12,7 @@ import {
   normalizeUserLevelStateEntry,
   normalizeUserLevelStateMap,
   resolveActiveLevelIdForUser,
+  resolvePcTokenLevelIdForUser,
   resolvePlacementLevelId,
 } from '../normalize/map-levels.js';
 import { normalizeSceneBoardState } from '../normalize/scene-board-state.js';
@@ -280,6 +281,135 @@ describe('Levels v2 — resolveActiveLevelIdForUser', () => {
         placements,
       }),
       BASE_MAP_LEVEL_ID,
+    );
+  });
+});
+
+describe('Login-time PC token resolver — resolvePcTokenLevelIdForUser', () => {
+  test('returns null without a userId or sceneState', () => {
+    assert.equal(resolvePcTokenLevelIdForUser({}), null);
+    assert.equal(resolvePcTokenLevelIdForUser({ userId: 'sharon' }), null);
+    assert.equal(
+      resolvePcTokenLevelIdForUser({ sceneState: { claimedTokens: {} } }),
+      null,
+    );
+  });
+
+  test('returns the level of a single PC-named claimed token', () => {
+    const sceneState = { claimedTokens: { 't1': 'sharon' } };
+    const placements = [
+      { id: 't1', name: 'Sharon Stormwind', levelId: 'map-level-a' },
+    ];
+    assert.equal(
+      resolvePcTokenLevelIdForUser({
+        sceneState,
+        userId: 'SHARON',
+        placements,
+        validLevelIds: ['level-0', 'map-level-a'],
+      }),
+      'map-level-a',
+    );
+  });
+
+  test('ignores claimed tokens whose name does not contain the PC alias', () => {
+    // e.g. a familiar/summon claimed by the player but not named after them.
+    const sceneState = { claimedTokens: { 't1': 'sharon', 't2': 'sharon' } };
+    const placements = [
+      { id: 't1', name: 'Inkfang the Familiar', levelId: 'map-level-a' },
+      { id: 't2', name: 'Sharon Stormwind', levelId: 'map-level-b' },
+    ];
+    assert.equal(
+      resolvePcTokenLevelIdForUser({
+        sceneState,
+        userId: 'sharon',
+        placements,
+        validLevelIds: ['level-0', 'map-level-a', 'map-level-b'],
+      }),
+      'map-level-b',
+    );
+  });
+
+  test('returns null when two PC-named tokens are claimed', () => {
+    const sceneState = { claimedTokens: { 't1': 'sharon', 't2': 'sharon' } };
+    const placements = [
+      { id: 't1', name: 'Sharon (illusion)', levelId: 'map-level-a' },
+      { id: 't2', name: 'Sharon Stormwind', levelId: 'map-level-b' },
+    ];
+    assert.equal(
+      resolvePcTokenLevelIdForUser({
+        sceneState,
+        userId: 'sharon',
+        placements,
+        validLevelIds: ['level-0', 'map-level-a', 'map-level-b'],
+      }),
+      null,
+    );
+  });
+
+  test('returns null when the only PC token is on an unknown level', () => {
+    const sceneState = { claimedTokens: { 't1': 'indigo' } };
+    const placements = [
+      { id: 't1', name: 'Indigo', levelId: 'map-level-deleted' },
+    ];
+    assert.equal(
+      resolvePcTokenLevelIdForUser({
+        sceneState,
+        userId: 'indigo',
+        placements,
+        validLevelIds: ['level-0', 'map-level-a'],
+      }),
+      null,
+    );
+  });
+
+  test('does not match a token claimed by another user', () => {
+    const sceneState = { claimedTokens: { 't1': 'sharon' } };
+    const placements = [
+      { id: 't1', name: 'Sharon Stormwind', levelId: 'map-level-a' },
+    ];
+    assert.equal(
+      resolvePcTokenLevelIdForUser({
+        sceneState,
+        userId: 'indigo',
+        placements,
+      }),
+      null,
+    );
+  });
+
+  test('matches the alias only on word boundaries (no substring hits)', () => {
+    // Guards against e.g. "Frunkster" matching "frunk" — board-interactions'
+    // matchProfileByName uses the same word-boundary rule.
+    const sceneState = { claimedTokens: { 't1': 'frunk' } };
+    const placements = [
+      { id: 't1', name: 'Frunkster Lookalike', levelId: 'map-level-a' },
+    ];
+    assert.equal(
+      resolvePcTokenLevelIdForUser({
+        sceneState,
+        userId: 'frunk',
+        placements,
+      }),
+      null,
+    );
+  });
+
+  test('returns the PC token level even when claims map has stale entries', () => {
+    // claim entries pointing at placements that no longer exist must not
+    // crash or count toward the match total.
+    const sceneState = {
+      claimedTokens: { 't1': 'zepha', 'gone': 'zepha' },
+    };
+    const placements = [
+      { id: 't1', name: 'Zepha Brightspark', levelId: 'map-level-a' },
+    ];
+    assert.equal(
+      resolvePcTokenLevelIdForUser({
+        sceneState,
+        userId: 'zepha',
+        placements,
+      }),
+      'map-level-a',
     );
   });
 });
