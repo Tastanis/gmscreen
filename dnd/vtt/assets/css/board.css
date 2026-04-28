@@ -2574,6 +2574,17 @@
     0 16px 36px rgba(79, 70, 229, 0.4);
 }
 
+/* Ghost clone shown while dragging a token. The original token stays
+   anchored at its starting square (so the measurement arrow's tail
+   has something to attach to); this translucent copy follows the
+   pointer to preview the drop location. */
+.vtt-token.vtt-token--drag-ghost {
+  opacity: 0.55;
+  pointer-events: none;
+  filter: drop-shadow(0 6px 14px rgba(15, 23, 42, 0.45));
+  transition: none;
+}
+
 .vtt-token.vtt-token--hidden {
   opacity: 0.5;
   border-color: rgba(148, 163, 184, 0.4);
@@ -4088,9 +4099,12 @@
 }
 
 .vtt-board__ruler {
-  position: absolute;
+  /* position: fixed pins the readout to the viewport so it stays visible
+     even when the map is panned or zoomed past the canvas edges. */
+  position: fixed;
   bottom: 1rem;
   right: 1rem;
+  z-index: 10000;
   background: rgba(15, 23, 42, 0.85);
   padding: 1rem 1.25rem;
   border-radius: var(--vtt-radius);
@@ -4099,6 +4113,7 @@
   font-size: 1.1rem;
   font-weight: 600;
   box-shadow: 0 12px 32px rgba(15, 23, 42, 0.35);
+  pointer-events: none;
 }
 
 .vtt-board__ruler-value {
@@ -4117,17 +4132,26 @@
 }
 
 .vtt-measure-overlay__path {
-  stroke: rgba(96, 165, 250, 0.9);
-  stroke-width: 6;
+  /* Stroke (gradient) and stroke-width (scaled to grid) are set in JS;
+     CSS only provides linecap/join + a soft drop shadow for legibility. */
   stroke-linecap: round;
   stroke-linejoin: round;
   fill: none;
+  filter: drop-shadow(0 1px 2px rgba(0, 0, 0, 0.45));
+}
+
+.vtt-measure-overlay__arrowhead {
+  fill: #0f0f0f;
+  stroke: rgba(255, 255, 255, 0.85);
+  stroke-width: 0.6;
+  stroke-linejoin: round;
 }
 
 .vtt-measure-overlay__node {
-  fill: rgba(59, 130, 246, 0.95);
-  stroke: rgba(15, 23, 42, 0.92);
-  stroke-width: 4;
+  /* Endpoint circles hidden by default — the gradient arrow + arrowhead
+     already convey the endpoints. Kept in the DOM so multi-waypoint
+     measurements can re-enable them later if desired. */
+  display: none;
 }
 
 .vtt-measure-overlay__label {

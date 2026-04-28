@@ -1,6 +1,14 @@
 const SVG_NS = 'http://www.w3.org/2000/svg';
 const MAX_MEASUREMENT_POINTS = 21; // 20 segments
 
+// Arrow visual constants
+const ARROW_STROKE_RATIO = 0.32;        // stroke-width as fraction of grid size
+const ARROW_BEND_RADIUS_RATIO = 0.55;   // smooth-bend radius as fraction of grid size
+const ARROW_GRADIENT_ID = 'vtt-measure-arrow-gradient';
+const ARROW_HEAD_ID = 'vtt-measure-arrow-head';
+const ARROW_COLOR_START = '#ef4444';    // red at source
+const ARROW_COLOR_END = '#0f0f0f';      // near-black at destination
+
 let sharedState = null;
 let cachedMapRect = null;
 
@@ -415,7 +423,7 @@ function updateOverlay(state) {
   if (!segments.length) {
     state.overlay.svg.setAttribute('hidden', 'hidden');
     state.overlay.svg.style.display = 'none';
-    state.overlay.path.setAttribute('points', '');
+    state.overlay.path.setAttribute('d', '');
     state.overlay.nodes.innerHTML = '';
     state.overlay.labels.innerHTML = '';
     state.ruler.setAttribute('hidden', 'hidden');
@@ -428,12 +436,35 @@ function updateOverlay(state) {
     return;
   }
 
+  const gridMetrics = getGridMetrics(state.grid, state.mapTransform);
+  const gridSize =
+    gridMetrics && gridMetrics.size > 0 ? gridMetrics.size : 64;
+
   state.overlay.svg.removeAttribute('hidden');
   state.overlay.svg.style.display = '';
+
+  // Build a king-move SVG path: diagonal segment from source, smooth bend,
+  // cardinal segment into destination. Pure cardinal/diagonal collapses to
+  // a straight line.
+  const pathD = buildArrowPathD(points, gridSize);
+  state.overlay.path.setAttribute('d', pathD);
+
+  // Stroke thickness scales with grid size so it looks consistent at any zoom.
   state.overlay.path.setAttribute(
-    'points',
-    points.map((point) => `${point.mapX},${point.mapY}`).join(' ')
+    'stroke-width',
+    String(Math.max(2, gridSize * ARROW_STROKE_RATIO))
   );
+
+  // Re-anchor the linear gradient to follow the actual path direction
+  // (first point -> last point in user-space coordinates).
+  if (state.overlay.gradient) {
+    const startPt = points[0];
+    const endPt = points[points.length - 1];
+    state.overlay.gradient.setAttribute('x1', String(startPt.mapX));
+    state.overlay.gradient.setAttribute('y1', String(startPt.mapY));
+    state.overlay.gradient.setAttribute('x2', String(endPt.mapX));
+    state.overlay.gradient.setAttribute('y2', String(endPt.mapY));
+  }
 
   syncNodeMarkers(state.overlay.nodes, points);
   syncSegmentLabels(state.overlay.labels, segments);
@@ -488,6 +519,86 @@ function getSegments(points) {
     segments.push({ start, end, squares });
   }
   return segments;
+}
+
+/**
+ * Build an SVG path `d` attribute that follows D&D king-move semantics:
+ * from each source point, travel `min(|dx|,|dy|)` diagonal squares first,
+ * then `||dx|-|dy||` cardinal squares into the destination, with a smooth
+ * quadratic bend at the corner. Pure cardinal or pure diagonal segments
+ * collapse to a straight line (the bend point coincides with an endpoint).
+ *
+ * @param {Array<{mapX:number, mapY:number, column:number, row:number}>} points
+ * @param {number} gridSize  Pixel size of one grid square (used for bend radius).
+ * @returns {string} SVG path data, or empty string if fewer than 2 points.
+ */
+function buildArrowPathD(points, gridSize) {
+  if (!Array.isArray(points) || points.length < 2) {
+    return '';
+  }
+
+  const safeGrid = Number.isFinite(gridSize) && gridSize > 0 ? gridSize : 64;
+  const bendRadius = safeGrid * ARROW_BEND_RADIUS_RATIO;
+
+  const parts = [`M ${fmt(points[0].mapX)} ${fmt(points[0].mapY)}`];
+
+  for (let i = 1; i < points.length; i += 1) {
+    const a = points[i - 1];
+    const b = points[i];
+
+    const dCol = b.column - a.column;
+    const dRow = b.row - a.row;
+    const adCol = Math.abs(dCol);
+    const adRow = Math.abs(dRow);
+    const sCol = Math.sign(dCol);
+    const sRow = Math.sign(dRow);
+
+    const diagSteps = Math.min(adCol, adRow);
+    const cardSteps = Math.max(adCol, adRow) - diagSteps;
+
+    // Pure cardinal (dCol==0 or dRow==0) or pure diagonal (|dCol|==|dRow|).
+    if (diagSteps === 0 || cardSteps === 0) {
+      parts.push(`L ${fmt(b.mapX)} ${fmt(b.mapY)}`);
+      continue;
+    }
+
+    // Bend point in map-space: end of the diagonal segment from the source.
+    const bendX = a.mapX + sCol * diagSteps * safeGrid;
+    const bendY = a.mapY + sRow * diagSteps * safeGrid;
+
+    const diagLen = Math.hypot(bendX - a.mapX, bendY - a.mapY);
+    const cardLen = Math.hypot(b.mapX - bendX, b.mapY - bendY);
+    if (diagLen <= 0 || cardLen <= 0) {
+      parts.push(`L ${fmt(b.mapX)} ${fmt(b.mapY)}`);
+      continue;
+    }
+
+    const uxDiag = (bendX - a.mapX) / diagLen;
+    const uyDiag = (bendY - a.mapY) / diagLen;
+    const uxCard = (b.mapX - bendX) / cardLen;
+    const uyCard = (b.mapY - bendY) / cardLen;
+
+    // Clamp the corner radius so the curve never overruns either segment.
+    const r = Math.min(bendRadius, diagLen * 0.5, cardLen * 0.5);
+
+    const beforeBendX = bendX - uxDiag * r;
+    const beforeBendY = bendY - uyDiag * r;
+    const afterBendX = bendX + uxCard * r;
+    const afterBendY = bendY + uyCard * r;
+
+    parts.push(`L ${fmt(beforeBendX)} ${fmt(beforeBendY)}`);
+    parts.push(
+      `Q ${fmt(bendX)} ${fmt(bendY)} ${fmt(afterBendX)} ${fmt(afterBendY)}`
+    );
+    parts.push(`L ${fmt(b.mapX)} ${fmt(b.mapY)}`);
+  }
+
+  return parts.join(' ');
+}
+
+function fmt(n) {
+  // Trim trailing zeros for compact path strings; SVG accepts plain decimals.
+  return Number.isFinite(n) ? Number(n.toFixed(2)).toString() : '0';
 }
 
 function syncNodeMarkers(group, points) {
@@ -553,10 +664,62 @@ function createOverlay(container) {
   svg.setAttribute('hidden', 'hidden');
   svg.style.pointerEvents = 'none';
 
-  const path = document.createElementNS(SVG_NS, 'polyline');
+  // <defs>: gradient (red -> black along the path) + arrowhead marker.
+  const defs = document.createElementNS(SVG_NS, 'defs');
+
+  const gradient = document.createElementNS(SVG_NS, 'linearGradient');
+  gradient.setAttribute('id', ARROW_GRADIENT_ID);
+  gradient.setAttribute('gradientUnits', 'userSpaceOnUse');
+  // x1/y1/x2/y2 are set per-render in updateOverlay to follow the path.
+  gradient.setAttribute('x1', '0');
+  gradient.setAttribute('y1', '0');
+  gradient.setAttribute('x2', '1');
+  gradient.setAttribute('y2', '0');
+
+  const stopStart = document.createElementNS(SVG_NS, 'stop');
+  stopStart.setAttribute('offset', '0%');
+  stopStart.setAttribute('stop-color', ARROW_COLOR_START);
+  stopStart.setAttribute('stop-opacity', '0.95');
+
+  const stopEnd = document.createElementNS(SVG_NS, 'stop');
+  stopEnd.setAttribute('offset', '100%');
+  stopEnd.setAttribute('stop-color', ARROW_COLOR_END);
+  stopEnd.setAttribute('stop-opacity', '1');
+
+  gradient.appendChild(stopStart);
+  gradient.appendChild(stopEnd);
+  defs.appendChild(gradient);
+
+  // Arrowhead marker. orient="auto" rotates with path tangent.
+  // viewBox 0..10, refX=8 lets the tip sit at the path end with a small
+  // overlap so it visually merges with the stroke.
+  const marker = document.createElementNS(SVG_NS, 'marker');
+  marker.setAttribute('id', ARROW_HEAD_ID);
+  marker.setAttribute('viewBox', '0 0 10 10');
+  marker.setAttribute('refX', '8');
+  marker.setAttribute('refY', '5');
+  marker.setAttribute('markerWidth', '4');
+  marker.setAttribute('markerHeight', '4');
+  marker.setAttribute('orient', 'auto-start-reverse');
+  marker.setAttribute('markerUnits', 'strokeWidth');
+
+  const headShape = document.createElementNS(SVG_NS, 'path');
+  // Wide-base arrowhead: a chunky chevron with rounded inset to match the
+  // reference screenshots (dark interior, light outline applied via CSS).
+  headShape.setAttribute('d', 'M 0 0 L 10 5 L 0 10 L 2.5 5 Z');
+  headShape.classList.add('vtt-measure-overlay__arrowhead');
+  marker.appendChild(headShape);
+  defs.appendChild(marker);
+
+  svg.appendChild(defs);
+
+  const path = document.createElementNS(SVG_NS, 'path');
   path.classList.add('vtt-measure-overlay__path');
   path.setAttribute('fill', 'none');
-  path.setAttribute('vector-effect', 'non-scaling-stroke');
+  path.setAttribute('stroke', `url(#${ARROW_GRADIENT_ID})`);
+  path.setAttribute('stroke-linecap', 'round');
+  path.setAttribute('stroke-linejoin', 'round');
+  path.setAttribute('marker-end', `url(#${ARROW_HEAD_ID})`);
   svg.appendChild(path);
 
   const nodes = document.createElementNS(SVG_NS, 'g');
@@ -577,7 +740,7 @@ function createOverlay(container) {
 
   container.appendChild(svg);
 
-  return { svg, path, nodes, labels, total };
+  return { svg, path, nodes, labels, total, gradient };
 }
 
 function syncOverlaySize(state) {
