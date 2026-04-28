@@ -116,17 +116,17 @@ export function resolvePlayerActiveMapLevelId(mapLevelsState = null) {
   const activeLevelId = normalizeTokenLevelId(mapLevelsState?.activeLevelId);
   if (activeLevelId) {
     const activeLevel = levels.find((level) => level.id === activeLevelId) ?? null;
-    return activeLevel && activeLevel.visible !== false ? activeLevel.id : null;
+    return activeLevel && activeLevel.hidden !== true ? activeLevel.id : null;
   }
 
   const defaultLevel = levels.find(
-    (level) => level.defaultForPlayers && level.visible !== false
+    (level) => level.defaultForPlayers && level.hidden !== true
   );
   if (defaultLevel) {
     return defaultLevel.id;
   }
 
-  return levels.find((level) => level.visible !== false)?.id ?? null;
+  return levels.find((level) => level.hidden !== true)?.id ?? null;
 }
 
 export function getPlayerTokenMapLevelVisibility(placement = {}, mapLevelsState = null, options = {}) {
@@ -151,7 +151,7 @@ export function getPlayerTokenMapLevelVisibility(placement = {}, mapLevelsState 
   const activeLevelIndex = levels.findIndex((level) => level.id === activeLevelId);
   const placementLevelIndex = levels.findIndex((level) => level.id === placementLevelId);
   const placementLevel = placementLevelIndex >= 0 ? levels[placementLevelIndex] : null;
-  if (activeLevelIndex < 0 || placementLevelIndex < 0 || placementLevel?.visible === false) {
+  if (activeLevelIndex < 0 || placementLevelIndex < 0 || placementLevel?.hidden === true) {
     return createTokenMapLevelVisibilityResult({
       visible: false,
       hasLevels: true,
@@ -731,7 +731,12 @@ export function getFallingDestinationLevelId(placement = {}, mapLevelsState = nu
 }
 
 function doesMapLevelBlockLowerLevels(level, mode) {
-  if (!level || typeof level !== 'object' || level.visible === false) {
+  // Levels v3: blocking is gated by `hidden` only, not by `displayMode`.
+  // An Auto-mode upper level whose image isn't drawn for the current
+  // viewer must still block their vision of tokens above (those tokens
+  // are surfaced through the level's cutouts via the existing rules).
+  // A `hidden` level is treated as if it doesn't exist for anyone.
+  if (!level || typeof level !== 'object' || level.hidden === true) {
     return false;
   }
 

@@ -236,12 +236,14 @@ describe('token level helpers', () => {
     assert.equal(mapLevels.levels[0].id, 'upper');
   });
 
-  test('resolves the player active level only when it is visible', () => {
+  test('resolves the player active level only when it is not hidden', () => {
+    // Levels v3: `hidden: true` replaces the legacy `visible: false`
+    // signal — a hidden level cannot be the player's active level.
     const mapLevels = {
       activeLevelId: 'upper',
       levels: [
-        { id: 'ground', name: 'Ground', visible: true, defaultForPlayers: true, zIndex: 0 },
-        { id: 'upper', name: 'Upper', visible: false, zIndex: 1 },
+        { id: 'ground', name: 'Ground', defaultForPlayers: true, zIndex: 0 },
+        { id: 'upper', name: 'Upper', hidden: true, zIndex: 1 },
       ],
     };
 

@@ -1454,7 +1454,7 @@ export function mountBoardInteractions(store, routes = {}) {
         : '';
       const level = mapLevels.levels.find((entry) => entry.id === levelId) ?? null;
       const hasMap = typeof level?.mapUrl === 'string' && level.mapUrl.trim().length > 0;
-      const isVisible = level ? level.visible !== false : false;
+      const isVisible = level ? level.hidden !== true : false;
       const isActiveLevel = Boolean(levelId && activeLevelId && levelId === activeLevelId);
       const pressed =
         mapLevelCutoutEditorActive &&
@@ -15317,7 +15317,7 @@ function createMapLevelCutoutTool() {
 
     const level = mapLevels.levels.find((entry) => entry.id === requestedId) ?? null;
     const hasMap = typeof level?.mapUrl === 'string' && level.mapUrl.trim().length > 0;
-    if (!level || !hasMap || level.visible === false) {
+    if (!level || !hasMap || level.hidden === true) {
       return null;
     }
 

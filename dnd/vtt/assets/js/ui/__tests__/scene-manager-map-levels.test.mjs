@@ -102,7 +102,7 @@ describe('scene manager map level controls', () => {
     assert.equal(store.getState().boardState.sceneState['scene-1'].mapLevels.levels.length, 5);
   });
 
-  test('normalizes opacity, upload URLs, ordering, visibility, and active selection', () => {
+  test('normalizes opacity, upload URLs, ordering, hide flag, and active selection', () => {
     const store = createStore(
       createInitialState({
         mapLevels: {
@@ -120,7 +120,7 @@ describe('scene manager map level controls', () => {
       const ground = mapLevels.levels.find((level) => level.id === 'ground');
       upper.name = 'Upper Gallery';
       upper.mapUrl = '/uploads/upper.png';
-      upper.visible = false;
+      upper.hidden = true;
       ground.opacity = sceneManager.normalizeMapLevelOpacityInput('35');
 
       const orderedLevels = sceneManager.getOrderedMapLevels(mapLevels.levels);
@@ -137,10 +137,49 @@ describe('scene manager map level controls', () => {
     );
     assert.equal(getLevel(store, 'upper').name, 'Upper Gallery');
     assert.equal(getLevel(store, 'upper').mapUrl, '/uploads/upper.png');
-    assert.equal(getLevel(store, 'upper').visible, false);
+    assert.equal(getLevel(store, 'upper').hidden, true);
     assert.equal(getLevel(store, 'upper').zIndex, 0);
     assert.equal(getLevel(store, 'ground').opacity, 0.35);
     assert.equal(store.getState().boardState.sceneState['scene-1'].mapLevels.activeLevelId, 'upper');
+  });
+
+  test('Levels v3: createMapLevel defaults new levels to displayMode "auto" with hidden false', () => {
+    const level = sceneManager.createMapLevel('Roof', []);
+    assert.equal(level.displayMode, 'auto');
+    assert.equal(level.hidden, false);
+    assert.equal(Object.prototype.hasOwnProperty.call(level, 'visible'), false);
+  });
+
+  test('Levels v3: scene markup renders the mode toggle button and the hide checkbox', () => {
+    const state = createInitialState({
+      mapLevels: {
+        activeLevelId: 'upper',
+        levels: [
+          { id: 'ground', name: 'Ground', mapUrl: '/maps/ground.png', zIndex: 0 },
+          {
+            id: 'upper',
+            name: 'Upper',
+            mapUrl: '/maps/upper.png',
+            zIndex: 1,
+            displayMode: 'always',
+            hidden: false,
+          },
+        ],
+      },
+    });
+
+    const markup = sceneManager.buildSceneMarkup(
+      state.scenes,
+      'scene-1',
+      state.boardState.sceneState,
+      { mapLevelUploadsEnabled: true, mapLevelUploadPending: false, assetUploadPending: false }
+    );
+
+    assert.match(markup, /data-action="cycle-map-level-display-mode"/);
+    assert.match(markup, /data-action="toggle-map-level-hide"/);
+    assert.match(markup, /data-map-level-display-mode="always"/);
+    // Old single visibility checkbox is gone.
+    assert.doesNotMatch(markup, /data-action="toggle-map-level-visibility"/);
   });
 });
 

@@ -21,13 +21,18 @@ export function createMapLevelRenderer({
 
   function sync(rawMapLevels = null, { sceneGrid = null, view = null, activeLevelId = undefined } = {}) {
     const mapLevels = normalizeMapLevelsState(rawMapLevels, { sceneGrid });
-    const renderableLevels = getRenderableMapLevels(mapLevels);
     // Levels v2: callers may supply an explicit `activeLevelId` resolved
     // from per-user `userLevelState` so the rendered "active" metadata
     // reflects the viewer's level. `undefined` falls back to the legacy
     // `mapLevels.activeLevelId` value; an explicit empty string clears.
     const resolvedActiveLevelId =
       activeLevelId === undefined ? mapLevels.activeLevelId ?? '' : activeLevelId ?? '';
+    // Levels v3: pass the resolved viewer level into the renderable filter
+    // so Auto-mode levels are excluded for viewers below them. The viewer
+    // applies to GMs and players alike (per-user level resolved upstream).
+    const renderableLevels = getRenderableMapLevels(mapLevels, {
+      viewerLevelId: resolvedActiveLevelId || null,
+    });
     const signature = safeStableStringify({
       activeLevelId: resolvedActiveLevelId,
       cutoutView: buildMapLevelCutoutViewSignature(view),
@@ -182,17 +187,46 @@ export function buildMapLevelCutoutMask(cutouts = [], view = null) {
   return `url("data:image/svg+xml,${encodeURIComponent(svg)}")`;
 }
 
-export function getRenderableMapLevels(mapLevelsState = null) {
+// Levels v3 filter rules (replaces the old `visible` boolean):
+//   - `level.hidden === true`             → never rendered (overrides mode)
+//   - `level.displayMode === 'always'`    → rendered for every viewer
+//   - `level.displayMode === 'auto'`      → rendered only when the viewer's
+//                                           own level zIndex is at or above
+//                                           this level's zIndex
+//   - `displayMode` missing or unknown    → treated as 'always' (legacy
+//                                           safe default for un-normalized
+//                                           callers, e.g. tests)
+//
+// `viewerLevelId` accepts a stored level id, the `level-0` base id, or
+// null/missing. When the viewer is on the base map (or unknown), their
+// effective zIndex is -Infinity so every Auto stored level is hidden.
+export function getRenderableMapLevels(mapLevelsState = null, { viewerLevelId = null } = {}) {
   const levels = Array.isArray(mapLevelsState?.levels) ? mapLevelsState.levels : [];
+
+  let viewerZIndex = -Infinity;
+  if (typeof viewerLevelId === 'string' && viewerLevelId) {
+    const viewerLevel = levels.find((entry) => entry && entry.id === viewerLevelId);
+    if (viewerLevel && Number.isFinite(viewerLevel.zIndex)) {
+      viewerZIndex = viewerLevel.zIndex;
+    }
+  }
 
   return levels
     .map((level, sourceIndex) => ({ level, sourceIndex }))
     .filter(({ level }) => {
-      if (!level || typeof level !== 'object' || level.visible === false) {
+      if (!level || typeof level !== 'object' || level.hidden === true) {
         return false;
       }
-
-      return typeof level.mapUrl === 'string' && level.mapUrl.trim().length > 0;
+      if (typeof level.mapUrl !== 'string' || level.mapUrl.trim().length === 0) {
+        return false;
+      }
+      if (level.displayMode === 'auto') {
+        const levelZ = Number.isFinite(level.zIndex) ? level.zIndex : 0;
+        if (levelZ > viewerZIndex) {
+          return false;
+        }
+      }
+      return true;
     })
     .sort((left, right) => {
       const leftZ = Number.isFinite(left.level.zIndex) ? left.level.zIndex : 0;
