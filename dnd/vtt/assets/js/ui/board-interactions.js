@@ -1770,7 +1770,18 @@ export function mountBoardInteractions(store, routes = {}) {
   // the ops path never silently drops templates/drawings/etc.
   const USE_DELTA_SAVES = true;
 
-  const persistBoardStateSnapshot = (options = {}, opsOverride = null) => {
+  // Serialize full-snapshot saves so rapid scene/level mutations (e.g.
+  // delete level → add level → toggle visibility) do not carry a stale
+  // `_version`. The persistence layer's `coalesce: true` aborts a prior
+  // in-flight save's fetch, but the server may have already processed
+  // that aborted request and bumped its version. The next save would
+  // then 409, and the conflict-snapshot recovery path overwrites the
+  // user's local change ("popback"). Ops/delta saves keep their fast
+  // coalesce path because the v2 ops endpoint already bypasses the
+  // stale-version check.
+  let snapshotSaveQueue = Promise.resolve();
+
+  const doPersistBoardStateSnapshot = (options = {}, opsOverride = null) => {
     if (!routes?.state || typeof boardApi.getState !== 'function') {
       console.warn('[VTT] Cannot persist board state: routes.state missing or boardApi.getState unavailable');
       return;
@@ -1880,9 +1891,11 @@ export function mountBoardInteractions(store, routes = {}) {
       const opsResult = persistBoardStateOps(routes.state, opsOverride, envelope, options);
       // Escape hatch: the ops buffer is too large or spans too many
       // scenes for a single delta flush. Fall back to a full-snapshot
-      // save by re-entering without the override.
+      // save by re-entering without the override. We re-enter through
+      // the inner function (not the queue wrapper) because we are
+      // already inside a queued task when forceFullSnapshot is true.
       if (opsResult && typeof opsResult === 'object' && opsResult.escape === true) {
-        return persistBoardStateSnapshot(options, null);
+        return doPersistBoardStateSnapshot(options, null);
       }
       savePromise = opsResult ?? null;
       saveFlushDescriptor = {
@@ -1982,6 +1995,18 @@ export function mountBoardInteractions(store, routes = {}) {
     }
 
     return savePromise ?? null;
+  };
+
+  const persistBoardStateSnapshot = (options = {}, opsOverride = null) => {
+    if (options?.forceFullSnapshot !== true) {
+      return doPersistBoardStateSnapshot(options, opsOverride);
+    }
+    const previous = snapshotSaveQueue;
+    const next = previous
+      .catch(() => null)
+      .then(() => doPersistBoardStateSnapshot(options, opsOverride));
+    snapshotSaveQueue = next.catch(() => null);
+    return next;
   };
 
   let keepaliveFlushScheduled = false;
