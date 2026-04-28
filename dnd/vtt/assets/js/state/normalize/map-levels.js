@@ -450,6 +450,70 @@ export function resolveActiveLevelIdForUser({
 }
 
 /**
+ * Login-time helper: resolve the level id of the user's claimed PC token
+ * for a scene, matching board-interactions' name-based PC inference. A
+ * placement is treated as a PC token when (a) it is claimed by `userId`
+ * in `sceneState.claimedTokens` and (b) its `name`, normalized to
+ * lowercased space-separated words, contains `userId` as a whole word
+ * (the same rule as `matchProfileByName` / auto-claim on first drag).
+ *
+ * Returns the matching placement's level id only when exactly one PC
+ * token exists for the user. With zero or two-plus PC matches we return
+ * `null` so the caller can fall back to the existing
+ * `resolveActiveLevelIdForUser` chain. This is intended to be called
+ * once on session start (see bootstrap.js) to overwrite a stale
+ * `userLevelState[userId]` entry — it is not a per-render resolver.
+ */
+export function resolvePcTokenLevelIdForUser({
+  sceneState = null,
+  userId = null,
+  placements = null,
+  validLevelIds = null,
+} = {}) {
+  const userKey = typeof userId === 'string' ? userId.trim().toLowerCase() : '';
+  if (!userKey || !sceneState || typeof sceneState !== 'object') {
+    return null;
+  }
+  const claims = sceneState.claimedTokens;
+  if (!claims || typeof claims !== 'object' || !Array.isArray(placements)) {
+    return null;
+  }
+  const validSet = Array.isArray(validLevelIds)
+    ? new Set(validLevelIds.filter((id) => typeof id === 'string' && id))
+    : null;
+  const isValidLevelId = (levelId) => {
+    if (typeof levelId !== 'string' || !levelId) {
+      return false;
+    }
+    if (!validSet || validSet.size === 0) {
+      return true;
+    }
+    return validSet.has(levelId);
+  };
+  const namePattern = new RegExp(`(^|\\s)${userKey}(\\s|$)`);
+
+  let matchedLevelId = null;
+  let matchCount = 0;
+  for (const placement of placements) {
+    if (!placement || typeof placement !== 'object') continue;
+    const placementId = typeof placement.id === 'string' ? placement.id : '';
+    if (!placementId) continue;
+    if (claims[placementId] !== userKey) continue;
+    const rawName = typeof placement.name === 'string' ? placement.name : '';
+    const normalizedName = rawName.toLowerCase().replace(/[^a-z0-9]+/g, ' ').trim();
+    if (!normalizedName || !namePattern.test(normalizedName)) continue;
+    const placementLevelId = resolvePlacementLevelId(placement);
+    if (!isValidLevelId(placementLevelId)) continue;
+    matchCount += 1;
+    if (matchCount > 1) {
+      return null;
+    }
+    matchedLevelId = placementLevelId;
+  }
+  return matchCount === 1 ? matchedLevelId : null;
+}
+
+/**
  * Levels v2: normalize the per-scene `claimedTokens` map. Keys are
  * placement ids, values are normalized profile ids. Invalid entries are
  * dropped silently.
