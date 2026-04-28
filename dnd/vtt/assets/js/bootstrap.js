@@ -25,6 +25,7 @@ import {
   BASE_MAP_LEVEL_ID,
   normalizeMapLevelsState,
   resolvePcTokenLevelIdForUser,
+  resolveTopmostLevelId,
 } from './state/normalize/map-levels.js';
 
 async function bootstrap() {
@@ -197,6 +198,8 @@ async function hydrateFromServer(routes, userContext) {
               authorRole: 'player',
             };
             applyPcTokenLevelOverride(nextBoardState, currentState?.user?.name);
+          } else {
+            applyGmActiveLevelOverride(nextBoardState, currentState?.user?.name);
           }
           draft.boardState = nextBoardState;
         }
@@ -252,6 +255,65 @@ function applyPcTokenLevelOverride(nextBoardState, userName) {
   sceneEntry.userLevelState[userKey] = {
     levelId: pcLevelId,
     _lastModified: Date.now(),
+  };
+}
+
+// On GM login, ensure `userLevelState[gm]` for the active scene names a
+// valid level. The fog renderer and the top-right level indicator both
+// resolve through this entry; when it is missing they fall back to
+// Level 0, so fog edits made on what visually looks like Level 1 land on
+// Level 0 instead. We preserve any saved entry so the GM resumes where
+// they left off, and only default to the topmost level when no prior
+// entry exists or it points at a level that has since been deleted.
+function applyGmActiveLevelOverride(nextBoardState, userName) {
+  const userKey = typeof userName === 'string' ? userName.trim().toLowerCase() : '';
+  if (!userKey) return;
+  const sceneId =
+    typeof nextBoardState?.activeSceneId === 'string' ? nextBoardState.activeSceneId : '';
+  if (!sceneId) return;
+  if (!nextBoardState.sceneState || typeof nextBoardState.sceneState !== 'object') {
+    nextBoardState.sceneState = {};
+  }
+  const sceneEntry =
+    nextBoardState.sceneState[sceneId] && typeof nextBoardState.sceneState[sceneId] === 'object'
+      ? nextBoardState.sceneState[sceneId]
+      : null;
+  if (!sceneEntry) return;
+
+  const normalizedMapLevels = normalizeMapLevelsState(sceneEntry.mapLevels ?? null, {
+    sceneGrid: sceneEntry.grid ?? null,
+  });
+  const validLevelIds = new Set([BASE_MAP_LEVEL_ID]);
+  normalizedMapLevels.levels.forEach((level) => {
+    if (level && typeof level.id === 'string' && level.id) {
+      validLevelIds.add(level.id);
+    }
+  });
+
+  const existing =
+    sceneEntry.userLevelState && typeof sceneEntry.userLevelState === 'object'
+      ? sceneEntry.userLevelState[userKey]
+      : null;
+  const existingLevelId =
+    existing && typeof existing === 'object' && typeof existing.levelId === 'string'
+      ? existing.levelId.trim()
+      : '';
+  if (existingLevelId && validLevelIds.has(existingLevelId)) {
+    return;
+  }
+
+  const topmostLevelId = resolveTopmostLevelId({
+    baseMapUrl: nextBoardState.mapUrl ?? null,
+    mapLevels: sceneEntry.mapLevels ?? null,
+    sceneGrid: sceneEntry.grid ?? null,
+  });
+  if (!sceneEntry.userLevelState || typeof sceneEntry.userLevelState !== 'object') {
+    sceneEntry.userLevelState = {};
+  }
+  sceneEntry.userLevelState[userKey] = {
+    levelId: topmostLevelId,
+    source: 'manual',
+    updatedAt: Date.now(),
   };
 }
 

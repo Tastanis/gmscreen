@@ -11,6 +11,7 @@ import {
   MAP_LEVEL_MAX_LEVELS,
   createEmptyMapLevelsState,
   normalizeMapLevelsState,
+  resolveTopmostLevelId,
 } from '../state/normalize/map-levels.js';
 
 export function renderSceneList(routes, store) {
@@ -132,6 +133,9 @@ export function renderSceneList(routes, store) {
       const scene = sceneState.items.find((item) => item.id === sceneId);
       if (!scene) return;
 
+      const isGM = Boolean(currentState?.user?.isGM);
+      const gmName = typeof currentState?.user?.name === 'string' ? currentState.user.name : '';
+
       stateApi.updateState?.((draft) => {
         ensureSceneDraft(draft);
         const boardDraft = ensureBoardStateDraft(draft);
@@ -155,6 +159,15 @@ export function renderSceneList(routes, store) {
         // This ensures consistency between the scene definition and the board state
         if (boardDraft.sceneState && boardDraft.sceneState[scene.id]) {
           boardDraft.sceneState[scene.id].grid = sceneGrid;
+        }
+        if (isGM) {
+          // Ensure the GM's per-user level entry is populated for the
+          // activated scene. Without this, fog edits and the level
+          // indicator silently fall back to Level 0 until the GM
+          // presses an up/down arrow. Preserve any saved entry so the
+          // GM resumes where they left off; default to the topmost
+          // level only when no valid entry exists.
+          ensureGmActiveLevelEntry(boardDraft, scene.id, gmName);
         }
       });
 
@@ -701,6 +714,50 @@ function ensureSceneBoardStateEntry(boardState, sceneId, fallbackGrid = null) {
 
 function normalizeGridConfig(raw = {}) {
   return normalizeGridState(raw);
+}
+
+function ensureGmActiveLevelEntry(boardDraft, sceneId, userName) {
+  const userKey = typeof userName === 'string' ? userName.trim().toLowerCase() : '';
+  if (!userKey || !sceneId || !boardDraft) return;
+  const sceneEntry =
+    boardDraft.sceneState && boardDraft.sceneState[sceneId] && typeof boardDraft.sceneState[sceneId] === 'object'
+      ? boardDraft.sceneState[sceneId]
+      : null;
+  if (!sceneEntry) return;
+
+  const validLevelIds = new Set([BASE_MAP_LEVEL_ID]);
+  const storedLevels = Array.isArray(sceneEntry.mapLevels?.levels) ? sceneEntry.mapLevels.levels : [];
+  storedLevels.forEach((level) => {
+    if (level && typeof level.id === 'string' && level.id) {
+      validLevelIds.add(level.id);
+    }
+  });
+
+  const existing =
+    sceneEntry.userLevelState && typeof sceneEntry.userLevelState === 'object'
+      ? sceneEntry.userLevelState[userKey]
+      : null;
+  const existingLevelId =
+    existing && typeof existing === 'object' && typeof existing.levelId === 'string'
+      ? existing.levelId.trim()
+      : '';
+  if (existingLevelId && validLevelIds.has(existingLevelId)) {
+    return;
+  }
+
+  const topmostLevelId = resolveTopmostLevelId({
+    baseMapUrl: boardDraft.mapUrl ?? null,
+    mapLevels: sceneEntry.mapLevels ?? null,
+    sceneGrid: sceneEntry.grid ?? null,
+  });
+  if (!sceneEntry.userLevelState || typeof sceneEntry.userLevelState !== 'object') {
+    sceneEntry.userLevelState = {};
+  }
+  sceneEntry.userLevelState[userKey] = {
+    levelId: topmostLevelId,
+    source: 'manual',
+    updatedAt: Date.now(),
+  };
 }
 
 const mapLevelSeed = Date.now();

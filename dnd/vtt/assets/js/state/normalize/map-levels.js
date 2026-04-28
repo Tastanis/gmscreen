@@ -295,6 +295,22 @@ export function buildLevelViewModel({ baseMapUrl = null, mapLevels = null, scene
 }
 
 /**
+ * Levels v2 helper: return the id of the topmost (highest zIndex) level
+ * in a scene. Falls back to `BASE_MAP_LEVEL_ID` when no stored levels
+ * exist. Used to default the GM's active level on login / scene
+ * activation when no prior `userLevelState` entry is saved.
+ */
+export function resolveTopmostLevelId({ baseMapUrl = null, mapLevels = null, sceneGrid = null } = {}) {
+  const viewModel = buildLevelViewModel({ baseMapUrl, mapLevels, sceneGrid });
+  if (!Array.isArray(viewModel) || viewModel.length === 0) {
+    return BASE_MAP_LEVEL_ID;
+  }
+  const last = viewModel[viewModel.length - 1];
+  const id = last && typeof last.id === 'string' ? last.id : '';
+  return id || BASE_MAP_LEVEL_ID;
+}
+
+/**
  * Levels v2 helper: validate a level id against a built view model.
  * Returns the id if it exists in the view model, otherwise null.
  */
