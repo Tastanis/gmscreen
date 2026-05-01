@@ -15615,7 +15615,17 @@ function createMapLevelCutoutTool() {
     }
 
     level.cutouts = cloneCutouts(draftCutouts);
-    mapLevelRenderer.sync(mapLevels, { sceneGrid: state.grid ?? sceneGrid, view: viewState });
+    // Pass the GM's actual viewer level so the renderer's Auto-mode filter
+    // matches `syncMapLevelsForState`. Falling back to `mapLevels.activeLevelId`
+    // (the legacy field, last set when a level was created) would render every
+    // stored level — leaking upper-level images and masks down onto lower
+    // viewer levels while the editor is open.
+    const viewerLevelId = getViewerLevelIdForCurrentUser(state, activeSceneId);
+    mapLevelRenderer.sync(mapLevels, {
+      sceneGrid: state.grid ?? sceneGrid,
+      view: viewState,
+      activeLevelId: viewerLevelId,
+    });
   }
 
   function resolveCutoutPixelRect(cutout) {
