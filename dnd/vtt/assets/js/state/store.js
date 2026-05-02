@@ -103,6 +103,14 @@ export function getState() {
   return JSON.parse(JSON.stringify(state));
 }
 
+export function getIsGm() {
+  return state.user?.isGM === true;
+}
+
+export function getUserName() {
+  return typeof state.user?.name === 'string' ? state.user.name : '';
+}
+
 export function subscribe(listener) {
   listeners.add(listener);
   return () => listeners.delete(listener);

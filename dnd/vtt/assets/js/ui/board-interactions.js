@@ -9035,6 +9035,9 @@ export function mountBoardInteractions(store, routes = {}) {
   }
 
   function isGmUser() {
+    if (typeof boardApi.getIsGm === 'function') {
+      return boardApi.getIsGm() === true;
+    }
     const state = boardApi.getState?.();
     return Boolean(state?.user?.isGM);
   }
@@ -9059,8 +9062,13 @@ export function mountBoardInteractions(store, routes = {}) {
   }
 
   function getCurrentUserId() {
-    const state = boardApi.getState?.();
-    const rawName = typeof state?.user?.name === 'string' ? state.user.name : '';
+    let rawName = '';
+    if (typeof boardApi.getUserName === 'function') {
+      rawName = boardApi.getUserName() || '';
+    } else {
+      const state = boardApi.getState?.();
+      rawName = typeof state?.user?.name === 'string' ? state.user.name : '';
+    }
     const normalized = rawName.trim().toLowerCase();
     return normalized || null;
   }
