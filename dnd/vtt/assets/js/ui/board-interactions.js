@@ -9034,9 +9034,25 @@ export function mountBoardInteractions(store, routes = {}) {
     }
   }
 
+  // GM status is set by the server at login and is stable for the rest of
+  // the session, so we cache the first real read. Without this cache, every
+  // call ran boardApi.getState() which deep-clones the entire app state via
+  // JSON.parse(JSON.stringify(state)). Profiling on a 10-token drag commit
+  // showed isGmUser alone burning ~2.4 seconds of CPU because callers like
+  // shouldHideEnemyHitPointValues invoke it once per token per render.
+  // We hold off on caching until the user object is actually populated so a
+  // call during early init can't lock in a false negative.
+  let cachedIsGmUser = null;
   function isGmUser() {
+    if (cachedIsGmUser !== null) {
+      return cachedIsGmUser;
+    }
     const state = boardApi.getState?.();
-    return Boolean(state?.user?.isGM);
+    if (!state?.user) {
+      return false;
+    }
+    cachedIsGmUser = Boolean(state.user.isGM);
+    return cachedIsGmUser;
   }
 
   function getPlacementCombatTeam(placement) {
