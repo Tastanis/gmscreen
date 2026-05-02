@@ -1,0 +1,17 @@
+# Force browsers and intermediate caches (e.g. GoDaddy's edge cache,
+# CDN layers) to revalidate every JS file on each request. The browser
+# still keeps a cached copy for speed, but it asks the server "is this
+# still current?" via If-Modified-Since/ETag before using it. If the
+# server returns 304 Not Modified, the cache is reused; if the file
+# changed, the new version is fetched. Net effect: code changes go live
+# immediately without renames or version-bumping inner ES module imports.
+#
+# Why this is needed: the entry-point bootstrap.js gets ?v=$assetVersion
+# cache-busting, but ES module imports inside it (./ui/board-interactions.js,
+# ./ui/token-interactions.js, etc.) do NOT inherit query strings, so
+# nested imports were getting indefinitely cached at the GoDaddy layer.
+<IfModule mod_headers.c>
+    <FilesMatch "\.js$">
+        Header set Cache-Control "no-cache, must-revalidate, max-age=0"
+    </FilesMatch>
+</IfModule>
