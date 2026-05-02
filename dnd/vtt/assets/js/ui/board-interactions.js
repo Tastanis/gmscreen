@@ -3149,7 +3149,7 @@ export function mountBoardInteractions(store, routes = {}) {
             })
           : false;
         if (selectionChanged) {
-          renderTokens(boardApi.getState?.() ?? {}, tokenLayer, viewState);
+          renderTokens(boardApi.getState?.() ?? {}, tokenLayer, viewState, { skipTracker: true });
         }
         prepareTokenDrag(event, placement);
         templateTool.clearSelection();
@@ -3157,7 +3157,7 @@ export function mountBoardInteractions(store, routes = {}) {
         // Empty space clicked - start selection box for drag-to-select
         const isAdditive = event.shiftKey;
         if (!isAdditive && clearSelection()) {
-          renderTokens(boardApi.getState?.() ?? {}, tokenLayer, viewState);
+          renderTokens(boardApi.getState?.() ?? {}, tokenLayer, viewState, { skipTracker: true });
         }
         templateTool.clearSelection();
         clearDragCandidate();
@@ -3181,7 +3181,7 @@ export function mountBoardInteractions(store, routes = {}) {
             ? updateSelection(placement.id, { additive: false })
             : false;
           if (selectionChanged) {
-            renderTokens(boardApi.getState?.() ?? {}, tokenLayer, viewState);
+            renderTokens(boardApi.getState?.() ?? {}, tokenLayer, viewState, { skipTracker: true });
           }
           templateTool.clearSelection();
           clearDragCandidate();
@@ -5216,7 +5216,7 @@ export function mountBoardInteractions(store, routes = {}) {
     return Math.min(Math.max(value, min), max);
   }
 
-  function renderTokens(state = {}, layer, view) {
+  function renderTokens(state = {}, layer, view, options = {}) {
     if (!layer) {
       updateCombatTracker([], { activeIds: [], skipCache: true, skipPrune: true });
       return;
@@ -5515,7 +5515,13 @@ export function mountBoardInteractions(store, routes = {}) {
       renderedPlacements = [];
     }
 
-    updateCombatTracker(trackerEntries, { activeIds: activeCombatantIds });
+    // Selection-only renders pass skipTracker to avoid the tracker rebuild,
+    // which would otherwise call pruneCombatGroups → syncCombatStateToStore
+    // → persistBoardStateSnapshot. Selection has no effect on the tracker,
+    // so the rebuild is pure cost; the next state-driven render rebuilds it.
+    if (!options.skipTracker) {
+      updateCombatTracker(trackerEntries, { activeIds: activeCombatantIds });
+    }
 
     // Skip aura rendering during active drag for performance; auras snap on drop
     if (!viewState.dragState) {

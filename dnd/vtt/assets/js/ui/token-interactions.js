@@ -230,7 +230,7 @@ export function createTokenInteractions({
     });
 
     notifySelectionChanged();
-    renderTokens(boardApi.getState?.() ?? {}, tokenLayer, viewState);
+    renderTokens(boardApi.getState?.() ?? {}, tokenLayer, viewState, { skipTracker: true });
   }
 
   function cancelSelectionBox() {
