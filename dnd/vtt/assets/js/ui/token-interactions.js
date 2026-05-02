@@ -881,7 +881,13 @@ export function createTokenInteractions({
         : `Moved ${movedCount} ${noun}.`;
     }
 
-    renderTokens(boardApi.getState?.() ?? {}, tokenLayer, viewState);
+    // Tracker was already rebuilt by applyStateToBoard during the boardApi
+    // .updateState call above (and again if processPlacementFalls fired its
+    // own update). Rebuilding it again here would re-run pruneCombatGroups
+    // outside the isApplyingState guard, which calls syncCombatStateToStore
+    // → persistBoardStateSnapshot, producing a redundant save and the 409
+    // recovery cascade observed in profiling. Skip the tracker rebuild.
+    renderTokens(boardApi.getState?.() ?? {}, tokenLayer, viewState, { skipTracker: true });
 
     if (fallenIds.length && typeof triggerTokenFallAnimations === 'function') {
       triggerTokenFallAnimations(fallenIds);
