@@ -1,6 +1,8 @@
 import {
   initializeState,
   getState,
+  getIsGm,
+  getUserName,
   subscribe,
   updateState,
   restrictTokensToPlayerView,
@@ -61,7 +63,7 @@ async function bootstrap() {
     user: userContext,
   });
 
-  const storeApi = { getState, subscribe, updateState };
+  const storeApi = { getState, getIsGm, getUserName, subscribe, updateState };
 
   mountSettingsPanel(routes, storeApi, userContext);
   const chatParticipants = Array.isArray(config.chatParticipants) ? config.chatParticipants : [];
