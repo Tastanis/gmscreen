@@ -1063,6 +1063,13 @@ export function mountBoardInteractions(store, routes = {}) {
       return false;
     }
 
+    // Capture pre-conflict combat intent so a stale-version 409 can't
+    // silently revert a GM action like End Combat. The server's snapshot
+    // still carries the previous combat state; without re-asserting our
+    // local intent here, applyCombatStateFromBoardState below would set
+    // combatActive back to true and the GM could never end combat.
+    const intentSnapshot = isGmUser() ? captureLocalCombatIntent() : null;
+
     boardApi.updateState?.((draft) => {
       const current = draft.boardState && typeof draft.boardState === 'object'
         ? draft.boardState
@@ -1088,7 +1095,72 @@ export function mountBoardInteractions(store, routes = {}) {
       applyStateToBoard(updatedState);
       applyCombatStateFromBoardState(updatedState);
     }
+
+    if (intentSnapshot) {
+      maybeReassertCombatIntent(intentSnapshot);
+    }
     return true;
+  }
+
+  function captureLocalCombatIntent() {
+    const activeSceneId = boardApi.getState?.()?.boardState?.activeSceneId ?? null;
+    if (!activeSceneId) {
+      return null;
+    }
+    return {
+      activeSceneId,
+      active: combatActive,
+      round: combatRound,
+      startingTeam: startingCombatTeam,
+      currentTeam: currentTurnTeam,
+      lastTeam: lastActingTeam,
+      roundTurnCount,
+      activeCombatantId,
+      completedCombatantIds: Array.from(completedCombatants),
+    };
+  }
+
+  function maybeReassertCombatIntent(intent) {
+    const updated = boardApi.getState?.();
+    const serverCombat =
+      updated?.boardState?.sceneState?.[intent.activeSceneId]?.combat ?? null;
+    const serverActive = Boolean(serverCombat?.active);
+    if (serverActive === Boolean(intent.active)) {
+      combatConflictRetryAttempts = 0;
+      return;
+    }
+    if (combatConflictRetryAttempts >= MAX_COMBAT_CONFLICT_RETRY_ATTEMPTS) {
+      console.warn(
+        '[VTT] Combat-intent retry limit reached after stale-version conflict;',
+        'accepting server combat state.'
+      );
+      combatConflictRetryAttempts = 0;
+      return;
+    }
+    combatConflictRetryAttempts += 1;
+    console.log(
+      '[VTT] Re-asserting GM combat intent after stale-version conflict',
+      `(attempt ${combatConflictRetryAttempts}).`
+    );
+    combatActive = intent.active;
+    combatRound = intent.round;
+    startingCombatTeam = intent.startingTeam;
+    currentTurnTeam = intent.currentTeam;
+    lastActingTeam = intent.lastTeam;
+    roundTurnCount = intent.roundTurnCount;
+    completedCombatants.clear();
+    intent.completedCombatantIds.forEach((id) => completedCombatants.add(id));
+    if (!combatActive) {
+      stopAllyTurnTimer();
+      clearTurnBorderFlash();
+      setActiveCombatantId(null);
+    } else {
+      setActiveCombatantId(intent.activeCombatantId);
+    }
+    updateStartCombatButton();
+    updateCombatModeIndicators();
+    refreshCombatTracker();
+    syncCombatStateToStore();
   }
 
   // Phase 3-B (commit 3): helpers for building `placement.update` ops
@@ -1304,6 +1376,10 @@ export function mountBoardInteractions(store, routes = {}) {
   let pendingCombatStateSync = false;
   let combatStateVersion = 0;
   let combatStateUpdatedAt = 0;
+  // Counter that bounds 409-conflict retries when re-asserting a GM's
+  // combat-state intent. Reset on each fresh user action and on save success.
+  let combatConflictRetryAttempts = 0;
+  const MAX_COMBAT_CONFLICT_RETRY_ATTEMPTS = 3;
   // Sequence number for combat state sync - increments on each local change
   // Used instead of timestamps to avoid clock drift issues between clients
   let combatSequence = 0;
@@ -1933,6 +2009,7 @@ export function mountBoardInteractions(store, routes = {}) {
           lastPersistedBoardStateHash = snapshotHash;
           lastBoardStateSaveCompletedAt = Date.now();
           pendingBoardStateSave = null;
+          combatConflictRetryAttempts = 0;
           // Clear only the dirty entries this save actually flushed. Ops
           // saves intentionally leave unrelated dirty board state queued.
           clearDirtyTrackingForSave(saveFlushDescriptor);
@@ -7716,6 +7793,7 @@ export function mountBoardInteractions(store, routes = {}) {
     activeTeam = null;
     combatActive = true;
     combatRound = 1;
+    combatConflictRetryAttempts = 0;
     setMaliceCount(0, { sync: false });
     if (isGmUser()) {
       combatTimerService.startCombat({ round: combatRound });
@@ -7782,6 +7860,7 @@ export function mountBoardInteractions(store, routes = {}) {
 
     combatActive = false;
     combatRound = 0;
+    combatConflictRetryAttempts = 0;
     completedCombatants.clear();
     pendingRoundConfirmation = false;
     closeTurnPrompt();
