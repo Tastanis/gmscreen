@@ -34,6 +34,7 @@ export function mountDragRuler() {
     overlay,
     ruler,
     rulerValue,
+    rulerDetail: ensureRulerDetail(ruler),
     measureButton,
     mapSurface,
     mapTransform,
@@ -484,6 +485,20 @@ function updateOverlay(state) {
   }
 }
 
+function ensureRulerDetail(ruler) {
+  if (!ruler) {
+    return null;
+  }
+  let detail = ruler.querySelector('.vtt-board__ruler-detail');
+  if (!detail) {
+    detail = document.createElement('span');
+    detail.className = 'vtt-board__ruler-detail';
+    detail.hidden = true;
+    ruler.appendChild(detail);
+  }
+  return detail;
+}
+
 function getRenderablePoints(state) {
   if (!state.points.length) {
     return [];
@@ -862,4 +877,29 @@ export function cancelExternalMeasurement() {
   if (sharedState.mode === 'external') {
     clearMeasurement(sharedState);
   }
+}
+
+export function setRulerSupplement(text) {
+  if (!sharedState?.ruler) {
+    return;
+  }
+  const detail = sharedState.rulerDetail ?? ensureRulerDetail(sharedState.ruler);
+  sharedState.rulerDetail = detail;
+  if (!detail) {
+    return;
+  }
+  const value = typeof text === 'string' ? text.trim() : '';
+  detail.textContent = value;
+  detail.hidden = value === '';
+  if (value) {
+    sharedState.ruler.removeAttribute('hidden');
+  }
+}
+
+export function clearRulerSupplement() {
+  if (!sharedState?.rulerDetail) {
+    return;
+  }
+  sharedState.rulerDetail.textContent = '';
+  sharedState.rulerDetail.hidden = true;
 }

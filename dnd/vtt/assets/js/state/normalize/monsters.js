@@ -312,6 +312,13 @@ export function stripMonsterSnapshot(entity, options = {}) {
   const canView = allowAllyMonster && canPlayersViewMonsterSnapshot(entity);
 
   if (!canView) {
+    const movementSpeed = extractSafeMovementSpeed(sanitized);
+    if (movementSpeed !== null) {
+      sanitized.traits = {
+        ...(sanitized.traits && typeof sanitized.traits === 'object' ? sanitized.traits : {}),
+        speed: movementSpeed,
+      };
+    }
     if ('monster' in sanitized) {
       delete sanitized.monster;
     }
@@ -341,6 +348,60 @@ export function stripMonsterSnapshot(entity, options = {}) {
   }
 
   return sanitized;
+}
+
+function extractSafeMovementSpeed(entity) {
+  if (!entity || typeof entity !== 'object') {
+    return null;
+  }
+  const metadata = entity.metadata && typeof entity.metadata === 'object' ? entity.metadata : null;
+  const monster = entity.monster && typeof entity.monster === 'object' ? entity.monster : null;
+  const metadataMonster = metadata?.monster && typeof metadata.monster === 'object' ? metadata.monster : null;
+  const candidates = [
+    entity.traits?.speed,
+    entity.movementSpeed,
+    entity.speed,
+    entity.movement,
+    metadata?.traits?.speed,
+    metadata?.movementSpeed,
+    metadata?.speed,
+    metadata?.movement,
+    monster?.speed,
+    monster?.movement,
+    metadataMonster?.speed,
+    metadataMonster?.movement,
+  ];
+
+  for (const candidate of candidates) {
+    const parsed = parseMovementSpeed(candidate);
+    if (parsed !== null) {
+      return parsed;
+    }
+  }
+  return null;
+}
+
+function parseMovementSpeed(value) {
+  if (typeof value === 'number' && Number.isFinite(value)) {
+    return Math.max(0, Math.trunc(value));
+  }
+  if (typeof value !== 'string') {
+    return null;
+  }
+  const trimmed = value.trim();
+  if (!trimmed) {
+    return null;
+  }
+  const numeric = Number(trimmed);
+  if (Number.isFinite(numeric)) {
+    return Math.max(0, Math.trunc(numeric));
+  }
+  const match = trimmed.match(/-?\d+/);
+  if (!match) {
+    return null;
+  }
+  const parsed = Number.parseInt(match[0], 10);
+  return Number.isFinite(parsed) ? Math.max(0, parsed) : null;
 }
 
 export function canPlayersViewMonsterSnapshot(entity) {

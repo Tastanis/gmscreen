@@ -73,6 +73,21 @@ export function normalizePlacementEntry(entry) {
   if (!monsterId && monster?.id) {
     monsterId = monster.id;
   }
+  const traits = normalizePlacementTraits(entry.traits ?? metadata?.traits ?? null);
+  const movementSpeed = toOptionalMovementSpeed(
+    entry.movementSpeed ??
+      entry.speed ??
+      entry.movement ??
+      metadata?.movementSpeed ??
+      metadata?.speed ??
+      metadata?.movement ??
+      monster?.speed ??
+      monster?.movement ??
+      null
+  );
+  if (movementSpeed !== null) {
+    traits.speed = movementSpeed;
+  }
   const hp = normalizePlacementHitPoints(
     entry.hp ??
       entry.hitPoints ??
@@ -146,6 +161,10 @@ export function normalizePlacementEntry(entry) {
     normalized.monster = monster;
   }
 
+  if (Object.keys(traits).length > 0) {
+    normalized.traits = traits;
+  }
+
   if (metadata) {
     const sanitizedMetadata = { ...metadata };
     if (monster) {
@@ -188,6 +207,48 @@ function toOptionalNonNegativeInt(value) {
   }
 
   return null;
+}
+
+function toOptionalMovementSpeed(value) {
+  if (value === null || value === undefined || value === '') {
+    return null;
+  }
+
+  if (typeof value === 'number' && Number.isFinite(value)) {
+    return Math.max(0, Math.trunc(value));
+  }
+
+  if (typeof value === 'string') {
+    const trimmed = value.trim();
+    if (!trimmed) {
+      return null;
+    }
+    const numeric = Number(trimmed);
+    if (Number.isFinite(numeric)) {
+      return Math.max(0, Math.trunc(numeric));
+    }
+    const match = trimmed.match(/-?\d+/);
+    if (match) {
+      const parsed = Number.parseInt(match[0], 10);
+      return Number.isFinite(parsed) ? Math.max(0, parsed) : null;
+    }
+  }
+
+  return null;
+}
+
+function normalizePlacementTraits(value) {
+  const traits = {};
+  if (!value || typeof value !== 'object') {
+    return traits;
+  }
+
+  const speed = toOptionalMovementSpeed(value.speed ?? value.movement ?? null);
+  if (speed !== null) {
+    traits.speed = speed;
+  }
+
+  return traits;
 }
 
 function normalizePlacementLevelId(value) {

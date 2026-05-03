@@ -324,7 +324,7 @@ if ($requestMethod !== 'POST' && $requestMethod !== 'GET') {
 $requestData = $requestMethod === 'POST' ? $_POST : $_GET;
 $action = isset($requestData['action']) ? $requestData['action'] : '';
 
-if (!in_array($action, array('sync-stamina', 'sync-hero-tokens', 'fetch-victories'), true) && $requestMethod !== 'POST') {
+if (!in_array($action, array('sync-stamina', 'sync-token-traits', 'sync-hero-tokens', 'fetch-victories'), true) && $requestMethod !== 'POST') {
     sendJsonResponse(array('success' => false, 'error' => 'Invalid request method'));
 }
 
@@ -344,8 +344,13 @@ $allowVttStaminaSync =
     && isset($requestData['source'])
     && $requestData['source'] === 'vtt'
     && $currentUser !== '';
+$allowVttTraitRead =
+    $action === 'sync-token-traits'
+    && $requestMethod === 'GET'
+    && isset($requestData['source'])
+    && $requestData['source'] === 'vtt';
 
-if (!$is_gm && $requestedCharacter !== strtolower($currentUser) && !$allowVttStaminaSync) {
+if (!$is_gm && $requestedCharacter !== strtolower($currentUser) && !$allowVttStaminaSync && !$allowVttTraitRead) {
     sendJsonResponse(array('success' => false, 'error' => 'Permission denied'));
 }
 
@@ -377,6 +382,20 @@ switch ($action) {
         } else {
             sendJsonResponse(array('success' => false, 'error' => 'Failed to save sheet'));
         }
+        break;
+
+    case 'sync-token-traits':
+        $allSheets = loadCharacterSheetData($dataDir, $dataFile, $characters);
+        $sheet = $allSheets[$requestedCharacter];
+        $speed = isset($sheet['hero']['vitals']['speed']) ? $sheet['hero']['vitals']['speed'] : '';
+        sendJsonResponse(array(
+            'success' => true,
+            'name' => isset($sheet['hero']['name']) && $sheet['hero']['name'] !== '' ? $sheet['hero']['name'] : $requestedCharacter,
+            'traits' => array(
+                'speed' => $speed,
+            ),
+            'speed' => $speed,
+        ));
         break;
 
     case 'sync-stamina':

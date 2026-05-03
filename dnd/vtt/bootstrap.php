@@ -448,7 +448,7 @@ function filterPlacementsForPlayerView($boardState): array
                 // can flip the flag without needing a full resync.  Strip
                 // ALL monster data regardless of ally status — no stat block
                 // should leak for a token the player cannot see yet.
-                $sanitized = $placement;
+                $sanitized = attachSafeMovementTrait($placement);
                 unset($sanitized['monster'], $sanitized['monsterId']);
                 if (isset($sanitized['metadata']) && is_array($sanitized['metadata'])) {
                     $metadata = $sanitized['metadata'];
@@ -498,7 +498,7 @@ function isPlacementHiddenFromPlayers(array $placement): bool
  */
 function sanitizeTokenForPlayerView(array $token): array
 {
-    $sanitized = $token;
+    $sanitized = attachSafeMovementTrait($token);
     unset($sanitized['monster'], $sanitized['monsterId']);
 
     if (isset($sanitized['metadata']) && is_array($sanitized['metadata'])) {
@@ -522,6 +522,7 @@ function sanitizePlacementForPlayerView(array $placement): array
     $sanitized = $placement;
 
     if (!canPlayersViewPlacementMonster($placement)) {
+        $sanitized = attachSafeMovementTrait($sanitized);
         unset($sanitized['monster'], $sanitized['monsterId']);
 
         if (isset($sanitized['metadata']) && is_array($sanitized['metadata'])) {
@@ -535,6 +536,83 @@ function sanitizePlacementForPlayerView(array $placement): array
     }
 
     return $sanitized;
+}
+
+/**
+ * @param array<string,mixed> $entity
+ * @return array<string,mixed>
+ */
+function attachSafeMovementTrait(array $entity): array
+{
+    $speed = extractSafeMovementSpeed($entity);
+    if ($speed === null) {
+        return $entity;
+    }
+
+    $traits = isset($entity['traits']) && is_array($entity['traits']) ? $entity['traits'] : [];
+    $traits['speed'] = $speed;
+    $entity['traits'] = $traits;
+    return $entity;
+}
+
+/**
+ * @param array<string,mixed> $entity
+ */
+function extractSafeMovementSpeed(array $entity): ?int
+{
+    $metadata = isset($entity['metadata']) && is_array($entity['metadata']) ? $entity['metadata'] : [];
+    $monster = isset($entity['monster']) && is_array($entity['monster']) ? $entity['monster'] : [];
+    $metadataMonster = isset($metadata['monster']) && is_array($metadata['monster']) ? $metadata['monster'] : [];
+    $traits = isset($entity['traits']) && is_array($entity['traits']) ? $entity['traits'] : [];
+    $metadataTraits = isset($metadata['traits']) && is_array($metadata['traits']) ? $metadata['traits'] : [];
+
+    $candidates = [
+        $traits['speed'] ?? null,
+        $entity['movementSpeed'] ?? null,
+        $entity['speed'] ?? null,
+        $entity['movement'] ?? null,
+        $metadataTraits['speed'] ?? null,
+        $metadata['movementSpeed'] ?? null,
+        $metadata['speed'] ?? null,
+        $metadata['movement'] ?? null,
+        $monster['speed'] ?? null,
+        $monster['movement'] ?? null,
+        $metadataMonster['speed'] ?? null,
+        $metadataMonster['movement'] ?? null,
+    ];
+
+    foreach ($candidates as $candidate) {
+        $parsed = parseSafeMovementSpeed($candidate);
+        if ($parsed !== null) {
+            return $parsed;
+        }
+    }
+
+    return null;
+}
+
+/**
+ * @param mixed $value
+ */
+function parseSafeMovementSpeed($value): ?int
+{
+    if (is_int($value) || is_float($value)) {
+        return max(0, (int) $value);
+    }
+    if (!is_string($value)) {
+        return null;
+    }
+    $trimmed = trim($value);
+    if ($trimmed === '') {
+        return null;
+    }
+    if (is_numeric($trimmed)) {
+        return max(0, (int) $trimmed);
+    }
+    if (preg_match('/-?\d+/', $trimmed, $matches) === 1) {
+        return max(0, (int) $matches[0]);
+    }
+    return null;
 }
 
 /**

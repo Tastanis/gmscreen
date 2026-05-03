@@ -3,7 +3,9 @@ import {
   cancelExternalMeasurement,
   finalizeExternalMeasurement,
   isMeasureModeActive,
+  setRulerSupplement,
   updateExternalMeasurement,
+  clearRulerSupplement,
 } from './drag-ruler.js';
 import {
   setDrawings as setDrawingToolDrawings,
@@ -60,6 +62,7 @@ import {
   resolveSceneMapLevelsState,
 } from './map-level-renderer.js';
 import { createTokenInteractions } from './token-interactions.js';
+import { createTokenMovementController } from '../token-system/token-movement-controller.js';
 import {
   buildTokenStackOrderUpdate,
   getPlacementStackOrder,
@@ -607,6 +610,7 @@ export function mountBoardInteractions(store, routes = {}) {
   let movementScheduled = false;
   const MAX_QUEUED_MOVEMENTS = 12;
   const DRAG_ACTIVATION_DISTANCE = 6;
+  let tokenMovementController = null;
   const tokenInteractions = createTokenInteractions({
     mapSurface,
     tokenLayer,
@@ -637,6 +641,10 @@ export function mountBoardInteractions(store, routes = {}) {
     toNonNegativeNumber: (value, fallback) => toNonNegativeNumber(value, fallback),
     persistBoardStateSnapshot: (options, opsOverride) =>
       persistBoardStateSnapshot(options, opsOverride),
+    onTokenDragStart: (payload) => tokenMovementController?.handleDragStart(payload),
+    onTokenDragMove: (payload) => tokenMovementController?.handleDragMove(payload),
+    onTokenDragEnd: (payload) => tokenMovementController?.handleDragEnd(payload),
+    onTokenDragCommitted: (payload) => tokenMovementController?.handleDragCommitted(payload),
     // Levels v2 (§5.6): drag commits route here so dropped tokens that
     // land entirely over a cutout fall to the next valid level.
     processPlacementFalls: (sceneId, placementIds) =>
@@ -813,6 +821,41 @@ export function mountBoardInteractions(store, routes = {}) {
   const dirtySceneState = new Set();
   // Track if top-level fields changed
   const dirtyTopLevel = new Set();
+
+  tokenMovementController = createTokenMovementController({
+    mapTransform,
+    routes,
+    getViewState: () => viewState,
+    getBoardState: () => boardApi.getState?.() ?? {},
+    getCombatContext: () => ({
+      active: combatActive,
+      sceneId: getActiveSceneId(),
+      round: combatRound,
+      activeCombatantId,
+    }),
+    getActiveScenePlacements: (state) => getActiveScenePlacements(state),
+    getPlacementById: (placementId) => {
+      const sceneId = getActiveSceneId();
+      return sceneId ? resolvePlacementById(boardApi.getState?.() ?? {}, sceneId, placementId) : null;
+    },
+    isActiveCombatantPlacement: (placementId) =>
+      Boolean(combatActive && activeCombatantId && getRepresentativeIdFor(placementId) === activeCombatantId),
+    getPlacementTeam: (placementId, placement) =>
+      placementId ? getCombatantTeam(placementId) : getPlacementCombatTeam(placement),
+    getPlacementLevelId: (placement) => {
+      const state = boardApi.getState?.() ?? {};
+      return placement ? resolveTokenLevelId(placement, getActiveSceneTokenLevelState(state)) : null;
+    },
+    setRulerSupplement: (text) => setRulerSupplement(text),
+    clearRulerSupplement: () => clearRulerSupplement(),
+    restoreMove: (move) => restoreTokenMovement(move),
+    cancelActiveDrag: () => endTokenDrag({ commit: false }),
+    isUndoSuppressed: () =>
+      isDrawModeActive() ||
+      isDrawingInProgress() ||
+      mapLevelCutoutEditorActive ||
+      isCustomConditionDialogOpen(),
+  });
 
   // Helper functions for dirty tracking
   function markPlacementDirty(sceneId, placementId) {
@@ -4465,6 +4508,69 @@ export function mountBoardInteractions(store, routes = {}) {
     }
   }
 
+  function restoreTokenMovement(move) {
+    if (!move || typeof boardApi.updateState !== 'function') {
+      return false;
+    }
+    const sceneId = typeof move.sceneId === 'string' ? move.sceneId : '';
+    const placementId = typeof move.tokenId === 'string' ? move.tokenId : '';
+    const from = move.from && typeof move.from === 'object' ? move.from : null;
+    if (!sceneId || !placementId || !from) {
+      return false;
+    }
+
+    const nextColumn = toNonNegativeNumber(from.column ?? from.col ?? 0, 0);
+    const nextRow = toNonNegativeNumber(from.row ?? from.y ?? 0, 0);
+    const nextWidth = Math.max(1, toNonNegativeNumber(from.width ?? from.columns ?? 1, 1));
+    const nextHeight = Math.max(1, toNonNegativeNumber(from.height ?? from.rows ?? 1, 1));
+    let restored = false;
+    const moveTimestamp = Date.now();
+
+    boardApi.updateState?.((draft) => {
+      const scenePlacements = ensureScenePlacementDraft(draft, sceneId);
+      if (!Array.isArray(scenePlacements) || !scenePlacements.length) {
+        return;
+      }
+      const placement = scenePlacements.find((entry) => entry?.id === placementId);
+      if (!placement) {
+        return;
+      }
+      const clamped = clampPlacementToBounds(nextColumn, nextRow, nextWidth, nextHeight);
+      placement.column = clamped.column;
+      placement.row = clamped.row;
+      placement.width = nextWidth;
+      placement.height = nextHeight;
+      placement._lastModified = moveTimestamp;
+      restored = true;
+    });
+
+    if (!restored) {
+      return false;
+    }
+
+    markPlacementDirty(sceneId, placementId);
+    let undoMoveOps = null;
+    if (USE_DELTA_SAVES && !hasNonPlacementDirtyState()) {
+      const latestPlacements = boardApi.getState?.()?.boardState?.placements?.[sceneId] ?? [];
+      const placement = latestPlacements.find((entry) => entry?.id === placementId);
+      if (placement) {
+        undoMoveOps = [{
+          type: 'placement.move',
+          sceneId,
+          placementId,
+          x: placement.column,
+          y: placement.row,
+        }];
+      }
+    }
+    persistBoardStateSnapshot({}, undoMoveOps);
+    renderTokens(boardApi.getState?.() ?? {}, tokenLayer, viewState, { skipTracker: true });
+    if (status) {
+      status.textContent = 'Movement undone.';
+    }
+    return true;
+  }
+
   function removeSelectedTokens() {
     if (!selectedTokenIds.size) {
       return;
@@ -6434,6 +6540,7 @@ export function mountBoardInteractions(store, routes = {}) {
     }
     refreshCombatantStateClasses();
     handleActiveTeamChanged(previousTeam ?? null, nextTeam ?? null, previousCombatantId, normalizedNextId);
+    tokenMovementController?.syncCombatTurn();
 
     if (!isGmUser()) {
       return;
@@ -8006,6 +8113,7 @@ export function mountBoardInteractions(store, routes = {}) {
         activeCombatantId = effectiveActiveCombatantId;
         refreshCombatantStateClasses();
       }
+      tokenMovementController?.syncCombatTurn();
 
       updateStartCombatButton();
       updateCombatModeIndicators();

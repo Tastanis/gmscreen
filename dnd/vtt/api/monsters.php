@@ -10,13 +10,6 @@ try {
     $auth = getVttUserContext();
     $isGm = (bool) ($auth['isGM'] ?? false);
 
-    if (!$isGm) {
-        respondJson(403, [
-            'success' => false,
-            'error' => 'Only the GM can access monster data.',
-        ]);
-    }
-
     $method = strtoupper($_SERVER['REQUEST_METHOD'] ?? 'GET');
     if ($method !== 'GET') {
         respondJson(405, [
@@ -25,7 +18,41 @@ try {
         ]);
     }
 
+    $action = isset($_GET['action']) ? trim((string) $_GET['action']) : '';
     $monsterId = isset($_GET['id']) ? trim((string) $_GET['id']) : '';
+    if ($action === 'movement') {
+        if ($monsterId === '') {
+            respondJson(400, [
+                'success' => false,
+                'error' => 'Monster id is required.',
+            ]);
+        }
+        $monster = findMonsterById($monsterId);
+        if ($monster === null) {
+            respondJson(404, [
+                'success' => false,
+                'error' => 'Monster not found.',
+            ]);
+        }
+
+        respondJson(200, [
+            'success' => true,
+            'data' => [
+                'id' => $monster['id'] ?? $monsterId,
+                'name' => $monster['name'] ?? '',
+                'speed' => $monster['speed'] ?? null,
+                'movement' => $monster['movement'] ?? null,
+            ],
+        ]);
+    }
+
+    if (!$isGm) {
+        respondJson(403, [
+            'success' => false,
+            'error' => 'Only the GM can access monster data.',
+        ]);
+    }
+
     if ($monsterId !== '') {
         $monster = findMonsterById($monsterId);
         if ($monster === null) {

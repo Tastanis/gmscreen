@@ -44,6 +44,10 @@ export function createTokenInteractions({
   ensureScenePlacementDraft,
   toNonNegativeNumber,
   persistBoardStateSnapshot,
+  onTokenDragStart = null,
+  onTokenDragMove = null,
+  onTokenDragEnd = null,
+  onTokenDragCommitted = null,
   // Levels v2 (§5.6): post-commit fall detection. Optional; when omitted
   // commits run with no fall handling (matches pre-v2 behavior).
   processPlacementFalls = null,
@@ -386,6 +390,16 @@ export function createTokenInteractions({
       }
     }
 
+    if (typeof onTokenDragStart === 'function') {
+      onTokenDragStart({
+        primaryToken,
+        tokens: viewState.dragState.tokens,
+        originalPositions: viewState.dragState.originalPositions,
+        preview: initialCursorPreview,
+        dragState: viewState.dragState,
+      });
+    }
+
     try {
       mapSurface.setPointerCapture?.(candidate.pointerId);
     } catch (error) {
@@ -563,6 +577,13 @@ export function createTokenInteractions({
       }
     }
 
+    if (typeof onTokenDragMove === 'function') {
+      onTokenDragMove({
+        preview: nextPreview,
+        dragState: viewState.dragState,
+      });
+    }
+
     // Apply CSS transform directly on dragged elements (GPU-composited, no
     // layout). When dragElements is empty (e.g. test harness with no real
     // tokenLayer, or a token whose DOM element vanished mid-drag), skip the
@@ -630,6 +651,7 @@ export function createTokenInteractions({
     const measurement = dragState.measurement ?? null;
     const startTime = dragState.startTime ?? 0;
     const deferredUpdates = dragState.deferredUpdates ?? null;
+    const originalPositions = dragState.originalPositions ?? null;
 
     if (measurement) {
       if (measurement.temporary || !isMeasureModeActive()) {
@@ -665,8 +687,17 @@ export function createTokenInteractions({
       dragElements = null;
     }
 
+    if (typeof onTokenDragEnd === 'function') {
+      onTokenDragEnd({
+        commit,
+        moved,
+        preview,
+        originalPositions,
+      });
+    }
+
     if (commit && moved && preview && preview.size) {
-      commitDragPreview(preview, { startTime, deferredUpdates });
+      commitDragPreview(preview, { startTime, deferredUpdates, originalPositions });
     } else {
       renderTokens(boardApi.getState?.() ?? {}, tokenLayer, viewState);
     }
@@ -722,7 +753,10 @@ export function createTokenInteractions({
     updateExternalMeasurement(nextPoint);
   }
 
-  function commitDragPreview(preview, { startTime = 0, deferredUpdates = null } = {}) {
+  function commitDragPreview(
+    preview,
+    { startTime = 0, deferredUpdates = null, originalPositions = null } = {}
+  ) {
     if (typeof boardApi.updateState !== 'function') {
       renderTokens(boardApi.getState?.() ?? {}, tokenLayer, viewState);
       return;
@@ -891,6 +925,15 @@ export function createTokenInteractions({
 
     if (fallenIds.length && typeof triggerTokenFallAnimations === 'function') {
       triggerTokenFallAnimations(fallenIds);
+    }
+
+    if (movedCount && typeof onTokenDragCommitted === 'function') {
+      onTokenDragCommitted({
+        sceneId: activeSceneId,
+        movedIds,
+        originalPositions,
+        preview,
+      });
     }
   }
 
