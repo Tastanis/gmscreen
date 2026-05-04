@@ -1,13 +1,14 @@
 <?php
 session_start();
 
-// Define users and passwords
+// Define credentials: username => array('password' => ..., 'session_user' => ...)
+// Username 'harms' maps to session user 'GM' for compatibility with the rest of the app.
 $users = array(
-    'frunk' => 'frunk',
-    'sharon' => 'sharon',
-    'indigo' => 'indigo',
-    'zepha' => 'zepha',
-    'harms' => 'GM'  // password 'harms' maps to user 'GM'
+    'frunk'  => array('password' => 'frunk',  'session_user' => 'frunk'),
+    'sharon' => array('password' => 'sharon', 'session_user' => 'sharon'),
+    'indigo' => array('password' => 'indigo', 'session_user' => 'indigo'),
+    'zepha'  => array('password' => 'zepha',  'session_user' => 'zepha'),
+    'harms'  => array('password' => 'harms',  'session_user' => 'GM'),
 );
 
 // Secret key for signing remember-me cookies (HMAC)
@@ -48,22 +49,24 @@ $error_message = '';
 
 // Handle login form submission
 if (isset($_POST['password']) && $_POST['password'] != '') {
+    $username = strtolower(trim($_POST['username'] ?? ''));
     $password = trim($_POST['password']);
 
-    if (isset($users[$password])) {
-        $_SESSION['user'] = $users[$password];
+    if (isset($users[$username]) && hash_equals($users[$username]['password'], $password)) {
+        $sessionUser = $users[$username]['session_user'];
+        $_SESSION['user'] = $sessionUser;
         $_SESSION['logged_in'] = true;
 
         // Set remember-me cookie if checkbox was checked
         if (!empty($_POST['remember'])) {
-            $token = createRememberToken($users[$password]);
+            $token = createRememberToken($sessionUser);
             setcookie(REMEMBER_COOKIE, $token, time() + (REMEMBER_DAYS * 86400), '/');
         }
 
         header('Location: dashboard.php');
         exit;
     } else {
-        $error_message = 'Invalid password';
+        $error_message = 'Invalid username or password';
     }
 }
 
@@ -144,6 +147,7 @@ if (isset($_SESSION['logged_in']) && $_SESSION['logged_in'] === true) {
             color: #34495e;
         }
 
+        .form-group input[type="text"],
         .form-group input[type="password"] {
             width: 100%;
             padding: 12px 15px;
@@ -154,6 +158,7 @@ if (isset($_SESSION['logged_in']) && $_SESSION['logged_in'] === true) {
             background: rgba(255, 255, 255, 0.9);
         }
 
+        .form-group input[type="text"]:focus,
         .form-group input[type="password"]:focus {
             outline: none;
             border-color: #667eea;
@@ -231,10 +236,14 @@ if (isset($_SESSION['logged_in']) && $_SESSION['logged_in'] === true) {
 <body>
     <div class="login-container">
         <h1>D&D Character Portal</h1>
-        <form method="POST">
+        <form method="POST" autocomplete="on">
+            <div class="form-group">
+                <label for="username">Username:</label>
+                <input type="text" id="username" name="username" autocomplete="username" required>
+            </div>
             <div class="form-group">
                 <label for="password">Password:</label>
-                <input type="password" id="password" name="password" required>
+                <input type="password" id="password" name="password" autocomplete="current-password" required>
             </div>
             <div class="remember-group">
                 <input type="checkbox" id="remember" name="remember" value="1">
