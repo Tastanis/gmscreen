@@ -16330,6 +16330,7 @@ function createTemplateTool() {
       const radius = Math.max(MIN_CIRCLE_RADIUS, toRoundedNumber(shape.radius, MIN_CIRCLE_RADIUS));
       base.center = { column, row };
       base.radius = radius;
+      base.levelId = resolvePlacementLevelId(shape);
       return base;
     }
 
@@ -16343,6 +16344,7 @@ function createTemplateTool() {
       base.length = length;
       base.width = width;
       base.rotation = rotation;
+      base.levelId = resolvePlacementLevelId(shape);
       if (Number.isFinite(shape.anchor?.column) && Number.isFinite(shape.anchor?.row)) {
         base.anchor = {
           column: Math.max(0, toRoundedNumber(shape.anchor.column, 0)),
@@ -16360,6 +16362,7 @@ function createTemplateTool() {
 
     if (type === 'wall') {
       const squares = Array.isArray(shape.squares) ? shape.squares : [];
+      base.levelId = resolvePlacementLevelId(shape);
       base.squares = squares
         .map((square) => {
           const column = Math.round(Number(square?.column ?? square?.col ?? square?.x));
@@ -16396,6 +16399,9 @@ function createTemplateTool() {
     }
 
     const color = sanitizeColorValue(entry.color);
+    const levelId = typeof entry.levelId === 'string' && entry.levelId.trim()
+      ? entry.levelId.trim()
+      : BASE_MAP_LEVEL_ID;
 
     if (type === 'circle') {
       const column = toRoundedNumber(entry.center?.column, 0);
@@ -16407,6 +16413,7 @@ function createTemplateTool() {
         color,
         center: { column, row },
         radius,
+        levelId,
       };
     }
 
@@ -16441,6 +16448,7 @@ function createTemplateTool() {
         length,
         width,
         rotation,
+        levelId,
       };
 
       if (anchorColumn !== null && anchorRow !== null) {
@@ -16475,6 +16483,7 @@ function createTemplateTool() {
         type: 'wall',
         color,
         squares,
+        levelId,
       };
       // Preserve wall color if set
       if (typeof entry.wallColor === 'string' && entry.wallColor.trim()) {
@@ -16591,8 +16600,13 @@ function createTemplateTool() {
   mapSurface.addEventListener('pointercancel', handlePlacementPointerCancel, true);
 
   function render(view = viewState) {
+    const state = boardApi.getState?.() ?? {};
+    const levelContext = resolveTemplateLevelContext(state);
     updateLayerVisibility(view);
-    shapes.forEach((shape) => updateShapeElement(shape, view));
+    shapes.forEach((shape) => {
+      updateShapeElement(shape, view);
+      applyTemplateLevelVisibility(shape, view, levelContext);
+    });
     if (previewShape) {
       updateShapeElement(previewShape, view);
     }
@@ -17045,6 +17059,9 @@ function createTemplateTool() {
   }
 
   function finalizePlacement(config) {
+    const templateLevelId = typeof config.levelId === 'string' && config.levelId.trim()
+      ? config.levelId.trim()
+      : getActiveTokenPlacementLevelId() ?? BASE_MAP_LEVEL_ID;
     clearPreview();
     restoreTemplateStatus();
     placementState = null;
@@ -17055,6 +17072,7 @@ function createTemplateTool() {
       const shape = createShape('circle', {
         center,
         radius: config.radius,
+        levelId: templateLevelId,
       }, { color: config.color });
       addShape(shape);
       return;
@@ -17066,7 +17084,7 @@ function createTemplateTool() {
         render(viewState);
         return;
       }
-      const shape = createShape('wall', { squares, wallColor: config.wallColor });
+      const shape = createShape('wall', { squares, wallColor: config.wallColor, levelId: templateLevelId });
       addShape(shape);
       return;
     }
@@ -17096,6 +17114,7 @@ function createTemplateTool() {
       rotation,
       anchor,
       orientation,
+      levelId: templateLevelId,
     }, { color: config.color });
     addShape(shape);
   }
@@ -17123,6 +17142,8 @@ function createTemplateTool() {
     const root = document.createElement('div');
     root.className = `vtt-template vtt-template--${type}${isPreview ? ' vtt-template--preview' : ''}`;
     root.dataset.templateId = id;
+    root.dataset.templateLevelId =
+      typeof data.levelId === 'string' && data.levelId.trim() ? data.levelId.trim() : BASE_MAP_LEVEL_ID;
     root.style.setProperty('--vtt-template-color', color);
 
     // Set wall color attribute for CSS variants
@@ -17195,6 +17216,9 @@ function createTemplateTool() {
         connectors: new Map(),
       },
       isPreview,
+      levelId: typeof data.levelId === 'string' && data.levelId.trim()
+        ? data.levelId.trim()
+        : BASE_MAP_LEVEL_ID,
     };
 
     if (type === 'circle') {
@@ -17253,6 +17277,7 @@ function createTemplateTool() {
     }
 
     if (!isPreview) {
+      node.addEventListener('keydown', (event) => handleNodeKeydown(event, shape));
       node.addEventListener('pointerdown', (event) => handleNodePointerDown(event, shape));
       node.addEventListener('pointermove', (event) => handleNodePointerMove(event, shape));
       node.addEventListener('pointerup', handleNodePointerUp);
@@ -17484,6 +17509,28 @@ function createTemplateTool() {
     commitShapes();
   }
 
+  function handleNodeKeydown(event, shape) {
+    if (!shape || shape.isPreview) {
+      return;
+    }
+
+    if (event.key === 'Delete' || event.key === 'Backspace') {
+      event.preventDefault();
+      event.stopPropagation();
+      selectShape(shape.id);
+      removeShape(shape.id);
+      return;
+    }
+
+    if (event.key === 'r' && shape.type === 'rectangle') {
+      event.preventDefault();
+      event.stopPropagation();
+      selectShape(shape.id);
+      activateTemplate(shape);
+      rotateRectangle(shape.id, event.shiftKey ? -45 : 45);
+    }
+  }
+
   function handleNodeClick(event, shape) {
     event.preventDefault();
     event.stopPropagation();
@@ -17634,13 +17681,17 @@ function createTemplateTool() {
     commitShapes();
   }
 
-  function updateShapeElement(shape, view = viewState) {
+  function updateShapeElement(shape, view = viewState, levelContext = null) {
     const { root, node, label } = shape.elements;
     if (!view.mapLoaded) {
       root.hidden = true;
+      root.setAttribute('aria-hidden', 'true');
+      clearTemplateVisibilityMask(root);
       return;
     }
     root.hidden = false;
+    root.setAttribute('aria-hidden', 'false');
+    clearTemplateVisibilityMask(root);
 
     const offsets = view.gridOffsets ?? {};
     const offsetLeft = Number.isFinite(offsets.left) ? offsets.left : 0;
@@ -17655,6 +17706,7 @@ function createTemplateTool() {
       node.style.top = '0';
       node.style.width = '100%';
       node.style.height = '100%';
+      applyTemplateLevelVisibility(shape, view, levelContext);
       return;
     }
 
@@ -17679,6 +17731,7 @@ function createTemplateTool() {
       node.style.height = `${gridSize}px`;
 
       label.textContent = `Radius: ${radius.toFixed(1)}`;
+      applyTemplateLevelVisibility(shape, view, levelContext);
       return;
     }
 
@@ -17730,6 +17783,252 @@ function createTemplateTool() {
     node.style.height = `${nodeSize}px`;
 
     label.textContent = `${lengthUnits.toFixed(1)} × ${widthUnits.toFixed(1)}`;
+  }
+
+  function resolveTemplateLevelContext(state = boardApi.getState?.() ?? {}) {
+    const boardState = state?.boardState && typeof state.boardState === 'object'
+      ? state.boardState
+      : {};
+    const activeSceneId = typeof boardState.activeSceneId === 'string' ? boardState.activeSceneId : null;
+    const sceneEntry =
+      activeSceneId &&
+      boardState.sceneState &&
+      typeof boardState.sceneState === 'object' &&
+      boardState.sceneState[activeSceneId] &&
+      typeof boardState.sceneState[activeSceneId] === 'object'
+        ? boardState.sceneState[activeSceneId]
+        : null;
+    const mapLevels = normalizeMapLevelsState(sceneEntry?.mapLevels ?? null, {
+      sceneGrid: sceneEntry?.grid ?? state?.grid ?? null,
+    });
+    const levels = buildLevelViewModel({
+      baseMapUrl: boardState.mapUrl ?? state?.mapUrl ?? null,
+      mapLevels,
+      sceneGrid: sceneEntry?.grid ?? state?.grid ?? null,
+    });
+    const viewerLevelId = getViewerLevelIdForCurrentUser(state, activeSceneId);
+    return { activeSceneId, viewerLevelId, levels };
+  }
+
+  function applyTemplateLevelVisibility(shape, view = viewState, levelContext = null) {
+    const root = shape?.elements?.root;
+    if (!root || shape?.isPreview || !levelContext || !Array.isArray(levelContext.levels)) {
+      return true;
+    }
+
+    const presentation = resolveTemplateLevelPresentation(shape, view, levelContext);
+    if (!presentation.visible) {
+      root.hidden = true;
+      root.setAttribute('aria-hidden', 'true');
+      clearTemplateVisibilityMask(root);
+      if (selectedId === shape.id) {
+        shape.elements.root.classList.remove('is-selected');
+        selectedId = null;
+        restoreTemplateStatus();
+      }
+      return false;
+    }
+
+    root.hidden = false;
+    root.setAttribute('aria-hidden', 'false');
+    if (presentation.maskRects && presentation.maskRects.length) {
+      applyTemplateVisibilityMask(root, presentation.maskRects);
+    } else {
+      clearTemplateVisibilityMask(root);
+    }
+    return true;
+  }
+
+  function resolveTemplateLevelPresentation(shape, view, levelContext) {
+    const levels = Array.isArray(levelContext?.levels) ? levelContext.levels : [];
+    const viewerLevelId = typeof levelContext?.viewerLevelId === 'string' && levelContext.viewerLevelId
+      ? levelContext.viewerLevelId
+      : BASE_MAP_LEVEL_ID;
+    const templateLevelId = resolvePlacementLevelId(shape);
+    const viewerIndex = levels.findIndex((level) => level?.id === viewerLevelId);
+    const templateIndex = levels.findIndex((level) => level?.id === templateLevelId);
+    const templateLevel = templateIndex >= 0 ? levels[templateIndex] : null;
+
+    if (viewerIndex < 0 || templateIndex < 0 || templateLevel?.hidden === true) {
+      return { visible: false };
+    }
+
+    if (templateIndex > viewerIndex) {
+      return { visible: false };
+    }
+
+    if (templateIndex === viewerIndex) {
+      return { visible: true, maskRects: null };
+    }
+
+    const blockingLevels = levels
+      .slice(templateIndex + 1, viewerIndex + 1)
+      .filter((level) => doesTemplateLevelBlockLowerVision(level));
+    if (!blockingLevels.length) {
+      return { visible: true, maskRects: null };
+    }
+
+    const maskRects = buildTemplateCutoutMaskRects(shape, view, blockingLevels);
+    return { visible: maskRects.length > 0, maskRects };
+  }
+
+  function doesTemplateLevelBlockLowerVision(level) {
+    if (!level || typeof level !== 'object' || level.hidden === true) {
+      return false;
+    }
+    if (level.blocksLowerLevelVision === false) {
+      return false;
+    }
+    if (Number.isFinite(level.opacity) && level.opacity <= 0) {
+      return false;
+    }
+    return typeof level.mapUrl === 'string' && level.mapUrl.trim().length > 0;
+  }
+
+  function buildTemplateCutoutMaskRects(shape, view, blockingLevels = []) {
+    const root = shape?.elements?.root;
+    const rootWidth = parseCssPixelValue(root?.style?.width);
+    const rootHeight = parseCssPixelValue(root?.style?.height);
+    const rootLeft = parseCssPixelValue(root?.style?.left);
+    const rootTop = parseCssPixelValue(root?.style?.top);
+    if (rootWidth <= 0 || rootHeight <= 0) {
+      return [];
+    }
+
+    let rects = [{ x: 0, y: 0, width: rootWidth, height: rootHeight }];
+    for (const level of blockingLevels) {
+      const cutoutRects = getLevelCutoutPixelRects(level, view)
+        .map((rect) => ({
+          x: rect.x - rootLeft,
+          y: rect.y - rootTop,
+          width: rect.width,
+          height: rect.height,
+        }))
+        .map((rect) => intersectRects(rect, { x: 0, y: 0, width: rootWidth, height: rootHeight }))
+        .filter(Boolean);
+
+      if (!cutoutRects.length) {
+        return [];
+      }
+
+      const nextRects = [];
+      rects.forEach((current) => {
+        cutoutRects.forEach((cutout) => {
+          const intersection = intersectRects(current, cutout);
+          if (intersection) {
+            nextRects.push(intersection);
+          }
+        });
+      });
+      rects = nextRects;
+      if (!rects.length) {
+        return [];
+      }
+    }
+
+    return rects;
+  }
+
+  function getLevelCutoutPixelRects(level, view) {
+    const cutouts = Array.isArray(level?.cutouts) ? level.cutouts : [];
+    const offsets = view?.gridOffsets ?? {};
+    const offsetLeft = Number.isFinite(offsets.left) ? offsets.left : 0;
+    const offsetTop = Number.isFinite(offsets.top) ? offsets.top : 0;
+    const gridSize = Math.max(8, Number.isFinite(view?.gridSize) ? view.gridSize : 64);
+
+    return cutouts
+      .map((cutout) => {
+        const column = Math.max(0, Math.trunc(Number(cutout?.column ?? cutout?.col ?? cutout?.x)));
+        const row = Math.max(0, Math.trunc(Number(cutout?.row ?? cutout?.y)));
+        if (!Number.isFinite(column) || !Number.isFinite(row)) {
+          return null;
+        }
+        const width = Math.max(1, Math.trunc(Number(cutout?.width ?? cutout?.columns ?? cutout?.w ?? 1)));
+        const height = Math.max(1, Math.trunc(Number(cutout?.height ?? cutout?.rows ?? cutout?.h ?? 1)));
+        return {
+          x: offsetLeft + column * gridSize,
+          y: offsetTop + row * gridSize,
+          width: width * gridSize,
+          height: height * gridSize,
+        };
+      })
+      .filter(Boolean);
+  }
+
+  function applyTemplateVisibilityMask(root, rects = []) {
+    if (!root || !Array.isArray(rects) || rects.length === 0) {
+      clearTemplateVisibilityMask(root);
+      return;
+    }
+    const width = parseCssPixelValue(root.style.width);
+    const height = parseCssPixelValue(root.style.height);
+    if (width <= 0 || height <= 0) {
+      clearTemplateVisibilityMask(root);
+      return;
+    }
+    const rectPaths = rects
+      .map((rect) => {
+        const x = roundTemplateMaskNumber(rect.x);
+        const y = roundTemplateMaskNumber(rect.y);
+        const w = roundTemplateMaskNumber(rect.width);
+        const h = roundTemplateMaskNumber(rect.height);
+        if (w <= 0 || h <= 0) {
+          return '';
+        }
+        return `<rect x="${x}" y="${y}" width="${w}" height="${h}" fill="white"/>`;
+      })
+      .filter(Boolean)
+      .join('');
+    if (!rectPaths) {
+      clearTemplateVisibilityMask(root);
+      return;
+    }
+    const svg = `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 ${roundTemplateMaskNumber(width)} ${roundTemplateMaskNumber(height)}">${rectPaths}</svg>`;
+    const mask = `url("data:image/svg+xml,${encodeURIComponent(svg)}")`;
+    root.style.maskImage = mask;
+    root.style.webkitMaskImage = mask;
+    root.style.maskRepeat = 'no-repeat';
+    root.style.webkitMaskRepeat = 'no-repeat';
+    root.style.maskSize = '100% 100%';
+    root.style.webkitMaskSize = '100% 100%';
+  }
+
+  function clearTemplateVisibilityMask(root) {
+    if (!root) {
+      return;
+    }
+    root.style.maskImage = '';
+    root.style.webkitMaskImage = '';
+    root.style.maskRepeat = '';
+    root.style.webkitMaskRepeat = '';
+    root.style.maskSize = '';
+    root.style.webkitMaskSize = '';
+  }
+
+  function intersectRects(a, b) {
+    if (!a || !b) {
+      return null;
+    }
+    const left = Math.max(a.x, b.x);
+    const top = Math.max(a.y, b.y);
+    const right = Math.min(a.x + a.width, b.x + b.width);
+    const bottom = Math.min(a.y + a.height, b.y + b.height);
+    if (right <= left || bottom <= top) {
+      return null;
+    }
+    return { x: left, y: top, width: right - left, height: bottom - top };
+  }
+
+  function parseCssPixelValue(value) {
+    const parsed = Number.parseFloat(value);
+    return Number.isFinite(parsed) ? parsed : 0;
+  }
+
+  function roundTemplateMaskNumber(value) {
+    if (!Number.isFinite(value)) {
+      return 0;
+    }
+    return Math.round(value * 100) / 100;
   }
 
   function updateLayerVisibility(view = viewState) {
@@ -18529,10 +18828,10 @@ function createTemplateTool() {
       let tile = tilesMap.get(key);
       if (!tile) {
         tile = document.createElement('div');
-        tile.className = 'vtt-wall__tile';
         container.appendChild(tile);
         tilesMap.set(key, tile);
       }
+      tile.className = `vtt-wall__tile vtt-wall__tile--${resolveWallTileOrientation(square, squares)}`;
       const localLeft = (square.column - minColumn) * bounds.gridSize;
       const localTop = (square.row - minRow) * bounds.gridSize;
       tile.style.left = `${localLeft}px`;
@@ -18749,12 +19048,36 @@ function createTemplateTool() {
     }
     const lengthUnits = Math.max(MIN_RECT_DIMENSION, shape.length ?? MIN_RECT_DIMENSION);
     const widthUnits = Math.max(MIN_RECT_DIMENSION, shape.width ?? MIN_RECT_DIMENSION);
-    const offsetColumn = anchorColumn - startColumn;
-    const offsetRow = anchorRow - startRow;
+    const centerColumn = startColumn + lengthUnits / 2;
+    const centerRow = startRow + widthUnits / 2;
+    const deltaColumn = anchorColumn + 0.5 - centerColumn;
+    const deltaRow = anchorRow + 0.5 - centerRow;
+    const radians = toRadians(-normalizeAngle(shape.rotation ?? 0));
+    const cos = Math.cos(radians);
+    const sin = Math.sin(radians);
     return {
-      x: offsetColumn + 0.5 - lengthUnits / 2,
-      y: offsetRow + 0.5 - widthUnits / 2,
+      x: deltaColumn * cos - deltaRow * sin,
+      y: deltaColumn * sin + deltaRow * cos,
     };
+  }
+
+  function resolveWallTileOrientation(square, squares = []) {
+    if (!square || !Array.isArray(squares)) {
+      return 'se';
+    }
+
+    const diagonalNeighbor = squares.find((candidate) => {
+      if (!candidate || candidate === square) {
+        return false;
+      }
+      return Math.abs(candidate.column - square.column) === 1 && Math.abs(candidate.row - square.row) === 1;
+    });
+
+    if (!diagonalNeighbor) {
+      return 'se';
+    }
+
+    return (diagonalNeighbor.column - square.column) * (diagonalNeighbor.row - square.row) > 0 ? 'se' : 'ne';
   }
 
   function clampRectanglePosition(start, length, width, rotation = 0, view = viewState) {

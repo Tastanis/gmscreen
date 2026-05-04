@@ -83,6 +83,11 @@ pnpm-lock.yaml
 /dnd/strixhaven/map/hex-data/
 /dnd/strixhaven/map/hex-images/
 
+# Buisness portal data - user-generated bullets and selections
+/buisness/data/*.json
+/buisness/data/*.tmp
+!buisness/data/.gitkeep
+
 # Backup directories
 **/backups/*
 **/backup/*

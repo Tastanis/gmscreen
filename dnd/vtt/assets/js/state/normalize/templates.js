@@ -1,4 +1,5 @@
 import { clampToFinite } from './helpers.js';
+import { BASE_MAP_LEVEL_ID } from './map-levels.js';
 
 export function normalizeTemplates(raw = {}) {
   if (!raw || typeof raw !== 'object') {
@@ -31,6 +32,9 @@ export function normalizeTemplateEntry(entry) {
   }
 
   const color = typeof entry.color === 'string' ? entry.color : undefined;
+  const levelId = typeof entry.levelId === 'string' && entry.levelId.trim()
+    ? entry.levelId.trim()
+    : BASE_MAP_LEVEL_ID;
 
   if (type === 'circle') {
     const column = clampToFinite(entry.center?.column, 0, 4);
@@ -41,6 +45,7 @@ export function normalizeTemplateEntry(entry) {
       type: 'circle',
       center: { column, row },
       radius,
+      levelId,
     };
     if (color) {
       normalized.color = color;
@@ -61,6 +66,7 @@ export function normalizeTemplateEntry(entry) {
       length,
       width,
       rotation,
+      levelId,
     };
     if (color) {
       normalized.color = color;
@@ -96,9 +102,13 @@ export function normalizeTemplateEntry(entry) {
       id,
       type: 'wall',
       squares,
+      levelId,
     };
     if (color) {
       normalized.color = color;
+    }
+    if (typeof entry.wallColor === 'string' && entry.wallColor.trim()) {
+      normalized.wallColor = entry.wallColor.trim();
     }
     return normalized;
   }
