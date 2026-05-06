@@ -64,6 +64,8 @@ buisness_require_login();
         <h3>Selection</h3>
         <div class="countChip" id="selection-count">0 items</div>
         <div class="actions">
+          <button type="button" class="pillBtn ghost exportBtn" id="export-questions-btn" title="Export selected questions as HTML" disabled>Questions</button>
+          <button type="button" class="pillBtn ghost exportBtn" id="export-drafts-btn" title="Export selected drafts as HTML" disabled>Drafts</button>
           <button type="button" class="iconBtn" id="copy-btn" title="Copy as text" disabled>
             <svg width="13" height="13" viewBox="0 0 16 16" fill="none" aria-hidden="true"><rect x="5" y="5" width="8" height="9" rx="1.5" stroke="currentColor" stroke-width="1.3"/><path d="M3 11V3.5A1.5 1.5 0 0 1 4.5 2H10" stroke="currentColor" stroke-width="1.3" stroke-linecap="round"/></svg>
           </button>
@@ -86,12 +88,12 @@ buisness_require_login();
   </div>
 
   <div class="tabBar">
-    <button type="button" class="tab on">General</button>
-    <button type="button" class="tab coming" title="Coming soon">Templates</button>
-    <button type="button" class="tab coming" title="Coming soon">Schedule</button>
-    <button type="button" class="tab coming" title="Coming soon">Integrations</button>
-    <button type="button" class="tab coming" title="Coming soon">Reports</button>
-    <button type="button" class="tab coming" title="Coming soon">Audit Log</button>
+    <button type="button" class="tab presetTab on" data-preset-key="general">General</button>
+    <button type="button" class="tab presetTab" data-preset-key="templates">Templates</button>
+    <button type="button" class="tab presetTab" data-preset-key="schedule">Schedule</button>
+    <button type="button" class="tab presetTab" data-preset-key="integrations">Integrations</button>
+    <button type="button" class="tab presetTab" data-preset-key="reports">Reports</button>
+    <button type="button" class="tab presetTab" data-preset-key="audit-log">Audit Log</button>
     <div class="tabSpacer"></div>
     <div class="tabMeta" id="save-status">draft &middot; autosaved</div>
   </div>
@@ -113,12 +115,46 @@ buisness_require_login();
       </label>
       <input type="text" class="bulletText" placeholder="Bullet text" />
     </div>
+    <label class="batchToggle">
+      <input type="checkbox" class="batchWithParent" />
+      <span>Batch with parent</span>
+    </label>
     <div class="bulletEditorRow bulletEditorActions">
       <button type="button" class="pillBtn ghost cancelBtn">Cancel</button>
       <button type="button" class="pillBtn dark saveBtn">Save</button>
     </div>
   </div>
 </template>
+
+<div class="modalOverlay" id="content-modal" hidden>
+  <div class="contentModal" role="dialog" aria-modal="true" aria-labelledby="content-modal-title">
+    <div class="contentModalHead">
+      <div>
+        <h3 id="content-modal-title">Bullet content</h3>
+        <p id="content-modal-subtitle"></p>
+      </div>
+      <button type="button" class="iconBtn" id="content-modal-close" title="Close">
+        <svg width="13" height="13" viewBox="0 0 16 16" fill="none" aria-hidden="true"><path d="m4 4 8 8M12 4l-8 8" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"/></svg>
+      </button>
+    </div>
+    <div class="contentModalBody">
+      <label class="richField">
+        <span>Questions</span>
+        <div class="richPasteBox" id="questions-editor" contenteditable="true" role="textbox" aria-multiline="true"></div>
+      </label>
+      <label class="richField">
+        <span>Draft</span>
+        <div class="richPasteBox" id="draft-editor" contenteditable="true" role="textbox" aria-multiline="true"></div>
+      </label>
+    </div>
+    <div class="contentModalFoot">
+      <button type="button" class="pillBtn ghost" id="content-clear-btn">Clear both</button>
+      <div class="modalFootSpacer"></div>
+      <button type="button" class="pillBtn ghost" id="content-cancel-btn">Cancel</button>
+      <button type="button" class="pillBtn dark" id="content-save-btn">Save content</button>
+    </div>
+  </div>
+</div>
 
 <script src="js/app-automation.js"></script>
 </body>
