@@ -45,6 +45,87 @@ function seedBoardState() {
   };
 }
 
+describe('Board State Op Applier - combat.set', () => {
+  test('replaces scene combat state while preserving unrelated scene fields', () => {
+    const state = {
+      sceneState: {
+        'scene-1': {
+          grid: { size: 64 },
+          fogOfWar: { byLevel: {} },
+          combat: {
+            active: true,
+            round: 3,
+            activeCombatantId: 'goblin',
+            completedCombatantIds: ['hero'],
+            turnPhase: 'active',
+            sequence: 7,
+            updatedAt: 1000,
+          },
+        },
+      },
+    };
+
+    const mutated = applyBoardStateOpLocally(state, {
+      type: 'combat.set',
+      sceneId: 'scene-1',
+      combat: {
+        active: false,
+        round: 0,
+        activeCombatantId: null,
+        completedCombatantIds: [],
+        turnPhase: 'idle',
+        malice: 2,
+        updatedAt: 2000,
+        sequence: 8,
+        monster: { name: 'hidden detail should not persist' },
+      },
+    });
+
+    assert.equal(mutated, true);
+    assert.deepEqual(state.sceneState['scene-1'].grid, { size: 64 });
+    assert.deepEqual(state.sceneState['scene-1'].fogOfWar, { byLevel: {} });
+    assert.equal(state.sceneState['scene-1'].combat.active, false);
+    assert.equal(state.sceneState['scene-1'].combat.round, 0);
+    assert.equal(state.sceneState['scene-1'].combat.turnPhase, 'idle');
+    assert.equal(state.sceneState['scene-1'].combat.sequence, 8);
+    assert.equal(state.sceneState['scene-1'].combat.monster, undefined);
+  });
+
+  test('ignores older combat.set payloads by sequence', () => {
+    const state = {
+      sceneState: {
+        'scene-1': {
+          combat: {
+            active: false,
+            round: 0,
+            activeCombatantId: null,
+            completedCombatantIds: [],
+            turnPhase: 'idle',
+            sequence: 10,
+            updatedAt: 3000,
+          },
+        },
+      },
+    };
+
+    const mutated = applyBoardStateOpLocally(state, {
+      type: 'combat.set',
+      sceneId: 'scene-1',
+      combat: {
+        active: true,
+        round: 4,
+        turnPhase: 'active',
+        sequence: 9,
+        updatedAt: 4000,
+      },
+    });
+
+    assert.equal(mutated, false);
+    assert.equal(state.sceneState['scene-1'].combat.active, false);
+    assert.equal(state.sceneState['scene-1'].combat.sequence, 10);
+  });
+});
+
 describe('Board State Op Applier — placement.move', () => {
   test('moves an existing placement and stamps _lastModified', () => {
     const state = seedBoardState();

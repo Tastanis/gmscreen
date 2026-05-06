@@ -170,14 +170,26 @@ export function prepareCombatSnapshotForSync(
 
   if (isRemoteNewer) {
     const roundChanged = existingNormalized.round !== nextSnapshot.round;
+    const applyActive = !isDirty('active');
+    const applyRound = !isDirty('round');
+    const applyActiveCombatantId = !isDirty('activeCombatantId');
+    const applyTeams = !isDirty('teams');
+    const applyTurnPhase = !isDirty('turnPhase');
+    const applyRoundTurnCount = !isDirty('roundTurnCount');
     const applyCompletedCombatants = !isDirty('completedCombatantIds');
     const applyMalice = !isDirty('malice') && (isGm || existingHasMaliceValue);
     const applyTurnLock = !isDirty('turnLock');
     const applyGroups = !isDirty('groups');
 
-    nextSnapshot.active = existingNormalized.active;
-    nextSnapshot.round = existingNormalized.round;
-    nextSnapshot.activeCombatantId = existingNormalized.activeCombatantId;
+    if (applyActive) {
+      nextSnapshot.active = existingNormalized.active;
+    }
+    if (applyRound) {
+      nextSnapshot.round = existingNormalized.round;
+    }
+    if (applyActiveCombatantId) {
+      nextSnapshot.activeCombatantId = existingNormalized.activeCombatantId;
+    }
 
     if (applyCompletedCombatants) {
       if (roundChanged) {
@@ -190,11 +202,17 @@ export function prepareCombatSnapshotForSync(
       }
     }
 
-    nextSnapshot.startingTeam = existingNormalized.startingTeam;
-    nextSnapshot.currentTeam = existingNormalized.currentTeam;
-    nextSnapshot.lastTeam = existingNormalized.lastTeam;
-    nextSnapshot.turnPhase = existingNormalized.turnPhase;
-    nextSnapshot.roundTurnCount = existingNormalized.roundTurnCount;
+    if (applyTeams) {
+      nextSnapshot.startingTeam = existingNormalized.startingTeam;
+      nextSnapshot.currentTeam = existingNormalized.currentTeam;
+      nextSnapshot.lastTeam = existingNormalized.lastTeam;
+    }
+    if (applyTurnPhase) {
+      nextSnapshot.turnPhase = existingNormalized.turnPhase;
+    }
+    if (applyRoundTurnCount) {
+      nextSnapshot.roundTurnCount = existingNormalized.roundTurnCount;
+    }
 
     if (!isDirty('malice')) {
       nextSnapshot.malice = existingNormalized.malice;
@@ -228,6 +246,12 @@ export function prepareCombatSnapshotForSync(
       groups: cloneCombatGroups(nextSnapshot.groups),
       existingVersion,
       existingUpdatedAt: existingNormalized.updatedAt,
+      applyActive,
+      applyRound,
+      applyActiveCombatantId,
+      applyTeams,
+      applyTurnPhase,
+      applyRoundTurnCount,
       applyCompletedCombatants,
       applyMalice,
       applyTurnLock,

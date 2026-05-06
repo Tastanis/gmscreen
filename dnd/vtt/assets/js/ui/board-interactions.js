@@ -1058,6 +1058,46 @@ export function mountBoardInteractions(store, routes = {}) {
            dirtyTopLevel.size > 0;
   }
 
+  function getDirtySaveSummary() {
+    const countMapEntries = (map) => {
+      if (!(map instanceof Map)) {
+        return 0;
+      }
+      let count = 0;
+      map.forEach((ids) => {
+        count += ids?.size ?? 0;
+      });
+      return count;
+    };
+
+    return {
+      placements: countMapEntries(dirtyPlacements),
+      templates: countMapEntries(dirtyTemplates),
+      drawings: countMapEntries(dirtyDrawings),
+      drawingReplaceScenes: drawingFullReplaceScenes.size,
+      pings: dirtyPings,
+      sceneState: dirtySceneState.size,
+      topLevel: dirtyTopLevel.size,
+    };
+  }
+
+  function logBoardSaveDebug(message, details = {}) {
+    const logger =
+      typeof console !== 'undefined' && typeof console.debug === 'function'
+        ? console.debug
+        : typeof console !== 'undefined' && typeof console.log === 'function'
+        ? console.log
+        : null;
+    if (!logger) {
+      return;
+    }
+    logger('[VTT save]', message, {
+      currentVersion: currentBoardStateVersion,
+      dirty: getDirtySaveSummary(),
+      ...details,
+    });
+  }
+
   // Phase 3-B (commit 3): true when any dirty entity cannot be shipped
   // as a delta op. Used at op-routed call sites (placement mutations,
   // commitShapes, syncDrawingsFromState) to decide whether it is safe
@@ -1203,6 +1243,7 @@ export function mountBoardInteractions(store, routes = {}) {
     updateStartCombatButton();
     updateCombatModeIndicators();
     refreshCombatTracker();
+    markCombatEncounterStateDirty();
     syncCombatStateToStore();
   }
 
@@ -1405,6 +1446,20 @@ export function mountBoardInteractions(store, routes = {}) {
 
   function clearDirtyCombatFields() {
     dirtyCombatFields.clear();
+  }
+
+  function markCombatEncounterStateDirty() {
+    [
+      'active',
+      'round',
+      'activeCombatantId',
+      'teams',
+      'turnPhase',
+      'roundTurnCount',
+      'completedCombatantIds',
+      'turnLock',
+      'malice',
+    ].forEach((field) => markCombatFieldDirty(field));
   }
 
   // Pusher real-time sync state
@@ -1882,9 +1937,10 @@ export function mountBoardInteractions(store, routes = {}) {
   //     and `placement.update` on every mutator-driven placement edit
   //     (HP/stamina, conditions, hidden flag, triggered action, etc.)
   //
-  // Templates, drawings, pings, scene state, fog, combat, and overlay
-  // saves still go through the snapshot path regardless of this flag;
-  // those will be moved to ops in commits 4-5. Call sites that detect
+  // Templates, drawings, pings, scene state, fog, and overlay saves
+  // still go through the snapshot path regardless of this flag. GM combat
+  // sync now uses `combat.set` ops so End Combat is not blocked by stale
+  // full-board snapshot versions. Call sites that detect
   // non-placement dirty state also fall back to the snapshot path so
   // the ops path never silently drops templates/drawings/etc.
   const USE_DELTA_SAVES = true;
@@ -2002,6 +2058,10 @@ export function mountBoardInteractions(store, routes = {}) {
     let savePromise = null;
     let saveFlushDescriptor = null;
     if (useOpsPath) {
+      logBoardSaveDebug('sending ops save', {
+        kind: 'ops',
+        ops: opsOverride.length,
+      });
       const envelope = {
         metadata,
         _version: currentBoardStateVersion > 0 ? currentBoardStateVersion : undefined,
@@ -2022,6 +2082,12 @@ export function mountBoardInteractions(store, routes = {}) {
         ops: Array.isArray(opsResult?.sentOps) ? opsResult.sentOps : opsOverride,
       };
     } else {
+      logBoardSaveDebug('sending snapshot save', {
+        kind: 'snapshot',
+        deltaOnly: useDelta,
+        sentVersion: snapshot._version ?? null,
+        fields: Object.keys(snapshot).filter((field) => !field.startsWith('_')),
+      });
       savePromise = persistBoardState(routes.state, snapshot, options);
       saveFlushDescriptor = {
         kind: 'snapshot',
@@ -2103,7 +2169,14 @@ export function mountBoardInteractions(store, routes = {}) {
           if (isBoardStateVersionConflictResult(result)) {
             clearDirtyTrackingForSave(saveFlushDescriptor);
             pendingResyncAfterSave = false;
-            console.warn('[VTT] Board state save rejected as stale; applying server state.');
+            console.warn('[VTT] Board state save rejected as stale; applying server state.', {
+              sentVersion:
+                saveFlushDescriptor?.kind === 'snapshot'
+                  ? saveFlushDescriptor.snapshot?._version ?? null
+                  : currentBoardStateVersion,
+              currentVersion: currentBoardStateVersion,
+              dirty: getDirtySaveSummary(),
+            });
             if (!applyBoardStateConflictSnapshot(result?.data)) {
               triggerBoardStateResync('save-version-conflict');
             }
@@ -2118,7 +2191,8 @@ export function mountBoardInteractions(store, routes = {}) {
   };
 
   const persistBoardStateSnapshot = (options = {}, opsOverride = null) => {
-    if (options?.forceFullSnapshot !== true) {
+    const hasOpsOverride = Array.isArray(opsOverride) && opsOverride.length > 0;
+    if (hasOpsOverride || options?.keepalive === true) {
       return doPersistBoardStateSnapshot(options, opsOverride);
     }
     const previous = snapshotSaveQueue;
@@ -2265,6 +2339,11 @@ export function mountBoardInteractions(store, routes = {}) {
       lastBoardStateHeartbeatSignature === signature &&
       now - lastBoardStateHeartbeatAt < BOARD_STATE_HEARTBEAT_DEBOUNCE_MS
     ) {
+      return;
+    }
+
+    if (!hasDirtyState()) {
+      logBoardSaveDebug('skipping heartbeat save with no dirty state', { reason });
       return;
     }
 
@@ -7898,6 +7977,7 @@ export function mountBoardInteractions(store, routes = {}) {
     clearTurnBorderFlash();
     pendingTurnTransition = null;
     activeTeam = null;
+    markCombatEncounterStateDirty();
     combatActive = true;
     combatRound = 1;
     combatConflictRetryAttempts = 0;
@@ -7965,6 +8045,7 @@ export function mountBoardInteractions(store, routes = {}) {
       combatTimerService.reset();
     }
 
+    markCombatEncounterStateDirty();
     combatActive = false;
     combatRound = 0;
     combatConflictRetryAttempts = 0;
@@ -8289,17 +8370,27 @@ export function mountBoardInteractions(store, routes = {}) {
     if (isRemoteNewer && localStatePatch) {
       // Also update local in-memory state to match the snapshot we're saving.
       // This prevents UI from using stale local state when refresh loop runs.
-      combatActive = localStatePatch.active;
-      combatRound = localStatePatch.round;
+      if (localStatePatch.applyActive) {
+        combatActive = localStatePatch.active;
+      }
+      if (localStatePatch.applyRound) {
+        combatRound = localStatePatch.round;
+      }
       if (localStatePatch.applyCompletedCombatants) {
         completedCombatants.clear();
         localStatePatch.completedCombatantIds.forEach((id) => completedCombatants.add(id));
       }
-      startingCombatTeam = localStatePatch.startingTeam;
-      currentTurnTeam = localStatePatch.currentTeam;
-      lastActingTeam = localStatePatch.lastTeam;
-      turnPhase = localStatePatch.turnPhase;
-      roundTurnCount = localStatePatch.roundTurnCount;
+      if (localStatePatch.applyTeams) {
+        startingCombatTeam = localStatePatch.startingTeam;
+        currentTurnTeam = localStatePatch.currentTeam;
+        lastActingTeam = localStatePatch.lastTeam;
+      }
+      if (localStatePatch.applyTurnPhase) {
+        turnPhase = localStatePatch.turnPhase;
+      }
+      if (localStatePatch.applyRoundTurnCount) {
+        roundTurnCount = localStatePatch.roundTurnCount;
+      }
       if (localStatePatch.applyMalice) {
         maliceCount = localStatePatch.malice;
       }
@@ -8313,7 +8404,9 @@ export function mountBoardInteractions(store, routes = {}) {
       combatStateUpdatedAt = localStatePatch.existingUpdatedAt || combatStateUpdatedAt;
 
       // Use setter to properly update active combatant with highlights and handlers
-      setActiveCombatantId(localStatePatch.activeCombatantId);
+      if (localStatePatch.applyActiveCombatantId) {
+        setActiveCombatantId(localStatePatch.activeCombatantId);
+      }
 
       // Refresh UI to reflect the new state immediately
       updateCombatModeIndicators();
@@ -8340,11 +8433,13 @@ export function mountBoardInteractions(store, routes = {}) {
 
     const latest = boardApi.getState?.() ?? state;
     if (latest?.user?.isGM) {
-      // Mark scene state dirty so combat changes (including groups) are included
-      // in delta saves. Without this, group changes are lost when other dirty
-      // entities exist and only a delta snapshot is built.
-      markSceneStateDirty(activeSceneId);
-      persistBoardStateSnapshot();
+      persistBoardStateSnapshot({}, [
+        {
+          type: 'combat.set',
+          sceneId: activeSceneId,
+          combat: snapshot,
+        },
+      ]);
     } else if (routes?.state) {
       // Track pending combat state save to prevent poller from overwriting during save
       const savePromise = persistCombatState(routes.state, activeSceneId, snapshot);

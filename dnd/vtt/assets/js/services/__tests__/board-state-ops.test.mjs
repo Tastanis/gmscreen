@@ -109,6 +109,64 @@ describe('Board State – delta ops persistence (phase 3-B commit 2)', () => {
     assert.equal(payload.boardState.drawings, undefined);
   });
 
+  test('persistCombatStateOp sends a deduped combat.set op without snapshot sceneState', async () => {
+    const { persistCombatStateOp, _resetBoardStateOpsBufferForTest } = await import(
+      '../board-state-service.js'
+    );
+    _resetBoardStateOpsBufferForTest();
+
+    await persistCombatStateOp(
+      '/api/state',
+      'scene-1',
+      {
+        active: false,
+        round: 0,
+        activeCombatantId: null,
+        completedCombatantIds: ['hero', 'hero'],
+        startingTeam: null,
+        currentTeam: null,
+        lastTeam: null,
+        turnPhase: 'idle',
+        roundTurnCount: 0,
+        malice: 0,
+        updatedAt: 1234,
+        sequence: 9,
+        turnLock: null,
+        groups: [{ representativeId: 'hero', memberIds: ['hero', 'ally'] }],
+        monster: { name: 'should not be sent' },
+      },
+      { _version: 2 }
+    );
+
+    assert.equal(capturedPayloads.length, 1);
+    const payload = capturedPayloads[0];
+    assert.equal(payload.boardState._version, 2);
+    assert.equal(payload.boardState.sceneState, undefined);
+    assert.deepEqual(payload.ops, [
+      {
+        type: 'combat.set',
+        sceneId: 'scene-1',
+        combat: {
+          active: false,
+          round: 0,
+          activeCombatantId: null,
+          completedCombatantIds: ['hero'],
+          startingTeam: null,
+          currentTeam: null,
+          lastTeam: null,
+          turnPhase: 'idle',
+          roundTurnCount: 0,
+          malice: 0,
+          updatedAt: 1234,
+          sequence: 9,
+          turnLock: null,
+          groups: [{ representativeId: 'hero', memberIds: ['hero', 'ally'] }],
+          lastEffect: null,
+        },
+      },
+    ]);
+  });
+
   test('two placement.move ops for the same (sceneId, placementId) coalesce (later wins)', async () => {
     const { persistBoardStateOps, _resetBoardStateOpsBufferForTest } = await import(
       '../board-state-service.js'

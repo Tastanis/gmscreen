@@ -24,6 +24,7 @@
  *   { type: 'claim.clear',        sceneId, placementId }
  *   { type: 'user-level.set',     sceneId, userId, levelId, source?, tokenId? }
  *   { type: 'user-level.activate',sceneId, levelId, userIds: [...] }
+ *   { type: 'combat.set',         sceneId, combat: { active, round, ... } }
  *
  * Unknown or malformed ops are silently ignored — the function returns
  * the boardState unchanged for that op. This matches the server's
@@ -294,6 +295,20 @@ export function applyBoardStateOpLocally(boardState, op) {
     return mutated;
   }
 
+  if (type === 'combat.set') {
+    if (!op.combat || typeof op.combat !== 'object') return false;
+    const sceneState = ensureSceneStateEntry(boardState, sceneId);
+    const combat = normalizeCombatOpPayload(op.combat);
+    const existing =
+      sceneState.combat && typeof sceneState.combat === 'object' ? sceneState.combat : null;
+    if (existing && !shouldApplyCombatPayload(combat, existing)) {
+      return false;
+    }
+    const before = existing ? JSON.stringify(existing) : '';
+    sceneState.combat = combat;
+    return JSON.stringify(sceneState.combat) !== before;
+  }
+
   // Unknown op type — ignored so the client tolerates payloads from
   // newer servers without crashing.
   return false;
@@ -385,4 +400,174 @@ function buildUserLevelEntry({ levelId, source, tokenId }) {
     entry.tokenId = tokenId.trim();
   }
   return entry;
+}
+
+function normalizeCombatOpPayload(raw) {
+  const active = Boolean(raw.active ?? raw.isActive);
+  const activeCombatantId = normalizeNullableString(raw.activeCombatantId);
+  const completedCombatantIds = Array.from(
+    new Set(
+      (Array.isArray(raw.completedCombatantIds) ? raw.completedCombatantIds : [])
+        .map((id) => (typeof id === 'string' ? id.trim() : ''))
+        .filter((id) => id)
+    )
+  );
+  return {
+    active,
+    round: normalizeNonNegativeInt(raw.round, 0),
+    activeCombatantId,
+    completedCombatantIds,
+    startingTeam: normalizeCombatTeam(raw.startingTeam ?? raw.initialTeam),
+    currentTeam: normalizeCombatTeam(raw.currentTeam ?? raw.activeTeam),
+    lastTeam: normalizeCombatTeam(raw.lastTeam ?? raw.previousTeam),
+    turnPhase: normalizeCombatTurnPhase(raw.turnPhase ?? raw.phase, active, activeCombatantId),
+    roundTurnCount: normalizeNonNegativeInt(raw.roundTurnCount, 0),
+    malice: normalizeNonNegativeInt(raw.malice ?? raw.maliceCount, 0),
+    updatedAt: normalizeNonNegativeInt(raw.updatedAt, Date.now()),
+    sequence: normalizeNonNegativeInt(raw.sequence ?? raw.seq, 0),
+    turnLock: normalizeCombatTurnLock(raw.turnLock),
+    groups: normalizeCombatGroups(raw.groups ?? raw.groupings ?? raw.combatGroups ?? raw.combatantGroups),
+    lastEffect: normalizeCombatTurnEffect(raw.lastEffect ?? raw.lastEvent),
+  };
+}
+
+function shouldApplyCombatPayload(incoming, existing) {
+  const existingSequence = normalizeNonNegativeInt(existing.sequence, 0);
+  const incomingSequence = normalizeNonNegativeInt(incoming.sequence, 0);
+  const existingUpdatedAt = normalizeNonNegativeInt(existing.updatedAt, 0);
+  const incomingUpdatedAt = normalizeNonNegativeInt(incoming.updatedAt, 0);
+
+  if (existingSequence > 0 && incomingSequence > 0) {
+    if (incomingSequence !== existingSequence) {
+      return incomingSequence > existingSequence;
+    }
+    if (existingUpdatedAt > 0 && incomingUpdatedAt > 0) {
+      return incomingUpdatedAt > existingUpdatedAt;
+    }
+    return false;
+  }
+
+  if (existingUpdatedAt > 0 && incomingUpdatedAt > 0) {
+    return incomingUpdatedAt > existingUpdatedAt;
+  }
+
+  return true;
+}
+
+function normalizeNonNegativeInt(value, fallback = 0) {
+  const numeric = Number(value);
+  if (!Number.isFinite(numeric)) {
+    return Math.max(0, Math.trunc(fallback));
+  }
+  return Math.max(0, Math.trunc(numeric));
+}
+
+function normalizeNullableString(value) {
+  if (typeof value !== 'string') {
+    return null;
+  }
+  const trimmed = value.trim();
+  return trimmed || null;
+}
+
+function normalizeCombatTeam(value) {
+  if (typeof value !== 'string') {
+    return null;
+  }
+  const normalized = value.trim().toLowerCase();
+  return normalized === 'ally' || normalized === 'enemy' ? normalized : null;
+}
+
+function normalizeCombatTurnPhase(value, active, activeCombatantId) {
+  if (typeof value === 'string') {
+    const normalized = value.trim().toLowerCase();
+    if (normalized === 'idle' || normalized === 'pick' || normalized === 'active') {
+      return normalized;
+    }
+  }
+  return active ? (activeCombatantId ? 'active' : 'pick') : 'idle';
+}
+
+function normalizeCombatTurnLock(raw) {
+  if (!raw || typeof raw !== 'object') {
+    return null;
+  }
+  const holderId = normalizeProfileIdField(raw.holderId);
+  if (!holderId) {
+    return null;
+  }
+  return {
+    holderId,
+    holderName: typeof raw.holderName === 'string' ? raw.holderName.trim() : '',
+    combatantId: normalizeNullableString(raw.combatantId),
+    lockedAt: normalizeNonNegativeInt(raw.lockedAt, Date.now()),
+  };
+}
+
+function normalizeCombatGroups(raw) {
+  const source = Array.isArray(raw)
+    ? raw
+    : raw && typeof raw === 'object'
+    ? Object.entries(raw).map(([representativeId, memberIds]) => ({
+        representativeId,
+        memberIds: Array.isArray(memberIds) ? memberIds : [],
+      }))
+    : [];
+  const groups = [];
+  source.forEach((entry) => {
+    if (!entry || typeof entry !== 'object') {
+      return;
+    }
+    const representativeId = normalizeNullableString(entry.representativeId ?? entry.id);
+    if (!representativeId) {
+      return;
+    }
+    const membersSource = Array.isArray(entry.memberIds)
+      ? entry.memberIds
+      : Array.isArray(entry.members)
+      ? entry.members
+      : Array.isArray(entry.ids)
+      ? entry.ids
+      : [];
+    const memberIds = [];
+    membersSource.forEach((memberId) => {
+      if (typeof memberId !== 'string') {
+        return;
+      }
+      const trimmed = memberId.trim();
+      if (trimmed && !memberIds.includes(trimmed)) {
+        memberIds.push(trimmed);
+      }
+    });
+    if (!memberIds.includes(representativeId)) {
+      memberIds.push(representativeId);
+    }
+    if (memberIds.length > 1) {
+      groups.push({ representativeId, memberIds });
+    }
+  });
+  return groups;
+}
+
+function normalizeCombatTurnEffect(raw) {
+  if (!raw || typeof raw !== 'object') {
+    return null;
+  }
+  const type = typeof raw.type === 'string' ? raw.type.trim().toLowerCase() : '';
+  if (!type) {
+    return null;
+  }
+  const effect = {
+    type,
+    triggeredAt: normalizeNonNegativeInt(raw.triggeredAt ?? raw.timestamp ?? raw.updatedAt, Date.now()),
+  };
+  const combatantId = normalizeNullableString(raw.combatantId);
+  const initiatorId = normalizeProfileIdField(raw.initiatorId);
+  if (combatantId) {
+    effect.combatantId = combatantId;
+  }
+  if (initiatorId) {
+    effect.initiatorId = initiatorId;
+  }
+  return effect;
 }

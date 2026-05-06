@@ -154,6 +154,13 @@ function boardStateOpDedupKey(op) {
   if (op.type === 'user-level.activate') {
     return `user-level.activate:${sceneId}`;
   }
+  if (op.type === 'combat.set') {
+    const combat = op.combat;
+    if (!combat || typeof combat !== 'object') {
+      return null;
+    }
+    return `combat.set:${sceneId}`;
+  }
   return null;
 }
 
@@ -358,6 +365,35 @@ export function persistCombatState(endpoint, sceneId, combatState = {}, options 
     rest,
     endpoint,
     { ...normalizedOptions, coalesce: normalizedOptions.coalesce ?? false }
+  );
+}
+
+export function persistCombatStateOp(endpoint, sceneId, combatState = {}, envelope = {}, options = {}) {
+  if (!endpoint) {
+    return null;
+  }
+
+  const payload = buildCombatPayload(sceneId, combatState);
+  if (!payload) {
+    return null;
+  }
+
+  const combat = payload.sceneState?.[payload.sceneId]?.combat ?? null;
+  if (!combat) {
+    return null;
+  }
+
+  return persistBoardStateOps(
+    endpoint,
+    [
+      {
+        type: 'combat.set',
+        sceneId: payload.sceneId,
+        combat,
+      },
+    ],
+    envelope,
+    options
   );
 }
 

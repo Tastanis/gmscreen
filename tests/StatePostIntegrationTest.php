@@ -114,4 +114,114 @@ final class StatePostIntegrationTest extends TestCase
         $this->assertSame(8, $playerView['placements']['scene-1'][0]['position']['x']);
         $this->assertSame(5, $playerView['placements']['scene-1'][0]['position']['y']);
     }
+
+    public function testGmCombatSetOpEndsCombatAndPreservesSceneFields(): void
+    {
+        $state = [
+            'sceneState' => [
+                'scene-1' => [
+                    'grid' => ['size' => 64],
+                    'fogOfWar' => ['byLevel' => new stdClass()],
+                    'combat' => [
+                        'active' => true,
+                        'round' => 3,
+                        'activeCombatantId' => 'goblin',
+                        'completedCombatantIds' => ['hero'],
+                        'turnPhase' => 'active',
+                        'sequence' => 7,
+                        'updatedAt' => 1000,
+                    ],
+                ],
+            ],
+        ];
+
+        $next = applyBoardStateOp($state, [
+            'type' => 'combat.set',
+            'sceneId' => 'scene-1',
+            'combat' => [
+                'active' => false,
+                'round' => 0,
+                'activeCombatantId' => null,
+                'completedCombatantIds' => [],
+                'turnPhase' => 'idle',
+                'malice' => 0,
+                'sequence' => 8,
+                'updatedAt' => 2000,
+                'monster' => ['name' => 'Hidden Monster'],
+            ],
+        ], ['isGm' => true]);
+
+        $this->assertSame(['size' => 64], $next['sceneState']['scene-1']['grid']);
+        $this->assertArrayHasKey('fogOfWar', $next['sceneState']['scene-1']);
+        $this->assertFalse($next['sceneState']['scene-1']['combat']['active']);
+        $this->assertSame(0, $next['sceneState']['scene-1']['combat']['round']);
+        $this->assertSame('idle', $next['sceneState']['scene-1']['combat']['turnPhase']);
+        $this->assertSame(8, $next['sceneState']['scene-1']['combat']['sequence']);
+        $this->assertArrayNotHasKey('monster', $next['sceneState']['scene-1']['combat']);
+    }
+
+    public function testNonGmCombatSetOpCannotEndCombat(): void
+    {
+        $state = [
+            'sceneState' => [
+                'scene-1' => [
+                    'combat' => [
+                        'active' => true,
+                        'round' => 2,
+                        'turnPhase' => 'active',
+                        'sequence' => 5,
+                        'updatedAt' => 1000,
+                    ],
+                ],
+            ],
+        ];
+
+        $next = applyBoardStateOp($state, [
+            'type' => 'combat.set',
+            'sceneId' => 'scene-1',
+            'combat' => [
+                'active' => false,
+                'round' => 0,
+                'turnPhase' => 'idle',
+                'sequence' => 6,
+                'updatedAt' => 2000,
+            ],
+        ], ['isGm' => false]);
+
+        $this->assertTrue($next['sceneState']['scene-1']['combat']['active']);
+        $this->assertSame(2, $next['sceneState']['scene-1']['combat']['round']);
+        $this->assertSame(5, $next['sceneState']['scene-1']['combat']['sequence']);
+    }
+
+    public function testCombatSetOpIgnoresOlderCombatSequence(): void
+    {
+        $state = [
+            'sceneState' => [
+                'scene-1' => [
+                    'combat' => [
+                        'active' => false,
+                        'round' => 0,
+                        'turnPhase' => 'idle',
+                        'sequence' => 10,
+                        'updatedAt' => 3000,
+                    ],
+                ],
+            ],
+        ];
+
+        $next = applyBoardStateOp($state, [
+            'type' => 'combat.set',
+            'sceneId' => 'scene-1',
+            'combat' => [
+                'active' => true,
+                'round' => 4,
+                'turnPhase' => 'active',
+                'sequence' => 9,
+                'updatedAt' => 4000,
+            ],
+        ], ['isGm' => true]);
+
+        $this->assertFalse($next['sceneState']['scene-1']['combat']['active']);
+        $this->assertSame(10, $next['sceneState']['scene-1']['combat']['sequence']);
+    }
 }

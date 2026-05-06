@@ -933,7 +933,9 @@ function sanitizeBoardStateOps(array $rawOps): array
  * also travel as ops. Commit 5 adds `drawing.add` and `drawing.remove`
  * for the non-erase/non-clear drawing flows; the erase/clear path
  * still rides the snapshot `_replaceDrawings` mechanism because it
- * has no op equivalent. Unknown or unsupported op types are ignored
+ * has no op equivalent. Phase 2 of the combat 409 fix adds GM-only
+ * `combat.set`, which replaces a scene's combat state without a full
+ * sceneState snapshot. Unknown or unsupported op types are ignored
  * so older servers can tolerate payloads from newer clients without
  * erroring out. The state returned is always a valid board state —
  * if the op cannot be applied (missing scene, missing entry, bad
@@ -1345,6 +1347,31 @@ function applyBoardStateOp(array $state, array $op, array $context = []): array
         // Re-index so json_encode serializes as a JSON array, not an
         // object with numeric string keys.
         $state['drawings'][$sceneId] = array_values($filtered);
+        return $state;
+    }
+
+    if ($type === 'combat.set') {
+        // GM-only encounter write. Combat used to ride on full sceneState
+        // snapshots, which made End Combat vulnerable to stale `_version`
+        // conflicts. This op writes only sceneState[sceneId].combat while
+        // preserving grid, levels, fog, claims, and other scene fields.
+        if (!$isGm) {
+            return $state;
+        }
+        $sceneId = isset($op['sceneId']) && is_string($op['sceneId']) ? trim($op['sceneId']) : '';
+        if ($sceneId === '') {
+            return $state;
+        }
+        if (!isset($op['combat']) || !is_array($op['combat'])) {
+            return $state;
+        }
+        $incomingCombat = normalizeCombatStatePayload($op['combat']);
+        $existingCombat = $state['sceneState'][$sceneId]['combat'] ?? [];
+        if (is_array($existingCombat) && !empty($existingCombat) && !shouldApplyCombatStatePayload($incomingCombat, $existingCombat)) {
+            return $state;
+        }
+        $state = ensureBoardStateSceneEntry($state, $sceneId);
+        $state['sceneState'][$sceneId]['combat'] = $incomingCombat;
         return $state;
     }
 

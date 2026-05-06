@@ -288,6 +288,73 @@ describe('combat sync snapshot reconciliation', () => {
     assert.equal(result.localStatePatch.applyGroups, false);
   });
 
+  test('dirty GM encounter state survives newer remote reconciliation', () => {
+    const result = prepareCombatSnapshotForSync(
+      {
+        active: false,
+        round: 0,
+        activeCombatantId: null,
+        completedCombatantIds: [],
+        startingTeam: null,
+        currentTeam: null,
+        lastTeam: null,
+        turnPhase: 'idle',
+        roundTurnCount: 0,
+        malice: 0,
+        sequence: 4,
+        updatedAt: 1000,
+      },
+      {
+        existingCombatState: {
+          active: true,
+          round: 3,
+          activeCombatantId: 'remote-active',
+          completedCombatantIds: ['remote-done'],
+          startingTeam: 'enemy',
+          currentTeam: 'ally',
+          lastTeam: 'enemy',
+          turnPhase: 'active',
+          roundTurnCount: 6,
+          malice: 5,
+          sequence: 8,
+          updatedAt: 2000,
+        },
+        currentVersion: 7,
+        currentUpdatedAt: 1500,
+        dirtyFields: new Set([
+          'active',
+          'round',
+          'activeCombatantId',
+          'teams',
+          'turnPhase',
+          'roundTurnCount',
+          'completedCombatantIds',
+          'malice',
+        ]),
+        isGm: true,
+      }
+    );
+
+    assert.equal(result.isRemoteNewer, true);
+    assert.equal(result.snapshot.sequence, 9);
+    assert.equal(result.snapshot.active, false);
+    assert.equal(result.snapshot.round, 0);
+    assert.equal(result.snapshot.activeCombatantId, null);
+    assert.deepEqual(result.snapshot.completedCombatantIds, []);
+    assert.equal(result.snapshot.startingTeam, null);
+    assert.equal(result.snapshot.currentTeam, null);
+    assert.equal(result.snapshot.lastTeam, null);
+    assert.equal(result.snapshot.turnPhase, 'idle');
+    assert.equal(result.snapshot.roundTurnCount, 0);
+    assert.equal(result.snapshot.malice, 0);
+    assert.equal(result.localStatePatch.applyActive, false);
+    assert.equal(result.localStatePatch.applyRound, false);
+    assert.equal(result.localStatePatch.applyActiveCombatantId, false);
+    assert.equal(result.localStatePatch.applyTeams, false);
+    assert.equal(result.localStatePatch.applyTurnPhase, false);
+    assert.equal(result.localStatePatch.applyRoundTurnCount, false);
+  });
+
   test('non-GM snapshots keep server malice and groups unless locally dirty', () => {
     const clean = prepareCombatSnapshotForSync(
       {
