@@ -242,6 +242,28 @@ export {
   mergeBoardStateSnapshot,
 };
 
+export function shouldRenderWallDiagonalConnector(startSquare, endSquare, squareKeySet) {
+  if (!startSquare || !endSquare || !squareKeySet || typeof squareKeySet.has !== 'function') {
+    return false;
+  }
+
+  const dx = endSquare.column - startSquare.column;
+  const dy = endSquare.row - startSquare.row;
+  if (Math.abs(dx) !== 1 || Math.abs(dy) !== 1) {
+    return false;
+  }
+
+  const baseColumn = Math.min(startSquare.column, endSquare.column);
+  const baseRow = Math.min(startSquare.row, endSquare.row);
+  const cornerSquares = [
+    `${baseColumn},${baseRow}`,
+    `${baseColumn + 1},${baseRow}`,
+    `${baseColumn},${baseRow + 1}`,
+    `${baseColumn + 1},${baseRow + 1}`,
+  ];
+  return cornerSquares.filter((key) => squareKeySet.has(key)).length === 2;
+}
+
 function deferDraggedPlacementUpdate(dragState, placement) {
   if (!dragState?.deferredUpdates || !placement?.id) {
     return;
@@ -18954,7 +18976,11 @@ function createTemplateTool() {
     squares.forEach((square) => {
       const southEastKey = `${square.column + 1},${square.row + 1}`;
       if (squareKeySet.has(southEastKey)) {
-        const key = ensureWallConnector(shape, bounds, { column: square.column, row: square.row }, { column: square.column + 1, row: square.row + 1 }, 'se', minColumn, minRow);
+        const startSquare = { column: square.column, row: square.row };
+        const endSquare = { column: square.column + 1, row: square.row + 1 };
+        const key = shouldRenderWallDiagonalConnector(startSquare, endSquare, squareKeySet)
+          ? ensureWallConnector(shape, bounds, startSquare, endSquare, 'se', minColumn, minRow)
+          : null;
         if (key) {
           connectorKeys.add(key);
         }
@@ -18962,7 +18988,11 @@ function createTemplateTool() {
 
       const northEastKey = `${square.column + 1},${square.row - 1}`;
       if (squareKeySet.has(northEastKey)) {
-        const key = ensureWallConnector(shape, bounds, { column: square.column, row: square.row }, { column: square.column + 1, row: square.row - 1 }, 'ne', minColumn, minRow);
+        const startSquare = { column: square.column, row: square.row };
+        const endSquare = { column: square.column + 1, row: square.row - 1 };
+        const key = shouldRenderWallDiagonalConnector(startSquare, endSquare, squareKeySet)
+          ? ensureWallConnector(shape, bounds, startSquare, endSquare, 'ne', minColumn, minRow)
+          : null;
         if (key) {
           connectorKeys.add(key);
         }
