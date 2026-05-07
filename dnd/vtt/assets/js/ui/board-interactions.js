@@ -17250,7 +17250,7 @@ function createTemplateTool() {
 
     // Set wall color attribute for CSS variants
     const wallColor = data.wallColor;
-    if (type === 'wall' && typeof wallColor === 'string' && wallColor.trim() && !isPreview) {
+    if (type === 'wall' && typeof wallColor === 'string' && wallColor.trim()) {
       root.dataset.wallColor = wallColor.trim();
     }
 
@@ -18204,6 +18204,7 @@ function createTemplateTool() {
     wallField.input.min = '1';
     wallField.input.inputMode = 'numeric';
     wallField.input.pattern = '\\d*';
+    wallField.input.value = '3';
 
     // Template color picker (6 colors)
     const templateColors = [
@@ -18247,14 +18248,13 @@ function createTemplateTool() {
       templateColorRow.appendChild(swatch);
     });
 
-    // Wall color picker (6 colors that match the CSS data-wall-color variants)
+    // Wall material picker (matches the CSS data-wall-color texture variants)
     const wallColors = [
-      { name: 'brown', label: 'Brown', color: 'rgba(184, 115, 51, 0.95)' },
-      { name: 'gray', label: 'Gray', color: 'rgba(148, 163, 184, 0.95)' },
-      { name: 'red', label: 'Red', color: 'rgba(185, 28, 28, 0.95)' },
-      { name: 'green', label: 'Green', color: 'rgba(34, 197, 94, 0.95)' },
-      { name: 'blue', label: 'Blue', color: 'rgba(59, 130, 246, 0.95)' },
-      { name: 'purple', label: 'Purple', color: 'rgba(168, 85, 247, 0.95)' },
+      { name: 'stone', label: 'Stone', color: 'linear-gradient(135deg, #9ca3af 0%, #4b5563 100%)' },
+      { name: 'dirt', label: 'Dirt', color: 'linear-gradient(135deg, #9a6a3a 0%, #4a2c16 100%)' },
+      { name: 'metal', label: 'Metal', color: 'linear-gradient(135deg, #cbd5e1 0%, #475569 48%, #94a3b8 100%)' },
+      { name: 'ice', label: 'Ice', color: 'linear-gradient(135deg, #dff7ff 0%, #67b9d6 100%)' },
+      { name: 'fire', label: 'Fire', color: 'linear-gradient(135deg, #ffd166 0%, #ef4444 55%, #7f1d1d 100%)' },
     ];
 
     let selectedWallColor = null;
@@ -18262,7 +18262,7 @@ function createTemplateTool() {
     const wallColorPicker = document.createElement('div');
     wallColorPicker.className = 'vtt-template-menu__field';
     const wallColorLabel = document.createElement('label');
-    wallColorLabel.textContent = 'Color (optional)';
+    wallColorLabel.textContent = 'Material (optional)';
     wallColorPicker.appendChild(wallColorLabel);
     const wallColorRow = document.createElement('div');
     wallColorRow.className = 'vtt-template-menu__colors';
@@ -18437,7 +18437,7 @@ function createTemplateTool() {
         squares: [],
       };
 
-      previewShape = createShape('wall', { squares: [] }, { preview: true });
+      previewShape = createShape('wall', { squares: [], wallColor: values?.wallColor }, { preview: true });
       layer.appendChild(previewShape.elements.root);
       updateStatus('Select the first square for your wall.');
       updateLayerVisibility();
@@ -18765,7 +18765,7 @@ function createTemplateTool() {
     const sanitized = sanitizeWallSquares(squares);
     if (!previewShape || previewShape.type !== 'wall') {
       clearPreview();
-      previewShape = createShape('wall', { squares: sanitized }, { preview: true });
+      previewShape = createShape('wall', { squares: sanitized, wallColor: placementState?.values?.wallColor }, { preview: true });
       layer.appendChild(previewShape.elements.root);
     } else {
       previewShape.squares = sanitized;
@@ -19002,17 +19002,13 @@ function createTemplateTool() {
       connectorsMap.set(key, connector);
     }
 
-    const midColumn = ((startSquare.column + endSquare.column) / 2) + 0.5;
-    const midRow = ((startSquare.row + endSquare.row) / 2) + 0.5;
-    const localLeft = (midColumn - minColumn) * bounds.gridSize;
-    const localTop = (midRow - minRow) * bounds.gridSize;
+    const localLeft = (baseColumn - minColumn) * bounds.gridSize;
+    const localTop = (baseRow - minRow) * bounds.gridSize;
 
-    const connectorWidth = bounds.gridSize * Math.SQRT2;
-    const connectorThickness = bounds.gridSize;
-    connector.style.width = `${connectorWidth}px`;
-    connector.style.height = `${connectorThickness}px`;
-    connector.style.left = `${localLeft - connectorWidth / 2}px`;
-    connector.style.top = `${localTop - connectorThickness / 2}px`;
+    connector.style.width = `${bounds.gridSize * 2}px`;
+    connector.style.height = `${bounds.gridSize * 2}px`;
+    connector.style.left = `${localLeft}px`;
+    connector.style.top = `${localTop}px`;
 
     return key;
   }
