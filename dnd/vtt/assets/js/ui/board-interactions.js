@@ -1225,6 +1225,7 @@ export function mountBoardInteractions(store, routes = {}) {
       '[VTT] Re-asserting GM combat intent after stale-version conflict',
       `(attempt ${combatConflictRetryAttempts}).`
     );
+    console.log('[COMBAT-VAR] reassertIntent: combatActive ->', intent.active, 'was', combatActive);
     combatActive = intent.active;
     combatRound = intent.round;
     startingCombatTeam = intent.startingTeam;
@@ -1831,6 +1832,9 @@ export function mountBoardInteractions(store, routes = {}) {
     startCombatButton.classList.remove('btn--soon');
     startCombatButton.addEventListener('click', (event) => {
       event.preventDefault();
+      console.log('[COMBAT-BTN] click; buttonText=', startCombatButton.textContent.trim(),
+        'localCombatActive=', combatActive, 'isGM=', isGmUser(),
+        'combatStateVersion=', combatStateVersion);
       if (!isGmUser()) {
         return;
       }
@@ -7968,16 +7972,19 @@ export function mountBoardInteractions(store, routes = {}) {
   }
 
   function handleStartCombat() {
+    console.log('[COMBAT-START-FN] entry; combatActive=', combatActive);
     if (combatActive) {
       handleEndCombat();
       return;
     }
+    console.warn('[COMBAT-START-FN] running START path because combatActive is FALSE');
 
     stopAllyTurnTimer();
     clearTurnBorderFlash();
     pendingTurnTransition = null;
     activeTeam = null;
     markCombatEncounterStateDirty();
+    console.log('[COMBAT-VAR] handleStartCombat: combatActive -> true');
     combatActive = true;
     combatRound = 1;
     combatConflictRetryAttempts = 0;
@@ -8021,7 +8028,9 @@ export function mountBoardInteractions(store, routes = {}) {
   }
 
   function handleEndCombat() {
+    console.log('[COMBAT-END-FN] entry; combatActive=', combatActive);
     if (!combatActive) {
+      console.warn('[COMBAT-END-FN] BAILED: combatActive is already false');
       return;
     }
 
@@ -8046,6 +8055,7 @@ export function mountBoardInteractions(store, routes = {}) {
     }
 
     markCombatEncounterStateDirty();
+    console.log('[COMBAT-VAR] handleEndCombat: combatActive -> false');
     combatActive = false;
     combatRound = 0;
     combatConflictRetryAttempts = 0;
@@ -8144,6 +8154,10 @@ export function mountBoardInteractions(store, routes = {}) {
     try {
       const previousActive = activeCombatantId;
       const wasCombatActive = combatActive;
+      if (combatActive !== normalized.active) {
+        console.log('[COMBAT-VAR] applyFromBoardState: combatActive', combatActive, '->', normalized.active,
+          'normalized.sequence=', normalized.sequence, 'localVersion=', combatStateVersion);
+      }
       combatActive = normalized.active;
       combatRound = normalized.round;
       if (isGmUser()) {
@@ -8371,6 +8385,9 @@ export function mountBoardInteractions(store, routes = {}) {
       // Also update local in-memory state to match the snapshot we're saving.
       // This prevents UI from using stale local state when refresh loop runs.
       if (localStatePatch.applyActive) {
+        if (combatActive !== localStatePatch.active) {
+          console.log('[COMBAT-VAR] localStatePatch: combatActive', combatActive, '->', localStatePatch.active);
+        }
         combatActive = localStatePatch.active;
       }
       if (localStatePatch.applyRound) {
