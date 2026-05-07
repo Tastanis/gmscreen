@@ -224,4 +224,77 @@ final class StatePostIntegrationTest extends TestCase
         $this->assertFalse($next['sceneState']['scene-1']['combat']['active']);
         $this->assertSame(10, $next['sceneState']['scene-1']['combat']['sequence']);
     }
+
+    public function testGmCombatSetOpCanEndCombatWithStaleSequence(): void
+    {
+        $state = [
+            'sceneState' => [
+                'scene-1' => [
+                    'grid' => ['size' => 64],
+                    'combat' => [
+                        'active' => true,
+                        'round' => 4,
+                        'activeCombatantId' => 'goblin',
+                        'completedCombatantIds' => ['hero'],
+                        'turnPhase' => 'active',
+                        'sequence' => 12,
+                        'updatedAt' => 5000,
+                    ],
+                ],
+            ],
+        ];
+
+        $next = applyBoardStateOp($state, [
+            'type' => 'combat.set',
+            'sceneId' => 'scene-1',
+            'combat' => [
+                'active' => false,
+                'round' => 0,
+                'activeCombatantId' => null,
+                'completedCombatantIds' => [],
+                'turnPhase' => 'idle',
+                'sequence' => 9,
+                'updatedAt' => 4000,
+            ],
+        ], ['isGm' => true]);
+
+        $combat = $next['sceneState']['scene-1']['combat'];
+        $this->assertFalse($combat['active']);
+        $this->assertSame(0, $combat['round']);
+        $this->assertSame('idle', $combat['turnPhase']);
+        $this->assertSame(13, $combat['sequence']);
+        $this->assertSame(5001, $combat['updatedAt']);
+        $this->assertSame(['size' => 64], $next['sceneState']['scene-1']['grid']);
+    }
+
+    public function testGmCombatSetOpMissingActiveDoesNotBypassFreshness(): void
+    {
+        $state = [
+            'sceneState' => [
+                'scene-1' => [
+                    'combat' => [
+                        'active' => true,
+                        'round' => 4,
+                        'turnPhase' => 'active',
+                        'sequence' => 12,
+                        'updatedAt' => 5000,
+                    ],
+                ],
+            ],
+        ];
+
+        $next = applyBoardStateOp($state, [
+            'type' => 'combat.set',
+            'sceneId' => 'scene-1',
+            'combat' => [
+                'round' => 0,
+                'turnPhase' => 'idle',
+                'sequence' => 9,
+                'updatedAt' => 4000,
+            ],
+        ], ['isGm' => true]);
+
+        $this->assertTrue($next['sceneState']['scene-1']['combat']['active']);
+        $this->assertSame(12, $next['sceneState']['scene-1']['combat']['sequence']);
+    }
 }

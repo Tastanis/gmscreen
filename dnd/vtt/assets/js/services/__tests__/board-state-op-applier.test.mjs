@@ -124,6 +124,75 @@ describe('Board State Op Applier - combat.set', () => {
     assert.equal(state.sceneState['scene-1'].combat.active, false);
     assert.equal(state.sceneState['scene-1'].combat.sequence, 10);
   });
+
+  test('applies end-combat payloads even when the broadcast sequence is stale', () => {
+    const state = {
+      sceneState: {
+        'scene-1': {
+          combat: {
+            active: true,
+            round: 3,
+            activeCombatantId: 'goblin',
+            completedCombatantIds: ['hero'],
+            turnPhase: 'active',
+            sequence: 12,
+            updatedAt: 3000,
+          },
+        },
+      },
+    };
+
+    const mutated = applyBoardStateOpLocally(state, {
+      type: 'combat.set',
+      sceneId: 'scene-1',
+      combat: {
+        active: false,
+        round: 0,
+        activeCombatantId: null,
+        completedCombatantIds: [],
+        turnPhase: 'idle',
+        sequence: 9,
+        updatedAt: 2000,
+      },
+    });
+
+    assert.equal(mutated, true);
+    assert.equal(state.sceneState['scene-1'].combat.active, false);
+    assert.equal(state.sceneState['scene-1'].combat.turnPhase, 'idle');
+    assert.equal(state.sceneState['scene-1'].combat.sequence, 13);
+    assert.equal(state.sceneState['scene-1'].combat.updatedAt, 3001);
+  });
+
+  test('does not treat missing active as a stale end-combat command', () => {
+    const state = {
+      sceneState: {
+        'scene-1': {
+          combat: {
+            active: true,
+            round: 3,
+            turnPhase: 'active',
+            sequence: 12,
+            updatedAt: 3000,
+          },
+        },
+      },
+    };
+
+    const mutated = applyBoardStateOpLocally(state, {
+      type: 'combat.set',
+      sceneId: 'scene-1',
+      combat: {
+        round: 0,
+        turnPhase: 'idle',
+        sequence: 9,
+        updatedAt: 2000,
+      },
+    });
+
+    assert.equal(mutated, false);
+    assert.equal(state.sceneState['scene-1'].combat.active, true);
+    assert.equal(state.sceneState['scene-1'].combat.sequence, 12);
+  });
 });
 
 describe('Board State Op Applier — placement.move', () => {

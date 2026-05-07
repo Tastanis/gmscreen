@@ -1365,10 +1365,16 @@ function applyBoardStateOp(array $state, array $op, array $context = []): array
         if (!isset($op['combat']) || !is_array($op['combat'])) {
             return $state;
         }
-        $incomingCombat = normalizeCombatStatePayload($op['combat']);
+        $rawCombat = $op['combat'];
+        $incomingCombat = normalizeCombatStatePayload($rawCombat);
         $existingCombat = $state['sceneState'][$sceneId]['combat'] ?? [];
-        if (is_array($existingCombat) && !empty($existingCombat) && !shouldApplyCombatStatePayload($incomingCombat, $existingCombat)) {
+        $hasExistingCombat = is_array($existingCombat) && !empty($existingCombat);
+        $isEndCombat = isExplicitInactiveCombatStatePayload($rawCombat);
+        if ($hasExistingCombat && !$isEndCombat && !shouldApplyCombatStatePayload($incomingCombat, $existingCombat)) {
             return $state;
+        }
+        if ($hasExistingCombat) {
+            $incomingCombat = advanceAcceptedGmCombatStatePayload($incomingCombat, $existingCombat);
         }
         $state = ensureBoardStateSceneEntry($state, $sceneId);
         $state['sceneState'][$sceneId]['combat'] = $incomingCombat;
@@ -2689,6 +2695,44 @@ function shouldApplyCombatStatePayload($incomingCombat, $existingCombat): bool
     }
 
     return true;
+}
+
+/**
+ * @param array<string,mixed> $rawCombat
+ */
+function isExplicitInactiveCombatStatePayload(array $rawCombat): bool
+{
+    if (array_key_exists('active', $rawCombat)) {
+        return !normalizeMapLevelBoolean($rawCombat['active'], false);
+    }
+
+    if (array_key_exists('isActive', $rawCombat)) {
+        return !normalizeMapLevelBoolean($rawCombat['isActive'], false);
+    }
+
+    return false;
+}
+
+/**
+ * @param array<string,mixed> $incomingCombat
+ * @param array<string,mixed> $existingCombat
+ * @return array<string,mixed>
+ */
+function advanceAcceptedGmCombatStatePayload(array $incomingCombat, array $existingCombat): array
+{
+    $existingSequence = (int) ($existingCombat['sequence'] ?? 0);
+    $incomingSequence = (int) ($incomingCombat['sequence'] ?? 0);
+    if ($existingSequence > 0 && $incomingSequence <= $existingSequence) {
+        $incomingCombat['sequence'] = $existingSequence + 1;
+    }
+
+    $existingUpdatedAt = (int) ($existingCombat['updatedAt'] ?? 0);
+    $incomingUpdatedAt = (int) ($incomingCombat['updatedAt'] ?? 0);
+    if ($existingUpdatedAt > 0 && $incomingUpdatedAt <= $existingUpdatedAt) {
+        $incomingCombat['updatedAt'] = $existingUpdatedAt + 1;
+    }
+
+    return $incomingCombat;
 }
 
 /**

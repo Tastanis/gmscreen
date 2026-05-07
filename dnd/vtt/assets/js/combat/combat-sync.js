@@ -145,53 +145,6 @@ export function getCombatStateMaliceSnapshot(snapshot) {
   }
 }
 
-export function getSavedCombatStateFromResult(result, sceneId) {
-  const key = typeof sceneId === 'string' ? sceneId.trim() : '';
-  if (!key || !result || typeof result !== 'object') {
-    return null;
-  }
-
-  const data = result.data && typeof result.data === 'object' ? result.data : null;
-  if (!data) {
-    return null;
-  }
-
-  const direct = data.sceneState?.[key]?.combat;
-  if (direct && typeof direct === 'object') {
-    return direct;
-  }
-
-  const nested = data.boardState?.sceneState?.[key]?.combat;
-  if (nested && typeof nested === 'object') {
-    return nested;
-  }
-
-  return null;
-}
-
-export function createCombatSnapshotRetry(snapshot, savedCombatState = null, now = Date.now()) {
-  const nextSnapshot = cloneCombatSnapshot(snapshot);
-  const saved = normalizeCombatState(savedCombatState ?? {});
-  const snapshotSequence = Number(nextSnapshot.sequence ?? 0);
-  const savedSequence = Number(saved.sequence ?? 0);
-  const snapshotUpdatedAt = Number(nextSnapshot.updatedAt ?? 0);
-  const savedUpdatedAt = Number(saved.updatedAt ?? 0);
-  const nowMs = Number(now);
-
-  nextSnapshot.sequence = Math.max(
-    Number.isFinite(snapshotSequence) ? Math.trunc(snapshotSequence) : 0,
-    Number.isFinite(savedSequence) ? Math.trunc(savedSequence) : 0
-  ) + 1;
-
-  nextSnapshot.updatedAt = Math.max(
-    Number.isFinite(snapshotUpdatedAt) ? Math.trunc(snapshotUpdatedAt) : 0,
-    Number.isFinite(savedUpdatedAt) ? Math.trunc(savedUpdatedAt) : 0,
-    Number.isFinite(nowMs) ? Math.trunc(nowMs) : Date.now()
-  ) + 1;
-
-  return nextSnapshot;
-}
-
 export function prepareCombatSnapshotForSync(
   snapshot,
   {

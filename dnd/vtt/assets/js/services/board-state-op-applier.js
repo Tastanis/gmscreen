@@ -298,11 +298,15 @@ export function applyBoardStateOpLocally(boardState, op) {
   if (type === 'combat.set') {
     if (!op.combat || typeof op.combat !== 'object') return false;
     const sceneState = ensureSceneStateEntry(boardState, sceneId);
-    const combat = normalizeCombatOpPayload(op.combat);
+    let combat = normalizeCombatOpPayload(op.combat);
     const existing =
       sceneState.combat && typeof sceneState.combat === 'object' ? sceneState.combat : null;
-    if (existing && !shouldApplyCombatPayload(combat, existing)) {
+    const endsActiveCombat = Boolean(existing?.active) && isExplicitInactiveCombatPayload(op.combat);
+    if (existing && !endsActiveCombat && !shouldApplyCombatPayload(combat, existing)) {
       return false;
+    }
+    if (existing) {
+      combat = advanceAcceptedCombatPayload(combat, existing);
     }
     const before = existing ? JSON.stringify(existing) : '';
     sceneState.combat = combat;
@@ -452,6 +456,58 @@ function shouldApplyCombatPayload(incoming, existing) {
   }
 
   return true;
+}
+
+function isExplicitInactiveCombatPayload(raw) {
+  if (!raw || typeof raw !== 'object') {
+    return false;
+  }
+  if (Object.prototype.hasOwnProperty.call(raw, 'active')) {
+    return !normalizeBoolean(raw.active, false);
+  }
+  if (Object.prototype.hasOwnProperty.call(raw, 'isActive')) {
+    return !normalizeBoolean(raw.isActive, false);
+  }
+  return false;
+}
+
+function advanceAcceptedCombatPayload(incoming, existing) {
+  const combat = { ...incoming };
+  const existingSequence = normalizeNonNegativeInt(existing.sequence, 0);
+  const incomingSequence = normalizeNonNegativeInt(combat.sequence, 0);
+  if (existingSequence > 0 && incomingSequence <= existingSequence) {
+    combat.sequence = existingSequence + 1;
+  }
+
+  const existingUpdatedAt = normalizeNonNegativeInt(existing.updatedAt, 0);
+  const incomingUpdatedAt = normalizeNonNegativeInt(combat.updatedAt, 0);
+  if (existingUpdatedAt > 0 && incomingUpdatedAt <= existingUpdatedAt) {
+    combat.updatedAt = existingUpdatedAt + 1;
+  }
+
+  return combat;
+}
+
+function normalizeBoolean(value, fallback = false) {
+  if (typeof value === 'boolean') {
+    return value;
+  }
+  if (typeof value === 'number') {
+    return value !== 0;
+  }
+  if (typeof value === 'string') {
+    const normalized = value.trim().toLowerCase();
+    if (!normalized) {
+      return fallback;
+    }
+    if (['true', '1', 'yes', 'on'].includes(normalized)) {
+      return true;
+    }
+    if (['false', '0', 'no', 'off'].includes(normalized)) {
+      return false;
+    }
+  }
+  return fallback;
 }
 
 function normalizeNonNegativeInt(value, fallback = 0) {
