@@ -212,7 +212,7 @@ export function createTokenMovementController({
 
   function canTrackPlacement(tokenId) {
     const context = getTurnContext();
-    return Boolean(context.active && tokenId && isActiveCombatantPlacement(tokenId));
+    return Boolean(context.active && tokenId);
   }
 
   function getTurnContext() {
