@@ -102,8 +102,10 @@ import {
 } from '../combat/combat-state.js';
 import {
   createCombatDirtyFieldTracker,
+  createCombatSnapshotRetry,
   getActiveSceneCombatState,
   getCombatStateMaliceSnapshot,
+  getSavedCombatStateFromResult,
   hasCombatMaliceValue,
   prepareCombatSnapshotForSync,
   shouldApplyRemoteCombatState,
@@ -8323,6 +8325,88 @@ export function mountBoardInteractions(store, routes = {}) {
     return snapshot;
   }
 
+  function combatSaveResultMatchesSnapshot(result, sceneId, snapshot) {
+    if (!result?.success || !sceneId || !snapshot || typeof snapshot !== 'object') {
+      return false;
+    }
+    const savedCombat = getSavedCombatStateFromResult(result, sceneId);
+    if (!savedCombat || typeof savedCombat !== 'object') {
+      return false;
+    }
+    const savedSequence = Number(savedCombat.sequence ?? 0);
+    const expectedSequence = Number(snapshot.sequence ?? 0);
+    if (Boolean(savedCombat.active) !== Boolean(snapshot.active)) {
+      return false;
+    }
+    if (
+      Number.isFinite(savedSequence) &&
+      Number.isFinite(expectedSequence) &&
+      expectedSequence > 0 &&
+      savedSequence < expectedSequence
+    ) {
+      return false;
+    }
+    return true;
+  }
+
+  function persistCombatSnapshotOp(sceneId, snapshot, reason, attempt = 0) {
+    const savePromise = persistBoardStateSnapshot({}, [
+      {
+        type: 'combat.set',
+        sceneId,
+        combat: snapshot,
+      },
+    ]);
+    if (!savePromise || typeof savePromise.then !== 'function') {
+      return savePromise ?? null;
+    }
+    return savePromise.then((result) => {
+      if (combatSaveResultMatchesSnapshot(result, sceneId, snapshot)) {
+        return result;
+      }
+      if (attempt < MAX_COMBAT_CONFLICT_RETRY_ATTEMPTS) {
+        return fallbackPersistCombatSnapshot(sceneId, snapshot, `${reason}-retry`, result, attempt + 1);
+      }
+      console.warn('[VTT] combat.set retry limit reached; accepting saved combat state.', {
+        reason,
+        sceneId,
+        expectedActive: snapshot.active,
+        expectedSequence: snapshot.sequence,
+      });
+      return result;
+    });
+  }
+
+  function fallbackPersistCombatSnapshot(sceneId, snapshot, reason, result = null, attempt = 0) {
+    if (!sceneId || !snapshot || !isGmUser()) {
+      return null;
+    }
+    const savedCombat = getSavedCombatStateFromResult(result, sceneId);
+    const retrySnapshot = createCombatSnapshotRetry(snapshot, savedCombat);
+    console.warn('[VTT] combat.set save did not persist expected combat state; retrying with a newer combat sequence.', {
+      reason,
+      sceneId,
+      expectedActive: retrySnapshot.active,
+      expectedSequence: retrySnapshot.sequence,
+      savedActive: savedCombat?.active ?? null,
+      savedSequence: savedCombat?.sequence ?? null,
+      attempt,
+    });
+    boardApi.updateState?.((draft) => {
+      const sceneStateEntry = ensureSceneStateDraftEntry(draft, sceneId);
+      sceneStateEntry.combat = {
+        ...retrySnapshot,
+        completedCombatantIds: [...retrySnapshot.completedCombatantIds],
+        lastEffect: retrySnapshot.lastEffect ? { ...retrySnapshot.lastEffect } : null,
+      };
+    });
+    combatSequence = Math.max(combatSequence, Number(retrySnapshot.sequence) || 0);
+    combatStateVersion = retrySnapshot.sequence > 0 ? retrySnapshot.sequence : retrySnapshot.updatedAt;
+    combatStateUpdatedAt = retrySnapshot.updatedAt || Date.now();
+    lastCombatStateSnapshot = JSON.stringify(retrySnapshot);
+    return persistCombatSnapshotOp(sceneId, retrySnapshot, reason, attempt);
+  }
+
   function serializeTurnLockState() {
     return serializeCombatTurnLockState(turnLockState);
   }
@@ -8433,13 +8517,21 @@ export function mountBoardInteractions(store, routes = {}) {
 
     const latest = boardApi.getState?.() ?? state;
     if (latest?.user?.isGM) {
-      persistBoardStateSnapshot({}, [
+      const combatSavePromise = persistBoardStateSnapshot({}, [
         {
           type: 'combat.set',
           sceneId: activeSceneId,
           combat: snapshot,
         },
       ]);
+      if (combatSavePromise && typeof combatSavePromise.then === 'function') {
+        combatSavePromise.then((result) => {
+          if (!combatSaveResultMatchesSnapshot(result, activeSceneId, snapshot)) {
+            return fallbackPersistCombatSnapshot(activeSceneId, snapshot, 'combat-set-mismatch', result);
+          }
+          return result;
+        });
+      }
     } else if (routes?.state) {
       // Track pending combat state save to prevent poller from overwriting during save
       const savePromise = persistCombatState(routes.state, activeSceneId, snapshot);

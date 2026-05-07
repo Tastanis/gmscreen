@@ -3,8 +3,10 @@ import assert from 'node:assert/strict';
 
 import {
   createCombatDirtyFieldTracker,
+  createCombatSnapshotRetry,
   getActiveSceneCombatState,
   getCombatStateMaliceSnapshot,
+  getSavedCombatStateFromResult,
   hasCombatMaliceValue,
   haveCombatGroupsChanged,
   prepareCombatSnapshotForSync,
@@ -148,6 +150,74 @@ describe('combat sync helpers', () => {
     assert.equal(getCombatStateMaliceSnapshot('{"malice": 3.8}'), 3);
     assert.equal(getCombatStateMaliceSnapshot('{"malice": "nope"}'), null);
     assert.equal(getCombatStateMaliceSnapshot('not json'), null);
+  });
+
+  test('extracts saved combat state from save responses', () => {
+    assert.deepEqual(
+      getSavedCombatStateFromResult(
+        {
+          success: true,
+          data: {
+            sceneState: {
+              'scene-1': {
+                combat: { active: true, sequence: 12 },
+              },
+            },
+          },
+        },
+        ' scene-1 '
+      ),
+      { active: true, sequence: 12 }
+    );
+
+    assert.deepEqual(
+      getSavedCombatStateFromResult(
+        {
+          success: true,
+          data: {
+            boardState: {
+              sceneState: {
+                'scene-1': {
+                  combat: { active: false, sequence: 13 },
+                },
+              },
+            },
+          },
+        },
+        'scene-1'
+      ),
+      { active: false, sequence: 13 }
+    );
+  });
+
+  test('builds retry snapshots above the saved server combat version', () => {
+    const retry = createCombatSnapshotRetry(
+      {
+        active: false,
+        round: 0,
+        activeCombatantId: null,
+        completedCombatantIds: [],
+        startingTeam: null,
+        currentTeam: null,
+        lastTeam: null,
+        turnPhase: 'idle',
+        roundTurnCount: 0,
+        malice: 0,
+        sequence: 8,
+        updatedAt: 1000,
+      },
+      {
+        active: true,
+        round: 3,
+        sequence: 12,
+        updatedAt: 2000,
+      },
+      3000
+    );
+
+    assert.equal(retry.active, false);
+    assert.equal(retry.sequence, 13);
+    assert.equal(retry.updatedAt, 3001);
   });
 });
 
