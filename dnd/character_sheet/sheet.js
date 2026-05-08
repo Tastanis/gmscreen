@@ -224,6 +224,23 @@ const ATTRIBUTES = ["Might", "Agility", "Reason", "Intuition", "Presence"];
 
 const SKILL_MODAL_ID = "skill-picker-modal";
 
+function hasAbilityAutomation(automation) {
+  return Boolean(
+    automation &&
+      typeof automation === "object" &&
+      Array.isArray(automation.cards) &&
+      automation.cards.length > 0
+  );
+}
+
+function normalizeAutomationBlock(automation) {
+  if (!hasAbilityAutomation(automation)) return null;
+  if (window.AbilityAutomationSchema?.normalizeAutomation) {
+    return window.AbilityAutomationSchema.normalizeAutomation(automation);
+  }
+  return deepClone(automation);
+}
+
 function deepClone(obj) {
   return JSON.parse(JSON.stringify(obj));
 }
@@ -476,6 +493,7 @@ function mergeWithDefaults(data) {
         tests: Array.isArray(action.tests)
           ? action.tests.map(normalizeTest)
           : convertLegacyEffectsToTests(action.effects).map(normalizeTest),
+        automation: normalizeAutomationBlock(action.automation),
       };
       if (key === "triggers") {
         normalizedAction.trigger = action.trigger || "";
@@ -2439,6 +2457,8 @@ function renderActionSection(type, containerId) {
               .join("");
 
             const useWhenValue = (action.useWhen || "").trim();
+            const automationConfigured = hasAbilityAutomation(action.automation);
+            const automationLabel = automationConfigured ? "Edit Automation" : "Automate";
             return `
             <article class="action-card action-card--collapsed" data-action-id="${action.id}" data-action-type="${type}">
               <header class="card-head">
@@ -2458,6 +2478,16 @@ function renderActionSection(type, containerId) {
                   <input class="edit-field" type="text" data-field="tags" value="${(action.tags || []).join(", ")}" placeholder="Tags" />
                 </div>
                 <span class="chat-dot-wrap"><button class="chat-dot" type="button" aria-label="Post to chat" data-chat-type="action" data-chat-id="${action.id}" data-chat-action-type="${type}"></button></span>
+                ${
+                  isEditMode
+                    ? `<button
+                        class="text-btn edit-only automation-action-btn ${automationConfigured ? "automation-action-btn--configured" : ""}"
+                        type="button"
+                        data-automate-action="${action.id}"
+                        data-action-type="${type}"
+                      ><span class="automation-action-btn__status" aria-hidden="true"></span>${automationLabel}</button>`
+                    : ""
+                }
                 <button
                   class="icon-btn edit-only"
                   data-move-action="up"
@@ -2526,6 +2556,7 @@ function renderActionSection(type, containerId) {
   bindActionRemovals();
   bindActionMoves();
   bindActionToggles();
+  bindAutomationButtons();
   bindTestAdds();
   bindTestRemovals();
   bindAttributeToggles();
@@ -2867,6 +2898,30 @@ function bindActionToggles() {
   });
 }
 
+function bindAutomationButtons() {
+  document.querySelectorAll("[data-automate-action]").forEach((btn) => {
+    btn.onclick = () => {
+      const actionId = btn.getAttribute("data-automate-action");
+      const type = btn.getAttribute("data-action-type");
+      if (!actionId || !type) return;
+      if (!window.AbilityAutomation || typeof window.AbilityAutomation.open !== "function") {
+        console.warn("Ability automation builder is not available.");
+        return;
+      }
+
+      captureActions();
+      const action = (sheetState.actions[type] || []).find((item) => item.id === actionId);
+      if (!action) return;
+
+      window.AbilityAutomation.open(actionId, type, action.automation, (automation) => {
+        action.automation = normalizeAutomationBlock(automation);
+        renderActionSection(type, ACTION_CONTAINER_IDS[type] || `${type}-pane`);
+        saveSheet();
+      });
+    };
+  });
+}
+
 function bindTestAdds() {
   document.querySelectorAll("[data-add-test]").forEach((btn) => {
     btn.onclick = () => {
@@ -3019,6 +3074,7 @@ function captureActions() {
     cards.forEach((card) => {
       const id = card.getAttribute("data-action-id") || createId("action");
       const getField = (field) => card.querySelector(`[data-field="${field}"]`);
+      const existingAction = (sheetState.actions[type] || []).find((action) => action.id === id);
       const tests = Array.from(card.querySelectorAll(".test")).map((testEl) => {
         const tiers = {};
         TEST_TIERS.forEach(({ key }) => {
@@ -3060,6 +3116,7 @@ function captureActions() {
         cost: getField("cost")?.value || "",
         description: sanitizeRichText(normalizeRichText(getField("description")?.innerHTML || "")),
         tests,
+        automation: normalizeAutomationBlock(existingAction?.automation),
         ...(type === "triggers"
           ? {
               trigger: getField("trigger")?.value || "",
