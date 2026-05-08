@@ -70,6 +70,18 @@ const SKILL_GROUPS = {
   ],
 };
 
+const ABILITY_CATEGORIES = [
+  { key: 'triggers', label: 'Trigger', heading: 'Triggers', empty: 'No triggers listed.' },
+  { key: 'mains', label: 'Main Action', heading: 'Main Actions', empty: 'No main actions listed.' },
+  { key: 'maneuvers', label: 'Maneuver', heading: 'Maneuvers', empty: 'No maneuvers listed.' },
+];
+
+const TEST_TIER_LABELS = {
+  low: '<= 11',
+  mid: '12-16',
+  high: '17+',
+};
+
 export function mountCharacterSummaryPanel(routes = {}) {
   const panel = document.getElementById('vtt-character-summary-panel');
   if (!panel) {
@@ -78,7 +90,11 @@ export function mountCharacterSummaryPanel(routes = {}) {
 
   let activeRequestId = 0;
   let activeCharacterId = null;
+  let activeAbilityCategory = null;
+  let activeSheet = null;
   const boardHeader = document.querySelector('.vtt-board__header');
+  const abilityTray = ensureAbilityTray();
+  const abilityPreview = ensureAbilityPreview();
 
   const updatePanelTop = () => {
     if (!boardHeader || !document.body) {
@@ -98,10 +114,14 @@ export function mountCharacterSummaryPanel(routes = {}) {
 
   const close = () => {
     activeCharacterId = null;
+    activeSheet = null;
+    activeAbilityCategory = null;
     panel.classList.remove('vtt-character-summary--open');
     panel.classList.add('vtt-character-summary--closed');
     panel.setAttribute('aria-hidden', 'true');
     document.body?.classList.remove('vtt-character-summary-is-open');
+    renderAbilityTray(abilityTray, null);
+    hideAbilityPreview(abilityPreview);
   };
 
   const open = () => {
@@ -114,11 +134,15 @@ export function mountCharacterSummaryPanel(routes = {}) {
 
   const setLoading = (name) => {
     panel.innerHTML = `<div class="vtt-character-summary__loading">Loading ${escapeHtml(name || 'character')}...</div>`;
+    renderAbilityTray(abilityTray, null);
+    hideAbilityPreview(abilityPreview);
     open();
   };
 
   const setError = () => {
     panel.innerHTML = '<div class="vtt-character-summary__error">Unable to load this character sheet.</div>';
+    renderAbilityTray(abilityTray, null);
+    hideAbilityPreview(abilityPreview);
     open();
   };
 
@@ -129,7 +153,11 @@ export function mountCharacterSummaryPanel(routes = {}) {
       return;
     }
 
+    const isNewCharacter = activeCharacterId !== characterId;
     activeCharacterId = characterId;
+    if (isNewCharacter) {
+      activeAbilityCategory = null;
+    }
     const requestId = ++activeRequestId;
     const token = detail.token && typeof detail.token === 'object' ? detail.token : {};
     setLoading(token.name || characterId);
@@ -139,11 +167,13 @@ export function mountCharacterSummaryPanel(routes = {}) {
       if (requestId !== activeRequestId || activeCharacterId !== characterId) {
         return;
       }
+      activeSheet = sheet;
       panel.innerHTML = renderCharacterCard(sheet, {
         characterId,
         token,
       });
       bindCharacterSummaryControls(panel);
+      renderAbilityTray(abilityTray, sheet, { activeCategory: activeAbilityCategory });
       open();
     } catch (error) {
       console.warn('[VTT] Failed to load character summary', error);
@@ -161,6 +191,79 @@ export function mountCharacterSummaryPanel(routes = {}) {
     }
     showCharacter(detail);
   });
+
+  abilityTray.addEventListener('click', (event) => {
+    const categoryButton = event.target.closest('[data-character-ability-category]');
+    if (!categoryButton || !activeSheet) {
+      return;
+    }
+    const category = categoryButton.dataset.characterAbilityCategory || '';
+    activeAbilityCategory = activeAbilityCategory === category ? null : category;
+    hideAbilityPreview(abilityPreview);
+    renderAbilityTray(abilityTray, activeSheet, { activeCategory: activeAbilityCategory });
+  });
+
+  abilityTray.addEventListener('pointerover', (event) => {
+    const item = event.target.closest('[data-character-ability-item]');
+    if (!item || !activeSheet) {
+      return;
+    }
+    const action = getAbilityAction(activeSheet, item.dataset.abilityCategory, item.dataset.abilityIndex);
+    if (action) {
+      renderAbilityPreview(abilityPreview, action, item.dataset.abilityCategory);
+    }
+  });
+
+  abilityTray.addEventListener('pointerout', (event) => {
+    const item = event.target.closest('[data-character-ability-item]');
+    if (!item || item.contains(event.relatedTarget)) {
+      return;
+    }
+    hideAbilityPreview(abilityPreview);
+  });
+
+  abilityTray.addEventListener('focusin', (event) => {
+    const item = event.target.closest('[data-character-ability-item]');
+    if (!item || !activeSheet) {
+      return;
+    }
+    const action = getAbilityAction(activeSheet, item.dataset.abilityCategory, item.dataset.abilityIndex);
+    if (action) {
+      renderAbilityPreview(abilityPreview, action, item.dataset.abilityCategory);
+    }
+  });
+
+  abilityTray.addEventListener('focusout', (event) => {
+    const item = event.target.closest('[data-character-ability-item]');
+    if (!item || item.contains(event.relatedTarget)) {
+      return;
+    }
+    hideAbilityPreview(abilityPreview);
+  });
+}
+
+function ensureAbilityTray() {
+  let tray = document.getElementById('vtt-character-ability-tray');
+  if (!tray) {
+    tray = document.createElement('div');
+    tray.id = 'vtt-character-ability-tray';
+    tray.className = 'vtt-character-ability-tray';
+    tray.setAttribute('aria-hidden', 'true');
+    document.body?.appendChild(tray);
+  }
+  return tray;
+}
+
+function ensureAbilityPreview() {
+  let preview = document.getElementById('vtt-character-ability-preview');
+  if (!preview) {
+    preview = document.createElement('aside');
+    preview.id = 'vtt-character-ability-preview';
+    preview.className = 'vtt-character-ability-preview';
+    preview.setAttribute('aria-hidden', 'true');
+    document.body?.appendChild(preview);
+  }
+  return preview;
 }
 
 function bindCharacterSummaryControls(panel) {
@@ -185,6 +288,179 @@ function bindCharacterSummaryControls(panel) {
       );
     });
   });
+}
+
+function renderAbilityTray(tray, sheet, { activeCategory = null } = {}) {
+  if (!tray) {
+    return;
+  }
+  if (!sheet) {
+    tray.innerHTML = '';
+    tray.setAttribute('aria-hidden', 'true');
+    tray.classList.remove('vtt-character-ability-tray--open');
+    return;
+  }
+
+  tray.innerHTML = `
+    <nav class="vtt-character-ability-tray__inner" aria-label="Character abilities">
+      ${ABILITY_CATEGORIES.map((category) => {
+        const actions = getAbilityActions(sheet, category.key);
+        const isActive = activeCategory === category.key;
+        return `
+          <div class="vtt-character-ability-category${isActive ? ' is-active' : ''}">
+            ${isActive ? renderAbilityList(category, actions) : ''}
+            <button
+              class="vtt-character-ability-tab"
+              type="button"
+              data-character-ability-category="${escapeAttribute(category.key)}"
+              aria-expanded="${isActive ? 'true' : 'false'}"
+            >${escapeHtml(category.label)}</button>
+          </div>
+        `;
+      }).join('')}
+    </nav>
+  `;
+  tray.setAttribute('aria-hidden', 'false');
+  tray.classList.add('vtt-character-ability-tray--open');
+}
+
+function renderAbilityList(category, actions) {
+  return `
+    <div class="vtt-character-ability-list" role="menu" aria-label="${escapeAttribute(category.heading)}">
+      <div class="vtt-character-ability-list__heading">${escapeHtml(category.heading)}</div>
+      ${actions.length
+        ? actions.map((action, index) => renderAbilityItem(action, category.key, index)).join('')
+        : `<div class="vtt-character-ability-empty">${escapeHtml(category.empty)}</div>`}
+    </div>
+  `;
+}
+
+function renderAbilityItem(action, categoryKey, index) {
+  const name = action?.name || 'Untitled Ability';
+  const meta = summarizeAbility(action, categoryKey);
+  return `
+    <button
+      class="vtt-character-ability-item"
+      type="button"
+      role="menuitem"
+      data-character-ability-item
+      data-ability-category="${escapeAttribute(categoryKey)}"
+      data-ability-index="${escapeAttribute(index)}"
+    >
+      <span class="vtt-character-ability-item__mark" aria-hidden="true">${escapeHtml(getAbilityIcon(categoryKey))}</span>
+      <span class="vtt-character-ability-item__text">
+        <span class="vtt-character-ability-item__name">${escapeHtml(name)}</span>
+        ${meta ? `<span class="vtt-character-ability-item__meta">${escapeHtml(meta)}</span>` : ''}
+      </span>
+    </button>
+  `;
+}
+
+function renderAbilityPreview(preview, action, categoryKey) {
+  if (!preview || !action) {
+    return;
+  }
+
+  const title = action.name || 'Untitled Ability';
+  const actionLabel = action.actionLabel || getAbilityCategoryLabel(categoryKey);
+  const tags = Array.isArray(action.tags) ? action.tags.filter(Boolean) : [];
+  const useWhen = typeof action.useWhen === 'string' ? action.useWhen.trim() : '';
+  const descriptionBlocks = extractTextBlocks(action.description || '');
+  const tests = Array.isArray(action.tests) ? action.tests : [];
+
+  preview.innerHTML = `
+    <article class="vtt-character-ability-card">
+      <header class="vtt-character-ability-card__header">
+        <h2>${escapeHtml(title)}</h2>
+        ${action.cost ? `<span class="vtt-character-ability-card__cost">${escapeHtml(action.cost)}</span>` : ''}
+      </header>
+      <div class="vtt-character-ability-card__type">
+        <strong>${escapeHtml(actionLabel)}</strong>
+        ${tags.length ? `<span>${escapeHtml(tags.join(', '))}</span>` : ''}
+      </div>
+      ${useWhen ? `<p class="vtt-character-ability-card__when">${escapeHtml(useWhen)}</p>` : ''}
+      ${renderAbilityMeta(action, categoryKey)}
+      ${descriptionBlocks.length
+        ? `<div class="vtt-character-ability-card__description">${descriptionBlocks.map((text) => `<p>${escapeHtml(text)}</p>`).join('')}</div>`
+        : ''}
+      ${tests.length ? `<div class="vtt-character-ability-card__tests">${tests.map(renderAbilityTest).join('')}</div>` : ''}
+    </article>
+  `;
+  preview.setAttribute('aria-hidden', 'false');
+  preview.classList.add('vtt-character-ability-preview--open');
+}
+
+function hideAbilityPreview(preview) {
+  if (!preview) {
+    return;
+  }
+  preview.setAttribute('aria-hidden', 'true');
+  preview.classList.remove('vtt-character-ability-preview--open');
+}
+
+function renderAbilityMeta(action, categoryKey) {
+  const entries = [
+    ['Range', action.range],
+    ['Target', action.target],
+    ...(categoryKey === 'triggers' ? [['Trigger', action.trigger]] : []),
+  ].filter(([, value]) => typeof value === 'string' && value.trim());
+
+  if (!entries.length) {
+    return '';
+  }
+
+  return `
+    <dl class="vtt-character-ability-card__meta">
+      ${entries.map(([label, value]) => `
+        <div>
+          <dt>${escapeHtml(label)}</dt>
+          <dd>${escapeHtml(value)}</dd>
+        </div>
+      `).join('')}
+    </dl>
+  `;
+}
+
+function renderAbilityTest(test) {
+  const tiers = test?.tiers && typeof test.tiers === 'object' ? test.tiers : {};
+  return `
+    <section class="vtt-character-ability-test">
+      <header>
+        <strong>${escapeHtml(test?.label || 'Power Roll')}</strong>
+        <span>${escapeHtml(formatRoll(test?.rollMod))}</span>
+      </header>
+      ${test?.beforeEffect ? `<p>${escapeHtml(test.beforeEffect)}</p>` : ''}
+      <div class="vtt-character-ability-test__tiers">
+        ${Object.entries(TEST_TIER_LABELS).map(([key, label]) => renderAbilityTier(label, tiers[key])).join('')}
+      </div>
+      ${test?.additionalEffect ? `<p>${escapeHtml(test.additionalEffect)}</p>` : ''}
+    </section>
+  `;
+}
+
+function renderAbilityTier(label, tier = {}) {
+  const parts = [];
+  if (tier?.damage) {
+    parts.push(`${tier.damage}${tier.damageType ? ` ${tier.damageType}` : ''}`);
+  }
+  if (tier?.notes) {
+    parts.push(tier.notes);
+  }
+  if (tier?.attributeCheck?.enabled) {
+    const attribute = tier.attributeCheck.attribute || 'Attribute';
+    const threshold = tier.attributeCheck.threshold || '-';
+    const effect = tier.attributeCheck.effect || '';
+    parts.push(`${attribute} <= ${threshold}${effect ? `: ${effect}` : ''}`);
+  }
+  if (!parts.length) {
+    return '';
+  }
+  return `
+    <div>
+      <span>${escapeHtml(label)}</span>
+      <p>${escapeHtml(parts.join(' | '))}</p>
+    </div>
+  `;
 }
 
 async function fetchCharacterSummary(routes, characterId) {
@@ -535,6 +811,62 @@ function extractTextBlocks(html) {
     .split(/\n\s*\n+/)
     .map((line) => line.trim())
     .filter(Boolean);
+}
+
+function getAbilityActions(sheet, categoryKey) {
+  const actions = sheet?.actions && typeof sheet.actions === 'object' ? sheet.actions : {};
+  const list = Array.isArray(actions[categoryKey]) ? actions[categoryKey] : [];
+  return list.filter((action) => action && typeof action === 'object' && (action.name || action.description || action.useWhen));
+}
+
+function getAbilityAction(sheet, categoryKey, indexValue) {
+  const index = Number.parseInt(indexValue, 10);
+  if (!categoryKey || !Number.isInteger(index) || index < 0) {
+    return null;
+  }
+  return getAbilityActions(sheet, categoryKey)[index] || null;
+}
+
+function summarizeAbility(action, categoryKey) {
+  const parts = [];
+  const tags = Array.isArray(action?.tags) ? action.tags.filter(Boolean) : [];
+  if (action?.actionLabel) {
+    parts.push(action.actionLabel);
+  } else {
+    parts.push(getAbilityCategoryLabel(categoryKey));
+  }
+  if (action?.cost) {
+    parts.push(action.cost);
+  }
+  if (tags.length) {
+    parts.push(tags.slice(0, 3).join(', '));
+  }
+  return parts.filter(Boolean).join(' - ');
+}
+
+function getAbilityCategoryLabel(categoryKey) {
+  return ABILITY_CATEGORIES.find((category) => category.key === categoryKey)?.label || 'Ability';
+}
+
+function getAbilityIcon(categoryKey) {
+  if (categoryKey === 'triggers') {
+    return '!';
+  }
+  if (categoryKey === 'mains') {
+    return '>';
+  }
+  return '+';
+}
+
+function formatRoll(rollMod) {
+  if (rollMod === '' || rollMod === null || rollMod === undefined) {
+    return '2d10';
+  }
+  const mod = String(rollMod).trim();
+  if (!mod) {
+    return '2d10';
+  }
+  return `2d10${mod.startsWith('-') ? '' : '+'}${mod}`;
 }
 
 function getSkillGroup(skill) {
