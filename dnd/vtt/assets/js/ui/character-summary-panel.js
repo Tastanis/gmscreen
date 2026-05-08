@@ -84,12 +84,14 @@ export function mountCharacterSummaryPanel(routes = {}) {
     panel.classList.remove('vtt-character-summary--open');
     panel.classList.add('vtt-character-summary--closed');
     panel.setAttribute('aria-hidden', 'true');
+    document.body?.classList.remove('vtt-character-summary-is-open');
   };
 
   const open = () => {
     panel.classList.add('vtt-character-summary--open');
     panel.classList.remove('vtt-character-summary--closed');
     panel.setAttribute('aria-hidden', 'false');
+    document.body?.classList.add('vtt-character-summary-is-open');
   };
 
   const setLoading = (name) => {
@@ -123,6 +125,7 @@ export function mountCharacterSummaryPanel(routes = {}) {
         characterId,
         token,
       });
+      bindCharacterSummaryControls(panel);
       open();
     } catch (error) {
       console.warn('[VTT] Failed to load character summary', error);
@@ -139,6 +142,30 @@ export function mountCharacterSummaryPanel(routes = {}) {
       return;
     }
     showCharacter(detail);
+  });
+}
+
+function bindCharacterSummaryControls(panel) {
+  panel.querySelectorAll('[data-character-condition-remove]').forEach((button) => {
+    button.addEventListener('click', (event) => {
+      event.preventDefault();
+      event.stopPropagation();
+
+      const placementId = button.dataset.placementId || '';
+      const conditionIndex = Number.parseInt(button.dataset.conditionIndex || '', 10);
+      if (!placementId || !Number.isInteger(conditionIndex) || conditionIndex < 0) {
+        return;
+      }
+
+      document.dispatchEvent(
+        new CustomEvent('vtt:character-summary-remove-condition', {
+          detail: {
+            placementId,
+            conditionIndex,
+          },
+        })
+      );
+    });
   });
 }
 
@@ -178,7 +205,6 @@ function renderCharacterCard(sheet, { characterId, token } = {}) {
   const sidebarResource = sidebar.resource && typeof sidebar.resource === 'object' ? sidebar.resource : {};
   const conditions = normalizeConditions(token?.conditions ?? token?.condition ?? []);
   const featureList = normalizeFeatures(sheet?.features ?? []);
-  const triggerList = collectTriggerLines(sheet);
 
   const name = hero.name || token?.name || formatCharacterName(characterId);
   const className = hero.class || '';
@@ -192,6 +218,7 @@ function renderCharacterCard(sheet, { characterId, token } = {}) {
   const healthPercent = staminaMax > 0 ? clamp((staminaCurrent / staminaMax) * 100, 0, 100) : 0;
   const resourceTitle = resource.title || sidebarResource.title || 'Resource';
   const resourceValue = valueOrZero(resource.value);
+  const resourceText = stripHtml(sidebarResource.text || '');
   const victories = valueOrZero(hero.victories);
   const surges = valueOrZero(hero.surges);
   const lists = sidebar.lists && typeof sidebar.lists === 'object' ? sidebar.lists : {};
@@ -244,10 +271,8 @@ function renderCharacterCard(sheet, { characterId, token } = {}) {
         <div class="vtt-character-resources">
           ${renderResource('Victories', victories)}
           ${renderResource(resourceTitle, resourceValue)}
-          <div class="vtt-character-trigger-list">
-            ${triggerList.length
-              ? triggerList.map((line) => `<div class="vtt-character-trigger">${escapeHtml(line)}</div>`).join('')
-              : '<div class="vtt-character-trigger">No listed action triggers</div>'}
+          <div class="vtt-character-resource-notes">
+            ${renderTextBlock(resourceText || 'No resource notes listed.')}
           </div>
         </div>
       `)}
@@ -255,7 +280,7 @@ function renderCharacterCard(sheet, { characterId, token } = {}) {
       ${renderSection('Auras, Conditions, & Effects', `
         <div class="vtt-character-condition-list">
           ${conditions.length
-            ? conditions.map((condition) => `<span class="vtt-character-condition">${escapeHtml(condition)}</span>`).join('')
+            ? conditions.map((condition, index) => renderCondition(condition, token?.id, index)).join('')
             : '<span class="vtt-character-condition">No conditions</span>'}
         </div>
       `)}
@@ -267,10 +292,10 @@ function renderCharacterCard(sheet, { characterId, token } = {}) {
         </div>
       `)}
 
-      ${renderSection('Perks', `
+      ${renderSection('Feats', `
         ${featureList.length
           ? featureList.map(renderFeature).join('')
-          : '<p class="vtt-character-feature">No perks listed.</p>'}
+          : '<p class="vtt-character-feature">No feats listed.</p>'}
       `)}
     </article>
   `;
@@ -355,6 +380,28 @@ function renderResource(label, value) {
   `;
 }
 
+function renderCondition(condition, placementId, index) {
+  const removeButton = placementId
+    ? `<button class="vtt-character-condition__remove" type="button" data-character-condition-remove data-placement-id="${escapeAttribute(placementId)}" data-condition-index="${escapeAttribute(index)}" aria-label="Remove ${escapeAttribute(condition)}">x</button>`
+    : '';
+
+  return `
+    <span class="vtt-character-condition">
+      <span class="vtt-character-condition__name">${escapeHtml(condition)}</span>
+      ${removeButton}
+    </span>
+  `;
+}
+
+function renderTextBlock(text) {
+  return String(text || '')
+    .split(/\r?\n+/)
+    .map((line) => line.trim())
+    .filter(Boolean)
+    .map((line) => `<p>${escapeHtml(line)}</p>`)
+    .join('');
+}
+
 function renderRecoveryTicks(current, max) {
   const total = Math.max(0, Math.min(12, Number(max) || 0));
   if (!total) {
@@ -387,7 +434,7 @@ function renderSkillGroups(skills) {
 }
 
 function renderFeature(feature) {
-  const title = feature.title || 'Untitled Perk';
+  const title = feature.title || 'Untitled Feat';
   const text = stripHtml(feature.text || '');
   return `
     <p class="vtt-character-feature">
@@ -439,24 +486,6 @@ function normalizeFeatures(value) {
     .map((feature) => (feature && typeof feature === 'object' ? feature : null))
     .filter((feature) => feature && (feature.title || feature.text))
     .slice(0, 8);
-}
-
-function collectTriggerLines(sheet) {
-  const actions = sheet?.actions && typeof sheet.actions === 'object' ? sheet.actions : {};
-  const lines = [];
-  ['mains', 'maneuvers', 'triggers', 'freeStrikes'].forEach((type) => {
-    const list = Array.isArray(actions[type]) ? actions[type] : [];
-    list.forEach((action) => {
-      const cost = typeof action?.cost === 'string' ? action.cost.trim() : '';
-      const useWhen = typeof action?.useWhen === 'string' ? action.useWhen.trim() : '';
-      if (!cost && !useWhen) {
-        return;
-      }
-      const name = action?.name || action?.actionLabel || 'Action';
-      lines.push(`${cost ? `${cost} ` : ''}${name}${useWhen ? ` - ${useWhen}` : ''}`);
-    });
-  });
-  return lines.slice(0, 5);
 }
 
 function getSkillGroup(skill) {

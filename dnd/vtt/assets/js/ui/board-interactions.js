@@ -1964,6 +1964,7 @@ export function mountBoardInteractions(store, routes = {}) {
       }
       closeMalicePanel({ applyChanges: true });
     });
+    document.addEventListener('vtt:character-summary-remove-condition', handleCharacterSummaryConditionRemove);
   }
 
   if (combatTrackerRoot) {
@@ -4028,6 +4029,16 @@ export function mountBoardInteractions(store, routes = {}) {
         detail,
       })
     );
+  }
+
+  function handleCharacterSummaryConditionRemove(event) {
+    const placementId = typeof event?.detail?.placementId === 'string' ? event.detail.placementId : '';
+    const conditionIndex = Number.parseInt(event?.detail?.conditionIndex, 10);
+    if (!placementId || !Number.isInteger(conditionIndex) || conditionIndex < 0) {
+      return;
+    }
+
+    removeConditionFromPlacement(placementId, conditionIndex);
   }
 
   function getSelectedPcSummaryDetail() {
@@ -7555,6 +7566,7 @@ export function mountBoardInteractions(store, routes = {}) {
       }
 
       syncConditionsAfterMutation(true);
+      dispatchTokenSelectionSummary();
     }
 
     return updated && didChange;
@@ -15003,6 +15015,7 @@ export function mountBoardInteractions(store, routes = {}) {
       }
 
       syncConditionsAfterMutation(true);
+      dispatchTokenSelectionSummary();
     }
 
     return updated && didChange;
@@ -15054,6 +15067,7 @@ export function mountBoardInteractions(store, routes = {}) {
       }
 
       syncConditionsAfterMutation(true);
+      dispatchTokenSelectionSummary();
     }
 
     return updated && didChange;
@@ -15130,6 +15144,7 @@ export function mountBoardInteractions(store, routes = {}) {
     if (cleared.length) {
       refreshTokenSettings();
       syncConditionsAfterMutation(true);
+      dispatchTokenSelectionSummary();
     }
 
     return cleared;
@@ -15193,6 +15208,7 @@ export function mountBoardInteractions(store, routes = {}) {
       }
 
       syncConditionsAfterMutation(true);
+      dispatchTokenSelectionSummary();
     }
 
     return updated && didChange;
