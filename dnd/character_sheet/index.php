@@ -38,6 +38,10 @@ require_once '../includes/strix-nav.php';
   <title>Hero Sheet</title>
   <link rel="stylesheet" href="../css/chat-panel.css?v=<?php echo (int) $assetVersion; ?>" />
   <link rel="stylesheet" href="styles.css?v=<?php echo (int) $assetVersion; ?>" />
+  <link rel="stylesheet" href="ability-automation/builder.css?v=<?php echo (int) $assetVersion; ?>" />
+  <script src="ability-automation/schema.js?v=<?php echo (int) $assetVersion; ?>"></script>
+  <script src="ability-automation/primitives.js?v=<?php echo (int) $assetVersion; ?>"></script>
+  <script src="ability-automation/builder.js?v=<?php echo (int) $assetVersion; ?>"></script>
   <script type="module" src="sheet.js?v=<?php echo (int) $assetVersion; ?>"></script>
 <?php if ($chatPusherConfig !== null): ?>
   <script src="https://js.pusher.com/8.4.0/pusher.min.js"></script>
