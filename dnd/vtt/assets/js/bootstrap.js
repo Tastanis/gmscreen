@@ -14,6 +14,7 @@ import {
 // even when the user hasn't created or activated a scene.
 const DEFAULT_SCENE_ID = '_default';
 import { mountSettingsPanel } from './ui/settings-panel.js';
+import { mountCharacterSummaryPanel } from './ui/character-summary-panel.js';
 import { mountChatPanel } from './ui/chat-panel.js';
 import { mountBoardInteractions } from './ui/board-interactions.js';
 import { mountDragRuler } from './ui/drag-ruler.js';
@@ -66,6 +67,7 @@ async function bootstrap() {
   const storeApi = { getState, getIsGm, getUserName, subscribe, updateState };
 
   mountSettingsPanel(routes, storeApi, userContext);
+  mountCharacterSummaryPanel(routes);
   const chatParticipants = Array.isArray(config.chatParticipants) ? config.chatParticipants : [];
   mountChatPanel(routes, userContext, chatParticipants);
   mountBoardInteractions(storeApi, routes);

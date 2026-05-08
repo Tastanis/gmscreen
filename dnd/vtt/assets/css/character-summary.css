@@ -1,0 +1,403 @@
+body.vtt-body {
+  --vtt-character-panel-width: 360px;
+  --vtt-character-panel-offset: 16px;
+  --vtt-character-panel-effective-width: min(
+    var(--vtt-character-panel-width),
+    calc(100vw - (var(--vtt-character-panel-offset) * 2))
+  );
+}
+
+.vtt-character-summary {
+  position: fixed;
+  top: var(--vtt-character-panel-offset);
+  bottom: var(--vtt-character-panel-offset);
+  left: 0;
+  width: var(--vtt-character-panel-effective-width);
+  background: rgba(5, 12, 10, 0.96);
+  border: 1px solid rgba(191, 166, 139, 0.42);
+  border-left: 0;
+  color: #efe6d2;
+  box-shadow: 10px 0 26px rgba(0, 0, 0, 0.36);
+  overflow-y: auto;
+  transform: translateX(calc(-100% - var(--vtt-character-panel-offset)));
+  transition: transform 180ms ease;
+  z-index: 1280;
+  pointer-events: none;
+  font-family: Georgia, "Times New Roman", serif;
+}
+
+.vtt-character-summary--open {
+  transform: translateX(0);
+  pointer-events: auto;
+}
+
+.vtt-character-summary--closed {
+  pointer-events: none;
+}
+
+.vtt-character-summary__empty,
+.vtt-character-summary__loading,
+.vtt-character-summary__error {
+  padding: 18px;
+  color: rgba(239, 230, 210, 0.74);
+  font-size: 0.95rem;
+  line-height: 1.35;
+}
+
+.vtt-character-card {
+  min-height: 100%;
+  background:
+    linear-gradient(180deg, rgba(12, 22, 18, 0.96), rgba(4, 8, 7, 0.98)),
+    radial-gradient(circle at 18% 0%, rgba(213, 155, 90, 0.14), transparent 28%);
+}
+
+.vtt-character-card__hero {
+  display: grid;
+  grid-template-columns: 92px minmax(0, 1fr) 94px;
+  gap: 10px;
+  align-items: stretch;
+  padding: 10px;
+  border-bottom: 1px solid rgba(191, 166, 139, 0.36);
+}
+
+.vtt-character-card__portrait {
+  position: relative;
+  aspect-ratio: 1;
+  border: 2px solid #b96535;
+  border-radius: 6px;
+  overflow: hidden;
+  background: rgba(213, 155, 90, 0.12);
+}
+
+.vtt-character-card__portrait img {
+  display: block;
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+}
+
+.vtt-character-card__identity {
+  min-width: 0;
+  align-self: center;
+}
+
+.vtt-character-card__name {
+  margin: 0 0 3px;
+  color: #fff8e8;
+  font-size: 1.25rem;
+  line-height: 1.05;
+  font-weight: 800;
+}
+
+.vtt-character-card__level {
+  color: #c9dfd3;
+  font-family: "Inter", "Segoe UI", sans-serif;
+  font-size: 0.82rem;
+  font-weight: 800;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+}
+
+.vtt-character-card__class,
+.vtt-character-card__track {
+  color: #cda879;
+  font-size: 1.05rem;
+  font-weight: 800;
+  line-height: 1.12;
+  text-transform: uppercase;
+}
+
+.vtt-character-card__quick {
+  display: grid;
+  gap: 6px;
+}
+
+.vtt-character-card__quick-box,
+.vtt-character-resource,
+.vtt-character-stat {
+  border: 1px solid rgba(21, 160, 113, 0.64);
+  border-radius: 5px;
+  background: rgba(0, 42, 31, 0.48);
+  box-shadow: inset 0 0 0 1px rgba(255, 255, 255, 0.03);
+}
+
+.vtt-character-card__quick-box {
+  min-height: 52px;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 2px;
+}
+
+.vtt-character-card__quick-label,
+.vtt-character-resource__label,
+.vtt-character-stat__label,
+.vtt-character-vital__label {
+  color: #bfae92;
+  font-family: "Inter", "Segoe UI", sans-serif;
+  font-size: 0.68rem;
+  letter-spacing: 0.05em;
+  text-transform: uppercase;
+}
+
+.vtt-character-card__quick-value,
+.vtt-character-resource__value,
+.vtt-character-stat__value,
+.vtt-character-vital__value {
+  color: #fff;
+  font-family: "Inter", "Segoe UI", sans-serif;
+  font-size: 1.45rem;
+  font-weight: 850;
+  line-height: 1;
+}
+
+.vtt-character-section {
+  border-bottom: 1px solid rgba(191, 166, 139, 0.32);
+}
+
+.vtt-character-section__header {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  padding: 8px 10px 5px;
+  color: #d7e8db;
+  font-size: 1rem;
+  line-height: 1;
+  text-transform: uppercase;
+}
+
+.vtt-character-section__icon {
+  color: #9acfc2;
+  font-size: 0.9rem;
+}
+
+.vtt-character-section__body {
+  padding: 0 10px 10px;
+}
+
+.vtt-character-stamina {
+  display: grid;
+  grid-template-columns: 42px 76px 42px minmax(0, 1fr) 48px;
+  gap: 6px;
+  align-items: stretch;
+}
+
+.vtt-character-pill {
+  min-height: 48px;
+  border: 1px solid rgba(21, 160, 113, 0.72);
+  border-radius: 6px;
+  background: rgba(0, 42, 31, 0.6);
+  color: #fff;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 2px;
+  font-family: "Inter", "Segoe UI", sans-serif;
+  font-weight: 850;
+}
+
+.vtt-character-pill--damage {
+  border-color: rgba(239, 68, 68, 0.86);
+  color: #f87171;
+}
+
+.vtt-character-pill--temp {
+  border-color: rgba(147, 112, 219, 0.86);
+}
+
+.vtt-character-pill__label {
+  font-size: 0.62rem;
+  letter-spacing: 0.05em;
+  text-transform: uppercase;
+}
+
+.vtt-character-pill__value {
+  font-size: 1.3rem;
+}
+
+.vtt-character-recovery__value {
+  font-size: 1.16rem;
+}
+
+.vtt-character-recovery__ticks {
+  display: grid;
+  grid-template-columns: repeat(8, 1fr);
+  gap: 2px;
+  width: 70%;
+}
+
+.vtt-character-recovery__tick {
+  height: 4px;
+  background: rgba(21, 160, 113, 0.28);
+}
+
+.vtt-character-recovery__tick.is-filled {
+  background: #2dd4bf;
+}
+
+.vtt-character-healthbar {
+  margin-top: 6px;
+  height: 18px;
+  border: 1px solid #d6c6a5;
+  background: #1b1b17;
+  overflow: hidden;
+  position: relative;
+}
+
+.vtt-character-healthbar__fill {
+  height: 100%;
+  background: linear-gradient(90deg, #e37500, #02a7a7);
+}
+
+.vtt-character-healthbar__text {
+  position: absolute;
+  inset: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  color: #fff;
+  font-family: "Inter", "Segoe UI", sans-serif;
+  font-size: 0.78rem;
+  font-weight: 850;
+  text-shadow: 0 1px 2px #000;
+}
+
+.vtt-character-stats {
+  display: grid;
+  grid-template-columns: repeat(5, minmax(0, 1fr));
+  gap: 7px;
+}
+
+.vtt-character-stat {
+  min-height: 64px;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+}
+
+.vtt-character-stat__label::first-letter {
+  background: rgba(191, 166, 139, 0.5);
+  color: #03120e;
+  font-weight: 900;
+  padding: 0 2px;
+}
+
+.vtt-character-vitals {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 8px;
+  margin-top: 10px;
+}
+
+.vtt-character-vital {
+  text-align: center;
+}
+
+.vtt-character-resources {
+  display: grid;
+  grid-template-columns: 98px 98px minmax(0, 1fr);
+  gap: 8px;
+}
+
+.vtt-character-resource {
+  min-height: 68px;
+  padding: 8px;
+}
+
+.vtt-character-resource__label {
+  color: #cda879;
+}
+
+.vtt-character-trigger-list {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  min-width: 0;
+}
+
+.vtt-character-trigger {
+  border: 1px solid rgba(213, 155, 90, 0.64);
+  border-radius: 4px;
+  color: #dcb572;
+  padding: 2px 6px;
+  font-size: 0.76rem;
+  line-height: 1.2;
+}
+
+.vtt-character-condition-list,
+.vtt-character-text-list {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 5px;
+}
+
+.vtt-character-condition {
+  border: 1px solid rgba(213, 155, 90, 0.64);
+  border-radius: 4px;
+  color: #f0e5ce;
+  padding: 3px 8px;
+  font-size: 0.84rem;
+  font-style: italic;
+}
+
+.vtt-character-text-list {
+  display: block;
+  color: #eee3cf;
+  font-size: 0.88rem;
+  line-height: 1.35;
+}
+
+.vtt-character-text-list p {
+  margin: 2px 0;
+}
+
+.vtt-character-text-list strong {
+  color: #bfae92;
+}
+
+.vtt-character-feature {
+  margin: 0 0 8px;
+  color: #eee3cf;
+  font-size: 0.86rem;
+  line-height: 1.32;
+}
+
+.vtt-character-feature__title {
+  color: #cda879;
+  font-weight: 850;
+}
+
+@media (max-width: 768px) {
+  body.vtt-body {
+    --vtt-character-panel-width: calc(100vw - 24px);
+    --vtt-character-panel-offset: 12px;
+  }
+
+  .vtt-character-summary {
+    border-left: 1px solid rgba(191, 166, 139, 0.42);
+    border-radius: 8px;
+    left: var(--vtt-character-panel-offset);
+  }
+
+  .vtt-character-card__hero {
+    grid-template-columns: 78px minmax(0, 1fr);
+  }
+
+  .vtt-character-card__quick {
+    grid-column: 1 / -1;
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+
+  .vtt-character-stamina,
+  .vtt-character-resources {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+
+  .vtt-character-recovery,
+  .vtt-character-trigger-list {
+    grid-column: 1 / -1;
+  }
+}

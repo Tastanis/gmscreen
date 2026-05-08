@@ -4014,6 +4014,56 @@ export function mountBoardInteractions(store, routes = {}) {
         : 'Select at least two tokens to enable grouping';
     }
     refreshTokenSelectionState();
+    dispatchTokenSelectionSummary();
+  }
+
+  function dispatchTokenSelectionSummary() {
+    if (typeof document === 'undefined' || typeof document.dispatchEvent !== 'function') {
+      return;
+    }
+
+    const detail = getSelectedPcSummaryDetail();
+    document.dispatchEvent(
+      new CustomEvent('vtt:token-selection-summary', {
+        detail,
+      })
+    );
+  }
+
+  function getSelectedPcSummaryDetail() {
+    if (selectedTokenIds.size !== 1) {
+      return { characterId: null, token: null };
+    }
+
+    const placementId = Array.from(selectedTokenIds)[0] ?? null;
+    const placement = placementId ? getPlacementFromStore(placementId) : null;
+    if (!placement) {
+      return { characterId: null, token: null };
+    }
+
+    const metadata = extractPlacementMetadata(placement);
+    const inPlayerFolder = isPlacementInPlayerFolder(placement, metadata);
+    const isPlayerOwned = isPlacementPlayerOwned(placement, metadata);
+    if (!inPlayerFolder && !isPlayerOwned) {
+      return { characterId: null, token: null };
+    }
+
+    const characterId = matchProfileByName(tokenLabel(placement));
+    if (!characterId || !PLAYER_CHARACTER_USER_IDS.includes(characterId)) {
+      return { characterId: null, token: null };
+    }
+
+    return {
+      characterId,
+      token: {
+        id: placement.id ?? placementId,
+        name: tokenLabel(placement),
+        imageUrl: typeof placement.imageUrl === 'string' ? placement.imageUrl : '',
+        hp: placement.hp ?? placement.hitPoints ?? null,
+        condition: placement.condition ?? null,
+        conditions: placement.conditions ?? null,
+      },
+    };
   }
 
   function refreshTokenSelectionState() {

@@ -21,6 +21,7 @@ require_once __DIR__ . '/../../includes/strix-nav.php';
     <link rel="stylesheet" href="assets/css/layout.css?v=<?= $assetVersion ?>" />
     <link rel="stylesheet" href="assets/css/board.css?v=<?= $assetVersion ?>" />
     <link rel="stylesheet" href="assets/css/chat.css?v=<?= $assetVersion ?>" />
+    <link rel="stylesheet" href="assets/css/character-summary.css?v=<?= $assetVersion ?>" />
     <link rel="stylesheet" href="assets/css/settings.css?v=<?= $assetVersion ?>" />
     <link rel="stylesheet" href="assets/css/fog-of-war.css?v=<?= $assetVersion ?>" />
     <link rel="stylesheet" href="../dice-roller/dice-roller.css?v=<?= $assetVersion ?>" />
@@ -28,6 +29,7 @@ require_once __DIR__ . '/../../includes/strix-nav.php';
 <body class="vtt-body">
     <?php renderStrixNav('vtt'); ?>
     <div id="vtt-app" class="vtt-app" data-routes='<?= json_encode($routes, JSON_HEX_TAG | JSON_HEX_APOS | JSON_HEX_QUOT | JSON_HEX_AMP) ?>'>
+        <?= $sections['characterSummaryPanel'] ?? '' ?>
         <?= $sections['settingsPanel'] ?? '' ?>
         <main class="vtt-app__main" id="vtt-main" tabindex="-1">
             <?= $sections['sceneBoard'] ?? '' ?>

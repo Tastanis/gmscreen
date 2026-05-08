@@ -65,6 +65,7 @@
  * screen space.
  */
 body.vtt-body {
+  --chat-panel-width: 288px;
   --vtt-chat-panel-effective-width: min(
     var(--chat-panel-width, 360px),
     calc(100vw - (var(--chat-panel-offset, 20px) * 2))
@@ -89,4 +90,10 @@ body.vtt-body .chat-panel-toggle[aria-expanded="true"]:hover {
     -50%,
     0
   );
+}
+
+@media (max-width: 768px) {
+  body.vtt-body {
+    --chat-panel-width: calc(100vw - 24px);
+  }
 }
