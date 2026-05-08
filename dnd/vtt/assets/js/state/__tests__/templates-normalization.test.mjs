@@ -28,4 +28,15 @@ describe('template normalization', () => {
 
     assert.equal(template.levelId, BASE_MAP_LEVEL_ID);
   });
+
+  test('preserves wall material on wall templates', () => {
+    const template = normalizeTemplateEntry({
+      id: 'fire-wall',
+      type: 'wall',
+      wallColor: 'fire',
+      squares: [{ column: 2, row: 4 }],
+    });
+
+    assert.equal(template.wallColor, 'fire');
+  });
 });

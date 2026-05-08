@@ -3167,6 +3167,10 @@ function normalizeTemplateEntry($entry): ?array
         if ($color !== null) {
             $normalized['color'] = $color;
         }
+        $wallColor = sanitizeWallColor($entry['wallColor'] ?? null);
+        if ($wallColor !== null) {
+            $normalized['wallColor'] = $wallColor;
+        }
 
         return $normalized;
     }
@@ -3193,6 +3197,21 @@ function sanitizeTemplateColor($value): ?string
     }
 
     return null;
+}
+
+function sanitizeWallColor($value): ?string
+{
+    if (!is_string($value)) {
+        return null;
+    }
+
+    $trimmed = strtolower(trim($value));
+    if ($trimmed === '') {
+        return null;
+    }
+
+    $allowed = ['stone', 'dirt', 'metal', 'ice', 'fire', 'brown', 'gray', 'red', 'green', 'blue', 'purple', 'cyan'];
+    return in_array($trimmed, $allowed, true) ? $trimmed : null;
 }
 
 function coerceFloat($value, ?float $fallback, int $precision): ?float
