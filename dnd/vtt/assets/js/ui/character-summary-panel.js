@@ -78,6 +78,23 @@ export function mountCharacterSummaryPanel(routes = {}) {
 
   let activeRequestId = 0;
   let activeCharacterId = null;
+  const boardHeader = document.querySelector('.vtt-board__header');
+
+  const updatePanelTop = () => {
+    if (!boardHeader || !document.body) {
+      return;
+    }
+    const rect = boardHeader.getBoundingClientRect();
+    const top = Math.max(12, Math.ceil(rect.bottom + 4));
+    document.body.style.setProperty('--vtt-character-panel-top', `${top}px`);
+  };
+
+  updatePanelTop();
+  window.addEventListener('resize', updatePanelTop);
+  if (typeof ResizeObserver === 'function' && boardHeader) {
+    const observer = new ResizeObserver(updatePanelTop);
+    observer.observe(boardHeader);
+  }
 
   const close = () => {
     activeCharacterId = null;
@@ -88,6 +105,7 @@ export function mountCharacterSummaryPanel(routes = {}) {
   };
 
   const open = () => {
+    updatePanelTop();
     panel.classList.add('vtt-character-summary--open');
     panel.classList.remove('vtt-character-summary--closed');
     panel.setAttribute('aria-hidden', 'false');
@@ -218,7 +236,7 @@ function renderCharacterCard(sheet, { characterId, token } = {}) {
   const healthPercent = staminaMax > 0 ? clamp((staminaCurrent / staminaMax) * 100, 0, 100) : 0;
   const resourceTitle = resource.title || sidebarResource.title || 'Resource';
   const resourceValue = valueOrZero(resource.value);
-  const resourceText = stripHtml(sidebarResource.text || '');
+  const resourceNotes = extractTextBlocks(sidebarResource.text || '');
   const victories = valueOrZero(hero.victories);
   const surges = valueOrZero(hero.surges);
   const lists = sidebar.lists && typeof sidebar.lists === 'object' ? sidebar.lists : {};
@@ -269,10 +287,14 @@ function renderCharacterCard(sheet, { characterId, token } = {}) {
 
       ${renderSection('Heroic Resources', `
         <div class="vtt-character-resources">
-          ${renderResource('Victories', victories)}
-          ${renderResource(resourceTitle, resourceValue)}
+          <div class="vtt-character-resource-totals">
+            ${renderResource('Victories', victories)}
+            ${renderResource(resourceTitle, resourceValue)}
+          </div>
           <div class="vtt-character-resource-notes">
-            ${renderTextBlock(resourceText || 'No resource notes listed.')}
+            ${resourceNotes.length
+              ? resourceNotes.map(renderResourceNote).join('')
+              : renderResourceNote('No resource notes listed.')}
           </div>
         </div>
       `)}
@@ -393,15 +415,6 @@ function renderCondition(condition, placementId, index) {
   `;
 }
 
-function renderTextBlock(text) {
-  return String(text || '')
-    .split(/\r?\n+/)
-    .map((line) => line.trim())
-    .filter(Boolean)
-    .map((line) => `<p>${escapeHtml(line)}</p>`)
-    .join('');
-}
-
 function renderRecoveryTicks(current, max) {
   const total = Math.max(0, Math.min(12, Number(max) || 0));
   if (!total) {
@@ -435,13 +448,17 @@ function renderSkillGroups(skills) {
 
 function renderFeature(feature) {
   const title = feature.title || 'Untitled Feat';
-  const text = stripHtml(feature.text || '');
+  const useWhen = typeof feature.useWhen === 'string' ? feature.useWhen.trim() : '';
   return `
     <p class="vtt-character-feature">
       <span class="vtt-character-feature__title">${escapeHtml(title)}</span>
-      ${text ? ` ${escapeHtml(text)}` : ''}
+      ${useWhen ? `<span class="vtt-character-feature__when">${escapeHtml(useWhen)}</span>` : ''}
     </p>
   `;
+}
+
+function renderResourceNote(text) {
+  return `<p class="vtt-character-resource-note">${escapeHtml(text)}</p>`;
 }
 
 function normalizeCharacterId(value) {
@@ -486,6 +503,38 @@ function normalizeFeatures(value) {
     .map((feature) => (feature && typeof feature === 'object' ? feature : null))
     .filter((feature) => feature && (feature.title || feature.text))
     .slice(0, 8);
+}
+
+function extractTextBlocks(html) {
+  if (!html) {
+    return [];
+  }
+
+  const div = document.createElement('div');
+  div.innerHTML = String(html);
+  div.querySelectorAll('br').forEach((breakNode) => {
+    breakNode.replaceWith('\n');
+  });
+
+  const directBlocks = Array.from(div.children).filter((node) =>
+    ['P', 'DIV', 'LI', 'BLOCKQUOTE'].includes(node.tagName)
+  );
+  const blockNodes = directBlocks.length
+    ? directBlocks
+    : Array.from(div.querySelectorAll('p, div, li, blockquote'));
+  const blocks = blockNodes
+    .flatMap((node) => (node.textContent || '').split(/\n\s*\n+/))
+    .map((text) => text.trim())
+    .filter(Boolean);
+
+  if (blocks.length) {
+    return blocks;
+  }
+
+  return (div.textContent || div.innerText || '')
+    .split(/\n\s*\n+/)
+    .map((line) => line.trim())
+    .filter(Boolean);
 }
 
 function getSkillGroup(skill) {

@@ -487,6 +487,7 @@ function mergeWithDefaults(data) {
   merged.features = merged.features.map((feature) => ({
     id: feature.id || createId("feature"),
     title: feature.title || "",
+    useWhen: feature.useWhen || "",
     tags: Array.isArray(feature.tags) ? feature.tags : [],
     text: feature.text || "",
     isWide: Boolean(feature.isWide),
@@ -2119,6 +2120,11 @@ function renderFeatures() {
                 ${(feature.tags || []).map((tag) => `<span class="chip">${tag}</span>`).join("")}
               </div>
               <input class="edit-field" type="text" data-field="tags" value="${(feature.tags || []).join(", ")}" placeholder="Tags" />
+              <div class="use-when-row">
+                <span class="use-when-label display-value">Use when:</span>
+                <span class="use-when-value display-value">${feature.useWhen || "-"}</span>
+                <input class="edit-field use-when-input" type="text" data-field="useWhen" value="${feature.useWhen || ""}" placeholder="When to use this ability..." />
+              </div>
               <div class="feature-body display-value rich-text-display">${renderRichText(feature.text || "")}</div>
               <div class="rich-text-wrapper">
                 <div class="rich-toolbar edit-only" role="toolbar" aria-label="Feature formatting">
@@ -2687,7 +2693,7 @@ function bindFeatureAdd() {
   if (!addBtn) return;
   addBtn.addEventListener("click", () => {
     captureFeatures();
-    sheetState.features.push({ id: createId("feature"), title: "", tags: [], text: "", isWide: false });
+    sheetState.features.push({ id: createId("feature"), title: "", useWhen: "", tags: [], text: "", isWide: false });
     renderFeatures();
     queueAutoSave();
   });
@@ -2988,11 +2994,13 @@ function captureFeatures() {
   cards.forEach((card) => {
     const id = card.getAttribute("data-feature-id") || createId("feature");
     const title = card.querySelector('[data-field="title"]').value;
+    const useWhen = card.querySelector('[data-field="useWhen"]')?.value || "";
     const tagsValue = card.querySelector('[data-field="tags"]').value;
     const text = card.querySelector('[data-field="text"]')?.innerHTML || "";
     updated.push({
       id,
       title,
+      useWhen,
       tags: tagsValue
         .split(",")
         .map((tag) => tag.trim())
@@ -3338,11 +3346,13 @@ function formatFeatureForChat(feature) {
   const heroName = sheetState.hero.name || "Hero";
   const title = feature.title || "Untitled Feature";
   const tags = (feature.tags || []).join(", ");
+  const useWhen = (feature.useWhen || "").trim();
   const body = stripHtmlToText(feature.text);
 
   const lines = [];
   lines.push(`${heroName} — ${title}`);
   if (tags) lines.push(`Tags: ${tags}`);
+  if (useWhen) lines.push(`Use When: ${useWhen}`);
   if (body) lines.push(body);
   return lines.join("\n");
 }

@@ -1,6 +1,7 @@
 body.vtt-body {
   --vtt-character-panel-width: 380px;
   --vtt-character-panel-offset: 16px;
+  --vtt-character-panel-top: var(--vtt-character-panel-offset);
   --vtt-character-panel-effective-width: min(
     var(--vtt-character-panel-width),
     calc(100vw - (var(--vtt-character-panel-offset) * 2))
@@ -13,7 +14,7 @@ body.vtt-character-summary-is-open .vtt-settings-launchers {
 
 .vtt-character-summary {
   position: fixed;
-  top: var(--vtt-character-panel-offset);
+  top: var(--vtt-character-panel-top);
   bottom: var(--vtt-character-panel-offset);
   left: 0;
   width: var(--vtt-character-panel-effective-width);
@@ -337,12 +338,20 @@ body.vtt-character-summary-is-open .vtt-settings-launchers {
 
 .vtt-character-resources {
   display: grid;
-  grid-template-columns: 88px 88px minmax(0, 1fr);
+  grid-template-columns: minmax(0, 1fr);
   gap: 8px;
+  align-items: start;
+}
+
+.vtt-character-resource-totals {
+  display: grid;
+  grid-template-columns: repeat(2, 88px);
+  gap: 8px;
+  align-items: start;
 }
 
 .vtt-character-resource {
-  min-height: 68px;
+  min-height: 58px;
   padding: 8px;
 }
 
@@ -351,13 +360,13 @@ body.vtt-character-summary-is-open .vtt-settings-launchers {
 }
 
 .vtt-character-resource-notes {
-  display: flex;
-  flex-direction: column;
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
   gap: 4px;
   min-width: 0;
 }
 
-.vtt-character-resource-notes p {
+.vtt-character-resource-note {
   border: 1px solid rgba(213, 155, 90, 0.64);
   border-radius: 4px;
   color: #dcb572;
@@ -433,8 +442,15 @@ body.vtt-character-summary-is-open .vtt-settings-launchers {
 }
 
 .vtt-character-feature__title {
+  display: block;
   color: #cda879;
   font-weight: 850;
+}
+
+.vtt-character-feature__when {
+  display: block;
+  color: #eee3cf;
+  font-style: italic;
 }
 
 @media (max-width: 768px) {
@@ -464,6 +480,7 @@ body.vtt-character-summary-is-open .vtt-settings-launchers {
   }
 
   .vtt-character-recovery,
+  .vtt-character-resource-totals,
   .vtt-character-resource-notes {
     grid-column: 1 / -1;
   }
