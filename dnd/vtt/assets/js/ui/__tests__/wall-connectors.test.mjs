@@ -1,7 +1,10 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
 
-import { shouldRenderWallDiagonalConnector } from '../board-interactions.js';
+import {
+  getWallDiagonalConnectorSides,
+  shouldRenderWallDiagonalConnector,
+} from '../board-interactions.js';
 
 function keySet(points) {
   return new Set(points.map(([column, row]) => `${column},${row}`));
@@ -29,6 +32,19 @@ test('wall diagonal connector is skipped when a third square touches the corner'
   assert.equal(
     shouldRenderWallDiagonalConnector({ column: 2, row: 2 }, { column: 3, row: 3 }, squares),
     false
+  );
+});
+
+test('wall diagonal connector hides only the crowded half of a bend', () => {
+  const squares = keySet([
+    [2, 3],
+    [3, 2],
+    [4, 3],
+  ]);
+
+  assert.deepEqual(
+    getWallDiagonalConnectorSides({ column: 2, row: 3 }, { column: 3, row: 2 }, squares),
+    { before: true, after: false }
   );
 });
 

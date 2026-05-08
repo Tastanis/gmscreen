@@ -2133,6 +2133,11 @@
   clip-path: polygon(0 0, 100% 0, 0 100%);
 }
 
+.vtt-wall__connector--hide-before::before,
+.vtt-wall__connector--hide-after::after {
+  display: none;
+}
+
 .vtt-template--preview .vtt-wall__connector {
   opacity: 0.88;
 }

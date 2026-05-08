@@ -243,25 +243,52 @@ export {
 };
 
 export function shouldRenderWallDiagonalConnector(startSquare, endSquare, squareKeySet) {
+  const sides = getWallDiagonalConnectorSides(startSquare, endSquare, squareKeySet);
+  return sides.before || sides.after;
+}
+
+export function getWallDiagonalConnectorSides(startSquare, endSquare, squareKeySet) {
   if (!startSquare || !endSquare || !squareKeySet || typeof squareKeySet.has !== 'function') {
-    return false;
+    return { before: false, after: false };
   }
 
   const dx = endSquare.column - startSquare.column;
   const dy = endSquare.row - startSquare.row;
   if (Math.abs(dx) !== 1 || Math.abs(dy) !== 1) {
+    return { before: false, after: false };
+  }
+
+  const orientation = dx * dy > 0 ? 'se' : 'ne';
+  const beforeCell = orientation === 'se'
+    ? { column: startSquare.column + 1, row: startSquare.row }
+    : { column: startSquare.column, row: startSquare.row - 1 };
+  const afterCell = orientation === 'se'
+    ? { column: startSquare.column, row: startSquare.row + 1 }
+    : { column: startSquare.column + 1, row: startSquare.row };
+
+  return {
+    before: shouldRenderWallConnectorHalf(beforeCell, squareKeySet),
+    after: shouldRenderWallConnectorHalf(afterCell, squareKeySet),
+  };
+}
+
+function shouldRenderWallConnectorHalf(cell, squareKeySet) {
+  if (!cell || squareKeySet.has(`${cell.column},${cell.row}`)) {
     return false;
   }
 
-  const baseColumn = Math.min(startSquare.column, endSquare.column);
-  const baseRow = Math.min(startSquare.row, endSquare.row);
-  const cornerSquares = [
-    `${baseColumn},${baseRow}`,
-    `${baseColumn + 1},${baseRow}`,
-    `${baseColumn},${baseRow + 1}`,
-    `${baseColumn + 1},${baseRow + 1}`,
-  ];
-  return cornerSquares.filter((key) => squareKeySet.has(key)).length === 2;
+  let neighborCount = 0;
+  for (let rowOffset = -1; rowOffset <= 1; rowOffset += 1) {
+    for (let columnOffset = -1; columnOffset <= 1; columnOffset += 1) {
+      if (columnOffset === 0 && rowOffset === 0) {
+        continue;
+      }
+      if (squareKeySet.has(`${cell.column + columnOffset},${cell.row + rowOffset}`)) {
+        neighborCount += 1;
+      }
+    }
+  }
+  return neighborCount === 2;
 }
 
 function deferDraggedPlacementUpdate(dragState, placement) {
@@ -18978,8 +19005,9 @@ function createTemplateTool() {
       if (squareKeySet.has(southEastKey)) {
         const startSquare = { column: square.column, row: square.row };
         const endSquare = { column: square.column + 1, row: square.row + 1 };
-        const key = shouldRenderWallDiagonalConnector(startSquare, endSquare, squareKeySet)
-          ? ensureWallConnector(shape, bounds, startSquare, endSquare, 'se', minColumn, minRow)
+        const connectorSides = getWallDiagonalConnectorSides(startSquare, endSquare, squareKeySet);
+        const key = connectorSides.before || connectorSides.after
+          ? ensureWallConnector(shape, bounds, startSquare, endSquare, 'se', minColumn, minRow, connectorSides)
           : null;
         if (key) {
           connectorKeys.add(key);
@@ -18990,8 +19018,9 @@ function createTemplateTool() {
       if (squareKeySet.has(northEastKey)) {
         const startSquare = { column: square.column, row: square.row };
         const endSquare = { column: square.column + 1, row: square.row - 1 };
-        const key = shouldRenderWallDiagonalConnector(startSquare, endSquare, squareKeySet)
-          ? ensureWallConnector(shape, bounds, startSquare, endSquare, 'ne', minColumn, minRow)
+        const connectorSides = getWallDiagonalConnectorSides(startSquare, endSquare, squareKeySet);
+        const key = connectorSides.before || connectorSides.after
+          ? ensureWallConnector(shape, bounds, startSquare, endSquare, 'ne', minColumn, minRow, connectorSides)
           : null;
         if (key) {
           connectorKeys.add(key);
@@ -19012,7 +19041,7 @@ function createTemplateTool() {
     }
   }
 
-  function ensureWallConnector(shape, bounds, startSquare, endSquare, orientation, minColumn, minRow) {
+  function ensureWallConnector(shape, bounds, startSquare, endSquare, orientation, minColumn, minRow, sides = {}) {
     const container = shape.elements.tileContainer;
     if (!container) {
       return null;
@@ -19027,10 +19056,15 @@ function createTemplateTool() {
     let connector = connectorsMap.get(key);
     if (!connector) {
       connector = document.createElement('div');
-      connector.className = `vtt-wall__connector vtt-wall__connector--${orientation}`;
       container.appendChild(connector);
       connectorsMap.set(key, connector);
     }
+    connector.className = [
+      'vtt-wall__connector',
+      `vtt-wall__connector--${orientation}`,
+      sides.before === false ? 'vtt-wall__connector--hide-before' : '',
+      sides.after === false ? 'vtt-wall__connector--hide-after' : '',
+    ].filter(Boolean).join(' ');
 
     const localLeft = (baseColumn - minColumn) * bounds.gridSize;
     const localTop = (baseRow - minRow) * bounds.gridSize;
