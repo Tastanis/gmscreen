@@ -3211,6 +3211,15 @@ export function mountBoardInteractions(store, routes = {}) {
       return;
     }
 
+    if (event.key?.toLowerCase() === 'g') {
+      if (selectedTokenIds.size <= 1) {
+        return;
+      }
+      event.preventDefault();
+      handleGroupSelectedTokens();
+      return;
+    }
+
     const movement = movementFromKey(event.key);
     if (!movement) {
       return;
@@ -11881,6 +11890,7 @@ export function mountBoardInteractions(store, routes = {}) {
         const row = target.row + dy;
         const movedDistance = automationChebyshevDistance(target, { column, row });
         if (movedDistance > distance) continue;
+        if (!isAutomationPushPathAwayFromSource(source, target, { column, row })) continue;
         const candidate = {
           column,
           row,
@@ -11893,6 +11903,39 @@ export function mountBoardInteractions(store, routes = {}) {
       }
     }
     return cells;
+  }
+
+  function isAutomationPushPathAwayFromSource(source, target, destination) {
+    const sourceCenter = getPlacementCenter(source);
+    const start = {
+      column: target.column,
+      row: target.row,
+      width: target.width,
+      height: target.height,
+    };
+    const dx = destination.column - start.column;
+    const dy = destination.row - start.row;
+    const steps = Math.max(Math.abs(dx), Math.abs(dy));
+    if (steps <= 0) {
+      return false;
+    }
+    const stepX = Math.sign(dx);
+    const stepY = Math.sign(dy);
+    let previousDistance = automationChebyshevDistance(sourceCenter, getPlacementCenter(start));
+    for (let index = 1; index <= steps; index += 1) {
+      const cell = {
+        column: start.column + stepX * index,
+        row: start.row + stepY * index,
+        width: start.width,
+        height: start.height,
+      };
+      const nextDistance = automationChebyshevDistance(sourceCenter, getPlacementCenter(cell));
+      if (nextDistance <= previousDistance) {
+        return false;
+      }
+      previousDistance = nextDistance;
+    }
+    return true;
   }
 
   function renderAutomationMoveOverlay(request) {
