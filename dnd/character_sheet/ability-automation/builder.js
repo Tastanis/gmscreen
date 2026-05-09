@@ -5,6 +5,7 @@
   const schema = window.AbilityAutomationSchema;
   const registry = window.AbilityAutomationPrimitives;
   const catalog = window.AbilityAutomationCatalog;
+  let activeBuilderPopup = null;
 
   function escapeHtml(value) {
     return String(value ?? "")
@@ -17,6 +18,14 @@
 
   function closeBuilder() {
     document.getElementById(BUILDER_ID)?.remove();
+    if (activeBuilderPopup && !activeBuilderPopup.closed) {
+      activeBuilderPopup.close();
+    }
+    activeBuilderPopup = null;
+  }
+
+  function asElement(value) {
+    return value && value.nodeType === 1 ? value : null;
   }
 
   function tierRange(key) {
@@ -335,19 +344,22 @@
   }
 
   function makeDraggable(host) {
+    if (host.classList.contains("automation-builder--external")) return;
     const panel = host.querySelector(".automation-builder__window");
     const handle = host.querySelector("[data-automation-builder-handle]");
     if (!panel || !handle) return;
 
+    const doc = host.ownerDocument || document;
+    const view = doc.defaultView || window;
     const positionPanel = () => {
       const rect = panel.getBoundingClientRect();
-      panel.style.left = `${Math.max(12, Math.round((window.innerWidth - rect.width) / 2))}px`;
-      panel.style.top = `${Math.max(12, Math.round(window.innerHeight * 0.08))}px`;
+      panel.style.left = `${Math.max(12, Math.round((view.innerWidth - rect.width) / 2))}px`;
+      panel.style.top = `${Math.max(12, Math.round(view.innerHeight * 0.08))}px`;
     };
-    requestAnimationFrame(positionPanel);
+    view.requestAnimationFrame(positionPanel);
 
     handle.addEventListener("pointerdown", (event) => {
-      if (event.target instanceof Element && event.target.closest("button")) return;
+      if (asElement(event.target)?.closest("button")) return;
       const rect = panel.getBoundingClientRect();
       const offsetX = event.clientX - rect.left;
       const offsetY = event.clientY - rect.top;
@@ -355,8 +367,8 @@
       panel.classList.add("automation-builder__window--dragging");
 
       const move = (moveEvent) => {
-        const maxLeft = Math.max(12, window.innerWidth - panel.offsetWidth - 12);
-        const maxTop = Math.max(12, window.innerHeight - 64);
+        const maxLeft = Math.max(12, view.innerWidth - panel.offsetWidth - 12);
+        const maxTop = Math.max(12, view.innerHeight - 64);
         panel.style.left = `${Math.min(Math.max(12, moveEvent.clientX - offsetX), maxLeft)}px`;
         panel.style.top = `${Math.min(Math.max(12, moveEvent.clientY - offsetY), maxTop)}px`;
       };
@@ -378,7 +390,7 @@
     let draggedCard = null;
 
     builder.addEventListener("dragstart", (event) => {
-      const target = event.target instanceof Element ? event.target : null;
+      const target = asElement(event.target);
       const handle = target?.closest("[data-drag-automation-card]");
       const card = target?.closest("[data-automation-card]");
       if (!handle || !card) {
@@ -394,7 +406,7 @@
     builder.addEventListener("dragover", (event) => {
       if (!draggedCard) return;
       const stack = builder.querySelector("[data-automation-cards]");
-      const targetCard = event.target instanceof Element ? event.target.closest("[data-automation-card]") : null;
+      const targetCard = asElement(event.target)?.closest("[data-automation-card]");
       if (!stack || !targetCard || targetCard === draggedCard) return;
       event.preventDefault();
       const rect = targetCard.getBoundingClientRect();
@@ -415,11 +427,8 @@
     });
   }
 
-  function open(actionId, actionType, currentAutomation, onSave) {
-    closeBuilder();
-
-    const automation = schema.normalizeAutomation(currentAutomation);
-    const host = document.createElement("div");
+  function createBuilderHost(targetDocument, actionId, actionType, automation) {
+    const host = targetDocument.createElement("div");
     host.id = BUILDER_ID;
     host.className = "automation-builder";
     host.innerHTML = `
@@ -453,14 +462,59 @@
         </footer>
       </div>
     `;
+    return host;
+  }
 
-    document.body.appendChild(host);
+  function getStylesheetLinks() {
+    return Array.from(document.querySelectorAll('link[rel="stylesheet"]'))
+      .map((link) => link.href || "")
+      .filter(Boolean);
+  }
+
+  function openBuilderPopup(actionId) {
+    const popup = window.open("", "abilityAutomationBuilder", "popup=yes,width=860,height=760,resizable=yes,scrollbars=yes");
+    if (!popup || popup.closed) return null;
+    const stylesheets = getStylesheetLinks();
+    popup.document.open();
+    popup.document.write(`<!DOCTYPE html>
+      <html lang="en">
+        <head>
+          <meta charset="UTF-8" />
+          <meta name="viewport" content="width=device-width, initial-scale=1" />
+          <title>Automation - ${escapeHtml(actionId)}</title>
+          ${stylesheets.map((href) => `<link rel="stylesheet" href="${escapeHtml(href)}" />`).join("")}
+        </head>
+        <body class="character-sheet-page automation-builder-popup-body"></body>
+      </html>`);
+    popup.document.close();
+    activeBuilderPopup = popup;
+    popup.addEventListener("beforeunload", () => {
+      if (activeBuilderPopup === popup) activeBuilderPopup = null;
+    });
+    popup.focus();
+    return popup;
+  }
+
+  function open(actionId, actionType, currentAutomation, onSave) {
+    closeBuilder();
+
+    const automation = schema.normalizeAutomation(currentAutomation);
+    const popup = openBuilderPopup(actionId);
+    const targetDocument = popup?.document || document;
+    const host = createBuilderHost(targetDocument, actionId, actionType, automation);
+    if (popup) {
+      host.classList.add("automation-builder--external");
+      targetDocument.body.appendChild(host);
+    } else {
+      document.body.appendChild(host);
+    }
+
     renderWarnings(host);
     makeDraggable(host);
     bindCardSorting(host);
 
     host.addEventListener("click", (event) => {
-      const target = event.target instanceof Element ? event.target : null;
+      const target = asElement(event.target);
       if (!target) return;
       if (target.closest("[data-close-automation-builder]")) closeBuilder();
       const addButton = target.closest("[data-add-automation-card]");
@@ -480,7 +534,7 @@
 
     host.addEventListener("input", () => renderWarnings(host));
     host.addEventListener("change", (event) => {
-      const target = event.target instanceof Element ? event.target : null;
+      const target = asElement(event.target);
       if (target?.matches('[data-card-field="actionType"]')) {
         replaceCards(host, readAutomation(host).cards);
         return;

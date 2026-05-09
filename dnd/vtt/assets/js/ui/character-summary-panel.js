@@ -202,6 +202,9 @@ export function mountCharacterSummaryPanel(routes = {}) {
       if (action && hasAbilityAutomation(action.automation)) {
         event.preventDefault();
         event.stopPropagation();
+        activeAbilityCategory = null;
+        hideAbilityPreview(abilityPreview);
+        renderAbilityTray(abilityTray, activeSheet, { activeCategory: activeAbilityCategory });
         startAbilityAutomation(activeSheet, action, abilityItem.dataset.abilityCategory, activeToken);
       }
       return;

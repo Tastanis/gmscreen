@@ -3328,6 +3328,14 @@ export function mountBoardInteractions(store, routes = {}) {
     cancelPendingAutomationMove('Forced movement canceled.');
   });
 
+  document.addEventListener('keydown', (event) => {
+    if (!pendingAutomationTarget || event.key !== 'Escape') {
+      return;
+    }
+    event.preventDefault();
+    cancelPendingAutomationTarget('Target selection canceled.');
+  });
+
   mapSurface.addEventListener('pointerdown', (event) => {
     if (isCustomConditionDialogOpen()) {
       return;
@@ -11574,9 +11582,7 @@ export function mountBoardInteractions(store, routes = {}) {
     }
 
     if (event.button === 2) {
-      event.preventDefault();
-      cancelPendingAutomationTarget('Target selection canceled.');
-      return true;
+      return false;
     }
 
     if (event.button !== 0) {
@@ -11591,7 +11597,7 @@ export function mountBoardInteractions(store, routes = {}) {
 
     const placement = findRenderedPlacementAtPoint(event);
     if (!placement) {
-      updateStatus(formatAutomationTargetPrompt(pendingAutomationTarget.targetConfig));
+      cancelPendingAutomationTarget('Target selection canceled.');
       return true;
     }
 

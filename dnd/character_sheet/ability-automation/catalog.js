@@ -114,18 +114,33 @@
 
   function getTierEffects(tier = {}) {
     const effects = [];
+    const seen = new Set();
+    const addEffect = (effect) => {
+      if (!effect) return;
+      const normalized = normalizeEffect(effect);
+      const signature = [
+        normalized.kind,
+        normalized.amount ?? "",
+        normalized.attribute ?? "",
+        normalized.damageType ?? "",
+        normalized.distance ?? "",
+        normalized.name ?? "",
+        normalized.duration ?? "",
+      ].join(":");
+      if (seen.has(signature)) return;
+      seen.add(signature);
+      effects.push(normalized);
+    };
     const damage = parseDamageExpression(`${tier.damage || ""}${tier.damageType ? ` ${tier.damageType}` : ""}`);
-    if (damage) effects.push(damage);
+    addEffect(damage);
     if (Array.isArray(tier.effects)) {
       tier.effects.forEach((effect) => {
         if (!effect || typeof effect !== "object") return;
-        if (effect.kind === "damage" && effects.some((existing) => existing.kind === "damage")) return;
-        effects.push(normalizeEffect(effect));
+        addEffect(effect);
       });
     }
     parseEffectText(tier.effect || "").forEach((effect) => {
-      if (effect.kind === "damage" && effects.some((existing) => existing.kind === "damage")) return;
-      effects.push(effect);
+      addEffect(effect);
     });
     return effects;
   }

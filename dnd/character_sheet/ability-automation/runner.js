@@ -14,6 +14,12 @@
       .replace(/'/g, "&#39;");
   }
 
+  function plainText(value) {
+    const div = document.createElement("div");
+    div.innerHTML = String(value ?? "");
+    return div.textContent || div.innerText || String(value ?? "");
+  }
+
   function closeRunner() {
     document.getElementById(RUNNER_ID)?.remove();
   }
@@ -330,9 +336,9 @@
 
     host.querySelector("[data-power-roll-body]").innerHTML = `
       <section class="power-roll-runner__section power-roll-runner__section--ability">
-        <div class="power-roll-runner__ability">
-          <h3>${escapeHtml(state.action.name || "Unnamed Ability")}</h3>
-          <p>${escapeHtml(state.action.description || "No ability text entered.")}</p>
+          <div class="power-roll-runner__ability">
+            <h3>${escapeHtml(state.action.name || "Unnamed Ability")}</h3>
+          <p>${escapeHtml(plainText(state.action.description || "No ability text entered."))}</p>
           <div class="power-roll-runner__meta">
             <span>Target: ${escapeHtml(targetName)}</span>
             ${state.action.range ? `<span>Range: ${escapeHtml(state.action.range)}</span>` : ""}
