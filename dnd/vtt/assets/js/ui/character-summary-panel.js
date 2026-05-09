@@ -859,7 +859,28 @@ function normalizeAutomation(automation) {
 
 function getAttributeBonus(sheet, attribute) {
   const key = String(attribute || '').trim().toLowerCase();
+  if (key === 'strongest') {
+    return getStrongestAttribute(sheet).bonus;
+  }
   return Number.parseInt(sheet?.hero?.stats?.[key] ?? 0, 10) || 0;
+}
+
+function getStrongestAttribute(sheet) {
+  const stats = sheet?.hero?.stats && typeof sheet.hero.stats === 'object' ? sheet.hero.stats : {};
+  const attributes = [
+    { key: 'might', attribute: 'Might' },
+    { key: 'agility', attribute: 'Agility' },
+    { key: 'reason', attribute: 'Reason' },
+    { key: 'intuition', attribute: 'Intuition' },
+    { key: 'presence', attribute: 'Presence' },
+  ];
+  return attributes.reduce(
+    (best, item) => {
+      const bonus = Number.parseInt(stats[item.key] ?? 0, 10) || 0;
+      return bonus > best.bonus ? { attribute: item.attribute, bonus } : best;
+    },
+    { attribute: 'Might', bonus: Number.parseInt(stats.might ?? 0, 10) || 0 }
+  );
 }
 
 function getAutomationTraits(sheet) {
@@ -885,6 +906,7 @@ function startAbilityAutomation(sheet, action, categoryKey, sourceToken = null, 
     sourcePlacement: clonePlain(sourceToken || {}),
     sourceTraits: getAutomationTraits(sheet),
     getAttributeBonus: (attribute) => getAttributeBonus(sheet, attribute),
+    getStrongestAttribute: () => getStrongestAttribute(sheet),
     postChat: postAutomationChat,
     selectTarget: requestAutomationTarget,
     selectAreaTarget: requestAutomationAreaTarget,

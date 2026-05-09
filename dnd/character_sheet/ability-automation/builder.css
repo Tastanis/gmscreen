@@ -199,6 +199,10 @@
   grid-column: 1 / -1;
 }
 
+.automation-builder__field--subtle {
+  opacity: 0.86;
+}
+
 .automation-builder__field input,
 .automation-builder__field select,
 .automation-builder__field textarea {
@@ -290,6 +294,36 @@
   color: var(--muted);
   font-size: 0.78rem;
   line-height: 1.25;
+}
+
+.automation-builder__mini-action {
+  grid-column: 2 / -1;
+  justify-self: start;
+  padding: 4px 8px;
+}
+
+.automation-builder__potency-list {
+  display: grid;
+  gap: 6px;
+  grid-column: 2 / -1;
+}
+
+.automation-builder__potency {
+  background: rgba(255, 248, 238, 0.62);
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  padding: 7px;
+}
+
+.automation-builder__potency-header {
+  align-items: center;
+  display: flex;
+  justify-content: space-between;
+  margin-bottom: 6px;
+}
+
+.automation-builder__grid--compact {
+  grid-template-columns: repeat(3, minmax(100px, 1fr));
 }
 
 .power-roll-runner {

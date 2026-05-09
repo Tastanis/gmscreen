@@ -132,7 +132,9 @@ Use this section as the human/LLM-facing index of automation concepts that curre
 
 - `powerRoll`
   - Rolls `2d10` plus an attribute/bonus.
+  - New power rolls default to `Strongest`, which resolves to the source character's highest Might/Agility/Reason/Intuition/Presence value at runtime.
   - Auto-selects a tier, allows manual tier override, and stores the selected tier for later actions.
+  - Tier potency riders are structured `potency` effects in `tier.effects`; shorthand remains supported for imports/backfill.
 
 - `dealStaminaDamage`
   - Reads damage from the selected power-roll tier.

@@ -1,7 +1,7 @@
 (function () {
   "use strict";
 
-  const ATTRIBUTES = ["Might", "Agility", "Reason", "Intuition", "Presence"];
+  const ATTRIBUTES = ["Strongest", "Might", "Agility", "Reason", "Intuition", "Presence"];
 
   const primitives = [
     {

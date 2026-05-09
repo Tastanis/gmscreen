@@ -87,7 +87,7 @@
         <label class="automation-builder__field">
           <span>Count</span>
           <select data-card-field="count">
-            ${["one", "each", "all"].map((option) => `<option value="${option}" ${data.count === option ? "selected" : ""}>${option}</option>`).join("")}
+            <option value="one" selected>one</option>
           </select>
         </label>
     `;
@@ -139,8 +139,14 @@
     const tierMarkup = schema.TIER_KEYS.map((key) => {
       const tier = tiers[key] || {};
       const effects = catalog?.getTierEffects ? catalog.getTierEffects(tier) : [];
+      const potencyEffects = effects.filter((effect) => effect.kind === "potency");
       const preview = effects.length
         ? `<div class="automation-builder__effect-preview">${effects.map((effect) => escapeHtml(catalog.describeEffect(effect))).join(" | ")}</div>`
+        : "";
+      const potencyMarkup = potencyEffects.length
+        ? `<div class="automation-builder__potency-list">
+            ${potencyEffects.map((effect, index) => renderPotencyRider(effect, index)).join("")}
+          </div>`
         : "";
       return `
         <div class="automation-builder__tier" data-tier="${key}">
@@ -153,10 +159,12 @@
             <span>Damage type</span>
             <input type="text" data-tier-field="damageType" value="${escapeHtml(tier.damageType)}" placeholder="optional" />
           </label>
-          <label class="automation-builder__field automation-builder__field--wide">
-            <span>Tier effect</span>
-            <input type="text" data-tier-field="effect" value="${escapeHtml(tier.effect)}" placeholder="e.g. push 3, slowed SE, slowed EOT" />
+          <label class="automation-builder__field automation-builder__field--wide automation-builder__field--subtle">
+            <span>Other effect</span>
+            <input type="text" data-tier-field="effect" value="${escapeHtml(tier.effect)}" placeholder="e.g. push 3" />
           </label>
+          ${potencyMarkup}
+          <button class="text-btn automation-builder__mini-action" type="button" data-add-potency-rider="${key}">+ Potency Rider</button>
           ${preview}
         </div>
       `;
@@ -180,6 +188,71 @@
         </label>
       </div>
       <div class="automation-builder__tiers">${tierMarkup}</div>
+    `;
+  }
+
+  function renderPotencyRider(effect, index) {
+    const inner = Array.isArray(effect.effects) ? effect.effects[0] || {} : {};
+    const resultType = inner.kind === "damage" ? "damage" : "condition";
+    return `
+      <section class="automation-builder__potency" data-potency-rider="${index}">
+        <div class="automation-builder__potency-header">
+          <strong>Potency Rider</strong>
+          <button class="icon-btn automation-builder__potency-remove" type="button" data-remove-potency-rider="${index}" aria-label="Remove potency rider">X</button>
+        </div>
+        <div class="automation-builder__grid automation-builder__grid--compact">
+          <label class="automation-builder__field">
+            <span>Target stat</span>
+            <select data-potency-field="attribute">
+              ${["Might", "Agility", "Reason", "Intuition", "Presence"].map((attr) => `<option value="${attr}" ${effect.attribute === attr ? "selected" : ""}>${attr}</option>`).join("")}
+            </select>
+          </label>
+          <label class="automation-builder__field">
+            <span>Potency</span>
+            <select data-potency-field="threshold">
+              ${["weak", "average", "strong"].map((value) => `<option value="${value}" ${effect.threshold === value ? "selected" : ""}>${value[0].toUpperCase()}${value.slice(1)}</option>`).join("")}
+            </select>
+          </label>
+          <label class="automation-builder__field">
+            <span>On fail</span>
+            <select data-potency-field="resultType">
+              <option value="condition" ${resultType === "condition" ? "selected" : ""}>Condition</option>
+              <option value="damage" ${resultType === "damage" ? "selected" : ""}>Damage</option>
+            </select>
+          </label>
+          ${resultType === "damage" ? renderPotencyDamageFields(inner) : renderPotencyConditionFields(inner)}
+        </div>
+      </section>
+    `;
+  }
+
+  function renderPotencyConditionFields(effect) {
+    const duration = effect.duration === "endOfTurn" ? "endOfTurn" : "saveEnds";
+    return `
+      <label class="automation-builder__field">
+        <span>Condition</span>
+        <input type="text" data-potency-field="conditionName" value="${escapeHtml(effect.name || "slowed")}" placeholder="slowed" />
+      </label>
+      <label class="automation-builder__field">
+        <span>Duration</span>
+        <select data-potency-field="duration">
+          <option value="saveEnds" ${duration === "saveEnds" ? "selected" : ""}>Save Ends</option>
+          <option value="endOfTurn" ${duration === "endOfTurn" ? "selected" : ""}>EOT</option>
+        </select>
+      </label>
+    `;
+  }
+
+  function renderPotencyDamageFields(effect) {
+    return `
+      <label class="automation-builder__field">
+        <span>Damage</span>
+        <input type="number" min="0" step="1" data-potency-field="damageAmount" value="${escapeHtml(effect.amount || 0)}" />
+      </label>
+      <label class="automation-builder__field">
+        <span>Type</span>
+        <input type="text" data-potency-field="damageType" value="${escapeHtml(effect.damageType || "")}" placeholder="optional" />
+      </label>
     `;
   }
 
@@ -307,13 +380,15 @@
     schema.TIER_KEYS.forEach((key) => {
       const tierEl = cardEl.querySelector(`[data-tier="${key}"]`);
       const getTierField = (field) => tierEl?.querySelector(`[data-tier-field="${field}"]`);
+      const structuredEffects = readPotencyRiders(tierEl);
       tiers[key] = {
         range: tierRange(key),
         damage: getTierField("damage")?.value || "",
         damageType: getTierField("damageType")?.value || "",
         effect: getTierField("effect")?.value || "",
+        effects: structuredEffects,
       };
-      tiers[key].effects = catalog?.getTierEffects ? catalog.getTierEffects(tiers[key]) : [];
+      tiers[key].effects = catalog?.getTierEffects ? catalog.getTierEffects(tiers[key]) : structuredEffects;
     });
 
     return {
@@ -322,11 +397,36 @@
       data: {
         actionType: "powerRoll",
         rollFormula: getField("rollFormula")?.value || "2d10",
-        attribute: getField("attribute")?.value || "Might",
+        attribute: getField("attribute")?.value || "Strongest",
         bonus: getField("bonus")?.value || "",
         tiers,
       },
     };
+  }
+
+  function readPotencyRiders(tierEl) {
+    if (!tierEl) return [];
+    return Array.from(tierEl.querySelectorAll("[data-potency-rider]")).map((riderEl) => {
+      const getField = (field) => riderEl.querySelector(`[data-potency-field="${field}"]`);
+      const resultType = getField("resultType")?.value || "condition";
+      const effect = resultType === "damage"
+        ? {
+            kind: "damage",
+            amount: parseInt(getField("damageAmount")?.value || "0", 10) || 0,
+            damageType: getField("damageType")?.value || "",
+          }
+        : {
+            kind: "condition",
+            name: getField("conditionName")?.value || "slowed",
+            duration: getField("duration")?.value || "saveEnds",
+          };
+      return {
+        kind: "potency",
+        attribute: getField("attribute")?.value || "Might",
+        threshold: getField("threshold")?.value || "weak",
+        effects: [effect],
+      };
+    });
   }
 
   function readAutomation(builder) {
@@ -389,6 +489,42 @@
     const automation = readAutomation(builder);
     const card = type === "action" ? schema.createActionCard("powerRoll") : schema.normalizeAutomation({ cards: [{ type: "target" }] }).cards[0];
     automation.cards.push(card);
+    replaceCards(builder, automation.cards);
+  }
+
+  function addPotencyRider(builder, tierKey, sourceButton) {
+    const cardEl = sourceButton?.closest("[data-automation-card]");
+    if (!cardEl) return;
+    const cardId = cardEl.getAttribute("data-automation-card");
+    const automation = readAutomation(builder);
+    const card = automation.cards.find((item) => item.id === cardId);
+    const tier = card?.data?.tiers?.[tierKey];
+    if (!tier) return;
+    tier.effects = Array.isArray(tier.effects) ? tier.effects : [];
+    tier.effects.push({
+      kind: "potency",
+      attribute: "Might",
+      threshold: "weak",
+      effects: [{ kind: "condition", name: "slowed", duration: "saveEnds" }],
+    });
+    replaceCards(builder, automation.cards);
+  }
+
+  function removePotencyRider(builder, sourceButton) {
+    const cardEl = sourceButton?.closest("[data-automation-card]");
+    const tierEl = sourceButton?.closest("[data-tier]");
+    if (!cardEl || !tierEl) return;
+    const cardId = cardEl.getAttribute("data-automation-card");
+    const tierKey = tierEl.getAttribute("data-tier");
+    const rider = sourceButton.closest("[data-potency-rider]");
+    const riderIndex = parseInt(rider?.getAttribute("data-potency-rider") || "-1", 10);
+    const automation = readAutomation(builder);
+    const card = automation.cards.find((item) => item.id === cardId);
+    const tier = card?.data?.tiers?.[tierKey];
+    if (!tier || !Array.isArray(tier.effects) || riderIndex < 0) return;
+    const potencyEffects = tier.effects.filter((effect) => effect.kind === "potency");
+    const targetEffect = potencyEffects[riderIndex];
+    tier.effects = tier.effects.filter((effect) => effect !== targetEffect);
     replaceCards(builder, automation.cards);
   }
 
@@ -568,6 +704,14 @@
       if (target.closest("[data-close-automation-builder]")) closeBuilder();
       const addButton = target.closest("[data-add-automation-card]");
       if (addButton) addCard(host, addButton.getAttribute("data-add-automation-card") || "target");
+      const addPotencyButton = target.closest("[data-add-potency-rider]");
+      if (addPotencyButton) {
+        addPotencyRider(host, addPotencyButton.getAttribute("data-add-potency-rider"), addPotencyButton);
+      }
+      const removePotencyButton = target.closest("[data-remove-potency-rider]");
+      if (removePotencyButton) {
+        removePotencyRider(host, removePotencyButton);
+      }
       const removeButton = target.closest("[data-remove-automation-card]");
       if (removeButton) {
         removeButton.closest("[data-automation-card]")?.remove();
@@ -584,7 +728,7 @@
     host.addEventListener("input", () => renderWarnings(host));
     host.addEventListener("change", (event) => {
       const target = asElement(event.target);
-      if (target?.matches('[data-card-field="actionType"], [data-card-field="mode"], [data-card-field="shape"]')) {
+      if (target?.matches('[data-card-field="actionType"], [data-card-field="mode"], [data-card-field="shape"], [data-potency-field="resultType"]')) {
         replaceCards(host, readAutomation(host).cards);
         return;
       }

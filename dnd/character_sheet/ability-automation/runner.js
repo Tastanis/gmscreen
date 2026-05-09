@@ -306,8 +306,9 @@
 
   function getPowerRollTotal(state, actionCard) {
     const data = actionCard.data || {};
-    const attribute = data.attribute || "Might";
-    const attributeBonus = parseInteger(state.context.getAttributeBonus?.(attribute));
+    const resolvedAttribute = resolvePowerRollAttribute(state, data.attribute);
+    const attribute = resolvedAttribute.attribute;
+    const attributeBonus = resolvedAttribute.bonus;
     const bonus = parseInteger(data.bonus);
     const manualBonus = parseInteger(state.manualBonus);
     const edgeCount = parseInteger(state.edgeCount);
@@ -316,6 +317,24 @@
     const edgeBonus = edgeState.bonus;
     const total = state.roll ? state.roll.total + attributeBonus + bonus + manualBonus + edgeBonus : null;
     return { total, attribute, attributeBonus, bonus, manualBonus, edgeCount, baneCount, edgeBonus, edgeState };
+  }
+
+  function resolvePowerRollAttribute(state, attribute) {
+    const requested = String(attribute || "Strongest").trim();
+    if (!requested || requested.toLowerCase() === "strongest") {
+      const strongest = state.context.getStrongestAttribute?.();
+      if (strongest && typeof strongest === "object") {
+        return {
+          attribute: strongest.attribute || "Strongest",
+          bonus: parseInteger(strongest.bonus),
+        };
+      }
+      return { attribute: "Strongest", bonus: 0 };
+    }
+    return {
+      attribute: requested,
+      bonus: parseInteger(state.context.getAttributeBonus?.(requested)),
+    };
   }
 
   function formatModifier(value) {

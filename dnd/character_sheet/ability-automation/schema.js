@@ -32,7 +32,7 @@
     return {
       actionType: "powerRoll",
       rollFormula: data.rollFormula || "2d10",
-      attribute: data.attribute || "Might",
+      attribute: data.attribute || "Strongest",
       bonus: data.bonus || "",
       edges: data.edges || "",
       banes: data.banes || "",
@@ -257,7 +257,7 @@
     }
 
     if (normalized.data.actionType === "powerRoll") {
-      return `Roll ${normalized.data.rollFormula} + ${normalized.data.attribute}.`;
+      return `Roll ${normalized.data.rollFormula} + ${normalized.data.attribute || "Strongest"}.`;
     }
 
     if (normalized.data.actionType === "dealStaminaDamage") {
