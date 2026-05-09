@@ -3,6 +3,7 @@
 
   const RUNNER_ID = "ability-automation-runner";
   const schema = window.AbilityAutomationSchema;
+  const catalog = window.AbilityAutomationCatalog;
 
   function escapeHtml(value) {
     return String(value ?? "")
@@ -118,6 +119,33 @@
     return Math.max(0, parseInt(match[0], 10) || 0);
   }
 
+  function getTierEffects(tier) {
+    return catalog?.getTierEffects ? catalog.getTierEffects(tier) : [];
+  }
+
+  function getTierDamage(tier, state) {
+    const effect = getTierEffects(tier).find((item) => item.kind === "damage");
+    if (effect) {
+      const baseAmount = parseInteger(effect.amount);
+      const attributeBonus = effect.attribute ? parseInteger(state.context.getAttributeBonus?.(effect.attribute)) : 0;
+      return {
+        amount: Math.max(0, baseAmount + attributeBonus),
+        damageType: effect.damageType || "",
+        label: catalog?.describeEffect ? catalog.describeEffect(effect) : "",
+      };
+    }
+    return {
+      amount: parseDamage(tier?.damage),
+      damageType: String(tier?.damageType || "").trim(),
+      label: "",
+    };
+  }
+
+  function getTierPushDistance(tier) {
+    const effect = getTierEffects(tier).find((item) => item.kind === "push");
+    return effect ? Math.max(0, parseInteger(effect.distance)) : 0;
+  }
+
   function rollFormula(formula) {
     const clean = String(formula || "2d10").replace(/\s+/g, "").toLowerCase();
     const match = clean.match(/^(\d*)d(\d+)$/);
@@ -200,7 +228,10 @@
           <p>${escapeHtml(schema.summarizeCard(card))}</p>
         </div>
       </section>
-      <p class="power-roll-runner__instruction">Click an enemy token on the map.</p>
+      <div class="power-roll-runner__inline-actions">
+        <p class="power-roll-runner__instruction">Click an enemy token on the map.</p>
+        <button class="dice-clear-btn" type="button" data-skip-target>Skip</button>
+      </div>
     `;
     return host;
   }
@@ -210,13 +241,18 @@
     return schema.TIER_KEYS.map((key) => {
       const tier = tiers[key] || {};
       const parts = [];
-      if (tier.damage || tier.damageType) {
-        const damageLabel = tier.damageType
-          ? `${tier.damage || "-"} ${tier.damageType}`
-          : `${tier.damage || "-"} stamina damage`;
-        parts.push(damageLabel.trim());
+      const effects = getTierEffects(tier);
+      if (effects.length && catalog?.describeEffect) {
+        effects.forEach((effect) => parts.push(catalog.describeEffect(effect)));
+      } else {
+        if (tier.damage || tier.damageType) {
+          const damageLabel = tier.damageType
+            ? `${tier.damage || "-"} ${tier.damageType}`
+            : `${tier.damage || "-"} stamina damage`;
+          parts.push(damageLabel.trim());
+        }
+        if (tier.effect) parts.push(tier.effect);
       }
-      if (tier.effect) parts.push(tier.effect);
       return `
         <button
           class="power-roll-runner__tier ${selectedTier === key ? "power-roll-runner__tier--selected" : ""}"
@@ -439,7 +475,23 @@
       if (typeof state.context.selectTarget !== "function") {
         throw new Error("Target selection is not available.");
       }
-      const target = await state.context.selectTarget(card.data);
+      const skipPromise = new Promise((resolve) => {
+        const onSkip = (event) => {
+          const target = event.target instanceof Element ? event.target : null;
+          if (target?.closest("[data-skip-target]")) {
+            host.removeEventListener("click", onSkip);
+            resolve({ skipped: true });
+          }
+        };
+        host.addEventListener("click", onSkip);
+      });
+      const target = await Promise.race([state.context.selectTarget(card.data), skipPromise]);
+      if (target?.skipped) {
+        state.context.cancelTargetSelection?.();
+        state.target = null;
+        state.targetName = "";
+        return;
+      }
       state.target = target || null;
       state.targetName = target?.name || "";
     } finally {
@@ -458,8 +510,9 @@
 
   async function runDealStaminaDamageAction(state, card) {
     const tier = state.selectedTierData || {};
-    const amount = parseDamage(tier.damage);
-    const damageType = String(tier.damageType || "").trim();
+    const damage = getTierDamage(tier, state);
+    const amount = damage.amount;
+    const damageType = damage.damageType;
     const note = String(card.data.note || "").trim();
     if (!amount) {
       await postChat(state.context, {
@@ -482,14 +535,72 @@
         })
       : null;
     const targetName = result?.name || state.target.name || "Target";
+    const finalAmount = Number.isFinite(result?.amount) ? result.amount : amount;
+    const adjustmentParts = [];
+    if (Number.isFinite(result?.vulnerability) && result.vulnerability > 0) {
+      adjustmentParts.push(`+ ${result.vulnerability} vulnerability`);
+    }
+    if (Number.isFinite(result?.immunity) && result.immunity > 0) {
+      adjustmentParts.push(`- ${result.immunity} immunity`);
+    }
+    const adjustmentText = adjustmentParts.length ? ` (${amount}${damageType ? ` ${damageType}` : ""} ${adjustmentParts.join(" ")} = ${finalAmount})` : "";
     const remaining = result?.max !== null && result?.max !== undefined
       ? ` (${result.current}/${result.max} stamina remaining)`
       : result?.current !== undefined
         ? ` (${result.current} stamina remaining)`
         : "";
-    const message = `${state.heroName} - ${state.action.name || "Ability"}: ${targetName} takes ${amount}${damageType ? ` ${damageType}` : ""} stamina damage${remaining}.${note ? `\n${note}` : ""}`;
+    const message = `${state.heroName} - ${state.action.name || "Ability"}: ${targetName} takes ${finalAmount}${damageType ? ` ${damageType}` : ""} stamina damage${adjustmentText}${remaining}.${note ? `\n${note}` : ""}`;
     await postChat(state.context, { message });
     state.dealtStaminaDamage = true;
+  }
+
+  async function runPushAction(state, card) {
+    const tier = state.selectedTierData || {};
+    const distance = getTierPushDistance(tier);
+    const note = String(card.data.note || "").trim();
+    if (!distance) {
+      await postChat(state.context, {
+        message: `${state.action.name || "Ability"} has no ${state.selectedTier || "selected"} tier push configured.`,
+      });
+      return;
+    }
+    if (!state.target?.id) {
+      await postChat(state.context, {
+        message: `${state.action.name || "Ability"} has no selected target for Push ${distance}.`,
+      });
+      return;
+    }
+    if (typeof state.context.forceMove !== "function") {
+      await postChat(state.context, {
+        message: `${state.action.name || "Ability"} would push ${state.target.name || "the target"} ${distance}, but forced movement is not available.`,
+      });
+      return;
+    }
+
+    const result = await state.context.forceMove({
+      movement: "push",
+      distance,
+      targetId: state.target.id,
+      target: state.target,
+      sourcePlacement: state.sourcePlacement || null,
+      sourceTraits: state.sourceTraits || {},
+      collisionDamageType: String(card.data.collisionDamageType || "").trim(),
+      abilityName: state.action.name || "Ability",
+    });
+
+    if (!result || result.skipped) {
+      await postChat(state.context, {
+        message: `${state.heroName} - ${state.action.name || "Ability"}: Push skipped.${note ? `\n${note}` : ""}`,
+      });
+      return;
+    }
+
+    const parts = [`${state.heroName} - ${state.action.name || "Ability"}: ${result.name || state.target.name || "Target"} is pushed ${result.movedDistance ?? distance} square${(result.movedDistance ?? distance) === 1 ? "" : "s"}.`];
+    if (result.collision) {
+      parts.push(`Collision: ${result.collision.targetName || "Target"} and ${result.collision.collidedName || "the other token"} each take ${result.collision.damage} untyped damage.`);
+    }
+    if (note) parts.push(note);
+    await postChat(state.context, { message: parts.join("\n") });
   }
 
   async function runActionCard(state, card) {
@@ -499,6 +610,10 @@
     }
     if (card.data.actionType === "dealStaminaDamage") {
       await runDealStaminaDamageAction(state, card);
+      return;
+    }
+    if (card.data.actionType === "push") {
+      await runPushAction(state, card);
       return;
     }
     if (card.data.actionType === "note" && card.data.text) {
@@ -513,6 +628,8 @@
       automation,
       context: options || {},
       heroName: options?.hero?.name || options?.heroName || "Hero",
+      sourcePlacement: options?.sourcePlacement || options?.sourceToken || null,
+      sourceTraits: options?.sourceTraits || {},
       target: null,
       targetName: "",
       selectedTier: null,
@@ -532,6 +649,9 @@
       const hasExplicitDamageAction = cards.some(
         (card) => card?.type === "action" && card?.data?.actionType === "dealStaminaDamage"
       );
+      const hasExplicitTierAction = cards.some(
+        (card) => card?.type === "action" && ["dealStaminaDamage", "push"].includes(card?.data?.actionType)
+      );
       for (const card of cards) {
         if (card.type === "target") {
           await runTargetCard(state, card);
@@ -539,7 +659,7 @@
           await runActionCard(state, card);
         }
       }
-      if (!hasExplicitDamageAction && !state.dealtStaminaDamage && state.selectedTierData && state.target?.id) {
+      if (!hasExplicitTierAction && !hasExplicitDamageAction && !state.dealtStaminaDamage && state.selectedTierData && state.target?.id) {
         await runDealStaminaDamageAction(state, { data: { note: "" } });
       }
     } catch (error) {

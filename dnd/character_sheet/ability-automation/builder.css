@@ -246,6 +246,13 @@
   grid-column: auto;
 }
 
+.automation-builder__effect-preview {
+  grid-column: 2 / -1;
+  color: var(--muted);
+  font-size: 0.85rem;
+  line-height: 1.25;
+}
+
 .power-roll-runner {
   background: transparent;
   inset: 0;
@@ -319,6 +326,24 @@
 
 .power-roll-runner__section--compact {
   padding: 10px;
+}
+
+.power-roll-runner__inline-actions {
+  align-items: center;
+  background: var(--panel-alt);
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  display: flex;
+  gap: 10px;
+  justify-content: space-between;
+  padding: 10px;
+}
+
+.power-roll-runner__inline-actions .power-roll-runner__instruction {
+  background: transparent;
+  border: 0;
+  margin: 0;
+  padding: 0;
 }
 
 .power-roll-runner__section--ability {

@@ -92,6 +92,7 @@ export function mountCharacterSummaryPanel(routes = {}) {
   let activeCharacterId = null;
   let activeAbilityCategory = null;
   let activeSheet = null;
+  let activeToken = null;
   const boardHeader = document.querySelector('.vtt-board__header');
   const abilityTray = ensureAbilityTray();
   const abilityPreview = ensureAbilityPreview();
@@ -116,6 +117,7 @@ export function mountCharacterSummaryPanel(routes = {}) {
     activeCharacterId = null;
     activeSheet = null;
     activeAbilityCategory = null;
+    activeToken = null;
     panel.classList.remove('vtt-character-summary--open');
     panel.classList.add('vtt-character-summary--closed');
     panel.setAttribute('aria-hidden', 'true');
@@ -160,6 +162,7 @@ export function mountCharacterSummaryPanel(routes = {}) {
     }
     const requestId = ++activeRequestId;
     const token = detail.token && typeof detail.token === 'object' ? detail.token : {};
+    activeToken = clonePlain(token);
     setLoading(token.name || characterId);
 
     try {
@@ -199,7 +202,7 @@ export function mountCharacterSummaryPanel(routes = {}) {
       if (action && hasAbilityAutomation(action.automation)) {
         event.preventDefault();
         event.stopPropagation();
-        startAbilityAutomation(activeSheet, action, abilityItem.dataset.abilityCategory);
+        startAbilityAutomation(activeSheet, action, abilityItem.dataset.abilityCategory, activeToken);
       }
       return;
     }
@@ -853,7 +856,15 @@ function getAttributeBonus(sheet, attribute) {
   return Number.parseInt(sheet?.hero?.stats?.[key] ?? 0, 10) || 0;
 }
 
-function startAbilityAutomation(sheet, action, categoryKey) {
+function getAutomationTraits(sheet) {
+  const vitals = sheet?.hero?.vitals && typeof sheet.hero.vitals === 'object' ? sheet.hero.vitals : {};
+  return {
+    size: vitals.size || '',
+    stability: vitals.stability || '',
+  };
+}
+
+function startAbilityAutomation(sheet, action, categoryKey, sourceToken = null) {
   if (!window.AbilityAutomationRunner || typeof window.AbilityAutomationRunner.open !== 'function') {
     console.warn('[VTT] Ability automation runner is not available.');
     return;
@@ -864,10 +875,15 @@ function startAbilityAutomation(sheet, action, categoryKey) {
     actionType: categoryKey,
     hero: clonePlain(sheet.hero || {}),
     automation: normalizeAutomation(action.automation),
+    sourceToken: clonePlain(sourceToken || {}),
+    sourcePlacement: clonePlain(sourceToken || {}),
+    sourceTraits: getAutomationTraits(sheet),
     getAttributeBonus: (attribute) => getAttributeBonus(sheet, attribute),
     postChat: postAutomationChat,
     selectTarget: requestAutomationTarget,
+    cancelTargetSelection: cancelAutomationTarget,
     applyDamage: requestAutomationDamage,
+    forceMove: requestAutomationForceMove,
   });
 }
 
@@ -900,6 +916,24 @@ function requestAutomationDamage(payload) {
   return new Promise((resolve, reject) => {
     document.dispatchEvent(
       new CustomEvent('vtt:automation-apply-damage', {
+        detail: {
+          payload: clonePlain(payload || {}),
+          resolve,
+          reject,
+        },
+      })
+    );
+  });
+}
+
+function cancelAutomationTarget() {
+  document.dispatchEvent(new CustomEvent('vtt:automation-cancel-target'));
+}
+
+function requestAutomationForceMove(payload) {
+  return new Promise((resolve, reject) => {
+    document.dispatchEvent(
+      new CustomEvent('vtt:automation-force-move', {
         detail: {
           payload: clonePlain(payload || {}),
           resolve,

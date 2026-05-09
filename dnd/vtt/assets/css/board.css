@@ -2701,7 +2701,14 @@
   box-shadow: 0 10px 24px color-mix(in srgb, var(--vtt-group-color) 45%, transparent);
 }
 
-.vtt-token.is-selected,
+.vtt-token.is-selected {
+  border-color: rgba(248, 113, 113, 0.98);
+  box-shadow:
+    0 0 0 2px rgba(220, 38, 38, 0.9),
+    0 0 0 8px rgba(248, 113, 113, 0.48),
+    0 14px 30px rgba(127, 29, 29, 0.55);
+}
+
 .vtt-token.is-hover-highlight {
   border-color: rgba(129, 140, 248, 0.95);
   box-shadow:
@@ -2712,6 +2719,75 @@
 
 .vtt-token.vtt-token--automation-target {
   animation: vtt-token-automation-target-flash 0.7s ease-in-out 0s 2;
+}
+
+.vtt-automation-move {
+  position: absolute;
+  inset: 0;
+  pointer-events: none;
+  z-index: 100050;
+}
+
+.vtt-automation-move__svg {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+  overflow: visible;
+  pointer-events: none;
+}
+
+.vtt-automation-move__arrow {
+  stroke: rgba(255, 255, 255, 0.96);
+  stroke-width: 5;
+  stroke-linecap: round;
+  filter: drop-shadow(0 2px 4px rgba(24, 14, 8, 0.75));
+}
+
+.vtt-automation-move__cell,
+.vtt-automation-move__ghost {
+  position: absolute;
+  box-sizing: border-box;
+  border-radius: 8px;
+}
+
+.vtt-automation-move__cell {
+  border: 2px solid rgba(245, 245, 244, 0.88);
+  background: rgba(120, 113, 108, 0.18);
+  box-shadow: inset 0 0 0 1px rgba(41, 37, 36, 0.35);
+}
+
+.vtt-automation-move__ghost {
+  display: grid;
+  place-items: center;
+  border: 3px solid rgba(255, 255, 255, 0.98);
+  background: rgba(120, 53, 15, 0.45);
+  color: #fff7ed;
+  font-weight: 800;
+  text-shadow: 0 2px 4px rgba(0, 0, 0, 0.75);
+  box-shadow:
+    0 0 0 4px rgba(68, 64, 60, 0.45),
+    0 10px 28px rgba(24, 14, 8, 0.55);
+}
+
+.vtt-automation-move__controls {
+  position: fixed;
+  left: 50%;
+  bottom: 86px;
+  transform: translateX(-50%);
+  pointer-events: auto;
+}
+
+.vtt-automation-move__controls button {
+  min-width: 92px;
+  border: 2px solid rgba(255, 255, 255, 0.85);
+  border-radius: 4px;
+  background: rgba(41, 37, 36, 0.92);
+  color: #fffaf0;
+  font-weight: 800;
+  padding: 0.55rem 1rem;
+  cursor: pointer;
+  box-shadow: 0 10px 20px rgba(0, 0, 0, 0.35);
 }
 
 @keyframes vtt-token-automation-target-flash {

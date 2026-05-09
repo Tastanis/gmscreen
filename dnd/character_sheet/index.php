@@ -39,6 +39,7 @@ require_once '../includes/strix-nav.php';
   <link rel="stylesheet" href="../css/chat-panel.css?v=<?php echo (int) $assetVersion; ?>" />
   <link rel="stylesheet" href="styles.css?v=<?php echo (int) $assetVersion; ?>" />
   <link rel="stylesheet" href="ability-automation/builder.css?v=<?php echo (int) $assetVersion; ?>" />
+  <script src="ability-automation/catalog.js?v=<?php echo (int) $assetVersion; ?>"></script>
   <script src="ability-automation/schema.js?v=<?php echo (int) $assetVersion; ?>"></script>
   <script src="ability-automation/primitives.js?v=<?php echo (int) $assetVersion; ?>"></script>
   <script src="ability-automation/actions.js?v=<?php echo (int) $assetVersion; ?>"></script>

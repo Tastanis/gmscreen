@@ -4,6 +4,7 @@
   const BUILDER_ID = "ability-automation-builder";
   const schema = window.AbilityAutomationSchema;
   const registry = window.AbilityAutomationPrimitives;
+  const catalog = window.AbilityAutomationCatalog;
 
   function escapeHtml(value) {
     return String(value ?? "")
@@ -85,12 +86,16 @@
     const tiers = data.tiers || {};
     const tierMarkup = schema.TIER_KEYS.map((key) => {
       const tier = tiers[key] || {};
+      const effects = catalog?.getTierEffects ? catalog.getTierEffects(tier) : [];
+      const preview = effects.length
+        ? `<div class="automation-builder__effect-preview">${effects.map((effect) => escapeHtml(catalog.describeEffect(effect))).join(" | ")}</div>`
+        : "";
       return `
         <div class="automation-builder__tier" data-tier="${key}">
           <div class="automation-builder__tier-label">${tierRange(key)}</div>
           <label class="automation-builder__field">
-            <span>Damage</span>
-            <input type="text" data-tier-field="damage" value="${escapeHtml(tier.damage)}" placeholder="e.g. 3" />
+            <span>Damage / result</span>
+            <input type="text" data-tier-field="damage" value="${escapeHtml(tier.damage)}" placeholder="e.g. 5 or 5 fire" />
           </label>
           <label class="automation-builder__field">
             <span>Damage type</span>
@@ -98,8 +103,9 @@
           </label>
           <label class="automation-builder__field automation-builder__field--wide">
             <span>Tier effect</span>
-            <input type="text" data-tier-field="effect" value="${escapeHtml(tier.effect)}" placeholder="optional push, condition, save note" />
+            <input type="text" data-tier-field="effect" value="${escapeHtml(tier.effect)}" placeholder="e.g. push 3, slowed SE, slowed EOT" />
           </label>
+          ${preview}
         </div>
       `;
     }).join("");
@@ -148,6 +154,33 @@
     `;
   }
 
+  function renderPushFields(data) {
+    return `
+      <div class="automation-builder__grid">
+        <label class="automation-builder__field">
+          <span>Push source</span>
+          <select data-card-field="source">
+            <option value="selectedPowerRollTier" ${data.source === "selectedPowerRollTier" ? "selected" : ""}>Selected power-roll tier</option>
+          </select>
+        </label>
+        <label class="automation-builder__field">
+          <span>Target</span>
+          <select data-card-field="target">
+            <option value="selectedTarget" ${data.target === "selectedTarget" ? "selected" : ""}>Selected target</option>
+          </select>
+        </label>
+        <label class="automation-builder__field">
+          <span>Collision damage type</span>
+          <input type="text" data-card-field="collisionDamageType" value="${escapeHtml(data.collisionDamageType)}" placeholder="blank = untyped" />
+        </label>
+        <label class="automation-builder__field automation-builder__field--wide">
+          <span>Result note</span>
+          <input type="text" data-card-field="note" value="${escapeHtml(data.note)}" placeholder="optional extra message after push" />
+        </label>
+      </div>
+    `;
+  }
+
   function renderNoteFields(data) {
     return `
       <label class="automation-builder__field automation-builder__field--wide">
@@ -162,6 +195,8 @@
     const actionType = registry.getActionType(data.actionType);
     const fields = data.actionType === "dealStaminaDamage"
       ? renderDealDamageFields(data)
+      : data.actionType === "push"
+        ? renderPushFields(data)
       : data.actionType === "note"
         ? renderNoteFields(data)
         : renderPowerRollFields(data);
@@ -202,6 +237,20 @@
       };
     }
 
+    if (actionType === "push") {
+      return {
+        id,
+        type: "action",
+        data: {
+          actionType,
+          source: getField("source")?.value || "selectedPowerRollTier",
+          target: getField("target")?.value || "selectedTarget",
+          collisionDamageType: getField("collisionDamageType")?.value || "",
+          note: getField("note")?.value || "",
+        },
+      };
+    }
+
     const tiers = {};
     schema.TIER_KEYS.forEach((key) => {
       const tierEl = cardEl.querySelector(`[data-tier="${key}"]`);
@@ -212,6 +261,7 @@
         damageType: getTierField("damageType")?.value || "",
         effect: getTierField("effect")?.value || "",
       };
+      tiers[key].effects = catalog?.getTierEffects ? catalog.getTierEffects(tiers[key]) : [];
     });
 
     return {

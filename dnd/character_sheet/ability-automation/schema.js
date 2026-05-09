@@ -4,7 +4,8 @@
   const AUTOMATION_SCHEMA_VERSION = 2;
   const AUTOMATION_SCHEMA_ID = "ability-automation/v2";
   const TIER_KEYS = ["low", "mid", "high"];
-  const ACTION_TYPES = ["powerRoll", "dealStaminaDamage", "note"];
+  const ACTION_TYPES = ["powerRoll", "dealStaminaDamage", "push", "note"];
+  const catalog = window.AbilityAutomationCatalog;
 
   function createId(prefix) {
     return `${prefix}_${Date.now()}_${Math.random().toString(16).slice(2)}`;
@@ -16,6 +17,7 @@
       damage: "",
       damageType: "",
       effect: "",
+      effects: [],
     };
   }
 
@@ -35,14 +37,15 @@
       edges: data.edges || "",
       banes: data.banes || "",
       tiers: Object.fromEntries(
-        TIER_KEYS.map((key) => [
-          key,
-          {
+        TIER_KEYS.map((key) => {
+          const tier = {
             ...emptyTier(),
             range: tierRange(key),
             ...(tiers[key] || {}),
-          },
-        ])
+          };
+          tier.effects = catalog?.getTierEffects ? catalog.getTierEffects(tier) : Array.isArray(tier.effects) ? tier.effects : [];
+          return [key, tier];
+        })
       ),
     };
   }
@@ -63,9 +66,20 @@
     };
   }
 
+  function defaultPushData(data = {}) {
+    return {
+      actionType: "push",
+      source: data.source || "selectedPowerRollTier",
+      target: data.target || "selectedTarget",
+      collisionDamageType: data.collisionDamageType || "",
+      note: data.note || "",
+    };
+  }
+
   function normalizeActionData(data = {}) {
     const actionType = ACTION_TYPES.includes(data.actionType) ? data.actionType : "powerRoll";
     if (actionType === "dealStaminaDamage") return defaultDealStaminaDamageData(data);
+    if (actionType === "push") return defaultPushData(data);
     if (actionType === "note") return defaultNoteData(data);
     return defaultPowerRollData(data);
   }
@@ -116,6 +130,14 @@
         id,
         type: "action",
         data: defaultDealStaminaDamageData(data),
+      };
+    }
+
+    if (type === "push") {
+      return {
+        id,
+        type: "action",
+        data: defaultPushData(data),
       };
     }
 
@@ -171,6 +193,7 @@
     const actionCards = automation.cards.filter((card) => card.type === "action");
     const powerRollCards = actionCards.filter((card) => card.data.actionType === "powerRoll");
     const hasDamageAction = actionCards.some((card) => card.data.actionType === "dealStaminaDamage");
+    const hasPushAction = actionCards.some((card) => card.data.actionType === "push");
 
     if (!targetCards.length) {
       warnings.push("Add a target card if this ability needs a token selected before it resolves.");
@@ -180,8 +203,8 @@
       warnings.push("Add at least one action card so the automation has something to do.");
     }
 
-    if (powerRollCards.length && !hasDamageAction) {
-      warnings.push("Add a deal stamina damage action if the power roll should damage the selected target.");
+    if (powerRollCards.length && !hasDamageAction && !hasPushAction) {
+      warnings.push("Add a damage, push, or other action after the power roll so the selected tier does something.");
     }
 
     powerRollCards.forEach((card, index) => {
@@ -190,8 +213,9 @@
       }
       TIER_KEYS.forEach((key) => {
         const tier = card.data.tiers[key];
-        if (!tier.damage) {
-          warnings.push(`Power roll action ${index + 1} ${key} tier has no damage value.`);
+        const hasOutput = catalog?.hasTierOutput ? catalog.hasTierOutput(tier) : Boolean(tier.damage || tier.effect);
+        if (!hasOutput) {
+          warnings.push(`Power roll action ${index + 1} ${key} tier has no result configured.`);
         }
       });
     });
@@ -215,6 +239,10 @@
 
     if (normalized.data.actionType === "dealStaminaDamage") {
       return "Deal the selected power-roll tier damage to the selected target.";
+    }
+
+    if (normalized.data.actionType === "push") {
+      return "Push the selected target using the selected power-roll tier.";
     }
 
     return normalized.data.text || "Automation note.";

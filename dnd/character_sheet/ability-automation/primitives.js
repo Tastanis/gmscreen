@@ -28,6 +28,11 @@
       description: "Apply the selected power-roll tier damage to the selected target.",
     },
     {
+      type: "push",
+      label: "Push",
+      description: "Move the selected target away from the source token using the selected tier's Push result.",
+    },
+    {
       type: "note",
       label: "Note",
       description: "Capture a future automation detail without executing it yet.",

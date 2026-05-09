@@ -52,6 +52,7 @@ require_once __DIR__ . '/../../includes/strix-nav.php';
         window.chatPusherConfig = <?= json_encode($config['chatPusher'] ?? null, JSON_HEX_TAG | JSON_HEX_APOS | JSON_HEX_QUOT | JSON_HEX_AMP) ?>;
     </script>
     <script src="../js/chat-panel.js?v=<?= $assetVersion ?>"></script>
+    <script src="../character_sheet/ability-automation/catalog.js?v=<?= $assetVersion ?>"></script>
     <script src="../character_sheet/ability-automation/schema.js?v=<?= $assetVersion ?>"></script>
     <script src="../character_sheet/ability-automation/primitives.js?v=<?= $assetVersion ?>"></script>
     <script src="../character_sheet/ability-automation/actions.js?v=<?= $assetVersion ?>"></script>

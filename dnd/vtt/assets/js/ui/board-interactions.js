@@ -824,6 +824,9 @@ export function mountBoardInteractions(store, routes = {}) {
   let damageHealUi = null;
   let pendingDamageHeal = null;
   let pendingAutomationTarget = null;
+  let pendingAutomationMove = null;
+  let automationMoveOverlay = null;
+  let characterSummaryCache = new Map();
   let damageHealStatusTimeoutId = null;
   let healOverflowPopup = null;
   const completedCombatants = new Set();
@@ -1906,7 +1909,9 @@ export function mountBoardInteractions(store, routes = {}) {
   }
 
   document.addEventListener('vtt:automation-select-target', handleAutomationTargetRequest);
+  document.addEventListener('vtt:automation-cancel-target', () => cancelPendingAutomationTarget('Target selection skipped.'));
   document.addEventListener('vtt:automation-apply-damage', handleAutomationDamageRequest);
+  document.addEventListener('vtt:automation-force-move', handleAutomationForceMoveRequest);
 
   if (maliceButton) {
     maliceButton.addEventListener('click', (event) => {
@@ -3294,6 +3299,12 @@ export function mountBoardInteractions(store, routes = {}) {
   );
 
   mapSurface.addEventListener('pointerdown', (event) => {
+    if (pendingAutomationMove) {
+      if (handleAutomationMovePointerDown(event)) {
+        event.stopImmediatePropagation();
+      }
+      return;
+    }
     if (!pendingAutomationTarget) {
       return;
     }
@@ -3301,6 +3312,21 @@ export function mountBoardInteractions(store, routes = {}) {
       event.stopImmediatePropagation();
     }
   }, true);
+
+  mapSurface.addEventListener('pointermove', (event) => {
+    if (!pendingAutomationMove) {
+      return;
+    }
+    handleAutomationMovePointerMove(event);
+  }, true);
+
+  document.addEventListener('keydown', (event) => {
+    if (!pendingAutomationMove || event.key !== 'Escape') {
+      return;
+    }
+    event.preventDefault();
+    cancelPendingAutomationMove('Forced movement canceled.');
+  });
 
   mapSurface.addEventListener('pointerdown', (event) => {
     if (isCustomConditionDialogOpen()) {
@@ -4082,6 +4108,10 @@ export function mountBoardInteractions(store, routes = {}) {
       token: {
         id: placement.id ?? placementId,
         name: tokenLabel(placement),
+        column: Number.isFinite(placement.column) ? placement.column : 0,
+        row: Number.isFinite(placement.row) ? placement.row : 0,
+        width: Math.max(1, Number.isFinite(placement.width) ? placement.width : 1),
+        height: Math.max(1, Number.isFinite(placement.height) ? placement.height : 1),
         imageUrl: typeof placement.imageUrl === 'string' ? placement.imageUrl : '',
         hp: placement.hp ?? placement.hitPoints ?? null,
         condition: placement.condition ?? null,
@@ -4118,6 +4148,7 @@ export function mountBoardInteractions(store, routes = {}) {
       }
       selectedTokenIds.add(id);
       notifySelectionChanged();
+      flashAutomationTargetToken(id);
       return true;
     }
 
@@ -4127,6 +4158,7 @@ export function mountBoardInteractions(store, routes = {}) {
       }
       selectedTokenIds.add(id);
       notifySelectionChanged();
+      flashAutomationTargetToken(id);
       return true;
     }
 
@@ -4137,12 +4169,14 @@ export function mountBoardInteractions(store, routes = {}) {
     if (selectedTokenIds.size === 0) {
       selectedTokenIds.add(id);
       notifySelectionChanged();
+      flashAutomationTargetToken(id);
       return true;
     }
 
     selectedTokenIds.clear();
     selectedTokenIds.add(id);
     notifySelectionChanged();
+    flashAutomationTargetToken(id);
     return true;
   }
 
@@ -11569,11 +11603,12 @@ export function mountBoardInteractions(store, routes = {}) {
     targetRequest.resolve?.({
       id: placement.id,
       name,
+      placement: getAutomationPlacementSnapshot(placement),
     });
     return true;
   }
 
-  function handleAutomationDamageRequest(event) {
+  async function handleAutomationDamageRequest(event) {
     const detail = event?.detail ?? {};
     const payload = detail.payload && typeof detail.payload === 'object' ? detail.payload : {};
     const resolve = typeof detail.resolve === 'function' ? detail.resolve : null;
@@ -11583,7 +11618,11 @@ export function mountBoardInteractions(store, routes = {}) {
       reject?.(new Error('Automation damage request is missing a target or amount.'));
       return;
     }
-    const result = applyDamageHealToPlacement(payload.placementId, 'damage', amount);
+    const adjustment = await getAutomationDamageAdjustment(payload.placementId, payload.damageType || '');
+    const adjustedAmount = Math.max(0, amount + adjustment.vulnerability - adjustment.immunity);
+    const result = adjustedAmount > 0
+      ? applyDamageHealToPlacement(payload.placementId, 'damage', adjustedAmount)
+      : getZeroDamageResult(payload.placementId);
     if (!result) {
       reject?.(new Error('Unable to update stamina for that token.'));
       return;
@@ -11591,8 +11630,474 @@ export function mountBoardInteractions(store, routes = {}) {
     flashAutomationTargetToken(payload.placementId);
     const maxDisplay = result.max !== null ? result.max : DEFAULT_HP_PLACEHOLDER;
     const hpDisplay = result.max !== null ? `${result.current}/${maxDisplay}` : `${result.current}`;
-    updateStatus(`${result.name} takes ${result.change} stamina damage (${hpDisplay} stamina remaining).`);
-    resolve?.(result);
+    updateStatus(`${result.name} takes ${adjustedAmount} stamina damage (${hpDisplay} stamina remaining).`);
+    resolve?.({
+      ...result,
+      originalAmount: amount,
+      amount: adjustedAmount,
+      damageType: payload.damageType || '',
+      immunity: adjustment.immunity,
+      vulnerability: adjustment.vulnerability,
+    });
+  }
+
+  function getAutomationPlacementSnapshot(placement) {
+    if (!placement || typeof placement !== 'object') {
+      return null;
+    }
+    return {
+      id: placement.id || '',
+      name: tokenLabel(placement),
+      column: Number.isFinite(placement.column) ? placement.column : 0,
+      row: Number.isFinite(placement.row) ? placement.row : 0,
+      width: Math.max(1, Number.isFinite(placement.width) ? placement.width : 1),
+      height: Math.max(1, Number.isFinite(placement.height) ? placement.height : 1),
+      hidden: Boolean(placement.hidden || placement.flags?.hidden),
+    };
+  }
+
+  function getZeroDamageResult(placementId) {
+    const placement = getPlacementFromStore(placementId);
+    if (!placement) {
+      return null;
+    }
+    const hp = ensurePlacementHitPoints(placement.hp);
+    const current = parseHitPointNumber(hp.current) ?? 0;
+    const max = parseHitPointNumber(hp.max);
+    return {
+      previous: current,
+      current,
+      max,
+      change: 0,
+      name: tokenLabel(placement),
+    };
+  }
+
+  async function getAutomationDamageAdjustment(placementId, damageType) {
+    const sheet = await getAutomationSheetForPlacement(placementId);
+    const lists = sheet?.sidebar?.lists && typeof sheet.sidebar.lists === 'object' ? sheet.sidebar.lists : {};
+    const immunity = parseDamageAdjustmentList(lists.immunity, damageType);
+    const vulnerability = parseDamageAdjustmentList(lists.vulnerability ?? lists.weakness, damageType);
+    return {
+      immunity,
+      vulnerability,
+    };
+  }
+
+  async function getAutomationSheetForPlacement(placementId) {
+    const placement = getPlacementFromStore(placementId);
+    if (!placement) {
+      return null;
+    }
+    const profileId = matchProfileByName(tokenLabel(placement));
+    if (!profileId || !PLAYER_CHARACTER_USER_IDS.includes(profileId)) {
+      return null;
+    }
+    if (characterSummaryCache.has(profileId)) {
+      return characterSummaryCache.get(profileId);
+    }
+    const endpoint = typeof routes?.sheet === 'string' && routes.sheet ? routes.sheet : '/dnd/character_sheet/handler.php';
+    const url = new URL(endpoint, window.location.href);
+    url.searchParams.set('action', 'summary');
+    url.searchParams.set('character', profileId);
+    url.searchParams.set('source', 'vtt');
+    try {
+      const response = await fetch(url.toString(), {
+        method: 'GET',
+        credentials: 'same-origin',
+        headers: { Accept: 'application/json' },
+        cache: 'no-store',
+      });
+      if (!response.ok) {
+        return null;
+      }
+      const payload = await response.json();
+      const sheet = payload && payload.success !== false ? payload.data : null;
+      if (sheet) {
+        characterSummaryCache.set(profileId, sheet);
+      }
+      return sheet;
+    } catch (error) {
+      console.warn('[VTT] Failed to load automation sheet summary', error);
+      return null;
+    }
+  }
+
+  function parseDamageAdjustmentList(list, damageType) {
+    const entries = Array.isArray(list) ? list : [];
+    const normalizedType = normalizeAutomationDamageType(damageType);
+    return entries.reduce((total, entry) => {
+      const text = typeof entry === 'string'
+        ? entry
+        : entry && typeof entry === 'object'
+          ? String(entry.name ?? entry.label ?? entry.value ?? '')
+          : '';
+      const parsed = parseDamageAdjustmentEntry(text);
+      if (!parsed.amount) {
+        return total;
+      }
+      if (parsed.type === 'all' || parsed.type === 'any' || parsed.type === normalizedType || (!parsed.type && !normalizedType)) {
+        return total + parsed.amount;
+      }
+      return total;
+    }, 0);
+  }
+
+  function parseDamageAdjustmentEntry(text) {
+    const match = String(text || '').trim().match(/^([a-z\s-]*?)(-?\d+)\s*$/i);
+    if (!match) {
+      return { type: '', amount: 0 };
+    }
+    return {
+      type: normalizeAutomationDamageType(match[1]),
+      amount: Math.max(0, Number.parseInt(match[2], 10) || 0),
+    };
+  }
+
+  function normalizeAutomationDamageType(value) {
+    const normalized = String(value || '').trim().toLowerCase();
+    if (!normalized || normalized === 'untyped' || normalized === 'generic') {
+      return '';
+    }
+    return normalized;
+  }
+
+  async function handleAutomationForceMoveRequest(event) {
+    const detail = event?.detail ?? {};
+    const payload = detail.payload && typeof detail.payload === 'object' ? detail.payload : {};
+    const resolve = typeof detail.resolve === 'function' ? detail.resolve : null;
+    const reject = typeof detail.reject === 'function' ? detail.reject : null;
+    const targetId = payload.targetId || payload.target?.id || '';
+    const targetPlacement = getPlacementFromStore(targetId);
+    const sourcePlacement = resolveAutomationSourcePlacement(payload.sourcePlacement);
+
+    if (!targetPlacement || !sourcePlacement) {
+      resolve?.({ skipped: true, reason: 'missing-placement' });
+      return;
+    }
+
+    const requestedDistance = Math.max(0, Number.parseInt(payload.distance, 10) || 0);
+    const targetTraits = await getAutomationTraitsForPlacement(targetPlacement);
+    const sourceTraits = {
+      ...(payload.sourceTraits && typeof payload.sourceTraits === 'object' ? payload.sourceTraits : {}),
+    };
+    const sourceRank = getAutomationSizeRank(sourceTraits.size, sourcePlacement);
+    const targetRank = getAutomationSizeRank(targetTraits.size, targetPlacement);
+    const sizeDifference = targetRank - sourceRank;
+    if (sizeDifference > 1) {
+      updateStatus(`${tokenLabel(targetPlacement)} is too large to push automatically.`);
+      resolve?.({ skipped: true, reason: 'too-large' });
+      return;
+    }
+
+    const stability = Math.max(0, Number.parseInt(targetTraits.stability, 10) || 0);
+    const sizePenalty = Math.max(0, sizeDifference);
+    const effectiveDistance = Math.max(0, requestedDistance - stability - sizePenalty);
+    if (!effectiveDistance) {
+      updateStatus(`${tokenLabel(targetPlacement)} is not moved by Push ${requestedDistance}.`);
+      resolve?.({ skipped: true, reason: 'no-distance' });
+      return;
+    }
+
+    closeDamageHealWidget();
+    closeHealOverflowPopup();
+    startAutomationMoveSelection({
+      payload,
+      resolve,
+      reject,
+      sourcePlacement,
+      targetPlacement,
+      requestedDistance,
+      effectiveDistance,
+      collisionDamageType: payload.collisionDamageType || '',
+    });
+  }
+
+  function resolveAutomationSourcePlacement(source) {
+    if (source?.id) {
+      return getPlacementFromStore(source.id) || source;
+    }
+    return null;
+  }
+
+  async function getAutomationTraitsForPlacement(placement) {
+    const sheet = await getAutomationSheetForPlacement(placement?.id);
+    const vitals = sheet?.hero?.vitals && typeof sheet.hero.vitals === 'object' ? sheet.hero.vitals : {};
+    return {
+      size: vitals.size || placement?.size || placement?.sizeOverride || '',
+      stability: vitals.stability || '',
+    };
+  }
+
+  function getAutomationSizeRank(sizeValue, placement) {
+    const text = String(sizeValue || '').trim().toLowerCase();
+    const numeric = Number.parseInt(text, 10);
+    if (Number.isFinite(numeric) && numeric > 1) {
+      return 3 + numeric;
+    }
+    if (text.includes('tiny') || /\b1\s*t\b/.test(text) || text === 't') return 0;
+    if (text.includes('small') || /\b1\s*s\b/.test(text) || text === 's') return 1;
+    if (text.includes('large') || /\b1\s*l\b/.test(text) || text === 'l') return 3;
+    const footprint = Math.max(
+      1,
+      Number.isFinite(placement?.width) ? placement.width : 1,
+      Number.isFinite(placement?.height) ? placement.height : 1
+    );
+    if (footprint > 1) return 3 + footprint;
+    return 2;
+  }
+
+  function startAutomationMoveSelection(request) {
+    cancelPendingAutomationMove();
+    const targetSnapshot = getAutomationPlacementSnapshot(request.targetPlacement);
+    const sourceSnapshot = getAutomationPlacementSnapshot(request.sourcePlacement);
+    pendingAutomationMove = {
+      ...request,
+      targetSnapshot,
+      sourceSnapshot,
+      previewCell: {
+        column: targetSnapshot.column,
+        row: targetSnapshot.row,
+      },
+      legalCells: buildAutomationPushLegalCells(sourceSnapshot, targetSnapshot, request.effectiveDistance),
+    };
+    automationMoveOverlay = renderAutomationMoveOverlay(pendingAutomationMove);
+    updateAutomationMovePreview(pendingAutomationMove.previewCell);
+    updateStatus(`Push ${targetSnapshot.name}: choose a destination or click Skip.`);
+  }
+
+  function buildAutomationPushLegalCells(source, target, distance) {
+    const cells = [];
+    const originDistance = automationChebyshevDistance(getPlacementCenter(source), getPlacementCenter(target));
+    for (let dy = -distance; dy <= distance; dy += 1) {
+      for (let dx = -distance; dx <= distance; dx += 1) {
+        const column = target.column + dx;
+        const row = target.row + dy;
+        const movedDistance = automationChebyshevDistance(target, { column, row });
+        if (movedDistance > distance) continue;
+        const candidate = {
+          column,
+          row,
+          width: target.width,
+          height: target.height,
+        };
+        const sourceDistance = automationChebyshevDistance(getPlacementCenter(source), getPlacementCenter(candidate));
+        if (sourceDistance <= originDistance) continue;
+        cells.push({ column, row });
+      }
+    }
+    return cells;
+  }
+
+  function renderAutomationMoveOverlay(request) {
+    if (!mapTransform) {
+      return null;
+    }
+    const overlay = document.createElement('div');
+    overlay.className = 'vtt-automation-move';
+    overlay.innerHTML = `
+      <svg class="vtt-automation-move__svg" aria-hidden="true">
+        <line class="vtt-automation-move__arrow" data-automation-move-arrow x1="0" y1="0" x2="0" y2="0"></line>
+      </svg>
+      <div class="vtt-automation-move__legal" data-automation-move-legal></div>
+      <div class="vtt-automation-move__ghost" data-automation-move-ghost>
+        <span>Push</span>
+      </div>
+      <div class="vtt-automation-move__controls">
+        <button type="button" data-skip-automation-move>Skip</button>
+      </div>
+    `;
+    const legalLayer = overlay.querySelector('[data-automation-move-legal]');
+    request.legalCells.forEach((cell) => {
+      const node = document.createElement('div');
+      node.className = 'vtt-automation-move__cell';
+      positionAutomationCell(node, cell.column, cell.row, request.targetSnapshot.width, request.targetSnapshot.height);
+      legalLayer?.appendChild(node);
+    });
+    mapTransform.appendChild(overlay);
+    return overlay;
+  }
+
+  function positionAutomationCell(node, column, row, width = 1, height = 1) {
+    const offsets = viewState.gridOffsets ?? {};
+    const gridSize = Math.max(8, Number.isFinite(viewState.gridSize) ? viewState.gridSize : 64);
+    const left = (Number.isFinite(offsets.left) ? offsets.left : 0) + column * gridSize;
+    const top = (Number.isFinite(offsets.top) ? offsets.top : 0) + row * gridSize;
+    node.style.left = `${left}px`;
+    node.style.top = `${top}px`;
+    node.style.width = `${Math.max(1, width) * gridSize}px`;
+    node.style.height = `${Math.max(1, height) * gridSize}px`;
+  }
+
+  function handleAutomationMovePointerMove(event) {
+    const cell = getAutomationGridCellFromEvent(event);
+    if (!cell) return;
+    updateAutomationMovePreview(cell);
+  }
+
+  async function handleAutomationMovePointerDown(event) {
+    if (!pendingAutomationMove) {
+      return false;
+    }
+    const target = event.target instanceof Element ? event.target : null;
+    if (target?.closest('[data-skip-automation-move]')) {
+      event.preventDefault();
+      const request = pendingAutomationMove;
+      clearAutomationMoveOverlay();
+      request.resolve?.({ skipped: true, reason: 'user-skip' });
+      updateStatus('Forced movement skipped.');
+      return true;
+    }
+    if (event.button !== 0) {
+      return false;
+    }
+    event.preventDefault();
+    const request = pendingAutomationMove;
+    const clickedPlacement = findRenderedPlacementAtPoint(event);
+    const cell = getAutomationGridCellFromEvent(event) || request.previewCell;
+    const collisionPlacement = clickedPlacement && clickedPlacement.id !== request.targetSnapshot.id
+      ? clickedPlacement
+      : null;
+    const destination = collisionPlacement
+      ? getAutomationCollisionStopCell(request.targetSnapshot, getAutomationPlacementSnapshot(collisionPlacement))
+      : cell;
+    const clamped = clampPlacementToBounds(
+      destination.column,
+      destination.row,
+      request.targetSnapshot.width,
+      request.targetSnapshot.height
+    );
+    const movedDistance = automationChebyshevDistance(request.targetSnapshot, clamped);
+    const moveResult = updatePlacementById(request.targetSnapshot.id, (placement) => {
+      placement.column = clamped.column;
+      placement.row = clamped.row;
+    }, { returnSavePromise: true });
+    if (!moveResult?.updated) {
+      clearAutomationMoveOverlay();
+      request.reject?.(new Error('Unable to move that token.'));
+      return true;
+    }
+
+    let collision = null;
+    if (collisionPlacement) {
+      const collisionDamage = Math.max(1, request.effectiveDistance - movedDistance);
+      const targetDamage = await applyAutomationCollisionDamage(request.targetSnapshot.id, collisionDamage, request.collisionDamageType);
+      const otherDamage = await applyAutomationCollisionDamage(collisionPlacement.id, collisionDamage, request.collisionDamageType);
+      collision = {
+        targetName: targetDamage?.name || request.targetSnapshot.name,
+        collidedName: otherDamage?.name || tokenLabel(collisionPlacement),
+        damage: collisionDamage,
+      };
+    }
+
+    flashAutomationTargetToken(request.targetSnapshot.id);
+    clearAutomationMoveOverlay();
+    request.resolve?.({
+      skipped: false,
+      name: request.targetSnapshot.name,
+      movedDistance,
+      collision,
+    });
+    return true;
+  }
+
+  async function applyAutomationCollisionDamage(placementId, amount, damageType) {
+    const adjustment = await getAutomationDamageAdjustment(placementId, damageType || '');
+    const adjustedAmount = Math.max(0, amount + adjustment.vulnerability - adjustment.immunity);
+    return adjustedAmount > 0
+      ? applyDamageHealToPlacement(placementId, 'damage', adjustedAmount)
+      : getZeroDamageResult(placementId);
+  }
+
+  function getAutomationCollisionStopCell(target, collided) {
+    const targetCenter = getPlacementCenter(target);
+    const collidedCenter = getPlacementCenter(collided);
+    const stepX = Math.sign(collidedCenter.column - targetCenter.column);
+    const stepY = Math.sign(collidedCenter.row - targetCenter.row);
+    return {
+      column: collided.column - stepX * Math.max(1, target.width),
+      row: collided.row - stepY * Math.max(1, target.height),
+    };
+  }
+
+  function updateAutomationMovePreview(cell) {
+    if (!pendingAutomationMove || !automationMoveOverlay || !cell) {
+      return;
+    }
+    pendingAutomationMove.previewCell = cell;
+    const ghost = automationMoveOverlay.querySelector('[data-automation-move-ghost]');
+    const arrow = automationMoveOverlay.querySelector('[data-automation-move-arrow]');
+    if (ghost instanceof HTMLElement) {
+      positionAutomationCell(ghost, cell.column, cell.row, pendingAutomationMove.targetSnapshot.width, pendingAutomationMove.targetSnapshot.height);
+    }
+    if (arrow instanceof SVGLineElement) {
+      const start = getCellPixelCenter(pendingAutomationMove.targetSnapshot);
+      const end = getCellPixelCenter({
+        ...pendingAutomationMove.targetSnapshot,
+        column: cell.column,
+        row: cell.row,
+      });
+      arrow.setAttribute('x1', String(start.x));
+      arrow.setAttribute('y1', String(start.y));
+      arrow.setAttribute('x2', String(end.x));
+      arrow.setAttribute('y2', String(end.y));
+    }
+  }
+
+  function getCellPixelCenter(cell) {
+    const offsets = viewState.gridOffsets ?? {};
+    const gridSize = Math.max(8, Number.isFinite(viewState.gridSize) ? viewState.gridSize : 64);
+    const left = Number.isFinite(offsets.left) ? offsets.left : 0;
+    const top = Number.isFinite(offsets.top) ? offsets.top : 0;
+    return {
+      x: left + (cell.column + Math.max(1, cell.width || 1) / 2) * gridSize,
+      y: top + (cell.row + Math.max(1, cell.height || 1) / 2) * gridSize,
+    };
+  }
+
+  function getAutomationGridCellFromEvent(event) {
+    const localPoint = getLocalMapPoint(event);
+    const gridPoint = localPoint ? mapPointToGrid(localPoint) : null;
+    if (!gridPoint) {
+      return null;
+    }
+    return {
+      column: Math.floor(gridPoint.column),
+      row: Math.floor(gridPoint.row),
+    };
+  }
+
+  function automationChebyshevDistance(left, right) {
+    return Math.max(
+      Math.abs((left?.column || 0) - (right?.column || 0)),
+      Math.abs((left?.row || 0) - (right?.row || 0))
+    );
+  }
+
+  function getPlacementCenter(placement) {
+    return {
+      column: (placement?.column || 0) + Math.max(1, placement?.width || 1) / 2,
+      row: (placement?.row || 0) + Math.max(1, placement?.height || 1) / 2,
+    };
+  }
+
+  function cancelPendingAutomationMove(message) {
+    if (!pendingAutomationMove) {
+      clearAutomationMoveOverlay();
+      return;
+    }
+    const request = pendingAutomationMove;
+    clearAutomationMoveOverlay();
+    if (message) {
+      updateStatus(message);
+      request.reject?.(new Error(message));
+    }
+  }
+
+  function clearAutomationMoveOverlay() {
+    automationMoveOverlay?.remove();
+    automationMoveOverlay = null;
+    pendingAutomationMove = null;
   }
 
   function flashAutomationTargetToken(placementId) {

@@ -62,11 +62,36 @@
     },
   });
 
+  registerAction("push", {
+    label: "Push",
+    execute(card, context) {
+      const tier = context.selectedTierData || {};
+      const push = window.AbilityAutomationCatalog?.getFirstTierEffect?.(tier, "push");
+      if (!push) {
+        return {
+          ok: false,
+          message: `${context.abilityName || "Ability"} has no selected tier push configured.`,
+        };
+      }
+      return {
+        ok: true,
+        movement: "push",
+        distance: push.distance,
+        target: formatTarget(context.targetName),
+        collisionDamageType: card?.data?.collisionDamageType || "",
+        message: `${context.abilityName || "Ability"} pushes ${formatTarget(context.targetName)} ${push.distance}.`,
+      };
+    },
+  });
+
   registerAction("action", {
     label: "Action",
     execute(card, context) {
       if (card?.data?.actionType === "dealStaminaDamage") {
         return getAction("dealStaminaDamage").execute(card, context);
+      }
+      if (card?.data?.actionType === "push") {
+        return getAction("push").execute(card, context);
       }
       return {
         ok: true,
