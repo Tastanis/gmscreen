@@ -51,26 +51,33 @@
   function renderTargetCard(card) {
     const data = card.data;
     const mode = data.mode === "area" ? "area" : "token";
-    const areaFields = `
-        <label class="automation-builder__field">
-          <span>Shape</span>
-          <select data-card-field="shape">
-            <option value="cube" ${data.shape !== "rectangle" ? "selected" : ""}>Cube / square</option>
-            <option value="rectangle" ${data.shape === "rectangle" ? "selected" : ""}>Rectangle</option>
-          </select>
-        </label>
-        <label class="automation-builder__field">
-          <span>Size</span>
-          <input type="number" min="1" step="1" data-card-field="size" value="${escapeHtml(data.size || 3)}" />
-        </label>
+    const shape = data.shape === "rectangle" ? "rectangle" : "cube";
+    const dimensionFields = shape === "rectangle"
+      ? `
         <label class="automation-builder__field">
           <span>Width</span>
           <input type="number" min="1" step="1" data-card-field="width" value="${escapeHtml(data.width || data.size || 3)}" />
         </label>
         <label class="automation-builder__field">
-          <span>Height</span>
+          <span>Length</span>
           <input type="number" min="1" step="1" data-card-field="height" value="${escapeHtml(data.height || data.size || 3)}" />
         </label>
+      `
+      : `
+        <label class="automation-builder__field">
+          <span>Size</span>
+          <input type="number" min="1" step="1" data-card-field="size" value="${escapeHtml(data.size || 3)}" />
+        </label>
+      `;
+    const areaFields = `
+        <label class="automation-builder__field">
+          <span>Shape</span>
+          <select data-card-field="shape">
+            <option value="cube" ${shape !== "rectangle" ? "selected" : ""}>Cube / square</option>
+            <option value="rectangle" ${shape === "rectangle" ? "selected" : ""}>Rectangle</option>
+          </select>
+        </label>
+        ${dimensionFields}
         <label class="automation-builder__field">
           <span>Range</span>
           <input type="text" data-card-field="range" value="${escapeHtml(data.range || "")}" placeholder="10" />
@@ -342,7 +349,7 @@
           within: getField("within")?.value || "",
           optional: getField("optional")?.value === "true",
           shape: getField("shape")?.value || "cube",
-          size: getField("size")?.value || "3",
+          size: getField("size")?.value || getField("width")?.value || "3",
           width: getField("width")?.value || getField("size")?.value || "3",
           height: getField("height")?.value || getField("size")?.value || "3",
           range: getField("range")?.value || "",

@@ -205,7 +205,10 @@ export function mountCharacterSummaryPanel(routes = {}) {
         activeAbilityCategory = null;
         hideAbilityPreview(abilityPreview);
         renderAbilityTray(abilityTray, activeSheet, { activeCategory: activeAbilityCategory });
-        startAbilityAutomation(activeSheet, action, abilityItem.dataset.abilityCategory, activeToken);
+        startAbilityAutomation(activeSheet, action, abilityItem.dataset.abilityCategory, activeToken, {
+          characterId: activeCharacterId,
+          routes,
+        });
       }
       return;
     }
@@ -867,7 +870,7 @@ function getAutomationTraits(sheet) {
   };
 }
 
-function startAbilityAutomation(sheet, action, categoryKey, sourceToken = null) {
+function startAbilityAutomation(sheet, action, categoryKey, sourceToken = null, options = {}) {
   if (!window.AbilityAutomationRunner || typeof window.AbilityAutomationRunner.open !== 'function') {
     console.warn('[VTT] Ability automation runner is not available.');
     return;
@@ -891,7 +894,7 @@ function startAbilityAutomation(sheet, action, categoryKey, sourceToken = null) 
     applyCondition: requestAutomationCondition,
     checkPotency: requestAutomationPotency,
     forceMove: requestAutomationForceMove,
-    spendResource: (ability) => spendAbilityResource(activeSheet, ability),
+    spendResource: (ability) => spendAbilityResource(sheet, ability, options),
   });
 }
 
@@ -998,7 +1001,7 @@ function requestAutomationForceMove(payload) {
   });
 }
 
-async function spendAbilityResource(sheet, ability) {
+async function spendAbilityResource(sheet, ability, options = {}) {
   const cost = parseAbilityResourceCost(ability?.cost);
   if (!cost.amount) return { skipped: true };
   const hero = sheet?.hero && typeof sheet.hero === 'object' ? sheet.hero : {};
@@ -1014,7 +1017,7 @@ async function spendAbilityResource(sheet, ability) {
   resource.value = Math.max(0, current - cost.amount);
   hero.resource = resource;
   if (sheet) sheet.hero = hero;
-  await saveCharacterSummarySheet(sheet);
+  await saveCharacterSummarySheet(sheet, options);
   return { spent: cost.amount, resource: title, remaining: resource.value };
 }
 
@@ -1027,12 +1030,14 @@ function parseAbilityResourceCost(value) {
   };
 }
 
-async function saveCharacterSummarySheet(sheet) {
-  if (!activeCharacterId || !sheet) return false;
-  const endpoint = typeof routes?.sheet === 'string' && routes.sheet ? routes.sheet : '/dnd/character_sheet/handler.php';
+async function saveCharacterSummarySheet(sheet, options = {}) {
+  const characterId = typeof options.characterId === 'string' ? options.characterId : '';
+  if (!characterId || !sheet) return false;
+  const routeConfig = options.routes && typeof options.routes === 'object' ? options.routes : {};
+  const endpoint = typeof routeConfig.sheet === 'string' && routeConfig.sheet ? routeConfig.sheet : '/dnd/character_sheet/handler.php';
   const body = new URLSearchParams();
   body.set('action', 'save');
-  body.set('character', activeCharacterId);
+  body.set('character', characterId);
   body.set('data', JSON.stringify(sheet));
   const response = await fetch(endpoint, {
     method: 'POST',
