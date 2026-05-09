@@ -156,6 +156,11 @@
     return getTierEffects(tier).filter((item) => item.kind === "potency");
   }
 
+  function getTokenTargetCount(data = {}) {
+    if (data.count !== "number") return 1;
+    return Math.max(1, parseInteger(data.countNumber));
+  }
+
   function rollFormula(formula) {
     const clean = String(formula || "2d10").replace(/\s+/g, "").toLowerCase();
     const match = clean.match(/^(\d*)d(\d+)$/);
@@ -545,17 +550,28 @@
         };
         host.addEventListener("click", onSkip);
       });
-      const target = await Promise.race([state.context.selectTarget(card.data), skipPromise]);
-      if (target?.skipped) {
-        state.context.cancelTargetSelection?.();
-        state.target = null;
-        state.targets = [];
-        state.targetName = "";
-        return;
+      const selectedTargets = [];
+      const selectedIds = new Set();
+      const targetCount = getTokenTargetCount(card.data);
+      for (let index = 0; index < targetCount; index += 1) {
+        const promptConfig = {
+          ...card.data,
+          pickIndex: index + 1,
+          pickTotal: targetCount,
+        };
+        const target = await Promise.race([state.context.selectTarget(promptConfig), skipPromise]);
+        if (target?.skipped) {
+          state.context.cancelTargetSelection?.();
+          break;
+        }
+        if (target?.id && !selectedIds.has(target.id)) {
+          selectedIds.add(target.id);
+          selectedTargets.push(target);
+        }
       }
-      state.target = target || null;
-      state.targets = target ? [target] : [];
-      state.targetName = target?.name || "";
+      state.targets = selectedTargets;
+      state.target = selectedTargets[0] || null;
+      state.targetName = selectedTargets.map((target) => target.name).filter(Boolean).join(", ");
     } finally {
       host.remove();
     }

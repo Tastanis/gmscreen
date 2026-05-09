@@ -12484,10 +12484,11 @@ export function mountBoardInteractions(store, routes = {}) {
   }
 
   function formatAutomationTargetPrompt(targetConfig = {}) {
-    const count = targetConfig.count || 'one';
+    const count = targetConfig.count === 'number' ? targetConfig.countNumber || 'x' : targetConfig.count || 'one';
     const creature = targetConfig.creature || 'target';
     const within = targetConfig.within ? ` ${targetConfig.within}` : '';
-    return `Pick ${count} ${creature}${within}.`;
+    const progress = targetConfig.pickTotal > 1 ? ` (${targetConfig.pickIndex || 1}/${targetConfig.pickTotal})` : '';
+    return `Pick ${count} ${creature}${within}${progress}.`;
   }
 
   function cancelPendingAutomationTarget(message) {

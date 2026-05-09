@@ -83,7 +83,8 @@
     const height = Math.max(1, parseInt(data.height ?? size, 10) || size);
     return {
       mode,
-      count: data.count || (mode === "area" ? "each" : "one"),
+      count: data.count === "number" ? "number" : mode === "area" ? "each" : "one",
+      countNumber: Math.max(1, parseInt(data.countNumber ?? data.countValue ?? 2, 10) || 2),
       creature: data.creature || data.affects || "enemy",
       within: data.within || "",
       optional: Boolean(data.optional),
@@ -121,6 +122,7 @@
           data: {
             mode: "token",
             count: "one",
+            countNumber: 2,
             creature: "enemy",
             within: "",
             optional: false,
@@ -250,7 +252,7 @@
         if (data.optional) parts.push("(optional)");
         return parts.join(" ");
       }
-      const parts = [`Pick ${data.count} ${data.creature}`];
+      const parts = [`Pick ${data.count === "number" ? data.countNumber : data.count} ${data.creature}`];
       if (data.within) parts.push(data.within);
       if (data.optional) parts.push("(optional)");
       return parts.join(" ");

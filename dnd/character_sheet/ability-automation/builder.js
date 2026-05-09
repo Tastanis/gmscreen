@@ -87,9 +87,16 @@
         <label class="automation-builder__field">
           <span>Count</span>
           <select data-card-field="count">
-            <option value="one" selected>one</option>
+            <option value="one" ${data.count === "number" ? "" : "selected"}>one</option>
+            <option value="number" ${data.count === "number" ? "selected" : ""}>x</option>
           </select>
         </label>
+        ${data.count === "number" ? `
+          <label class="automation-builder__field">
+            <span>Number</span>
+            <input type="number" min="1" step="1" data-card-field="countNumber" value="${escapeHtml(data.countNumber || 2)}" />
+          </label>
+        ` : ""}
     `;
     const body = `
       <div class="automation-builder__grid">
@@ -445,6 +452,7 @@
         data: {
           mode: getField("mode")?.value || "token",
           count: getField("count")?.value || (getField("mode")?.value === "area" ? "each" : "one"),
+          countNumber: getField("countNumber")?.value || "2",
           creature: getField("creature")?.value || "enemy",
           within: getField("within")?.value || "",
           optional: getField("optional")?.value === "true",
@@ -728,7 +736,7 @@
     host.addEventListener("input", () => renderWarnings(host));
     host.addEventListener("change", (event) => {
       const target = asElement(event.target);
-      if (target?.matches('[data-card-field="actionType"], [data-card-field="mode"], [data-card-field="shape"], [data-potency-field="resultType"]')) {
+      if (target?.matches('[data-card-field="actionType"], [data-card-field="mode"], [data-card-field="shape"], [data-card-field="count"], [data-potency-field="resultType"]')) {
         replaceCards(host, readAutomation(host).cards);
         return;
       }
