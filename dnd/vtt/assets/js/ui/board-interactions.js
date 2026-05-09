@@ -11564,6 +11564,7 @@ export function mountBoardInteractions(store, routes = {}) {
     const targetRequest = pendingAutomationTarget;
     pendingAutomationTarget = null;
     const name = tokenLabel(placement);
+    flashAutomationTargetToken(placement.id);
     updateStatus(`${name} selected as target.`);
     targetRequest.resolve?.({
       id: placement.id,
@@ -11587,10 +11588,30 @@ export function mountBoardInteractions(store, routes = {}) {
       reject?.(new Error('Unable to update stamina for that token.'));
       return;
     }
+    flashAutomationTargetToken(payload.placementId);
     const maxDisplay = result.max !== null ? result.max : DEFAULT_HP_PLACEHOLDER;
     const hpDisplay = result.max !== null ? `${result.current}/${maxDisplay}` : `${result.current}`;
     updateStatus(`${result.name} takes ${result.change} stamina damage (${hpDisplay} stamina remaining).`);
     resolve?.(result);
+  }
+
+  function flashAutomationTargetToken(placementId) {
+    if (!placementId || !tokenLayer) {
+      return;
+    }
+    const escapedId = window.CSS?.escape
+      ? window.CSS.escape(String(placementId))
+      : String(placementId).replace(/["\\]/g, '\\$&');
+    const token = tokenLayer.querySelector(`[data-placement-id="${escapedId}"]`);
+    if (!(token instanceof HTMLElement)) {
+      return;
+    }
+    token.classList.remove('vtt-token--automation-target');
+    void token.offsetWidth;
+    token.classList.add('vtt-token--automation-target');
+    window.setTimeout(() => {
+      token.classList.remove('vtt-token--automation-target');
+    }, 1500);
   }
 
   function formatAutomationTargetPrompt(targetConfig = {}) {

@@ -6,7 +6,7 @@
 
 .vtt-board__header {
   display: grid;
-  grid-template-columns: minmax(0, 230px) minmax(0, 1fr) minmax(170px, 220px);
+  grid-template-columns: minmax(0, 210px) minmax(620px, 1fr) minmax(155px, 200px);
   grid-template-areas: "actions tracker meta";
   align-items: start;
   gap: 0.25rem;
@@ -255,7 +255,7 @@
 .vtt-combat-tracker__section {
   padding: 0 0.05rem 0.25rem;
   display: grid;
-  grid-template-columns: repeat(auto-fill, minmax(44px, 1fr));
+  grid-template-columns: repeat(auto-fill, minmax(38px, 1fr));
   grid-auto-rows: 34px;
   gap: 0.25rem;
   align-content: flex-start;
@@ -2708,6 +2708,25 @@
     0 0 0 2px rgba(99, 102, 241, 0.85),
     0 0 0 8px rgba(165, 180, 252, 0.55),
     0 14px 30px rgba(15, 23, 42, 0.55);
+}
+
+.vtt-token.vtt-token--automation-target {
+  animation: vtt-token-automation-target-flash 0.7s ease-in-out 0s 2;
+}
+
+@keyframes vtt-token-automation-target-flash {
+  0%,
+  100% {
+    border-color: rgba(15, 23, 42, 0.9);
+    box-shadow: 0 10px 24px rgba(15, 23, 42, 0.55);
+  }
+  50% {
+    border-color: rgba(248, 113, 113, 1);
+    box-shadow:
+      0 0 0 4px rgba(239, 68, 68, 0.9),
+      0 0 0 12px rgba(248, 113, 113, 0.42),
+      0 14px 30px rgba(127, 29, 29, 0.6);
+  }
 }
 
 .vtt-token.is-dragging {

@@ -100,6 +100,13 @@
     return "high";
   }
 
+  function shiftTierKey(key, shift) {
+    const keys = ["low", "mid", "high"];
+    const index = keys.indexOf(key);
+    if (index === -1 || !shift) return key;
+    return keys[Math.min(keys.length - 1, Math.max(0, index + shift))];
+  }
+
   function parseInteger(value) {
     const parsed = parseInt(String(value || "").trim(), 10);
     return Number.isFinite(parsed) ? parsed : 0;
@@ -224,8 +231,31 @@
     }).join("");
   }
 
-  function getEdgeBonus(edgeCount, baneCount) {
-    return (parseInteger(edgeCount) - parseInteger(baneCount)) * 2;
+  function getEdgeState(edgeCount, baneCount) {
+    const edge = Math.max(0, parseInteger(edgeCount));
+    const bane = Math.max(0, parseInteger(baneCount));
+    const net = edge - bane;
+    if (net === 0) {
+      return { edge, bane, net, bonus: 0, tierShift: 0, label: "Normal roll" };
+    }
+    if (net > 0) {
+      return {
+        edge,
+        bane,
+        net,
+        bonus: 2,
+        tierShift: net >= 2 ? 1 : 0,
+        label: net >= 2 ? "Double Edge (+2, tier up)" : "Edge (+2)",
+      };
+    }
+    return {
+      edge,
+      bane,
+      net,
+      bonus: -2,
+      tierShift: net <= -2 ? -1 : 0,
+      label: net <= -2 ? "Double Bane (-2, tier down)" : "Bane (-2)",
+    };
   }
 
   function getPowerRollTotal(state, actionCard) {
@@ -233,11 +263,13 @@
     const attribute = data.attribute || "Might";
     const attributeBonus = parseInteger(state.context.getAttributeBonus?.(attribute));
     const bonus = parseInteger(data.bonus);
+    const manualBonus = parseInteger(state.manualBonus);
     const edgeCount = parseInteger(state.edgeCount);
     const baneCount = parseInteger(state.baneCount);
-    const edgeBonus = getEdgeBonus(edgeCount, baneCount);
-    const total = state.roll ? state.roll.total + attributeBonus + bonus + edgeBonus : null;
-    return { total, attribute, attributeBonus, bonus, edgeCount, baneCount, edgeBonus };
+    const edgeState = getEdgeState(edgeCount, baneCount);
+    const edgeBonus = edgeState.bonus;
+    const total = state.roll ? state.roll.total + attributeBonus + bonus + manualBonus + edgeBonus : null;
+    return { total, attribute, attributeBonus, bonus, manualBonus, edgeCount, baneCount, edgeBonus, edgeState };
   }
 
   function formatModifier(value) {
@@ -247,12 +279,18 @@
 
   function renderPowerRoll(host, state, actionCard) {
     const data = actionCard.data || {};
-    const { total, attribute, attributeBonus, bonus, edgeCount, baneCount, edgeBonus } = getPowerRollTotal(state, actionCard);
-    const edgeText = edgeBonus ? `${edgeBonus > 0 ? "Edge" : "Bane"} ${formatModifier(edgeBonus)}` : "No edge/bane";
+    const { total, attribute, attributeBonus, bonus, manualBonus, edgeState } = getPowerRollTotal(state, actionCard);
+    const formulaParts = [`${data.rollFormula || "2d10"} + ${attribute}`];
+    if (bonus) formulaParts.push(formatModifier(bonus));
+    if (manualBonus) formulaParts.push(formatModifier(manualBonus));
+    if (edgeState.net) formulaParts.push(edgeState.label);
     const detail = state.roll
-      ? `Dice: ${state.roll.rolls.join(" + ")} | ${attribute} ${formatModifier(attributeBonus)} | ${edgeText}`
-      : `${data.rollFormula || "2d10"} + ${attribute} ${bonus ? formatModifier(bonus) : ""}`.trim();
+      ? `Dice: ${state.roll.rolls.join(" + ")} | ${attribute} ${formatModifier(attributeBonus)} | ${edgeState.label}`
+      : formulaParts.join(" ");
     const targetName = state.target?.name || "No target selected";
+    const tierDetail = state.roll
+      ? `Tier: ${tierLabel(state.selectedTier)}${state.baseTier && state.baseTier !== state.selectedTier ? ` from ${tierLabel(state.baseTier)}` : ""}`
+      : "Ready";
 
     host.querySelector("[data-power-roll-body]").innerHTML = `
       <section class="power-roll-runner__section power-roll-runner__section--ability">
@@ -270,22 +308,23 @@
         <div class="dice-result-screen power-roll-runner__screen">
           <div class="dice-queue-display">${escapeHtml(detail)}</div>
           <div class="dice-result-total">${total === null ? "--" : total}</div>
-          <div class="dice-result-detail">${escapeHtml(state.roll ? `Tier: ${tierLabel(state.selectedTier)}` : "Ready")}</div>
+          <div class="dice-result-detail">${escapeHtml(tierDetail)}</div>
         </div>
         <div class="dice-row dice-row--edge-bane power-roll-runner__edge-buttons">
           <button class="dice-btn dice-btn--edge" type="button" data-power-roll-edge-adjust="1">Edge (+2)</button>
           <button class="dice-btn dice-btn--bane" type="button" data-power-roll-bane-adjust="1">Bane (-2)</button>
+          <button class="dice-btn" type="button" data-power-roll-bonus-adjust="1">+1</button>
+          <button class="dice-btn" type="button" data-power-roll-bonus-adjust="-1">-1</button>
         </div>
-        <div class="power-roll-runner__edge-summary">
-          <span>Edges: ${escapeHtml(edgeCount)}</span>
-          <span>Banes: ${escapeHtml(baneCount)}</span>
-          <span>Net: ${escapeHtml(formatModifier(edgeBonus))}</span>
-          <button class="power-roll-runner__mini-btn" type="button" data-power-roll-clear-edge-bane>Clear</button>
+        <div class="power-roll-runner__adjustments">
+          <span>${escapeHtml(edgeState.label)}</span>
+          <span>Manual: ${escapeHtml(formatModifier(state.manualBonus))}</span>
+          <button class="power-roll-runner__mini-btn" type="button" data-power-roll-clear-adjustments>Clear</button>
         </div>
         <div class="dice-actions__controls power-roll-runner__controls">
           <button class="dice-roll-btn" type="button" data-power-roll-roll>${state.roll ? "Reroll" : "Roll"}</button>
           <button class="dice-clear-btn" type="button" data-close-power-roll>Cancel</button>
-          <button class="dice-project-roll-btn" type="button" data-power-roll-accept ${state.roll ? "" : "disabled"}>Accept</button>
+          ${state.roll ? '<button class="dice-project-roll-btn" type="button" data-power-roll-accept>Accept</button>' : ""}
         </div>
       </section>
       <section class="power-roll-runner__section">
@@ -317,19 +356,28 @@
         renderPowerRoll(host, state, actionCard);
         return;
       }
-      if (target.closest("[data-power-roll-clear-edge-bane]")) {
+      const bonusButton = target.closest("[data-power-roll-bonus-adjust]");
+      if (bonusButton) {
+        state.manualBonus = parseInteger(state.manualBonus) + parseInteger(bonusButton.getAttribute("data-power-roll-bonus-adjust"));
+        state.resultText = state.roll ? "Modifier changed. Reroll to post the adjusted result." : "";
+        renderPowerRoll(host, state, actionCard);
+        return;
+      }
+      if (target.closest("[data-power-roll-clear-adjustments]")) {
         state.edgeCount = 0;
         state.baneCount = 0;
-        state.resultText = state.roll ? "Edges and banes cleared. Reroll to post the adjusted result." : "";
+        state.manualBonus = 0;
+        state.resultText = state.roll ? "Adjustments cleared. Reroll to post the adjusted result." : "";
         renderPowerRoll(host, state, actionCard);
         return;
       }
       if (target.closest("[data-power-roll-roll]")) {
         state.roll = rollFormula(actionCard.data.rollFormula || "2d10");
-        const { total, attributeBonus, bonus, edgeBonus } = getPowerRollTotal(state, actionCard);
-        state.selectedTier = getTierKey(total);
+        const { total, attributeBonus, bonus, edgeBonus, edgeState } = getPowerRollTotal(state, actionCard);
+        state.baseTier = getTierKey(total);
+        state.selectedTier = shiftTierKey(state.baseTier, edgeState.tierShift);
         state.manualTier = false;
-        state.resultText = `Rolled ${total}. Auto-selected ${tierLabel(state.selectedTier)}.`;
+        state.resultText = `Rolled ${total}. Auto-selected ${tierLabel(state.selectedTier)}${state.baseTier !== state.selectedTier ? ` from ${tierLabel(state.baseTier)} because of ${edgeState.label}.` : "."}`;
         await postChat(state.context, buildRollChatEntry(state, actionCard, total, attributeBonus, bonus, edgeBonus));
         renderPowerRoll(host, state, actionCard);
         return;
@@ -356,9 +404,11 @@
 
   function buildRollChatEntry(state, actionCard, total, attributeBonus, bonus, edgeBonus) {
     const data = actionCard.data || {};
+    const manualBonus = parseInteger(state.manualBonus);
     const numericModifiers = [
       attributeBonus ? `${attributeBonus >= 0 ? "+" : "-"} ${Math.abs(attributeBonus)}` : "",
       bonus ? `${bonus >= 0 ? "+" : "-"} ${Math.abs(bonus)}` : "",
+      manualBonus ? `${manualBonus >= 0 ? "+" : "-"} ${Math.abs(manualBonus)}` : "",
       edgeBonus ? `${edgeBonus >= 0 ? "+" : "-"} ${Math.abs(edgeBonus)}` : "",
     ].filter(Boolean);
     const expression = [state.roll.notation, ...numericModifiers].join(" ");
@@ -372,6 +422,7 @@
           { type: "dice", notation: state.roll.notation, rolls: state.roll.rolls, total: state.roll.total },
           ...(attributeBonus ? [{ type: "modifier", notation: String(attributeBonus), value: attributeBonus }] : []),
           ...(bonus ? [{ type: "modifier", notation: String(bonus), value: bonus }] : []),
+          ...(manualBonus ? [{ type: "modifier", notation: String(manualBonus), value: manualBonus }] : []),
           ...(edgeBonus ? [{ type: "modifier", notation: String(edgeBonus), value: edgeBonus }] : []),
         ],
         total,
@@ -399,6 +450,7 @@
   async function runPowerRollAction(state, card) {
     state.edgeCount = parseInteger(card.data.edges);
     state.baneCount = parseInteger(card.data.banes);
+    state.manualBonus = 0;
     const host = makeHost("Power Roll", state.action.name || "Ability Automation", "power");
     renderPowerRoll(host, state, card);
     await new Promise((resolve) => wirePowerRoll(host, state, card, resolve));
@@ -437,6 +489,7 @@
         : "";
     const message = `${state.heroName} - ${state.action.name || "Ability"}: ${targetName} takes ${amount}${damageType ? ` ${damageType}` : ""} stamina damage${remaining}.${note ? `\n${note}` : ""}`;
     await postChat(state.context, { message });
+    state.dealtStaminaDamage = true;
   }
 
   async function runActionCard(state, card) {
@@ -464,20 +517,30 @@
       targetName: "",
       selectedTier: null,
       selectedTierData: null,
+      baseTier: null,
       manualTier: false,
       edgeCount: 0,
       baneCount: 0,
+      manualBonus: 0,
       roll: null,
       resultText: "",
+      dealtStaminaDamage: false,
     };
 
     try {
-      for (const card of automation.cards || []) {
+      const cards = automation.cards || [];
+      const hasExplicitDamageAction = cards.some(
+        (card) => card?.type === "action" && card?.data?.actionType === "dealStaminaDamage"
+      );
+      for (const card of cards) {
         if (card.type === "target") {
           await runTargetCard(state, card);
         } else if (card.type === "action") {
           await runActionCard(state, card);
         }
+      }
+      if (!hasExplicitDamageAction && !state.dealtStaminaDamage && state.selectedTierData && state.target?.id) {
+        await runDealStaminaDamageAction(state, { data: { note: "" } });
       }
     } catch (error) {
       closeRunner();
