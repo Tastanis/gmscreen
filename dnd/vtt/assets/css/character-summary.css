@@ -545,7 +545,7 @@ body.vtt-character-summary-is-open .vtt-settings-launchers {
   width: 100%;
   min-height: 48px;
   display: grid;
-  grid-template-columns: 34px minmax(0, 1fr);
+  grid-template-columns: 34px minmax(0, 1fr) auto;
   gap: 8px;
   align-items: center;
   padding: 5px 8px;
@@ -556,6 +556,10 @@ body.vtt-character-summary-is-open .vtt-settings-launchers {
   cursor: pointer;
   font: inherit;
   text-align: left;
+}
+
+.vtt-character-ability-item--automated {
+  border-left: 3px solid #22c55e;
 }
 
 .vtt-character-ability-item:hover,
@@ -577,6 +581,16 @@ body.vtt-character-summary-is-open .vtt-settings-launchers {
   font-family: "Inter", "Segoe UI", sans-serif;
   font-size: 1rem;
   font-weight: 900;
+}
+
+.vtt-character-ability-item__auto {
+  align-self: center;
+  border: 1px solid rgba(34, 197, 94, 0.48);
+  border-radius: 999px;
+  color: #b6f3c9;
+  font: 800 0.62rem/1 "Inter", "Segoe UI", sans-serif;
+  padding: 4px 6px;
+  text-transform: uppercase;
 }
 
 .vtt-character-ability-item__text {

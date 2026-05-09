@@ -1,9 +1,10 @@
 (function () {
   "use strict";
 
-  const AUTOMATION_SCHEMA_VERSION = 1;
-  const AUTOMATION_SCHEMA_ID = "ability-automation/v1";
+  const AUTOMATION_SCHEMA_VERSION = 2;
+  const AUTOMATION_SCHEMA_ID = "ability-automation/v2";
   const TIER_KEYS = ["low", "mid", "high"];
+  const ACTION_TYPES = ["powerRoll", "dealStaminaDamage", "note"];
 
   function createId(prefix) {
     return `${prefix}_${Date.now()}_${Math.random().toString(16).slice(2)}`;
@@ -24,6 +25,58 @@
     return "17+";
   }
 
+  function defaultPowerRollData(data = {}) {
+    const tiers = data.tiers && typeof data.tiers === "object" ? data.tiers : {};
+    return {
+      actionType: "powerRoll",
+      rollFormula: data.rollFormula || "2d10",
+      attribute: data.attribute || "Might",
+      bonus: data.bonus || "",
+      edges: data.edges || "",
+      banes: data.banes || "",
+      tiers: Object.fromEntries(
+        TIER_KEYS.map((key) => [
+          key,
+          {
+            ...emptyTier(),
+            range: tierRange(key),
+            ...(tiers[key] || {}),
+          },
+        ])
+      ),
+    };
+  }
+
+  function defaultDealStaminaDamageData(data = {}) {
+    return {
+      actionType: "dealStaminaDamage",
+      source: data.source || "selectedPowerRollTier",
+      target: data.target || "selectedTarget",
+      note: data.note || "",
+    };
+  }
+
+  function defaultNoteData(data = {}) {
+    return {
+      actionType: "note",
+      text: data.text || "",
+    };
+  }
+
+  function normalizeActionData(data = {}) {
+    const actionType = ACTION_TYPES.includes(data.actionType) ? data.actionType : "powerRoll";
+    if (actionType === "dealStaminaDamage") return defaultDealStaminaDamageData(data);
+    if (actionType === "note") return defaultNoteData(data);
+    return defaultPowerRollData(data);
+  }
+
+  function createActionCard(actionType = "powerRoll") {
+    return normalizeCard({
+      type: "action",
+      data: { actionType },
+    });
+  }
+
   function defaultAutomation() {
     return {
       schema: AUTOMATION_SCHEMA_ID,
@@ -36,31 +89,11 @@
             count: "one",
             creature: "enemy",
             within: "",
+            optional: false,
           },
         },
-        {
-          id: createId("card"),
-          type: "powerRollDamage",
-          data: {
-            rollFormula: "2d10",
-            attribute: "Might",
-            bonus: "",
-            tiers: {
-              low: { ...emptyTier(), range: tierRange("low") },
-              mid: { ...emptyTier(), range: "12-16" },
-              high: { ...emptyTier(), range: "17+" },
-            },
-          },
-        },
-        {
-          id: createId("card"),
-          type: "dealStaminaDamage",
-          data: {
-            source: "selectedPowerRollTier",
-            target: "selectedTarget",
-            note: "",
-          },
-        },
+        createActionCard("powerRoll"),
+        createActionCard("dealStaminaDamage"),
       ],
     };
   }
@@ -71,47 +104,34 @@
     const data = card?.data && typeof card.data === "object" ? card.data : {};
 
     if (type === "powerRollDamage") {
-      const tiers = data.tiers && typeof data.tiers === "object" ? data.tiers : {};
       return {
         id,
-        type,
-        data: {
-          rollFormula: data.rollFormula || "2d10",
-          attribute: data.attribute || "Might",
-          bonus: data.bonus || "",
-          tiers: Object.fromEntries(
-            TIER_KEYS.map((key) => [
-              key,
-              {
-                ...emptyTier(),
-                range: tierRange(key),
-                ...(tiers[key] || {}),
-              },
-            ])
-          ),
-        },
-      };
-    }
-
-    if (type === "note") {
-      return {
-        id,
-        type,
-        data: {
-          text: data.text || "",
-        },
+        type: "action",
+        data: defaultPowerRollData(data),
       };
     }
 
     if (type === "dealStaminaDamage") {
       return {
         id,
+        type: "action",
+        data: defaultDealStaminaDamageData(data),
+      };
+    }
+
+    if (type === "note") {
+      return {
+        id,
+        type: "action",
+        data: defaultNoteData(data),
+      };
+    }
+
+    if (type === "action") {
+      return {
+        id,
         type,
-        data: {
-          source: data.source || "selectedPowerRollTier",
-          target: data.target || "selectedTarget",
-          note: data.note || "",
-        },
+        data: normalizeActionData(data),
       };
     }
 
@@ -122,6 +142,7 @@
         count: data.count || "one",
         creature: data.creature || "enemy",
         within: data.within || "",
+        optional: Boolean(data.optional),
       },
     };
   }
@@ -133,8 +154,8 @@
 
     const cards = Array.isArray(input.cards) ? input.cards.map(normalizeCard) : [];
     return {
-      schema: input.schema || AUTOMATION_SCHEMA_ID,
-      version: Number(input.version) || AUTOMATION_SCHEMA_VERSION,
+      schema: AUTOMATION_SCHEMA_ID,
+      version: AUTOMATION_SCHEMA_VERSION,
       cards: cards.length ? cards : defaultAutomation().cards,
     };
   }
@@ -146,30 +167,31 @@
   function validateAutomation(input) {
     const automation = normalizeAutomation(input);
     const warnings = [];
-    const hasTarget = automation.cards.some((card) => card.type === "target");
-    const powerRollCards = automation.cards.filter((card) => card.type === "powerRollDamage");
-    const hasDamageAction = automation.cards.some((card) => card.type === "dealStaminaDamage");
+    const targetCards = automation.cards.filter((card) => card.type === "target");
+    const actionCards = automation.cards.filter((card) => card.type === "action");
+    const powerRollCards = actionCards.filter((card) => card.data.actionType === "powerRoll");
+    const hasDamageAction = actionCards.some((card) => card.data.actionType === "dealStaminaDamage");
 
-    if (!hasTarget) {
-      warnings.push("Add a target card so play mode will know who the ability affects later.");
+    if (!targetCards.length) {
+      warnings.push("Add a target card if this ability needs a token selected before it resolves.");
     }
 
-    if (!powerRollCards.length) {
-      warnings.push("Add a power roll damage card to describe tiered damage.");
+    if (!actionCards.length) {
+      warnings.push("Add at least one action card so the automation has something to do.");
     }
 
     if (powerRollCards.length && !hasDamageAction) {
-      warnings.push("Add a deal stamina damage card if this power roll should apply tier damage in play mode.");
+      warnings.push("Add a deal stamina damage action if the power roll should damage the selected target.");
     }
 
     powerRollCards.forEach((card, index) => {
       if (!card.data.attribute) {
-        warnings.push(`Power roll card ${index + 1} is missing an attribute.`);
+        warnings.push(`Power roll action ${index + 1} is missing an attribute.`);
       }
       TIER_KEYS.forEach((key) => {
         const tier = card.data.tiers[key];
         if (!tier.damage) {
-          warnings.push(`Power roll card ${index + 1} ${key} tier has no damage value.`);
+          warnings.push(`Power roll action ${index + 1} ${key} tier has no damage value.`);
         }
       });
     });
@@ -177,15 +199,40 @@
     return warnings;
   }
 
+  function summarizeCard(card) {
+    const normalized = normalizeCard(card);
+    if (normalized.type === "target") {
+      const data = normalized.data;
+      const parts = [`Pick ${data.count} ${data.creature}`];
+      if (data.within) parts.push(data.within);
+      if (data.optional) parts.push("(optional)");
+      return parts.join(" ");
+    }
+
+    if (normalized.data.actionType === "powerRoll") {
+      return `Roll ${normalized.data.rollFormula} + ${normalized.data.attribute}.`;
+    }
+
+    if (normalized.data.actionType === "dealStaminaDamage") {
+      return "Deal the selected power-roll tier damage to the selected target.";
+    }
+
+    return normalized.data.text || "Automation note.";
+  }
+
   window.AbilityAutomationSchema = {
     AUTOMATION_SCHEMA_ID,
     AUTOMATION_SCHEMA_VERSION,
+    ACTION_TYPES,
     TIER_KEYS,
     createId,
     tierRange,
     defaultAutomation,
+    createActionCard,
     normalizeAutomation,
+    normalizeCard,
     validateAutomation,
     hasAutomation,
+    summarizeCard,
   };
 })();

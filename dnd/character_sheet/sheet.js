@@ -241,11 +241,6 @@ function normalizeAutomationBlock(automation) {
   return deepClone(automation);
 }
 
-function getAutomationAttributeBonus(attribute) {
-  const key = String(attribute || "").trim().toLowerCase();
-  return parseInt(sheetState.hero.stats?.[key] ?? 0, 10) || 0;
-}
-
 function deepClone(obj) {
   return JSON.parse(JSON.stringify(obj));
 }
@@ -2491,13 +2486,6 @@ function renderActionSection(type, containerId) {
                         data-automate-action="${action.id}"
                         data-action-type="${type}"
                       ><span class="automation-action-btn__status" aria-hidden="true"></span>${automationLabel}</button>`
-                    : automationConfigured
-                      ? `<button
-                          class="text-btn automation-action-btn automation-action-btn--configured"
-                          type="button"
-                          data-power-roll-action="${action.id}"
-                          data-action-type="${type}"
-                        ><span class="automation-action-btn__status" aria-hidden="true"></span>Power Roll</button>`
                     : ""
                 }
                 <button
@@ -2569,7 +2557,6 @@ function renderActionSection(type, containerId) {
   bindActionMoves();
   bindActionToggles();
   bindAutomationButtons();
-  bindPowerRollButtons();
   bindTestAdds();
   bindTestRemovals();
   bindAttributeToggles();
@@ -2930,32 +2917,6 @@ function bindAutomationButtons() {
         action.automation = normalizeAutomationBlock(automation);
         renderActionSection(type, ACTION_CONTAINER_IDS[type] || `${type}-pane`);
         saveSheet();
-      });
-    };
-  });
-}
-
-function bindPowerRollButtons() {
-  document.querySelectorAll("[data-power-roll-action]").forEach((btn) => {
-    btn.onclick = () => {
-      const actionId = btn.getAttribute("data-power-roll-action");
-      const type = btn.getAttribute("data-action-type");
-      if (!actionId || !type) return;
-      if (!window.AbilityAutomationRunner || typeof window.AbilityAutomationRunner.open !== "function") {
-        console.warn("Ability automation runner is not available.");
-        return;
-      }
-
-      const action = (sheetState.actions[type] || []).find((item) => item.id === actionId);
-      if (!action || !hasAbilityAutomation(action.automation)) return;
-
-      window.AbilityAutomationRunner.open({
-        action: deepClone(action),
-        actionType: type,
-        hero: deepClone(sheetState.hero),
-        automation: normalizeAutomationBlock(action.automation),
-        getAttributeBonus: getAutomationAttributeBonus,
-        postChat: postAutomationChat,
       });
     };
   });

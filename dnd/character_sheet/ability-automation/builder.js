@@ -22,14 +22,14 @@
     return schema.tierRange ? schema.tierRange(key) : key === "low" ? "<= 11" : key === "mid" ? "12-16" : "17+";
   }
 
-  function cardShell(card, title, body) {
+  function cardShell(card, title, description, body) {
     return `
       <section class="automation-builder__card" data-automation-card="${escapeHtml(card.id)}" data-card-type="${escapeHtml(card.type)}">
         <header class="automation-builder__card-header">
           <button class="automation-builder__drag-handle" type="button" draggable="true" data-drag-automation-card aria-label="Drag ${escapeHtml(title)} card">::</button>
           <div class="automation-builder__card-heading">
             <h3 class="automation-builder__card-title">${escapeHtml(title)}</h3>
-            <p class="automation-builder__card-type">${escapeHtml(registry.getPrimitive(card.type).description)}</p>
+            <p class="automation-builder__card-type">${escapeHtml(description)}</p>
           </div>
           <button class="icon-btn automation-builder__remove" type="button" data-remove-automation-card="${escapeHtml(card.id)}" aria-label="Remove ${escapeHtml(title)} card">X</button>
         </header>
@@ -54,20 +54,37 @@
             ${["enemy", "ally", "creature", "object", "creature or object"].map((option) => `<option value="${option}" ${data.creature === option ? "selected" : ""}>${option}</option>`).join("")}
           </select>
         </label>
+        <label class="automation-builder__field">
+          <span>Optional</span>
+          <select data-card-field="optional">
+            <option value="false" ${data.optional ? "" : "selected"}>Required</option>
+            <option value="true" ${data.optional ? "selected" : ""}>No target allowed</option>
+          </select>
+        </label>
         <label class="automation-builder__field automation-builder__field--wide">
           <span>Range / area note</span>
           <input type="text" data-card-field="within" value="${escapeHtml(data.within)}" placeholder="e.g. within 1, melee 1, each enemy in the area" />
         </label>
       </div>
     `;
-    return cardShell(card, "Target", body);
+    return cardShell(card, "Target", registry.getPrimitive("target").description, body);
   }
 
-  function renderPowerRollCard(card) {
-    const data = card.data;
-    const tiers = data.tiers;
+  function renderActionSelector(data) {
+    return `
+      <label class="automation-builder__field automation-builder__field--wide">
+        <span>Action type</span>
+        <select data-card-field="actionType">
+          ${registry.actionTypes.map((actionType) => `<option value="${actionType.type}" ${data.actionType === actionType.type ? "selected" : ""}>${escapeHtml(actionType.label)}</option>`).join("")}
+        </select>
+      </label>
+    `;
+  }
+
+  function renderPowerRollFields(data) {
+    const tiers = data.tiers || {};
     const tierMarkup = schema.TIER_KEYS.map((key) => {
-      const tier = tiers[key];
+      const tier = tiers[key] || {};
       return `
         <div class="automation-builder__tier" data-tier="${key}">
           <div class="automation-builder__tier-label">${tierRange(key)}</div>
@@ -87,7 +104,7 @@
       `;
     }).join("");
 
-    const body = `
+    return `
       <div class="automation-builder__grid">
         <label class="automation-builder__field">
           <span>Roll</span>
@@ -106,12 +123,10 @@
       </div>
       <div class="automation-builder__tiers">${tierMarkup}</div>
     `;
-    return cardShell(card, "Power Roll Damage", body);
   }
 
-  function renderDealStaminaDamageCard(card) {
-    const data = card.data || {};
-    const body = `
+  function renderDealDamageFields(data) {
+    return `
       <div class="automation-builder__grid">
         <label class="automation-builder__field">
           <span>Damage source</span>
@@ -131,24 +146,85 @@
         </label>
       </div>
     `;
-    return cardShell(card, "Deal Stamina Damage", body);
   }
 
-  function renderNoteCard(card) {
-    const body = `
+  function renderNoteFields(data) {
+    return `
       <label class="automation-builder__field automation-builder__field--wide">
         <span>Note</span>
-        <textarea rows="3" data-card-field="text" placeholder="Describe a future automation detail.">${escapeHtml(card.data.text)}</textarea>
+        <textarea rows="3" data-card-field="text" placeholder="Describe a future automation detail.">${escapeHtml(data.text)}</textarea>
       </label>
     `;
-    return cardShell(card, "Automation Note", body);
+  }
+
+  function renderActionCard(card) {
+    const data = card.data;
+    const actionType = registry.getActionType(data.actionType);
+    const fields = data.actionType === "dealStaminaDamage"
+      ? renderDealDamageFields(data)
+      : data.actionType === "note"
+        ? renderNoteFields(data)
+        : renderPowerRollFields(data);
+    return cardShell(card, "Action", actionType.description, `${renderActionSelector(data)}${fields}`);
   }
 
   function renderCard(card) {
-    if (card.type === "powerRollDamage") return renderPowerRollCard(card);
-    if (card.type === "dealStaminaDamage") return renderDealStaminaDamageCard(card);
-    if (card.type === "note") return renderNoteCard(card);
-    return renderTargetCard(card);
+    const normalized = schema.normalizeCard ? schema.normalizeCard(card) : card;
+    if (normalized.type === "action") return renderActionCard(normalized);
+    return renderTargetCard(normalized);
+  }
+
+  function readActionCard(cardEl, id) {
+    const getField = (field) => cardEl.querySelector(`[data-card-field="${field}"]`);
+    const actionType = getField("actionType")?.value || "powerRoll";
+
+    if (actionType === "dealStaminaDamage") {
+      return {
+        id,
+        type: "action",
+        data: {
+          actionType,
+          source: getField("source")?.value || "selectedPowerRollTier",
+          target: getField("target")?.value || "selectedTarget",
+          note: getField("note")?.value || "",
+        },
+      };
+    }
+
+    if (actionType === "note") {
+      return {
+        id,
+        type: "action",
+        data: {
+          actionType,
+          text: getField("text")?.value || "",
+        },
+      };
+    }
+
+    const tiers = {};
+    schema.TIER_KEYS.forEach((key) => {
+      const tierEl = cardEl.querySelector(`[data-tier="${key}"]`);
+      const getTierField = (field) => tierEl?.querySelector(`[data-tier-field="${field}"]`);
+      tiers[key] = {
+        range: tierRange(key),
+        damage: getTierField("damage")?.value || "",
+        damageType: getTierField("damageType")?.value || "",
+        effect: getTierField("effect")?.value || "",
+      };
+    });
+
+    return {
+      id,
+      type: "action",
+      data: {
+        actionType: "powerRoll",
+        rollFormula: getField("rollFormula")?.value || "2d10",
+        attribute: getField("attribute")?.value || "Might",
+        bonus: getField("bonus")?.value || "",
+        tiers,
+      },
+    };
   }
 
   function readAutomation(builder) {
@@ -157,44 +233,8 @@
       const id = cardEl.getAttribute("data-automation-card") || schema.createId("card");
       const getField = (field) => cardEl.querySelector(`[data-card-field="${field}"]`);
 
-      if (type === "powerRollDamage") {
-        const tiers = {};
-        schema.TIER_KEYS.forEach((key) => {
-          const tierEl = cardEl.querySelector(`[data-tier="${key}"]`);
-          const getTierField = (field) => tierEl?.querySelector(`[data-tier-field="${field}"]`);
-          tiers[key] = {
-            range: tierRange(key),
-            damage: getTierField("damage")?.value || "",
-            damageType: getTierField("damageType")?.value || "",
-            effect: getTierField("effect")?.value || "",
-          };
-        });
-        return {
-          id,
-          type,
-          data: {
-            rollFormula: getField("rollFormula")?.value || "2d10",
-            attribute: getField("attribute")?.value || "Might",
-            bonus: getField("bonus")?.value || "",
-            tiers,
-          },
-        };
-      }
-
-      if (type === "dealStaminaDamage") {
-        return {
-          id,
-          type,
-          data: {
-            source: getField("source")?.value || "selectedPowerRollTier",
-            target: getField("target")?.value || "selectedTarget",
-            note: getField("note")?.value || "",
-          },
-        };
-      }
-
-      if (type === "note") {
-        return { id, type, data: { text: getField("text")?.value || "" } };
+      if (type === "action") {
+        return readActionCard(cardEl, id);
       }
 
       return {
@@ -204,11 +244,21 @@
           count: getField("count")?.value || "one",
           creature: getField("creature")?.value || "enemy",
           within: getField("within")?.value || "",
+          optional: getField("optional")?.value === "true",
         },
       };
     });
 
     return schema.normalizeAutomation({ cards });
+  }
+
+  function renderSummary(builder) {
+    const summaryEl = builder.querySelector("[data-automation-summary]");
+    if (!summaryEl) return;
+    const automation = readAutomation(builder);
+    summaryEl.innerHTML = automation.cards.length
+      ? `<ol>${automation.cards.map((card) => `<li>${escapeHtml(schema.summarizeCard(card))}</li>`).join("")}</ol>`
+      : "<p>No automation steps yet.</p>";
   }
 
   function renderWarnings(builder) {
@@ -217,8 +267,9 @@
     const warnings = schema.validateAutomation(readAutomation(builder));
     warningsEl.innerHTML = warnings.length
       ? `<ul>${warnings.map((warning) => `<li>${escapeHtml(warning)}</li>`).join("")}</ul>`
-      : "<p>Ready to save. Play mode will run executable cards from top to bottom.</p>";
+      : "<p>Ready to save. VTT play mode will run cards from top to bottom.</p>";
     warningsEl.classList.toggle("automation-builder__warnings--ok", warnings.length === 0);
+    renderSummary(builder);
   }
 
   function replaceCards(builder, cards) {
@@ -228,7 +279,8 @@
 
   function addCard(builder, type) {
     const automation = readAutomation(builder);
-    automation.cards.push(schema.normalizeAutomation({ cards: [{ type }] }).cards[0]);
+    const card = type === "action" ? schema.createActionCard("powerRoll") : schema.normalizeAutomation({ cards: [{ type: "target" }] }).cards[0];
+    automation.cards.push(card);
     replaceCards(builder, automation.cards);
   }
 
@@ -330,12 +382,20 @@
           <button class="icon-btn" type="button" data-close-automation-builder aria-label="Close automation builder">X</button>
         </header>
         <div class="modal__body automation-builder__body">
-          <p class="automation-builder__intro">Describe this ability as cards. Play mode runs executable cards from top to bottom.</p>
+          <p class="automation-builder__intro">Build the VTT play sequence with target cards and action cards. Cards run from top to bottom.</p>
           <div class="automation-builder__toolbar">
             ${registry.primitives.map((primitive) => `<button class="text-btn" type="button" data-add-automation-card="${escapeHtml(primitive.type)}">+ ${escapeHtml(primitive.label)}</button>`).join("")}
           </div>
-          <div class="automation-builder__stack" data-automation-cards>${automation.cards.map(renderCard).join("")}</div>
-          <aside class="automation-builder__warnings" data-automation-warnings aria-live="polite"></aside>
+          <div class="automation-builder__layout">
+            <div class="automation-builder__stack" data-automation-cards>${automation.cards.map(renderCard).join("")}</div>
+            <aside class="automation-builder__sidebar">
+              <div class="automation-builder__plain">
+                <h3>Play Sequence</h3>
+                <div data-automation-summary></div>
+              </div>
+              <div class="automation-builder__warnings" data-automation-warnings aria-live="polite"></div>
+            </aside>
+          </div>
         </div>
         <footer class="automation-builder__footer">
           <button class="text-btn" type="button" data-close-automation-builder>Cancel</button>
@@ -369,7 +429,14 @@
     });
 
     host.addEventListener("input", () => renderWarnings(host));
-    host.addEventListener("change", () => renderWarnings(host));
+    host.addEventListener("change", (event) => {
+      const target = event.target instanceof Element ? event.target : null;
+      if (target?.matches('[data-card-field="actionType"]')) {
+        replaceCards(host, readAutomation(host).cards);
+        return;
+      }
+      renderWarnings(host);
+    });
   }
 
   window.AbilityAutomation = { open };

@@ -823,6 +823,7 @@ export function mountBoardInteractions(store, routes = {}) {
   let hitPointsEditSession = null;
   let damageHealUi = null;
   let pendingDamageHeal = null;
+  let pendingAutomationTarget = null;
   let damageHealStatusTimeoutId = null;
   let healOverflowPopup = null;
   const completedCombatants = new Set();
@@ -1903,6 +1904,9 @@ export function mountBoardInteractions(store, routes = {}) {
       toggleDamageHealWidget();
     });
   }
+
+  document.addEventListener('vtt:automation-select-target', handleAutomationTargetRequest);
+  document.addEventListener('vtt:automation-apply-damage', handleAutomationDamageRequest);
 
   if (maliceButton) {
     maliceButton.addEventListener('click', (event) => {
@@ -3321,7 +3325,31 @@ export function mountBoardInteractions(store, routes = {}) {
       return;
     }
 
+    if (pendingAutomationTarget && event.button === 2) {
+      event.preventDefault();
+      cancelPendingAutomationTarget('Target selection canceled.');
+      return;
+    }
+
     if (!viewState.mapLoaded) {
+      return;
+    }
+
+    if (pendingAutomationTarget && event.button === 0) {
+      event.preventDefault();
+      const placement = findRenderedPlacementAtPoint(event);
+      if (!placement) {
+        updateStatus(formatAutomationTargetPrompt(pendingAutomationTarget.targetConfig));
+        return;
+      }
+      const targetRequest = pendingAutomationTarget;
+      pendingAutomationTarget = null;
+      const name = tokenLabel(placement);
+      updateStatus(`${name} selected as target.`);
+      targetRequest.resolve?.({
+        id: placement.id,
+        name,
+      });
       return;
     }
 
@@ -11505,6 +11533,58 @@ export function mountBoardInteractions(store, routes = {}) {
     }
 
     return null;
+  }
+
+  function handleAutomationTargetRequest(event) {
+    const detail = event?.detail ?? {};
+    pendingAutomationTarget = {
+      targetConfig: detail.targetConfig && typeof detail.targetConfig === 'object'
+        ? detail.targetConfig
+        : {},
+      resolve: typeof detail.resolve === 'function' ? detail.resolve : null,
+      reject: typeof detail.reject === 'function' ? detail.reject : null,
+    };
+    closeDamageHealWidget();
+    closeHealOverflowPopup();
+    updateStatus(formatAutomationTargetPrompt(pendingAutomationTarget.targetConfig));
+  }
+
+  function handleAutomationDamageRequest(event) {
+    const detail = event?.detail ?? {};
+    const payload = detail.payload && typeof detail.payload === 'object' ? detail.payload : {};
+    const resolve = typeof detail.resolve === 'function' ? detail.resolve : null;
+    const reject = typeof detail.reject === 'function' ? detail.reject : null;
+    const amount = parseDamageHealAmount(payload.amount);
+    if (!payload.placementId || !amount) {
+      reject?.(new Error('Automation damage request is missing a target or amount.'));
+      return;
+    }
+    const result = applyDamageHealToPlacement(payload.placementId, 'damage', amount);
+    if (!result) {
+      reject?.(new Error('Unable to update stamina for that token.'));
+      return;
+    }
+    const maxDisplay = result.max !== null ? result.max : DEFAULT_HP_PLACEHOLDER;
+    const hpDisplay = result.max !== null ? `${result.current}/${maxDisplay}` : `${result.current}`;
+    updateStatus(`${result.name} takes ${result.change} stamina damage (${hpDisplay} stamina remaining).`);
+    resolve?.(result);
+  }
+
+  function formatAutomationTargetPrompt(targetConfig = {}) {
+    const count = targetConfig.count || 'one';
+    const creature = targetConfig.creature || 'target';
+    const within = targetConfig.within ? ` ${targetConfig.within}` : '';
+    return `Pick ${count} ${creature}${within}.`;
+  }
+
+  function cancelPendingAutomationTarget(message) {
+    if (!pendingAutomationTarget) {
+      return;
+    }
+    const request = pendingAutomationTarget;
+    pendingAutomationTarget = null;
+    updateStatus(message || 'Target selection canceled.');
+    request.reject?.(new Error(message || 'Target selection canceled.'));
   }
 
   function applyDamageHealToPlacement(placementId, mode, amount, { allowTempHp = false } = {}) {

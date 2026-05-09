@@ -62,6 +62,20 @@
     },
   });
 
+  registerAction("action", {
+    label: "Action",
+    execute(card, context) {
+      if (card?.data?.actionType === "dealStaminaDamage") {
+        return getAction("dealStaminaDamage").execute(card, context);
+      }
+      return {
+        ok: true,
+        skipped: true,
+        message: "",
+      };
+    },
+  });
+
   window.AbilityAutomationActions = {
     registerAction,
     getAction,

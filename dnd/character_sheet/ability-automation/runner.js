@@ -3,7 +3,6 @@
 
   const RUNNER_ID = "ability-automation-runner";
   const schema = window.AbilityAutomationSchema;
-  const actions = window.AbilityAutomationActions;
 
   function escapeHtml(value) {
     return String(value ?? "")
@@ -35,6 +34,12 @@
     return Number.isFinite(parsed) ? parsed : 0;
   }
 
+  function parseDamage(value) {
+    const match = String(value || "").match(/-?\d+/);
+    if (!match) return 0;
+    return Math.max(0, parseInt(match[0], 10) || 0);
+  }
+
   function rollFormula(formula) {
     const clean = String(formula || "2d10").replace(/\s+/g, "").toLowerCase();
     const match = clean.match(/^(\d*)d(\d+)$/);
@@ -49,35 +54,6 @@
       rolls,
       total: rolls.reduce((sum, roll) => sum + roll, 0),
     };
-  }
-
-  function findPowerRollCard(automation) {
-    return (automation.cards || []).find((card) => card.type === "powerRollDamage") || null;
-  }
-
-  function findTargetCard(automation) {
-    return (automation.cards || []).find((card) => card.type === "target") || null;
-  }
-
-  function renderTierCards(powerRollCard, selectedTier, hasRolled) {
-    const tiers = powerRollCard?.data?.tiers || {};
-    return schema.TIER_KEYS.map((key) => {
-      const tier = tiers[key] || {};
-      const parts = [];
-      if (tier.damage || tier.damageType) parts.push(`${tier.damage || "-"} ${tier.damageType || ""}`.trim());
-      if (tier.effect) parts.push(tier.effect);
-      return `
-        <button
-          class="power-roll-runner__tier ${selectedTier === key ? "power-roll-runner__tier--selected" : ""}"
-          type="button"
-          data-select-tier="${key}"
-          ${hasRolled ? "" : "disabled"}
-        >
-          <span class="power-roll-runner__tier-range">${tierLabel(key)}</span>
-          <span class="power-roll-runner__tier-body">${escapeHtml(parts.join(" | ") || "No result configured")}</span>
-        </button>
-      `;
-    }).join("");
   }
 
   async function postChat(context, entry) {
@@ -108,45 +84,102 @@
     return Boolean(data && data.success);
   }
 
-  function setResult(panel, text, ok) {
-    const result = panel.querySelector("[data-power-roll-result]");
-    if (!result) return;
-    result.textContent = text;
-    result.classList.toggle("power-roll-runner__log--error", ok === false);
+  function makeHost(title, eyebrow) {
+    closeRunner();
+    const host = document.createElement("div");
+    host.id = RUNNER_ID;
+    host.className = "power-roll-runner";
+    host.innerHTML = `
+      <div class="power-roll-runner__modal" role="dialog" aria-modal="true" aria-labelledby="power-roll-title">
+        <header class="modal__header power-roll-runner__header">
+          <div>
+            <p class="automation-builder__eyebrow">${escapeHtml(eyebrow || "Automation")}</p>
+            <h2 class="modal__title" id="power-roll-title">${escapeHtml(title || "Ability Automation")}</h2>
+          </div>
+          <button class="icon-btn" type="button" data-close-power-roll aria-label="Close automation">X</button>
+        </header>
+        <div class="power-roll-runner__body" data-power-roll-body></div>
+      </div>
+    `;
+    document.body.appendChild(host);
+    host.addEventListener("click", (event) => {
+      const target = event.target instanceof Element ? event.target : null;
+      if (target === host || target?.closest("[data-close-power-roll]")) {
+        closeRunner();
+      }
+    });
+    return host;
   }
 
-  function render(panel, state) {
-    const powerRollCard = state.powerRollCard;
-    const action = state.action || {};
-    const targetCard = state.targetCard;
-    const attribute = powerRollCard?.data?.attribute || "Might";
-    const attributeBonus = parseInteger(state.context.getAttributeBonus?.(attribute));
-    const bonus = parseInteger(powerRollCard?.data?.bonus);
-    const total = state.roll ? state.roll.total + attributeBonus + bonus : null;
-    const expression = `${powerRollCard?.data?.rollFormula || "2d10"} + ${attribute}${bonus ? ` + ${bonus}` : ""}`;
-
-    panel.querySelector("[data-power-roll-body]").innerHTML = `
+  function showTargetPrompt(state, card) {
+    const host = makeHost("Pick Target", state.action.name || "Ability Automation");
+    host.querySelector("[data-power-roll-body]").innerHTML = `
       <section class="power-roll-runner__section">
         <div class="power-roll-runner__ability">
-          <h3>${escapeHtml(action.name || "Unnamed Ability")}</h3>
-          <p>${escapeHtml(action.description || "No ability text entered.")}</p>
+          <h3>${escapeHtml(state.action.name || "Unnamed Ability")}</h3>
+          <p>${escapeHtml(schema.summarizeCard(card))}</p>
+        </div>
+      </section>
+      <pre class="power-roll-runner__log">Click an enemy token on the map.</pre>
+    `;
+    return host;
+  }
+
+  function renderTierCards(actionCard, selectedTier, hasRolled) {
+    const tiers = actionCard?.data?.tiers || {};
+    return schema.TIER_KEYS.map((key) => {
+      const tier = tiers[key] || {};
+      const parts = [];
+      if (tier.damage || tier.damageType) parts.push(`${tier.damage || "-"} ${tier.damageType || ""}`.trim());
+      if (tier.effect) parts.push(tier.effect);
+      return `
+        <button
+          class="power-roll-runner__tier ${selectedTier === key ? "power-roll-runner__tier--selected" : ""}"
+          type="button"
+          data-select-tier="${key}"
+          ${hasRolled ? "" : "disabled"}
+        >
+          <span class="power-roll-runner__tier-range">${tierLabel(key)}</span>
+          <span class="power-roll-runner__tier-body">${escapeHtml(parts.join(" | ") || "No result configured")}</span>
+        </button>
+      `;
+    }).join("");
+  }
+
+  function renderPowerRoll(host, state, actionCard) {
+    const data = actionCard.data || {};
+    const attribute = data.attribute || "Might";
+    const attributeBonus = parseInteger(state.context.getAttributeBonus?.(attribute));
+    const bonus = parseInteger(data.bonus);
+    const edgeCount = parseInteger(state.edgeCount);
+    const baneCount = parseInteger(state.baneCount);
+    const netEdge = edgeCount - baneCount;
+    const edgeBonus = netEdge > 0 ? 2 : netEdge < 0 ? -2 : 0;
+    const total = state.roll ? state.roll.total + attributeBonus + bonus + edgeBonus : null;
+    const edgeText = netEdge > 0 ? "Edge +2" : netEdge < 0 ? "Bane -2" : "No edge/bane";
+    const targetName = state.target?.name || "No target selected";
+
+    host.querySelector("[data-power-roll-body]").innerHTML = `
+      <section class="power-roll-runner__section">
+        <div class="power-roll-runner__ability">
+          <h3>${escapeHtml(state.action.name || "Unnamed Ability")}</h3>
+          <p>${escapeHtml(state.action.description || "No ability text entered.")}</p>
           <div class="power-roll-runner__meta">
-            ${action.range ? `<span>Range: ${escapeHtml(action.range)}</span>` : ""}
-            ${action.target ? `<span>Target: ${escapeHtml(action.target)}</span>` : ""}
-            ${action.cost ? `<span>Cost: ${escapeHtml(action.cost)}</span>` : ""}
-            ${targetCard ? `<span>Automation target: ${escapeHtml(targetCard.data.count)} ${escapeHtml(targetCard.data.creature)} ${escapeHtml(targetCard.data.within || "")}</span>` : ""}
+            <span>Target: ${escapeHtml(targetName)}</span>
+            ${state.action.range ? `<span>Range: ${escapeHtml(state.action.range)}</span>` : ""}
+            ${state.action.cost ? `<span>Cost: ${escapeHtml(state.action.cost)}</span>` : ""}
           </div>
-          <label class="power-roll-runner__target">
-            <span>Target enemy</span>
-            <input type="text" data-power-roll-target value="${escapeHtml(state.targetName)}" placeholder="Enemy name or token" />
-          </label>
         </div>
       </section>
       <section class="power-roll-runner__dice" aria-live="polite">
         <div class="power-roll-runner__screen">
-          <span class="power-roll-runner__expression">${escapeHtml(expression)}</span>
+          <span class="power-roll-runner__expression">${escapeHtml(`${data.rollFormula || "2d10"} + ${attribute}${bonus ? ` + ${bonus}` : ""}`)}</span>
           <strong>${total === null ? "--" : total}</strong>
-          <span>${state.roll ? `Dice: ${state.roll.rolls.join(" + ")} | ${attribute} ${attributeBonus >= 0 ? "+" : ""}${attributeBonus}` : "Ready"}</span>
+          <span>${state.roll ? `Dice: ${state.roll.rolls.join(" + ")} | ${attribute} ${attributeBonus >= 0 ? "+" : ""}${attributeBonus} | ${edgeText}` : "Ready"}</span>
+        </div>
+        <div class="power-roll-runner__edge-row">
+          <label><span>Edges</span><input type="number" min="0" step="1" data-power-roll-edge value="${escapeHtml(state.edgeCount)}" /></label>
+          <label><span>Banes</span><input type="number" min="0" step="1" data-power-roll-bane value="${escapeHtml(state.baneCount)}" /></label>
         </div>
         <div class="power-roll-runner__controls">
           <button class="dice-roll-btn" type="button" data-power-roll-roll>${state.roll ? "Reroll" : "Roll"}</button>
@@ -156,141 +189,35 @@
       </section>
       <section class="power-roll-runner__section">
         <div class="power-roll-runner__tiers">
-          ${renderTierCards(powerRollCard, state.selectedTier, Boolean(state.roll))}
+          ${renderTierCards(actionCard, state.selectedTier, Boolean(state.roll))}
         </div>
         <div class="power-roll-runner__details">
           <strong>Additional details</strong>
           <p>Effects, conditions, and follow-up choices will land here as automation grows.</p>
         </div>
       </section>
-      <pre class="power-roll-runner__log" data-power-roll-result>${escapeHtml(state.resultText || "Roll, pick a tier if needed, then accept to run automation.")}</pre>
+      <pre class="power-roll-runner__log">${escapeHtml(state.resultText || "Roll, pick a tier if needed, then accept.")}</pre>
     `;
   }
 
-  async function rollPower(panel, state) {
-    const targetInput = panel.querySelector("[data-power-roll-target]");
-    state.targetName = targetInput?.value || state.targetName;
-    state.roll = rollFormula(state.powerRollCard?.data?.rollFormula || "2d10");
-    const attribute = state.powerRollCard?.data?.attribute || "Might";
-    const attributeBonus = parseInteger(state.context.getAttributeBonus?.(attribute));
-    const bonus = parseInteger(state.powerRollCard?.data?.bonus);
-    const total = state.roll.total + attributeBonus + bonus;
-    state.selectedTier = getTierKey(total);
-    state.manualTier = false;
-    state.resultText = `Rolled ${total}. Auto-selected ${tierLabel(state.selectedTier)}.`;
-
-    const numericModifiers = [
-      attributeBonus ? `${attributeBonus >= 0 ? "+" : "-"} ${Math.abs(attributeBonus)}` : "",
-      bonus ? `${bonus >= 0 ? "+" : "-"} ${Math.abs(bonus)}` : "",
-    ].filter(Boolean);
-    const expression = [state.roll.notation, ...numericModifiers].join(" ");
-    await postChat(state.context, {
-      message: `${state.heroName} - ${state.action.name || "Power Roll"} rolled ${total} (${tierLabel(state.selectedTier)}).`,
-      type: "dice_roll",
-      payload: {
-        expression,
-        components: [state.roll.notation, ...numericModifiers],
-        breakdown: [
-          { type: "dice", notation: state.roll.notation, rolls: state.roll.rolls, total: state.roll.total },
-          ...(attributeBonus ? [{ type: "modifier", notation: numericModifiers[0], value: attributeBonus }] : []),
-          ...(bonus ? [{ type: "modifier", notation: numericModifiers[attributeBonus ? 1 : 0], value: bonus }] : []),
-        ],
-        total,
-      },
-    });
-    render(panel, state);
-  }
-
-  async function acceptAutomation(panel, state) {
-    if (!state.roll || !state.selectedTier) {
-      setResult(panel, "Roll before accepting.", false);
-      return;
-    }
-
-    const targetInput = panel.querySelector("[data-power-roll-target]");
-    state.targetName = targetInput?.value || state.targetName;
-    const tierData = state.powerRollCard?.data?.tiers?.[state.selectedTier] || {};
-    const executionContext = {
-      heroName: state.heroName,
-      abilityName: state.action.name || "Power Roll",
-      targetName: state.targetName,
-      selectedTier: state.selectedTier,
-      selectedTierData: tierData,
-      roll: state.roll,
-      action: state.action,
-    };
-    const lines = [];
-
-    for (const card of state.automation.cards || []) {
-      if (card.type === "target") {
-        lines.push(`Target: ${state.targetName || card.data.creature || "enemy"}`);
-      } else if (card.type === "powerRollDamage") {
-        lines.push(`Tier: ${tierLabel(state.selectedTier)}${state.manualTier ? " (manual override)" : ""}`);
-      } else {
-        const result = await actions.executeAction(card, executionContext);
-        if (result?.message) lines.push(result.message);
-      }
-    }
-
-    const message = lines.join("\n");
-    state.resultText = message || "Automation ran with no executable effects.";
-    await postChat(state.context, { message: state.resultText, type: "text" });
-    render(panel, state);
-  }
-
-  function open(options) {
-    closeRunner();
-
-    const automation = schema.normalizeAutomation(options?.automation);
-    const powerRollCard = findPowerRollCard(automation);
-    if (!powerRollCard) {
-      console.warn("No power roll automation card was found.");
-      return;
-    }
-
-    const host = document.createElement("div");
-    host.id = RUNNER_ID;
-    host.className = "power-roll-runner";
-    host.innerHTML = `
-      <div class="power-roll-runner__modal" role="dialog" aria-modal="true" aria-labelledby="power-roll-title">
-        <header class="modal__header power-roll-runner__header">
-          <div>
-            <p class="automation-builder__eyebrow">${escapeHtml(options?.actionType || "Action")}</p>
-            <h2 class="modal__title" id="power-roll-title">Power Roll</h2>
-          </div>
-          <button class="icon-btn" type="button" data-close-power-roll aria-label="Close power roll">X</button>
-        </header>
-        <div class="power-roll-runner__body" data-power-roll-body></div>
-      </div>
-    `;
-
-    const state = {
-      action: options?.action || {},
-      actionType: options?.actionType || "",
-      automation,
-      context: options || {},
-      heroName: options?.hero?.name || "Hero",
-      targetCard: findTargetCard(automation),
-      powerRollCard,
-      targetName: "",
-      selectedTier: null,
-      manualTier: false,
-      roll: null,
-      resultText: "",
-    };
-
-    document.body.appendChild(host);
-    render(host, state);
-
-    host.addEventListener("click", async (event) => {
+  function wirePowerRoll(host, state, actionCard, resolve) {
+    const onClick = async (event) => {
       const target = event.target instanceof Element ? event.target : null;
       if (!target) return;
-      if (target === host || target.closest("[data-close-power-roll]")) {
-        closeRunner();
-        return;
-      }
       if (target.closest("[data-power-roll-roll]")) {
-        await rollPower(host, state);
+        state.edgeCount = parseInteger(host.querySelector("[data-power-roll-edge]")?.value);
+        state.baneCount = parseInteger(host.querySelector("[data-power-roll-bane]")?.value);
+        state.roll = rollFormula(actionCard.data.rollFormula || "2d10");
+        const attribute = actionCard.data.attribute || "Might";
+        const attributeBonus = parseInteger(state.context.getAttributeBonus?.(attribute));
+        const bonus = parseInteger(actionCard.data.bonus);
+        const edgeBonus = state.edgeCount > state.baneCount ? 2 : state.baneCount > state.edgeCount ? -2 : 0;
+        const total = state.roll.total + attributeBonus + bonus + edgeBonus;
+        state.selectedTier = getTierKey(total);
+        state.manualTier = false;
+        state.resultText = `Rolled ${total}. Auto-selected ${tierLabel(state.selectedTier)}.`;
+        await postChat(state.context, buildRollChatEntry(state, actionCard, total, attributeBonus, bonus, edgeBonus));
+        renderPowerRoll(host, state, actionCard);
         return;
       }
       const tierButton = target.closest("[data-select-tier]");
@@ -298,20 +225,150 @@
         state.selectedTier = tierButton.getAttribute("data-select-tier");
         state.manualTier = true;
         state.resultText = `Manual tier selected: ${tierLabel(state.selectedTier)}.`;
-        render(host, state);
+        renderPowerRoll(host, state, actionCard);
         return;
       }
-      if (target.closest("[data-power-roll-accept]")) {
-        await acceptAutomation(host, state);
+      if (target.closest("[data-power-roll-accept]") && state.roll && state.selectedTier) {
+        host.removeEventListener("click", onClick);
+        const tierData = actionCard.data.tiers?.[state.selectedTier] || {};
+        state.selectedTierData = tierData;
+        closeRunner();
+        resolve();
       }
-    });
+    };
 
-    host.addEventListener("input", (event) => {
-      const target = event.target instanceof Element ? event.target : null;
-      if (target?.matches("[data-power-roll-target]")) {
-        state.targetName = target.value;
+    host.addEventListener("click", onClick);
+  }
+
+  function buildRollChatEntry(state, actionCard, total, attributeBonus, bonus, edgeBonus) {
+    const data = actionCard.data || {};
+    const numericModifiers = [
+      attributeBonus ? `${attributeBonus >= 0 ? "+" : "-"} ${Math.abs(attributeBonus)}` : "",
+      bonus ? `${bonus >= 0 ? "+" : "-"} ${Math.abs(bonus)}` : "",
+      edgeBonus ? `${edgeBonus >= 0 ? "+" : "-"} ${Math.abs(edgeBonus)}` : "",
+    ].filter(Boolean);
+    const expression = [state.roll.notation, ...numericModifiers].join(" ");
+    return {
+      message: `${state.heroName} - ${state.action.name || "Power Roll"} rolled ${total} (${tierLabel(state.selectedTier)}).`,
+      type: "dice_roll",
+      payload: {
+        expression,
+        components: [state.roll.notation, ...numericModifiers],
+        breakdown: [
+          { type: "dice", notation: state.roll.notation, rolls: state.roll.rolls, total: state.roll.total },
+          ...(attributeBonus ? [{ type: "modifier", notation: String(attributeBonus), value: attributeBonus }] : []),
+          ...(bonus ? [{ type: "modifier", notation: String(bonus), value: bonus }] : []),
+          ...(edgeBonus ? [{ type: "modifier", notation: String(edgeBonus), value: edgeBonus }] : []),
+        ],
+        total,
+      },
+    };
+  }
+
+  async function runTargetCard(state, card) {
+    if (card.data.optional) {
+      return;
+    }
+    const host = showTargetPrompt(state, card);
+    try {
+      if (typeof state.context.selectTarget !== "function") {
+        throw new Error("Target selection is not available.");
       }
-    });
+      const target = await state.context.selectTarget(card.data);
+      state.target = target || null;
+      state.targetName = target?.name || "";
+    } finally {
+      host.remove();
+    }
+  }
+
+  async function runPowerRollAction(state, card) {
+    const host = makeHost("Power Roll", state.action.name || "Ability Automation");
+    renderPowerRoll(host, state, card);
+    await new Promise((resolve) => wirePowerRoll(host, state, card, resolve));
+  }
+
+  async function runDealStaminaDamageAction(state, card) {
+    const tier = state.selectedTierData || {};
+    const amount = parseDamage(tier.damage);
+    const damageType = String(tier.damageType || "").trim();
+    const note = String(card.data.note || "").trim();
+    if (!amount) {
+      await postChat(state.context, {
+        message: `${state.action.name || "Ability"} has no ${state.selectedTier || "selected"} tier stamina damage configured.`,
+      });
+      return;
+    }
+    if (!state.target?.id) {
+      await postChat(state.context, {
+        message: `${state.action.name || "Ability"} has no selected target for ${amount} stamina damage.`,
+      });
+      return;
+    }
+    const result = typeof state.context.applyDamage === "function"
+      ? await state.context.applyDamage({
+          placementId: state.target.id,
+          amount,
+          damageType,
+          abilityName: state.action.name || "Ability",
+        })
+      : null;
+    const targetName = result?.name || state.target.name || "Target";
+    const remaining = result?.max !== null && result?.max !== undefined
+      ? ` (${result.current}/${result.max} stamina remaining)`
+      : result?.current !== undefined
+        ? ` (${result.current} stamina remaining)`
+        : "";
+    const message = `${state.heroName} - ${state.action.name || "Ability"}: ${targetName} takes ${amount}${damageType ? ` ${damageType}` : ""} stamina damage${remaining}.${note ? `\n${note}` : ""}`;
+    await postChat(state.context, { message });
+  }
+
+  async function runActionCard(state, card) {
+    if (card.data.actionType === "powerRoll") {
+      await runPowerRollAction(state, card);
+      return;
+    }
+    if (card.data.actionType === "dealStaminaDamage") {
+      await runDealStaminaDamageAction(state, card);
+      return;
+    }
+    if (card.data.actionType === "note" && card.data.text) {
+      await postChat(state.context, { message: card.data.text });
+    }
+  }
+
+  async function open(options) {
+    const automation = schema.normalizeAutomation(options?.automation);
+    const state = {
+      action: options?.action || {},
+      automation,
+      context: options || {},
+      heroName: options?.hero?.name || options?.heroName || "Hero",
+      target: null,
+      targetName: "",
+      selectedTier: null,
+      selectedTierData: null,
+      manualTier: false,
+      edgeCount: 0,
+      baneCount: 0,
+      roll: null,
+      resultText: "",
+    };
+
+    try {
+      for (const card of automation.cards || []) {
+        if (card.type === "target") {
+          await runTargetCard(state, card);
+        } else if (card.type === "action") {
+          await runActionCard(state, card);
+        }
+      }
+    } catch (error) {
+      closeRunner();
+      await postChat(state.context, {
+        message: `${state.action.name || "Ability"} automation stopped: ${error?.message || "unknown error"}.`,
+      });
+    }
   }
 
   window.AbilityAutomationRunner = { open };

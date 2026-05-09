@@ -193,6 +193,17 @@ export function mountCharacterSummaryPanel(routes = {}) {
   });
 
   abilityTray.addEventListener('click', (event) => {
+    const abilityItem = event.target.closest('[data-character-ability-item]');
+    if (abilityItem && activeSheet) {
+      const action = getAbilityAction(activeSheet, abilityItem.dataset.abilityCategory, abilityItem.dataset.abilityIndex);
+      if (action && hasAbilityAutomation(action.automation)) {
+        event.preventDefault();
+        event.stopPropagation();
+        startAbilityAutomation(activeSheet, action, abilityItem.dataset.abilityCategory);
+      }
+      return;
+    }
+
     const categoryButton = event.target.closest('[data-character-ability-category]');
     if (!categoryButton || !activeSheet) {
       return;
@@ -338,9 +349,10 @@ function renderAbilityList(category, actions) {
 function renderAbilityItem(action, categoryKey, index) {
   const name = action?.name || 'Untitled Ability';
   const meta = summarizeAbility(action, categoryKey);
+  const automated = hasAbilityAutomation(action?.automation);
   return `
     <button
-      class="vtt-character-ability-item"
+      class="vtt-character-ability-item${automated ? ' vtt-character-ability-item--automated' : ''}"
       type="button"
       role="menuitem"
       data-character-ability-item
@@ -352,6 +364,7 @@ function renderAbilityItem(action, categoryKey, index) {
         <span class="vtt-character-ability-item__name">${escapeHtml(name)}</span>
         ${meta ? `<span class="vtt-character-ability-item__meta">${escapeHtml(meta)}</span>` : ''}
       </span>
+      ${automated ? '<span class="vtt-character-ability-item__auto" aria-label="Automated">Auto</span>' : ''}
     </button>
   `;
 }
@@ -817,6 +830,92 @@ function getAbilityActions(sheet, categoryKey) {
   const actions = sheet?.actions && typeof sheet.actions === 'object' ? sheet.actions : {};
   const list = Array.isArray(actions[categoryKey]) ? actions[categoryKey] : [];
   return list.filter((action) => action && typeof action === 'object' && (action.name || action.description || action.useWhen));
+}
+
+function hasAbilityAutomation(automation) {
+  return Boolean(
+    automation &&
+      typeof automation === 'object' &&
+      Array.isArray(automation.cards) &&
+      automation.cards.length > 0
+  );
+}
+
+function normalizeAutomation(automation) {
+  if (window.AbilityAutomationSchema?.normalizeAutomation) {
+    return window.AbilityAutomationSchema.normalizeAutomation(automation);
+  }
+  return automation;
+}
+
+function getAttributeBonus(sheet, attribute) {
+  const key = String(attribute || '').trim().toLowerCase();
+  return Number.parseInt(sheet?.hero?.stats?.[key] ?? 0, 10) || 0;
+}
+
+function startAbilityAutomation(sheet, action, categoryKey) {
+  if (!window.AbilityAutomationRunner || typeof window.AbilityAutomationRunner.open !== 'function') {
+    console.warn('[VTT] Ability automation runner is not available.');
+    return;
+  }
+
+  window.AbilityAutomationRunner.open({
+    action: clonePlain(action),
+    actionType: categoryKey,
+    hero: clonePlain(sheet.hero || {}),
+    automation: normalizeAutomation(action.automation),
+    getAttributeBonus: (attribute) => getAttributeBonus(sheet, attribute),
+    postChat: postAutomationChat,
+    selectTarget: requestAutomationTarget,
+    applyDamage: requestAutomationDamage,
+  });
+}
+
+async function postAutomationChat(entry) {
+  if (window.dashboardChat && typeof window.dashboardChat.sendMessage === 'function') {
+    return window.dashboardChat.sendMessage({
+      message: entry?.message || '',
+      type: entry?.type || 'text',
+      payload: entry?.payload || null,
+    });
+  }
+  return false;
+}
+
+function requestAutomationTarget(targetConfig) {
+  return new Promise((resolve, reject) => {
+    document.dispatchEvent(
+      new CustomEvent('vtt:automation-select-target', {
+        detail: {
+          targetConfig: clonePlain(targetConfig || {}),
+          resolve,
+          reject,
+        },
+      })
+    );
+  });
+}
+
+function requestAutomationDamage(payload) {
+  return new Promise((resolve, reject) => {
+    document.dispatchEvent(
+      new CustomEvent('vtt:automation-apply-damage', {
+        detail: {
+          payload: clonePlain(payload || {}),
+          resolve,
+          reject,
+        },
+      })
+    );
+  });
+}
+
+function clonePlain(value) {
+  try {
+    return JSON.parse(JSON.stringify(value));
+  } catch (error) {
+    return value;
+  }
 }
 
 function getAbilityAction(sheet, categoryKey, indexValue) {

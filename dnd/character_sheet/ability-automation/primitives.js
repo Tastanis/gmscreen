@@ -7,22 +7,30 @@
     {
       type: "target",
       label: "Target",
-      description: "Choose the creatures or objects affected by the ability.",
+      description: "Choose a token or skip target selection when the ability does not need one.",
     },
     {
-      type: "powerRollDamage",
-      label: "Power Roll Damage",
-      description: "Roll 2d10 plus an attribute and define damage for each tier.",
+      type: "action",
+      label: "Action",
+      description: "Run a power roll, deal damage, apply an effect, or add another automation step.",
+    },
+  ];
+
+  const actionTypes = [
+    {
+      type: "powerRoll",
+      label: "Power Roll",
+      description: "Roll 2d10 plus an attribute and select a tier.",
     },
     {
       type: "dealStaminaDamage",
       label: "Deal Stamina Damage",
-      description: "Apply the selected power-roll tier damage to the chosen target.",
+      description: "Apply the selected power-roll tier damage to the selected target.",
     },
     {
       type: "note",
-      label: "Automation Note",
-      description: "Capture future automation details without making them executable yet.",
+      label: "Note",
+      description: "Capture a future automation detail without executing it yet.",
     },
   ];
 
@@ -30,9 +38,15 @@
     return primitives.find((primitive) => primitive.type === type) || primitives[0];
   }
 
+  function getActionType(type) {
+    return actionTypes.find((actionType) => actionType.type === type) || actionTypes[0];
+  }
+
   window.AbilityAutomationPrimitives = {
     ATTRIBUTES,
     primitives,
+    actionTypes,
     getPrimitive,
+    getActionType,
   };
 })();
