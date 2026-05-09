@@ -2614,16 +2614,7 @@
  * Indigo = purple, Sharon = light grey, Frunk = red, Zepha = brown-orange.
  */
 .vtt-token__claim-ring {
-  position: absolute;
-  inset: -8px;
-  border-radius: 50%;
-  pointer-events: none;
-  z-index: -1;
-  box-shadow:
-    0 0 0 3px var(--vtt-claim-color, transparent),
-    0 0 14px 4px color-mix(in srgb, var(--vtt-claim-color, transparent) 70%, transparent);
-  transition: opacity 160ms ease;
-  opacity: 0.85;
+  display: none;
 }
 
 .vtt-token__claim-ring[data-claimed-by='indigo'] {
@@ -2644,7 +2635,7 @@
 
 .vtt-token.is-selected .vtt-token__claim-ring,
 .vtt-token.is-hover-highlight .vtt-token__claim-ring {
-  opacity: 0.35;
+  display: none;
 }
 
 /* Levels v2 (§5.6): falling animation — scale up by 5%, quick wobble,
