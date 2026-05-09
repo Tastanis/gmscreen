@@ -17,6 +17,77 @@
     document.getElementById(RUNNER_ID)?.remove();
   }
 
+  function getRunnerDefaultPosition(modal, variant) {
+    const panel = document.querySelector(".vtt-character-summary--open, .vtt-character-summary");
+    const panelRect = panel instanceof HTMLElement ? panel.getBoundingClientRect() : null;
+    const panelRight = panelRect && panelRect.width > 40 && panelRect.left < window.innerWidth
+      ? panelRect.right
+      : 0;
+    const left = Math.max(16, panelRight ? panelRight + 16 : 24);
+    const top = variant === "target" ? 76 : 72;
+    return constrainRunnerPosition(left, top, modal);
+  }
+
+  function constrainRunnerPosition(left, top, modal) {
+    const rect = modal?.getBoundingClientRect();
+    const width = rect?.width || 360;
+    const height = rect?.height || 220;
+    const padding = 12;
+    const maxLeft = Math.max(padding, window.innerWidth - width - padding);
+    const maxTop = Math.max(padding, window.innerHeight - height - padding);
+    return {
+      left: Math.min(Math.max(padding, left), maxLeft),
+      top: Math.min(Math.max(padding, top), maxTop),
+    };
+  }
+
+  function positionRunnerWindow(host, variant) {
+    const modal = host.querySelector(".power-roll-runner__modal");
+    if (!(modal instanceof HTMLElement)) return;
+    requestAnimationFrame(() => {
+      const position = getRunnerDefaultPosition(modal, variant);
+      modal.style.left = `${position.left}px`;
+      modal.style.top = `${position.top}px`;
+    });
+  }
+
+  function makeRunnerDraggable(host) {
+    const modal = host.querySelector(".power-roll-runner__modal");
+    const header = host.querySelector(".power-roll-runner__header");
+    if (!(modal instanceof HTMLElement) || !(header instanceof HTMLElement)) return;
+
+    let dragState = null;
+    const stopDrag = () => {
+      if (!dragState) return;
+      dragState = null;
+      modal.classList.remove("power-roll-runner__modal--dragging");
+      document.removeEventListener("pointermove", onMove);
+      document.removeEventListener("pointerup", stopDrag);
+      document.removeEventListener("pointercancel", stopDrag);
+    };
+    const onMove = (event) => {
+      if (!dragState) return;
+      const position = constrainRunnerPosition(event.clientX - dragState.offsetX, event.clientY - dragState.offsetY, modal);
+      modal.style.left = `${position.left}px`;
+      modal.style.top = `${position.top}px`;
+    };
+
+    header.addEventListener("pointerdown", (event) => {
+      const target = event.target instanceof Element ? event.target : null;
+      if (event.button !== 0 || target?.closest("[data-close-power-roll]")) return;
+      const rect = modal.getBoundingClientRect();
+      dragState = {
+        offsetX: event.clientX - rect.left,
+        offsetY: event.clientY - rect.top,
+      };
+      modal.classList.add("power-roll-runner__modal--dragging");
+      document.addEventListener("pointermove", onMove);
+      document.addEventListener("pointerup", stopDrag);
+      document.addEventListener("pointercancel", stopDrag);
+      event.preventDefault();
+    });
+  }
+
   function tierLabel(key) {
     if (key === "low") return "<= 11";
     if (key === "mid") return "12-16";
@@ -84,43 +155,45 @@
     return Boolean(data && data.success);
   }
 
-  function makeHost(title, eyebrow) {
+  function makeHost(title, eyebrow, variant = "power") {
     closeRunner();
     const host = document.createElement("div");
     host.id = RUNNER_ID;
-    host.className = "power-roll-runner";
+    host.className = `power-roll-runner power-roll-runner--${variant}`;
     host.innerHTML = `
-      <div class="power-roll-runner__modal" role="dialog" aria-modal="true" aria-labelledby="power-roll-title">
-        <header class="modal__header power-roll-runner__header">
-          <div>
-            <p class="automation-builder__eyebrow">${escapeHtml(eyebrow || "Automation")}</p>
-            <h2 class="modal__title" id="power-roll-title">${escapeHtml(title || "Ability Automation")}</h2>
+      <div class="dice-modal dice-modal--vtt power-roll-runner__modal" role="dialog" aria-modal="false" aria-labelledby="power-roll-title">
+        <header class="dice-modal-header power-roll-runner__header">
+          <div class="dice-modal-heading-group power-roll-runner__heading">
+            <h2 class="dice-modal-title" id="power-roll-title">${escapeHtml(title || "Ability Automation")}</h2>
+            <span class="dice-modal-project-label">${escapeHtml(eyebrow || "Automation")}</span>
           </div>
-          <button class="icon-btn" type="button" data-close-power-roll aria-label="Close automation">X</button>
+          <button class="dice-modal-close" type="button" data-close-power-roll aria-label="Close automation">&times;</button>
         </header>
-        <div class="power-roll-runner__body" data-power-roll-body></div>
+        <div class="dice-modal-content power-roll-runner__body" data-power-roll-body></div>
       </div>
     `;
     document.body.appendChild(host);
     host.addEventListener("click", (event) => {
       const target = event.target instanceof Element ? event.target : null;
-      if (target === host || target?.closest("[data-close-power-roll]")) {
+      if (target?.closest("[data-close-power-roll]")) {
         closeRunner();
       }
     });
+    makeRunnerDraggable(host);
+    positionRunnerWindow(host, variant);
     return host;
   }
 
   function showTargetPrompt(state, card) {
-    const host = makeHost("Pick Target", state.action.name || "Ability Automation");
+    const host = makeHost("Pick Target", state.action.name || "Ability Automation", "target");
     host.querySelector("[data-power-roll-body]").innerHTML = `
-      <section class="power-roll-runner__section">
+      <section class="power-roll-runner__section power-roll-runner__section--compact">
         <div class="power-roll-runner__ability">
           <h3>${escapeHtml(state.action.name || "Unnamed Ability")}</h3>
           <p>${escapeHtml(schema.summarizeCard(card))}</p>
         </div>
       </section>
-      <pre class="power-roll-runner__log">Click an enemy token on the map.</pre>
+      <p class="power-roll-runner__instruction">Click an enemy token on the map.</p>
     `;
     return host;
   }
@@ -130,7 +203,12 @@
     return schema.TIER_KEYS.map((key) => {
       const tier = tiers[key] || {};
       const parts = [];
-      if (tier.damage || tier.damageType) parts.push(`${tier.damage || "-"} ${tier.damageType || ""}`.trim());
+      if (tier.damage || tier.damageType) {
+        const damageLabel = tier.damageType
+          ? `${tier.damage || "-"} ${tier.damageType}`
+          : `${tier.damage || "-"} stamina damage`;
+        parts.push(damageLabel.trim());
+      }
       if (tier.effect) parts.push(tier.effect);
       return `
         <button
@@ -146,21 +224,38 @@
     }).join("");
   }
 
-  function renderPowerRoll(host, state, actionCard) {
+  function getEdgeBonus(edgeCount, baneCount) {
+    return (parseInteger(edgeCount) - parseInteger(baneCount)) * 2;
+  }
+
+  function getPowerRollTotal(state, actionCard) {
     const data = actionCard.data || {};
     const attribute = data.attribute || "Might";
     const attributeBonus = parseInteger(state.context.getAttributeBonus?.(attribute));
     const bonus = parseInteger(data.bonus);
     const edgeCount = parseInteger(state.edgeCount);
     const baneCount = parseInteger(state.baneCount);
-    const netEdge = edgeCount - baneCount;
-    const edgeBonus = netEdge > 0 ? 2 : netEdge < 0 ? -2 : 0;
+    const edgeBonus = getEdgeBonus(edgeCount, baneCount);
     const total = state.roll ? state.roll.total + attributeBonus + bonus + edgeBonus : null;
-    const edgeText = netEdge > 0 ? "Edge +2" : netEdge < 0 ? "Bane -2" : "No edge/bane";
+    return { total, attribute, attributeBonus, bonus, edgeCount, baneCount, edgeBonus };
+  }
+
+  function formatModifier(value) {
+    const number = parseInteger(value);
+    return `${number >= 0 ? "+" : "-"}${Math.abs(number)}`;
+  }
+
+  function renderPowerRoll(host, state, actionCard) {
+    const data = actionCard.data || {};
+    const { total, attribute, attributeBonus, bonus, edgeCount, baneCount, edgeBonus } = getPowerRollTotal(state, actionCard);
+    const edgeText = edgeBonus ? `${edgeBonus > 0 ? "Edge" : "Bane"} ${formatModifier(edgeBonus)}` : "No edge/bane";
+    const detail = state.roll
+      ? `Dice: ${state.roll.rolls.join(" + ")} | ${attribute} ${formatModifier(attributeBonus)} | ${edgeText}`
+      : `${data.rollFormula || "2d10"} + ${attribute} ${bonus ? formatModifier(bonus) : ""}`.trim();
     const targetName = state.target?.name || "No target selected";
 
     host.querySelector("[data-power-roll-body]").innerHTML = `
-      <section class="power-roll-runner__section">
+      <section class="power-roll-runner__section power-roll-runner__section--ability">
         <div class="power-roll-runner__ability">
           <h3>${escapeHtml(state.action.name || "Unnamed Ability")}</h3>
           <p>${escapeHtml(state.action.description || "No ability text entered.")}</p>
@@ -171,17 +266,23 @@
           </div>
         </div>
       </section>
-      <section class="power-roll-runner__dice" aria-live="polite">
-        <div class="power-roll-runner__screen">
-          <span class="power-roll-runner__expression">${escapeHtml(`${data.rollFormula || "2d10"} + ${attribute}${bonus ? ` + ${bonus}` : ""}`)}</span>
-          <strong>${total === null ? "--" : total}</strong>
-          <span>${state.roll ? `Dice: ${state.roll.rolls.join(" + ")} | ${attribute} ${attributeBonus >= 0 ? "+" : ""}${attributeBonus} | ${edgeText}` : "Ready"}</span>
+      <section class="power-roll-runner__dice dice-view dice-view--standard" aria-live="polite">
+        <div class="dice-result-screen power-roll-runner__screen">
+          <div class="dice-queue-display">${escapeHtml(detail)}</div>
+          <div class="dice-result-total">${total === null ? "--" : total}</div>
+          <div class="dice-result-detail">${escapeHtml(state.roll ? `Tier: ${tierLabel(state.selectedTier)}` : "Ready")}</div>
         </div>
-        <div class="power-roll-runner__edge-row">
-          <label><span>Edges</span><input type="number" min="0" step="1" data-power-roll-edge value="${escapeHtml(state.edgeCount)}" /></label>
-          <label><span>Banes</span><input type="number" min="0" step="1" data-power-roll-bane value="${escapeHtml(state.baneCount)}" /></label>
+        <div class="dice-row dice-row--edge-bane power-roll-runner__edge-buttons">
+          <button class="dice-btn dice-btn--edge" type="button" data-power-roll-edge-adjust="1">Edge (+2)</button>
+          <button class="dice-btn dice-btn--bane" type="button" data-power-roll-bane-adjust="1">Bane (-2)</button>
         </div>
-        <div class="power-roll-runner__controls">
+        <div class="power-roll-runner__edge-summary">
+          <span>Edges: ${escapeHtml(edgeCount)}</span>
+          <span>Banes: ${escapeHtml(baneCount)}</span>
+          <span>Net: ${escapeHtml(formatModifier(edgeBonus))}</span>
+          <button class="power-roll-runner__mini-btn" type="button" data-power-roll-clear-edge-bane>Clear</button>
+        </div>
+        <div class="dice-actions__controls power-roll-runner__controls">
           <button class="dice-roll-btn" type="button" data-power-roll-roll>${state.roll ? "Reroll" : "Roll"}</button>
           <button class="dice-clear-btn" type="button" data-close-power-roll>Cancel</button>
           <button class="dice-project-roll-btn" type="button" data-power-roll-accept ${state.roll ? "" : "disabled"}>Accept</button>
@@ -196,7 +297,7 @@
           <p>Effects, conditions, and follow-up choices will land here as automation grows.</p>
         </div>
       </section>
-      <pre class="power-roll-runner__log">${escapeHtml(state.resultText || "Roll, pick a tier if needed, then accept.")}</pre>
+      <p class="power-roll-runner__instruction">${escapeHtml(state.resultText || "Roll, pick a tier if needed, then accept.")}</p>
     `;
   }
 
@@ -204,15 +305,28 @@
     const onClick = async (event) => {
       const target = event.target instanceof Element ? event.target : null;
       if (!target) return;
+      if (target.closest("[data-power-roll-edge-adjust]")) {
+        state.edgeCount = parseInteger(state.edgeCount) + 1;
+        state.resultText = state.roll ? "Edge added. Reroll to post the adjusted result." : "";
+        renderPowerRoll(host, state, actionCard);
+        return;
+      }
+      if (target.closest("[data-power-roll-bane-adjust]")) {
+        state.baneCount = parseInteger(state.baneCount) + 1;
+        state.resultText = state.roll ? "Bane added. Reroll to post the adjusted result." : "";
+        renderPowerRoll(host, state, actionCard);
+        return;
+      }
+      if (target.closest("[data-power-roll-clear-edge-bane]")) {
+        state.edgeCount = 0;
+        state.baneCount = 0;
+        state.resultText = state.roll ? "Edges and banes cleared. Reroll to post the adjusted result." : "";
+        renderPowerRoll(host, state, actionCard);
+        return;
+      }
       if (target.closest("[data-power-roll-roll]")) {
-        state.edgeCount = parseInteger(host.querySelector("[data-power-roll-edge]")?.value);
-        state.baneCount = parseInteger(host.querySelector("[data-power-roll-bane]")?.value);
         state.roll = rollFormula(actionCard.data.rollFormula || "2d10");
-        const attribute = actionCard.data.attribute || "Might";
-        const attributeBonus = parseInteger(state.context.getAttributeBonus?.(attribute));
-        const bonus = parseInteger(actionCard.data.bonus);
-        const edgeBonus = state.edgeCount > state.baneCount ? 2 : state.baneCount > state.edgeCount ? -2 : 0;
-        const total = state.roll.total + attributeBonus + bonus + edgeBonus;
+        const { total, attributeBonus, bonus, edgeBonus } = getPowerRollTotal(state, actionCard);
         state.selectedTier = getTierKey(total);
         state.manualTier = false;
         state.resultText = `Rolled ${total}. Auto-selected ${tierLabel(state.selectedTier)}.`;
@@ -283,7 +397,9 @@
   }
 
   async function runPowerRollAction(state, card) {
-    const host = makeHost("Power Roll", state.action.name || "Ability Automation");
+    state.edgeCount = parseInteger(card.data.edges);
+    state.baneCount = parseInteger(card.data.banes);
+    const host = makeHost("Power Roll", state.action.name || "Ability Automation", "power");
     renderPowerRoll(host, state, card);
     await new Promise((resolve) => wirePowerRoll(host, state, card, resolve));
   }

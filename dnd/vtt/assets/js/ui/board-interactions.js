@@ -3294,6 +3294,15 @@ export function mountBoardInteractions(store, routes = {}) {
   );
 
   mapSurface.addEventListener('pointerdown', (event) => {
+    if (!pendingAutomationTarget) {
+      return;
+    }
+    if (handleAutomationTargetPointerDown(event)) {
+      event.stopImmediatePropagation();
+    }
+  }, true);
+
+  mapSurface.addEventListener('pointerdown', (event) => {
     if (isCustomConditionDialogOpen()) {
       return;
     }
@@ -3325,31 +3334,7 @@ export function mountBoardInteractions(store, routes = {}) {
       return;
     }
 
-    if (pendingAutomationTarget && event.button === 2) {
-      event.preventDefault();
-      cancelPendingAutomationTarget('Target selection canceled.');
-      return;
-    }
-
     if (!viewState.mapLoaded) {
-      return;
-    }
-
-    if (pendingAutomationTarget && event.button === 0) {
-      event.preventDefault();
-      const placement = findRenderedPlacementAtPoint(event);
-      if (!placement) {
-        updateStatus(formatAutomationTargetPrompt(pendingAutomationTarget.targetConfig));
-        return;
-      }
-      const targetRequest = pendingAutomationTarget;
-      pendingAutomationTarget = null;
-      const name = tokenLabel(placement);
-      updateStatus(`${name} selected as target.`);
-      targetRequest.resolve?.({
-        id: placement.id,
-        name,
-      });
       return;
     }
 
@@ -11547,6 +11532,44 @@ export function mountBoardInteractions(store, routes = {}) {
     closeDamageHealWidget();
     closeHealOverflowPopup();
     updateStatus(formatAutomationTargetPrompt(pendingAutomationTarget.targetConfig));
+  }
+
+  function handleAutomationTargetPointerDown(event) {
+    if (!pendingAutomationTarget) {
+      return false;
+    }
+
+    if (event.button === 2) {
+      event.preventDefault();
+      cancelPendingAutomationTarget('Target selection canceled.');
+      return true;
+    }
+
+    if (event.button !== 0) {
+      return false;
+    }
+
+    event.preventDefault();
+    if (!viewState.mapLoaded) {
+      updateStatus(formatAutomationTargetPrompt(pendingAutomationTarget.targetConfig));
+      return true;
+    }
+
+    const placement = findRenderedPlacementAtPoint(event);
+    if (!placement) {
+      updateStatus(formatAutomationTargetPrompt(pendingAutomationTarget.targetConfig));
+      return true;
+    }
+
+    const targetRequest = pendingAutomationTarget;
+    pendingAutomationTarget = null;
+    const name = tokenLabel(placement);
+    updateStatus(`${name} selected as target.`);
+    targetRequest.resolve?.({
+      id: placement.id,
+      name,
+    });
+    return true;
   }
 
   function handleAutomationDamageRequest(event) {

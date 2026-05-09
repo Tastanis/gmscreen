@@ -247,59 +247,87 @@
 }
 
 .power-roll-runner {
-  align-items: center;
-  background: rgba(0, 0, 0, 0.28);
-  display: flex;
+  background: transparent;
   inset: 0;
-  justify-content: center;
-  padding: 16px;
+  pointer-events: none;
   position: fixed;
   z-index: 35;
 }
 
 .vtt-body .power-roll-runner {
-  --panel-alt: rgba(18, 18, 14, 0.94);
-  --border: rgba(190, 178, 154, 0.72);
-  --muted: var(--vtt-text-muted);
-  --text: var(--vtt-text-primary);
-  --chip: rgba(213, 155, 90, 0.18);
-  --success: var(--vtt-success);
-  --danger: var(--vtt-danger);
-  --accent-strong: var(--vtt-accent);
+  --panel-alt: var(--dice-surface);
+  --border: var(--dice-border);
+  --muted: var(--dice-muted);
+  --text: var(--dice-text);
+  --chip: rgba(139, 111, 78, 0.14);
+  --success: var(--dice-success);
+  --danger: var(--dice-danger);
+  --accent-strong: var(--dice-accent-strong);
   z-index: 2000;
 }
 
 .power-roll-runner__modal {
-  background: #f0e8da;
-  border: 1px solid var(--border);
-  border-radius: 6px;
-  box-shadow: 0 14px 44px rgba(0, 0, 0, 0.24);
-  max-height: 92vh;
+  max-height: calc(100vh - 24px);
   overflow: auto;
-  padding: 16px;
-  width: min(860px, 96vw);
+  pointer-events: auto;
+  position: fixed;
+  resize: both;
+  width: min(560px, calc(100vw - 32px));
+}
+
+.power-roll-runner--target .power-roll-runner__modal {
+  min-height: 0;
+  min-width: 260px;
+  resize: none;
+  width: min(340px, calc(100vw - 32px));
+}
+
+.power-roll-runner__modal--dragging {
+  cursor: grabbing;
 }
 
 .power-roll-runner__header {
-  align-items: flex-start;
+  align-items: center;
+}
+
+.power-roll-runner__heading {
+  min-width: 0;
+}
+
+.power-roll-runner__heading .dice-modal-project-label {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
 }
 
 .power-roll-runner__body {
-  display: grid;
+  color: var(--text);
+  display: flex;
+  flex-direction: column;
   gap: 12px;
 }
 
 .power-roll-runner__section,
 .power-roll-runner__dice,
-.power-roll-runner__log {
+.power-roll-runner__instruction {
   background: var(--panel-alt);
   border: 1px solid var(--border);
   border-radius: 6px;
   padding: 12px;
 }
 
+.power-roll-runner__section--compact {
+  padding: 10px;
+}
+
+.power-roll-runner__section--ability {
+  background: #efe3d2;
+}
+
 .power-roll-runner__ability h3 {
   margin: 0 0 6px;
+  color: var(--text);
 }
 
 .power-roll-runner__ability p,
@@ -345,27 +373,16 @@
 }
 
 .power-roll-runner__dice {
-  display: grid;
+  display: flex;
   gap: 10px;
 }
 
 .power-roll-runner__screen {
-  align-items: center;
-  background: #1f2b25;
-  border: 1px solid var(--border);
-  border-radius: 6px;
-  color: #f5f0e8;
-  display: grid;
-  gap: 4px;
-  justify-items: center;
-  min-height: 110px;
-  padding: 14px;
-  text-align: center;
+  min-height: 86px;
 }
 
-.power-roll-runner__screen strong {
-  font-size: 2.6rem;
-  line-height: 1;
+.power-roll-runner__screen .dice-result-total {
+  text-align: right;
 }
 
 .power-roll-runner__expression {
@@ -374,32 +391,34 @@
 }
 
 .power-roll-runner__controls {
-  display: grid;
-  gap: 8px;
   grid-template-columns: 1fr 1fr 1fr;
 }
 
-.power-roll-runner__edge-row {
+.power-roll-runner__edge-summary {
+  align-items: center;
+  background: #e6d8c5;
+  border: 1px solid var(--border);
+  border-radius: 5px;
+  color: var(--text);
   display: grid;
-  gap: 8px;
-  grid-template-columns: 1fr 1fr;
-}
-
-.power-roll-runner__edge-row label {
-  color: var(--muted);
-  display: flex;
-  flex-direction: column;
-  font-size: 0.85rem;
+  font-size: 0.82rem;
   font-weight: 700;
-  gap: 4px;
+  gap: 6px;
+  grid-template-columns: repeat(3, 1fr) auto;
+  padding: 7px 8px;
 }
 
-.power-roll-runner__edge-row input {
+.power-roll-runner__mini-btn {
+  background: #f4eadc;
   border: 1px solid var(--border);
   border-radius: 4px;
-  color: var(--text);
+  color: var(--dice-muted);
+  cursor: pointer;
   font: inherit;
-  padding: 7px 8px;
+  font-size: 0.75rem;
+  font-weight: 800;
+  padding: 4px 8px;
+  text-transform: uppercase;
 }
 
 .power-roll-runner__tiers {
@@ -409,7 +428,7 @@
 }
 
 .power-roll-runner__tier {
-  background: #fff8ee;
+  background: #f7efe4;
   border: 1px solid var(--border);
   border-radius: 6px;
   color: var(--text);
@@ -428,7 +447,8 @@
 
 .power-roll-runner__tier--selected {
   border-color: var(--success);
-  box-shadow: inset 0 0 0 2px rgba(95, 179, 106, 0.28);
+  box-shadow: inset 0 0 0 2px rgba(59, 109, 66, 0.3);
+  background: #e1ecdf;
 }
 
 .power-roll-runner__tier-range {
@@ -446,7 +466,7 @@
   padding-top: 10px;
 }
 
-.power-roll-runner__log {
+.power-roll-runner__instruction {
   color: var(--text);
   font: inherit;
   margin: 0;
@@ -465,7 +485,7 @@
   }
 
   .power-roll-runner__controls,
-  .power-roll-runner__edge-row,
+  .power-roll-runner__edge-summary,
   .power-roll-runner__tiers,
   .automation-builder__layout {
     grid-template-columns: 1fr;
