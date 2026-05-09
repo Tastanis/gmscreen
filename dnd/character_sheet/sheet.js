@@ -241,6 +241,11 @@ function normalizeAutomationBlock(automation) {
   return deepClone(automation);
 }
 
+function getAutomationAttributeBonus(attribute) {
+  const key = String(attribute || "").trim().toLowerCase();
+  return parseInt(sheetState.hero.stats?.[key] ?? 0, 10) || 0;
+}
+
 function deepClone(obj) {
   return JSON.parse(JSON.stringify(obj));
 }
@@ -2486,6 +2491,13 @@ function renderActionSection(type, containerId) {
                         data-automate-action="${action.id}"
                         data-action-type="${type}"
                       ><span class="automation-action-btn__status" aria-hidden="true"></span>${automationLabel}</button>`
+                    : automationConfigured
+                      ? `<button
+                          class="text-btn automation-action-btn automation-action-btn--configured"
+                          type="button"
+                          data-power-roll-action="${action.id}"
+                          data-action-type="${type}"
+                        ><span class="automation-action-btn__status" aria-hidden="true"></span>Power Roll</button>`
                     : ""
                 }
                 <button
@@ -2557,6 +2569,7 @@ function renderActionSection(type, containerId) {
   bindActionMoves();
   bindActionToggles();
   bindAutomationButtons();
+  bindPowerRollButtons();
   bindTestAdds();
   bindTestRemovals();
   bindAttributeToggles();
@@ -2922,6 +2935,32 @@ function bindAutomationButtons() {
   });
 }
 
+function bindPowerRollButtons() {
+  document.querySelectorAll("[data-power-roll-action]").forEach((btn) => {
+    btn.onclick = () => {
+      const actionId = btn.getAttribute("data-power-roll-action");
+      const type = btn.getAttribute("data-action-type");
+      if (!actionId || !type) return;
+      if (!window.AbilityAutomationRunner || typeof window.AbilityAutomationRunner.open !== "function") {
+        console.warn("Ability automation runner is not available.");
+        return;
+      }
+
+      const action = (sheetState.actions[type] || []).find((item) => item.id === actionId);
+      if (!action || !hasAbilityAutomation(action.automation)) return;
+
+      window.AbilityAutomationRunner.open({
+        action: deepClone(action),
+        actionType: type,
+        hero: deepClone(sheetState.hero),
+        automation: normalizeAutomationBlock(action.automation),
+        getAttributeBonus: getAutomationAttributeBonus,
+        postChat: postAutomationChat,
+      });
+    };
+  });
+}
+
 function bindTestAdds() {
   document.querySelectorAll("[data-add-test]").forEach((btn) => {
     btn.onclick = () => {
@@ -3268,10 +3307,14 @@ async function saveSheet() {
 
 const CHAT_API = window.chatHandlerUrl || "/dnd/chat_handler.php";
 
-async function sendToChat(text) {
+async function postAutomationChat(entry) {
+  const message = typeof entry === "string" ? entry : entry?.message || "";
+  const type = typeof entry === "object" && entry?.type ? entry.type : "text";
+  const payload = typeof entry === "object" ? entry.payload : null;
+
   if (window.dashboardChat && typeof window.dashboardChat.sendMessage === "function") {
     try {
-      return await window.dashboardChat.sendMessage({ message: text });
+      return await window.dashboardChat.sendMessage({ message, type, payload });
     } catch (error) {
       console.warn("Failed to post through chat panel", error);
     }
@@ -3279,7 +3322,15 @@ async function sendToChat(text) {
 
   const params = new URLSearchParams();
   params.append("action", "chat_send");
-  params.append("message", text);
+  params.append("message", message);
+  if (type && type !== "text") params.append("type", type);
+  if (payload) {
+    try {
+      params.append("payload", JSON.stringify(payload));
+    } catch (error) {
+      console.warn("Failed to serialize chat payload", error);
+    }
+  }
   try {
     const response = await fetch(CHAT_API, {
       method: "POST",
@@ -3293,6 +3344,10 @@ async function sendToChat(text) {
     console.warn("Failed to post to chat", error);
     return false;
   }
+}
+
+async function sendToChat(text) {
+  return postAutomationChat({ message: text, type: "text" });
 }
 
 function showChatToast(text) {

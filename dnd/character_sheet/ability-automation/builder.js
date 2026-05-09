@@ -1,7 +1,7 @@
 (function () {
   "use strict";
 
-  const MODAL_ID = "ability-automation-modal";
+  const BUILDER_ID = "ability-automation-builder";
   const schema = window.AbilityAutomationSchema;
   const registry = window.AbilityAutomationPrimitives;
 
@@ -14,19 +14,24 @@
       .replace(/'/g, "&#39;");
   }
 
-  function closeModal() {
-    document.getElementById(MODAL_ID)?.remove();
+  function closeBuilder() {
+    document.getElementById(BUILDER_ID)?.remove();
+  }
+
+  function tierRange(key) {
+    return schema.tierRange ? schema.tierRange(key) : key === "low" ? "<= 11" : key === "mid" ? "12-16" : "17+";
   }
 
   function cardShell(card, title, body) {
     return `
       <section class="automation-builder__card" data-automation-card="${escapeHtml(card.id)}" data-card-type="${escapeHtml(card.type)}">
         <header class="automation-builder__card-header">
-          <div>
+          <button class="automation-builder__drag-handle" type="button" draggable="true" data-drag-automation-card aria-label="Drag ${escapeHtml(title)} card">::</button>
+          <div class="automation-builder__card-heading">
             <h3 class="automation-builder__card-title">${escapeHtml(title)}</h3>
             <p class="automation-builder__card-type">${escapeHtml(registry.getPrimitive(card.type).description)}</p>
           </div>
-          <button class="icon-btn automation-builder__remove" type="button" data-remove-automation-card="${escapeHtml(card.id)}" aria-label="Remove ${escapeHtml(title)} card">✕</button>
+          <button class="icon-btn automation-builder__remove" type="button" data-remove-automation-card="${escapeHtml(card.id)}" aria-label="Remove ${escapeHtml(title)} card">X</button>
         </header>
         <div class="automation-builder__card-body">${body}</div>
       </section>
@@ -63,10 +68,9 @@
     const tiers = data.tiers;
     const tierMarkup = schema.TIER_KEYS.map((key) => {
       const tier = tiers[key];
-      const label = key === "low" ? "≤ 11" : key === "mid" ? "12-16" : "17+";
       return `
         <div class="automation-builder__tier" data-tier="${key}">
-          <div class="automation-builder__tier-label">${label}</div>
+          <div class="automation-builder__tier-label">${tierRange(key)}</div>
           <label class="automation-builder__field">
             <span>Damage</span>
             <input type="text" data-tier-field="damage" value="${escapeHtml(tier.damage)}" placeholder="e.g. 3" />
@@ -105,6 +109,31 @@
     return cardShell(card, "Power Roll Damage", body);
   }
 
+  function renderDealStaminaDamageCard(card) {
+    const data = card.data || {};
+    const body = `
+      <div class="automation-builder__grid">
+        <label class="automation-builder__field">
+          <span>Damage source</span>
+          <select data-card-field="source">
+            <option value="selectedPowerRollTier" ${data.source === "selectedPowerRollTier" ? "selected" : ""}>Selected power-roll tier</option>
+          </select>
+        </label>
+        <label class="automation-builder__field">
+          <span>Target</span>
+          <select data-card-field="target">
+            <option value="selectedTarget" ${data.target === "selectedTarget" ? "selected" : ""}>Selected target</option>
+          </select>
+        </label>
+        <label class="automation-builder__field automation-builder__field--wide">
+          <span>Result note</span>
+          <input type="text" data-card-field="note" value="${escapeHtml(data.note)}" placeholder="optional extra message after damage" />
+        </label>
+      </div>
+    `;
+    return cardShell(card, "Deal Stamina Damage", body);
+  }
+
   function renderNoteCard(card) {
     const body = `
       <label class="automation-builder__field automation-builder__field--wide">
@@ -117,12 +146,13 @@
 
   function renderCard(card) {
     if (card.type === "powerRollDamage") return renderPowerRollCard(card);
+    if (card.type === "dealStaminaDamage") return renderDealStaminaDamageCard(card);
     if (card.type === "note") return renderNoteCard(card);
     return renderTargetCard(card);
   }
 
-  function readAutomation(modal) {
-    const cards = Array.from(modal.querySelectorAll("[data-automation-card]")).map((cardEl) => {
+  function readAutomation(builder) {
+    const cards = Array.from(builder.querySelectorAll("[data-automation-card]")).map((cardEl) => {
       const type = cardEl.getAttribute("data-card-type") || "target";
       const id = cardEl.getAttribute("data-automation-card") || schema.createId("card");
       const getField = (field) => cardEl.querySelector(`[data-card-field="${field}"]`);
@@ -133,7 +163,7 @@
           const tierEl = cardEl.querySelector(`[data-tier="${key}"]`);
           const getTierField = (field) => tierEl?.querySelector(`[data-tier-field="${field}"]`);
           tiers[key] = {
-            range: key === "low" ? "≤ 11" : key === "mid" ? "12-16" : "17+",
+            range: tierRange(key),
             damage: getTierField("damage")?.value || "",
             damageType: getTierField("damageType")?.value || "",
             effect: getTierField("effect")?.value || "",
@@ -147,6 +177,18 @@
             attribute: getField("attribute")?.value || "Might",
             bonus: getField("bonus")?.value || "",
             tiers,
+          },
+        };
+      }
+
+      if (type === "dealStaminaDamage") {
+        return {
+          id,
+          type,
+          data: {
+            source: getField("source")?.value || "selectedPowerRollTier",
+            target: getField("target")?.value || "selectedTarget",
+            note: getField("note")?.value || "",
           },
         };
       }
@@ -169,41 +211,126 @@
     return schema.normalizeAutomation({ cards });
   }
 
-  function renderWarnings(modal) {
-    const warningsEl = modal.querySelector("[data-automation-warnings]");
+  function renderWarnings(builder) {
+    const warningsEl = builder.querySelector("[data-automation-warnings]");
     if (!warningsEl) return;
-    const warnings = schema.validateAutomation(readAutomation(modal));
+    const warnings = schema.validateAutomation(readAutomation(builder));
     warningsEl.innerHTML = warnings.length
       ? `<ul>${warnings.map((warning) => `<li>${escapeHtml(warning)}</li>`).join("")}</ul>`
-      : "<p>Ready to save. Runtime execution will be added later.</p>";
+      : "<p>Ready to save. Play mode will run executable cards from top to bottom.</p>";
     warningsEl.classList.toggle("automation-builder__warnings--ok", warnings.length === 0);
   }
 
-  function addCard(modal, type) {
-    const automation = readAutomation(modal);
+  function replaceCards(builder, cards) {
+    builder.querySelector("[data-automation-cards]").innerHTML = cards.map(renderCard).join("");
+    renderWarnings(builder);
+  }
+
+  function addCard(builder, type) {
+    const automation = readAutomation(builder);
     automation.cards.push(schema.normalizeAutomation({ cards: [{ type }] }).cards[0]);
-    modal.querySelector("[data-automation-cards]").innerHTML = automation.cards.map(renderCard).join("");
-    renderWarnings(modal);
+    replaceCards(builder, automation.cards);
+  }
+
+  function makeDraggable(host) {
+    const panel = host.querySelector(".automation-builder__window");
+    const handle = host.querySelector("[data-automation-builder-handle]");
+    if (!panel || !handle) return;
+
+    const positionPanel = () => {
+      const rect = panel.getBoundingClientRect();
+      panel.style.left = `${Math.max(12, Math.round((window.innerWidth - rect.width) / 2))}px`;
+      panel.style.top = `${Math.max(12, Math.round(window.innerHeight * 0.08))}px`;
+    };
+    requestAnimationFrame(positionPanel);
+
+    handle.addEventListener("pointerdown", (event) => {
+      if (event.target instanceof Element && event.target.closest("button")) return;
+      const rect = panel.getBoundingClientRect();
+      const offsetX = event.clientX - rect.left;
+      const offsetY = event.clientY - rect.top;
+      panel.setPointerCapture(event.pointerId);
+      panel.classList.add("automation-builder__window--dragging");
+
+      const move = (moveEvent) => {
+        const maxLeft = Math.max(12, window.innerWidth - panel.offsetWidth - 12);
+        const maxTop = Math.max(12, window.innerHeight - 64);
+        panel.style.left = `${Math.min(Math.max(12, moveEvent.clientX - offsetX), maxLeft)}px`;
+        panel.style.top = `${Math.min(Math.max(12, moveEvent.clientY - offsetY), maxTop)}px`;
+      };
+
+      const stop = () => {
+        panel.classList.remove("automation-builder__window--dragging");
+        panel.removeEventListener("pointermove", move);
+        panel.removeEventListener("pointerup", stop);
+        panel.removeEventListener("pointercancel", stop);
+      };
+
+      panel.addEventListener("pointermove", move);
+      panel.addEventListener("pointerup", stop);
+      panel.addEventListener("pointercancel", stop);
+    });
+  }
+
+  function bindCardSorting(builder) {
+    let draggedCard = null;
+
+    builder.addEventListener("dragstart", (event) => {
+      const target = event.target instanceof Element ? event.target : null;
+      const handle = target?.closest("[data-drag-automation-card]");
+      const card = target?.closest("[data-automation-card]");
+      if (!handle || !card) {
+        event.preventDefault();
+        return;
+      }
+      draggedCard = card;
+      card.classList.add("automation-builder__card--dragging");
+      event.dataTransfer.effectAllowed = "move";
+      event.dataTransfer.setData("text/plain", card.getAttribute("data-automation-card") || "");
+    });
+
+    builder.addEventListener("dragover", (event) => {
+      if (!draggedCard) return;
+      const stack = builder.querySelector("[data-automation-cards]");
+      const targetCard = event.target instanceof Element ? event.target.closest("[data-automation-card]") : null;
+      if (!stack || !targetCard || targetCard === draggedCard) return;
+      event.preventDefault();
+      const rect = targetCard.getBoundingClientRect();
+      const placeBefore = event.clientY < rect.top + rect.height / 2;
+      stack.insertBefore(draggedCard, placeBefore ? targetCard : targetCard.nextSibling);
+    });
+
+    builder.addEventListener("drop", (event) => {
+      if (!draggedCard) return;
+      event.preventDefault();
+      renderWarnings(builder);
+    });
+
+    builder.addEventListener("dragend", () => {
+      draggedCard?.classList.remove("automation-builder__card--dragging");
+      draggedCard = null;
+      renderWarnings(builder);
+    });
   }
 
   function open(actionId, actionType, currentAutomation, onSave) {
-    closeModal();
+    closeBuilder();
 
     const automation = schema.normalizeAutomation(currentAutomation);
-    const modal = document.createElement("div");
-    modal.id = MODAL_ID;
-    modal.className = "modal-overlay automation-builder";
-    modal.innerHTML = `
-      <div class="modal automation-builder__modal" role="dialog" aria-modal="true" aria-labelledby="ability-automation-title">
-        <header class="modal__header automation-builder__header">
+    const host = document.createElement("div");
+    host.id = BUILDER_ID;
+    host.className = "automation-builder";
+    host.innerHTML = `
+      <div class="automation-builder__window" role="dialog" aria-modal="false" aria-labelledby="ability-automation-title">
+        <header class="modal__header automation-builder__header" data-automation-builder-handle>
           <div>
-            <p class="automation-builder__eyebrow">${escapeHtml(actionType)} • ${escapeHtml(actionId)}</p>
+            <p class="automation-builder__eyebrow">${escapeHtml(actionType)} - ${escapeHtml(actionId)}</p>
             <h2 class="modal__title" id="ability-automation-title">Ability Automation</h2>
           </div>
-          <button class="icon-btn" type="button" data-close-automation-builder aria-label="Close automation builder">✕</button>
+          <button class="icon-btn" type="button" data-close-automation-builder aria-label="Close automation builder">X</button>
         </header>
         <div class="modal__body automation-builder__body">
-          <p class="automation-builder__intro">Describe this ability as cards. These values are saved as data only; play-mode execution is intentionally not part of this version.</p>
+          <p class="automation-builder__intro">Describe this ability as cards. Play mode runs executable cards from top to bottom.</p>
           <div class="automation-builder__toolbar">
             ${registry.primitives.map((primitive) => `<button class="text-btn" type="button" data-add-automation-card="${escapeHtml(primitive.type)}">+ ${escapeHtml(primitive.label)}</button>`).join("")}
           </div>
@@ -217,31 +344,32 @@
       </div>
     `;
 
-    document.body.appendChild(modal);
-    renderWarnings(modal);
+    document.body.appendChild(host);
+    renderWarnings(host);
+    makeDraggable(host);
+    bindCardSorting(host);
 
-    modal.addEventListener("click", (event) => {
-      if (event.target === modal) closeModal();
+    host.addEventListener("click", (event) => {
       const target = event.target instanceof Element ? event.target : null;
       if (!target) return;
-      if (target.closest("[data-close-automation-builder]")) closeModal();
+      if (target.closest("[data-close-automation-builder]")) closeBuilder();
       const addButton = target.closest("[data-add-automation-card]");
-      if (addButton) addCard(modal, addButton.getAttribute("data-add-automation-card") || "target");
+      if (addButton) addCard(host, addButton.getAttribute("data-add-automation-card") || "target");
       const removeButton = target.closest("[data-remove-automation-card]");
       if (removeButton) {
         removeButton.closest("[data-automation-card]")?.remove();
-        renderWarnings(modal);
+        renderWarnings(host);
       }
       if (target.closest("[data-save-automation-builder]")) {
         if (typeof onSave === "function") {
-          onSave(readAutomation(modal));
+          onSave(readAutomation(host));
         }
-        closeModal();
+        closeBuilder();
       }
     });
 
-    modal.addEventListener("input", () => renderWarnings(modal));
-    modal.addEventListener("change", () => renderWarnings(modal));
+    host.addEventListener("input", () => renderWarnings(host));
+    host.addEventListener("change", () => renderWarnings(host));
   }
 
   window.AbilityAutomation = { open };

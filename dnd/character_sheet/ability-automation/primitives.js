@@ -15,6 +15,11 @@
       description: "Roll 2d10 plus an attribute and define damage for each tier.",
     },
     {
+      type: "dealStaminaDamage",
+      label: "Deal Stamina Damage",
+      description: "Apply the selected power-roll tier damage to the chosen target.",
+    },
+    {
       type: "note",
       label: "Automation Note",
       description: "Capture future automation details without making them executable yet.",

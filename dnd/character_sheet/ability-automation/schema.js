@@ -18,6 +18,12 @@
     };
   }
 
+  function tierRange(key) {
+    if (key === "low") return "<= 11";
+    if (key === "mid") return "12-16";
+    return "17+";
+  }
+
   function defaultAutomation() {
     return {
       schema: AUTOMATION_SCHEMA_ID,
@@ -40,10 +46,19 @@
             attribute: "Might",
             bonus: "",
             tiers: {
-              low: { ...emptyTier(), range: "≤ 11" },
+              low: { ...emptyTier(), range: tierRange("low") },
               mid: { ...emptyTier(), range: "12-16" },
               high: { ...emptyTier(), range: "17+" },
             },
+          },
+        },
+        {
+          id: createId("card"),
+          type: "dealStaminaDamage",
+          data: {
+            source: "selectedPowerRollTier",
+            target: "selectedTarget",
+            note: "",
           },
         },
       ],
@@ -69,7 +84,7 @@
               key,
               {
                 ...emptyTier(),
-                range: key === "low" ? "≤ 11" : key === "mid" ? "12-16" : "17+",
+                range: tierRange(key),
                 ...(tiers[key] || {}),
               },
             ])
@@ -84,6 +99,18 @@
         type,
         data: {
           text: data.text || "",
+        },
+      };
+    }
+
+    if (type === "dealStaminaDamage") {
+      return {
+        id,
+        type,
+        data: {
+          source: data.source || "selectedPowerRollTier",
+          target: data.target || "selectedTarget",
+          note: data.note || "",
         },
       };
     }
@@ -121,6 +148,7 @@
     const warnings = [];
     const hasTarget = automation.cards.some((card) => card.type === "target");
     const powerRollCards = automation.cards.filter((card) => card.type === "powerRollDamage");
+    const hasDamageAction = automation.cards.some((card) => card.type === "dealStaminaDamage");
 
     if (!hasTarget) {
       warnings.push("Add a target card so play mode will know who the ability affects later.");
@@ -128,6 +156,10 @@
 
     if (!powerRollCards.length) {
       warnings.push("Add a power roll damage card to describe tiered damage.");
+    }
+
+    if (powerRollCards.length && !hasDamageAction) {
+      warnings.push("Add a deal stamina damage card if this power roll should apply tier damage in play mode.");
     }
 
     powerRollCards.forEach((card, index) => {
@@ -150,6 +182,7 @@
     AUTOMATION_SCHEMA_VERSION,
     TIER_KEYS,
     createId,
+    tierRange,
     defaultAutomation,
     normalizeAutomation,
     validateAutomation,
