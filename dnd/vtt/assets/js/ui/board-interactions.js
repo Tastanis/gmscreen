@@ -824,6 +824,8 @@ export function mountBoardInteractions(store, routes = {}) {
   let damageHealUi = null;
   let pendingDamageHeal = null;
   let pendingAutomationTarget = null;
+  let pendingAutomationArea = null;
+  let automationAreaOverlay = null;
   let pendingAutomationMove = null;
   let automationMoveOverlay = null;
   let characterSummaryCache = new Map();
@@ -1910,7 +1912,11 @@ export function mountBoardInteractions(store, routes = {}) {
 
   document.addEventListener('vtt:automation-select-target', handleAutomationTargetRequest);
   document.addEventListener('vtt:automation-cancel-target', () => cancelPendingAutomationTarget('Target selection skipped.'));
+  document.addEventListener('vtt:automation-select-area', handleAutomationAreaRequest);
+  document.addEventListener('vtt:automation-cancel-area', () => cancelPendingAutomationArea('Area targeting skipped.'));
   document.addEventListener('vtt:automation-apply-damage', handleAutomationDamageRequest);
+  document.addEventListener('vtt:automation-apply-condition', handleAutomationConditionRequest);
+  document.addEventListener('vtt:automation-check-potency', handleAutomationPotencyRequest);
   document.addEventListener('vtt:automation-force-move', handleAutomationForceMoveRequest);
 
   if (maliceButton) {
@@ -3308,6 +3314,12 @@ export function mountBoardInteractions(store, routes = {}) {
   );
 
   mapSurface.addEventListener('pointerdown', (event) => {
+    if (pendingAutomationArea) {
+      if (handleAutomationAreaPointerDown(event)) {
+        event.stopImmediatePropagation();
+      }
+      return;
+    }
     if (pendingAutomationMove) {
       if (handleAutomationMovePointerDown(event)) {
         event.stopImmediatePropagation();
@@ -3323,11 +3335,22 @@ export function mountBoardInteractions(store, routes = {}) {
   }, true);
 
   mapSurface.addEventListener('pointermove', (event) => {
+    if (pendingAutomationArea) {
+      handleAutomationAreaPointerMove(event);
+      return;
+    }
     if (!pendingAutomationMove) {
       return;
     }
     handleAutomationMovePointerMove(event);
   }, true);
+
+  document.addEventListener('keydown', (event) => {
+    if (pendingAutomationArea && event.key === 'Escape') {
+      event.preventDefault();
+      cancelPendingAutomationArea('Area targeting canceled.');
+    }
+  });
 
   document.addEventListener('keydown', (event) => {
     if (!pendingAutomationMove || event.key !== 'Escape') {
@@ -11623,6 +11646,203 @@ export function mountBoardInteractions(store, routes = {}) {
     return true;
   }
 
+  function handleAutomationAreaRequest(event) {
+    const detail = event?.detail ?? {};
+    cancelPendingAutomationArea();
+    pendingAutomationArea = {
+      targetConfig: detail.targetConfig && typeof detail.targetConfig === 'object' ? detail.targetConfig : {},
+      resolve: typeof detail.resolve === 'function' ? detail.resolve : null,
+      reject: typeof detail.reject === 'function' ? detail.reject : null,
+      hoverIds: new Set(),
+      previewCell: null,
+    };
+    closeDamageHealWidget();
+    closeHealOverflowPopup();
+    automationAreaOverlay = renderAutomationAreaOverlay(pendingAutomationArea);
+    updateStatus(formatAutomationAreaPrompt(pendingAutomationArea.targetConfig));
+  }
+
+  function renderAutomationAreaOverlay(request) {
+    if (!mapTransform) return null;
+    const overlay = document.createElement('div');
+    overlay.className = 'vtt-automation-area';
+    overlay.innerHTML = `
+      <div class="vtt-automation-area__range" data-automation-area-range></div>
+      <div class="vtt-automation-area__preview" data-automation-area-preview>
+        <span>${escapeHtml(request.targetConfig?.label || request.targetConfig?.within || 'Area')}</span>
+      </div>
+      <div class="vtt-automation-area__controls">
+        <button type="button" data-skip-automation-area>Skip</button>
+      </div>
+    `;
+    mapTransform.appendChild(overlay);
+    updateAutomationAreaRange();
+    return overlay;
+  }
+
+  function getAutomationAreaDimensions(config = {}) {
+    const shape = config.shape === 'rectangle' ? 'rectangle' : 'cube';
+    const size = Math.max(1, Number.parseInt(config.size ?? 3, 10) || 3);
+    const width = shape === 'rectangle'
+      ? Math.max(1, Number.parseInt(config.width ?? size, 10) || size)
+      : size;
+    const height = shape === 'rectangle'
+      ? Math.max(1, Number.parseInt(config.height ?? size, 10) || size)
+      : size;
+    return { width, height, shape };
+  }
+
+  function updateAutomationAreaRange() {
+    if (!pendingAutomationArea || !automationAreaOverlay) return;
+    const rangeNode = automationAreaOverlay.querySelector('[data-automation-area-range]');
+    if (!(rangeNode instanceof HTMLElement)) return;
+    const source = pendingAutomationArea.targetConfig?.sourcePlacement || pendingAutomationArea.sourcePlacement || null;
+    const range = Number.parseInt(String(pendingAutomationArea.targetConfig?.range || '').match(/\d+/)?.[0] ?? '', 10);
+    if (!source || !Number.isFinite(range) || range <= 0) {
+      rangeNode.hidden = true;
+      return;
+    }
+    const origin = getPlacementCenter(source);
+    positionAutomationCell(rangeNode, Math.floor(origin.column - range), Math.floor(origin.row - range), range * 2 + 1, range * 2 + 1);
+    rangeNode.hidden = false;
+  }
+
+  function handleAutomationAreaPointerMove(event) {
+    if (!pendingAutomationArea || !automationAreaOverlay) return;
+    const cell = getAutomationGridCellFromEvent(event);
+    if (!cell) return;
+    updateAutomationAreaPreview(cell);
+  }
+
+  function updateAutomationAreaPreview(cell) {
+    if (!pendingAutomationArea || !automationAreaOverlay || !cell) return;
+    pendingAutomationArea.previewCell = cell;
+    const { width, height } = getAutomationAreaDimensions(pendingAutomationArea.targetConfig);
+    const preview = automationAreaOverlay.querySelector('[data-automation-area-preview]');
+    if (preview instanceof HTMLElement) {
+      positionAutomationCell(preview, cell.column, cell.row, width, height);
+    }
+    const affected = findAutomationAreaTargets(cell, width, height, pendingAutomationArea.targetConfig);
+    updateAutomationAreaHover(affected);
+  }
+
+  function handleAutomationAreaPointerDown(event) {
+    if (!pendingAutomationArea) return false;
+    const target = event.target instanceof Element ? event.target : null;
+    if (target?.closest('[data-skip-automation-area]')) {
+      event.preventDefault();
+      const request = pendingAutomationArea;
+      clearAutomationAreaOverlay();
+      request.resolve?.({ skipped: true, targets: [] });
+      updateStatus('Area targeting skipped.');
+      return true;
+    }
+    if (event.button === 2) return false;
+    if (event.button !== 0) return false;
+    event.preventDefault();
+    const request = pendingAutomationArea;
+    const cell = getAutomationGridCellFromEvent(event) || request.previewCell;
+    if (!cell) return true;
+    const { width, height } = getAutomationAreaDimensions(request.targetConfig);
+    const affected = findAutomationAreaTargets(cell, width, height, request.targetConfig);
+    affected.forEach((placement) => {
+      if (!isAutomationPlacementHidden(placement)) flashAutomationTargetToken(placement.id);
+    });
+    clearAutomationAreaOverlay();
+    request.resolve?.({
+      skipped: false,
+      template: { column: cell.column, row: cell.row, width, height },
+      targets: affected.map((placement) => ({
+        id: placement.id,
+        name: tokenLabel(placement),
+        hidden: isAutomationPlacementHidden(placement),
+        placement: getAutomationPlacementSnapshot(placement),
+      })),
+    });
+    updateStatus(`${affected.length} target${affected.length === 1 ? '' : 's'} selected in area.`);
+    return true;
+  }
+
+  function findAutomationAreaTargets(cell, width, height, config = {}) {
+    const area = {
+      left: cell.column,
+      top: cell.row,
+      right: cell.column + width,
+      bottom: cell.row + height,
+    };
+    return getPlacementsForActiveScene().filter((placement) => {
+      if (!placement?.id) return false;
+      if (!doesAutomationAreaAffectPlacement(area, placement)) return false;
+      return doesAutomationTargetFilterMatch(placement, config.creature || config.affects || 'creature');
+    });
+  }
+
+  function doesAutomationAreaAffectPlacement(area, placement) {
+    const left = Number.isFinite(placement.column) ? placement.column : 0;
+    const top = Number.isFinite(placement.row) ? placement.row : 0;
+    const width = Math.max(1, Number.isFinite(placement.width) ? placement.width : 1);
+    const height = Math.max(1, Number.isFinite(placement.height) ? placement.height : 1);
+    return left < area.right && left + width > area.left && top < area.bottom && top + height > area.top;
+  }
+
+  function doesAutomationTargetFilterMatch(placement, filter) {
+    const normalized = String(filter || '').trim().toLowerCase();
+    if (!normalized || normalized === 'creature' || normalized === 'creature or object' || normalized === 'object') {
+      return true;
+    }
+    const team = normalizeCombatTeam(placement.team ?? placement.combatTeam ?? null);
+    if (normalized === 'enemy') return team === 'enemy';
+    if (normalized === 'ally') return team === 'ally';
+    return true;
+  }
+
+  function updateAutomationAreaHover(placements) {
+    const nextIds = new Set(placements.map((placement) => placement.id).filter(Boolean));
+    pendingAutomationArea?.hoverIds?.forEach((id) => {
+      if (!nextIds.has(id)) setAutomationAreaHoverToken(id, false);
+    });
+    nextIds.forEach((id) => {
+      const placement = getPlacementFromStore(id);
+      if (!isAutomationPlacementHidden(placement)) setAutomationAreaHoverToken(id, true);
+    });
+    if (pendingAutomationArea) pendingAutomationArea.hoverIds = nextIds;
+  }
+
+  function setAutomationAreaHoverToken(placementId, active) {
+    if (!placementId || !tokenLayer) return;
+    const escapedId = window.CSS?.escape
+      ? window.CSS.escape(String(placementId))
+      : String(placementId).replace(/["\\]/g, '\\$&');
+    const token = tokenLayer.querySelector(`[data-placement-id="${escapedId}"]`);
+    if (token instanceof HTMLElement) {
+      token.classList.toggle('vtt-token--automation-area-hover', Boolean(active));
+    }
+  }
+
+  function isAutomationPlacementHidden(placement) {
+    return Boolean(placement?.hidden || placement?.flags?.hidden);
+  }
+
+  function clearAutomationAreaOverlay() {
+    pendingAutomationArea?.hoverIds?.forEach((id) => setAutomationAreaHoverToken(id, false));
+    automationAreaOverlay?.remove();
+    automationAreaOverlay = null;
+    pendingAutomationArea = null;
+  }
+
+  function cancelPendingAutomationArea(message) {
+    if (!pendingAutomationArea) {
+      clearAutomationAreaOverlay();
+      return;
+    }
+    const request = pendingAutomationArea;
+    clearAutomationAreaOverlay();
+    if (message) {
+      updateStatus(message);
+      request.reject?.(new Error(message));
+    }
+  }
+
   async function handleAutomationDamageRequest(event) {
     const detail = event?.detail ?? {};
     const payload = detail.payload && typeof detail.payload === 'object' ? detail.payload : {};
@@ -11642,7 +11862,10 @@ export function mountBoardInteractions(store, routes = {}) {
       reject?.(new Error('Unable to update stamina for that token.'));
       return;
     }
-    flashAutomationTargetToken(payload.placementId);
+    const resultPlacement = getPlacementFromStore(payload.placementId);
+    if (!isAutomationPlacementHidden(resultPlacement)) {
+      flashAutomationTargetToken(payload.placementId);
+    }
     const maxDisplay = result.max !== null ? result.max : DEFAULT_HP_PLACEHOLDER;
     const hpDisplay = result.max !== null ? `${result.current}/${maxDisplay}` : `${result.current}`;
     updateStatus(`${result.name} takes ${adjustedAmount} stamina damage (${hpDisplay} stamina remaining).`);
@@ -11653,6 +11876,66 @@ export function mountBoardInteractions(store, routes = {}) {
       damageType: payload.damageType || '',
       immunity: adjustment.immunity,
       vulnerability: adjustment.vulnerability,
+      hidden: isAutomationPlacementHidden(resultPlacement),
+    });
+  }
+
+  async function handleAutomationConditionRequest(event) {
+    const detail = event?.detail ?? {};
+    const payload = detail.payload && typeof detail.payload === 'object' ? detail.payload : {};
+    const resolve = typeof detail.resolve === 'function' ? detail.resolve : null;
+    const reject = typeof detail.reject === 'function' ? detail.reject : null;
+    const placementId = payload.placementId || '';
+    const conditionPayload = payload.condition && typeof payload.condition === 'object' ? payload.condition : {};
+    const name = typeof conditionPayload.name === 'string' ? conditionPayload.name.trim() : '';
+    if (!placementId || !name) {
+      reject?.(new Error('Automation condition request is missing a target or condition.'));
+      return;
+    }
+    const duration = normalizeConditionDurationValue(conditionPayload.duration ?? conditionPayload.type ?? '');
+    const condition = {
+      name,
+      duration: { type: duration },
+    };
+    if (conditionPayload.description) {
+      condition.description = String(conditionPayload.description);
+    }
+    if (duration === 'end-of-turn' && payload.sourceId) {
+      condition.endsOn = { tokenId: payload.sourceId };
+    }
+    const updated = applyConditionToPlacement(placementId, condition);
+    if (!updated) {
+      resolve?.({ applied: false, name });
+      return;
+    }
+    const placement = getPlacementFromStore(placementId);
+    if (!isAutomationPlacementHidden(placement)) {
+      flashAutomationTargetToken(placementId);
+      updateStatus(`${tokenLabel(placement)} gains ${name}.`);
+    }
+    resolve?.({ applied: true, name, hidden: isAutomationPlacementHidden(placement) });
+  }
+
+  async function handleAutomationPotencyRequest(event) {
+    const detail = event?.detail ?? {};
+    const payload = detail.payload && typeof detail.payload === 'object' ? detail.payload : {};
+    const resolve = typeof detail.resolve === 'function' ? detail.resolve : null;
+    const placementId = payload.placementId || '';
+    const placement = getPlacementFromStore(placementId);
+    if (!placement) {
+      resolve?.({ passes: false, reason: 'missing-target' });
+      return;
+    }
+    const sourceStats = payload.sourceStats && typeof payload.sourceStats === 'object' ? payload.sourceStats : {};
+    const targetStats = await getAutomationStatsForPlacement(placement);
+    const threshold = computeAutomationPotencyThreshold(sourceStats, payload.threshold);
+    const attributeValue = getAutomationStatValue(targetStats, payload.attribute);
+    resolve?.({
+      passes: attributeValue < threshold,
+      threshold,
+      attributeValue,
+      attribute: payload.attribute || '',
+      hidden: isAutomationPlacementHidden(placement),
     });
   }
 
@@ -11842,6 +12125,38 @@ export function mountBoardInteractions(store, routes = {}) {
       size: vitals.size || placement?.size || placement?.sizeOverride || '',
       stability: vitals.stability || '',
     };
+  }
+
+  async function getAutomationStatsForPlacement(placement) {
+    const sheet = await getAutomationSheetForPlacement(placement?.id);
+    const stats = sheet?.hero?.stats && typeof sheet.hero.stats === 'object' ? sheet.hero.stats : {};
+    return stats;
+  }
+
+  function computeAutomationPotencyThreshold(stats = {}, threshold = 'weak') {
+    const values = ['might', 'agility', 'reason', 'intuition', 'presence'].map((key) => Number.parseInt(stats[key] ?? 0, 10) || 0);
+    const highest = values.length ? Math.max(...values) : 0;
+    const normalized = String(threshold || 'weak').trim().toLowerCase();
+    if (normalized === 'strong') return highest;
+    if (normalized === 'average') return highest - 1;
+    return highest - 2;
+  }
+
+  function getAutomationStatValue(stats = {}, attribute = '') {
+    const key = String(attribute || '').trim().toLowerCase();
+    const lookup = {
+      m: 'might',
+      might: 'might',
+      a: 'agility',
+      agility: 'agility',
+      r: 'reason',
+      reason: 'reason',
+      i: 'intuition',
+      intuition: 'intuition',
+      p: 'presence',
+      presence: 'presence',
+    };
+    return Number.parseInt(stats[lookup[key] || key] ?? 0, 10) || 0;
   }
 
   function getAutomationSizeRank(sizeValue, placement) {

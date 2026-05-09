@@ -152,6 +152,10 @@
     return effect ? Math.max(0, parseInteger(effect.distance)) : 0;
   }
 
+  function getTierPotencyEffects(tier) {
+    return getTierEffects(tier).filter((item) => item.kind === "potency");
+  }
+
   function rollFormula(formula) {
     const clean = String(formula || "2d10").replace(/\s+/g, "").toLowerCase();
     const match = clean.match(/^(\d*)d(\d+)$/);
@@ -235,7 +239,7 @@
         </div>
       </section>
       <div class="power-roll-runner__inline-actions">
-        <p class="power-roll-runner__instruction">Click an enemy token on the map.</p>
+        <p class="power-roll-runner__instruction">${escapeHtml(card.data.mode === "area" ? "Place the area template on the map." : "Click an enemy token on the map.")}</p>
         <button class="dice-clear-btn" type="button" data-skip-target>Skip</button>
       </div>
     `;
@@ -329,7 +333,9 @@
     const detail = state.roll
       ? `Dice: ${state.roll.rolls.join(" + ")} | ${attribute} ${formatModifier(attributeBonus)} | ${edgeState.label}`
       : formulaParts.join(" ");
-    const targetName = state.target?.name || "No target selected";
+    const targetName = state.targets?.length > 1
+      ? `${state.targets.length} targets`
+      : state.target?.name || "No target selected";
     const tierDetail = state.roll
       ? `Tier: ${tierLabel(state.selectedTier)}${state.baseTier && state.baseTier !== state.selectedTier ? ` from ${tierLabel(state.baseTier)}` : ""}`
       : "Ready";
@@ -478,6 +484,35 @@
     }
     const host = showTargetPrompt(state, card);
     try {
+      if (card.data.mode === "area") {
+        if (typeof state.context.selectAreaTarget !== "function") {
+          throw new Error("Area targeting is not available.");
+        }
+        const skipPromise = new Promise((resolve) => {
+          const onSkip = (event) => {
+            const target = event.target instanceof Element ? event.target : null;
+            if (target?.closest("[data-skip-target]")) {
+              host.removeEventListener("click", onSkip);
+              resolve({ skipped: true });
+            }
+          };
+          host.addEventListener("click", onSkip);
+        });
+        const result = await Promise.race([state.context.selectAreaTarget({
+          ...card.data,
+          sourcePlacement: state.sourcePlacement || null,
+        }), skipPromise]);
+        if (result?.skipped) {
+          state.context.cancelAreaSelection?.();
+          state.targets = [];
+          state.target = null;
+          return;
+        }
+        state.targets = Array.isArray(result?.targets) ? result.targets : [];
+        state.target = state.targets[0] || null;
+        state.targetName = state.targets.map((target) => target.name).filter(Boolean).join(", ");
+        return;
+      }
       if (typeof state.context.selectTarget !== "function") {
         throw new Error("Target selection is not available.");
       }
@@ -495,10 +530,12 @@
       if (target?.skipped) {
         state.context.cancelTargetSelection?.();
         state.target = null;
+        state.targets = [];
         state.targetName = "";
         return;
       }
       state.target = target || null;
+      state.targets = target ? [target] : [];
       state.targetName = target?.name || "";
     } finally {
       host.remove();
@@ -512,6 +549,7 @@
     const host = makeHost("Power Roll", state.action.name || "Ability Automation", "power");
     renderPowerRoll(host, state, card);
     await new Promise((resolve) => wirePowerRoll(host, state, card, resolve));
+    await runTierConditionEffects(state);
   }
 
   async function runDealStaminaDamageAction(state, card) {
@@ -526,38 +564,100 @@
       });
       return;
     }
-    if (!state.target?.id) {
+    const targets = Array.isArray(state.targets) && state.targets.length ? state.targets : state.target ? [state.target] : [];
+    if (!targets.length) {
       await postChat(state.context, {
-        message: `${state.action.name || "Ability"} has no selected target for ${amount} stamina damage.`,
+        message: `${state.action.name || "Ability"} has no selected targets for ${amount} stamina damage.`,
       });
       return;
     }
-    const result = typeof state.context.applyDamage === "function"
-      ? await state.context.applyDamage({
-          placementId: state.target.id,
-          amount,
-          damageType,
-          abilityName: state.action.name || "Ability",
-        })
-      : null;
-    const targetName = result?.name || state.target.name || "Target";
-    const finalAmount = Number.isFinite(result?.amount) ? result.amount : amount;
-    const adjustmentParts = [];
-    if (Number.isFinite(result?.vulnerability) && result.vulnerability > 0) {
-      adjustmentParts.push(`+ ${result.vulnerability} vulnerability`);
+    const lines = [];
+    for (const target of targets) {
+      if (!target?.id) continue;
+      const result = typeof state.context.applyDamage === "function"
+        ? await state.context.applyDamage({
+            placementId: target.id,
+            amount,
+            damageType,
+            abilityName: state.action.name || "Ability",
+          })
+        : null;
+      const hidden = Boolean(result?.hidden || target.hidden || target.placement?.hidden);
+      if (!hidden) {
+        const targetName = result?.name || target.name || "Target";
+        const finalAmount = Number.isFinite(result?.amount) ? result.amount : amount;
+        const adjustmentParts = [];
+        if (Number.isFinite(result?.vulnerability) && result.vulnerability > 0) adjustmentParts.push(`+ ${result.vulnerability} vulnerability`);
+        if (Number.isFinite(result?.immunity) && result.immunity > 0) adjustmentParts.push(`- ${result.immunity} immunity`);
+        const adjustmentText = adjustmentParts.length ? ` (${amount}${damageType ? ` ${damageType}` : ""} ${adjustmentParts.join(" ")} = ${finalAmount})` : "";
+        const remaining = result?.max !== null && result?.max !== undefined
+          ? ` (${result.current}/${result.max} stamina remaining)`
+          : result?.current !== undefined
+            ? ` (${result.current} stamina remaining)`
+            : "";
+        lines.push(`${targetName} takes ${finalAmount}${damageType ? ` ${damageType}` : ""} stamina damage${adjustmentText}${remaining}.`);
+      }
     }
-    if (Number.isFinite(result?.immunity) && result.immunity > 0) {
-      adjustmentParts.push(`- ${result.immunity} immunity`);
-    }
-    const adjustmentText = adjustmentParts.length ? ` (${amount}${damageType ? ` ${damageType}` : ""} ${adjustmentParts.join(" ")} = ${finalAmount})` : "";
-    const remaining = result?.max !== null && result?.max !== undefined
-      ? ` (${result.current}/${result.max} stamina remaining)`
-      : result?.current !== undefined
-        ? ` (${result.current} stamina remaining)`
-        : "";
-    const message = `${state.heroName} - ${state.action.name || "Ability"}: ${targetName} takes ${finalAmount}${damageType ? ` ${damageType}` : ""} stamina damage${adjustmentText}${remaining}.${note ? `\n${note}` : ""}`;
-    await postChat(state.context, { message });
+    const visibleText = lines.length ? lines.join("\n") : "Hidden targets are affected.";
+    await postChat(state.context, { message: `${state.heroName} - ${state.action.name || "Ability"}:\n${visibleText}${note ? `\n${note}` : ""}` });
     state.dealtStaminaDamage = true;
+  }
+
+  function normalizeConditionDuration(duration) {
+    if (duration === "endOfTurn") return "end-of-turn";
+    return "save-ends";
+  }
+
+  async function runTierConditionEffects(state) {
+    const tier = state.selectedTierData || {};
+    const directConditions = getTierEffects(tier).filter((effect) => effect.kind === "condition");
+    const potencyEffects = getTierPotencyEffects(tier);
+    if (!directConditions.length && !potencyEffects.length) return;
+    const targets = Array.isArray(state.targets) && state.targets.length ? state.targets : state.target ? [state.target] : [];
+    for (const target of targets) {
+      if (!target?.id) continue;
+      for (const condition of directConditions) {
+        await state.context.applyCondition?.({
+          placementId: target.id,
+          condition: {
+            name: condition.name,
+            duration: normalizeConditionDuration(condition.duration),
+          },
+          sourceId: state.sourcePlacement?.id || "",
+        });
+      }
+      for (const potency of potencyEffects) {
+        const result = await state.context.checkPotency?.({
+          placementId: target.id,
+          attribute: potency.attribute,
+          threshold: potency.threshold,
+          sourceStats: state.hero?.stats || {},
+        });
+        if (!result?.passes) continue;
+        for (const effect of potency.effects || []) {
+          if (effect.kind === "condition") {
+            await state.context.applyCondition?.({
+              placementId: target.id,
+              condition: {
+                name: effect.name,
+                duration: normalizeConditionDuration(effect.duration),
+              },
+              sourceId: state.sourcePlacement?.id || "",
+            });
+          }
+          if (effect.kind === "damage") {
+            const baseAmount = parseInteger(effect.amount);
+            const attributeBonus = effect.attribute ? parseInteger(state.context.getAttributeBonus?.(effect.attribute)) : 0;
+            await state.context.applyDamage?.({
+              placementId: target.id,
+              amount: Math.max(0, baseAmount + attributeBonus),
+              damageType: effect.damageType || "",
+              abilityName: state.action.name || "Ability",
+            });
+          }
+        }
+      }
+    }
   }
 
   async function runPushAction(state, card) {
@@ -633,10 +733,12 @@
       action: options?.action || {},
       automation,
       context: options || {},
+      hero: options?.hero || {},
       heroName: options?.hero?.name || options?.heroName || "Hero",
       sourcePlacement: options?.sourcePlacement || options?.sourceToken || null,
       sourceTraits: options?.sourceTraits || {},
       target: null,
+      targets: [],
       targetName: "",
       selectedTier: null,
       selectedTierData: null,
@@ -651,6 +753,13 @@
     };
 
     try {
+      if (typeof state.context.spendResource === "function") {
+        const spendResult = await state.context.spendResource(state.action);
+        if (spendResult?.canceled) {
+          closeRunner();
+          return;
+        }
+      }
       const cards = automation.cards || [];
       const hasExplicitDamageAction = cards.some(
         (card) => card?.type === "action" && card?.data?.actionType === "dealStaminaDamage"

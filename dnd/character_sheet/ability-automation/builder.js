@@ -50,16 +50,52 @@
 
   function renderTargetCard(card) {
     const data = card.data;
-    const body = `
-      <div class="automation-builder__grid">
+    const mode = data.mode === "area" ? "area" : "token";
+    const areaFields = `
+        <label class="automation-builder__field">
+          <span>Shape</span>
+          <select data-card-field="shape">
+            <option value="cube" ${data.shape !== "rectangle" ? "selected" : ""}>Cube / square</option>
+            <option value="rectangle" ${data.shape === "rectangle" ? "selected" : ""}>Rectangle</option>
+          </select>
+        </label>
+        <label class="automation-builder__field">
+          <span>Size</span>
+          <input type="number" min="1" step="1" data-card-field="size" value="${escapeHtml(data.size || 3)}" />
+        </label>
+        <label class="automation-builder__field">
+          <span>Width</span>
+          <input type="number" min="1" step="1" data-card-field="width" value="${escapeHtml(data.width || data.size || 3)}" />
+        </label>
+        <label class="automation-builder__field">
+          <span>Height</span>
+          <input type="number" min="1" step="1" data-card-field="height" value="${escapeHtml(data.height || data.size || 3)}" />
+        </label>
+        <label class="automation-builder__field">
+          <span>Range</span>
+          <input type="text" data-card-field="range" value="${escapeHtml(data.range || "")}" placeholder="10" />
+        </label>
+    `;
+    const tokenFields = `
         <label class="automation-builder__field">
           <span>Count</span>
           <select data-card-field="count">
             ${["one", "each", "all"].map((option) => `<option value="${option}" ${data.count === option ? "selected" : ""}>${option}</option>`).join("")}
           </select>
         </label>
+    `;
+    const body = `
+      <div class="automation-builder__grid">
         <label class="automation-builder__field">
-          <span>Target type</span>
+          <span>Mode</span>
+          <select data-card-field="mode">
+            <option value="token" ${mode === "token" ? "selected" : ""}>Token</option>
+            <option value="area" ${mode === "area" ? "selected" : ""}>Area</option>
+          </select>
+        </label>
+        ${mode === "area" ? areaFields : tokenFields}
+        <label class="automation-builder__field">
+          <span>${mode === "area" ? "Affects" : "Target type"}</span>
           <select data-card-field="creature">
             ${["enemy", "ally", "creature", "object", "creature or object"].map((option) => `<option value="${option}" ${data.creature === option ? "selected" : ""}>${option}</option>`).join("")}
           </select>
@@ -72,7 +108,7 @@
           </select>
         </label>
         <label class="automation-builder__field automation-builder__field--wide">
-          <span>Range / area note</span>
+          <span>Note</span>
           <input type="text" data-card-field="within" value="${escapeHtml(data.within)}" placeholder="e.g. within 1, melee 1, each enemy in the area" />
         </label>
       </div>
@@ -300,10 +336,16 @@
         id,
         type: "target",
         data: {
-          count: getField("count")?.value || "one",
+          mode: getField("mode")?.value || "token",
+          count: getField("count")?.value || (getField("mode")?.value === "area" ? "each" : "one"),
           creature: getField("creature")?.value || "enemy",
           within: getField("within")?.value || "",
           optional: getField("optional")?.value === "true",
+          shape: getField("shape")?.value || "cube",
+          size: getField("size")?.value || "3",
+          width: getField("width")?.value || getField("size")?.value || "3",
+          height: getField("height")?.value || getField("size")?.value || "3",
+          range: getField("range")?.value || "",
         },
       };
     });
@@ -535,7 +577,7 @@
     host.addEventListener("input", () => renderWarnings(host));
     host.addEventListener("change", (event) => {
       const target = asElement(event.target);
-      if (target?.matches('[data-card-field="actionType"]')) {
+      if (target?.matches('[data-card-field="actionType"], [data-card-field="mode"], [data-card-field="shape"]')) {
         replaceCards(host, readAutomation(host).cards);
         return;
       }

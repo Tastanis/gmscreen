@@ -76,6 +76,25 @@
     };
   }
 
+  function defaultTargetData(data = {}) {
+    const mode = data.mode === "area" ? "area" : "token";
+    const size = Math.max(1, parseInt(data.size ?? data.width ?? 3, 10) || 3);
+    const width = Math.max(1, parseInt(data.width ?? size, 10) || size);
+    const height = Math.max(1, parseInt(data.height ?? size, 10) || size);
+    return {
+      mode,
+      count: data.count || (mode === "area" ? "each" : "one"),
+      creature: data.creature || data.affects || "enemy",
+      within: data.within || "",
+      optional: Boolean(data.optional),
+      shape: data.shape === "rectangle" ? "rectangle" : "cube",
+      size,
+      width,
+      height,
+      range: data.range || "",
+    };
+  }
+
   function normalizeActionData(data = {}) {
     const actionType = ACTION_TYPES.includes(data.actionType) ? data.actionType : "powerRoll";
     if (actionType === "dealStaminaDamage") return defaultDealStaminaDamageData(data);
@@ -100,6 +119,7 @@
           id: createId("card"),
           type: "target",
           data: {
+            mode: "token",
             count: "one",
             creature: "enemy",
             within: "",
@@ -160,12 +180,7 @@
     return {
       id,
       type: "target",
-      data: {
-        count: data.count || "one",
-        creature: data.creature || "enemy",
-        within: data.within || "",
-        optional: Boolean(data.optional),
-      },
+      data: defaultTargetData(data),
     };
   }
 
@@ -227,6 +242,14 @@
     const normalized = normalizeCard(card);
     if (normalized.type === "target") {
       const data = normalized.data;
+      if (data.mode === "area") {
+        const size = data.shape === "rectangle" ? `${data.width}x${data.height}` : `${data.size}x${data.size}`;
+        const parts = [`Place ${size} area`];
+        if (data.range) parts.push(`within ${data.range}`);
+        parts.push(`affecting ${data.creature}`);
+        if (data.optional) parts.push("(optional)");
+        return parts.join(" ");
+      }
       const parts = [`Pick ${data.count} ${data.creature}`];
       if (data.within) parts.push(data.within);
       if (data.optional) parts.push("(optional)");

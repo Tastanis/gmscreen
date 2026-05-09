@@ -884,9 +884,14 @@ function startAbilityAutomation(sheet, action, categoryKey, sourceToken = null) 
     getAttributeBonus: (attribute) => getAttributeBonus(sheet, attribute),
     postChat: postAutomationChat,
     selectTarget: requestAutomationTarget,
+    selectAreaTarget: requestAutomationAreaTarget,
     cancelTargetSelection: cancelAutomationTarget,
+    cancelAreaSelection: cancelAutomationArea,
     applyDamage: requestAutomationDamage,
+    applyCondition: requestAutomationCondition,
+    checkPotency: requestAutomationPotency,
     forceMove: requestAutomationForceMove,
+    spendResource: (ability) => spendAbilityResource(activeSheet, ability),
   });
 }
 
@@ -929,8 +934,54 @@ function requestAutomationDamage(payload) {
   });
 }
 
+function requestAutomationAreaTarget(targetConfig) {
+  return new Promise((resolve, reject) => {
+    document.dispatchEvent(
+      new CustomEvent('vtt:automation-select-area', {
+        detail: {
+          targetConfig: clonePlain(targetConfig || {}),
+          resolve,
+          reject,
+        },
+      })
+    );
+  });
+}
+
+function requestAutomationCondition(payload) {
+  return new Promise((resolve, reject) => {
+    document.dispatchEvent(
+      new CustomEvent('vtt:automation-apply-condition', {
+        detail: {
+          payload: clonePlain(payload || {}),
+          resolve,
+          reject,
+        },
+      })
+    );
+  });
+}
+
+function requestAutomationPotency(payload) {
+  return new Promise((resolve, reject) => {
+    document.dispatchEvent(
+      new CustomEvent('vtt:automation-check-potency', {
+        detail: {
+          payload: clonePlain(payload || {}),
+          resolve,
+          reject,
+        },
+      })
+    );
+  });
+}
+
 function cancelAutomationTarget() {
   document.dispatchEvent(new CustomEvent('vtt:automation-cancel-target'));
+}
+
+function cancelAutomationArea() {
+  document.dispatchEvent(new CustomEvent('vtt:automation-cancel-area'));
 }
 
 function requestAutomationForceMove(payload) {
@@ -945,6 +996,52 @@ function requestAutomationForceMove(payload) {
       })
     );
   });
+}
+
+async function spendAbilityResource(sheet, ability) {
+  const cost = parseAbilityResourceCost(ability?.cost);
+  if (!cost.amount) return { skipped: true };
+  const hero = sheet?.hero && typeof sheet.hero === 'object' ? sheet.hero : {};
+  const resource = hero.resource && typeof hero.resource === 'object' ? hero.resource : {};
+  const title = resource.title || sheet?.sidebar?.resource?.title || 'Resource';
+  const costName = cost.name.toLowerCase();
+  if (costName && title.toLowerCase() !== costName) return { skipped: true };
+  const current = Number.parseInt(resource.value ?? 0, 10) || 0;
+  if (current < cost.amount) {
+    const proceed = window.confirm(`${title} is ${current}, but ${ability?.name || 'this ability'} costs ${cost.amount}. Continue anyway?`);
+    return proceed ? { continued: true, insufficient: true } : { canceled: true };
+  }
+  resource.value = Math.max(0, current - cost.amount);
+  hero.resource = resource;
+  if (sheet) sheet.hero = hero;
+  await saveCharacterSummarySheet(sheet);
+  return { spent: cost.amount, resource: title, remaining: resource.value };
+}
+
+function parseAbilityResourceCost(value) {
+  const match = String(value || '').trim().match(/^(\d+)\s+(.+)$/);
+  if (!match) return { amount: 0, name: '' };
+  return {
+    amount: Math.max(0, Number.parseInt(match[1], 10) || 0),
+    name: match[2].trim(),
+  };
+}
+
+async function saveCharacterSummarySheet(sheet) {
+  if (!activeCharacterId || !sheet) return false;
+  const endpoint = typeof routes?.sheet === 'string' && routes.sheet ? routes.sheet : '/dnd/character_sheet/handler.php';
+  const body = new URLSearchParams();
+  body.set('action', 'save');
+  body.set('character', activeCharacterId);
+  body.set('data', JSON.stringify(sheet));
+  const response = await fetch(endpoint, {
+    method: 'POST',
+    credentials: 'same-origin',
+    headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
+    body,
+  });
+  const payload = await response.json().catch(() => null);
+  return Boolean(response.ok && payload?.success !== false);
 }
 
 function clonePlain(value) {

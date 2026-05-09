@@ -18,6 +18,18 @@
   const GENERIC_DAMAGE_TYPES = ["", "untyped", "all", "any"];
   const SAVE_ENDS_ALIASES = ["se", "save ends", "save end"];
   const END_OF_TURN_ALIASES = ["eot", "end of turn", "end of next turn"];
+  const ATTRIBUTE_SHORTHAND = {
+    m: "Might",
+    might: "Might",
+    a: "Agility",
+    agility: "Agility",
+    r: "Reason",
+    reason: "Reason",
+    i: "Intuition",
+    intuition: "Intuition",
+    p: "Presence",
+    presence: "Presence",
+  };
 
   function escapeRegExp(value) {
     return String(value).replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
@@ -86,6 +98,24 @@
     };
   }
 
+  function parsePotencyExpression(text) {
+    const source = String(text || "").trim();
+    if (!source) return null;
+    const match = source.match(/^(M|A|R|I|P|might|agility|reason|intuition|presence)\s*<\s*(weak|average|strong)\s+(.+)$/i);
+    if (!match) return null;
+    const attribute = ATTRIBUTE_SHORTHAND[normalizeToken(match[1]).replace(/\s+/g, "")] || "";
+    const threshold = normalizeToken(match[2]);
+    const remainder = String(match[3] || "").trim();
+    const effects = parseEffectText(remainder).filter((effect) => effect.kind !== "potency");
+    return {
+      kind: "potency",
+      attribute,
+      threshold,
+      effects,
+      raw: source,
+    };
+  }
+
   function splitEffectText(text) {
     return String(text || "")
       .split(/\s*(?:;|\n|\|)\s*/)
@@ -96,6 +126,11 @@
   function parseEffectText(text) {
     const effects = [];
     splitEffectText(text).forEach((part) => {
+      const potency = parsePotencyExpression(part);
+      if (potency) {
+        effects.push(potency);
+        return;
+      }
       const push = parsePushExpression(part);
       if (push) {
         effects.push(push);
@@ -126,6 +161,9 @@
         normalized.distance ?? "",
         normalized.name ?? "",
         normalized.duration ?? "",
+        normalized.attribute ?? "",
+        normalized.threshold ?? "",
+        Array.isArray(normalized.effects) ? normalized.effects.map(describeEffect).join(",") : "",
       ].join(":");
       if (seen.has(signature)) return;
       seen.add(signature);
@@ -170,6 +208,15 @@
         raw: effect.raw || "",
       };
     }
+    if (effect.kind === "potency") {
+      return {
+        kind: "potency",
+        attribute: ATTRIBUTE_SHORTHAND[normalizeToken(effect.attribute)] || effect.attribute || "",
+        threshold: normalizeToken(effect.threshold || "weak"),
+        effects: Array.isArray(effect.effects) ? effect.effects.map(normalizeEffect).filter((item) => item.kind !== "potency") : [],
+        raw: effect.raw || "",
+      };
+    }
     return { ...effect };
   }
 
@@ -195,6 +242,10 @@
       const duration = effect.duration === "saveEnds" ? " SE" : effect.duration === "endOfTurn" ? " EOT" : "";
       return `${effect.name}${duration}`;
     }
+    if (effect.kind === "potency") {
+      const inner = Array.isArray(effect.effects) ? effect.effects.map(describeEffect).filter(Boolean).join(", ") : "";
+      return `${effect.attribute} < ${String(effect.threshold || "").toUpperCase()}${inner ? `: ${inner}` : ""}`;
+    }
     return effect.raw || "";
   }
 
@@ -207,6 +258,7 @@
     hasTierOutput,
     parseDamageExpression,
     parseEffectText,
+    parsePotencyExpression,
     parsePushExpression,
     describeEffect,
     normalizeDamageType,
