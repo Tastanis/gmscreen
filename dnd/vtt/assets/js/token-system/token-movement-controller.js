@@ -122,6 +122,24 @@ export function createTokenMovementController({
       },
       getTurnContext()
     );
+
+    // Dispatch a global "token moved (normal movement)" event so the trigger
+    // system can check for opportunity-attack predicates. Forced movement
+    // (push/pull/slide) goes through a different code path and does NOT fire
+    // this event, which is exactly what we want — opportunity attacks only
+    // trigger on a creature's own willing movement.
+    if (typeof documentRef !== 'undefined' && documentRef?.dispatchEvent) {
+      documentRef.dispatchEvent(new CustomEvent('vtt:token-moved', {
+        detail: {
+          placementId: tokenId,
+          sceneId,
+          from: normalizeFootprint(from),
+          to: normalizeFootprint(to),
+          kind: 'normal',
+        },
+      }));
+    }
+
     dragSession = null;
   }
 

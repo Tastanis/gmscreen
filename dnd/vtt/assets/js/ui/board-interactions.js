@@ -1929,6 +1929,57 @@ export function mountBoardInteractions(store, routes = {}) {
     if (placementId) clearTriggerReady(placementId, abilityId);
   });
 
+  // Opportunity attack auto-detect: when a token moves out of an enemy's
+  // adjacency via NORMAL movement during combat, mark that enemy's
+  // free-strike trigger as ready (blue "!" overlay).
+  document.addEventListener('vtt:token-moved', (event) => {
+    const detail = event?.detail || {};
+    if (detail.kind !== 'normal') return;
+    if (!combatActive) return;
+    const movingId = detail.placementId;
+    const from = detail.from;
+    const to = detail.to;
+    if (!movingId || !from || !to) return;
+
+    const state = boardApi.getState?.() ?? {};
+    const sceneId = detail.sceneId || state.boardState?.activeSceneId || null;
+    if (!sceneId) return;
+    const scenePlacements = getActiveScenePlacements(state) || [];
+    const movingPlacement = scenePlacements.find((p) => p && p.id === movingId);
+    const movingTeam = movingPlacement ? getCombatantTeam(movingId) || normalizeCombatTeam(movingPlacement.team) : null;
+
+    for (const watcher of scenePlacements) {
+      if (!watcher || !watcher.id || watcher.id === movingId) continue;
+      const watcherTeam = getCombatantTeam(watcher.id) || normalizeCombatTeam(watcher.team);
+      // Only opposing-team watchers trigger opp-attacks.
+      if (movingTeam && watcherTeam && movingTeam === watcherTeam) continue;
+      const wasAdjacent = footprintGap(watcher, from) === 1;
+      const isAdjacent = footprintGap(watcher, to) === 1;
+      if (wasAdjacent && !isAdjacent) {
+        markTriggerReady(watcher.id, '__opportunityAttack__');
+      }
+    }
+  });
+
+  function footprintGap(a, b) {
+    if (!a || !b) return Infinity;
+    const aw = Math.max(1, Number.isFinite(a.width) ? a.width : 1);
+    const ah = Math.max(1, Number.isFinite(a.height) ? a.height : 1);
+    const bw = Math.max(1, Number.isFinite(b.width) ? b.width : 1);
+    const bh = Math.max(1, Number.isFinite(b.height) ? b.height : 1);
+    const ax1 = a.column ?? 0;
+    const ax2 = ax1 + aw - 1;
+    const bx1 = b.column ?? 0;
+    const bx2 = bx1 + bw - 1;
+    const ay1 = a.row ?? 0;
+    const ay2 = ay1 + ah - 1;
+    const by1 = b.row ?? 0;
+    const by2 = by1 + bh - 1;
+    const dx = Math.max(0, Math.max(ax1 - bx2, bx1 - ax2));
+    const dy = Math.max(0, Math.max(ay1 - by2, by1 - ay2));
+    return Math.max(dx, dy);
+  }
+
   // ---------- Trigger event bus ----------
   // Lightweight, event-driven trigger registry. Listeners register against a
   // specific eventType (move, damage, turnStart, turnEnd, …); when fire() is
@@ -9037,13 +9088,22 @@ export function mountBoardInteractions(store, routes = {}) {
         if (!placement || typeof placement !== 'object') {
           return;
         }
+        let placementMutated = false;
         if (placement.triggeredActionReady !== true) {
           placement.triggeredActionReady = true;
+          placementMutated = true;
+        }
+        // Round-start: clear any blue "!" trigger-ready flags from the prior
+        // round. New triggered abilities can fire fresh now.
+        if (placement.hasReadyTrigger || (Array.isArray(placement.readyTriggerAbilities) && placement.readyTriggerAbilities.length)) {
+          placement.hasReadyTrigger = false;
+          placement.readyTriggerAbilities = [];
+          placementMutated = true;
+        }
+        if (placementMutated) {
           placement._lastModified = nowMs;
           mutated = true;
-          if (placement.id) {
-            mutatedIds.push(placement.id);
-          }
+          if (placement.id) mutatedIds.push(placement.id);
         }
       });
     });
@@ -9062,7 +9122,7 @@ export function mountBoardInteractions(store, routes = {}) {
           type: 'placement.update',
           sceneId: activeSceneId,
           placementId: id,
-          patch: { triggeredActionReady: true },
+          patch: { triggeredActionReady: true, hasReadyTrigger: false, readyTriggerAbilities: [] },
         }));
       }
       persistBoardStateSnapshot({}, resetOps);

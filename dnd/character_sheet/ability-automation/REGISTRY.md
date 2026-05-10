@@ -134,16 +134,26 @@ Lightweight event-driven registry for triggered abilities. JSON-authored `trigge
 | `markReady(placementId, abilityId?)` | string, string \| null | Sets `placement.hasReadyTrigger = true`, adds to `readyTriggerAbilities`. Surfaces blue `!` overlay on token + TRIGGER button. |
 | `clearReady(placementId, abilityId?)` | string, string \| null | Clears specific ability or all triggers on a token. |
 
-### Built-in event types (planned)
+### Built-in event types
 
-| eventType | Payload shape | Status |
+| eventType / DOM event | Payload shape | Status |
 |---|---|---|
-| `move` | `{ placementId, fromColumn, fromRow, toColumn, toRow }` | Bus exists, dispatcher hooks deferred to next pass |
-| `damage` | `{ targetId, sourceId, amount, damageType }` | Bus exists, hooks deferred |
-| `turnStart` / `turnEnd` | `{ placementId }` | Bus exists, hooks deferred |
-| `staminaChange` | `{ placementId, before, after }` | Bus exists, hooks deferred |
+| `vtt:token-moved` | `{ placementId, sceneId, from: { column, row, width, height }, to: {...}, kind: "normal" }` | Implemented. Fires from `token-movement-controller.handleDragCommitted` only on normal player movement. Forced movement and teleport bypass this event. |
+| `damage` | `{ targetId, sourceId, amount, damageType }` | Bus exists, hook deferred |
+| `turnStart` / `turnEnd` | `{ placementId }` | Bus exists, hook deferred |
+| `staminaChange` | `{ placementId, before, after }` | Bus exists, hook deferred |
 
-Built-in opportunity attack (everyone has it) auto-detect lands in the next pass.
+### Built-in opportunity attack
+
+Auto-detected on every normal movement during combat:
+
+- Listens for `vtt:token-moved` with `kind === "normal"`
+- For each opposing-team token that *was* adjacent (Chebyshev gap = 1, footprint-aware) to the moving token's `from` and is *not* adjacent to its `to`, calls `markReady(watcherId, "__opportunityAttack__")`
+- Skipped when `combatActive === false`
+- Skipped for forced movement (push/pull/slide) and teleport because those don't fire `vtt:token-moved`
+- Cleared at the start of each combat round via `resetTriggeredActionsForActiveScene`
+
+The watcher token gets the blue pulsing `!` overlay on the board and the `!` badge on their TRIGGER ability tab when they're selected. Clicking either clears it (manual resolution this pass; auto-clear on free-strike-used in a future pass once free strikes are first-class abilities).
 
 ## Schema versioning
 
