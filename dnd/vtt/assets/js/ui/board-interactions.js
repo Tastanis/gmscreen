@@ -1915,6 +1915,7 @@ export function mountBoardInteractions(store, routes = {}) {
   document.addEventListener('vtt:automation-select-area', handleAutomationAreaRequest);
   document.addEventListener('vtt:automation-cancel-area', () => cancelPendingAutomationArea('Area targeting skipped.'));
   document.addEventListener('vtt:automation-apply-damage', handleAutomationDamageRequest);
+  document.addEventListener('vtt:automation-apply-heal', handleAutomationHealRequest);
   document.addEventListener('vtt:automation-apply-condition', handleAutomationConditionRequest);
   document.addEventListener('vtt:automation-check-potency', handleAutomationPotencyRequest);
   document.addEventListener('vtt:automation-force-move', handleAutomationForceMoveRequest);
@@ -11880,6 +11881,40 @@ export function mountBoardInteractions(store, routes = {}) {
     });
   }
 
+  async function handleAutomationHealRequest(event) {
+    const detail = event?.detail ?? {};
+    const payload = detail.payload && typeof detail.payload === 'object' ? detail.payload : {};
+    const resolve = typeof detail.resolve === 'function' ? detail.resolve : null;
+    const reject = typeof detail.reject === 'function' ? detail.reject : null;
+    const amount = parseDamageHealAmount(payload.amount);
+    if (!payload.placementId || !amount) {
+      reject?.(new Error('Automation heal request is missing a target or amount.'));
+      return;
+    }
+    // For heal: cap at max. For temporaryStamina: allow going over (allowTempHp=true).
+    const allowTempHp = Boolean(payload.allowTempHp);
+    const result = applyDamageHealToPlacement(payload.placementId, 'heal', amount, { allowTempHp });
+    if (!result) {
+      reject?.(new Error('Unable to update stamina for that token.'));
+      return;
+    }
+    const placement = getPlacementFromStore(payload.placementId);
+    if (!isAutomationPlacementHidden(placement)) {
+      flashAutomationTargetToken(payload.placementId);
+    }
+    const maxDisplay = result.max !== null ? result.max : DEFAULT_HP_PLACEHOLDER;
+    const hpDisplay = result.max !== null ? `${result.current}/${maxDisplay}` : `${result.current}`;
+    const overage = allowTempHp && Number.isFinite(result.max) && result.current > result.max
+      ? ` (+${result.current - result.max} temp)`
+      : '';
+    updateStatus(`${result.name} recovers ${result.change || amount} stamina${overage} (${hpDisplay}).`);
+    resolve?.({
+      ...result,
+      hidden: isAutomationPlacementHidden(placement),
+      allowTempHp,
+    });
+  }
+
   async function handleAutomationConditionRequest(event) {
     const detail = event?.detail ?? {};
     const payload = detail.payload && typeof detail.payload === 'object' ? detail.payload : {};
@@ -12060,6 +12095,33 @@ export function mountBoardInteractions(store, routes = {}) {
     return normalized;
   }
 
+  function getAutomationMoveVerb(payload = {}) {
+    const raw = String(payload.verb || payload.movement || 'push').trim();
+    const lower = raw.toLowerCase().replace(/\s+/g, '');
+    const map = { push: 'push', pull: 'pull', slide: 'slide', verticalpush: 'verticalPush', verticalpull: 'verticalPull', verticalslide: 'verticalSlide' };
+    if (map[lower]) return map[lower];
+    if (['push', 'pull', 'slide', 'verticalPush', 'verticalPull', 'verticalSlide'].includes(raw)) return raw;
+    return 'push';
+  }
+
+  function getAutomationMoveVerbLabel(verb) {
+    switch (verb) {
+      case 'pull': return 'Pull';
+      case 'slide': return 'Slide';
+      case 'verticalPush': return 'Vertical Push';
+      case 'verticalPull': return 'Vertical Pull';
+      case 'verticalSlide': return 'Vertical Slide';
+      default: return 'Push';
+    }
+  }
+
+  function getAutomationMoveBaseVerb(verb) {
+    if (verb === 'verticalPush') return 'push';
+    if (verb === 'verticalPull') return 'pull';
+    if (verb === 'verticalSlide') return 'slide';
+    return verb;
+  }
+
   async function handleAutomationForceMoveRequest(event) {
     const detail = event?.detail ?? {};
     const payload = detail.payload && typeof detail.payload === 'object' ? detail.payload : {};
@@ -12068,6 +12130,8 @@ export function mountBoardInteractions(store, routes = {}) {
     const targetId = payload.targetId || payload.target?.id || '';
     const targetPlacement = getPlacementFromStore(targetId);
     const sourcePlacement = resolveAutomationSourcePlacement(payload.sourcePlacement);
+    const verb = getAutomationMoveVerb(payload);
+    const verbLabel = getAutomationMoveVerbLabel(verb);
 
     if (!targetPlacement || !sourcePlacement) {
       resolve?.({ skipped: true, reason: 'missing-placement' });
@@ -12083,7 +12147,7 @@ export function mountBoardInteractions(store, routes = {}) {
     const targetRank = getAutomationSizeRank(targetTraits.size, targetPlacement);
     const sizeDifference = targetRank - sourceRank;
     if (sizeDifference > 1) {
-      updateStatus(`${tokenLabel(targetPlacement)} is too large to push automatically.`);
+      updateStatus(`${tokenLabel(targetPlacement)} is too large to ${verbLabel.toLowerCase()} automatically.`);
       resolve?.({ skipped: true, reason: 'too-large' });
       return;
     }
@@ -12092,7 +12156,7 @@ export function mountBoardInteractions(store, routes = {}) {
     const sizePenalty = Math.max(0, sizeDifference);
     const effectiveDistance = Math.max(0, requestedDistance - stability - sizePenalty);
     if (!effectiveDistance) {
-      updateStatus(`${tokenLabel(targetPlacement)} is not moved by Push ${requestedDistance}.`);
+      updateStatus(`${tokenLabel(targetPlacement)} is not moved by ${verbLabel} ${requestedDistance}.`);
       resolve?.({ skipped: true, reason: 'no-distance' });
       return;
     }
@@ -12107,6 +12171,8 @@ export function mountBoardInteractions(store, routes = {}) {
       targetPlacement,
       requestedDistance,
       effectiveDistance,
+      verb,
+      verbLabel,
       collisionDamageType: payload.collisionDamageType || '',
     });
   }
@@ -12181,22 +12247,28 @@ export function mountBoardInteractions(store, routes = {}) {
     cancelPendingAutomationMove();
     const targetSnapshot = getAutomationPlacementSnapshot(request.targetPlacement);
     const sourceSnapshot = getAutomationPlacementSnapshot(request.sourcePlacement);
+    const verb = getAutomationMoveVerb(request);
+    const verbLabel = request.verbLabel || getAutomationMoveVerbLabel(verb);
+    const baseVerb = getAutomationMoveBaseVerb(verb);
     pendingAutomationMove = {
       ...request,
+      verb,
+      verbLabel,
+      baseVerb,
       targetSnapshot,
       sourceSnapshot,
       previewCell: {
         column: targetSnapshot.column,
         row: targetSnapshot.row,
       },
-      legalCells: buildAutomationPushLegalCells(sourceSnapshot, targetSnapshot, request.effectiveDistance),
+      legalCells: buildAutomationMoveLegalCells(sourceSnapshot, targetSnapshot, request.effectiveDistance, baseVerb),
     };
     automationMoveOverlay = renderAutomationMoveOverlay(pendingAutomationMove);
     updateAutomationMovePreview(pendingAutomationMove.previewCell);
-    updateStatus(`Push ${targetSnapshot.name}: choose a destination or click Skip.`);
+    updateStatus(`${verbLabel} ${targetSnapshot.name}: choose a destination or click Skip.`);
   }
 
-  function buildAutomationPushLegalCells(source, target, distance) {
+  function buildAutomationMoveLegalCells(source, target, distance, baseVerb) {
     const cells = [];
     const originDistance = automationChebyshevDistance(getPlacementCenter(source), getPlacementCenter(target));
     for (let dy = -distance; dy <= distance; dy += 1) {
@@ -12204,36 +12276,26 @@ export function mountBoardInteractions(store, routes = {}) {
         const column = target.column + dx;
         const row = target.row + dy;
         const movedDistance = automationChebyshevDistance(target, { column, row });
-        if (movedDistance > distance) continue;
-        if (!isAutomationPushPathAwayFromSource(source, target, { column, row })) continue;
-        const candidate = {
-          column,
-          row,
-          width: target.width,
-          height: target.height,
-        };
+        if (movedDistance > distance || movedDistance === 0) continue;
+        if (!isAutomationMovePathLegal(source, target, { column, row }, baseVerb)) continue;
+        const candidate = { column, row, width: target.width, height: target.height };
         const sourceDistance = automationChebyshevDistance(getPlacementCenter(source), getPlacementCenter(candidate));
-        if (sourceDistance <= originDistance) continue;
+        if (baseVerb === 'push' && sourceDistance <= originDistance) continue;
+        if (baseVerb === 'pull' && sourceDistance >= originDistance) continue;
+        // slide: any cell within distance — no source-distance constraint
         cells.push({ column, row });
       }
     }
     return cells;
   }
 
-  function isAutomationPushPathAwayFromSource(source, target, destination) {
+  function isAutomationMovePathLegal(source, target, destination, baseVerb) {
     const sourceCenter = getPlacementCenter(source);
-    const start = {
-      column: target.column,
-      row: target.row,
-      width: target.width,
-      height: target.height,
-    };
+    const start = { column: target.column, row: target.row, width: target.width, height: target.height };
     const dx = destination.column - start.column;
     const dy = destination.row - start.row;
     const steps = Math.max(Math.abs(dx), Math.abs(dy));
-    if (steps <= 0) {
-      return false;
-    }
+    if (steps <= 0) return false;
     const stepX = Math.sign(dx);
     const stepY = Math.sign(dy);
     let previousDistance = automationChebyshevDistance(sourceCenter, getPlacementCenter(start));
@@ -12245,12 +12307,20 @@ export function mountBoardInteractions(store, routes = {}) {
         height: start.height,
       };
       const nextDistance = automationChebyshevDistance(sourceCenter, getPlacementCenter(cell));
-      if (nextDistance <= previousDistance) {
-        return false;
-      }
+      if (baseVerb === 'push' && nextDistance <= previousDistance) return false;
+      if (baseVerb === 'pull' && nextDistance >= previousDistance) return false;
+      // slide: no monotonic requirement — any path works
       previousDistance = nextDistance;
     }
     return true;
+  }
+
+  // Back-compat alias in case anything still calls the old name.
+  function buildAutomationPushLegalCells(source, target, distance) {
+    return buildAutomationMoveLegalCells(source, target, distance, 'push');
+  }
+  function isAutomationPushPathAwayFromSource(source, target, destination) {
+    return isAutomationMovePathLegal(source, target, destination, 'push');
   }
 
   function renderAutomationMoveOverlay(request) {
@@ -12265,7 +12335,7 @@ export function mountBoardInteractions(store, routes = {}) {
       </svg>
       <div class="vtt-automation-move__legal" data-automation-move-legal></div>
       <div class="vtt-automation-move__ghost" data-automation-move-ghost>
-        <span>Push</span>
+        <span>${escapeHtml(request.verbLabel || 'Push')}</span>
       </div>
       <div class="vtt-automation-move__controls">
         <button type="button" data-skip-automation-move>Skip</button>
@@ -12311,6 +12381,23 @@ export function mountBoardInteractions(store, routes = {}) {
       request.resolve?.({ skipped: true, reason: 'user-skip' });
       updateStatus('Forced movement skipped.');
       return true;
+    }
+    // Right-click during force-move: start a pan so the GM can scroll the map
+    // to find their destination. The bubble-phase pan handler doesn't fire
+    // because the capture-phase listener returns early when pendingAutomationMove
+    // is active, so we set up the pan here directly.
+    if (event.button === 2) {
+      viewState.isPanning = true;
+      viewState.pointerId = event.pointerId;
+      viewState.lastPointer = { x: event.clientX, y: event.clientY };
+      mapSurface.classList.add('is-panning');
+      try {
+        mapSurface.setPointerCapture(event.pointerId);
+      } catch (error) {
+        // Ignore capture failures — pan still works via mouse-move events.
+      }
+      // Don't preventDefault; let the contextmenu listener suppress the menu.
+      return true; // claim it so the capture listener calls stopImmediatePropagation
     }
     if (event.button !== 0) {
       return false;

@@ -23,11 +23,13 @@ For *how* to write JSON, see `AUTHORING.md`. This file is `what is supported`.
 | `damage` | Full | Applies via board, supports immunity/vulnerability on PC sheets |
 | `condition` | Full | Applies via board condition tracker (save-ends durations integrate with token tracker) |
 | `forcedMovement` (`push`) | Full | Push works end-to-end (board preview, collisions) |
-| `forcedMovement` (`pull`/`slide`/`vertical*`) | Partial | Verb passes to board; board may currently fall back to push behavior — verify per move |
+| `forcedMovement` (`pull`) | Full | Legal cells strictly nearer to caster, monotonic-toward-source path |
+| `forcedMovement` (`slide`) | Full | Any cell within Chebyshev distance, no source-distance constraint |
+| `forcedMovement` (`vertical*`) | Partial | Falls through to horizontal push/pull/slide. Z-axis not modeled |
 | `potency` | Full | Calls `checkPotency`, runs `onFail` effects on failed targets |
 | `spend` | Full | Prompts user contextually, runs nested effects on accept |
-| `heal` | Chat reminder | Posts message; manual application required |
-| `temporaryStamina` | Chat reminder | Posts message; manual |
+| `heal` | Full | Applies via board heal path. Capped at max stamina |
+| `temporaryStamina` | Full | Applies via board heal path with overage allowed (over-max shows as temp) |
 | `teleport` | Chat reminder | Posts message; manual |
 | `swap` | Chat reminder | Posts message; manual |
 | `freeStrike` | Chat reminder | Posts message; manual |
@@ -107,6 +109,7 @@ These are called by `runner.js` and dispatched as `vtt:automation-*` CustomEvent
 | `selectTarget(config)` | target block fields + `{ pickIndex, pickTotal, allowDone }` | `{ id, name, hidden?, placement? }` or `{ skipped }` / `{ done }` / `{ canceled }` |
 | `selectAreaTarget(config)` | target block fields + `sourcePlacement` | `{ targets: [...] }` or `{ skipped }` / `{ canceled }` |
 | `applyDamage(payload)` | `{ placementId, amount, damageType, abilityName }` | `{ name, amount, current, max, hidden, vulnerability, immunity }` |
+| `applyHeal(payload)` | `{ placementId, amount, allowTempHp, abilityName }` | `{ name, change, current, max, hidden, allowTempHp }` |
 | `applyCondition(payload)` | `{ placementId, condition: {name, duration}, sourceId }` | `{ ok }` |
 | `checkPotency(payload)` | `{ placementId, attribute, threshold, sourceStats }` | `{ passes: bool }` |
 | `forceMove(payload)` | `{ movement, verb, distance, upTo, targetId, target, sourcePlacement, sourceTraits, abilityName }` | `{ name, movedDistance, collision?, skipped? }` |

@@ -913,6 +913,7 @@ function startAbilityAutomation(sheet, action, categoryKey, sourceToken = null, 
     cancelTargetSelection: cancelAutomationTarget,
     cancelAreaSelection: cancelAutomationArea,
     applyDamage: requestAutomationDamage,
+    applyHeal: requestAutomationHeal,
     applyCondition: requestAutomationCondition,
     checkPotency: requestAutomationPotency,
     forceMove: requestAutomationForceMove,
@@ -1013,6 +1014,20 @@ function requestAutomationForceMove(payload) {
   return new Promise((resolve, reject) => {
     document.dispatchEvent(
       new CustomEvent('vtt:automation-force-move', {
+        detail: {
+          payload: clonePlain(payload || {}),
+          resolve,
+          reject,
+        },
+      })
+    );
+  });
+}
+
+function requestAutomationHeal(payload) {
+  return new Promise((resolve, reject) => {
+    document.dispatchEvent(
+      new CustomEvent('vtt:automation-apply-heal', {
         detail: {
           payload: clonePlain(payload || {}),
           resolve,

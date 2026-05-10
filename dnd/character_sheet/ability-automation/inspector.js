@@ -62,7 +62,8 @@
     }
 
     const normalized = schema.normalizeAutomation(automation);
-    const steps = schema.describeAutomationSteps(normalized);
+    const ctx = options.hero ? buildHeroResolveCtx(options.hero) : null;
+    const steps = schema.describeAutomationSteps(normalized, ctx);
     const warnings = normalized.warnings || [];
     const rawJson = JSON.stringify(automation, null, 2);
     const normalizedJson = JSON.stringify(stripWarnings(normalized), null, 2);
@@ -106,6 +107,28 @@
     `;
     document.body.appendChild(host);
     bindClose(host);
+  }
+
+  function buildHeroResolveCtx(hero) {
+    const stats = hero?.stats && typeof hero.stats === "object" ? hero.stats : {};
+    function statValue(attr) {
+      const key = String(attr || "").trim().toLowerCase();
+      const map = { m: "might", might: "might", a: "agility", agility: "agility", r: "reason", reason: "reason", i: "intuition", intuition: "intuition", p: "presence", presence: "presence" };
+      const real = map[key] || key;
+      return Number.parseInt(stats[real], 10) || 0;
+    }
+    return {
+      getAttributeBonus: (attr) => statValue(attr),
+      getPotencyThreshold: (level) => {
+        const values = ["might", "agility", "reason", "intuition", "presence"]
+          .map((k) => Number.parseInt(stats[k], 10) || 0);
+        const highest = values.length ? Math.max(...values) : 0;
+        const normalized = String(level || "weak").trim().toLowerCase();
+        if (normalized === "strong") return highest;
+        if (normalized === "average") return highest - 1;
+        return highest - 2;
+      },
+    };
   }
 
   function stripWarnings(automation) {

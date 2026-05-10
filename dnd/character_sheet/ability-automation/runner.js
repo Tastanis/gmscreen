@@ -210,6 +210,35 @@
     return { attribute: requested, bonus: asInt(state.context.getAttributeBonus?.(requested)) };
   }
 
+  // Build a resolution context that primitives.describeEffectResolved can use
+  // to convert "9 + Intuition" into "11" and "A<weak" into "A<2".
+  function buildResolveCtx(state) {
+    const stats = state.hero?.stats && typeof state.hero.stats === "object" ? state.hero.stats : {};
+    return {
+      getAttributeBonus(attr) {
+        if (typeof state.context.getAttributeBonus === "function") {
+          return asInt(state.context.getAttributeBonus(attr), 0);
+        }
+        return 0;
+      },
+      getPotencyThreshold(level) {
+        const values = ["might", "agility", "reason", "intuition", "presence"]
+          .map((key) => asInt(stats[key], 0));
+        const highest = values.length ? Math.max(...values) : 0;
+        const normalized = String(level || "weak").trim().toLowerCase();
+        if (normalized === "strong") return highest;
+        if (normalized === "average") return highest - 1;
+        return highest - 2;
+      },
+    };
+  }
+
+  function describeEffectFor(effect, state) {
+    return P.describeEffectResolved
+      ? P.describeEffectResolved(effect, buildResolveCtx(state))
+      : P.describeEffect(effect);
+  }
+
   // ---------- chat ----------
 
   async function postChat(context, entry) {
@@ -307,6 +336,10 @@
         const result = await Promise.race([
           state.context.selectAreaTarget({
             ...block,
+            // The board's existing filter reads `creature` (legacy v2 field). Send
+            // both shapes so v3 `predicate` and v2 `creature` both work.
+            creature: block.predicate,
+            affects: block.predicate,
             sourcePlacement: state.sourcePlacement || null,
           }),
           skipPromise,
@@ -339,6 +372,9 @@
       for (let pickIndex = 0; pickIndex < desired; pickIndex += 1) {
         const promptConfig = {
           ...block,
+          // Send predicate under the v2 field name the board still reads.
+          creature: block.predicate,
+          affects: block.predicate,
           pickIndex: pickIndex + 1,
           pickTotal: Number.isFinite(desired) ? desired : 0,
           allowDone: upTo,
@@ -371,11 +407,15 @@
 
   // ---------- power roll block ----------
 
-  function renderTierCards(block, selectedTier, hasRolled) {
+  function renderTierCards(block, selectedTier, hasRolled, state) {
     const tiers = block.tiers || {};
+    const ctx = state ? buildResolveCtx(state) : null;
     return P.TIER_KEYS.map((key) => {
       const tier = tiers[key] || { effects: [] };
-      const text = (tier.effects || []).map(P.describeEffect).filter(Boolean).join(" | ") || "No effects";
+      const text = (tier.effects || [])
+        .map((eff) => (ctx && P.describeEffectResolved ? P.describeEffectResolved(eff, ctx) : P.describeEffect(eff)))
+        .filter(Boolean)
+        .join(" | ") || "No effects";
       return `
         <button
           class="power-roll-runner__tier ${selectedTier === key ? "power-roll-runner__tier--selected" : ""}"
@@ -468,7 +508,7 @@
       </section>
       <section class="power-roll-runner__section">
         <div class="power-roll-runner__tiers">
-          ${renderTierCards(block, state.selectedTier, Boolean(state.roll))}
+          ${renderTierCards(block, state.selectedTier, Boolean(state.roll), state)}
         </div>
         <div class="power-roll-runner__details">
           <strong>Tier preview</strong>
@@ -656,9 +696,9 @@
       case "spend":
         return applySpendEffect(state, effect, targets, ctx);
       case "heal":
-        return reminderEffect(state, effect, targets, "Heal");
+        return applyHealEffect(state, effect, targets, ctx, false);
       case "temporaryStamina":
-        return reminderEffect(state, effect, targets, "Temporary Stamina");
+        return applyHealEffect(state, effect, targets, ctx, true);
       case "teleport":
         return reminderEffect(state, effect, targets, "Teleport");
       case "swap":
@@ -757,6 +797,47 @@
       case "untilDying": return "until-dying";
       default: return "instantaneous";
     }
+  }
+
+  async function applyHealEffect(state, effect, targets, ctx, allowTempHp) {
+    if (!targets.length) return;
+    const recoveries = asInt(effect.recoveries, 0);
+    const flatAmount = asInt(effect.amount, 0);
+
+    // "recoveries" requires a per-character recovery value we don't yet plumb;
+    // surface as a chat reminder so the GM can apply manually for now.
+    if (recoveries && !flatAmount) {
+      await reminderEffect(state, effect, targets, allowTempHp ? "Temporary Stamina" : "Heal");
+      return;
+    }
+    if (!flatAmount) return;
+
+    const lines = [];
+    for (const target of targets) {
+      if (state.aborted) return;
+      if (!target?.id) continue;
+      const result = typeof state.context.applyHeal === "function"
+        ? await state.context.applyHeal({
+            placementId: target.id,
+            amount: flatAmount,
+            allowTempHp,
+            abilityName: state.action.name || "Ability",
+          })
+        : null;
+      if (!result) {
+        lines.push(`${target.name || "Target"}: heal not applied (no hook).`);
+        continue;
+      }
+      const targetName = result.name || target.name || "Target";
+      const max = result.max;
+      const current = result.current;
+      const display = max !== null && max !== undefined ? `${current}/${max}` : `${current}`;
+      const overage = allowTempHp && Number.isFinite(max) && current > max ? ` (+${current - max} temp)` : "";
+      lines.push(`${targetName} recovers ${result.change || flatAmount} stamina${overage} (${display}).`);
+    }
+    await postChat(state.context, {
+      message: `${state.heroName} - ${state.action.name || "Ability"}:\n${lines.join("\n")}`,
+    });
   }
 
   async function applyForcedMovementEffect(state, effect, targets) {

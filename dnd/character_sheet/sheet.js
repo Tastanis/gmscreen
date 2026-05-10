@@ -2936,7 +2936,7 @@ function bindInspectorButtons() {
       }
       const action = (sheetState.actions[type] || []).find((item) => item.id === actionId);
       if (!action) return;
-      window.AbilityAutomationInspector.open({ action });
+      window.AbilityAutomationInspector.open({ action, hero: sheetState.hero });
     };
   });
 }

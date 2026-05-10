@@ -509,7 +509,11 @@
     );
   }
 
-  function summarizeBlock(block) {
+  function describeOne(effect, ctx) {
+    return ctx && P.describeEffectResolved ? P.describeEffectResolved(effect, ctx) : P.describeEffect(effect);
+  }
+
+  function summarizeBlock(block, ctx) {
     if (!block || typeof block !== "object") return "";
     switch (block.type) {
       case "target": {
@@ -530,57 +534,56 @@
       case "powerRoll":
         return `Roll ${block.rollFormula || "2d10"} + ${block.attribute || "Strongest"}${block.bonus ? ` ${block.bonus >= 0 ? "+" : ""}${block.bonus}` : ""}.`;
       case "effect": {
-        const inner = (block.effects || []).map(P.describeEffect).filter(Boolean).join(", ");
+        const inner = (block.effects || []).map((e) => describeOne(e, ctx)).filter(Boolean).join(", ");
         return `Effect: ${inner || "(none)"}`;
       }
       case "trigger":
         return `Trigger: ${block.condition || "(no condition)"}`;
       case "persistent":
-        return `Persistent ${block.cost || 0}${block.resource ? ` ${block.resource}` : ""}: ${(block.effects || []).map(P.describeEffect).filter(Boolean).join(", ") || "(no effects)"}`;
+        return `Persistent ${block.cost || 0}${block.resource ? ` ${block.resource}` : ""}: ${(block.effects || []).map((e) => describeOne(e, ctx)).filter(Boolean).join(", ") || "(no effects)"}`;
       default:
         return "";
     }
   }
 
-  function describeBlockSteps(block) {
+  function describeBlockSteps(block, ctx) {
     if (!block || typeof block !== "object") return [];
     switch (block.type) {
       case "target": {
-        const summary = summarizeBlock(block);
-        return [summary];
+        return [summarizeBlock(block, ctx)];
       }
       case "powerRoll": {
         const lines = [`Roll ${block.rollFormula || "2d10"} + ${block.attribute || "Strongest"}.`];
         for (const tier of P.TIER_KEYS) {
           const effects = block.tiers?.[tier]?.effects || [];
-          const text = effects.map(P.describeEffect).filter(Boolean).join("; ");
+          const text = effects.map((e) => describeOne(e, ctx)).filter(Boolean).join("; ");
           lines.push(`  ${P.tierLabel(tier)}: ${text || "(no effects)"}`);
         }
         return lines;
       }
       case "effect":
-        return [`Apply: ${(block.effects || []).map(P.describeEffect).filter(Boolean).join("; ") || "(no effects)"}`];
+        return [`Apply: ${(block.effects || []).map((e) => describeOne(e, ctx)).filter(Boolean).join("; ") || "(no effects)"}`];
       case "trigger":
         return [
           `Trigger: ${block.condition || "(no condition)"}`,
-          `  → ${(block.effects || []).map(P.describeEffect).filter(Boolean).join("; ") || "(no effects)"}`,
+          `  → ${(block.effects || []).map((e) => describeOne(e, ctx)).filter(Boolean).join("; ") || "(no effects)"}`,
         ];
       case "persistent":
         return [
           `Persistent ${block.cost || 0} ${block.resource || ""} at ${block.tickAt}:`,
-          `  ${(block.effects || []).map(P.describeEffect).filter(Boolean).join("; ") || "(no effects)"}`,
+          `  ${(block.effects || []).map((e) => describeOne(e, ctx)).filter(Boolean).join("; ") || "(no effects)"}`,
         ];
       default:
         return [];
     }
   }
 
-  function describeAutomationSteps(automation) {
+  function describeAutomationSteps(automation, ctx) {
     const norm = normalizeAutomation(automation);
     const lines = [];
     norm.cards.forEach((block, index) => {
-      lines.push(`${index + 1}. [${block.type}] ${summarizeBlock(block)}`);
-      describeBlockSteps(block).slice(1).forEach((line) => lines.push(`   ${line}`));
+      lines.push(`${index + 1}. [${block.type}] ${summarizeBlock(block, ctx)}`);
+      describeBlockSteps(block, ctx).slice(1).forEach((line) => lines.push(`   ${line}`));
     });
     return lines;
   }

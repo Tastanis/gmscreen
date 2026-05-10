@@ -230,6 +230,24 @@
     return TIER_KEYS[Math.min(TIER_KEYS.length - 1, Math.max(0, index + shift))];
   }
 
+  // Resolve a damage amount given character context (adds attribute bonus).
+  function resolveDamageAmount(effect, ctx) {
+    const base = Number.parseInt(effect.amount, 10) || 0;
+    if (!effect.attribute || !ctx || typeof ctx.getAttributeBonus !== "function") return base;
+    const bonus = Number.parseInt(ctx.getAttributeBonus(effect.attribute), 10) || 0;
+    return base + bonus;
+  }
+
+  // Resolve a potency level (weak/average/strong) to its integer threshold using
+  // the same formula the board uses: highest characteristic minus offset.
+  function resolvePotencyThreshold(level, ctx) {
+    if (!ctx || typeof ctx.getPotencyThreshold !== "function") return null;
+    const value = ctx.getPotencyThreshold(level);
+    return Number.isFinite(value) ? value : null;
+  }
+
+  // Describe an effect WITHOUT character context — the JSON-level form.
+  // Use describeEffectResolved when the runtime/inspector has the source character.
   function describeEffect(effect) {
     if (!effect || typeof effect !== "object") return "";
     switch (effect.kind) {
@@ -284,6 +302,34 @@
     }
   }
 
+  // Describe an effect WITH character context. Resolves attribute bonuses and
+  // potency thresholds to integers. Used by the runner's tier preview and the
+  // inspector when a hero is supplied.
+  function describeEffectResolved(effect, ctx) {
+    if (!effect || typeof effect !== "object") return "";
+    if (!ctx) return describeEffect(effect);
+    switch (effect.kind) {
+      case "damage": {
+        const total = resolveDamageAmount(effect, ctx);
+        const type = effect.damageType && effect.damageType !== "untyped" ? ` ${effect.damageType}` : "";
+        return `${total}${type} damage`;
+      }
+      case "potency": {
+        const threshold = resolvePotencyThreshold(effect.level, ctx);
+        const inner = (effect.onFail || []).map((eff) => describeEffectResolved(eff, ctx)).filter(Boolean).join(", ");
+        const tag = threshold !== null ? `${effect.attribute || "?"}<${threshold}` : `${effect.attribute || "?"}<${effect.level || "?"}`;
+        return `${tag} → ${inner || "(no effect)"}`;
+      }
+      case "spend": {
+        const inner = (effect.effects || []).map((eff) => describeEffectResolved(eff, ctx)).filter(Boolean).join(", ");
+        return `Spend ${effect.amount || 1} ${effect.resource || ""}: ${inner}`;
+      }
+      // Everything else has no character-dependent fields — fall back to the raw form.
+      default:
+        return describeEffect(effect);
+    }
+  }
+
   global.AbilityAutomationPrimitives = {
     BLOCK_TYPES,
     EFFECT_KINDS,
@@ -314,5 +360,8 @@
     tierFromTotal,
     shiftTierKey,
     describeEffect,
+    describeEffectResolved,
+    resolveDamageAmount,
+    resolvePotencyThreshold,
   };
 })(window);
