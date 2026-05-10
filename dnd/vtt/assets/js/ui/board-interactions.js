@@ -1923,6 +1923,11 @@ export function mountBoardInteractions(store, routes = {}) {
     const placementId = event?.detail?.placementId;
     if (placementId) toggleTriggeredActionState(placementId);
   });
+  document.addEventListener('vtt:clear-trigger-ready', (event) => {
+    const placementId = event?.detail?.placementId;
+    const abilityId = event?.detail?.abilityId || null;
+    if (placementId) clearTriggerReady(placementId, abilityId);
+  });
 
   // ---------- Trigger event bus ----------
   // Lightweight, event-driven trigger registry. Listeners register against a
@@ -1976,6 +1981,7 @@ export function mountBoardInteractions(store, routes = {}) {
     const activeSceneId = state.boardState?.activeSceneId ?? null;
     if (!activeSceneId) return false;
     let updated = false;
+    let nextReady = [];
     boardApi.updateState?.((draft) => {
       const scenePlacements = ensureScenePlacementDraft(draft, activeSceneId);
       const target = scenePlacements.find((item) => item && item.id === placementId);
@@ -1984,10 +1990,23 @@ export function mountBoardInteractions(store, routes = {}) {
       if (abilityId && !ready.includes(abilityId)) ready.push(abilityId);
       target.readyTriggerAbilities = ready;
       target.hasReadyTrigger = true;
+      target._lastModified = Date.now();
+      nextReady = ready;
       updated = true;
     });
-    if (updated) markPlacementDirty(activeSceneId, placementId);
-    return updated;
+    if (!updated) return false;
+    markPlacementDirty(activeSceneId, placementId);
+    let ops = null;
+    if (USE_DELTA_SAVES && !hasNonPlacementDirtyState()) {
+      ops = [{
+        type: 'placement.update',
+        sceneId: activeSceneId,
+        placementId,
+        patch: { hasReadyTrigger: true, readyTriggerAbilities: nextReady },
+      }];
+    }
+    persistBoardStateSnapshot({}, ops);
+    return true;
   }
 
   function clearTriggerReady(placementId, abilityId) {
@@ -1996,22 +2015,36 @@ export function mountBoardInteractions(store, routes = {}) {
     const activeSceneId = state.boardState?.activeSceneId ?? null;
     if (!activeSceneId) return false;
     let updated = false;
+    let nextReady = [];
+    let nextHas = false;
     boardApi.updateState?.((draft) => {
       const scenePlacements = ensureScenePlacementDraft(draft, activeSceneId);
       const target = scenePlacements.find((item) => item && item.id === placementId);
       if (!target) return;
       if (abilityId) {
-        const ready = (Array.isArray(target.readyTriggerAbilities) ? target.readyTriggerAbilities : []).filter((id) => id !== abilityId);
-        target.readyTriggerAbilities = ready;
-        target.hasReadyTrigger = ready.length > 0;
+        nextReady = (Array.isArray(target.readyTriggerAbilities) ? target.readyTriggerAbilities : []).filter((id) => id !== abilityId);
       } else {
-        target.readyTriggerAbilities = [];
-        target.hasReadyTrigger = false;
+        nextReady = [];
       }
+      nextHas = nextReady.length > 0;
+      target.readyTriggerAbilities = nextReady;
+      target.hasReadyTrigger = nextHas;
+      target._lastModified = Date.now();
       updated = true;
     });
-    if (updated) markPlacementDirty(activeSceneId, placementId);
-    return updated;
+    if (!updated) return false;
+    markPlacementDirty(activeSceneId, placementId);
+    let ops = null;
+    if (USE_DELTA_SAVES && !hasNonPlacementDirtyState()) {
+      ops = [{
+        type: 'placement.update',
+        sceneId: activeSceneId,
+        placementId,
+        patch: { hasReadyTrigger: nextHas, readyTriggerAbilities: nextReady },
+      }];
+    }
+    persistBoardStateSnapshot({}, ops);
+    return true;
   }
 
   window.AbilityTriggerBus = {
@@ -3393,6 +3426,21 @@ export function mountBoardInteractions(store, routes = {}) {
     tokenLayer.addEventListener('pointerdown', handleTriggerIndicatorPointerDown);
     tokenLayer.addEventListener('click', handleTriggerIndicatorClick);
     tokenLayer.addEventListener('keydown', handleTriggerIndicatorKeydown);
+    tokenLayer.addEventListener('pointerdown', (event) => {
+      if (event.target?.closest?.('[data-token-trigger-ready]')) {
+        event.preventDefault();
+        event.stopPropagation();
+      }
+    });
+    tokenLayer.addEventListener('click', (event) => {
+      const mark = event.target?.closest?.('[data-token-trigger-ready]');
+      if (!mark) return;
+      event.preventDefault();
+      event.stopPropagation();
+      const tokenElement = mark.closest('.vtt-token');
+      const placementId = tokenElement?.dataset?.placementId ?? null;
+      if (placementId) clearTriggerReady(placementId, null);
+    });
   }
 
   mapSurface.addEventListener(
@@ -10311,10 +10359,12 @@ export function mountBoardInteractions(store, routes = {}) {
       return;
     }
     if (!readyMark) {
-      readyMark = document.createElement('div');
+      readyMark = document.createElement('button');
+      readyMark.type = 'button';
       readyMark.className = 'vtt-token__trigger-ready';
-      readyMark.setAttribute('aria-label', 'Trigger ready');
-      readyMark.title = 'A trigger condition has been met for this token.';
+      readyMark.setAttribute('data-token-trigger-ready', 'true');
+      readyMark.setAttribute('aria-label', 'Trigger condition met. Click to clear.');
+      readyMark.title = 'Trigger condition met. Click to clear.';
       readyMark.textContent = '!';
       tokenElement.appendChild(readyMark);
     }

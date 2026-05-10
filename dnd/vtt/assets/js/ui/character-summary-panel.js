@@ -215,6 +215,23 @@ export function mountCharacterSummaryPanel(routes = {}) {
       return;
     }
 
+    // Clicking the blue "!" badge clears all ready-trigger flags for this token.
+    const triggerClear = event.target.closest('[data-character-trigger-clear]');
+    if (triggerClear) {
+      event.preventDefault();
+      event.stopPropagation();
+      const placementId = triggerClear.dataset.placementId || '';
+      if (placementId) {
+        if (activeToken && typeof activeToken === 'object') {
+          activeToken.hasReadyTrigger = false;
+          activeToken.readyTriggerAbilities = [];
+          renderAbilityTray(abilityTray, activeSheet, { activeCategory: activeAbilityCategory, activeToken });
+        }
+        document.dispatchEvent(new CustomEvent('vtt:clear-trigger-ready', { detail: { placementId } }));
+      }
+      return;
+    }
+
     const abilityItem = event.target.closest('[data-character-ability-item]');
     if (abilityItem && activeSheet) {
       const action = getAbilityAction(activeSheet, abilityItem.dataset.abilityCategory, abilityItem.dataset.abilityIndex);
@@ -352,18 +369,30 @@ function renderAbilityTray(tray, sheet, { activeCategory = null, activeToken = n
         const actions = getAbilityActions(sheet, category.key);
         const isActive = activeCategory === category.key;
         const isTrigger = category.key === 'triggers';
+        // NOTE: nested <button> inside <button> is invalid HTML and breaks
+        // layout (browsers split them). The dot uses <span role="button">
+        // so it stays inside the parent tab.
         const dotHtml = isTrigger && showTriggerDot && triggerPlacementId
-          ? `<button
+          ? `<span
               class="vtt-character-ability-tab__trigger-dot${triggerReady ? '' : ' is-spent'}"
-              type="button"
+              role="button"
+              tabindex="0"
               data-character-trigger-toggle
               data-placement-id="${escapeAttribute(triggerPlacementId)}"
               aria-label="${triggerReady ? 'Triggered action ready. Click to mark used.' : 'Triggered action used. Click to reset.'}"
               title="${triggerReady ? 'Triggered action ready' : 'Triggered action used'}"
-            ></button>`
+            ></span>`
           : '';
         const readyHtml = isTrigger && hasReadyTrigger
-          ? `<span class="vtt-character-ability-tab__trigger-ready" aria-label="Trigger condition met">!</span>`
+          ? `<span
+              class="vtt-character-ability-tab__trigger-ready"
+              role="button"
+              tabindex="0"
+              data-character-trigger-clear
+              data-placement-id="${escapeAttribute(triggerPlacementId)}"
+              aria-label="Trigger condition met. Click to clear."
+              title="Trigger condition met. Click to clear."
+            >!</span>`
           : '';
         const tabClass = `vtt-character-ability-tab${isTrigger && hasReadyTrigger ? ' has-ready-trigger' : ''}`;
         return `
@@ -374,7 +403,7 @@ function renderAbilityTray(tray, sheet, { activeCategory = null, activeToken = n
               type="button"
               data-character-ability-category="${escapeAttribute(category.key)}"
               aria-expanded="${isActive ? 'true' : 'false'}"
-            >${dotHtml}${readyHtml}${escapeHtml(category.label)}</button>
+            >${dotHtml}${readyHtml}<span class="vtt-character-ability-tab__label">${escapeHtml(category.label)}</span></button>
           </div>
         `;
       }).join('')}

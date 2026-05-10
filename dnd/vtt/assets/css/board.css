@@ -3140,9 +3140,21 @@
   font-size: calc(var(--tok-unit) * 11);
   border: 2px solid rgba(15, 23, 42, 0.85);
   box-shadow: 0 4px 10px rgba(15, 23, 42, 0.55), 0 0 0 4px rgba(37, 99, 235, 0.25);
-  pointer-events: none;
+  /* Clickable: clearing the ready state. */
+  pointer-events: auto;
+  cursor: pointer;
+  padding: 0;
   z-index: 70;
   animation: vtt-token-trigger-pulse 1.6s ease-in-out infinite;
+}
+
+.vtt-token__trigger-ready:hover {
+  filter: brightness(1.15);
+}
+
+.vtt-token__trigger-ready:focus-visible {
+  outline: 2px solid rgba(250, 204, 21, 0.85);
+  outline-offset: 2px;
 }
 
 @keyframes vtt-token-trigger-pulse {
