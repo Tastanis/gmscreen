@@ -176,7 +176,7 @@ export function mountCharacterSummaryPanel(routes = {}) {
         token,
       });
       bindCharacterSummaryControls(panel);
-      renderAbilityTray(abilityTray, sheet, { activeCategory: activeAbilityCategory });
+      renderAbilityTray(abilityTray, sheet, { activeCategory: activeAbilityCategory, activeToken });
       open();
     } catch (error) {
       console.warn('[VTT] Failed to load character summary', error);
@@ -196,6 +196,25 @@ export function mountCharacterSummaryPanel(routes = {}) {
   });
 
   abilityTray.addEventListener('click', (event) => {
+    // Trigger-dot toggle (above the TRIGGER tab) — dispatches to the board to
+    // flip triggeredActionReady on the placement.
+    const triggerDot = event.target.closest('[data-character-trigger-toggle]');
+    if (triggerDot) {
+      event.preventDefault();
+      event.stopPropagation();
+      const placementId = triggerDot.dataset.placementId || '';
+      if (placementId) {
+        // Optimistic local update so the dot flips instantly.
+        if (activeToken && typeof activeToken === 'object') {
+          const wasReady = activeToken.triggeredActionReady !== false;
+          activeToken.triggeredActionReady = !wasReady;
+          renderAbilityTray(abilityTray, activeSheet, { activeCategory: activeAbilityCategory, activeToken });
+        }
+        document.dispatchEvent(new CustomEvent('vtt:toggle-triggered-action', { detail: { placementId } }));
+      }
+      return;
+    }
+
     const abilityItem = event.target.closest('[data-character-ability-item]');
     if (abilityItem && activeSheet) {
       const action = getAbilityAction(activeSheet, abilityItem.dataset.abilityCategory, abilityItem.dataset.abilityIndex);
@@ -204,7 +223,7 @@ export function mountCharacterSummaryPanel(routes = {}) {
         event.stopPropagation();
         activeAbilityCategory = null;
         hideAbilityPreview(abilityPreview);
-        renderAbilityTray(abilityTray, activeSheet, { activeCategory: activeAbilityCategory });
+        renderAbilityTray(abilityTray, activeSheet, { activeCategory: activeAbilityCategory, activeToken });
         startAbilityAutomation(activeSheet, action, abilityItem.dataset.abilityCategory, activeToken, {
           characterId: activeCharacterId,
           routes,
@@ -220,7 +239,7 @@ export function mountCharacterSummaryPanel(routes = {}) {
     const category = categoryButton.dataset.characterAbilityCategory || '';
     activeAbilityCategory = activeAbilityCategory === category ? null : category;
     hideAbilityPreview(abilityPreview);
-    renderAbilityTray(abilityTray, activeSheet, { activeCategory: activeAbilityCategory });
+    renderAbilityTray(abilityTray, activeSheet, { activeCategory: activeAbilityCategory, activeToken });
   });
 
   abilityTray.addEventListener('pointerover', (event) => {
@@ -310,7 +329,7 @@ function bindCharacterSummaryControls(panel) {
   });
 }
 
-function renderAbilityTray(tray, sheet, { activeCategory = null } = {}) {
+function renderAbilityTray(tray, sheet, { activeCategory = null, activeToken = null } = {}) {
   if (!tray) {
     return;
   }
@@ -321,20 +340,41 @@ function renderAbilityTray(tray, sheet, { activeCategory = null } = {}) {
     return;
   }
 
+  const placement = activeToken && typeof activeToken === 'object' ? activeToken : null;
+  const showTriggerDot = Boolean(placement?.showTriggeredAction ?? placement?.overlays?.triggeredAction?.visible ?? false);
+  const triggerReady = placement ? placement.triggeredActionReady !== false : true;
+  const triggerPlacementId = placement?.id ? String(placement.id) : '';
+  const hasReadyTrigger = Boolean(placement?.hasReadyTrigger);
+
   tray.innerHTML = `
     <nav class="vtt-character-ability-tray__inner" aria-label="Character abilities">
       ${ABILITY_CATEGORIES.map((category) => {
         const actions = getAbilityActions(sheet, category.key);
         const isActive = activeCategory === category.key;
+        const isTrigger = category.key === 'triggers';
+        const dotHtml = isTrigger && showTriggerDot && triggerPlacementId
+          ? `<button
+              class="vtt-character-ability-tab__trigger-dot${triggerReady ? '' : ' is-spent'}"
+              type="button"
+              data-character-trigger-toggle
+              data-placement-id="${escapeAttribute(triggerPlacementId)}"
+              aria-label="${triggerReady ? 'Triggered action ready. Click to mark used.' : 'Triggered action used. Click to reset.'}"
+              title="${triggerReady ? 'Triggered action ready' : 'Triggered action used'}"
+            ></button>`
+          : '';
+        const readyHtml = isTrigger && hasReadyTrigger
+          ? `<span class="vtt-character-ability-tab__trigger-ready" aria-label="Trigger condition met">!</span>`
+          : '';
+        const tabClass = `vtt-character-ability-tab${isTrigger && hasReadyTrigger ? ' has-ready-trigger' : ''}`;
         return `
           <div class="vtt-character-ability-category${isActive ? ' is-active' : ''}">
             ${isActive ? renderAbilityList(category, actions) : ''}
             <button
-              class="vtt-character-ability-tab"
+              class="${tabClass}"
               type="button"
               data-character-ability-category="${escapeAttribute(category.key)}"
               aria-expanded="${isActive ? 'true' : 'false'}"
-            >${escapeHtml(category.label)}</button>
+            >${dotHtml}${readyHtml}${escapeHtml(category.label)}</button>
           </div>
         `;
       }).join('')}

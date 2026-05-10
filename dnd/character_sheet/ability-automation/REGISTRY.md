@@ -122,6 +122,29 @@ These are called by `runner.js` and dispatched as `vtt:automation-*` CustomEvent
 
 ---
 
+## Trigger event bus (window.AbilityTriggerBus)
+
+Lightweight event-driven registry for triggered abilities. JSON-authored `trigger` blocks register against the bus; built-in triggers (e.g. opportunity attack — coming next pass) also use it.
+
+| Method | Signature | Notes |
+|---|---|---|
+| `register(entry)` | `entry = { tokenId, eventType, predicate, abilityId? }` | `predicate(payload, entry) → bool`. Returning true marks the trigger ready. |
+| `unregisterByToken(tokenId)` | string | Removes all triggers for a token (call on token destroy / scene leave). |
+| `fire(eventType, payload)` | string, object | Dispatches the event; ready triggers update their token state. |
+| `markReady(placementId, abilityId?)` | string, string \| null | Sets `placement.hasReadyTrigger = true`, adds to `readyTriggerAbilities`. Surfaces blue `!` overlay on token + TRIGGER button. |
+| `clearReady(placementId, abilityId?)` | string, string \| null | Clears specific ability or all triggers on a token. |
+
+### Built-in event types (planned)
+
+| eventType | Payload shape | Status |
+|---|---|---|
+| `move` | `{ placementId, fromColumn, fromRow, toColumn, toRow }` | Bus exists, dispatcher hooks deferred to next pass |
+| `damage` | `{ targetId, sourceId, amount, damageType }` | Bus exists, hooks deferred |
+| `turnStart` / `turnEnd` | `{ placementId }` | Bus exists, hooks deferred |
+| `staminaChange` | `{ placementId, before, after }` | Bus exists, hooks deferred |
+
+Built-in opportunity attack (everyone has it) auto-detect lands in the next pass.
+
 ## Schema versioning
 
 | Version | Status |

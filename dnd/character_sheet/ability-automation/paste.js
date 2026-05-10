@@ -120,8 +120,10 @@
       if (target.closest("[data-paste-clear]")) {
         textarea.value = "";
         renderStatus("");
+        // Persist the clear, but keep the dialog open so the user can paste
+        // fresh JSON without reopening.
         onSave(null);
-        close();
+        textarea.focus();
         return;
       }
       if (target.closest("[data-paste-save]")) {

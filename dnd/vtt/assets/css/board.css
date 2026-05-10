@@ -3070,37 +3070,149 @@
   background: #0284c7;
 }
 
+/* The trigger indicator now lives on the action panel's TRIGGER button
+   (.vtt-character-ability-tab__trigger-dot). The token-side dot is hidden
+   to declutter the board, but the underlying state still drives the panel
+   indicator and the round-end reset logic. */
 .vtt-token__trigger-indicator {
-  position: absolute;
-  bottom: calc(var(--tok-unit) * 5.6);
-  right: calc(var(--tok-unit) * 5.6);
-  width: calc(var(--tok-unit) * 13.6);
-  height: calc(var(--tok-unit) * 13.6);
-  border-radius: 50%;
-  border: 2px solid rgba(15, 23, 42, 0.75);
-  background: var(--vtt-success);
-  box-shadow: 0 4px 10px rgba(15, 23, 42, 0.55);
-  cursor: pointer;
-  pointer-events: auto;
-  transition: transform var(--vtt-transition), background var(--vtt-transition), box-shadow var(--vtt-transition);
+  display: none !important;
 }
 
-.vtt-token__trigger-indicator.is-spent {
+/* Dot above the TRIGGER label on the action-panel ability tab. */
+.vtt-character-ability-tab {
+  position: relative;
+}
+
+.vtt-character-ability-tab__trigger-dot {
+  position: absolute;
+  top: -6px;
+  left: 50%;
+  transform: translateX(-50%);
+  width: 12px;
+  height: 12px;
+  border-radius: 50%;
+  border: 2px solid rgba(15, 23, 42, 0.85);
+  background: var(--vtt-success);
+  box-shadow: 0 2px 6px rgba(15, 23, 42, 0.55);
+  cursor: pointer;
+  z-index: 2;
+  padding: 0;
+  transition: transform 120ms ease, background 120ms ease;
+}
+
+.vtt-character-ability-tab__trigger-dot.is-spent {
   background: var(--vtt-danger);
 }
 
-.vtt-token__trigger-indicator:hover {
-  transform: scale(1.1);
-  box-shadow: 0 6px 14px rgba(15, 23, 42, 0.65);
+.vtt-character-ability-tab__trigger-dot:hover {
+  transform: translateX(-50%) scale(1.18);
 }
 
-.vtt-token__trigger-indicator:active {
-  transform: scale(0.95);
-}
-
-.vtt-token__trigger-indicator:focus-visible {
+.vtt-character-ability-tab__trigger-dot:focus-visible {
   outline: 2px solid rgba(250, 204, 21, 0.85);
   outline-offset: 2px;
+}
+
+/* Legacy token-side indicator rules are no-ops now that the indicator is
+   hidden via display: none above. Kept here as comments for safe rollback. */
+/*
+.vtt-token__trigger-indicator.is-spent { background: var(--vtt-danger); }
+.vtt-token__trigger-indicator:hover { transform: scale(1.1); }
+.vtt-token__trigger-indicator:active { transform: scale(0.95); }
+.vtt-token__trigger-indicator:focus-visible { outline: 2px solid rgba(250, 204, 21, 0.85); outline-offset: 2px; }
+*/
+
+/* Blue "!" overlay above a token when at least one trigger condition has
+   been met for it. Painted by syncTriggeredActionIndicator from the
+   `placement.hasReadyTrigger` flag. The TriggerBus sets/clears this. */
+.vtt-token__trigger-ready {
+  position: absolute;
+  top: calc(var(--tok-unit) * -2);
+  right: calc(var(--tok-unit) * -2);
+  width: calc(var(--tok-unit) * 16);
+  height: calc(var(--tok-unit) * 16);
+  display: grid;
+  place-items: center;
+  border-radius: 50%;
+  background: #2563eb;
+  color: #fff;
+  font-weight: 900;
+  font-size: calc(var(--tok-unit) * 11);
+  border: 2px solid rgba(15, 23, 42, 0.85);
+  box-shadow: 0 4px 10px rgba(15, 23, 42, 0.55), 0 0 0 4px rgba(37, 99, 235, 0.25);
+  pointer-events: none;
+  z-index: 70;
+  animation: vtt-token-trigger-pulse 1.6s ease-in-out infinite;
+}
+
+@keyframes vtt-token-trigger-pulse {
+  0%, 100% { transform: scale(1); box-shadow: 0 4px 10px rgba(15, 23, 42, 0.55), 0 0 0 4px rgba(37, 99, 235, 0.25); }
+  50% { transform: scale(1.12); box-shadow: 0 4px 14px rgba(15, 23, 42, 0.7), 0 0 0 8px rgba(37, 99, 235, 0.18); }
+}
+
+.vtt-character-ability-tab__trigger-ready {
+  position: absolute;
+  top: -4px;
+  right: -4px;
+  width: 18px;
+  height: 18px;
+  display: grid;
+  place-items: center;
+  border-radius: 50%;
+  background: #2563eb;
+  color: #fff;
+  font-weight: 900;
+  font-size: 13px;
+  border: 2px solid rgba(15, 23, 42, 0.85);
+  box-shadow: 0 2px 6px rgba(15, 23, 42, 0.55);
+  pointer-events: none;
+  z-index: 3;
+  animation: vtt-token-trigger-pulse 1.6s ease-in-out infinite;
+}
+
+.vtt-character-ability-tab.has-ready-trigger {
+  outline: 2px solid #2563eb;
+  outline-offset: 2px;
+}
+
+/* Floating damage / heal numbers above tokens. */
+.vtt-token__float-number {
+  position: absolute;
+  top: calc(var(--tok-unit) * -2);
+  left: 50%;
+  transform: translateX(calc(-50% + var(--float-stagger-x, 0px)));
+  font-weight: 900;
+  font-size: calc(var(--tok-unit) * 18);
+  line-height: 1;
+  pointer-events: none;
+  text-shadow: 0 2px 6px rgba(0, 0, 0, 0.85), 0 0 4px rgba(0, 0, 0, 0.85);
+  z-index: 60;
+  white-space: nowrap;
+  animation: vtt-token-float-number 1500ms ease-out forwards;
+  will-change: transform, opacity;
+}
+
+.vtt-token__float-number--damage {
+  color: #ff5b4a;
+}
+
+.vtt-token__float-number--heal {
+  color: #57e389;
+}
+
+@keyframes vtt-token-float-number {
+  0% {
+    transform: translate(calc(-50% + var(--float-stagger-x, 0px)), 0) scale(0.85);
+    opacity: 0;
+  }
+  15% {
+    transform: translate(calc(-50% + var(--float-stagger-x, 0px)), -6px) scale(1.05);
+    opacity: 1;
+  }
+  100% {
+    transform: translate(calc(-50% + var(--float-stagger-x, 0px)), -56px) scale(1);
+    opacity: 0;
+  }
 }
 
 .vtt-token__condition {

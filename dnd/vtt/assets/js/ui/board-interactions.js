@@ -1919,6 +1919,108 @@ export function mountBoardInteractions(store, routes = {}) {
   document.addEventListener('vtt:automation-apply-condition', handleAutomationConditionRequest);
   document.addEventListener('vtt:automation-check-potency', handleAutomationPotencyRequest);
   document.addEventListener('vtt:automation-force-move', handleAutomationForceMoveRequest);
+  document.addEventListener('vtt:toggle-triggered-action', (event) => {
+    const placementId = event?.detail?.placementId;
+    if (placementId) toggleTriggeredActionState(placementId);
+  });
+
+  // ---------- Trigger event bus ----------
+  // Lightweight, event-driven trigger registry. Listeners register against a
+  // specific eventType (move, damage, turnStart, turnEnd, …); when fire() is
+  // called, only matching listeners run their predicate. No polling, no
+  // per-frame loops. JSON-authored triggers from the runner can register here
+  // via `register({tokenId, eventType, predicate, abilityId})`.
+  const triggerRegistry = { byEvent: new Map(), byToken: new Map() };
+
+  function triggerRegister(entry) {
+    if (!entry || !entry.tokenId || !entry.eventType || typeof entry.predicate !== 'function') {
+      return null;
+    }
+    const list = triggerRegistry.byEvent.get(entry.eventType) || [];
+    list.push(entry);
+    triggerRegistry.byEvent.set(entry.eventType, list);
+    const tokList = triggerRegistry.byToken.get(entry.tokenId) || [];
+    tokList.push(entry);
+    triggerRegistry.byToken.set(entry.tokenId, tokList);
+    return entry;
+  }
+
+  function triggerUnregisterByToken(tokenId) {
+    if (!tokenId) return;
+    const entries = triggerRegistry.byToken.get(tokenId) || [];
+    triggerRegistry.byToken.delete(tokenId);
+    for (const e of entries) {
+      const list = triggerRegistry.byEvent.get(e.eventType);
+      if (!list) continue;
+      const idx = list.indexOf(e);
+      if (idx !== -1) list.splice(idx, 1);
+    }
+  }
+
+  function triggerFire(eventType, payload) {
+    const list = triggerRegistry.byEvent.get(eventType) || [];
+    for (const entry of list) {
+      try {
+        if (entry.predicate(payload, entry)) {
+          markTriggerReady(entry.tokenId, entry.abilityId || null);
+        }
+      } catch (err) {
+        console.warn('[VTT] Trigger predicate failed for', eventType, err);
+      }
+    }
+  }
+
+  function markTriggerReady(placementId, abilityId) {
+    if (!placementId || typeof boardApi.updateState !== 'function') return false;
+    const state = boardApi.getState?.() ?? {};
+    const activeSceneId = state.boardState?.activeSceneId ?? null;
+    if (!activeSceneId) return false;
+    let updated = false;
+    boardApi.updateState?.((draft) => {
+      const scenePlacements = ensureScenePlacementDraft(draft, activeSceneId);
+      const target = scenePlacements.find((item) => item && item.id === placementId);
+      if (!target) return;
+      const ready = Array.isArray(target.readyTriggerAbilities) ? [...target.readyTriggerAbilities] : [];
+      if (abilityId && !ready.includes(abilityId)) ready.push(abilityId);
+      target.readyTriggerAbilities = ready;
+      target.hasReadyTrigger = true;
+      updated = true;
+    });
+    if (updated) markPlacementDirty(activeSceneId, placementId);
+    return updated;
+  }
+
+  function clearTriggerReady(placementId, abilityId) {
+    if (!placementId || typeof boardApi.updateState !== 'function') return false;
+    const state = boardApi.getState?.() ?? {};
+    const activeSceneId = state.boardState?.activeSceneId ?? null;
+    if (!activeSceneId) return false;
+    let updated = false;
+    boardApi.updateState?.((draft) => {
+      const scenePlacements = ensureScenePlacementDraft(draft, activeSceneId);
+      const target = scenePlacements.find((item) => item && item.id === placementId);
+      if (!target) return;
+      if (abilityId) {
+        const ready = (Array.isArray(target.readyTriggerAbilities) ? target.readyTriggerAbilities : []).filter((id) => id !== abilityId);
+        target.readyTriggerAbilities = ready;
+        target.hasReadyTrigger = ready.length > 0;
+      } else {
+        target.readyTriggerAbilities = [];
+        target.hasReadyTrigger = false;
+      }
+      updated = true;
+    });
+    if (updated) markPlacementDirty(activeSceneId, placementId);
+    return updated;
+  }
+
+  window.AbilityTriggerBus = {
+    register: triggerRegister,
+    unregisterByToken: triggerUnregisterByToken,
+    fire: triggerFire,
+    markReady: markTriggerReady,
+    clearReady: clearTriggerReady,
+  };
 
   if (maliceButton) {
     maliceButton.addEventListener('click', (event) => {
@@ -3425,6 +3527,7 @@ export function mountBoardInteractions(store, routes = {}) {
             updateStatus('Unable to update hit points for that token.');
             return;
           }
+          floatStaminaDelta(placement.id, healResult.change || action.amount, 'heal');
           const healName = healResult.name;
           const healMax = healResult.max;
           const healMaxDisplay = healMax !== null ? healMax : DEFAULT_HP_PLACEHOLDER;
@@ -3444,6 +3547,7 @@ export function mountBoardInteractions(store, routes = {}) {
         updateStatus('Unable to update hit points for that token.');
         return;
       }
+      floatStaminaDelta(placement.id, result.change || action.amount, action.mode === 'damage' ? 'damage' : 'heal');
 
       const { name, current, max, change } = result;
       const effectLabel = action.mode === 'damage' ? 'damage' : 'HP';
@@ -4157,6 +4261,10 @@ export function mountBoardInteractions(store, routes = {}) {
         hp: placement.hp ?? placement.hitPoints ?? null,
         condition: placement.condition ?? null,
         conditions: placement.conditions ?? null,
+        showTriggeredAction: Boolean(placement.showTriggeredAction ?? placement?.overlays?.triggeredAction?.visible ?? false),
+        triggeredActionReady: placement.triggeredActionReady !== false,
+        hasReadyTrigger: Boolean(placement.hasReadyTrigger),
+        readyTriggerAbilities: Array.isArray(placement.readyTriggerAbilities) ? placement.readyTriggerAbilities.slice() : [],
       },
     };
   }
@@ -10188,32 +10296,28 @@ export function mountBoardInteractions(store, routes = {}) {
   }
 
   function syncTriggeredActionIndicator(tokenElement, placement) {
-    const shouldShow = Boolean(placement.showTriggeredAction);
-    let indicator = tokenElement.querySelector('.vtt-token__trigger-indicator');
+    // Token-side dot was migrated to the action panel's TRIGGER button. We
+    // still strip any legacy DOM here so old snapshots don't leave stragglers.
+    const indicator = tokenElement.querySelector('.vtt-token__trigger-indicator');
+    if (indicator) indicator.remove();
 
-    if (!shouldShow) {
-      if (indicator) {
-        indicator.remove();
-      }
+    // Blue "!" overlay when at least one trigger condition has been met for
+    // this token. Painted from `placement.hasReadyTrigger`. The trigger
+    // system (window.AbilityTriggerBus) sets/clears this flag.
+    let readyMark = tokenElement.querySelector('.vtt-token__trigger-ready');
+    const showReady = Boolean(placement.hasReadyTrigger);
+    if (!showReady) {
+      if (readyMark) readyMark.remove();
       return;
     }
-
-    if (!indicator) {
-      indicator = document.createElement('button');
-      indicator.type = 'button';
-      indicator.className = 'vtt-token__trigger-indicator';
-      indicator.setAttribute('data-token-trigger-indicator', 'true');
-      tokenElement.appendChild(indicator);
+    if (!readyMark) {
+      readyMark = document.createElement('div');
+      readyMark.className = 'vtt-token__trigger-ready';
+      readyMark.setAttribute('aria-label', 'Trigger ready');
+      readyMark.title = 'A trigger condition has been met for this token.';
+      readyMark.textContent = '!';
+      tokenElement.appendChild(readyMark);
     }
-
-    const isReady = placement.triggeredActionReady !== false;
-    indicator.classList.toggle('is-spent', !isReady);
-    indicator.setAttribute('aria-pressed', (!isReady).toString());
-    indicator.setAttribute(
-      'aria-label',
-      isReady ? 'Triggered action ready. Click to mark used.' : 'Triggered action used. Click to reset.'
-    );
-    indicator.title = isReady ? 'Triggered action ready' : 'Triggered action used';
   }
 
   function syncTokenConditionLabel(tokenElement, placement) {
@@ -10525,6 +10629,10 @@ export function mountBoardInteractions(store, routes = {}) {
     );
     const triggeredActionReady =
       placement.triggeredActionReady ?? placement?.overlays?.triggeredAction?.ready ?? true;
+    const readyTriggerAbilities = Array.isArray(placement.readyTriggerAbilities)
+      ? placement.readyTriggerAbilities.filter((id) => typeof id === 'string' && id.length)
+      : [];
+    const hasReadyTrigger = Boolean(placement.hasReadyTrigger || readyTriggerAbilities.length);
     const conditions = ensurePlacementConditions(
       placement?.conditions ??
         placement.condition ??
@@ -10560,6 +10668,8 @@ export function mountBoardInteractions(store, routes = {}) {
       showHp,
       showTriggeredAction,
       triggeredActionReady: triggeredActionReady !== false,
+      hasReadyTrigger,
+      readyTriggerAbilities,
       conditions,
       condition,
       team,
@@ -11866,6 +11976,7 @@ export function mountBoardInteractions(store, routes = {}) {
     const resultPlacement = getPlacementFromStore(payload.placementId);
     if (!isAutomationPlacementHidden(resultPlacement)) {
       flashAutomationTargetToken(payload.placementId);
+      floatStaminaDelta(payload.placementId, adjustedAmount, 'damage');
     }
     const maxDisplay = result.max !== null ? result.max : DEFAULT_HP_PLACEHOLDER;
     const hpDisplay = result.max !== null ? `${result.current}/${maxDisplay}` : `${result.current}`;
@@ -11901,6 +12012,7 @@ export function mountBoardInteractions(store, routes = {}) {
     const placement = getPlacementFromStore(payload.placementId);
     if (!isAutomationPlacementHidden(placement)) {
       flashAutomationTargetToken(payload.placementId);
+      floatStaminaDelta(payload.placementId, result.change || amount, 'heal');
     }
     const maxDisplay = result.max !== null ? result.max : DEFAULT_HP_PLACEHOLDER;
     const hpDisplay = result.max !== null ? `${result.current}/${maxDisplay}` : `${result.current}`;
@@ -12292,24 +12404,30 @@ export function mountBoardInteractions(store, routes = {}) {
   function isAutomationMovePathLegal(source, target, destination, baseVerb) {
     const sourceCenter = getPlacementCenter(source);
     const start = { column: target.column, row: target.row, width: target.width, height: target.height };
-    const dx = destination.column - start.column;
-    const dy = destination.row - start.row;
-    const steps = Math.max(Math.abs(dx), Math.abs(dy));
+    let remainingDx = destination.column - start.column;
+    let remainingDy = destination.row - start.row;
+    const steps = Math.max(Math.abs(remainingDx), Math.abs(remainingDy));
     if (steps <= 0) return false;
-    const stepX = Math.sign(dx);
-    const stepY = Math.sign(dy);
     let previousDistance = automationChebyshevDistance(sourceCenter, getPlacementCenter(start));
-    for (let index = 1; index <= steps; index += 1) {
-      const cell = {
-        column: start.column + stepX * index,
-        row: start.row + stepY * index,
-        width: start.width,
-        height: start.height,
-      };
+    let column = start.column;
+    let row = start.row;
+    for (let index = 0; index < steps; index += 1) {
+      // Chebyshev walk: take a diagonal step while both axes have remaining
+      // distance, then a cardinal step for whichever axis is still off-target.
+      const stepX = Math.sign(remainingDx);
+      const stepY = Math.sign(remainingDy);
+      column += stepX;
+      row += stepY;
+      remainingDx -= stepX;
+      remainingDy -= stepY;
+      const cell = { column, row, width: start.width, height: start.height };
       const nextDistance = automationChebyshevDistance(sourceCenter, getPlacementCenter(cell));
-      if (baseVerb === 'push' && nextDistance <= previousDistance) return false;
-      if (baseVerb === 'pull' && nextDistance >= previousDistance) return false;
-      // slide: no monotonic requirement — any path works
+      // Push: each step must be non-decreasing distance from source.
+      // Pull: each step must be non-increasing distance from source.
+      // Plateaus are allowed (diagonal moves that traverse parallel to source).
+      // Slide: any walk is fine.
+      if (baseVerb === 'push' && nextDistance < previousDistance) return false;
+      if (baseVerb === 'pull' && nextDistance > previousDistance) return false;
       previousDistance = nextDistance;
     }
     return true;
@@ -12455,9 +12573,12 @@ export function mountBoardInteractions(store, routes = {}) {
   async function applyAutomationCollisionDamage(placementId, amount, damageType) {
     const adjustment = await getAutomationDamageAdjustment(placementId, damageType || '');
     const adjustedAmount = Math.max(0, amount + adjustment.vulnerability - adjustment.immunity);
-    return adjustedAmount > 0
-      ? applyDamageHealToPlacement(placementId, 'damage', adjustedAmount)
-      : getZeroDamageResult(placementId);
+    if (adjustedAmount <= 0) {
+      return getZeroDamageResult(placementId);
+    }
+    const result = applyDamageHealToPlacement(placementId, 'damage', adjustedAmount);
+    if (result) floatStaminaDelta(placementId, adjustedAmount, 'damage');
+    return result;
   }
 
   function getAutomationCollisionStopCell(target, collided) {
@@ -12568,6 +12689,34 @@ export function mountBoardInteractions(store, routes = {}) {
     window.setTimeout(() => {
       token.classList.remove('vtt-token--automation-target');
     }, 1500);
+  }
+
+  // Floats a -N (red) or +N (green) number above a token for 1.5s, slowly
+  // rising and fading. Multiple calls stack vertically.
+  function floatStaminaDelta(placementId, amount, mode /* 'damage' | 'heal' */) {
+    if (!placementId || !tokenLayer) return;
+    const numericAmount = Number.parseInt(amount, 10);
+    if (!Number.isFinite(numericAmount) || numericAmount === 0) return;
+    const escapedId = window.CSS?.escape
+      ? window.CSS.escape(String(placementId))
+      : String(placementId).replace(/["\\]/g, '\\$&');
+    const token = tokenLayer.querySelector(`[data-placement-id="${escapedId}"]`);
+    if (!(token instanceof HTMLElement)) return;
+
+    const span = document.createElement('span');
+    span.className = `vtt-token__float-number vtt-token__float-number--${mode === 'heal' ? 'heal' : 'damage'}`;
+    const prefix = mode === 'heal' ? '+' : '-';
+    span.textContent = `${prefix}${Math.abs(numericAmount)}`;
+
+    // Stagger if multiple delta numbers are already on this token.
+    const existing = token.querySelectorAll('.vtt-token__float-number').length;
+    span.style.setProperty('--float-stagger-x', `${existing * 6}px`);
+    token.appendChild(span);
+    window.setTimeout(() => {
+      if (span.parentNode === token) {
+        span.parentNode.removeChild(span);
+      }
+    }, 1600);
   }
 
   function formatAutomationTargetPrompt(targetConfig = {}) {
