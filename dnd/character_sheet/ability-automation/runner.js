@@ -1,9 +1,29 @@
-(function () {
+// Ability Automation — v3 Runtime.
+//
+// Walks `automation.cards` in order. For each block:
+//   target     → asks the VTT board to select tokens or place an area template
+//   powerRoll  → rolls 2d10 + attribute, pauses for tier confirm, applies tier effects
+//   effect     → applies a list of effects without a roll
+//   trigger    → posts a chat reminder (no auto-detect this pass)
+//   persistent → posts a chat reminder (no zone tracking this pass)
+//
+// Effects dispatch through context callbacks (applyDamage, applyCondition, forceMove,
+// checkPotency). Effect kinds that the runtime can't apply on the board produce chat
+// reminders so the GM can apply them manually.
+
+(function (global) {
   "use strict";
 
   const RUNNER_ID = "ability-automation-runner";
-  const schema = window.AbilityAutomationSchema;
-  const catalog = window.AbilityAutomationCatalog;
+  const schema = global.AbilityAutomationSchema;
+  const P = global.AbilityAutomationPrimitives;
+
+  if (!schema || !P) {
+    console.error("AbilityAutomationRunner requires schema.js and primitives.js to load first.");
+    return;
+  }
+
+  // ---------- DOM helpers ----------
 
   function escapeHtml(value) {
     return String(value ?? "")
@@ -27,9 +47,8 @@
   function getRunnerDefaultPosition(modal, variant) {
     const panel = document.querySelector(".vtt-character-summary--open, .vtt-character-summary");
     const panelRect = panel instanceof HTMLElement ? panel.getBoundingClientRect() : null;
-    const panelRight = panelRect && panelRect.width > 40 && panelRect.left < window.innerWidth
-      ? panelRect.right
-      : 0;
+    const panelRight =
+      panelRect && panelRect.width > 40 && panelRect.left < window.innerWidth ? panelRect.right : 0;
     const left = Math.max(16, panelRight ? panelRight + 16 : 24);
     const top = variant === "target" ? 76 : 72;
     return constrainRunnerPosition(left, top, modal);
@@ -74,7 +93,11 @@
     };
     const onMove = (event) => {
       if (!dragState) return;
-      const position = constrainRunnerPosition(event.clientX - dragState.offsetX, event.clientY - dragState.offsetY, modal);
+      const position = constrainRunnerPosition(
+        event.clientX - dragState.offsetX,
+        event.clientY - dragState.offsetY,
+        modal
+      );
       modal.style.left = `${position.left}px`;
       modal.style.top = `${position.top}px`;
     };
@@ -83,126 +106,13 @@
       const target = event.target instanceof Element ? event.target : null;
       if (event.button !== 0 || target?.closest("[data-close-power-roll]")) return;
       const rect = modal.getBoundingClientRect();
-      dragState = {
-        offsetX: event.clientX - rect.left,
-        offsetY: event.clientY - rect.top,
-      };
+      dragState = { offsetX: event.clientX - rect.left, offsetY: event.clientY - rect.top };
       modal.classList.add("power-roll-runner__modal--dragging");
       document.addEventListener("pointermove", onMove);
       document.addEventListener("pointerup", stopDrag);
       document.addEventListener("pointercancel", stopDrag);
       event.preventDefault();
     });
-  }
-
-  function tierLabel(key) {
-    if (key === "low") return "<= 11";
-    if (key === "mid") return "12-16";
-    return "17+";
-  }
-
-  function getTierKey(total) {
-    if (total <= 11) return "low";
-    if (total <= 16) return "mid";
-    return "high";
-  }
-
-  function shiftTierKey(key, shift) {
-    const keys = ["low", "mid", "high"];
-    const index = keys.indexOf(key);
-    if (index === -1 || !shift) return key;
-    return keys[Math.min(keys.length - 1, Math.max(0, index + shift))];
-  }
-
-  function parseInteger(value) {
-    const parsed = parseInt(String(value || "").trim(), 10);
-    return Number.isFinite(parsed) ? parsed : 0;
-  }
-
-  function parseDamage(value) {
-    const match = String(value || "").match(/-?\d+/);
-    if (!match) return 0;
-    return Math.max(0, parseInt(match[0], 10) || 0);
-  }
-
-  function getTierEffects(tier) {
-    return catalog?.getTierEffects ? catalog.getTierEffects(tier) : [];
-  }
-
-  function getTierDamage(tier, state) {
-    const effect = getTierEffects(tier).find((item) => item.kind === "damage");
-    if (effect) {
-      const baseAmount = parseInteger(effect.amount);
-      const attributeBonus = effect.attribute ? parseInteger(state.context.getAttributeBonus?.(effect.attribute)) : 0;
-      return {
-        amount: Math.max(0, baseAmount + attributeBonus),
-        damageType: effect.damageType || "",
-        label: catalog?.describeEffect ? catalog.describeEffect(effect) : "",
-      };
-    }
-    return {
-      amount: parseDamage(tier?.damage),
-      damageType: String(tier?.damageType || "").trim(),
-      label: "",
-    };
-  }
-
-  function getTierPushDistance(tier) {
-    const effect = getTierEffects(tier).find((item) => item.kind === "push");
-    return effect ? Math.max(0, parseInteger(effect.distance)) : 0;
-  }
-
-  function getTierPotencyEffects(tier) {
-    return getTierEffects(tier).filter((item) => item.kind === "potency");
-  }
-
-  function getTokenTargetCount(data = {}) {
-    if (data.count !== "number") return 1;
-    return Math.max(1, parseInteger(data.countNumber));
-  }
-
-  function rollFormula(formula) {
-    const clean = String(formula || "2d10").replace(/\s+/g, "").toLowerCase();
-    const match = clean.match(/^(\d*)d(\d+)$/);
-    const count = match ? parseInt(match[1] || "1", 10) : 2;
-    const sides = match ? parseInt(match[2], 10) : 10;
-    const rolls = [];
-    for (let index = 0; index < Math.max(1, count); index += 1) {
-      rolls.push(Math.floor(Math.random() * Math.max(1, sides)) + 1);
-    }
-    return {
-      notation: match ? `${count}d${sides}` : "2d10",
-      rolls,
-      total: rolls.reduce((sum, roll) => sum + roll, 0),
-    };
-  }
-
-  async function postChat(context, entry) {
-    if (context && typeof context.postChat === "function") {
-      return context.postChat(entry);
-    }
-
-    if (window.dashboardChat && typeof window.dashboardChat.sendMessage === "function") {
-      return window.dashboardChat.sendMessage({
-        message: entry.message || "",
-        type: entry.type || "text",
-        payload: entry.payload || null,
-      });
-    }
-
-    const params = new URLSearchParams();
-    params.append("action", "chat_send");
-    params.append("message", entry.message || "");
-    if (entry.type && entry.type !== "text") params.append("type", entry.type);
-    if (entry.payload) params.append("payload", JSON.stringify(entry.payload));
-
-    const response = await fetch(window.chatHandlerUrl || "/dnd/chat_handler.php", {
-      method: "POST",
-      headers: { "Content-Type": "application/x-www-form-urlencoded" },
-      body: params.toString(),
-    });
-    const data = await response.json();
-    return Boolean(data && data.success);
   }
 
   function makeHost(title, eyebrow, variant = "power") {
@@ -226,6 +136,7 @@
     host.addEventListener("click", (event) => {
       const target = event.target instanceof Element ? event.target : null;
       if (target?.closest("[data-close-power-roll]")) {
+        host.dispatchEvent(new CustomEvent("automation-cancel"));
         closeRunner();
       }
     });
@@ -234,61 +145,39 @@
     return host;
   }
 
-  function showTargetPrompt(state, card) {
-    const host = makeHost("Pick Target", state.action.name || "Ability Automation", "target");
-    host.querySelector("[data-power-roll-body]").innerHTML = `
-      <section class="power-roll-runner__section power-roll-runner__section--compact">
-        <div class="power-roll-runner__ability">
-          <h3>${escapeHtml(state.action.name || "Unnamed Ability")}</h3>
-          <p>${escapeHtml(schema.summarizeCard(card))}</p>
-        </div>
-      </section>
-      <div class="power-roll-runner__inline-actions">
-        <p class="power-roll-runner__instruction">${escapeHtml(card.data.mode === "area" ? "Place the area template on the map." : "Click an enemy token on the map.")}</p>
-        <button class="dice-clear-btn" type="button" data-skip-target>Skip</button>
-      </div>
-    `;
-    return host;
+  // ---------- numeric helpers ----------
+
+  function asInt(value, fallback = 0) {
+    const parsed = parseInt(value, 10);
+    return Number.isFinite(parsed) ? parsed : fallback;
   }
 
-  function renderTierCards(actionCard, selectedTier, hasRolled) {
-    const tiers = actionCard?.data?.tiers || {};
-    return schema.TIER_KEYS.map((key) => {
-      const tier = tiers[key] || {};
-      const parts = [];
-      const effects = getTierEffects(tier);
-      if (effects.length && catalog?.describeEffect) {
-        effects.forEach((effect) => parts.push(catalog.describeEffect(effect)));
-      } else {
-        if (tier.damage || tier.damageType) {
-          const damageLabel = tier.damageType
-            ? `${tier.damage || "-"} ${tier.damageType}`
-            : `${tier.damage || "-"} stamina damage`;
-          parts.push(damageLabel.trim());
-        }
-        if (tier.effect) parts.push(tier.effect);
-      }
-      return `
-        <button
-          class="power-roll-runner__tier ${selectedTier === key ? "power-roll-runner__tier--selected" : ""}"
-          type="button"
-          data-select-tier="${key}"
-          ${hasRolled ? "" : "disabled"}
-        >
-          <span class="power-roll-runner__tier-range">${tierLabel(key)}</span>
-          <span class="power-roll-runner__tier-body">${escapeHtml(parts.join(" | ") || "No result configured")}</span>
-        </button>
-      `;
-    }).join("");
+  function rollFormula(formula) {
+    const clean = String(formula || "2d10").replace(/\s+/g, "").toLowerCase();
+    const match = clean.match(/^(\d*)d(\d+)$/);
+    const count = match ? asInt(match[1] || "1", 1) : 2;
+    const sides = match ? asInt(match[2], 10) : 10;
+    const rolls = [];
+    for (let index = 0; index < Math.max(1, count); index += 1) {
+      rolls.push(Math.floor(Math.random() * Math.max(1, sides)) + 1);
+    }
+    return {
+      notation: match ? `${count}d${sides}` : "2d10",
+      rolls,
+      total: rolls.reduce((sum, roll) => sum + roll, 0),
+    };
+  }
+
+  function formatModifier(value) {
+    const number = asInt(value);
+    return `${number >= 0 ? "+" : "-"}${Math.abs(number)}`;
   }
 
   function getEdgeState(edgeCount, baneCount) {
-    const edge = Math.max(0, parseInteger(edgeCount));
-    const bane = Math.max(0, parseInteger(baneCount));
+    const edge = Math.max(0, asInt(edgeCount));
+    const bane = Math.max(0, asInt(baneCount));
     const net = edge - bane;
-    if (net === 0) {
-      return { edge, bane, net, bonus: 0, tierShift: 0, label: "Normal roll" };
-    }
+    if (net === 0) return { edge, bane, net, bonus: 0, tierShift: 0, label: "Normal roll" };
     if (net > 0) {
       return {
         edge,
@@ -309,65 +198,243 @@
     };
   }
 
-  function getPowerRollTotal(state, actionCard) {
-    const data = actionCard.data || {};
-    const resolvedAttribute = resolvePowerRollAttribute(state, data.attribute);
-    const attribute = resolvedAttribute.attribute;
-    const attributeBonus = resolvedAttribute.bonus;
-    const bonus = parseInteger(data.bonus);
-    const manualBonus = parseInteger(state.manualBonus);
-    const edgeCount = parseInteger(state.edgeCount);
-    const baneCount = parseInteger(state.baneCount);
-    const edgeState = getEdgeState(edgeCount, baneCount);
-    const edgeBonus = edgeState.bonus;
-    const total = state.roll ? state.roll.total + attributeBonus + bonus + manualBonus + edgeBonus : null;
-    return { total, attribute, attributeBonus, bonus, manualBonus, edgeCount, baneCount, edgeBonus, edgeState };
-  }
-
-  function resolvePowerRollAttribute(state, attribute) {
+  function resolveAttribute(state, attribute) {
     const requested = String(attribute || "Strongest").trim();
     if (!requested || requested.toLowerCase() === "strongest") {
       const strongest = state.context.getStrongestAttribute?.();
       if (strongest && typeof strongest === "object") {
-        return {
-          attribute: strongest.attribute || "Strongest",
-          bonus: parseInteger(strongest.bonus),
-        };
+        return { attribute: strongest.attribute || "Strongest", bonus: asInt(strongest.bonus) };
       }
       return { attribute: "Strongest", bonus: 0 };
     }
+    return { attribute: requested, bonus: asInt(state.context.getAttributeBonus?.(requested)) };
+  }
+
+  // ---------- chat ----------
+
+  async function postChat(context, entry) {
+    if (context && typeof context.postChat === "function") {
+      return context.postChat(entry);
+    }
+    if (global.dashboardChat && typeof global.dashboardChat.sendMessage === "function") {
+      return global.dashboardChat.sendMessage({
+        message: entry.message || "",
+        type: entry.type || "text",
+        payload: entry.payload || null,
+      });
+    }
+    return false;
+  }
+
+  // ---------- target group resolution ----------
+
+  function getTargetGroup(state, name) {
+    const groupName = name || state.currentGroup || "primary";
+    return state.groups[groupName] || [];
+  }
+
+  function setTargetGroup(state, name, tokens) {
+    const groupName = name || "primary";
+    state.groups[groupName] = Array.isArray(tokens) ? tokens : [];
+    state.currentGroup = groupName;
+  }
+
+  // ---------- target block ----------
+
+  function showTargetPrompt(state, block) {
+    const host = makeHost("Pick Target", state.action.name || "Ability Automation", "target");
+    host.querySelector("[data-power-roll-body]").innerHTML = `
+      <section class="power-roll-runner__section power-roll-runner__section--compact">
+        <div class="power-roll-runner__ability">
+          <h3>${escapeHtml(state.action.name || "Unnamed Ability")}</h3>
+          <p>${escapeHtml(schema.summarizeBlock(block))}</p>
+        </div>
+      </section>
+      <div class="power-roll-runner__inline-actions">
+        <p class="power-roll-runner__instruction">${escapeHtml(
+          block.mode === "area"
+            ? "Place the area template on the map."
+            : "Click a token on the map."
+        )}</p>
+        ${block.optional ? '<button class="dice-clear-btn" type="button" data-skip-target>Skip</button>' : ""}
+        <button class="dice-clear-btn" type="button" data-cancel-automation>Cancel</button>
+      </div>
+    `;
+    return host;
+  }
+
+  function getTokenTargetCount(block) {
+    const count = block.count;
+    if (!count) return 1;
+    if (count.mode === "all") return Infinity;
+    return Math.max(1, asInt(count.value, 1));
+  }
+
+  async function runTargetBlock(state, block) {
+    const host = showTargetPrompt(state, block);
+    const finish = () => host.remove();
+
+    const cancelPromise = new Promise((resolve) => {
+      const onCancel = (event) => {
+        const target = event.target instanceof Element ? event.target : null;
+        if (target?.closest("[data-cancel-automation]")) {
+          host.removeEventListener("click", onCancel);
+          resolve({ canceled: true });
+        }
+      };
+      host.addEventListener("click", onCancel);
+      host.addEventListener("automation-cancel", () => resolve({ canceled: true }));
+    });
+
+    const skipPromise = block.optional
+      ? new Promise((resolve) => {
+          const onSkip = (event) => {
+            const target = event.target instanceof Element ? event.target : null;
+            if (target?.closest("[data-skip-target]")) {
+              host.removeEventListener("click", onSkip);
+              resolve({ skipped: true });
+            }
+          };
+          host.addEventListener("click", onSkip);
+        })
+      : new Promise(() => {});
+
+    try {
+      if (block.mode === "area") {
+        if (typeof state.context.selectAreaTarget !== "function") {
+          throw new Error("Area targeting is not available.");
+        }
+        const result = await Promise.race([
+          state.context.selectAreaTarget({
+            ...block,
+            sourcePlacement: state.sourcePlacement || null,
+          }),
+          skipPromise,
+          cancelPromise,
+        ]);
+        if (result?.canceled) {
+          state.context.cancelAreaSelection?.();
+          state.aborted = true;
+          return;
+        }
+        if (result?.skipped) {
+          state.context.cancelAreaSelection?.();
+          setTargetGroup(state, block.name, []);
+          return;
+        }
+        const tokens = Array.isArray(result?.targets) ? result.targets : [];
+        setTargetGroup(state, block.name, tokens);
+        return;
+      }
+
+      if (typeof state.context.selectTarget !== "function") {
+        throw new Error("Target selection is not available.");
+      }
+
+      const desired = getTokenTargetCount(block);
+      const upTo = block.count?.mode === "upTo";
+      const selected = [];
+      const seen = new Set();
+
+      for (let pickIndex = 0; pickIndex < desired; pickIndex += 1) {
+        const promptConfig = {
+          ...block,
+          pickIndex: pickIndex + 1,
+          pickTotal: Number.isFinite(desired) ? desired : 0,
+          allowDone: upTo,
+        };
+        const result = await Promise.race([
+          state.context.selectTarget(promptConfig),
+          skipPromise,
+          cancelPromise,
+        ]);
+        if (result?.canceled) {
+          state.context.cancelTargetSelection?.();
+          state.aborted = true;
+          return;
+        }
+        if (result?.skipped || result?.done) {
+          state.context.cancelTargetSelection?.();
+          break;
+        }
+        if (result?.id && !seen.has(result.id)) {
+          seen.add(result.id);
+          selected.push(result);
+        }
+        if (!Number.isFinite(desired)) break;
+      }
+      setTargetGroup(state, block.name, selected);
+    } finally {
+      finish();
+    }
+  }
+
+  // ---------- power roll block ----------
+
+  function renderTierCards(block, selectedTier, hasRolled) {
+    const tiers = block.tiers || {};
+    return P.TIER_KEYS.map((key) => {
+      const tier = tiers[key] || { effects: [] };
+      const text = (tier.effects || []).map(P.describeEffect).filter(Boolean).join(" | ") || "No effects";
+      return `
+        <button
+          class="power-roll-runner__tier ${selectedTier === key ? "power-roll-runner__tier--selected" : ""}"
+          type="button"
+          data-select-tier="${key}"
+          ${hasRolled ? "" : "disabled"}
+        >
+          <span class="power-roll-runner__tier-range">${P.tierLabel(key)}</span>
+          <span class="power-roll-runner__tier-body">${escapeHtml(text)}</span>
+        </button>
+      `;
+    }).join("");
+  }
+
+  function getPowerRollTotal(state, block) {
+    const resolved = resolveAttribute(state, block.attribute);
+    const attributeBonus = resolved.bonus;
+    const bonus = asInt(block.bonus);
+    const manualBonus = asInt(state.manualBonus);
+    const edgeState = getEdgeState(state.edgeCount, state.baneCount);
+    const total = state.roll
+      ? state.roll.total + attributeBonus + bonus + manualBonus + edgeState.bonus
+      : null;
     return {
-      attribute: requested,
-      bonus: parseInteger(state.context.getAttributeBonus?.(requested)),
+      total,
+      attribute: resolved.attribute,
+      attributeBonus,
+      bonus,
+      manualBonus,
+      edgeState,
     };
   }
 
-  function formatModifier(value) {
-    const number = parseInteger(value);
-    return `${number >= 0 ? "+" : "-"}${Math.abs(number)}`;
-  }
-
-  function renderPowerRoll(host, state, actionCard) {
-    const data = actionCard.data || {};
-    const { total, attribute, attributeBonus, bonus, manualBonus, edgeState } = getPowerRollTotal(state, actionCard);
-    const formulaParts = [`${data.rollFormula || "2d10"} + ${attribute}`];
+  function renderPowerRoll(host, state, block) {
+    const { total, attribute, attributeBonus, bonus, manualBonus, edgeState } = getPowerRollTotal(state, block);
+    const formulaParts = [`${block.rollFormula || "2d10"} + ${attribute}`];
     if (bonus) formulaParts.push(formatModifier(bonus));
     if (manualBonus) formulaParts.push(formatModifier(manualBonus));
     if (edgeState.net) formulaParts.push(edgeState.label);
     const detail = state.roll
       ? `Dice: ${state.roll.rolls.join(" + ")} | ${attribute} ${formatModifier(attributeBonus)} | ${edgeState.label}`
       : formulaParts.join(" ");
-    const targetName = state.targets?.length > 1
-      ? `${state.targets.length} targets`
-      : state.target?.name || "No target selected";
+
+    const targetGroup = getTargetGroup(state, block.target);
+    const targetName =
+      targetGroup.length > 1
+        ? `${targetGroup.length} targets`
+        : targetGroup[0]?.name || "No target selected";
+
     const tierDetail = state.roll
-      ? `Tier: ${tierLabel(state.selectedTier)}${state.baseTier && state.baseTier !== state.selectedTier ? ` from ${tierLabel(state.baseTier)}` : ""}`
+      ? `Tier: ${P.tierLabel(state.selectedTier)}${
+          state.baseTier && state.baseTier !== state.selectedTier ? ` from ${P.tierLabel(state.baseTier)}` : ""
+        }`
       : "Ready";
 
     host.querySelector("[data-power-roll-body]").innerHTML = `
       <section class="power-roll-runner__section power-roll-runner__section--ability">
-          <div class="power-roll-runner__ability">
-            <h3>${escapeHtml(state.action.name || "Unnamed Ability")}</h3>
+        <div class="power-roll-runner__ability">
+          <h3>${escapeHtml(state.action.name || "Unnamed Ability")}</h3>
           <p>${escapeHtml(plainText(state.action.description || "No ability text entered."))}</p>
           <div class="power-roll-runner__meta">
             <span>Target: ${escapeHtml(targetName)}</span>
@@ -395,88 +462,24 @@
         </div>
         <div class="dice-actions__controls power-roll-runner__controls">
           <button class="dice-roll-btn" type="button" data-power-roll-roll>${state.roll ? "Reroll" : "Roll"}</button>
-          <button class="dice-clear-btn" type="button" data-close-power-roll>Cancel</button>
+          <button class="dice-clear-btn" type="button" data-cancel-automation>Cancel</button>
           ${state.roll ? '<button class="dice-project-roll-btn" type="button" data-power-roll-accept>Accept</button>' : ""}
         </div>
       </section>
       <section class="power-roll-runner__section">
         <div class="power-roll-runner__tiers">
-          ${renderTierCards(actionCard, state.selectedTier, Boolean(state.roll))}
+          ${renderTierCards(block, state.selectedTier, Boolean(state.roll))}
         </div>
         <div class="power-roll-runner__details">
-          <strong>Additional details</strong>
-          <p>Effects, conditions, and follow-up choices will land here as automation grows.</p>
+          <strong>Tier preview</strong>
+          <p>${escapeHtml(state.resultText || "Roll, pick a tier if needed, then accept.")}</p>
         </div>
       </section>
-      <p class="power-roll-runner__instruction">${escapeHtml(state.resultText || "Roll, pick a tier if needed, then accept.")}</p>
     `;
   }
 
-  function wirePowerRoll(host, state, actionCard, resolve) {
-    const onClick = async (event) => {
-      const target = event.target instanceof Element ? event.target : null;
-      if (!target) return;
-      if (target.closest("[data-power-roll-edge-adjust]")) {
-        state.edgeCount = parseInteger(state.edgeCount) + 1;
-        state.resultText = state.roll ? "Edge added. Reroll to post the adjusted result." : "";
-        renderPowerRoll(host, state, actionCard);
-        return;
-      }
-      if (target.closest("[data-power-roll-bane-adjust]")) {
-        state.baneCount = parseInteger(state.baneCount) + 1;
-        state.resultText = state.roll ? "Bane added. Reroll to post the adjusted result." : "";
-        renderPowerRoll(host, state, actionCard);
-        return;
-      }
-      const bonusButton = target.closest("[data-power-roll-bonus-adjust]");
-      if (bonusButton) {
-        state.manualBonus = parseInteger(state.manualBonus) + parseInteger(bonusButton.getAttribute("data-power-roll-bonus-adjust"));
-        state.resultText = state.roll ? "Modifier changed. Reroll to post the adjusted result." : "";
-        renderPowerRoll(host, state, actionCard);
-        return;
-      }
-      if (target.closest("[data-power-roll-clear-adjustments]")) {
-        state.edgeCount = 0;
-        state.baneCount = 0;
-        state.manualBonus = 0;
-        state.resultText = state.roll ? "Adjustments cleared. Reroll to post the adjusted result." : "";
-        renderPowerRoll(host, state, actionCard);
-        return;
-      }
-      if (target.closest("[data-power-roll-roll]")) {
-        state.roll = rollFormula(actionCard.data.rollFormula || "2d10");
-        const { total, attributeBonus, bonus, edgeBonus, edgeState } = getPowerRollTotal(state, actionCard);
-        state.baseTier = getTierKey(total);
-        state.selectedTier = shiftTierKey(state.baseTier, edgeState.tierShift);
-        state.manualTier = false;
-        state.resultText = `Rolled ${total}. Auto-selected ${tierLabel(state.selectedTier)}${state.baseTier !== state.selectedTier ? ` from ${tierLabel(state.baseTier)} because of ${edgeState.label}.` : "."}`;
-        await postChat(state.context, buildRollChatEntry(state, actionCard, total, attributeBonus, bonus, edgeBonus));
-        renderPowerRoll(host, state, actionCard);
-        return;
-      }
-      const tierButton = target.closest("[data-select-tier]");
-      if (tierButton && state.roll) {
-        state.selectedTier = tierButton.getAttribute("data-select-tier");
-        state.manualTier = true;
-        state.resultText = `Manual tier selected: ${tierLabel(state.selectedTier)}.`;
-        renderPowerRoll(host, state, actionCard);
-        return;
-      }
-      if (target.closest("[data-power-roll-accept]") && state.roll && state.selectedTier) {
-        host.removeEventListener("click", onClick);
-        const tierData = actionCard.data.tiers?.[state.selectedTier] || {};
-        state.selectedTierData = tierData;
-        closeRunner();
-        resolve();
-      }
-    };
-
-    host.addEventListener("click", onClick);
-  }
-
-  function buildRollChatEntry(state, actionCard, total, attributeBonus, bonus, edgeBonus) {
-    const data = actionCard.data || {};
-    const manualBonus = parseInteger(state.manualBonus);
+  function buildRollChatEntry(state, block, total, attributeBonus, bonus, edgeBonus) {
+    const manualBonus = asInt(state.manualBonus);
     const numericModifiers = [
       attributeBonus ? `${attributeBonus >= 0 ? "+" : "-"} ${Math.abs(attributeBonus)}` : "",
       bonus ? `${bonus >= 0 ? "+" : "-"} ${Math.abs(bonus)}` : "",
@@ -485,7 +488,7 @@
     ].filter(Boolean);
     const expression = [state.roll.notation, ...numericModifiers].join(" ");
     return {
-      message: `${state.heroName} - ${state.action.name || "Power Roll"} rolled ${total} (${tierLabel(state.selectedTier)}).`,
+      message: `${state.heroName} - ${state.action.name || "Power Roll"} rolled ${total} (${P.tierLabel(state.selectedTier)}).`,
       type: "dice_roll",
       payload: {
         expression,
@@ -502,263 +505,391 @@
     };
   }
 
-  async function runTargetCard(state, card) {
-    if (card.data.optional) {
-      return;
-    }
-    const host = showTargetPrompt(state, card);
-    try {
-      if (card.data.mode === "area") {
-        if (typeof state.context.selectAreaTarget !== "function") {
-          throw new Error("Area targeting is not available.");
-        }
-        const skipPromise = new Promise((resolve) => {
-          const onSkip = (event) => {
-            const target = event.target instanceof Element ? event.target : null;
-            if (target?.closest("[data-skip-target]")) {
-              host.removeEventListener("click", onSkip);
-              resolve({ skipped: true });
-            }
-          };
-          host.addEventListener("click", onSkip);
-        });
-        const result = await Promise.race([state.context.selectAreaTarget({
-          ...card.data,
-          sourcePlacement: state.sourcePlacement || null,
-        }), skipPromise]);
-        if (result?.skipped) {
-          state.context.cancelAreaSelection?.();
-          state.targets = [];
-          state.target = null;
-          return;
-        }
-        state.targets = Array.isArray(result?.targets) ? result.targets : [];
-        state.target = state.targets[0] || null;
-        state.targetName = state.targets.map((target) => target.name).filter(Boolean).join(", ");
+  function wirePowerRoll(host, state, block, resolve) {
+    const onClick = async (event) => {
+      const target = event.target instanceof Element ? event.target : null;
+      if (!target) return;
+      if (target.closest("[data-cancel-automation]")) {
+        host.removeEventListener("click", onClick);
+        state.aborted = true;
+        closeRunner();
+        resolve();
         return;
       }
-      if (typeof state.context.selectTarget !== "function") {
-        throw new Error("Target selection is not available.");
+      if (target.closest("[data-power-roll-edge-adjust]")) {
+        state.edgeCount = asInt(state.edgeCount) + 1;
+        state.resultText = state.roll ? "Edge added. Reroll to post the adjusted result." : "";
+        renderPowerRoll(host, state, block);
+        return;
       }
-      const skipPromise = new Promise((resolve) => {
-        const onSkip = (event) => {
-          const target = event.target instanceof Element ? event.target : null;
-          if (target?.closest("[data-skip-target]")) {
-            host.removeEventListener("click", onSkip);
-            resolve({ skipped: true });
-          }
-        };
-        host.addEventListener("click", onSkip);
-      });
-      const selectedTargets = [];
-      const selectedIds = new Set();
-      const targetCount = getTokenTargetCount(card.data);
-      for (let index = 0; index < targetCount; index += 1) {
-        const promptConfig = {
-          ...card.data,
-          pickIndex: index + 1,
-          pickTotal: targetCount,
-        };
-        const target = await Promise.race([state.context.selectTarget(promptConfig), skipPromise]);
-        if (target?.skipped) {
-          state.context.cancelTargetSelection?.();
-          break;
-        }
-        if (target?.id && !selectedIds.has(target.id)) {
-          selectedIds.add(target.id);
-          selectedTargets.push(target);
-        }
+      if (target.closest("[data-power-roll-bane-adjust]")) {
+        state.baneCount = asInt(state.baneCount) + 1;
+        state.resultText = state.roll ? "Bane added. Reroll to post the adjusted result." : "";
+        renderPowerRoll(host, state, block);
+        return;
       }
-      state.targets = selectedTargets;
-      state.target = selectedTargets[0] || null;
-      state.targetName = selectedTargets.map((target) => target.name).filter(Boolean).join(", ");
-    } finally {
-      host.remove();
-    }
+      const bonusButton = target.closest("[data-power-roll-bonus-adjust]");
+      if (bonusButton) {
+        state.manualBonus =
+          asInt(state.manualBonus) + asInt(bonusButton.getAttribute("data-power-roll-bonus-adjust"));
+        state.resultText = state.roll ? "Modifier changed. Reroll to post the adjusted result." : "";
+        renderPowerRoll(host, state, block);
+        return;
+      }
+      if (target.closest("[data-power-roll-clear-adjustments]")) {
+        state.edgeCount = 0;
+        state.baneCount = 0;
+        state.manualBonus = 0;
+        state.resultText = state.roll ? "Adjustments cleared. Reroll to post the adjusted result." : "";
+        renderPowerRoll(host, state, block);
+        return;
+      }
+      if (target.closest("[data-power-roll-roll]")) {
+        state.roll = rollFormula(block.rollFormula || "2d10");
+        const { total, attributeBonus, bonus, edgeState } = getPowerRollTotal(state, block);
+        state.baseTier = P.tierFromTotal(total);
+        state.selectedTier = P.shiftTierKey(state.baseTier, edgeState.tierShift);
+        state.resultText = `Rolled ${total}. Auto-selected ${P.tierLabel(state.selectedTier)}${
+          state.baseTier !== state.selectedTier
+            ? ` from ${P.tierLabel(state.baseTier)} (${edgeState.label}).`
+            : "."
+        }`;
+        await postChat(state.context, buildRollChatEntry(state, block, total, attributeBonus, bonus, edgeState.bonus));
+        renderPowerRoll(host, state, block);
+        return;
+      }
+      const tierButton = target.closest("[data-select-tier]");
+      if (tierButton && state.roll) {
+        state.selectedTier = tierButton.getAttribute("data-select-tier");
+        state.resultText = `Manual tier selected: ${P.tierLabel(state.selectedTier)}.`;
+        renderPowerRoll(host, state, block);
+        return;
+      }
+      if (target.closest("[data-power-roll-accept]") && state.roll && state.selectedTier) {
+        host.removeEventListener("click", onClick);
+        closeRunner();
+        resolve();
+      }
+    };
+
+    host.addEventListener("click", onClick);
   }
 
-  async function runPowerRollAction(state, card) {
-    state.edgeCount = parseInteger(card.data.edges);
-    state.baneCount = parseInteger(card.data.banes);
+  async function runPowerRollBlock(state, block) {
+    state.edgeCount = 0;
+    state.baneCount = 0;
     state.manualBonus = 0;
+    state.roll = null;
+    state.selectedTier = null;
+    state.baseTier = null;
+    state.resultText = "";
+
     const host = makeHost("Power Roll", state.action.name || "Ability Automation", "power");
-    renderPowerRoll(host, state, card);
-    await new Promise((resolve) => wirePowerRoll(host, state, card, resolve));
-    await runTierConditionEffects(state);
+    renderPowerRoll(host, state, block);
+    await new Promise((resolve) => wirePowerRoll(host, state, block, resolve));
+
+    if (state.aborted) return;
+    if (!state.selectedTier) return;
+
+    const tier = block.tiers?.[state.selectedTier] || { effects: [] };
+    const targetGroupName = block.target;
+    await applyEffects(state, tier.effects || [], targetGroupName, {
+      sourceLabel: `${state.action.name || "Ability"} (${P.tierLabel(state.selectedTier)})`,
+    });
   }
 
-  async function runDealStaminaDamageAction(state, card) {
-    const tier = state.selectedTierData || {};
-    const damage = getTierDamage(tier, state);
-    const amount = damage.amount;
-    const damageType = damage.damageType;
-    const note = String(card.data.note || "").trim();
-    if (!amount) {
-      await postChat(state.context, {
-        message: `${state.action.name || "Ability"} has no ${state.selectedTier || "selected"} tier stamina damage configured.`,
-      });
-      return;
+  // ---------- effect block ----------
+
+  async function runEffectBlock(state, block) {
+    await applyEffects(state, block.effects || [], block.target, {
+      sourceLabel: state.action.name || "Effect",
+    });
+    if (block.note) {
+      await postChat(state.context, { message: `${state.heroName} - ${state.action.name || "Ability"}: ${block.note}` });
     }
-    const targets = Array.isArray(state.targets) && state.targets.length ? state.targets : state.target ? [state.target] : [];
+  }
+
+  // ---------- trigger / persistent (chat reminders only this pass) ----------
+
+  async function runTriggerBlock(state, block) {
+    const inner = (block.effects || []).map(P.describeEffect).filter(Boolean).join("; ");
+    const lines = [`${state.heroName} - ${state.action.name || "Ability"} trigger:`];
+    if (block.condition) lines.push(`When: ${block.condition}`);
+    if (inner) lines.push(`Then: ${inner}`);
+    if (block.note) lines.push(block.note);
+    await postChat(state.context, { message: lines.join("\n") });
+  }
+
+  async function runPersistentBlock(state, block) {
+    const inner = (block.effects || []).map(P.describeEffect).filter(Boolean).join("; ");
+    const lines = [
+      `${state.heroName} - ${state.action.name || "Ability"} persistent zone:`,
+      `Cost ${block.cost || 0}${block.resource ? ` ${block.resource}` : ""} at ${block.tickAt}.`,
+    ];
+    if (inner) lines.push(`Each tick: ${inner}`);
+    if (block.note) lines.push(block.note);
+    await postChat(state.context, { message: lines.join("\n") });
+  }
+
+  // ---------- effect dispatch ----------
+
+  async function applyEffects(state, effects, targetGroupName, ctx = {}) {
+    if (!Array.isArray(effects) || !effects.length) return;
+    const targets = getTargetGroup(state, targetGroupName);
+    for (const effect of effects) {
+      if (state.aborted) return;
+      await applyEffect(state, effect, targets, ctx);
+    }
+  }
+
+  async function applyEffect(state, effect, targets, ctx) {
+    if (!effect || typeof effect !== "object") return;
+    switch (effect.kind) {
+      case "damage":
+        return applyDamageEffect(state, effect, targets, ctx);
+      case "condition":
+        return applyConditionEffect(state, effect, targets, ctx);
+      case "forcedMovement":
+        return applyForcedMovementEffect(state, effect, targets, ctx);
+      case "potency":
+        return applyPotencyEffect(state, effect, targets, ctx);
+      case "spend":
+        return applySpendEffect(state, effect, targets, ctx);
+      case "heal":
+        return reminderEffect(state, effect, targets, "Heal");
+      case "temporaryStamina":
+        return reminderEffect(state, effect, targets, "Temporary Stamina");
+      case "teleport":
+        return reminderEffect(state, effect, targets, "Teleport");
+      case "swap":
+        return reminderEffect(state, effect, targets, "Swap");
+      case "freeStrike":
+        return reminderEffect(state, effect, targets, "Free Strike");
+      case "cascade":
+        return reminderEffect(state, effect, targets, "Cascade");
+      case "resourceGain":
+        return reminderEffect(state, effect, targets, "Resource");
+      case "note":
+        return noteEffect(state, effect);
+      case "other":
+        return reminderEffect(state, effect, targets, "Note");
+      default:
+        return null;
+    }
+  }
+
+  async function applyDamageEffect(state, effect, targets, ctx) {
     if (!targets.length) {
       await postChat(state.context, {
-        message: `${state.action.name || "Ability"} has no selected targets for ${amount} stamina damage.`,
+        message: `${state.heroName} - ${state.action.name || "Ability"}: ${P.describeEffect(effect)} (no target).`,
       });
       return;
     }
+    const baseAmount = asInt(effect.amount, 0);
+    const attributeBonus = effect.attribute
+      ? asInt(state.context.getAttributeBonus?.(effect.attribute), 0)
+      : 0;
+    const amount = Math.max(0, baseAmount + attributeBonus);
+    const damageType = effect.damageType && effect.damageType !== "untyped" ? effect.damageType : "";
     const lines = [];
+    let visibleHidden = 0;
     for (const target of targets) {
+      if (state.aborted) return;
       if (!target?.id) continue;
-      const result = typeof state.context.applyDamage === "function"
-        ? await state.context.applyDamage({
-            placementId: target.id,
-            amount,
-            damageType,
-            abilityName: state.action.name || "Ability",
-          })
-        : null;
-      const hidden = Boolean(result?.hidden || target.hidden || target.placement?.hidden);
-      if (!hidden) {
-        const targetName = result?.name || target.name || "Target";
-        const finalAmount = Number.isFinite(result?.amount) ? result.amount : amount;
-        const adjustmentParts = [];
-        if (Number.isFinite(result?.vulnerability) && result.vulnerability > 0) adjustmentParts.push(`+ ${result.vulnerability} vulnerability`);
-        if (Number.isFinite(result?.immunity) && result.immunity > 0) adjustmentParts.push(`- ${result.immunity} immunity`);
-        const adjustmentText = adjustmentParts.length ? ` (${amount}${damageType ? ` ${damageType}` : ""} ${adjustmentParts.join(" ")} = ${finalAmount})` : "";
-        const remaining = result?.max !== null && result?.max !== undefined
-          ? ` (${result.current}/${result.max} stamina remaining)`
-          : result?.current !== undefined
-            ? ` (${result.current} stamina remaining)`
-            : "";
-        lines.push(`${targetName} takes ${finalAmount}${damageType ? ` ${damageType}` : ""} stamina damage${adjustmentText}${remaining}.`);
-      }
-    }
-    const visibleText = lines.length ? lines.join("\n") : "Hidden targets are affected.";
-    await postChat(state.context, { message: `${state.heroName} - ${state.action.name || "Ability"}:\n${visibleText}${note ? `\n${note}` : ""}` });
-    state.dealtStaminaDamage = true;
-  }
-
-  function normalizeConditionDuration(duration) {
-    if (duration === "endOfTurn") return "end-of-turn";
-    return "save-ends";
-  }
-
-  async function runTierConditionEffects(state) {
-    const tier = state.selectedTierData || {};
-    const directConditions = getTierEffects(tier).filter((effect) => effect.kind === "condition");
-    const potencyEffects = getTierPotencyEffects(tier);
-    if (!directConditions.length && !potencyEffects.length) return;
-    const targets = Array.isArray(state.targets) && state.targets.length ? state.targets : state.target ? [state.target] : [];
-    for (const target of targets) {
-      if (!target?.id) continue;
-      for (const condition of directConditions) {
-        await state.context.applyCondition?.({
-          placementId: target.id,
-          condition: {
-            name: condition.name,
-            duration: normalizeConditionDuration(condition.duration),
-          },
-          sourceId: state.sourcePlacement?.id || "",
-        });
-      }
-      for (const potency of potencyEffects) {
-        const result = await state.context.checkPotency?.({
-          placementId: target.id,
-          attribute: potency.attribute,
-          threshold: potency.threshold,
-          sourceStats: state.hero?.stats || {},
-        });
-        if (!result?.passes) continue;
-        for (const effect of potency.effects || []) {
-          if (effect.kind === "condition") {
-            await state.context.applyCondition?.({
+      const result =
+        typeof state.context.applyDamage === "function"
+          ? await state.context.applyDamage({
               placementId: target.id,
-              condition: {
-                name: effect.name,
-                duration: normalizeConditionDuration(effect.duration),
-              },
-              sourceId: state.sourcePlacement?.id || "",
-            });
-          }
-          if (effect.kind === "damage") {
-            const baseAmount = parseInteger(effect.amount);
-            const attributeBonus = effect.attribute ? parseInteger(state.context.getAttributeBonus?.(effect.attribute)) : 0;
-            await state.context.applyDamage?.({
-              placementId: target.id,
-              amount: Math.max(0, baseAmount + attributeBonus),
-              damageType: effect.damageType || "",
+              amount,
+              damageType,
               abilityName: state.action.name || "Ability",
-            });
-          }
-        }
+            })
+          : null;
+      const hidden = Boolean(result?.hidden || target.hidden || target.placement?.hidden);
+      if (hidden) {
+        visibleHidden += 1;
+        continue;
       }
+      const targetName = result?.name || target.name || "Target";
+      const finalAmount = Number.isFinite(result?.amount) ? result.amount : amount;
+      const adjustments = [];
+      if (Number.isFinite(result?.vulnerability) && result.vulnerability > 0) adjustments.push(`+${result.vulnerability} vulnerability`);
+      if (Number.isFinite(result?.immunity) && result.immunity > 0) adjustments.push(`-${result.immunity} immunity`);
+      const adjustmentText = adjustments.length
+        ? ` (${amount}${damageType ? ` ${damageType}` : ""} ${adjustments.join(" ")} = ${finalAmount})`
+        : "";
+      const remaining = result?.max !== null && result?.max !== undefined
+        ? ` (${result.current}/${result.max} stamina remaining)`
+        : result?.current !== undefined
+          ? ` (${result.current} stamina remaining)`
+          : "";
+      lines.push(`${targetName} takes ${finalAmount}${damageType ? ` ${damageType}` : ""} damage${adjustmentText}${remaining}.`);
+    }
+    const visible = lines.length ? lines.join("\n") : visibleHidden ? "Hidden targets are affected." : "No damage applied.";
+    await postChat(state.context, {
+      message: `${state.heroName} - ${state.action.name || "Ability"}:\n${visible}`,
+    });
+  }
+
+  async function applyConditionEffect(state, effect, targets) {
+    if (!targets.length) return;
+    const duration = mapConditionDuration(effect.duration);
+    const name = effect.name === "other" && effect.text ? effect.text : effect.name;
+    for (const target of targets) {
+      if (state.aborted) return;
+      if (!target?.id) continue;
+      await state.context.applyCondition?.({
+        placementId: target.id,
+        condition: { name, duration },
+        sourceId: state.sourcePlacement?.id || "",
+      });
+    }
+    await postChat(state.context, {
+      message: `${state.heroName} - ${state.action.name || "Ability"}: applies ${P.describeEffect(effect)}.`,
+    });
+  }
+
+  function mapConditionDuration(duration) {
+    switch (duration) {
+      case "saveEnds": return "save-ends";
+      case "endOfTurn": return "end-of-turn";
+      case "endOfEncounter": return "end-of-encounter";
+      case "untilDying": return "until-dying";
+      default: return "instantaneous";
     }
   }
 
-  async function runPushAction(state, card) {
-    const tier = state.selectedTierData || {};
-    const distance = getTierPushDistance(tier);
-    const note = String(card.data.note || "").trim();
-    if (!distance) {
+  async function applyForcedMovementEffect(state, effect, targets) {
+    if (!targets.length) {
       await postChat(state.context, {
-        message: `${state.action.name || "Ability"} has no ${state.selectedTier || "selected"} tier push configured.`,
+        message: `${state.heroName} - ${state.action.name || "Ability"}: ${P.describeEffect(effect)} (no target).`,
       });
       return;
     }
-    if (!state.target?.id) {
-      await postChat(state.context, {
-        message: `${state.action.name || "Ability"} has no selected target for Push ${distance}.`,
-      });
-      return;
-    }
+    const verb = effect.verb || "push";
+    const distance = asInt(effect.distance, 0);
+    if (!distance) return;
     if (typeof state.context.forceMove !== "function") {
       await postChat(state.context, {
-        message: `${state.action.name || "Ability"} would push ${state.target.name || "the target"} ${distance}, but forced movement is not available.`,
+        message: `${state.heroName} - ${state.action.name || "Ability"}: ${P.describeEffect(effect)} — forced movement not available.`,
       });
       return;
     }
 
-    const result = await state.context.forceMove({
-      movement: "push",
-      distance,
-      targetId: state.target.id,
-      target: state.target,
-      sourcePlacement: state.sourcePlacement || null,
-      sourceTraits: state.sourceTraits || {},
-      collisionDamageType: String(card.data.collisionDamageType || "").trim(),
-      abilityName: state.action.name || "Ability",
-    });
-
-    if (!result || result.skipped) {
+    const lines = [];
+    for (const target of targets) {
+      if (state.aborted) return;
+      if (!target?.id) continue;
+      const result = await state.context.forceMove({
+        movement: verb,
+        verb,
+        distance,
+        upTo: Boolean(effect.upTo),
+        targetId: target.id,
+        target,
+        sourcePlacement: state.sourcePlacement || null,
+        sourceTraits: state.sourceTraits || {},
+        abilityName: state.action.name || "Ability",
+      });
+      if (!result || result.skipped) {
+        lines.push(`${target.name || "Target"}: ${verb} ${distance} skipped.`);
+        continue;
+      }
+      const moved = result.movedDistance ?? distance;
+      lines.push(`${result.name || target.name || "Target"} is ${verb}ed ${moved} square${moved === 1 ? "" : "s"}.`);
+      if (result.collision) {
+        lines.push(
+          `Collision: ${result.collision.targetName || "Target"} and ${result.collision.collidedName || "the other token"} each take ${result.collision.damage} untyped damage.`
+        );
+      }
+    }
+    if (lines.length) {
       await postChat(state.context, {
-        message: `${state.heroName} - ${state.action.name || "Ability"}: Push skipped.${note ? `\n${note}` : ""}`,
+        message: `${state.heroName} - ${state.action.name || "Ability"}:\n${lines.join("\n")}`,
       });
-      return;
     }
-
-    const parts = [`${state.heroName} - ${state.action.name || "Ability"}: ${result.name || state.target.name || "Target"} is pushed ${result.movedDistance ?? distance} square${(result.movedDistance ?? distance) === 1 ? "" : "s"}.`];
-    if (result.collision) {
-      parts.push(`Collision: ${result.collision.targetName || "Target"} and ${result.collision.collidedName || "the other token"} each take ${result.collision.damage} untyped damage.`);
-    }
-    if (note) parts.push(note);
-    await postChat(state.context, { message: parts.join("\n") });
   }
 
-  async function runActionCard(state, card) {
-    if (card.data.actionType === "powerRoll") {
-      await runPowerRollAction(state, card);
+  async function applyPotencyEffect(state, effect, targets, ctx) {
+    if (!targets.length) return;
+    for (const target of targets) {
+      if (state.aborted) return;
+      if (!target?.id) continue;
+      const result =
+        typeof state.context.checkPotency === "function"
+          ? await state.context.checkPotency({
+              placementId: target.id,
+              attribute: effect.attribute,
+              threshold: effect.level,
+              sourceStats: state.hero?.stats || {},
+            })
+          : { passes: true };
+      if (!result?.passes) {
+        await postChat(state.context, {
+          message: `${state.heroName} - ${state.action.name || "Ability"}: ${target.name || "Target"} resisted ${effect.attribute}<${effect.level}.`,
+        });
+        continue;
+      }
+      const failedTargets = [target];
+      await applyEffects(
+        { ...state, groups: { _potency: failedTargets } },
+        effect.onFail || [],
+        "_potency",
+        ctx
+      );
+    }
+  }
+
+  async function applySpendEffect(state, effect, targets, ctx) {
+    const cost = `${effect.amount || 1} ${effect.resource || "resource"}`;
+    const inner = (effect.effects || []).map(P.describeEffect).filter(Boolean).join("; ");
+    const proceed = global.confirm(
+      `Spend ${cost} for ${state.action.name || "this ability"}?\n${inner || "(no listed effect)"}`
+    );
+    if (!proceed) {
+      await postChat(state.context, {
+        message: `${state.heroName} - ${state.action.name || "Ability"}: declined to spend ${cost}.`,
+      });
       return;
     }
-    if (card.data.actionType === "dealStaminaDamage") {
-      await runDealStaminaDamageAction(state, card);
-      return;
-    }
-    if (card.data.actionType === "push") {
-      await runPushAction(state, card);
-      return;
-    }
-    if (card.data.actionType === "note" && card.data.text) {
-      await postChat(state.context, { message: card.data.text });
+    await postChat(state.context, {
+      message: `${state.heroName} - ${state.action.name || "Ability"}: spent ${cost}.`,
+    });
+    await applyEffects(state, effect.effects || [], null, ctx);
+  }
+
+  async function reminderEffect(state, effect, targets, label) {
+    const targetLabel = targets.length
+      ? targets.map((t) => t.name).filter(Boolean).join(", ") || `${targets.length} target(s)`
+      : "(no target)";
+    await postChat(state.context, {
+      message: `${state.heroName} - ${state.action.name || "Ability"}: ${label} — ${P.describeEffect(effect)} → ${targetLabel}.`,
+    });
+  }
+
+  async function noteEffect(state, effect) {
+    if (!effect.text) return;
+    await postChat(state.context, {
+      message: `${state.heroName} - ${state.action.name || "Ability"}: ${effect.text}`,
+    });
+  }
+
+  // ---------- main loop ----------
+
+  async function runBlock(state, block) {
+    switch (block.type) {
+      case "target":
+        return runTargetBlock(state, block);
+      case "powerRoll":
+        return runPowerRollBlock(state, block);
+      case "effect":
+        return runEffectBlock(state, block);
+      case "trigger":
+        return runTriggerBlock(state, block);
+      case "persistent":
+        return runPersistentBlock(state, block);
+      default:
+        return null;
     }
   }
 
@@ -772,19 +903,16 @@
       heroName: options?.hero?.name || options?.heroName || "Hero",
       sourcePlacement: options?.sourcePlacement || options?.sourceToken || null,
       sourceTraits: options?.sourceTraits || {},
-      target: null,
-      targets: [],
-      targetName: "",
+      groups: {},
+      currentGroup: null,
       selectedTier: null,
-      selectedTierData: null,
       baseTier: null,
-      manualTier: false,
       edgeCount: 0,
       baneCount: 0,
       manualBonus: 0,
       roll: null,
       resultText: "",
-      dealtStaminaDamage: false,
+      aborted: false,
     };
 
     try {
@@ -795,30 +923,30 @@
           return;
         }
       }
-      const cards = automation.cards || [];
-      const hasExplicitDamageAction = cards.some(
-        (card) => card?.type === "action" && card?.data?.actionType === "dealStaminaDamage"
-      );
-      const hasExplicitTierAction = cards.some(
-        (card) => card?.type === "action" && ["dealStaminaDamage", "push"].includes(card?.data?.actionType)
-      );
-      for (const card of cards) {
-        if (card.type === "target") {
-          await runTargetCard(state, card);
-        } else if (card.type === "action") {
-          await runActionCard(state, card);
-        }
+      const blocks = automation.cards || [];
+      if (!blocks.length) {
+        await postChat(state.context, {
+          message: `${state.action.name || "Ability"} has no automation configured.`,
+        });
+        return;
       }
-      if (!hasExplicitTierAction && !hasExplicitDamageAction && !state.dealtStaminaDamage && state.selectedTierData && state.target?.id) {
-        await runDealStaminaDamageAction(state, { data: { note: "" } });
+      for (const block of blocks) {
+        if (state.aborted) break;
+        await runBlock(state, block);
+      }
+      if (state.aborted) {
+        await postChat(state.context, {
+          message: `${state.heroName} - ${state.action.name || "Ability"} automation canceled.`,
+        });
       }
     } catch (error) {
       closeRunner();
+      console.error("[AbilityAutomationRunner] error", error);
       await postChat(state.context, {
         message: `${state.action.name || "Ability"} automation stopped: ${error?.message || "unknown error"}.`,
       });
     }
   }
 
-  window.AbilityAutomationRunner = { open };
-})();
+  global.AbilityAutomationRunner = { open, close: closeRunner };
+})(window);

@@ -1,3 +1,10 @@
+// Ability Automation — Shorthand parser (LLM-import only).
+//
+// Parses Draw Steel-style tier shorthand like "5 fire; M<w slowed SE" into
+// structured effect objects. The v3 runtime does NOT use this — the runtime
+// reads structured JSON from the schema. Kept available for tooling that
+// converts book text or LLM output into JSON the paste UI can consume.
+
 (function () {
   "use strict";
 

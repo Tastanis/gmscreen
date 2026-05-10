@@ -1,236 +1,93 @@
 # Ability Automation
 
-This folder contains the character-sheet ability automation authoring and runtime system.
+This folder contains the character-sheet ability automation system: paste-in JSON authoring, runtime execution, and inspector for debugging.
 
-Start here before changing automation code. The system is split so saved ability data, builder UI, runtime execution, and VTT board effects stay separate.
+Start here before changing automation code. Saved ability data, paste UI, runtime execution, and VTT board effects are kept separate.
+
+For LLM-friendly authoring docs, read [`AUTHORING.md`](AUTHORING.md). For the registry of every supported field, hook, and feature, read [`REGISTRY.md`](REGISTRY.md).
 
 ## File Map
 
-- `catalog.js`
-  - Shared vocabulary and parser for automation shorthand.
-  - Examples: `5 fire`, `push 3`, `slowed SE`, `slowed EOT`, `R < WEAK slowed SE`.
-  - Use this when interpreting tier text or describing parsed effects.
+- `primitives.js` — Single source of truth for vocabulary: block types, effect kinds, conditions, damage types, durations, forced-movement verbs, target predicates, distance forms. Add new vocabulary here first.
+- `schema.js` — Normalizes/validates JSON automation against v3. Lenient — surfaces warnings but never blocks save (per A2 questionnaire answer). Exposes `normalizeAutomation`, `summarizeBlock`, `describeAutomationSteps`, `hasAutomation`.
+- `catalog.js` — Shorthand parser (LLM-import only). Not used by the runtime.
+- `runner.js` — VTT runtime executor. Walks `automation.cards` top-to-bottom, dispatches effects through context callbacks. Exposes `window.AbilityAutomationRunner.open(options)`.
+- `paste.js` — Character-sheet authoring UI: a JSON paste dialog. Replaces the v2 builder. Exposes `window.AbilityAutomation.open(actionId, type, currentAutomation, onSave)` matching the legacy signature so the sheet integration is zero-touch.
+- `inspector.js` — Read-only inspector modal for one ability. Shows runtime steps, normalized JSON, raw JSON, warnings. Exposes `window.AbilityAutomationInspector.open({ action })`.
+- `automation.css` — Styles for runner, paste, inspector, and the small "configured" pip on character-sheet ability buttons.
+- `AUTHORING.md` — Format spec. Paste alongside an ability description into an LLM to get JSON output. Self-contained — should never need a code grep.
+- `REGISTRY.md` — Flat reference of every supported value, hook, and feature with implementation status.
 
-- `schema.js`
-  - Defines the saved automation data shape.
-  - Normalizes old/new cards and saved tier data.
-  - Creates default automation and validates warnings.
-  - The saved `automation.cards` order is the runtime execution order.
+## Integration points
 
-- `primitives.js`
-  - Defines builder primitives and action type labels.
-  - Current primitives are `Target` and `Action`.
-  - Current action types include `powerRoll`, `dealStaminaDamage`, `push`, and `note`.
+- `../index.php` — Loads primitives → schema → catalog → paste → inspector → runner for the character sheet (in that order).
+- `../../vtt/templates/layout.php` — Loads primitives → schema → catalog → runner for the VTT (paste/inspector aren't needed there).
+- `../../vtt/assets/js/ui/character-summary-panel.js` — `startAbilityAutomation()` opens the runner with board hooks.
+- `../../vtt/assets/js/ui/board-interactions.js` — Owns `selectTarget`, `selectAreaTarget`, `applyDamage`, `applyCondition`, `checkPotency`, `forceMove` event handlers.
 
-- `actions.js`
-  - Lightweight action registry for reusable executable action concepts.
-  - Keep action behavior reusable here when practical.
-
-- `builder.js`
-  - Character-sheet authoring UI.
-  - Exposes `window.AbilityAutomation.open(actionId, actionType, currentAutomation, onSave)`.
-  - Saves only through the `onSave` callback. Do not fetch/save directly from here.
-
-- `builder.css`
-  - Styles the builder, builder popup/fallback, and current automation runtime UI.
-
-- `runner.js`
-  - VTT runtime executor.
-  - Exposes `window.AbilityAutomationRunner.open(options)`.
-  - Runs cards top-to-bottom.
-
-## Integration Points
-
-- `../index.php`
-  - Loads catalog/schema/primitives/actions/builder/runner for the character sheet.
-
-- `../../vtt/templates/layout.php`
-  - Loads catalog/schema/primitives/actions/runner for the VTT.
-
-- `../../vtt/assets/js/ui/character-summary-panel.js`
-  - Starts automation when a configured ability is clicked in the VTT ability tray.
-
-- `../../vtt/assets/js/ui/board-interactions.js`
-  - Owns board-side effects: target selection, stamina damage, push movement, collision damage, token movement, and token visual feedback.
-
-- `../../vtt/assets/css/board.css`
-  - Owns token/map visuals such as selection halos, group dots, team borders, and push overlays.
-
-## Data Model
-
-Automation is stored on each ability/action as:
+## Saved data shape
 
 ```js
 action.automation = {
-  schema: "ability-automation/v2",
-  version: 2,
+  schema: "ability-automation/v3",
+  version: 3,
+  warnings: [],   // populated by normalize; surfaced in inspector
   cards: [
-    { type: "target", data: { ... } },
-    { type: "action", data: { actionType: "powerRoll", ... } },
-    { type: "action", data: { actionType: "dealStaminaDamage", ... } },
-  ],
-};
+    { type: "target",     id, name, mode, predicate, count, optional, distance, ... },
+    { type: "powerRoll",  id, attribute, bonus, target, tiers: { tier1, tier2, tier3 } },
+    { type: "effect",     id, target, effects: [...] },
+    { type: "trigger",    id, condition, effects: [...] },
+    { type: "persistent", id, cost, resource, tickAt, effects: [...] }
+  ]
+}
 ```
 
-Do not merge this with the existing manual `tests` array. Manual tests and automation must remain separate.
+`automation.cards` (the field name is retained from v2 for minimal sheet-side churn) is the runtime execution order. Block types are orthogonal — multiple targets, multiple effects, etc. all allowed.
 
-## Runtime Flow
+## Runtime flow
 
-The runner executes `automation.cards` in stored order.
+For each block in `automation.cards`:
 
-Typical flow:
+1. `target` — VTT prompts the user to pick token(s) or place a template. Result is stored under `state.groups[block.name]`.
+2. `powerRoll` — Open dice modal; user rolls, picks a tier, accepts. The runtime then walks `tier.effects` and dispatches each effect against the resolved target group.
+3. `effect` — Walk `block.effects` against the target group (no roll).
+4. `trigger` — Post a chat reminder. **No auto-detect this pass.**
+5. `persistent` — Post a chat reminder. **No zone tracking this pass.**
 
-1. `target`
-   - Requests a token from the VTT board.
+Each effect is dispatched by `kind`:
 
-2. `action: powerRoll`
-   - Opens the power-roll UI.
-   - Rolls and selects a tier.
-   - Stores the chosen tier in runtime state.
+- `damage`, `condition`, `forcedMovement` (push), `potency`, `spend` — full implementation via board hooks.
+- `forcedMovement` (pull/slide/vertical) — verb passed through; board may fall back to push behavior. See REGISTRY.md.
+- `heal`, `temporaryStamina`, `teleport`, `swap`, `freeStrike`, `cascade`, `resourceGain`, `note`, `other` — chat reminder; manual application required.
 
-3. `action: dealStaminaDamage`
-   - Reads damage from the selected tier.
-   - Calls the VTT board to apply stamina damage.
-   - Board code handles typed immunity/vulnerability adjustments.
+## Authoring flow
 
-4. `action: push`
-   - Reads `push X` from the selected tier.
-   - Calls the VTT board to handle forced movement, legal preview squares, token move, and collision damage.
+1. The user types ability text on the character sheet (name, description, range, cost, tests). The sheet handles all of that.
+2. The user clicks **Automate** on the ability.
+3. `paste.js` opens a modal with a JSON textarea.
+4. The user pastes (or types) JSON. Live lenient validation shows warnings/summary.
+5. Click **Save** — the JSON is normalized and written to `action.automation`.
+6. The user can click **Inspect** later to read the saved JSON, see the runtime-step preview, and confirm warnings.
 
-Area targeting is a target card mode. It asks the board to place a square/rectangle template, previews affected tokens while hovering, then stores all affected tokens as the current target set for later actions.
+## Important invariants
 
-## Builder Shape
+- Plain JavaScript only. No new dependencies.
+- Do not modify `handler.php`.
+- Saved automation lives on `action.automation`.
+- The character sheet's manual `tests` array is separate — never merge.
+- `automation.cards` order is execution order.
+- `paste.js` saves through the `onSave` callback only — no direct fetch.
+- `runner.js` does not mutate the board directly. All board effects flow through `state.context.*` callbacks.
+- VTT board state changes propagate through the existing board state persistence/sync paths.
+- When adding a new effect kind, condition, etc.: update `primitives.js`, then `schema.js` normalizer, then `runner.js` dispatcher, then `AUTHORING.md` and `REGISTRY.md`.
 
-Keep the builder model broad:
+## Known gaps (deferred to phase 2)
 
-- A `Target` card selects who/what the ability is aimed at.
-- An `Action` card chooses an action type.
-- Do not create a new top-level card for every mechanic unless it is truly not an action or target.
+- Triggers auto-detect on damage/move/turn events.
+- Persistent zones with tick-on-turn application and "pay N to extend" UI.
+- Pull/slide/vertical forced movement preview on the board (verb passes; preview path is push-shaped).
+- Heal/temporary-stamina/teleport/swap/cascade/freeStrike auto-application via board hooks.
+- Marks (judged by, marked by, bonded).
+- Standalone inspector page listing every ability across every character.
 
-For example:
-
-- Power roll is an action type.
-- Deal stamina damage is an action type.
-- Push is an action type.
-- Conditions, riders, and later tier sub-effects should generally live under an action/tier unless there is a strong reason to promote them.
-
-## Current Reference Catalog
-
-Use this section as the human/LLM-facing index of automation concepts that currently exist. When adding a new action, trigger, target mode, or shorthand expression, update this list in the same change.
-
-### Card Types
-
-- `target`
-  - Selects a token or area target before later actions resolve.
-  - Runtime support exists for selecting one token or placing a square/rectangle area template on the VTT board.
-
-- `action`
-  - Executes one configured action type.
-  - Action cards are the normal place to add mechanics.
-
-### Action Types
-
-- `powerRoll`
-  - Rolls `2d10` plus an attribute/bonus.
-  - New power rolls default to `Strongest`, which resolves to the source character's highest Might/Agility/Reason/Intuition/Presence value at runtime.
-  - Auto-selects a tier, allows manual tier override, and stores the selected tier for later actions.
-  - Tier potency riders are structured `potency` effects in `tier.effects`; shorthand remains supported for imports/backfill.
-
-- `dealStaminaDamage`
-  - Reads damage from the selected power-roll tier.
-  - Applies stamina damage to every selected target.
-  - Board code handles typed immunity/vulnerability adjustments for PC sheets.
-
-- `push`
-  - Reads `push X` from the selected power-roll tier.
-  - Opens the VTT forced-movement preview.
-  - Supports legal push preview squares, skip, token movement, and collision damage.
-
-- `note`
-  - Stores non-executable notes for future automation work.
-  - Does not mutate board state.
-
-### Trigger Types
-
-No executable trigger cards exist yet.
-
-Current trigger-related behavior is only indirect:
-
-- VTT ability tray click starts an ability automation.
-- Free triggered abilities can appear in the tray as abilities, but their trigger condition is not automated yet.
-
-Future trigger work should add explicit trigger concepts here before wiring runtime behavior.
-
-### Target Modes
-
-The current target card stores:
-
-- `mode`
-  - Known values: `token`, `area`.
-
-- `count`
-  - Known values: `one`, `each`, `all`.
-
-- `creature`
-  - Known values: `enemy`, `ally`, `creature`, `object`, `creature or object`.
-
-- `within`
-  - Free-text note such as `melee 1`.
-
-- `shape`
-  - Area mode only.
-  - Known values: `cube`, `rectangle`.
-
-- `size`
-  - Area cube/square size. `3` means a 3x3 area.
-
-- `width` / `height`
-  - Area rectangle dimensions in squares.
-
-- `range`
-  - Area mode placement guide. `10` draws the legal/range outline, but the board currently still allows dropping outside it.
-
-- `optional`
-  - Allows an ability to continue without a selected target when configured.
-
-## Shorthand Rules
-
-Use `catalog.js` for parsing and display.
-
-Current supported shorthand:
-
-- `5 fire` means 5 fire damage.
-- `2 + Reason corruption` means 2 plus Reason modifier corruption damage.
-- `push 3` means push 3 squares.
-- `slowed SE` means slowed, save ends.
-- `slowed EOT` means slowed until end of turn.
-- `R < WEAK slowed SE` means compare the target's Reason to the source's Weak potency threshold and apply slowed, save ends, on failure.
-
-When adding shorthand, update `catalog.js` first, then consume it from schema/builder/runner.
-
-## VTT Boundaries
-
-Builder code should not mutate the VTT board.
-
-Runtime runner code should not directly edit board state. It should call functions passed in through `AbilityAutomationRunner.open(options)`.
-
-Board mutations live in `board-interactions.js`, including:
-
-- target selection
-- stamina damage
-- typed damage adjustment
-- forced movement
-- collision damage
-- token visual feedback
-
-## Important Invariants
-
-- Plain JavaScript only.
-- No new dependencies.
-- Do not modify `handler.php` unless unavoidable.
-- Saved automation stays on `action.automation`.
-- Preserve existing manual `tests`.
-- Card order is execution order.
-- Builder saves through `onSave`; no direct fetch.
-- Runtime should run top-to-bottom.
-- VTT board state changes must propagate through existing board state persistence/sync paths.
+When implementing any of these, update `REGISTRY.md` so authors know.

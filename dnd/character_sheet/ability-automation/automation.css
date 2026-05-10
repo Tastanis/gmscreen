@@ -1,0 +1,493 @@
+/* Ability Automation styles — runner (dice modal), paste UI, inspector,
+   and the small "configured" pip on the character-sheet ability button.
+   Replaces the v2 builder.css. */
+
+/* ---------- character-sheet button indicator ---------- */
+
+.automation-action-btn {
+  align-items: center;
+  display: inline-flex;
+  gap: 6px;
+}
+
+.automation-action-btn__status {
+  background: var(--border);
+  border-radius: 999px;
+  display: inline-block;
+  height: 8px;
+  width: 8px;
+}
+
+.automation-action-btn--configured .automation-action-btn__status {
+  background: var(--success);
+}
+
+.automation-action-btn--configured {
+  border-color: var(--success);
+}
+
+/* ---------- runner (dice modal during execution) ---------- */
+
+.power-roll-runner {
+  background: transparent;
+  inset: 0;
+  pointer-events: none;
+  position: fixed;
+  z-index: 35;
+}
+
+.vtt-body .power-roll-runner {
+  --panel-alt: var(--dice-surface);
+  --border: var(--dice-border);
+  --muted: var(--dice-muted);
+  --text: var(--dice-text);
+  --chip: rgba(139, 111, 78, 0.14);
+  --success: var(--dice-success);
+  --danger: var(--dice-danger);
+  --accent-strong: var(--dice-accent-strong);
+  z-index: 2000;
+}
+
+.power-roll-runner__modal {
+  max-height: calc(100vh - 24px);
+  overflow: auto;
+  pointer-events: auto;
+  position: fixed;
+  resize: both;
+  width: min(380px, calc(100vw - 32px));
+}
+
+.power-roll-runner--target .power-roll-runner__modal {
+  min-height: 0;
+  min-width: 260px;
+  resize: none;
+  width: min(300px, calc(100vw - 32px));
+}
+
+.power-roll-runner__modal--dragging {
+  cursor: grabbing;
+}
+
+.power-roll-runner__header {
+  align-items: center;
+}
+
+.power-roll-runner__heading {
+  min-width: 0;
+}
+
+.power-roll-runner__heading .dice-modal-project-label {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.power-roll-runner__body {
+  color: var(--text);
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.power-roll-runner__section,
+.power-roll-runner__dice,
+.power-roll-runner__instruction {
+  background: var(--panel-alt);
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  padding: 8px;
+}
+
+.power-roll-runner__section--compact {
+  padding: 8px;
+}
+
+.power-roll-runner__inline-actions {
+  align-items: center;
+  background: var(--panel-alt);
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  display: flex;
+  gap: 8px;
+  justify-content: space-between;
+  padding: 8px;
+  flex-wrap: wrap;
+}
+
+.power-roll-runner__inline-actions .power-roll-runner__instruction {
+  background: transparent;
+  border: 0;
+  margin: 0;
+  padding: 0;
+  flex: 1 1 160px;
+}
+
+.power-roll-runner__section--ability {
+  background: #efe3d2;
+}
+
+.power-roll-runner__ability h3 {
+  margin: 0 0 4px;
+  color: var(--text);
+  font-size: 1rem;
+}
+
+.power-roll-runner__ability p,
+.power-roll-runner__details p {
+  color: var(--text);
+  margin: 0;
+  white-space: pre-wrap;
+  font-size: 0.9rem;
+  line-height: 1.25;
+}
+
+.power-roll-runner__meta {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 4px;
+  margin-top: 8px;
+}
+
+.power-roll-runner__meta span {
+  background: var(--chip);
+  border: 1px solid var(--border);
+  border-radius: 999px;
+  color: var(--text);
+  font-size: 0.8rem;
+  font-weight: 700;
+  padding: 3px 7px;
+}
+
+.power-roll-runner__dice {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.power-roll-runner__screen {
+  min-height: 70px;
+}
+
+.power-roll-runner__screen .dice-result-total {
+  text-align: right;
+}
+
+.power-roll-runner__controls {
+  display: grid;
+  grid-template-columns: 1fr 1fr 1fr;
+  gap: 6px;
+}
+
+.power-roll-runner__adjustments {
+  align-items: center;
+  background: #e6d8c5;
+  border: 1px solid var(--border);
+  border-radius: 5px;
+  color: var(--text);
+  display: grid;
+  font-size: 0.82rem;
+  font-weight: 700;
+  gap: 6px;
+  grid-template-columns: minmax(0, 1.4fr) minmax(0, 1fr) auto;
+  padding: 6px 7px;
+}
+
+.power-roll-runner__edge-buttons {
+  display: grid;
+  grid-template-columns: repeat(4, 1fr);
+  gap: 6px;
+}
+
+.power-roll-runner__mini-btn {
+  background: #f4eadc;
+  border: 1px solid var(--border);
+  border-radius: 4px;
+  color: var(--dice-muted);
+  cursor: pointer;
+  font: inherit;
+  font-size: 0.75rem;
+  font-weight: 800;
+  padding: 4px 8px;
+  text-transform: uppercase;
+}
+
+.power-roll-runner__tiers {
+  display: grid;
+  gap: 6px;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+}
+
+.power-roll-runner__tier {
+  background: #f7efe4;
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  color: var(--text);
+  cursor: pointer;
+  display: grid;
+  gap: 4px;
+  min-height: 72px;
+  padding: 8px;
+  text-align: left;
+}
+
+.power-roll-runner__tier:disabled {
+  cursor: default;
+  opacity: 0.72;
+}
+
+.power-roll-runner__tier--selected {
+  border-color: var(--success);
+  box-shadow: inset 0 0 0 2px rgba(59, 109, 66, 0.3);
+  background: #e1ecdf;
+}
+
+.power-roll-runner__tier-range {
+  color: var(--accent-strong);
+  font-weight: 800;
+}
+
+.power-roll-runner__tier-body {
+  font-size: 0.82rem;
+  line-height: 1.2;
+}
+
+.power-roll-runner__details {
+  border-top: 1px solid var(--border);
+  margin-top: 8px;
+  padding-top: 8px;
+}
+
+.power-roll-runner__details strong {
+  display: block;
+  margin-bottom: 4px;
+  font-size: 0.9rem;
+}
+
+.power-roll-runner__instruction {
+  color: var(--text);
+  font: inherit;
+  margin: 0;
+  white-space: pre-wrap;
+}
+
+@media (max-width: 720px) {
+  .power-roll-runner__controls,
+  .power-roll-runner__adjustments,
+  .power-roll-runner__edge-buttons,
+  .power-roll-runner__tiers {
+    grid-template-columns: 1fr;
+  }
+}
+
+/* ---------- paste UI ---------- */
+
+.ability-paste {
+  inset: 0;
+  position: fixed;
+  z-index: 5000;
+}
+
+.ability-paste__backdrop {
+  background: rgba(20, 18, 14, 0.55);
+  inset: 0;
+  position: absolute;
+}
+
+.ability-paste__modal {
+  background: #f5edde;
+  border: 1px solid #b89c70;
+  border-radius: 8px;
+  box-shadow: 0 18px 50px rgba(0, 0, 0, 0.35);
+  display: flex;
+  flex-direction: column;
+  left: 50%;
+  max-height: calc(100vh - 60px);
+  overflow: hidden;
+  position: absolute;
+  top: 50%;
+  transform: translate(-50%, -50%);
+  width: min(820px, calc(100vw - 40px));
+}
+
+.ability-paste__header {
+  align-items: flex-start;
+  background: #ece1ca;
+  border-bottom: 1px solid #b89c70;
+  display: flex;
+  gap: 12px;
+  justify-content: space-between;
+  padding: 14px 18px;
+}
+
+.ability-paste__title {
+  margin: 0 0 4px;
+  font-size: 1.05rem;
+}
+
+.ability-paste__subtitle {
+  color: #6e5b3a;
+  font-size: 0.85rem;
+  margin: 0;
+}
+
+.ability-paste__close {
+  background: transparent;
+  border: 0;
+  cursor: pointer;
+  font-size: 1.4rem;
+  line-height: 1;
+  padding: 2px 8px;
+  color: #6e5b3a;
+}
+
+.ability-paste__close:hover {
+  color: #1a1a1a;
+}
+
+.ability-paste__body {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  overflow: auto;
+  padding: 16px 18px;
+}
+
+.ability-paste__textarea {
+  background: #fffaf0;
+  border: 1px solid #b89c70;
+  border-radius: 6px;
+  font-family: ui-monospace, "SF Mono", Monaco, Consolas, "Cascadia Code", monospace;
+  font-size: 13px;
+  line-height: 1.45;
+  min-height: 320px;
+  padding: 10px 12px;
+  resize: vertical;
+  width: 100%;
+}
+
+.ability-paste__status {
+  background: #fffaf0;
+  border: 1px solid #d8c4a3;
+  border-radius: 6px;
+  padding: 10px 12px;
+  font-size: 0.86rem;
+  min-height: 32px;
+}
+
+.ability-paste__summary {
+  color: #3b3024;
+  margin-bottom: 4px;
+}
+
+.ability-paste__warnings {
+  color: #7a4a2b;
+  margin: 4px 0 0;
+  padding-left: 18px;
+}
+
+.ability-paste__warnings li {
+  margin: 2px 0;
+}
+
+.ability-paste__status-empty {
+  color: #6e5b3a;
+}
+
+.ability-paste__status-error {
+  color: #a8341c;
+  font-weight: 600;
+}
+
+.ability-paste__footer {
+  align-items: center;
+  background: #ece1ca;
+  border-top: 1px solid #b89c70;
+  display: flex;
+  gap: 8px;
+  padding: 12px 18px;
+}
+
+.ability-paste__spacer {
+  flex: 1;
+}
+
+.ability-paste__btn {
+  background: #fffaf0;
+  border: 1px solid #b89c70;
+  border-radius: 5px;
+  color: #1a1a1a;
+  cursor: pointer;
+  font: inherit;
+  font-size: 0.9rem;
+  font-weight: 600;
+  padding: 8px 16px;
+}
+
+.ability-paste__btn:hover {
+  background: #f0e3c8;
+}
+
+.ability-paste__btn--primary {
+  background: #5b8a4a;
+  border-color: #3f6a30;
+  color: #fffdf6;
+}
+
+.ability-paste__btn--primary:hover {
+  background: #4d7a3d;
+}
+
+.ability-paste__btn--ghost {
+  background: transparent;
+}
+
+/* ---------- inspector (read-only) ---------- */
+
+.ability-inspector {
+  inset: 0;
+  position: fixed;
+  z-index: 5000;
+}
+
+.ability-inspector__modal {
+  width: min(900px, calc(100vw - 40px));
+}
+
+.ability-inspector__body {
+  gap: 14px;
+}
+
+.ability-inspector__section {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+.ability-inspector__section-title {
+  font-size: 0.95rem;
+  margin: 0;
+  color: #3b3024;
+}
+
+.ability-inspector__pre {
+  background: #2a261e;
+  border: 1px solid #1a1812;
+  border-radius: 6px;
+  color: #e9dec5;
+  font-family: ui-monospace, "SF Mono", Monaco, Consolas, "Cascadia Code", monospace;
+  font-size: 12px;
+  line-height: 1.5;
+  margin: 0;
+  max-height: 320px;
+  overflow: auto;
+  padding: 10px 12px;
+  white-space: pre-wrap;
+  word-break: break-all;
+}
+
+.ability-inspector__pre--steps {
+  background: #faf3e2;
+  border-color: #d8c4a3;
+  color: #1a1a1a;
+}

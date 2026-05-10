@@ -2485,7 +2485,8 @@ function renderActionSection(type, containerId) {
                         type="button"
                         data-automate-action="${action.id}"
                         data-action-type="${type}"
-                      ><span class="automation-action-btn__status" aria-hidden="true"></span>${automationLabel}</button>`
+                      ><span class="automation-action-btn__status" aria-hidden="true"></span>${automationLabel}</button>
+                       ${automationConfigured ? `<button class="text-btn edit-only" type="button" data-inspect-action="${action.id}" data-action-type="${type}" title="Inspect saved automation JSON">Inspect</button>` : ""}`
                     : ""
                 }
                 <button
@@ -2557,6 +2558,7 @@ function renderActionSection(type, containerId) {
   bindActionMoves();
   bindActionToggles();
   bindAutomationButtons();
+  bindInspectorButtons();
   bindTestAdds();
   bindTestRemovals();
   bindAttributeToggles();
@@ -2918,6 +2920,23 @@ function bindAutomationButtons() {
         renderActionSection(type, ACTION_CONTAINER_IDS[type] || `${type}-pane`);
         saveSheet();
       });
+    };
+  });
+}
+
+function bindInspectorButtons() {
+  document.querySelectorAll("[data-inspect-action]").forEach((btn) => {
+    btn.onclick = () => {
+      const actionId = btn.getAttribute("data-inspect-action");
+      const type = btn.getAttribute("data-action-type");
+      if (!actionId || !type) return;
+      if (!window.AbilityAutomationInspector || typeof window.AbilityAutomationInspector.open !== "function") {
+        console.warn("Ability automation inspector is not available.");
+        return;
+      }
+      const action = (sheetState.actions[type] || []).find((item) => item.id === actionId);
+      if (!action) return;
+      window.AbilityAutomationInspector.open({ action });
     };
   });
 }

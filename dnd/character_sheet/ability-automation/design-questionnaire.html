@@ -1,0 +1,880 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<title>Ability Automation — Design Questionnaire</title>
+<style>
+  :root {
+    --bg: #f7f7f5;
+    --card: #ffffff;
+    --ink: #1a1a1a;
+    --muted: #666;
+    --border: #d8d8d4;
+    --accent: #1a4d8a;
+    --rec-bg: #fff8e1;
+    --rec-border: #f0b400;
+    --rec-ink: #6a4d00;
+    --good: #2f6f4a;
+  }
+  * { box-sizing: border-box; }
+  body {
+    font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+    max-width: 920px;
+    margin: 0 auto;
+    padding: 32px 24px 140px;
+    color: var(--ink);
+    background: var(--bg);
+    line-height: 1.5;
+  }
+  h1 { margin: 0 0 6px; font-size: 28px; }
+  .lead { color: var(--muted); margin: 0 0 28px; }
+  h2 {
+    margin: 44px 0 14px;
+    padding: 10px 14px;
+    background: var(--ink);
+    color: #fafafa;
+    border-radius: 5px;
+    font-size: 17px;
+    letter-spacing: 0.3px;
+  }
+  .toc {
+    background: var(--card);
+    border: 1px solid var(--border);
+    border-radius: 6px;
+    padding: 14px 20px;
+    margin-bottom: 32px;
+    font-size: 14px;
+  }
+  .toc ol { margin: 6px 0 0; padding-left: 22px; }
+  .toc li { margin: 2px 0; }
+  .toc a { color: var(--accent); text-decoration: none; }
+  .toc a:hover { text-decoration: underline; }
+  .q {
+    background: var(--card);
+    border: 1px solid var(--border);
+    border-radius: 6px;
+    padding: 16px 18px;
+    margin: 12px 0;
+  }
+  .q-num {
+    display: inline-block;
+    font-weight: 700;
+    color: var(--muted);
+    font-size: 12px;
+    letter-spacing: 1px;
+    margin-bottom: 4px;
+  }
+  .q-text { font-weight: 600; font-size: 16px; margin: 2px 0 8px; }
+  .q-help { color: var(--muted); font-size: 13.5px; margin: 0 0 12px; }
+  .q-rec {
+    background: var(--rec-bg);
+    border-left: 3px solid var(--rec-border);
+    padding: 8px 12px;
+    margin: 10px 0;
+    font-size: 13px;
+    border-radius: 0 4px 4px 0;
+    color: var(--rec-ink);
+  }
+  .q-rec b { color: #4a3500; }
+  .opts label, .checkbox-list label {
+    display: block;
+    padding: 4px 2px;
+    cursor: pointer;
+    font-size: 14.5px;
+  }
+  textarea {
+    width: 100%;
+    min-height: 56px;
+    font-family: inherit;
+    font-size: 14px;
+    padding: 8px 10px;
+    border: 1px solid var(--border);
+    border-radius: 4px;
+    resize: vertical;
+    background: #fdfdfb;
+  }
+  textarea.tall { min-height: 90px; }
+  input[type="text"] {
+    width: 100%;
+    font-family: inherit;
+    font-size: 14px;
+    padding: 6px 10px;
+    border: 1px solid var(--border);
+    border-radius: 4px;
+    background: #fdfdfb;
+  }
+  code {
+    background: #eee;
+    padding: 1px 5px;
+    border-radius: 3px;
+    font-size: 13px;
+  }
+  #extract-btn {
+    position: fixed;
+    bottom: 24px;
+    right: 24px;
+    padding: 14px 26px;
+    background: var(--accent);
+    color: white;
+    border: none;
+    border-radius: 6px;
+    font-size: 15px;
+    font-weight: 600;
+    cursor: pointer;
+    box-shadow: 0 4px 14px rgba(0,0,0,0.18);
+    z-index: 10;
+  }
+  #extract-btn:hover { background: #2961a8; }
+  #save-indicator {
+    position: fixed;
+    bottom: 30px;
+    right: 220px;
+    color: var(--good);
+    font-size: 12px;
+    font-weight: 600;
+    opacity: 0;
+    transition: opacity 0.3s;
+  }
+  #save-indicator.show { opacity: 1; }
+  #output-section {
+    margin-top: 48px;
+    background: var(--card);
+    border: 2px solid var(--accent);
+    border-radius: 6px;
+    padding: 18px 20px;
+    display: none;
+  }
+  #output-section.visible { display: block; }
+  #output-section h3 { margin-top: 0; }
+  #output {
+    width: 100%;
+    min-height: 320px;
+    font-family: ui-monospace, "SF Mono", Monaco, Consolas, monospace;
+    font-size: 12px;
+    padding: 12px;
+    border: 1px solid var(--border);
+    border-radius: 4px;
+    background: #fafaf7;
+  }
+  .row-btns { margin-top: 10px; display: flex; gap: 10px; }
+  .row-btns button {
+    padding: 8px 16px;
+    border: none;
+    border-radius: 4px;
+    font-size: 14px;
+    cursor: pointer;
+    color: white;
+  }
+  .copy-btn { background: var(--good); }
+  .clear-btn { background: #b54a4a; }
+  .helper-input { margin-top: 6px; }
+  details { margin: 6px 0; }
+  summary { cursor: pointer; color: var(--accent); font-size: 13px; }
+  .pill {
+    display: inline-block;
+    padding: 1px 8px;
+    border-radius: 10px;
+    font-size: 12px;
+    margin-left: 6px;
+    background: #ddd;
+    color: #555;
+  }
+  .pill.priority { background: #f0b400; color: #4a3500; }
+</style>
+</head>
+<body>
+
+<h1>Ability Automation — Design Questionnaire</h1>
+<p class="lead">Round-1 questions for the JSON-driven automation rebuild. Answers auto-save to your browser. When you're done, click <b>Extract Answers</b> (bottom right) to get a text block to paste back to Claude.</p>
+
+<div class="toc">
+  <b>Sections</b>
+  <ol>
+    <li><a href="#sec-a">Workflow & JSON authoring</a></li>
+    <li><a href="#sec-b">Top-level JSON shape</a></li>
+    <li><a href="#sec-c">Targets</a></li>
+    <li><a href="#sec-d">Power roll & tiers</a></li>
+    <li><a href="#sec-e">Potency riders</a></li>
+    <li><a href="#sec-f">Effects catalog</a></li>
+    <li><a href="#sec-g">Triggers / persistent / spend</a></li>
+    <li><a href="#sec-h">Runtime UX</a></li>
+    <li><a href="#sec-i">Inspector / debug view</a></li>
+    <li><a href="#sec-j">Migration & cleanup</a></li>
+    <li><a href="#sec-k">Anything else</a></li>
+  </ol>
+</div>
+
+<h2 id="sec-a">A. Workflow & JSON authoring</h2>
+
+<div class="q" data-q="A1">
+  <div class="q-num">A1</div>
+  <div class="q-text">Where will automation JSON come from primarily?</div>
+  <div class="q-help">Determines whether we invest more in LLM tooling or hand-edit ergonomics.</div>
+  <div class="opts">
+    <label><input type="radio" name="A1" value="llm"> Mostly LLM-generated from the ability description + a format spec</label>
+    <label><input type="radio" name="A1" value="hand"> Mostly hand-written</label>
+    <label><input type="radio" name="A1" value="mix"> Mix — LLM first pass, hand edits as needed</label>
+  </div>
+  <div class="q-rec"><b>My default if blank:</b> Mix. The format spec doc is the long-term win for LLM-assisted authoring.</div>
+  <textarea placeholder="Notes / overrides..."></textarea>
+</div>
+
+<div class="q" data-q="A2">
+  <div class="q-num">A2</div>
+  <div class="q-text">When you paste bad JSON, what should happen?</div>
+  <div class="q-help">Strict = JSON gets validated against a schema, errors listed clearly. Lenient = unknown fields silently dropped, runtime tries its best.</div>
+  <div class="opts">
+    <label><input type="radio" name="A2" value="strict"> Strict — validate, refuse to save until errors are fixed, show messages like "expected condition.duration to be one of […]"</label>
+    <label><input type="radio" name="A2" value="lenient"> Lenient — save it anyway, log warnings, runtime tries to run as much as possible</label>
+    <label><input type="radio" name="A2" value="warn-but-save"> Warn but save — show errors but allow saving with a warning badge on the ability</label>
+  </div>
+  <div class="q-rec"><b>My default if blank:</b> Warn but save. Strict frustrates LLM-generated drafts; lenient hides bugs.</div>
+  <textarea placeholder="Notes..."></textarea>
+</div>
+
+<div class="q" data-q="A3">
+  <div class="q-num">A3</div>
+  <div class="q-text">Should there be a "format spec" document you can paste into an LLM along with an ability text to get JSON back?</div>
+  <div class="q-help">A single Markdown file with the schema, all enums, and 8-10 worked examples covering the common ability patterns.</div>
+  <div class="opts">
+    <label><input type="radio" name="A3" value="yes"> Yes — build it; commit it to the repo so it stays in sync with code</label>
+    <label><input type="radio" name="A3" value="no"> No — I'll figure JSON out from examples</label>
+  </div>
+  <div class="q-rec"><b>My default if blank:</b> Yes. Path: <code>dnd/character_sheet/ability-automation/AUTHORING.md</code>. Acts as both LLM context and your reference.</div>
+  <textarea placeholder="Different path? Other docs you'd want?"></textarea>
+</div>
+
+<h2 id="sec-b">B. Top-level JSON shape</h2>
+
+<div class="q" data-q="B1">
+  <div class="q-num">B1</div>
+  <div class="q-text">What's the outer shape of an automation JSON?</div>
+  <div class="q-help">Today: flat array of cards. The book has clear sections (target, roll, effect, trigger, persistent). A sectioned object would match the book.</div>
+  <div class="opts">
+    <label><input type="radio" name="B1" value="cards"> Flat ordered list of "steps" (target, action, etc.) — order = execution order</label>
+    <label><input type="radio" name="B1" value="sections"> Sectioned object — fixed slots for <code>target</code>, <code>powerRoll</code>, <code>effects[]</code>, <code>trigger</code>, <code>persistent</code></label>
+    <label><input type="radio" name="B1" value="hybrid"> Hybrid — top level is a list of "blocks" but each block is a typed section (one target block, one powerRoll block, N effect blocks)</label>
+  </div>
+  <div class="q-rec"><b>My default if blank:</b> Hybrid. Ordered list of typed blocks gives you both: explicit ordering for "effect before vs after roll" cases, and named sections so blocks know their shape.</div>
+  <textarea placeholder="Notes..."></textarea>
+</div>
+
+<div class="q" data-q="B2">
+  <div class="q-num">B2</div>
+  <div class="q-text">Should the automation JSON include the ability's name and description?</div>
+  <div class="q-help">You said the character sheet stays the source of truth for what the player sees. So this asks whether the JSON ALSO carries the display text (for the inspector / chat output) or only behavior.</div>
+  <div class="opts">
+    <label><input type="radio" name="B2" value="behavior-only"> Behavior only — JSON contains automation, character-sheet fields are the display text</label>
+    <label><input type="radio" name="B2" value="include-name"> Include name only — JSON has a <code>name</code> field for chat/inspector use, no description</label>
+    <label><input type="radio" name="B2" value="include-both"> Include both — JSON also stores its own copy of the description (denormalized)</label>
+  </div>
+  <div class="q-rec"><b>My default if blank:</b> Include name only. Avoids drift between sheet text and JSON, but lets the inspector and chat say "Brutal Slam: …" without needing a sheet lookup.</div>
+  <textarea placeholder="Notes..."></textarea>
+</div>
+
+<div class="q" data-q="B3">
+  <div class="q-num">B3</div>
+  <div class="q-text">Action type (main/maneuver/move/triggered/free-triggered) and resource cost — where do they live?</div>
+  <div class="q-help">The character sheet already has fields for these. Question is whether JSON duplicates them or just consumes them.</div>
+  <div class="opts">
+    <label><input type="radio" name="B3" value="sheet-only"> Sheet only — JSON has no notion of action type or cost; runtime reads them off the action being run</label>
+    <label><input type="radio" name="B3" value="json-mirror"> JSON mirrors them — but sheet wins on conflict</label>
+    <label><input type="radio" name="B3" value="json-source"> JSON is the source of truth — sheet display reads from JSON</label>
+  </div>
+  <div class="q-rec"><b>My default if blank:</b> Sheet only. Less duplication, less drift. Spend riders inside JSON are different — those stay in JSON since they're per-effect.</div>
+  <textarea placeholder="Notes..."></textarea>
+</div>
+
+<h2 id="sec-c">C. Targets</h2>
+
+<div class="q" data-q="C1">
+  <div class="q-num">C1</div>
+  <div class="q-text">How is the ability's distance/range encoded?</div>
+  <div class="q-help">Book forms: <code>Melee 1</code>, <code>Ranged 5</code>, <code>Melee 1 or ranged 5</code>, <code>Self</code>, <code>5 burst</code>, <code>3 aura</code>, <code>2 cube within 5</code>, <code>10×2 line within 5</code>, <code>4 wall within 10</code>.</div>
+  <div class="opts">
+    <label><input type="radio" name="C1" value="parsed"> Parsed structure: <code>{ form: "melee"|"ranged"|"melee-or-ranged"|"self"|"burst"|"aura"|"cube"|"line"|"wall", value: N, within: N, secondary: N }</code></label>
+    <label><input type="radio" name="C1" value="freetext"> Free text only — runtime never enforces, just displays</label>
+    <label><input type="radio" name="C1" value="both"> Both — parsed when possible, free-text fallback</label>
+  </div>
+  <div class="q-rec"><b>My default if blank:</b> Parsed structure. Range enforcement on the board (legal-target highlight, template-placement bounds) needs structured data.</div>
+  <textarea placeholder="Forms I'm missing? Different field names?"></textarea>
+</div>
+
+<div class="q" data-q="C2">
+  <div class="q-num">C2</div>
+  <div class="q-text">Confirm the target predicate enum.</div>
+  <div class="q-help">What can be in the "target =" line. Check what should be supported now; uncheck to drop; add custom in the textarea.</div>
+  <div class="checkbox-list">
+    <label><input type="checkbox" name="C2-pred" value="creature" checked> creature</label>
+    <label><input type="checkbox" name="C2-pred" value="enemy" checked> enemy</label>
+    <label><input type="checkbox" name="C2-pred" value="ally" checked> ally</label>
+    <label><input type="checkbox" name="C2-pred" value="object" checked> object</label>
+    <label><input type="checkbox" name="C2-pred" value="creatureOrObject" checked> creature or object</label>
+    <label><input type="checkbox" name="C2-pred" value="self" checked> self</label>
+    <label><input type="checkbox" name="C2-pred" value="selfOrAlly" checked> self or ally</label>
+    <label><input type="checkbox" name="C2-pred" value="selfAndAlly" checked> self and ally(s)</label>
+    <label><input type="checkbox" name="C2-pred" value="dead"> dead creature</label>
+    <label><input type="checkbox" name="C2-pred" value="willing"> willing creature</label>
+    <label><input type="checkbox" name="C2-pred" value="hero"> hero (PC)</label>
+    <label><input type="checkbox" name="C2-pred" value="monster"> monster (NPC)</label>
+  </div>
+  <textarea placeholder="Custom predicates I want supported (one per line)..."></textarea>
+</div>
+
+<div class="q" data-q="C3">
+  <div class="q-num">C3</div>
+  <div class="q-text">Should target groups be NAMED so later effects can reference specific groups?</div>
+  <div class="q-help">Useful when one ability hits everyone in an area but only pushes the primary, or marks just one of several. Example: <code>{ "target": "primary", "effects": [...] }</code> vs <code>{ "target": "inArea", "effects": [...] }</code>.</div>
+  <div class="opts">
+    <label><input type="radio" name="C3" value="yes"> Yes — every target block has an optional <code>name</code>, effect blocks have an optional <code>target</code> field that defaults to "all targets so far"</label>
+    <label><input type="radio" name="C3" value="implicit"> Implicit only — every effect uses the most recently selected target group</label>
+    <label><input type="radio" name="C3" value="defer"> Defer — most abilities don't need this; add later if needed</label>
+  </div>
+  <div class="q-rec"><b>My default if blank:</b> Yes. The book has too many "primary takes X, secondaries take Y" patterns to skip this. Adds zero cost when unused (default = "all current targets").</div>
+  <textarea placeholder="Notes..."></textarea>
+</div>
+
+<div class="q" data-q="C4">
+  <div class="q-num">C4</div>
+  <div class="q-text">"Optional" target — what does that mean at runtime?</div>
+  <div class="q-help">Today a target marked optional silently skips. Book usage: "you can target yourself or one ally" — the ally is optional but the ability still runs.</div>
+  <div class="opts">
+    <label><input type="radio" name="C4" value="skip-empty"> Skipping = continue with empty target list (later effects skip if they have no target)</label>
+    <label><input type="radio" name="C4" value="skip-abort"> Skipping a non-optional target = abort the whole automation</label>
+    <label><input type="radio" name="C4" value="confirm"> Always show explicit "Skip" / "Cancel automation" buttons — user picks each time</label>
+  </div>
+  <div class="q-rec"><b>My default if blank:</b> Always show explicit buttons. Mandatory targets only show "Cancel automation" (not "Skip"). Optional targets show both.</div>
+  <textarea placeholder="Notes..."></textarea>
+</div>
+
+<h2 id="sec-d">D. Power roll & tiers</h2>
+
+<div class="q" data-q="D1">
+  <div class="q-num">D1</div>
+  <div class="q-text">"Strongest" attribute — when is it resolved?</div>
+  <div class="q-help">Today it resolves at runtime to the source character's highest M/A/R/I/P. If you change attributes between sessions, the ability follows you.</div>
+  <div class="opts">
+    <label><input type="radio" name="D1" value="runtime"> Runtime — always read live from the source character's current scores</label>
+    <label><input type="radio" name="D1" value="snapshot"> Snapshot — when JSON is saved, write the chosen attribute into the JSON</label>
+    <label><input type="radio" name="D1" value="both"> Either — JSON can store <code>"Strongest"</code> OR a literal attribute name</label>
+  </div>
+  <div class="q-rec"><b>My default if blank:</b> Either. Most book abilities specify a fixed attribute (e.g. "Power Roll + Might"). "Strongest" is for class abilities that explicitly use highest characteristic. Both forms in JSON cover both cases.</div>
+  <textarea placeholder="Notes..."></textarea>
+</div>
+
+<div class="q" data-q="D2">
+  <div class="q-num">D2</div>
+  <div class="q-text">Edges and banes — where do they come from at runtime?</div>
+  <div class="q-help">Edges/banes alter tier outcomes. They can come from the ability itself, the situation (cover, advantage), and class features.</div>
+  <div class="opts">
+    <label><input type="radio" name="D2" value="json-only"> Static — JSON declares baseline edges/banes</label>
+    <label><input type="radio" name="D2" value="prompt-only"> Prompt-only — runtime always asks before the roll</label>
+    <label><input type="radio" name="D2" value="both"> Both — JSON declares baseline, runtime shows them and lets you bump up/down before the roll</label>
+  </div>
+  <div class="q-rec"><b>My default if blank:</b> Both. Most situational adjustments come from the table; the ability sometimes declares its own edge/bane (e.g. "this ability has a double edge"). Pre-roll widget shows current count with +/- buttons.</div>
+  <textarea placeholder="Notes..."></textarea>
+</div>
+
+<div class="q" data-q="D3">
+  <div class="q-num">D3</div>
+  <div class="q-text">What effect kinds can appear inside a tier result?</div>
+  <div class="q-help">Per the book, tier text is "<code>damage; rider; rider</code>". Riders can be forced movement, conditions via potency, or even cascading abilities ("an ally uses a strike as a free triggered action"). What should the schema allow inside a tier?</div>
+  <div class="opts">
+    <label><input type="radio" name="D3" value="full"> Full registry — any effect kind from section F can live in a tier</label>
+    <label><input type="radio" name="D3" value="restricted"> Restricted — damage, forced movement, condition (with potency), heal, temp stamina only</label>
+  </div>
+  <div class="q-rec"><b>My default if blank:</b> Full registry. The book uses cascading abilities, marks, swaps, etc. inside tier text. Restricting now will force schema bumps later.</div>
+  <textarea placeholder="Notes..."></textarea>
+</div>
+
+<div class="q" data-q="D4">
+  <div class="q-num">D4</div>
+  <div class="q-text">Critical hits (natural 19/20) — how should the system handle them?</div>
+  <div class="q-help">Book rule: nat 19/20 on a 2d10 main-action ability roll grants an immediate extra action. Affects automation because tier 3 ≠ crit.</div>
+  <div class="opts">
+    <label><input type="radio" name="D4" value="ignore"> Ignore — runtime doesn't track crits</label>
+    <label><input type="radio" name="D4" value="badge"> Badge — runtime detects crits and shows a badge / chat note, but doesn't grant the action automatically</label>
+    <label><input type="radio" name="D4" value="auto"> Auto — runtime detects crit and prompts "take a free main action?"</label>
+  </div>
+  <div class="q-rec"><b>My default if blank:</b> Badge. Granting the action is a player decision and table-context-heavy; just notify so they don't miss it.</div>
+  <textarea placeholder="Notes..."></textarea>
+</div>
+
+<h2 id="sec-e">E. Potency riders</h2>
+
+<div class="q" data-q="E1">
+  <div class="q-num">E1</div>
+  <div class="q-text">How is a potency threshold stored in JSON?</div>
+  <div class="q-help">Book reads "M&lt;w" / "P&lt;v" / "I&lt;s". These resolve to character-specific integer thresholds at runtime (a level-1 caster's strong = ~2, a level-10 caster's strong = ~5).</div>
+  <div class="opts">
+    <label><input type="radio" name="E1" value="qualitative"> Qualitative only — <code>{ attribute: "M", level: "weak"|"average"|"strong" }</code>; resolve to int at runtime</label>
+    <label><input type="radio" name="E1" value="numeric"> Numeric only — <code>{ attribute: "M", value: 2 }</code>; author looks up the int</label>
+    <label><input type="radio" name="E1" value="qual-with-override"> Qualitative with optional override — qualitative is normal, numeric override for unusual abilities</label>
+  </div>
+  <div class="q-rec"><b>My default if blank:</b> Qualitative with optional override. 99% of abilities are qualitative; the rare numeric override (e.g. "M&lt;1 regardless of caster level") stays expressible.</div>
+  <textarea placeholder="Notes..."></textarea>
+</div>
+
+<div class="q" data-q="E2">
+  <div class="q-num">E2</div>
+  <div class="q-text">What can a potency rider do on failure?</div>
+  <div class="q-help">Today only conditions / damage. Book has riders that push, slide, force a free strike, force the target to use an ability, etc.</div>
+  <div class="opts">
+    <label><input type="radio" name="E2" value="full"> Any effect from the registry — same shape as a tier rider</label>
+    <label><input type="radio" name="E2" value="condition-damage"> Conditions and damage only</label>
+  </div>
+  <div class="q-rec"><b>My default if blank:</b> Any effect from the registry. Treat the failure branch as just another effect list.</div>
+  <textarea placeholder="Notes..."></textarea>
+</div>
+
+<h2 id="sec-f">F. Effects catalog</h2>
+
+<div class="q" data-q="F1">
+  <div class="q-num">F1</div>
+  <div class="q-text">Confirm the effect kinds we'll implement.</div>
+  <div class="q-help">Check the ones to support now. Each becomes a typed "effect" the JSON can use anywhere (tier rider, flat effect block, potency failure, spend bonus).</div>
+  <div class="checkbox-list">
+    <label><input type="checkbox" name="F1-kind" value="damage" checked> damage (with type, can scale by attribute)</label>
+    <label><input type="checkbox" name="F1-kind" value="heal" checked> heal (Stamina restoration via Recovery or fixed amount)</label>
+    <label><input type="checkbox" name="F1-kind" value="temporaryStamina" checked> temporary Stamina</label>
+    <label><input type="checkbox" name="F1-kind" value="condition" checked> condition (with duration)</label>
+    <label><input type="checkbox" name="F1-kind" value="forcedMovement" checked> forced movement (push / pull / slide ± vertical)</label>
+    <label><input type="checkbox" name="F1-kind" value="teleport" checked> teleport</label>
+    <label><input type="checkbox" name="F1-kind" value="shift"> shift / move (caster movement, not forced)</label>
+    <label><input type="checkbox" name="F1-kind" value="swap"> swap places</label>
+    <label><input type="checkbox" name="F1-kind" value="resourceGain"> resource / surge gain or spend</label>
+    <label><input type="checkbox" name="F1-kind" value="endEffect"> end an effect on target (save-ends or EoT cleanse)</label>
+    <label><input type="checkbox" name="F1-kind" value="freeStrike"> grant free strike (target makes one, or ally makes one against target)</label>
+    <label><input type="checkbox" name="F1-kind" value="cascade"> cascade — invoke another ability as a free triggered action</label>
+    <label><input type="checkbox" name="F1-kind" value="summon"> summon / create token</label>
+    <label><input type="checkbox" name="F1-kind" value="persistentZone"> persistent zone (auras, walls, vortex)</label>
+    <label><input type="checkbox" name="F1-kind" value="note" checked> note (non-executable narrative reminder)</label>
+  </div>
+  <textarea placeholder="Other effect kinds I want, OR effect kinds to defer to a later phase..."></textarea>
+</div>
+
+<div class="q" data-q="F2">
+  <div class="q-num">F2</div>
+  <div class="q-text">Damage type enum.</div>
+  <div class="q-help">Used to look up immunity/weakness on the receiving token. Uncheck any to drop, add custom in textarea.</div>
+  <div class="checkbox-list">
+    <label><input type="checkbox" name="F2-dmg" value="untyped" checked> untyped (just "damage")</label>
+    <label><input type="checkbox" name="F2-dmg" value="acid" checked> acid</label>
+    <label><input type="checkbox" name="F2-dmg" value="cold" checked> cold</label>
+    <label><input type="checkbox" name="F2-dmg" value="corruption" checked> corruption</label>
+    <label><input type="checkbox" name="F2-dmg" value="fire" checked> fire</label>
+    <label><input type="checkbox" name="F2-dmg" value="holy" checked> holy</label>
+    <label><input type="checkbox" name="F2-dmg" value="lightning" checked> lightning</label>
+    <label><input type="checkbox" name="F2-dmg" value="poison" checked> poison</label>
+    <label><input type="checkbox" name="F2-dmg" value="psychic" checked> psychic</label>
+    <label><input type="checkbox" name="F2-dmg" value="sonic" checked> sonic</label>
+  </div>
+  <textarea placeholder="Custom damage types..."></textarea>
+</div>
+
+<div class="q" data-q="F3">
+  <div class="q-num">F3</div>
+  <div class="q-text">Condition enum.</div>
+  <div class="q-help">Names the runtime knows how to display and (eventually) auto-track on tokens. Marks are deferred per your earlier note.</div>
+  <div class="checkbox-list">
+    <label><input type="checkbox" name="F3-cond" value="bleeding" checked> bleeding</label>
+    <label><input type="checkbox" name="F3-cond" value="dazed" checked> dazed</label>
+    <label><input type="checkbox" name="F3-cond" value="frightened" checked> frightened</label>
+    <label><input type="checkbox" name="F3-cond" value="grabbed" checked> grabbed</label>
+    <label><input type="checkbox" name="F3-cond" value="prone" checked> prone</label>
+    <label><input type="checkbox" name="F3-cond" value="restrained" checked> restrained</label>
+    <label><input type="checkbox" name="F3-cond" value="slowed" checked> slowed</label>
+    <label><input type="checkbox" name="F3-cond" value="taunted" checked> taunted</label>
+    <label><input type="checkbox" name="F3-cond" value="weakened" checked> weakened</label>
+  </div>
+  <textarea placeholder="Custom conditions / homebrew..."></textarea>
+</div>
+
+<div class="q" data-q="F4">
+  <div class="q-num">F4</div>
+  <div class="q-text">Duration enum.</div>
+  <div class="q-help">Tag a condition (or any timed effect) with one of these. Runtime can later prompt for saves at end-of-turn.</div>
+  <div class="checkbox-list">
+    <label><input type="checkbox" name="F4-dur" value="instantaneous" checked> instantaneous (resolves immediately, no tracking)</label>
+    <label><input type="checkbox" name="F4-dur" value="endOfTurn" checked> end of target's next turn (EoT)</label>
+    <label><input type="checkbox" name="F4-dur" value="saveEnds" checked> save ends (SE)</label>
+    <label><input type="checkbox" name="F4-dur" value="endOfEncounter" checked> end of encounter (EoE)</label>
+    <label><input type="checkbox" name="F4-dur" value="untilDying" checked> until you are dying</label>
+    <label><input type="checkbox" name="F4-dur" value="startOfNextTurn"> start of your next turn</label>
+  </div>
+  <textarea placeholder="Other durations / notes..."></textarea>
+</div>
+
+<div class="q" data-q="F5">
+  <div class="q-num">F5</div>
+  <div class="q-text">Forced movement verbs.</div>
+  <div class="q-help">All take an integer distance. Vertical variants matter for cliffs/flying.</div>
+  <div class="checkbox-list">
+    <label><input type="checkbox" name="F5-verb" value="push" checked> push</label>
+    <label><input type="checkbox" name="F5-verb" value="pull" checked> pull</label>
+    <label><input type="checkbox" name="F5-verb" value="slide" checked> slide</label>
+    <label><input type="checkbox" name="F5-verb" value="verticalPush" checked> vertical push</label>
+    <label><input type="checkbox" name="F5-verb" value="verticalPull" checked> vertical pull</label>
+    <label><input type="checkbox" name="F5-verb" value="verticalSlide" checked> vertical slide</label>
+  </div>
+  <div class="q-rec"><b>Bonus:</b> Should distance support "up to N" (player picks 0..N at runtime) in addition to fixed N? I'd say <b>yes</b> — book has both.</div>
+  <textarea placeholder="Notes / 'up to N' opinion..."></textarea>
+</div>
+
+<h2 id="sec-g">G. Triggers / persistent / spend</h2>
+
+<div class="q" data-q="G1">
+  <div class="q-num">G1</div>
+  <div class="q-text">Are triggered abilities (free triggered actions, reactions) part of THIS pass?</div>
+  <div class="q-help">Book has triggered abilities ("Trigger: target takes damage", etc.). Today: zero scaffolding. Adding them well requires runtime hooks on damage/move/turn events.</div>
+  <div class="opts">
+    <label><input type="radio" name="G1" value="full"> Yes — implement both authoring and runtime auto-detect</label>
+    <label><input type="radio" name="G1" value="authored-manual"> Author them but runtime is manual ("click ability when trigger condition fires"); auto-detect later</label>
+    <label><input type="radio" name="G1" value="defer"> Defer entirely — phase 2</label>
+  </div>
+  <div class="q-rec"><b>My default if blank:</b> Author them but runtime is manual. Schema and chat output ready; the auto-detect (event bus on damage/move/turn) is a meaty separate project.</div>
+  <textarea placeholder="Notes..."></textarea>
+</div>
+
+<div class="q" data-q="G2">
+  <div class="q-num">G2</div>
+  <div class="q-text">Persistent zones / sustains (auras, walls, vortex, "Persistent N" re-fire) — this pass?</div>
+  <div class="opts">
+    <label><input type="radio" name="G2" value="full"> Yes — track active zones, fire start-of-turn / end-of-turn ticks, allow caster to pay <code>Persistent N</code> cost to extend</label>
+    <label><input type="radio" name="G2" value="placeholder"> Schema-only — record persistent block in JSON, render in chat as a reminder, no auto-tracking</label>
+    <label><input type="radio" name="G2" value="defer"> Defer entirely</label>
+  </div>
+  <div class="q-rec"><b>My default if blank:</b> Schema-only for now. Real tracking needs a per-encounter zones registry on the board, which is a bigger lift than the JSON rebuild.</div>
+  <textarea placeholder="Notes..."></textarea>
+</div>
+
+<div class="q" data-q="G3">
+  <div class="q-num">G3</div>
+  <div class="q-text">"Spend N Resource: bonus" riders — when do they prompt?</div>
+  <div class="q-help">Book has many of these (Spend 1 Wrath, Spend 1 Essence, etc.). Two natural points: before the roll (so they can edge it) or after (apply riders to the result).</div>
+  <div class="opts">
+    <label><input type="radio" name="G3" value="upfront"> Upfront — single dialog at start lists all available spends with checkboxes; commits before the roll</label>
+    <label><input type="radio" name="G3" value="contextual"> Contextual — each spend prompts at the moment its effect would apply</label>
+    <label><input type="radio" name="G3" value="hybrid"> Hybrid — pre-roll spends shown upfront; post-result spends shown after tier reveal</label>
+  </div>
+  <div class="q-rec"><b>My default if blank:</b> Hybrid. Some spends modify the roll (must be upfront); others modify the result (must be after). JSON tags each with a <code>timing</code>.</div>
+  <textarea placeholder="Notes..."></textarea>
+</div>
+
+<h2 id="sec-h">H. Runtime UX</h2>
+
+<div class="q" data-q="H1">
+  <div class="q-num">H1</div>
+  <div class="q-text">After the dice roll, how is the tier result chosen?</div>
+  <div class="opts">
+    <label><input type="radio" name="H1" value="auto"> Auto — runtime picks the tier from the roll, applies it</label>
+    <label><input type="radio" name="H1" value="confirm"> Auto-pick + confirm — show roll & auto-picked tier, user clicks Accept (allows tier override)</label>
+    <label><input type="radio" name="H1" value="manual"> Manual — show roll & all three tiers, user picks</label>
+  </div>
+  <div class="q-rec"><b>My default if blank:</b> Auto-pick + confirm. Today's behavior. Edges/banes can shift the effective tier per-target — confirm step lets the user override per-target.</div>
+  <textarea placeholder="Notes..."></textarea>
+</div>
+
+<div class="q" data-q="H2">
+  <div class="q-num">H2</div>
+  <div class="q-text">Multi-target token selection — how does the user end it?</div>
+  <div class="q-help">When the ability targets "Three creatures" or "up to 3 enemies".</div>
+  <div class="opts">
+    <label><input type="radio" name="H2" value="exact-n"> Exact N — runtime ends after N picks</label>
+    <label><input type="radio" name="H2" value="up-to-n"> Up-to-N — runtime shows "Done" button + counter; user picks 0..N</label>
+    <label><input type="radio" name="H2" value="both"> Both — JSON specifies which mode per target block (<code>{ count: 3, mode: "exact"|"upTo" }</code>)</label>
+  </div>
+  <div class="q-rec"><b>My default if blank:</b> Both. Book has both ("Three allies" exact, "up to 3 enemies in burst" up-to). Flag in JSON, runtime renders accordingly.</div>
+  <textarea placeholder="Notes..."></textarea>
+</div>
+
+<div class="q" data-q="H3">
+  <div class="q-num">H3</div>
+  <div class="q-text">Skip behavior on a target prompt.</div>
+  <div class="opts">
+    <label><input type="radio" name="H3" value="skip-continue"> Skip = continue the rest of the automation with empty target list (subsequent effects with no target are no-ops)</label>
+    <label><input type="radio" name="H3" value="skip-abort"> Skip = abort entire automation</label>
+    <label><input type="radio" name="H3" value="depends"> Depends on whether the target is marked optional (only optional targets show Skip; mandatory only show Cancel = abort)</label>
+  </div>
+  <div class="q-rec"><b>My default if blank:</b> Depends. Skip is only valid for optional targets. Mandatory targets only offer Cancel.</div>
+  <textarea placeholder="Notes..."></textarea>
+</div>
+
+<div class="q" data-q="H4">
+  <div class="q-num">H4</div>
+  <div class="q-text">Should a "Cancel automation" button always be visible during runtime?</div>
+  <div class="opts">
+    <label><input type="radio" name="H4" value="always"> Always — at every pause point, X in the corner aborts the whole flow</label>
+    <label><input type="radio" name="H4" value="esc-only"> Only via Esc keypress</label>
+    <label><input type="radio" name="H4" value="targets-only"> Only on target prompts (today's behavior)</label>
+  </div>
+  <div class="q-rec"><b>My default if blank:</b> Always. Today the runner can hang on the chat side if the user closes the power-roll modal without accepting; explicit cancel everywhere prevents that.</div>
+  <textarea placeholder="Notes..."></textarea>
+</div>
+
+<div class="q" data-q="H5">
+  <div class="q-num">H5</div>
+  <div class="q-text">Damage application — auto vs confirm.</div>
+  <div class="opts">
+    <label><input type="radio" name="H5" value="auto"> Auto-apply, post chat message after</label>
+    <label><input type="radio" name="H5" value="confirm-each"> Confirm each target — "Apply 8 fire damage to Goblin?" Yes/No</label>
+    <label><input type="radio" name="H5" value="batch"> Batch confirm — show all targets + damage in one dialog, single Apply All button</label>
+  </div>
+  <div class="q-rec"><b>My default if blank:</b> Auto-apply. Post a chat message that has Undo. Today's behavior plus Undo would be ideal.</div>
+  <textarea placeholder="Notes / Undo opinion..."></textarea>
+</div>
+
+<div class="q" data-q="H6">
+  <div class="q-num">H6</div>
+  <div class="q-text">Hidden tokens / chat visibility.</div>
+  <div class="q-help">If the target is a hidden NPC, do players see the damage number?</div>
+  <div class="opts">
+    <label><input type="radio" name="H6" value="hide-amounts"> Hide numbers from players when target is hidden — GM sees full info</label>
+    <label><input type="radio" name="H6" value="show-all"> Always show full info in chat</label>
+    <label><input type="radio" name="H6" value="hide-target-name"> Hide target name only (still show damage number)</label>
+  </div>
+  <div class="q-rec"><b>My default if blank:</b> Hide numbers. The point of hidden NPCs is players don't know they exist.</div>
+  <textarea placeholder="Notes..."></textarea>
+</div>
+
+<h2 id="sec-i">I. Inspector / debug view</h2>
+
+<div class="q" data-q="I1">
+  <div class="q-num">I1</div>
+  <div class="q-text">Where does the inspector live?</div>
+  <div class="opts">
+    <label><input type="radio" name="I1" value="sheet"> On the character sheet — button next to each ability opens an inspector for that ability</label>
+    <label><input type="radio" name="I1" value="standalone"> Standalone admin page (e.g. <code>/dnd/character_sheet/automation-inspector.php</code>) listing every ability across every character</label>
+    <label><input type="radio" name="I1" value="vtt"> On the VTT — modal triggered from the ability tray (Shift+click an ability)</label>
+    <label><input type="radio" name="I1" value="both"> Per-ability button on the sheet AND a standalone "all abilities" page</label>
+  </div>
+  <div class="q-rec"><b>My default if blank:</b> Both. Per-ability for quick checks, standalone for "audit all my abilities" sweeps.</div>
+  <textarea placeholder="Notes..."></textarea>
+</div>
+
+<div class="q" data-q="I2">
+  <div class="q-num">I2</div>
+  <div class="q-text">What should the inspector show?</div>
+  <div class="checkbox-list">
+    <label><input type="checkbox" name="I2-show" value="raw" checked> Raw JSON (the saved blob)</label>
+    <label><input type="checkbox" name="I2-show" value="parsed" checked> Parsed/normalized structure (after defaults applied)</label>
+    <label><input type="checkbox" name="I2-show" value="steps" checked> Ordered runtime steps preview ("1. Select 1 enemy. 2. Roll 2d10+M. 3. Tier 1: 3 damage…")</label>
+    <label><input type="checkbox" name="I2-show" value="warnings" checked> Validation warnings (unknown effect kinds, missing damage type, etc.)</label>
+    <label><input type="checkbox" name="I2-show" value="missing"> What's NOT covered by automation (gaps the runtime would skip)</label>
+    <label><input type="checkbox" name="I2-show" value="resolved"> Resolved values (e.g. potency thresholds turned into ints for the current character)</label>
+    <label><input type="checkbox" name="I2-show" value="text-vs-auto"> Side-by-side: ability description text vs automation summary (so I can spot mismatches)</label>
+    <label><input type="checkbox" name="I2-show" value="dry-run"> Dry-run button — simulates the runtime against a sample target without dispatching to the board</label>
+  </div>
+  <textarea placeholder="Anything else for the inspector..."></textarea>
+</div>
+
+<div class="q" data-q="I3">
+  <div class="q-num">I3</div>
+  <div class="q-text">Should the inspector allow inline JSON edit?</div>
+  <div class="opts">
+    <label><input type="radio" name="I3" value="readonly"> Read-only — to edit, you re-paste from the sheet's automation button</label>
+    <label><input type="radio" name="I3" value="edit-here"> Edit inline — save updates the same JSON</label>
+  </div>
+  <div class="q-rec"><b>My default if blank:</b> Edit inline on the standalone page (audit + fix in one place); read-only on the per-ability hover.</div>
+  <textarea placeholder="Notes..."></textarea>
+</div>
+
+<h2 id="sec-j">J. Migration & cleanup</h2>
+
+<div class="q" data-q="J1">
+  <div class="q-num">J1</div>
+  <div class="q-text">What happens to existing authored automations on this branch?</div>
+  <div class="q-help">Recent commits added "structured potency riders" and "area-template ability automation". A few abilities have v2 saved data.</div>
+  <div class="opts">
+    <label><input type="radio" name="J1" value="re-author"> Throw out v2 data — I'll re-author the handful of abilities as JSON</label>
+    <label><input type="radio" name="J1" value="auto-migrate"> Auto-migrate v2 → v3 on first load, save the new shape</label>
+    <label><input type="radio" name="J1" value="dual-read"> Keep reading v2 indefinitely, write only v3</label>
+  </div>
+  <div class="q-rec"><b>My default if blank:</b> Auto-migrate, then drop the v2 read path. Cleanest endpoint without losing your in-flight work.</div>
+  <textarea placeholder="Notes..."></textarea>
+</div>
+
+<div class="q" data-q="J2">
+  <div class="q-num">J2</div>
+  <div class="q-text">Approve removing this list of dead/half-finished code?</div>
+  <div class="q-help">Each was flagged as smells in my analysis.</div>
+  <div class="checkbox-list">
+    <label><input type="checkbox" name="J2-kill" value="builder" checked> The entire <code>builder.js</code> + <code>builder.css</code> + popup window flow + in-page modal fallback</label>
+    <label><input type="checkbox" name="J2-kill" value="actions-registry" checked> <code>actions.js</code> (registry that's never invoked)</label>
+    <label><input type="checkbox" name="J2-kill" value="dual-storage" checked> Dual-stored damage on tiers (<code>tier.damage</code> shorthand string + <code>tier.damageType</code> string vs structured <code>tier.effects</code>)</label>
+    <label><input type="checkbox" name="J2-kill" value="deal-stamina" checked> The standalone <code>dealStaminaDamage</code> action card type</label>
+    <label><input type="checkbox" name="J2-kill" value="implicit-damage" checked> Implicit damage fallback in runner (auto-applies damage when no damage card present)</label>
+    <label><input type="checkbox" name="J2-kill" value="legacy-card-types" checked> Schema normalization that rewrites <code>powerRollDamage</code> / <code>dealStaminaDamage</code> / etc. as legacy top-level types</label>
+    <label><input type="checkbox" name="J2-kill" value="placeholder-selects"> The single-option <code>source</code> / <code>target</code> selects on damage and push cards (moot if dealStaminaDamage card dies)</label>
+    <label><input type="checkbox" name="J2-kill" value="shorthand-parser"> The shorthand parser in <code>catalog.js</code> (or repurpose for LLM import only)</label>
+  </div>
+  <textarea placeholder="Anything I should NOT delete? Anything else to delete?"></textarea>
+</div>
+
+<h2 id="sec-k">K. Anything else</h2>
+
+<div class="q" data-q="K1">
+  <div class="q-num">K1</div>
+  <div class="q-text">Anything I should have asked but didn't?</div>
+  <div class="q-help">The big stuff: ability sharing across characters, NPC abilities, monster statblocks, condition tracking persistence, end-of-turn save prompts, integration with rolls table, etc.</div>
+  <textarea class="tall" placeholder="Free-form. Anything that should be on the table for round 2."></textarea>
+</div>
+
+<div class="q" data-q="K2">
+  <div class="q-num">K2</div>
+  <div class="q-text">Priority order — what HAS to work in the first iteration?</div>
+  <div class="q-help">The MVP. Everything else can come in later passes.</div>
+  <textarea class="tall" placeholder="e.g. 'single-target strike with damage + push must work end-to-end before anything else; area templates and conditions next; triggers and persistent zones last'"></textarea>
+</div>
+
+<button id="extract-btn">Extract Answers</button>
+<span id="save-indicator">Saved</span>
+
+<div id="output-section">
+  <h3>Your answers (paste this into Claude)</h3>
+  <textarea id="output" readonly></textarea>
+  <div class="row-btns">
+    <button class="copy-btn" id="copy-btn">Copy to clipboard</button>
+    <button class="clear-btn" id="clear-btn">Clear all answers</button>
+  </div>
+</div>
+
+<script>
+  const STORAGE_KEY = "abilityAutomationQuestionnaire.v1";
+
+  function loadState() {
+    try {
+      return JSON.parse(localStorage.getItem(STORAGE_KEY) || "{}");
+    } catch { return {}; }
+  }
+
+  function saveState() {
+    const state = {};
+    document.querySelectorAll(".q").forEach(card => {
+      const id = card.dataset.q;
+      const data = { radios: {}, checks: [], notes: [] };
+      card.querySelectorAll('input[type="radio"]:checked').forEach(r => { data.radios[r.name] = r.value; });
+      card.querySelectorAll('input[type="checkbox"]:checked').forEach(c => { data.checks.push(c.value); });
+      card.querySelectorAll('textarea').forEach(t => { if (t.value.trim()) data.notes.push(t.value); });
+      card.querySelectorAll('input[type="text"]').forEach(t => { if (t.value.trim()) data.notes.push(t.value); });
+      state[id] = data;
+    });
+    localStorage.setItem(STORAGE_KEY, JSON.stringify(state));
+    flashSaved();
+  }
+
+  function restoreState() {
+    const state = loadState();
+    document.querySelectorAll(".q").forEach(card => {
+      const id = card.dataset.q;
+      const data = state[id];
+      if (!data) return;
+      card.querySelectorAll('input[type="radio"]').forEach(r => {
+        if (data.radios && data.radios[r.name] === r.value) r.checked = true;
+      });
+      card.querySelectorAll('input[type="checkbox"]').forEach(c => {
+        if (data.checks && data.checks.includes(c.value)) c.checked = true;
+        else c.checked = false;
+      });
+      const notes = (data.notes || []).slice();
+      card.querySelectorAll('textarea').forEach(t => { t.value = notes.shift() || ""; });
+      card.querySelectorAll('input[type="text"]').forEach(t => { t.value = notes.shift() || ""; });
+    });
+  }
+
+  let saveTimer = null;
+  function flashSaved() {
+    const el = document.getElementById("save-indicator");
+    el.classList.add("show");
+    clearTimeout(saveTimer);
+    saveTimer = setTimeout(() => el.classList.remove("show"), 1200);
+  }
+
+  document.addEventListener("input", saveState);
+  document.addEventListener("change", saveState);
+
+  function extractMarkdown() {
+    const lines = ["# Ability Automation — Questionnaire Answers", ""];
+    let currentSection = "";
+    document.querySelectorAll("h2, .q").forEach(el => {
+      if (el.tagName === "H2") {
+        currentSection = el.textContent.trim();
+        lines.push("");
+        lines.push("## " + currentSection);
+        lines.push("");
+        return;
+      }
+      const id = el.dataset.q;
+      const qText = el.querySelector(".q-text").textContent.trim();
+      lines.push("### " + id + ". " + qText);
+      const radios = el.querySelectorAll('input[type="radio"]:checked');
+      if (radios.length) {
+        radios.forEach(r => {
+          const label = r.parentElement.textContent.trim();
+          lines.push("- **Choice:** " + label);
+        });
+      }
+      const checks = el.querySelectorAll('input[type="checkbox"]:checked');
+      if (checks.length) {
+        const labels = Array.from(checks).map(c => c.parentElement.textContent.trim());
+        lines.push("- **Checked:** " + labels.join(" | "));
+      }
+      const allChecks = el.querySelectorAll('input[type="checkbox"]');
+      if (allChecks.length) {
+        const unchecked = Array.from(allChecks).filter(c => !c.checked).map(c => c.parentElement.textContent.trim());
+        if (unchecked.length) {
+          lines.push("- **Unchecked (rejected):** " + unchecked.join(" | "));
+        }
+      }
+      el.querySelectorAll('textarea').forEach(t => {
+        if (t.value.trim()) lines.push("- **Notes:** " + t.value.trim().replace(/\n/g, "\n  "));
+      });
+      el.querySelectorAll('input[type="text"]').forEach(t => {
+        if (t.value.trim()) lines.push("- **Text:** " + t.value.trim());
+      });
+      const hasAny = radios.length || checks.length || el.querySelector('textarea')?.value.trim() || el.querySelector('input[type="text"]')?.value.trim();
+      if (!hasAny) {
+        lines.push("- _(no answer — use default)_");
+      }
+      lines.push("");
+    });
+    return lines.join("\n");
+  }
+
+  document.getElementById("extract-btn").addEventListener("click", () => {
+    const md = extractMarkdown();
+    const out = document.getElementById("output");
+    out.value = md;
+    document.getElementById("output-section").classList.add("visible");
+    document.getElementById("output-section").scrollIntoView({ behavior: "smooth", block: "start" });
+  });
+
+  document.getElementById("copy-btn").addEventListener("click", async () => {
+    const out = document.getElementById("output");
+    out.select();
+    try {
+      await navigator.clipboard.writeText(out.value);
+      const btn = document.getElementById("copy-btn");
+      const orig = btn.textContent;
+      btn.textContent = "Copied!";
+      setTimeout(() => { btn.textContent = orig; }, 1500);
+    } catch {
+      document.execCommand("copy");
+    }
+  });
+
+  document.getElementById("clear-btn").addEventListener("click", () => {
+    if (!confirm("Clear all answers? This cannot be undone.")) return;
+    localStorage.removeItem(STORAGE_KEY);
+    document.querySelectorAll('input').forEach(i => {
+      if (i.type === "radio" || i.type === "checkbox") i.checked = i.defaultChecked;
+      else i.value = "";
+    });
+    document.querySelectorAll('textarea').forEach(t => t.value = "");
+    document.getElementById("output-section").classList.remove("visible");
+  });
+
+  restoreState();
+</script>
+</body>
+</html>
