@@ -1541,6 +1541,16 @@ export function mountBoardInteractions(store, routes = {}) {
     ].forEach((field) => markCombatFieldDirty(field));
   }
 
+  function markCombatTurnStateDirty() {
+    [
+      'activeCombatantId',
+      'teams',
+      'turnPhase',
+      'roundTurnCount',
+      'turnLock',
+    ].forEach((field) => markCombatFieldDirty(field));
+  }
+
   // Pusher real-time sync state
   let pusherInterface = null;
   let pusherConnected = false;
@@ -7316,6 +7326,7 @@ export function mountBoardInteractions(store, routes = {}) {
     if (isInCompleted || state === 'completed') {
       completedCombatants.delete(representativeId);
       setActiveCombatantId(representativeId);
+      markCombatTurnStateDirty();
       // Don't change currentTurnTeam here - preserve the existing decision state.
       // Moving a token back from completed doesn't change whose turn it is to pick.
       refreshCombatTracker();
@@ -7329,6 +7340,7 @@ export function mountBoardInteractions(store, routes = {}) {
       closeTurnPrompt();
       setActiveCombatantId(null);
       releaseTurnLock(getCurrentUserId());
+      markCombatTurnStateDirty();
       updateCombatModeIndicators();
       syncCombatStateToStore();
       return;
@@ -7337,6 +7349,7 @@ export function mountBoardInteractions(store, routes = {}) {
     completedCombatants.delete(representativeId);
     setActiveCombatantId(representativeId);
     forceAcquireTurnLockForGm(representativeId);
+    markCombatTurnStateDirty();
     beginCombatantTurn(representativeId);
   }
 
@@ -7407,6 +7420,7 @@ export function mountBoardInteractions(store, routes = {}) {
 
     completedCombatants.delete(representativeId);
     setActiveCombatantId(representativeId);
+    markCombatTurnStateDirty();
     if (isGmUser()) {
       combatTimerService.startTurn({
         userId: participantId || undefined,
@@ -7515,6 +7529,7 @@ export function mountBoardInteractions(store, routes = {}) {
 
     updateCombatModeIndicators();
     refreshCombatTracker();
+    markCombatTurnStateDirty();
     syncCombatStateToStore();
   }
 
@@ -7564,6 +7579,7 @@ export function mountBoardInteractions(store, routes = {}) {
 
     // Ensure turn phase is updated to PICK
     updateTurnPhase();
+    markCombatTurnStateDirty();
 
     // Refresh tracker once with final state (avoids intermediate null state flash)
     refreshCombatTracker();
@@ -8590,6 +8606,7 @@ export function mountBoardInteractions(store, routes = {}) {
     });
     rememberGmCombatIntent();
     syncCombatStateToStore();
+    rememberGmCombatIntent();
     resetTriggeredActionsForActiveScene();
     updateStartCombatButton();
     refreshCombatTracker();
@@ -8659,6 +8676,7 @@ export function mountBoardInteractions(store, routes = {}) {
     // payload, defeating the End Combat click.
     rememberGmCombatIntent();
     syncCombatStateToStore();
+    rememberGmCombatIntent();
     resetTriggeredActionsForActiveScene();
     if (status) {
       status.textContent = 'Combat ended.';
@@ -8731,7 +8749,8 @@ export function mountBoardInteractions(store, routes = {}) {
 
     if (
       pendingGmCombatIntent?.activeSceneId === activeSceneKey &&
-      normalized.active === pendingGmCombatIntent.active
+      normalized.active === pendingGmCombatIntent.active &&
+      !hasPendingCombatIntentSave()
     ) {
       pendingGmCombatIntent = null;
     }
