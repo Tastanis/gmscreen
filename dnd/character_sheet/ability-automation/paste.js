@@ -92,9 +92,16 @@
       const normalized = schema.normalizeAutomation(parsed);
       const warnings = normalized.warnings || [];
       const summaries = (normalized.cards || []).map((block, index) => `${index + 1}. ${block.type}`);
-      const summaryHtml = summaries.length
-        ? `<div class="ability-paste__summary"><strong>${normalized.cards.length} block(s):</strong> ${escapeHtml(summaries.join("  →  "))}</div>`
-        : '<div class="ability-paste__summary">No blocks parsed.</div>';
+      const modifierCount = Array.isArray(normalized.modifiers) ? normalized.modifiers.length : 0;
+      let summaryHtml = '';
+      if (summaries.length) {
+        summaryHtml = `<div class="ability-paste__summary"><strong>${normalized.cards.length} block(s):</strong> ${escapeHtml(summaries.join("  →  "))}</div>`;
+      } else if (modifierCount > 0) {
+        const labels = normalized.modifiers.map((m, i) => m.label || `modifier ${i + 1}`).join(', ');
+        summaryHtml = `<div class="ability-paste__summary"><strong>${modifierCount} feature modifier(s):</strong> ${escapeHtml(labels)}</div>`;
+      } else {
+        summaryHtml = '<div class="ability-paste__summary">No blocks or modifiers parsed.</div>';
+      }
       const warnHtml = warnings.length
         ? `<ul class="ability-paste__warnings">${warnings.map((w) => `<li>${escapeHtml(w)}</li>`).join("")}</ul>`
         : "";

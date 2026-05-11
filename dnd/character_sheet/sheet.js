@@ -510,6 +510,9 @@ function mergeWithDefaults(data) {
     tags: Array.isArray(feature.tags) ? feature.tags : [],
     text: feature.text || "",
     isWide: Boolean(feature.isWide),
+    // Preserve any saved automation (kit modifiers etc.) — without this the
+    // feature normalize loop drops the field on every reload.
+    automation: normalizeAutomationBlock(feature.automation),
   }));
 
   return merged;
