@@ -254,6 +254,23 @@
         if (extras) effect._extra = extras;
         return effect;
       }
+      case "ifKeyword": {
+        const known = new Set(["kind", "all", "any", "none", "then", "else"]);
+        const effect = {
+          kind: "ifKeyword",
+          all: Array.isArray(input.all) ? input.all.map((k) => P.normalizeKeyword?.(k) || String(k || "").trim()).filter(Boolean) : [],
+          any: Array.isArray(input.any) ? input.any.map((k) => P.normalizeKeyword?.(k) || String(k || "").trim()).filter(Boolean) : [],
+          none: Array.isArray(input.none) ? input.none.map((k) => P.normalizeKeyword?.(k) || String(k || "").trim()).filter(Boolean) : [],
+          then: normalizeEffectList(input.then || [], warnings, `${path}.then`),
+          else: normalizeEffectList(input.else || [], warnings, `${path}.else`),
+        };
+        if (!effect.all.length && !effect.any.length && !effect.none.length) {
+          warnings.push(`${path}: ifKeyword has no all/any/none — predicate always passes.`);
+        }
+        const extras = pickExtras(input, known);
+        if (extras) effect._extra = extras;
+        return effect;
+      }
       case "other": {
         const known = new Set(["kind", "text"]);
         const effect = { kind: "other", text: asTrimmedString(input.text) };
@@ -459,6 +476,42 @@
     }
   }
 
+  // ---------- feature modifiers ----------
+
+  // A modifier rule on a feature. `match` is the predicate against the
+  // running ability; `apply` is the set of bonuses to fold into it. Used
+  // by feature.automation.modifiers — applied in-memory at the start of
+  // runner.open() BEFORE any UI renders.
+  function normalizeModifier(input, warnings, path) {
+    if (!input || typeof input !== "object") {
+      warnings.push(`${path}: modifier must be an object — skipping.`);
+      return null;
+    }
+    const match = input.match && typeof input.match === "object" ? input.match : {};
+    const apply = input.apply && typeof input.apply === "object" ? input.apply : {};
+    const out = {
+      match: {
+        keywordsAll: Array.isArray(match.keywordsAll) ? match.keywordsAll.map((k) => P.normalizeKeyword?.(k) || String(k || "").trim()).filter(Boolean) : [],
+        keywordsAny: Array.isArray(match.keywordsAny) ? match.keywordsAny.map((k) => P.normalizeKeyword?.(k) || String(k || "").trim()).filter(Boolean) : [],
+        keywordsNone: Array.isArray(match.keywordsNone) ? match.keywordsNone.map((k) => P.normalizeKeyword?.(k) || String(k || "").trim()).filter(Boolean) : [],
+        damageType: asTrimmedString(match.damageType),
+        attribute: asTrimmedString(match.attribute),
+      },
+      apply: {
+        damageBonus: asInt(apply.damageBonus, 0),
+        rangeBonus: asInt(apply.rangeBonus, 0),
+        forcedMovementBonus: asInt(apply.forcedMovementBonus, 0),
+        // Damage-type override (e.g. an elemental kit that recolors all weapon damage):
+        damageType: asTrimmedString(apply.damageType),
+        // Free-text rider for the inspector — what the modifier intends to do.
+        note: asTrimmedString(apply.note),
+      },
+      label: asTrimmedString(input.label),
+    };
+    if (input.note) out.note = asTrimmedString(input.note);
+    return out;
+  }
+
   // ---------- top-level ----------
 
   function emptyAutomation() {
@@ -466,6 +519,7 @@
       schema: SCHEMA_ID,
       version: SCHEMA_VERSION,
       cards: [],
+      modifiers: [],
       warnings: [],
     };
   }
@@ -492,10 +546,25 @@
       .map((block, index) => normalizeBlock(block, warnings, index))
       .filter(Boolean);
 
+    const rawModifiers = Array.isArray(input.modifiers) ? input.modifiers : [];
+    const modifiers = rawModifiers
+      .map((mod, index) => normalizeModifier(mod, warnings, `modifiers[${index}]`))
+      .filter(Boolean);
+
+    // Top-level ability keywords. Optional. The runner uses these for
+    // ifKeyword predicates and feature-modifier matching. If absent, the
+    // runner falls back to the action's `keywords` / `tags` field on the
+    // character sheet.
+    const keywords = P.normalizeKeywordList
+      ? P.normalizeKeywordList(input.keywords)
+      : Array.isArray(input.keywords) ? input.keywords.filter(Boolean).map(String) : [];
+
     return {
       schema: SCHEMA_ID,
       version: SCHEMA_VERSION,
       cards,
+      modifiers,
+      keywords,
       warnings,
     };
   }
@@ -504,8 +573,8 @@
     return Boolean(
       input &&
         typeof input === "object" &&
-        Array.isArray(input.cards) &&
-        input.cards.length
+        ((Array.isArray(input.cards) && input.cards.length) ||
+          (Array.isArray(input.modifiers) && input.modifiers.length))
     );
   }
 

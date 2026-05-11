@@ -6,11 +6,19 @@ The runtime is lenient: unknown fields are preserved but ignored, missing fields
 
 ---
 
+**Two flavors of automation:**
+
+- **Ability automation** — `cards[]` describes what happens when the ability fires. Attached to an ability.
+- **Feature automation** — `modifiers[]` describes how the feature changes other abilities. Attached to a feature. See [Feature modifiers](#feature-modifiers) at the bottom.
+
+---
+
 ## Top-level shape
 
 ```json
 {
   "schema": "ability-automation/v3",
+  "keywords": ["Melee", "Strike", "Weapon"],
   "cards": [
     { "type": "target",     "...": "..." },
     { "type": "powerRoll",  "...": "..." },
@@ -22,6 +30,7 @@ The runtime is lenient: unknown fields are preserved but ignored, missing fields
 ```
 
 - `schema` — must be `"ability-automation/v3"`.
+- `keywords` — optional array of strings describing the ability. Used by `ifKeyword` predicates and feature-modifier matching. Standard set (case-insensitive): `Melee, Ranged, Strike, Weapon, Magic, Psionic, Area, Charge, Persistent, Resistance, Routine, Free, FreeStrike, FreeTriggered`. Custom strings allowed.
 - `cards` — ordered list of blocks. The runtime executes them top-to-bottom.
 
 The `name` and `description` of the ability live on the character sheet — do **not** copy them into the JSON.
@@ -302,6 +311,31 @@ Optional resource spend that, if accepted by the user, triggers extra effects.
 
 Runtime prompts the user contextually: "Spend N <resource> for: <effects>?".
 
+### `ifKeyword` (rider)
+
+Branches based on the ability's `keywords`. Effects in `then` run when the predicate matches; effects in `else` run when it doesn't. Either branch can be empty.
+
+```json
+{
+  "kind": "ifKeyword",
+  "all": ["Strike"],
+  "any": ["Melee", "Ranged"],
+  "none": ["Magic"],
+  "then": [ { "kind": "damage", "amount": 1 } ],
+  "else": []
+}
+```
+
+| Field | Values |
+|---|---|
+| `all` | array of keywords — predicate requires ALL of these on the ability |
+| `any` | array of keywords — predicate requires AT LEAST ONE of these |
+| `none` | array of keywords — predicate requires NONE of these |
+| `then` | effects to apply when predicate matches |
+| `else` | effects to apply when predicate fails |
+
+Predicate matching reads the ability's `keywords` field (or `tags` as a legacy fallback). All comparisons are case-insensitive.
+
 ### `other`
 
 ```json
@@ -521,3 +555,156 @@ Use **only** when nothing else fits. Runtime prints the text to chat as a remind
 9. **Don't include the ability name or description** — those live on the character sheet.
 
 10. **`schema` field is required** — set it to `"ability-automation/v3"`.
+
+---
+
+## Feature modifiers
+
+Some character traits and kits change how abilities work without being abilities themselves — e.g. "+1 damage on weapon strikes," "+1 range on ranged attacks," "all your damage is fire instead." That's what **feature modifiers** are for.
+
+Feature JSON lives on a feature (paste it via the Automate button on the feature card, edit mode). The shape is:
+
+```json
+{
+  "schema": "ability-automation/v3",
+  "modifiers": [
+    {
+      "label": "Sword Mastery",
+      "match": { "keywordsAll": ["Strike", "Weapon"] },
+      "apply": { "damageBonus": 1 }
+    }
+  ]
+}
+```
+
+A feature can carry multiple modifier rules. Each has two parts:
+
+### Match (when does this rule apply?)
+
+| Field | Meaning |
+|---|---|
+| `keywordsAll` | Ability must have **every** keyword in this list |
+| `keywordsAny` | Ability must have **at least one** keyword in this list |
+| `keywordsNone` | Ability must have **none** of these keywords |
+| `damageType` | At least one damage effect in the ability uses this type |
+| `attribute` | The ability's power roll uses this attribute (`Might`, `Agility`, etc.) |
+
+An empty match (`{}`) matches every ability.
+
+### Apply (what does this rule do?)
+
+| Field | Effect |
+|---|---|
+| `damageBonus` | int — added to every `damage.amount` in the ability |
+| `rangeBonus` | int — added to every target block's `distance.value` |
+| `forcedMovementBonus` | int — added to every `forcedMovement.distance` |
+| `damageType` | string — overrides the damage type on every damage effect |
+| `note` | string — free-text reminder shown in the inspector |
+
+### How it runs
+
+When you click an ability:
+
+1. Before the dice modal renders, the runtime walks your features.
+2. For each modifier that matches THIS ability, the bonuses are folded into an **in-memory copy** of the ability's automation.
+3. The tier preview, power-roll modal, and chat output all show the **post-modifier** numbers.
+4. The saved JSON on the ability never changes — swap the kit and the modifier stops applying.
+
+A chat message names which modifiers kicked in so the table can see "Sword Mastery applied" etc.
+
+### Worked examples
+
+**Sword Mastery kit — +1 damage on weapon strikes:**
+
+```json
+{
+  "schema": "ability-automation/v3",
+  "modifiers": [
+    {
+      "label": "Sword Mastery",
+      "match": { "keywordsAll": ["Strike", "Weapon"] },
+      "apply": { "damageBonus": 1 }
+    }
+  ]
+}
+```
+
+**Sniper kit — +1 range on all ranged attacks:**
+
+```json
+{
+  "schema": "ability-automation/v3",
+  "modifiers": [
+    {
+      "label": "Sniper",
+      "match": { "keywordsAny": ["Ranged"] },
+      "apply": { "rangeBonus": 1 }
+    }
+  ]
+}
+```
+
+**Brutal kit — +1 push/pull/slide distance on all forced movement:**
+
+```json
+{
+  "schema": "ability-automation/v3",
+  "modifiers": [
+    {
+      "label": "Brutal",
+      "match": {},
+      "apply": { "forcedMovementBonus": 1 }
+    }
+  ]
+}
+```
+
+**Elemental Affinity (fire) — all your weapon damage becomes fire:**
+
+```json
+{
+  "schema": "ability-automation/v3",
+  "modifiers": [
+    {
+      "label": "Fire Affinity",
+      "match": { "keywordsAll": ["Weapon"] },
+      "apply": { "damageType": "fire" }
+    }
+  ]
+}
+```
+
+**Combined feature with multiple rules:**
+
+```json
+{
+  "schema": "ability-automation/v3",
+  "modifiers": [
+    {
+      "label": "Marksman — Range",
+      "match": { "keywordsAll": ["Ranged"] },
+      "apply": { "rangeBonus": 2 }
+    },
+    {
+      "label": "Marksman — Damage on Strikes",
+      "match": { "keywordsAll": ["Ranged", "Strike"] },
+      "apply": { "damageBonus": 1 }
+    }
+  ]
+}
+```
+
+### Authoring rules of thumb for modifiers
+
+1. **Match generously, apply minimally.** A `match: {}` is fine for "applies to all my abilities" features. Don't over-narrow if you don't have to.
+2. **No nested effects yet.** `apply` is a set of bonus fields, not a list of effects. To insert a new effect (e.g. "after damage, also apply slowed"), that's a phase-2 feature — flag in your notes as a TODO.
+3. **Stacking is additive.** If two of your features both add `+1 damage`, the ability gets `+2`. No cap right now.
+4. **No "once per combat" tracking.** All modifier rules are always-on while the feature exists. Per-encounter / spend-based modifiers are phase-2.
+5. **Ally features don't apply to your abilities.** Only the running character's own features are checked. Aura/buff effects from allies are phase-2.
+
+### What modifier fields DO NOT exist (don't invent)
+
+- `actionTypeRequired` (e.g. "only for main actions") — not yet
+- `replaceEffect` (e.g. "use new damage table") — not yet
+- `insertEffectAfter` (e.g. "after damage, also push") — not yet
+- `cost` / `perEncounter` / `perRound` — not yet

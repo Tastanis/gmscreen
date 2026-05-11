@@ -23,8 +23,69 @@
     "note",
     "potency",
     "spend",
+    "ifKeyword",
     "other",
   ];
+
+  // Standard Draw Steel ability keywords. Authors can use any string, but the
+  // ones below are recognized for canonical casing and as the registry seed.
+  const KEYWORDS = [
+    "Melee",
+    "Ranged",
+    "Strike",
+    "Weapon",
+    "Magic",
+    "Psionic",
+    "Area",
+    "Charge",
+    "Persistent",
+    "Resistance",
+    "Routine",
+    "Free",
+    "FreeStrike",
+    "FreeTriggered",
+  ];
+
+  function normalizeKeyword(value) {
+    if (value === null || value === undefined) return "";
+    const trimmed = String(value).trim();
+    if (!trimmed) return "";
+    // Case-insensitive canonicalization against the standard registry.
+    const match = KEYWORDS.find((kw) => kw.toLowerCase() === trimmed.toLowerCase());
+    return match || trimmed;
+  }
+
+  function normalizeKeywordList(value) {
+    if (value === null || value === undefined) return [];
+    const raw = Array.isArray(value)
+      ? value
+      : String(value).split(/[,;|]/g);
+    const seen = new Set();
+    const result = [];
+    for (const item of raw) {
+      const kw = normalizeKeyword(item);
+      if (!kw) continue;
+      const lower = kw.toLowerCase();
+      if (seen.has(lower)) continue;
+      seen.add(lower);
+      result.push(kw);
+    }
+    return result;
+  }
+
+  function keywordsMatch(have, query) {
+    // `have` is the ability's keywords (case-insensitive list).
+    // `query` may have: { all: [...], any: [...], none: [...] }
+    if (!query || typeof query !== "object") return true;
+    const lower = (have || []).map((k) => String(k).toLowerCase());
+    const hasAll = (list) => (list || []).every((k) => lower.includes(String(k).toLowerCase()));
+    const hasAny = (list) => !list?.length || list.some((k) => lower.includes(String(k).toLowerCase()));
+    const hasNone = (list) => !list?.length || list.every((k) => !lower.includes(String(k).toLowerCase()));
+    if (query.all && !hasAll(query.all)) return false;
+    if (query.any && !hasAny(query.any)) return false;
+    if (query.none && !hasNone(query.none)) return false;
+    return true;
+  }
 
   const ATTRIBUTES = ["Might", "Agility", "Reason", "Intuition", "Presence", "Strongest"];
   const ATTRIBUTE_SHORT = { M: "Might", A: "Agility", R: "Reason", I: "Intuition", P: "Presence" };
@@ -363,5 +424,9 @@
     describeEffectResolved,
     resolveDamageAmount,
     resolvePotencyThreshold,
+    KEYWORDS,
+    normalizeKeyword,
+    normalizeKeywordList,
+    keywordsMatch,
   };
 })(window);

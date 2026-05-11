@@ -35,6 +35,7 @@ For *how* to write JSON, see `AUTHORING.md`. This file is `what is supported`.
 | `freeStrike` | Chat reminder | Posts message; manual |
 | `cascade` | Chat reminder | Posts message; manual |
 | `resourceGain` | Chat reminder | Posts message; manual |
+| `ifKeyword` | Full | Branches based on ability's `keywords`. `then` runs on match, `else` on miss |
 | `note` | Full | Posts text to chat |
 | `other` | Chat reminder | Posts text to chat |
 
@@ -154,6 +155,40 @@ Auto-detected on every normal movement during combat:
 - Cleared at the start of each combat round via `resetTriggeredActionsForActiveScene`
 
 The watcher token gets the blue pulsing `!` overlay on the board and the `!` badge on their TRIGGER ability tab when they're selected. Clicking either clears it (manual resolution this pass; auto-clear on free-strike-used in a future pass once free strikes are first-class abilities).
+
+## Ability keywords
+
+Standard set (case-insensitive normalization to canonical casing):
+
+`Melee, Ranged, Strike, Weapon, Magic, Psionic, Area, Charge, Persistent, Resistance, Routine, Free, FreeStrike, FreeTriggered`
+
+Custom strings are accepted. JSON authoring puts them in `automation.keywords` at the top level. Runtime falls back to `action.keywords` and then `action.tags` from the character sheet if `automation.keywords` is absent.
+
+Used by:
+- `ifKeyword` effect (conditional gating of effects)
+- Feature-modifier `match.keywordsAll` / `keywordsAny` / `keywordsNone`
+
+## Feature modifiers
+
+Top-level `automation.modifiers[]` on a feature's automation JSON. Each modifier has:
+
+| Field | Shape |
+|---|---|
+| `label` | string — shown in chat + inspector when this modifier applies |
+| `match.keywordsAll` | string[] — ability needs all of these keywords |
+| `match.keywordsAny` | string[] — ability needs any of these |
+| `match.keywordsNone` | string[] — ability needs none of these |
+| `match.damageType` | string — at least one damage effect must use this type |
+| `match.attribute` | string — power-roll attribute must match |
+| `apply.damageBonus` | int — added to every `damage.amount` |
+| `apply.rangeBonus` | int — added to every `target.distance.value` |
+| `apply.forcedMovementBonus` | int — added to every `forcedMovement.distance` |
+| `apply.damageType` | string — overrides damage type on every damage effect |
+| `apply.note` | string — free-text shown in inspector |
+
+Applied at the start of `runner.open()`, before any rendering. The tier preview, dice modal, and chat output all see post-modifier values. The saved ability JSON is never mutated.
+
+Stacking is additive. Multiple matching modifiers all apply. Per-encounter / spend-based / replace-effect modifiers are deferred.
 
 ## Schema versioning
 

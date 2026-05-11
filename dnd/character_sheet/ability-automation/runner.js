@@ -695,6 +695,8 @@
         return applyPotencyEffect(state, effect, targets, ctx);
       case "spend":
         return applySpendEffect(state, effect, targets, ctx);
+      case "ifKeyword":
+        return applyIfKeywordEffect(state, effect, targets, ctx);
       case "heal":
         return applyHealEffect(state, effect, targets, ctx, false);
       case "temporaryStamina":
@@ -921,6 +923,17 @@
     }
   }
 
+  async function applyIfKeywordEffect(state, effect, targets, ctx) {
+    const keywords = getAbilityKeywords(state);
+    const matched = P.keywordsMatch
+      ? P.keywordsMatch(keywords, { all: effect.all, any: effect.any, none: effect.none })
+      : true;
+    const branch = matched ? effect.then : effect.else;
+    if (!Array.isArray(branch) || !branch.length) return;
+    // Reuse the current target group for the branch.
+    await applyEffects(state, branch, null, ctx);
+  }
+
   async function applySpendEffect(state, effect, targets, ctx) {
     const cost = `${effect.amount || 1} ${effect.resource || "resource"}`;
     const inner = (effect.effects || []).map(P.describeEffect).filter(Boolean).join("; ");
@@ -974,8 +987,171 @@
     }
   }
 
+  // Single source of truth for ability keywords. Priority:
+  //   1. automation.keywords (LLM-authored JSON) — most specific
+  //   2. action.keywords (character sheet)
+  //   3. action.tags (legacy field name)
+  function getAbilityKeywords(state) {
+    const auto = state?.automation;
+    if (auto && Array.isArray(auto.keywords) && auto.keywords.length) return auto.keywords;
+    const action = state?.action;
+    if (action && Array.isArray(action.keywords) && action.keywords.length) return action.keywords;
+    if (action && Array.isArray(action.tags) && action.tags.length) return action.tags;
+    return [];
+  }
+
+  // ---------- feature modifier application (pre-roll) ----------
+
+  // Collect every modifier from every feature on the source character that
+  // matches THIS ability's keywords/damage/attribute. Returns an array of
+  // matching `apply` blocks (already extracted from features).
+  function collectMatchingModifiers(automation, action, features) {
+    if (!Array.isArray(features) || !features.length) return [];
+    const keywords = Array.isArray(automation?.keywords) && automation.keywords.length
+      ? automation.keywords
+      : Array.isArray(action?.keywords)
+        ? action.keywords
+        : Array.isArray(action?.tags) ? action.tags : [];
+    const matched = [];
+    for (const feature of features) {
+      const featureAutomation = feature?.automation;
+      const featureMods = Array.isArray(featureAutomation?.modifiers) ? featureAutomation.modifiers : null;
+      if (!featureMods?.length) continue;
+      for (const mod of featureMods) {
+        if (modifierMatches(mod, keywords, automation, action)) {
+          matched.push({ apply: mod.apply || {}, source: feature.title || feature.name || "Feature", label: mod.label || "" });
+        }
+      }
+    }
+    return matched;
+  }
+
+  function modifierMatches(modifier, abilityKeywords, automation, action) {
+    if (!modifier || !modifier.match) return false;
+    const match = modifier.match;
+    // Keyword filters.
+    if (P.keywordsMatch) {
+      const ok = P.keywordsMatch(abilityKeywords, {
+        all: match.keywordsAll,
+        any: match.keywordsAny,
+        none: match.keywordsNone,
+      });
+      if (!ok) return false;
+    }
+    // Damage-type filter — match if ANY damage effect in the automation uses
+    // this type (or no type filter set).
+    if (match.damageType) {
+      let foundType = false;
+      walkAutomationEffects(automation, (effect) => {
+        if (effect.kind === "damage" && String(effect.damageType || "").toLowerCase() === match.damageType.toLowerCase()) {
+          foundType = true;
+        }
+      });
+      if (!foundType) return false;
+    }
+    // Attribute filter — match against the power roll's attribute.
+    if (match.attribute) {
+      const prAttr = findPowerRollAttribute(automation);
+      if (!prAttr) return false;
+      const ok = P.normalizeAttribute
+        ? P.normalizeAttribute(prAttr).toLowerCase() === P.normalizeAttribute(match.attribute).toLowerCase()
+        : prAttr.toLowerCase() === match.attribute.toLowerCase();
+      if (!ok) return false;
+    }
+    return true;
+  }
+
+  function findPowerRollAttribute(automation) {
+    const blocks = automation?.cards || [];
+    for (const block of blocks) {
+      if (block?.type === "powerRoll" && block.attribute) return block.attribute;
+    }
+    return "";
+  }
+
+  function walkAutomationEffects(automation, visit) {
+    const blocks = automation?.cards || [];
+    for (const block of blocks) {
+      walkBlockEffects(block, visit);
+    }
+  }
+
+  function walkBlockEffects(block, visit) {
+    if (!block || typeof block !== "object") return;
+    if (block.type === "powerRoll" && block.tiers) {
+      for (const key of P.TIER_KEYS) {
+        const effects = block.tiers[key]?.effects || [];
+        walkEffectList(effects, visit);
+      }
+    } else if (Array.isArray(block.effects)) {
+      walkEffectList(block.effects, visit);
+    }
+  }
+
+  function walkEffectList(list, visit) {
+    if (!Array.isArray(list)) return;
+    for (const effect of list) {
+      if (!effect || typeof effect !== "object") continue;
+      visit(effect);
+      // Recurse into wrapper effects.
+      if (effect.kind === "potency" && Array.isArray(effect.onFail)) walkEffectList(effect.onFail, visit);
+      if (effect.kind === "spend" && Array.isArray(effect.effects)) walkEffectList(effect.effects, visit);
+      if (effect.kind === "ifKeyword") {
+        walkEffectList(effect.then || [], visit);
+        walkEffectList(effect.else || [], visit);
+      }
+    }
+  }
+
+  // Mutate the (pre-cloned) automation by applying each matched modifier's
+  // bonus fields. Runs ONCE at the start of open() so all UI rendering and
+  // damage calculations see the post-modifier values.
+  function applyModifiersInPlace(automation, matchedModifiers, state) {
+    if (!matchedModifiers.length) return;
+    const totals = matchedModifiers.reduce((acc, m) => {
+      const a = m.apply || {};
+      acc.damageBonus += Number.parseInt(a.damageBonus, 10) || 0;
+      acc.rangeBonus += Number.parseInt(a.rangeBonus, 10) || 0;
+      acc.forcedMovementBonus += Number.parseInt(a.forcedMovementBonus, 10) || 0;
+      if (a.damageType) acc.damageTypeOverride = String(a.damageType).trim().toLowerCase();
+      return acc;
+    }, { damageBonus: 0, rangeBonus: 0, forcedMovementBonus: 0, damageTypeOverride: "" });
+
+    // Add range bonus to every target block's distance.value.
+    if (totals.rangeBonus) {
+      for (const block of automation.cards || []) {
+        if (block?.type === "target" && block.distance && Number.isFinite(block.distance.value)) {
+          block.distance.value = Math.max(0, block.distance.value + totals.rangeBonus);
+        }
+      }
+    }
+
+    // Add damage / forced-movement bonuses to every relevant effect.
+    walkAutomationEffects(automation, (effect) => {
+      if (effect.kind === "damage") {
+        if (totals.damageBonus) {
+          effect.amount = (Number.parseInt(effect.amount, 10) || 0) + totals.damageBonus;
+        }
+        if (totals.damageTypeOverride) {
+          effect.damageType = totals.damageTypeOverride;
+        }
+      } else if (effect.kind === "forcedMovement") {
+        if (totals.forcedMovementBonus && Number.isFinite(effect.distance)) {
+          effect.distance = Math.max(0, effect.distance + totals.forcedMovementBonus);
+        }
+      }
+    });
+
+    // Stash a summary on state for the inspector / chat to reference.
+    state.appliedModifiers = matchedModifiers;
+  }
+
   async function open(options) {
     const automation = schema.normalizeAutomation(options?.automation);
+    // Apply feature modifiers BEFORE rendering anything. Tier preview, dice
+    // modal, and chat output all see the post-modifier values.
+    const features = Array.isArray(options?.features) ? options.features : [];
+    const matchedModifiers = collectMatchingModifiers(automation, options?.action, features);
     const state = {
       action: options?.action || {},
       automation,
@@ -994,7 +1170,15 @@
       roll: null,
       resultText: "",
       aborted: false,
+      appliedModifiers: [],
     };
+    if (matchedModifiers.length) {
+      applyModifiersInPlace(automation, matchedModifiers, state);
+      // Post a brief note to chat naming which features kicked in.
+      await postChat(state.context, {
+        message: `${state.heroName} - ${state.action.name || "Ability"}: applied ${matchedModifiers.length} feature modifier${matchedModifiers.length === 1 ? "" : "s"} (${matchedModifiers.map((m) => m.source).join(", ")}).`,
+      });
+    }
 
     try {
       if (typeof state.context.spendResource === "function") {

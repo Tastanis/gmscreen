@@ -1953,13 +1953,42 @@ export function mountBoardInteractions(store, routes = {}) {
       const watcherTeam = getCombatantTeam(watcher.id) || normalizeCombatTeam(watcher.team);
       // Only opposing-team watchers trigger opp-attacks.
       if (movingTeam && watcherTeam && movingTeam === watcherTeam) continue;
-      const wasAdjacent = footprintGap(watcher, from) === 1;
-      const isAdjacent = footprintGap(watcher, to) === 1;
-      if (wasAdjacent && !isAdjacent) {
+      // Walk the full Chebyshev path so we catch moves that PASS THROUGH the
+      // watcher's adjacency, not just moves that start adjacent.
+      if (movePathLeavesAdjacency(from, to, watcher)) {
         markTriggerReady(watcher.id, '__opportunityAttack__');
       }
     }
   });
+
+  // Returns true if at any step along the Chebyshev walk from `from` to `to`
+  // the moving token transitions from adjacent-to-watcher (gap === 1) to
+  // non-adjacent (gap > 1). Catches the "move past an enemy" case.
+  function movePathLeavesAdjacency(from, to, watcher) {
+    if (!from || !to || !watcher) return false;
+    const width = Math.max(1, Number.isFinite(from.width) ? from.width : 1);
+    const height = Math.max(1, Number.isFinite(from.height) ? from.height : 1);
+    let col = from.column ?? 0;
+    let row = from.row ?? 0;
+    let remainingDx = (to.column ?? 0) - col;
+    let remainingDy = (to.row ?? 0) - row;
+    let prevGap = footprintGap(watcher, { column: col, row, width, height });
+    let steps = 0;
+    const maxSteps = 200; // safety guard against pathological inputs
+    while ((remainingDx !== 0 || remainingDy !== 0) && steps < maxSteps) {
+      const stepX = Math.sign(remainingDx);
+      const stepY = Math.sign(remainingDy);
+      col += stepX;
+      row += stepY;
+      remainingDx -= stepX;
+      remainingDy -= stepY;
+      const nextGap = footprintGap(watcher, { column: col, row, width, height });
+      if (prevGap === 1 && nextGap > 1) return true;
+      prevGap = nextGap;
+      steps += 1;
+    }
+    return false;
+  }
 
   function footprintGap(a, b) {
     if (!a || !b) return Infinity;
@@ -2041,6 +2070,7 @@ export function mountBoardInteractions(store, routes = {}) {
       if (abilityId && !ready.includes(abilityId)) ready.push(abilityId);
       target.readyTriggerAbilities = ready;
       target.hasReadyTrigger = true;
+      target.triggerSetAtPhase = phaseTick; // stamp current phase for expiration
       target._lastModified = Date.now();
       nextReady = ready;
       updated = true;
@@ -2053,10 +2083,11 @@ export function mountBoardInteractions(store, routes = {}) {
         type: 'placement.update',
         sceneId: activeSceneId,
         placementId,
-        patch: { hasReadyTrigger: true, readyTriggerAbilities: nextReady },
+        patch: { hasReadyTrigger: true, readyTriggerAbilities: nextReady, triggerSetAtPhase: phaseTick },
       }];
     }
     persistBoardStateSnapshot({}, ops);
+    dispatchTriggerStateChanged(placementId);
     return true;
   }
 
@@ -2080,6 +2111,7 @@ export function mountBoardInteractions(store, routes = {}) {
       nextHas = nextReady.length > 0;
       target.readyTriggerAbilities = nextReady;
       target.hasReadyTrigger = nextHas;
+      if (!nextHas) target.triggerSetAtPhase = null;
       target._lastModified = Date.now();
       updated = true;
     });
@@ -2091,10 +2123,11 @@ export function mountBoardInteractions(store, routes = {}) {
         type: 'placement.update',
         sceneId: activeSceneId,
         placementId,
-        patch: { hasReadyTrigger: nextHas, readyTriggerAbilities: nextReady },
+        patch: { hasReadyTrigger: nextHas, readyTriggerAbilities: nextReady, triggerSetAtPhase: nextHas ? undefined : null },
       }];
     }
     persistBoardStateSnapshot({}, ops);
+    dispatchTriggerStateChanged(placementId);
     return true;
   }
 
@@ -6937,8 +6970,10 @@ export function mountBoardInteractions(store, routes = {}) {
     // In PICK phase, no one should hold the lock
     releaseTurnLock();
 
+    const previousPhase = turnPhase;
     currentTurnTeam = normalizedTeam;
     turnPhase = TURN_PHASE.PICK;
+    if (previousPhase !== TURN_PHASE.PICK) bumpPhaseTick();
     return true;
   }
 
@@ -6952,9 +6987,11 @@ export function mountBoardInteractions(store, routes = {}) {
       return false;
     }
 
+    const previousPhase = turnPhase;
     activeCombatantId = combatantId;
     activeTeam = team;
     turnPhase = TURN_PHASE.ACTIVE;
+    if (previousPhase !== TURN_PHASE.ACTIVE) bumpPhaseTick();
     return true;
   }
 
@@ -6965,6 +7002,97 @@ export function mountBoardInteractions(store, routes = {}) {
     turnPhase = TURN_PHASE.IDLE;
     // Clear any locks when combat ends
     releaseTurnLock();
+    // Combat ending: clear all ready-trigger overlays on all placements.
+    expireAllTriggers();
+  }
+
+  // GM-local counter. Bumps on every phase boundary (pick<->active). Used to
+  // expire stale ready-trigger overlays — a trigger set during phase N clears
+  // when phaseTick reaches N + 2 (i.e., two boundaries later). The placement
+  // stores its own setAtPhase value, persisted with the rest of placement
+  // state, so non-GM clients see clears via state sync.
+  let phaseTick = 0;
+
+  function bumpPhaseTick() {
+    if (!isGmUser()) return;
+    phaseTick += 1;
+    expireStaleTriggers();
+  }
+
+  function expireStaleTriggers() {
+    if (typeof boardApi.updateState !== 'function') return;
+    const state = boardApi.getState?.() ?? {};
+    const activeSceneId = state.boardState?.activeSceneId ?? null;
+    if (!activeSceneId) return;
+    const expirableIds = [];
+    boardApi.updateState?.((draft) => {
+      const scenePlacements = ensureScenePlacementDraft(draft, activeSceneId);
+      const nowMs = Date.now();
+      scenePlacements.forEach((p) => {
+        if (!p || typeof p !== 'object') return;
+        if (!p.hasReadyTrigger) return;
+        const setAt = Number.isFinite(p.triggerSetAtPhase) ? p.triggerSetAtPhase : null;
+        if (setAt === null) return;
+        if (phaseTick - setAt < 2) return;
+        p.hasReadyTrigger = false;
+        p.readyTriggerAbilities = [];
+        p.triggerSetAtPhase = null;
+        p._lastModified = nowMs;
+        if (p.id) expirableIds.push(p.id);
+      });
+    });
+    if (!expirableIds.length) return;
+    expirableIds.forEach((id) => markPlacementDirty(activeSceneId, id));
+    let ops = null;
+    if (USE_DELTA_SAVES && !hasNonPlacementDirtyState()) {
+      ops = expirableIds.map((id) => ({
+        type: 'placement.update',
+        sceneId: activeSceneId,
+        placementId: id,
+        patch: { hasReadyTrigger: false, readyTriggerAbilities: [], triggerSetAtPhase: null },
+      }));
+    }
+    persistBoardStateSnapshot({}, ops);
+    expirableIds.forEach((id) => dispatchTriggerStateChanged(id));
+  }
+
+  function expireAllTriggers() {
+    if (!isGmUser() || typeof boardApi.updateState !== 'function') return;
+    const state = boardApi.getState?.() ?? {};
+    const activeSceneId = state.boardState?.activeSceneId ?? null;
+    if (!activeSceneId) return;
+    const ids = [];
+    boardApi.updateState?.((draft) => {
+      const scenePlacements = ensureScenePlacementDraft(draft, activeSceneId);
+      const nowMs = Date.now();
+      scenePlacements.forEach((p) => {
+        if (!p || typeof p !== 'object') return;
+        if (!p.hasReadyTrigger && !(p.readyTriggerAbilities?.length)) return;
+        p.hasReadyTrigger = false;
+        p.readyTriggerAbilities = [];
+        p.triggerSetAtPhase = null;
+        p._lastModified = nowMs;
+        if (p.id) ids.push(p.id);
+      });
+    });
+    if (!ids.length) return;
+    ids.forEach((id) => markPlacementDirty(activeSceneId, id));
+    persistBoardStateSnapshot({});
+    ids.forEach((id) => dispatchTriggerStateChanged(id));
+  }
+
+  // Fires when a trigger's ready state changes. Re-dispatches the panel's
+  // token-selection-summary if the affected placement is the currently
+  // selected token, so the TRIGGER tab badge updates instantly without the
+  // user having to re-click the token.
+  function dispatchTriggerStateChanged(placementId) {
+    if (typeof document === 'undefined') return;
+    document.dispatchEvent(new CustomEvent('vtt:trigger-state-changed', {
+      detail: { placementId },
+    }));
+    if (selectedTokenIds.size === 1 && selectedTokenIds.has(placementId)) {
+      dispatchTokenSelectionSummary();
+    }
   }
 
   // Validates if a turn start attempt is valid and returns context
@@ -10743,6 +10871,7 @@ export function mountBoardInteractions(store, routes = {}) {
       ? placement.readyTriggerAbilities.filter((id) => typeof id === 'string' && id.length)
       : [];
     const hasReadyTrigger = Boolean(placement.hasReadyTrigger || readyTriggerAbilities.length);
+    const triggerSetAtPhase = Number.isFinite(placement.triggerSetAtPhase) ? placement.triggerSetAtPhase : null;
     const conditions = ensurePlacementConditions(
       placement?.conditions ??
         placement.condition ??

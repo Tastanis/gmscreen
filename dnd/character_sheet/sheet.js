@@ -2101,7 +2101,10 @@ function renderFeatures() {
     <div class="card-grid">
       ${sheetState.features
         .map(
-          (feature, index) => `
+          (feature, index) => {
+            const automationConfigured = hasAbilityAutomation(feature.automation);
+            const automationLabel = automationConfigured ? "Edit Automation" : "Automate";
+            return `
             <article class="feature-card ${feature.isWide ? "feature-card--wide" : ""}" data-feature-id="${feature.id}">
               <header class="card-head">
                 <div>
@@ -2110,6 +2113,12 @@ function renderFeatures() {
                 </div>
                 <div class="feature-controls">
                   <span class="chat-dot-wrap"><button class="chat-dot" type="button" aria-label="Post to chat" data-chat-type="feature" data-chat-id="${feature.id}"></button></span>
+                  <button
+                    class="text-btn edit-only automation-action-btn ${automationConfigured ? "automation-action-btn--configured" : ""}"
+                    type="button"
+                    data-automate-feature="${feature.id}"
+                  ><span class="automation-action-btn__status" aria-hidden="true"></span>${automationLabel}</button>
+                  ${automationConfigured ? `<button class="text-btn edit-only" type="button" data-inspect-feature="${feature.id}" title="Inspect saved automation JSON">Inspect</button>` : ""}
                   <button
                     class="icon-btn edit-only"
                     data-move-feature="up"
@@ -2161,7 +2170,8 @@ function renderFeatures() {
                 >${renderRichText(feature.text || "")}</div>
               </div>
             </article>
-          `
+          `;
+          }
         )
         .join("")}
     </div>
@@ -2172,6 +2182,8 @@ function renderFeatures() {
   bindFeatureRemovals();
   bindFeatureMoves();
   bindFeatureWidthToggles();
+  bindFeatureAutomationButtons();
+  bindFeatureInspectorButtons();
   bindRichTextToolbars();
   bindChatDots();
 }
@@ -2920,6 +2932,49 @@ function bindAutomationButtons() {
         renderActionSection(type, ACTION_CONTAINER_IDS[type] || `${type}-pane`);
         saveSheet();
       });
+    };
+  });
+}
+
+function bindFeatureAutomationButtons() {
+  document.querySelectorAll("[data-automate-feature]").forEach((btn) => {
+    btn.onclick = () => {
+      const featureId = btn.getAttribute("data-automate-feature");
+      if (!featureId) return;
+      if (!window.AbilityAutomation || typeof window.AbilityAutomation.open !== "function") {
+        console.warn("Ability automation paste UI is not available.");
+        return;
+      }
+      const feature = (sheetState.features || []).find((f) => f.id === featureId);
+      if (!feature) return;
+      window.AbilityAutomation.open(featureId, "feature", feature.automation, (automation) => {
+        feature.automation = normalizeAutomationBlock(automation);
+        renderFeatures();
+        saveSheet();
+      });
+    };
+  });
+}
+
+function bindFeatureInspectorButtons() {
+  document.querySelectorAll("[data-inspect-feature]").forEach((btn) => {
+    btn.onclick = () => {
+      const featureId = btn.getAttribute("data-inspect-feature");
+      if (!featureId) return;
+      if (!window.AbilityAutomationInspector || typeof window.AbilityAutomationInspector.open !== "function") {
+        console.warn("Ability automation inspector is not available.");
+        return;
+      }
+      const feature = (sheetState.features || []).find((f) => f.id === featureId);
+      if (!feature) return;
+      // Wrap feature as if it were an action for the inspector's display logic.
+      const action = {
+        id: feature.id,
+        name: feature.title || "Feature",
+        description: feature.text || "",
+        automation: feature.automation,
+      };
+      window.AbilityAutomationInspector.open({ action, hero: sheetState.hero });
     };
   });
 }

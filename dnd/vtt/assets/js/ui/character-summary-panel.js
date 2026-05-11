@@ -971,6 +971,10 @@ function startAbilityAutomation(sheet, action, categoryKey, sourceToken = null, 
     actionType: categoryKey,
     hero: clonePlain(sheet.hero || {}),
     automation: normalizeAutomation(action.automation),
+    // Feature list with their automation (modifiers live here). Pre-roll
+    // modifier collection walks this and folds matching bonuses into the
+    // in-memory automation before any UI renders.
+    features: Array.isArray(sheet.features) ? sheet.features.map(clonePlain) : [],
     sourceToken: clonePlain(sourceToken || {}),
     sourcePlacement: clonePlain(sourceToken || {}),
     sourceTraits: getAutomationTraits(sheet),
