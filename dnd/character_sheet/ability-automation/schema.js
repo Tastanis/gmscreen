@@ -99,14 +99,19 @@
     switch (kind) {
       case "damage": {
         const known = new Set(["kind", "amount", "attribute", "damageType", "raw"]);
+        const attribute = input.attribute !== undefined && input.attribute !== null
+          ? (P.normalizeAttributeOrList ? P.normalizeAttributeOrList(input.attribute) : P.normalizeAttribute(input.attribute))
+          : "";
         const effect = {
           kind: "damage",
           amount: asInt(input.amount, 0),
-          attribute: input.attribute ? P.normalizeAttribute(input.attribute) : "",
+          attribute,
           damageType: P.normalizeDamageType(input.damageType || "untyped"),
         };
-        if (effect.attribute && !P.ATTRIBUTES.includes(effect.attribute)) {
-          warnings.push(`${path}: damage attribute "${input.attribute}" not in registry.`);
+        const attrValid = !attribute
+          || (Array.isArray(attribute) ? attribute.every((a) => P.ATTRIBUTES.includes(a)) : P.ATTRIBUTES.includes(attribute));
+        if (!attrValid) {
+          warnings.push(`${path}: damage attribute "${JSON.stringify(input.attribute)}" not in registry.`);
         }
         if (!P.DAMAGE_TYPES.includes(effect.damageType)) {
           warnings.push(`${path}: damage type "${input.damageType}" not in registry.`);
@@ -383,18 +388,24 @@
       const source = tiersInput[key] || (legacy && tiersInput[legacy]) || {};
       tiers[key] = normalizeTier(source, warnings, `${path}.tiers.${key}`);
     }
+    const attribute = P.normalizeAttributeOrList
+      ? P.normalizeAttributeOrList(input.attribute || "Strongest")
+      : P.normalizeAttribute(input.attribute || "Strongest");
     const block = {
       type: "powerRoll",
       id: input.id || createId("powerroll"),
-      attribute: P.normalizeAttribute(input.attribute || "Strongest"),
+      attribute,
       bonus: asInt(input.bonus, 0),
       target: asTrimmedString(input.target),
       rollFormula: asTrimmedString(input.rollFormula) || "2d10",
       tiers,
     };
     if (input.note) block.note = asTrimmedString(input.note);
-    if (!P.ATTRIBUTES.includes(block.attribute)) {
-      warnings.push(`${path}: attribute "${block.attribute}" not in registry.`);
+    const attrValid = Array.isArray(attribute)
+      ? attribute.every((a) => P.ATTRIBUTES.includes(a))
+      : P.ATTRIBUTES.includes(attribute);
+    if (!attrValid) {
+      warnings.push(`${path}: attribute "${JSON.stringify(attribute)}" not in registry.`);
     }
     const extras = pickExtras(input, known);
     if (extras) block._extra = extras;

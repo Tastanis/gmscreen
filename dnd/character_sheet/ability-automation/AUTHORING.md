@@ -107,7 +107,7 @@ Rolls 2d10 + attribute, picks a tier, applies that tier's effects to the target 
 
 | Field | Values |
 |---|---|
-| `attribute` | `"Might"`, `"Agility"`, `"Reason"`, `"Intuition"`, `"Presence"`, or `"Strongest"` (resolves to highest at runtime). |
+| `attribute` | `"Might"`, `"Agility"`, `"Reason"`, `"Intuition"`, `"Presence"`, or `"Strongest"` (highest of all 5). Also accepts an array like `["M", "A"]` meaning "highest of these specific attributes" — used for free strikes (highest of M or A only). |
 | `bonus` | int (added to the roll). |
 | `target` | string — name of a target block. Defaults to most recent target group. |
 | `tiers.tier1` / `tier2` / `tier3` | each `{ effects: [...] }`. Tier1 = `≤11`, tier2 = `12-16`, tier3 = `17+`. |
@@ -169,8 +169,10 @@ Each effect is one of the kinds below. They're used inside `powerRoll.tiers.tier
 | Field | Values |
 |---|---|
 | `amount` | int (flat amount) |
-| `attribute` | optional `"M"`, `"A"`, `"R"`, `"I"`, `"P"` — runtime adds the source's attribute bonus |
+| `attribute` | optional. Single string `"M"`/`"A"`/`"R"`/`"I"`/`"P"`/`"Strongest"`, OR an array like `["M", "A"]` meaning "highest of these specific attributes" (used for free strikes — highest of Might or Agility only) |
 | `damageType` | `"untyped"`, `"acid"`, `"cold"`, `"corruption"`, `"fire"`, `"holy"`, `"lightning"`, `"poison"`, `"psychic"`, `"sonic"` |
+
+`"Strongest"` means highest of all 5 characteristics. Use an array like `["M", "A"]` when the rule is "highest of these specific attributes only" — most often this is the free-strike rule (highest of M or A but never R/I/P).
 
 ### `heal`
 

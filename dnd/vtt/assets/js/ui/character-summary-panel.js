@@ -234,10 +234,20 @@ export function mountCharacterSummaryPanel(routes = {}) {
 
     const abilityItem = event.target.closest('[data-character-ability-item]');
     if (abilityItem && activeSheet) {
-      const action = getAbilityAction(activeSheet, abilityItem.dataset.abilityCategory, abilityItem.dataset.abilityIndex);
+      const action = getAbilityAction(activeSheet, abilityItem.dataset.abilityCategory, abilityItem.dataset.abilityIndex, { activeToken });
       if (action && hasAbilityAutomation(action.automation)) {
         event.preventDefault();
         event.stopPropagation();
+        // If this ability was injected because a trigger condition was met
+        // (e.g. opp-attack), clear that trigger from the placement now so
+        // the blue "!" disappears and the player can't fire it twice.
+        const clearsTrigger = abilityItem.dataset.clearsTrigger || '';
+        const sourcePlacementId = activeToken?.id || '';
+        if (clearsTrigger && sourcePlacementId) {
+          document.dispatchEvent(new CustomEvent('vtt:clear-trigger-ready', {
+            detail: { placementId: sourcePlacementId, abilityId: clearsTrigger },
+          }));
+        }
         activeAbilityCategory = null;
         hideAbilityPreview(abilityPreview);
         renderAbilityTray(abilityTray, activeSheet, { activeCategory: activeAbilityCategory, activeToken });
@@ -264,7 +274,7 @@ export function mountCharacterSummaryPanel(routes = {}) {
     if (!item || !activeSheet) {
       return;
     }
-    const action = getAbilityAction(activeSheet, item.dataset.abilityCategory, item.dataset.abilityIndex);
+    const action = getAbilityAction(activeSheet, item.dataset.abilityCategory, item.dataset.abilityIndex, { activeToken });
     if (action) {
       renderAbilityPreview(abilityPreview, action, item.dataset.abilityCategory);
     }
@@ -283,7 +293,7 @@ export function mountCharacterSummaryPanel(routes = {}) {
     if (!item || !activeSheet) {
       return;
     }
-    const action = getAbilityAction(activeSheet, item.dataset.abilityCategory, item.dataset.abilityIndex);
+    const action = getAbilityAction(activeSheet, item.dataset.abilityCategory, item.dataset.abilityIndex, { activeToken });
     if (action) {
       renderAbilityPreview(abilityPreview, action, item.dataset.abilityCategory);
     }
@@ -366,7 +376,7 @@ function renderAbilityTray(tray, sheet, { activeCategory = null, activeToken = n
   tray.innerHTML = `
     <nav class="vtt-character-ability-tray__inner" aria-label="Character abilities">
       ${ABILITY_CATEGORIES.map((category) => {
-        const actions = getAbilityActions(sheet, category.key);
+        const actions = getAbilityActions(sheet, category.key, { activeToken });
         const isActive = activeCategory === category.key;
         const isTrigger = category.key === 'triggers';
         // NOTE: nested <button> inside <button> is invalid HTML and breaks
@@ -428,15 +438,21 @@ function renderAbilityItem(action, categoryKey, index) {
   const name = action?.name || 'Untitled Ability';
   const meta = summarizeAbility(action, categoryKey);
   const automated = hasAbilityAutomation(action?.automation);
+  // When an ability is injected into the trigger list because a trigger
+  // condition is met (e.g. opp-attack), render a blue "!" to the LEFT of
+  // the icon and stash the trigger id so clicking it auto-clears.
+  const triggerId = action?._injectedTriggerId || '';
   return `
     <button
-      class="vtt-character-ability-item${automated ? ' vtt-character-ability-item--automated' : ''}"
+      class="vtt-character-ability-item${automated ? ' vtt-character-ability-item--automated' : ''}${triggerId ? ' vtt-character-ability-item--trigger-ready' : ''}"
       type="button"
       role="menuitem"
       data-character-ability-item
       data-ability-category="${escapeAttribute(categoryKey)}"
       data-ability-index="${escapeAttribute(index)}"
+      ${triggerId ? `data-clears-trigger="${escapeAttribute(triggerId)}"` : ''}
     >
+      ${triggerId ? '<span class="vtt-character-ability-item__trigger-ready" aria-label="Trigger condition met">!</span>' : ''}
       <span class="vtt-character-ability-item__mark" aria-hidden="true">${escapeHtml(getAbilityIcon(categoryKey))}</span>
       <span class="vtt-character-ability-item__text">
         <span class="vtt-character-ability-item__name">${escapeHtml(name)}</span>
@@ -904,10 +920,41 @@ function extractTextBlocks(html) {
     .filter(Boolean);
 }
 
-function getAbilityActions(sheet, categoryKey) {
+function actionHasKeyword(action, keyword) {
+  if (!action) return false;
+  const target = String(keyword || '').toLowerCase();
+  if (!target) return false;
+  const keywords = action.automation && Array.isArray(action.automation.keywords) ? action.automation.keywords : [];
+  if (keywords.some((k) => String(k).toLowerCase() === target)) return true;
+  const tags = Array.isArray(action.tags) ? action.tags : [];
+  if (tags.some((t) => String(t).toLowerCase() === target)) return true;
+  return false;
+}
+
+function getAbilityActions(sheet, categoryKey, opts = {}) {
   const actions = sheet?.actions && typeof sheet.actions === 'object' ? sheet.actions : {};
   const list = Array.isArray(actions[categoryKey]) ? actions[categoryKey] : [];
-  return list.filter((action) => action && typeof action === 'object' && (action.name || action.description || action.useWhen));
+  const freeStrikes = Array.isArray(actions.freeStrikes) ? actions.freeStrikes : [];
+  const activeToken = opts.activeToken || null;
+  let merged = list;
+  if (categoryKey === 'mains') {
+    // Free strikes share the Main Action tab in the panel.
+    merged = [...list, ...freeStrikes];
+  } else if (categoryKey === 'triggers') {
+    // Opportunity attack: when the active token has the built-in opp-attack
+    // trigger ready, the melee free strike appears at the top of the
+    // trigger list. Click it to run the free strike AND clear the trigger.
+    const ready = Array.isArray(activeToken?.readyTriggerAbilities) ? activeToken.readyTriggerAbilities : [];
+    if (ready.includes('__opportunityAttack__')) {
+      const melee = freeStrikes.find((fs) => actionHasKeyword(fs, 'Melee'));
+      if (melee) {
+        // Tag a shallow clone so the renderer can show "!" and the click
+        // handler knows to clear the trigger after running.
+        merged = [{ ...melee, _injectedTriggerId: '__opportunityAttack__' }, ...list];
+      }
+    }
+  }
+  return merged.filter((action) => action && typeof action === 'object' && (action.name || action.description || action.useWhen));
 }
 
 function hasAbilityAutomation(automation) {
@@ -1167,12 +1214,12 @@ function clonePlain(value) {
   }
 }
 
-function getAbilityAction(sheet, categoryKey, indexValue) {
+function getAbilityAction(sheet, categoryKey, indexValue, opts = {}) {
   const index = Number.parseInt(indexValue, 10);
   if (!categoryKey || !Number.isInteger(index) || index < 0) {
     return null;
   }
-  return getAbilityActions(sheet, categoryKey)[index] || null;
+  return getAbilityActions(sheet, categoryKey, opts)[index] || null;
 }
 
 function summarizeAbility(action, categoryKey) {

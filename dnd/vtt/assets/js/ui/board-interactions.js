@@ -6953,6 +6953,12 @@ export function mountBoardInteractions(store, routes = {}) {
     const newPhase = getTurnPhase();
     if (newPhase !== turnPhase) {
       turnPhase = newPhase;
+      // Phase changed — bump the trigger-expiration counter. This is the real
+      // choke point for turn advance (setActiveCombatantId calls
+      // updateTurnPhase). The transitionTo* helpers below also bump on their
+      // own paths; the bumpPhaseTick guard against double-bump is the
+      // `newPhase !== turnPhase` check above.
+      bumpPhaseTick();
     }
     return turnPhase;
   }

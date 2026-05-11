@@ -199,6 +199,18 @@
   }
 
   function resolveAttribute(state, attribute) {
+    // Array form means "highest bonus among these specific attributes" — e.g.
+    // ["M", "A"] = highest of Might or Agility only (free strike rule).
+    if (Array.isArray(attribute)) {
+      if (!attribute.length) return { attribute: "Strongest", bonus: 0 };
+      let best = { attribute: attribute[0], bonus: Number.NEGATIVE_INFINITY };
+      for (const attr of attribute) {
+        const bonus = asInt(state.context.getAttributeBonus?.(attr), 0);
+        if (bonus > best.bonus) best = { attribute: attr, bonus };
+      }
+      if (best.bonus === Number.NEGATIVE_INFINITY) best.bonus = 0;
+      return best;
+    }
     const requested = String(attribute || "Strongest").trim();
     if (!requested || requested.toLowerCase() === "strongest") {
       const strongest = state.context.getStrongestAttribute?.();
@@ -216,6 +228,12 @@
     const stats = state.hero?.stats && typeof state.hero.stats === "object" ? state.hero.stats : {};
     return {
       getAttributeBonus(attr) {
+        // Array means "highest among these" (e.g. free strike's M or A).
+        if (Array.isArray(attr)) {
+          if (!attr.length) return 0;
+          const bonuses = attr.map((a) => asInt(state.context.getAttributeBonus?.(a), 0));
+          return bonuses.length ? Math.max(...bonuses) : 0;
+        }
         if (typeof state.context.getAttributeBonus === "function") {
           return asInt(state.context.getAttributeBonus(attr), 0);
         }
@@ -237,6 +255,18 @@
     return P.describeEffectResolved
       ? P.describeEffectResolved(effect, buildResolveCtx(state))
       : P.describeEffect(effect);
+  }
+
+  // Resolve a damage effect's attribute to a numeric bonus, supporting either
+  // a single attribute string ("Might", "Strongest") or an array of attributes
+  // ["M", "A"] meaning "highest of M or A only".
+  function resolveAttributeBonusForDamage(state, attribute) {
+    if (Array.isArray(attribute)) {
+      if (!attribute.length) return 0;
+      const bonuses = attribute.map((a) => asInt(state.context.getAttributeBonus?.(a), 0));
+      return Math.max(...bonuses);
+    }
+    return asInt(state.context.getAttributeBonus?.(attribute), 0);
   }
 
   // ---------- chat ----------
@@ -729,7 +759,7 @@
     }
     const baseAmount = asInt(effect.amount, 0);
     const attributeBonus = effect.attribute
-      ? asInt(state.context.getAttributeBonus?.(effect.attribute), 0)
+      ? resolveAttributeBonusForDamage(state, effect.attribute)
       : 0;
     const amount = Math.max(0, baseAmount + attributeBonus);
     const damageType = effect.damageType && effect.damageType !== "untyped" ? effect.damageType : "";

@@ -3187,6 +3187,30 @@
   outline-offset: 2px;
 }
 
+/* Blue "!" to the LEFT of an ability in the trigger list when its predicate
+   has been met (currently the injected opp-attack free strike). */
+.vtt-character-ability-item--trigger-ready {
+  outline: 2px solid #2563eb;
+  outline-offset: -2px;
+}
+
+.vtt-character-ability-item__trigger-ready {
+  display: grid;
+  place-items: center;
+  flex-shrink: 0;
+  width: 18px;
+  height: 18px;
+  border-radius: 50%;
+  background: #2563eb;
+  color: #fff;
+  font-weight: 900;
+  font-size: 12px;
+  margin-right: 6px;
+  border: 2px solid rgba(15, 23, 42, 0.85);
+  box-shadow: 0 2px 6px rgba(15, 23, 42, 0.55);
+  animation: vtt-token-trigger-pulse 1.6s ease-in-out infinite;
+}
+
 /* Floating damage / heal numbers above tokens. */
 .vtt-token__float-number {
   position: absolute;

@@ -179,6 +179,19 @@
     return trimmed;
   }
 
+  // Accept either a single attribute string or an array. When an array is
+  // returned, callers should treat it as "use the highest bonus among these
+  // attributes" — e.g. `["Might", "Agility"]` means "highest of M or A
+  // only", which is the free-strike rule.
+  function normalizeAttributeOrList(value) {
+    if (Array.isArray(value)) {
+      const list = value.map(normalizeAttribute).filter(Boolean);
+      if (list.length <= 1) return list[0] || "";
+      return list;
+    }
+    return normalizeAttribute(value);
+  }
+
   function normalizeDamageType(value) {
     if (!value) return "untyped";
     const lower = String(value).trim().toLowerCase();
@@ -410,6 +423,7 @@
     TIER_RANGES,
     LEGACY_TIER_KEYS,
     normalizeAttribute,
+    normalizeAttributeOrList,
     normalizeDamageType,
     normalizeCondition,
     normalizeDuration,
