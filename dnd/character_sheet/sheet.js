@@ -225,12 +225,13 @@ const ATTRIBUTES = ["Might", "Agility", "Reason", "Intuition", "Presence"];
 const SKILL_MODAL_ID = "skill-picker-modal";
 
 function hasAbilityAutomation(automation) {
-  return Boolean(
-    automation &&
-      typeof automation === "object" &&
-      Array.isArray(automation.cards) &&
-      automation.cards.length > 0
-  );
+  if (!automation || typeof automation !== "object") return false;
+  // Ability automation lives in `cards`; feature automation (kit modifiers)
+  // lives in `modifiers`. Both shapes count as "has automation" — without
+  // this, kit JSONs were being discarded on save by normalizeAutomationBlock.
+  const hasCards = Array.isArray(automation.cards) && automation.cards.length > 0;
+  const hasModifiers = Array.isArray(automation.modifiers) && automation.modifiers.length > 0;
+  return hasCards || hasModifiers;
 }
 
 function normalizeAutomationBlock(automation) {
