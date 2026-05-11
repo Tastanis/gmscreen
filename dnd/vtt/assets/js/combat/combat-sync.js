@@ -2,6 +2,7 @@ import {
   getCombatStateVersion,
   isCombatStateNewer,
   normalizeCombatState,
+  normalizeCombatTeam,
 } from './combat-state.js';
 
 export function createCombatDirtyFieldTracker(initialFields = []) {
