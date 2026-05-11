@@ -49,7 +49,6 @@ import {
 import { shouldApplyIncomingVersion } from '../state/version-guard.js';
 import { close as closeMonsterStatBlock, open as openMonsterStatBlock } from './monster-stat-block.js';
 import { createCombatTimerService } from '../services/combat-timer-service.js';
-import { showCombatTimerReport } from './combat-timer-report.js';
 import { mountFogOfWar, renderFog, renderFogSelection, isFogSelectActive, isPositionFogged, createFogChecker } from './fog-of-war.js';
 import { createConditionTooltips } from './condition-tooltips.js';
 import { createMapPings } from './map-pings.js';
@@ -1889,7 +1888,11 @@ export function mountBoardInteractions(store, routes = {}) {
       if (!isGmUser()) {
         return;
       }
-      handleStartCombat();
+      if (combatActive) {
+        handleEndCombat();
+      } else {
+        handleStartCombat();
+      }
     });
   }
 
@@ -8519,7 +8522,6 @@ export function mountBoardInteractions(store, routes = {}) {
 
   function handleStartCombat() {
     if (combatActive) {
-      handleEndCombat();
       return;
     }
 
@@ -8588,9 +8590,8 @@ export function mountBoardInteractions(store, routes = {}) {
       }
     }
 
-    let timerSummary = null;
     if (isGmUser()) {
-      timerSummary = combatTimerService.finishCombat();
+      combatTimerService.finishCombat();
     } else {
       combatTimerService.reset();
     }
@@ -8629,9 +8630,6 @@ export function mountBoardInteractions(store, routes = {}) {
     resetTriggeredActionsForActiveScene();
     if (status) {
       status.textContent = 'Combat ended.';
-    }
-    if (timerSummary && isGmUser()) {
-      showCombatTimerReport(timerSummary);
     }
   }
 
@@ -8782,10 +8780,7 @@ export function mountBoardInteractions(store, routes = {}) {
       }
       if (wasCombatActive && !combatActive) {
         if (isGmUser()) {
-          const summary = combatTimerService.finishCombat();
-          if (summary) {
-            showCombatTimerReport(summary);
-          }
+          combatTimerService.finishCombat();
         } else {
           combatTimerService.reset();
         }
