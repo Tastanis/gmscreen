@@ -7008,8 +7008,12 @@ export function mountBoardInteractions(store, routes = {}) {
     turnPhase = TURN_PHASE.IDLE;
     // Clear any locks when combat ends
     releaseTurnLock();
-    // Combat ending: clear all ready-trigger overlays on all placements.
-    expireAllTriggers();
+    // NOTE: We do NOT call expireAllTriggers() here. The end-combat flow
+    // (~line 8589) requires that NO boardApi.updateState() runs between
+    // its local state mutations and the explicit snapshot sync, or the
+    // store subscriber reverts to a pre-end-combat snapshot. Trigger
+    // overlays will linger past end-combat — clear manually or they'll
+    // reset on next combat round-start via resetTriggeredActionsForActiveScene.
   }
 
   // GM-local counter. Bumps on every phase boundary (pick<->active). Used to
@@ -7021,6 +7025,12 @@ export function mountBoardInteractions(store, routes = {}) {
 
   function bumpPhaseTick() {
     if (!isGmUser()) return;
+    // CRITICAL: Do NOT call boardApi.updateState() while combat is being
+    // ended. The end-combat flow (see line ~8611 comment) requires that no
+    // store-write happens between local state mutation and the explicit
+    // sync — otherwise the store subscriber reads stale pre-end-combat
+    // state and reverts everything ("old things came back" bug).
+    if (!combatActive) return;
     phaseTick += 1;
     expireStaleTriggers();
   }
