@@ -9,6 +9,7 @@ import {
   haveCombatGroupsChanged,
   prepareCombatSnapshotForSync,
   shouldApplyRemoteCombatState,
+  shouldProtectLocalCombatIntent,
 } from '../combat-sync.js';
 
 describe('combat sync scene selection', () => {
@@ -148,6 +149,100 @@ describe('combat sync helpers', () => {
     assert.equal(getCombatStateMaliceSnapshot('{"malice": 3.8}'), 3);
     assert.equal(getCombatStateMaliceSnapshot('{"malice": "nope"}'), null);
     assert.equal(getCombatStateMaliceSnapshot('not json'), null);
+  });
+
+  test('protects a fresh GM start intent from stale inactive snapshots', () => {
+    assert.equal(
+      shouldProtectLocalCombatIntent(
+        { active: false, round: 0, activeCombatantId: null, sequence: 1, updatedAt: 1000 },
+        {
+          intent: {
+            activeSceneId: 'scene-a',
+            active: true,
+            round: 1,
+            activeCombatantId: null,
+            startingTeam: 'ally',
+            currentTeam: 'ally',
+            lastTeam: null,
+            recordedAt: 5000,
+          },
+          activeSceneId: 'scene-a',
+          currentVersion: 2,
+          currentUpdatedAt: 2000,
+          now: 5500,
+        }
+      ),
+      true
+    );
+  });
+
+  test('protects GM end intent while a save is pending even when incoming version is newer', () => {
+    assert.equal(
+      shouldProtectLocalCombatIntent(
+        { active: true, round: 3, activeCombatantId: 'enemy-1', sequence: 9, updatedAt: 9000 },
+        {
+          intent: {
+            activeSceneId: 'scene-a',
+            active: false,
+            round: 0,
+            activeCombatantId: null,
+            startingTeam: null,
+            currentTeam: null,
+            lastTeam: null,
+            recordedAt: 10000,
+          },
+          activeSceneId: 'scene-a',
+          currentVersion: 8,
+          currentUpdatedAt: 8000,
+          hasPendingSave: true,
+          now: 10100,
+        }
+      ),
+      true
+    );
+  });
+
+  test('does not protect expired or matching GM combat intents', () => {
+    assert.equal(
+      shouldProtectLocalCombatIntent(
+        { active: false, round: 0, activeCombatantId: null, sequence: 1, updatedAt: 1000 },
+        {
+          intent: {
+            activeSceneId: 'scene-a',
+            active: false,
+            round: 0,
+            activeCombatantId: null,
+            recordedAt: 1000,
+          },
+          activeSceneId: 'scene-a',
+          currentVersion: 2,
+          currentUpdatedAt: 2000,
+          now: 1500,
+        }
+      ),
+      false
+    );
+
+    assert.equal(
+      shouldProtectLocalCombatIntent(
+        { active: false, round: 0, activeCombatantId: null, sequence: 1, updatedAt: 1000 },
+        {
+          intent: {
+            activeSceneId: 'scene-a',
+            active: true,
+            round: 1,
+            activeCombatantId: null,
+            recordedAt: 1000,
+          },
+          activeSceneId: 'scene-a',
+          currentVersion: 2,
+          currentUpdatedAt: 2000,
+          now: 12000,
+          maxAgeMs: 10000,
+        }
+      ),
+      false
+    );
   });
 
 });

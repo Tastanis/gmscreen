@@ -106,6 +106,7 @@ import {
   hasCombatMaliceValue,
   prepareCombatSnapshotForSync,
   shouldApplyRemoteCombatState,
+  shouldProtectLocalCombatIntent,
 } from '../combat/combat-sync.js';
 import {
   TURN_LOCK_STALE_TIMEOUT_MS,
@@ -859,6 +860,7 @@ export function mountBoardInteractions(store, routes = {}) {
   // This handles the window between save completion and server state propagation
   let lastBoardStateSaveCompletedAt = 0;
   const SAVE_GRACE_PERIOD_MS = 1500;
+  const LOCAL_COMBAT_INTENT_PROTECTION_MS = 10000;
 
   // Delta tracking for efficient saves - only send what changed
   // Maps sceneId -> Set of placement IDs that were modified
@@ -1257,6 +1259,26 @@ export function mountBoardInteractions(store, routes = {}) {
     };
   }
 
+  function rememberGmCombatIntent() {
+    if (!isGmUser()) {
+      pendingGmCombatIntent = null;
+      return null;
+    }
+    const intent = captureLocalCombatIntent();
+    if (!intent) {
+      return null;
+    }
+    pendingGmCombatIntent = {
+      ...intent,
+      recordedAt: Date.now(),
+    };
+    return pendingGmCombatIntent;
+  }
+
+  function hasPendingCombatIntentSave() {
+    return Boolean(pendingBoardStateSave?.promise || pendingCombatStateSave?.promise);
+  }
+
   function maybeReassertCombatIntent(intent) {
     const updated = boardApi.getState?.();
     const serverCombat =
@@ -1264,6 +1286,9 @@ export function mountBoardInteractions(store, routes = {}) {
     const serverActive = Boolean(serverCombat?.active);
     if (serverActive === Boolean(intent.active)) {
       combatConflictRetryAttempts = 0;
+      if (pendingGmCombatIntent?.activeSceneId === intent.activeSceneId) {
+        pendingGmCombatIntent = null;
+      }
       return;
     }
     if (combatConflictRetryAttempts >= MAX_COMBAT_CONFLICT_RETRY_ATTEMPTS) {
@@ -1536,6 +1561,7 @@ export function mountBoardInteractions(store, routes = {}) {
   // Used instead of timestamps to avoid clock drift issues between clients
   let combatSequence = 0;
   let lastCombatStateSnapshot = null;
+  let pendingGmCombatIntent = null;
   let startingCombatTeam = null;
   let currentTurnTeam = null;
   let activeTeam = null;
@@ -8562,8 +8588,13 @@ export function mountBoardInteractions(store, routes = {}) {
       type: TURN_EFFECT_TYPES.DRAW_STEEL,
       triggeredAt: Date.now(),
     });
-    showDrawSteelPopup();
+    rememberGmCombatIntent();
     syncCombatStateToStore();
+    resetTriggeredActionsForActiveScene();
+    updateStartCombatButton();
+    refreshCombatTracker();
+    updateCombatModeIndicators();
+    showDrawSteelPopup();
 
     if (isGmUser()) {
       computeInitialMalice().then((initialMalice) => {
@@ -8626,6 +8657,7 @@ export function mountBoardInteractions(store, routes = {}) {
     // the local combatActive flag back to true. The next snapshot we
     // build then carries active=true and persists a Start-Combat-shaped
     // payload, defeating the End Combat click.
+    rememberGmCombatIntent();
     syncCombatStateToStore();
     resetTriggeredActionsForActiveScene();
     if (status) {
@@ -8681,6 +8713,28 @@ export function mountBoardInteractions(store, routes = {}) {
 
     const hasMaliceValue = hasCombatMaliceValue(combatState);
     const normalized = normalizeCombatState(combatState);
+    if (
+      shouldProtectLocalCombatIntent(normalized, {
+        intent: pendingGmCombatIntent,
+        activeSceneId: activeSceneKey,
+        currentVersion: combatStateVersion,
+        currentUpdatedAt: combatStateUpdatedAt,
+        hasPendingSave: hasPendingCombatIntentSave(),
+        maxAgeMs: LOCAL_COMBAT_INTENT_PROTECTION_MS,
+      })
+    ) {
+      updateStartCombatButton();
+      updateCombatModeIndicators();
+      refreshCombatTracker();
+      return;
+    }
+
+    if (
+      pendingGmCombatIntent?.activeSceneId === activeSceneKey &&
+      normalized.active === pendingGmCombatIntent.active
+    ) {
+      pendingGmCombatIntent = null;
+    }
 
     // Allow updates on initial load (combatStateVersion === 0) even if sequence matches.
     // Also check if groups have changed - partial group data can arrive initially and

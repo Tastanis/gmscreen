@@ -127,6 +127,53 @@ export function shouldApplyRemoteCombatState(
   return haveCombatGroupsChanged(normalizedState?.groups, currentGroups);
 }
 
+export function shouldProtectLocalCombatIntent(
+  normalizedState,
+  {
+    intent = null,
+    activeSceneId = '',
+    currentVersion = 0,
+    currentUpdatedAt = 0,
+    hasPendingSave = false,
+    now = Date.now(),
+    maxAgeMs = 10000,
+  } = {}
+) {
+  if (!intent || !normalizedState || typeof normalizedState !== 'object') {
+    return false;
+  }
+
+  if (typeof intent.activeSceneId !== 'string' || intent.activeSceneId !== activeSceneId) {
+    return false;
+  }
+
+  const recordedAt = Number(intent.recordedAt ?? 0);
+  if (!Number.isFinite(recordedAt) || recordedAt <= 0 || now - recordedAt > maxAgeMs) {
+    return false;
+  }
+
+  const mismatchesIntent =
+    Boolean(normalizedState.active) !== Boolean(intent.active) ||
+    Number(normalizedState.round ?? 0) !== Number(intent.round ?? 0) ||
+    normalizeNullableTeam(normalizedState.startingTeam) !== normalizeNullableTeam(intent.startingTeam) ||
+    normalizeNullableTeam(normalizedState.currentTeam) !== normalizeNullableTeam(intent.currentTeam) ||
+    normalizeNullableTeam(normalizedState.lastTeam) !== normalizeNullableTeam(intent.lastTeam) ||
+    normalizeNullableId(normalizedState.activeCombatantId) !== normalizeNullableId(intent.activeCombatantId);
+
+  if (!mismatchesIntent) {
+    return false;
+  }
+
+  if (hasPendingSave) {
+    return true;
+  }
+
+  return !isCombatStateNewer(normalizedState, {
+    version: currentVersion,
+    updatedAt: currentUpdatedAt,
+  });
+}
+
 export function getCombatStateMaliceSnapshot(snapshot) {
   if (!snapshot || typeof snapshot !== 'string') {
     return null;
@@ -307,6 +354,17 @@ function isCombatFieldDirty(dirtyFields, field) {
   }
 
   return false;
+}
+
+function normalizeNullableTeam(value) {
+  if (value === null || value === undefined || value === '') {
+    return null;
+  }
+  return normalizeCombatTeam(value);
+}
+
+function normalizeNullableId(value) {
+  return typeof value === 'string' && value.trim() ? value.trim() : null;
 }
 
 function cloneCombatSnapshot(snapshot) {
