@@ -2785,6 +2785,13 @@
   animation: vtt-token-automation-target-flash 0.7s ease-in-out 0s 2;
 }
 
+/* Continuous red pulse on a token that's been pre-suggested as the target
+   for an open picker (e.g. the mover that just triggered an opportunity
+   attack). The player can still click anyone — this is a visual hint. */
+.vtt-token.vtt-token--suggested-target {
+  animation: vtt-token-automation-target-flash 0.9s ease-in-out infinite;
+}
+
 .vtt-automation-move {
   position: absolute;
   inset: 0;

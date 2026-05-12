@@ -1995,7 +1995,9 @@ export function mountBoardInteractions(store, routes = {}) {
       // Walk the full Chebyshev path so we catch moves that PASS THROUGH the
       // watcher's adjacency, not just moves that start adjacent.
       if (movePathLeavesAdjacency(from, to, watcher)) {
-        markTriggerReady(watcher.id, '__opportunityAttack__');
+        // Source = the moving token. The picker uses this to flash the
+        // mover as the suggested target for the watcher's free strike.
+        markTriggerReady(watcher.id, '__opportunityAttack__', movingId);
       }
     }
   });
@@ -2094,13 +2096,14 @@ export function mountBoardInteractions(store, routes = {}) {
     }
   }
 
-  function markTriggerReady(placementId, abilityId) {
+  function markTriggerReady(placementId, abilityId, sourceId = null) {
     if (!placementId || typeof boardApi.updateState !== 'function') return false;
     const state = boardApi.getState?.() ?? {};
     const activeSceneId = state.boardState?.activeSceneId ?? null;
     if (!activeSceneId) return false;
     let updated = false;
     let nextReady = [];
+    let nextSources = {};
     boardApi.updateState?.((draft) => {
       const scenePlacements = ensureScenePlacementDraft(draft, activeSceneId);
       const target = scenePlacements.find((item) => item && item.id === placementId);
@@ -2110,8 +2113,18 @@ export function mountBoardInteractions(store, routes = {}) {
       target.readyTriggerAbilities = ready;
       target.hasReadyTrigger = true;
       target.triggerSetAtPhase = phaseTick; // stamp current phase for expiration
+      // Per-ability source token (e.g. the mover whose movement triggered an
+      // opportunity attack). Used by the picker to flash that token as the
+      // suggested target. Most recent source wins if the same trigger fires
+      // again before resolution.
+      const sources = (target.readyTriggerSources && typeof target.readyTriggerSources === 'object')
+        ? { ...target.readyTriggerSources }
+        : {};
+      if (abilityId && sourceId) sources[abilityId] = sourceId;
+      target.readyTriggerSources = sources;
       target._lastModified = Date.now();
       nextReady = ready;
+      nextSources = sources;
       updated = true;
     });
     if (!updated) return false;
@@ -2122,7 +2135,12 @@ export function mountBoardInteractions(store, routes = {}) {
         type: 'placement.update',
         sceneId: activeSceneId,
         placementId,
-        patch: { hasReadyTrigger: true, readyTriggerAbilities: nextReady, triggerSetAtPhase: phaseTick },
+        patch: {
+          hasReadyTrigger: true,
+          readyTriggerAbilities: nextReady,
+          readyTriggerSources: nextSources,
+          triggerSetAtPhase: phaseTick,
+        },
       }];
     }
     persistBoardStateSnapshot({}, ops);
@@ -2138,17 +2156,25 @@ export function mountBoardInteractions(store, routes = {}) {
     let updated = false;
     let nextReady = [];
     let nextHas = false;
+    let nextSources = {};
     boardApi.updateState?.((draft) => {
       const scenePlacements = ensureScenePlacementDraft(draft, activeSceneId);
       const target = scenePlacements.find((item) => item && item.id === placementId);
       if (!target) return;
+      const priorSources = (target.readyTriggerSources && typeof target.readyTriggerSources === 'object')
+        ? target.readyTriggerSources
+        : {};
       if (abilityId) {
         nextReady = (Array.isArray(target.readyTriggerAbilities) ? target.readyTriggerAbilities : []).filter((id) => id !== abilityId);
+        nextSources = { ...priorSources };
+        delete nextSources[abilityId];
       } else {
         nextReady = [];
+        nextSources = {};
       }
       nextHas = nextReady.length > 0;
       target.readyTriggerAbilities = nextReady;
+      target.readyTriggerSources = nextSources;
       target.hasReadyTrigger = nextHas;
       if (!nextHas) target.triggerSetAtPhase = null;
       target._lastModified = Date.now();
@@ -2162,7 +2188,12 @@ export function mountBoardInteractions(store, routes = {}) {
         type: 'placement.update',
         sceneId: activeSceneId,
         placementId,
-        patch: { hasReadyTrigger: nextHas, readyTriggerAbilities: nextReady, triggerSetAtPhase: nextHas ? undefined : null },
+        patch: {
+          hasReadyTrigger: nextHas,
+          readyTriggerAbilities: nextReady,
+          readyTriggerSources: nextSources,
+          triggerSetAtPhase: nextHas ? undefined : null,
+        },
       }];
     }
     persistBoardStateSnapshot({}, ops);
@@ -7091,6 +7122,7 @@ export function mountBoardInteractions(store, routes = {}) {
         if (phaseTick - setAt < 2) return;
         p.hasReadyTrigger = false;
         p.readyTriggerAbilities = [];
+        p.readyTriggerSources = {};
         p.triggerSetAtPhase = null;
         p._lastModified = nowMs;
         if (p.id) expirableIds.push(p.id);
@@ -7104,7 +7136,7 @@ export function mountBoardInteractions(store, routes = {}) {
         type: 'placement.update',
         sceneId: activeSceneId,
         placementId: id,
-        patch: { hasReadyTrigger: false, readyTriggerAbilities: [], triggerSetAtPhase: null },
+        patch: { hasReadyTrigger: false, readyTriggerAbilities: [], readyTriggerSources: {}, triggerSetAtPhase: null },
       }));
     }
     persistBoardStateSnapshot({}, ops);
@@ -7125,6 +7157,7 @@ export function mountBoardInteractions(store, routes = {}) {
         if (!p.hasReadyTrigger && !(p.readyTriggerAbilities?.length)) return;
         p.hasReadyTrigger = false;
         p.readyTriggerAbilities = [];
+        p.readyTriggerSources = {};
         p.triggerSetAtPhase = null;
         p._lastModified = nowMs;
         if (p.id) ids.push(p.id);
@@ -9310,6 +9343,7 @@ export function mountBoardInteractions(store, routes = {}) {
         if (placement.hasReadyTrigger || (Array.isArray(placement.readyTriggerAbilities) && placement.readyTriggerAbilities.length)) {
           placement.hasReadyTrigger = false;
           placement.readyTriggerAbilities = [];
+          placement.readyTriggerSources = {};
           placementMutated = true;
         }
         if (placementMutated) {
@@ -12040,6 +12074,11 @@ export function mountBoardInteractions(store, routes = {}) {
     closeDamageHealWidget();
     closeHealOverflowPopup();
     updateStatus(formatAutomationTargetPrompt(pendingAutomationTarget.targetConfig));
+    // If a suggested target was threaded through (e.g. the mover whose
+    // movement triggered this opp-attack free strike), pulse it red until
+    // the picker resolves or cancels. Player can still click anyone.
+    const suggestedId = pendingAutomationTarget.targetConfig?.suggestedTargetId;
+    if (suggestedId) startSuggestedTargetPulse(suggestedId);
   }
 
   function handleAutomationTargetPointerDown(event) {
@@ -12069,6 +12108,7 @@ export function mountBoardInteractions(store, routes = {}) {
 
     const targetRequest = pendingAutomationTarget;
     pendingAutomationTarget = null;
+    stopSuggestedTargetPulse();
     const name = tokenLabel(placement);
     flashAutomationTargetToken(placement.id);
     updateStatus(`${name} selected as target.`);
@@ -13014,6 +13054,37 @@ export function mountBoardInteractions(store, routes = {}) {
     }, 1500);
   }
 
+  // Continuous red pulse on a token while a target picker is open with a
+  // pre-suggested target (e.g. the mover that triggered an opportunity
+  // attack). Distinct from `flashAutomationTargetToken` which is a brief
+  // post-pick confirmation flash.
+  let suggestedTargetPulseId = null;
+  function startSuggestedTargetPulse(placementId) {
+    stopSuggestedTargetPulse();
+    if (!placementId || !tokenLayer) return;
+    const escapedId = window.CSS?.escape
+      ? window.CSS.escape(String(placementId))
+      : String(placementId).replace(/["\\]/g, '\\$&');
+    const token = tokenLayer.querySelector(`[data-placement-id="${escapedId}"]`);
+    if (!(token instanceof HTMLElement)) return;
+    token.classList.add('vtt-token--suggested-target');
+    suggestedTargetPulseId = String(placementId);
+  }
+  function stopSuggestedTargetPulse() {
+    if (!suggestedTargetPulseId || !tokenLayer) {
+      suggestedTargetPulseId = null;
+      return;
+    }
+    const escapedId = window.CSS?.escape
+      ? window.CSS.escape(suggestedTargetPulseId)
+      : suggestedTargetPulseId.replace(/["\\]/g, '\\$&');
+    const token = tokenLayer.querySelector(`[data-placement-id="${escapedId}"]`);
+    if (token instanceof HTMLElement) {
+      token.classList.remove('vtt-token--suggested-target');
+    }
+    suggestedTargetPulseId = null;
+  }
+
   // Floats a -N (red) or +N (green) number above a token for 1.5s, slowly
   // rising and fading. Multiple calls stack vertically.
   function floatStaminaDelta(placementId, amount, mode /* 'damage' | 'heal' */) {
@@ -13056,6 +13127,7 @@ export function mountBoardInteractions(store, routes = {}) {
     }
     const request = pendingAutomationTarget;
     pendingAutomationTarget = null;
+    stopSuggestedTargetPulse();
     updateStatus(message || 'Target selection canceled.');
     request.reject?.(new Error(message || 'Target selection canceled.'));
   }

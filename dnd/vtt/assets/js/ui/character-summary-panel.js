@@ -243,6 +243,12 @@ export function mountCharacterSummaryPanel(routes = {}) {
         // the blue "!" disappears and the player can't fire it twice.
         const clearsTrigger = abilityItem.dataset.clearsTrigger || '';
         const sourcePlacementId = activeToken?.id || '';
+        // The mover that triggered the opp-attack is stored on the token at
+        // mark-ready time. Capture it BEFORE dispatching the clear (which
+        // wipes the sources map). The target picker pulses this token red.
+        const suggestedTargetId = (clearsTrigger && activeToken?.readyTriggerSources && typeof activeToken.readyTriggerSources === 'object')
+          ? (activeToken.readyTriggerSources[clearsTrigger] || '')
+          : '';
         if (clearsTrigger && sourcePlacementId) {
           document.dispatchEvent(new CustomEvent('vtt:clear-trigger-ready', {
             detail: { placementId: sourcePlacementId, abilityId: clearsTrigger },
@@ -254,6 +260,7 @@ export function mountCharacterSummaryPanel(routes = {}) {
         startAbilityAutomation(activeSheet, action, abilityItem.dataset.abilityCategory, activeToken, {
           characterId: activeCharacterId,
           routes,
+          suggestedTargetId,
         });
       }
       return;
@@ -1025,6 +1032,10 @@ function startAbilityAutomation(sheet, action, categoryKey, sourceToken = null, 
     sourceToken: clonePlain(sourceToken || {}),
     sourcePlacement: clonePlain(sourceToken || {}),
     sourceTraits: getAutomationTraits(sheet),
+    // Pre-suggested target placement id (e.g. mover that triggered an
+    // opp-attack). Runner threads this into every target picker config so
+    // the board can flash it red.
+    suggestedTargetId: options?.suggestedTargetId || '',
     getAttributeBonus: (attribute) => getAttributeBonus(sheet, attribute),
     getStrongestAttribute: () => getStrongestAttribute(sheet),
     postChat: postAutomationChat,

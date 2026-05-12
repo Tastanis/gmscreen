@@ -408,6 +408,10 @@
           pickIndex: pickIndex + 1,
           pickTotal: Number.isFinite(desired) ? desired : 0,
           allowDone: upTo,
+          // Pre-suggested target (e.g. the mover that triggered an
+          // opp-attack). Picker pulses this token red but the player can
+          // still click anyone.
+          suggestedTargetId: state.suggestedTargetId || "",
         };
         const result = await Promise.race([
           state.context.selectTarget(promptConfig),
@@ -1190,6 +1194,10 @@
       heroName: options?.hero?.name || options?.heroName || "Hero",
       sourcePlacement: options?.sourcePlacement || options?.sourceToken || null,
       sourceTraits: options?.sourceTraits || {},
+      // Pre-suggested target id from a triggered action (e.g. the mover
+      // that triggered an opp-attack). Threaded into every target picker
+      // config so the board can paint a continuous red pulse on it.
+      suggestedTargetId: options?.suggestedTargetId || "",
       groups: {},
       currentGroup: null,
       selectedTier: null,
