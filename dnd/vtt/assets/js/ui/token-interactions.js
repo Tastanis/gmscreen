@@ -857,6 +857,40 @@ export function createTokenInteractions({
       // Mark only the moved placements as dirty
       movedIds.forEach((id) => markPlacementDirty(activeSceneId, id));
 
+      // Dispatch `vtt:token-moved` for every drag commit. The
+      // movement-controller's own dispatch is gated on combat being
+      // active, so out-of-combat drags never fire the event. The
+      // stairs trigger (and any other listener) needs this to run
+      // regardless of combat state. Fire BEFORE persist so any
+      // listener-driven mutations (e.g. level-switch ops) get queued
+      // into the same coalesced save.
+      const latestForEvent =
+        boardApi.getState?.()?.boardState?.placements?.[activeSceneId] ?? [];
+      movedIds.forEach((id) => {
+        const placement = latestForEvent.find((entry) => entry?.id === id);
+        const original = originalPositions instanceof Map ? originalPositions.get(id) : null;
+        if (!placement || !original) return;
+        document.dispatchEvent(new CustomEvent('vtt:token-moved', {
+          detail: {
+            placementId: id,
+            sceneId: activeSceneId,
+            from: {
+              column: original.column ?? original.col ?? 0,
+              row: original.row ?? original.y ?? 0,
+              width: original.width ?? original.columns ?? 1,
+              height: original.height ?? original.rows ?? 1,
+            },
+            to: {
+              column: placement.column,
+              row: placement.row,
+              width: placement.width ?? 1,
+              height: placement.height ?? 1,
+            },
+            kind: 'normal',
+          },
+        }));
+      });
+
       // Phase 3-B (commit 2): this is the one and only save path that
       // currently goes out as delta ops. Every other write path in
       // this file still calls `persistBoardStateSnapshot()` with no

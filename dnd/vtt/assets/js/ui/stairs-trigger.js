@@ -291,7 +291,10 @@ function dispatchLevelChange({ sceneId, placementId, targetLevelId }) {
     const placements = draft.boardState.placements?.[sceneId];
     if (Array.isArray(placements)) {
       const placement = placements.find((p) => p?.id === placementId);
-      if (placement) placement.levelId = targetLevelId;
+      if (placement) {
+        placement.levelId = targetLevelId;
+        placement._lastModified = now;
+      }
     }
     if (!userId) return;
     if (!draft.boardState.sceneState) draft.boardState.sceneState = {};
@@ -309,12 +312,29 @@ function dispatchLevelChange({ sceneId, placementId, targetLevelId }) {
     };
   });
 
-  if (typeof boardApi._markSceneStateDirty === 'function') {
-    boardApi._markSceneStateDirty(sceneId);
+  // Send the change as delta ops rather than a snapshot save. This
+  // matches `processPlacementFalls` — ops accumulate in a process-wide
+  // buffer and coalesce with any in-flight movement save, so we don't
+  // race against the move's persist and 409 on version mismatch.
+  if (typeof boardApi._persistBoardState !== 'function') return;
+  const ops = [
+    {
+      type: 'placement.update',
+      sceneId,
+      placementId,
+      patch: { levelId: targetLevelId },
+    },
+  ];
+  if (userId) {
+    ops.push({
+      type: 'user-level.set',
+      sceneId,
+      userId,
+      levelId: targetLevelId,
+      source: 'manual',
+    });
   }
-  if (typeof boardApi._persistBoardState === 'function') {
-    boardApi._persistBoardState();
-  }
+  boardApi._persistBoardState({}, ops);
 }
 
 function findPlacement(state, sceneId, placementId) {
