@@ -50,6 +50,10 @@ import { shouldApplyIncomingVersion } from '../state/version-guard.js';
 import { close as closeMonsterStatBlock, open as openMonsterStatBlock } from './monster-stat-block.js';
 import { createCombatTimerService } from '../services/combat-timer-service.js';
 import { mountFogOfWar, renderFog, renderFogSelection, isFogSelectActive, isPositionFogged, createFogChecker } from './fog-of-war.js';
+import { mountStairsPanel, isStairsEditMode, getSelectedStairId, subscribeStairsMode } from './stairs-panel.js';
+import { mountStairsRenderer, renderStairs, refreshStairsRender } from './stairs-renderer.js';
+import { mountStairsTool } from './stairs-tool.js';
+import { mountStairsTrigger } from './stairs-trigger.js';
 import { createConditionTooltips } from './condition-tooltips.js';
 import { createMapPings } from './map-pings.js';
 import {
@@ -4280,6 +4284,7 @@ export function mountBoardInteractions(store, routes = {}) {
       renderTokens(state, tokenLayer, viewState);
       renderFog(state);
       renderFogSelection();
+      renderStairs(state);
       templateTool.notifyMapState();
       applyCombatStateFromBoardState(state);
       mapPings.processIncomingPings(state.boardState?.pings ?? [], activeSceneId);
@@ -4321,6 +4326,33 @@ export function mountBoardInteractions(store, routes = {}) {
     isGm: Boolean(userState.isGM),
     getActiveLevelId: (state, sceneId) => getViewerLevelIdForCurrentUser(state, sceneId),
   });
+
+  // Mount stairs side panel (GM-only floating panel like fog).
+  mountStairsPanel({
+    boardApi,
+    isGm: Boolean(userState.isGM),
+    getViewerLevelId: (state, sceneId) => getViewerLevelIdForCurrentUser(state, sceneId),
+  });
+  mountStairsRenderer({
+    boardApi,
+    viewState,
+    getViewerLevelId: (state, sceneId) => getViewerLevelIdForCurrentUser(state, sceneId),
+    isEditMode: isStairsEditMode,
+    getSelectedStairId,
+  });
+  mountStairsTool({
+    boardApi,
+    viewState,
+    isGm: Boolean(userState.isGM),
+    getViewerLevelId: (state, sceneId) => getViewerLevelIdForCurrentUser(state, sceneId),
+  });
+  mountStairsTrigger({
+    boardApi,
+    getCurrentUserId,
+  });
+  // Panel open/close and selection changes don't trip a board-state
+  // notification, so the renderer subscribes directly to mode changes.
+  subscribeStairsMode(() => refreshStairsRender());
 
   // Expose a helper so fog-of-war.js can mark scene state dirty for saving
   boardApi._markSceneStateDirty = (sceneId) => {

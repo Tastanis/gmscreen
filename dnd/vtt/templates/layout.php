@@ -24,6 +24,7 @@ require_once __DIR__ . '/../../includes/strix-nav.php';
     <link rel="stylesheet" href="assets/css/character-summary.css?v=<?= $assetVersion ?>" />
     <link rel="stylesheet" href="assets/css/settings.css?v=<?= $assetVersion ?>" />
     <link rel="stylesheet" href="assets/css/fog-of-war.css?v=<?= $assetVersion ?>" />
+    <link rel="stylesheet" href="assets/css/stairs.css?v=<?= $assetVersion ?>" />
     <link rel="stylesheet" href="../dice-roller/dice-roller.css?v=<?= $assetVersion ?>" />
     <link rel="stylesheet" href="../character_sheet/ability-automation/automation.css?v=<?= $assetVersion ?>" />
 </head>

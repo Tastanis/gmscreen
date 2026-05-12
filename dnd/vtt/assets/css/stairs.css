@@ -1,0 +1,245 @@
+/* ── Stairs panel launcher button ───────────────────────────────── */
+
+.vtt-settings-launcher--stairs .vtt-settings-launcher__icon {
+  font-size: 1.05rem;
+  line-height: 1;
+}
+
+/* ── Stairs control panel (kept compact for future tools) ───────── */
+
+.vtt-stairs-panel {
+  position: fixed;
+  left: 56px;
+  top: 50%;
+  transform: translateY(-50%);
+  z-index: 1000;
+  background: var(--vtt-panel-bg, #1e1e2e);
+  border: 1px solid var(--vtt-border, #3a3a4a);
+  border-radius: 8px;
+  padding: 12px;
+  width: 220px;
+  box-shadow: 0 4px 20px rgba(0, 0, 0, 0.5);
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  color: var(--vtt-text, #e0e0e0);
+  font-size: 0.85rem;
+}
+
+.vtt-stairs-panel[hidden] {
+  display: none;
+}
+
+.vtt-stairs-panel__header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding-bottom: 6px;
+  border-bottom: 1px solid var(--vtt-border, #3a3a4a);
+  margin-bottom: 2px;
+}
+
+.vtt-stairs-panel__title {
+  font-size: 0.9rem;
+  font-weight: 600;
+  margin: 0;
+}
+
+.vtt-stairs-panel__close {
+  background: none;
+  border: none;
+  color: var(--vtt-text, #e0e0e0);
+  font-size: 1.2rem;
+  cursor: pointer;
+  padding: 0 4px;
+  line-height: 1;
+  opacity: 0.7;
+}
+
+.vtt-stairs-panel__close:hover {
+  opacity: 1;
+}
+
+.vtt-stairs-panel__section {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+.vtt-stairs-panel__section-title {
+  font-size: 0.7rem;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  color: #8a8a98;
+  margin: 0;
+}
+
+.vtt-stairs-panel__place-row {
+  display: flex;
+  gap: 6px;
+}
+
+.vtt-stairs-panel__btn {
+  flex: 1;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 6px;
+  padding: 6px 10px;
+  border: 1px solid var(--vtt-border, #3a3a4a);
+  border-radius: 4px;
+  background: var(--vtt-btn-bg, #2a2a3a);
+  color: var(--vtt-text, #e0e0e0);
+  cursor: pointer;
+  font-size: 0.8rem;
+  transition: background 0.15s, border-color 0.15s;
+}
+
+.vtt-stairs-panel__btn:hover {
+  background: var(--vtt-btn-hover-bg, #3a3a4a);
+  border-color: #5a5a6a;
+}
+
+.vtt-stairs-panel__btn[aria-pressed="true"],
+.vtt-stairs-panel__btn.is-active {
+  background: #3a5a8a;
+  border-color: #4a9eff;
+}
+
+.vtt-stairs-panel__btn:disabled {
+  opacity: 0.4;
+  cursor: not-allowed;
+}
+
+.vtt-stairs-panel__list {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  max-height: 180px;
+  overflow-y: auto;
+}
+
+.vtt-stairs-panel__list-empty {
+  font-size: 0.75rem;
+  color: #888;
+  text-align: center;
+  padding: 4px 0;
+}
+
+.vtt-stairs-panel__list-item {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 6px;
+  padding: 4px 6px;
+  border: 1px solid transparent;
+  border-radius: 4px;
+  background: rgba(255, 255, 255, 0.03);
+}
+
+.vtt-stairs-panel__list-item.is-selected {
+  background: rgba(74, 158, 255, 0.12);
+  border-color: #4a9eff;
+}
+
+.vtt-stairs-panel__list-label {
+  font-size: 0.78rem;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  flex: 1;
+}
+
+.vtt-stairs-panel__icon-btn {
+  background: none;
+  border: none;
+  color: var(--vtt-text, #e0e0e0);
+  cursor: pointer;
+  padding: 2px 4px;
+  font-size: 0.85rem;
+  opacity: 0.7;
+}
+
+.vtt-stairs-panel__icon-btn:hover {
+  opacity: 1;
+}
+
+.vtt-stairs-panel__divider {
+  border: none;
+  border-top: 1px solid var(--vtt-border, #3a3a4a);
+  margin: 2px 0;
+}
+
+.vtt-stairs-panel__status {
+  font-size: 0.72rem;
+  color: #888;
+  text-align: center;
+  min-height: 1.2em;
+}
+
+/* ── Stair polygon rendering layer ──────────────────────────────── */
+
+.vtt-board__stairs {
+  position: absolute;
+  inset: 0;
+  pointer-events: none;
+  z-index: 5;
+  overflow: visible;
+}
+
+/* Only individual elements receive events — never the empty SVG. This
+   keeps map-surface clicks (placement, deselect-on-empty) working. */
+.vtt-board__stairs.is-edit-mode .vtt-stair-corner-handle {
+  pointer-events: all;
+}
+.vtt-board__stairs.is-edit-mode .vtt-stair-segment {
+  pointer-events: stroke;
+}
+.vtt-board__stairs.is-edit-mode .vtt-stair-fill {
+  pointer-events: fill;
+}
+
+.vtt-stair-segment--barrier {
+  stroke: #a0a0b0;
+  stroke-width: 2;
+  stroke-linecap: square;
+}
+
+.vtt-stair-segment--green {
+  stroke: #2ecc71;
+  stroke-width: 3;
+  stroke-linecap: square;
+}
+
+.vtt-stair-segment--red {
+  stroke: #e74c3c;
+  stroke-width: 3;
+  stroke-linecap: square;
+}
+
+.vtt-stair-segment {
+  cursor: pointer;
+}
+
+.vtt-stair-fill {
+  fill: rgba(74, 158, 255, 0.05);
+  pointer-events: none;
+}
+
+.vtt-stair-fill.is-selected {
+  fill: rgba(74, 158, 255, 0.18);
+}
+
+.vtt-stair-corner-handle {
+  fill: #fff;
+  stroke: #4a9eff;
+  stroke-width: 2;
+  cursor: move;
+}
+
+.vtt-stair-corner-handle:hover {
+  fill: #4a9eff;
+}

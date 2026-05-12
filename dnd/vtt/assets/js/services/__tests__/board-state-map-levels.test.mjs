@@ -58,11 +58,13 @@ test('persistBoardState serializes mapLevels under per-scene board state only', 
         zIndex: 0,
         grid: null,
         cutouts: [{ column: 1, row: 2, width: 2, height: 3 }],
+        stairs: [],
         blocksLowerLevelInteraction: true,
         blocksLowerLevelVision: true,
         defaultForPlayers: true,
       },
     ],
     activeLevelId: 'level-a',
+    baseStairs: [],
   });
 });

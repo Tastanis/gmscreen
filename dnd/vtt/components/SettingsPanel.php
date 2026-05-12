@@ -156,6 +156,16 @@ function renderVttSettingsPanel(string $tokenLibraryMarkup = '', bool $isGm = fa
             <span class="vtt-settings-launcher__icon" aria-hidden="true"></span>
             <span class="visually-hidden">Fog of War</span>
         </button>
+        <button
+            type="button"
+            class="vtt-settings-launcher vtt-settings-launcher--stairs"
+            data-settings-launch="stairs"
+            aria-label="Stairs"
+            title="Stairs"
+        >
+            <span class="vtt-settings-launcher__icon" aria-hidden="true">&#x2B0F;</span>
+            <span class="visually-hidden">Stairs</span>
+        </button>
         <?php endif; ?>
     </div>
     <?php

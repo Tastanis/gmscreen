@@ -903,3 +903,17 @@ export function clearRulerSupplement() {
   sharedState.rulerDetail.textContent = '';
   sharedState.rulerDetail.hidden = true;
 }
+
+/**
+ * Read the current measurement waypoints (cell coords) without
+ * mutating ruler state. Used by stairs-trigger to evaluate the actual
+ * drag path against stair polygons on commit. Returns a fresh array of
+ * `{ column, row }` points (may be empty if no measurement is active
+ * or recent).
+ */
+export function getCurrentMeasurementPoints() {
+  if (!sharedState || !Array.isArray(sharedState.points)) return [];
+  return sharedState.points
+    .filter((p) => p && Number.isFinite(p.column) && Number.isFinite(p.row))
+    .map((p) => ({ column: p.column, row: p.row }));
+}

@@ -56,6 +56,7 @@ describe('map level normalization', () => {
       zIndex: 2,
       grid: { size: 80, locked: true, visible: false, offsetX: 12, offsetY: 16 },
       cutouts: [{ column: 2, row: 0, width: 1, height: 3, id: 'hole' }],
+      stairs: [],
       blocksLowerLevelInteraction: false,
       blocksLowerLevelVision: false,
       defaultForPlayers: false,
@@ -111,12 +112,14 @@ describe('map level normalization', () => {
           zIndex: 0,
           grid: null,
           cutouts: [],
+          stairs: [],
           blocksLowerLevelInteraction: true,
           blocksLowerLevelVision: true,
           defaultForPlayers: true,
         },
       ],
       activeLevelId: 'ground',
+      baseStairs: [],
     });
   });
 });

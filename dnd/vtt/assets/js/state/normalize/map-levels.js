@@ -1,5 +1,6 @@
 import { normalizeGridState } from './grid.js';
 import { roundToPrecision, toBoolean, toNonNegativeInt } from './helpers.js';
+import { normalizeStairList } from './stairs.js';
 
 export const MAP_LEVEL_MAX_LEVELS = 5;
 export const MAP_LEVEL_ID_PREFIX = 'map-level-';
@@ -49,7 +50,7 @@ const mapLevelSeed = Date.now();
 let mapLevelSequence = 0;
 
 export function createEmptyMapLevelsState() {
-  return { levels: [], activeLevelId: null };
+  return { levels: [], activeLevelId: null, baseStairs: [] };
 }
 
 export function normalizeMapLevelsState(raw, { sceneGrid = null } = {}) {
@@ -76,6 +77,9 @@ export function normalizeMapLevelsState(raw, { sceneGrid = null } = {}) {
     raw.activeLevelId ?? raw.activeLevel ?? raw.selectedLevelId ?? null,
     mapLevels.levels
   );
+  // Stairs that live on the virtual base level (Level 0) are stored on
+  // mapLevels itself so they survive without a stored level entry.
+  mapLevels.baseStairs = normalizeStairList(raw.baseStairs);
 
   return mapLevels;
 }
@@ -100,6 +104,7 @@ export function normalizeMapLevelEntry(raw = {}, index = 0, sceneGrid = null) {
     zIndex: normalizeMapLevelZIndex(raw.zIndex, index),
     grid: hasOwnGrid ? normalizeGridState({ ...(sceneGrid ?? {}), ...raw.grid }) : null,
     cutouts: normalizeMapLevelCutouts(raw.cutouts),
+    stairs: normalizeStairList(raw.stairs),
     blocksLowerLevelInteraction: toBoolean(raw.blocksLowerLevelInteraction, true),
     blocksLowerLevelVision: toBoolean(raw.blocksLowerLevelVision, true),
     defaultForPlayers: toBoolean(raw.defaultForPlayers, false),
@@ -267,6 +272,7 @@ export function buildLevelViewModel({ baseMapUrl = null, mapLevels = null, scene
     zIndex: -1,
     grid: sceneGrid && typeof sceneGrid === 'object' ? sceneGrid : null,
     cutouts: [],
+    stairs: Array.isArray(mapLevels?.baseStairs) ? mapLevels.baseStairs : [],
     blocksLowerLevelInteraction: false,
     blocksLowerLevelVision: false,
     defaultForPlayers: false,

@@ -77,6 +77,8 @@ export function mountSettingsPanel(routes, store, user = {}) {
       // Fog panel is managed independently by fog-of-war.js; skip it here
       // to avoid opening the main settings panel alongside the fog panel.
       if (tabId === 'fog') return;
+      // Same pattern for the Stairs panel — owned by stairs-panel.js.
+      if (tabId === 'stairs') return;
       openView(tabId);
     });
   });
