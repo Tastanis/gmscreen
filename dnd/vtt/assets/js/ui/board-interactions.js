@@ -846,6 +846,7 @@ export function mountBoardInteractions(store, routes = {}) {
   let pendingRoundConfirmation = false;
   let activeConditionPrompt = null;
   let activeTurnDialog = null;
+  let activePlayerTurnStartOverlay = null;
   let activeSaveEndsPrompt = null;
   let lastTurnPromptAnchorRect = null;
   const turnLockState = createTurnLockState();
@@ -6768,6 +6769,7 @@ export function mountBoardInteractions(store, routes = {}) {
         scheduleTrackerOverflowRefresh,
       },
     });
+    updatePlayerTurnStartButton();
   }
 
   function setSectionOverflowState(section, overflowed) {
@@ -7340,6 +7342,26 @@ export function mountBoardInteractions(store, routes = {}) {
     const combatantId = target.dataset.combatantId || '';
     if (!combatantId) {
       return false;
+    }
+
+    const context = buildTurnContext(combatantId);
+    handlePlayerInitiatedTurn(combatantId, context);
+    return true;
+  }
+
+  function activateCurrentPlayerTurnTarget() {
+    if (!combatActive || isGmUser()) {
+      return false;
+    }
+
+    const combatantId = getCurrentPlayerTurnCombatantId();
+    if (!combatantId) {
+      return false;
+    }
+
+    const target = findCombatTrackerToken(combatantId);
+    if (target) {
+      return activateCombatTrackerTarget(target);
     }
 
     const context = buildTurnContext(combatantId);
@@ -8148,7 +8170,9 @@ export function mountBoardInteractions(store, routes = {}) {
       return;
     }
 
+    closePlayerTurnStartButton();
     closeTurnPrompt();
+    closePlayerTurnStartButton();
 
     const label = getCombatantLabel(combatantId);
     const heading = formatTurnPromptHeading(label);
@@ -8460,6 +8484,136 @@ export function mountBoardInteractions(store, routes = {}) {
     overlay?.classList.remove('is-dragging');
     overlay?.remove();
     activeTurnDialog = null;
+    updatePlayerTurnStartButton();
+  }
+
+  function updatePlayerTurnStartButton() {
+    if (typeof document === 'undefined' || !document.body) {
+      return;
+    }
+
+    if (isGmUser() || activeTurnDialog) {
+      closePlayerTurnStartButton();
+      return;
+    }
+
+    const combatantId = getCurrentPlayerTurnCombatantId();
+    if (!combatActive || !combatantId) {
+      closePlayerTurnStartButton();
+      return;
+    }
+
+    const representativeId = getRepresentativeIdFor(combatantId) || combatantId;
+    if (activeCombatantId && activeCombatantId === representativeId) {
+      closePlayerTurnStartButton();
+      return;
+    }
+
+    const label = getCombatantLabel(combatantId) || formatProfileDisplayName(getCurrentUserId());
+    const buttonLabel = formatStartTurnButtonLabel(label);
+
+    let overlay = activePlayerTurnStartOverlay;
+    let button = overlay?.button ?? null;
+    if (!overlay || !button || !document.body.contains(overlay.element)) {
+      const element = document.createElement('div');
+      element.className = 'vtt-player-turn-start-overlay';
+      element.innerHTML = `
+        <button type="button" class="vtt-player-turn-start-button" data-player-start-turn></button>
+      `;
+      button = element.querySelector('[data-player-start-turn]');
+      if (!button) {
+        return;
+      }
+      const handleClick = () => {
+        activateCurrentPlayerTurnTarget();
+        updatePlayerTurnStartButton();
+      };
+      button.addEventListener('click', handleClick);
+      document.body.appendChild(element);
+      activePlayerTurnStartOverlay = { element, button, handleClick };
+      overlay = activePlayerTurnStartOverlay;
+    }
+
+    button.textContent = buttonLabel;
+    button.setAttribute('aria-label', buttonLabel);
+    positionPlayerTurnStartOverlay(overlay.element);
+  }
+
+  function closePlayerTurnStartButton() {
+    if (!activePlayerTurnStartOverlay) {
+      return;
+    }
+
+    const { element, button, handleClick } = activePlayerTurnStartOverlay;
+    button?.removeEventListener('click', handleClick);
+    element?.remove();
+    activePlayerTurnStartOverlay = null;
+  }
+
+  function positionPlayerTurnStartOverlay(overlay) {
+    if (!overlay) {
+      return;
+    }
+    positionTurnPromptOverlay(overlay);
+  }
+
+  function getCurrentPlayerTurnCombatantId() {
+    const userId = getCurrentUserId();
+    if (!userId || !PLAYER_CHARACTER_USER_IDS.includes(userId)) {
+      return null;
+    }
+
+    const state = boardApi.getState?.() ?? {};
+    const activeSceneId = state?.boardState?.activeSceneId ?? null;
+    const sceneEntry = activeSceneId ? state?.boardState?.sceneState?.[activeSceneId] ?? null : null;
+    const claimedTokens = sceneEntry?.claimedTokens;
+    const claimedPlacementIds = [];
+
+    if (claimedTokens && typeof claimedTokens === 'object') {
+      Object.entries(claimedTokens).forEach(([placementId, claimedUserId]) => {
+        if (normalizeProfileId(claimedUserId) === userId && typeof placementId === 'string' && placementId) {
+          claimedPlacementIds.push(placementId);
+        }
+      });
+    }
+
+    const candidates = claimedPlacementIds.length
+      ? claimedPlacementIds
+      : lastCombatTrackerEntries
+          .map((entry) => (entry && typeof entry.id === 'string' ? entry.id : null))
+          .filter((id) => id && normalizeProfileId(getCombatantProfileId(id)) === userId);
+
+    const activeIds = lastCombatTrackerActiveIds instanceof Set ? lastCombatTrackerActiveIds : new Set();
+    const validCandidates = candidates.filter((id) => activeIds.has(id) && getCombatantTeam(id) === 'ally');
+    const waitingCandidate = validCandidates.find((id) => {
+      const representativeId = getRepresentativeIdFor(id) || id;
+      return !completedCombatants.has(representativeId);
+    });
+
+    return waitingCandidate ?? validCandidates[0] ?? null;
+  }
+
+  function findCombatTrackerToken(combatantId) {
+    if (!combatTrackerRoot || !combatantId) {
+      return null;
+    }
+
+    const representativeId = getRepresentativeIdFor(combatantId) || combatantId;
+    const nodes = Array.from(combatTrackerRoot.querySelectorAll('[data-combatant-id]'));
+    return nodes.find((node) => node instanceof HTMLElement && node.dataset.combatantId === representativeId) ?? null;
+  }
+
+  function formatStartTurnButtonLabel(label) {
+    const raw = typeof label === 'string' ? label.trim().replace(/\s+/g, ' ') : '';
+    const name = raw || 'your character';
+    const lower = name.toLowerCase();
+    if (lower.endsWith("'s") || lower.endsWith('’s')) {
+      return `Start ${name} turn`;
+    }
+    if (/[sS]$/.test(name)) {
+      return `Start ${name}' turn`;
+    }
+    return `Start ${name}'s turn`;
   }
 
   function isCombatantHidden(combatantId) {

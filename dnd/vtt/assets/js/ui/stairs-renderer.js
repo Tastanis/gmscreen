@@ -3,8 +3,9 @@
  *
  * Draws stair polygons on the GM's current level inside an SVG layer
  * (`#vtt-stairs-layer`) that sits over the board. Polygons are only
- * shown while the stairs panel is open (edit mode). Outside edit mode
- * the layer is cleared and pointer-events are disabled.
+ * fully editable while the stairs panel is open (edit mode). Outside edit
+ * mode only red/green directional segments remain visible, and pointer-events
+ * are disabled.
  *
  * Each stair is rendered as:
  *   - a translucent fill (selectable / highlighted when selected)
@@ -69,15 +70,7 @@ export function renderStairs(state) {
   if (!layerEl) return;
   if (state) lastState = state;
 
-  const visible = Boolean(isEditMode());
-  if (!visible) {
-    if (layerEl.style.display !== 'none') {
-      layerEl.replaceChildren();
-      layerEl.style.display = 'none';
-      layerEl.classList.remove('is-edit-mode');
-    }
-    return;
-  }
+  const editing = Boolean(isEditMode());
 
   const view = viewStateRef ?? {};
   const mapW = Number(view.mapPixelSize?.width);
@@ -89,7 +82,8 @@ export function renderStairs(state) {
   }
 
   layerEl.style.display = '';
-  layerEl.classList.add('is-edit-mode');
+  layerEl.classList.toggle('is-edit-mode', editing);
+  layerEl.setAttribute('aria-hidden', editing ? 'false' : 'true');
   layerEl.setAttribute('viewBox', `0 0 ${mapW} ${mapH}`);
   layerEl.setAttribute('width', String(mapW));
   layerEl.setAttribute('height', String(mapH));
@@ -117,11 +111,12 @@ export function renderStairs(state) {
     const group = document.createElementNS(SVG_NS, 'g');
     group.dataset.stairId = stair.id;
     group.classList.add('vtt-stair');
+    let hasRenderableElement = false;
 
-    // Polygon fill outlines the stair body for hit-testing & visual
-    // grouping. We compute the perimeter as a polygon-points string.
+    // Polygon fill outlines the stair body for hit-testing & visual grouping
+    // in edit mode. During normal play, only red/green directional edges show.
     const perimeter = buildStairPerimeter(stair.corners);
-    if (perimeter.length > 0) {
+    if (editing && perimeter.length > 0) {
       const points = [];
       perimeter.forEach((segment, idx) => {
         if (idx === 0) {
@@ -136,13 +131,18 @@ export function renderStairs(state) {
       polygon.classList.add('vtt-stair-fill');
       if (stair.id === selectedId) polygon.classList.add('is-selected');
       group.appendChild(polygon);
+      hasRenderableElement = true;
     }
 
     // One <line> per unit segment, colored per edgeColors map.
     perimeter.forEach((segment) => {
+      const color = resolveSegmentColor(stair.edgeColors, segment.id);
+      if (!editing && color !== 'green' && color !== 'red') {
+        return;
+      }
+
       const from = cellToPx(segment.from);
       const to = cellToPx(segment.to);
-      const color = resolveSegmentColor(stair.edgeColors, segment.id);
       const line = document.createElementNS(SVG_NS, 'line');
       line.setAttribute('x1', String(from.x));
       line.setAttribute('y1', String(from.y));
@@ -153,10 +153,11 @@ export function renderStairs(state) {
       line.dataset.segmentId = segment.id;
       line.dataset.segmentColor = color;
       group.appendChild(line);
+      hasRenderableElement = true;
     });
 
-    // Corner handles for the selected stair only.
-    if (stair.id === selectedId && Array.isArray(stair.corners)) {
+    // Corner handles for the selected stair only in edit mode.
+    if (editing && stair.id === selectedId && Array.isArray(stair.corners)) {
       stair.corners.forEach((corner, cornerIndex) => {
         const center = cellToPx(corner);
         const half = HANDLE_SIZE / 2;
@@ -169,11 +170,19 @@ export function renderStairs(state) {
         rect.dataset.stairId = stair.id;
         rect.dataset.cornerIndex = String(cornerIndex);
         group.appendChild(rect);
+        hasRenderableElement = true;
       });
     }
 
-    fragment.appendChild(group);
+    if (hasRenderableElement) {
+      fragment.appendChild(group);
+    }
   });
+  if (!fragment.childNodes.length) {
+    layerEl.replaceChildren();
+    layerEl.style.display = 'none';
+    return;
+  }
   layerEl.replaceChildren(fragment);
 }
 
