@@ -41,7 +41,7 @@ describe('stairs trigger — evaluateStairCrossing (down-stair, green→red trig
       { x: 2.5, y: 0.5 }, // outside, above
       { x: 2.5, y: 5.5 }, // outside, below
     ];
-    assert.equal(evaluateStairCrossing(path, buildDownStair()), true);
+    assert.equal(evaluateStairCrossing(path, buildDownStair()).fired, true);
   });
 
   test('enter green, exit green (same color back out) does not fire', () => {
@@ -50,7 +50,7 @@ describe('stairs trigger — evaluateStairCrossing (down-stair, green→red trig
       { x: 2.5, y: 3.0 },
       { x: 2.5, y: 0.5 },
     ];
-    assert.equal(evaluateStairCrossing(path, buildDownStair()), false);
+    assert.equal(evaluateStairCrossing(path, buildDownStair()).fired, false);
   });
 
   test('enter green, exit barrier (side wall) does not fire', () => {
@@ -59,7 +59,7 @@ describe('stairs trigger — evaluateStairCrossing (down-stair, green→red trig
       { x: 2.5, y: 3.0 }, // inside
       { x: 0.5, y: 3.0 }, // left of polygon (outside, exited via left barrier)
     ];
-    assert.equal(evaluateStairCrossing(path, buildDownStair()), false);
+    assert.equal(evaluateStairCrossing(path, buildDownStair()).fired, false);
   });
 
   test('enter from barrier side does not fire even when exiting through red', () => {
@@ -68,7 +68,7 @@ describe('stairs trigger — evaluateStairCrossing (down-stair, green→red trig
       { x: 2.5, y: 3.0 }, // inside (entered through left barrier)
       { x: 2.5, y: 5.5 }, // outside, below (would have been red exit)
     ];
-    assert.equal(evaluateStairCrossing(path, buildDownStair()), false);
+    assert.equal(evaluateStairCrossing(path, buildDownStair()).fired, false);
   });
 
   test('starting inside the polygon never triggers', () => {
@@ -76,7 +76,7 @@ describe('stairs trigger — evaluateStairCrossing (down-stair, green→red trig
       { x: 2.5, y: 3.0 }, // already inside
       { x: 2.5, y: 5.5 }, // exit via red
     ];
-    assert.equal(evaluateStairCrossing(path, buildDownStair()), false);
+    assert.equal(evaluateStairCrossing(path, buildDownStair()).fired, false);
   });
 
   test('crossing green then red in a single straight segment also fires', () => {
@@ -86,7 +86,7 @@ describe('stairs trigger — evaluateStairCrossing (down-stair, green→red trig
       { x: 2.5, y: -0.5 },
       { x: 2.5, y: 6.0 },
     ];
-    assert.equal(evaluateStairCrossing(path, buildDownStair()), true);
+    assert.equal(evaluateStairCrossing(path, buildDownStair()).fired, true);
   });
 });
 
@@ -96,7 +96,7 @@ describe('stairs trigger — evaluateStairCrossing (up-stair, red→green trigge
       { x: 2.5, y: 5.5 }, // outside, below
       { x: 2.5, y: 0.5 }, // outside, above
     ];
-    assert.equal(evaluateStairCrossing(path, buildUpStair()), true);
+    assert.equal(evaluateStairCrossing(path, buildUpStair()).fired, true);
   });
 
   test('walk green->red on an up-stair does NOT fire (wrong direction)', () => {
@@ -104,7 +104,60 @@ describe('stairs trigger — evaluateStairCrossing (up-stair, red→green trigge
       { x: 2.5, y: 0.5 },
       { x: 2.5, y: 5.5 },
     ];
-    assert.equal(evaluateStairCrossing(path, buildUpStair()), false);
+    assert.equal(evaluateStairCrossing(path, buildUpStair()).fired, false);
+  });
+});
+
+describe('stairs trigger — multi-step (square-by-square) traversal', () => {
+  // Each arrow-key step is one move event with a 2-point path (from → to).
+  // To complete a traversal the trigger must remember the entry color
+  // recorded by a previous step.
+
+  test('three-step traversal: enter green (step 1), cross inside (step 2), exit red (step 3)', () => {
+    const stair = buildDownStair(); // green=top(row1), red=bottom(row5)
+    // Step 1: from above to one row inside (crosses green).
+    const step1 = evaluateStairCrossing(
+      [{ x: 2.5, y: 0.5 }, { x: 2.5, y: 1.5 }],
+      stair
+    );
+    assert.equal(step1.fired, false);
+    assert.equal(step1.endsInside, true);
+    assert.equal(step1.entry, 'green');
+
+    // Step 2: still inside, no crossing. Entry must persist.
+    const step2 = evaluateStairCrossing(
+      [{ x: 2.5, y: 1.5 }, { x: 2.5, y: 3.5 }],
+      stair,
+      { priorEntry: step1.entry }
+    );
+    assert.equal(step2.fired, false);
+    assert.equal(step2.endsInside, true);
+    assert.equal(step2.entry, 'green');
+
+    // Step 3: exit through red. Should fire on a down-stair.
+    const step3 = evaluateStairCrossing(
+      [{ x: 2.5, y: 3.5 }, { x: 2.5, y: 5.5 }],
+      stair,
+      { priorEntry: step2.entry }
+    );
+    assert.equal(step3.fired, true);
+  });
+
+  test('square-by-square: enter red (step 1) then exit green (step 2) fires on up-stair', () => {
+    const stair = buildUpStair();
+    const step1 = evaluateStairCrossing(
+      [{ x: 2.5, y: 5.5 }, { x: 2.5, y: 4.5 }],
+      stair
+    );
+    assert.equal(step1.entry, 'red');
+    assert.equal(step1.endsInside, true);
+
+    const step2 = evaluateStairCrossing(
+      [{ x: 2.5, y: 4.5 }, { x: 2.5, y: 0.5 }],
+      stair,
+      { priorEntry: step1.entry }
+    );
+    assert.equal(step2.fired, true);
   });
 });
 
@@ -117,7 +170,7 @@ describe('stairs trigger — multi-waypoint paths', () => {
       { x: 2.0, y: 4.0 },
       { x: 2.5, y: 5.5 },
     ];
-    assert.equal(evaluateStairCrossing(path, buildDownStair()), true);
+    assert.equal(evaluateStairCrossing(path, buildDownStair()).fired, true);
   });
 
   test('enter green, exit barrier, re-enter green, exit red fires (state resets cleanly)', () => {
@@ -130,6 +183,6 @@ describe('stairs trigger — multi-waypoint paths', () => {
       { x: 2.5, y: 0.5 }, // back to top center, outside
       { x: 2.5, y: 5.5 }, // straight down through polygon: green entry, red exit → fire
     ];
-    assert.equal(evaluateStairCrossing(path, buildDownStair()), true);
+    assert.equal(evaluateStairCrossing(path, buildDownStair()).fired, true);
   });
 });

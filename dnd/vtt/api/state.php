@@ -2210,6 +2210,7 @@ function createEmptyMapLevelsState(): array
     return [
         'levels' => [],
         'activeLevelId' => null,
+        'baseStairs' => [],
     ];
 }
 
@@ -2252,6 +2253,11 @@ function normalizeMapLevelsPayload($rawMapLevels, array $sceneGrid = []): array
     }
 
     $mapLevels['activeLevelId'] = resolveActiveMapLevelId($preferred, $mapLevels['levels']);
+    // Stairs on the virtual base level (Level 0) live at mapLevels root
+    // because Level 0 has no entry in `levels[]`.
+    $mapLevels['baseStairs'] = normalizeMapLevelStairsPayload(
+        $rawMapLevels['baseStairs'] ?? []
+    );
     return $mapLevels;
 }
 
@@ -2304,6 +2310,7 @@ function normalizeMapLevelPayload($rawLevel, int $index, array $sceneGrid = []):
         'zIndex' => normalizeMapLevelZIndex($rawLevel['zIndex'] ?? null, $index),
         'grid' => $grid,
         'cutouts' => normalizeMapLevelCutoutsPayload($rawLevel['cutouts'] ?? []),
+        'stairs' => normalizeMapLevelStairsPayload($rawLevel['stairs'] ?? []),
         'blocksLowerLevelInteraction' => normalizeMapLevelBoolean($rawLevel['blocksLowerLevelInteraction'] ?? null, true),
         'blocksLowerLevelVision' => normalizeMapLevelBoolean($rawLevel['blocksLowerLevelVision'] ?? null, true),
         'defaultForPlayers' => normalizeMapLevelBoolean($rawLevel['defaultForPlayers'] ?? null, false),
@@ -2432,6 +2439,204 @@ function normalizeRequiredMapLevelCellCoordinate($value): ?int
     }
 
     return max(0, (int) ((float) $value));
+}
+
+/**
+ * Server-side mirror of `normalizeStairList` in stairs.js. Drops any
+ * stair entry that's missing required fields and de-duplicates by id.
+ *
+ * @param mixed $rawStairs
+ * @return array<int,array<string,mixed>>
+ */
+function normalizeMapLevelStairsPayload($rawStairs): array
+{
+    if (!is_array($rawStairs)) {
+        return [];
+    }
+    $stairs = [];
+    $seenIds = [];
+    foreach ($rawStairs as $rawStair) {
+        $normalized = normalizeMapLevelStairPayload($rawStair);
+        if ($normalized === null) {
+            continue;
+        }
+        if (in_array($normalized['id'], $seenIds, true)) {
+            continue;
+        }
+        $seenIds[] = $normalized['id'];
+        $stairs[] = $normalized;
+    }
+    return $stairs;
+}
+
+/**
+ * Server-side mirror of `normalizeStairEntry` in stairs.js. Rejects any
+ * stair whose corners are missing/malformed, direction is invalid, or
+ * linkedLevelId is empty.
+ *
+ * @param mixed $rawStair
+ */
+function normalizeMapLevelStairPayload($rawStair): ?array
+{
+    if (!is_array($rawStair)) {
+        return null;
+    }
+    $corners = normalizeMapLevelStairCorners($rawStair['corners'] ?? null);
+    if ($corners === null) {
+        return null;
+    }
+    $direction = null;
+    if (is_string($rawStair['direction'] ?? null)) {
+        $candidate = strtolower(trim($rawStair['direction']));
+        if ($candidate === 'down' || $candidate === 'up') {
+            $direction = $candidate;
+        }
+    }
+    if ($direction === null) {
+        return null;
+    }
+    $linkedLevelId = null;
+    if (is_string($rawStair['linkedLevelId'] ?? null)) {
+        $trimmed = trim($rawStair['linkedLevelId']);
+        if ($trimmed !== '') {
+            $linkedLevelId = $trimmed;
+        }
+    }
+    if ($linkedLevelId === null) {
+        return null;
+    }
+    $idSource = null;
+    if (is_string($rawStair['id'] ?? null)) {
+        $trimmed = trim($rawStair['id']);
+        if ($trimmed !== '') {
+            $idSource = $trimmed;
+        }
+    }
+    $id = $idSource ?? uniqid('stair-', false);
+    $edgeColors = normalizeMapLevelStairEdgeColors($rawStair['edgeColors'] ?? null);
+
+    return [
+        'id' => $id,
+        'direction' => $direction,
+        'corners' => $corners,
+        'edgeColors' => (object) $edgeColors,
+        'linkedLevelId' => $linkedLevelId,
+    ];
+}
+
+/**
+ * Stair corners must be a list of exactly 4 cell coordinates. Any other
+ * shape returns null so the parent normalizer drops the stair.
+ *
+ * @param mixed $rawCorners
+ * @return array<int,array<string,int>>|null
+ */
+function normalizeMapLevelStairCorners($rawCorners): ?array
+{
+    if (!is_array($rawCorners) || count($rawCorners) !== 4) {
+        return null;
+    }
+    $corners = [];
+    foreach ($rawCorners as $rawCorner) {
+        if (!is_array($rawCorner)) {
+            return null;
+        }
+        $colSource = $rawCorner['column'] ?? ($rawCorner['col'] ?? ($rawCorner['x'] ?? null));
+        $rowSource = $rawCorner['row'] ?? ($rawCorner['y'] ?? null);
+        if (!is_numeric($colSource) || !is_numeric($rowSource)) {
+            return null;
+        }
+        $corners[] = [
+            'column' => max(0, (int) ((float) $colSource)),
+            'row' => max(0, (int) ((float) $rowSource)),
+        ];
+    }
+    $allSame = true;
+    foreach ($corners as $corner) {
+        if ($corner['column'] !== $corners[0]['column'] || $corner['row'] !== $corners[0]['row']) {
+            $allSame = false;
+            break;
+        }
+    }
+    if ($allSame) {
+        return null;
+    }
+    return $corners;
+}
+
+/**
+ * Edge color map: sparse object keyed by canonical segment id. Server
+ * accepts only well-formed unit-length segment keys with the colors
+ * `green` or `red`. Missing entries default to barrier on the client.
+ *
+ * @param mixed $raw
+ * @return array<string,string>
+ */
+function normalizeMapLevelStairEdgeColors($raw): array
+{
+    if (!is_array($raw)) {
+        return [];
+    }
+    $out = [];
+    foreach ($raw as $key => $value) {
+        if (!is_string($key) || !is_string($value)) {
+            continue;
+        }
+        $canonical = canonicalizeMapLevelStairSegmentKey($key);
+        if ($canonical === null) {
+            continue;
+        }
+        $color = strtolower(trim($value));
+        if ($color !== 'green' && $color !== 'red') {
+            continue;
+        }
+        $out[$canonical] = $color;
+    }
+    return $out;
+}
+
+function canonicalizeMapLevelStairSegmentKey(string $rawKey): ?string
+{
+    $parts = explode('-', trim($rawKey));
+    if (count($parts) !== 2) {
+        return null;
+    }
+    $first = parseMapLevelStairEndpoint($parts[0]);
+    $second = parseMapLevelStairEndpoint($parts[1]);
+    if ($first === null || $second === null) {
+        return null;
+    }
+    $dCol = abs($first['column'] - $second['column']);
+    $dRow = abs($first['row'] - $second['row']);
+    $isUnit = ($dCol === 1 && $dRow === 0) || ($dCol === 0 && $dRow === 1);
+    if (!$isUnit) {
+        return null;
+    }
+    // Sort endpoints (column asc, then row asc) for a canonical id.
+    if (
+        $first['column'] > $second['column']
+        || ($first['column'] === $second['column'] && $first['row'] > $second['row'])
+    ) {
+        $tmp = $first;
+        $first = $second;
+        $second = $tmp;
+    }
+    return $first['column'] . ',' . $first['row'] . '-' . $second['column'] . ',' . $second['row'];
+}
+
+function parseMapLevelStairEndpoint(string $text): ?array
+{
+    $parts = explode(',', trim($text));
+    if (count($parts) !== 2) {
+        return null;
+    }
+    if (!is_numeric($parts[0]) || !is_numeric($parts[1])) {
+        return null;
+    }
+    return [
+        'column' => (int) ((float) $parts[0]),
+        'row' => (int) ((float) $parts[1]),
+    ];
 }
 
 function normalizeMapLevelDimension($value, int $fallback = 1): int

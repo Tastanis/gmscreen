@@ -19,7 +19,6 @@ import {
   addStairWithMirror,
   cycleSegmentColor,
   rectangleCornersFromCells,
-  buildPlacementEdgeColors,
   removeStairWithMirror,
   resolveLinkedLevelId,
   updateStairCorners,
@@ -174,7 +173,6 @@ function commitPlacement(cellA, cellB, direction) {
   if (!sceneId) return;
   const levelId = currentViewerLevelId();
   const corners = rectangleCornersFromCells(cellA, cellB);
-  const edgeColors = buildPlacementEdgeColors({ cellA, cellB, corners });
 
   let newStairId = null;
   boardApi.updateState((draft) => {
@@ -189,7 +187,9 @@ function commitPlacement(cellA, cellB, direction) {
       levelId,
       direction,
       corners,
-      edgeColors,
+      // No auto-coloring at placement — every segment starts as a
+      // barrier. The GM paints green/red via segment clicks.
+      edgeColors: {},
     });
   });
   if (newStairId) {

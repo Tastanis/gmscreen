@@ -25,6 +25,12 @@ import { getCurrentMeasurementPoints } from './drag-ruler.js';
 let boardApi = null;
 let getCurrentUserId = () => null;
 
+// Per-token tracking so square-by-square movement can detect an entry
+// in one move event and an exit in a later one. Keyed by placementId;
+// value is { stairId, entry: 'green'|'red'|'barrier' } — null when the
+// token is currently outside every stair polygon on its level.
+const tokenStairState = new Map();
+
 export function mountStairsTrigger(options = {}) {
   boardApi = options.boardApi ?? null;
   if (typeof options.getCurrentUserId === 'function') {
@@ -56,13 +62,40 @@ function handleTokenMoved(event) {
   const path = buildPathCenters(from, to);
   if (path.length < 2) return;
 
-  for (const stair of stairs) {
-    const fired = evaluateStairCrossing(path, stair);
-    if (fired) {
+  // First, evaluate the stair the token is "currently mid-traversal of"
+  // (if any) — this lets a token finish a multi-step traversal that
+  // started in a previous move event.
+  const existing = tokenStairState.get(placementId) ?? null;
+  const orderedStairs = orderStairsWithPriorEntry(stairs, existing);
+
+  for (const stair of orderedStairs) {
+    const result = evaluateStairCrossing(path, stair, {
+      priorEntry: existing && existing.stairId === stair.id ? existing.entry : null,
+    });
+    if (result.fired) {
+      tokenStairState.delete(placementId);
       dispatchLevelChange({ sceneId, placementId, targetLevelId: stair.linkedLevelId });
       return; // only one stair can fire per move
     }
+    // Persist tracking state for the next move event. We only keep
+    // tracking for one stair at a time — whichever the token is most
+    // recently inside of.
+    if (result.endsInside) {
+      tokenStairState.set(placementId, { stairId: stair.id, entry: result.entry });
+      return;
+    }
   }
+  // The token ended this move outside every polygon — clear stale state.
+  tokenStairState.delete(placementId);
+}
+
+function orderStairsWithPriorEntry(stairs, existing) {
+  if (!existing) return stairs;
+  const idx = stairs.findIndex((s) => s.id === existing.stairId);
+  if (idx <= 0) return stairs;
+  // Move the prior-entry stair to the front so its state is honored
+  // before we evaluate any others (which would otherwise reset it).
+  return [stairs[idx], ...stairs.slice(0, idx), ...stairs.slice(idx + 1)];
 }
 
 // ── Path construction ────────────────────────────────────────────
@@ -116,22 +149,36 @@ function footprintCenter(footprint) {
 
 /**
  * Walk the path and decide whether this stair's direction-specific
- * crossing pattern is met. Returns true if the stair should fire.
+ * crossing pattern is met.
+ *
+ * Returns a small result envelope:
+ *   { fired, entry, endsInside }
+ *
+ * `priorEntry` carries forward the entry color recorded in a previous
+ * move event so square-by-square movement can complete an entry→exit
+ * pattern across multiple steps.
  */
-export function evaluateStairCrossing(pathCenters, stair) {
-  if (!Array.isArray(pathCenters) || pathCenters.length < 2) return false;
-  if (!stair || !Array.isArray(stair.corners) || stair.corners.length !== 4) return false;
+export function evaluateStairCrossing(pathCenters, stair, { priorEntry = null } = {}) {
+  const result = { fired: false, entry: null, endsInside: false };
+  if (!Array.isArray(pathCenters) || pathCenters.length < 2) return result;
+  if (!stair || !Array.isArray(stair.corners) || stair.corners.length !== 4) return result;
   const perimeter = buildStairPerimeter(stair.corners);
-  if (!perimeter.length) return false;
+  if (!perimeter.length) return result;
   const polygonVerts = polygonCornersFromPerimeter(perimeter);
   const startsInside = pointInPolygon(pathCenters[0], polygonVerts);
 
-  // Starting "under the stairs" suppresses any trigger for this move —
-  // the user never crossed an entry edge.
-  let entry = startsInside ? 'barrier' : null;
-  let fired = false;
+  // Initial entry state:
+  //   - prior tracking from a previous move event takes precedence;
+  //   - otherwise, starting "inside" with no record = under the stairs
+  //     (barrier entry, can't trigger).
+  let entry;
+  if (priorEntry === 'green' || priorEntry === 'red' || priorEntry === 'barrier') {
+    entry = priorEntry;
+  } else {
+    entry = startsInside ? 'barrier' : null;
+  }
 
-  for (let i = 0; i < pathCenters.length - 1 && !fired; i += 1) {
+  for (let i = 0; i < pathCenters.length - 1 && !result.fired; i += 1) {
     const segStart = pathCenters[i];
     const segEnd = pathCenters[i + 1];
     const crossings = [];
@@ -149,14 +196,14 @@ export function evaluateStairCrossing(pathCenters, stair) {
         entry === 'green' &&
         crossing.color === 'red'
       ) {
-        fired = true;
+        result.fired = true;
         break;
       } else if (
         stair.direction === 'up' &&
         entry === 'red' &&
         crossing.color === 'green'
       ) {
-        fired = true;
+        result.fired = true;
         break;
       } else {
         // Any other crossing pattern — reset state. The next crossing
@@ -166,7 +213,10 @@ export function evaluateStairCrossing(pathCenters, stair) {
     }
   }
 
-  return fired;
+  result.entry = entry;
+  result.endsInside =
+    !result.fired && pointInPolygon(pathCenters[pathCenters.length - 1], polygonVerts);
+  return result;
 }
 
 function polygonCornersFromPerimeter(perimeter) {

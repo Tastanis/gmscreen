@@ -5047,6 +5047,7 @@ export function mountBoardInteractions(store, routes = {}) {
 
     let moved = false;
     const movedIds = [];
+    const movedFootprints = []; // { id, from, to } captured pre-mutation
     const moveTimestamp = Date.now();
     boardApi.updateState?.((draft) => {
       if (!draft.boardState || typeof draft.boardState !== 'object') {
@@ -5077,6 +5078,11 @@ export function mountBoardInteractions(store, routes = {}) {
         const nextColumn = clamp(currentColumn + stepX, 0, maxColumn);
         const nextRow = clamp(currentRow + stepY, 0, maxRow);
         if (nextColumn !== currentColumn || nextRow !== currentRow) {
+          movedFootprints.push({
+            id: placement.id,
+            from: { column: currentColumn, row: currentRow, width, height },
+            to: { column: nextColumn, row: nextRow, width, height },
+          });
           placement.column = nextColumn;
           placement.row = nextRow;
           placement._lastModified = moveTimestamp;
@@ -5085,6 +5091,22 @@ export function mountBoardInteractions(store, routes = {}) {
         }
       });
     });
+
+    // Dispatch the same `vtt:token-moved` event as drag-commit so the
+    // stairs trigger (and any other listener) sees keyboard movement.
+    if (moved) {
+      movedFootprints.forEach((entry) => {
+        document.dispatchEvent(new CustomEvent('vtt:token-moved', {
+          detail: {
+            placementId: entry.id,
+            sceneId: activeSceneId,
+            from: entry.from,
+            to: entry.to,
+            kind: 'normal',
+          },
+        }));
+      });
+    }
 
     if (moved) {
       // Mark moved placements as dirty for delta save
