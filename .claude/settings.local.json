@@ -50,7 +50,8 @@
       "Bash(node --test dnd/vtt/assets/js/state/__tests__/*.test.mjs)",
       "Bash(node --test dnd/vtt/assets/js/services/__tests__/*.test.mjs dnd/vtt/assets/js/ui/__tests__/scene-manager-map-levels.test.mjs dnd/vtt/assets/js/ui/__tests__/map-level-renderer.test.mjs dnd/vtt/assets/js/ui/__tests__/token-levels.test.mjs)",
       "Bash(xargs node --test)",
-      "Bash(node --input-type=module -e \"Promise.all\\([import\\('./dnd/vtt/assets/js/ui/stairs-panel.js'\\), import\\('./dnd/vtt/assets/js/ui/stairs-renderer.js'\\), import\\('./dnd/vtt/assets/js/ui/stairs-geometry.js'\\), import\\('./dnd/vtt/assets/js/ui/stairs-mutations.js'\\), import\\('./dnd/vtt/assets/js/ui/stairs-tool.js'\\)]\\).then\\(\\(\\) => console.log\\('OK'\\)\\).catch\\(e => { console.error\\('FAIL', e.message\\); process.exit\\(1\\); }\\);\")"
+      "Bash(node --input-type=module -e \"Promise.all\\([import\\('./dnd/vtt/assets/js/ui/stairs-panel.js'\\), import\\('./dnd/vtt/assets/js/ui/stairs-renderer.js'\\), import\\('./dnd/vtt/assets/js/ui/stairs-geometry.js'\\), import\\('./dnd/vtt/assets/js/ui/stairs-mutations.js'\\), import\\('./dnd/vtt/assets/js/ui/stairs-tool.js'\\)]\\).then\\(\\(\\) => console.log\\('OK'\\)\\).catch\\(e => { console.error\\('FAIL', e.message\\); process.exit\\(1\\); }\\);\")",
+      "Bash(ls -la \"C:/Users/tasta/Downloads/Draw Steel Rules.pdf\")"
     ],
     "deny": []
   }
