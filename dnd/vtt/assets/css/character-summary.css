@@ -31,6 +31,78 @@ body.vtt-character-summary-is-open .vtt-settings-launchers {
   font-family: Georgia, "Times New Roman", serif;
 }
 
+.vtt-character-summary__tuck {
+  position: sticky;
+  top: 8px;
+  float: right;
+  width: 30px;
+  height: 30px;
+  margin: 8px 8px 0 0;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  border: 1px solid rgba(239, 230, 210, 0.42);
+  border-radius: 4px;
+  background: rgba(5, 12, 10, 0.86);
+  color: #efe6d2;
+  cursor: pointer;
+  font: 900 1rem/1 "Inter", "Segoe UI", sans-serif;
+  z-index: 4;
+}
+
+.vtt-character-summary__tuck:hover,
+.vtt-character-summary__tuck:focus-visible {
+  border-color: rgba(244, 234, 215, 0.86);
+  color: #fff;
+  outline: none;
+}
+
+.vtt-character-summary-reveal {
+  position: fixed;
+  left: 0;
+  top: var(--vtt-character-panel-top);
+  min-width: 42px;
+  max-width: 172px;
+  min-height: 42px;
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 8px 10px 8px 8px;
+  border: 1px solid rgba(191, 166, 139, 0.46);
+  border-left: 0;
+  border-radius: 0 6px 6px 0;
+  background: rgba(5, 12, 10, 0.94);
+  color: #efe6d2;
+  box-shadow: 6px 0 18px rgba(0, 0, 0, 0.28);
+  cursor: pointer;
+  font: 800 0.78rem/1 "Inter", "Segoe UI", sans-serif;
+  text-transform: uppercase;
+  z-index: 1270;
+}
+
+.vtt-character-summary-reveal[hidden] {
+  display: none;
+}
+
+.vtt-character-summary-reveal:hover,
+.vtt-character-summary-reveal:focus-visible {
+  border-color: rgba(244, 234, 215, 0.84);
+  color: #fff;
+  outline: none;
+}
+
+.vtt-character-summary-reveal__chevron {
+  font-size: 1rem;
+  line-height: 1;
+}
+
+.vtt-character-summary-reveal__name {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
 .vtt-character-summary--open {
   transform: translateX(0);
   pointer-events: auto;
@@ -767,6 +839,11 @@ body.vtt-character-summary-is-open .vtt-settings-launchers {
     border-left: 1px solid rgba(191, 166, 139, 0.42);
     border-radius: 8px;
     left: var(--vtt-character-panel-offset);
+  }
+
+  .vtt-character-summary-reveal {
+    top: calc(var(--vtt-character-panel-top) + 4px);
+    max-width: 148px;
   }
 
   .vtt-character-card__hero {

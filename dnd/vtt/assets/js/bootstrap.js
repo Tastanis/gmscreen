@@ -67,7 +67,7 @@ async function bootstrap() {
   const storeApi = { getState, getIsGm, getUserName, subscribe, updateState };
 
   mountSettingsPanel(routes, storeApi, userContext);
-  mountCharacterSummaryPanel(routes);
+  mountCharacterSummaryPanel(routes, userContext);
   const chatParticipants = Array.isArray(config.chatParticipants) ? config.chatParticipants : [];
   mountChatPanel(routes, userContext, chatParticipants);
   mountBoardInteractions(storeApi, routes);

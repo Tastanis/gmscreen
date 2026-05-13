@@ -82,20 +82,26 @@ const TEST_TIER_LABELS = {
   high: '17+',
 };
 
-export function mountCharacterSummaryPanel(routes = {}) {
+const PANEL_VISIBILITY_STORAGE_PREFIX = 'vtt:character-summary:open:';
+
+export function mountCharacterSummaryPanel(routes = {}, userContext = {}) {
   const panel = document.getElementById('vtt-character-summary-panel');
   if (!panel) {
     return;
   }
 
+  const storageKey = buildPanelVisibilityStorageKey(userContext);
+  let panelPreferredOpen = readPanelVisibilityPreference(storageKey);
   let activeRequestId = 0;
   let activeCharacterId = null;
   let activeAbilityCategory = null;
   let activeSheet = null;
   let activeToken = null;
+  let activeDisplayName = '';
   const boardHeader = document.querySelector('.vtt-board__header');
   const abilityTray = ensureAbilityTray();
   const abilityPreview = ensureAbilityPreview();
+  const revealButton = ensureRevealButton();
 
   const updatePanelTop = () => {
     if (!boardHeader || !document.body) {
@@ -113,39 +119,72 @@ export function mountCharacterSummaryPanel(routes = {}) {
     observer.observe(boardHeader);
   }
 
-  const close = () => {
+  const clearActiveCharacter = () => {
     activeCharacterId = null;
     activeSheet = null;
     activeAbilityCategory = null;
     activeToken = null;
-    panel.classList.remove('vtt-character-summary--open');
-    panel.classList.add('vtt-character-summary--closed');
-    panel.setAttribute('aria-hidden', 'true');
-    document.body?.classList.remove('vtt-character-summary-is-open');
+    activeDisplayName = '';
+    setPanelOpen(false, { persist: false });
+    syncRevealButton();
     renderAbilityTray(abilityTray, null);
     hideAbilityPreview(abilityPreview);
   };
 
-  const open = () => {
+  const setPanelOpen = (open, { persist = true } = {}) => {
+    const isOpen = Boolean(open);
     updatePanelTop();
-    panel.classList.add('vtt-character-summary--open');
-    panel.classList.remove('vtt-character-summary--closed');
-    panel.setAttribute('aria-hidden', 'false');
-    document.body?.classList.add('vtt-character-summary-is-open');
+    panel.classList.toggle('vtt-character-summary--open', isOpen);
+    panel.classList.toggle('vtt-character-summary--closed', !isOpen);
+    panel.setAttribute('aria-hidden', isOpen ? 'false' : 'true');
+    document.body?.classList.toggle('vtt-character-summary-is-open', isOpen);
+    if (!isOpen) {
+      renderAbilityTray(abilityTray, null);
+      hideAbilityPreview(abilityPreview);
+    } else if (activeSheet) {
+      renderAbilityTray(abilityTray, activeSheet, { activeCategory: activeAbilityCategory, activeToken });
+    }
+    if (persist) {
+      panelPreferredOpen = isOpen;
+      writePanelVisibilityPreference(storageKey, isOpen);
+    }
+    syncRevealButton();
+  };
+
+  const showPanel = () => {
+    setPanelOpen(true);
+  };
+
+  const tuckPanel = () => {
+    setPanelOpen(false);
   };
 
   const setLoading = (name) => {
+    activeDisplayName = String(name || activeCharacterId || 'Character');
     panel.innerHTML = `<div class="vtt-character-summary__loading">Loading ${escapeHtml(name || 'character')}...</div>`;
     renderAbilityTray(abilityTray, null);
     hideAbilityPreview(abilityPreview);
-    open();
+    if (panelPreferredOpen) {
+      setPanelOpen(true, { persist: false });
+    } else {
+      setPanelOpen(false, { persist: false });
+    }
+    syncRevealButton();
   };
 
   const setError = () => {
-    panel.innerHTML = '<div class="vtt-character-summary__error">Unable to load this character sheet.</div>';
+    panel.innerHTML = `
+      <button type="button" class="vtt-character-summary__tuck" data-character-summary-tuck aria-label="Tuck character sheet" title="Tuck character sheet">&lt;</button>
+      <div class="vtt-character-summary__error">Unable to load this character sheet.</div>
+    `;
+    bindCharacterSummaryControls(panel, { onTuck: tuckPanel });
     renderAbilityTray(abilityTray, null);
     hideAbilityPreview(abilityPreview);
-    open();
+    if (panelPreferredOpen) {
+      setPanelOpen(true, { persist: false });
+    } else {
+      setPanelOpen(false, { persist: false });
+    }
   };
 
   async function showCharacter(detail = {}) {
@@ -171,13 +210,18 @@ export function mountCharacterSummaryPanel(routes = {}) {
         return;
       }
       activeSheet = sheet;
+      activeDisplayName = sheet?.hero?.name || token.name || formatCharacterName(characterId);
       panel.innerHTML = renderCharacterCard(sheet, {
         characterId,
         token,
       });
-      bindCharacterSummaryControls(panel);
+      bindCharacterSummaryControls(panel, { onTuck: tuckPanel });
       renderAbilityTray(abilityTray, sheet, { activeCategory: activeAbilityCategory, activeToken });
-      open();
+      if (panelPreferredOpen) {
+        setPanelOpen(true, { persist: false });
+      } else {
+        setPanelOpen(false, { persist: false });
+      }
     } catch (error) {
       console.warn('[VTT] Failed to load character summary', error);
       if (requestId === activeRequestId) {
@@ -189,11 +233,33 @@ export function mountCharacterSummaryPanel(routes = {}) {
   document.addEventListener('vtt:token-selection-summary', (event) => {
     const detail = event?.detail ?? {};
     if (!detail.characterId) {
-      close();
+      clearActiveCharacter();
       return;
     }
     showCharacter(detail);
   });
+
+  revealButton.addEventListener('click', (event) => {
+    event.preventDefault();
+    if (!activeCharacterId) {
+      return;
+    }
+    showPanel();
+  });
+
+  function syncRevealButton() {
+    const hasCharacter = Boolean(activeCharacterId);
+    const isOpen = panel.classList.contains('vtt-character-summary--open');
+    revealButton.hidden = !hasCharacter || isOpen;
+    revealButton.setAttribute('aria-hidden', revealButton.hidden ? 'true' : 'false');
+    const label = activeDisplayName ? `Show ${activeDisplayName} sheet` : 'Show character sheet';
+    revealButton.setAttribute('aria-label', label);
+    revealButton.title = label;
+    const nameEl = revealButton.querySelector('[data-character-summary-reveal-name]');
+    if (nameEl) {
+      nameEl.textContent = activeDisplayName || 'Sheet';
+    }
+  }
 
   abilityTray.addEventListener('click', (event) => {
     // Trigger-dot toggle (above the TRIGGER tab) — dispatches to the board to
@@ -339,7 +405,35 @@ function ensureAbilityPreview() {
   return preview;
 }
 
-function bindCharacterSummaryControls(panel) {
+function ensureRevealButton() {
+  let button = document.getElementById('vtt-character-summary-reveal');
+  if (!button) {
+    button = document.createElement('button');
+    button.id = 'vtt-character-summary-reveal';
+    button.className = 'vtt-character-summary-reveal';
+    button.type = 'button';
+    button.hidden = true;
+    button.setAttribute('aria-hidden', 'true');
+    button.innerHTML = `
+      <span class="vtt-character-summary-reveal__chevron" aria-hidden="true">&gt;</span>
+      <span class="vtt-character-summary-reveal__name" data-character-summary-reveal-name>Sheet</span>
+    `;
+    document.body?.appendChild(button);
+  }
+  return button;
+}
+
+function bindCharacterSummaryControls(panel, { onTuck = null } = {}) {
+  panel.querySelectorAll('[data-character-summary-tuck]').forEach((button) => {
+    button.addEventListener('click', (event) => {
+      event.preventDefault();
+      event.stopPropagation();
+      if (typeof onTuck === 'function') {
+        onTuck();
+      }
+    });
+  });
+
   panel.querySelectorAll('[data-character-condition-remove]').forEach((button) => {
     button.addEventListener('click', (event) => {
       event.preventDefault();
@@ -635,6 +729,7 @@ function renderCharacterCard(sheet, { characterId, token } = {}) {
 
   return `
     <article class="vtt-character-card" data-character-id="${escapeHtml(characterId)}">
+      <button type="button" class="vtt-character-summary__tuck" data-character-summary-tuck aria-label="Tuck character sheet" title="Tuck character sheet">&lt;</button>
       <header class="vtt-character-card__hero">
         <div class="vtt-character-card__portrait">
           ${imageUrl ? `<img src="${escapeAttribute(imageUrl)}" alt="${escapeAttribute(name)} token">` : ''}
@@ -854,6 +949,46 @@ function renderResourceNote(text) {
 function normalizeCharacterId(value) {
   const normalized = typeof value === 'string' ? value.trim().toLowerCase() : '';
   return PC_CHARACTER_IDS.has(normalized) ? normalized : '';
+}
+
+function buildPanelVisibilityStorageKey(userContext = {}) {
+  const rawName =
+    typeof userContext?.name === 'string' && userContext.name.trim()
+      ? userContext.name
+      : typeof window !== 'undefined' && typeof window.vttConfig?.currentUser === 'string'
+        ? window.vttConfig.currentUser
+        : 'anonymous';
+  const userKey = rawName.trim().toLowerCase() || 'anonymous';
+  return `${PANEL_VISIBILITY_STORAGE_PREFIX}${userKey}`;
+}
+
+function readPanelVisibilityPreference(storageKey) {
+  try {
+    if (typeof window === 'undefined' || !window.localStorage) {
+      return true;
+    }
+    const value = window.localStorage.getItem(storageKey);
+    if (value === 'closed') {
+      return false;
+    }
+    if (value === 'open') {
+      return true;
+    }
+  } catch (error) {
+    // Ignore storage failures; the panel should still work in private mode.
+  }
+  return true;
+}
+
+function writePanelVisibilityPreference(storageKey, open) {
+  try {
+    if (typeof window === 'undefined' || !window.localStorage) {
+      return;
+    }
+    window.localStorage.setItem(storageKey, open ? 'open' : 'closed');
+  } catch (error) {
+    // Ignore storage failures; this is a user convenience preference only.
+  }
 }
 
 function normalizeConditions(value) {

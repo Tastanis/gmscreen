@@ -5796,7 +5796,8 @@ export function mountBoardInteractions(store, routes = {}) {
       return;
     }
 
-    const userIds = KNOWN_LEVEL_USER_IDS.slice();
+    const sceneEntry = state.boardState?.sceneState?.[activeSceneId] ?? null;
+    const userIds = getKnownLevelUserIdsForScene(sceneEntry);
     if (userIds.length === 0) {
       return;
     }
@@ -5842,6 +5843,33 @@ export function mountBoardInteractions(store, routes = {}) {
         || 'map level';
       status.textContent = `Pulled all players to ${levelName}.`;
     }
+  }
+
+  function getKnownLevelUserIdsForScene(sceneEntry = null) {
+    const ids = new Set();
+    const add = (value) => {
+      const normalized = normalizeProfileId(value);
+      if (normalized) {
+        ids.add(normalized);
+      }
+    };
+
+    KNOWN_LEVEL_USER_IDS.forEach(add);
+    add(getCurrentUserId());
+
+    if (sceneEntry && typeof sceneEntry === 'object') {
+      const userLevelState = sceneEntry.userLevelState;
+      if (userLevelState && typeof userLevelState === 'object') {
+        Object.keys(userLevelState).forEach(add);
+      }
+
+      const claimedTokens = sceneEntry.claimedTokens;
+      if (claimedTokens && typeof claimedTokens === 'object') {
+        Object.values(claimedTokens).forEach(add);
+      }
+    }
+
+    return Array.from(ids);
   }
 
 
@@ -7447,11 +7475,7 @@ export function mountBoardInteractions(store, routes = {}) {
 
     if (activeCombatantId === representativeId) {
       closeTurnPrompt();
-      setActiveCombatantId(null);
-      releaseTurnLock(getCurrentUserId());
-      markCombatTurnStateDirty();
-      updateCombatModeIndicators();
-      syncCombatStateToStore();
+      completeActiveCombatant();
       return;
     }
 
@@ -9486,6 +9510,7 @@ export function mountBoardInteractions(store, routes = {}) {
     if (!roundState.advanced) {
       return;
     }
+    markCombatEncounterStateDirty();
     completedCombatants.clear();
     roundState.completedCombatantIds.forEach((id) => completedCombatants.add(id));
     setActiveCombatantId(roundState.activeCombatantId);
@@ -15488,8 +15513,8 @@ export function mountBoardInteractions(store, routes = {}) {
       return;
     }
 
-    const placement = getPlacementFromStore(activeTokenSettingsId);
-    if (!placement) {
+    const activePlacement = getPlacementFromStore(activeTokenSettingsId);
+    if (!activePlacement) {
       closeTokenSettings();
       return;
     }
@@ -15500,21 +15525,37 @@ export function mountBoardInteractions(store, routes = {}) {
     // current level via `resolvePlacementLevelId` so a token already on
     // Level 0 (`levelId === BASE_MAP_LEVEL_ID`, or missing/blank legacy
     // data) is recognized as such.
-    const currentLevelId = resolvePlacementLevelId(placement);
-    const targetLevel = getAdjacentTokenLevel(mapLevels, currentLevelId, direction, {
-      includeBaseLevel: true,
+    const placements = Array.isArray(state.boardState?.placements?.[activeSceneId])
+      ? state.boardState.placements[activeSceneId]
+      : [];
+    const targetLevelById = new Map();
+    getTokenSettingsTargetIds(activeTokenSettingsId).forEach((placementId) => {
+      const placement = placements.find((entry) => entry?.id === placementId);
+      if (!placement) {
+        return;
+      }
+      const currentLevelId = resolvePlacementLevelId(placement);
+      const targetLevel = getAdjacentTokenLevel(mapLevels, currentLevelId, direction, {
+        includeBaseLevel: true,
+      });
+      if (targetLevel?.id) {
+        targetLevelById.set(placementId, targetLevel);
+      }
     });
-    if (!targetLevel?.id) {
-      syncTokenLevelControls(placement);
+    if (!targetLevelById.size) {
+      syncTokenLevelControls(activePlacement);
       return;
     }
 
-    const updated = updatePlacementById(activeTokenSettingsId, (target) => {
-      target.levelId = targetLevel.id;
-      target._lastModified = Date.now();
+    const movedIds = Array.from(targetLevelById.keys());
+    const updated = updatePlacementsByIds(movedIds, (target) => {
+      const targetLevel = targetLevelById.get(target.id);
+      if (targetLevel?.id) {
+        target.levelId = targetLevel.id;
+      }
     });
     if (!updated) {
-      syncTokenLevelControls(placement);
+      syncTokenLevelControls(activePlacement);
       return;
     }
 
@@ -15522,16 +15563,18 @@ export function mountBoardInteractions(store, routes = {}) {
     // mutation must also update that claimant's `userLevelState` so reload
     // persistence and "follow your token" stay coherent. Activate-pulled
     // entries get overwritten by the new `claim`-source entry.
-    applyClaimDrivenUserLevelUpdate({
-      sceneId: activeSceneId,
-      placementId: activeTokenSettingsId,
-      levelId: targetLevel.id,
+    targetLevelById.forEach((targetLevel, placementId) => {
+      applyClaimDrivenUserLevelUpdate({
+        sceneId: activeSceneId,
+        placementId,
+        levelId: targetLevel.id,
+      });
     });
 
     // Levels v2 (§5.6): if the GM moved a token to a level whose cutout
     // sits entirely under the token's footprint, the token falls. Chained
     // falls resolve to the final resting level inside processPlacementFalls.
-    const fallenIds = processPlacementFalls(activeSceneId, [activeTokenSettingsId]);
+    const fallenIds = processPlacementFalls(activeSceneId, movedIds);
 
     refreshTokenSettings();
     renderTokens(boardApi.getState?.() ?? {}, tokenLayer, viewState);
@@ -15539,19 +15582,28 @@ export function mountBoardInteractions(store, routes = {}) {
     triggerTokenFallAnimations(fallenIds);
 
     if (status) {
-      const label = tokenLabel(getPlacementFromStore(activeTokenSettingsId));
-      const finalPlacement = getPlacementFromStore(activeTokenSettingsId);
-      const finalLevelId = resolvePlacementLevelId(finalPlacement);
-      const levelName = (() => {
-        if (fallenIds.length && finalLevelId) {
-          const levelView = getViewerLevelDisplayName(state, activeSceneId, finalLevelId);
-          return levelView || targetLevel.name || 'map level';
-        }
-        return targetLevel.name || 'map level';
-      })();
-      status.textContent = fallenIds.length
-        ? `${label} fell to ${levelName}.`
-        : `Moved ${label} to ${levelName}.`;
+      if (movedIds.length === 1) {
+        const placementId = movedIds[0];
+        const label = tokenLabel(getPlacementFromStore(placementId));
+        const targetLevel = targetLevelById.get(placementId);
+        const finalPlacement = getPlacementFromStore(placementId);
+        const finalLevelId = resolvePlacementLevelId(finalPlacement);
+        const levelName = (() => {
+          if (fallenIds.length && finalLevelId) {
+            const levelView = getViewerLevelDisplayName(state, activeSceneId, finalLevelId);
+            return levelView || targetLevel?.name || 'map level';
+          }
+          return targetLevel?.name || 'map level';
+        })();
+        status.textContent = fallenIds.length
+          ? `${label} fell to ${levelName}.`
+          : `Moved ${label} to ${levelName}.`;
+      } else {
+        const noun = movedIds.length === 1 ? 'token' : 'tokens';
+        status.textContent = fallenIds.length
+          ? `Moved ${movedIds.length} ${noun}; ${fallenIds.length} fell.`
+          : `Moved ${movedIds.length} ${noun} ${direction === 'down' ? 'down' : 'up'} one level.`;
+      }
     }
   }
 
