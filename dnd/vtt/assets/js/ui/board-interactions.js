@@ -8844,8 +8844,11 @@ export function mountBoardInteractions(store, routes = {}) {
     });
     rememberGmCombatIntent();
     syncCombatStateToStore();
-    rememberGmCombatIntent();
+    const startCombatIntent = rememberGmCombatIntent();
     resetTriggeredActionsForActiveScene();
+    if (startCombatIntent) {
+      maybeReassertCombatIntent(startCombatIntent);
+    }
     updateStartCombatButton();
     refreshCombatTracker();
     updateCombatModeIndicators();
