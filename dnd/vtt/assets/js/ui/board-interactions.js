@@ -8357,8 +8357,16 @@ export function mountBoardInteractions(store, routes = {}) {
     }
 
     const margin = 8;
-    overlay.style.top = `${margin}px`;
-    overlay.style.right = `${margin}px`;
+    const boardRect = document.querySelector('.vtt-board__canvas-wrapper')?.getBoundingClientRect?.();
+    const viewportWidth = window.innerWidth || document.documentElement.clientWidth || 0;
+    const top = boardRect && Number.isFinite(boardRect.top) ? boardRect.top + margin : margin;
+    const right =
+      boardRect && Number.isFinite(boardRect.right) && viewportWidth
+        ? Math.max(margin, viewportWidth - boardRect.right + margin)
+        : margin;
+
+    overlay.style.top = `${Math.max(margin, top)}px`;
+    overlay.style.right = `${right}px`;
     overlay.style.left = 'auto';
     overlay.style.bottom = 'auto';
     overlay.style.transform = 'none';
