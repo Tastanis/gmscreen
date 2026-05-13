@@ -8174,16 +8174,12 @@ export function mountBoardInteractions(store, routes = {}) {
     closeTurnPrompt();
     closePlayerTurnStartButton();
 
-    const label = getCombatantLabel(combatantId);
-    const heading = formatTurnPromptHeading(label);
     const overlay = document.createElement('div');
     overlay.className = 'vtt-turn-overlay';
     overlay.innerHTML = `
       <div class="vtt-turn-dialog" role="dialog" data-turn-dialog>
-        <div class="vtt-turn-dialog__handle" data-turn-drag-handle aria-hidden="true"></div>
-        <h3 class="vtt-turn-dialog__title">${escapeHtml(heading)}</h3>
         <div class="vtt-turn-dialog__actions">
-          <button type="button" class="btn" data-turn-cancel>Cancel</button>
+          <button type="button" class="btn" data-turn-cancel>Cancel Turn</button>
           <button type="button" class="btn btn--primary" data-turn-complete>End Turn</button>
         </div>
       </div>
@@ -8360,19 +8356,12 @@ export function mountBoardInteractions(store, routes = {}) {
       return;
     }
 
-    const margin = 12;
-    let top = margin;
-    let right = margin;
-
-    const anchorRect = getTurnPromptAnchorRect();
-    if (anchorRect) {
-      const viewportWidth = window.innerWidth || document.documentElement.clientWidth || 0;
-      top = anchorRect.bottom + margin;
-      right = Math.max(margin, viewportWidth - anchorRect.right);
-    }
-
-    overlay.style.top = `${Math.max(margin, top)}px`;
-    overlay.style.right = `${Math.max(margin, right)}px`;
+    const margin = 8;
+    overlay.style.top = `${margin}px`;
+    overlay.style.right = `${margin}px`;
+    overlay.style.left = 'auto';
+    overlay.style.bottom = 'auto';
+    overlay.style.transform = 'none';
   }
 
   function getTurnPromptAnchorRect() {
