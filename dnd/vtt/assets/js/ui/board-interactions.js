@@ -7377,14 +7377,6 @@ export function mountBoardInteractions(store, routes = {}) {
     activeTeam = team;
     turnPhase = TURN_PHASE.ACTIVE;
     if (previousPhase !== TURN_PHASE.ACTIVE) bumpPhaseTick();
-    // Fan out turnStart so authored triggers (e.g. "at the start of your turn,
-    // ...") can mark their owner. The bus dispatches to every registered
-    // listener; each predicate decides whether to act.
-    try {
-      triggerFire('turnStart', { placementId: combatantId, team });
-    } catch (err) {
-      console.warn('[VTT] triggerFire(turnStart) failed', err);
-    }
     return true;
   }
 
@@ -7548,6 +7540,21 @@ export function mountBoardInteractions(store, routes = {}) {
     highlightedCombatantId = normalizedNextId;
     activeCombatantId = normalizedNextId;
     activeTeam = nextTeam ?? null;
+
+    // Fan out turnStart for authored triggers (e.g. "at the start of my
+    // turn, ..."). Only fire when:
+    //   - combat is active
+    //   - the active combatant actually changed (avoid double-fires from
+    //     state syncs that re-set the same id)
+    //   - the new id is non-null (clearing the active turn fires turnEnd
+    //     via completeActiveCombatant, not turnStart)
+    if (combatActive && normalizedNextId && normalizedNextId !== previousCombatantId) {
+      try {
+        triggerFire('turnStart', { placementId: normalizedNextId, team: nextTeam ?? null });
+      } catch (err) {
+        console.warn('[VTT] triggerFire(turnStart) failed', err);
+      }
+    }
 
     // Update turn phase to reflect new state
     updateTurnPhase();
