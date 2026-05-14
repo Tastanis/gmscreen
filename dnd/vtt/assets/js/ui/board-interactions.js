@@ -1290,6 +1290,9 @@ export function mountBoardInteractions(store, routes = {}) {
       updated?.boardState?.sceneState?.[intent.activeSceneId]?.combat ?? null;
     const serverActive = Boolean(serverCombat?.active);
     if (serverActive === Boolean(intent.active)) {
+      if (hasPendingCombatIntentSave() || registeringLocalCombatSave) {
+        return;
+      }
       combatConflictRetryAttempts = 0;
       if (pendingGmCombatIntent?.activeSceneId === intent.activeSceneId) {
         pendingGmCombatIntent = null;
@@ -1577,6 +1580,7 @@ export function mountBoardInteractions(store, routes = {}) {
   let combatSequence = 0;
   let lastCombatStateSnapshot = null;
   let pendingGmCombatIntent = null;
+  let registeringLocalCombatSave = false;
   let startingCombatTeam = null;
   let currentTurnTeam = null;
   let activeTeam = null;
@@ -4390,6 +4394,12 @@ export function mountBoardInteractions(store, routes = {}) {
   boardApi._markSceneStateDirty = (sceneId) => {
     if (typeof sceneId === 'string' && sceneId) {
       dirtySceneState.add(sceneId);
+    }
+  };
+
+  boardApi._markTopLevelDirty = (field) => {
+    if (typeof field === 'string' && field) {
+      markTopLevelDirty(field);
     }
   };
 
@@ -7667,8 +7677,13 @@ export function mountBoardInteractions(store, routes = {}) {
   }
 
   function completeActiveCombatant() {
+    const completionTargetId =
+      (activeCombatantId ? getRepresentativeIdFor(activeCombatantId) || activeCombatantId : null) ||
+      (activeTurnDialog?.combatantId
+        ? getRepresentativeIdFor(activeTurnDialog.combatantId) || activeTurnDialog.combatantId
+        : null);
     const turnCompletion = completeCombatantTurnState({
-      activeCombatantId,
+      activeCombatantId: completionTargetId,
       completedCombatantIds: completedCombatants,
       roundTurnCount,
       getRepresentativeIdFor,
@@ -8598,14 +8613,25 @@ export function mountBoardInteractions(store, routes = {}) {
       });
     }
 
-    const candidates = claimedPlacementIds.length
-      ? claimedPlacementIds
-      : lastCombatTrackerEntries
-          .map((entry) => (entry && typeof entry.id === 'string' ? entry.id : null))
-          .filter((id) => id && normalizeProfileId(getCombatantProfileId(id)) === userId);
+    const candidateIds = new Set();
+    claimedPlacementIds.forEach((id) => {
+      if (typeof id === 'string' && id) {
+        candidateIds.add(id);
+      }
+    });
+    lastCombatTrackerEntries.forEach((entry) => {
+      const id = entry && typeof entry.id === 'string' ? entry.id : null;
+      if (id && normalizeProfileId(getCombatantProfileId(id)) === userId) {
+        candidateIds.add(id);
+      }
+    });
 
     const activeIds = lastCombatTrackerActiveIds instanceof Set ? lastCombatTrackerActiveIds : new Set();
-    const validCandidates = candidates.filter((id) => activeIds.has(id) && getCombatantTeam(id) === 'ally');
+    const validCandidates = Array.from(candidateIds).filter((id) => {
+      const representativeId = getRepresentativeIdFor(id) || id;
+      const isActive = activeIds.has(id) || activeIds.has(representativeId);
+      return isActive && getCombatantTeam(representativeId) === 'ally';
+    });
     const waitingCandidate = validCandidates.find((id) => {
       const representativeId = getRepresentativeIdFor(id) || id;
       return !completedCombatants.has(representativeId);
@@ -9002,7 +9028,7 @@ export function mountBoardInteractions(store, routes = {}) {
         activeSceneId: activeSceneKey,
         currentVersion: combatStateVersion,
         currentUpdatedAt: combatStateUpdatedAt,
-        hasPendingSave: hasPendingCombatIntentSave(),
+        hasPendingSave: hasPendingCombatIntentSave() || registeringLocalCombatSave,
         maxAgeMs: LOCAL_COMBAT_INTENT_PROTECTION_MS,
       })
     ) {
@@ -9015,7 +9041,8 @@ export function mountBoardInteractions(store, routes = {}) {
     if (
       pendingGmCombatIntent?.activeSceneId === activeSceneKey &&
       normalized.active === pendingGmCombatIntent.active &&
-      !hasPendingCombatIntentSave()
+      !hasPendingCombatIntentSave() &&
+      !registeringLocalCombatSave
     ) {
       pendingGmCombatIntent = null;
     }
@@ -9312,16 +9339,22 @@ export function mountBoardInteractions(store, routes = {}) {
       return;
     }
 
-    boardApi.updateState?.((draft) => {
-      const sceneStateEntry = ensureSceneStateDraftEntry(draft, activeSceneId);
-      sceneStateEntry.combat = {
-        ...snapshot,
-        completedCombatantIds: [...snapshot.completedCombatantIds],
-        lastEffect: snapshot.lastEffect ? { ...snapshot.lastEffect } : null,
-      };
-    });
+    const latestBeforeStoreSync = boardApi.getState?.() ?? state;
+    registeringLocalCombatSave = latestBeforeStoreSync?.user?.isGM === true;
+    try {
+      boardApi.updateState?.((draft) => {
+        const sceneStateEntry = ensureSceneStateDraftEntry(draft, activeSceneId);
+        sceneStateEntry.combat = {
+          ...snapshot,
+          completedCombatantIds: [...snapshot.completedCombatantIds],
+          lastEffect: snapshot.lastEffect ? { ...snapshot.lastEffect } : null,
+        };
+      });
+    } finally {
+      registeringLocalCombatSave = false;
+    }
 
-    const latest = boardApi.getState?.() ?? state;
+    const latest = boardApi.getState?.() ?? latestBeforeStoreSync;
     if (latest?.user?.isGM) {
       persistBoardStateSnapshot({}, [
         {

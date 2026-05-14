@@ -69,7 +69,7 @@ export function renderSceneList(routes, store) {
   render(stateApi.getState?.());
   stateApi.subscribe?.((nextState) => render(nextState));
 
-  const persistBoardStateSnapshot = (dirtySceneId = null) => {
+  const persistBoardStateSnapshot = (dirtySceneId = null, options = {}) => {
     if (!endpoints.state || typeof stateApi.getState !== 'function') {
       return;
     }
@@ -79,7 +79,10 @@ export function renderSceneList(routes, store) {
     }
 
     if (typeof stateApi._persistBoardState === 'function') {
-      return stateApi._persistBoardState({ forceFullSnapshot: true });
+      return stateApi._persistBoardState({
+        forceFullSnapshot: true,
+        ...options,
+      });
     }
 
     const latest = stateApi.getState?.();
@@ -88,7 +91,7 @@ export function renderSceneList(routes, store) {
       return;
     }
 
-    const savePromise = persistBoardState(endpoints.state, boardState);
+    const savePromise = persistBoardState(endpoints.state, boardState, options);
     if (savePromise && typeof savePromise.then === 'function') {
       savePromise.then((result) => {
         const version = normalizeBoardStateVersion(result?.data?._version);
@@ -171,7 +174,11 @@ export function renderSceneList(routes, store) {
         }
       });
 
-      persistBoardStateSnapshot();
+      if (typeof stateApi._markTopLevelDirty === 'function') {
+        stateApi._markTopLevelDirty('activeSceneId');
+        stateApi._markTopLevelDirty('mapUrl');
+      }
+      persistBoardStateSnapshot(null, { coalesce: false });
     }
 
     if (action === 'add-map-level' && sceneId) {
@@ -1139,12 +1146,12 @@ function buildSceneMarkup(sceneState, activeSceneId, boardSceneState = {}, optio
     groups.push({ id: null, title: 'Unsorted Scenes', scenes: unsorted });
   }
 
-  const collapsedFolders = loadCollapsedFolders();
+  const openFolders = getOpenFoldersForSession();
 
   const markup = groups
     .map((group) => {
       const folderId = group.id ?? 'unsorted';
-      const isCollapsed = collapsedFolders.has(folderId);
+      const isCollapsed = !openFolders.has(folderId);
       return `
       <section class="scene-group${isCollapsed ? ' is-collapsed' : ''}" data-folder-id="${group.id ?? ''}">
         <header class="scene-group__header">
@@ -1169,40 +1176,20 @@ function buildSceneMarkup(sceneState, activeSceneId, boardSceneState = {}, optio
   return `<div class="scene-list">${markup}</div>`;
 }
 
-const COLLAPSED_FOLDERS_KEY = 'vtt-collapsed-scene-folders';
+const openSceneFoldersForSession = new Set();
 
-function loadCollapsedFolders() {
-  try {
-    const stored = localStorage.getItem(COLLAPSED_FOLDERS_KEY);
-    if (stored) {
-      const parsed = JSON.parse(stored);
-      if (Array.isArray(parsed)) {
-        return new Set(parsed);
-      }
-    }
-  } catch (error) {
-    // Ignore localStorage errors
-  }
-  return new Set();
-}
-
-function saveCollapsedFolders(collapsedSet) {
-  try {
-    localStorage.setItem(COLLAPSED_FOLDERS_KEY, JSON.stringify([...collapsedSet]));
-  } catch (error) {
-    // Ignore localStorage errors
-  }
+function getOpenFoldersForSession() {
+  return openSceneFoldersForSession;
 }
 
 function toggleFolderCollapsed(folderId) {
-  const collapsed = loadCollapsedFolders();
-  if (collapsed.has(folderId)) {
-    collapsed.delete(folderId);
+  if (openSceneFoldersForSession.has(folderId)) {
+    openSceneFoldersForSession.delete(folderId);
+    return true;
   } else {
-    collapsed.add(folderId);
+    openSceneFoldersForSession.add(folderId);
+    return false;
   }
-  saveCollapsedFolders(collapsed);
-  return collapsed.has(folderId);
 }
 
 function renderSceneItem(scene, activeSceneId, sceneBoardState = {}, options = {}) {
