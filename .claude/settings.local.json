@@ -51,7 +51,26 @@
       "Bash(node --test dnd/vtt/assets/js/services/__tests__/*.test.mjs dnd/vtt/assets/js/ui/__tests__/scene-manager-map-levels.test.mjs dnd/vtt/assets/js/ui/__tests__/map-level-renderer.test.mjs dnd/vtt/assets/js/ui/__tests__/token-levels.test.mjs)",
       "Bash(xargs node --test)",
       "Bash(node --input-type=module -e \"Promise.all\\([import\\('./dnd/vtt/assets/js/ui/stairs-panel.js'\\), import\\('./dnd/vtt/assets/js/ui/stairs-renderer.js'\\), import\\('./dnd/vtt/assets/js/ui/stairs-geometry.js'\\), import\\('./dnd/vtt/assets/js/ui/stairs-mutations.js'\\), import\\('./dnd/vtt/assets/js/ui/stairs-tool.js'\\)]\\).then\\(\\(\\) => console.log\\('OK'\\)\\).catch\\(e => { console.error\\('FAIL', e.message\\); process.exit\\(1\\); }\\);\")",
-      "Bash(ls -la \"C:/Users/tasta/Downloads/Draw Steel Rules.pdf\")"
+      "Bash(ls -la \"C:/Users/tasta/Downloads/Draw Steel Rules.pdf\")",
+      "PowerShell(Get-Command python, py, python3 -ErrorAction SilentlyContinue)",
+      "Bash(pdftotext -layout \"/c/Users/tasta/Downloads/Draw Steel Rules.pdf\" \"/c/Users/tasta/Desktop/gmscreen/_ds_extract.txt\")",
+      "Bash(pdftotext -layout -f 1 -l 1 \"/c/Users/tasta/Downloads/Draw Steel Rules.pdf\" -)",
+      "Bash(pdftotext \"/c/Users/tasta/Downloads/Draw Steel Rules.pdf\" /tmp/ds_full.txt)",
+      "Bash(pdftotext -layout \"/c/Users/tasta/Downloads/Draw Steel Rules.pdf\" /tmp/ds_layout.txt)",
+      "Bash(cp /tmp/ds_full.txt \"C:/Users/tasta/Desktop/gmscreen/.ds_full.txt\")",
+      "Bash(cp /tmp/ds_layout.txt \"C:/Users/tasta/Desktop/gmscreen/.ds_layout.txt\")",
+      "Bash(awk 'BEGIN{p=1} /\\\\f/{p++} {print p\"\\\\t\"$0}' \"C:/Users/tasta/Desktop/gmscreen/.ds_layout.txt\")",
+      "Bash(awk -F'\\\\t' '$1==80 {print NR\": \"$0}' \"C:/Users/tasta/Desktop/gmscreen/.ds_pages.txt\")",
+      "Bash(awk -F'\\\\t' '$1==268' \"C:/Users/tasta/Desktop/gmscreen/.ds_pages.txt\")",
+      "Bash(awk -F'\\\\t' '$1>=80 && $1<=84' \"C:/Users/tasta/Desktop/gmscreen/.ds_pages.txt\")",
+      "Bash(awk -F'\\\\t' '$1>=78 && $1<=80' \"C:/Users/tasta/Desktop/gmscreen/.ds_pages.txt\")",
+      "Bash(awk -F'\\\\t' '$1==234 || $1==235' \"C:/Users/tasta/Desktop/gmscreen/.ds_pages.txt\")",
+      "Bash(awk -F'\\\\t' '$1==281 || $1==282' \"C:/Users/tasta/Desktop/gmscreen/.ds_pages.txt\")",
+      "Bash(awk -F'\\\\t' '$1==277 || $1==278 || $1==279' \"C:/Users/tasta/Desktop/gmscreen/.ds_pages.txt\")",
+      "Bash(awk -F'\\\\t' '$1==275 || $1==276' \"C:/Users/tasta/Desktop/gmscreen/.ds_pages.txt\")",
+      "Bash(awk -F'\\\\t' '$1>=273 && $1<=275' \"C:/Users/tasta/Desktop/gmscreen/.ds_pages.txt\")",
+      "Bash(awk -F'\\\\t' '$1==274' \"C:/Users/tasta/Desktop/gmscreen/.ds_pages.txt\")",
+      "Bash(awk -F'\\\\t' '$1==273' \"C:/Users/tasta/Desktop/gmscreen/.ds_pages.txt\")"
     ],
     "deny": []
   }
