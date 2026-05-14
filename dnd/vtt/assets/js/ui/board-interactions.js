@@ -2314,6 +2314,14 @@ export function mountBoardInteractions(store, routes = {}) {
     const filter = (match && match.filter) || {};
     const event = match?.event;
     const whose = filter.whose || "any";
+    // TEMP DEBUG: log the filter at predicate construction so we can verify
+    // the authored damageType / minAmount survived schema normalization.
+    console.log('[trigger predicate built]', {
+      abilityName: entry.abilityName,
+      event,
+      filter,
+      whose,
+    });
     return function predicate(payload) {
       if (!payload || typeof payload !== 'object') return false;
       const payloadTokenId =
@@ -2326,9 +2334,18 @@ export function mountBoardInteractions(store, routes = {}) {
       }
       if (event === 'damage') {
         const amount = Number.parseInt(payload.amount, 10) || 0;
+        const dt = String(payload.damageType || '').toLowerCase();
+        // TEMP DEBUG
+        console.log('[damage predicate check]', {
+          abilityName: entry.abilityName,
+          payloadType: dt,
+          payloadAmount: amount,
+          filterTypes: filter.damageType,
+          filterMin: filter.minAmount,
+          isArray: Array.isArray(filter.damageType),
+        });
         if (filter.minAmount && amount < filter.minAmount) return false;
         if (Array.isArray(filter.damageType) && filter.damageType.length) {
-          const dt = String(payload.damageType || '').toLowerCase();
           if (!filter.damageType.includes(dt)) return false;
         }
         return true;
