@@ -2104,6 +2104,26 @@ export function mountBoardInteractions(store, routes = {}) {
     if (!entry || !entry.tokenId || !entry.eventType || typeof entry.predicate !== 'function') {
       return null;
     }
+    // De-duplicate: if the same token already has an entry with this abilityId,
+    // drop the old one so re-casting the ability replaces instead of stacking.
+    // Without this, every cast adds a fresh predicate to the registry and the
+    // same trigger fires N times per matching event.
+    if (entry.abilityId) {
+      const existingForToken = triggerRegistry.byToken.get(entry.tokenId) || [];
+      const stale = existingForToken.filter((e) => e.abilityId === entry.abilityId);
+      for (const old of stale) {
+        const eventList = triggerRegistry.byEvent.get(old.eventType);
+        if (eventList) {
+          const idx = eventList.indexOf(old);
+          if (idx !== -1) eventList.splice(idx, 1);
+        }
+        const tokenList = triggerRegistry.byToken.get(old.tokenId);
+        if (tokenList) {
+          const tidx = tokenList.indexOf(old);
+          if (tidx !== -1) tokenList.splice(tidx, 1);
+        }
+      }
+    }
     const list = triggerRegistry.byEvent.get(entry.eventType) || [];
     list.push(entry);
     triggerRegistry.byEvent.set(entry.eventType, list);

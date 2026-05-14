@@ -2931,10 +2931,17 @@ function bindAutomationButtons() {
       const action = (sheetState.actions[type] || []).find((item) => item.id === actionId);
       if (!action) return;
 
-      window.AbilityAutomation.open(actionId, type, action.automation, (automation) => {
-        action.automation = normalizeAutomationBlock(automation);
+      window.AbilityAutomation.open(actionId, type, action.automation, async (automation) => {
+        // Re-resolve the action from sheetState. Between open and save, an
+        // edit-mode autosave may have run captureActions() and rebuilt the
+        // actions array — the original `action` reference may now be an
+        // orphan that's no longer in sheetState. Always mutate the current
+        // object so the save persists.
+        const freshAction = (sheetState.actions[type] || []).find((item) => item.id === actionId);
+        const targetAction = freshAction || action;
+        targetAction.automation = normalizeAutomationBlock(automation);
         renderActionSection(type, ACTION_CONTAINER_IDS[type] || `${type}-pane`);
-        saveSheet();
+        await saveSheet();
       });
     };
   });
@@ -2951,10 +2958,13 @@ function bindFeatureAutomationButtons() {
       }
       const feature = (sheetState.features || []).find((f) => f.id === featureId);
       if (!feature) return;
-      window.AbilityAutomation.open(featureId, "feature", feature.automation, (automation) => {
-        feature.automation = normalizeAutomationBlock(automation);
+      window.AbilityAutomation.open(featureId, "feature", feature.automation, async (automation) => {
+        // Same orphan-reference defense as the action automation save.
+        const freshFeature = (sheetState.features || []).find((f) => f.id === featureId);
+        const targetFeature = freshFeature || feature;
+        targetFeature.automation = normalizeAutomationBlock(automation);
         renderFeatures();
-        saveSheet();
+        await saveSheet();
       });
     };
   });

@@ -74,7 +74,10 @@
       "Bash(node --test dnd/vtt/assets/js/combat/__tests__/combat-state.test.mjs dnd/vtt/assets/js/combat/__tests__/combat-effects.test.mjs)",
       "Bash(node --check dnd/character_sheet/ability-automation/schema.js)",
       "Bash(node --check dnd/character_sheet/ability-automation/runner.js)",
-      "Bash(node --check dnd/vtt/assets/js/ui/character-summary-panel.js)"
+      "Bash(node --check dnd/vtt/assets/js/ui/character-summary-panel.js)",
+      "Bash(git check-ignore *)",
+      "Bash(node --check dnd/character_sheet/sheet.js)",
+      "Bash(node --check dnd/character_sheet/ability-automation/paste.js)"
     ],
     "deny": []
   }

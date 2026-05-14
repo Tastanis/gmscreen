@@ -117,9 +117,39 @@
     scheduleRender();
     textarea.addEventListener("input", scheduleRender);
 
-    host.addEventListener("click", (event) => {
+    let isSaving = false;
+    async function runSave(value) {
+      if (isSaving) return;
+      isSaving = true;
+      const saveBtn = host.querySelector('[data-paste-save]');
+      const cancelBtn = host.querySelector('[data-paste-cancel]');
+      const clearBtn = host.querySelector('[data-paste-clear]');
+      const previousLabel = saveBtn?.textContent;
+      if (saveBtn) {
+        saveBtn.disabled = true;
+        saveBtn.textContent = 'Saving…';
+      }
+      if (cancelBtn) cancelBtn.disabled = true;
+      if (clearBtn) clearBtn.disabled = true;
+      try {
+        await Promise.resolve(onSave(value));
+      } catch (err) {
+        console.error('[AbilityAutomation paste] save failed', err);
+      } finally {
+        isSaving = false;
+        if (saveBtn) {
+          saveBtn.disabled = false;
+          saveBtn.textContent = previousLabel || 'Save';
+        }
+        if (cancelBtn) cancelBtn.disabled = false;
+        if (clearBtn) clearBtn.disabled = false;
+      }
+    }
+
+    host.addEventListener("click", async (event) => {
       const target = event.target instanceof Element ? event.target : null;
       if (!target) return;
+      if (isSaving) return;
       if (target.closest("[data-paste-cancel]")) {
         close();
         return;
@@ -129,14 +159,14 @@
         renderStatus("");
         // Persist the clear, but keep the dialog open so the user can paste
         // fresh JSON without reopening.
-        onSave(null);
+        await runSave(null);
         textarea.focus();
         return;
       }
       if (target.closest("[data-paste-save]")) {
         const text = textarea.value;
         if (!text.trim()) {
-          onSave(null);
+          await runSave(null);
           close();
           return;
         }
@@ -145,7 +175,7 @@
           // JSON parse error — keep the dialog open so user can fix.
           return;
         }
-        onSave(result.normalized);
+        await runSave(result.normalized);
         close();
       }
     });
