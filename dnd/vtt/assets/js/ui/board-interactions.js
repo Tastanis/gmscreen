@@ -2131,6 +2131,17 @@ export function mountBoardInteractions(store, routes = {}) {
       try {
         if (entry.predicate(payload, entry)) {
           markTriggerReady(entry.tokenId, entry.abilityId || null);
+          // Post a chat line so the player knows which trigger fired. Useful
+          // for debugging predicate matches and for surfacing the trigger so
+          // the player doesn't miss the small `!` overlay. Skipped for the
+          // built-in opportunity-attack sentinel (which has its own UX).
+          if (entry.authored && entry.abilityName && window.dashboardChat?.sendMessage) {
+            const tokenName = tokenLabel(getPlacementFromStore(entry.tokenId)) || 'Token';
+            window.dashboardChat.sendMessage({
+              message: `${tokenName} — "${entry.abilityName}" trigger is READY (click the ! to resolve).`,
+              type: 'text',
+            }).catch(() => {});
+          }
         }
       } catch (err) {
         console.warn('[VTT] Trigger predicate failed for', eventType, err);
@@ -2374,6 +2385,7 @@ export function mountBoardInteractions(store, routes = {}) {
       match,
       targetIds: Array.isArray(payload.targetIds) ? [...payload.targetIds] : [],
       abilityId: abilityId || `authored_trigger_${casterId}_${Date.now()}`,
+      abilityName: payload.abilityName || '',
       authored: true,
       condition: payload.condition || '',
     };
