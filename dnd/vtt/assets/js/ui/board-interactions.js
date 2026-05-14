@@ -1967,6 +1967,10 @@ export function mountBoardInteractions(store, routes = {}) {
   document.addEventListener('vtt:automation-apply-condition', handleAutomationConditionRequest);
   document.addEventListener('vtt:automation-check-potency', handleAutomationPotencyRequest);
   document.addEventListener('vtt:automation-force-move', handleAutomationForceMoveRequest);
+  document.addEventListener('vtt:automation-apply-teleport', handleAutomationTeleportRequest);
+  document.addEventListener('vtt:automation-apply-swap', handleAutomationSwapRequest);
+  document.addEventListener('vtt:automation-run-free-strike', handleAutomationFreeStrikeRequest);
+  document.addEventListener('vtt:automation-recovery-value', handleAutomationRecoveryValueRequest);
   document.addEventListener('vtt:toggle-triggered-action', (event) => {
     const placementId = event?.detail?.placementId;
     if (placementId) toggleTriggeredActionState(placementId);
@@ -1980,10 +1984,12 @@ export function mountBoardInteractions(store, routes = {}) {
   // Opportunity attack auto-detect: when a token moves out of an enemy's
   // adjacency via NORMAL movement during combat, mark that enemy's
   // free-strike trigger as ready (blue "!" overlay).
+  //
+  // Also fans the move out through AbilityTriggerBus.fire('move', ...) so
+  // authored `trigger` blocks with a `match.event === "move"` can react.
   document.addEventListener('vtt:token-moved', (event) => {
     const detail = event?.detail || {};
     if (detail.kind !== 'normal') return;
-    if (!combatActive) return;
     const movingId = detail.placementId;
     const from = detail.from;
     const to = detail.to;
@@ -1996,18 +2002,45 @@ export function mountBoardInteractions(store, routes = {}) {
     const movingPlacement = scenePlacements.find((p) => p && p.id === movingId);
     const movingTeam = movingPlacement ? getCombatantTeam(movingId) || normalizeCombatTeam(movingPlacement.team) : null;
 
+    // Per-watcher leaves/enters adjacency map for authored predicates. The
+    // built-in opp-attack flow only uses `leaves`, but authored triggers may
+    // ask for either edge.
+    const perWatcherMoveStates = new Map();
+
     for (const watcher of scenePlacements) {
       if (!watcher || !watcher.id || watcher.id === movingId) continue;
-      const watcherTeam = getCombatantTeam(watcher.id) || normalizeCombatTeam(watcher.team);
-      // Only opposing-team watchers trigger opp-attacks.
-      if (movingTeam && watcherTeam && movingTeam === watcherTeam) continue;
-      // Walk the full Chebyshev path so we catch moves that PASS THROUGH the
-      // watcher's adjacency, not just moves that start adjacent.
-      if (movePathLeavesAdjacency(from, to, watcher)) {
-        // Source = the moving token. The picker uses this to flash the
-        // mover as the suggested target for the watcher's free strike.
-        markTriggerReady(watcher.id, '__opportunityAttack__', movingId);
+      const leaves = movePathLeavesAdjacency(from, to, watcher);
+      const fromGap = footprintGap(watcher, { column: from.column, row: from.row, width: from.width, height: from.height });
+      const toGap = footprintGap(watcher, { column: to.column, row: to.row, width: to.width, height: to.height });
+      const enters = fromGap > 1 && toGap === 1;
+      perWatcherMoveStates.set(watcher.id, { leaves, enters });
+
+      // Built-in opp-attack: opposing-team watchers whose adjacency the mover
+      // left during NORMAL movement while combat is active.
+      if (combatActive && leaves) {
+        const watcherTeam = getCombatantTeam(watcher.id) || normalizeCombatTeam(watcher.team);
+        if (!movingTeam || !watcherTeam || movingTeam !== watcherTeam) {
+          markTriggerReady(watcher.id, '__opportunityAttack__', movingId);
+        }
       }
+    }
+
+    // Authored-trigger fan-out. We fire once per watcher so that whose-based
+    // filters can resolve relative to their own adjacency edges. The bus
+    // dispatches to listeners registered against `eventType === 'move'` and
+    // each predicate decides whether it cares about this watcher's edge.
+    try {
+      triggerFire('move', {
+        placementId: movingId,
+        sourceId: movingId,
+        from: { column: from.column, row: from.row, width: from.width, height: from.height },
+        to: { column: to.column, row: to.row, width: to.width, height: to.height },
+        kind: detail.kind,
+        sceneId,
+        perWatcher: perWatcherMoveStates,
+      });
+    } catch (err) {
+      console.warn('[VTT] triggerFire(move) failed', err);
     }
   });
 
@@ -2217,6 +2250,139 @@ export function mountBoardInteractions(store, routes = {}) {
     markReady: markTriggerReady,
     clearReady: clearTriggerReady,
   };
+
+  // ---------- Authored-trigger registration (runner -> bus bridge) ----------
+  // The ability-automation runner calls `state.context.registerTrigger(...)`
+  // when it hits a `trigger` block whose JSON has a structured `match`. The
+  // panel adapter forwards that as `vtt:automation-register-trigger`, and we
+  // turn it into an `AbilityTriggerBus.register` call with a predicate that
+  // inspects fired-event payloads against the authored `filter`.
+  //
+  // The caster's token gets the blue `!` overlay when the predicate hits —
+  // same path opp-attack uses. The user clicks the `!` to resolve manually.
+  // (Auto-resolution is deferred to a later phase to keep player-in-the-loop.)
+
+  function getActiveScenePlacementById(placementId) {
+    if (!placementId) return null;
+    const state = boardApi.getState?.() ?? {};
+    const placements = getActiveScenePlacements(state) || [];
+    return placements.find((p) => p && p.id === placementId) || null;
+  }
+
+  function getTeamForPlacementId(placementId) {
+    if (!placementId) return null;
+    const fromCombat = getCombatantTeam(placementId);
+    if (fromCombat) return fromCombat;
+    const placement = getActiveScenePlacementById(placementId);
+    return placement ? normalizeCombatTeam(placement.team) : null;
+  }
+
+  function whosePredicateMatches(whose, casterId, casterTeam, payloadTokenId, targetIdsAtRegister) {
+    if (!whose || whose === "any") return true;
+    if (!payloadTokenId) return false;
+    if (whose === "self") return payloadTokenId === casterId;
+    if (whose === "target") {
+      return Array.isArray(targetIdsAtRegister) && targetIdsAtRegister.includes(payloadTokenId);
+    }
+    const otherTeam = getTeamForPlacementId(payloadTokenId);
+    if (whose === "ally") {
+      if (!otherTeam || !casterTeam) return false;
+      return otherTeam === casterTeam;
+    }
+    if (whose === "enemy") {
+      if (!otherTeam || !casterTeam) return false;
+      return otherTeam !== casterTeam;
+    }
+    return false;
+  }
+
+  function buildAuthoredTriggerPredicate(entry) {
+    // Closes over { casterId, casterTeam, match, targetIds } so the predicate
+    // is self-contained and can be unregistered without leaks.
+    const { casterId, casterTeam, match, targetIds } = entry;
+    const filter = (match && match.filter) || {};
+    const event = match?.event;
+    const whose = filter.whose || "any";
+    return function predicate(payload) {
+      if (!payload || typeof payload !== 'object') return false;
+      const payloadTokenId =
+        payload.placementId ||
+        payload.targetId ||
+        payload.tokenId ||
+        '';
+      if (!whosePredicateMatches(whose, casterId, casterTeam, payloadTokenId, targetIds)) {
+        return false;
+      }
+      if (event === 'damage') {
+        const amount = Number.parseInt(payload.amount, 10) || 0;
+        if (filter.minAmount && amount < filter.minAmount) return false;
+        if (Array.isArray(filter.damageType) && filter.damageType.length) {
+          const dt = String(payload.damageType || '').toLowerCase();
+          if (!filter.damageType.includes(dt)) return false;
+        }
+        return true;
+      }
+      if (event === 'staminaChange') {
+        const direction = filter.direction || 'either';
+        if (direction === 'either') return true;
+        const delta = Number.parseInt(payload.delta, 10) || 0;
+        if (direction === 'down') return delta < 0;
+        if (direction === 'up') return delta > 0;
+        return false;
+      }
+      if (event === 'turnStart' || event === 'turnEnd') {
+        return true;
+      }
+      if (event === 'move') {
+        // The bus fans a single move event with a `perWatcher` lookup keyed
+        // by watcher placement id. Resolve THIS predicate's adjacency state
+        // from the caster's slot in that lookup.
+        let watcherState = null;
+        if (payload.perWatcher instanceof Map) {
+          watcherState = payload.perWatcher.get(casterId);
+        } else if (payload.perWatcher && typeof payload.perWatcher === 'object') {
+          watcherState = payload.perWatcher[casterId];
+        }
+        const leaves = Boolean(watcherState?.leaves);
+        const enters = Boolean(watcherState?.enters);
+        if (filter.leavesAdjacency && !leaves) return false;
+        if (filter.entersAdjacency && !enters) return false;
+        return true;
+      }
+      return true;
+    };
+  }
+
+  function handleAutomationRegisterTriggerRequest(event) {
+    const detail = event?.detail ?? {};
+    const payload = detail.payload && typeof detail.payload === 'object' ? detail.payload : {};
+    const resolve = typeof detail.resolve === 'function' ? detail.resolve : null;
+    const reject = typeof detail.reject === 'function' ? detail.reject : null;
+    const casterId = payload.casterId || '';
+    const abilityId = payload.abilityId || '';
+    const match = payload.match && typeof payload.match === 'object' ? payload.match : null;
+    if (!casterId || !match || !match.event) {
+      resolve?.({ registered: false, reason: 'missing-fields' });
+      return;
+    }
+    const casterTeam = getTeamForPlacementId(casterId);
+    const entry = {
+      tokenId: casterId,
+      eventType: match.event,
+      casterId,
+      casterTeam,
+      match,
+      targetIds: Array.isArray(payload.targetIds) ? [...payload.targetIds] : [],
+      abilityId: abilityId || `authored_trigger_${casterId}_${Date.now()}`,
+      authored: true,
+      condition: payload.condition || '',
+    };
+    entry.predicate = buildAuthoredTriggerPredicate(entry);
+    const registered = triggerRegister(entry);
+    resolve?.({ registered: Boolean(registered), abilityId: entry.abilityId, eventType: entry.eventType });
+  }
+
+  document.addEventListener('vtt:automation-register-trigger', handleAutomationRegisterTriggerRequest);
 
   if (maliceButton) {
     maliceButton.addEventListener('click', (event) => {
@@ -7162,6 +7328,14 @@ export function mountBoardInteractions(store, routes = {}) {
     activeTeam = team;
     turnPhase = TURN_PHASE.ACTIVE;
     if (previousPhase !== TURN_PHASE.ACTIVE) bumpPhaseTick();
+    // Fan out turnStart so authored triggers (e.g. "at the start of your turn,
+    // ...") can mark their owner. The bus dispatches to every registered
+    // listener; each predicate decides whether to act.
+    try {
+      triggerFire('turnStart', { placementId: combatantId, team });
+    } catch (err) {
+      console.warn('[VTT] triggerFire(turnStart) failed', err);
+    }
     return true;
   }
 
@@ -7695,6 +7869,13 @@ export function mountBoardInteractions(store, routes = {}) {
     const finishedId = turnCompletion.finishedId;
     if (isGmUser()) {
       combatTimerService.endTurn();
+    }
+    // Fan out turnEnd before any save-ends UI opens, so authored "at end of
+    // turn" triggers can arm their owner before the resolution dialog appears.
+    try {
+      triggerFire('turnEnd', { placementId: finishedId, team: turnCompletion.finishedTeam });
+    } catch (err) {
+      console.warn('[VTT] triggerFire(turnEnd) failed', err);
     }
     const finishingPlacement = getPlacementFromStore(finishedId);
     const finishingConditions = ensurePlacementConditions(
@@ -9602,6 +9783,14 @@ export function mountBoardInteractions(store, routes = {}) {
         let placementMutated = false;
         if (placement.triggeredActionReady !== true) {
           placement.triggeredActionReady = true;
+          placementMutated = true;
+        }
+        // Round-start: reset Draw Steel's "one triggered action per round"
+        // counter so the placement can react again this round. Free
+        // triggered actions don't consume this; only the non-free path will
+        // flip it back to true once spent (handled in a later phase).
+        if (placement.triggeredActionUsedThisRound !== false) {
+          placement.triggeredActionUsedThisRound = false;
           placementMutated = true;
         }
         // Round-start: clear any blue "!" trigger-ready flags from the prior
@@ -12593,6 +12782,10 @@ export function mountBoardInteractions(store, routes = {}) {
       reject?.(new Error('Automation damage request is missing a target or amount.'));
       return;
     }
+    const beforePlacement = getPlacementFromStore(payload.placementId);
+    const beforeStamina = Number.isFinite(beforePlacement?.currentStamina)
+      ? beforePlacement.currentStamina
+      : null;
     const adjustment = await getAutomationDamageAdjustment(payload.placementId, payload.damageType || '');
     const adjustedAmount = Math.max(0, amount + adjustment.vulnerability - adjustment.immunity);
     const result = adjustedAmount > 0
@@ -12610,6 +12803,31 @@ export function mountBoardInteractions(store, routes = {}) {
     const maxDisplay = result.max !== null ? result.max : DEFAULT_HP_PLACEHOLDER;
     const hpDisplay = result.max !== null ? `${result.current}/${maxDisplay}` : `${result.current}`;
     updateStatus(`${result.name} takes ${adjustedAmount} stamina damage (${hpDisplay} stamina remaining).`);
+    // Bus fan-out for authored triggers. `damage` covers "when this creature
+    // takes damage" predicates; `staminaChange` covers the broader hook for
+    // anything watching for stamina deltas.
+    try {
+      triggerFire('damage', {
+        placementId: payload.placementId,
+        targetId: payload.placementId,
+        sourceId: payload.sourceId || '',
+        amount: adjustedAmount,
+        originalAmount: amount,
+        damageType: payload.damageType || '',
+        abilityName: payload.abilityName || '',
+      });
+      const afterStamina = Number.isFinite(result.current) ? result.current : null;
+      const delta = beforeStamina !== null && afterStamina !== null ? afterStamina - beforeStamina : -adjustedAmount;
+      triggerFire('staminaChange', {
+        placementId: payload.placementId,
+        before: beforeStamina,
+        after: afterStamina,
+        delta,
+        kind: 'damage',
+      });
+    } catch (err) {
+      console.warn('[VTT] triggerFire(damage/staminaChange) failed', err);
+    }
     resolve?.({
       ...result,
       originalAmount: amount,
@@ -12631,6 +12849,10 @@ export function mountBoardInteractions(store, routes = {}) {
       reject?.(new Error('Automation heal request is missing a target or amount.'));
       return;
     }
+    const beforePlacement = getPlacementFromStore(payload.placementId);
+    const beforeStamina = Number.isFinite(beforePlacement?.currentStamina)
+      ? beforePlacement.currentStamina
+      : null;
     // For heal: cap at max. For temporaryStamina: allow going over (allowTempHp=true).
     const allowTempHp = Boolean(payload.allowTempHp);
     const result = applyDamageHealToPlacement(payload.placementId, 'heal', amount, { allowTempHp });
@@ -12649,6 +12871,21 @@ export function mountBoardInteractions(store, routes = {}) {
       ? ` (+${result.current - result.max} temp)`
       : '';
     updateStatus(`${result.name} recovers ${result.change || amount} stamina${overage} (${hpDisplay}).`);
+    try {
+      const afterStamina = Number.isFinite(result.current) ? result.current : null;
+      const delta = beforeStamina !== null && afterStamina !== null
+        ? afterStamina - beforeStamina
+        : (result.change || amount);
+      triggerFire('staminaChange', {
+        placementId: payload.placementId,
+        before: beforeStamina,
+        after: afterStamina,
+        delta,
+        kind: allowTempHp ? 'temporaryStamina' : 'heal',
+      });
+    } catch (err) {
+      console.warn('[VTT] triggerFire(staminaChange) failed', err);
+    }
     resolve?.({
       ...result,
       hidden: isAutomationPlacementHidden(placement),
@@ -12861,6 +13098,233 @@ export function mountBoardInteractions(store, routes = {}) {
     if (verb === 'verticalPull') return 'pull';
     if (verb === 'verticalSlide') return 'slide';
     return verb;
+  }
+
+  async function handleAutomationRecoveryValueRequest(event) {
+    const detail = event?.detail ?? {};
+    const payload = detail.payload && typeof detail.payload === 'object' ? detail.payload : {};
+    const resolve = typeof detail.resolve === 'function' ? detail.resolve : null;
+    const placementId = payload.placementId || '';
+    if (!placementId) {
+      resolve?.({ recoveryValue: null });
+      return;
+    }
+    const sheet = await getAutomationSheetForPlacement(placementId);
+    if (!sheet) {
+      resolve?.({ recoveryValue: null });
+      return;
+    }
+    const vitals = sheet?.hero?.vitals && typeof sheet.hero.vitals === 'object' ? sheet.hero.vitals : {};
+    // The sheet's recoveryValue field is sometimes a number, sometimes a
+    // free-text expression (e.g. "max stamina ÷ 3"). Take whatever we can
+    // parse; let the runner fall back to a manual reminder otherwise.
+    const raw = vitals.recoveryValue;
+    let parsed = null;
+    if (Number.isFinite(raw)) {
+      parsed = Number(raw);
+    } else if (typeof raw === 'string') {
+      const n = Number.parseInt(raw.replace(/[^\d-]/g, ''), 10);
+      if (Number.isFinite(n)) parsed = n;
+    }
+    if (!Number.isFinite(parsed) || parsed <= 0) {
+      // Final fallback: round-down(staminaMax / 3) per Draw Steel rules
+      const max = Number.parseInt(vitals.staminaMax ?? 0, 10);
+      if (Number.isFinite(max) && max > 0) parsed = Math.floor(max / 3);
+    }
+    resolve?.({
+      recoveryValue: Number.isFinite(parsed) && parsed > 0 ? parsed : null,
+      currentRecoveries: Number.parseInt(vitals.currentRecoveries ?? 0, 10) || 0,
+    });
+  }
+
+  async function handleAutomationTeleportRequest(event) {
+    const detail = event?.detail ?? {};
+    const payload = detail.payload && typeof detail.payload === 'object' ? detail.payload : {};
+    const resolve = typeof detail.resolve === 'function' ? detail.resolve : null;
+    const reject = typeof detail.reject === 'function' ? detail.reject : null;
+    const targetId = payload.targetId || payload.placementId || '';
+    const targetPlacement = getPlacementFromStore(targetId);
+    if (!targetPlacement) {
+      resolve?.({ skipped: true, reason: 'missing-placement' });
+      return;
+    }
+    const distance = Math.max(0, Number.parseInt(payload.distance, 10) || 0);
+    if (!distance) {
+      resolve?.({ skipped: true, reason: 'no-distance' });
+      return;
+    }
+    closeDamageHealWidget();
+    closeHealOverflowPopup();
+    // Teleport reuses the slide-shaped overlay (any cell within Chebyshev
+    // distance from current). Unlike forced movement, stability and size
+    // differences are NOT subtracted — teleport ignores both per the rules.
+    // The "source" passed in is the target's own placement so the slide path
+    // legality check has a reference point that doesn't add constraints.
+    startAutomationMoveSelection({
+      payload,
+      resolve,
+      reject,
+      sourcePlacement: { ...targetPlacement },
+      targetPlacement,
+      requestedDistance: distance,
+      effectiveDistance: distance,
+      verb: 'slide',
+      verbLabel: 'Teleport',
+      collisionDamageType: '',
+    });
+  }
+
+  async function handleAutomationSwapRequest(event) {
+    const detail = event?.detail ?? {};
+    const payload = detail.payload && typeof detail.payload === 'object' ? detail.payload : {};
+    const resolve = typeof detail.resolve === 'function' ? detail.resolve : null;
+    const sourcePlacement = resolveAutomationSourcePlacement(payload.sourcePlacement);
+    const targetPlacement = getPlacementFromStore(payload.targetId);
+    if (!sourcePlacement || !targetPlacement) {
+      resolve?.({ skipped: true, reason: 'missing-placement' });
+      return;
+    }
+    if (sourcePlacement.id === targetPlacement.id) {
+      resolve?.({ skipped: true, reason: 'same-token' });
+      return;
+    }
+    // Atomic transpose: swap (column, row) on both placements. Footprint
+    // checks are best-effort — if either token has a different size, allow
+    // the swap anyway (GM can manually correct).
+    const sourceTo = { column: targetPlacement.column, row: targetPlacement.row };
+    const targetTo = { column: sourcePlacement.column, row: sourcePlacement.row };
+    const sourceUpdate = updatePlacementById(sourcePlacement.id, (p) => {
+      p.column = sourceTo.column;
+      p.row = sourceTo.row;
+    });
+    const targetUpdate = updatePlacementById(targetPlacement.id, (p) => {
+      p.column = targetTo.column;
+      p.row = targetTo.row;
+    });
+    if (!sourceUpdate?.updated || !targetUpdate?.updated) {
+      resolve?.({ skipped: true, reason: 'update-failed' });
+      return;
+    }
+    flashAutomationTargetToken(sourcePlacement.id);
+    flashAutomationTargetToken(targetPlacement.id);
+    updateStatus(`${tokenLabel(sourcePlacement)} and ${tokenLabel(targetPlacement)} swap places.`);
+    resolve?.({
+      name: tokenLabel(targetPlacement),
+      sourceId: sourcePlacement.id,
+      targetId: targetPlacement.id,
+    });
+  }
+
+  async function handleAutomationFreeStrikeRequest(event) {
+    const detail = event?.detail ?? {};
+    const payload = detail.payload && typeof detail.payload === 'object' ? detail.payload : {};
+    const resolve = typeof detail.resolve === 'function' ? detail.resolve : null;
+    const candidateIds = Array.isArray(payload.byCandidateIds) ? payload.byCandidateIds : [];
+    const byId = candidateIds[0] || '';
+    const byPlacement = byId ? getPlacementFromStore(byId) : null;
+    if (!byPlacement) {
+      resolve?.({ skipped: true, reason: 'missing-by' });
+      return;
+    }
+
+    // Resolve the "by" entity's M and A bonuses. PC sheets have these in
+    // `hero.stats`; for monsters/NPCs we may have nothing, so we fall back to
+    // 0 and let the GM adjust in chat.
+    let mBonus = 0;
+    let aBonus = 0;
+    const sheet = await getAutomationSheetForPlacement(byId);
+    if (sheet?.hero?.stats) {
+      mBonus = Number.parseInt(sheet.hero.stats.might ?? 0, 10) || 0;
+      aBonus = Number.parseInt(sheet.hero.stats.agility ?? 0, 10) || 0;
+    }
+    const bonus = Math.max(mBonus, aBonus);
+    const bonusLabel = mBonus >= aBonus ? `+${bonus} M` : `+${bonus} A`;
+
+    // Roll 2d10.
+    const d1 = Math.floor(Math.random() * 10) + 1;
+    const d2 = Math.floor(Math.random() * 10) + 1;
+    const naturalRoll = d1 + d2;
+    const total = naturalRoll + bonus;
+    const tier = total <= 11 ? 1 : total <= 16 ? 2 : 3;
+    const tierDamage = { 1: 2, 2: 5, 3: 7 }[tier];
+    const damage = tierDamage + bonus;
+
+    // Pick the "against" target via the standard automation picker, with
+    // the by-entity as the new source so distance/team filters resolve
+    // relative to who's actually striking.
+    const targetConfig = {
+      mode: 'token',
+      predicate: payload.againstPredicate || 'creature',
+      creature: payload.againstPredicate || 'creature',
+      affects: payload.againstPredicate || 'creature',
+      count: { value: 1, mode: 'exact' },
+      distance: { form: 'melee', value: 1 },
+      pickIndex: 0,
+      pickTotal: 1,
+      allowDone: false,
+      // The board's selector closure reads `sourcePlacement` to filter by
+      // melee/ranged distance. For a free strike, the "source" is the
+      // by-entity, not the original caster.
+      sourcePlacement: { ...byPlacement },
+    };
+    const pickResult = await new Promise((res) => {
+      document.dispatchEvent(new CustomEvent('vtt:automation-select-target', {
+        detail: {
+          targetConfig,
+          resolve: res,
+          reject: (err) => res({ canceled: true, error: err }),
+        },
+      }));
+    });
+    if (!pickResult || pickResult.canceled || pickResult.skipped) {
+      resolve?.({ skipped: true, reason: 'no-target' });
+      return;
+    }
+    const againstId = pickResult.id || pickResult.placement?.id;
+    if (!againstId) {
+      resolve?.({ skipped: true, reason: 'no-target' });
+      return;
+    }
+
+    // Apply damage through the normal automation path so vulnerability /
+    // immunity / overlays work the same as any other ability.
+    const damageResult = await new Promise((res) => {
+      document.dispatchEvent(new CustomEvent('vtt:automation-apply-damage', {
+        detail: {
+          payload: {
+            placementId: againstId,
+            sourceId: byId,
+            amount: damage,
+            damageType: '',
+            abilityName: `${tokenLabel(byPlacement)} — Free Strike`,
+          },
+          resolve: res,
+          reject: () => res(null),
+        },
+      }));
+    });
+
+    // Post the dice math + result so the table sees what happened.
+    const chatLines = [
+      `${tokenLabel(byPlacement)} makes a Free Strike against ${tokenLabel(getPlacementFromStore(againstId))}.`,
+      `2d10 + M or A: ${d1} + ${d2} ${bonusLabel} = ${total} → tier ${tier} (${tierDamage}+M or A = ${damage} damage).`,
+    ];
+    if (payload.text) chatLines.push(payload.text);
+    if (window.dashboardChat?.sendMessage) {
+      try {
+        await window.dashboardChat.sendMessage({ message: chatLines.join('\n'), type: 'text' });
+      } catch (_) {
+        // Chat write failures are non-fatal — the damage already applied.
+      }
+    }
+    resolve?.({
+      skipped: false,
+      byId,
+      againstId,
+      tier,
+      damage,
+      damageResult,
+    });
   }
 
   async function handleAutomationForceMoveRequest(event) {

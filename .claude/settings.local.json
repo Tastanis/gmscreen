@@ -70,7 +70,11 @@
       "Bash(awk -F'\\\\t' '$1==275 || $1==276' \"C:/Users/tasta/Desktop/gmscreen/.ds_pages.txt\")",
       "Bash(awk -F'\\\\t' '$1>=273 && $1<=275' \"C:/Users/tasta/Desktop/gmscreen/.ds_pages.txt\")",
       "Bash(awk -F'\\\\t' '$1==274' \"C:/Users/tasta/Desktop/gmscreen/.ds_pages.txt\")",
-      "Bash(awk -F'\\\\t' '$1==273' \"C:/Users/tasta/Desktop/gmscreen/.ds_pages.txt\")"
+      "Bash(awk -F'\\\\t' '$1==273' \"C:/Users/tasta/Desktop/gmscreen/.ds_pages.txt\")",
+      "Bash(node --test dnd/vtt/assets/js/combat/__tests__/combat-state.test.mjs dnd/vtt/assets/js/combat/__tests__/combat-effects.test.mjs)",
+      "Bash(node --check dnd/character_sheet/ability-automation/schema.js)",
+      "Bash(node --check dnd/character_sheet/ability-automation/runner.js)",
+      "Bash(node --check dnd/vtt/assets/js/ui/character-summary-panel.js)"
     ],
     "deny": []
   }

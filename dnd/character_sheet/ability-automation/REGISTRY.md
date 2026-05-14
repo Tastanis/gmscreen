@@ -13,7 +13,7 @@ For *how* to write JSON, see `AUTHORING.md`. This file is `what is supported`.
 | `target` | Full |
 | `powerRoll` | Full |
 | `effect` | Full |
-| `trigger` | Schema + chat reminder (no auto-detect this pass) |
+| `trigger` | Schema + registration against `AbilityTriggerBus`. Authored `match` config fires the blue `!` overlay when its event/filter matches; click to resolve manually. No structured `match` → chat reminder fallback. |
 | `persistent` | Schema + chat reminder (no auto-tick this pass) |
 
 ## Effect kinds — `effect.kind` (used inside `tier.effects`, `effect.effects`, `trigger.effects`, `persistent.effects`, `potency.onFail`, `spend.effects`)
@@ -28,13 +28,13 @@ For *how* to write JSON, see `AUTHORING.md`. This file is `what is supported`.
 | `forcedMovement` (`vertical*`) | Partial | Falls through to horizontal push/pull/slide. Z-axis not modeled |
 | `potency` | Full | Calls `checkPotency`, runs `onFail` effects on failed targets |
 | `spend` | Full | Prompts user contextually, runs nested effects on accept |
-| `heal` | Full | Applies via board heal path. Capped at max stamina |
+| `heal` | Full | Flat `amount` heals via board heal path (capped at max). `recoveries` reads target's recovery value from their sheet and heals that × N; recoveries counter on the sheet is NOT auto-decremented (chat reminder so the player updates it). |
 | `temporaryStamina` | Full | Applies via board heal path with overage allowed (over-max shows as temp) |
-| `teleport` | Chat reminder | Posts message; manual |
-| `swap` | Chat reminder | Posts message; manual |
-| `freeStrike` | Chat reminder | Posts message; manual |
-| `cascade` | Chat reminder | Posts message; manual |
-| `resourceGain` | Chat reminder | Posts message; manual |
+| `teleport` | Full | Reuses the slide-shaped destination picker; legal-cell highlight covers any cell within Chebyshev distance. No stability or size penalty. Clicking an occupied cell still routes through the slide-style collision path — pick an empty cell to follow the rules. |
+| `swap` | Full | Atomic transpose of caster ↔ target placements. Best-effort footprint check; non-equal sizes allowed (GM corrects manually). |
+| `freeStrike` | Full | "By" entity defaults to the most recent target group's first member (the creature being told to free-strike). Reads M/A bonuses from their sheet (0 / 0 fallback if no sheet). Rolls 2d10 inline, prompts user to pick the "against" target via the standard picker (with the by-entity as source), applies tier damage (`2/5/7 + max(M, A)`) via the normal automation damage path. |
+| `cascade` | Chat reminder | Posts message; manual. Cascade requires stable cross-ability IDs and an "invoke another ability" entry point that doesn't exist yet — Phase D. |
+| `resourceGain` | Full | Mutates the caster's own `hero.resource.value` on their sheet. If the JSON names a specific resource and the caster's resource bar has a different title, falls back to a chat reminder. Floors at 0. |
 | `ifKeyword` | Full | Branches based on ability's `keywords`. `then` runs on match, `else` on miss |
 | `note` | Full | Posts text to chat |
 | `other` | Chat reminder | Posts text to chat |
@@ -120,6 +120,12 @@ These are called by `runner.js` and dispatched as `vtt:automation-*` CustomEvent
 | `getStrongestAttribute()` | none | `{ attribute, bonus }` |
 | `postChat(entry)` | `{ message, type, payload }` | bool |
 | `spendResource(action)` | the action object | `{ canceled? }` or any non-canceled |
+| `registerTrigger(entry)` | `{ casterId, abilityId, abilityName, match: { event, filter }, effects, targetGroup, targetIds, condition, note }` | `{ registered: bool, abilityId, eventType }` |
+| `applyResourceGain(payload)` | `{ amount, resource, abilityName }` | `{ applied, delta, resource, current }` or `{ skipped, reason }` |
+| `applyTeleport(payload)` | `{ placementId, distance, abilityName, sourcePlacement }` | `{ name, movedDistance }` or `{ skipped, reason }` |
+| `applySwap(payload)` | `{ targetId, sourcePlacement, abilityName }` | `{ name, sourceId, targetId }` or `{ skipped, reason }` |
+| `runFreeStrike(payload)` | `{ byCandidateIds, againstPredicate, text, abilityName, casterName }` | `{ skipped, byId, againstId, tier, damage, damageResult }` |
+| `getRecoveryValueForTarget(payload)` | `{ placementId }` | `{ recoveryValue, currentRecoveries }` — `recoveryValue` is null when unknown |
 
 ---
 
@@ -137,12 +143,45 @@ Lightweight event-driven registry for triggered abilities. JSON-authored `trigge
 
 ### Built-in event types
 
-| eventType / DOM event | Payload shape | Status |
+| eventType | Payload shape | Status |
 |---|---|---|
-| `vtt:token-moved` | `{ placementId, sceneId, from: { column, row, width, height }, to: {...}, kind: "normal" }` | Implemented. Fires from `token-movement-controller.handleDragCommitted` only on normal player movement. Forced movement and teleport bypass this event. |
-| `damage` | `{ targetId, sourceId, amount, damageType }` | Bus exists, hook deferred |
-| `turnStart` / `turnEnd` | `{ placementId }` | Bus exists, hook deferred |
-| `staminaChange` | `{ placementId, before, after }` | Bus exists, hook deferred |
+| `move` | `{ placementId, sourceId, from: {column,row,width,height}, to: {...}, kind: "normal", sceneId, perWatcher }` | Fires once per `vtt:token-moved` (normal movement only). `perWatcher` is a `Map<watcherId, { leaves, enters }>` so a predicate's adjacency filter can resolve relative to its own watcher. |
+| `damage` | `{ placementId, targetId, sourceId, amount, originalAmount, damageType, abilityName }` | Fires from `handleAutomationDamageRequest` after the stamina mutation. Manual / non-automation damage paths do NOT fire this yet — Phase B work. |
+| `staminaChange` | `{ placementId, before, after, delta, kind }` | Fires from both `handleAutomationDamageRequest` and `handleAutomationHealRequest`. `kind` ∈ {`damage`, `heal`, `temporaryStamina`}. |
+| `turnStart` | `{ placementId, team }` | Fires from `transitionToActiveTurn` whenever a token becomes the active combatant. |
+| `turnEnd` | `{ placementId, team }` | Fires from `completeActiveCombatant` immediately before the save-ends UI opens. |
+| `vtt:token-moved` (DOM event) | Underlying DOM event the `move` fan-out subscribes to. Still also used by the hard-coded opportunity-attack auto-detect. |
+
+### Authored trigger `match` shape
+
+Trigger blocks may carry a structured `match` alongside the free-text `condition` label. The runner forwards it via the host's `registerTrigger` callback; the board converts it into a bus listener with a generated predicate.
+
+```json
+{
+  "type": "trigger",
+  "condition": "When the target takes fire damage",
+  "match": {
+    "event": "damage",
+    "filter": { "whose": "target", "damageType": ["fire"], "minAmount": 1 }
+  },
+  "effects": [ ... ]
+}
+```
+
+| Event | Filter fields |
+|---|---|
+| `damage` | `whose` (`self`/`ally`/`enemy`/`target`/`any`), `minAmount` int, `damageType` string\|string[] |
+| `staminaChange` | `whose`, `direction` (`up`/`down`/`either`) |
+| `turnStart`, `turnEnd` | `whose` |
+| `move` | `whose`, `leavesAdjacency` bool, `entersAdjacency` bool |
+
+`whose` resolves against:
+- `self` → the caster's own placement id
+- `target` → ids in the target group named by `block.target` (or just the most recent group)
+- `ally`/`enemy` → team comparison against the caster's combat team
+- `any` (default) → no filter
+
+If `match` is omitted, the runner falls back to a chat reminder so the GM at least sees what should happen.
 
 ### Built-in opportunity attack
 

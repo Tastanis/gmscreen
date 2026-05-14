@@ -1183,6 +1183,12 @@ function startAbilityAutomation(sheet, action, categoryKey, sourceToken = null, 
     applyCondition: requestAutomationCondition,
     checkPotency: requestAutomationPotency,
     forceMove: requestAutomationForceMove,
+    registerTrigger: requestAutomationRegisterTrigger,
+    applyResourceGain: (payload) => applyAbilityResourceGain(sheet, payload, options),
+    applyTeleport: requestAutomationTeleport,
+    applySwap: requestAutomationSwap,
+    runFreeStrike: requestAutomationFreeStrike,
+    getRecoveryValueForTarget: requestAutomationRecoveryValue,
     spendResource: (ability) => spendAbilityResource(sheet, ability, options),
   });
 }
@@ -1302,6 +1308,100 @@ function requestAutomationHeal(payload) {
       })
     );
   });
+}
+
+function requestAutomationRegisterTrigger(payload) {
+  return new Promise((resolve, reject) => {
+    document.dispatchEvent(
+      new CustomEvent('vtt:automation-register-trigger', {
+        detail: {
+          payload: clonePlain(payload || {}),
+          resolve,
+          reject,
+        },
+      })
+    );
+  });
+}
+
+function requestAutomationTeleport(payload) {
+  return new Promise((resolve, reject) => {
+    document.dispatchEvent(
+      new CustomEvent('vtt:automation-apply-teleport', {
+        detail: {
+          payload: clonePlain(payload || {}),
+          resolve,
+          reject,
+        },
+      })
+    );
+  });
+}
+
+function requestAutomationSwap(payload) {
+  return new Promise((resolve, reject) => {
+    document.dispatchEvent(
+      new CustomEvent('vtt:automation-apply-swap', {
+        detail: {
+          payload: clonePlain(payload || {}),
+          resolve,
+          reject,
+        },
+      })
+    );
+  });
+}
+
+function requestAutomationFreeStrike(payload) {
+  return new Promise((resolve, reject) => {
+    document.dispatchEvent(
+      new CustomEvent('vtt:automation-run-free-strike', {
+        detail: {
+          payload: clonePlain(payload || {}),
+          resolve,
+          reject,
+        },
+      })
+    );
+  });
+}
+
+function requestAutomationRecoveryValue(payload) {
+  return new Promise((resolve, reject) => {
+    document.dispatchEvent(
+      new CustomEvent('vtt:automation-recovery-value', {
+        detail: {
+          payload: clonePlain(payload || {}),
+          resolve,
+          reject,
+        },
+      })
+    );
+  });
+}
+
+// resourceGain modifies the caster's heroic resource directly on their sheet.
+// Mirrors spendAbilityResource but allows positive or negative amounts and
+// doesn't enforce a per-ability cost match.
+async function applyAbilityResourceGain(sheet, payload = {}, options = {}) {
+  const amount = Number.parseInt(payload?.amount ?? 0, 10) || 0;
+  if (!amount || !sheet) return { skipped: true, amount: 0 };
+  const hero = sheet?.hero && typeof sheet.hero === 'object' ? sheet.hero : {};
+  const resource = hero.resource && typeof hero.resource === 'object' ? hero.resource : {};
+  const title = resource.title || sheet?.sidebar?.resource?.title || 'Resource';
+  // If the JSON names a specific resource, only apply if it matches the
+  // caster's resource bar. Otherwise, assume the caster's resource.
+  const askedName = String(payload?.resource || '').trim().toLowerCase();
+  if (askedName && askedName !== title.toLowerCase()) {
+    return { skipped: true, reason: 'resource-mismatch', resource: title };
+  }
+  const current = Number.parseInt(resource.value ?? 0, 10) || 0;
+  const next = Math.max(0, current + amount);
+  resource.value = next;
+  hero.resource = resource;
+  if (sheet) sheet.hero = hero;
+  await saveCharacterSummarySheet(sheet, options);
+  return { applied: amount, delta: next - current, resource: title, current: next };
 }
 
 async function spendAbilityResource(sheet, ability, options = {}) {

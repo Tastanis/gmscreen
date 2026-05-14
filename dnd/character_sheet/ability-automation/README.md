@@ -81,13 +81,15 @@ Each effect is dispatched by `kind`:
 - VTT board state changes propagate through the existing board state persistence/sync paths.
 - When adding a new effect kind, condition, etc.: update `primitives.js`, then `schema.js` normalizer, then `runner.js` dispatcher, then `AUTHORING.md` and `REGISTRY.md`.
 
-## Known gaps (deferred to phase 2)
+## Known gaps (deferred to later phases)
 
-- Triggers auto-detect on damage/move/turn events.
 - Persistent zones with tick-on-turn application and "pay N to extend" UI.
-- Pull/slide/vertical forced movement preview on the board (verb passes; preview path is push-shaped).
-- Heal/temporary-stamina/teleport/swap/cascade/freeStrike auto-application via board hooks.
+- Vertical forced movement (Z-axis); horizontal push/pull/slide are fully wired.
+- `cascade` effect kind — fires another ability as a free triggered action. Needs stable cross-ability identifiers and a recursive runner entry point. Phase D candidate.
+- Auto-decrement of the target's `currentRecoveries` after a recovery-style heal — currently a chat reminder so the player adjusts the sheet manually. Adding a `sync-recoveries` endpoint to `handler.php` would close this.
 - Marks (judged by, marked by, bonded).
+- Teleport's destination picker reuses the slide overlay, which means clicking an occupied cell triggers a slam (technically wrong for teleport). Picking an empty cell behaves correctly.
+- Auto-resolution of fired triggers — today the bus marks the watcher's blue `!` overlay and the user clicks to resolve. Intentional: keeps the player in the loop.
 - Standalone inspector page listing every ability across every character.
 
 When implementing any of these, update `REGISTRY.md` so authors know.

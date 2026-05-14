@@ -683,15 +683,61 @@
     }
   }
 
-  // ---------- trigger / persistent (chat reminders only this pass) ----------
+  // ---------- trigger / persistent ----------
+  //
+  // Trigger blocks register against the board's AbilityTriggerBus via the
+  // host's `registerTrigger` callback. When the matching event fires later,
+  // the bus marks the caster's token with the blue "!" overlay (same flow as
+  // the built-in opportunity attack). The user clicks it to resolve manually.
+  //
+  // If the host doesn't expose `registerTrigger` (e.g. the runner is being
+  // used outside the VTT), or the block has no structured `match`, we fall
+  // back to posting a chat reminder so the GM at least sees what should happen.
+
+  function collectTargetIdsForGroup(state, groupName) {
+    if (!groupName) return [];
+    const group = state.groups?.[groupName];
+    if (!Array.isArray(group)) return [];
+    return group.map((entry) => entry?.id).filter(Boolean);
+  }
 
   async function runTriggerBlock(state, block) {
+    const ctx = state.context || {};
+    const casterId = state.sourcePlacement?.id || "";
+    const targetGroupRef = block.target || "";
+    const targetIds = collectTargetIdsForGroup(state, targetGroupRef);
     const inner = (block.effects || []).map(P.describeEffect).filter(Boolean).join("; ");
+
+    if (block.match && typeof ctx.registerTrigger === "function") {
+      try {
+        await ctx.registerTrigger({
+          casterId,
+          abilityId: state.action?.id || `ability_${block.id}`,
+          abilityName: state.action?.name || "",
+          match: block.match,
+          effects: block.effects || [],
+          targetGroup: targetGroupRef,
+          targetIds,
+          condition: block.condition || "",
+          note: block.note || "",
+        });
+        const lines = [`${state.heroName} - ${state.action.name || "Ability"} trigger armed:`];
+        if (block.condition) lines.push(`When: ${block.condition}`);
+        if (inner) lines.push(`Then: ${inner}`);
+        if (block.note) lines.push(block.note);
+        await postChat(ctx, { message: lines.join("\n") });
+        return;
+      } catch (err) {
+        console.warn("[AbilityAutomationRunner] registerTrigger failed; falling back to chat reminder.", err);
+        // Fall through to chat-only path below.
+      }
+    }
+
     const lines = [`${state.heroName} - ${state.action.name || "Ability"} trigger:`];
     if (block.condition) lines.push(`When: ${block.condition}`);
     if (inner) lines.push(`Then: ${inner}`);
     if (block.note) lines.push(block.note);
-    await postChat(state.context, { message: lines.join("\n") });
+    await postChat(ctx, { message: lines.join("\n") });
   }
 
   async function runPersistentBlock(state, block) {
@@ -736,15 +782,15 @@
       case "temporaryStamina":
         return applyHealEffect(state, effect, targets, ctx, true);
       case "teleport":
-        return reminderEffect(state, effect, targets, "Teleport");
+        return applyTeleportEffect(state, effect, targets, ctx);
       case "swap":
-        return reminderEffect(state, effect, targets, "Swap");
+        return applySwapEffect(state, effect, targets, ctx);
       case "freeStrike":
-        return reminderEffect(state, effect, targets, "Free Strike");
+        return applyFreeStrikeEffect(state, effect, targets, ctx);
       case "cascade":
         return reminderEffect(state, effect, targets, "Cascade");
       case "resourceGain":
-        return reminderEffect(state, effect, targets, "Resource");
+        return applyResourceGainEffect(state, effect, targets, ctx);
       case "note":
         return noteEffect(state, effect);
       case "other":
@@ -840,22 +886,44 @@
     const recoveries = asInt(effect.recoveries, 0);
     const flatAmount = asInt(effect.amount, 0);
 
-    // "recoveries" requires a per-character recovery value we don't yet plumb;
-    // surface as a chat reminder so the GM can apply manually for now.
-    if (recoveries && !flatAmount) {
-      await reminderEffect(state, effect, targets, allowTempHp ? "Temporary Stamina" : "Heal");
-      return;
-    }
-    if (!flatAmount) return;
+    if (!recoveries && !flatAmount) return;
 
     const lines = [];
     for (const target of targets) {
       if (state.aborted) return;
       if (!target?.id) continue;
+
+      // Resolve the actual heal amount for this target. With `recoveries`,
+      // each target spends one of their own recoveries (chat reminder, since
+      // handler.php has no recovery-decrement endpoint) and heals by their
+      // own `recoveryValue`. If we can't read the target's sheet, fall back
+      // to the flatAmount or a chat reminder.
+      let amount = flatAmount;
+      let recoveryValueUsed = 0;
+      let recoveryUnknown = false;
+      if (recoveries) {
+        const resolved = typeof state.context.getRecoveryValueForTarget === "function"
+          ? await state.context.getRecoveryValueForTarget({ placementId: target.id })
+          : null;
+        if (Number.isFinite(resolved?.recoveryValue) && resolved.recoveryValue > 0) {
+          recoveryValueUsed = Math.trunc(resolved.recoveryValue) * recoveries;
+          amount = recoveryValueUsed + flatAmount;
+        } else {
+          recoveryUnknown = true;
+        }
+      }
+
+      if (!amount) {
+        if (recoveryUnknown) {
+          lines.push(`${target.name || "Target"}: spend ${recoveries} recovery → heal recovery value (apply manually).`);
+        }
+        continue;
+      }
+
       const result = typeof state.context.applyHeal === "function"
         ? await state.context.applyHeal({
             placementId: target.id,
-            amount: flatAmount,
+            amount,
             allowTempHp,
             abilityName: state.action.name || "Ability",
           })
@@ -869,11 +937,16 @@
       const current = result.current;
       const display = max !== null && max !== undefined ? `${current}/${max}` : `${current}`;
       const overage = allowTempHp && Number.isFinite(max) && current > max ? ` (+${current - max} temp)` : "";
-      lines.push(`${targetName} recovers ${result.change || flatAmount} stamina${overage} (${display}).`);
+      const recoveryNote = recoveries
+        ? ` (spent ${recoveries} recovery → ${recoveryValueUsed}${flatAmount ? `+${flatAmount}` : ""}; decrement recoveries on sheet)`
+        : "";
+      lines.push(`${targetName} recovers ${result.change || amount} stamina${overage}${recoveryNote} (${display}).`);
     }
-    await postChat(state.context, {
-      message: `${state.heroName} - ${state.action.name || "Ability"}:\n${lines.join("\n")}`,
-    });
+    if (lines.length) {
+      await postChat(state.context, {
+        message: `${state.heroName} - ${state.action.name || "Ability"}:\n${lines.join("\n")}`,
+      });
+    }
   }
 
   async function applyForcedMovementEffect(state, effect, targets) {
@@ -984,6 +1057,133 @@
       message: `${state.heroName} - ${state.action.name || "Ability"}: spent ${cost}.`,
     });
     await applyEffects(state, effect.effects || [], null, ctx);
+  }
+
+  async function applyResourceGainEffect(state, effect, _targets, _ctx) {
+    const amount = asInt(effect.amount, 0);
+    if (!amount) return;
+    const resourceName = effect.resource || "";
+    if (typeof state.context.applyResourceGain === "function") {
+      const result = await state.context.applyResourceGain({
+        amount,
+        resource: resourceName,
+        abilityName: state.action.name || "Ability",
+      });
+      if (result?.skipped && result.reason === "resource-mismatch") {
+        await postChat(state.context, {
+          message: `${state.heroName} - ${state.action.name || "Ability"}: ${P.describeEffect(effect)} — caster's resource is "${result.resource}", manual adjust needed.`,
+        });
+        return;
+      }
+      if (result?.applied !== undefined) {
+        const sign = result.applied >= 0 ? "+" : "";
+        await postChat(state.context, {
+          message: `${state.heroName} - ${state.action.name || "Ability"}: ${sign}${result.applied} ${result.resource || resourceName || "resource"} (now ${result.current}).`,
+        });
+        return;
+      }
+    }
+    await postChat(state.context, {
+      message: `${state.heroName} - ${state.action.name || "Ability"}: ${P.describeEffect(effect)} — apply manually.`,
+    });
+  }
+
+  async function applyTeleportEffect(state, effect, targets, _ctx) {
+    if (!targets.length) return;
+    const distance = asInt(effect.distance, 0);
+    if (!distance) {
+      await postChat(state.context, {
+        message: `${state.heroName} - ${state.action.name || "Ability"}: teleport 0 (skipped).`,
+      });
+      return;
+    }
+    if (typeof state.context.applyTeleport !== "function") {
+      await reminderEffect(state, effect, targets, "Teleport");
+      return;
+    }
+    const lines = [];
+    for (const target of targets) {
+      if (state.aborted) return;
+      if (!target?.id) continue;
+      const result = await state.context.applyTeleport({
+        placementId: target.id,
+        distance,
+        abilityName: state.action.name || "Ability",
+        sourcePlacement: state.sourcePlacement || null,
+      });
+      if (!result || result.skipped) {
+        lines.push(`${target.name || "Target"}: teleport ${distance} skipped.`);
+        continue;
+      }
+      const moved = Number.isFinite(result.movedDistance) ? result.movedDistance : distance;
+      lines.push(`${result.name || target.name || "Target"} teleports ${moved} square${moved === 1 ? "" : "s"}.`);
+    }
+    if (lines.length) {
+      await postChat(state.context, {
+        message: `${state.heroName} - ${state.action.name || "Ability"}:\n${lines.join("\n")}`,
+      });
+    }
+  }
+
+  async function applySwapEffect(state, effect, targets, _ctx) {
+    if (!targets.length) return;
+    if (typeof state.context.applySwap !== "function") {
+      await reminderEffect(state, effect, targets, "Swap");
+      return;
+    }
+    const lines = [];
+    for (const target of targets) {
+      if (state.aborted) return;
+      if (!target?.id) continue;
+      const result = await state.context.applySwap({
+        targetId: target.id,
+        sourcePlacement: state.sourcePlacement || null,
+        abilityName: state.action.name || "Ability",
+      });
+      if (!result || result.skipped) {
+        lines.push(`${target.name || "Target"}: swap skipped${result?.reason ? ` (${result.reason})` : ""}.`);
+        continue;
+      }
+      lines.push(`${state.heroName} and ${result.name || target.name || "Target"} swap places.`);
+    }
+    if (lines.length) {
+      await postChat(state.context, {
+        message: `${state.heroName} - ${state.action.name || "Ability"}:\n${lines.join("\n")}`,
+      });
+    }
+  }
+
+  async function applyFreeStrikeEffect(state, effect, targets, _ctx) {
+    if (typeof state.context.runFreeStrike !== "function") {
+      await reminderEffect(state, effect, targets, "Free Strike");
+      return;
+    }
+    // "by" = the entity *making* the free strike. By default this is whoever
+    // the parent ability most recently targeted (e.g., "the target makes a
+    // free strike against an ally" → the parent target is the by-entity).
+    // If there's no target group yet, fall back to the caster.
+    const byIds = targets.length
+      ? targets.map((t) => t?.id).filter(Boolean)
+      : state.sourcePlacement?.id
+        ? [state.sourcePlacement.id]
+        : [];
+    if (!byIds.length) {
+      await reminderEffect(state, effect, targets, "Free Strike");
+      return;
+    }
+    const result = await state.context.runFreeStrike({
+      byCandidateIds: byIds,
+      againstPredicate: effect.against || "creature",
+      text: effect.text || "",
+      abilityName: state.action.name || "Ability",
+      casterName: state.heroName,
+    });
+    if (result?.skipped) {
+      await postChat(state.context, {
+        message: `${state.heroName} - ${state.action.name || "Ability"}: free strike skipped.`,
+      });
+      return;
+    }
   }
 
   async function reminderEffect(state, effect, targets, label) {

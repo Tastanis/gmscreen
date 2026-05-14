@@ -130,15 +130,41 @@ Place these before or after the power roll for "effects that apply regardless of
 
 ### `trigger`
 
-Declarative trigger metadata. **This pass: chat reminder only — no auto-detect.**
+A reactive ability. Carries a free-text `condition` label plus an optional structured `match` config. With `match`, the runner registers a listener on the board's trigger bus; when the matching event later fires, the caster's token lights up with the blue `!` overlay and the player resolves the ability manually (same flow as built-in opportunity attacks). Without `match`, falls back to a chat reminder so the GM can apply manually.
 
 ```json
 {
   "type": "trigger",
   "condition": "The target takes damage.",
+  "match": {
+    "event": "damage",
+    "filter": { "whose": "target", "minAmount": 1 }
+  },
   "effects": [ { "kind": "damage", "amount": 3, "damageType": "psychic" } ]
 }
 ```
+
+**Recognized events** (use the lowercase name in `match.event`):
+
+| event | When it fires | Useful filter fields |
+|---|---|---|
+| `damage` | A token takes damage from an automated ability | `whose`, `minAmount`, `damageType` (single or array) |
+| `staminaChange` | A token's stamina changed via automation (damage or heal) | `whose`, `direction` (`down`/`up`/`either`) |
+| `turnStart` | A token becomes the active combatant | `whose` |
+| `turnEnd` | The active combatant's turn ends | `whose` |
+| `move` | A token moves via normal player movement | `whose`, `leavesAdjacency`, `entersAdjacency` |
+
+**`whose` values** — resolved relative to the **caster** (the player who armed the trigger) and the target group named by the trigger's `target` field (or the most recent target group if `target` is omitted):
+
+| whose | Matches |
+|---|---|
+| `self` | The caster's own placement |
+| `target` | A placement in the named target group |
+| `ally` | Same combat team as the caster |
+| `enemy` | Opposing combat team |
+| `any` *(default)* | No filter |
+
+Triggers stay registered until the encounter ends, the caster leaves the scene, or the round-tick stale-out (two phase boundaries) clears them.
 
 ### `persistent`
 
@@ -181,7 +207,7 @@ Each effect is one of the kinds below. They're used inside `powerRoll.tiers.tier
 { "kind": "heal", "amount": 5 }
 ```
 
-`recoveries` spends the target's recovery to heal their recovery value. `amount` is a flat number. **Chat-reminder this pass — runtime prints a message; manual application required.**
+`recoveries` spends N of the target's recoveries to heal `N × recoveryValue`. `amount` is a flat number; both can combine. The runtime reads the target's `hero.vitals.recoveryValue` from their character sheet; if unknown, it posts a chat reminder so the GM can apply manually. **The target's `currentRecoveries` is NOT auto-decremented yet — the chat output reminds the player to update their sheet.**
 
 ### `temporaryStamina`
 
@@ -189,7 +215,7 @@ Each effect is one of the kinds below. They're used inside `powerRoll.tiers.tier
 { "kind": "temporaryStamina", "amount": 5 }
 ```
 
-Chat-reminder this pass.
+Applies via the same heal path but allows the new total to exceed max stamina (the overage displays as "temp").
 
 ### `condition`
 
@@ -223,7 +249,7 @@ Chat-reminder this pass.
 { "kind": "teleport", "distance": 5 }
 ```
 
-Chat-reminder this pass.
+Opens a destination picker showing every cell within `distance` (Chebyshev). Click an empty cell to land there. No stability reduction, no size penalty. Clicking an occupied cell will route through the slide-style collision path (technically wrong for teleport — pick an empty cell).
 
 ### `swap`
 
@@ -231,23 +257,23 @@ Chat-reminder this pass.
 { "kind": "swap" }
 ```
 
-Caster swaps places with the target. Chat-reminder this pass.
+Caster and target atomically transpose their (column, row). Best-effort footprint check.
 
 ### `resourceGain`
 
 ```json
-{ "kind": "resourceGain", "resource": "surge", "amount": 1 }
+{ "kind": "resourceGain", "resource": "wrath", "amount": 1 }
 ```
 
-Negative `amount` = loss. Chat-reminder this pass.
+Modifies the caster's heroic resource. Negative `amount` = loss. If the named `resource` doesn't match the caster's resource bar title, posts a chat reminder for manual adjust. Floors at 0.
 
 ### `freeStrike`
 
 ```json
-{ "kind": "freeStrike", "against": "ally", "text": "before taking damage, the target makes a free strike against an ally" }
+{ "kind": "freeStrike", "against": "ally", "text": "the target makes a free strike against an ally" }
 ```
 
-Chat-reminder. Use this for "the target makes a free strike" book text. `against` is the relationship of who gets struck.
+The "by" entity (who's striking) defaults to the **most recent target group** — i.e. the parent ability's target, which is the typical pattern: "the target makes a free strike against ...". The runtime reads the by-entity's M and A from their sheet (falls back to 0 if no sheet), rolls 2d10 + highest, opens a target picker for the "against" creature with the by-entity as the new source, then applies tier damage (`2/5/7 + max(M, A)`) through the normal damage path. The dice math and tier outcome are posted to chat.
 
 ### `cascade`
 
@@ -507,11 +533,50 @@ Use **only** when nothing else fits. Runtime prints the text to chat as a remind
 {
   "schema": "ability-automation/v3",
   "cards": [
-    { "type": "target", "mode": "token", "predicate": "ally", "count": { "value": 1, "mode": "exact" } },
+    { "type": "target", "name": "protectee", "mode": "token", "predicate": "ally", "count": { "value": 1, "mode": "exact" } },
     {
       "type": "trigger",
+      "target": "protectee",
       "condition": "The target takes damage.",
+      "match": { "event": "damage", "filter": { "whose": "target", "minAmount": 1 } },
       "effects": [ { "kind": "note", "text": "Caster takes the damage instead of the target." } ]
+    }
+  ]
+}
+```
+
+### 7b. End-of-turn auto-reminder (timing trigger)
+
+> Effect: At the end of your next turn, lose 1d6 fire damage.
+
+```json
+{
+  "schema": "ability-automation/v3",
+  "cards": [
+    { "type": "target", "mode": "token", "predicate": "enemy", "count": { "value": 1, "mode": "exact" } },
+    {
+      "type": "trigger",
+      "condition": "At the end of the target's next turn.",
+      "match": { "event": "turnEnd", "filter": { "whose": "target" } },
+      "effects": [ { "kind": "note", "text": "Roll 1d6 fire damage on the marked target." } ]
+    }
+  ]
+}
+```
+
+### 7c. Opportunity-attack-style authored trigger (move filter)
+
+> Trigger: An adjacent enemy leaves your reach.
+
+```json
+{
+  "schema": "ability-automation/v3",
+  "cards": [
+    {
+      "type": "trigger",
+      "condition": "An adjacent enemy leaves your reach.",
+      "match": { "event": "move", "filter": { "whose": "enemy", "leavesAdjacency": true } },
+      "effects": [ { "kind": "freeStrike", "against": "enemy", "text": "Take a melee free strike against the mover." } ]
     }
   ]
 }

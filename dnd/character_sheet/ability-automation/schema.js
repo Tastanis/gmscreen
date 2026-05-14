@@ -427,8 +427,70 @@
     return block;
   }
 
+  // Recognized event keys for trigger blocks. The board's AbilityTriggerBus
+  // fires these names — keep this list in sync with the fan-out sites in
+  // board-interactions.js (handleAutomationDamageRequest, transitionToActiveTurn,
+  // end-of-turn flow, vtt:token-moved listener).
+  const TRIGGER_EVENTS = ["damage", "staminaChange", "turnStart", "turnEnd", "move"];
+
+  // The `whose` filter answers "whose event is this?" relative to the caster
+  // and the runner's previously-named target groups.
+  const WHOSE_VALUES = ["self", "ally", "enemy", "target", "any"];
+  const STAMINA_DIRECTIONS = ["down", "up", "either"];
+
+  function normalizeTriggerMatch(input, warnings, path) {
+    if (!input || typeof input !== "object") return null;
+    const rawEvent = asTrimmedString(input.event).toLowerCase();
+    if (!rawEvent) return null;
+    const event = TRIGGER_EVENTS.find((e) => e.toLowerCase() === rawEvent);
+    if (!event) {
+      warnings.push(`${path}.event: unknown trigger event "${input.event}". Known: ${TRIGGER_EVENTS.join(", ")}.`);
+      return null;
+    }
+    const filterInput = input.filter && typeof input.filter === "object" ? input.filter : {};
+    const filter = {};
+    const whoseRaw = asTrimmedString(filterInput.whose).toLowerCase();
+    if (whoseRaw) {
+      if (WHOSE_VALUES.includes(whoseRaw)) {
+        filter.whose = whoseRaw;
+      } else {
+        warnings.push(`${path}.filter.whose: "${filterInput.whose}" not in ${WHOSE_VALUES.join("/")}.`);
+        filter.whose = "any";
+      }
+    }
+    if (filter.whose === "target") {
+      const ref = asTrimmedString(filterInput.targetGroup) || asTrimmedString(filterInput.group);
+      if (ref) filter.targetGroup = ref;
+    }
+    if (event === "damage") {
+      const minAmount = asNonNegInt(filterInput.minAmount, 0);
+      if (minAmount) filter.minAmount = minAmount;
+      const dtList = Array.isArray(filterInput.damageType)
+        ? filterInput.damageType
+        : filterInput.damageType !== undefined && filterInput.damageType !== null
+          ? [filterInput.damageType]
+          : [];
+      const damageTypes = dtList
+        .map((t) => asTrimmedString(t).toLowerCase())
+        .filter(Boolean);
+      if (damageTypes.length) filter.damageType = damageTypes;
+    }
+    if (event === "staminaChange") {
+      const dirRaw = asTrimmedString(filterInput.direction).toLowerCase();
+      if (dirRaw && !STAMINA_DIRECTIONS.includes(dirRaw)) {
+        warnings.push(`${path}.filter.direction: "${filterInput.direction}" not in ${STAMINA_DIRECTIONS.join("/")}.`);
+      }
+      filter.direction = STAMINA_DIRECTIONS.includes(dirRaw) ? dirRaw : "either";
+    }
+    if (event === "move") {
+      if (filterInput.leavesAdjacency) filter.leavesAdjacency = true;
+      if (filterInput.entersAdjacency) filter.entersAdjacency = true;
+    }
+    return { event, filter };
+  }
+
   function normalizeTriggerBlock(input, warnings, path) {
-    const known = new Set(["type", "id", "condition", "target", "effects", "note"]);
+    const known = new Set(["type", "id", "condition", "match", "target", "effects", "note"]);
     const block = {
       type: "trigger",
       id: input.id || createId("trigger"),
@@ -436,7 +498,11 @@
       target: asTrimmedString(input.target),
       effects: normalizeEffectList(input.effects, warnings, `${path}.effects`),
     };
-    if (!block.condition) warnings.push(`${path}: trigger has no condition text.`);
+    const match = normalizeTriggerMatch(input.match, warnings, `${path}.match`);
+    if (match) block.match = match;
+    if (!block.condition && !match) {
+      warnings.push(`${path}: trigger has no condition text or match config.`);
+    }
     if (input.note) block.note = asTrimmedString(input.note);
     const extras = pickExtras(input, known);
     if (extras) block._extra = extras;
