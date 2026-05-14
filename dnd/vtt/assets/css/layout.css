@@ -15,6 +15,16 @@
   position: relative;
   overflow: hidden;
   box-shadow: 0 10px 28px rgba(10, 6, 4, 0.35);
+  transition: margin-right 0.35s ease;
+}
+
+/* When the chat panel slides in from the right, shift the main board content
+ * leftward so its right-aligned UI (Round / GM's turn indicators, action
+ * buttons, the floating End Turn overlay) stays visible alongside chat
+ * instead of getting covered. The chat-panel-is-open class is toggled on
+ * <body> by dnd/js/chat-panel.js. */
+body.chat-panel-is-open .vtt-app__main {
+  margin-right: calc(var(--chat-panel-width, 360px) + var(--chat-panel-offset, 20px) + 8px);
 }
 
 #vtt-main {

@@ -1401,6 +1401,16 @@ async function applyAbilityResourceGain(sheet, payload = {}, options = {}) {
   hero.resource = resource;
   if (sheet) sheet.hero = hero;
   await saveCharacterSummarySheet(sheet, options);
+  // Signal that the sheet changed so any visible panels can refresh. The
+  // board listens for this, invalidates its sheet cache, and re-dispatches
+  // the selection-summary event so the VTT character panel re-fetches and
+  // re-renders the resource bar in real time. The standalone character
+  // sheet page still needs a manual refresh (separate-page; out of scope).
+  if (typeof document !== 'undefined' && options?.characterId) {
+    document.dispatchEvent(new CustomEvent('vtt:character-sheet-updated', {
+      detail: { characterId: options.characterId, change: 'resource' },
+    }));
+  }
   return { applied: amount, delta: next - current, resource: title, current: next };
 }
 

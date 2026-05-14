@@ -1971,6 +1971,34 @@ export function mountBoardInteractions(store, routes = {}) {
   document.addEventListener('vtt:automation-apply-swap', handleAutomationSwapRequest);
   document.addEventListener('vtt:automation-run-free-strike', handleAutomationFreeStrikeRequest);
   document.addEventListener('vtt:automation-recovery-value', handleAutomationRecoveryValueRequest);
+  // When the chat panel opens or closes, the layout CSS shifts the board
+  // content. Re-position the floating End Turn overlay so it lands inside
+  // the new board boundary. Run twice: once immediately for the snap, and
+  // once after the 350ms CSS transition for the settled position.
+  document.addEventListener('chat-panel:toggle', () => {
+    if (!activeTurnDialog?.overlay) return;
+    requestAnimationFrame(() => {
+      positionTurnPromptOverlay(activeTurnDialog.overlay);
+    });
+    setTimeout(() => {
+      if (activeTurnDialog?.overlay) {
+        positionTurnPromptOverlay(activeTurnDialog.overlay);
+      }
+    }, 400);
+  });
+  // When ability automation mutates a character sheet (e.g. resourceGain
+  // adjusts the resource bar), invalidate the local sheet cache and ask the
+  // panel to re-fetch so the change shows up live.
+  document.addEventListener('vtt:character-sheet-updated', (event) => {
+    const characterId = event?.detail?.characterId;
+    if (characterId && characterSummaryCache instanceof Map) {
+      characterSummaryCache.delete(characterId);
+    }
+    // Re-dispatch the panel selection summary for the currently-selected
+    // token. If that token represents the updated character, the panel will
+    // re-fetch and re-render with the new resource value.
+    dispatchTokenSelectionSummary();
+  });
   document.addEventListener('vtt:toggle-triggered-action', (event) => {
     const placementId = event?.detail?.placementId;
     if (placementId) toggleTriggeredActionState(placementId);
