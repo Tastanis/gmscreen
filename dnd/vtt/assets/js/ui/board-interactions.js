@@ -2374,29 +2374,9 @@ export function mountBoardInteractions(store, routes = {}) {
     return getPersistentZonesForScene(sceneId);
   }
 
-  // Start the existing wall-template placement flow but route the result
-  // back through `callback` instead of writing a permanent template shape.
-  // Returns a promise that resolves with { squares, wallColor } on commit
-  // or { canceled: true } on Escape / cancel.
-  function startWallPlacementForAutomation(squareCount, { wallColor } = {}) {
-    return new Promise((resolve) => {
-      const total = Math.max(1, Number.parseInt(squareCount, 10) || 1);
-      cancelPlacement();
-      placementState = {
-        type: 'wall',
-        values: { squares: total, wallColor: wallColor || undefined },
-        stage: 'wall-select',
-        pointerId: null,
-        start: null,
-        squares: [],
-        automationCallback: resolve,
-      };
-      previewShape = createShape('wall', { squares: [], wallColor }, { preview: true });
-      layer.appendChild(previewShape.elements.root);
-      updateStatus(`Select the first of ${total} wall square${total === 1 ? '' : 's'}. Each new square must touch a previous one (diagonals OK). Escape to cancel.`);
-      updateLayerVisibility();
-    });
-  }
+  // (startWallPlacementForAutomation lives inside createTemplateTool so it
+  // has direct access to placementState / createShape / layer / etc. It's
+  // exposed on the templateTool API for the area picker to call.)
 
   function handleAutomationRegisterZoneRequest(event) {
     const detail = event?.detail ?? {};
@@ -13147,7 +13127,12 @@ export function mountBoardInteractions(store, routes = {}) {
       const request = pendingAutomationArea;
       const wallColor = request.targetConfig?.wallColor;
       pendingAutomationArea = null;
-      startWallPlacementForAutomation(length, { wallColor }).then((result) => {
+      if (typeof templateTool?.startWallPlacementForAutomation !== 'function') {
+        request.resolve?.({ canceled: true });
+        updateStatus('Wall placement is not available (template tool missing).');
+        return;
+      }
+      templateTool.startWallPlacementForAutomation(length, { wallColor }).then((result) => {
         if (!result || result.canceled) {
           request.resolve?.({ canceled: true });
           updateStatus('Wall placement canceled.');
@@ -19900,6 +19885,29 @@ function createTemplateTool() {
     render(viewState);
   }
 
+  // Used by ability automation (persistent-zone walls) to drive the same
+  // wall-placement UI the GM uses for templates, but capture the result
+  // through a callback instead of writing a permanent template shape.
+  function startWallPlacementForAutomation(squareCount, { wallColor } = {}) {
+    return new Promise((resolve) => {
+      const total = Math.max(1, Number.parseInt(squareCount, 10) || 1);
+      cancelPlacement();
+      placementState = {
+        type: 'wall',
+        values: { squares: total, wallColor: wallColor || undefined },
+        stage: 'wall-select',
+        pointerId: null,
+        start: null,
+        squares: [],
+        automationCallback: resolve,
+      };
+      previewShape = createShape('wall', { squares: [], wallColor }, { preview: true });
+      layer.appendChild(previewShape.elements.root);
+      updateStatus(`Select the first of ${total} wall square${total === 1 ? '' : 's'}. Each new square must touch a previous one (diagonals OK). Escape to cancel.`);
+      updateLayerVisibility();
+    });
+  }
+
   function cancelPlacement() {
     if (!placementState) {
       return false;
@@ -22468,6 +22476,7 @@ function createTemplateTool() {
     cancelPlacement,
     handleKeydown,
     clearSelection,
+    startWallPlacementForAutomation,
   };
 }
 
