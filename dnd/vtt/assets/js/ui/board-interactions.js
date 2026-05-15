@@ -2332,6 +2332,27 @@ export function mountBoardInteractions(store, routes = {}) {
     const layer = document.createElement('div');
     layer.className = 'vtt-persistent-zones';
     layer.setAttribute('aria-hidden', 'true');
+    // Wire the End button click directly on the layer (capture phase) so
+    // the map-surface's pan/pointer handlers can't swallow the click before
+    // our document-level listener sees it.
+    layer.addEventListener('click', (event) => {
+      const target = event.target instanceof Element ? event.target : null;
+      if (!target) return;
+      const endBtn = target.closest('[data-zone-end]');
+      if (!endBtn) return;
+      event.preventDefault();
+      event.stopPropagation();
+      const zoneId = endBtn.getAttribute('data-zone-end');
+      if (zoneId) removePersistentZone(zoneId, { reason: 'manually ended' });
+    }, true);
+    layer.addEventListener('pointerdown', (event) => {
+      // Prevent the board pan handler from triggering when interacting with
+      // the End button or the zone label area.
+      const target = event.target instanceof Element ? event.target : null;
+      if (target?.closest('[data-zone-end]') || target?.closest('.vtt-persistent-zone__body')) {
+        event.stopPropagation();
+      }
+    }, true);
     mapTransform.appendChild(layer);
     zoneOverlayLayer = layer;
     return layer;
@@ -2353,6 +2374,30 @@ export function mountBoardInteractions(store, routes = {}) {
     return getPersistentZonesForScene(sceneId);
   }
 
+  // Start the existing wall-template placement flow but route the result
+  // back through `callback` instead of writing a permanent template shape.
+  // Returns a promise that resolves with { squares, wallColor } on commit
+  // or { canceled: true } on Escape / cancel.
+  function startWallPlacementForAutomation(squareCount, { wallColor } = {}) {
+    return new Promise((resolve) => {
+      const total = Math.max(1, Number.parseInt(squareCount, 10) || 1);
+      cancelPlacement();
+      placementState = {
+        type: 'wall',
+        values: { squares: total, wallColor: wallColor || undefined },
+        stage: 'wall-select',
+        pointerId: null,
+        start: null,
+        squares: [],
+        automationCallback: resolve,
+      };
+      previewShape = createShape('wall', { squares: [], wallColor }, { preview: true });
+      layer.appendChild(previewShape.elements.root);
+      updateStatus(`Select the first of ${total} wall square${total === 1 ? '' : 's'}. Each new square must touch a previous one (diagonals OK). Escape to cancel.`);
+      updateLayerVisibility();
+    });
+  }
+
   function handleAutomationRegisterZoneRequest(event) {
     const detail = event?.detail ?? {};
     const payload = detail.payload && typeof detail.payload === 'object' ? detail.payload : {};
@@ -2368,6 +2413,13 @@ export function mountBoardInteractions(store, routes = {}) {
     persistentZoneCounter += 1;
     const zoneId = `zone_${Date.now()}_${persistentZoneCounter}`;
     const ownerPlacement = getPlacementFromStore(payload.casterId);
+    // For walls, the runner-side area record carries a `squares` list; for
+    // rectangular shapes it's just the bounding box.
+    const squares = Array.isArray(template.squares)
+      ? template.squares
+          .map((s) => ({ column: Number(s?.column) || 0, row: Number(s?.row) || 0 }))
+          .filter((s) => Number.isFinite(s.column) && Number.isFinite(s.row))
+      : null;
     const zone = {
       id: zoneId,
       sceneId,
@@ -2381,7 +2433,8 @@ export function mountBoardInteractions(store, routes = {}) {
         width: Math.max(1, Number(template.width) || 1),
         height: Math.max(1, Number(template.height) || 1),
       },
-      shape: area.shape || 'cube',
+      squares,
+      shape: area.shape || template.shape || 'cube',
       upkeep: {
         cost: Math.max(0, Number(payload.upkeep?.cost) || 0),
         resource: String(payload.upkeep?.resource || '').trim(),
@@ -2413,16 +2466,49 @@ export function mountBoardInteractions(store, routes = {}) {
     }
     layer.hidden = false;
     for (const zone of zones) {
-      const cell = document.createElement('div');
-      cell.className = 'vtt-persistent-zone';
-      cell.dataset.zoneId = zone.id;
-      cell.dataset.casterId = zone.casterId;
       const safeName = escapeZoneText(zone.abilityName);
       const safeOwner = escapeZoneText(zone.ownerName || 'Owner');
       const upkeepText = zone.upkeep.cost
         ? `${zone.upkeep.cost} ${zone.upkeep.resource || 'Resource'}/turn`
         : 'no upkeep';
+      const titleAttr = `${safeName} — ${safeOwner} • ${escapeZoneText(upkeepText)}`;
+
+      if (Array.isArray(zone.squares) && zone.squares.length) {
+        // Wall-shaped zone: render each square as its own tile so the
+        // footprint can include diagonals / branches, then anchor the badge
+        // + hover panel on the FIRST square.
+        for (let i = 0; i < zone.squares.length; i += 1) {
+          const sq = zone.squares[i];
+          const tile = document.createElement('div');
+          tile.className = 'vtt-persistent-zone vtt-persistent-zone--wall-tile';
+          tile.dataset.zoneId = zone.id;
+          tile.dataset.casterId = zone.casterId;
+          tile.setAttribute('title', titleAttr);
+          if (i === 0) {
+            tile.innerHTML = `
+              <div class="vtt-persistent-zone__badge" aria-hidden="true">⚡</div>
+              <div class="vtt-persistent-zone__body">
+                <div class="vtt-persistent-zone__label">${safeName}</div>
+                <div class="vtt-persistent-zone__meta">${safeOwner} • ${escapeZoneText(upkeepText)}</div>
+                <button type="button" class="vtt-persistent-zone__end" data-zone-end="${zone.id}" title="End this zone">End</button>
+              </div>
+            `;
+          }
+          positionAutomationCell(tile, sq.column, sq.row, 1, 1);
+          layer.appendChild(tile);
+        }
+        continue;
+      }
+
+      // Rectangular zone (cube / burst / aura / line / rectangle): one tile
+      // spanning the whole footprint.
+      const cell = document.createElement('div');
+      cell.className = 'vtt-persistent-zone';
+      cell.dataset.zoneId = zone.id;
+      cell.dataset.casterId = zone.casterId;
+      cell.setAttribute('title', titleAttr);
       cell.innerHTML = `
+        <div class="vtt-persistent-zone__badge" aria-hidden="true">⚡</div>
         <div class="vtt-persistent-zone__body">
           <div class="vtt-persistent-zone__label">${safeName}</div>
           <div class="vtt-persistent-zone__meta">${safeOwner} • ${escapeZoneText(upkeepText)}</div>
@@ -2485,17 +2571,9 @@ export function mountBoardInteractions(store, routes = {}) {
     }
   }
 
-  // Manual "End" button on the zone overlay
-  document.addEventListener('click', (event) => {
-    const target = event.target instanceof Element ? event.target : null;
-    if (!target) return;
-    const endBtn = target.closest('[data-zone-end]');
-    if (!endBtn) return;
-    event.preventDefault();
-    event.stopPropagation();
-    const zoneId = endBtn.getAttribute('data-zone-end');
-    if (zoneId) removePersistentZone(zoneId, { reason: 'manually ended' });
-  });
+  // (End-button click handler is attached on the zone overlay layer in
+  // ensurePersistentZoneOverlayLayer so the map-surface pointer handlers
+  // don't swallow it.)
 
   // ---------- Zone tick lifecycle ----------
   //
@@ -2533,16 +2611,20 @@ export function mountBoardInteractions(store, routes = {}) {
       }
     }
 
-    // Step 2: find affected placements inside the zone.
-    const area = {
-      left: zone.template.column,
-      top: zone.template.row,
-      right: zone.template.column + zone.template.width,
-      bottom: zone.template.row + zone.template.height,
-    };
-    const affected = getPlacementsForActiveScene().filter((p) =>
-      doesAutomationAreaAffectPlacement(area, p)
-    );
+    // Step 2: find affected placements inside the zone. Walls use a
+    // per-square footprint; other shapes use the bounding rectangle.
+    const affected = Array.isArray(zone.squares) && zone.squares.length
+      ? getPlacementsForActiveScene().filter((p) =>
+          doesAutomationSquaresAffectPlacement(zone.squares, p)
+        )
+      : getPlacementsForActiveScene().filter((p) =>
+          doesAutomationAreaAffectPlacement({
+            left: zone.template.column,
+            top: zone.template.row,
+            right: zone.template.column + zone.template.width,
+            bottom: zone.template.row + zone.template.height,
+          }, p)
+        );
 
     // Step 3: apply each effect to each affected placement.
     if (!affected.length) {
@@ -13048,8 +13130,106 @@ export function mountBoardInteractions(store, routes = {}) {
     };
     closeDamageHealWidget();
     closeHealOverflowPopup();
+
+    // Walls are placed cell-by-cell, not as a single rectangle. Route the
+    // request through the existing wall-template placement flow so authors
+    // get diagonal/branching wall support and the brick visual style. The
+    // result comes back as a list of squares which the runner stores on
+    // state.areas for the persistent block to consume.
+    const shape = String(pendingAutomationArea.targetConfig?.shape || '').toLowerCase();
+    if (shape === 'wall') {
+      const length = Math.max(
+        1,
+        Number.parseInt(pendingAutomationArea.targetConfig?.length, 10)
+          || Number.parseInt(pendingAutomationArea.targetConfig?.size, 10)
+          || 1
+      );
+      const request = pendingAutomationArea;
+      const wallColor = request.targetConfig?.wallColor;
+      pendingAutomationArea = null;
+      startWallPlacementForAutomation(length, { wallColor }).then((result) => {
+        if (!result || result.canceled) {
+          request.resolve?.({ canceled: true });
+          updateStatus('Wall placement canceled.');
+          return;
+        }
+        const squares = Array.isArray(result.squares) ? result.squares : [];
+        if (!squares.length) {
+          request.resolve?.({ canceled: true });
+          return;
+        }
+        // Compute the bounding rectangle for legacy area helpers + a
+        // representative "template" cell (top-left corner).
+        const cols = squares.map((s) => s.column);
+        const rows = squares.map((s) => s.row);
+        const minCol = Math.min(...cols);
+        const minRow = Math.min(...rows);
+        const maxCol = Math.max(...cols);
+        const maxRow = Math.max(...rows);
+        const template = {
+          column: minCol,
+          row: minRow,
+          width: maxCol - minCol + 1,
+          height: maxRow - minRow + 1,
+          squares: squares.map((s) => ({ column: s.column, row: s.row })),
+          shape: 'wall',
+        };
+        // Find creatures whose footprint overlaps any of the wall squares.
+        const affected = getPlacementsForActiveScene().filter((p) =>
+          doesAutomationSquaresAffectPlacement(squares, p)
+        );
+        affected.forEach((placement) => {
+          if (!isAutomationPlacementHidden(placement)) flashAutomationTargetToken(placement.id);
+        });
+        request.resolve?.({
+          skipped: false,
+          template,
+          targets: affected.map((placement) => ({
+            id: placement.id,
+            name: tokenLabel(placement),
+            hidden: isAutomationPlacementHidden(placement),
+            placement: getAutomationPlacementSnapshot(placement),
+          })),
+        });
+        updateStatus(`Wall placed (${squares.length} square${squares.length === 1 ? '' : 's'}).`);
+      });
+      return;
+    }
+
     automationAreaOverlay = renderAutomationAreaOverlay(pendingAutomationArea);
     updateStatus(formatAutomationAreaPrompt(pendingAutomationArea.targetConfig));
+  }
+
+  function doesAutomationSquaresAffectPlacement(squares, placement) {
+    if (!Array.isArray(squares) || !squares.length) return false;
+    const left = Number.isFinite(placement.column) ? placement.column : 0;
+    const top = Number.isFinite(placement.row) ? placement.row : 0;
+    const width = Math.max(1, Number.isFinite(placement.width) ? placement.width : 1);
+    const height = Math.max(1, Number.isFinite(placement.height) ? placement.height : 1);
+    const right = left + width;
+    const bottom = top + height;
+    return squares.some((sq) => sq.column >= left && sq.column < right && sq.row >= top && sq.row < bottom);
+  }
+
+  function formatAutomationAreaPrompt(config = {}) {
+    const shape = String(config.shape || 'cube').toLowerCase();
+    const size = Number.parseInt(config.size, 10) || 0;
+    const width = Number.parseInt(config.width, 10) || size || 1;
+    const height = Number.parseInt(config.height, 10) || size || 1;
+    const length = Number.parseInt(config.length, 10) || size || 1;
+    const within = Number.parseInt(config.distance?.within ?? config.within, 10);
+    const withinText = Number.isFinite(within) && within > 0 ? ` within ${within} squares` : '';
+    let shapeText;
+    switch (shape) {
+      case 'rectangle': shapeText = `${width}x${height} rectangle`; break;
+      case 'line': shapeText = `${length}-square line`; break;
+      case 'wall': shapeText = `${length}-square wall`; break;
+      case 'burst': shapeText = `${size}-square burst`; break;
+      case 'aura': shapeText = `${size}-square aura`; break;
+      case 'cube':
+      default: shapeText = `${size || width}-square cube`; break;
+    }
+    return `Place ${shapeText}${withinText}, then click to confirm.`;
   }
 
   function renderAutomationAreaOverlay(request) {
@@ -19731,6 +19911,16 @@ function createTemplateTool() {
         // Ignore release failures when aborting placement.
       }
     }
+    // If this placement was started for an ability automation (e.g. a
+    // persistent zone's wall footprint), notify the caller so its promise
+    // can resolve as canceled instead of hanging.
+    if (typeof placementState.automationCallback === 'function') {
+      try {
+        placementState.automationCallback({ canceled: true });
+      } catch (err) {
+        console.warn('[VTT] automation wall placement cancel callback failed', err);
+      }
+    }
     placementState = null;
     clearPreview();
     restoreTemplateStatus();
@@ -21691,7 +21881,25 @@ function createTemplateTool() {
     const total = Number.isInteger(placementState.values?.squares) ? placementState.values.squares : placementState.squares.length;
     const remaining = Math.max(0, total - placementState.squares.length);
     if (remaining <= 0) {
-      finalizePlacement({ type: 'wall', squares: placementState.squares.slice(), wallColor: placementState.values?.wallColor });
+      const finalSquares = placementState.squares.slice();
+      const wallColor = placementState.values?.wallColor;
+      // If this placement was started for an ability automation, deliver
+      // the squares to the callback INSTEAD of adding a permanent template
+      // shape to the scene state. The zone overlay handles its own visuals.
+      if (typeof placementState.automationCallback === 'function') {
+        const cb = placementState.automationCallback;
+        placementState = null;
+        clearPreview();
+        restoreTemplateStatus();
+        updateLayerVisibility();
+        try {
+          cb({ squares: finalSquares, wallColor });
+        } catch (err) {
+          console.warn('[VTT] automation wall placement callback failed', err);
+        }
+        return;
+      }
+      finalizePlacement({ type: 'wall', squares: finalSquares, wallColor });
       return;
     }
 

@@ -5434,11 +5434,18 @@
   background: rgba(255, 138, 41, 0.18);
   border-radius: 4px;
   box-shadow: 0 0 14px rgba(255, 138, 41, 0.35) inset;
-  display: flex;
-  align-items: flex-start;
-  justify-content: flex-end;
-  padding: 4px;
   animation: vtt-persistent-zone-pulse 2.4s ease-in-out infinite;
+}
+
+/* Wall-tile variant: each square of a wall-shaped zone is its own tile so
+ * the footprint can include diagonals and branches. Tiles share the same
+ * pulsing color but render with a tighter border to look like a wall. */
+.vtt-persistent-zone--wall-tile {
+  border-style: solid;
+  border-width: 1px;
+  border-color: rgba(255, 184, 76, 0.9);
+  background: rgba(180, 90, 40, 0.32);
+  border-radius: 2px;
 }
 
 @keyframes vtt-persistent-zone-pulse {
@@ -5450,17 +5457,48 @@
   }
 }
 
-.vtt-persistent-zone__body {
+/* Small persistent badge in the top-right corner of the zone.
+ * The body panel is hidden by default and revealed on hover. */
+.vtt-persistent-zone__badge {
+  position: absolute;
+  top: 2px;
+  right: 2px;
+  width: 20px;
+  height: 20px;
+  border-radius: 50%;
   background: rgba(20, 14, 11, 0.9);
+  color: #ffb84c;
+  font-size: 13px;
+  font-weight: 700;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  border: 1px solid rgba(255, 184, 76, 0.8);
+  pointer-events: none;
+}
+
+.vtt-persistent-zone__body {
+  position: absolute;
+  top: 24px;
+  right: 2px;
+  background: rgba(20, 14, 11, 0.95);
   color: #fdebcc;
   font-size: 11px;
   line-height: 1.2;
-  padding: 4px 6px;
+  padding: 6px 8px;
   border-radius: 3px;
-  display: flex;
+  display: none;
   flex-direction: column;
-  gap: 2px;
-  max-width: 200px;
+  gap: 3px;
+  min-width: 130px;
+  max-width: 220px;
+  z-index: 2;
+  border: 1px solid rgba(255, 184, 76, 0.6);
+  box-shadow: 0 4px 10px rgba(0, 0, 0, 0.4);
+}
+
+.vtt-persistent-zone:hover .vtt-persistent-zone__body {
+  display: flex;
 }
 
 .vtt-persistent-zone__label {
