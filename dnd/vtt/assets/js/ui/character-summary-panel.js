@@ -1189,6 +1189,7 @@ function startAbilityAutomation(sheet, action, categoryKey, sourceToken = null, 
     applySwap: requestAutomationSwap,
     runFreeStrike: requestAutomationFreeStrike,
     getRecoveryValueForTarget: requestAutomationRecoveryValue,
+    registerPersistentZone: requestAutomationRegisterZone,
     spendResource: (ability) => spendAbilityResource(sheet, ability, options),
   });
 }
@@ -1370,6 +1371,20 @@ function requestAutomationRecoveryValue(payload) {
   return new Promise((resolve, reject) => {
     document.dispatchEvent(
       new CustomEvent('vtt:automation-recovery-value', {
+        detail: {
+          payload: clonePlain(payload || {}),
+          resolve,
+          reject,
+        },
+      })
+    );
+  });
+}
+
+function requestAutomationRegisterZone(payload) {
+  return new Promise((resolve, reject) => {
+    document.dispatchEvent(
+      new CustomEvent('vtt:automation-register-persistent-zone', {
         detail: {
           payload: clonePlain(payload || {}),
           resolve,

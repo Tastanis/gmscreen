@@ -1971,6 +1971,7 @@ export function mountBoardInteractions(store, routes = {}) {
   document.addEventListener('vtt:automation-apply-swap', handleAutomationSwapRequest);
   document.addEventListener('vtt:automation-run-free-strike', handleAutomationFreeStrikeRequest);
   document.addEventListener('vtt:automation-recovery-value', handleAutomationRecoveryValueRequest);
+  document.addEventListener('vtt:automation-register-persistent-zone', handleAutomationRegisterZoneRequest);
   // When the chat panel opens or closes, the layout CSS shifts the board
   // content. Re-position the floating End Turn overlay so it lands inside
   // the new board boundary. Run twice: once immediately for the snap, and
@@ -2309,6 +2310,370 @@ export function mountBoardInteractions(store, routes = {}) {
     markReady: markTriggerReady,
     clearReady: clearTriggerReady,
   };
+
+  // ---------- Persistent zones (Phase C, Pass 1) ----------
+  //
+  // In-memory zone storage keyed by sceneId → array of zone records.
+  // Each record describes an area that lingers across rounds, ticks at the
+  // owner's start-of-turn (deducting upkeep + applying effects to creatures
+  // inside), and auto-ends if upkeep can't be paid or combat ends.
+  //
+  // Pass 1 does NOT persist zones to disk or sync via Pusher — page reload
+  // wipes them. Acceptable because zones auto-end at encounter end anyway.
+  const persistentZonesByScene = new Map();
+  let persistentZoneCounter = 0;
+  let zoneOverlayLayer = null;
+
+  function ensurePersistentZoneOverlayLayer() {
+    if (zoneOverlayLayer && document.body?.contains(zoneOverlayLayer)) {
+      return zoneOverlayLayer;
+    }
+    if (!mapTransform) return null;
+    const layer = document.createElement('div');
+    layer.className = 'vtt-persistent-zones';
+    layer.setAttribute('aria-hidden', 'true');
+    mapTransform.appendChild(layer);
+    zoneOverlayLayer = layer;
+    return layer;
+  }
+
+  function getPersistentZonesForScene(sceneId) {
+    if (!sceneId) return [];
+    const list = persistentZonesByScene.get(sceneId);
+    if (!list) {
+      persistentZonesByScene.set(sceneId, []);
+      return persistentZonesByScene.get(sceneId);
+    }
+    return list;
+  }
+
+  function getActivePersistentZones() {
+    const state = boardApi.getState?.() ?? {};
+    const sceneId = state.boardState?.activeSceneId ?? null;
+    return getPersistentZonesForScene(sceneId);
+  }
+
+  function handleAutomationRegisterZoneRequest(event) {
+    const detail = event?.detail ?? {};
+    const payload = detail.payload && typeof detail.payload === 'object' ? detail.payload : {};
+    const resolve = typeof detail.resolve === 'function' ? detail.resolve : null;
+    const state = boardApi.getState?.() ?? {};
+    const sceneId = state.boardState?.activeSceneId ?? null;
+    const area = payload.area && typeof payload.area === 'object' ? payload.area : null;
+    const template = area?.template && typeof area.template === 'object' ? area.template : null;
+    if (!sceneId || !template || !payload.casterId) {
+      resolve?.({ registered: false, reason: 'missing-fields' });
+      return;
+    }
+    persistentZoneCounter += 1;
+    const zoneId = `zone_${Date.now()}_${persistentZoneCounter}`;
+    const ownerPlacement = getPlacementFromStore(payload.casterId);
+    const zone = {
+      id: zoneId,
+      sceneId,
+      casterId: payload.casterId,
+      ownerName: ownerPlacement ? tokenLabel(ownerPlacement) : payload.casterName || '',
+      abilityId: payload.abilityId || '',
+      abilityName: payload.abilityName || 'Persistent Zone',
+      template: {
+        column: Number(template.column) || 0,
+        row: Number(template.row) || 0,
+        width: Math.max(1, Number(template.width) || 1),
+        height: Math.max(1, Number(template.height) || 1),
+      },
+      shape: area.shape || 'cube',
+      upkeep: {
+        cost: Math.max(0, Number(payload.upkeep?.cost) || 0),
+        resource: String(payload.upkeep?.resource || '').trim(),
+      },
+      tickAt: payload.tickAt === 'endOfTurn' ? 'endOfTurn' : 'startOfTurn',
+      effects: Array.isArray(payload.effects) ? payload.effects : [],
+      attributeBonuses: payload.attributeBonuses && typeof payload.attributeBonuses === 'object'
+        ? { ...payload.attributeBonuses }
+        : {},
+      note: payload.note || '',
+      createdAt: Date.now(),
+    };
+    const list = getPersistentZonesForScene(sceneId);
+    list.push(zone);
+    renderPersistentZoneOverlays();
+    resolve?.({ registered: true, zoneId, zoneCount: list.length });
+  }
+
+  function renderPersistentZoneOverlays() {
+    const layer = ensurePersistentZoneOverlayLayer();
+    if (!layer) return;
+    const state = boardApi.getState?.() ?? {};
+    const sceneId = state.boardState?.activeSceneId ?? null;
+    const zones = getPersistentZonesForScene(sceneId);
+    layer.innerHTML = '';
+    if (!zones.length) {
+      layer.hidden = true;
+      return;
+    }
+    layer.hidden = false;
+    for (const zone of zones) {
+      const cell = document.createElement('div');
+      cell.className = 'vtt-persistent-zone';
+      cell.dataset.zoneId = zone.id;
+      cell.dataset.casterId = zone.casterId;
+      const safeName = escapeZoneText(zone.abilityName);
+      const safeOwner = escapeZoneText(zone.ownerName || 'Owner');
+      const upkeepText = zone.upkeep.cost
+        ? `${zone.upkeep.cost} ${zone.upkeep.resource || 'Resource'}/turn`
+        : 'no upkeep';
+      cell.innerHTML = `
+        <div class="vtt-persistent-zone__body">
+          <div class="vtt-persistent-zone__label">${safeName}</div>
+          <div class="vtt-persistent-zone__meta">${safeOwner} • ${escapeZoneText(upkeepText)}</div>
+          <button type="button" class="vtt-persistent-zone__end" data-zone-end="${zone.id}" title="End this zone">End</button>
+        </div>
+      `;
+      positionAutomationCell(cell, zone.template.column, zone.template.row, zone.template.width, zone.template.height);
+      layer.appendChild(cell);
+    }
+  }
+
+  function escapeZoneText(value) {
+    return String(value ?? '')
+      .replace(/&/g, '&amp;')
+      .replace(/</g, '&lt;')
+      .replace(/>/g, '&gt;')
+      .replace(/"/g, '&quot;')
+      .replace(/'/g, '&#39;');
+  }
+
+  function removePersistentZone(zoneId, { reason = '' } = {}) {
+    if (!zoneId) return false;
+    let removed = null;
+    for (const [sceneId, list] of persistentZonesByScene.entries()) {
+      const idx = list.findIndex((z) => z && z.id === zoneId);
+      if (idx !== -1) {
+        removed = list.splice(idx, 1)[0];
+        break;
+      }
+    }
+    if (!removed) return false;
+    renderPersistentZoneOverlays();
+    if (window.dashboardChat?.sendMessage) {
+      const reasonText = reason ? ` (${reason})` : '';
+      window.dashboardChat.sendMessage({
+        message: `Persistent zone ended: ${removed.abilityName}${reasonText}.`,
+        type: 'text',
+      }).catch(() => {});
+    }
+    return true;
+  }
+
+  function clearPersistentZonesForScene(sceneId, { reason = '' } = {}) {
+    const list = persistentZonesByScene.get(sceneId);
+    if (!list || !list.length) return;
+    const removed = list.splice(0, list.length);
+    renderPersistentZoneOverlays();
+    if (removed.length && window.dashboardChat?.sendMessage) {
+      window.dashboardChat.sendMessage({
+        message: `${removed.length} persistent zone${removed.length === 1 ? '' : 's'} cleared${reason ? ` (${reason})` : ''}.`,
+        type: 'text',
+      }).catch(() => {});
+    }
+  }
+
+  function clearAllPersistentZones({ reason = '' } = {}) {
+    const sceneIds = [...persistentZonesByScene.keys()];
+    for (const sceneId of sceneIds) {
+      clearPersistentZonesForScene(sceneId, { reason });
+    }
+  }
+
+  // Manual "End" button on the zone overlay
+  document.addEventListener('click', (event) => {
+    const target = event.target instanceof Element ? event.target : null;
+    if (!target) return;
+    const endBtn = target.closest('[data-zone-end]');
+    if (!endBtn) return;
+    event.preventDefault();
+    event.stopPropagation();
+    const zoneId = endBtn.getAttribute('data-zone-end');
+    if (zoneId) removePersistentZone(zoneId, { reason: 'manually ended' });
+  });
+
+  // ---------- Zone tick lifecycle ----------
+  //
+  // Called from setActiveCombatantId (start of turn) and completeActiveCombatant
+  // (end of turn). For each zone owned by the combatant whose turn boundary
+  // this is, we:
+  //   1. Deduct upkeep from owner's resource (auto-end if can't pay)
+  //   2. Apply tick effects to every creature inside the zone footprint
+  //
+  // Damage/condition effects go through the existing automation handlers so
+  // vulnerability/immunity/duration logic stays consistent with normal abilities.
+
+  async function tickPersistentZonesForOwner(ownerId, when) {
+    if (!ownerId) return;
+    const zones = getActivePersistentZones();
+    if (!zones.length) return;
+    const matching = zones.filter((z) => z && z.casterId === ownerId && z.tickAt === when);
+    if (!matching.length) return;
+    for (const zone of [...matching]) {
+      try {
+        await tickSinglePersistentZone(zone);
+      } catch (err) {
+        console.warn('[VTT] Zone tick failed', zone?.abilityName, err);
+      }
+    }
+  }
+
+  async function tickSinglePersistentZone(zone) {
+    // Step 1: deduct upkeep.
+    if (zone.upkeep?.cost > 0) {
+      const upkeepResult = await deductPersistentZoneUpkeep(zone);
+      if (!upkeepResult.paid) {
+        removePersistentZone(zone.id, { reason: upkeepResult.reason || "couldn't pay upkeep" });
+        return;
+      }
+    }
+
+    // Step 2: find affected placements inside the zone.
+    const area = {
+      left: zone.template.column,
+      top: zone.template.row,
+      right: zone.template.column + zone.template.width,
+      bottom: zone.template.row + zone.template.height,
+    };
+    const affected = getPlacementsForActiveScene().filter((p) =>
+      doesAutomationAreaAffectPlacement(area, p)
+    );
+
+    // Step 3: apply each effect to each affected placement.
+    if (!affected.length) {
+      announceZoneTick(zone, [], 'no creatures inside');
+      return;
+    }
+
+    const damageLines = [];
+    for (const effect of zone.effects) {
+      if (!effect || typeof effect !== 'object') continue;
+      if (effect.kind === 'damage') {
+        const baseAmount = Number.parseInt(effect.amount, 10) || 0;
+        const attrShort = String(effect.attribute || '').toUpperCase();
+        const attrFull = { M: 'Might', A: 'Agility', R: 'Reason', I: 'Intuition', P: 'Presence' }[attrShort];
+        const attrBonus = attrFull ? (Number(zone.attributeBonuses?.[attrFull]) || 0) : 0;
+        const totalAmount = Math.max(0, baseAmount + attrBonus);
+        if (totalAmount <= 0) continue;
+        for (const target of affected) {
+          if (!target?.id) continue;
+          const result = await new Promise((res) => {
+            document.dispatchEvent(new CustomEvent('vtt:automation-apply-damage', {
+              detail: {
+                payload: {
+                  placementId: target.id,
+                  sourceId: zone.casterId,
+                  amount: totalAmount,
+                  damageType: effect.damageType || '',
+                  abilityName: `${zone.abilityName} (zone tick)`,
+                },
+                resolve: res,
+                reject: () => res(null),
+              },
+            }));
+          });
+          if (result?.name) {
+            damageLines.push(`${result.name} takes ${result.amount}${effect.damageType ? ` ${effect.damageType}` : ''}`);
+          }
+        }
+      } else if (effect.kind === 'condition') {
+        const durationMap = {
+          saveEnds: 'save-ends',
+          endOfTurn: 'end-of-turn',
+          endOfEncounter: 'end-of-encounter',
+          untilDying: 'until-dying',
+        };
+        const duration = durationMap[effect.duration] || 'instantaneous';
+        for (const target of affected) {
+          if (!target?.id) continue;
+          await new Promise((res) => {
+            document.dispatchEvent(new CustomEvent('vtt:automation-apply-condition', {
+              detail: {
+                payload: {
+                  placementId: target.id,
+                  condition: { name: effect.name, duration, description: effect.text || '' },
+                  sourceId: zone.casterId,
+                },
+                resolve: res,
+                reject: () => res(null),
+              },
+            }));
+          });
+        }
+      }
+      // Other effect kinds (forced movement, heal, etc.) skipped at zone-tick
+      // for now — they're rare in zones and risk surprising behavior.
+    }
+
+    announceZoneTick(zone, affected, damageLines.length ? damageLines.join(', ') : 'effects applied');
+  }
+
+  async function deductPersistentZoneUpkeep(zone) {
+    const sheet = await getAutomationSheetForPlacement(zone.casterId);
+    if (!sheet) {
+      // No PC sheet on the caster (likely a monster). For Pass 1 we just let
+      // the zone persist without deducting — GM can end manually if needed.
+      return { paid: true, skipped: true, reason: 'no-sheet' };
+    }
+    const hero = sheet.hero || {};
+    const resource = hero.resource && typeof hero.resource === 'object' ? hero.resource : {};
+    const title = (resource.title || sheet?.sidebar?.resource?.title || '').toString();
+    const askedResource = String(zone.upkeep.resource || '').trim();
+    if (askedResource && title.toLowerCase() !== askedResource.toLowerCase()) {
+      // Wrong resource named — Pass 1 keeps the zone alive but warns in chat.
+      window.dashboardChat?.sendMessage({
+        message: `${zone.abilityName}: upkeep is "${askedResource}" but ${zone.ownerName}'s bar is "${title}". GM adjust manually.`,
+        type: 'text',
+      }).catch(() => {});
+      return { paid: true, skipped: true, reason: 'resource-mismatch' };
+    }
+    const current = Number.parseInt(resource.value ?? 0, 10) || 0;
+    if (current < zone.upkeep.cost) {
+      return { paid: false, reason: 'insufficient resource' };
+    }
+    resource.value = current - zone.upkeep.cost;
+    hero.resource = resource;
+    sheet.hero = hero;
+    // Persist back via handler.php using the same path the panel uses.
+    try {
+      const endpoint = typeof routes?.sheet === 'string' && routes.sheet ? routes.sheet : '/dnd/character_sheet/handler.php';
+      const body = new URLSearchParams();
+      body.set('action', 'save');
+      body.set('character', zone.casterId);
+      body.set('data', JSON.stringify(sheet));
+      await fetch(endpoint, {
+        method: 'POST',
+        credentials: 'same-origin',
+        headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
+        body,
+      });
+    } catch (err) {
+      console.warn('[VTT] Failed to persist zone upkeep deduction', err);
+    }
+    if (characterSummaryCache instanceof Map) {
+      characterSummaryCache.delete(zone.casterId);
+    }
+    document.dispatchEvent(new CustomEvent('vtt:character-sheet-updated', {
+      detail: { characterId: zone.casterId, change: 'resource' },
+    }));
+    return { paid: true, remaining: resource.value };
+  }
+
+  function announceZoneTick(zone, affected, detail) {
+    if (!window.dashboardChat?.sendMessage) return;
+    const targetText = affected.length
+      ? affected.map((p) => tokenLabel(p)).filter(Boolean).join(', ')
+      : 'no targets';
+    window.dashboardChat.sendMessage({
+      message: `${zone.abilityName} ticks (${zone.ownerName}'s turn): ${targetText} — ${detail}.`,
+      type: 'text',
+    }).catch(() => {});
+  }
 
   // ---------- Authored-trigger registration (runner -> bus bridge) ----------
   // The ability-automation runner calls `state.context.registerTrigger(...)`
@@ -7582,6 +7947,12 @@ export function mountBoardInteractions(store, routes = {}) {
       } catch (err) {
         console.warn('[VTT] triggerFire(turnStart) failed', err);
       }
+      // Tick any persistent zones owned by this combatant whose tickAt is
+      // startOfTurn. Async, fire-and-forget — board state updates from
+      // damage/conditions go through their normal handlers.
+      tickPersistentZonesForOwner(normalizedNextId, 'startOfTurn').catch((err) => {
+        console.warn('[VTT] persistent zone start-of-turn tick failed', err);
+      });
     }
 
     // Update turn phase to reflect new state
@@ -7961,6 +8332,10 @@ export function mountBoardInteractions(store, routes = {}) {
     } catch (err) {
       console.warn('[VTT] triggerFire(turnEnd) failed', err);
     }
+    // Tick zones owned by this combatant whose tickAt is endOfTurn.
+    tickPersistentZonesForOwner(finishedId, 'endOfTurn').catch((err) => {
+      console.warn('[VTT] persistent zone end-of-turn tick failed', err);
+    });
     const finishingPlacement = getPlacementFromStore(finishedId);
     const finishingConditions = ensurePlacementConditions(
       finishingPlacement?.conditions ?? finishingPlacement?.condition ?? null
@@ -9203,6 +9578,8 @@ export function mountBoardInteractions(store, routes = {}) {
     markCombatEncounterStateDirty();
     combatActive = false;
     combatRound = 0;
+    // Persistent zones auto-end at encounter end per Draw Steel rules.
+    clearAllPersistentZones({ reason: 'combat ended' });
     combatConflictRetryAttempts = 0;
     completedCombatants.clear();
     pendingRoundConfirmation = false;

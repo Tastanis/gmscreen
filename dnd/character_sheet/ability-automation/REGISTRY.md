@@ -14,7 +14,7 @@ For *how* to write JSON, see `AUTHORING.md`. This file is `what is supported`.
 | `powerRoll` | Full |
 | `effect` | Full |
 | `trigger` | Schema + registration against `AbilityTriggerBus`. Authored `match` config fires the blue `!` overlay when its event/filter matches; click to resolve manually. No structured `match` → chat reminder fallback. |
-| `persistent` | Schema + chat reminder (no auto-tick this pass) |
+| `persistent` | Schema + registration as a board-side persistent zone. Requires a preceding area `target` block so the zone has a footprint. Ticks at owner's `tickAt` (startOfTurn or endOfTurn): deducts upkeep from owner's heroic resource, applies effects to every creature inside the zone footprint. Auto-ends on combat end or when owner can't pay upkeep. **In-memory only** — page reload wipes zones (Pass 2 will add persistence). |
 
 ## Effect kinds — `effect.kind` (used inside `tier.effects`, `effect.effects`, `trigger.effects`, `persistent.effects`, `potency.onFail`, `spend.effects`)
 
@@ -126,6 +126,7 @@ These are called by `runner.js` and dispatched as `vtt:automation-*` CustomEvent
 | `applySwap(payload)` | `{ targetId, sourcePlacement, abilityName }` | `{ name, sourceId, targetId }` or `{ skipped, reason }` |
 | `runFreeStrike(payload)` | `{ byCandidateIds, againstPredicate, text, abilityName, casterName }` | `{ skipped, byId, againstId, tier, damage, damageResult }` |
 | `getRecoveryValueForTarget(payload)` | `{ placementId }` | `{ recoveryValue, currentRecoveries }` — `recoveryValue` is null when unknown |
+| `registerPersistentZone(payload)` | `{ casterId, abilityId, abilityName, area: { template, shape, ... }, upkeep: { cost, resource }, tickAt, effects, attributeBonuses, note }` | `{ registered, zoneId, zoneCount }` or `{ registered: false, reason }` |
 
 ---
 

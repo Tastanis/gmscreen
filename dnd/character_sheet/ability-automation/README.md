@@ -83,7 +83,8 @@ Each effect is dispatched by `kind`:
 
 ## Known gaps (deferred to later phases)
 
-- Persistent zones with tick-on-turn application and "pay N to extend" UI.
+- Persistent zone **persistence across page reloads** + Pusher sync to other clients (Pass 1 is in-memory + GM-only).
+- Persistent zones: "on enter zone" trigger during movement (Pass 1 only ticks at owner's turn).
 - Vertical forced movement (Z-axis); horizontal push/pull/slide are fully wired.
 - `cascade` effect kind — fires another ability as a free triggered action. Needs stable cross-ability identifiers and a recursive runner entry point. Phase D candidate.
 - Auto-decrement of the target's `currentRecoveries` after a recovery-style heal — currently a chat reminder so the player adjusts the sheet manually. Adding a `sync-recoveries` endpoint to `handler.php` would close this.

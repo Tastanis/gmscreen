@@ -387,6 +387,26 @@
         }
         const tokens = Array.isArray(result?.targets) ? result.targets : [];
         setTargetGroup(state, block.name, tokens);
+        // Persist the placed template area so a later `persistent` block in
+        // the same automation can reuse the same cells when registering the
+        // zone with the board. Schema's target block carries the shape
+        // metadata (shape, size, length, etc.); the result.template carries
+        // the placed position.
+        if (result?.template && typeof result.template === "object") {
+          if (!state.areas) state.areas = {};
+          const areaKey = block.name || "primary";
+          state.areas[areaKey] = {
+            template: { ...result.template },
+            shape: block.shape || "cube",
+            size: block.size || 0,
+            width: block.width || 0,
+            height: block.height || 0,
+            length: block.length || 0,
+            blockName: areaKey,
+            blockId: block.id || "",
+          };
+          state.currentArea = areaKey;
+        }
         return;
       }
 
@@ -741,14 +761,60 @@
   }
 
   async function runPersistentBlock(state, block) {
+    const ctx = state.context || {};
     const inner = (block.effects || []).map(P.describeEffect).filter(Boolean).join("; ");
+
+    // Find the area template to use as the zone footprint. Prefer the area
+    // referenced by `block.target`, then the most recent area placed, then
+    // fall back to chat-only if no template exists.
+    const areaKey = block.target || state.currentArea || "primary";
+    const areaRecord = state.areas?.[areaKey] || (state.currentArea ? state.areas?.[state.currentArea] : null);
+
+    if (areaRecord && typeof ctx.registerPersistentZone === "function") {
+      try {
+        // Snapshot caster attribute bonuses so the zone can resolve damage
+        // amounts at tick time without re-reading the caster's sheet.
+        const attributeBonuses = {};
+        if (typeof ctx.getAttributeBonus === "function") {
+          for (const attr of ["Might", "Agility", "Reason", "Intuition", "Presence"]) {
+            attributeBonuses[attr] = ctx.getAttributeBonus(attr) || 0;
+          }
+        }
+        const result = await ctx.registerPersistentZone({
+          casterId: state.sourcePlacement?.id || "",
+          abilityId: state.action?.id || `ability_${block.id}`,
+          abilityName: state.action?.name || "",
+          area: areaRecord,
+          upkeep: {
+            cost: Number(block.cost) || 0,
+            resource: block.resource || "",
+          },
+          tickAt: block.tickAt || "startOfTurn",
+          effects: block.effects || [],
+          attributeBonuses,
+          note: block.note || "",
+        });
+        const zoneId = result?.zoneId || "(zone)";
+        const lines = [`${state.heroName} - ${state.action.name || "Ability"} persistent zone armed (${zoneId}):`];
+        lines.push(`Cost ${block.cost || 0}${block.resource ? ` ${block.resource}` : ""} at ${block.tickAt || "startOfTurn"}.`);
+        if (inner) lines.push(`Each tick: ${inner}`);
+        if (block.note) lines.push(block.note);
+        await postChat(ctx, { message: lines.join("\n") });
+        return;
+      } catch (err) {
+        console.warn("[AbilityAutomationRunner] registerPersistentZone failed; falling back to chat reminder.", err);
+        // Fall through to the chat-only path so the GM at least sees what should happen.
+      }
+    }
+
     const lines = [
       `${state.heroName} - ${state.action.name || "Ability"} persistent zone:`,
       `Cost ${block.cost || 0}${block.resource ? ` ${block.resource}` : ""} at ${block.tickAt}.`,
     ];
     if (inner) lines.push(`Each tick: ${inner}`);
+    if (!areaRecord) lines.push("(No area placed — manual tracking required.)");
     if (block.note) lines.push(block.note);
-    await postChat(state.context, { message: lines.join("\n") });
+    await postChat(ctx, { message: lines.join("\n") });
   }
 
   // ---------- effect dispatch ----------
@@ -1400,6 +1466,11 @@
       suggestedTargetId: options?.suggestedTargetId || "",
       groups: {},
       currentGroup: null,
+      // Area templates placed by area-target blocks. Keyed by the target
+      // block's `name`. Persistent zone registration looks here to find the
+      // cells the zone should occupy.
+      areas: {},
+      currentArea: null,
       selectedTier: null,
       baseTier: null,
       edgeCount: 0,

@@ -5415,3 +5415,75 @@
   position: relative;
   z-index: 1;
 }
+
+/* ---------- Persistent zones (Phase C) ---------- */
+/* A linger-on-the-board overlay distinct from the ephemeral area-template
+ * preview. Zones tick at the owner's turn boundary, deduct upkeep from
+ * their heroic resource, and apply effects to creatures inside. */
+.vtt-persistent-zones {
+  position: absolute;
+  inset: 0;
+  pointer-events: none;
+  z-index: 6;
+}
+
+.vtt-persistent-zone {
+  position: absolute;
+  pointer-events: auto;
+  border: 2px dashed rgba(255, 184, 76, 0.85);
+  background: rgba(255, 138, 41, 0.18);
+  border-radius: 4px;
+  box-shadow: 0 0 14px rgba(255, 138, 41, 0.35) inset;
+  display: flex;
+  align-items: flex-start;
+  justify-content: flex-end;
+  padding: 4px;
+  animation: vtt-persistent-zone-pulse 2.4s ease-in-out infinite;
+}
+
+@keyframes vtt-persistent-zone-pulse {
+  0%, 100% {
+    box-shadow: 0 0 14px rgba(255, 138, 41, 0.35) inset;
+  }
+  50% {
+    box-shadow: 0 0 22px rgba(255, 138, 41, 0.6) inset;
+  }
+}
+
+.vtt-persistent-zone__body {
+  background: rgba(20, 14, 11, 0.9);
+  color: #fdebcc;
+  font-size: 11px;
+  line-height: 1.2;
+  padding: 4px 6px;
+  border-radius: 3px;
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  max-width: 200px;
+}
+
+.vtt-persistent-zone__label {
+  font-weight: 600;
+}
+
+.vtt-persistent-zone__meta {
+  font-size: 10px;
+  opacity: 0.85;
+}
+
+.vtt-persistent-zone__end {
+  align-self: flex-end;
+  margin-top: 2px;
+  background: rgba(180, 50, 40, 0.85);
+  color: #fff;
+  border: 1px solid rgba(255, 255, 255, 0.25);
+  border-radius: 3px;
+  padding: 2px 6px;
+  font-size: 10px;
+  cursor: pointer;
+}
+
+.vtt-persistent-zone__end:hover {
+  background: rgba(220, 70, 55, 1);
+}

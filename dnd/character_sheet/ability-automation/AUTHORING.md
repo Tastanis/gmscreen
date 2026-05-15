@@ -168,7 +168,7 @@ Triggers stay registered until the encounter ends, the caster leaves the scene, 
 
 ### `persistent`
 
-Persistent zone metadata. **This pass: chat reminder only — no auto-tick yet.**
+A zone that lingers across rounds, ticks at the owner's turn boundary, and applies effects to creatures inside it. Requires a **preceding area `target` block** so the zone has a footprint — without it, falls back to a chat-only reminder.
 
 ```json
 {
@@ -179,6 +179,20 @@ Persistent zone metadata. **This pass: chat reminder only — no auto-tick yet.*
   "effects": [ { "kind": "damage", "amount": 3, "damageType": "fire" } ]
 }
 ```
+
+| Field | Values |
+|---|---|
+| `cost` | int — heroic resource spent per tick. 0 = no upkeep. |
+| `resource` | string — the resource name (must match the caster's bar title, e.g. "Wrath"). Empty = use caster's resource without name check. |
+| `tickAt` | `"startOfTurn"` \| `"endOfTurn"` — which boundary of the OWNER's turn ticks. |
+| `effects` | array — tick effects. `damage` and `condition` are auto-applied; other kinds skipped at tick. |
+| `target` | optional string — name of an earlier target block to reuse as the zone footprint. Default = most recent area placed. |
+
+**Behavior**:
+- At the owner's `tickAt`, the runtime deducts `cost` from the owner's resource (or auto-ends the zone if unaffordable), then applies tick effects to every creature inside the zone footprint.
+- Zone is visible on the board as a pulsing orange dashed outline with an "End" button.
+- Auto-ends on encounter end.
+- **In-memory only this pass** — a page reload while combat is active will wipe zones. Cast again to re-arm.
 
 ---
 
