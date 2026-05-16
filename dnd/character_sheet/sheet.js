@@ -2111,9 +2111,9 @@ function renderFeatures() {
             return `
             <article class="feature-card ${feature.isWide ? "feature-card--wide" : ""}" data-feature-id="${feature.id}">
               <header class="card-head">
-                <div>
+                <div class="feature-head__main">
                   <div class="display-value feature-title">${feature.title || "Untitled Feature"}</div>
-                  <input class="edit-field" type="text" data-field="title" value="${feature.title || ""}" />
+                  <input class="edit-field" type="text" data-field="title" value="${feature.title || ""}" placeholder="Feature name" />
                 </div>
                 <div class="feature-controls">
                   <span class="chat-dot-wrap"><button class="chat-dot" type="button" aria-label="Post to chat" data-chat-type="feature" data-chat-id="${feature.id}"></button></span>

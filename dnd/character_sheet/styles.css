@@ -1502,6 +1502,8 @@ body.edit-mode .respite-btn {
   display: flex;
   align-items: center;
   gap: 6px;
+  flex-wrap: wrap;
+  justify-content: flex-end;
 }
 
 .card-head {
@@ -1509,6 +1511,16 @@ body.edit-mode .respite-btn {
   justify-content: space-between;
   align-items: flex-start;
   gap: 8px;
+  flex-wrap: wrap;
+}
+
+/* Give the name/title side a real minimum width so the input never collapses
+   when extra buttons (Edit Automation + Inspect) show up. Buttons wrap below
+   instead of squishing the name. */
+.card-head__left,
+.feature-head__main {
+  flex: 1 1 240px;
+  min-width: 0;
 }
 
 .chip-row {
