@@ -36,6 +36,8 @@ For *how* to write JSON, see `AUTHORING.md`. This file is `what is supported`.
 | `cascade` | Chat reminder | Posts message; manual. Cascade requires stable cross-ability IDs and an "invoke another ability" entry point that doesn't exist yet — Phase D. |
 | `resourceGain` | Full | Mutates the caster's own `hero.resource.value` on their sheet. If the JSON names a specific resource and the caster's resource bar has a different title, falls back to a chat reminder. Floors at 0. |
 | `ifKeyword` | Full | Branches based on ability's `keywords`. `then` runs on match, `else` on miss |
+| `ifStrained` | Full | Branches on whether the caster's heroic resource value is below 0. `then` runs when strained, `else` runs when not. |
+| `halveTriggeringDamage` | Full | Inside a `trigger` block matching the `damage` event: halves the triggering damage by healing back the difference. `rounding` (`up`/`down`) controls which half the placement takes. No-op outside a trigger with a captured damage payload. |
 | `note` | Full | Posts text to chat |
 | `other` | Chat reminder | Posts text to chat |
 
@@ -45,9 +47,11 @@ For *how* to write JSON, see `AUTHORING.md`. This file is `what is supported`.
 
 ## Conditions — `condition.name`
 
-`bleeding`, `dazed`, `dying`, `frightened`, `grabbed`, `prone`, `restrained`, `slowed`, `taunted`, `weakened`, `other`
+`bleeding`, `dazed`, `dying`, `frightened`, `grabbed`, `prone`, `restrained`, `slowed`, `taunted`, `weakened`, `damageWeakness`, `damageImmunity`, `other`
 
 When `name === "other"`, supply `text` describing the homebrew condition.
+
+`damageWeakness` and `damageImmunity` carry numeric riders: `amount` (int, required) and `damageType` (string, optional). Stored on the placement; read by `getAutomationDamageAdjustment` when computing adjusted damage. Empty / "untyped" `damageType` matches every type.
 
 ## Durations — `condition.duration`
 

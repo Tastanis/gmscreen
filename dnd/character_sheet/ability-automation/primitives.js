@@ -24,6 +24,8 @@
     "potency",
     "spend",
     "ifKeyword",
+    "ifStrained",
+    "halveTriggeringDamage",
     "other",
   ];
 
@@ -116,8 +118,17 @@
     "slowed",
     "taunted",
     "weakened",
+    // Numeric / typed riders. Carry `amount` and (optionally) `damageType` on
+    // the condition object; the VTT damage handler reads them when computing
+    // adjusted damage. Empty `damageType` = applies to every type.
+    "damageWeakness",
+    "damageImmunity",
     "other",
   ];
+
+  // Conditions that carry numeric / typed fields beyond the base shape. Used by
+  // the normalizer to know NOT to discard `amount` / `damageType` on save.
+  const NUMERIC_CONDITIONS = ["damageWeakness", "damageImmunity"];
 
   const DURATIONS = [
     "instantaneous",
@@ -201,9 +212,14 @@
 
   function normalizeCondition(value) {
     if (!value) return "";
-    const lower = String(value).trim().toLowerCase();
-    if (!lower) return "";
-    return CONDITIONS.includes(lower) ? lower : "other";
+    const raw = String(value).trim();
+    if (!raw) return "";
+    const lower = raw.toLowerCase();
+    // CONDITIONS uses canonical casing (e.g. "damageWeakness"). Match by
+    // lowercase and return the canonical form so downstream consumers can
+    // compare with === instead of toLowerCase() each time.
+    const canonical = CONDITIONS.find((name) => name.toLowerCase() === lower);
+    return canonical || "other";
   }
 
   function normalizeDuration(value) {
@@ -338,6 +354,12 @@
         return `${effect.amount || 0} temporary Stamina`;
       case "condition": {
         const dur = effect.duration && effect.duration !== "instantaneous" ? ` (${effect.duration})` : "";
+        if (effect.name === "damageWeakness" || effect.name === "damageImmunity") {
+          const verb = effect.name === "damageWeakness" ? "weakness" : "immunity";
+          const amount = effect.amount || 0;
+          const type = effect.damageType && effect.damageType !== "untyped" ? ` ${effect.damageType}` : "";
+          return `${verb} ${amount}${type}${dur}`;
+        }
         const name = effect.name === "other" && effect.text ? effect.text : effect.name || "condition";
         return `${name}${dur}`;
       }
@@ -369,6 +391,14 @@
         const inner = (effect.effects || []).map(describeEffect).filter(Boolean).join(", ");
         return `Spend ${effect.amount || 1} ${effect.resource || ""}: ${inner}`;
       }
+      case "ifStrained": {
+        const thenText = (effect.then || []).map(describeEffect).filter(Boolean).join(", ");
+        const elseText = (effect.else || []).map(describeEffect).filter(Boolean).join(", ");
+        if (elseText) return `If strained → ${thenText || "(no effect)"} else → ${elseText}`;
+        return `If strained → ${thenText || "(no effect)"}`;
+      }
+      case "halveTriggeringDamage":
+        return "halve the triggering damage";
       case "other":
         return effect.text || "(other)";
       default:
@@ -412,6 +442,7 @@
     POTENCY_LEVELS,
     DAMAGE_TYPES,
     CONDITIONS,
+    NUMERIC_CONDITIONS,
     DURATIONS,
     FORCED_MOVEMENT_VERBS,
     TARGET_PREDICATES,

@@ -240,9 +240,13 @@ Applies via the same heal path but allows the new total to exceed max stamina (t
 
 | Field | Values |
 |---|---|
-| `name` | `"bleeding"`, `"dazed"`, `"dying"`, `"frightened"`, `"grabbed"`, `"prone"`, `"restrained"`, `"slowed"`, `"taunted"`, `"weakened"`, `"other"` |
+| `name` | `"bleeding"`, `"dazed"`, `"dying"`, `"frightened"`, `"grabbed"`, `"prone"`, `"restrained"`, `"slowed"`, `"taunted"`, `"weakened"`, `"damageWeakness"`, `"damageImmunity"`, `"other"` |
 | `text` | required when `name === "other"` — describes the homebrew condition |
 | `duration` | `"instantaneous"`, `"endOfTurn"`, `"saveEnds"`, `"endOfEncounter"`, `"untilDying"` |
+| `amount` | int — required for `"damageWeakness"` / `"damageImmunity"`. How much extra damage is taken (weakness) / soaked (immunity). |
+| `damageType` | string — optional for `"damageWeakness"` / `"damageImmunity"`. Restricts to one type. Omit / `"untyped"` = applies to all types. |
+
+`damageWeakness` and `damageImmunity` are numeric riders. The VTT damage handler stacks `amount` on top of the sheet's own immunity/vulnerability lists when applying damage to the affected target. Example: `{ "kind": "condition", "name": "damageWeakness", "amount": 5, "damageType": "fire", "duration": "saveEnds" }` makes the target take +5 damage from every fire effect until they save out.
 
 ### `forcedMovement`
 
@@ -377,6 +381,41 @@ Branches based on the ability's `keywords`. Effects in `then` run when the predi
 | `else` | effects to apply when predicate fails |
 
 Predicate matching reads the ability's `keywords` field (or `tags` as a legacy fallback). All comparisons are case-insensitive.
+
+### `ifStrained` (rider)
+
+Branches based on whether the caster is currently strained — defined as the caster's heroic resource value being below 0. The Talent class is the primary user (Clarity below 0 = strained), but anything that lets a resource go negative will trip this.
+
+```json
+{
+  "kind": "ifStrained",
+  "then": [ { "kind": "damage", "amount": 2, "damageType": "psychic" } ],
+  "else": []
+}
+```
+
+| Field | Values |
+|---|---|
+| `then` | effects applied when the caster is strained (resource < 0) |
+| `else` | effects applied when the caster is NOT strained |
+
+Both branches optional; an empty branch silently does nothing. Use this for Talent abilities with "Strained:" riders — drop the rider into `then` and the runtime auto-applies it when applicable.
+
+### `halveTriggeringDamage` (rider — trigger blocks only)
+
+Soaks half of the damage that fired the trigger. The board has already applied the full damage by the time the trigger resolves; this effect heals back the difference so the net damage on the placement equals the rounded half.
+
+```json
+{ "kind": "halveTriggeringDamage", "rounding": "up" }
+```
+
+| Field | Values |
+|---|---|
+| `rounding` | `"up"` (default — player takes the larger half, e.g. 7 of 13) or `"down"` (player takes the smaller half, e.g. 6 of 13) |
+
+Requires a `trigger` block with `match.event: "damage"` so the runtime can read the original damage payload. Without that match, the effect posts a chat reminder instead of healing.
+
+Use this for "you take half damage instead" triggered actions like Resist the Unnatural, Unearthly Reflexes, and Feedback Loop (when paired with a re-damage effect targeting the source).
 
 ### `other`
 

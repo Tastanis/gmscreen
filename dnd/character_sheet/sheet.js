@@ -175,7 +175,7 @@ const defaultSheet = {
     victories: "",
     surges: "",
     surgesUsed: 0,
-    resource: { title: "Resource", value: 0, autoDice: "" },
+    resource: { title: "Resource", value: 0, autoDice: "", allowNegative: false },
     heroTokens: [false, false],
     stats: {
       might: 0,
@@ -445,6 +445,7 @@ function mergeWithDefaults(data) {
   merged.hero.resource.value = normalizeResourceValue(
     inputHero.resource?.value ?? merged.hero.resource.value
   );
+  merged.hero.resource.allowNegative = Boolean(merged.hero.resource.allowNegative);
   merged.hero.stats = { ...merged.hero.stats, ...(inputHero.stats || {}) };
   merged.hero.vitals = normalizeVitals(inputHero.vitals);
   merged.hero.culture = normalizeIdentityGroup(inputHero.culture, DEFAULT_CULTURE_FIELDS);
@@ -1112,6 +1113,14 @@ function renderHeroPane() {
                       placeholder="e.g. d6"
                     />
                   </div>
+                  <label class="resource-allow-negative" title="For Talent's Clarity: spends go below 0 down to -(1 + Reason).">
+                    <input
+                      type="checkbox"
+                      data-model="hero.resource.allowNegative"
+                      ${hero.resource.allowNegative ? "checked" : ""}
+                    />
+                    <span>Allow negative (Talent)</span>
+                  </label>
                 </div>
               </div>`
             : ""
@@ -3076,7 +3085,12 @@ function captureCoreFields() {
     if (el.classList.contains("rich-text-editor")) {
       value = sanitizeRichText(normalizeRichText(el.innerHTML));
     }
-    if (el.type === "number") {
+    if (el.type === "checkbox") {
+      // Checkboxes use .checked, not .value. Without this branch the captured
+      // value would always be the literal string "on" or "" regardless of
+      // whether the box was toggled.
+      value = Boolean(el.checked);
+    } else if (el.type === "number") {
       value = el.value === "" ? "" : Number(el.value);
     }
     if (["hero.vitals.currentStamina", "hero.vitals.currentRecoveries"].includes(path)) {

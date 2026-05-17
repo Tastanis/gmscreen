@@ -315,6 +315,16 @@ export function mountCharacterSummaryPanel(routes = {}, userContext = {}) {
         const suggestedTargetId = (clearsTrigger && activeToken?.readyTriggerSources && typeof activeToken.readyTriggerSources === 'object')
           ? (activeToken.readyTriggerSources[clearsTrigger] || '')
           : '';
+        // The firing-event payload (damage amount, etc.) is also stashed on
+        // the placement at mark-ready time. Capture it BEFORE the clear
+        // dispatch so trigger-aware effects like halveTriggeringDamage know
+        // what damage event armed them.
+        const triggerSnapshot = (clearsTrigger && activeToken?.readyTriggerPayloads && typeof activeToken.readyTriggerPayloads === 'object')
+          ? activeToken.readyTriggerPayloads[clearsTrigger]
+          : null;
+        const triggerPayload = triggerSnapshot && typeof triggerSnapshot === 'object'
+          ? (triggerSnapshot.payload && typeof triggerSnapshot.payload === 'object' ? triggerSnapshot.payload : triggerSnapshot)
+          : null;
         if (clearsTrigger && sourcePlacementId) {
           document.dispatchEvent(new CustomEvent('vtt:clear-trigger-ready', {
             detail: { placementId: sourcePlacementId, abilityId: clearsTrigger },
@@ -327,6 +337,7 @@ export function mountCharacterSummaryPanel(routes = {}, userContext = {}) {
           characterId: activeCharacterId,
           routes,
           suggestedTargetId,
+          triggerPayload,
         });
       }
       return;
@@ -1171,6 +1182,10 @@ function startAbilityAutomation(sheet, action, categoryKey, sourceToken = null, 
     // opp-attack). Runner threads this into every target picker config so
     // the board can flash it red.
     suggestedTargetId: options?.suggestedTargetId || '',
+    // Firing-event snapshot from the trigger registry (damage amount, source,
+    // damage type, etc.). Captured at mark-ready time and threaded here so
+    // effects like halveTriggeringDamage can read the original damage value.
+    triggerPayload: options?.triggerPayload || null,
     getAttributeBonus: (attribute) => getAttributeBonus(sheet, attribute),
     getStrongestAttribute: () => getStrongestAttribute(sheet),
     postChat: postAutomationChat,
@@ -1411,7 +1426,11 @@ async function applyAbilityResourceGain(sheet, payload = {}, options = {}) {
     return { skipped: true, reason: 'resource-mismatch', resource: title };
   }
   const current = Number.parseInt(resource.value ?? 0, 10) || 0;
-  const next = Math.max(0, current + amount);
+  const floor = resourceFloor(hero, resource);
+  // Allows negative-direction resourceGain ("lose 1 clarity") to push below
+  // 0 down to the floor when the resource permits it. Positive gains are
+  // unaffected since the floor is never above 0.
+  const next = Math.max(floor, current + amount);
   resource.value = next;
   hero.resource = resource;
   if (sheet) sheet.hero = hero;
@@ -1438,15 +1457,34 @@ async function spendAbilityResource(sheet, ability, options = {}) {
   const costName = cost.name.toLowerCase();
   if (costName && title.toLowerCase() !== costName) return { skipped: true };
   const current = Number.parseInt(resource.value ?? 0, 10) || 0;
-  if (current < cost.amount) {
+  const floor = resourceFloor(hero, resource);
+  // Talent's Clarity (`allowNegative: true`) lets the player push the
+  // resource into negative territory, capped at -(1 + Reason). For every
+  // other resource the floor is 0 and the old behavior (confirm prompt at
+  // insufficient) is preserved.
+  if (!resource.allowNegative && current < cost.amount) {
     const proceed = window.confirm(`${title} is ${current}, but ${ability?.name || 'this ability'} costs ${cost.amount}. Continue anyway?`);
     return proceed ? { continued: true, insufficient: true } : { canceled: true };
   }
-  resource.value = Math.max(0, current - cost.amount);
+  if (resource.allowNegative && current - cost.amount < floor) {
+    const proceed = window.confirm(`${title} would drop to ${current - cost.amount}, past the floor of ${floor} (-(1 + Reason)). Cap at ${floor}?`);
+    if (!proceed) return { canceled: true };
+  }
+  resource.value = Math.max(floor, current - cost.amount);
   hero.resource = resource;
   if (sheet) sheet.hero = hero;
   await saveCharacterSummarySheet(sheet, options);
   return { spent: cost.amount, resource: title, remaining: resource.value };
+}
+
+// The floor a resource can drop to when paying a cost. `allowNegative`
+// resources (Talent's Clarity) clamp at -(1 + Reason); everything else
+// clamps at 0. Reason of 2 → floor of -3, etc. Stat may be null/undefined
+// for fresh characters; treat as 0.
+function resourceFloor(hero, resource) {
+  if (!resource || !resource.allowNegative) return 0;
+  const reason = Number(hero?.stats?.reason) || 0;
+  return -(1 + reason);
 }
 
 function parseAbilityResourceCost(value) {

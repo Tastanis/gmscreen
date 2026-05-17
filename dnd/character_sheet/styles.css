@@ -508,6 +508,21 @@ body {
   flex: 1;
 }
 
+.resource-allow-negative {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  font-size: 11px;
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
+  color: var(--muted);
+  cursor: pointer;
+}
+
+.resource-allow-negative input[type="checkbox"] {
+  margin: 0;
+}
+
 .auto-dice-button {
   background: var(--accent);
   color: #f0e8da;

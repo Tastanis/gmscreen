@@ -767,6 +767,22 @@ export function mountBoardInteractions(store, routes = {}) {
       name: 'Weakened',
       description: 'While you are weakened, all your power rolls take a bane.',
     },
+    {
+      // Numeric rider applied by automation. Stored on the placement with
+      // `amount` and (optionally) `damageType`; the automation damage handler
+      // stacks the amount onto incoming damage of the matching type. Empty
+      // damageType = applies to every type.
+      name: 'damageWeakness',
+      description:
+        'While you have this rider, you take extra damage equal to the rider amount from the matching damage type (or any type if untyped).',
+    },
+    {
+      // Mirror of damageWeakness — soaks `amount` from incoming damage of the
+      // matching type.
+      name: 'damageImmunity',
+      description:
+        'While you have this rider, you ignore damage equal to the rider amount from the matching damage type (or any type if untyped).',
+    },
     CUSTOM_CONDITION_DEFINITION,
   ];
   const CONDITION_NAMES = CONDITION_DEFINITIONS.map((definition) => definition.name);
@@ -2179,7 +2195,16 @@ export function mountBoardInteractions(store, routes = {}) {
     for (const entry of list) {
       try {
         if (entry.predicate(payload, entry)) {
-          markTriggerReady(entry.tokenId, entry.abilityId || null);
+          // Snapshot the firing payload onto the placement so the resolved
+          // ability can read it later — needed for effects like
+          // `halveTriggeringDamage` that need to know the original damage
+          // amount.
+          markTriggerReady(
+            entry.tokenId,
+            entry.abilityId || null,
+            payload?.sourceId || null,
+            { eventType, payload }
+          );
           // Post a chat line so the player knows which trigger fired. Useful
           // for debugging predicate matches and for surfacing the trigger so
           // the player doesn't miss the small `!` overlay. Skipped for the
@@ -2198,7 +2223,7 @@ export function mountBoardInteractions(store, routes = {}) {
     }
   }
 
-  function markTriggerReady(placementId, abilityId, sourceId = null) {
+  function markTriggerReady(placementId, abilityId, sourceId = null, eventSnapshot = null) {
     if (!placementId || typeof boardApi.updateState !== 'function') return false;
     const state = boardApi.getState?.() ?? {};
     const activeSceneId = state.boardState?.activeSceneId ?? null;
@@ -2206,6 +2231,7 @@ export function mountBoardInteractions(store, routes = {}) {
     let updated = false;
     let nextReady = [];
     let nextSources = {};
+    let nextPayloads = {};
     boardApi.updateState?.((draft) => {
       const scenePlacements = ensureScenePlacementDraft(draft, activeSceneId);
       const target = scenePlacements.find((item) => item && item.id === placementId);
@@ -2224,9 +2250,27 @@ export function mountBoardInteractions(store, routes = {}) {
         : {};
       if (abilityId && sourceId) sources[abilityId] = sourceId;
       target.readyTriggerSources = sources;
+      // Per-ability firing payload. Read by halveTriggeringDamage and other
+      // trigger-context effects when the player resolves the ready trigger.
+      // Cleared by clearTriggerReady so stale payloads can't bleed across
+      // unrelated trigger fires.
+      const payloads = (target.readyTriggerPayloads && typeof target.readyTriggerPayloads === 'object')
+        ? { ...target.readyTriggerPayloads }
+        : {};
+      if (abilityId && eventSnapshot && typeof eventSnapshot === 'object') {
+        // Persist a defensive clone so later mutations to the live payload
+        // don't bleed into the saved snapshot.
+        try {
+          payloads[abilityId] = JSON.parse(JSON.stringify(eventSnapshot));
+        } catch (_err) {
+          payloads[abilityId] = eventSnapshot;
+        }
+      }
+      target.readyTriggerPayloads = payloads;
       target._lastModified = Date.now();
       nextReady = ready;
       nextSources = sources;
+      nextPayloads = payloads;
       updated = true;
     });
     if (!updated) return false;
@@ -2241,6 +2285,7 @@ export function mountBoardInteractions(store, routes = {}) {
           hasReadyTrigger: true,
           readyTriggerAbilities: nextReady,
           readyTriggerSources: nextSources,
+          readyTriggerPayloads: nextPayloads,
           triggerSetAtPhase: phaseTick,
         },
       }];
@@ -2259,6 +2304,7 @@ export function mountBoardInteractions(store, routes = {}) {
     let nextReady = [];
     let nextHas = false;
     let nextSources = {};
+    let nextPayloads = {};
     boardApi.updateState?.((draft) => {
       const scenePlacements = ensureScenePlacementDraft(draft, activeSceneId);
       const target = scenePlacements.find((item) => item && item.id === placementId);
@@ -2266,17 +2312,24 @@ export function mountBoardInteractions(store, routes = {}) {
       const priorSources = (target.readyTriggerSources && typeof target.readyTriggerSources === 'object')
         ? target.readyTriggerSources
         : {};
+      const priorPayloads = (target.readyTriggerPayloads && typeof target.readyTriggerPayloads === 'object')
+        ? target.readyTriggerPayloads
+        : {};
       if (abilityId) {
         nextReady = (Array.isArray(target.readyTriggerAbilities) ? target.readyTriggerAbilities : []).filter((id) => id !== abilityId);
         nextSources = { ...priorSources };
         delete nextSources[abilityId];
+        nextPayloads = { ...priorPayloads };
+        delete nextPayloads[abilityId];
       } else {
         nextReady = [];
         nextSources = {};
+        nextPayloads = {};
       }
       nextHas = nextReady.length > 0;
       target.readyTriggerAbilities = nextReady;
       target.readyTriggerSources = nextSources;
+      target.readyTriggerPayloads = nextPayloads;
       target.hasReadyTrigger = nextHas;
       if (!nextHas) target.triggerSetAtPhase = null;
       target._lastModified = Date.now();
@@ -2294,6 +2347,7 @@ export function mountBoardInteractions(store, routes = {}) {
           hasReadyTrigger: nextHas,
           readyTriggerAbilities: nextReady,
           readyTriggerSources: nextSources,
+          readyTriggerPayloads: nextPayloads,
           triggerSetAtPhase: nextHas ? undefined : null,
         },
       }];
@@ -7887,6 +7941,7 @@ export function mountBoardInteractions(store, routes = {}) {
         p.hasReadyTrigger = false;
         p.readyTriggerAbilities = [];
         p.readyTriggerSources = {};
+        p.readyTriggerPayloads = {};
         p.triggerSetAtPhase = null;
         p._lastModified = nowMs;
         if (p.id) expirableIds.push(p.id);
@@ -7900,7 +7955,7 @@ export function mountBoardInteractions(store, routes = {}) {
         type: 'placement.update',
         sceneId: activeSceneId,
         placementId: id,
-        patch: { hasReadyTrigger: false, readyTriggerAbilities: [], readyTriggerSources: {}, triggerSetAtPhase: null },
+        patch: { hasReadyTrigger: false, readyTriggerAbilities: [], readyTriggerSources: {}, readyTriggerPayloads: {}, triggerSetAtPhase: null },
       }));
     }
     persistBoardStateSnapshot({}, ops);
@@ -7922,6 +7977,7 @@ export function mountBoardInteractions(store, routes = {}) {
         p.hasReadyTrigger = false;
         p.readyTriggerAbilities = [];
         p.readyTriggerSources = {};
+        p.readyTriggerPayloads = {};
         p.triggerSetAtPhase = null;
         p._lastModified = nowMs;
         if (p.id) ids.push(p.id);
@@ -10322,6 +10378,7 @@ export function mountBoardInteractions(store, routes = {}) {
           placement.hasReadyTrigger = false;
           placement.readyTriggerAbilities = [];
           placement.readyTriggerSources = {};
+          placement.readyTriggerPayloads = {};
           placementMutated = true;
         }
         if (placementMutated) {
@@ -13539,6 +13596,20 @@ export function mountBoardInteractions(store, routes = {}) {
     if (conditionPayload.description) {
       condition.description = String(conditionPayload.description);
     }
+    // Numeric / typed riders for damageWeakness / damageImmunity. The damage
+    // adjuster reads these directly off the placement's condition list.
+    if (name === 'damageWeakness' || name === 'damageImmunity') {
+      const amount = Number.parseInt(conditionPayload.amount, 10);
+      if (Number.isFinite(amount) && amount > 0) {
+        condition.amount = amount;
+      }
+      const dt = typeof conditionPayload.damageType === 'string'
+        ? conditionPayload.damageType.trim().toLowerCase()
+        : '';
+      if (dt && dt !== 'untyped') {
+        condition.damageType = dt;
+      }
+    }
     if (duration === 'end-of-turn' && payload.sourceId) {
       condition.endsOn = { tokenId: payload.sourceId };
     }
@@ -13613,12 +13684,44 @@ export function mountBoardInteractions(store, routes = {}) {
   async function getAutomationDamageAdjustment(placementId, damageType) {
     const sheet = await getAutomationSheetForPlacement(placementId);
     const lists = sheet?.sidebar?.lists && typeof sheet.sidebar.lists === 'object' ? sheet.sidebar.lists : {};
-    const immunity = parseDamageAdjustmentList(lists.immunity, damageType);
-    const vulnerability = parseDamageAdjustmentList(lists.vulnerability ?? lists.weakness, damageType);
+    const sheetImmunity = parseDamageAdjustmentList(lists.immunity, damageType);
+    const sheetVulnerability = parseDamageAdjustmentList(lists.vulnerability ?? lists.weakness, damageType);
+    // Per-placement condition riders. Stack additively on top of the sheet's
+    // immunity/vulnerability lists. `damageWeakness` adds to vulnerability,
+    // `damageImmunity` adds to immunity. An empty / "untyped" damageType on
+    // the condition means "applies to every type".
+    const conditionAdjustment = sumConditionDamageAdjustments(placementId, damageType);
     return {
-      immunity,
-      vulnerability,
+      immunity: sheetImmunity + conditionAdjustment.immunity,
+      vulnerability: sheetVulnerability + conditionAdjustment.vulnerability,
     };
+  }
+
+  function sumConditionDamageAdjustments(placementId, damageType) {
+    const placement = getPlacementFromStore(placementId);
+    const conditions = Array.isArray(placement?.conditions)
+      ? placement.conditions
+      : placement?.condition
+        ? [placement.condition]
+        : [];
+    if (!conditions.length) return { immunity: 0, vulnerability: 0 };
+    const requestedType = normalizeAutomationDamageType(damageType);
+    let immunity = 0;
+    let vulnerability = 0;
+    for (const condition of conditions) {
+      if (!condition || typeof condition !== 'object') continue;
+      const name = typeof condition.name === 'string' ? condition.name : '';
+      if (name !== 'damageWeakness' && name !== 'damageImmunity') continue;
+      const amount = Number.parseInt(condition.amount, 10);
+      if (!Number.isFinite(amount) || amount <= 0) continue;
+      const conditionType = normalizeAutomationDamageType(condition.damageType || '');
+      // Empty conditionType means "matches every damage type". If the damage
+      // event itself is untyped, only "every type" riders bite.
+      if (conditionType && conditionType !== requestedType) continue;
+      if (name === 'damageWeakness') vulnerability += amount;
+      else immunity += amount;
+    }
+    return { immunity, vulnerability };
   }
 
   async function getAutomationSheetForPlacement(placementId) {
@@ -15533,7 +15636,26 @@ export function mountBoardInteractions(store, routes = {}) {
       }
     }
 
-    return { name, description, duration };
+    // Numeric riders for damageWeakness / damageImmunity. Preserve through
+    // every normalize pass so they survive reload, save-sync, and dedup.
+    const numericRider = name === 'damageWeakness' || name === 'damageImmunity';
+    let amount = null;
+    let damageType = '';
+    if (numericRider) {
+      const parsedAmount = Number.parseInt(value.amount, 10);
+      if (Number.isFinite(parsedAmount) && parsedAmount > 0) {
+        amount = parsedAmount;
+      }
+      if (typeof value.damageType === 'string') {
+        const dt = value.damageType.trim().toLowerCase();
+        if (dt && dt !== 'untyped') damageType = dt;
+      }
+    }
+
+    const result = { name, description, duration };
+    if (amount !== null) result.amount = amount;
+    if (damageType) result.damageType = damageType;
+    return result;
   }
 
   function ensurePlacementCondition(value) {
@@ -15556,6 +15678,13 @@ export function mountBoardInteractions(store, routes = {}) {
       }
     } else {
       condition.duration = { type: 'save-ends' };
+    }
+
+    if (Number.isFinite(normalized.amount) && normalized.amount > 0) {
+      condition.amount = normalized.amount;
+    }
+    if (typeof normalized.damageType === 'string' && normalized.damageType) {
+      condition.damageType = normalized.damageType;
     }
 
     return condition;
@@ -15672,6 +15801,15 @@ export function mountBoardInteractions(store, routes = {}) {
 
     const name = condition.name.trim().toLowerCase();
     const type = normalizeConditionDurationValue(condition?.duration?.type ?? '');
+    // damageWeakness / damageImmunity carry numeric riders (amount + damageType)
+    // that differentiate "weakness 5 fire" from "weakness 5 cold". Factor them
+    // into the dedup key so applying both produces two distinct condition
+    // entries rather than collapsing into one.
+    if (name === 'damageweakness' || name === 'damageimmunity') {
+      const amount = Number.isFinite(condition.amount) ? `${condition.amount}` : '0';
+      const dt = typeof condition.damageType === 'string' ? condition.damageType.trim().toLowerCase() : '';
+      return `${name}|${type}|${amount}|${dt}`;
+    }
     if (type === 'end-of-turn') {
       const targetId =
         typeof condition?.duration?.targetTokenId === 'string'

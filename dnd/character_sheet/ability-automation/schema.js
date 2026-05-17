@@ -143,7 +143,7 @@
         return effect;
       }
       case "condition": {
-        const known = new Set(["kind", "name", "duration", "text"]);
+        const known = new Set(["kind", "name", "duration", "text", "amount", "damageType"]);
         const rawName = asTrimmedString(input.name);
         const name = P.normalizeCondition(rawName) || "other";
         const effect = {
@@ -152,8 +152,19 @@
           duration: P.normalizeDuration(input.duration || "instantaneous"),
         };
         if (name === "other") effect.text = asTrimmedString(input.text || rawName);
-        if (rawName && !P.CONDITIONS.includes(rawName.toLowerCase()) && name === "other" && !effect.text) {
+        if (rawName && !P.CONDITIONS.find((c) => c.toLowerCase() === rawName.toLowerCase()) && name === "other" && !effect.text) {
           warnings.push(`${path}: condition "${rawName}" mapped to "other" with no description.`);
+        }
+        // damageWeakness / damageImmunity carry numeric riders. Preserve them so
+        // the board's damage adjuster can read amount + (optional) damageType.
+        if ((P.NUMERIC_CONDITIONS || []).includes(name)) {
+          effect.amount = asNonNegInt(input.amount, 0);
+          const dt = P.normalizeDamageType(input.damageType || "");
+          // Empty / "untyped" means "applies to every type" for these riders.
+          effect.damageType = dt === "untyped" ? "" : dt;
+          if (!effect.amount) {
+            warnings.push(`${path}: ${name} has amount 0 — runtime will ignore.`);
+          }
         }
         const extras = pickExtras(input, known);
         if (extras) effect._extra = extras;
@@ -272,6 +283,35 @@
         if (!effect.all.length && !effect.any.length && !effect.none.length) {
           warnings.push(`${path}: ifKeyword has no all/any/none — predicate always passes.`);
         }
+        const extras = pickExtras(input, known);
+        if (extras) effect._extra = extras;
+        return effect;
+      }
+      case "ifStrained": {
+        // Branches on whether the caster is currently strained (heroic resource
+        // value < 0). The Talent class uses this — Clarity below 0 = strained.
+        // Other classes that overload their resource into negative territory
+        // will also trip this.
+        const known = new Set(["kind", "then", "else"]);
+        const effect = {
+          kind: "ifStrained",
+          then: normalizeEffectList(input.then || [], warnings, `${path}.then`),
+          else: normalizeEffectList(input.else || [], warnings, `${path}.else`),
+        };
+        if (!effect.then.length && !effect.else.length) {
+          warnings.push(`${path}: ifStrained has no then/else effects.`);
+        }
+        const extras = pickExtras(input, known);
+        if (extras) effect._extra = extras;
+        return effect;
+      }
+      case "halveTriggeringDamage": {
+        // Used inside a `trigger` block to soak half of the damage that fired
+        // the trigger. Requires a `damage`-event match on the trigger block.
+        // The runner reads the captured triggering damage payload from state.
+        const known = new Set(["kind", "rounding"]);
+        const rounding = pickKnown(input.rounding, ["up", "down"], "up");
+        const effect = { kind: "halveTriggeringDamage", rounding };
         const extras = pickExtras(input, known);
         if (extras) effect._extra = extras;
         return effect;

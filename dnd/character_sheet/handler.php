@@ -37,6 +37,12 @@ function getDefaultCharacterEntry() {
             'resource' => array(
                 'title' => 'Resource',
                 'value' => '',
+                // Talent's Clarity is the only heroic resource that legally
+                // drops below 0 ("spend resource you don't have, take damage
+                // per negative point at end of turn, strained state"). The
+                // checkbox on the sheet's resource editor flips this on.
+                // Floor when allowed = -(1 + Reason).
+                'allowNegative' => false,
             ),
             'heroTokens' => array(false, false),
             'stats' => array(

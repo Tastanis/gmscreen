@@ -843,6 +843,10 @@
         return applySpendEffect(state, effect, targets, ctx);
       case "ifKeyword":
         return applyIfKeywordEffect(state, effect, targets, ctx);
+      case "ifStrained":
+        return applyIfStrainedEffect(state, effect, targets, ctx);
+      case "halveTriggeringDamage":
+        return applyHalveTriggeringDamageEffect(state, effect, targets, ctx);
       case "heal":
         return applyHealEffect(state, effect, targets, ctx, false);
       case "temporaryStamina":
@@ -922,18 +926,105 @@
   async function applyConditionEffect(state, effect, targets) {
     if (!targets.length) return;
     const duration = mapConditionDuration(effect.duration);
-    const name = effect.name === "other" && effect.text ? effect.text : effect.name;
+    const isNumeric = effect.name === "damageWeakness" || effect.name === "damageImmunity";
+    // For "other" surface the free-text description as the visible condition
+    // name. damageWeakness / damageImmunity keep their canonical name so the
+    // damage handler can recognize them; their numeric riders flow through
+    // the condition object.
+    const name = !isNumeric && effect.name === "other" && effect.text ? effect.text : effect.name;
     for (const target of targets) {
       if (state.aborted) return;
       if (!target?.id) continue;
+      const conditionPayload = { name, duration };
+      if (isNumeric) {
+        conditionPayload.amount = asInt(effect.amount, 0);
+        if (effect.damageType) conditionPayload.damageType = effect.damageType;
+      }
       await state.context.applyCondition?.({
         placementId: target.id,
-        condition: { name, duration },
+        condition: conditionPayload,
         sourceId: state.sourcePlacement?.id || "",
       });
     }
     await postChat(state.context, {
       message: `${state.heroName} - ${state.action.name || "Ability"}: applies ${P.describeEffect(effect)}.`,
+    });
+  }
+
+  async function applyIfStrainedEffect(state, effect, _targets, ctx) {
+    const strained = isCasterStrained(state);
+    const branch = strained ? effect.then : effect.else;
+    if (!Array.isArray(branch) || !branch.length) return;
+    // Branch reuses the current target group — same convention as ifKeyword.
+    await applyEffects(state, branch, null, ctx);
+  }
+
+  // Strained = caster's heroic resource has dipped below 0. The Talent class's
+  // Clarity rules push the resource into the negatives intentionally; the only
+  // engine signal we need is "is the value < 0 right now". Read from the hero
+  // snapshot that the panel passed in at runner.open().
+  function isCasterStrained(state) {
+    const value = state.hero?.resource?.value;
+    if (value === null || value === undefined || value === "") return false;
+    const parsed = asInt(value, 0);
+    return parsed < 0;
+  }
+
+  // Soak half of the triggering damage by HEALING the caster back the missing
+  // portion. The board has already applied the full damage by the time the
+  // trigger resolves (damage flows: applyDamageHealToPlacement → triggerFire
+  // → markReady → user clicks → resolves). Healing the difference is the only
+  // way to retroactively report "you took half damage" without re-architecting
+  // the damage pipeline. `rounding: "up"` means the player still takes the
+  // larger half (book-default for Resist the Unnatural / Unearthly Reflexes).
+  async function applyHalveTriggeringDamageEffect(state, effect, _targets, _ctx) {
+    const payload = state.triggerPayload || null;
+    const originalAmount = asInt(payload?.amount, 0);
+    if (!payload || !originalAmount) {
+      await postChat(state.context, {
+        message: `${state.heroName} - ${state.action.name || "Ability"}: half-damage requested but no triggering damage event is in scope.`,
+      });
+      return;
+    }
+    const rounding = effect?.rounding === "down" ? "down" : "up";
+    const taken = rounding === "down"
+      ? Math.floor(originalAmount / 2)
+      : Math.ceil(originalAmount / 2);
+    const refund = Math.max(0, originalAmount - taken);
+    const placementId = payload.placementId || payload.targetId || state.sourcePlacement?.id || "";
+    if (!placementId) {
+      await postChat(state.context, {
+        message: `${state.heroName} - ${state.action.name || "Ability"}: half-damage refund had no placement id; apply manually.`,
+      });
+      return;
+    }
+    if (!refund) {
+      // Already at minimum (1 damage → ceil = 1 → refund 0). Nothing to do.
+      await postChat(state.context, {
+        message: `${state.heroName} - ${state.action.name || "Ability"}: triggering damage too small to halve further (took ${taken}).`,
+      });
+      return;
+    }
+    if (typeof state.context.applyHeal !== "function") {
+      await postChat(state.context, {
+        message: `${state.heroName} - ${state.action.name || "Ability"}: refund ${refund} stamina (heal hook missing — apply manually).`,
+      });
+      return;
+    }
+    const result = await state.context.applyHeal({
+      placementId,
+      amount: refund,
+      allowTempHp: false,
+      abilityName: state.action.name || "Ability",
+    });
+    const targetName = result?.name || state.heroName || "Caster";
+    const display = result?.max !== null && result?.max !== undefined
+      ? `${result.current}/${result.max}`
+      : result?.current !== undefined
+        ? `${result.current}`
+        : "?";
+    await postChat(state.context, {
+      message: `${state.heroName} - ${state.action.name || "Ability"}: ${targetName} takes ${taken} of ${originalAmount} (refunded ${refund} stamina; ${display}).`,
     });
   }
 
@@ -1464,6 +1555,11 @@
       // that triggered an opp-attack). Threaded into every target picker
       // config so the board can paint a continuous red pulse on it.
       suggestedTargetId: options?.suggestedTargetId || "",
+      // Captured firing-event payload from a triggered action. Set when the
+      // panel resolves a ready trigger; consumed by `halveTriggeringDamage`
+      // and similar trigger-context-aware effects. Null for non-triggered
+      // ability runs.
+      triggerPayload: options?.triggerPayload || null,
       groups: {},
       currentGroup: null,
       // Area templates placed by area-target blocks. Keyed by the target
