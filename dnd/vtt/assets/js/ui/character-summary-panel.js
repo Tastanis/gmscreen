@@ -1474,6 +1474,15 @@ async function spendAbilityResource(sheet, ability, options = {}) {
   hero.resource = resource;
   if (sheet) sheet.hero = hero;
   await saveCharacterSummarySheet(sheet, options);
+  // Mirror applyAbilityResourceGain: tell the board its sheet cache is stale
+  // so the visible resource bar repaints on the next selection-summary tick.
+  // Without this the value-after-spend doesn't render until the user clicks
+  // away and back.
+  if (typeof document !== 'undefined' && options?.characterId) {
+    document.dispatchEvent(new CustomEvent('vtt:character-sheet-updated', {
+      detail: { characterId: options.characterId, change: 'resource' },
+    }));
+  }
   return { spent: cost.amount, resource: title, remaining: resource.value };
 }
 
@@ -1488,12 +1497,30 @@ function resourceFloor(hero, resource) {
 }
 
 function parseAbilityResourceCost(value) {
-  const match = String(value || '').trim().match(/^(\d+)\s+(.+)$/);
-  if (!match) return { amount: 0, name: '' };
-  return {
-    amount: Math.max(0, Number.parseInt(match[1], 10) || 0),
-    name: match[2].trim(),
-  };
+  const text = String(value || '').trim();
+  if (!text) return { amount: 0, name: '' };
+  // Format A: "<number> <resource name>" — explicit, e.g. "3 Clarity".
+  // spendAbilityResource skips the deduction if the named resource doesn't
+  // match the character's own bar title.
+  const namedMatch = text.match(/^(\d+)\s+(.+)$/);
+  if (namedMatch) {
+    return {
+      amount: Math.max(0, Number.parseInt(namedMatch[1], 10) || 0),
+      name: namedMatch[2].trim(),
+    };
+  }
+  // Format B: bare number — implies the character's own resource bar.
+  // This is how the sheet's Cost field is normally typed (Frunk's "3"/"5"/"7"
+  // on the heroic abilities, etc.). spendAbilityResource sees `name = ''`
+  // and falls through to the caster's resource without a name guard.
+  const bareMatch = text.match(/^(\d+)$/);
+  if (bareMatch) {
+    return {
+      amount: Math.max(0, Number.parseInt(bareMatch[1], 10) || 0),
+      name: '',
+    };
+  }
+  return { amount: 0, name: '' };
 }
 
 async function saveCharacterSummarySheet(sheet, options = {}) {
