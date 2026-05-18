@@ -184,15 +184,37 @@ A zone that lingers across rounds, ticks at the owner's turn boundary, and appli
 |---|---|
 | `cost` | int — heroic resource spent per tick. 0 = no upkeep. |
 | `resource` | string — the resource name (must match the caster's bar title, e.g. "Wrath"). Empty = use caster's resource without name check. |
-| `tickAt` | `"startOfTurn"` \| `"endOfTurn"` — which boundary of the OWNER's turn ticks. |
-| `effects` | array — tick effects. `damage` and `condition` are auto-applied; other kinds skipped at tick. |
+| `tickAt` | `"startOfTurn"` \| `"endOfTurn"` — which boundary of the OWNER's turn ticks. Hits everyone currently inside. |
+| `triggers` | array — extra per-creature triggers. See below. |
+| `effects` | array — tick / trigger effects. `damage` and `condition` are auto-applied; other kinds skipped. |
 | `target` | optional string — name of an earlier target block to reuse as the zone footprint. Default = most recent area placed. |
+
+**`triggers` values** (combine freely with each other AND `tickAt`):
+
+| value | When it fires | Targets |
+|---|---|---|
+| `"onEnter"` | A creature enters the zone footprint via normal movement, the first time per combat round. | Just the mover. |
+| `"onOccupantTurnStart"` | A creature inside the zone starts their own turn. | Just that creature. |
 
 **Behavior**:
 - At the owner's `tickAt`, the runtime deducts `cost` from the owner's resource (or auto-ends the zone if unaffordable), then applies tick effects to every creature inside the zone footprint.
+- `onEnter` deduplicates per round — round-start clears the "already entered" set. Creatures already standing in the zone when it's cast are pre-seeded as "already entered" so they don't take entry damage from the cast itself.
+- `onOccupantTurnStart` fires once at each occupant's own turn start.
 - Zone is visible on the board as a pulsing orange dashed outline with an "End" button.
 - Auto-ends on encounter end.
 - **In-memory only this pass** — a page reload while combat is active will wipe zones. Cast again to re-arm.
+
+**Example — Incinerate's column of fire** ("Each enemy who enters the area for the first time in a combat round or starts their turn there takes 2 fire damage"):
+
+```json
+{
+  "type": "persistent",
+  "cost": 0,
+  "tickAt": "startOfTurn",
+  "triggers": ["onEnter", "onOccupantTurnStart"],
+  "effects": [ { "kind": "damage", "amount": 2, "damageType": "fire" } ]
+}
+```
 
 ---
 

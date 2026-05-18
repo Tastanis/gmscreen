@@ -432,6 +432,9 @@
           // opp-attack). Picker pulses this token red but the player can
           // still click anyone.
           suggestedTargetId: state.suggestedTargetId || "",
+          // Source token, used by the board to draw the reach/range box
+          // around the caster while the player is picking a target.
+          sourcePlacement: state.sourcePlacement || null,
         };
         const result = await Promise.race([
           state.context.selectTarget(promptConfig),
@@ -790,6 +793,11 @@
             resource: block.resource || "",
           },
           tickAt: block.tickAt || "startOfTurn",
+          // Per-creature triggers (v3.1). Recognized: "onEnter" fires on a
+          // creature the first time they enter the zone this round, and
+          // "onOccupantTurnStart" fires when a creature inside starts their
+          // own turn. Effects apply only to the triggering creature.
+          triggers: Array.isArray(block.triggers) ? [...block.triggers] : [],
           effects: block.effects || [],
           attributeBonuses,
           note: block.note || "",

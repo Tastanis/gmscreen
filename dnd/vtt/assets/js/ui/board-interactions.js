@@ -844,6 +844,7 @@ export function mountBoardInteractions(store, routes = {}) {
   let damageHealUi = null;
   let pendingDamageHeal = null;
   let pendingAutomationTarget = null;
+  let automationTargetRangeOverlay = null;
   let pendingAutomationArea = null;
   let automationAreaOverlay = null;
   let pendingAutomationMove = null;
@@ -2087,7 +2088,57 @@ export function mountBoardInteractions(store, routes = {}) {
     } catch (err) {
       console.warn('[VTT] triggerFire(move) failed', err);
     }
+
+    // Persistent-zone onEnter: any active zone with the onEnter trigger fires
+    // its effects on the mover the first time per round that the mover enters
+    // its footprint. Movement within a zone (already inside, just shifting)
+    // doesn't refire — we compare before/after.
+    try {
+      checkPersistentZoneEntries(movingId, from, to);
+    } catch (err) {
+      console.warn('[VTT] persistent-zone enter check failed', err);
+    }
   });
+
+  function checkPersistentZoneEntries(movingId, from, to) {
+    if (!movingId || !from || !to) return;
+    const zones = getActivePersistentZones();
+    if (!zones.length) return;
+    const moverNow = getPlacementFromStore(movingId);
+    if (!moverNow) return;
+    const fromFootprint = {
+      id: movingId,
+      column: from.column ?? 0,
+      row: from.row ?? 0,
+      width: from.width ?? moverNow.width ?? 1,
+      height: from.height ?? moverNow.height ?? 1,
+    };
+    const toFootprint = {
+      id: movingId,
+      column: to.column ?? 0,
+      row: to.row ?? 0,
+      width: to.width ?? moverNow.width ?? 1,
+      height: to.height ?? moverNow.height ?? 1,
+    };
+    for (const zone of zones) {
+      if (!zone || !Array.isArray(zone.triggers) || !zone.triggers.includes('onEnter')) continue;
+      const wasInside = isPlacementInsideZone(zone, fromFootprint);
+      const isInside = isPlacementInsideZone(zone, toFootprint);
+      if (!isInside) {
+        // Stepping fully out resets dedupe so re-entering later in the same
+        // round still won't refire — book rule is "first time per round".
+        // (Keep the entry recorded.)
+        continue;
+      }
+      if (wasInside) continue; // moved within the zone, not a new entry
+      if (zone.enteredThisRound.has(movingId)) continue; // already triggered this round
+      zone.enteredThisRound.add(movingId);
+      // Fire effects asynchronously to the mover only.
+      applyPersistentZoneEffectsToPlacements(zone, [moverNow], 'enter').catch((err) => {
+        console.warn('[VTT] persistent-zone onEnter effects failed', err);
+      });
+    }
+  }
 
   // Returns true if at any step along the Chebyshev walk from `from` to `to`
   // the moving token transitions from adjacent-to-watcher (gap === 1) to
@@ -2474,6 +2525,15 @@ export function mountBoardInteractions(store, routes = {}) {
         resource: String(payload.upkeep?.resource || '').trim(),
       },
       tickAt: payload.tickAt === 'endOfTurn' ? 'endOfTurn' : 'startOfTurn',
+      // Per-creature triggers. Valid values: "onEnter", "onOccupantTurnStart".
+      // onEnter fires on a creature the first time they enter the zone in a
+      // combat round (deduped by enteredThisRound). onOccupantTurnStart fires
+      // when a creature inside the zone starts their own turn. Both apply
+      // effects only to the triggering creature, not all occupants.
+      triggers: Array.isArray(payload.triggers)
+        ? payload.triggers.filter((t) => t === 'onEnter' || t === 'onOccupantTurnStart')
+        : [],
+      enteredThisRound: new Set(),
       effects: Array.isArray(payload.effects) ? payload.effects : [],
       attributeBonuses: payload.attributeBonuses && typeof payload.attributeBonuses === 'object'
         ? { ...payload.attributeBonuses }
@@ -2483,6 +2543,13 @@ export function mountBoardInteractions(store, routes = {}) {
     };
     const list = getPersistentZonesForScene(sceneId);
     list.push(zone);
+    // Seed enteredThisRound with anyone already inside at registration time so
+    // they don't double-tick if they're already standing in the area.
+    if (zone.triggers.includes('onEnter')) {
+      for (const occupant of getCreaturesInsideZone(zone)) {
+        if (occupant?.id) zone.enteredThisRound.add(occupant.id);
+      }
+    }
     renderPersistentZoneOverlays();
     resolve?.({ registered: true, zoneId, zoneCount: list.length });
   }
@@ -2605,6 +2672,23 @@ export function mountBoardInteractions(store, routes = {}) {
     }
   }
 
+  function resetPersistentZoneRoundState() {
+    // Round-start: clear the "already entered this round" dedupe set on every
+    // active zone so onEnter triggers can fire again for the new round.
+    const zones = getActivePersistentZones();
+    for (const zone of zones) {
+      if (zone && zone.enteredThisRound instanceof Set) {
+        zone.enteredThisRound.clear();
+        // Re-seed with current occupants so they don't double-trigger if
+        // they're standing in the zone at round start (they take damage via
+        // onOccupantTurnStart on THEIR turn, not on enter).
+        for (const occupant of getCreaturesInsideZone(zone)) {
+          if (occupant?.id) zone.enteredThisRound.add(occupant.id);
+        }
+      }
+    }
+  }
+
   // (End-button click handler is attached on the zone overlay layer in
   // ensurePersistentZoneOverlayLayer so the map-surface pointer handlers
   // don't swallow it.)
@@ -2635,6 +2719,23 @@ export function mountBoardInteractions(store, routes = {}) {
     }
   }
 
+  async function fireOccupantTurnStartZones(combatantId) {
+    if (!combatantId) return;
+    const zones = getActivePersistentZones();
+    if (!zones.length) return;
+    const combatant = getPlacementFromStore(combatantId);
+    if (!combatant) return;
+    for (const zone of [...zones]) {
+      if (!zone || !Array.isArray(zone.triggers) || !zone.triggers.includes('onOccupantTurnStart')) continue;
+      if (!isPlacementInsideZone(zone, combatant)) continue;
+      try {
+        await applyPersistentZoneEffectsToPlacements(zone, [combatant], 'turn-start');
+      } catch (err) {
+        console.warn('[VTT] Zone occupant-turn-start failed', zone?.abilityName, err);
+      }
+    }
+  }
+
   async function tickSinglePersistentZone(zone) {
     // Step 1: deduct upkeep.
     if (zone.upkeep?.cost > 0) {
@@ -2645,27 +2746,46 @@ export function mountBoardInteractions(store, routes = {}) {
       }
     }
 
-    // Step 2: find affected placements inside the zone. Walls use a
-    // per-square footprint; other shapes use the bounding rectangle.
-    const affected = Array.isArray(zone.squares) && zone.squares.length
-      ? getPlacementsForActiveScene().filter((p) =>
-          doesAutomationSquaresAffectPlacement(zone.squares, p)
-        )
-      : getPlacementsForActiveScene().filter((p) =>
-          doesAutomationAreaAffectPlacement({
-            left: zone.template.column,
-            top: zone.template.row,
-            right: zone.template.column + zone.template.width,
-            bottom: zone.template.row + zone.template.height,
-          }, p)
-        );
-
-    // Step 3: apply each effect to each affected placement.
+    const affected = getCreaturesInsideZone(zone);
     if (!affected.length) {
       announceZoneTick(zone, [], 'no creatures inside');
       return;
     }
+    await applyPersistentZoneEffectsToPlacements(zone, affected, 'tick');
+  }
 
+  function getCreaturesInsideZone(zone) {
+    // Walls use a per-square footprint; other shapes use the bounding rectangle.
+    if (Array.isArray(zone.squares) && zone.squares.length) {
+      return getPlacementsForActiveScene().filter((p) =>
+        doesAutomationSquaresAffectPlacement(zone.squares, p)
+      );
+    }
+    return getPlacementsForActiveScene().filter((p) =>
+      doesAutomationAreaAffectPlacement({
+        left: zone.template.column,
+        top: zone.template.row,
+        right: zone.template.column + zone.template.width,
+        bottom: zone.template.row + zone.template.height,
+      }, p)
+    );
+  }
+
+  function isPlacementInsideZone(zone, placement) {
+    if (!zone || !placement) return false;
+    if (Array.isArray(zone.squares) && zone.squares.length) {
+      return doesAutomationSquaresAffectPlacement(zone.squares, placement);
+    }
+    return doesAutomationAreaAffectPlacement({
+      left: zone.template.column,
+      top: zone.template.row,
+      right: zone.template.column + zone.template.width,
+      bottom: zone.template.row + zone.template.height,
+    }, placement);
+  }
+
+  async function applyPersistentZoneEffectsToPlacements(zone, placements, reason) {
+    if (!Array.isArray(placements) || !placements.length) return;
     const damageLines = [];
     for (const effect of zone.effects) {
       if (!effect || typeof effect !== 'object') continue;
@@ -2676,7 +2796,7 @@ export function mountBoardInteractions(store, routes = {}) {
         const attrBonus = attrFull ? (Number(zone.attributeBonuses?.[attrFull]) || 0) : 0;
         const totalAmount = Math.max(0, baseAmount + attrBonus);
         if (totalAmount <= 0) continue;
-        for (const target of affected) {
+        for (const target of placements) {
           if (!target?.id) continue;
           const result = await new Promise((res) => {
             document.dispatchEvent(new CustomEvent('vtt:automation-apply-damage', {
@@ -2686,7 +2806,7 @@ export function mountBoardInteractions(store, routes = {}) {
                   sourceId: zone.casterId,
                   amount: totalAmount,
                   damageType: effect.damageType || '',
-                  abilityName: `${zone.abilityName} (zone tick)`,
+                  abilityName: `${zone.abilityName} (${reason || 'zone'})`,
                 },
                 resolve: res,
                 reject: () => res(null),
@@ -2705,7 +2825,7 @@ export function mountBoardInteractions(store, routes = {}) {
           untilDying: 'until-dying',
         };
         const duration = durationMap[effect.duration] || 'instantaneous';
-        for (const target of affected) {
+        for (const target of placements) {
           if (!target?.id) continue;
           await new Promise((res) => {
             document.dispatchEvent(new CustomEvent('vtt:automation-apply-condition', {
@@ -2725,8 +2845,7 @@ export function mountBoardInteractions(store, routes = {}) {
       // Other effect kinds (forced movement, heal, etc.) skipped at zone-tick
       // for now — they're rare in zones and risk surprising behavior.
     }
-
-    announceZoneTick(zone, affected, damageLines.length ? damageLines.join(', ') : 'effects applied');
+    announceZoneTick(zone, placements, damageLines.length ? damageLines.join(', ') : 'effects applied');
   }
 
   async function deductPersistentZoneUpkeep(zone) {
@@ -8071,6 +8190,13 @@ export function mountBoardInteractions(store, routes = {}) {
       tickPersistentZonesForOwner(normalizedNextId, 'startOfTurn').catch((err) => {
         console.warn('[VTT] persistent zone start-of-turn tick failed', err);
       });
+      // Per-victim turn-start for zones with onOccupantTurnStart: if the
+      // combatant whose turn just began is standing in such a zone, apply the
+      // zone's effects to JUST them. This is how Incinerate-style "starts
+      // their turn there takes damage" rules are evaluated.
+      fireOccupantTurnStartZones(normalizedNextId).catch((err) => {
+        console.warn('[VTT] persistent zone occupant-turn-start failed', err);
+      });
     }
 
     // Update turn phase to reflect new state
@@ -10319,6 +10445,7 @@ export function mountBoardInteractions(store, routes = {}) {
       setMaliceCount(maliceCount + maliceIncrease);
     }
     resetTriggeredActionsForActiveScene();
+    resetPersistentZoneRoundState();
     updateStartCombatButton();
     refreshCombatTracker();
 
@@ -13114,6 +13241,63 @@ export function mountBoardInteractions(store, routes = {}) {
     // the picker resolves or cancels. Player can still click anyone.
     const suggestedId = pendingAutomationTarget.targetConfig?.suggestedTargetId;
     if (suggestedId) startSuggestedTargetPulse(suggestedId);
+    // Draw the reach/range box around the source token so the player can see
+    // who's actually legal to click. Skipped when distance info is missing.
+    renderAutomationTargetRangeOverlay(pendingAutomationTarget.targetConfig);
+  }
+
+  function renderAutomationTargetRangeOverlay(targetConfig) {
+    clearAutomationTargetRangeOverlay();
+    if (!mapTransform || !targetConfig) return;
+    const source = resolveAutomationSourcePlacement(targetConfig.sourcePlacement)
+      || (sourceTokenForRange());
+    if (!source) return;
+    const distance = targetConfig.distance && typeof targetConfig.distance === 'object'
+      ? targetConfig.distance
+      : null;
+    if (!distance) return;
+    const form = String(distance.form || '').toLowerCase();
+    if (form === 'self') return;
+    // For meleeOrRanged we draw the larger of the two — the secondary is the
+    // ranged value, primary is the melee reach.
+    let range = Number.parseInt(distance.value, 10) || 0;
+    if (form === 'meleeorranged') {
+      range = Math.max(range, Number.parseInt(distance.secondary, 10) || 0);
+    }
+    if (form === 'cube' || form === 'line' || form === 'wall') {
+      // Area templates have their own placement overlay. Show the "within"
+      // range here so the player can see where they're allowed to drop it.
+      range = Number.parseInt(distance.within, 10) || range;
+    }
+    if (range <= 0) return;
+    const width = Math.max(1, source.width || 1);
+    const height = Math.max(1, source.height || 1);
+    const overlay = document.createElement('div');
+    overlay.className = 'vtt-automation-target-range';
+    const ring = document.createElement('div');
+    ring.className = 'vtt-automation-target-range__box';
+    overlay.appendChild(ring);
+    mapTransform.appendChild(overlay);
+    positionAutomationCell(
+      ring,
+      (source.column || 0) - range,
+      (source.row || 0) - range,
+      width + range * 2,
+      height + range * 2
+    );
+    automationTargetRangeOverlay = overlay;
+  }
+
+  function clearAutomationTargetRangeOverlay() {
+    automationTargetRangeOverlay?.remove();
+    automationTargetRangeOverlay = null;
+  }
+
+  function sourceTokenForRange() {
+    // No targetConfig fallback today — without sourcePlacement we can't draw
+    // the box. The runner threads sourcePlacement through for every standard
+    // automation flow, so this branch is the missing-data escape hatch.
+    return null;
   }
 
   function handleAutomationTargetPointerDown(event) {
@@ -13144,6 +13328,7 @@ export function mountBoardInteractions(store, routes = {}) {
     const targetRequest = pendingAutomationTarget;
     pendingAutomationTarget = null;
     stopSuggestedTargetPulse();
+    clearAutomationTargetRangeOverlay();
     const name = tokenLabel(placement);
     flashAutomationTargetToken(placement.id);
     updateStatus(`${name} selected as target.`);
@@ -13309,13 +13494,26 @@ export function mountBoardInteractions(store, routes = {}) {
     const rangeNode = automationAreaOverlay.querySelector('[data-automation-area-range]');
     if (!(rangeNode instanceof HTMLElement)) return;
     const source = pendingAutomationArea.targetConfig?.sourcePlacement || pendingAutomationArea.sourcePlacement || null;
-    const range = Number.parseInt(String(pendingAutomationArea.targetConfig?.range || '').match(/\d+/)?.[0] ?? '', 10);
+    // v3 sends distance.within (number); legacy sent range as a string like "10".
+    // Pick whichever is present.
+    const within = pendingAutomationArea.targetConfig?.distance?.within;
+    const legacy = Number.parseInt(String(pendingAutomationArea.targetConfig?.range || '').match(/\d+/)?.[0] ?? '', 10);
+    const range = Number.isFinite(Number.parseInt(within, 10))
+      ? Number.parseInt(within, 10)
+      : legacy;
     if (!source || !Number.isFinite(range) || range <= 0) {
       rangeNode.hidden = true;
       return;
     }
-    const origin = getPlacementCenter(source);
-    positionAutomationCell(rangeNode, Math.floor(origin.column - range), Math.floor(origin.row - range), range * 2 + 1, range * 2 + 1);
+    const width = Math.max(1, source.width || 1);
+    const height = Math.max(1, source.height || 1);
+    positionAutomationCell(
+      rangeNode,
+      (source.column || 0) - range,
+      (source.row || 0) - range,
+      width + range * 2,
+      height + range * 2
+    );
     rangeNode.hidden = false;
   }
 
@@ -14573,11 +14771,31 @@ export function mountBoardInteractions(store, routes = {}) {
   }
 
   function formatAutomationTargetPrompt(targetConfig = {}) {
-    const count = targetConfig.count === 'number' ? targetConfig.countNumber || 'x' : targetConfig.count || 'one';
-    const creature = targetConfig.creature || 'target';
-    const within = targetConfig.within ? ` ${targetConfig.within}` : '';
+    const countVal = (typeof targetConfig.count === 'object' && targetConfig.count)
+      ? Number.parseInt(targetConfig.count.value, 10) || 1
+      : (Number.parseInt(targetConfig.count, 10) || 1);
+    const upTo = (typeof targetConfig.count === 'object' && targetConfig.count?.mode === 'upTo');
+    const countLabel = countVal > 1 ? `${upTo ? 'up to ' : ''}${countVal}` : (upTo ? 'up to 1' : 'one');
+    const creature = String(targetConfig.creature || targetConfig.predicate || 'target');
+    const distance = targetConfig.distance && typeof targetConfig.distance === 'object'
+      ? targetConfig.distance
+      : null;
+    let rangeText = '';
+    if (distance) {
+      const form = String(distance.form || '').toLowerCase();
+      const value = Number.parseInt(distance.value, 10) || 0;
+      const secondary = Number.parseInt(distance.secondary, 10) || 0;
+      if (form === 'melee' && value > 0) rangeText = ` within reach (${value})`;
+      else if (form === 'ranged' && value > 0) rangeText = ` within range ${value}`;
+      else if (form === 'meleeorranged') rangeText = ` (melee ${value} or ranged ${secondary})`;
+      else if (form === 'self') rangeText = ' (self)';
+      else if (form === 'burst' && value > 0) rangeText = ` in ${value}-burst`;
+      else if (form === 'aura' && value > 0) rangeText = ` in ${value}-aura`;
+    } else if (targetConfig.within) {
+      rangeText = ` within ${targetConfig.within}`;
+    }
     const progress = targetConfig.pickTotal > 1 ? ` (${targetConfig.pickIndex || 1}/${targetConfig.pickTotal})` : '';
-    return `Pick ${count} ${creature}${within}${progress}.`;
+    return `Pick ${countLabel} ${creature}${rangeText}${progress}.`;
   }
 
   function cancelPendingAutomationTarget(message) {
@@ -14587,6 +14805,7 @@ export function mountBoardInteractions(store, routes = {}) {
     const request = pendingAutomationTarget;
     pendingAutomationTarget = null;
     stopSuggestedTargetPulse();
+    clearAutomationTargetRangeOverlay();
     updateStatus(message || 'Target selection canceled.');
     request.reject?.(new Error(message || 'Target selection canceled.'));
   }

@@ -550,17 +550,29 @@
   }
 
   function normalizePersistentBlock(input, warnings, path) {
-    const known = new Set(["type", "id", "cost", "resource", "tickAt", "effects", "note"]);
+    const known = new Set(["type", "id", "cost", "resource", "tickAt", "triggers", "effects", "note", "target"]);
+    const validTriggers = new Set(["onEnter", "onOccupantTurnStart"]);
+    const triggers = Array.isArray(input.triggers)
+      ? input.triggers.filter((t) => {
+          if (validTriggers.has(t)) return true;
+          warnings.push(`${path}: unknown persistent trigger "${t}" — dropping.`);
+          return false;
+        })
+      : [];
     const block = {
       type: "persistent",
       id: input.id || createId("persistent"),
       cost: asNonNegInt(input.cost, 0),
       resource: asTrimmedString(input.resource),
       tickAt: pickKnown(input.tickAt, ["startOfTurn", "endOfTurn"], "startOfTurn"),
+      triggers,
       effects: normalizeEffectList(input.effects, warnings, `${path}.effects`),
     };
+    if (input.target) block.target = asTrimmedString(input.target);
     if (input.note) block.note = asTrimmedString(input.note);
-    if (!block.cost) warnings.push(`${path}: persistent has cost 0; reads as "always-on".`);
+    if (!block.cost && !block.triggers.length) {
+      warnings.push(`${path}: persistent has cost 0 with no triggers; reads as "always-on at owner turn".`);
+    }
     const extras = pickExtras(input, known);
     if (extras) block._extra = extras;
     return block;

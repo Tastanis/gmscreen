@@ -1099,11 +1099,16 @@ function getAbilityActions(sheet, categoryKey, opts = {}) {
     // trigger list. Click it to run the free strike AND clear the trigger.
     const ready = Array.isArray(activeToken?.readyTriggerAbilities) ? activeToken.readyTriggerAbilities : [];
     if (ready.includes('__opportunityAttack__')) {
-      const melee = freeStrikes.find((fs) => actionHasKeyword(fs, 'Melee'));
-      if (melee) {
-        // Tag a shallow clone so the renderer can show "!" and the click
-        // handler knows to clear the trigger after running.
-        merged = [{ ...melee, _injectedTriggerId: '__opportunityAttack__' }, ...list];
+      // Prefer a melee free strike (book default for opp-attacks). Fall back
+      // to any Strike-keyword free strike so classes whose free strike is
+      // explicitly ranged — e.g. the Talent using Mind Spike — still get the
+      // "!" injection on the trigger list.
+      const fallback =
+        freeStrikes.find((fs) => actionHasKeyword(fs, 'Melee')) ||
+        freeStrikes.find((fs) => actionHasKeyword(fs, 'Strike')) ||
+        freeStrikes[0];
+      if (fallback) {
+        merged = [{ ...fallback, _injectedTriggerId: '__opportunityAttack__' }, ...list];
       }
     }
   }
