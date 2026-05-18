@@ -564,7 +564,7 @@
       id: input.id || createId("persistent"),
       cost: asNonNegInt(input.cost, 0),
       resource: asTrimmedString(input.resource),
-      tickAt: pickKnown(input.tickAt, ["startOfTurn", "endOfTurn"], "startOfTurn"),
+      tickAt: pickKnown(input.tickAt, ["startOfTurn", "endOfTurn", "never"], "startOfTurn"),
       triggers,
       effects: normalizeEffectList(input.effects, warnings, `${path}.effects`),
     };

@@ -2524,7 +2524,11 @@ export function mountBoardInteractions(store, routes = {}) {
         cost: Math.max(0, Number(payload.upkeep?.cost) || 0),
         resource: String(payload.upkeep?.resource || '').trim(),
       },
-      tickAt: payload.tickAt === 'endOfTurn' ? 'endOfTurn' : 'startOfTurn',
+      tickAt: payload.tickAt === 'endOfTurn'
+        ? 'endOfTurn'
+        : payload.tickAt === 'never'
+          ? 'never'
+          : 'startOfTurn',
       // Per-creature triggers. Valid values: "onEnter", "onOccupantTurnStart".
       // onEnter fires on a creature the first time they enter the zone in a
       // combat round (deduped by enteredThisRound). onOccupantTurnStart fires
@@ -2723,13 +2727,24 @@ export function mountBoardInteractions(store, routes = {}) {
     if (!combatantId) return;
     const zones = getActivePersistentZones();
     if (!zones.length) return;
-    const combatant = getPlacementFromStore(combatantId);
-    if (!combatant) return;
+    // Expand the active combatant id to the full set of placements that take
+    // turns together. For solo combatants this is just the single placement;
+    // for grouped combatants (minion squads, paired NPCs) it's every member.
+    // Each member is checked independently, so a squad with 3 of 4 tokens
+    // standing in a fire zone takes damage on the 3 that are actually inside.
+    const representativeId = getRepresentativeIdFor(combatantId) || combatantId;
+    const memberIds = getGroupMembers(representativeId);
+    const ids = Array.isArray(memberIds) && memberIds.length ? memberIds : [combatantId];
+    const placements = ids
+      .map((id) => getPlacementFromStore(id))
+      .filter(Boolean);
+    if (!placements.length) return;
     for (const zone of [...zones]) {
       if (!zone || !Array.isArray(zone.triggers) || !zone.triggers.includes('onOccupantTurnStart')) continue;
-      if (!isPlacementInsideZone(zone, combatant)) continue;
+      const inside = placements.filter((p) => isPlacementInsideZone(zone, p));
+      if (!inside.length) continue;
       try {
-        await applyPersistentZoneEffectsToPlacements(zone, [combatant], 'turn-start');
+        await applyPersistentZoneEffectsToPlacements(zone, inside, 'turn-start');
       } catch (err) {
         console.warn('[VTT] Zone occupant-turn-start failed', zone?.abilityName, err);
       }

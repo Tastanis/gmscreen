@@ -184,7 +184,7 @@ A zone that lingers across rounds, ticks at the owner's turn boundary, and appli
 |---|---|
 | `cost` | int — heroic resource spent per tick. 0 = no upkeep. |
 | `resource` | string — the resource name (must match the caster's bar title, e.g. "Wrath"). Empty = use caster's resource without name check. |
-| `tickAt` | `"startOfTurn"` \| `"endOfTurn"` — which boundary of the OWNER's turn ticks. Hits everyone currently inside. |
+| `tickAt` | `"startOfTurn"` \| `"endOfTurn"` \| `"never"` — which boundary of the OWNER's turn hits everyone currently inside. Use `"never"` for "no owner tick — only the per-creature `triggers` fire." |
 | `triggers` | array — extra per-creature triggers. See below. |
 | `effects` | array — tick / trigger effects. `damage` and `condition` are auto-applied; other kinds skipped. |
 | `target` | optional string — name of an earlier target block to reuse as the zone footprint. Default = most recent area placed. |
@@ -210,7 +210,7 @@ A zone that lingers across rounds, ticks at the owner's turn boundary, and appli
 {
   "type": "persistent",
   "cost": 0,
-  "tickAt": "startOfTurn",
+  "tickAt": "never",
   "triggers": ["onEnter", "onOccupantTurnStart"],
   "effects": [ { "kind": "damage", "amount": 2, "damageType": "fire" } ]
 }
