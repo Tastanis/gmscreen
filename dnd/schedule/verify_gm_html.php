@@ -33,7 +33,7 @@ echo htmlspecialchars('<?php if ($is_gm): ?>
             <span class="save-status" id="saveStatus">Ready</span>
         </div>
         
-        <?php foreach ([\'frunk\', \'sharon\', \'indigo\', \'zepha\'] as $character): ?>
+        <?php foreach ([\'cal\', \'sharon\', \'indigo\', \'zepha\'] as $character): ?>
             <div class="character-section">
                 <h2 class="character-name"><?php echo $character_names[$character]; ?></h2>
                 <div class="table-wrapper">

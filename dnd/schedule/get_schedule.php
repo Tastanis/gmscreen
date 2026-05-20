@@ -44,7 +44,7 @@ if (file_exists($schedules_file)) {
 if (!isset($schedules['_current_week'])) {
     $schedules['_current_week'] = array(
         'GM' => 1,
-        'frunk' => 1,
+        'cal' => 1,
         'sharon' => 1,
         'indigo' => 1,
         'zepha' => 1
@@ -55,7 +55,7 @@ if (!isset($schedules['_current_week'])) {
 $schedules['_current_week'][$user] = $week;
 
 // Get or create the week structure for all characters
-$valid_characters = ['frunk', 'sharon', 'indigo', 'zepha'];
+$valid_characters = ['cal', 'sharon', 'indigo', 'zepha'];
 $valid_days = ['monday', 'tuesday', 'thursday', 'friday', 'saturday', 'sunday'];
 
 foreach ($valid_characters as $character) {
@@ -147,13 +147,13 @@ echo json_encode($response_data, JSON_PRETTY_PRINT | JSON_UNESCAPED_UNICODE);
 
 // Helper functions
 function initializeEmptySchedule() {
-    $valid_characters = ['frunk', 'sharon', 'indigo', 'zepha'];
+    $valid_characters = ['cal', 'sharon', 'indigo', 'zepha'];
     $valid_days = ['monday', 'tuesday', 'thursday', 'friday', 'saturday', 'sunday'];
     
     $schedule = array(
         '_current_week' => array(
             'GM' => 1,
-            'frunk' => 1,
+            'cal' => 1,
             'sharon' => 1,
             'indigo' => 1,
             'zepha' => 1

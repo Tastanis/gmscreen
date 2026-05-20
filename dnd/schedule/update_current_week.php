@@ -48,7 +48,7 @@ if (file_exists($schedules_file)) {
 if (!isset($schedules['_current_week'])) {
     $schedules['_current_week'] = array(
         'GM' => 1,
-        'frunk' => 1,
+        'cal' => 1,
         'sharon' => 1,
         'indigo' => 1,
         'zepha' => 1
@@ -85,13 +85,13 @@ echo json_encode(array(
 
 // Helper function
 function initializeEmptySchedule() {
-    $valid_characters = ['frunk', 'sharon', 'indigo', 'zepha'];
+    $valid_characters = ['cal', 'sharon', 'indigo', 'zepha'];
     $valid_days = ['monday', 'tuesday', 'thursday', 'friday', 'saturday', 'sunday'];
     
     $schedule = array(
         '_current_week' => array(
             'GM' => 1,
-            'frunk' => 1,
+            'cal' => 1,
             'sharon' => 1,
             'indigo' => 1,
             'zepha' => 1

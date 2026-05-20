@@ -1,6 +1,6 @@
 @import url('https://fonts.googleapis.com/css2?family=Anton&family=Barlow+Condensed:wght@400;600;700&display=swap');
 
-body.frunk-theme {
+body.cal-theme {
     font-family: 'Barlow Condensed', 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
     background: radial-gradient(circle at 20% 20%, #f6f7fb 0%, #dfe3ec 45%, #0e0f16 100%);
     color: #140a12;
@@ -8,7 +8,7 @@ body.frunk-theme {
     overflow-x: hidden;
 }
 
-.frunk-bunny {
+.cal-bunny {
     position: fixed;
     bottom: 2.5rem;
     left: -6rem;
@@ -24,11 +24,11 @@ body.frunk-theme {
     image-rendering: optimizeQuality;
     filter: drop-shadow(0 0.35rem 0.65rem rgba(12, 3, 9, 0.45));
     animation:
-        frunk-bunny-hop 6s linear forwards,
-        frunk-bunny-sprite 0.6s steps(1) infinite;
+        cal-bunny-hop 6s linear forwards,
+        cal-bunny-sprite 0.6s steps(1) infinite;
 }
 
-@keyframes frunk-bunny-sprite {
+@keyframes cal-bunny-sprite {
     0%,
     33% {
         background-image: url('./images/first.png');
@@ -43,7 +43,7 @@ body.frunk-theme {
     }
 }
 
-@keyframes frunk-bunny-hop {
+@keyframes cal-bunny-hop {
     0% {
         transform: translateX(0) translateY(0) scale(0.98);
     }
@@ -89,7 +89,7 @@ body.frunk-theme {
     }
 }
 
-body.frunk-theme::before {
+body.cal-theme::before {
     content: '';
     position: fixed;
     inset: 0;
@@ -102,7 +102,7 @@ body.frunk-theme::before {
     z-index: -1;
 }
 
-body.frunk-theme::after {
+body.cal-theme::after {
     content: '';
     position: fixed;
     inset: 0;
@@ -112,13 +112,13 @@ body.frunk-theme::after {
     z-index: -1;
 }
 
-body.frunk-theme .top-nav {
+body.cal-theme .top-nav {
     background: rgba(244, 246, 252, 0.9);
     border-bottom: 3px solid rgba(255, 46, 99, 0.7);
     box-shadow: 0 18px 35px rgba(15, 16, 24, 0.45);
 }
 
-body.frunk-theme .nav-title {
+body.cal-theme .nav-title {
     font-family: 'Anton', sans-serif;
     color: #ff2e63;
     letter-spacing: 0.12em;
@@ -126,7 +126,7 @@ body.frunk-theme .nav-title {
     text-shadow: 0 4px 12px rgba(15, 16, 24, 0.35);
 }
 
-body.frunk-theme .nav-buttons .nav-btn {
+body.cal-theme .nav-buttons .nav-btn {
     background: linear-gradient(160deg, #ffffff, #f4f5fa);
     color: #140a12;
     border: 2px solid rgba(255, 46, 99, 0.55);
@@ -135,44 +135,44 @@ body.frunk-theme .nav-buttons .nav-btn {
     letter-spacing: 0.08em;
 }
 
-body.frunk-theme .nav-buttons .nav-btn:hover {
+body.cal-theme .nav-buttons .nav-btn:hover {
     background: linear-gradient(160deg, #ffe8ee, #fff5f8);
     transform: translateY(-1px) scale(1.01);
 }
 
-body.frunk-theme .nav-btn.logout-btn {
+body.cal-theme .nav-btn.logout-btn {
     background: linear-gradient(160deg, #140a12, #2d0c17);
     color: #ffffff;
     border-color: rgba(255, 255, 255, 0.4);
     box-shadow: 0 8px 22px rgba(20, 10, 18, 0.4);
 }
 
-body.frunk-theme .nav-btn.logout-btn:hover {
+body.cal-theme .nav-btn.logout-btn:hover {
     background: linear-gradient(160deg, #2d0c17, #430e22);
 }
 
-body.frunk-theme #theme-toggle-btn {
+body.cal-theme #theme-toggle-btn {
     position: relative;
     overflow: hidden;
     border-width: 3px;
     font-weight: 600;
 }
 
-body.frunk-theme #theme-toggle-btn::before {
+body.cal-theme #theme-toggle-btn::before {
     content: '🐰';
     margin-right: 8px;
 }
 
-body.frunk-theme #theme-toggle-btn.theme-active::after {
+body.cal-theme #theme-toggle-btn.theme-active::after {
     content: '';
     position: absolute;
     inset: -25%;
     background: radial-gradient(circle at 30% 30%, rgba(255, 46, 99, 0.32) 0%, rgba(255, 46, 99, 0) 65%);
-    animation: frunk-rage-glow 6s infinite alternate;
+    animation: cal-rage-glow 6s infinite alternate;
     z-index: -1;
 }
 
-@keyframes frunk-rage-glow {
+@keyframes cal-rage-glow {
     from {
         opacity: 0.35;
         transform: scale(0.9);
@@ -183,258 +183,258 @@ body.frunk-theme #theme-toggle-btn.theme-active::after {
     }
 }
 
-body.frunk-theme .dropdown-content {
+body.cal-theme .dropdown-content {
     background: rgba(244, 246, 252, 0.95);
     border: 2px solid rgba(20, 10, 18, 0.15);
     box-shadow: 0 20px 45px rgba(14, 15, 22, 0.35);
 }
 
-body.frunk-theme .dropdown-content a {
+body.cal-theme .dropdown-content a {
     color: #140a12;
     text-transform: uppercase;
     letter-spacing: 0.05em;
 }
 
-body.frunk-theme .dropdown-content a:hover {
+body.cal-theme .dropdown-content a:hover {
     background: rgba(255, 46, 99, 0.1);
 }
 
-body.frunk-theme .main-container {
+body.cal-theme .main-container {
     max-width: 1400px;
     margin: 30px auto;
     padding: 0 20px 60px;
 }
 
-body.frunk-theme .character-tabs,
-body.frunk-theme .inventory-tabs {
+body.cal-theme .character-tabs,
+body.cal-theme .inventory-tabs {
     background: rgba(255, 255, 255, 0.92);
     border-radius: 18px 18px 0 0;
     border: 2px solid rgba(20, 10, 18, 0.15);
     box-shadow: 0 18px 40px rgba(14, 15, 22, 0.35);
 }
 
-body.frunk-theme .character-tab,
-body.frunk-theme .inventory-tab {
+body.cal-theme .character-tab,
+body.cal-theme .inventory-tab {
     color: #140a12;
     text-transform: uppercase;
     letter-spacing: 0.06em;
 }
 
-body.frunk-theme .character-tab:hover,
-body.frunk-theme .inventory-tab:hover {
+body.cal-theme .character-tab:hover,
+body.cal-theme .inventory-tab:hover {
     background: rgba(255, 46, 99, 0.12);
 }
 
-body.frunk-theme .character-tab.active,
-body.frunk-theme .inventory-tab.active {
+body.cal-theme .character-tab.active,
+body.cal-theme .inventory-tab.active {
     background: rgba(255, 46, 99, 0.55);
     color: #fff;
     border-bottom: 3px solid rgba(255, 46, 99, 0.85);
     box-shadow: inset 0 -3px 0 rgba(180, 30, 70, 0.6);
 }
 
-body.frunk-theme .content-wrapper,
-body.frunk-theme .inventory-container,
-body.frunk-theme .inventory-content-wrapper {
+body.cal-theme .content-wrapper,
+body.cal-theme .inventory-container,
+body.cal-theme .inventory-content-wrapper {
     background: rgba(248, 249, 253, 0.92);
     border: 2px solid rgba(20, 10, 18, 0.1);
     border-radius: 0 0 20px 20px;
     box-shadow: 0 30px 60px rgba(14, 15, 22, 0.35);
 }
 
-body.frunk-theme .section h2,
-body.frunk-theme .inventory-section h2 {
+body.cal-theme .section h2,
+body.cal-theme .inventory-section h2 {
     font-family: 'Anton', sans-serif;
     color: #140a12;
     border-bottom-color: rgba(255, 46, 99, 0.4);
     letter-spacing: 0.08em;
 }
 
-body.frunk-theme input,
-body.frunk-theme textarea,
-body.frunk-theme select {
+body.cal-theme input,
+body.cal-theme textarea,
+body.cal-theme select {
     background: rgba(255, 255, 255, 0.85);
     border: 2px solid rgba(20, 10, 18, 0.15);
     color: #140a12;
 }
 
-body.frunk-theme input:focus,
-body.frunk-theme textarea:focus,
-body.frunk-theme select:focus {
+body.cal-theme input:focus,
+body.cal-theme textarea:focus,
+body.cal-theme select:focus {
     border-color: rgba(255, 46, 99, 0.55);
     box-shadow: 0 0 0 3px rgba(255, 46, 99, 0.25);
 }
 
-body.frunk-theme .upload-btn {
+body.cal-theme .upload-btn {
     background: linear-gradient(160deg, #ff2e63, #c21b46);
     border: 2px solid rgba(255, 255, 255, 0.5);
     color: #ffffff;
 }
 
-body.frunk-theme .upload-btn:hover {
+body.cal-theme .upload-btn:hover {
     background: linear-gradient(160deg, #ff4b79, #d91f54);
 }
 
-body.frunk-theme .relationship-entry,
-body.frunk-theme .inventory-item {
+body.cal-theme .relationship-entry,
+body.cal-theme .inventory-item {
     background: rgba(255, 255, 255, 0.75);
     border: 2px solid rgba(20, 10, 18, 0.12);
     box-shadow: 0 10px 18px rgba(20, 10, 18, 0.1);
 }
 
-body.frunk-theme .relationship-entry:hover,
-body.frunk-theme .inventory-item:hover {
+body.cal-theme .relationship-entry:hover,
+body.cal-theme .inventory-item:hover {
     border-color: rgba(255, 46, 99, 0.35);
 }
 
-body.frunk-theme .relationship-entry strong,
-body.frunk-theme .inventory-item strong {
+body.cal-theme .relationship-entry strong,
+body.cal-theme .inventory-item strong {
     color: #ff2e63;
 }
 
-body.frunk-theme .relationship-entry .relationship-points {
+body.cal-theme .relationship-entry .relationship-points {
     color: #2b2d42;
 }
 
-body.frunk-theme .relationship-entry .relationship-notes,
-body.frunk-theme .inventory-item .item-notes {
+body.cal-theme .relationship-entry .relationship-notes,
+body.cal-theme .inventory-item .item-notes {
     color: #2b2d42;
 }
 
-body.frunk-theme .card,
-body.frunk-theme .inventory-card {
+body.cal-theme .card,
+body.cal-theme .inventory-card {
     background: rgba(255, 255, 255, 0.85);
     border: 2px solid rgba(20, 10, 18, 0.12);
     box-shadow: 0 15px 28px rgba(14, 15, 22, 0.25);
 }
 
-body.frunk-theme .card:hover,
-body.frunk-theme .inventory-card:hover {
+body.cal-theme .card:hover,
+body.cal-theme .inventory-card:hover {
     transform: translateY(-3px);
     box-shadow: 0 20px 40px rgba(14, 15, 22, 0.35);
 }
 
-body.frunk-theme .inventory-tab.gm {
+body.cal-theme .inventory-tab.gm {
     color: #ff2e63;
 }
 
-body.frunk-theme .gm-allowed {
+body.cal-theme .gm-allowed {
     color: #c21b46;
 }
 
-body.frunk-theme .gm-restricted,
-body.frunk-theme .access-restricted {
+body.cal-theme .gm-restricted,
+body.cal-theme .access-restricted {
     color: rgba(20, 10, 18, 0.45);
 }
 
-body.frunk-theme .inventory-section h3 {
+body.cal-theme .inventory-section h3 {
     color: #ff2e63;
 }
 
-body.frunk-theme .inventory-section strong,
-body.frunk-theme .inventory-note strong {
+body.cal-theme .inventory-section strong,
+body.cal-theme .inventory-note strong {
     color: #c21b46;
 }
 
-body.frunk-theme .inventory-note {
+body.cal-theme .inventory-note {
     background: rgba(255, 255, 255, 0.65);
     border: 2px solid rgba(20, 10, 18, 0.12);
 }
 
-body.frunk-theme .status-bar {
+body.cal-theme .status-bar {
     background: rgba(255, 255, 255, 0.8);
     border: 2px solid rgba(20, 10, 18, 0.15);
 }
 
-body.frunk-theme .status-bar .status-label {
+body.cal-theme .status-bar .status-label {
     color: #2b2d42;
 }
 
-body.frunk-theme .status-bar .status-value {
+body.cal-theme .status-bar .status-value {
     color: #ff2e63;
 }
 
-body.frunk-theme .inventory-content-wrapper::-webkit-scrollbar-thumb {
+body.cal-theme .inventory-content-wrapper::-webkit-scrollbar-thumb {
     background: rgba(255, 46, 99, 0.4);
 }
 
-body.frunk-theme .inventory-content-wrapper::-webkit-scrollbar-track {
+body.cal-theme .inventory-content-wrapper::-webkit-scrollbar-track {
     background: rgba(255, 255, 255, 0.6);
 }
 
-body.frunk-theme .portrait-frame {
+body.cal-theme .portrait-frame {
     border: 3px solid rgba(255, 46, 99, 0.35);
     background: rgba(255, 255, 255, 0.75);
 }
 
-body.frunk-theme .portrait-placeholder {
+body.cal-theme .portrait-placeholder {
     color: rgba(20, 10, 18, 0.5);
 }
 
-body.frunk-theme .monster-card {
+body.cal-theme .monster-card {
     background: rgba(255, 255, 255, 0.88);
     border: 2px solid rgba(20, 10, 18, 0.12);
 }
 
-body.frunk-theme .monster-card .monster-name {
+body.cal-theme .monster-card .monster-name {
     color: #ff2e63;
 }
 
-body.frunk-theme .monster-card .monster-details {
+body.cal-theme .monster-card .monster-details {
     color: #2b2d42;
 }
 
-body.frunk-theme .schedule-table th {
+body.cal-theme .schedule-table th {
     background: rgba(255, 46, 99, 0.2);
 }
 
-body.frunk-theme .schedule-table td {
+body.cal-theme .schedule-table td {
     background: rgba(255, 255, 255, 0.7);
 }
 
-body.frunk-theme .schedule-table tr:nth-child(even) td {
+body.cal-theme .schedule-table tr:nth-child(even) td {
     background: rgba(255, 235, 242, 0.7);
 }
 
-body.frunk-theme .schedule-table tr:hover td {
+body.cal-theme .schedule-table tr:hover td {
     background: rgba(255, 46, 99, 0.22);
 }
 
-body.frunk-theme .tab-description {
+body.cal-theme .tab-description {
     color: rgba(20, 10, 18, 0.75);
 }
 
-body.frunk-theme .tab-description strong {
+body.cal-theme .tab-description strong {
     color: #ff2e63;
 }
 
-body.frunk-theme .tab-description em {
+body.cal-theme .tab-description em {
     color: #2b2d42;
 }
 
-body.frunk-theme .inventory-search input {
+body.cal-theme .inventory-search input {
     background: rgba(255, 255, 255, 0.8);
     border: 2px solid rgba(20, 10, 18, 0.12);
 }
 
-body.frunk-theme .inventory-search input:focus {
+body.cal-theme .inventory-search input:focus {
     border-color: rgba(255, 46, 99, 0.45);
 }
 
-body.frunk-theme .inventory-list-item {
+body.cal-theme .inventory-list-item {
     background: rgba(255, 255, 255, 0.75);
     border: 2px solid rgba(20, 10, 18, 0.12);
 }
 
-body.frunk-theme .inventory-list-item:hover {
+body.cal-theme .inventory-list-item:hover {
     border-color: rgba(255, 46, 99, 0.35);
 }
 
-body.frunk-theme .rage-ripple {
-    animation: frunk-rage-pulse 0.6s ease-in-out;
+body.cal-theme .rage-ripple {
+    animation: cal-rage-pulse 0.6s ease-in-out;
 }
 
-@keyframes frunk-rage-pulse {
+@keyframes cal-rage-pulse {
     0% {
         transform: scale(1);
         filter: drop-shadow(0 0 0 rgba(255, 46, 99, 0));

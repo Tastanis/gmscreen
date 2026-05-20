@@ -12,7 +12,7 @@ if (!isset($_SESSION['logged_in']) || $_SESSION['logged_in'] !== true) {
 
 $user = $_SESSION['user'];
 $is_gm = ($user === 'GM');
-$characters = array('frunk', 'sharon', 'indigo', 'zepha');
+$characters = array('cal', 'sharon', 'indigo', 'zepha');
 
 $character = isset($_POST['character']) ? strtolower(trim($_POST['character'])) : '';
 $hirelingId = isset($_POST['hireling_id']) ? trim($_POST['hireling_id']) : '';

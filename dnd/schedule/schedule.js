@@ -172,7 +172,7 @@ async function loadScheduleData() {
 
 // ===== GM VIEW FUNCTIONS =====
 function populateGMView(allSchedules) {
-    const characters = ['frunk', 'sharon', 'indigo', 'zepha'];
+    const characters = ['cal', 'sharon', 'indigo', 'zepha'];
     const days = ['monday', 'tuesday', 'thursday', 'friday', 'saturday', 'sunday'];
     const blocks = ['block1', 'block2', 'block3', 'block4'];
     

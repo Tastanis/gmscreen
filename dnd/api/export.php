@@ -116,7 +116,7 @@ function formatStudent($s) {
     // Relationships
     if (!empty($s['relationships']) && is_array($s['relationships'])) {
         $relLines = [];
-        $characters = ['frunk', 'zepha', 'sharon', 'indigo'];
+        $characters = ['cal', 'zepha', 'sharon', 'indigo'];
         foreach ($characters as $char) {
             $points = $s['relationships']["{$char}_points"] ?? '';
             $notes = $s['relationships']["{$char}_notes"] ?? '';

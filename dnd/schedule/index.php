@@ -14,7 +14,7 @@ $is_gm = ($user === 'GM');
 
 // Define character names for display
 $character_names = [
-    'frunk' => 'FRUNK',
+    'cal' => 'CAL',
     'sharon' => 'SHARON', 
     'indigo' => 'INDIGO',
     'zepha' => 'ZEPHA',
@@ -50,7 +50,7 @@ if (!file_exists($schedules_file)) {
     $empty_schedule = [
         '_current_week' => [
             'GM' => 1,
-            'frunk' => 1,
+            'cal' => 1,
             'sharon' => 1,
             'indigo' => 1,
             'zepha' => 1
@@ -58,7 +58,7 @@ if (!file_exists($schedules_file)) {
     ];
     
     // Initialize week 1 for all characters
-    foreach (['frunk', 'sharon', 'indigo', 'zepha'] as $char) {
+    foreach (['cal', 'sharon', 'indigo', 'zepha'] as $char) {
         $empty_schedule[$char] = [
             '1' => []
         ];
@@ -143,7 +143,7 @@ require_once '../includes/strix-nav.php';
                         <span class="save-status" id="saveStatus">Ready</span>
                     </div>
                     
-                    <?php foreach (['frunk', 'sharon', 'indigo', 'zepha'] as $character): ?>
+                    <?php foreach (['cal', 'sharon', 'indigo', 'zepha'] as $character): ?>
                         <div class="character-section">
                             <h2 class="character-name"><?php echo $character_names[$character]; ?></h2>
                             <div class="table-wrapper">

@@ -676,15 +676,15 @@ function createStudentDetailForm(student) {
                 <div class="pc-relationships-list">
                     <div class="pc-relationship">
                         <div class="pc-relationship-header">
-                            <label>Frunk:</label>
+                            <label>Cal:</label>
                             ${isGM ?
-                                `<input type="text" value="${escapeHtml(relationships.frunk_points || '')}" data-field="relationships.frunk_points" placeholder="Points" class="relationship-points">` :
-                                `<span class="readonly-points">${escapeHtml(relationships.frunk_points || '0')}</span>`
+                                `<input type="text" value="${escapeHtml(relationships.cal_points || '')}" data-field="relationships.cal_points" placeholder="Points" class="relationship-points">` :
+                                `<span class="readonly-points">${escapeHtml(relationships.cal_points || '0')}</span>`
                             }
                         </div>
                         ${isGM ?
-                            `<div class="rich-text-container small" data-field="relationships.frunk_notes" data-placeholder="Relationship notes..."></div>` :
-                            `<div class="readonly-field readonly-textarea">${escapeHtml(relationships.frunk_notes || 'No relationship notes')}</div>`
+                            `<div class="rich-text-container small" data-field="relationships.cal_notes" data-placeholder="Relationship notes..."></div>` :
+                            `<div class="readonly-field readonly-textarea">${escapeHtml(relationships.cal_notes || 'No relationship notes')}</div>`
                         }
                     </div>
 

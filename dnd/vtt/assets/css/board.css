@@ -2705,7 +2705,7 @@
  * behind the image so selection (which uses border + box-shadow on the
  * .vtt-token element itself) draws on top, and fades while the token is
  * selected so the selection halo always reads first. Color per profile:
- * Indigo = purple, Sharon = light grey, Frunk = red, Zepha = brown-orange.
+ * Indigo = purple, Sharon = light grey, Cal = red, Zepha = brown-orange.
  */
 .vtt-token__claim-ring {
   display: none;
@@ -2719,7 +2719,7 @@
   --vtt-claim-color: #d4d4d8;
 }
 
-.vtt-token__claim-ring[data-claimed-by='frunk'] {
+.vtt-token__claim-ring[data-claimed-by='cal'] {
   --vtt-claim-color: #ef4444;
 }
 

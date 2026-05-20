@@ -23,7 +23,7 @@ function loadInventoryData() {
     
     // Return default data structure if file doesn't exist
     $default_data = array();
-    foreach (array('frunk', 'sharon', 'indigo', 'zepha', 'shared', 'gm') as $section) {
+    foreach (array('cal', 'sharon', 'indigo', 'zepha', 'shared', 'gm') as $section) {
         $default_data[$section] = array('items' => array());
     }
     return $default_data;
@@ -69,7 +69,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['action'])) {
             $item_data = isset($_POST['item_data']) ? json_decode($_POST['item_data'], true) : null;
             
             // Validate tab and permissions
-            if (!in_array($tab, array('frunk', 'sharon', 'indigo', 'zepha', 'shared', 'gm'))) {
+            if (!in_array($tab, array('cal', 'sharon', 'indigo', 'zepha', 'shared', 'gm'))) {
                 echo json_encode(array('success' => false, 'error' => 'Invalid tab'));
                 break;
             }
@@ -147,7 +147,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['action'])) {
             $index = isset($_POST['index']) ? intval($_POST['index']) : -1;
             
             // Validate tab and permissions
-            if (!in_array($tab, array('frunk', 'sharon', 'indigo', 'zepha', 'shared', 'gm'))) {
+            if (!in_array($tab, array('cal', 'sharon', 'indigo', 'zepha', 'shared', 'gm'))) {
                 echo json_encode(array('success' => false, 'error' => 'Invalid tab'));
                 break;
             }
@@ -197,7 +197,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['action'])) {
             $value = isset($_POST['value']) ? $_POST['value'] : '';
             
             // Validate tab and permissions
-            if (!in_array($tab, array('frunk', 'sharon', 'indigo', 'zepha', 'shared', 'gm'))) {
+            if (!in_array($tab, array('cal', 'sharon', 'indigo', 'zepha', 'shared', 'gm'))) {
                 echo json_encode(array('success' => false, 'error' => 'Invalid tab'));
                 break;
             }
@@ -255,7 +255,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['action'])) {
             $index = isset($_POST['index']) ? intval($_POST['index']) : -1;
             
             // Validate source tab (must be player's own tab)
-            if (!in_array($from_tab, array('frunk', 'sharon', 'indigo', 'zepha'))) {
+            if (!in_array($from_tab, array('cal', 'sharon', 'indigo', 'zepha'))) {
                 echo json_encode(array('success' => false, 'error' => 'Can only share from personal inventory'));
                 break;
             }
@@ -373,7 +373,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['action'])) {
             }
             
             // Validate target tab
-            if (!in_array($to_tab, array('frunk', 'sharon', 'indigo', 'zepha'))) {
+            if (!in_array($to_tab, array('cal', 'sharon', 'indigo', 'zepha'))) {
                 echo json_encode(array('success' => false, 'error' => 'Invalid target tab'));
                 break;
             }

@@ -45,7 +45,7 @@ describe('Levels v2 — KNOWN_LEVEL_USER_IDS roster', () => {
     // Step 4 (§5.3): Activate must pull every known user, not only
     // currently connected websocket clients. The roster mirrors the
     // password→user map in dnd/index.php normalized to lowercase.
-    assert.deepEqual(KNOWN_LEVEL_USER_IDS, ['gm', 'frunk', 'sharon', 'indigo', 'zepha']);
+    assert.deepEqual(KNOWN_LEVEL_USER_IDS, ['gm', 'cal', 'sharon', 'indigo', 'zepha']);
   });
 
   test('is frozen so callers cannot mutate the shared roster', () => {
@@ -174,11 +174,11 @@ describe('Levels v2 — normalizeUserLevelStateMap and normalizeClaimedTokensMap
       'placement-1': 'Indigo',
       '': 'sharon',
       'placement-2': '',
-      'placement-3': 'FRUNK',
+      'placement-3': 'CAL',
     });
     assert.deepEqual(result, {
       'placement-1': 'indigo',
-      'placement-3': 'frunk',
+      'placement-3': 'cal',
     });
   });
 });
@@ -405,16 +405,16 @@ describe('Login-time PC token resolver — resolvePcTokenLevelIdForUser', () => 
   });
 
   test('matches the alias only on word boundaries (no substring hits)', () => {
-    // Guards against e.g. "Frunkster" matching "frunk" — board-interactions'
+    // Guards against e.g. "Calster" matching "cal" — board-interactions'
     // matchProfileByName uses the same word-boundary rule.
-    const sceneState = { claimedTokens: { 't1': 'frunk' } };
+    const sceneState = { claimedTokens: { 't1': 'cal' } };
     const placements = [
-      { id: 't1', name: 'Frunkster Lookalike', levelId: 'map-level-a' },
+      { id: 't1', name: 'Calster Lookalike', levelId: 'map-level-a' },
     ];
     assert.equal(
       resolvePcTokenLevelIdForUser({
         sceneState,
-        userId: 'frunk',
+        userId: 'cal',
         placements,
       }),
       null,
@@ -447,7 +447,7 @@ describe('Levels v2 — PLAYER_CHARACTER_USER_IDS roster (Step 6)', () => {
     // both iterate this list. The GM is intentionally omitted because the
     // plan treats unclaimed and GM-owned as equivalent — there is no
     // "claim for GM" action.
-    assert.deepEqual(PLAYER_CHARACTER_USER_IDS, ['frunk', 'sharon', 'indigo', 'zepha']);
+    assert.deepEqual(PLAYER_CHARACTER_USER_IDS, ['cal', 'sharon', 'indigo', 'zepha']);
   });
 
   test('is frozen so callers cannot mutate the shared roster', () => {

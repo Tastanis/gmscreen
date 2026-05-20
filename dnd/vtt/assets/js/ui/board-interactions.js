@@ -1637,7 +1637,7 @@ export function mountBoardInteractions(store, routes = {}) {
   };
 
   const PLAYER_PROFILE_ALIASES = {
-    frunk: ['frunk'],
+    cal: ['cal'],
     sharon: ['sharon'],
     indigo: ['indigo'],
     zepha: ['zepha'],
@@ -7480,7 +7480,7 @@ export function mountBoardInteractions(store, routes = {}) {
   // Levels v2 (§5.4): paint a colored ring on tokens claimed by a player so
   // every viewer can see whose token is whose at a glance. Color is driven
   // entirely from CSS via `data-claimed-by` so the palette is centralized
-  // (Indigo = purple, Sharon = light grey, Frunk = red, Zepha = brown-orange).
+  // (Indigo = purple, Sharon = light grey, Cal = red, Zepha = brown-orange).
   // Unclaimed tokens (or any non-PC claimant) get no ring.
   function applyTokenClaimPresentation(token, claimedUserId) {
     if (!token) {

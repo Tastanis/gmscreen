@@ -1,6 +1,6 @@
 import { DEFAULT_MOVEMENT_SPEED } from './movement-math.js';
 
-export const PC_TOKEN_NAMES = new Set(['frunk', 'sharon', 'indigo', 'zepha']);
+export const PC_TOKEN_NAMES = new Set(['cal', 'sharon', 'indigo', 'zepha']);
 
 const CACHE_TTL_MS = 30000;
 

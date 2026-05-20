@@ -30,7 +30,7 @@ The goal of this rework is to:
 - **Stored map levels** - The existing `mapLevels.levels` array. It continues to store only Level 1+ maps. Level 0 is virtual and derived from the scene's base `mapUrl`.
 - **Active level (per user)** - The single level a given user is currently on. Determines what tokens render at full size, what tokens are hidden vs. indicated as above/below, and which level new tokens get placed onto.
 - **Activate (GM action)** - A GM-only button that forces every known user's active level to match the GM's current viewing level. This is a one-shot push, not a binding subscription.
-- **Claim** - A per-scene assignment of a token to a specific user. A claimed token belongs to that user for view-following purposes. The four PC tokens (Indigo, Sharon, Frunk, Zepha) auto-claim to the user with the matching profile id when first dragged into a scene.
+- **Claim** - A per-scene assignment of a token to a specific user. A claimed token belongs to that user for view-following purposes. The four PC tokens (Indigo, Sharon, Cal, Zepha) auto-claim to the user with the matching profile id when first dragged into a scene.
 - **Cutout edge rule** - A token whose occupied cells are within one grid square of a cutout, treating the cutout as one square larger in every direction, is visible across that cutout. This applies symmetrically: tokens above can be seen from below, and tokens below can be seen from above.
 - **Fall** - When a token ends a move entirely inside a raw cutout area, it automatically drops to the next level down. If it lands inside another cutout, it keeps falling until it does not, or until it hits Level 0.
 
@@ -67,7 +67,7 @@ These decisions make the plan fit the current codebase more smoothly.
 
 ### 4.2 Per-user state
 
-- Store user keys as normalized profile ids, not display names. Use the same normalized ids the VTT already derives for `gm`, `indigo`, `sharon`, `frunk`, and `zepha`.
+- Store user keys as normalized profile ids, not display names. Use the same normalized ids the VTT already derives for `gm`, `indigo`, `sharon`, `cal`, and `zepha`.
 - Store active level state as an object, not a bare string:
 
 ```jsonc
@@ -176,7 +176,7 @@ These decisions make the plan fit the current codebase more smoothly.
 **Defaults:**
 
 - Tokens are unclaimed by default. Treat unclaimed as GM-owned for display and permission purposes.
-- PC tokens (Indigo, Sharon, Frunk, Zepha) auto-claim to the matching user the first time they are dragged into a scene.
+- PC tokens (Indigo, Sharon, Cal, Zepha) auto-claim to the matching user the first time they are dragged into a scene.
 - Auto-claim should not run on every load and should not replace existing character-sheet linkage. Claim is separate per-scene state.
 - Changing scenes resets claims to unclaimed, plus PC auto-claims when those tokens are first placed in that scene.
 
@@ -202,7 +202,7 @@ These decisions make the plan fit the current codebase more smoothly.
 - Claimed player tokens get a colored ring:
   - Indigo: purple
   - Sharon: light grey
-  - Frunk: red
+  - Cal: red
   - Zepha: brown-orange
   - GM/unclaimed: no ring
 - The ring must not interfere with selection. Selection should draw above the ring, or the ring should fade while selected.
@@ -627,7 +627,7 @@ Landed on branch `claude/vibrant-chandrasekhar-b7f6db` (worktree `vibrant-chandr
 Files touched:
 
 - `dnd/vtt/assets/js/state/normalize/map-levels.js`
-  - Added `KNOWN_LEVEL_USER_IDS = Object.freeze(['gm', 'frunk', 'sharon', 'indigo', 'zepha'])`. This mirrors the password→user map in `dnd/index.php` normalized to lowercase profile ids. It is the configured chat/player roster called for in §5.3 ("known users from the configured chat/player roster, not only currently connected websocket clients"). The list is frozen so callers cannot mutate the shared roster, and exported so the activate handler and its tests share one source of truth.
+  - Added `KNOWN_LEVEL_USER_IDS = Object.freeze(['gm', 'cal', 'sharon', 'indigo', 'zepha'])`. This mirrors the password→user map in `dnd/index.php` normalized to lowercase profile ids. It is the configured chat/player roster called for in §5.3 ("known users from the configured chat/player roster, not only currently connected websocket clients"). The list is frozen so callers cannot mutate the shared roster, and exported so the activate handler and its tests share one source of truth.
 - `dnd/vtt/components/SceneBoard.php`
   - Added a GM-only `<button data-action="activate-map-level">Activate</button>` inside the existing `[data-map-level-nav]` block, after the up-level button. It inherits the nav's `hidden`/`aria-hidden` toggling, so it is hidden whenever the nav is hidden (no scene active or non-GM). The PHP guard (`if ($isGm)`) means non-GM markup never includes the button.
 - `dnd/vtt/assets/css/board.css`
@@ -645,7 +645,7 @@ Files touched:
 
 Tests added:
 
-- `dnd/vtt/assets/js/state/__tests__/map-levels-v2-normalization.test.mjs` — two tests under a new `KNOWN_LEVEL_USER_IDS roster` suite verifying the exact ordered roster (`['gm', 'frunk', 'sharon', 'indigo', 'zepha']`) and that the array is frozen.
+- `dnd/vtt/assets/js/state/__tests__/map-levels-v2-normalization.test.mjs` — two tests under a new `KNOWN_LEVEL_USER_IDS roster` suite verifying the exact ordered roster (`['gm', 'cal', 'sharon', 'indigo', 'zepha']`) and that the array is frozen.
 - `dnd/vtt/assets/js/services/__tests__/board-state-op-applier-levels-v2.test.mjs` — one test under the existing `user-level.activate` suite that imports `KNOWN_LEVEL_USER_IDS`, seeds a scene with a pre-existing claim-driven entry for `indigo` (with `tokenId`), applies an activate op carrying the full roster, and asserts every roster member ends up on the target level with `source: 'activate'` and that the previous `tokenId` is dropped (activate writes a fresh entry without `tokenId` so the follow-token rule re-engages cleanly on the next claimed-token level change).
 
 Behavioral consequences for downstream steps:
@@ -719,7 +719,7 @@ Landed on branch `claude/zealous-hamilton-43564f` (worktree `zealous-hamilton-43
 Files touched:
 
 - `dnd/vtt/assets/js/state/normalize/map-levels.js`
-  - Added `PLAYER_CHARACTER_USER_IDS = Object.freeze(['frunk', 'sharon', 'indigo', 'zepha'])`. The four player-character profile ids used by both the PC auto-claim path (only PCs auto-claim on first drag) and the GM's claim assignment dropdown. The GM is intentionally omitted because the plan treats unclaimed and GM-owned as equivalent — there is no "claim for GM" action.
+  - Added `PLAYER_CHARACTER_USER_IDS = Object.freeze(['cal', 'sharon', 'indigo', 'zepha'])`. The four player-character profile ids used by both the PC auto-claim path (only PCs auto-claim on first drag) and the GM's claim assignment dropdown. The GM is intentionally omitted because the plan treats unclaimed and GM-owned as equivalent — there is no "claim for GM" action.
   - Added `getClaimedUserIdForPlacement(sceneState, placementId)`. Resolves the claimant profile id for a placement from a scene's `claimedTokens` map, normalized to lowercase, or `null` for unclaimed/GM-owned. The helper accepts a per-scene `sceneState` entry (the same shape as `resolveActiveLevelIdForUser`) so callers do not need to know the storage shape.
 - `dnd/vtt/assets/js/ui/board-interactions.js`
   - Imported `PLAYER_CHARACTER_USER_IDS` and `getClaimedUserIdForPlacement` from `state/normalize/map-levels.js`.
@@ -736,7 +736,7 @@ Files touched:
   - `handleTokenLevelMoveClick` also bumps `target._lastModified = Date.now()` so the claim-fallback resolver in `resolveActiveLevelIdForUser` (which uses the most-recently-modified claimed token's level when no `userLevelState` entry exists) sees the update.
 - `dnd/vtt/assets/css/board.css`
   - Added `.vtt-token__claim-ring` rules: absolutely positioned with `inset: -8px`, `z-index: -1` so it sits behind the token border and image, double-layer `box-shadow` (solid 3px ring + soft 14px glow using `color-mix`) driven by a `--vtt-claim-color` custom property.
-  - Per-profile color rules via `[data-claimed-by='<id>']` attribute selectors: Indigo → `#a855f7` (purple), Sharon → `#d4d4d8` (light grey), Frunk → `#ef4444` (red), Zepha → `#c2410c` (brown-orange). The values match the §5.4 palette.
+  - Per-profile color rules via `[data-claimed-by='<id>']` attribute selectors: Indigo → `#a855f7` (purple), Sharon → `#d4d4d8` (light grey), Cal → `#ef4444` (red), Zepha → `#c2410c` (brown-orange). The values match the §5.4 palette.
   - `.vtt-token.is-selected .vtt-token__claim-ring` and `.vtt-token.is-hover-highlight .vtt-token__claim-ring` drop the ring opacity to `0.35` so the existing selection halo (which uses border/box-shadow on the token element itself) reads first when selected. Per §5.4 "selection should draw above the ring, or the ring should fade while selected".
   - Added `.vtt-token-settings__row--claim`, `.vtt-token-settings__claim-label`, `.vtt-token-settings__claim-name`, `.vtt-token-settings__claim-select`, and `.vtt-token-settings__claim-button` rules modeled on the existing level-row chrome so the two rows in the token-settings panel read as a matched pair.
 
@@ -754,7 +754,7 @@ Behavioral consequences for downstream steps:
 - PC auto-claim runs only inside `handleTokenDrop`, which only fires on a fresh drag-into-scene. There is no other code path that creates placements at load time, so the "should not run on every load" guard is satisfied implicitly. If a future step adds a "duplicate token" or "import scene" path, that path must NOT call `autoClaimPlacement`; instead it should preserve whatever `claimedTokens` mapping was on the source.
 - The claim ring sits at `z-index: -1` inside the `.vtt-token` element. Selection halo continues to use the token element's own border + box-shadow, which renders above absolutely-positioned children with negative z-index, so selection draws on top without explicit z-index management. The opacity-fade rule is belt-and-suspenders so even with future renderer changes the ring still defers to selection.
 - Step 7 (view-follow) builds on the `source: 'claim'` user-level entries written here. When a player's `userLevelState` entry is `source: 'claim'` with `tokenId: <id>`, the view-follow path should pan that player's view to the claimed token. Today the user-level entry is already being written to that exact shape; Step 7 just needs to react to it (likely via a state-subscription side effect) and call into `map-pings.js`'s `centerViewOnPing` (or a refactored sibling).
-- The four PC display names rendered in the claim section/select use `formatProfileDisplayName(profileId)` (the existing helper), which capitalizes the lowercase id. Display names in the settings panel will read "Frunk", "Sharon", "Indigo", "Zepha", and "Unknown Player" for any profile id not in the alias map. Adding a new PC requires updating both `KNOWN_LEVEL_USER_IDS` and `PLAYER_CHARACTER_USER_IDS` (and `dnd/index.php`).
+- The four PC display names rendered in the claim section/select use `formatProfileDisplayName(profileId)` (the existing helper), which capitalizes the lowercase id. Display names in the settings panel will read "Cal", "Sharon", "Indigo", "Zepha", and "Unknown Player" for any profile id not in the alias map. Adding a new PC requires updating both `KNOWN_LEVEL_USER_IDS` and `PLAYER_CHARACTER_USER_IDS` (and `dnd/index.php`).
 
 ### Step 7 — View-follow (DONE)
 
@@ -833,7 +833,7 @@ Behavioral consequences for downstream steps:
 - The animation timing assumes `requestAnimationFrame` is available in the renderer; the `setTimeout(..., 0)` fallback covers test environments. In SSR / non-browser contexts neither path runs into a DOM, but the module guards against missing `classList` so `playTokenFallAnimation(null)` resolves without effect.
 - The drag commit path emits TWO sets of ops per fall: a `placement.move` op (existing, for column/row) and a `placement.update` op (new, for `levelId`). These travel as separate `persistBoardStateSnapshot` calls because the `placement.move` op is built and dispatched inside `commitDragPreview`'s op-list and the `placement.update` op is added later by `processPlacementFalls`. Two persists is a small cost on the rare event of a fall; bundling them would require restructuring `commitDragPreview` to defer its persist until after the fall hook runs. Acceptable in v2; revisit if profiling shows the second persist round-trip causing a visible delay.
 - The animation plays for the local user (whoever caused the fall, plus the GM and the claimant on remote clients) but the §5.6 "Other players may simply receive the end-state render change" line is satisfied because remote clients only get the state mutation via Pusher; they do not re-trigger the animation locally. The `processPlacementFalls` helper does NOT broadcast an "animate this token" signal — the animation is purely a local UI flourish on whoever called `triggerTokenFallAnimations`.
-- Status messages from drag commits now include a fall callout (`"; N tokens fell."`); from token-settings level-moves, a fall replaces the move message entirely. If a future UI wants a more elaborate fall toast (e.g. "Frunk fell from Level 2 to Level 0"), the `processPlacementFalls` return value already carries `fromLevelId`/`toLevelId` per fall — extend the consumer rather than the helper.
+- Status messages from drag commits now include a fall callout (`"; N tokens fell."`); from token-settings level-moves, a fall replaces the move message entirely. If a future UI wants a more elaborate fall toast (e.g. "Cal fell from Level 2 to Level 0"), the `processPlacementFalls` return value already carries `fromLevelId`/`toLevelId` per fall — extend the consumer rather than the helper.
 
 ### Step 9 — Deletion cascade (DONE)
 
@@ -861,7 +861,7 @@ Files touched:
     3. `falls back to BASE_MAP_LEVEL_ID when no lower stored level exists` — deleting the bottom stored level remaps placements to `level-0`.
     4. `keeps surviving stored level ids stable; only zIndex is recomputed` — locks in the §4.4 stable-id rule.
     5. `clears legacy mapLevels.activeLevelId when it pointed at the deleted level` — defensive check that the pre-v2 field never references a deleted id after the cascade.
-    6. `remaps userLevelState entries pointing at the deleted level (preserving source/tokenId)` — Pass A behavior across `gm`/`frunk`/`sharon`. Confirms that a user pointing at a non-deleted level is untouched (including its `updatedAt`), and that the GM and an `activate`-sourced user both get remapped while keeping their `source` field.
+    6. `remaps userLevelState entries pointing at the deleted level (preserving source/tokenId)` — Pass A behavior across `gm`/`cal`/`sharon`. Confirms that a user pointing at a non-deleted level is untouched (including its `updatedAt`), and that the GM and an `activate`-sourced user both get remapped while keeping their `source` field.
     7. `claim-driven invariant: remapped claimed token overwrites claimant userLevelState to source: claim` — Pass B behavior when the claimant's previous state pointed at a different level. Confirms the entry ends up `source: 'claim'` with `tokenId` set, even though Pass A wouldn't have touched it.
     8. `claim source overrides pass-A remap when the same user has both signals` — Pass B running after Pass A produces the consistent claim-source entry, not the preserved Pass-A shape.
 
@@ -882,7 +882,7 @@ Behavioral consequences for downstream work:
 
 ### 2026-04-27 — Step 6 (claims) manual test: claim ops silently lost on version conflict
 
-**Symptom (reported by GM during test):** Dropped a Frunk-named token, opened token settings, picked "Frunk" from the GM claim dropdown — claim status remained "Unclaimed". Player (Frunk) tried clicking the player Claim button — same result. Console showed two `409 Conflict` POSTs to `dnd/vtt/api/state.php` and `[VTT] Board state save rejected as stale; applying server state.` Chat panel was concurrently throwing `ERR_INSUFFICIENT_RESOURCES` — likely unrelated, but suggests the page had many in-flight requests.
+**Symptom (reported by GM during test):** Dropped a Cal-named token, opened token settings, picked "Cal" from the GM claim dropdown — claim status remained "Unclaimed". Player (Cal) tried clicking the player Claim button — same result. Console showed two `409 Conflict` POSTs to `dnd/vtt/api/state.php` and `[VTT] Board state save rejected as stale; applying server state.` Chat panel was concurrently throwing `ERR_INSUFFICIENT_RESOURCES` — likely unrelated, but suggests the page had many in-flight requests.
 
 **Root cause (suspected, needs confirmation):** When the client's `_version` is behind the server's, `state.php` (line ~364) returns a 409 conflict before applying any ops in the payload. On the client, `submitTokenClaimChange` mutates local state and sends a `claim.set` op via `persistBoardStateSnapshot({}, [op])`. On 409, the conflict handler at `board-interactions.js:~2245` calls `clearDirtyTrackingForSave` and `applyBoardStateConflictSnapshot` — which **drops the failed op without retrying** and overwrites the local mutation with the server's snapshot. Result: the claim is silently lost, both locally and on the server. Same code path drives `autoClaimPlacement` (PC drag-in auto-claim), so PC auto-claim is also vulnerable.
 
@@ -892,7 +892,7 @@ Behavioral consequences for downstream work:
 1. On op-only saves that hit 409, after applying the conflict snapshot, **re-apply the failed op locally and re-broadcast it** with the fresh `_version`. This requires keeping the op list around through the conflict handler instead of dropping it via `clearDirtyTrackingForSave`.
 2. Alternative: server-side, separate the version check for snapshot-merge from the version check for ops. Ops like `claim.set` are idempotent and don't depend on the client having the latest snapshot; the server could apply them even on a stale `_version` and just refuse the snapshot half.
 
-**Adjacent observation:** PC auto-claim only runs when `isTokenSourcePlayerVisible(template)` is true — i.e. the token must be dragged from the PC folder, not a generic token renamed "Frunk". Working as designed, but worth documenting because a tester dragging a generic token expecting auto-claim will see no claim ring.
+**Adjacent observation:** PC auto-claim only runs when `isTokenSourcePlayerVisible(template)` is true — i.e. the token must be dragged from the PC folder, not a generic token renamed "Cal". Working as designed, but worth documenting because a tester dragging a generic token expecting auto-claim will see no claim ring.
 
 **Fix landed (2026-04-27, Option A):** PC auto-claim is now batched with `placement.add` into a single ops payload inside `handleTokenDrop`. Both ops apply under one server lock — no separate save round-trip, no version race. The standalone `autoClaimPlacement` helper was removed (single caller). The §5.4 "first time only" guard is preserved because `handleTokenDrop` only fires on a fresh drag-into-scene. Local mutation still happens up-front so the snapshot fallback path (when delta-saves is off or non-placement state is dirty) picks up the claim too. The broader 409-drop-without-retry issue (manual claim, etc.) is **not** addressed by this fix — that is the Option B fix and remains open.
 

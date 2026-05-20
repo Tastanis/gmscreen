@@ -13,7 +13,7 @@ echo "First 100 chars: " . substr($content1, 0, 100) . "\n";
 $data1 = json_decode($content1, true);
 echo "JSON decode result: " . (is_array($data1) ? "SUCCESS" : "FAILED - " . json_last_error_msg()) . "\n";
 if (is_array($data1)) {
-    echo "Frunk name: '" . ($data1['frunk']['character']['character_name'] ?? 'NOT FOUND') . "'\n";
+    echo "Cal name: '" . ($data1['cal']['character']['character_name'] ?? 'NOT FOUND') . "'\n";
 }
 echo "\n";
 
@@ -28,7 +28,7 @@ if ($handle) {
     $data2 = json_decode($content2, true);
     echo "JSON decode result: " . (is_array($data2) ? "SUCCESS" : "FAILED - " . json_last_error_msg()) . "\n";
     if (is_array($data2)) {
-        echo "Frunk name: '" . ($data2['frunk']['character']['character_name'] ?? 'NOT FOUND') . "'\n";
+        echo "Cal name: '" . ($data2['cal']['character']['character_name'] ?? 'NOT FOUND') . "'\n";
     }
 } else {
     echo "Failed to open file\n";
@@ -45,7 +45,7 @@ if ($lines) {
     $data3 = json_decode($content3, true);
     echo "JSON decode result: " . (is_array($data3) ? "SUCCESS" : "FAILED - " . json_last_error_msg()) . "\n";
     if (is_array($data3)) {
-        echo "Frunk name: '" . ($data3['frunk']['character']['character_name'] ?? 'NOT FOUND') . "'\n";
+        echo "Cal name: '" . ($data3['cal']['character']['character_name'] ?? 'NOT FOUND') . "'\n";
     }
 } else {
     echo "file() failed\n";

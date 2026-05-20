@@ -9,7 +9,7 @@ if (!isset($_SESSION['logged_in']) || $_SESSION['logged_in'] !== true) {
 
 $user = $_SESSION['user'];
 $is_gm = ($user === 'GM');
-$characters = array('frunk', 'sharon', 'indigo', 'zepha');
+$characters = array('cal', 'sharon', 'indigo', 'zepha');
 
 // Function to load inventory data
 function loadInventoryData() {
@@ -24,7 +24,7 @@ function loadInventoryData() {
     
     // Return default data structure if file doesn't exist
     $default_data = array();
-    foreach (array('frunk', 'sharon', 'indigo', 'zepha', 'shared', 'gm') as $section) {
+    foreach (array('cal', 'sharon', 'indigo', 'zepha', 'shared', 'gm') as $section) {
         $default_data[$section] = array('items' => array());
     }
     return $default_data;
@@ -33,12 +33,12 @@ function loadInventoryData() {
 // Determine which tabs the user can see
 $visibleTabs = array();
 if ($is_gm) {
-    $visibleTabs = array('frunk', 'sharon', 'indigo', 'zepha', 'shared', 'gm');
+    $visibleTabs = array('cal', 'sharon', 'indigo', 'zepha', 'shared', 'gm');
 } else {
     $visibleTabs = array($user, 'shared', 'gm');
 }
 
-$defaultTab = $is_gm ? 'frunk' : $user;
+$defaultTab = $is_gm ? 'cal' : $user;
 ?>
 
 <!DOCTYPE html>

@@ -5,7 +5,7 @@
 </head>
 <body>
     <h1>Testing Character Data Loading</h1>
-    <button onclick="testLoad()">Test Load Frunk</button>
+    <button onclick="testLoad()">Test Load Cal</button>
     <pre id="output"></pre>
     
     <script>
@@ -15,7 +15,7 @@
         
         const formData = new FormData();
         formData.append('action', 'load');
-        formData.append('character', 'frunk');
+        formData.append('character', 'cal');
         
         // Also test other characters
         setTimeout(() => testChar('sharon'), 2000);

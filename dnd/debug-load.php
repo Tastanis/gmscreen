@@ -4,11 +4,11 @@ $_SESSION['logged_in'] = true;
 $_SESSION['user'] = 'GM';
 
 // Test what happens when we manually call the load logic
-$characters = array('frunk', 'sharon', 'indigo', 'zepha');
+$characters = array('cal', 'sharon', 'indigo', 'zepha');
 $is_gm = true;
 
 // Simulate the load request
-$character = 'frunk';
+$character = 'cal';
 
 echo "Testing load for character: $character\n\n";
 

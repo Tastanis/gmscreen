@@ -12,7 +12,7 @@ $is_gm = ($user === 'GM');
 
 // Only allow uploads if user is GM or uploading to their own character
 $character = isset($_POST['character']) ? $_POST['character'] : '';
-$characters = array('frunk', 'sharon', 'indigo', 'zepha');
+$characters = array('cal', 'sharon', 'indigo', 'zepha');
 
 if (!in_array($character, $characters)) {
     echo json_encode(array('success' => false, 'error' => 'Invalid character'));

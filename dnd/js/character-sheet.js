@@ -2029,7 +2029,7 @@ function saveAllDataForCharacter(targetCharacter, silent = false) {
     if (!isGM) return; // Only GM can save
     
     // Validate character parameter
-    if (!targetCharacter || !['frunk', 'sharon', 'indigo', 'zepha'].includes(targetCharacter)) {
+    if (!targetCharacter || !['cal', 'sharon', 'indigo', 'zepha'].includes(targetCharacter)) {
         console.error('Invalid character specified for save:', targetCharacter);
         return;
     }

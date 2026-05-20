@@ -17,10 +17,10 @@
             label: 'Christmas'
         },
         {
-            name: 'frunk',
-            className: 'frunk-theme',
-            linkId: 'frunk-theme',
-            label: 'Frunk'
+            name: 'cal',
+            className: 'cal-theme',
+            linkId: 'cal-theme',
+            label: 'Cal'
         }
     ];
 

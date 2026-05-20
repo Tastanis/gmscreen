@@ -1,7 +1,7 @@
 <?php
 return [
     'GM' => 'GM',
-    'frunk' => 'Frunk',
+    'cal' => 'Cal',
     'sharon' => 'Sharon',
     'indigo' => 'Indigo',
     'zepha' => 'Zepha'

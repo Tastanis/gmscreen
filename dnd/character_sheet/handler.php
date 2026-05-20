@@ -3,7 +3,7 @@ if (session_status() === PHP_SESSION_NONE) {
     session_start();
 }
 
-$characters = array('frunk', 'sharon', 'indigo', 'zepha');
+$characters = array('cal', 'sharon', 'indigo', 'zepha');
 $dataDir = __DIR__ . '/data';
 $dataFile = $dataDir . '/character_sheets.json';
 $heroTokenFile = $dataDir . '/hero_tokens.json';

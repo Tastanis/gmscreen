@@ -6,7 +6,7 @@
  *
  * Endpoints:
  *   /dnd/api/projects.php                        - Directory listing + all projects summary
- *   /dnd/api/projects.php?character=frunk         - Projects for a specific character
+ *   /dnd/api/projects.php?character=cal         - Projects for a specific character
  *   /dnd/api/projects.php?character=all           - All characters' projects
  */
 

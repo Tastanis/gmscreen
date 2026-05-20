@@ -322,20 +322,20 @@ describe('Levels v2 — deleteSceneMapLevelCascade (Step 9)', () => {
         },
         userLevelState: {
           gm: { levelId: 'upper', source: 'manual', updatedAt: 100 },
-          frunk: { levelId: 'upper', source: 'activate', updatedAt: 200 },
+          cal: { levelId: 'upper', source: 'activate', updatedAt: 200 },
           sharon: { levelId: 'ground', source: 'manual', updatedAt: 300 },
         },
       })
     );
 
     const result = sceneManager.deleteSceneMapLevelCascade(store, 'scene-1', 'upper');
-    assert.deepEqual(result.remappedUserIds.sort(), ['frunk', 'gm']);
+    assert.deepEqual(result.remappedUserIds.sort(), ['cal', 'gm']);
 
     const userLevelState = store.getState().boardState.sceneState['scene-1'].userLevelState;
     assert.equal(userLevelState.gm.levelId, 'ground');
     assert.equal(userLevelState.gm.source, 'manual');
-    assert.equal(userLevelState.frunk.levelId, 'ground');
-    assert.equal(userLevelState.frunk.source, 'activate');
+    assert.equal(userLevelState.cal.levelId, 'ground');
+    assert.equal(userLevelState.cal.source, 'activate');
     assert.equal(userLevelState.sharon.levelId, 'ground'); // unchanged
     assert.equal(userLevelState.sharon.updatedAt, 300);
     assert.ok(userLevelState.gm.updatedAt >= 100);
@@ -352,27 +352,27 @@ describe('Levels v2 — deleteSceneMapLevelCascade (Step 9)', () => {
           ],
         },
         placements: [
-          { id: 'p-frunk', levelId: 'upper', column: 2, row: 2 },
+          { id: 'p-cal', levelId: 'upper', column: 2, row: 2 },
         ],
         claimedTokens: {
-          'p-frunk': 'frunk',
+          'p-cal': 'cal',
         },
-        // Frunk's state happens to point at a non-deleted level. The claim-driven
-        // invariant should still pull frunk to the fallback when the token moves.
+        // Cal's state happens to point at a non-deleted level. The claim-driven
+        // invariant should still pull cal to the fallback when the token moves.
         userLevelState: {
-          frunk: { levelId: 'ground', source: 'manual', updatedAt: 100 },
+          cal: { levelId: 'ground', source: 'manual', updatedAt: 100 },
         },
       })
     );
 
     const result = sceneManager.deleteSceneMapLevelCascade(store, 'scene-1', 'upper');
-    assert.deepEqual(result.remappedClaimUserIds, ['frunk']);
+    assert.deepEqual(result.remappedClaimUserIds, ['cal']);
 
     const userLevelState = store.getState().boardState.sceneState['scene-1'].userLevelState;
-    assert.equal(userLevelState.frunk.levelId, 'ground');
-    assert.equal(userLevelState.frunk.source, 'claim');
-    assert.equal(userLevelState.frunk.tokenId, 'p-frunk');
-    assert.ok(userLevelState.frunk.updatedAt > 100);
+    assert.equal(userLevelState.cal.levelId, 'ground');
+    assert.equal(userLevelState.cal.source, 'claim');
+    assert.equal(userLevelState.cal.tokenId, 'p-cal');
+    assert.ok(userLevelState.cal.updatedAt > 100);
   });
 
   test('claim source overrides pass-A remap when the same user has both signals', () => {

@@ -781,7 +781,7 @@ class CharacterLookup {
                 ${student.relationships ? `
                 <div class="info-block">
                     <h3>PC Relationships</h3>
-                    ${student.relationships.frunk_points || student.relationships.frunk_notes ? `<p><strong>Frunk:</strong> ${this.escapeHtml(student.relationships.frunk_points || '')} ${this.escapeHtml(student.relationships.frunk_notes || '')}</p>` : ''}
+                    ${student.relationships.cal_points || student.relationships.cal_notes ? `<p><strong>Cal:</strong> ${this.escapeHtml(student.relationships.cal_points || '')} ${this.escapeHtml(student.relationships.cal_notes || '')}</p>` : ''}
                     ${student.relationships.zepha_points || student.relationships.zepha_notes ? `<p><strong>Zepha:</strong> ${this.escapeHtml(student.relationships.zepha_points || '')} ${this.escapeHtml(student.relationships.zepha_notes || '')}</p>` : ''}
                     ${student.relationships.sharon_points || student.relationships.sharon_notes ? `<p><strong>Sharon:</strong> ${this.escapeHtml(student.relationships.sharon_points || '')} ${this.escapeHtml(student.relationships.sharon_notes || '')}</p>` : ''}
                     ${student.relationships.indigo_points || student.relationships.indigo_notes ? `<p><strong>Indigo:</strong> ${this.escapeHtml(student.relationships.indigo_points || '')} ${this.escapeHtml(student.relationships.indigo_notes || '')}</p>` : ''}

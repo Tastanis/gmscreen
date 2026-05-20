@@ -430,7 +430,7 @@ header h1 {
 /* Character-specific accent colors */
 .character-section:nth-child(2) .character-name {
     border-left: 4px solid var(--danger);
-} /* Frunk */
+} /* Cal */
 .character-section:nth-child(3) .character-name {
     border-left: 4px solid var(--info);
 } /* Sharon */

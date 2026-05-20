@@ -31,7 +31,7 @@ describe('stamina-sync-service — broadcast', () => {
 
   test('broadcastStaminaSync posts a message on the shared channel', () => {
     service.broadcastStaminaSync({
-      character: 'Frunk',
+      character: 'Cal',
       currentStamina: 12,
       staminaMax: 24,
     });
@@ -41,7 +41,7 @@ describe('stamina-sync-service — broadcast', () => {
     assert.deepEqual(messages[0].data, {
       type: 'stamina-sync',
       source: 'vtt',
-      character: 'Frunk',
+      character: 'Cal',
       currentStamina: 12,
       staminaMax: 24,
     });

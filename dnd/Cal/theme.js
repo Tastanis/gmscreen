@@ -66,7 +66,7 @@
     }
 
     function removeBunnyElements() {
-        document.querySelectorAll('.frunk-bunny').forEach(element => {
+        document.querySelectorAll('.cal-bunny').forEach(element => {
             element.remove();
         });
     }
@@ -84,7 +84,7 @@
         }
 
         const bunny = document.createElement('div');
-        bunny.className = 'frunk-bunny';
+        bunny.className = 'cal-bunny';
         const randomBottom = randomBetweenFloat(BUNNY_BOTTOM_MIN_REM, BUNNY_BOTTOM_MAX_REM);
         bunny.style.bottom = `${randomBottom.toFixed(2)}rem`;
         document.body.appendChild(bunny);
@@ -157,7 +157,7 @@
     }
 
     function handleThemeChange(themeName) {
-        if (themeName === 'frunk') {
+        if (themeName === 'cal') {
             enableRage();
         } else {
             disableRage();

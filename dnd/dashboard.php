@@ -39,7 +39,7 @@ require_once __DIR__ . '/includes/chat_pusher.php';
 $chatPusherConfig = getChatPusherClientConfig();
 
 // Define character list
-$characters = array('frunk', 'sharon', 'indigo', 'zepha');
+$characters = array('cal', 'sharon', 'indigo', 'zepha');
 
 // Include character integration utilities for loading student data
 require_once __DIR__ . '/strixhaven/gm/includes/character-integration.php';
@@ -142,7 +142,7 @@ function loadCharacterData() {
     if (!file_exists($dataFile)) {
         error_log("Creating new character data file (first time setup)");
         $default_data = array();
-        foreach (array('frunk', 'sharon', 'indigo', 'zepha') as $char) {
+        foreach (array('cal', 'sharon', 'indigo', 'zepha') as $char) {
             $default_data[$char] = array(
                 'character' => array(
                     'character_name' => '',
@@ -384,7 +384,7 @@ function loadInventoryData() {
     
     // Return default data structure if file doesn't exist
     $default_data = array();
-    foreach (array('frunk', 'sharon', 'indigo', 'zepha', 'shared', 'gm') as $section) {
+    foreach (array('cal', 'sharon', 'indigo', 'zepha', 'shared', 'gm') as $section) {
         $default_data[$section] = array('items' => array());
     }
     return $default_data;
@@ -891,16 +891,16 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['action'])) {
 
 // Load initial data
 $allData = loadCharacterData();
-$currentCharacter = $is_gm ? 'frunk' : $user; // GM starts viewing Frunk, players see their own
+$currentCharacter = $is_gm ? 'cal' : $user; // GM starts viewing Cal, players see their own
 
 // Determine which inventory tabs the user can see
 $visibleInventoryTabs = array();
 if ($is_gm) {
-    $visibleInventoryTabs = array('frunk', 'sharon', 'indigo', 'zepha', 'shared', 'gm');
+    $visibleInventoryTabs = array('cal', 'sharon', 'indigo', 'zepha', 'shared', 'gm');
 } else {
     $visibleInventoryTabs = array($user, 'shared', 'gm');
 }
-$defaultInventoryTab = $is_gm ? 'frunk' : $user;
+$defaultInventoryTab = $is_gm ? 'cal' : $user;
 ?>
 
 <!DOCTYPE html>
@@ -914,7 +914,7 @@ $defaultInventoryTab = $is_gm ? 'frunk' : $user;
     <link rel="stylesheet" href="css/inventory.css">
     <link rel="stylesheet" href="Halloween/theme.css" id="halloween-theme" disabled>
     <link rel="stylesheet" href="Christmas/theme.css" id="christmas-theme" disabled>
-    <link rel="stylesheet" href="Frunk/theme.css" id="frunk-theme" disabled>
+    <link rel="stylesheet" href="Cal/theme.css" id="cal-theme" disabled>
 <?php if ($chatPusherConfig !== null): ?>
     <script src="https://js.pusher.com/8.4.0/pusher.min.js"></script>
 <?php endif; ?>
@@ -1652,7 +1652,7 @@ $defaultInventoryTab = $is_gm ? 'frunk' : $user;
     <script src="js/theme-manager.js"></script>
     <script src="Halloween/theme.js" defer></script>
     <script src="Christmas/theme.js" defer></script>
-    <script src="Frunk/theme.js" defer></script>
+    <script src="Cal/theme.js" defer></script>
     <script src="strixhaven/gm/js/character-lookup.js"></script>
     <script src="js/character-sheet.js"></script>
     <script src="js/inventory-integrated.js"></script>

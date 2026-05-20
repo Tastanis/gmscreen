@@ -84,7 +84,7 @@ switch ($inventory_action) {
         $item_data = isset($_POST['item_data']) ? json_decode($_POST['item_data'], true) : null;
         
         // Validate tab and permissions
-        if (!in_array($tab, array('frunk', 'sharon', 'indigo', 'zepha', 'shared', 'gm'))) {
+        if (!in_array($tab, array('cal', 'sharon', 'indigo', 'zepha', 'shared', 'gm'))) {
             echo json_encode(array('success' => false, 'error' => 'Invalid tab'));
             break;
         }
@@ -162,7 +162,7 @@ switch ($inventory_action) {
         $index = isset($_POST['index']) ? intval($_POST['index']) : -1;
         
         // Validate tab and permissions
-        if (!in_array($tab, array('frunk', 'sharon', 'indigo', 'zepha', 'shared', 'gm'))) {
+        if (!in_array($tab, array('cal', 'sharon', 'indigo', 'zepha', 'shared', 'gm'))) {
             echo json_encode(array('success' => false, 'error' => 'Invalid tab'));
             break;
         }
@@ -210,7 +210,7 @@ switch ($inventory_action) {
             break;
         }
 
-        if (!in_array($tab, array('frunk', 'sharon', 'indigo', 'zepha', 'shared', 'gm'))) {
+        if (!in_array($tab, array('cal', 'sharon', 'indigo', 'zepha', 'shared', 'gm'))) {
             echo json_encode(array('success' => false, 'error' => 'Invalid tab'));
             break;
         }
@@ -274,7 +274,7 @@ switch ($inventory_action) {
         $value = isset($_POST['value']) ? $_POST['value'] : '';
         
         // Validate tab and permissions
-        if (!in_array($tab, array('frunk', 'sharon', 'indigo', 'zepha', 'shared', 'gm'))) {
+        if (!in_array($tab, array('cal', 'sharon', 'indigo', 'zepha', 'shared', 'gm'))) {
             echo json_encode(array('success' => false, 'error' => 'Invalid tab'));
             break;
         }
@@ -332,7 +332,7 @@ switch ($inventory_action) {
         $index = isset($_POST['index']) ? intval($_POST['index']) : -1;
         
         // Validate source tab (must be player's own tab)
-        if (!in_array($from_tab, array('frunk', 'sharon', 'indigo', 'zepha'))) {
+        if (!in_array($from_tab, array('cal', 'sharon', 'indigo', 'zepha'))) {
             echo json_encode(array('success' => false, 'error' => 'Can only share from personal inventory'));
             break;
         }
@@ -434,7 +434,7 @@ switch ($inventory_action) {
         }
         
         // Validate target tab
-        if (!in_array($to_tab, array('frunk', 'sharon', 'indigo', 'zepha'))) {
+        if (!in_array($to_tab, array('cal', 'sharon', 'indigo', 'zepha'))) {
             echo json_encode(array('success' => false, 'error' => 'Invalid target tab'));
             break;
         }
@@ -562,7 +562,7 @@ switch ($inventory_action) {
             $itemFound = false;
             $itemTab = null;
             
-            foreach (array('frunk', 'sharon', 'indigo', 'zepha', 'shared', 'gm') as $tab) {
+            foreach (array('cal', 'sharon', 'indigo', 'zepha', 'shared', 'gm') as $tab) {
                 if (isset($data[$tab]['items'])) {
                     foreach ($data[$tab]['items'] as $index => $item) {
                         if ($item['id'] === $item_id) {

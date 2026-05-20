@@ -35,8 +35,8 @@ function getBlankStudentRecord() {
         'bane' => '',
         'favorites' => [],
         'relationships' => [
-            'frunk_points' => '',
-            'frunk_notes' => '',
+            'cal_points' => '',
+            'cal_notes' => '',
             'zepha_points' => '',
             'zepha_notes' => '',
             'sharon_points' => '',

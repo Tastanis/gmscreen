@@ -58,7 +58,7 @@ test('placement with object HP {current, max} is preserved through store', () =>
         'scene-1': [
           {
             id: 'plc-1',
-            name: 'Frunk',
+            name: 'Cal',
             column: 0,
             row: 0,
             hp: { current: '35', max: '50' },
@@ -321,7 +321,7 @@ test('restrictTokensToPlayerView only includes tokens from PC folder', () => {
       { id: monsterFolderId, name: 'Monsters' },
     ],
     items: [
-      { id: 'tok-1', name: 'Frunk', folderId: pcFolderId },
+      { id: 'tok-1', name: 'Cal', folderId: pcFolderId },
       { id: 'tok-2', name: 'Sharon', folderId: pcFolderId },
       { id: 'tok-3', name: 'Goblin', folderId: monsterFolderId },
       { id: 'tok-4', name: 'Unsorted', folderId: null },
@@ -331,7 +331,7 @@ test('restrictTokensToPlayerView only includes tokens from PC folder', () => {
   const filtered = restrictTokensToPlayerView(tokensState);
 
   const itemNames = filtered.items.map((t) => t.name);
-  assert.ok(itemNames.includes('Frunk'), 'PC folder token should be visible');
+  assert.ok(itemNames.includes('Cal'), 'PC folder token should be visible');
   assert.ok(itemNames.includes('Sharon'), 'PC folder token should be visible');
   assert.ok(!itemNames.includes('Goblin'), 'Monster folder token should be hidden');
   assert.ok(!itemNames.includes('Unsorted'), 'Unsorted token should be hidden');
@@ -378,7 +378,7 @@ test('placement name is preserved through store normalization', () => {
         'scene-1': [
           {
             id: 'plc-name',
-            name: 'Frunk',
+            name: 'Cal',
             column: 3,
             row: 5,
             hp: { current: '40', max: '50' },
@@ -391,7 +391,7 @@ test('placement name is preserved through store normalization', () => {
   const state = getState();
   const placement = state.boardState.placements['scene-1'][0];
 
-  assert.equal(placement.name, 'Frunk');
+  assert.equal(placement.name, 'Cal');
   assert.equal(placement.id, 'plc-name');
 });
 
@@ -403,7 +403,7 @@ test('placement metadata with sourceFolderName survives normalization', () => {
         'scene-1': [
           {
             id: 'plc-meta',
-            name: 'Frunk',
+            name: 'Cal',
             column: 0,
             row: 0,
             hp: { current: '40', max: '50' },
@@ -431,7 +431,7 @@ test('placement metadata with sourceFolderName survives normalization', () => {
 test('restrictPlacementsToPlayerView preserves placements with HP regardless of values', () => {
   const placements = {
     'scene-1': [
-      { id: 'plc-1', name: 'Frunk', hp: { current: '0', max: '50' } },
+      { id: 'plc-1', name: 'Cal', hp: { current: '0', max: '50' } },
       { id: 'plc-2', name: 'Sharon', hp: { current: '30', max: '30' } },
       { id: 'plc-3', name: 'Goblin', hp: { current: '', max: '' } },
     ],
@@ -468,7 +468,7 @@ test('multiple placements in same scene maintain independent HP values', () => {
       activeSceneId: 'scene-1',
       placements: {
         'scene-1': [
-          { id: 'plc-a', name: 'Frunk', column: 0, row: 0, hp: { current: '35', max: '50' } },
+          { id: 'plc-a', name: 'Cal', column: 0, row: 0, hp: { current: '35', max: '50' } },
           { id: 'plc-b', name: 'Sharon', column: 1, row: 0, hp: { current: '20', max: '30' } },
           { id: 'plc-c', name: 'Goblin', column: 2, row: 0, hp: 12 },
         ],
@@ -497,10 +497,10 @@ test('placements across different scenes have independent HP', () => {
       activeSceneId: 'scene-1',
       placements: {
         'scene-1': [
-          { id: 'plc-s1', name: 'Frunk', column: 0, row: 0, hp: { current: '40', max: '50' } },
+          { id: 'plc-s1', name: 'Cal', column: 0, row: 0, hp: { current: '40', max: '50' } },
         ],
         'scene-2': [
-          { id: 'plc-s2', name: 'Frunk', column: 0, row: 0, hp: { current: '25', max: '50' } },
+          { id: 'plc-s2', name: 'Cal', column: 0, row: 0, hp: { current: '25', max: '50' } },
         ],
       },
     },

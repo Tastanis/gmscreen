@@ -41,22 +41,22 @@ if (is_array($data)) {
     }
     
     echo "\n2. Testing individual character access...\n";
-    $testChar = 'frunk';
-    $frunkData = isset($data[$testChar]) ? $data[$testChar] : null;
-    if ($frunkData) {
-        echo "Frunk data found:\n";
-        echo "  Name: " . ($frunkData['character']['character_name'] ?? 'NOT SET') . "\n";
-        echo "  Player: " . ($frunkData['character']['player_name'] ?? 'NOT SET') . "\n";
-        echo "  Projects: " . count($frunkData['projects'] ?? []) . "\n";
+    $testChar = 'cal';
+    $calData = isset($data[$testChar]) ? $data[$testChar] : null;
+    if ($calData) {
+        echo "Cal data found:\n";
+        echo "  Name: " . ($calData['character']['character_name'] ?? 'NOT SET') . "\n";
+        echo "  Player: " . ($calData['character']['player_name'] ?? 'NOT SET') . "\n";
+        echo "  Projects: " . count($calData['projects'] ?? []) . "\n";
         
-        if (!empty($frunkData['projects'])) {
+        if (!empty($calData['projects'])) {
             echo "\n  Project details:\n";
-            foreach ($frunkData['projects'] as $i => $project) {
+            foreach ($calData['projects'] as $i => $project) {
                 echo "    " . ($i + 1) . ". " . ($project['project_name'] ?? 'NO NAME') . "\n";
             }
         }
     } else {
-        echo "ERROR: Frunk data not found\n";
+        echo "ERROR: Cal data not found\n";
     }
     
 } else {

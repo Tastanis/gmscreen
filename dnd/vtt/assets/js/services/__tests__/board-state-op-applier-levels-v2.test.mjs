@@ -46,10 +46,10 @@ describe('Board State Op Applier — claim.set / claim.clear', () => {
       type: 'claim.set',
       sceneId: 'scene-1',
       placementId: 'hero',
-      userId: 'frunk',
+      userId: 'cal',
     });
     assert.equal(mutated, true);
-    assert.equal(state.sceneState['scene-1'].claimedTokens.hero, 'frunk');
+    assert.equal(state.sceneState['scene-1'].claimedTokens.hero, 'cal');
   });
 
   test('claim.set with same user is a no-op', () => {
@@ -140,11 +140,11 @@ describe('Board State Op Applier — user-level.set', () => {
     applyBoardStateOpLocally(state, {
       type: 'user-level.set',
       sceneId: 'scene-1',
-      userId: 'frunk',
+      userId: 'cal',
       levelId: 'level-0',
       source: 'bogus',
     });
-    assert.equal(state.sceneState['scene-1'].userLevelState.frunk.source, 'manual');
+    assert.equal(state.sceneState['scene-1'].userLevelState.cal.source, 'manual');
   });
 });
 
@@ -155,14 +155,14 @@ describe('Board State Op Applier — user-level.activate', () => {
       type: 'user-level.activate',
       sceneId: 'scene-1',
       levelId: 'map-level-a',
-      userIds: ['indigo', 'Sharon', 'frunk'],
+      userIds: ['indigo', 'Sharon', 'cal'],
     });
     assert.equal(mutated, true);
     const entries = state.sceneState['scene-1'].userLevelState;
     assert.equal(entries.indigo.levelId, 'map-level-a');
     assert.equal(entries.indigo.source, 'activate');
     assert.equal(entries.sharon.source, 'activate');
-    assert.equal(entries.frunk.source, 'activate');
+    assert.equal(entries.cal.source, 'activate');
   });
 
   test('returns false when userIds is empty or missing', () => {

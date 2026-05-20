@@ -117,7 +117,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['action']) && $_POST['
         $itemFound = false;
         $itemTab = null;
         
-        foreach (array('frunk', 'sharon', 'indigo', 'zepha', 'shared', 'gm') as $tab) {
+        foreach (array('cal', 'sharon', 'indigo', 'zepha', 'shared', 'gm') as $tab) {
             if (isset($data[$tab]['items'])) {
                 foreach ($data[$tab]['items'] as $index => $item) {
                     if ($item['id'] === $item_id) {

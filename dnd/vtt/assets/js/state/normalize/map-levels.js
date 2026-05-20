@@ -28,7 +28,7 @@ export const BASE_MAP_LEVEL_ID = 'level-0';
 // only currently connected websocket clients — so reloads stay consistent.
 export const KNOWN_LEVEL_USER_IDS = Object.freeze([
   'gm',
-  'frunk',
+  'cal',
   'sharon',
   'indigo',
   'zepha',
@@ -40,7 +40,7 @@ export const KNOWN_LEVEL_USER_IDS = Object.freeze([
 // `'gm'` for Activate's roster purpose, but the GM is never a claim target —
 // unclaimed and GM-owned are equivalent per the plan.
 export const PLAYER_CHARACTER_USER_IDS = Object.freeze([
-  'frunk',
+  'cal',
   'sharon',
   'indigo',
   'zepha',

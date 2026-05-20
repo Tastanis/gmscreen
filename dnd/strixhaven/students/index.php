@@ -41,7 +41,7 @@ function syncRelationshipsToCharacters($student) {
             $relationships = $student['relationships'];
             $studentId = $student['student_id'];
             $studentName = isset($student['name']) ? $student['name'] : '';
-            $pcs = array('frunk', 'zepha', 'sharon', 'indigo');
+            $pcs = array('cal', 'zepha', 'sharon', 'indigo');
             $updated = false;
 
             foreach ($pcs as $pc) {

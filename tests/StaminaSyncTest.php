@@ -142,7 +142,7 @@ final class StaminaSyncTest extends TestCase
         $defaults = getDefaultCharacterEntry();
         $entry = [
             'hero' => [
-                'name' => 'Frunk',
+                'name' => 'Cal',
                 'vitals' => [
                     'staminaMax' => 60,
                     'currentStamina' => 45,
@@ -158,7 +158,7 @@ final class StaminaSyncTest extends TestCase
         $this->assertSame(45, $result['hero']['vitals']['currentStamina']);
         $this->assertSame(10, $result['hero']['vitals']['recoveriesMax']);
         $this->assertSame(7, $result['hero']['vitals']['currentRecoveries']);
-        $this->assertSame('Frunk', $result['hero']['name']);
+        $this->assertSame('Cal', $result['hero']['name']);
     }
 
     public function testMergeCharacterDefaultsIncludesAllVitalKeys(): void
@@ -210,25 +210,25 @@ final class StaminaSyncTest extends TestCase
 
     public function testSaveAndLoadPreservesStaminaValues(): void
     {
-        $characters = ['frunk'];
+        $characters = ['cal'];
         $defaults = getDefaultCharacterEntry();
-        $data = ['frunk' => $defaults];
-        $data['frunk']['hero']['vitals']['staminaMax'] = 50;
-        $data['frunk']['hero']['vitals']['currentStamina'] = 35;
+        $data = ['cal' => $defaults];
+        $data['cal']['hero']['vitals']['staminaMax'] = 50;
+        $data['cal']['hero']['vitals']['currentStamina'] = 35;
 
         $this->assertTrue(saveCharacterSheetData($this->tmpDir, $this->tmpFile, $data));
 
         $loaded = loadCharacterSheetData($this->tmpDir, $this->tmpFile, $characters);
 
-        $this->assertSame(50, $loaded['frunk']['hero']['vitals']['staminaMax']);
-        $this->assertSame(35, $loaded['frunk']['hero']['vitals']['currentStamina']);
+        $this->assertSame(50, $loaded['cal']['hero']['vitals']['staminaMax']);
+        $this->assertSame(35, $loaded['cal']['hero']['vitals']['currentStamina']);
     }
 
     public function testLoadNormalizesCorruptedStaminaValues(): void
     {
-        $characters = ['frunk'];
+        $characters = ['cal'];
         $corrupted = [
-            'frunk' => [
+            'cal' => [
                 'hero' => [
                     'vitals' => [
                         'stamina' => 70,
@@ -241,9 +241,9 @@ final class StaminaSyncTest extends TestCase
 
         $loaded = loadCharacterSheetData($this->tmpDir, $this->tmpFile, $characters);
 
-        $this->assertSame(70, $loaded['frunk']['hero']['vitals']['staminaMax'],
+        $this->assertSame(70, $loaded['cal']['hero']['vitals']['staminaMax'],
             'Legacy stamina should be normalized to staminaMax on load');
-        $this->assertSame(70, $loaded['frunk']['hero']['vitals']['currentStamina'],
+        $this->assertSame(70, $loaded['cal']['hero']['vitals']['currentStamina'],
             'Legacy stamina should also populate currentStamina');
     }
 
@@ -253,59 +253,59 @@ final class StaminaSyncTest extends TestCase
 
     public function testSyncStaminaPostUpdatesCharacterSheet(): void
     {
-        $characters = ['frunk'];
+        $characters = ['cal'];
         $defaults = getDefaultCharacterEntry();
-        $initial = ['frunk' => $defaults];
-        $initial['frunk']['hero']['name'] = 'Frunk';
-        $initial['frunk']['hero']['vitals']['staminaMax'] = 50;
-        $initial['frunk']['hero']['vitals']['currentStamina'] = 50;
+        $initial = ['cal' => $defaults];
+        $initial['cal']['hero']['name'] = 'Cal';
+        $initial['cal']['hero']['vitals']['staminaMax'] = 50;
+        $initial['cal']['hero']['vitals']['currentStamina'] = 50;
 
         saveCharacterSheetData($this->tmpDir, $this->tmpFile, $initial);
 
         // Simulate the sync-stamina POST action logic from handler.php
         $allSheets = loadCharacterSheetData($this->tmpDir, $this->tmpFile, $characters);
-        $sheet = $allSheets['frunk'];
+        $sheet = $allSheets['cal'];
 
         $staminaMax = 50;
         $currentStamina = 35;
 
         $sheet['hero']['vitals']['staminaMax'] = $staminaMax;
         $sheet['hero']['vitals']['currentStamina'] = $currentStamina;
-        $allSheets['frunk'] = $sheet;
+        $allSheets['cal'] = $sheet;
 
         $this->assertTrue(saveCharacterSheetData($this->tmpDir, $this->tmpFile, $allSheets));
 
         // Verify by reloading
         $reloaded = loadCharacterSheetData($this->tmpDir, $this->tmpFile, $characters);
-        $this->assertSame(50, $reloaded['frunk']['hero']['vitals']['staminaMax']);
-        $this->assertSame(35, $reloaded['frunk']['hero']['vitals']['currentStamina']);
+        $this->assertSame(50, $reloaded['cal']['hero']['vitals']['staminaMax']);
+        $this->assertSame(35, $reloaded['cal']['hero']['vitals']['currentStamina']);
     }
 
     public function testSyncStaminaGetReturnsExpectedFields(): void
     {
-        $characters = ['frunk'];
+        $characters = ['cal'];
         $defaults = getDefaultCharacterEntry();
-        $data = ['frunk' => $defaults];
-        $data['frunk']['hero']['name'] = 'Frunk the Bold';
-        $data['frunk']['hero']['vitals']['staminaMax'] = 60;
-        $data['frunk']['hero']['vitals']['currentStamina'] = 42;
+        $data = ['cal' => $defaults];
+        $data['cal']['hero']['name'] = 'Cal the Bold';
+        $data['cal']['hero']['vitals']['staminaMax'] = 60;
+        $data['cal']['hero']['vitals']['currentStamina'] = 42;
 
         saveCharacterSheetData($this->tmpDir, $this->tmpFile, $data);
 
         // Simulate the sync-stamina GET response construction from handler.php
         $allSheets = loadCharacterSheetData($this->tmpDir, $this->tmpFile, $characters);
-        $sheet = $allSheets['frunk'];
+        $sheet = $allSheets['cal'];
 
         $response = [
             'name' => isset($sheet['hero']['name']) && $sheet['hero']['name'] !== ''
-                ? $sheet['hero']['name'] : 'frunk',
+                ? $sheet['hero']['name'] : 'cal',
             'staminaMax' => isset($sheet['hero']['vitals']['staminaMax'])
                 ? $sheet['hero']['vitals']['staminaMax'] : 0,
             'currentStamina' => isset($sheet['hero']['vitals']['currentStamina'])
                 ? $sheet['hero']['vitals']['currentStamina'] : 0,
         ];
 
-        $this->assertSame('Frunk the Bold', $response['name']);
+        $this->assertSame('Cal the Bold', $response['name']);
         $this->assertSame(60, $response['staminaMax']);
         $this->assertSame(42, $response['currentStamina']);
     }
@@ -331,17 +331,17 @@ final class StaminaSyncTest extends TestCase
 
     public function testSyncStaminaOnlyCurrentStaminaUpdated(): void
     {
-        $characters = ['frunk'];
+        $characters = ['cal'];
         $defaults = getDefaultCharacterEntry();
-        $data = ['frunk' => $defaults];
-        $data['frunk']['hero']['vitals']['staminaMax'] = 50;
-        $data['frunk']['hero']['vitals']['currentStamina'] = 50;
+        $data = ['cal' => $defaults];
+        $data['cal']['hero']['vitals']['staminaMax'] = 50;
+        $data['cal']['hero']['vitals']['currentStamina'] = 50;
 
         saveCharacterSheetData($this->tmpDir, $this->tmpFile, $data);
 
         // Simulate sync where only currentStamina is provided (staminaMax is null)
         $allSheets = loadCharacterSheetData($this->tmpDir, $this->tmpFile, $characters);
-        $sheet = $allSheets['frunk'];
+        $sheet = $allSheets['cal'];
 
         $staminaMax = null;
         $currentStamina = 25;
@@ -350,14 +350,14 @@ final class StaminaSyncTest extends TestCase
             $sheet['hero']['vitals']['staminaMax'] = $staminaMax;
         }
         $sheet['hero']['vitals']['currentStamina'] = $currentStamina;
-        $allSheets['frunk'] = $sheet;
+        $allSheets['cal'] = $sheet;
 
         saveCharacterSheetData($this->tmpDir, $this->tmpFile, $allSheets);
         $reloaded = loadCharacterSheetData($this->tmpDir, $this->tmpFile, $characters);
 
-        $this->assertSame(50, $reloaded['frunk']['hero']['vitals']['staminaMax'],
+        $this->assertSame(50, $reloaded['cal']['hero']['vitals']['staminaMax'],
             'staminaMax should remain unchanged when not provided');
-        $this->assertSame(25, $reloaded['frunk']['hero']['vitals']['currentStamina'],
+        $this->assertSame(25, $reloaded['cal']['hero']['vitals']['currentStamina'],
             'currentStamina should be updated');
     }
 
@@ -367,7 +367,7 @@ final class StaminaSyncTest extends TestCase
 
     public function testSyncStaminaForOneCharacterDoesNotAffectAnother(): void
     {
-        $characters = ['frunk', 'sharon'];
+        $characters = ['cal', 'sharon'];
         $defaults = getDefaultCharacterEntry();
         $data = [];
 
@@ -380,16 +380,16 @@ final class StaminaSyncTest extends TestCase
 
         saveCharacterSheetData($this->tmpDir, $this->tmpFile, $data);
 
-        // Update only frunk's stamina
+        // Update only cal's stamina
         $allSheets = loadCharacterSheetData($this->tmpDir, $this->tmpFile, $characters);
-        $allSheets['frunk']['hero']['vitals']['currentStamina'] = 30;
+        $allSheets['cal']['hero']['vitals']['currentStamina'] = 30;
         saveCharacterSheetData($this->tmpDir, $this->tmpFile, $allSheets);
 
         $reloaded = loadCharacterSheetData($this->tmpDir, $this->tmpFile, $characters);
 
-        $this->assertSame(30, $reloaded['frunk']['hero']['vitals']['currentStamina']);
+        $this->assertSame(30, $reloaded['cal']['hero']['vitals']['currentStamina']);
         $this->assertSame(50, $reloaded['sharon']['hero']['vitals']['currentStamina'],
-            'Sharon\'s stamina should be unaffected by Frunk\'s update');
+            'Sharon\'s stamina should be unaffected by Cal\'s update');
     }
 
     // ----------------------------------------------------------------
@@ -445,14 +445,14 @@ final class StaminaSyncTest extends TestCase
 
     public function testLoadCreatesDefaultFileIfMissing(): void
     {
-        $characters = ['frunk'];
+        $characters = ['cal'];
         $loaded = loadCharacterSheetData($this->tmpDir, $this->tmpFile, $characters);
 
-        $this->assertArrayHasKey('frunk', $loaded);
-        $this->assertArrayHasKey('hero', $loaded['frunk']);
-        $this->assertArrayHasKey('vitals', $loaded['frunk']['hero']);
-        $this->assertSame(0, $loaded['frunk']['hero']['vitals']['staminaMax']);
-        $this->assertSame(0, $loaded['frunk']['hero']['vitals']['currentStamina']);
+        $this->assertArrayHasKey('cal', $loaded);
+        $this->assertArrayHasKey('hero', $loaded['cal']);
+        $this->assertArrayHasKey('vitals', $loaded['cal']['hero']);
+        $this->assertSame(0, $loaded['cal']['hero']['vitals']['staminaMax']);
+        $this->assertSame(0, $loaded['cal']['hero']['vitals']['currentStamina']);
         $this->assertFileExists($this->tmpFile);
     }
 }

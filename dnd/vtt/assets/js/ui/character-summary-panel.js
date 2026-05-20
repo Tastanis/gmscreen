@@ -1,4 +1,4 @@
-const PC_CHARACTER_IDS = new Set(['frunk', 'sharon', 'indigo', 'zepha']);
+const PC_CHARACTER_IDS = new Set(['cal', 'sharon', 'indigo', 'zepha']);
 
 const SKILL_GROUPS = {
   Crafting: [
@@ -1515,7 +1515,7 @@ function parseAbilityResourceCost(value) {
     };
   }
   // Format B: bare number — implies the character's own resource bar.
-  // This is how the sheet's Cost field is normally typed (Frunk's "3"/"5"/"7"
+  // This is how the sheet's Cost field is normally typed (Cal's "3"/"5"/"7"
   // on the heroic abilities, etc.). spendAbilityResource sees `name = ''`
   // and falls through to the caster's resource without a name guard.
   const bareMatch = text.match(/^(\d+)$/);

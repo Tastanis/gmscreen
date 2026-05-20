@@ -4,7 +4,7 @@ session_start();
 // Define credentials: username => array('password' => ..., 'session_user' => ...)
 // Username 'harms' maps to session user 'GM' for compatibility with the rest of the app.
 $users = array(
-    'frunk'  => array('password' => 'frunk',  'session_user' => 'frunk'),
+    'cal'  => array('password' => 'cal',  'session_user' => 'cal'),
     'sharon' => array('password' => 'sharon', 'session_user' => 'sharon'),
     'indigo' => array('password' => 'indigo', 'session_user' => 'indigo'),
     'zepha'  => array('password' => 'zepha',  'session_user' => 'zepha'),
