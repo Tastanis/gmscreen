@@ -2,90 +2,113 @@
 
 body.cal-theme {
     font-family: 'Barlow Condensed', 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
-    background: radial-gradient(circle at 20% 20%, #f6f7fb 0%, #dfe3ec 45%, #0e0f16 100%);
-    color: #140a12;
+    background:
+        radial-gradient(circle at 78% 12%, rgba(247, 207, 102, 0.28) 0%, rgba(247, 207, 102, 0) 32%),
+        radial-gradient(circle at 12% 88%, rgba(126, 143, 86, 0.24) 0%, rgba(126, 143, 86, 0) 38%),
+        linear-gradient(135deg, #716d63 0%, #4e5047 48%, #161712 100%);
+    color: #241910;
     position: relative;
     overflow-x: hidden;
 }
 
-.cal-bunny {
+.cal-mushroom-growth {
     position: fixed;
-    bottom: 2.5rem;
-    left: -6rem;
-    width: 4.25rem;
-    height: 3.2rem;
+    bottom: var(--mushroom-bottom, 0.25rem);
+    left: var(--mushroom-left, 50vw);
+    width: var(--mushroom-size, 8rem);
+    aspect-ratio: 1 / 1;
     pointer-events: none;
-    z-index: 9999;
-    transform-origin: center;
+    z-index: 4;
+    transform-origin: 50% 100%;
     background-image: url('./images/first.png');
     background-repeat: no-repeat;
-    background-position: center;
+    background-position: bottom center;
     background-size: contain;
     image-rendering: optimizeQuality;
-    filter: drop-shadow(0 0.35rem 0.65rem rgba(12, 3, 9, 0.45));
+    filter:
+        drop-shadow(0 0.8rem 1rem rgba(22, 16, 10, 0.5))
+        drop-shadow(0 0 0.85rem rgba(248, 207, 90, 0.35));
     animation:
-        cal-bunny-hop 6s linear forwards,
-        cal-bunny-sprite 0.6s steps(1) infinite;
+        cal-mushroom-grow var(--mushroom-duration, 7.5s) ease-out forwards,
+        cal-mushroom-sprite var(--mushroom-duration, 7.5s) steps(1) forwards;
 }
 
-@keyframes cal-bunny-sprite {
+.cal-mushroom-growth::before,
+.cal-mushroom-growth::after {
+    content: '';
+    position: absolute;
+    left: 50%;
+    bottom: 18%;
+    width: 0.45rem;
+    height: 0.45rem;
+    border-radius: 50%;
+    background: rgba(255, 222, 114, 0.9);
+    box-shadow:
+        -2.2rem -1.1rem 0 -0.12rem rgba(255, 235, 154, 0.72),
+        1.8rem -1.7rem 0 -0.08rem rgba(255, 218, 93, 0.82),
+        -1.1rem -3.1rem 0 -0.16rem rgba(255, 248, 201, 0.68),
+        2.6rem -3.6rem 0 -0.18rem rgba(255, 226, 123, 0.68);
+    opacity: 0;
+    animation: cal-spore-rise var(--mushroom-duration, 7.5s) ease-out forwards;
+}
+
+.cal-mushroom-growth::after {
+    animation-delay: 0.45s;
+    transform: scale(0.8) rotate(12deg);
+}
+
+@keyframes cal-mushroom-sprite {
     0%,
-    33% {
+    34% {
         background-image: url('./images/first.png');
     }
-    34%,
-    66% {
+    35%,
+    68% {
         background-image: url('./images/second.png');
     }
-    67%,
+    69%,
     100% {
         background-image: url('./images/third.png');
     }
 }
 
-@keyframes cal-bunny-hop {
+@keyframes cal-mushroom-grow {
     0% {
-        transform: translateX(0) translateY(0) scale(0.98);
+        opacity: 0;
+        transform: translateX(-50%) translateY(2rem) scale(0.08, 0.02) rotate(-2deg);
     }
-
-    10% {
-        transform: translateX(10vw) translateY(-1.5rem) scale(1.02);
+    14% {
+        opacity: 1;
+        transform: translateX(-50%) translateY(1rem) scale(0.28, 0.18) rotate(1deg);
     }
-
-    20% {
-        transform: translateX(20vw) translateY(0) scale(1);
+    42% {
+        transform: translateX(calc(-50% + var(--mushroom-drift, 0rem) * -0.3)) translateY(0) scale(0.72, 0.84) rotate(-1deg);
     }
-
-    30% {
-        transform: translateX(30vw) translateY(-1.3rem) scale(1.03);
+    66% {
+        opacity: 1;
+        transform: translateX(calc(-50% + var(--mushroom-drift, 0rem))) translateY(-0.35rem) scale(1.04, 1.02) rotate(1deg);
     }
-
-    40% {
-        transform: translateX(40vw) translateY(0) scale(0.99);
+    82% {
+        transform: translateX(calc(-50% + var(--mushroom-drift, 0rem) * 0.6)) translateY(-0.2rem) scale(1) rotate(0deg);
     }
-
-    50% {
-        transform: translateX(50vw) translateY(-1.4rem) scale(1.04);
-    }
-
-    60% {
-        transform: translateX(60vw) translateY(0) scale(1);
-    }
-
-    70% {
-        transform: translateX(70vw) translateY(-1.2rem) scale(1.03);
-    }
-
-    80% {
-        transform: translateX(80vw) translateY(0) scale(0.99);
-    }
-
-    90% {
-        transform: translateX(90vw) translateY(-1rem) scale(1.01);
-    }
-
     100% {
-        transform: translateX(110vw) translateY(0) scale(0.98);
+        opacity: 0;
+        transform: translateX(calc(-50% + var(--mushroom-drift, 0rem))) translateY(-0.7rem) scale(0.96) rotate(0deg);
+    }
+}
+
+@keyframes cal-spore-rise {
+    0%,
+    22% {
+        opacity: 0;
+        transform: translate(-50%, 0) scale(0.45);
+    }
+    46% {
+        opacity: 0.85;
+    }
+    100% {
+        opacity: 0;
+        transform: translate(calc(-50% + var(--mushroom-drift, 0rem)), -5rem) scale(1.1);
     }
 }
 
@@ -95,9 +118,12 @@ body.cal-theme::before {
     inset: 0;
     pointer-events: none;
     background:
-        linear-gradient(115deg, rgba(255, 255, 255, 0.6) 0%, rgba(255, 255, 255, 0) 45%),
-        linear-gradient(245deg, rgba(255, 46, 99, 0.12) 0%, rgba(255, 46, 99, 0) 55%),
-        repeating-linear-gradient(90deg, rgba(15, 16, 24, 0.18), rgba(15, 16, 24, 0.18) 2px, transparent 2px, transparent 6px);
+        radial-gradient(circle at 18% 20%, rgba(255, 230, 151, 0.32) 0 0.18rem, transparent 0.22rem),
+        radial-gradient(circle at 58% 76%, rgba(255, 218, 98, 0.28) 0 0.14rem, transparent 0.18rem),
+        radial-gradient(circle at 82% 32%, rgba(255, 244, 203, 0.25) 0 0.12rem, transparent 0.16rem),
+        linear-gradient(115deg, rgba(255, 246, 218, 0.26) 0%, rgba(255, 246, 218, 0) 45%),
+        repeating-linear-gradient(90deg, rgba(20, 16, 12, 0.1), rgba(20, 16, 12, 0.1) 2px, transparent 2px, transparent 7px);
+    background-size: 13rem 13rem, 17rem 17rem, 19rem 19rem, auto, auto;
     mix-blend-mode: screen;
     z-index: -1;
 }
@@ -107,48 +133,50 @@ body.cal-theme::after {
     position: fixed;
     inset: 0;
     pointer-events: none;
-    background: radial-gradient(circle at 60% 20%, rgba(255, 255, 255, 0.3) 0%, rgba(255, 255, 255, 0) 40%),
-        radial-gradient(circle at 30% 80%, rgba(255, 46, 99, 0.22) 0%, rgba(255, 46, 99, 0) 55%);
+    background:
+        radial-gradient(circle at 60% 20%, rgba(255, 231, 161, 0.22) 0%, rgba(255, 231, 161, 0) 40%),
+        radial-gradient(circle at 30% 80%, rgba(125, 140, 83, 0.24) 0%, rgba(125, 140, 83, 0) 55%),
+        linear-gradient(to top, rgba(20, 22, 15, 0.62), rgba(20, 22, 15, 0) 35%);
     z-index: -1;
 }
 
 body.cal-theme .top-nav {
-    background: rgba(244, 246, 252, 0.9);
-    border-bottom: 3px solid rgba(255, 46, 99, 0.7);
-    box-shadow: 0 18px 35px rgba(15, 16, 24, 0.45);
+    background: rgba(244, 235, 211, 0.92);
+    border-bottom: 3px solid rgba(221, 167, 55, 0.72);
+    box-shadow: 0 18px 35px rgba(20, 18, 12, 0.46);
 }
 
 body.cal-theme .nav-title {
     font-family: 'Anton', sans-serif;
-    color: #ff2e63;
+    color: #d89a20;
     letter-spacing: 0.12em;
     text-transform: uppercase;
-    text-shadow: 0 4px 12px rgba(15, 16, 24, 0.35);
+    text-shadow: 0 4px 12px rgba(20, 16, 10, 0.34);
 }
 
 body.cal-theme .nav-buttons .nav-btn {
-    background: linear-gradient(160deg, #ffffff, #f4f5fa);
-    color: #140a12;
-    border: 2px solid rgba(255, 46, 99, 0.55);
-    box-shadow: 0 8px 18px rgba(20, 10, 18, 0.25);
+    background: linear-gradient(160deg, #fff9e9, #ead8ad);
+    color: #241910;
+    border: 2px solid rgba(180, 126, 35, 0.55);
+    box-shadow: 0 8px 18px rgba(34, 24, 12, 0.24);
     text-transform: uppercase;
     letter-spacing: 0.08em;
 }
 
 body.cal-theme .nav-buttons .nav-btn:hover {
-    background: linear-gradient(160deg, #ffe8ee, #fff5f8);
+    background: linear-gradient(160deg, #fff4c6, #f3d47b);
     transform: translateY(-1px) scale(1.01);
 }
 
 body.cal-theme .nav-btn.logout-btn {
-    background: linear-gradient(160deg, #140a12, #2d0c17);
+    background: linear-gradient(160deg, #1b1710, #3c2c14);
     color: #ffffff;
     border-color: rgba(255, 255, 255, 0.4);
-    box-shadow: 0 8px 22px rgba(20, 10, 18, 0.4);
+    box-shadow: 0 8px 22px rgba(20, 16, 10, 0.4);
 }
 
 body.cal-theme .nav-btn.logout-btn:hover {
-    background: linear-gradient(160deg, #2d0c17, #430e22);
+    background: linear-gradient(160deg, #3c2c14, #5a401a);
 }
 
 body.cal-theme #theme-toggle-btn {
@@ -159,20 +187,25 @@ body.cal-theme #theme-toggle-btn {
 }
 
 body.cal-theme #theme-toggle-btn::before {
-    content: '🐰';
+    content: '';
+    display: inline-block;
+    width: 1.1em;
+    height: 1.1em;
     margin-right: 8px;
+    vertical-align: -0.16em;
+    background: url('./images/first.png') center / contain no-repeat;
 }
 
 body.cal-theme #theme-toggle-btn.theme-active::after {
     content: '';
     position: absolute;
     inset: -25%;
-    background: radial-gradient(circle at 30% 30%, rgba(255, 46, 99, 0.32) 0%, rgba(255, 46, 99, 0) 65%);
-    animation: cal-rage-glow 6s infinite alternate;
+    background: radial-gradient(circle at 30% 30%, rgba(255, 215, 109, 0.38) 0%, rgba(255, 215, 109, 0) 65%);
+    animation: cal-spore-glow 6s infinite alternate;
     z-index: -1;
 }
 
-@keyframes cal-rage-glow {
+@keyframes cal-spore-glow {
     from {
         opacity: 0.35;
         transform: scale(0.9);
@@ -184,19 +217,19 @@ body.cal-theme #theme-toggle-btn.theme-active::after {
 }
 
 body.cal-theme .dropdown-content {
-    background: rgba(244, 246, 252, 0.95);
-    border: 2px solid rgba(20, 10, 18, 0.15);
-    box-shadow: 0 20px 45px rgba(14, 15, 22, 0.35);
+    background: rgba(246, 236, 210, 0.96);
+    border: 2px solid rgba(36, 25, 16, 0.15);
+    box-shadow: 0 20px 45px rgba(18, 17, 12, 0.35);
 }
 
 body.cal-theme .dropdown-content a {
-    color: #140a12;
+    color: #241910;
     text-transform: uppercase;
     letter-spacing: 0.05em;
 }
 
 body.cal-theme .dropdown-content a:hover {
-    background: rgba(255, 46, 99, 0.1);
+    background: rgba(216, 154, 32, 0.16);
 }
 
 body.cal-theme .main-container {
@@ -207,244 +240,204 @@ body.cal-theme .main-container {
 
 body.cal-theme .character-tabs,
 body.cal-theme .inventory-tabs {
-    background: rgba(255, 255, 255, 0.92);
+    background: rgba(255, 248, 229, 0.92);
     border-radius: 18px 18px 0 0;
-    border: 2px solid rgba(20, 10, 18, 0.15);
-    box-shadow: 0 18px 40px rgba(14, 15, 22, 0.35);
+    border: 2px solid rgba(36, 25, 16, 0.15);
+    box-shadow: 0 18px 40px rgba(18, 17, 12, 0.35);
 }
 
 body.cal-theme .character-tab,
 body.cal-theme .inventory-tab {
-    color: #140a12;
+    color: #241910;
     text-transform: uppercase;
     letter-spacing: 0.06em;
 }
 
 body.cal-theme .character-tab:hover,
 body.cal-theme .inventory-tab:hover {
-    background: rgba(255, 46, 99, 0.12);
+    background: rgba(216, 154, 32, 0.14);
 }
 
 body.cal-theme .character-tab.active,
 body.cal-theme .inventory-tab.active {
-    background: rgba(255, 46, 99, 0.55);
-    color: #fff;
-    border-bottom: 3px solid rgba(255, 46, 99, 0.85);
-    box-shadow: inset 0 -3px 0 rgba(180, 30, 70, 0.6);
+    background: rgba(216, 154, 32, 0.62);
+    color: #fffaf0;
+    border-bottom: 3px solid rgba(255, 216, 108, 0.88);
+    box-shadow: inset 0 -3px 0 rgba(123, 83, 20, 0.6);
 }
 
 body.cal-theme .content-wrapper,
 body.cal-theme .inventory-container,
 body.cal-theme .inventory-content-wrapper {
-    background: rgba(248, 249, 253, 0.92);
-    border: 2px solid rgba(20, 10, 18, 0.1);
+    background: rgba(250, 243, 224, 0.93);
+    border: 2px solid rgba(36, 25, 16, 0.12);
     border-radius: 0 0 20px 20px;
-    box-shadow: 0 30px 60px rgba(14, 15, 22, 0.35);
+    box-shadow: 0 30px 60px rgba(18, 17, 12, 0.35);
 }
 
 body.cal-theme .section h2,
 body.cal-theme .inventory-section h2 {
     font-family: 'Anton', sans-serif;
-    color: #140a12;
-    border-bottom-color: rgba(255, 46, 99, 0.4);
+    color: #241910;
+    border-bottom-color: rgba(216, 154, 32, 0.45);
     letter-spacing: 0.08em;
 }
 
 body.cal-theme input,
 body.cal-theme textarea,
 body.cal-theme select {
-    background: rgba(255, 255, 255, 0.85);
-    border: 2px solid rgba(20, 10, 18, 0.15);
-    color: #140a12;
+    background: rgba(255, 252, 241, 0.88);
+    border: 2px solid rgba(36, 25, 16, 0.15);
+    color: #241910;
 }
 
 body.cal-theme input:focus,
 body.cal-theme textarea:focus,
 body.cal-theme select:focus {
-    border-color: rgba(255, 46, 99, 0.55);
-    box-shadow: 0 0 0 3px rgba(255, 46, 99, 0.25);
+    border-color: rgba(216, 154, 32, 0.6);
+    box-shadow: 0 0 0 3px rgba(255, 218, 112, 0.28);
 }
 
 body.cal-theme .upload-btn {
-    background: linear-gradient(160deg, #ff2e63, #c21b46);
+    background: linear-gradient(160deg, #d89a20, #866020);
     border: 2px solid rgba(255, 255, 255, 0.5);
     color: #ffffff;
 }
 
 body.cal-theme .upload-btn:hover {
-    background: linear-gradient(160deg, #ff4b79, #d91f54);
+    background: linear-gradient(160deg, #f0bc3e, #a97824);
 }
 
 body.cal-theme .relationship-entry,
 body.cal-theme .inventory-item {
-    background: rgba(255, 255, 255, 0.75);
-    border: 2px solid rgba(20, 10, 18, 0.12);
-    box-shadow: 0 10px 18px rgba(20, 10, 18, 0.1);
+    background: rgba(255, 252, 241, 0.78);
+    border: 2px solid rgba(36, 25, 16, 0.12);
+    box-shadow: 0 10px 18px rgba(34, 24, 12, 0.1);
 }
 
 body.cal-theme .relationship-entry:hover,
 body.cal-theme .inventory-item:hover {
-    border-color: rgba(255, 46, 99, 0.35);
+    border-color: rgba(216, 154, 32, 0.4);
 }
 
 body.cal-theme .relationship-entry strong,
 body.cal-theme .inventory-item strong {
-    color: #ff2e63;
+    color: #b87814;
 }
 
-body.cal-theme .relationship-entry .relationship-points {
-    color: #2b2d42;
-}
-
+body.cal-theme .relationship-entry .relationship-points,
 body.cal-theme .relationship-entry .relationship-notes,
 body.cal-theme .inventory-item .item-notes {
-    color: #2b2d42;
+    color: #38402b;
 }
 
 body.cal-theme .card,
 body.cal-theme .inventory-card {
-    background: rgba(255, 255, 255, 0.85);
-    border: 2px solid rgba(20, 10, 18, 0.12);
-    box-shadow: 0 15px 28px rgba(14, 15, 22, 0.25);
+    background: rgba(255, 252, 241, 0.86);
+    border: 2px solid rgba(36, 25, 16, 0.12);
+    box-shadow: 0 15px 28px rgba(18, 17, 12, 0.25);
 }
 
 body.cal-theme .card:hover,
 body.cal-theme .inventory-card:hover {
     transform: translateY(-3px);
-    box-shadow: 0 20px 40px rgba(14, 15, 22, 0.35);
+    box-shadow: 0 20px 40px rgba(18, 17, 12, 0.35);
 }
 
-body.cal-theme .inventory-tab.gm {
-    color: #ff2e63;
+body.cal-theme .inventory-tab.gm,
+body.cal-theme .inventory-section h3,
+body.cal-theme .tab-description strong,
+body.cal-theme .monster-card .monster-name,
+body.cal-theme .status-bar .status-value {
+    color: #b87814;
 }
 
-body.cal-theme .gm-allowed {
-    color: #c21b46;
+body.cal-theme .gm-allowed,
+body.cal-theme .inventory-section strong,
+body.cal-theme .inventory-note strong {
+    color: #7d6f35;
 }
 
 body.cal-theme .gm-restricted,
 body.cal-theme .access-restricted {
-    color: rgba(20, 10, 18, 0.45);
+    color: rgba(36, 25, 16, 0.48);
 }
 
-body.cal-theme .inventory-section h3 {
-    color: #ff2e63;
+body.cal-theme .inventory-note,
+body.cal-theme .status-bar,
+body.cal-theme .monster-card,
+body.cal-theme .inventory-search input,
+body.cal-theme .inventory-list-item {
+    background: rgba(255, 252, 241, 0.74);
+    border: 2px solid rgba(36, 25, 16, 0.12);
 }
 
-body.cal-theme .inventory-section strong,
-body.cal-theme .inventory-note strong {
-    color: #c21b46;
-}
-
-body.cal-theme .inventory-note {
-    background: rgba(255, 255, 255, 0.65);
-    border: 2px solid rgba(20, 10, 18, 0.12);
-}
-
-body.cal-theme .status-bar {
-    background: rgba(255, 255, 255, 0.8);
-    border: 2px solid rgba(20, 10, 18, 0.15);
-}
-
-body.cal-theme .status-bar .status-label {
-    color: #2b2d42;
-}
-
-body.cal-theme .status-bar .status-value {
-    color: #ff2e63;
+body.cal-theme .status-bar .status-label,
+body.cal-theme .monster-card .monster-details,
+body.cal-theme .tab-description em {
+    color: #38402b;
 }
 
 body.cal-theme .inventory-content-wrapper::-webkit-scrollbar-thumb {
-    background: rgba(255, 46, 99, 0.4);
+    background: rgba(216, 154, 32, 0.48);
 }
 
 body.cal-theme .inventory-content-wrapper::-webkit-scrollbar-track {
-    background: rgba(255, 255, 255, 0.6);
+    background: rgba(255, 252, 241, 0.62);
 }
 
 body.cal-theme .portrait-frame {
-    border: 3px solid rgba(255, 46, 99, 0.35);
-    background: rgba(255, 255, 255, 0.75);
+    border: 3px solid rgba(216, 154, 32, 0.42);
+    background: rgba(255, 252, 241, 0.76);
 }
 
 body.cal-theme .portrait-placeholder {
-    color: rgba(20, 10, 18, 0.5);
-}
-
-body.cal-theme .monster-card {
-    background: rgba(255, 255, 255, 0.88);
-    border: 2px solid rgba(20, 10, 18, 0.12);
-}
-
-body.cal-theme .monster-card .monster-name {
-    color: #ff2e63;
-}
-
-body.cal-theme .monster-card .monster-details {
-    color: #2b2d42;
+    color: rgba(36, 25, 16, 0.5);
 }
 
 body.cal-theme .schedule-table th {
-    background: rgba(255, 46, 99, 0.2);
+    background: rgba(216, 154, 32, 0.22);
 }
 
 body.cal-theme .schedule-table td {
-    background: rgba(255, 255, 255, 0.7);
+    background: rgba(255, 252, 241, 0.72);
 }
 
 body.cal-theme .schedule-table tr:nth-child(even) td {
-    background: rgba(255, 235, 242, 0.7);
+    background: rgba(242, 225, 179, 0.72);
 }
 
 body.cal-theme .schedule-table tr:hover td {
-    background: rgba(255, 46, 99, 0.22);
+    background: rgba(216, 154, 32, 0.24);
 }
 
 body.cal-theme .tab-description {
-    color: rgba(20, 10, 18, 0.75);
-}
-
-body.cal-theme .tab-description strong {
-    color: #ff2e63;
-}
-
-body.cal-theme .tab-description em {
-    color: #2b2d42;
-}
-
-body.cal-theme .inventory-search input {
-    background: rgba(255, 255, 255, 0.8);
-    border: 2px solid rgba(20, 10, 18, 0.12);
+    color: rgba(36, 25, 16, 0.76);
 }
 
 body.cal-theme .inventory-search input:focus {
-    border-color: rgba(255, 46, 99, 0.45);
-}
-
-body.cal-theme .inventory-list-item {
-    background: rgba(255, 255, 255, 0.75);
-    border: 2px solid rgba(20, 10, 18, 0.12);
+    border-color: rgba(216, 154, 32, 0.5);
 }
 
 body.cal-theme .inventory-list-item:hover {
-    border-color: rgba(255, 46, 99, 0.35);
+    border-color: rgba(216, 154, 32, 0.4);
 }
 
-body.cal-theme .rage-ripple {
-    animation: cal-rage-pulse 0.6s ease-in-out;
+body.cal-theme .spore-ripple {
+    animation: cal-spore-pulse 0.7s ease-in-out;
 }
 
-@keyframes cal-rage-pulse {
+@keyframes cal-spore-pulse {
     0% {
         transform: scale(1);
-        filter: drop-shadow(0 0 0 rgba(255, 46, 99, 0));
+        filter: drop-shadow(0 0 0 rgba(255, 215, 109, 0));
     }
     50% {
         transform: scale(1.03);
-        filter: drop-shadow(0 0 12px rgba(255, 46, 99, 0.45));
+        filter: drop-shadow(0 0 14px rgba(255, 215, 109, 0.55));
     }
     100% {
         transform: scale(1);
-        filter: drop-shadow(0 0 0 rgba(255, 46, 99, 0));
+        filter: drop-shadow(0 0 0 rgba(255, 215, 109, 0));
     }
 }

@@ -1,19 +1,23 @@
 (function () {
-    const MIN_RAGE_INTERVAL = 15000;
-    const MAX_RAGE_INTERVAL = 28000;
-    const BUNNY_INTERVAL_MIN = 170000;
-    const BUNNY_INTERVAL_MAX = 190000;
-    const INITIAL_BUNNY_WINDOW = 5000;
-    const INITIAL_BUNNY_COUNT_MIN = 4;
-    const INITIAL_BUNNY_COUNT_MAX = 5;
-    const RECURRING_BUNNY_COUNT_MIN = 1;
-    const RECURRING_BUNNY_COUNT_MAX = 2;
-    const BUNNY_WAVE_SPREAD = 900;
-    const BUNNY_BOTTOM_MIN_REM = 1.5;
-    const BUNNY_BOTTOM_MAX_REM = 6.5;
+    const MIN_SPORE_INTERVAL = 12000;
+    const MAX_SPORE_INTERVAL = 24000;
+    const MUSHROOM_INTERVAL_MIN = 125000;
+    const MUSHROOM_INTERVAL_MAX = 155000;
+    const INITIAL_MUSHROOM_WINDOW = 5200;
+    const INITIAL_MUSHROOM_COUNT_MIN = 4;
+    const INITIAL_MUSHROOM_COUNT_MAX = 6;
+    const RECURRING_MUSHROOM_COUNT_MIN = 1;
+    const RECURRING_MUSHROOM_COUNT_MAX = 3;
+    const MUSHROOM_WAVE_SPREAD = 1500;
+    const MUSHROOM_BOTTOM_MIN_REM = -1.2;
+    const MUSHROOM_BOTTOM_MAX_REM = 1.2;
+    const MUSHROOM_SIZE_MIN_REM = 5.5;
+    const MUSHROOM_SIZE_MAX_REM = 12.5;
+    const MUSHROOM_DURATION_MIN_MS = 6200;
+    const MUSHROOM_DURATION_MAX_MS = 9200;
 
-    let rageTimer = null;
-    const bunnyTimers = new Set();
+    let sporeTimer = null;
+    const mushroomTimers = new Set();
     let active = false;
 
     function randomBetween(min, max) {
@@ -26,141 +30,150 @@
 
     function managedTimeout(callback, delay) {
         const timerId = window.setTimeout(() => {
-            bunnyTimers.delete(timerId);
+            mushroomTimers.delete(timerId);
             callback();
         }, delay);
-        bunnyTimers.add(timerId);
+        mushroomTimers.add(timerId);
     }
 
-    function removeRageClass(target) {
+    function removeSporeClass(target) {
         if (!target) {
             return;
         }
-        target.classList.remove('rage-ripple');
+        target.classList.remove('spore-ripple');
     }
 
-    function triggerRage() {
+    function triggerSporePulse() {
         if (!active) {
             return;
         }
+
         const targets = [
             document.querySelector('.nav-title'),
             document.getElementById('theme-toggle-btn')
         ];
+
         targets.forEach(target => {
             if (!target) {
                 return;
             }
-            target.classList.add('rage-ripple');
-            setTimeout(() => removeRageClass(target), 650);
+            target.classList.add('spore-ripple');
+            window.setTimeout(() => removeSporeClass(target), 750);
         });
-        scheduleNextRage();
+
+        scheduleNextSporePulse();
     }
 
-    function scheduleNextRage() {
+    function scheduleNextSporePulse() {
         if (!active) {
             return;
         }
-        const delay = randomBetween(MIN_RAGE_INTERVAL, MAX_RAGE_INTERVAL);
-        rageTimer = window.setTimeout(triggerRage, delay);
+        const delay = randomBetween(MIN_SPORE_INTERVAL, MAX_SPORE_INTERVAL);
+        sporeTimer = window.setTimeout(triggerSporePulse, delay);
     }
 
-    function removeBunnyElements() {
-        document.querySelectorAll('.cal-bunny').forEach(element => {
+    function removeMushroomElements() {
+        document.querySelectorAll('.cal-mushroom-growth').forEach(element => {
             element.remove();
         });
     }
 
-    function scheduleBunnyWave(count) {
+    function scheduleMushroomWave(count) {
         for (let index = 0; index < count; index += 1) {
-            const offset = Math.floor(Math.random() * Math.max(1, BUNNY_WAVE_SPREAD));
-            managedTimeout(spawnBunny, offset);
+            const offset = Math.floor(Math.random() * Math.max(1, MUSHROOM_WAVE_SPREAD));
+            managedTimeout(spawnMushroom, offset);
         }
     }
 
-    function spawnBunny() {
+    function spawnMushroom() {
         if (!active) {
             return;
         }
 
-        const bunny = document.createElement('div');
-        bunny.className = 'cal-bunny';
-        const randomBottom = randomBetweenFloat(BUNNY_BOTTOM_MIN_REM, BUNNY_BOTTOM_MAX_REM);
-        bunny.style.bottom = `${randomBottom.toFixed(2)}rem`;
-        document.body.appendChild(bunny);
+        const mushroom = document.createElement('div');
+        mushroom.className = 'cal-mushroom-growth';
+        mushroom.style.setProperty('--mushroom-left', `${randomBetweenFloat(6, 94).toFixed(2)}vw`);
+        mushroom.style.setProperty('--mushroom-bottom', `${randomBetweenFloat(MUSHROOM_BOTTOM_MIN_REM, MUSHROOM_BOTTOM_MAX_REM).toFixed(2)}rem`);
+        mushroom.style.setProperty('--mushroom-size', `${randomBetweenFloat(MUSHROOM_SIZE_MIN_REM, MUSHROOM_SIZE_MAX_REM).toFixed(2)}rem`);
+        mushroom.style.setProperty('--mushroom-drift', `${randomBetweenFloat(-1.2, 1.2).toFixed(2)}rem`);
+        mushroom.style.setProperty('--mushroom-duration', `${randomBetween(MUSHROOM_DURATION_MIN_MS, MUSHROOM_DURATION_MAX_MS)}ms`);
+        document.body.appendChild(mushroom);
 
-        const handleAnimationEnd = () => {
-            bunny.removeEventListener('animationend', handleAnimationEnd);
-            bunny.remove();
+        const handleAnimationEnd = event => {
+            if (event.animationName !== 'cal-mushroom-grow') {
+                return;
+            }
+            mushroom.removeEventListener('animationend', handleAnimationEnd);
+            mushroom.remove();
         };
 
-        bunny.addEventListener('animationend', handleAnimationEnd);
+        mushroom.addEventListener('animationend', handleAnimationEnd);
     }
 
-    function scheduleRecurringBunnies() {
+    function scheduleRecurringMushrooms() {
         if (!active) {
             return;
         }
 
-        const delay = randomBetween(BUNNY_INTERVAL_MIN, BUNNY_INTERVAL_MAX);
+        const delay = randomBetween(MUSHROOM_INTERVAL_MIN, MUSHROOM_INTERVAL_MAX);
         managedTimeout(() => {
             if (!active) {
                 return;
             }
-            const count = randomBetween(RECURRING_BUNNY_COUNT_MIN, RECURRING_BUNNY_COUNT_MAX);
-            scheduleBunnyWave(count);
-            scheduleRecurringBunnies();
+            const count = randomBetween(RECURRING_MUSHROOM_COUNT_MIN, RECURRING_MUSHROOM_COUNT_MAX);
+            scheduleMushroomWave(count);
+            scheduleRecurringMushrooms();
         }, delay);
     }
 
-    function scheduleInitialBunnies() {
+    function scheduleInitialMushrooms() {
         if (!active) {
             return;
         }
 
-        const bunnyCount = randomBetween(INITIAL_BUNNY_COUNT_MIN, INITIAL_BUNNY_COUNT_MAX);
-        const baseSpacing = INITIAL_BUNNY_WINDOW / Math.max(1, bunnyCount);
+        const mushroomCount = randomBetween(INITIAL_MUSHROOM_COUNT_MIN, INITIAL_MUSHROOM_COUNT_MAX);
+        const baseSpacing = INITIAL_MUSHROOM_WINDOW / Math.max(1, mushroomCount);
 
-        for (let index = 0; index < bunnyCount; index += 1) {
+        for (let index = 0; index < mushroomCount; index += 1) {
             const jitter = Math.floor(Math.random() * (baseSpacing / 2));
             const delay = Math.floor(index * baseSpacing + jitter);
-            managedTimeout(spawnBunny, delay);
+            managedTimeout(spawnMushroom, delay);
         }
     }
 
-    function enableRage() {
+    function enableMushroomTheme() {
         if (active) {
             return;
         }
         active = true;
-        scheduleNextRage();
-        scheduleInitialBunnies();
-        scheduleRecurringBunnies();
+        scheduleNextSporePulse();
+        scheduleInitialMushrooms();
+        scheduleRecurringMushrooms();
     }
 
-    function disableRage() {
+    function disableMushroomTheme() {
         if (!active) {
             return;
         }
         active = false;
-        if (rageTimer) {
-            clearTimeout(rageTimer);
-            rageTimer = null;
+        if (sporeTimer) {
+            clearTimeout(sporeTimer);
+            sporeTimer = null;
         }
-        bunnyTimers.forEach(timerId => {
+        mushroomTimers.forEach(timerId => {
             clearTimeout(timerId);
         });
-        bunnyTimers.clear();
-        removeRageClass(document.querySelector('.nav-title'));
-        removeRageClass(document.getElementById('theme-toggle-btn'));
-        removeBunnyElements();
+        mushroomTimers.clear();
+        removeSporeClass(document.querySelector('.nav-title'));
+        removeSporeClass(document.getElementById('theme-toggle-btn'));
+        removeMushroomElements();
     }
 
     function handleThemeChange(themeName) {
         if (themeName === 'cal') {
-            enableRage();
+            enableMushroomTheme();
         } else {
-            disableRage();
+            disableMushroomTheme();
         }
     }
 
