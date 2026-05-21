@@ -18,12 +18,15 @@ if ($_SERVER['REQUEST_METHOD'] !== 'POST') {
     exit;
 }
 
-$student_id = intval($_POST['student_id'] ?? 0);
 $standard_id = trim($_POST['standard_id'] ?? '');
 $title = trim($_POST['title'] ?? '');
 $description = trim($_POST['description'] ?? '');
+$asl_level = (int) ($_POST['asl_level'] ?? (defined('ASLHUB_SITE_LEVEL') ? ASLHUB_SITE_LEVEL : 1));
+if (!in_array($asl_level, [1, 2], true)) {
+    $asl_level = defined('ASLHUB_SITE_LEVEL') ? (int) ASLHUB_SITE_LEVEL : 1;
+}
 
-if ($student_id <= 0 || $standard_id === '' || $title === '') {
+if ($standard_id === '' || $title === '') {
     http_response_code(400);
     echo json_encode(['success' => false, 'message' => 'Standard and title are required.']);
     exit;
@@ -32,14 +35,6 @@ if ($student_id <= 0 || $standard_id === '' || $title === '') {
 aslhubEnsureStudentDashboardSchema($pdo);
 
 try {
-    $stmt = $pdo->prepare("SELECT id FROM users WHERE id = ? AND is_teacher = FALSE");
-    $stmt->execute([$student_id]);
-    if (!$stmt->fetch()) {
-        http_response_code(404);
-        echo json_encode(['success' => false, 'message' => 'Student not found.']);
-        exit;
-    }
-
     $stmt = $pdo->prepare("SELECT standard_id FROM asl_standards WHERE standard_id = ?");
     $stmt->execute([$standard_id]);
     if (!$stmt->fetch()) {
@@ -52,15 +47,15 @@ try {
     $stmt->execute([$standard_id]);
     $next_order = (int) $stmt->fetchColumn();
 
-    $stmt = $pdo->prepare("INSERT INTO asl_learning_targets (standard_id, title, description, order_index)
-        VALUES (?, ?, ?, ?)");
-    $stmt->execute([$standard_id, $title, $description === '' ? null : $description, $next_order]);
+    $stmt = $pdo->prepare("INSERT INTO asl_learning_targets (standard_id, title, description, order_index, asl_level)
+        VALUES (?, ?, ?, ?, ?)");
+    $stmt->execute([$standard_id, $title, $description === '' ? null : $description, $next_order, $asl_level]);
 
     echo json_encode([
         'success' => true,
         'message' => 'Learning target added.',
         'learning_target_id' => $pdo->lastInsertId(),
-        'dashboard' => aslhubFetchStudentDashboardData($pdo, $student_id),
+        'standards' => aslhubFetchTeacherStandardsData($pdo, $asl_level),
     ]);
 } catch (PDOException $e) {
     error_log('ASL learning target add failed: ' . $e->getMessage());

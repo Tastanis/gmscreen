@@ -87,6 +87,13 @@ try {
     $total_skills = 0;
     $skills_summary = [];
 }
+
+$aslhub_site_level = defined('ASLHUB_SITE_LEVEL') ? (int) ASLHUB_SITE_LEVEL : 2;
+$standards_data = aslhubFetchTeacherStandardsData($pdo, $aslhub_site_level);
+$standards_json = json_encode($standards_data, JSON_HEX_TAG | JSON_HEX_APOS | JSON_HEX_QUOT | JSON_HEX_AMP);
+if ($standards_json === false) {
+    $standards_json = '{}';
+}
 ?>
 <!DOCTYPE html>
 <html lang="en">
@@ -111,8 +118,7 @@ try {
 
         <nav class="teacher-tabs" aria-label="Dashboard sections">
             <button type="button" class="teacher-tab" onclick="showSection('students')" id="students-btn">Student Progress</button>
-            <button type="button" class="teacher-tab" onclick="showSection('skills')" id="skills-btn">Skills Overview</button>
-            <button type="button" class="teacher-tab" onclick="showSection('manage')" id="manage-btn">Manage Skills</button>
+            <button type="button" class="teacher-tab" onclick="showSection('standards')" id="standards-btn">Standards</button>
             <button type="button" class="teacher-tab" onclick="showSection('scroller')" id="scroller-btn">Scroller Game</button>
             <button type="button" class="teacher-tab" onclick="window.location.href='bingo_dashboard.php'" id="bingo-btn">Bingo</button>
         </nav>
@@ -193,7 +199,6 @@ try {
                                 <div class="student-card-avatar" aria-hidden="true"><?php echo $initials; ?></div>
                                 <div class="student-card-identity">
                                     <h3 class="student-name"><?php echo htmlspecialchars($student['first_name'] . ' ' . $student['last_name']); ?></h3>
-                                    <p class="student-email"><?php echo htmlspecialchars($student['email']); ?></p>
                                 </div>
                             </header>
                             <div class="student-card-meta">
@@ -218,143 +223,38 @@ try {
                 </div>
             </section>
                 
-            <!-- Skills Overview Section -->
-            <section class="student-section" id="skills-section" style="display: none;">
+            <!-- Standards Section -->
+            <section class="student-section" id="standards-section" style="display: none;">
                 <div class="student-section-header">
                     <div>
-                        <p class="student-kicker">Skills Overview</p>
-                        <h2>Progress Across All Skills</h2>
+                        <p class="student-kicker">Standards &amp; Learning Targets</p>
+                        <h2>Standards for ASL <?php echo (int) $aslhub_site_level; ?></h2>
                     </div>
-                    <p>Aggregated student status per skill.</p>
+                    <p>Click a bucket, then a standard, then add learning targets that will appear for every ASL <?php echo (int) $aslhub_site_level; ?> student.</p>
                 </div>
 
-                <div class="skills-summary">
-                        <?php 
-                        // Get all skills with their IDs for the action buttons
-                        $stmt = $pdo->prepare("SELECT id, skill_name, skill_description, unit, order_index, asl_level FROM skills ORDER BY order_index");
-                        $stmt->execute();
-                        $all_skills = $stmt->fetchAll();
-                        
-                        $position_number = 1;
-                        foreach ($all_skills as $skill): 
-                            // Find the corresponding skill summary
-                            $skill_summary = null;
-        foreach ($skills_summary as $summary) {
-            if ((int)$summary['id'] === (int)$skill['id']) {
-                $skill_summary = $summary;
-                break;
-            }
-        }
-                            
-                            if (!$skill_summary) {
-                                $skill_summary = [
-                                    'skill_name' => $skill['skill_name'],
-                                    'not_started' => 0,
-                                    'progressing' => 0,
-                                    'proficient' => 0
-                                ];
-                            }
-                        ?>
-                            <div class="skill-summary-card" data-skill-id="<?php echo $skill['id']; ?>">
-                                <div class="skill-position-controls">
-                                    <span class="skill-position-number">#<?php echo $position_number; ?></span>
-                                    <div class="position-buttons">
-                                        <button class="position-btn" onclick="moveSkill(<?php echo $skill['id']; ?>, 'move_up')" <?php echo $position_number == 1 ? 'disabled' : ''; ?> title="Move Up">▲</button>
-                                        <button class="position-btn" onclick="moveSkill(<?php echo $skill['id']; ?>, 'move_down')" <?php echo $position_number == count($all_skills) ? 'disabled' : ''; ?> title="Move Down">▼</button>
-                                        <input type="number" class="position-input" id="position-<?php echo $skill['id']; ?>" min="1" max="<?php echo count($all_skills); ?>" value="<?php echo $position_number; ?>" onchange="moveToPosition(<?php echo $skill['id']; ?>, this.value)" title="Move to position">
-                                    </div>
-                                </div>
-                                <div class="skill-summary-header">
-                                    <div>
-                                        <h3><?php echo htmlspecialchars($skill_summary['skill_name']); ?></h3>
-                                        <div class="skill-meta-line">
-                                            <?php if (!empty($skill['unit'])): ?>
-                                                <span class="skill-unit">Unit: <?php echo htmlspecialchars($skill['unit']); ?></span>
-                                            <?php else: ?>
-                                                <span class="skill-unit no-unit">No Unit</span>
-                                            <?php endif; ?>
-                                            <span class="skill-level-badge">
-                                                <?php echo (($skill['asl_level'] ?? 3) == 3) ? 'ASL 1 & 2' : 'ASL ' . (int)$skill['asl_level']; ?>
-                                            </span>
-                                        </div>
-                                    </div>
-                                    <div class="skill-actions">
-                                        <button class="action-btn edit-btn" onclick="editSkill(<?php echo $skill['id']; ?>, '<?php echo htmlspecialchars($skill['skill_name'], ENT_QUOTES); ?>', '<?php echo htmlspecialchars($skill['skill_description'], ENT_QUOTES); ?>', '<?php echo htmlspecialchars($skill['unit'] ?? '', ENT_QUOTES); ?>', <?php echo (int)($skill['asl_level'] ?? 3); ?>)">Edit</button>
-                                        <button class="action-btn resources-btn" onclick="manageResources(<?php echo $skill['id']; ?>, '<?php echo htmlspecialchars($skill['skill_name'], ENT_QUOTES); ?>')">Resources</button>
-                                        <button class="action-btn delete-btn" onclick="deleteSkill(<?php echo $skill['id']; ?>, '<?php echo htmlspecialchars($skill['skill_name'], ENT_QUOTES); ?>')">Delete</button>
-                                    </div>
-                                </div>
-                                <div class="skill-stats">
-                                    <div class="stat-item">
-                                        <span class="stat-label">Not Started:</span>
-                                        <span class="stat-value not-started"><?php echo $skill_summary['not_started']; ?></span>
-                                    </div>
-                                    <div class="stat-item">
-                                        <span class="stat-label">Progressing:</span>
-                                        <span class="stat-value progressing"><?php echo $skill_summary['progressing']; ?></span>
-                                    </div>
-                                    <div class="stat-item">
-                                        <span class="stat-label">Proficient:</span>
-                                        <span class="stat-value proficient"><?php echo $skill_summary['proficient']; ?></span>
-                                    </div>
-                                </div>
-                            </div>
-                        <?php
-                            $position_number++;
-                        endforeach; ?>
+                <div class="curriculum-grid teacher-standards-grid">
+                    <div>
+                        <h3 class="column-title">Buckets</h3>
+                        <div id="standards-bucket-list" class="bucket-list"></div>
+                    </div>
+                    <div>
+                        <h3 class="column-title">Standards</h3>
+                        <div id="standards-standard-list" class="standard-list"></div>
+                    </div>
+                    <div>
+                        <h3 class="column-title">Learning Targets</h3>
+                        <div id="standards-target-panel" class="target-panel"></div>
+                        <form id="standards-add-lt-form" class="add-lt-form">
+                            <h4>Add Learning Target</h4>
+                            <input type="text" name="title" placeholder="Learning target title" required>
+                            <textarea name="description" placeholder="Optional description"></textarea>
+                            <button type="submit">Add to Selected Standard</button>
+                        </form>
+                    </div>
                 </div>
             </section>
 
-            <!-- Manage Skills Section -->
-            <section class="student-section" id="manage-section" style="display: none;">
-                <div class="student-section-header">
-                    <div>
-                        <p class="student-kicker">Manage Skills</p>
-                        <h2>Add, Edit, or Remove Skills</h2>
-                    </div>
-                    <p>Skills appear under each standard for grading.</p>
-                </div>
-
-                <div class="manage-actions">
-                    <button class="teacher-btn teacher-btn-success" onclick="showAddSkillForm()">Add New Skill</button>
-                    <button class="teacher-btn teacher-btn-neutral" onclick="exportProgress()">Export Progress Report</button>
-                </div>
-
-                <div id="add-skill-form" class="teacher-inline-form" style="display: none;">
-                        <h3>Add New Skill</h3>
-                        <form id="new-skill-form">
-                            <div class="form-group">
-                                <label>Skill Name</label>
-                                <input type="text" name="skill_name" class="form-input" required>
-                            </div>
-                            <div class="form-group">
-                                <label>Skill Description</label>
-                                <textarea name="skill_description" class="form-input" rows="3"></textarea>
-                            </div>
-                            <div class="form-group">
-                                <label>Unit (optional - leave blank for year-round skills)</label>
-                                <input type="text" name="unit" class="form-input" placeholder="e.g., Unit 1, Semester 1, etc.">
-                            </div>
-                            <div class="form-group">
-                                <label>ASL Level</label>
-                                <select name="asl_level" class="form-input">
-                                    <option value="1">ASL 1 Only</option>
-                                    <option value="2" selected>ASL 2 Only</option>
-                                    <option value="3">Both ASL 1 &amp; 2</option>
-                                </select>
-                            </div>
-                            <div class="form-group">
-                                <label>Resources (one per line)</label>
-                                <textarea name="resources" class="form-input" rows="5" placeholder="Resource Name 1|https://example.com&#10;https://docs.google.com/document/d/123&#10;Just a resource name&#10;Another Resource|https://link.com"></textarea>
-                                <small style="color: #6c757d; font-size: 0.85rem; margin-top: 5px; display: block;">
-                                    Format: "Name|URL" or just "URL" or just "Name". Use the Resources button after creation for advanced editing.
-                                </small>
-                            </div>
-                        <button type="submit" class="form-button">Add Skill</button>
-                        <button type="button" class="form-button" onclick="hideAddSkillForm()" style="background: #6c757d;">Cancel</button>
-                    </form>
-                </div>
-            </section>
 
             <!-- Scroller Game Section -->
             <section class="student-section" id="scroller-section" style="display: none;">
@@ -556,25 +456,22 @@ try {
     
     <script>
         function showSection(sectionName) {
-            // Hide all sections
-            document.getElementById('students-section').style.display = 'none';
-            document.getElementById('skills-section').style.display = 'none';
-            document.getElementById('manage-section').style.display = 'none';
-            document.getElementById('scroller-section').style.display = 'none';
-            
-            // Remove active class from all buttons
-            document.getElementById('students-btn').classList.remove('active');
-            document.getElementById('skills-btn').classList.remove('active');
-            document.getElementById('manage-btn').classList.remove('active');
-            document.getElementById('scroller-btn').classList.remove('active');
-            
-            // Show selected section and activate button
-            document.getElementById(sectionName + '-section').style.display = 'block';
-            document.getElementById(sectionName + '-btn').classList.add('active');
-            
-            // Load section-specific content
+            ['students', 'standards', 'scroller'].forEach(name => {
+                const section = document.getElementById(name + '-section');
+                const btn = document.getElementById(name + '-btn');
+                if (section) section.style.display = 'none';
+                if (btn) btn.classList.remove('active');
+            });
+
+            const showSec = document.getElementById(sectionName + '-section');
+            const showBtn = document.getElementById(sectionName + '-btn');
+            if (showSec) showSec.style.display = 'block';
+            if (showBtn) showBtn.classList.add('active');
+
             if (sectionName === 'scroller') {
                 loadWordlists();
+            } else if (sectionName === 'standards') {
+                renderStandardsSection();
             }
         }
         
@@ -642,21 +539,144 @@ try {
             });
         }
 
-        function showAddSkillForm() {
-            document.getElementById('add-skill-form').style.display = 'block';
+        // ===== Standards section =====
+        const SITE_ASL_LEVEL = <?php echo (int) $aslhub_site_level; ?>;
+        let standardsData = <?php echo $standards_json; ?>;
+        const standardsState = {
+            bucketId: (standardsData.buckets && standardsData.buckets[0]) ? standardsData.buckets[0].id : null,
+            standardId: (standardsData.buckets && standardsData.buckets[0] && standardsData.buckets[0].standards[0]) ? standardsData.buckets[0].standards[0].id : null
+        };
+
+        function standardsEscapeHtml(value) {
+            const div = document.createElement('div');
+            div.textContent = value == null ? '' : String(value);
+            return div.innerHTML;
         }
-        
-        function hideAddSkillForm() {
-            document.getElementById('add-skill-form').style.display = 'none';
-            document.getElementById('new-skill-form').reset();
+
+        function getStandardsBucket(bucketId) {
+            return (standardsData.buckets || []).find(b => b.id === bucketId) || null;
         }
-        
-        function exportProgress() {
-            // This would generate and download a progress report
-            alert('Export functionality coming soon!');
+
+        function getStandardsStandard(standardId) {
+            for (const b of standardsData.buckets || []) {
+                const found = (b.standards || []).find(s => s.id === standardId);
+                if (found) return found;
+            }
+            return null;
         }
-        
-        
+
+        function getStandardsTargets(standardId) {
+            return (standardsData.targetsByStandard || {})[standardId] || [];
+        }
+
+        function renderStandardsBuckets() {
+            const list = document.getElementById('standards-bucket-list');
+            if (!list) return;
+            list.innerHTML = (standardsData.buckets || []).map(b => {
+                const count = (b.standards || []).reduce((sum, s) => sum + getStandardsTargets(s.id).length, 0);
+                return `
+                    <button type="button" class="bucket-card ${b.id === standardsState.bucketId ? 'active' : ''}" data-bucket-id="${standardsEscapeHtml(b.id)}">
+                        <span class="bucket-code">${standardsEscapeHtml(b.code)}</span>
+                        <span class="bucket-name">${standardsEscapeHtml(b.name)}</span>
+                        <span class="bucket-progress">${count} learning target${count === 1 ? '' : 's'}</span>
+                    </button>
+                `;
+            }).join('');
+            list.querySelectorAll('[data-bucket-id]').forEach(btn => {
+                btn.addEventListener('click', () => {
+                    const b = getStandardsBucket(btn.dataset.bucketId);
+                    standardsState.bucketId = btn.dataset.bucketId;
+                    standardsState.standardId = (b && b.standards[0]) ? b.standards[0].id : null;
+                    renderStandardsSection();
+                });
+            });
+        }
+
+        function renderStandardsStandards() {
+            const list = document.getElementById('standards-standard-list');
+            if (!list) return;
+            const bucket = getStandardsBucket(standardsState.bucketId);
+            const standards = bucket ? (bucket.standards || []) : [];
+            list.innerHTML = standards.map(s => {
+                const count = getStandardsTargets(s.id).length;
+                return `
+                    <button type="button" class="standard-row ${s.id === standardsState.standardId ? 'active' : ''}" data-standard-id="${standardsEscapeHtml(s.id)}">
+                        <span class="standard-id">${standardsEscapeHtml(s.id)}</span>
+                        <span class="standard-name">${standardsEscapeHtml(s.name)}</span>
+                        <span class="standard-desc">${standardsEscapeHtml(s.description || '')}</span>
+                        <span class="standard-progress">${count} LT${count === 1 ? '' : 's'}</span>
+                    </button>
+                `;
+            }).join('');
+            list.querySelectorAll('[data-standard-id]').forEach(btn => {
+                btn.addEventListener('click', () => {
+                    standardsState.standardId = btn.dataset.standardId;
+                    renderStandardsSection();
+                });
+            });
+        }
+
+        function renderStandardsTargets() {
+            const panel = document.getElementById('standards-target-panel');
+            if (!panel) return;
+            const standard = getStandardsStandard(standardsState.standardId);
+            if (!standard) {
+                panel.innerHTML = '<div class="empty-panel">Select a standard to view its learning targets.</div>';
+                return;
+            }
+            const targets = getStandardsTargets(standard.id);
+            const targetItems = targets.length
+                ? targets.map(t => `
+                    <div class="target-row">
+                        <span>${standardsEscapeHtml(t.title)}</span>
+                        ${t.description ? `<small>${standardsEscapeHtml(t.description)}</small>` : ''}
+                    </div>
+                `).join('')
+                : '<div class="empty-panel">No learning targets yet. Add one below.</div>';
+            panel.innerHTML = `
+                <div class="target-standard-summary">
+                    <span>${standardsEscapeHtml(standard.id)}</span>
+                    <h4>${standardsEscapeHtml(standard.name)}</h4>
+                    <p>${standardsEscapeHtml(standard.description || '')}</p>
+                </div>
+                <div class="target-list">${targetItems}</div>
+            `;
+        }
+
+        function renderStandardsSection() {
+            renderStandardsBuckets();
+            renderStandardsStandards();
+            renderStandardsTargets();
+        }
+
+        function submitStandardsAddLearningTarget() {
+            const form = document.getElementById('standards-add-lt-form');
+            if (!form) return;
+            if (!standardsState.standardId) {
+                showMessage('Select a standard first.', 'error');
+                return;
+            }
+            const formData = new FormData(form);
+            formData.append('standard_id', standardsState.standardId);
+            formData.append('asl_level', SITE_ASL_LEVEL);
+
+            fetch('add_learning_target.php', { method: 'POST', body: formData })
+                .then(r => r.json())
+                .then(data => {
+                    if (!data.success) {
+                        throw new Error(data.message || 'Unable to add learning target.');
+                    }
+                    if (data.standards) {
+                        standardsData = data.standards;
+                    }
+                    form.reset();
+                    renderStandardsSection();
+                    showMessage('Learning target added.', 'success');
+                })
+                .catch(err => showMessage(err.message || 'Unable to add learning target.', 'error'));
+        }
+
+
         // Set initial active state
         document.addEventListener('DOMContentLoaded', function() {
             document.getElementById('students-btn').classList.add('active');
@@ -667,12 +687,15 @@ try {
             document.getElementById('level-filter').addEventListener('change', filterAndSortStudents);
             document.getElementById('sort-filter').addEventListener('change', filterAndSortStudents);
             
-            // Add form submission handler
-            document.getElementById('new-skill-form').addEventListener('submit', function(e) {
-                e.preventDefault();
-                submitNewSkill();
-            });
-            
+            // Standards add-LT form handler
+            const addLtForm = document.getElementById('standards-add-lt-form');
+            if (addLtForm) {
+                addLtForm.addEventListener('submit', function(e) {
+                    e.preventDefault();
+                    submitStandardsAddLearningTarget();
+                });
+            }
+
             // Add scroller wordlist form submission handler
             document.getElementById('new-wordlist-form').addEventListener('submit', function(e) {
                 e.preventDefault();
