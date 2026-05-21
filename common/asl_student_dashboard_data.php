@@ -219,6 +219,19 @@ if (!function_exists('aslhubEnsureStudentDashboardSchema')) {
                 INDEX idx_user_lt_history_target (learning_target_id)
             ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci");
 
+            $pdo->exec("CREATE TABLE IF NOT EXISTS asl_student_meetings (
+                id INT AUTO_INCREMENT PRIMARY KEY,
+                user_id INT NOT NULL,
+                meeting_date DATE NOT NULL,
+                absences INT NOT NULL DEFAULT 0,
+                participation_pct DECIMAL(5,2) NULL,
+                notes TEXT NULL,
+                created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+                updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+                INDEX idx_asl_meetings_user_date (user_id, meeting_date),
+                INDEX idx_asl_meetings_date (meeting_date)
+            ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci");
+
             $pdo->exec("CREATE TABLE IF NOT EXISTS asl_student_snapshot_metrics (
                 id INT AUTO_INCREMENT PRIMARY KEY,
                 user_id INT NOT NULL,
@@ -452,6 +465,143 @@ if (!function_exists('aslhubStudentDashboardComparisons')) {
     }
 }
 
+if (!function_exists('aslhubStudentMeetingBucketLabel')) {
+    function aslhubStudentMeetingBucketLabel(DateTimeImmutable $start, int $bucketIndex): array
+    {
+        $bucketStart = $start->modify('+' . ($bucketIndex * 14) . ' days');
+        $bucketEnd = $bucketStart->modify('+13 days');
+        return [
+            'index' => $bucketIndex,
+            'periodStart' => $bucketStart->format('Y-m-d'),
+            'periodEnd' => $bucketEnd->format('Y-m-d'),
+            'label' => $bucketStart->format('M j'),
+        ];
+    }
+}
+
+if (!function_exists('aslhubStudentDashboardMeetings')) {
+    function aslhubStudentDashboardMeetings(PDO $pdo, int $userId): array
+    {
+        $start = aslhubStudentDashboardCourseStart();
+        $now = new DateTimeImmutable('now');
+        $daysSinceStart = max(0, (int) $start->diff($now)->format('%r%a'));
+        $currentBucket = (int) floor($daysSinceStart / 14);
+
+        $studentEntries = [];
+        $classByBucket = [];
+        $bucketsWithData = [];
+
+        try {
+            $stmt = $pdo->prepare("SELECT id, meeting_date, absences, participation_pct, notes
+                FROM asl_student_meetings
+                WHERE user_id = ?
+                ORDER BY meeting_date DESC, id DESC");
+            $stmt->execute([$userId]);
+            foreach ($stmt->fetchAll(PDO::FETCH_ASSOC) as $row) {
+                try {
+                    $mDate = new DateTimeImmutable($row['meeting_date']);
+                } catch (Exception $e) {
+                    continue;
+                }
+                $days = (int) $start->diff($mDate)->format('%r%a');
+                $bucketIndex = $days >= 0 ? (int) floor($days / 14) : 0;
+                $studentEntries[] = [
+                    'id' => (int) $row['id'],
+                    'date' => $row['meeting_date'],
+                    'absences' => (int) $row['absences'],
+                    'participation_pct' => $row['participation_pct'] !== null ? (float) $row['participation_pct'] : null,
+                    'notes' => $row['notes'] ?? '',
+                    'bucketIndex' => $bucketIndex,
+                ];
+                $bucketsWithData[$bucketIndex] = true;
+            }
+
+            $stmt = $pdo->query("SELECT m.meeting_date, m.absences, m.participation_pct
+                FROM asl_student_meetings m
+                INNER JOIN users u ON u.id = m.user_id
+                WHERE u.is_teacher = FALSE");
+            foreach ($stmt->fetchAll(PDO::FETCH_ASSOC) as $row) {
+                try {
+                    $mDate = new DateTimeImmutable($row['meeting_date']);
+                } catch (Exception $e) {
+                    continue;
+                }
+                $days = (int) $start->diff($mDate)->format('%r%a');
+                $bucketIndex = $days >= 0 ? (int) floor($days / 14) : 0;
+                if (!isset($classByBucket[$bucketIndex])) {
+                    $classByBucket[$bucketIndex] = ['abs_sum' => 0, 'abs_n' => 0, 'pct_sum' => 0.0, 'pct_n' => 0];
+                }
+                $classByBucket[$bucketIndex]['abs_sum'] += (int) $row['absences'];
+                $classByBucket[$bucketIndex]['abs_n'] += 1;
+                if ($row['participation_pct'] !== null) {
+                    $classByBucket[$bucketIndex]['pct_sum'] += (float) $row['participation_pct'];
+                    $classByBucket[$bucketIndex]['pct_n'] += 1;
+                }
+                $bucketsWithData[$bucketIndex] = true;
+            }
+        } catch (PDOException $e) {
+            error_log('ASL meetings fetch failed: ' . $e->getMessage());
+        }
+
+        $maxBucket = max($currentBucket, $bucketsWithData ? max(array_keys($bucketsWithData)) : 0);
+        $buckets = [];
+        $studentByBucket = [];
+        foreach ($studentEntries as $entry) {
+            if (!isset($studentByBucket[$entry['bucketIndex']])) {
+                $studentByBucket[$entry['bucketIndex']] = $entry;
+            }
+        }
+
+        for ($i = 0; $i <= $maxBucket; $i++) {
+            $info = aslhubStudentMeetingBucketLabel($start, $i);
+            $studentEntry = $studentByBucket[$i] ?? null;
+            $classBucket = $classByBucket[$i] ?? null;
+            $buckets[] = [
+                'index' => $i,
+                'label' => $info['label'],
+                'periodStart' => $info['periodStart'],
+                'periodEnd' => $info['periodEnd'],
+                'student' => $studentEntry ? [
+                    'absences' => $studentEntry['absences'],
+                    'participation_pct' => $studentEntry['participation_pct'],
+                    'date' => $studentEntry['date'],
+                ] : null,
+                'class' => $classBucket && $classBucket['abs_n'] > 0 ? [
+                    'avgAbsences' => round($classBucket['abs_sum'] / $classBucket['abs_n'], 2),
+                    'avgParticipation' => $classBucket['pct_n'] > 0 ? round($classBucket['pct_sum'] / $classBucket['pct_n'], 2) : null,
+                    'sampleSize' => $classBucket['abs_n'],
+                ] : null,
+            ];
+        }
+
+        $latestStudent = $studentEntries[0] ?? null;
+        $latestClass = null;
+        if ($latestStudent) {
+            $bi = $latestStudent['bucketIndex'];
+            if (isset($classByBucket[$bi]) && $classByBucket[$bi]['abs_n'] > 0) {
+                $latestClass = [
+                    'avgAbsences' => round($classByBucket[$bi]['abs_sum'] / $classByBucket[$bi]['abs_n'], 2),
+                    'avgParticipation' => $classByBucket[$bi]['pct_n'] > 0 ? round($classByBucket[$bi]['pct_sum'] / $classByBucket[$bi]['pct_n'], 2) : null,
+                ];
+            }
+        }
+
+        return [
+            'buckets' => $buckets,
+            'currentBucketIndex' => $currentBucket,
+            'studentEntries' => $studentEntries,
+            'latest' => [
+                'student' => $latestStudent ? [
+                    'date' => $latestStudent['date'],
+                    'absences' => $latestStudent['absences'],
+                    'participation_pct' => $latestStudent['participation_pct'],
+                ] : null,
+                'class' => $latestClass,
+            ],
+        ];
+    }
+}
+
 if (!function_exists('aslhubFetchStudentDashboardData')) {
     function aslhubFetchStudentDashboardData(PDO $pdo, int $userId): array
     {
@@ -667,6 +817,7 @@ if (!function_exists('aslhubFetchStudentDashboardData')) {
             'scale' => aslhubLearningTargetScale(),
             'graph' => aslhubStudentDashboardBuildGraph($pdo, $userId),
             'comparisons' => aslhubStudentDashboardComparisons($pdo, $userId),
+            'meetings' => aslhubStudentDashboardMeetings($pdo, $userId),
         ];
     }
 }

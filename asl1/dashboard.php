@@ -51,7 +51,6 @@ if ($dashboard_json === false) {
                 <h1>Student Dashboard</h1>
             </div>
             <nav class="student-actions" aria-label="Student tools">
-                <a href="skills.php">Skills</a>
                 <button type="button" onclick="window.open('scrollergame/index.html', '_blank')">Scroller Game</button>
                 <button type="button" onclick="openGoals()">Goals</button>
                 <a href="bingo.php">Bingo</a>
@@ -140,9 +139,10 @@ if ($dashboard_json === false) {
                         <p class="student-kicker">Class Comparison</p>
                         <h2 id="comparison-heading">Attendance and On-task Trends</h2>
                     </div>
-                    <p>These use teacher-entered class metrics when available.</p>
+                    <p>Click a card to see your trend over time vs. the ASL 1/2 class average.</p>
                 </div>
-                <div id="comparison-list" class="comparison-list"></div>
+                <div id="comparison-cards" class="comparison-cards"></div>
+                <div id="comparison-detail" class="comparison-detail" style="display: none;"></div>
             </section>
         </main>
     </div>
@@ -407,8 +407,8 @@ if ($dashboard_json === false) {
                 ${weekLines.join('')}
                 <line x1="${pad.left}" y1="${pad.top}" x2="${pad.left}" y2="${pad.top + chartHeight}" class="chart-axis"></line>
                 <line x1="${pad.left}" y1="${pad.top + chartHeight}" x2="${pad.left + chartWidth}" y2="${pad.top + chartHeight}" class="chart-axis"></line>
-                <text x="14" y="${pad.top + 8}" class="chart-axis-label">Pts</text>
-                <text x="${pad.left - 12}" y="${pad.top + 5}" text-anchor="end" class="chart-label">${maxY}</text>
+                <text x="${pad.left}" y="14" text-anchor="end" class="chart-axis-label">Pts</text>
+                <text x="${pad.left - 8}" y="${pad.top + 5}" text-anchor="end" class="chart-label">${maxY}</text>
                 <text x="${pad.left - 12}" y="${pad.top + chartHeight}" text-anchor="end" class="chart-label">0</text>
                 <polyline points="${polyline}" class="chart-line"></polyline>
                 ${points.map(point => `<circle cx="${point[0]}" cy="${point[1]}" r="3" class="chart-dot"></circle>`).join('')}
@@ -416,48 +416,177 @@ if ($dashboard_json === false) {
             `;
         }
 
+        const comparisonState = { metric: null };
+
+        function formatMeetingDate(iso) {
+            if (!iso) return '';
+            const parts = iso.split('-');
+            if (parts.length !== 3) return iso;
+            const d = new Date(parts[0], parts[1] - 1, parts[2]);
+            return d.toLocaleDateString(undefined, {year: 'numeric', month: 'short', day: 'numeric'});
+        }
+
         function renderComparisons() {
-            const list = document.getElementById('comparison-list');
-            const comparisons = dashboardData.comparisons || [];
-            if (!comparisons.length) {
-                list.innerHTML = '<div class="comparison-empty">No comparison data yet.</div>';
+            const cards = document.getElementById('comparison-cards');
+            const detail = document.getElementById('comparison-detail');
+            const meetings = dashboardData.meetings || { buckets: [], studentEntries: [], latest: {} };
+            const latest = meetings.latest || {};
+            const studentLatest = latest.student || null;
+            const classLatest = latest.class || null;
+
+            const fmt = (val, suffix) => val == null ? '&mdash;' : escapeHtml(formatNumber(val)) + (suffix || '');
+
+            const noteCount = (meetings.studentEntries || []).length;
+
+            cards.innerHTML = `
+                <button type="button" class="comparison-summary-card ${comparisonState.metric === 'attendance' ? 'active' : ''}" data-metric="attendance">
+                    <span class="comparison-card-label">Attendance</span>
+                    <strong class="comparison-card-value">${fmt(studentLatest ? studentLatest.absences : null)}<small> absences</small></strong>
+                    <span class="comparison-card-meta">Class avg: ${fmt(classLatest ? classLatest.avgAbsences : null)}</span>
+                </button>
+                <button type="button" class="comparison-summary-card ${comparisonState.metric === 'participation' ? 'active' : ''}" data-metric="participation">
+                    <span class="comparison-card-label">Participation</span>
+                    <strong class="comparison-card-value">${fmt(studentLatest ? studentLatest.participation_pct : null, '%')}</strong>
+                    <span class="comparison-card-meta">Class avg: ${fmt(classLatest ? classLatest.avgParticipation : null, '%')}</span>
+                </button>
+                <button type="button" class="comparison-summary-card ${comparisonState.metric === 'notes' ? 'active' : ''}" data-metric="notes">
+                    <span class="comparison-card-label">Notes</span>
+                    <strong class="comparison-card-value">${noteCount}<small> meeting${noteCount === 1 ? '' : 's'}</small></strong>
+                    <span class="comparison-card-meta">${noteCount ? 'Most recent: ' + escapeHtml(formatMeetingDate(meetings.studentEntries[0].date)) : 'No notes yet'}</span>
+                </button>
+            `;
+
+            cards.querySelectorAll('[data-metric]').forEach(btn => {
+                btn.addEventListener('click', () => {
+                    comparisonState.metric = (comparisonState.metric === btn.dataset.metric) ? null : btn.dataset.metric;
+                    renderComparisons();
+                });
+            });
+
+            if (!comparisonState.metric) {
+                detail.style.display = 'none';
+                detail.innerHTML = '';
                 return;
             }
 
-            list.innerHTML = comparisons.map(item => {
-                if (item.status !== 'ready') {
-                    return `
-                        <div class="comparison-card empty">
-                            <span>${escapeHtml(item.label)}</span>
-                            <strong>${escapeHtml(item.message || 'No data yet')}</strong>
-                        </div>
-                    `;
-                }
+            detail.style.display = 'block';
+            if (comparisonState.metric === 'notes') {
+                renderNotesDetail(detail, meetings.studentEntries || []);
+            } else {
+                renderMetricDetail(detail, comparisonState.metric, meetings.buckets || []);
+            }
+        }
 
-                const studentPct = Math.min(100, (Number(item.studentValue) / Number(item.classMax || 1)) * 100);
-                const averagePct = Math.min(100, (Number(item.classAverage) / Number(item.classMax || 1)) * 100);
-                const unit = item.unit ? ' ' + item.unit : '';
+        function renderNotesDetail(container, entries) {
+            if (!entries.length) {
+                container.innerHTML = '<div class="empty-panel">No meeting notes yet.</div>';
+                return;
+            }
+            container.innerHTML = `
+                <h3 class="comparison-detail-title">Meeting Notes</h3>
+                <div class="meeting-notes-list">
+                    ${entries.map(entry => `
+                        <article class="meeting-note-card">
+                            <header>
+                                <strong>${escapeHtml(formatMeetingDate(entry.date))}</strong>
+                                <span>Absences: ${escapeHtml(entry.absences)} &middot; Participation: ${entry.participation_pct == null ? '&mdash;' : escapeHtml(entry.participation_pct) + '%'}</span>
+                            </header>
+                            <p>${entry.notes ? escapeHtml(entry.notes) : '<em>No notes recorded.</em>'}</p>
+                        </article>
+                    `).join('')}
+                </div>
+            `;
+        }
 
-                return `
-                    <div class="comparison-card">
-                        <div class="comparison-title">
-                            <span>${escapeHtml(item.label)}</span>
-                            <strong>Your value: ${escapeHtml(formatNumber(item.studentValue))}${escapeHtml(unit)}</strong>
-                        </div>
-                        <div class="comparison-bars">
-                            <div>
-                                <span>You</span>
-                                <div class="metric-track"><div style="width: ${studentPct}%"></div></div>
-                            </div>
-                            <div>
-                                <span>Class average</span>
-                                <div class="metric-track average"><div style="width: ${averagePct}%"></div></div>
-                            </div>
-                        </div>
-                        <p>Class average: ${escapeHtml(formatNumber(item.classAverage))}${escapeHtml(unit)}</p>
-                    </div>
-                `;
+        function renderMetricDetail(container, metric, buckets) {
+            const isParticipation = metric === 'participation';
+            const title = isParticipation ? 'Participation Over Time' : 'Absences Over Time';
+            const unit = isParticipation ? '%' : '';
+            const studentKey = isParticipation ? 'participation_pct' : 'absences';
+            const classKey = isParticipation ? 'avgParticipation' : 'avgAbsences';
+
+            const studentSeries = buckets.map(b => b.student && b.student[studentKey] != null ? Number(b.student[studentKey]) : null);
+            const classSeries = buckets.map(b => b.class && b.class[classKey] != null ? Number(b.class[classKey]) : null);
+
+            const hasAny = studentSeries.some(v => v != null) || classSeries.some(v => v != null);
+            if (!hasAny) {
+                container.innerHTML = `<h3 class="comparison-detail-title">${title}</h3><div class="empty-panel">No data yet for this metric.</div>`;
+                return;
+            }
+
+            const width = 920;
+            const height = 280;
+            const pad = {top: 22, right: 26, bottom: 58, left: 54};
+            const chartWidth = width - pad.left - pad.right;
+            const chartHeight = height - pad.top - pad.bottom;
+            const allVals = studentSeries.concat(classSeries).filter(v => v != null);
+            let maxY = Math.max.apply(null, allVals.length ? allVals : [1]);
+            if (isParticipation) maxY = Math.max(maxY, 100);
+            maxY = Math.max(maxY, 1);
+            const n = buckets.length;
+            const xAt = idx => pad.left + (n <= 1 ? chartWidth / 2 : (idx / (n - 1)) * chartWidth);
+            const yAt = val => pad.top + chartHeight - (val / maxY) * chartHeight;
+
+            const buildPolyline = (series) => {
+                const segs = [];
+                let current = [];
+                series.forEach((v, i) => {
+                    if (v == null) {
+                        if (current.length) { segs.push(current); current = []; }
+                    } else {
+                        current.push([xAt(i), yAt(v)]);
+                    }
+                });
+                if (current.length) segs.push(current);
+                return segs;
+            };
+
+            const studentSegs = buildPolyline(studentSeries);
+            const classSegs = buildPolyline(classSeries);
+
+            const labels = buckets.map((b, i) => {
+                if (n > 12 && i % 2 !== 0 && i !== n - 1) return '';
+                return `<text x="${xAt(i)}" y="${height - 22}" text-anchor="middle" class="chart-label">${escapeHtml(b.label)}</text>`;
             }).join('');
+
+            const verticals = buckets.map((b, i) =>
+                `<line x1="${xAt(i)}" y1="${pad.top}" x2="${xAt(i)}" y2="${pad.top + chartHeight}" class="chart-week-line" />`
+            ).join('');
+
+            const studentLines = studentSegs.map(seg =>
+                `<polyline points="${seg.map(p => p.join(',')).join(' ')}" class="metric-line metric-line-student" />`
+            ).join('');
+            const studentDots = studentSegs.flat().map(p =>
+                `<circle cx="${p[0]}" cy="${p[1]}" r="4" class="chart-dot metric-dot-student"></circle>`
+            ).join('');
+            const classLines = classSegs.map(seg =>
+                `<polyline points="${seg.map(p => p.join(',')).join(' ')}" class="metric-line metric-line-class" />`
+            ).join('');
+            const classDots = classSegs.flat().map(p =>
+                `<circle cx="${p[0]}" cy="${p[1]}" r="3.5" class="chart-dot metric-dot-class"></circle>`
+            ).join('');
+
+            container.innerHTML = `
+                <h3 class="comparison-detail-title">${title}</h3>
+                <div class="comparison-legend">
+                    <span class="legend-swatch legend-student"></span> You
+                    <span class="legend-swatch legend-class"></span> Class average (ASL 1 &amp; 2)
+                </div>
+                <div class="chart-wrap">
+                    <svg viewBox="0 0 ${width} ${height}" role="img" aria-label="${title}">
+                        <rect x="0" y="0" width="${width}" height="${height}" class="chart-bg"></rect>
+                        ${verticals}
+                        <line x1="${pad.left}" y1="${pad.top}" x2="${pad.left}" y2="${pad.top + chartHeight}" class="chart-axis"></line>
+                        <line x1="${pad.left}" y1="${pad.top + chartHeight}" x2="${pad.left + chartWidth}" y2="${pad.top + chartHeight}" class="chart-axis"></line>
+                        <text x="${pad.left}" y="14" text-anchor="end" class="chart-axis-label">${escapeHtml(isParticipation ? '%' : '#')}</text>
+                        <text x="${pad.left - 8}" y="${pad.top + 5}" text-anchor="end" class="chart-label">${formatNumber(maxY)}${escapeHtml(unit)}</text>
+                        <text x="${pad.left - 8}" y="${pad.top + chartHeight}" text-anchor="end" class="chart-label">0${escapeHtml(unit)}</text>
+                        ${classLines}${classDots}
+                        ${studentLines}${studentDots}
+                        ${labels}
+                    </svg>
+                </div>
+            `;
         }
 
         function renderDashboard() {
