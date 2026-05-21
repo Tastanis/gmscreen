@@ -116,6 +116,19 @@ if (!function_exists('aslhubStudentDashboardResourcePlaceholders')) {
     }
 }
 
+if (!function_exists('aslhubLearningTargetScale')) {
+    function aslhubLearningTargetScale(): array
+    {
+        return [
+            0 => 'Not attempted',
+            1 => 'Beginning',
+            2 => 'Developing',
+            3 => 'Proficient',
+            4 => 'Extending',
+        ];
+    }
+}
+
 if (!function_exists('aslhubEnsureStudentDashboardSchema')) {
     function aslhubEnsureStudentDashboardSchema(PDO $pdo): void
     {
@@ -184,6 +197,16 @@ if (!function_exists('aslhubEnsureStudentDashboardSchema')) {
                 INDEX idx_user_lt_target (learning_target_id)
             ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci");
 
+            $pdo->exec("CREATE TABLE IF NOT EXISTS user_learning_target_score_history (
+                id INT AUTO_INCREMENT PRIMARY KEY,
+                user_id INT NOT NULL,
+                learning_target_id INT NOT NULL,
+                score TINYINT NOT NULL DEFAULT 0,
+                scored_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
+                INDEX idx_user_lt_history_user_time (user_id, scored_at),
+                INDEX idx_user_lt_history_target (learning_target_id)
+            ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci");
+
             $pdo->exec("CREATE TABLE IF NOT EXISTS asl_student_snapshot_metrics (
                 id INT AUTO_INCREMENT PRIMARY KEY,
                 user_id INT NOT NULL,
@@ -227,18 +250,21 @@ if (!function_exists('aslhubEmptyBucketProgress')) {
             'code' => $bucket['code'],
             'name' => $bucket['name'],
             'blurb' => $bucket['blurb'],
-            'totalTargets' => 0,
-            'completedTargets' => 0,
-            'percent' => 0,
-            'standards' => [],
+                'totalTargets' => 0,
+                'completedTargets' => 0,
+                'attemptedTargets' => 0,
+                'earnedPoints' => 0,
+                'totalPoints' => 0,
+                'percent' => 0,
+                'standards' => [],
         ];
     }
 }
 
 if (!function_exists('aslhubStudentDashboardPercent')) {
-    function aslhubStudentDashboardPercent(int $completed, int $total): int
+    function aslhubStudentDashboardPercent(float $earned, float $possible): int
     {
-        return $total > 0 ? (int) round(($completed / $total) * 100) : 0;
+        return $possible > 0 ? (int) round(($earned / $possible) * 100) : 0;
     }
 }
 
@@ -273,47 +299,75 @@ if (!function_exists('aslhubStudentDashboardBuildGraph')) {
         }
 
         try {
-            $stmt = $pdo->prepare("SELECT b.bucket_id, ult.completed_at
-                FROM user_learning_targets ult
-                INNER JOIN asl_learning_targets lt ON lt.id = ult.learning_target_id
+            $stmt = $pdo->prepare("SELECT h.learning_target_id, h.score, h.scored_at, b.bucket_id
+                FROM user_learning_target_score_history h
+                INNER JOIN asl_learning_targets lt ON lt.id = h.learning_target_id
                 INNER JOIN asl_standards st ON st.standard_id = lt.standard_id
                 INNER JOIN asl_skill_buckets b ON b.bucket_id = st.bucket_id
-                WHERE ult.user_id = ? AND ult.score >= 3 AND ult.completed_at IS NOT NULL AND lt.active = 1");
+                WHERE h.user_id = ? AND lt.active = 1
+                ORDER BY h.scored_at, h.id");
             $stmt->execute([$userId]);
             $rows = $stmt->fetchAll(PDO::FETCH_ASSOC);
         } catch (PDOException $e) {
             $rows = [];
         }
 
+        if (empty($rows)) {
+            try {
+                $stmt = $pdo->prepare("SELECT ult.learning_target_id, COALESCE(ult.score, 0) AS score, COALESCE(ult.completed_at, ult.updated_at) AS scored_at, b.bucket_id
+                    FROM user_learning_targets ult
+                    INNER JOIN asl_learning_targets lt ON lt.id = ult.learning_target_id
+                    INNER JOIN asl_standards st ON st.standard_id = lt.standard_id
+                    INNER JOIN asl_skill_buckets b ON b.bucket_id = st.bucket_id
+                    WHERE ult.user_id = ? AND COALESCE(ult.score, 0) > 0 AND lt.active = 1
+                    ORDER BY scored_at, ult.id");
+                $stmt->execute([$userId]);
+                $rows = $stmt->fetchAll(PDO::FETCH_ASSOC);
+            } catch (PDOException $e) {
+                $rows = [];
+            }
+        }
+
         $start = aslhubStudentDashboardCourseStart();
+        $previousScores = [];
         foreach ($rows as $row) {
             try {
-                $completedAt = new DateTimeImmutable($row['completed_at']);
+                $scoredAt = new DateTimeImmutable($row['scored_at']);
             } catch (Exception $e) {
                 continue;
             }
 
-            $days = (int) $start->diff($completedAt)->format('%r%a');
+            $score = max(0, min(4, (int) $row['score']));
+            $targetId = (int) $row['learning_target_id'];
+            $previousScore = $previousScores[$targetId] ?? 0;
+            $delta = $score - $previousScore;
+            $previousScores[$targetId] = $score;
+
+            if ($delta === 0) {
+                continue;
+            }
+
+            $days = (int) $start->diff($scoredAt)->format('%r%a');
             if ($days < 0) {
                 continue;
             }
             $weekIndex = min($weeks - 1, (int) floor($days / 7));
-            $overall[$weekIndex]++;
+            $overall[$weekIndex] += $delta;
             if (isset($byBucket[$row['bucket_id']])) {
-                $byBucket[$row['bucket_id']][$weekIndex]++;
+                $byBucket[$row['bucket_id']][$weekIndex] += $delta;
             }
         }
 
         $running = 0;
         foreach ($overall as $index => $value) {
-            $running += $value;
+            $running = max(0, $running + $value);
             $overall[$index] = $running;
         }
 
         foreach ($byBucket as $bucketId => $values) {
             $running = 0;
             foreach ($values as $index => $value) {
-                $running += $value;
+                $running = max(0, $running + $value);
                 $byBucket[$bucketId][$index] = $running;
             }
         }
@@ -405,10 +459,13 @@ if (!function_exists('aslhubFetchStudentDashboardData')) {
                     'bucketId' => $bucket['id'],
                     'name' => $standard['name'],
                     'description' => $standard['description'],
-                    'totalTargets' => 0,
-                    'completedTargets' => 0,
-                    'percent' => 0,
-                ];
+                'totalTargets' => 0,
+                'completedTargets' => 0,
+                'attemptedTargets' => 0,
+                'earnedPoints' => 0,
+                'totalPoints' => 0,
+                'percent' => 0,
+            ];
                 $standardsByBucket[$bucket['id']][] = $standardData;
                 $targetsByStandard[$standard['id']] = [];
             }
@@ -428,6 +485,9 @@ if (!function_exists('aslhubFetchStudentDashboardData')) {
                         'blurb' => $bucket['blurb'],
                         'totalTargets' => 0,
                         'completedTargets' => 0,
+                        'attemptedTargets' => 0,
+                        'earnedPoints' => 0,
+                        'totalPoints' => 0,
                         'percent' => 0,
                         'standards' => [],
                     ];
@@ -447,6 +507,9 @@ if (!function_exists('aslhubFetchStudentDashboardData')) {
                     'description' => $standard['description'],
                     'totalTargets' => 0,
                     'completedTargets' => 0,
+                    'attemptedTargets' => 0,
+                    'earnedPoints' => 0,
+                    'totalPoints' => 0,
                     'percent' => 0,
                 ];
                 if (!isset($targetsByStandard[$standard['standard_id']])) {
@@ -476,7 +539,9 @@ if (!function_exists('aslhubFetchStudentDashboardData')) {
                     'title' => $target['title'],
                     'description' => $target['description'],
                     'score' => $score,
+                    'scoreLabel' => aslhubLearningTargetScale()[$score] ?? 'Not attempted',
                     'completed' => $score >= 3,
+                    'attempted' => $score > 0,
                     'completedAt' => $target['completed_at'],
                     'placeholder' => false,
                 ];
@@ -503,48 +568,79 @@ if (!function_exists('aslhubFetchStudentDashboardData')) {
 
         $overallTotal = 0;
         $overallCompleted = 0;
+        $overallAttempted = 0;
+        $overallEarnedPoints = 0;
         foreach ($standardsByBucket as $bucketId => $standards) {
             foreach ($standards as $standardIndex => $standard) {
                 $targets = $targetsByStandard[$standard['id']] ?? [];
                 $total = count($targets);
                 $completed = 0;
+                $attempted = 0;
+                $earnedPoints = 0;
                 foreach ($targets as $target) {
+                    $score = max(0, min(4, (int) ($target['score'] ?? 0)));
+                    $earnedPoints += $score;
+                    if ($score > 0) {
+                        $attempted++;
+                    }
                     if (!empty($target['completed'])) {
                         $completed++;
                     }
                 }
+                $totalPoints = $total * 4;
 
                 $standardsByBucket[$bucketId][$standardIndex]['totalTargets'] = $total;
                 $standardsByBucket[$bucketId][$standardIndex]['completedTargets'] = $completed;
-                $standardsByBucket[$bucketId][$standardIndex]['percent'] = aslhubStudentDashboardPercent($completed, $total);
+                $standardsByBucket[$bucketId][$standardIndex]['attemptedTargets'] = $attempted;
+                $standardsByBucket[$bucketId][$standardIndex]['earnedPoints'] = $earnedPoints;
+                $standardsByBucket[$bucketId][$standardIndex]['totalPoints'] = $totalPoints;
+                $standardsByBucket[$bucketId][$standardIndex]['percent'] = aslhubStudentDashboardPercent($earnedPoints, $totalPoints);
 
                 if (isset($buckets[$bucketId])) {
                     $buckets[$bucketId]['totalTargets'] += $total;
                     $buckets[$bucketId]['completedTargets'] += $completed;
+                    $buckets[$bucketId]['attemptedTargets'] += $attempted;
+                    $buckets[$bucketId]['earnedPoints'] += $earnedPoints;
+                    $buckets[$bucketId]['totalPoints'] += $totalPoints;
                 }
                 $overallTotal += $total;
                 $overallCompleted += $completed;
+                $overallAttempted += $attempted;
+                $overallEarnedPoints += $earnedPoints;
             }
         }
 
         foreach ($buckets as $bucketId => $bucket) {
-            $buckets[$bucketId]['percent'] = aslhubStudentDashboardPercent($bucket['completedTargets'], $bucket['totalTargets']);
+            $buckets[$bucketId]['percent'] = aslhubStudentDashboardPercent($bucket['earnedPoints'], $bucket['totalPoints']);
             $buckets[$bucketId]['standards'] = $standardsByBucket[$bucketId] ?? [];
+        }
+
+        try {
+            $stmt = $pdo->prepare("SELECT first_name, last_name FROM users WHERE id = ?");
+            $stmt->execute([$userId]);
+            $studentRow = $stmt->fetch(PDO::FETCH_ASSOC) ?: [];
+            $studentName = trim(($studentRow['first_name'] ?? '') . ' ' . ($studentRow['last_name'] ?? ''));
+        } catch (PDOException $e) {
+            $studentName = trim(($_SESSION['user_first_name'] ?? '') . ' ' . ($_SESSION['user_last_name'] ?? ''));
         }
 
         return [
             'student' => [
-                'name' => trim(($_SESSION['user_first_name'] ?? '') . ' ' . ($_SESSION['user_last_name'] ?? '')),
+                'name' => $studentName,
             ],
             'overall' => [
                 'totalTargets' => $overallTotal,
                 'completedTargets' => $overallCompleted,
-                'percent' => aslhubStudentDashboardPercent($overallCompleted, $overallTotal),
+                'attemptedTargets' => $overallAttempted,
+                'earnedPoints' => $overallEarnedPoints,
+                'totalPoints' => $overallTotal * 4,
+                'percent' => aslhubStudentDashboardPercent($overallEarnedPoints, $overallTotal * 4),
             ],
             'buckets' => array_values($buckets),
             'targetsByStandard' => $targetsByStandard,
             'resourcesByTarget' => $resourcesByTarget,
             'resourcePlaceholders' => aslhubStudentDashboardResourcePlaceholders(),
+            'scale' => aslhubLearningTargetScale(),
             'graph' => aslhubStudentDashboardBuildGraph($pdo, $userId),
             'comparisons' => aslhubStudentDashboardComparisons($pdo, $userId),
         ];

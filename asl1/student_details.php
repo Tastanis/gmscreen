@@ -1,8 +1,9 @@
 <?php
 session_start();
-require_once 'config.php';
+$aslhub_base_dir = defined('ASLHUB_BASE_DIR') ? ASLHUB_BASE_DIR : __DIR__;
+require_once $aslhub_base_dir . '/config.php';
+require_once $aslhub_base_dir . '/../common/asl_student_dashboard_data.php';
 
-// Check if user is logged in and is a teacher
 if (!isset($_SESSION['user_id']) || !isset($_SESSION['is_teacher']) || !$_SESSION['is_teacher']) {
     header('Location: index.php');
     exit;
@@ -12,20 +13,19 @@ $student_id = isset($_GET['id']) ? intval($_GET['id']) : 0;
 $message = '';
 $message_type = '';
 
-// Handle form submission for updating student details
+aslhubEnsureStudentDashboardSchema($pdo);
+
 if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['action']) && $_POST['action'] === 'update') {
-    $first_name = trim($_POST['first_name']);
-    $last_name = trim($_POST['last_name']);
-    $email = trim($_POST['email']);
-    $new_password = trim($_POST['new_password']);
-    
+    $first_name = trim($_POST['first_name'] ?? '');
+    $last_name = trim($_POST['last_name'] ?? '');
+    $email = trim($_POST['email'] ?? '');
+    $new_password = trim($_POST['new_password'] ?? '');
+
     try {
-        // Update basic information
         $stmt = $pdo->prepare("UPDATE users SET first_name = ?, last_name = ?, email = ? WHERE id = ? AND is_teacher = FALSE");
         $stmt->execute([$first_name, $last_name, $email, $student_id]);
-        
-        // Update password if provided
-        if (!empty($new_password)) {
+
+        if ($new_password !== '') {
             if (strlen($new_password) < 6) {
                 $message = 'Password must be at least 6 characters long.';
                 $message_type = 'error';
@@ -33,710 +33,482 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['action']) && $_POST['
                 $hashed_password = password_hash($new_password, PASSWORD_DEFAULT);
                 $stmt = $pdo->prepare("UPDATE users SET password = ? WHERE id = ? AND is_teacher = FALSE");
                 $stmt->execute([$hashed_password, $student_id]);
-                $message = 'Student details updated successfully, including password.';
+                $message = 'Student details updated, including password.';
                 $message_type = 'success';
             }
         } else {
-            $message = 'Student details updated successfully.';
+            $message = 'Student details updated.';
             $message_type = 'success';
         }
-    } catch(PDOException $e) {
+    } catch (PDOException $e) {
         $message = 'Error updating student details.';
         $message_type = 'error';
     }
 }
 
-// Get student details
 try {
-    $stmt = $pdo->prepare("
-        SELECT
-            u.id,
-            u.first_name,
-            u.last_name,
-            u.email,
-            u.level,
-            COALESCE(
-                SUM(CASE
-                    WHEN us.status = 'not_started' THEN s.points_not_started
-                    WHEN us.status = 'progressing' THEN s.points_progressing
-                    WHEN us.status = 'proficient' THEN s.points_proficient
-                    ELSE 0
-                END), 0
-            ) as earned_points,
-            COALESCE(
-                (
-                    SELECT SUM(points_proficient)
-                    FROM skills
-                    WHERE asl_level = COALESCE(u.level, 1) OR asl_level = 3
-                ), 0
-            ) as total_possible_points
-        FROM users u
-        LEFT JOIN user_skills us ON u.id = us.user_id
-        LEFT JOIN skills s ON us.skill_id = s.id
-            AND (s.asl_level = COALESCE(u.level, 1) OR s.asl_level = 3)
-        WHERE u.id = ? AND u.is_teacher = FALSE
-        GROUP BY u.id, u.first_name, u.last_name, u.email, u.level
-    ");
+    $stmt = $pdo->prepare("SELECT id, first_name, last_name, email, class_period, level FROM users WHERE id = ? AND is_teacher = FALSE");
     $stmt->execute([$student_id]);
-    $student = $stmt->fetch();
-    
+    $student = $stmt->fetch(PDO::FETCH_ASSOC);
+
     if (!$student) {
         header('Location: teacher_dashboard.php');
         exit;
     }
-    
-    // Get student's skills progress
-    $student_level = intval($student['level'] ?? 1);
-    if (!in_array($student_level, [1, 2], true)) {
-        $student_level = 1;
-    }
-
-    $stmt = $pdo->prepare("
-        SELECT
-            s.skill_name,
-            s.skill_description,
-            s.unit,
-            COALESCE(us.status, 'not_started') as status,
-            s.points_not_started,
-            s.points_progressing,
-            s.points_proficient
-        FROM skills s
-        LEFT JOIN user_skills us ON s.id = us.skill_id AND us.user_id = ?
-        WHERE s.asl_level = ? OR s.asl_level = 3
-        ORDER BY s.order_index
-    ");
-    $stmt->execute([$student_id, $student_level]);
-    $skills = $stmt->fetchAll();
-
-    $stmt = $pdo->prepare("
-        SELECT
-            id,
-            framework,
-            goal_type,
-            goal_focus,
-            success_criteria,
-            COALESCE(status, 'not_started') as status,
-            created_at
-        FROM user_goals
-        WHERE user_id = ?
-        ORDER BY created_at DESC
-    ");
-    $stmt->execute([$student_id]);
-    $goals = $stmt->fetchAll();
-
-    // Note: In a production environment, you should NEVER store or display passwords in plain text
-    // This is only for educational purposes and specific requirement
-    // We'll retrieve the actual password for display (educational/demo purposes only)
-    // Since passwords are hashed, we can't retrieve the original password
-    // We'll show a placeholder message instead
-    $password_display = "Password is encrypted and cannot be displayed";
-    
-} catch(PDOException $e) {
+} catch (PDOException $e) {
     header('Location: teacher_dashboard.php');
     exit;
 }
 
-$progress_percentage = $student['total_possible_points'] > 0 ?
-    round(($student['earned_points'] / $student['total_possible_points']) * 100) : 0;
-
-$goal_progress_percentage = 0;
-$goal_status_counts = [
-    'not_started' => 0,
-    'progressing' => 0,
-    'proficient' => 0,
-];
-
-if (!empty($goals)) {
-    $status_weights = [
-        'not_started' => 0,
-        'progressing' => 0.5,
-        'proficient' => 1,
-    ];
-
-    $total_weight = 0;
-
-    foreach ($goals as $goal) {
-        $status_key = $goal['status'] ?? 'not_started';
-        if (!isset($status_weights[$status_key])) {
-            $status_key = 'not_started';
-        }
-
-        $goal_status_counts[$status_key]++;
-        $total_weight += $status_weights[$status_key];
-    }
-
-    $goal_progress_percentage = (int) round(($total_weight / count($goals)) * 100);
+$dashboard_data = aslhubFetchStudentDashboardData($pdo, $student_id);
+$dashboard_json = json_encode($dashboard_data, JSON_HEX_TAG | JSON_HEX_APOS | JSON_HEX_QUOT | JSON_HEX_AMP);
+if ($dashboard_json === false) {
+    $dashboard_json = '{}';
 }
+$student_name = trim(($student['first_name'] ?? '') . ' ' . ($student['last_name'] ?? ''));
 ?>
 <!DOCTYPE html>
 <html lang="en">
 <head>
     <meta charset="utf-8">
-    <title>Student Details - <?php echo htmlspecialchars($student['first_name'] . ' ' . $student['last_name']); ?></title>
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <title>Student Details - <?php echo htmlspecialchars($student_name); ?></title>
     <link rel="stylesheet" href="css/asl-style.css">
-    <style>
-        .student-details-container {
-            max-width: 1200px;
-            margin: 0 auto;
-            padding: 20px;
-        }
-        
-        .back-link {
-            display: inline-block;
-            margin-bottom: 20px;
-            color: #4299e1;
-            text-decoration: none;
-            font-weight: 500;
-        }
-        
-        .back-link:hover {
-            text-decoration: underline;
-        }
-        
-        .details-header {
-            background: rgba(247, 250, 252, 0.8);
-            border-radius: 12px;
-            padding: 30px;
-            margin-bottom: 30px;
-            border: 2px solid #e2e8f0;
-        }
-        
-        .student-name-header {
-            font-size: 2rem;
-            color: #2d3748;
-            margin-bottom: 10px;
-        }
-        
-        .student-meta {
-            color: #718096;
-            margin-bottom: 20px;
-        }
-        
-        .progress-overview {
-            display: flex;
-            align-items: center;
-            gap: 20px;
-            margin-top: 20px;
-        }
-        
-        .progress-bar-container {
-            flex: 1;
-            background: #e2e8f0;
-            border-radius: 8px;
-            height: 20px;
-            overflow: hidden;
-        }
-        
-        .progress-bar-fill {
-            height: 100%;
-            background: linear-gradient(135deg, #48bb78 0%, #38a169 100%);
-            transition: width 0.3s ease;
-        }
-        
-        .progress-text {
-            font-weight: 600;
-            color: #2d3748;
-        }
-        
-        .details-section {
-            background: rgba(247, 250, 252, 0.8);
-            border-radius: 12px;
-            padding: 30px;
-            margin-bottom: 30px;
-            border: 2px solid #e2e8f0;
-        }
-        
-        .section-title {
-            font-size: 1.5rem;
-            color: #2d3748;
-            margin-bottom: 20px;
-        }
-        
-        .edit-form {
-            display: grid;
-            gap: 20px;
-        }
-        
-        .form-row {
-            display: grid;
-            grid-template-columns: 1fr 1fr;
-            gap: 20px;
-        }
-        
-        .form-group label {
-            display: block;
-            margin-bottom: 5px;
-            color: #4a5568;
-            font-weight: 500;
-        }
-        
-        .form-input {
-            width: 100%;
-            padding: 10px 15px;
-            border: 2px solid #e2e8f0;
-            border-radius: 8px;
-            font-size: 1rem;
-            transition: border-color 0.3s;
-        }
-        
-        .form-input:focus {
-            outline: none;
-            border-color: #4299e1;
-        }
-        
-        .password-info {
-            background: #fef5e7;
-            border: 1px solid #f39c12;
-            border-radius: 8px;
-            padding: 15px;
-            margin-bottom: 20px;
-        }
-        
-        .password-info-title {
-            color: #e67e22;
-            font-weight: 600;
-            margin-bottom: 5px;
-        }
-        
-        .button-group {
-            display: flex;
-            gap: 10px;
-            margin-top: 20px;
-        }
-        
-        .skills-grid {
-            display: grid;
-            grid-template-columns: repeat(auto-fill, minmax(300px, 1fr));
-            gap: 20px;
-        }
-        
-        .skill-card {
-            background: white;
-            border-radius: 8px;
-            padding: 15px;
-            border: 1px solid #e2e8f0;
-        }
-        
-        .skill-name {
-            font-weight: 600;
-            color: #2d3748;
-            margin-bottom: 5px;
-        }
-        
-        .skill-description {
-            font-size: 0.9rem;
-            color: #718096;
-            margin-bottom: 10px;
-        }
-        
-        .skill-status {
-            display: inline-block;
-            padding: 4px 12px;
-            border-radius: 4px;
-            font-size: 0.85rem;
-            font-weight: 600;
-        }
-        
-        .status-not_started {
-            background: #feb2b2;
-            color: #742a2a;
-        }
-        
-        .status-progressing {
-            background: #faf089;
-            color: #744210;
-        }
-        
-        .status-proficient {
-            background: #c6f6d5;
-            color: #22543d;
-        }
-        
-        .message {
-            padding: 12px 20px;
-            border-radius: 8px;
-            margin-bottom: 20px;
-            font-weight: 500;
-        }
-        
-        .message.success {
-            background: #c6f6d5;
-            color: #22543d;
-            border: 1px solid #48bb78;
-        }
-        
-        .message.error {
-            background: #feb2b2;
-            color: #742a2a;
-            border: 1px solid #f56565;
-        }
-        
-        .form-button {
-            padding: 10px 20px;
-            border: none;
-            border-radius: 8px;
-            font-size: 1rem;
-            font-weight: 500;
-            cursor: pointer;
-            transition: all 0.3s;
-        }
-        
-        .btn-primary {
-            background: linear-gradient(135deg, #4299e1 0%, #3182ce 100%);
-            color: white;
-        }
-        
-        .btn-primary:hover {
-            background: linear-gradient(135deg, #3182ce 0%, #2c5aa0 100%);
-        }
-        
-        .btn-secondary {
-            background: #e2e8f0;
-            color: #4a5568;
-        }
-
-        .btn-secondary:hover {
-            background: #cbd5e0;
-        }
-
-        .btn-danger {
-            background: #f56565;
-            color: white;
-        }
-
-        .btn-danger:hover {
-            background: #c53030;
-        }
-
-        .goal-progress-overview {
-            display: grid;
-            gap: 20px;
-            margin-bottom: 25px;
-        }
-
-        .goal-progress-bar {
-            position: relative;
-            background: #e2e8f0;
-            border-radius: 8px;
-            overflow: hidden;
-            height: 20px;
-        }
-
-        .goal-progress-fill {
-            height: 100%;
-            background: linear-gradient(135deg, #68d391 0%, #38a169 100%);
-            transition: width 0.3s ease;
-        }
-
-        .goal-progress-text {
-            font-weight: 600;
-            color: #2d3748;
-        }
-
-        .goal-status-summary {
-            display: flex;
-            flex-wrap: wrap;
-            gap: 15px;
-        }
-
-        .goal-summary-item {
-            background: #f7fafc;
-            border: 1px solid #e2e8f0;
-            border-radius: 8px;
-            padding: 10px 15px;
-            font-size: 0.95rem;
-            color: #4a5568;
-        }
-
-        .goal-card-list {
-            display: grid;
-            gap: 15px;
-        }
-
-        .goal-card {
-            background: white;
-            border: 1px solid #e2e8f0;
-            border-radius: 10px;
-            padding: 18px;
-        }
-
-        .goal-card-header {
-            display: flex;
-            justify-content: space-between;
-            align-items: flex-start;
-            gap: 15px;
-            margin-bottom: 12px;
-        }
-
-        .goal-card-title {
-            font-weight: 600;
-            color: #2d3748;
-            margin-bottom: 4px;
-        }
-
-        .goal-card-date {
-            font-size: 0.85rem;
-            color: #718096;
-        }
-
-        .goal-card-body {
-            display: grid;
-            gap: 10px;
-        }
-
-        .goal-card-body strong {
-            display: block;
-            margin-bottom: 4px;
-            color: #4a5568;
-        }
-
-        .goal-status-tag {
-            display: inline-flex;
-            align-items: center;
-            justify-content: center;
-            padding: 4px 10px;
-            border-radius: 999px;
-            font-size: 0.85rem;
-            font-weight: 600;
-        }
-
-        .goal-empty-state {
-            background: #f7fafc;
-            border: 1px dashed #cbd5e0;
-            border-radius: 10px;
-            padding: 25px;
-            text-align: center;
-            color: #4a5568;
-        }
-
-        @media (max-width: 768px) {
-            .goal-status-summary {
-                flex-direction: column;
-            }
-        }
-    </style>
 </head>
-<body>
-    <div class="container">
-        <header>
-            <h1>Student Details</h1>
-            <div class="user-info">
-                <span>Logged in as: <?php echo htmlspecialchars($_SESSION['user_first_name'] . ' ' . $_SESSION['user_last_name']); ?></span>
-                <a href="logout.php" class="logout-btn">Logout</a>
+<body class="student-dashboard-page teacher-student-page">
+    <div class="student-shell">
+        <header class="student-topbar">
+            <div>
+                <p class="student-kicker">Teacher View</p>
+                <h1><?php echo htmlspecialchars($student_name); ?></h1>
             </div>
+            <nav class="student-actions" aria-label="Teacher student tools">
+                <a href="teacher_dashboard.php">Back to Dashboard</a>
+                <a class="logout-link" href="logout.php">Logout</a>
+            </nav>
         </header>
-        
-        <div class="student-details-container">
-            <a href="teacher_dashboard.php" class="back-link">← Back to Dashboard</a>
-            
-            <?php if ($message): ?>
-                <div class="message <?php echo $message_type; ?>">
-                    <?php echo htmlspecialchars($message); ?>
-                </div>
-            <?php endif; ?>
-            
-            <div class="details-header">
-                <h2 class="student-name-header"><?php echo htmlspecialchars($student['first_name'] . ' ' . $student['last_name']); ?></h2>
-                <div class="student-meta">
-                    <p>Email: <?php echo htmlspecialchars($student['email']); ?></p>
-                    <p>ASL Level: <?php echo $student['level']; ?></p>
-                </div>
-                <div class="progress-overview">
-                    <div class="progress-bar-container">
-                        <div class="progress-bar-fill" style="width: <?php echo $progress_percentage; ?>%"></div>
-                    </div>
-                    <div class="progress-text">
-                        <?php echo $progress_percentage; ?>% Complete (<?php echo $student['earned_points']; ?>/<?php echo $student['total_possible_points']; ?> points)
-                    </div>
-                </div>
+
+        <?php if ($message): ?>
+            <div class="teacher-message <?php echo htmlspecialchars($message_type); ?>">
+                <?php echo htmlspecialchars($message); ?>
             </div>
-            
-            <div class="details-section">
-                <h3 class="section-title">Edit Student Information</h3>
+        <?php endif; ?>
 
-                <div class="password-info">
-                    <div class="password-info-title">Password Information</div>
-                    <div>For security reasons, the current password cannot be displayed. You can set a new password below if needed.</div>
+        <main class="student-dashboard">
+            <section class="student-hero teacher-student-hero" aria-labelledby="student-name-heading">
+                <div class="student-identity">
+                    <div class="student-avatar" aria-hidden="true">
+                        <?php echo htmlspecialchars(substr($student['first_name'] ?? 'A', 0, 1) . substr($student['last_name'] ?? 'S', 0, 1)); ?>
+                    </div>
+                    <div>
+                        <p class="student-kicker">Student</p>
+                        <h2 id="student-name-heading"><?php echo htmlspecialchars($student_name); ?></h2>
+                        <p class="teacher-student-meta">
+                            <?php echo htmlspecialchars($student['email'] ?? ''); ?>
+                            <?php if (!empty($student['class_period'])): ?>
+                                <span>Period <?php echo htmlspecialchars($student['class_period']); ?></span>
+                            <?php endif; ?>
+                            <span>ASL <?php echo htmlspecialchars($student['level'] ?? '1'); ?></span>
+                        </p>
+                    </div>
                 </div>
 
-                <form method="POST" class="edit-form">
+                <div class="student-progress-summary" aria-live="polite">
+                    <div class="progress-copy">
+                        <span id="progress-context">Overall LT Progress</span>
+                        <strong id="progress-percent">0%</strong>
+                    </div>
+                    <div class="student-progress-track" aria-hidden="true">
+                        <div id="student-progress-fill" class="student-progress-fill"></div>
+                    </div>
+                    <div id="progress-count" class="student-progress-count">No learning target points yet</div>
+                </div>
+            </section>
+
+            <section class="student-section teacher-rating-section" aria-labelledby="rating-heading">
+                <div class="student-section-header">
+                    <div>
+                        <p class="student-kicker">Ratings</p>
+                        <h2 id="rating-heading">Learning Target Ratings</h2>
+                    </div>
+                    <p>0 = not attempted, 1 = beginning, 2 = developing, 3 = proficient, 4 = extending.</p>
+                </div>
+
+                <div class="curriculum-grid teacher-curriculum-grid">
+                    <div>
+                        <h3 class="column-title">Buckets</h3>
+                        <div id="bucket-list" class="bucket-list"></div>
+                    </div>
+                    <div>
+                        <h3 class="column-title">Standards</h3>
+                        <div id="standard-list" class="standard-list"></div>
+                        <form id="add-lt-form" class="add-lt-form">
+                            <h4>Add Learning Target</h4>
+                            <input type="text" name="title" placeholder="Learning target title" required>
+                            <textarea name="description" placeholder="Optional description"></textarea>
+                            <button type="submit">Add to Selected Standard</button>
+                        </form>
+                    </div>
+                    <div>
+                        <h3 class="column-title">Learning Targets</h3>
+                        <div id="target-panel" class="target-panel"></div>
+                    </div>
+                </div>
+            </section>
+
+            <section class="student-section analytics-section" aria-labelledby="chart-heading">
+                <div class="student-section-header">
+                    <div>
+                        <p class="student-kicker">Course Progression</p>
+                        <h2 id="chart-heading">Progress Over Time</h2>
+                    </div>
+                    <p id="chart-scope">Showing all skill buckets</p>
+                </div>
+                <div class="chart-wrap">
+                    <svg id="progress-chart" role="img" aria-label="Learning target points over time"></svg>
+                    <p id="chart-empty-note" class="chart-empty-note">The graph will fill in when this student is rated 1-4.</p>
+                </div>
+            </section>
+
+            <section class="student-section teacher-edit-section" aria-labelledby="edit-heading">
+                <div class="student-section-header">
+                    <div>
+                        <p class="student-kicker">Account</p>
+                        <h2 id="edit-heading">Student Information</h2>
+                    </div>
+                </div>
+
+                <form method="POST" class="teacher-student-form">
                     <input type="hidden" name="action" value="update">
-                    
-                    <div class="form-row">
-                        <div class="form-group">
-                            <label for="first_name">First Name</label>
-                            <input type="text" id="first_name" name="first_name" class="form-input" 
-                                   value="<?php echo htmlspecialchars($student['first_name']); ?>" required>
-                        </div>
-                        <div class="form-group">
-                            <label for="last_name">Last Name</label>
-                            <input type="text" id="last_name" name="last_name" class="form-input" 
-                                   value="<?php echo htmlspecialchars($student['last_name']); ?>" required>
-                        </div>
-                    </div>
-                    
-                    <div class="form-group">
-                        <label for="email">Email</label>
-                        <input type="email" id="email" name="email" class="form-input" 
-                               value="<?php echo htmlspecialchars($student['email']); ?>" required>
-                    </div>
-                    
-                    <div class="form-group">
-                        <label for="new_password">New Password (leave blank to keep current password)</label>
-                        <input type="text" id="new_password" name="new_password" class="form-input" 
-                               placeholder="Enter new password (min 6 characters)">
-                        <small style="color: #718096; margin-top: 5px; display: block;">
-                            Note: If you set a new password, make sure to inform the student of their new password.
-                        </small>
-                    </div>
-                    
-                    <div class="button-group">
-                        <button type="submit" class="form-button btn-primary">Update Student Details</button>
-                        <a href="teacher_dashboard.php" class="form-button btn-secondary" style="text-decoration: none; display: inline-block; text-align: center;">Cancel</a>
-                        <button type="button" class="form-button btn-danger" id="delete-student-btn">Delete Student</button>
+                    <label>
+                        <span>First Name</span>
+                        <input type="text" name="first_name" value="<?php echo htmlspecialchars($student['first_name']); ?>" required>
+                    </label>
+                    <label>
+                        <span>Last Name</span>
+                        <input type="text" name="last_name" value="<?php echo htmlspecialchars($student['last_name']); ?>" required>
+                    </label>
+                    <label>
+                        <span>Email</span>
+                        <input type="email" name="email" value="<?php echo htmlspecialchars($student['email']); ?>" required>
+                    </label>
+                    <label>
+                        <span>New Password</span>
+                        <input type="text" name="new_password" placeholder="Leave blank to keep current password">
+                    </label>
+                    <div class="teacher-form-actions">
+                        <button type="submit">Save Student Info</button>
+                        <button type="button" class="danger" id="delete-student-btn">Delete Student</button>
                     </div>
                 </form>
-            </div>
-
-            <div class="details-section">
-                <h3 class="section-title">Goal Progress</h3>
-
-                <?php if (!empty($goals)): ?>
-                    <div class="goal-progress-overview">
-                        <div>
-                            <div class="goal-progress-bar">
-                                <div class="goal-progress-fill" style="width: <?php echo $goal_progress_percentage; ?>%"></div>
-                            </div>
-                            <div class="goal-progress-text" style="margin-top: 8px;">
-                                <?php echo $goal_progress_percentage; ?>% of goals completed or progressing
-                            </div>
-                        </div>
-
-                        <div class="goal-status-summary">
-                            <div class="goal-summary-item">
-                                <strong>Not Started:</strong> <?php echo $goal_status_counts['not_started']; ?>
-                            </div>
-                            <div class="goal-summary-item">
-                                <strong>Progressing:</strong> <?php echo $goal_status_counts['progressing']; ?>
-                            </div>
-                            <div class="goal-summary-item">
-                                <strong>Proficient:</strong> <?php echo $goal_status_counts['proficient']; ?>
-                            </div>
-                            <div class="goal-summary-item">
-                                <strong>Total Goals:</strong> <?php echo count($goals); ?>
-                            </div>
-                        </div>
-                    </div>
-
-                    <div class="goal-card-list">
-                        <?php foreach ($goals as $goal): ?>
-                            <?php
-                                $status_key = $goal['status'] ?? 'not_started';
-                                if (!in_array($status_key, ['not_started', 'progressing', 'proficient'], true)) {
-                                    $status_key = 'not_started';
-                                }
-                                $status_label = ucfirst(str_replace('_', ' ', $status_key));
-                                $goal_type_value = $goal['goal_type'] ?? '';
-                                $goal_type_label = $goal_type_value !== '' ? ucfirst($goal_type_value) . ' Goal' : 'Goal';
-                                $created_at = $goal['created_at'] ? date('F j, Y', strtotime($goal['created_at'])) : 'Unknown date';
-                            ?>
-                            <div class="goal-card">
-                                <div class="goal-card-header">
-                                    <div>
-                                        <div class="goal-card-title"><?php echo htmlspecialchars($goal_type_label); ?></div>
-                                        <div class="goal-card-date">Created <?php echo htmlspecialchars($created_at); ?></div>
-                                    </div>
-                                    <span class="goal-status-tag status-<?php echo $status_key; ?>"><?php echo htmlspecialchars($status_label); ?></span>
-                                </div>
-                                <div class="goal-card-body">
-                                    <div>
-                                        <strong>Focus</strong>
-                                        <div><?php echo nl2br(htmlspecialchars($goal['goal_focus'] ?? '')); ?></div>
-                                    </div>
-                                    <div>
-                                        <strong>Success Criteria</strong>
-                                        <div><?php echo nl2br(htmlspecialchars($goal['success_criteria'] ?? '')); ?></div>
-                                    </div>
-                                </div>
-                            </div>
-                        <?php endforeach; ?>
-                    </div>
-                <?php else: ?>
-                    <div class="goal-empty-state">
-                        <h4 style="margin-top: 0;">No goals yet</h4>
-                        <p>This student hasn't created any goals. Encourage them to set a daily or weekly goal from their dashboard.</p>
-                    </div>
-                <?php endif; ?>
-            </div>
-
-            <div class="details-section">
-                <h3 class="section-title">Skills Progress</h3>
-                <div class="skills-grid">
-                    <?php foreach ($skills as $skill): ?>
-                        <div class="skill-card">
-                            <div class="skill-name"><?php echo htmlspecialchars($skill['skill_name']); ?></div>
-                            <?php if ($skill['skill_description']): ?>
-                                <div class="skill-description"><?php echo htmlspecialchars($skill['skill_description']); ?></div>
-                            <?php endif; ?>
-                            <?php if ($skill['unit']): ?>
-                                <div style="font-size: 0.85rem; color: #4299e1; margin-bottom: 10px;">
-                                    Unit: <?php echo htmlspecialchars($skill['unit']); ?>
-                                </div>
-                            <?php endif; ?>
-                            <span class="skill-status status-<?php echo $skill['status']; ?>">
-                                <?php echo ucfirst(str_replace('_', ' ', $skill['status'])); ?>
-                            </span>
-                        </div>
-                    <?php endforeach; ?>
-                </div>
-            </div>
-        </div>
+            </section>
+        </main>
     </div>
 
     <script>
-        (function() {
-            const deleteButton = document.getElementById('delete-student-btn');
-            if (!deleteButton) {
+        const studentId = <?php echo (int) $student_id; ?>;
+        let dashboardData = <?php echo $dashboard_json; ?>;
+        const state = {
+            bucketId: dashboardData.buckets && dashboardData.buckets[0] ? dashboardData.buckets[0].id : null,
+            standardId: dashboardData.buckets && dashboardData.buckets[0] && dashboardData.buckets[0].standards[0] ? dashboardData.buckets[0].standards[0].id : null,
+            progressScope: 'overall'
+        };
+
+        function escapeHtml(value) {
+            const div = document.createElement('div');
+            div.textContent = value == null ? '' : String(value);
+            return div.innerHTML;
+        }
+
+        function progressText(earned, possible) {
+            if (!possible) {
+                return 'No learning targets yet';
+            }
+            return earned + ' of ' + possible + ' LT points';
+        }
+
+        function getBucket(bucketId) {
+            return (dashboardData.buckets || []).find(bucket => bucket.id === bucketId) || null;
+        }
+
+        function getStandard(standardId) {
+            for (const bucket of dashboardData.buckets || []) {
+                const found = (bucket.standards || []).find(standard => standard.id === standardId);
+                if (found) {
+                    return found;
+                }
+            }
+            return null;
+        }
+
+        function getTargets(standardId) {
+            return (dashboardData.targetsByStandard || {})[standardId] || [];
+        }
+
+        function selectedProgressScope() {
+            const standard = getStandard(state.standardId);
+            const bucket = getBucket(state.bucketId);
+            if (state.progressScope === 'standard' && standard) {
+                return {
+                    name: standard.id + ' Progress',
+                    percent: standard.percent,
+                    earnedPoints: standard.earnedPoints || 0,
+                    totalPoints: standard.totalPoints || 0
+                };
+            }
+            if (state.progressScope === 'bucket' && bucket) {
+                return {
+                    name: bucket.name + ' Progress',
+                    percent: bucket.percent,
+                    earnedPoints: bucket.earnedPoints || 0,
+                    totalPoints: bucket.totalPoints || 0
+                };
+            }
+            return Object.assign({ name: 'Overall LT Progress' }, dashboardData.overall || { percent: 0, earnedPoints: 0, totalPoints: 0 });
+        }
+
+        function renderProgressSummary(scope) {
+            document.getElementById('progress-context').textContent = scope.name;
+            document.getElementById('progress-percent').textContent = scope.percent + '%';
+            document.getElementById('progress-count').textContent = progressText(scope.earnedPoints || 0, scope.totalPoints || 0);
+            document.getElementById('student-progress-fill').style.width = scope.percent + '%';
+        }
+
+        function renderBuckets() {
+            const list = document.getElementById('bucket-list');
+            list.innerHTML = (dashboardData.buckets || []).map(bucket => `
+                <button type="button" class="bucket-card ${bucket.id === state.bucketId ? 'active' : ''}" data-bucket-id="${escapeHtml(bucket.id)}">
+                    <span class="bucket-code">${escapeHtml(bucket.code)}</span>
+                    <span class="bucket-name">${escapeHtml(bucket.name)}</span>
+                    <span class="bucket-progress">${escapeHtml(progressText(bucket.earnedPoints || 0, bucket.totalPoints || 0))}</span>
+                </button>
+            `).join('');
+
+            list.querySelectorAll('[data-bucket-id]').forEach(button => {
+                button.addEventListener('click', () => {
+                    const bucket = getBucket(button.dataset.bucketId);
+                    state.bucketId = button.dataset.bucketId;
+                    state.standardId = bucket && bucket.standards[0] ? bucket.standards[0].id : null;
+                    state.progressScope = 'bucket';
+                    renderDashboard();
+                });
+            });
+        }
+
+        function renderStandards() {
+            const bucket = getBucket(state.bucketId);
+            const standards = bucket ? bucket.standards || [] : [];
+            const list = document.getElementById('standard-list');
+
+            list.innerHTML = standards.map(standard => `
+                <button type="button" class="standard-row ${standard.id === state.standardId ? 'active' : ''}" data-standard-id="${escapeHtml(standard.id)}">
+                    <span class="standard-id">${escapeHtml(standard.id)}</span>
+                    <span class="standard-name">${escapeHtml(standard.name)}</span>
+                    <span class="standard-desc">${escapeHtml(standard.description)}</span>
+                    <span class="standard-progress">${escapeHtml(progressText(standard.earnedPoints || 0, standard.totalPoints || 0))}</span>
+                </button>
+            `).join('');
+
+            list.querySelectorAll('[data-standard-id]').forEach(button => {
+                button.addEventListener('click', () => {
+                    state.standardId = button.dataset.standardId;
+                    state.progressScope = 'standard';
+                    renderDashboard();
+                });
+            });
+        }
+
+        function renderTargets() {
+            const panel = document.getElementById('target-panel');
+            const standard = getStandard(state.standardId);
+            const targets = getTargets(state.standardId);
+
+            if (!standard) {
+                panel.innerHTML = '<div class="empty-panel">No standard selected.</div>';
                 return;
             }
 
-            deleteButton.addEventListener('click', function() {
-                if (!confirm('Are you sure you want to delete this student? This action cannot be undone.')) {
+            if (!targets.length) {
+                panel.innerHTML = `
+                    <div class="target-standard-summary">
+                        <span>${escapeHtml(standard.id)}</span>
+                        <h4>${escapeHtml(standard.name)}</h4>
+                        <p>No learning targets have been added under this standard yet.</p>
+                    </div>
+                `;
+                return;
+            }
+
+            const scale = dashboardData.scale || {0: 'Not attempted', 1: 'Beginning', 2: 'Developing', 3: 'Proficient', 4: 'Extending'};
+            panel.innerHTML = targets.map(target => `
+                <div class="teacher-target-card" data-target-id="${escapeHtml(target.id)}">
+                    <div>
+                        <h4>${escapeHtml(target.title)}</h4>
+                        ${target.description ? `<p>${escapeHtml(target.description)}</p>` : ''}
+                        <span class="teacher-target-score">Current: ${escapeHtml(target.score || 0)} - ${escapeHtml(target.scoreLabel || scale[target.score || 0])}</span>
+                    </div>
+                    <div class="rating-buttons" role="group" aria-label="Rate ${escapeHtml(target.title)}">
+                        ${[0, 1, 2, 3, 4].map(score => `
+                            <button type="button" class="${Number(target.score || 0) === score ? 'active' : ''}" data-score="${score}" data-target-id="${escapeHtml(target.id)}" title="${escapeHtml(scale[score])}">
+                                ${score}
+                            </button>
+                        `).join('')}
+                    </div>
+                </div>
+            `).join('');
+
+            panel.querySelectorAll('[data-score]').forEach(button => {
+                button.addEventListener('click', () => saveRating(button.dataset.targetId, button.dataset.score, button));
+            });
+        }
+
+        function saveRating(targetId, score, button) {
+            const params = new URLSearchParams();
+            params.append('student_id', studentId);
+            params.append('learning_target_id', targetId);
+            params.append('score', score);
+
+            button.disabled = true;
+            fetch('update_learning_target_score.php', {
+                method: 'POST',
+                headers: {'Content-Type': 'application/x-www-form-urlencoded'},
+                body: params.toString()
+            })
+            .then(response => response.json())
+            .then(data => {
+                if (!data.success) {
+                    throw new Error(data.message || 'Unable to save rating.');
+                }
+                dashboardData = data.dashboard;
+                renderDashboard();
+                showTeacherToast('Rating saved.', 'success');
+            })
+            .catch(error => {
+                button.disabled = false;
+                showTeacherToast(error.message || 'Unable to save rating.', 'error');
+            });
+        }
+
+        function renderChart() {
+            const svg = document.getElementById('progress-chart');
+            const note = document.getElementById('chart-empty-note');
+            const scopeLabel = document.getElementById('chart-scope');
+            const graph = dashboardData.graph || {};
+            const bucket = getBucket(state.bucketId);
+            const useBucketGraph = state.progressScope !== 'overall' && bucket && graph.byBucket;
+            const values = useBucketGraph ? graph.byBucket[bucket.id] || [] : graph.overall || [];
+            const totalPoints = useBucketGraph ? bucket.totalPoints : (dashboardData.overall ? dashboardData.overall.totalPoints : 0);
+            const maxY = Math.max(totalPoints || 0, ...values, 1);
+            const width = 920;
+            const height = 300;
+            const pad = {top: 22, right: 26, bottom: 58, left: 54};
+            const chartWidth = width - pad.left - pad.right;
+            const chartHeight = height - pad.top - pad.bottom;
+
+            scopeLabel.textContent = useBucketGraph ? 'Showing ' + bucket.name : 'Showing all skill buckets';
+            note.style.display = values.some(value => value > 0) ? 'none' : 'block';
+
+            const points = values.map((value, index) => {
+                const x = pad.left + (index / Math.max(values.length - 1, 1)) * chartWidth;
+                const y = pad.top + chartHeight - (value / maxY) * chartHeight;
+                return [x, y];
+            });
+            const polyline = points.map(point => point.join(',')).join(' ');
+            const monthLabels = [];
+            let weekOffset = 0;
+            (graph.months || []).forEach(month => {
+                const x = pad.left + ((weekOffset + 1.5) / Math.max((graph.weeks || 36) - 1, 1)) * chartWidth;
+                monthLabels.push(`<text x="${x}" y="${height - 20}" text-anchor="middle" class="chart-label">${escapeHtml(month.label)}</text>`);
+                weekOffset += month.weeks;
+            });
+            monthLabels.push(`<text x="${pad.left + chartWidth}" y="${height - 20}" text-anchor="middle" class="chart-label">Jun</text>`);
+
+            const weekLines = [];
+            for (let i = 0; i < (graph.weeks || 36); i++) {
+                const x = pad.left + (i / Math.max((graph.weeks || 36) - 1, 1)) * chartWidth;
+                weekLines.push(`<line x1="${x}" y1="${pad.top}" x2="${x}" y2="${pad.top + chartHeight}" class="chart-week-line ${i % 4 === 0 ? 'month' : ''}" />`);
+            }
+
+            svg.setAttribute('viewBox', `0 0 ${width} ${height}`);
+            svg.innerHTML = `
+                <rect x="0" y="0" width="${width}" height="${height}" class="chart-bg"></rect>
+                ${weekLines.join('')}
+                <line x1="${pad.left}" y1="${pad.top}" x2="${pad.left}" y2="${pad.top + chartHeight}" class="chart-axis"></line>
+                <line x1="${pad.left}" y1="${pad.top + chartHeight}" x2="${pad.left + chartWidth}" y2="${pad.top + chartHeight}" class="chart-axis"></line>
+                <text x="14" y="${pad.top + 8}" class="chart-axis-label">Pts</text>
+                <text x="${pad.left - 12}" y="${pad.top + 5}" text-anchor="end" class="chart-label">${maxY}</text>
+                <text x="${pad.left - 12}" y="${pad.top + chartHeight}" text-anchor="end" class="chart-label">0</text>
+                <polyline points="${polyline}" class="chart-line"></polyline>
+                ${points.map(point => `<circle cx="${point[0]}" cy="${point[1]}" r="3" class="chart-dot"></circle>`).join('')}
+                ${monthLabels.join('')}
+            `;
+        }
+
+        function renderDashboard() {
+            renderBuckets();
+            renderStandards();
+            renderTargets();
+            renderProgressSummary(selectedProgressScope());
+            renderChart();
+        }
+
+        function showTeacherToast(message, type) {
+            const toast = document.createElement('div');
+            toast.className = 'teacher-toast ' + type;
+            toast.textContent = message;
+            document.body.appendChild(toast);
+            setTimeout(() => toast.remove(), 2400);
+        }
+
+        document.getElementById('add-lt-form').addEventListener('submit', event => {
+            event.preventDefault();
+            const form = event.currentTarget;
+            const formData = new FormData(form);
+            formData.append('student_id', studentId);
+            formData.append('standard_id', state.standardId || '');
+
+            fetch('add_learning_target.php', {
+                method: 'POST',
+                body: formData
+            })
+            .then(response => response.json())
+            .then(data => {
+                if (!data.success) {
+                    throw new Error(data.message || 'Unable to add learning target.');
+                }
+                dashboardData = data.dashboard;
+                form.reset();
+                renderDashboard();
+                showTeacherToast('Learning target added.', 'success');
+            })
+            .catch(error => showTeacherToast(error.message || 'Unable to add learning target.', 'error'));
+        });
+
+        document.getElementById('delete-student-btn').addEventListener('click', function() {
+            if (!confirm('Are you sure you want to delete this student? This action cannot be undone.')) {
+                return;
+            }
+
+            const params = new URLSearchParams();
+            params.append('student_id', studentId);
+
+            fetch('delete_student.php', {
+                method: 'POST',
+                headers: {'Content-Type': 'application/x-www-form-urlencoded'},
+                body: params.toString()
+            })
+            .then(response => response.json())
+            .then(data => {
+                if (data.success) {
+                    window.location.href = 'teacher_dashboard.php';
                     return;
                 }
+                showTeacherToast(data.message || 'Unable to delete student.', 'error');
+            })
+            .catch(() => showTeacherToast('Unable to delete student.', 'error'));
+        });
 
-                const originalText = deleteButton.textContent;
-                deleteButton.disabled = true;
-                deleteButton.textContent = 'Deleting...';
-
-                const params = new URLSearchParams();
-                params.append('student_id', '<?php echo $student['id']; ?>');
-
-                fetch('delete_student.php', {
-                    method: 'POST',
-                    headers: {
-                        'Content-Type': 'application/x-www-form-urlencoded'
-                    },
-                    body: params.toString()
-                })
-                .then(response => response.json())
-                .then(data => {
-                    if (data.success) {
-                        window.location.href = 'teacher_dashboard.php';
-                        return;
-                    }
-
-                    alert(data.message || 'Unable to delete student. Please try again.');
-                    deleteButton.disabled = false;
-                    deleteButton.textContent = originalText;
-                })
-                .catch(() => {
-                    alert('An unexpected error occurred while deleting the student.');
-                    deleteButton.disabled = false;
-                    deleteButton.textContent = originalText;
-                });
-            });
-        })();
+        document.addEventListener('DOMContentLoaded', renderDashboard);
     </script>
 </body>
 </html>

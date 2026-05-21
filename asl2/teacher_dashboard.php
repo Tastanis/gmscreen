@@ -1,6 +1,7 @@
 <?php
 session_start();
 require_once 'config.php';
+require_once __DIR__ . '/../common/asl_student_dashboard_data.php';
 
 // Check if user is logged in and is a teacher
 if (!isset($_SESSION['user_id']) || !isset($_SESSION['is_teacher']) || !$_SESSION['is_teacher']) {
@@ -43,9 +44,22 @@ try {
     ");
     $stmt->execute();
     $students = $stmt->fetchAll();
+
+    aslhubEnsureStudentDashboardSchema($pdo);
+    $lt_total_targets = null;
+    foreach ($students as &$student) {
+        $lt_dashboard = aslhubFetchStudentDashboardData($pdo, (int) $student['id']);
+        $student['earned_points'] = $lt_dashboard['overall']['earnedPoints'] ?? 0;
+        $student['total_possible_points'] = $lt_dashboard['overall']['totalPoints'] ?? 0;
+        $student['lt_total_targets'] = $lt_dashboard['overall']['totalTargets'] ?? 0;
+        if ($lt_total_targets === null) {
+            $lt_total_targets = $student['lt_total_targets'];
+        }
+    }
+    unset($student);
     
     // Get total skills count
-    $stmt = $pdo->prepare("SELECT COUNT(*) as total_skills FROM skills");
+    $stmt = $pdo->prepare("SELECT COUNT(*) as total_skills FROM asl_learning_targets WHERE active = 1");
     $stmt->execute();
     $total_skills = $stmt->fetchColumn();
     
@@ -104,7 +118,7 @@ try {
                 <!-- Students Section -->
                 <div id="students-section">
                     <h2>Student Progress Overview</h2>
-                    <p>Total Students: <strong><span id="filtered-count"><?php echo count($students); ?></span></strong> of <strong><span id="total-count"><?php echo count($students); ?></span></strong> | Total Skills: <strong><?php echo $total_skills; ?></strong></p>
+                    <p>Total Students: <strong><span id="filtered-count"><?php echo count($students); ?></span></strong> of <strong><span id="total-count"><?php echo count($students); ?></span></strong> | Total LTs: <strong><?php echo $total_skills; ?></strong></p>
                     
                     <!-- Filtering and Sorting Controls -->
                     <div class="filter-controls" style="margin: 20px 0; padding: 20px; background: rgba(247, 250, 252, 0.8); border-radius: 12px; border: 2px solid #e2e8f0;">

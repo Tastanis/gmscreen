@@ -91,7 +91,7 @@ if ($dashboard_json === false) {
                     <div class="student-progress-track" aria-hidden="true">
                         <div id="student-progress-fill" class="student-progress-fill"></div>
                     </div>
-                    <div id="progress-count" class="student-progress-count">No learning targets yet</div>
+                    <div id="progress-count" class="student-progress-count">No learning target points yet</div>
                 </div>
             </section>
 
@@ -130,7 +130,7 @@ if ($dashboard_json === false) {
                 </div>
                 <div class="chart-wrap">
                     <svg id="progress-chart" role="img" aria-label="Learning targets completed over time"></svg>
-                    <p id="chart-empty-note" class="chart-empty-note">The graph will fill in when learning targets are graded 3 or 4.</p>
+                    <p id="chart-empty-note" class="chart-empty-note">The graph will fill in when learning targets are rated 1-4.</p>
                 </div>
             </section>
 
@@ -177,7 +177,7 @@ if ($dashboard_json === false) {
             if (!total) {
                 return 'No learning targets yet';
             }
-            return completed + ' of ' + total + ' LTs proficient';
+            return completed + ' of ' + total + ' LT points';
         }
 
         function getBucket(bucketId) {
@@ -222,7 +222,7 @@ if ($dashboard_json === false) {
                 <button type="button" class="bucket-card ${bucket.id === state.bucketId ? 'active' : ''}" data-bucket-id="${escapeHtml(bucket.id)}">
                     <span class="bucket-code">${escapeHtml(bucket.code)}</span>
                     <span class="bucket-name">${escapeHtml(bucket.name)}</span>
-                    <span class="bucket-progress">${escapeHtml(progressText(bucket.completedTargets, bucket.totalTargets))}</span>
+                    <span class="bucket-progress">${escapeHtml(progressText(bucket.earnedPoints || 0, bucket.totalPoints || 0))}</span>
                 </button>
             `).join('');
 
@@ -248,7 +248,7 @@ if ($dashboard_json === false) {
                     <span class="standard-id">${escapeHtml(standard.id)}</span>
                     <span class="standard-name">${escapeHtml(standard.name)}</span>
                     <span class="standard-desc">${escapeHtml(standard.description)}</span>
-                    <span class="standard-progress">${escapeHtml(progressText(standard.completedTargets, standard.totalTargets))}</span>
+                    <span class="standard-progress">${escapeHtml(progressText(standard.earnedPoints || 0, standard.totalPoints || 0))}</span>
                 </button>
             `).join('');
 
@@ -277,7 +277,7 @@ if ($dashboard_json === false) {
             const targetButtons = targets.map(target => `
                 <button type="button" class="target-row ${String(target.id) === String(state.targetId) ? 'active' : ''}" data-target-id="${escapeHtml(target.id)}">
                     <span>${escapeHtml(target.title)}</span>
-                    <strong>${target.placeholder ? 'Placeholder' : 'Score ' + escapeHtml(target.score || 0)}</strong>
+                    <strong>${target.placeholder ? 'Placeholder' : escapeHtml((target.score || 0) + ' - ' + (target.scoreLabel || 'Not attempted'))}</strong>
                 </button>
             `).join('');
 
@@ -331,7 +331,7 @@ if ($dashboard_json === false) {
 
             context.textContent = scope.name;
             percent.textContent = scope.percent + '%';
-            count.textContent = progressText(scope.completedTargets, scope.totalTargets);
+            count.textContent = progressText(scope.earnedPoints || 0, scope.totalPoints || 0);
             fill.style.width = scope.percent + '%';
         }
 
@@ -343,7 +343,9 @@ if ($dashboard_json === false) {
                     name: standard.id + ' Progress',
                     percent: standard.percent,
                     completedTargets: standard.completedTargets,
-                    totalTargets: standard.totalTargets
+                    totalTargets: standard.totalTargets,
+                    earnedPoints: standard.earnedPoints || 0,
+                    totalPoints: standard.totalPoints || 0
                 };
             }
             if (state.progressScope === 'bucket' && bucket) {
@@ -351,10 +353,12 @@ if ($dashboard_json === false) {
                     name: bucket.name + ' Progress',
                     percent: bucket.percent,
                     completedTargets: bucket.completedTargets,
-                    totalTargets: bucket.totalTargets
+                    totalTargets: bucket.totalTargets,
+                    earnedPoints: bucket.earnedPoints || 0,
+                    totalPoints: bucket.totalPoints || 0
                 };
             }
-            return Object.assign({ name: 'Overall LT Progress' }, dashboardData.overall || { percent: 0, completedTargets: 0, totalTargets: 0 });
+            return Object.assign({ name: 'Overall LT Progress' }, dashboardData.overall || { percent: 0, completedTargets: 0, totalTargets: 0, earnedPoints: 0, totalPoints: 0 });
         }
 
         function renderChart() {
@@ -365,8 +369,8 @@ if ($dashboard_json === false) {
             const bucket = getBucket(state.bucketId);
             const useBucketGraph = state.progressScope !== 'overall' && bucket && graph.byBucket;
             const values = useBucketGraph ? graph.byBucket[bucket.id] || [] : graph.overall || [];
-            const totalTargets = useBucketGraph ? bucket.totalTargets : (dashboardData.overall ? dashboardData.overall.totalTargets : 0);
-            const maxY = Math.max(totalTargets || 0, ...values, 1);
+            const totalPoints = useBucketGraph ? bucket.totalPoints : (dashboardData.overall ? dashboardData.overall.totalPoints : 0);
+            const maxY = Math.max(totalPoints || 0, ...values, 1);
             const width = 920;
             const height = 300;
             const pad = { top: 22, right: 26, bottom: 58, left: 54 };
@@ -403,7 +407,7 @@ if ($dashboard_json === false) {
                 ${weekLines.join('')}
                 <line x1="${pad.left}" y1="${pad.top}" x2="${pad.left}" y2="${pad.top + chartHeight}" class="chart-axis"></line>
                 <line x1="${pad.left}" y1="${pad.top + chartHeight}" x2="${pad.left + chartWidth}" y2="${pad.top + chartHeight}" class="chart-axis"></line>
-                <text x="14" y="${pad.top + 8}" class="chart-axis-label">LTs</text>
+                <text x="14" y="${pad.top + 8}" class="chart-axis-label">Pts</text>
                 <text x="${pad.left - 12}" y="${pad.top + 5}" text-anchor="end" class="chart-label">${maxY}</text>
                 <text x="${pad.left - 12}" y="${pad.top + chartHeight}" text-anchor="end" class="chart-label">0</text>
                 <polyline points="${polyline}" class="chart-line"></polyline>
