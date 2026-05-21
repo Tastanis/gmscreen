@@ -167,10 +167,22 @@ if (!function_exists('aslhubEnsureStudentDashboardSchema')) {
                 description TEXT NULL,
                 order_index INT NOT NULL DEFAULT 0,
                 active TINYINT(1) NOT NULL DEFAULT 1,
+                asl_level TINYINT NULL,
                 created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
                 updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
-                INDEX idx_asl_lts_standard (standard_id)
+                INDEX idx_asl_lts_standard (standard_id),
+                INDEX idx_asl_lts_level (asl_level)
             ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci");
+
+            try {
+                $columnCheck = $pdo->query("SHOW COLUMNS FROM asl_learning_targets LIKE 'asl_level'");
+                if ($columnCheck && $columnCheck->rowCount() === 0) {
+                    $pdo->exec("ALTER TABLE asl_learning_targets ADD COLUMN asl_level TINYINT NULL AFTER active");
+                    $pdo->exec("ALTER TABLE asl_learning_targets ADD INDEX idx_asl_lts_level (asl_level)");
+                }
+            } catch (PDOException $e) {
+                error_log('ASL learning_targets level migration failed: ' . $e->getMessage());
+            }
 
             $pdo->exec("CREATE TABLE IF NOT EXISTS asl_learning_target_resources (
                 id INT AUTO_INCREMENT PRIMARY KEY,
@@ -521,12 +533,24 @@ if (!function_exists('aslhubFetchStudentDashboardData')) {
         }
 
         try {
+            $userLevel = null;
+            try {
+                $levelStmt = $pdo->prepare("SELECT level FROM users WHERE id = ?");
+                $levelStmt->execute([$userId]);
+                $levelRow = $levelStmt->fetch(PDO::FETCH_ASSOC);
+                if ($levelRow && in_array((int) $levelRow['level'], [1, 2], true)) {
+                    $userLevel = (int) $levelRow['level'];
+                }
+            } catch (PDOException $e) {
+                $userLevel = null;
+            }
+
             $stmt = $pdo->prepare("SELECT lt.id, lt.standard_id, lt.title, lt.description, COALESCE(ult.score, 0) AS score, ult.completed_at
                 FROM asl_learning_targets lt
                 LEFT JOIN user_learning_targets ult ON ult.learning_target_id = lt.id AND ult.user_id = ?
-                WHERE lt.active = 1
+                WHERE lt.active = 1 AND (lt.asl_level IS NULL OR lt.asl_level = ?)
                 ORDER BY lt.standard_id, lt.order_index, lt.id");
-            $stmt->execute([$userId]);
+            $stmt->execute([$userId, $userLevel]);
             foreach ($stmt->fetchAll(PDO::FETCH_ASSOC) as $target) {
                 $standardId = $target['standard_id'];
                 if (!isset($targetsByStandard[$standardId])) {
@@ -643,6 +667,76 @@ if (!function_exists('aslhubFetchStudentDashboardData')) {
             'scale' => aslhubLearningTargetScale(),
             'graph' => aslhubStudentDashboardBuildGraph($pdo, $userId),
             'comparisons' => aslhubStudentDashboardComparisons($pdo, $userId),
+        ];
+    }
+}
+
+if (!function_exists('aslhubFetchTeacherStandardsData')) {
+    function aslhubFetchTeacherStandardsData(PDO $pdo, int $aslLevel): array
+    {
+        aslhubEnsureStudentDashboardSchema($pdo);
+
+        $buckets = [];
+        $standardsByBucket = [];
+        $targetsByStandard = [];
+
+        try {
+            $stmt = $pdo->query("SELECT bucket_id, code, name, blurb FROM asl_skill_buckets ORDER BY order_index, bucket_id");
+            foreach ($stmt->fetchAll(PDO::FETCH_ASSOC) as $bucket) {
+                $buckets[$bucket['bucket_id']] = [
+                    'id' => $bucket['bucket_id'],
+                    'code' => $bucket['code'],
+                    'name' => $bucket['name'],
+                    'blurb' => $bucket['blurb'],
+                    'standards' => [],
+                ];
+                $standardsByBucket[$bucket['bucket_id']] = [];
+            }
+
+            $stmt = $pdo->query("SELECT standard_id, bucket_id, name, description FROM asl_standards ORDER BY bucket_id, order_index, standard_id");
+            foreach ($stmt->fetchAll(PDO::FETCH_ASSOC) as $standard) {
+                if (!isset($standardsByBucket[$standard['bucket_id']])) {
+                    continue;
+                }
+                $standardsByBucket[$standard['bucket_id']][] = [
+                    'id' => $standard['standard_id'],
+                    'bucketId' => $standard['bucket_id'],
+                    'name' => $standard['name'],
+                    'description' => $standard['description'],
+                ];
+                $targetsByStandard[$standard['standard_id']] = [];
+            }
+
+            $stmt = $pdo->prepare("SELECT id, standard_id, title, description, asl_level
+                FROM asl_learning_targets
+                WHERE active = 1 AND (asl_level IS NULL OR asl_level = ?)
+                ORDER BY standard_id, order_index, id");
+            $stmt->execute([$aslLevel]);
+            foreach ($stmt->fetchAll(PDO::FETCH_ASSOC) as $target) {
+                $sid = $target['standard_id'];
+                if (!isset($targetsByStandard[$sid])) {
+                    $targetsByStandard[$sid] = [];
+                }
+                $targetsByStandard[$sid][] = [
+                    'id' => (int) $target['id'],
+                    'standardId' => $sid,
+                    'title' => $target['title'],
+                    'description' => $target['description'],
+                    'aslLevel' => $target['asl_level'] !== null ? (int) $target['asl_level'] : null,
+                ];
+            }
+        } catch (PDOException $e) {
+            error_log('ASL teacher standards fetch failed: ' . $e->getMessage());
+        }
+
+        foreach ($buckets as $bid => $bucket) {
+            $buckets[$bid]['standards'] = $standardsByBucket[$bid] ?? [];
+        }
+
+        return [
+            'aslLevel' => $aslLevel,
+            'buckets' => array_values($buckets),
+            'targetsByStandard' => $targetsByStandard,
         ];
     }
 }

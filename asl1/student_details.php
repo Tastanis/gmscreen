@@ -142,12 +142,6 @@ $student_name = trim(($student['first_name'] ?? '') . ' ' . ($student['last_name
                     <div>
                         <h3 class="column-title">Standards</h3>
                         <div id="standard-list" class="standard-list"></div>
-                        <form id="add-lt-form" class="add-lt-form">
-                            <h4>Add Learning Target</h4>
-                            <input type="text" name="title" placeholder="Learning target title" required>
-                            <textarea name="description" placeholder="Optional description"></textarea>
-                            <button type="submit">Add to Selected Standard</button>
-                        </form>
                     </div>
                     <div>
                         <h3 class="column-title">Learning Targets</h3>
@@ -459,30 +453,6 @@ $student_name = trim(($student['first_name'] ?? '') . ' ' . ($student['last_name
             document.body.appendChild(toast);
             setTimeout(() => toast.remove(), 2400);
         }
-
-        document.getElementById('add-lt-form').addEventListener('submit', event => {
-            event.preventDefault();
-            const form = event.currentTarget;
-            const formData = new FormData(form);
-            formData.append('student_id', studentId);
-            formData.append('standard_id', state.standardId || '');
-
-            fetch('add_learning_target.php', {
-                method: 'POST',
-                body: formData
-            })
-            .then(response => response.json())
-            .then(data => {
-                if (!data.success) {
-                    throw new Error(data.message || 'Unable to add learning target.');
-                }
-                dashboardData = data.dashboard;
-                form.reset();
-                renderDashboard();
-                showTeacherToast('Learning target added.', 'success');
-            })
-            .catch(error => showTeacherToast(error.message || 'Unable to add learning target.', 'error'));
-        });
 
         document.getElementById('delete-student-btn').addEventListener('click', function() {
             if (!confirm('Are you sure you want to delete this student? This action cannot be undone.')) {
