@@ -32,8 +32,8 @@ if ($_POST) {
                         break;
                     }
                 } else {
-                    // Student login - check MGHS password or stored password
-                    if ($password === 'MGHS' || password_verify($password, $user['password'])) {
+                    // Student login - verify against the stored password hash
+                    if (password_verify($password, $user['password'])) {
                         $authenticated_user = $user;
                         break;
                     }
