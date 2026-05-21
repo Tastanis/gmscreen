@@ -6,17 +6,14 @@ ALTER TABLE users ADD COLUMN is_teacher BOOLEAN DEFAULT FALSE;
 ALTER TABLE users ADD COLUMN password_reset_token VARCHAR(255) NULL;
 ALTER TABLE users ADD COLUMN password_reset_expires DATETIME NULL;
 
--- Insert teacher account (password is 'Dark-dude3')
-INSERT INTO users (first_name, last_name, password, email, is_teacher) 
-VALUES ('Brandon', 'Harms', '$2y$10$YourHashedPasswordHere', 'brandon.harms@mghs.edu', TRUE)
-ON DUPLICATE KEY UPDATE 
-    password = '$2y$10$YourHashedPasswordHere',
+-- Insert teacher account
+-- Password is empty here; set it via set_teacher_password.php (bootstrap mode)
+-- after running this script. Never store plaintext passwords in source control.
+INSERT INTO users (first_name, last_name, password, email, is_teacher)
+VALUES ('Brandon', 'Harms', '', 'brandon.harms@mghs.edu', TRUE)
+ON DUPLICATE KEY UPDATE
     is_teacher = TRUE,
     email = 'brandon.harms@mghs.edu';
-
--- Note: The password hash above is a placeholder. 
--- In the login.php, we handle teacher authentication separately with the plain text password 'Dark-dude3'
--- This is only for the initial setup. In production, you should use proper password hashing.
 
 -- Create skills table
 CREATE TABLE IF NOT EXISTS skills (

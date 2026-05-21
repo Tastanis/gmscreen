@@ -26,14 +26,14 @@ if ($_POST) {
             foreach ($users as $user) {
                 // Check if this is the teacher account
                 if ($user['is_teacher']) {
-                    // Teacher login - check specific password
-                    if ($password === 'Dark-dude3') {
+                    // Teacher login - verify against the stored password hash
+                    if (!empty($user['password']) && password_verify($password, $user['password'])) {
                         $authenticated_user = $user;
                         break;
                     }
                 } else {
-                    // Student login - check MGHS password or stored password
-                    if ($password === 'MGHS' || password_verify($password, $user['password'])) {
+                    // Student login - verify against the stored password hash
+                    if (password_verify($password, $user['password'])) {
                         $authenticated_user = $user;
                         break;
                     }
