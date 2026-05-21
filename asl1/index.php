@@ -163,6 +163,9 @@ session_start();
                     <button type="submit" class="form-button">Login</button>
                     <button type="button" class="form-button create-account-btn" onclick="openModal()">Create New Account</button>
                 </form>
+                <div class="text-center" style="margin-top: 12px;">
+                    <a href="#" onclick="openForgotModal(); return false;" class="back-btn">Forgot password?</a>
+                </div>
             </div>
             
             <div class="text-center" style="margin-top: 20px;">
@@ -211,7 +214,37 @@ session_start();
         </div>
     </div>
     
+    <!-- Forgot Password Modal -->
+    <div id="forgotPasswordModal" class="modal">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h2>Reset Your Password</h2>
+                <button class="close-btn" onclick="closeForgotModal()">&times;</button>
+            </div>
+            <form action="forgot_password.php" method="POST">
+                <p style="margin-bottom: 15px; color: #4a5568;">
+                    Enter the email address on your account. If we find a match, we'll send you a link to reset your password.
+                </p>
+                <div class="form-group">
+                    <label for="forgot_email">School Email</label>
+                    <input type="email" id="forgot_email" name="email" class="form-input" placeholder="Enter your school email" required>
+                </div>
+                <button type="submit" class="form-button">Send Reset Link</button>
+            </form>
+        </div>
+    </div>
+
     <script>
+        function openForgotModal() {
+            document.getElementById('forgotPasswordModal').classList.add('show');
+            document.body.style.overflow = 'hidden';
+        }
+
+        function closeForgotModal() {
+            document.getElementById('forgotPasswordModal').classList.remove('show');
+            document.body.style.overflow = 'auto';
+        }
+
         function openModal() {
             document.getElementById('registrationModal').classList.add('show');
             document.body.style.overflow = 'hidden';
@@ -230,6 +263,10 @@ session_start();
             const modal = document.getElementById('registrationModal');
             if (event.target === modal) {
                 closeModal();
+            }
+            const forgotModal = document.getElementById('forgotPasswordModal');
+            if (event.target === forgotModal) {
+                closeForgotModal();
             }
         }
         

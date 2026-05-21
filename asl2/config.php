@@ -79,9 +79,37 @@ if (!function_exists('aslhubEnsureGoalsTable')) {
     }
 }
 
+if (!function_exists('aslhubEnsurePasswordResetColumns')) {
+    function aslhubEnsurePasswordResetColumns(PDO $pdo): void
+    {
+        static $checkedReset = false;
+
+        if ($checkedReset) {
+            return;
+        }
+
+        $checkedReset = true;
+
+        try {
+            $columnCheck = $pdo->query("SHOW COLUMNS FROM users LIKE 'password_reset_token'");
+            if ($columnCheck && $columnCheck->rowCount() === 0) {
+                $pdo->exec("ALTER TABLE users ADD COLUMN password_reset_token VARCHAR(64) NULL");
+            }
+
+            $columnCheck = $pdo->query("SHOW COLUMNS FROM users LIKE 'password_reset_expires'");
+            if ($columnCheck && $columnCheck->rowCount() === 0) {
+                $pdo->exec("ALTER TABLE users ADD COLUMN password_reset_expires DATETIME NULL");
+            }
+        } catch (PDOException $e) {
+            error_log('ASL Hub schema check (users.password_reset_*) failed: ' . $e->getMessage());
+        }
+    }
+}
+
 if (!defined('ASLHUB_SITE_LEVEL')) {
     define('ASLHUB_SITE_LEVEL', 2);
 }
 aslhubEnsureSkillLevels($pdo, 2);
 aslhubEnsureGoalsTable($pdo);
+aslhubEnsurePasswordResetColumns($pdo);
 ?>
