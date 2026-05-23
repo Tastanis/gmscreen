@@ -87,280 +87,185 @@ try {
     $total_skills = 0;
     $skills_summary = [];
 }
+
+$aslhub_site_level = defined('ASLHUB_SITE_LEVEL') ? (int) ASLHUB_SITE_LEVEL : 1;
+$standards_data = aslhubFetchTeacherStandardsData($pdo, $aslhub_site_level);
+$standards_json = json_encode($standards_data, JSON_HEX_TAG | JSON_HEX_APOS | JSON_HEX_QUOT | JSON_HEX_AMP);
+if ($standards_json === false) {
+    $standards_json = '{}';
+}
 ?>
 <!DOCTYPE html>
 <html lang="en">
 <head>
     <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
     <title>ASL Hub - Teacher Dashboard</title>
     <link rel="stylesheet" href="css/asl-style.css">
 </head>
-<body>
-    <div class="container">
-        <header>
-            <h1>ASL Hub - Teacher Dashboard</h1>
-            <div class="user-info">
-                <span>Welcome, <?php echo htmlspecialchars($_SESSION['user_first_name'] . ' ' . $_SESSION['user_last_name']); ?>!</span>
-                <a href="logout.php" class="logout-btn">Logout</a>
+<body class="student-dashboard-page teacher-dashboard-page">
+    <div class="student-shell">
+        <header class="student-topbar">
+            <div>
+                <p class="student-kicker">ASL Hub</p>
+                <h1>Teacher Dashboard</h1>
             </div>
+            <nav class="student-actions" aria-label="Teacher tools">
+                <span class="teacher-welcome">Welcome, <?php echo htmlspecialchars($_SESSION['user_first_name']); ?></span>
+                <a class="logout-link" href="logout.php">Logout</a>
+            </nav>
         </header>
-        
-        <div class="teacher-dashboard">
-            <div class="main-content">
-                <div style="display: flex; gap: 20px; margin-bottom: 30px;">
-                    <button class="form-button" onclick="showSection('students')" id="students-btn">Student Progress</button>
-                    <button class="form-button" onclick="showSection('skills')" id="skills-btn">Skills Overview</button>
-                    <button class="form-button" onclick="showSection('manage')" id="manage-btn">Manage Skills</button>
-                    <button class="form-button" onclick="showSection('scroller')" id="scroller-btn">Scroller Game</button>
-                    <button class="form-button" onclick="window.location.href='bingo_dashboard.php'" id="bingo-btn">Bingo</button>
-                </div>
-                
-                <!-- Students Section -->
-                <div id="students-section">
-                    <h2>Student Progress Overview</h2>
-                    <p>Total Students: <strong><span id="filtered-count"><?php echo count($students); ?></span></strong> of <strong><span id="total-count"><?php echo count($students); ?></span></strong> | Total LTs: <strong><?php echo $total_skills; ?></strong></p>
-                    
-                    <!-- Filtering and Sorting Controls -->
-                    <div class="filter-controls" style="margin: 20px 0; padding: 20px; background: rgba(247, 250, 252, 0.8); border-radius: 12px; border: 2px solid #e2e8f0;">
-                        <div style="display: flex; gap: 15px; flex-wrap: wrap; align-items: center; margin-bottom: 15px;">
-                            <div style="flex: 1; min-width: 200px;">
-                                <label style="display: block; margin-bottom: 5px; color: #4a5568; font-weight: 500;">Search Student:</label>
-                                <input type="text" id="student-search" placeholder="Type student name..." 
-                                       style="width: 100%; padding: 8px 12px; border: 2px solid #e2e8f0; border-radius: 6px;">
-                            </div>
-                            <div>
-                                <label style="display: block; margin-bottom: 5px; color: #4a5568; font-weight: 500;">Period:</label>
-                                <select id="period-filter" style="padding: 8px 12px; border: 2px solid #e2e8f0; border-radius: 6px;">
-                                    <option value="all">All Periods</option>
-                                    <option value="1">Period 1</option>
-                                    <option value="2">Period 2</option>
-                                    <option value="3">Period 3</option>
-                                    <option value="4">Period 4</option>
-                                    <option value="5">Period 5</option>
-                                    <option value="6">Period 6</option>
-                                    <option value="unassigned">Unassigned</option>
-                                </select>
-                            </div>
-                            <div>
-                                <label style="display: block; margin-bottom: 5px; color: #4a5568; font-weight: 500;">ASL Level:</label>
-                                <select id="level-filter" style="padding: 8px 12px; border: 2px solid #e2e8f0; border-radius: 6px;">
-                                    <option value="all">All Levels</option>
-                                    <option value="1">ASL 1</option>
-                                    <option value="2">ASL 2</option>
-                                </select>
-                            </div>
-                            <div>
-                                <label style="display: block; margin-bottom: 5px; color: #4a5568; font-weight: 500;">Sort By:</label>
-                                <select id="sort-filter" style="padding: 8px 12px; border: 2px solid #e2e8f0; border-radius: 6px;">
-                                    <option value="first-asc">First Name (A-Z)</option>
-                                    <option value="first-desc">First Name (Z-A)</option>
-                                    <option value="last-asc">Last Name (A-Z)</option>
-                                    <option value="last-desc">Last Name (Z-A)</option>
-                                    <option value="progress-asc">Progress (Low to High)</option>
-                                    <option value="progress-desc">Progress (High to Low)</option>
-                                </select>
-                            </div>
-                            <div>
-                                <button onclick="resetFilters()" class="form-button" style="background: #6c757d; padding: 8px 16px; margin-top: 22px;">Reset Filters</button>
-                            </div>
-                        </div>
+
+        <nav class="teacher-tabs" aria-label="Dashboard sections">
+            <button type="button" class="teacher-tab" onclick="showSection('students')" id="students-btn">Student Progress</button>
+            <button type="button" class="teacher-tab" onclick="showSection('standards')" id="standards-btn">Standards</button>
+            <button type="button" class="teacher-tab" onclick="showSection('scroller')" id="scroller-btn">Scroller Game</button>
+            <button type="button" class="teacher-tab" onclick="window.location.href='bingo_dashboard.php'" id="bingo-btn">Bingo</button>
+        </nav>
+
+        <main class="student-dashboard">
+            <!-- Students Section -->
+            <section class="student-section" id="students-section">
+                <div class="student-section-header">
+                    <div>
+                        <p class="student-kicker">Class Overview</p>
+                        <h2>Student Progress</h2>
                     </div>
-                    
-                    <div class="students-grid" id="students-grid">
-                        <?php foreach ($students as $student): ?>
-                            <?php
-                            $progress_percentage = $student['total_possible_points'] > 0 ? 
-                                round(($student['earned_points'] / $student['total_possible_points']) * 100) : 0;
-                            ?>
-                            <div class="student-card"
-                                 data-first-name="<?php echo htmlspecialchars(strtolower($student['first_name'])); ?>"
-                                 data-last-name="<?php echo htmlspecialchars(strtolower($student['last_name'])); ?>"
-                                 data-period="<?php echo $student['class_period'] ?? 'unassigned'; ?>"
-                                 data-level="<?php echo $student['level'] ?? '1'; ?>"
-                                 data-progress="<?php echo $progress_percentage; ?>"
-                                 data-student-id="<?php echo $student['id']; ?>">
-                                <div class="student-name">
-                                    <?php echo htmlspecialchars($student['first_name'] . ' ' . $student['last_name']); ?>
-                                </div>
-                                <div class="student-email">
-                                    <?php echo htmlspecialchars($student['email']); ?>
-                                </div>
-                                <div style="display: flex; justify-content: space-between; margin-top: 5px; font-size: 0.85rem; color: #718096;">
-                                    <span>Period: <?php echo $student['class_period'] ?? 'N/A'; ?></span>
-                                    <span>Level: ASL <?php echo $student['level'] ?? '1'; ?></span>
-                                </div>
-                                <div class="student-progress">
-                                    <div class="student-progress-bar">
-                                        <div class="student-progress-fill 
-                                            <?php 
-                                                if ($progress_percentage <= 50) {
-                                                    echo 'progress-0-50';
-                                                } elseif ($progress_percentage <= 75) {
-                                                    echo 'progress-51-75';
-                                                } else {
-                                                    echo 'progress-76-100';
-                                                }
-                                            ?>" 
-                                            style="width: <?php echo $progress_percentage; ?>%"></div>
-                                    </div>
-                                    <div class="student-progress-text">
-                                        <?php echo $progress_percentage; ?>% Complete
-                                    </div>
-                                </div>
-                                <div class="student-stats">
-                                    <small>
-                                        Points: <?php echo $student['earned_points']; ?> / <?php echo $student['total_possible_points']; ?>
-                                    </small>
-                                </div>
-                                <div class="student-card-actions">
-                                    <button class="form-button" onclick="viewStudentDetails(<?php echo $student['id']; ?>)" style="font-size: 0.9rem; padding: 6px 12px;">
-                                        View Details
-                                    </button>
-                                    <button class="form-button delete-student-button" onclick="deleteStudent(<?php echo $student['id']; ?>, '<?php echo htmlspecialchars($student['first_name'] . ' ' . $student['last_name'], ENT_QUOTES); ?>', this)" style="font-size: 0.9rem; padding: 6px 12px;">
-                                        Delete
-                                    </button>
-                                </div>
-                            </div>
-                        <?php endforeach; ?>
-                    </div>
+                    <p class="teacher-section-summary">
+                        Showing <strong><span id="filtered-count"><?php echo count($students); ?></span></strong>
+                        of <strong><span id="total-count"><?php echo count($students); ?></span></strong> students
+                        <span class="teacher-dot" aria-hidden="true">&middot;</span>
+                        <strong><?php echo $total_skills; ?></strong> learning targets
+                    </p>
                 </div>
-                
-                <!-- Skills Overview Section -->
-                <div id="skills-section" style="display: none;">
-                    <h2>Skills Overview</h2>
-                    <p>Progress summary across all skills and students</p>
-                    
-                    <div class="skills-summary">
-                        <?php 
-                        // Get all skills with their IDs for the action buttons
-                        $stmt = $pdo->prepare("SELECT id, skill_name, skill_description, unit, order_index, asl_level FROM skills ORDER BY order_index");
-                        $stmt->execute();
-                        $all_skills = $stmt->fetchAll();
-                        
-                        $position_number = 1;
-                        foreach ($all_skills as $skill): 
-                            // Find the corresponding skill summary
-                            $skill_summary = null;
-        foreach ($skills_summary as $summary) {
-            if ((int)$summary['id'] === (int)$skill['id']) {
-                $skill_summary = $summary;
-                break;
-            }
-        }
-                            
-                            if (!$skill_summary) {
-                                $skill_summary = [
-                                    'skill_name' => $skill['skill_name'],
-                                    'not_started' => 0,
-                                    'progressing' => 0,
-                                    'proficient' => 0
-                                ];
-                            }
+
+                <div class="teacher-filter-bar">
+                    <label class="teacher-filter-field teacher-filter-search">
+                        <span>Search</span>
+                        <input type="text" id="student-search" placeholder="Student name&hellip;">
+                    </label>
+                    <label class="teacher-filter-field">
+                        <span>Period</span>
+                        <select id="period-filter">
+                            <option value="all">All Periods</option>
+                            <option value="1">Period 1</option>
+                            <option value="2">Period 2</option>
+                            <option value="3">Period 3</option>
+                            <option value="4">Period 4</option>
+                            <option value="5">Period 5</option>
+                            <option value="6">Period 6</option>
+                            <option value="unassigned">Unassigned</option>
+                        </select>
+                    </label>
+                    <label class="teacher-filter-field">
+                        <span>Level</span>
+                        <select id="level-filter">
+                            <option value="all">All Levels</option>
+                            <option value="1">ASL 1</option>
+                            <option value="2">ASL 2</option>
+                        </select>
+                    </label>
+                    <label class="teacher-filter-field">
+                        <span>Sort by</span>
+                        <select id="sort-filter">
+                            <option value="first-asc">First name (A&ndash;Z)</option>
+                            <option value="first-desc">First name (Z&ndash;A)</option>
+                            <option value="last-asc">Last name (A&ndash;Z)</option>
+                            <option value="last-desc">Last name (Z&ndash;A)</option>
+                            <option value="progress-asc">Progress (low to high)</option>
+                            <option value="progress-desc">Progress (high to low)</option>
+                        </select>
+                    </label>
+                    <button type="button" class="teacher-filter-reset" onclick="resetFilters()">Reset</button>
+                </div>
+
+                <div class="students-grid" id="students-grid">
+                    <?php foreach ($students as $student): ?>
+                        <?php
+                        $progress_percentage = $student['total_possible_points'] > 0 ?
+                            round(($student['earned_points'] / $student['total_possible_points']) * 100) : 0;
+                        $progress_class = $progress_percentage <= 50 ? 'progress-0-50'
+                            : ($progress_percentage <= 75 ? 'progress-51-75' : 'progress-76-100');
+                        $initials = htmlspecialchars(substr($student['first_name'] ?? 'A', 0, 1) . substr($student['last_name'] ?? 'S', 0, 1));
                         ?>
-                            <div class="skill-summary-card" data-skill-id="<?php echo $skill['id']; ?>">
-                                <div class="skill-position-controls">
-                                    <span class="skill-position-number">#<?php echo $position_number; ?></span>
-                                    <div class="position-buttons">
-                                        <button class="position-btn" onclick="moveSkill(<?php echo $skill['id']; ?>, 'move_up')" <?php echo $position_number == 1 ? 'disabled' : ''; ?> title="Move Up">▲</button>
-                                        <button class="position-btn" onclick="moveSkill(<?php echo $skill['id']; ?>, 'move_down')" <?php echo $position_number == count($all_skills) ? 'disabled' : ''; ?> title="Move Down">▼</button>
-                                        <input type="number" class="position-input" id="position-<?php echo $skill['id']; ?>" min="1" max="<?php echo count($all_skills); ?>" value="<?php echo $position_number; ?>" onchange="moveToPosition(<?php echo $skill['id']; ?>, this.value)" title="Move to position">
-                                    </div>
+                        <article class="student-card"
+                             data-first-name="<?php echo htmlspecialchars(strtolower($student['first_name'])); ?>"
+                             data-last-name="<?php echo htmlspecialchars(strtolower($student['last_name'])); ?>"
+                             data-period="<?php echo $student['class_period'] ?? 'unassigned'; ?>"
+                             data-level="<?php echo $student['level'] ?? '1'; ?>"
+                             data-progress="<?php echo $progress_percentage; ?>"
+                             data-student-id="<?php echo $student['id']; ?>">
+                            <header class="student-card-header">
+                                <div class="student-card-avatar" aria-hidden="true"><?php echo $initials; ?></div>
+                                <div class="student-card-identity">
+                                    <h3 class="student-name"><?php echo htmlspecialchars($student['first_name'] . ' ' . $student['last_name']); ?></h3>
                                 </div>
-                                <div class="skill-summary-header">
-                                    <div>
-                                        <h3><?php echo htmlspecialchars($skill_summary['skill_name']); ?></h3>
-                                        <div class="skill-meta-line">
-                                            <?php if (!empty($skill['unit'])): ?>
-                                                <span class="skill-unit">Unit: <?php echo htmlspecialchars($skill['unit']); ?></span>
-                                            <?php else: ?>
-                                                <span class="skill-unit no-unit">No Unit</span>
-                                            <?php endif; ?>
-                                            <span class="skill-level-badge">
-                                                <?php echo (($skill['asl_level'] ?? 3) == 3) ? 'ASL 1 & 2' : 'ASL ' . (int)$skill['asl_level']; ?>
-                                            </span>
-                                        </div>
-                                    </div>
-                                    <div class="skill-actions">
-                                        <button class="action-btn edit-btn" onclick="editSkill(<?php echo $skill['id']; ?>, '<?php echo htmlspecialchars($skill['skill_name'], ENT_QUOTES); ?>', '<?php echo htmlspecialchars($skill['skill_description'], ENT_QUOTES); ?>', '<?php echo htmlspecialchars($skill['unit'] ?? '', ENT_QUOTES); ?>', <?php echo (int)($skill['asl_level'] ?? 3); ?>)">Edit</button>
-                                        <button class="action-btn resources-btn" onclick="manageResources(<?php echo $skill['id']; ?>, '<?php echo htmlspecialchars($skill['skill_name'], ENT_QUOTES); ?>')">Resources</button>
-                                        <button class="action-btn delete-btn" onclick="deleteSkill(<?php echo $skill['id']; ?>, '<?php echo htmlspecialchars($skill['skill_name'], ENT_QUOTES); ?>')">Delete</button>
-                                    </div>
+                            </header>
+                            <div class="student-card-meta">
+                                <span>Period <?php echo $student['class_period'] ?? '&mdash;'; ?></span>
+                                <span>ASL <?php echo $student['level'] ?? '1'; ?></span>
+                            </div>
+                            <div class="student-progress">
+                                <div class="student-progress-bar">
+                                    <div class="student-progress-fill <?php echo $progress_class; ?>" style="width: <?php echo $progress_percentage; ?>%"></div>
                                 </div>
-                                <div class="skill-stats">
-                                    <div class="stat-item">
-                                        <span class="stat-label">Not Started:</span>
-                                        <span class="stat-value not-started"><?php echo $skill_summary['not_started']; ?></span>
-                                    </div>
-                                    <div class="stat-item">
-                                        <span class="stat-label">Progressing:</span>
-                                        <span class="stat-value progressing"><?php echo $skill_summary['progressing']; ?></span>
-                                    </div>
-                                    <div class="stat-item">
-                                        <span class="stat-label">Proficient:</span>
-                                        <span class="stat-value proficient"><?php echo $skill_summary['proficient']; ?></span>
-                                    </div>
+                                <div class="student-progress-text">
+                                    <span><?php echo $progress_percentage; ?>% complete</span>
+                                    <span class="student-points"><?php echo $student['earned_points']; ?> / <?php echo $student['total_possible_points']; ?> pts</span>
                                 </div>
                             </div>
-                        <?php 
-                            $position_number++;
-                        endforeach; ?>
-                    </div>
+                            <div class="student-card-actions">
+                                <button type="button" class="teacher-btn teacher-btn-primary" onclick="viewStudentDetails(<?php echo $student['id']; ?>)">View Details</button>
+                                <button type="button" class="teacher-btn teacher-btn-danger delete-student-button" onclick="deleteStudent(<?php echo $student['id']; ?>, '<?php echo htmlspecialchars($student['first_name'] . ' ' . $student['last_name'], ENT_QUOTES); ?>', this)">Delete</button>
+                            </div>
+                        </article>
+                    <?php endforeach; ?>
                 </div>
+            </section>
                 
-                <!-- Manage Skills Section -->
-                <div id="manage-section" style="display: none;">
-                    <h2>Manage Skills</h2>
-                    <p>Add, edit, or remove skills and resources</p>
-                    
-                    <div class="manage-actions">
-                        <button class="form-button" onclick="showAddSkillForm()" style="background: #28a745;">
-                            Add New Skill
-                        </button>
-                        <button class="form-button" onclick="exportProgress()" style="background: #17a2b8;">
-                            Export Progress Report
-                        </button>
+            <!-- Standards Section -->
+            <section class="student-section" id="standards-section" style="display: none;">
+                <div class="student-section-header">
+                    <div>
+                        <p class="student-kicker">Standards &amp; Learning Targets</p>
+                        <h2>Standards for ASL <?php echo (int) $aslhub_site_level; ?></h2>
                     </div>
-                    
-                    <div id="add-skill-form" style="display: none; margin-top: 20px; padding: 20px; background: rgba(247, 250, 252, 0.8); border-radius: 12px;">
-                        <h3>Add New Skill</h3>
-                        <form id="new-skill-form">
-                            <div class="form-group">
-                                <label>Skill Name</label>
-                                <input type="text" name="skill_name" class="form-input" required>
-                            </div>
-                            <div class="form-group">
-                                <label>Skill Description</label>
-                                <textarea name="skill_description" class="form-input" rows="3"></textarea>
-                            </div>
-                            <div class="form-group">
-                                <label>Unit (optional - leave blank for year-round skills)</label>
-                                <input type="text" name="unit" class="form-input" placeholder="e.g., Unit 1, Semester 1, etc.">
-                            </div>
-                            <div class="form-group">
-                                <label>ASL Level</label>
-                                <select name="asl_level" class="form-input">
-                                    <option value="1" selected>ASL 1 Only</option>
-                                    <option value="2">ASL 2 Only</option>
-                                    <option value="3">Both ASL 1 &amp; 2</option>
-                                </select>
-                            </div>
-                            <div class="form-group">
-                                <label>Resources (one per line)</label>
-                                <textarea name="resources" class="form-input" rows="5" placeholder="Resource Name 1|https://example.com&#10;https://docs.google.com/document/d/123&#10;Just a resource name&#10;Another Resource|https://link.com"></textarea>
-                                <small style="color: #6c757d; font-size: 0.85rem; margin-top: 5px; display: block;">
-                                    Format: "Name|URL" or just "URL" or just "Name". Use the Resources button after creation for advanced editing.
-                                </small>
-                            </div>
-                            <button type="submit" class="form-button">Add Skill</button>
-                            <button type="button" class="form-button" onclick="hideAddSkillForm()" style="background: #6c757d;">Cancel</button>
+                    <p>Click a bucket, then a standard, then add learning targets that will appear for every ASL <?php echo (int) $aslhub_site_level; ?> student.</p>
+                </div>
+
+                <div class="curriculum-grid teacher-standards-grid">
+                    <div>
+                        <h3 class="column-title">Buckets</h3>
+                        <div id="standards-bucket-list" class="bucket-list"></div>
+                    </div>
+                    <div>
+                        <h3 class="column-title">Standards</h3>
+                        <div id="standards-standard-list" class="standard-list"></div>
+                    </div>
+                    <div>
+                        <h3 class="column-title">Learning Targets</h3>
+                        <div id="standards-target-panel" class="target-panel"></div>
+                        <form id="standards-add-lt-form" class="add-lt-form">
+                            <h4>Add Learning Target</h4>
+                            <input type="text" name="title" placeholder="Learning target title" required>
+                            <textarea name="description" placeholder="Optional description"></textarea>
+                            <button type="submit">Add to Selected Standard</button>
                         </form>
                     </div>
                 </div>
-                
-                <!-- Scroller Game Section -->
-                <div id="scroller-section" style="display: none;">
-                    <h2>Scroller Game Management</h2>
-                    <p>Create and manage word lists for the scroller game, and control active sessions</p>
+            </section>
+
+            <!-- Hidden legacy skills overview (disabled) -->
+
+            <!-- Scroller Game Section -->
+            <section class="student-section" id="scroller-section" style="display: none;">
+                <div class="student-section-header">
+                    <div>
+                        <p class="student-kicker">Scroller Game</p>
+                        <h2>Word Lists &amp; Sessions</h2>
+                    </div>
+                    <p>Manage word lists and run live student sessions.</p>
+                </div>
                     
                     <!-- Active Session Display -->
                     <div id="active-session-display" style="display: none; margin-bottom: 30px; padding: 20px; background: rgba(72, 187, 120, 0.1); border-radius: 12px; border: 2px solid #48bb78;">
@@ -462,15 +367,14 @@ try {
                                 </span>
                             </div>
                             <div id="wordlists-list">
-                                <!-- Word lists will be loaded here -->
-                            </div>
+                            <!-- Word lists will be loaded here -->
                         </div>
                     </div>
                 </div>
-            </div>
-        </div>
+            </section>
+        </main>
     </div>
-    
+
     <!-- Edit Wordlist Modal -->
     <div id="edit-wordlist-modal" class="resources-modal-overlay" style="display: none;">
         <div class="resources-modal-container">
@@ -553,25 +457,22 @@ try {
     
     <script>
         function showSection(sectionName) {
-            // Hide all sections
-            document.getElementById('students-section').style.display = 'none';
-            document.getElementById('skills-section').style.display = 'none';
-            document.getElementById('manage-section').style.display = 'none';
-            document.getElementById('scroller-section').style.display = 'none';
-            
-            // Remove active class from all buttons
-            document.getElementById('students-btn').classList.remove('active');
-            document.getElementById('skills-btn').classList.remove('active');
-            document.getElementById('manage-btn').classList.remove('active');
-            document.getElementById('scroller-btn').classList.remove('active');
-            
-            // Show selected section and activate button
-            document.getElementById(sectionName + '-section').style.display = 'block';
-            document.getElementById(sectionName + '-btn').classList.add('active');
-            
-            // Load section-specific content
+            ['students', 'standards', 'scroller'].forEach(name => {
+                const section = document.getElementById(name + '-section');
+                const btn = document.getElementById(name + '-btn');
+                if (section) section.style.display = 'none';
+                if (btn) btn.classList.remove('active');
+            });
+
+            const showSec = document.getElementById(sectionName + '-section');
+            const showBtn = document.getElementById(sectionName + '-btn');
+            if (showSec) showSec.style.display = 'block';
+            if (showBtn) showBtn.classList.add('active');
+
             if (sectionName === 'scroller') {
                 loadWordlists();
+            } else if (sectionName === 'standards') {
+                renderStandardsSection();
             }
         }
         
@@ -639,21 +540,144 @@ try {
             });
         }
 
-        function showAddSkillForm() {
-            document.getElementById('add-skill-form').style.display = 'block';
+        // ===== Standards section =====
+        const SITE_ASL_LEVEL = <?php echo (int) $aslhub_site_level; ?>;
+        let standardsData = <?php echo $standards_json; ?>;
+        const standardsState = {
+            bucketId: (standardsData.buckets && standardsData.buckets[0]) ? standardsData.buckets[0].id : null,
+            standardId: (standardsData.buckets && standardsData.buckets[0] && standardsData.buckets[0].standards[0]) ? standardsData.buckets[0].standards[0].id : null
+        };
+
+        function standardsEscapeHtml(value) {
+            const div = document.createElement('div');
+            div.textContent = value == null ? '' : String(value);
+            return div.innerHTML;
         }
-        
-        function hideAddSkillForm() {
-            document.getElementById('add-skill-form').style.display = 'none';
-            document.getElementById('new-skill-form').reset();
+
+        function getStandardsBucket(bucketId) {
+            return (standardsData.buckets || []).find(b => b.id === bucketId) || null;
         }
-        
-        function exportProgress() {
-            // This would generate and download a progress report
-            alert('Export functionality coming soon!');
+
+        function getStandardsStandard(standardId) {
+            for (const b of standardsData.buckets || []) {
+                const found = (b.standards || []).find(s => s.id === standardId);
+                if (found) return found;
+            }
+            return null;
         }
-        
-        
+
+        function getStandardsTargets(standardId) {
+            return (standardsData.targetsByStandard || {})[standardId] || [];
+        }
+
+        function renderStandardsBuckets() {
+            const list = document.getElementById('standards-bucket-list');
+            if (!list) return;
+            list.innerHTML = (standardsData.buckets || []).map(b => {
+                const count = (b.standards || []).reduce((sum, s) => sum + getStandardsTargets(s.id).length, 0);
+                return `
+                    <button type="button" class="bucket-card ${b.id === standardsState.bucketId ? 'active' : ''}" data-bucket-id="${standardsEscapeHtml(b.id)}">
+                        <span class="bucket-code">${standardsEscapeHtml(b.code)}</span>
+                        <span class="bucket-name">${standardsEscapeHtml(b.name)}</span>
+                        <span class="bucket-progress">${count} learning target${count === 1 ? '' : 's'}</span>
+                    </button>
+                `;
+            }).join('');
+            list.querySelectorAll('[data-bucket-id]').forEach(btn => {
+                btn.addEventListener('click', () => {
+                    const b = getStandardsBucket(btn.dataset.bucketId);
+                    standardsState.bucketId = btn.dataset.bucketId;
+                    standardsState.standardId = (b && b.standards[0]) ? b.standards[0].id : null;
+                    renderStandardsSection();
+                });
+            });
+        }
+
+        function renderStandardsStandards() {
+            const list = document.getElementById('standards-standard-list');
+            if (!list) return;
+            const bucket = getStandardsBucket(standardsState.bucketId);
+            const standards = bucket ? (bucket.standards || []) : [];
+            list.innerHTML = standards.map(s => {
+                const count = getStandardsTargets(s.id).length;
+                return `
+                    <button type="button" class="standard-row ${s.id === standardsState.standardId ? 'active' : ''}" data-standard-id="${standardsEscapeHtml(s.id)}">
+                        <span class="standard-id">${standardsEscapeHtml(s.id)}</span>
+                        <span class="standard-name">${standardsEscapeHtml(s.name)}</span>
+                        <span class="standard-desc">${standardsEscapeHtml(s.description || '')}</span>
+                        <span class="standard-progress">${count} LT${count === 1 ? '' : 's'}</span>
+                    </button>
+                `;
+            }).join('');
+            list.querySelectorAll('[data-standard-id]').forEach(btn => {
+                btn.addEventListener('click', () => {
+                    standardsState.standardId = btn.dataset.standardId;
+                    renderStandardsSection();
+                });
+            });
+        }
+
+        function renderStandardsTargets() {
+            const panel = document.getElementById('standards-target-panel');
+            if (!panel) return;
+            const standard = getStandardsStandard(standardsState.standardId);
+            if (!standard) {
+                panel.innerHTML = '<div class="empty-panel">Select a standard to view its learning targets.</div>';
+                return;
+            }
+            const targets = getStandardsTargets(standard.id);
+            const targetItems = targets.length
+                ? targets.map(t => `
+                    <div class="target-row">
+                        <span>${standardsEscapeHtml(t.title)}</span>
+                        ${t.description ? `<small>${standardsEscapeHtml(t.description)}</small>` : ''}
+                    </div>
+                `).join('')
+                : '<div class="empty-panel">No learning targets yet. Add one below.</div>';
+            panel.innerHTML = `
+                <div class="target-standard-summary">
+                    <span>${standardsEscapeHtml(standard.id)}</span>
+                    <h4>${standardsEscapeHtml(standard.name)}</h4>
+                    <p>${standardsEscapeHtml(standard.description || '')}</p>
+                </div>
+                <div class="target-list">${targetItems}</div>
+            `;
+        }
+
+        function renderStandardsSection() {
+            renderStandardsBuckets();
+            renderStandardsStandards();
+            renderStandardsTargets();
+        }
+
+        function submitStandardsAddLearningTarget() {
+            const form = document.getElementById('standards-add-lt-form');
+            if (!form) return;
+            if (!standardsState.standardId) {
+                showMessage('Select a standard first.', 'error');
+                return;
+            }
+            const formData = new FormData(form);
+            formData.append('standard_id', standardsState.standardId);
+            formData.append('asl_level', SITE_ASL_LEVEL);
+
+            fetch('add_learning_target.php', { method: 'POST', body: formData })
+                .then(r => r.json())
+                .then(data => {
+                    if (!data.success) {
+                        throw new Error(data.message || 'Unable to add learning target.');
+                    }
+                    if (data.standards) {
+                        standardsData = data.standards;
+                    }
+                    form.reset();
+                    renderStandardsSection();
+                    showMessage('Learning target added.', 'success');
+                })
+                .catch(err => showMessage(err.message || 'Unable to add learning target.', 'error'));
+        }
+
+
         // Set initial active state
         document.addEventListener('DOMContentLoaded', function() {
             document.getElementById('students-btn').classList.add('active');
@@ -664,12 +688,15 @@ try {
             document.getElementById('level-filter').addEventListener('change', filterAndSortStudents);
             document.getElementById('sort-filter').addEventListener('change', filterAndSortStudents);
             
-            // Add form submission handler
-            document.getElementById('new-skill-form').addEventListener('submit', function(e) {
-                e.preventDefault();
-                submitNewSkill();
-            });
-            
+            // Standards add-LT form handler
+            const addLtForm = document.getElementById('standards-add-lt-form');
+            if (addLtForm) {
+                addLtForm.addEventListener('submit', function(e) {
+                    e.preventDefault();
+                    submitStandardsAddLearningTarget();
+                });
+            }
+
             // Add scroller wordlist form submission handler
             document.getElementById('new-wordlist-form').addEventListener('submit', function(e) {
                 e.preventDefault();
@@ -1520,232 +1547,499 @@ try {
     </script>
     
     <style>
-        .teacher-dashboard .main-content {
-            grid-column: 1 / -1;
+        /* ===== TEACHER DASHBOARD — APPLE-CLEAN ===== */
+        .teacher-dashboard-page .student-section {
+            padding: 22px;
+        }
+
+        .teacher-welcome {
+            color: #6e6e73;
+            font-size: 0.92rem;
+            font-weight: 600;
+            padding: 0 6px;
+            white-space: nowrap;
+        }
+
+        .teacher-tabs {
+            display: flex;
+            gap: 8px;
+            flex-wrap: wrap;
+            padding: 6px;
+            margin-bottom: 18px;
+            background: rgba(255, 255, 255, 0.88);
+            border: 1px solid rgba(210, 210, 215, 0.72);
+            border-radius: 8px;
+            box-shadow: 0 16px 40px rgba(0, 0, 0, 0.06);
+            backdrop-filter: blur(18px);
+        }
+
+        .teacher-tab {
+            background: transparent;
+            border: 1px solid transparent;
+            border-radius: 8px;
+            color: #1d1d1f;
+            cursor: pointer;
+            font: inherit;
+            font-size: 0.92rem;
+            font-weight: 600;
+            padding: 9px 14px;
+            transition: background 0.16s ease, border-color 0.16s ease, color 0.16s ease;
+        }
+
+        .teacher-tab:hover {
+            background: #f5f5f7;
+        }
+
+        .teacher-tab.active {
+            background: #1d1d1f;
+            color: #fff;
+        }
+
+        .teacher-section-summary {
+            color: #6e6e73;
+            margin: 0;
+        }
+
+        .teacher-section-summary strong {
+            color: #1d1d1f;
+        }
+
+        .teacher-dot {
+            color: #d2d2d7;
+            margin: 0 6px;
+        }
+
+        /* Filter bar */
+        .teacher-filter-bar {
+            display: grid;
+            grid-template-columns: minmax(220px, 2fr) repeat(3, minmax(140px, 1fr)) auto;
+            gap: 12px;
+            align-items: end;
+            padding: 16px;
+            margin: 18px 0 22px;
+            background: #fbfbfd;
+            border: 1px solid #e8e8ed;
+            border-radius: 10px;
+        }
+
+        .teacher-filter-field {
+            display: grid;
+            gap: 6px;
+        }
+
+        .teacher-filter-field span {
+            color: #6e6e73;
+            font-size: 0.78rem;
+            font-weight: 700;
+            text-transform: uppercase;
+            letter-spacing: 0.02em;
+        }
+
+        .teacher-filter-field input,
+        .teacher-filter-field select {
+            width: 100%;
+            border: 1px solid #d2d2d7;
+            border-radius: 8px;
+            background: #fff;
+            color: #1d1d1f;
+            font: inherit;
+            padding: 9px 11px;
+            min-height: 40px;
+        }
+
+        .teacher-filter-field input:focus,
+        .teacher-filter-field select:focus {
+            outline: none;
+            border-color: #0071e3;
+            box-shadow: 0 0 0 3px rgba(0, 113, 227, 0.18);
+        }
+
+        .teacher-filter-reset {
+            border: 1px solid #d2d2d7;
+            background: #fff;
+            border-radius: 8px;
+            cursor: pointer;
+            font: inherit;
+            font-weight: 600;
+            padding: 9px 16px;
+            min-height: 40px;
+            color: #1d1d1f;
+            transition: border-color 0.16s ease, box-shadow 0.16s ease;
+        }
+
+        .teacher-filter-reset:hover {
+            border-color: #0071e3;
+            box-shadow: 0 8px 18px rgba(0, 113, 227, 0.12);
+        }
+
+        @media (max-width: 900px) {
+            .teacher-filter-bar {
+                grid-template-columns: 1fr 1fr;
+            }
+            .teacher-filter-search {
+                grid-column: 1 / -1;
+            }
+        }
+
+        /* Student cards */
+        .teacher-dashboard-page .students-grid {
+            display: grid;
+            grid-template-columns: repeat(auto-fill, minmax(280px, 1fr));
+            gap: 16px;
+        }
+
+        .teacher-dashboard-page .student-card {
+            background: #fff;
+            border: 1px solid rgba(210, 210, 215, 0.8);
+            border-radius: 10px;
+            padding: 18px;
+            display: flex;
+            flex-direction: column;
+            gap: 12px;
+            box-shadow: 0 8px 24px rgba(0, 0, 0, 0.04);
+            transition: transform 0.16s ease, box-shadow 0.16s ease, border-color 0.16s ease;
+        }
+
+        .teacher-dashboard-page .student-card:hover {
+            transform: translateY(-2px);
+            border-color: #0071e3;
+            box-shadow: 0 16px 36px rgba(0, 113, 227, 0.12);
+        }
+
+        .student-card-header {
+            display: flex;
+            align-items: center;
+            gap: 12px;
+            min-width: 0;
+        }
+
+        .student-card-avatar {
+            width: 42px;
+            height: 42px;
+            border-radius: 50%;
+            background: #1d1d1f;
+            color: #fff;
+            display: grid;
+            place-items: center;
+            font-size: 0.9rem;
+            font-weight: 800;
+            flex: 0 0 auto;
+        }
+
+        .student-card-identity {
+            min-width: 0;
+        }
+
+        .teacher-dashboard-page .student-name {
+            font-size: 1.02rem;
+            font-weight: 700;
+            color: #1d1d1f;
+            margin: 0;
+            overflow-wrap: anywhere;
+        }
+
+        .teacher-dashboard-page .student-email {
+            color: #6e6e73;
+            font-size: 0.84rem;
+            margin: 2px 0 0;
+            overflow-wrap: anywhere;
+        }
+
+        .student-card-meta {
+            display: flex;
+            gap: 8px;
+            flex-wrap: wrap;
+        }
+
+        .student-card-meta span {
+            background: #f5f5f7;
+            color: #1d1d1f;
+            border-radius: 999px;
+            font-size: 0.78rem;
+            font-weight: 600;
+            padding: 3px 10px;
+        }
+
+        .teacher-dashboard-page .student-progress {
+            display: grid;
+            gap: 6px;
+        }
+
+        .teacher-dashboard-page .student-progress-bar {
+            background: #e8e8ed;
+            border-radius: 999px;
+            height: 8px;
+            overflow: hidden;
+        }
+
+        .teacher-dashboard-page .student-progress-fill {
+            height: 100%;
+            border-radius: 999px;
+            transition: width 0.3s ease;
+        }
+
+        .teacher-dashboard-page .student-progress-fill.progress-0-50 { background: #ff9f0a; }
+        .teacher-dashboard-page .student-progress-fill.progress-51-75 { background: #ffd60a; }
+        .teacher-dashboard-page .student-progress-fill.progress-76-100 { background: #30d158; }
+
+        .teacher-dashboard-page .student-progress-text {
+            display: flex;
+            justify-content: space-between;
+            color: #6e6e73;
+            font-size: 0.82rem;
+            font-weight: 600;
+        }
+
+        .student-points {
+            color: #1d1d1f;
         }
 
         .student-card-actions {
             display: flex;
             gap: 8px;
-            margin-top: 10px;
+            margin-top: auto;
         }
 
-        .delete-student-button {
-            background: #f56565;
-            color: white;
+        /* Buttons */
+        .teacher-btn {
+            border: 1px solid #d2d2d7;
+            background: #fff;
+            color: #1d1d1f;
+            border-radius: 8px;
+            cursor: pointer;
+            font: inherit;
+            font-size: 0.88rem;
+            font-weight: 600;
+            padding: 8px 14px;
+            min-height: 36px;
+            transition: border-color 0.16s ease, box-shadow 0.16s ease, background 0.16s ease, color 0.16s ease;
         }
 
-        .delete-student-button:hover {
-            background: #c53030;
+        .teacher-btn:hover {
+            border-color: #0071e3;
+            box-shadow: 0 8px 18px rgba(0, 113, 227, 0.12);
+        }
+
+        .teacher-btn-primary {
+            background: #0071e3;
+            border-color: #0071e3;
+            color: #fff;
+        }
+
+        .teacher-btn-primary:hover {
+            background: #0062c4;
+            border-color: #0062c4;
+            box-shadow: 0 8px 18px rgba(0, 113, 227, 0.24);
+        }
+
+        .teacher-btn-danger {
+            border-color: #ffd1d8;
+            color: #b4233a;
+        }
+
+        .teacher-btn-danger:hover {
+            border-color: #b4233a;
+            background: #fff5f6;
+            box-shadow: 0 8px 18px rgba(180, 35, 58, 0.16);
+        }
+
+        .teacher-btn-success {
+            background: #30d158;
+            border-color: #30d158;
+            color: #fff;
+        }
+
+        .teacher-btn-success:hover {
+            background: #29b34d;
+            border-color: #29b34d;
+        }
+
+        .teacher-btn-neutral {
+            background: #f5f5f7;
+        }
+
+        /* Skill summary cards */
+        .skills-summary {
+            display: grid;
+            gap: 14px;
         }
 
         .skill-summary-card {
-            background: rgba(247, 250, 252, 0.8);
-            border-radius: 12px;
-            padding: 20px;
-            margin-bottom: 20px;
-            border: 2px solid #e2e8f0;
+            background: #fbfbfd;
+            border: 1px solid #e8e8ed;
+            border-radius: 10px;
+            padding: 18px;
         }
-        
+
         .skill-summary-header {
             display: flex;
             justify-content: space-between;
-            align-items: center;
-            margin-bottom: 15px;
+            align-items: flex-start;
+            gap: 12px;
+            margin-bottom: 14px;
+            flex-wrap: wrap;
         }
-        
+
         .skill-summary-card h3 {
-            color: #2d3748;
+            color: #1d1d1f;
             margin: 0;
-            flex: 1;
+            font-size: 1.05rem;
+            font-weight: 700;
         }
-        
+
         .skill-actions {
             display: flex;
-            gap: 8px;
+            gap: 6px;
+            flex-wrap: wrap;
         }
-        
+
         .action-btn {
-            padding: 6px 12px;
-            border: none;
-            border-radius: 4px;
+            border: 1px solid #d2d2d7;
+            background: #fff;
+            color: #1d1d1f;
+            border-radius: 8px;
             cursor: pointer;
-            font-size: 0.85rem;
-            font-weight: 500;
-            transition: all 0.3s ease;
-        }
-        
-        .edit-btn {
-            background: #4299e1;
-            color: white;
-        }
-        
-        .edit-btn:hover {
-            background: #3182ce;
-        }
-        
-        .resources-btn {
-            background: #38a169;
-            color: white;
-        }
-        
-        .resources-btn:hover {
-            background: #2f855a;
-        }
-        
-        .delete-btn {
-            background: #e53e3e;
-            color: white;
-        }
-        
-        .delete-btn:hover {
-            background: #c53030;
-        }
-        
-        .skill-stats {
-            display: flex;
-            gap: 20px;
-            flex-wrap: wrap;
-        }
-        
-        .stat-item {
-            display: flex;
-            align-items: center;
-            gap: 8px;
-        }
-        
-        .stat-label {
+            font: inherit;
+            font-size: 0.82rem;
             font-weight: 600;
-            color: #4a5568;
+            padding: 6px 12px;
+            transition: border-color 0.16s ease, color 0.16s ease, background 0.16s ease;
         }
-        
-        .stat-value {
-            padding: 4px 8px;
-            border-radius: 4px;
-            font-weight: 600;
-            min-width: 24px;
-            text-align: center;
-        }
-        
-        .stat-value.not-started {
-            background: #feb2b2;
-            color: #742a2a;
-        }
-        
-        .stat-value.progressing {
-            background: #faf089;
-            color: #744210;
-        }
-        
-        .stat-value.proficient {
-            background: #c6f6d5;
-            color: #22543d;
-        }
-        
-        .manage-actions {
-            display: flex;
-            gap: 15px;
-            margin-bottom: 20px;
-            flex-wrap: wrap;
-        }
-        
-        .student-email {
-            font-size: 0.9rem;
-            color: #4a5568;
-            margin-bottom: 10px;
-        }
-        
-        .student-stats {
-            margin-top: 5px;
-            color: #4a5568;
-        }
-        
-        .form-button.active {
-            background: linear-gradient(135deg, #3182ce 0%, #2c5aa0 100%);
-        }
-        
+
+        .action-btn.edit-btn:hover { border-color: #0071e3; color: #0071e3; }
+        .action-btn.resources-btn:hover { border-color: #30d158; color: #248a3d; }
+        .action-btn.delete-btn:hover { border-color: #ff453a; color: #b4233a; background: #fff5f6; }
+
         .skill-position-controls {
             display: flex;
             align-items: center;
             gap: 10px;
-            margin-bottom: 10px;
-            padding-bottom: 10px;
-            border-bottom: 1px solid #e2e8f0;
+            margin-bottom: 12px;
+            padding-bottom: 12px;
+            border-bottom: 1px solid #e8e8ed;
         }
-        
+
         .skill-position-number {
-            font-size: 1.2rem;
-            font-weight: bold;
-            color: #4299e1;
+            font-size: 0.92rem;
+            font-weight: 700;
+            color: #6e6e73;
             min-width: 40px;
         }
-        
+
         .position-buttons {
             display: flex;
-            gap: 5px;
+            gap: 6px;
             align-items: center;
         }
-        
+
         .position-btn {
-            width: 30px;
-            height: 30px;
-            border: 1px solid #cbd5e0;
-            background: white;
-            border-radius: 4px;
+            width: 28px;
+            height: 28px;
+            border: 1px solid #d2d2d7;
+            background: #fff;
+            border-radius: 6px;
             cursor: pointer;
-            font-size: 12px;
-            transition: all 0.2s;
+            font-size: 11px;
+            color: #1d1d1f;
+            transition: all 0.16s;
         }
-        
+
         .position-btn:hover:not(:disabled) {
-            background: #4299e1;
-            color: white;
-            border-color: #4299e1;
+            background: #0071e3;
+            color: #fff;
+            border-color: #0071e3;
         }
-        
+
         .position-btn:disabled {
             opacity: 0.3;
             cursor: not-allowed;
         }
-        
+
         .position-input {
-            width: 60px;
+            width: 56px;
             padding: 4px 8px;
-            border: 1px solid #cbd5e0;
-            border-radius: 4px;
-            font-size: 14px;
+            border: 1px solid #d2d2d7;
+            border-radius: 6px;
+            font-size: 13px;
         }
-        
+
         .skill-meta-line {
             display: flex;
             align-items: center;
             gap: 8px;
-            margin-top: 4px;
+            margin-top: 6px;
             flex-wrap: wrap;
         }
 
         .skill-level-badge {
             display: inline-block;
-            padding: 2px 8px;
-            background: #805ad5;
-            color: #f7fafc;
-            border-radius: 4px;
-            font-size: 0.85rem;
+            padding: 2px 9px;
+            background: #f5f5f7;
+            color: #1d1d1f;
+            border: 1px solid #e8e8ed;
+            border-radius: 999px;
+            font-size: 0.78rem;
+            font-weight: 600;
         }
 
         .skill-unit {
             display: inline-block;
-            padding: 2px 8px;
-            background: #4299e1;
-            color: white;
-            border-radius: 4px;
-            font-size: 0.85rem;
-            margin-left: 10px;
+            padding: 2px 9px;
+            background: #eaf4ff;
+            color: #0062c4;
+            border-radius: 999px;
+            font-size: 0.78rem;
+            font-weight: 600;
         }
-        
+
         .skill-unit.no-unit {
-            background: #cbd5e0;
-            color: #4a5568;
+            background: #f5f5f7;
+            color: #6e6e73;
+        }
+
+        .skill-stats {
+            display: flex;
+            gap: 18px;
+            flex-wrap: wrap;
+        }
+
+        .stat-item {
+            display: flex;
+            align-items: center;
+            gap: 8px;
+            color: #6e6e73;
+            font-size: 0.88rem;
+        }
+
+        .stat-label { font-weight: 600; }
+
+        .stat-value {
+            padding: 3px 9px;
+            border-radius: 999px;
+            font-weight: 700;
+            min-width: 28px;
+            text-align: center;
+            font-size: 0.82rem;
+        }
+
+        .stat-value.not-started { background: #fff1f2; color: #b4233a; }
+        .stat-value.progressing { background: #fff8e1; color: #8a6d00; }
+        .stat-value.proficient { background: #e8faec; color: #248a3d; }
+
+        /* Manage section */
+        .manage-actions {
+            display: flex;
+            gap: 10px;
+            margin-bottom: 18px;
+            flex-wrap: wrap;
+        }
+
+        .teacher-inline-form {
+            margin-top: 18px;
+            padding: 18px;
+            background: #fbfbfd;
+            border: 1px solid #e8e8ed;
+            border-radius: 10px;
         }
     </style>
 </body>

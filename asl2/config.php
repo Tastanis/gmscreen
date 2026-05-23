@@ -79,6 +79,9 @@ if (!function_exists('aslhubEnsureGoalsTable')) {
     }
 }
 
+if (!defined('ASLHUB_SITE_LEVEL')) {
+    define('ASLHUB_SITE_LEVEL', 2);
+}
 aslhubEnsureSkillLevels($pdo, 2);
 aslhubEnsureGoalsTable($pdo);
 ?>

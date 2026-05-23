@@ -167,10 +167,22 @@ if (!function_exists('aslhubEnsureStudentDashboardSchema')) {
                 description TEXT NULL,
                 order_index INT NOT NULL DEFAULT 0,
                 active TINYINT(1) NOT NULL DEFAULT 1,
+                asl_level TINYINT NULL,
                 created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
                 updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
-                INDEX idx_asl_lts_standard (standard_id)
+                INDEX idx_asl_lts_standard (standard_id),
+                INDEX idx_asl_lts_level (asl_level)
             ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci");
+
+            try {
+                $columnCheck = $pdo->query("SHOW COLUMNS FROM asl_learning_targets LIKE 'asl_level'");
+                if ($columnCheck && $columnCheck->rowCount() === 0) {
+                    $pdo->exec("ALTER TABLE asl_learning_targets ADD COLUMN asl_level TINYINT NULL AFTER active");
+                    $pdo->exec("ALTER TABLE asl_learning_targets ADD INDEX idx_asl_lts_level (asl_level)");
+                }
+            } catch (PDOException $e) {
+                error_log('ASL learning_targets level migration failed: ' . $e->getMessage());
+            }
 
             $pdo->exec("CREATE TABLE IF NOT EXISTS asl_learning_target_resources (
                 id INT AUTO_INCREMENT PRIMARY KEY,
@@ -205,6 +217,19 @@ if (!function_exists('aslhubEnsureStudentDashboardSchema')) {
                 scored_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
                 INDEX idx_user_lt_history_user_time (user_id, scored_at),
                 INDEX idx_user_lt_history_target (learning_target_id)
+            ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci");
+
+            $pdo->exec("CREATE TABLE IF NOT EXISTS asl_student_meetings (
+                id INT AUTO_INCREMENT PRIMARY KEY,
+                user_id INT NOT NULL,
+                meeting_date DATE NOT NULL,
+                absences INT NOT NULL DEFAULT 0,
+                participation_pct DECIMAL(5,2) NULL,
+                notes TEXT NULL,
+                created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+                updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+                INDEX idx_asl_meetings_user_date (user_id, meeting_date),
+                INDEX idx_asl_meetings_date (meeting_date)
             ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci");
 
             $pdo->exec("CREATE TABLE IF NOT EXISTS asl_student_snapshot_metrics (
@@ -440,6 +465,143 @@ if (!function_exists('aslhubStudentDashboardComparisons')) {
     }
 }
 
+if (!function_exists('aslhubStudentMeetingBucketLabel')) {
+    function aslhubStudentMeetingBucketLabel(DateTimeImmutable $start, int $bucketIndex): array
+    {
+        $bucketStart = $start->modify('+' . ($bucketIndex * 14) . ' days');
+        $bucketEnd = $bucketStart->modify('+13 days');
+        return [
+            'index' => $bucketIndex,
+            'periodStart' => $bucketStart->format('Y-m-d'),
+            'periodEnd' => $bucketEnd->format('Y-m-d'),
+            'label' => $bucketStart->format('M j'),
+        ];
+    }
+}
+
+if (!function_exists('aslhubStudentDashboardMeetings')) {
+    function aslhubStudentDashboardMeetings(PDO $pdo, int $userId): array
+    {
+        $start = aslhubStudentDashboardCourseStart();
+        $now = new DateTimeImmutable('now');
+        $daysSinceStart = max(0, (int) $start->diff($now)->format('%r%a'));
+        $currentBucket = (int) floor($daysSinceStart / 14);
+
+        $studentEntries = [];
+        $classByBucket = [];
+        $bucketsWithData = [];
+
+        try {
+            $stmt = $pdo->prepare("SELECT id, meeting_date, absences, participation_pct, notes
+                FROM asl_student_meetings
+                WHERE user_id = ?
+                ORDER BY meeting_date DESC, id DESC");
+            $stmt->execute([$userId]);
+            foreach ($stmt->fetchAll(PDO::FETCH_ASSOC) as $row) {
+                try {
+                    $mDate = new DateTimeImmutable($row['meeting_date']);
+                } catch (Exception $e) {
+                    continue;
+                }
+                $days = (int) $start->diff($mDate)->format('%r%a');
+                $bucketIndex = $days >= 0 ? (int) floor($days / 14) : 0;
+                $studentEntries[] = [
+                    'id' => (int) $row['id'],
+                    'date' => $row['meeting_date'],
+                    'absences' => (int) $row['absences'],
+                    'participation_pct' => $row['participation_pct'] !== null ? (float) $row['participation_pct'] : null,
+                    'notes' => $row['notes'] ?? '',
+                    'bucketIndex' => $bucketIndex,
+                ];
+                $bucketsWithData[$bucketIndex] = true;
+            }
+
+            $stmt = $pdo->query("SELECT m.meeting_date, m.absences, m.participation_pct
+                FROM asl_student_meetings m
+                INNER JOIN users u ON u.id = m.user_id
+                WHERE u.is_teacher = FALSE");
+            foreach ($stmt->fetchAll(PDO::FETCH_ASSOC) as $row) {
+                try {
+                    $mDate = new DateTimeImmutable($row['meeting_date']);
+                } catch (Exception $e) {
+                    continue;
+                }
+                $days = (int) $start->diff($mDate)->format('%r%a');
+                $bucketIndex = $days >= 0 ? (int) floor($days / 14) : 0;
+                if (!isset($classByBucket[$bucketIndex])) {
+                    $classByBucket[$bucketIndex] = ['abs_sum' => 0, 'abs_n' => 0, 'pct_sum' => 0.0, 'pct_n' => 0];
+                }
+                $classByBucket[$bucketIndex]['abs_sum'] += (int) $row['absences'];
+                $classByBucket[$bucketIndex]['abs_n'] += 1;
+                if ($row['participation_pct'] !== null) {
+                    $classByBucket[$bucketIndex]['pct_sum'] += (float) $row['participation_pct'];
+                    $classByBucket[$bucketIndex]['pct_n'] += 1;
+                }
+                $bucketsWithData[$bucketIndex] = true;
+            }
+        } catch (PDOException $e) {
+            error_log('ASL meetings fetch failed: ' . $e->getMessage());
+        }
+
+        $maxBucket = max($currentBucket, $bucketsWithData ? max(array_keys($bucketsWithData)) : 0);
+        $buckets = [];
+        $studentByBucket = [];
+        foreach ($studentEntries as $entry) {
+            if (!isset($studentByBucket[$entry['bucketIndex']])) {
+                $studentByBucket[$entry['bucketIndex']] = $entry;
+            }
+        }
+
+        for ($i = 0; $i <= $maxBucket; $i++) {
+            $info = aslhubStudentMeetingBucketLabel($start, $i);
+            $studentEntry = $studentByBucket[$i] ?? null;
+            $classBucket = $classByBucket[$i] ?? null;
+            $buckets[] = [
+                'index' => $i,
+                'label' => $info['label'],
+                'periodStart' => $info['periodStart'],
+                'periodEnd' => $info['periodEnd'],
+                'student' => $studentEntry ? [
+                    'absences' => $studentEntry['absences'],
+                    'participation_pct' => $studentEntry['participation_pct'],
+                    'date' => $studentEntry['date'],
+                ] : null,
+                'class' => $classBucket && $classBucket['abs_n'] > 0 ? [
+                    'avgAbsences' => round($classBucket['abs_sum'] / $classBucket['abs_n'], 2),
+                    'avgParticipation' => $classBucket['pct_n'] > 0 ? round($classBucket['pct_sum'] / $classBucket['pct_n'], 2) : null,
+                    'sampleSize' => $classBucket['abs_n'],
+                ] : null,
+            ];
+        }
+
+        $latestStudent = $studentEntries[0] ?? null;
+        $latestClass = null;
+        if ($latestStudent) {
+            $bi = $latestStudent['bucketIndex'];
+            if (isset($classByBucket[$bi]) && $classByBucket[$bi]['abs_n'] > 0) {
+                $latestClass = [
+                    'avgAbsences' => round($classByBucket[$bi]['abs_sum'] / $classByBucket[$bi]['abs_n'], 2),
+                    'avgParticipation' => $classByBucket[$bi]['pct_n'] > 0 ? round($classByBucket[$bi]['pct_sum'] / $classByBucket[$bi]['pct_n'], 2) : null,
+                ];
+            }
+        }
+
+        return [
+            'buckets' => $buckets,
+            'currentBucketIndex' => $currentBucket,
+            'studentEntries' => $studentEntries,
+            'latest' => [
+                'student' => $latestStudent ? [
+                    'date' => $latestStudent['date'],
+                    'absences' => $latestStudent['absences'],
+                    'participation_pct' => $latestStudent['participation_pct'],
+                ] : null,
+                'class' => $latestClass,
+            ],
+        ];
+    }
+}
+
 if (!function_exists('aslhubFetchStudentDashboardData')) {
     function aslhubFetchStudentDashboardData(PDO $pdo, int $userId): array
     {
@@ -521,12 +683,24 @@ if (!function_exists('aslhubFetchStudentDashboardData')) {
         }
 
         try {
+            $userLevel = null;
+            try {
+                $levelStmt = $pdo->prepare("SELECT level FROM users WHERE id = ?");
+                $levelStmt->execute([$userId]);
+                $levelRow = $levelStmt->fetch(PDO::FETCH_ASSOC);
+                if ($levelRow && in_array((int) $levelRow['level'], [1, 2], true)) {
+                    $userLevel = (int) $levelRow['level'];
+                }
+            } catch (PDOException $e) {
+                $userLevel = null;
+            }
+
             $stmt = $pdo->prepare("SELECT lt.id, lt.standard_id, lt.title, lt.description, COALESCE(ult.score, 0) AS score, ult.completed_at
                 FROM asl_learning_targets lt
                 LEFT JOIN user_learning_targets ult ON ult.learning_target_id = lt.id AND ult.user_id = ?
-                WHERE lt.active = 1
+                WHERE lt.active = 1 AND (lt.asl_level IS NULL OR lt.asl_level = ?)
                 ORDER BY lt.standard_id, lt.order_index, lt.id");
-            $stmt->execute([$userId]);
+            $stmt->execute([$userId, $userLevel]);
             foreach ($stmt->fetchAll(PDO::FETCH_ASSOC) as $target) {
                 $standardId = $target['standard_id'];
                 if (!isset($targetsByStandard[$standardId])) {
@@ -643,6 +817,77 @@ if (!function_exists('aslhubFetchStudentDashboardData')) {
             'scale' => aslhubLearningTargetScale(),
             'graph' => aslhubStudentDashboardBuildGraph($pdo, $userId),
             'comparisons' => aslhubStudentDashboardComparisons($pdo, $userId),
+            'meetings' => aslhubStudentDashboardMeetings($pdo, $userId),
+        ];
+    }
+}
+
+if (!function_exists('aslhubFetchTeacherStandardsData')) {
+    function aslhubFetchTeacherStandardsData(PDO $pdo, int $aslLevel): array
+    {
+        aslhubEnsureStudentDashboardSchema($pdo);
+
+        $buckets = [];
+        $standardsByBucket = [];
+        $targetsByStandard = [];
+
+        try {
+            $stmt = $pdo->query("SELECT bucket_id, code, name, blurb FROM asl_skill_buckets ORDER BY order_index, bucket_id");
+            foreach ($stmt->fetchAll(PDO::FETCH_ASSOC) as $bucket) {
+                $buckets[$bucket['bucket_id']] = [
+                    'id' => $bucket['bucket_id'],
+                    'code' => $bucket['code'],
+                    'name' => $bucket['name'],
+                    'blurb' => $bucket['blurb'],
+                    'standards' => [],
+                ];
+                $standardsByBucket[$bucket['bucket_id']] = [];
+            }
+
+            $stmt = $pdo->query("SELECT standard_id, bucket_id, name, description FROM asl_standards ORDER BY bucket_id, order_index, standard_id");
+            foreach ($stmt->fetchAll(PDO::FETCH_ASSOC) as $standard) {
+                if (!isset($standardsByBucket[$standard['bucket_id']])) {
+                    continue;
+                }
+                $standardsByBucket[$standard['bucket_id']][] = [
+                    'id' => $standard['standard_id'],
+                    'bucketId' => $standard['bucket_id'],
+                    'name' => $standard['name'],
+                    'description' => $standard['description'],
+                ];
+                $targetsByStandard[$standard['standard_id']] = [];
+            }
+
+            $stmt = $pdo->prepare("SELECT id, standard_id, title, description, asl_level
+                FROM asl_learning_targets
+                WHERE active = 1 AND (asl_level IS NULL OR asl_level = ?)
+                ORDER BY standard_id, order_index, id");
+            $stmt->execute([$aslLevel]);
+            foreach ($stmt->fetchAll(PDO::FETCH_ASSOC) as $target) {
+                $sid = $target['standard_id'];
+                if (!isset($targetsByStandard[$sid])) {
+                    $targetsByStandard[$sid] = [];
+                }
+                $targetsByStandard[$sid][] = [
+                    'id' => (int) $target['id'],
+                    'standardId' => $sid,
+                    'title' => $target['title'],
+                    'description' => $target['description'],
+                    'aslLevel' => $target['asl_level'] !== null ? (int) $target['asl_level'] : null,
+                ];
+            }
+        } catch (PDOException $e) {
+            error_log('ASL teacher standards fetch failed: ' . $e->getMessage());
+        }
+
+        foreach ($buckets as $bid => $bucket) {
+            $buckets[$bid]['standards'] = $standardsByBucket[$bid] ?? [];
+        }
+
+        return [
+            'aslLevel' => $aslLevel,
+            'buckets' => array_values($buckets),
+            'targetsByStandard' => $targetsByStandard,
         ];
     }
 }

@@ -2401,11 +2401,17 @@ body.student-dashboard-page {
 }
 
 .bucket-name,
-.standard-name,
-.target-row span {
+.standard-name {
     color: #1d1d1f;
     font-weight: 750;
     line-height: 1.25;
+}
+
+.target-row span {
+    color: #1d1d1f;
+    font-weight: 700;
+    font-size: 1.02rem;
+    line-height: 1.3;
 }
 
 .bucket-progress,
@@ -2431,20 +2437,34 @@ body.student-dashboard-page {
     padding: 14px;
 }
 
+.target-standard-summary {
+    padding: 8px 10px;
+    display: grid;
+    grid-template-columns: auto 1fr;
+    align-items: baseline;
+    gap: 8px;
+    row-gap: 2px;
+}
+
 .target-standard-summary span {
     color: #0071e3;
     font-weight: 800;
+    font-size: 0.82rem;
 }
 
 .target-standard-summary h4 {
     color: #1d1d1f;
-    font-size: 1.05rem;
-    margin: 4px 0 6px;
+    font-size: 0.92rem;
+    font-weight: 700;
+    margin: 0;
 }
 
 .target-standard-summary p {
     color: #6e6e73;
     margin: 0;
+    font-size: 0.8rem;
+    line-height: 1.3;
+    grid-column: 1 / -1;
 }
 
 .target-row {
@@ -2635,6 +2655,246 @@ body.student-dashboard-page {
     color: #6e6e73;
     font-weight: 600;
     margin: 12px 0 0;
+}
+
+.comparison-cards {
+    display: grid;
+    grid-template-columns: repeat(3, minmax(0, 1fr));
+    gap: 12px;
+}
+
+.comparison-summary-card {
+    background: #fbfbfd;
+    border: 1px solid #d2d2d7;
+    border-radius: 10px;
+    color: #1d1d1f;
+    cursor: pointer;
+    display: grid;
+    gap: 6px;
+    padding: 14px;
+    text-align: left;
+    transition: border-color 0.16s ease, box-shadow 0.16s ease, transform 0.16s ease;
+}
+
+.comparison-summary-card:hover {
+    border-color: #0071e3;
+    box-shadow: 0 10px 22px rgba(0, 113, 227, 0.1);
+    transform: translateY(-1px);
+}
+
+.comparison-summary-card.active {
+    background: #f0f7ff;
+    border-color: #0071e3;
+    box-shadow: inset 3px 0 0 #0071e3;
+}
+
+.comparison-card-label {
+    color: #6e6e73;
+    font-size: 0.78rem;
+    font-weight: 800;
+    text-transform: uppercase;
+    letter-spacing: 0.02em;
+}
+
+.comparison-card-value {
+    color: #1d1d1f;
+    font-size: 1.6rem;
+    font-weight: 800;
+}
+
+.comparison-card-value small {
+    color: #6e6e73;
+    font-size: 0.78rem;
+    font-weight: 700;
+    margin-left: 4px;
+}
+
+.comparison-card-meta {
+    color: #6e6e73;
+    font-size: 0.85rem;
+    font-weight: 600;
+}
+
+.comparison-detail {
+    margin-top: 14px;
+    background: #fbfbfd;
+    border: 1px solid #d2d2d7;
+    border-radius: 10px;
+    padding: 16px;
+}
+
+.comparison-detail-title {
+    margin: 0 0 10px;
+    font-size: 1.05rem;
+}
+
+.comparison-legend {
+    color: #6e6e73;
+    display: flex;
+    flex-wrap: wrap;
+    gap: 16px;
+    font-size: 0.85rem;
+    font-weight: 600;
+    margin-bottom: 10px;
+}
+
+.legend-swatch {
+    display: inline-block;
+    width: 16px;
+    height: 4px;
+    border-radius: 2px;
+    margin-right: 6px;
+    vertical-align: middle;
+}
+
+.legend-swatch.legend-student { background: #0071e3; }
+.legend-swatch.legend-class { background: #ff9f0a; }
+
+.metric-line {
+    fill: none;
+    stroke-width: 2;
+}
+
+.metric-line-student { stroke: #0071e3; }
+.metric-line-class {
+    stroke: #ff9f0a;
+    stroke-dasharray: 4 3;
+}
+
+.metric-dot-student { fill: #fff; stroke: #0071e3; stroke-width: 2; }
+.metric-dot-class { fill: #fff; stroke: #ff9f0a; stroke-width: 2; }
+
+.meeting-notes-list {
+    display: grid;
+    gap: 10px;
+}
+
+.meeting-note-card {
+    background: #fff;
+    border: 1px solid #d2d2d7;
+    border-radius: 8px;
+    padding: 12px 14px;
+}
+
+.meeting-note-card header {
+    align-items: baseline;
+    color: #6e6e73;
+    display: flex;
+    flex-wrap: wrap;
+    gap: 10px;
+    justify-content: space-between;
+    margin-bottom: 6px;
+}
+
+.meeting-note-card header strong {
+    color: #1d1d1f;
+    font-size: 0.98rem;
+}
+
+.meeting-note-card p {
+    color: #1d1d1f;
+    margin: 0;
+    line-height: 1.4;
+    white-space: pre-wrap;
+}
+
+.teacher-meeting-form {
+    background: #fbfbfd;
+    border: 1px solid #d2d2d7;
+    border-radius: 10px;
+    display: grid;
+    grid-template-columns: repeat(3, minmax(0, 1fr));
+    gap: 12px;
+    padding: 14px;
+}
+
+.teacher-meeting-form label {
+    display: grid;
+    gap: 4px;
+    font-size: 0.85rem;
+    font-weight: 700;
+    color: #6e6e73;
+}
+
+.teacher-meeting-form input,
+.teacher-meeting-form textarea {
+    border: 1px solid #d2d2d7;
+    border-radius: 8px;
+    padding: 8px 10px;
+    font: inherit;
+    color: #1d1d1f;
+    background: #fff;
+}
+
+.teacher-meeting-form .teacher-meeting-notes {
+    grid-column: 1 / -1;
+}
+
+.teacher-meeting-form .teacher-form-actions {
+    grid-column: 1 / -1;
+}
+
+.teacher-meeting-history {
+    margin-top: 18px;
+}
+
+.meeting-history-row {
+    background: #fff;
+    border: 1px solid #d2d2d7;
+    border-radius: 8px;
+    padding: 10px 12px;
+    margin-bottom: 8px;
+}
+
+.meeting-row-head {
+    align-items: center;
+    display: flex;
+    justify-content: space-between;
+    margin-bottom: 4px;
+}
+
+.meeting-delete-btn {
+    background: transparent;
+    border: 1px solid #d2d2d7;
+    border-radius: 6px;
+    color: #be123c;
+    cursor: pointer;
+    font-size: 0.78rem;
+    font-weight: 700;
+    padding: 4px 10px;
+}
+
+.meeting-delete-btn:hover {
+    border-color: #be123c;
+    background: #fff1f2;
+}
+
+.meeting-row-stats {
+    color: #6e6e73;
+    display: flex;
+    flex-wrap: wrap;
+    gap: 14px;
+    font-size: 0.88rem;
+}
+
+.meeting-row-stats strong {
+    color: #1d1d1f;
+}
+
+.meeting-row-notes {
+    color: #1d1d1f;
+    margin: 6px 0 0;
+    line-height: 1.4;
+    white-space: pre-wrap;
+}
+
+@media (max-width: 720px) {
+    .comparison-cards {
+        grid-template-columns: 1fr;
+    }
+    .teacher-meeting-form {
+        grid-template-columns: 1fr;
+    }
 }
 
 .teacher-student-page .teacher-student-hero {

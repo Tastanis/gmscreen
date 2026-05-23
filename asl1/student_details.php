@@ -142,12 +142,6 @@ $student_name = trim(($student['first_name'] ?? '') . ' ' . ($student['last_name
                     <div>
                         <h3 class="column-title">Standards</h3>
                         <div id="standard-list" class="standard-list"></div>
-                        <form id="add-lt-form" class="add-lt-form">
-                            <h4>Add Learning Target</h4>
-                            <input type="text" name="title" placeholder="Learning target title" required>
-                            <textarea name="description" placeholder="Optional description"></textarea>
-                            <button type="submit">Add to Selected Standard</button>
-                        </form>
                     </div>
                     <div>
                         <h3 class="column-title">Learning Targets</h3>
@@ -167,6 +161,43 @@ $student_name = trim(($student['first_name'] ?? '') . ' ' . ($student['last_name
                 <div class="chart-wrap">
                     <svg id="progress-chart" role="img" aria-label="Learning target points over time"></svg>
                     <p id="chart-empty-note" class="chart-empty-note">The graph will fill in when this student is rated 1-4.</p>
+                </div>
+            </section>
+
+            <section class="student-section teacher-meetings-section" aria-labelledby="meetings-heading">
+                <div class="student-section-header">
+                    <div>
+                        <p class="student-kicker">Meetings</p>
+                        <h2 id="meetings-heading">Attendance, Participation &amp; Notes</h2>
+                    </div>
+                    <p>Log each check-in: absences since last meeting, participation %, and notes.</p>
+                </div>
+
+                <form id="meeting-entry-form" class="teacher-meeting-form">
+                    <label>
+                        <span>Meeting Date</span>
+                        <input type="date" name="meeting_date" required>
+                    </label>
+                    <label>
+                        <span>Absences (since last meeting)</span>
+                        <input type="number" name="absences" min="0" step="1" value="0">
+                    </label>
+                    <label>
+                        <span>Participation %</span>
+                        <input type="number" name="participation_pct" min="0" max="100" step="0.1" placeholder="0&ndash;100">
+                    </label>
+                    <label class="teacher-meeting-notes">
+                        <span>Notes</span>
+                        <textarea name="notes" rows="3" placeholder="Conversation notes&hellip;"></textarea>
+                    </label>
+                    <div class="teacher-form-actions">
+                        <button type="submit">Save Meeting Entry</button>
+                    </div>
+                </form>
+
+                <div class="teacher-meeting-history">
+                    <h3 class="column-title">History</h3>
+                    <div id="meeting-history-list"></div>
                 </div>
             </section>
 
@@ -435,8 +466,8 @@ $student_name = trim(($student['first_name'] ?? '') . ' ' . ($student['last_name
                 ${weekLines.join('')}
                 <line x1="${pad.left}" y1="${pad.top}" x2="${pad.left}" y2="${pad.top + chartHeight}" class="chart-axis"></line>
                 <line x1="${pad.left}" y1="${pad.top + chartHeight}" x2="${pad.left + chartWidth}" y2="${pad.top + chartHeight}" class="chart-axis"></line>
-                <text x="14" y="${pad.top + 8}" class="chart-axis-label">Pts</text>
-                <text x="${pad.left - 12}" y="${pad.top + 5}" text-anchor="end" class="chart-label">${maxY}</text>
+                <text x="${pad.left}" y="14" text-anchor="end" class="chart-axis-label">Pts</text>
+                <text x="${pad.left - 8}" y="${pad.top + 5}" text-anchor="end" class="chart-label">${maxY}</text>
                 <text x="${pad.left - 12}" y="${pad.top + chartHeight}" text-anchor="end" class="chart-label">0</text>
                 <polyline points="${polyline}" class="chart-line"></polyline>
                 ${points.map(point => `<circle cx="${point[0]}" cy="${point[1]}" r="3" class="chart-dot"></circle>`).join('')}
@@ -450,6 +481,79 @@ $student_name = trim(($student['first_name'] ?? '') . ' ' . ($student['last_name
             renderTargets();
             renderProgressSummary(selectedProgressScope());
             renderChart();
+            renderMeetingHistory();
+        }
+
+        function formatMeetingDate(iso) {
+            if (!iso) return '';
+            const parts = iso.split('-');
+            if (parts.length !== 3) return iso;
+            const d = new Date(parts[0], parts[1] - 1, parts[2]);
+            return d.toLocaleDateString(undefined, {year: 'numeric', month: 'short', day: 'numeric'});
+        }
+
+        function renderMeetingHistory() {
+            const list = document.getElementById('meeting-history-list');
+            if (!list) return;
+            const entries = (dashboardData.meetings && dashboardData.meetings.studentEntries) || [];
+            if (!entries.length) {
+                list.innerHTML = '<div class="empty-panel">No meeting entries yet.</div>';
+                return;
+            }
+            list.innerHTML = entries.map(entry => `
+                <div class="meeting-history-row" data-entry-id="${entry.id}">
+                    <div class="meeting-row-head">
+                        <strong>${escapeHtml(formatMeetingDate(entry.date))}</strong>
+                        <button type="button" class="meeting-delete-btn" data-entry-id="${entry.id}">Delete</button>
+                    </div>
+                    <div class="meeting-row-stats">
+                        <span>Absences: <strong>${escapeHtml(entry.absences)}</strong></span>
+                        <span>Participation: <strong>${entry.participation_pct == null ? '&mdash;' : escapeHtml(entry.participation_pct) + '%'}</strong></span>
+                    </div>
+                    ${entry.notes ? `<p class="meeting-row-notes">${escapeHtml(entry.notes)}</p>` : ''}
+                </div>
+            `).join('');
+
+            list.querySelectorAll('.meeting-delete-btn').forEach(btn => {
+                btn.addEventListener('click', () => deleteMeetingEntry(btn.dataset.entryId));
+            });
+        }
+
+        function deleteMeetingEntry(entryId) {
+            if (!confirm('Delete this meeting entry?')) return;
+            const params = new URLSearchParams();
+            params.append('entry_id', entryId);
+            params.append('student_id', studentId);
+            fetch('delete_meeting_entry.php', {
+                method: 'POST',
+                headers: {'Content-Type': 'application/x-www-form-urlencoded'},
+                body: params.toString()
+            })
+            .then(r => r.json())
+            .then(data => {
+                if (!data.success) throw new Error(data.message || 'Unable to delete entry.');
+                dashboardData.meetings = data.meetings;
+                renderMeetingHistory();
+                showTeacherToast('Meeting entry deleted.', 'success');
+            })
+            .catch(err => showTeacherToast(err.message || 'Unable to delete entry.', 'error'));
+        }
+
+        function submitMeetingEntry(e) {
+            e.preventDefault();
+            const form = document.getElementById('meeting-entry-form');
+            const formData = new FormData(form);
+            formData.append('student_id', studentId);
+            fetch('add_meeting_entry.php', {method: 'POST', body: formData})
+                .then(r => r.json())
+                .then(data => {
+                    if (!data.success) throw new Error(data.message || 'Unable to save entry.');
+                    dashboardData.meetings = data.meetings;
+                    form.reset();
+                    renderMeetingHistory();
+                    showTeacherToast('Meeting entry saved.', 'success');
+                })
+                .catch(err => showTeacherToast(err.message || 'Unable to save entry.', 'error'));
         }
 
         function showTeacherToast(message, type) {
@@ -459,30 +563,6 @@ $student_name = trim(($student['first_name'] ?? '') . ' ' . ($student['last_name
             document.body.appendChild(toast);
             setTimeout(() => toast.remove(), 2400);
         }
-
-        document.getElementById('add-lt-form').addEventListener('submit', event => {
-            event.preventDefault();
-            const form = event.currentTarget;
-            const formData = new FormData(form);
-            formData.append('student_id', studentId);
-            formData.append('standard_id', state.standardId || '');
-
-            fetch('add_learning_target.php', {
-                method: 'POST',
-                body: formData
-            })
-            .then(response => response.json())
-            .then(data => {
-                if (!data.success) {
-                    throw new Error(data.message || 'Unable to add learning target.');
-                }
-                dashboardData = data.dashboard;
-                form.reset();
-                renderDashboard();
-                showTeacherToast('Learning target added.', 'success');
-            })
-            .catch(error => showTeacherToast(error.message || 'Unable to add learning target.', 'error'));
-        });
 
         document.getElementById('delete-student-btn').addEventListener('click', function() {
             if (!confirm('Are you sure you want to delete this student? This action cannot be undone.')) {
@@ -508,7 +588,19 @@ $student_name = trim(($student['first_name'] ?? '') . ' ' . ($student['last_name
             .catch(() => showTeacherToast('Unable to delete student.', 'error'));
         });
 
-        document.addEventListener('DOMContentLoaded', renderDashboard);
+        document.addEventListener('DOMContentLoaded', function() {
+            renderDashboard();
+            const meetingForm = document.getElementById('meeting-entry-form');
+            if (meetingForm) {
+                const dateInput = meetingForm.querySelector('input[name="meeting_date"]');
+                if (dateInput && !dateInput.value) {
+                    const today = new Date();
+                    const iso = today.toISOString().slice(0, 10);
+                    dateInput.value = iso;
+                }
+                meetingForm.addEventListener('submit', submitMeetingEntry);
+            }
+        });
     </script>
 </body>
 </html>
