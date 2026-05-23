@@ -25,6 +25,11 @@
     "spend",
     "ifKeyword",
     "ifStrained",
+    "ifMark",
+    "ifScopedFlag",
+    "setScopedFlag",
+    "applyMark",
+    "endMark",
     "halveTriggeringDamage",
     "other",
   ];
@@ -397,6 +402,17 @@
         if (elseText) return `If strained → ${thenText || "(no effect)"} else → ${elseText}`;
         return `If strained → ${thenText || "(no effect)"}`;
       }
+      case "ifMark": {
+        const thenText = (effect.then || []).map(describeEffect).filter(Boolean).join(", ");
+        const elseText = (effect.else || []).map(describeEffect).filter(Boolean).join(", ");
+        const label = effect.predicate || "targetJudgedBySelf";
+        if (elseText) return `If ${label}: ${thenText || "(no effect)"} else: ${elseText}`;
+        return `If ${label}: ${thenText || "(no effect)"}`;
+      }
+      case "applyMark":
+        return `apply ${effect.markType || "mark"}`;
+      case "endMark":
+        return `end ${effect.markType || "mark"}`;
       case "halveTriggeringDamage":
         return "halve the triggering damage";
       case "other":

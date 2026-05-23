@@ -189,7 +189,23 @@ export function normalizePlacementEntry(entry) {
     normalized.metadata = normalizedMetadata;
   }
 
+  if (entry.marks && typeof entry.marks === 'object' && !Array.isArray(entry.marks)) {
+    normalized.marks = clonePlainObject(entry.marks);
+  }
+
+  if (entry.activeMarks && typeof entry.activeMarks === 'object' && !Array.isArray(entry.activeMarks)) {
+    normalized.activeMarks = clonePlainObject(entry.activeMarks);
+  }
+
   return normalized;
+}
+
+function clonePlainObject(value) {
+  try {
+    return JSON.parse(JSON.stringify(value));
+  } catch (_err) {
+    return {};
+  }
 }
 
 function toOptionalNonNegativeInt(value) {

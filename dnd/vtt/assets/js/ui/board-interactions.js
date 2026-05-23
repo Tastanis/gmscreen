@@ -1989,6 +1989,12 @@ export function mountBoardInteractions(store, routes = {}) {
   document.addEventListener('vtt:automation-run-free-strike', handleAutomationFreeStrikeRequest);
   document.addEventListener('vtt:automation-recovery-value', handleAutomationRecoveryValueRequest);
   document.addEventListener('vtt:automation-register-persistent-zone', handleAutomationRegisterZoneRequest);
+  document.addEventListener('vtt:automation-apply-mark', handleAutomationApplyMarkRequest);
+  document.addEventListener('vtt:automation-end-mark', handleAutomationEndMarkRequest);
+  document.addEventListener('vtt:automation-check-mark', handleAutomationCheckMarkRequest);
+  document.addEventListener('vtt:automation-fire-trigger-event', handleAutomationFireTriggerEventRequest);
+  document.addEventListener('vtt:automation-check-scoped-flag', handleAutomationCheckScopedFlagRequest);
+  document.addEventListener('vtt:automation-set-scoped-flag', handleAutomationSetScopedFlagRequest);
   // When the chat panel opens or closes, the layout CSS shifts the board
   // content. Re-position the floating End Turn overlay so it lands inside
   // the new board boundary. Run twice: once immediately for the snap, and
@@ -2199,6 +2205,49 @@ export function mountBoardInteractions(store, routes = {}) {
   // per-frame loops. JSON-authored triggers from the runner can register here
   // via `register({tokenId, eventType, predicate, abilityId})`.
   const triggerRegistry = { byEvent: new Map(), byToken: new Map() };
+  const automationScopedFlags = new Set();
+
+  function scopedFlagKey(payload) {
+    const scope = String(payload?.scope || 'round').trim().toLowerCase();
+    const key = String(payload?.key || '').trim();
+    const sourceId = String(payload?.sourceId || '').trim();
+    const targetId = String(payload?.targetId || '').trim();
+    if (!key || !sourceId || !targetId) return '';
+    const scopeValue = scope === 'round'
+      ? combatRound
+      : scope === 'turn'
+        ? activeCombatantId || ''
+        : 'encounter';
+    return `${scope}:${scopeValue}:${sourceId}:${targetId}:${key}`;
+  }
+
+  function handleAutomationCheckScopedFlagRequest(event) {
+    const detail = event?.detail ?? {};
+    const payload = detail.payload && typeof detail.payload === 'object' ? detail.payload : {};
+    const resolve = typeof detail.resolve === 'function' ? detail.resolve : null;
+    const key = scopedFlagKey(payload);
+    resolve?.({ set: Boolean(key && automationScopedFlags.has(key)) });
+  }
+
+  function handleAutomationSetScopedFlagRequest(event) {
+    const detail = event?.detail ?? {};
+    const payload = detail.payload && typeof detail.payload === 'object' ? detail.payload : {};
+    const resolve = typeof detail.resolve === 'function' ? detail.resolve : null;
+    const key = scopedFlagKey(payload);
+    if (key) automationScopedFlags.add(key);
+    resolve?.({ set: Boolean(key) });
+  }
+
+  function resetAutomationScopedFlags(scope = 'round') {
+    if (scope === 'all') {
+      automationScopedFlags.clear();
+      return;
+    }
+    const prefix = `${String(scope || 'round').toLowerCase()}:`;
+    for (const key of [...automationScopedFlags]) {
+      if (key.startsWith(prefix)) automationScopedFlags.delete(key);
+    }
+  }
 
   function triggerRegister(entry) {
     if (!entry || !entry.tokenId || !entry.eventType || typeof entry.predicate !== 'function') {
@@ -2817,10 +2866,18 @@ export function mountBoardInteractions(store, routes = {}) {
         const attrShort = String(effect.attribute || '').toUpperCase();
         const attrFull = { M: 'Might', A: 'Agility', R: 'Reason', I: 'Intuition', P: 'Presence' }[attrShort];
         const attrBonus = attrFull ? (Number(zone.attributeBonuses?.[attrFull]) || 0) : 0;
-        const totalAmount = Math.max(0, baseAmount + attrBonus);
-        if (totalAmount <= 0) continue;
         for (const target of placements) {
           if (!target?.id) continue;
+          const diceAmount = rollAutomationDiceFormula(effect.amountDice);
+          const markBonus = effect.markBonusDice && markPredicateMatches(effect.markPredicate || 'targetInPersistentZoneJudgedByZoneCaster', {
+            markType: 'judgment',
+            sourceId: zone.casterId,
+            targetId: target.id,
+          })
+            ? rollAutomationDiceFormula(effect.markBonusDice)
+            : 0;
+          const totalAmount = Math.max(0, baseAmount + attrBonus + diceAmount + markBonus);
+          if (totalAmount <= 0) continue;
           const result = await new Promise((res) => {
             document.dispatchEvent(new CustomEvent('vtt:automation-apply-damage', {
               detail: {
@@ -2869,6 +2926,23 @@ export function mountBoardInteractions(store, routes = {}) {
       // for now — they're rare in zones and risk surprising behavior.
     }
     announceZoneTick(zone, placements, damageLines.length ? damageLines.join(', ') : 'effects applied');
+  }
+
+  function rollAutomationDiceFormula(formula) {
+    const text = String(formula || '').trim().toLowerCase();
+    if (!text) return 0;
+    const match = text.match(/^(\d+)d(\d+)$/);
+    if (!match) {
+      const flat = Number.parseInt(text, 10);
+      return Number.isFinite(flat) ? flat : 0;
+    }
+    const count = Math.max(0, Number.parseInt(match[1], 10) || 0);
+    const sides = Math.max(1, Number.parseInt(match[2], 10) || 1);
+    let total = 0;
+    for (let i = 0; i < count; i += 1) {
+      total += 1 + Math.floor(Math.random() * sides);
+    }
+    return total;
   }
 
   async function deductPersistentZoneUpkeep(zone) {
@@ -2959,12 +3033,220 @@ export function mountBoardInteractions(store, routes = {}) {
     return placement ? normalizeCombatTeam(placement.team) : null;
   }
 
+  function normalizeMarkType(value) {
+    const text = String(value || '').trim().toLowerCase();
+    return text || 'judgment';
+  }
+
+  function getPlacementMark(placement, markType = 'judgment') {
+    const type = normalizeMarkType(markType);
+    const marks = placement?.marks && typeof placement.marks === 'object' ? placement.marks : {};
+    return marks[type] && typeof marks[type] === 'object' ? marks[type] : null;
+  }
+
+  function getJudgedTargetForSource(sourceId, markType = 'judgment') {
+    const type = normalizeMarkType(markType);
+    if (!sourceId) return null;
+    const source = getPlacementFromStore(sourceId);
+    const active = source?.activeMarks && typeof source.activeMarks === 'object' ? source.activeMarks : {};
+    const targetId = active[type]?.targetId || '';
+    if (targetId) return getPlacementFromStore(targetId);
+    const state = boardApi.getState?.() ?? {};
+    return (getActiveScenePlacements(state) || []).find((p) => getPlacementMark(p, type)?.sourceId === sourceId) || null;
+  }
+
+  function markPredicateMatches(predicate, { markType = 'judgment', sourceId = '', targetId = '', triggerPayload = null } = {}) {
+    const type = normalizeMarkType(markType);
+    const target = targetId ? getPlacementFromStore(targetId) : null;
+    const targetMark = getPlacementMark(target, type);
+    const judged = sourceId ? getJudgedTargetForSource(sourceId, type) : null;
+    switch (predicate || 'targetJudgedBySelf') {
+      case 'targetJudgedByAny':
+        return Boolean(targetMark);
+      case 'actorIsMyJudgedTarget': {
+        const actorId = triggerPayload?.actorId || triggerPayload?.placementId || triggerPayload?.targetId || '';
+        return Boolean(judged?.id && actorId === judged.id);
+      }
+      case 'sourceIsJudgingTarget':
+        return Boolean(targetMark && targetMark.sourceId === sourceId);
+      case 'targetInPersistentZoneJudgedByZoneCaster':
+      case 'targetJudgedBySelf':
+      default:
+        return Boolean(targetMark && targetMark.sourceId === sourceId);
+    }
+  }
+
+  function handleAutomationCheckMarkRequest(event) {
+    const detail = event?.detail ?? {};
+    const payload = detail.payload && typeof detail.payload === 'object' ? detail.payload : {};
+    const resolve = typeof detail.resolve === 'function' ? detail.resolve : null;
+    resolve?.({
+      matched: markPredicateMatches(payload.predicate, {
+        markType: payload.markType || 'judgment',
+        sourceId: payload.sourceId || '',
+        targetId: payload.targetId || '',
+        triggerPayload: payload.triggerPayload || null,
+      }),
+    });
+  }
+
+  function handleAutomationApplyMarkRequest(event) {
+    const detail = event?.detail ?? {};
+    const payload = detail.payload && typeof detail.payload === 'object' ? detail.payload : {};
+    const resolve = typeof detail.resolve === 'function' ? detail.resolve : null;
+    const reject = typeof detail.reject === 'function' ? detail.reject : null;
+    const markType = normalizeMarkType(payload.markType);
+    const sourceId = payload.sourceId || '';
+    const targetId = payload.targetId || '';
+    if (!sourceId || !targetId) {
+      reject?.(new Error('Mark request missing source or target.'));
+      return;
+    }
+    const source = getPlacementFromStore(sourceId);
+    const target = getPlacementFromStore(targetId);
+    if (!source || !target) {
+      reject?.(new Error('Mark request source or target is not on the active scene.'));
+      return;
+    }
+    const previousTarget = getJudgedTargetForSource(sourceId, markType);
+    const replacedMark = getPlacementMark(target, markType);
+    const affectedIds = [...new Set([sourceId, targetId, previousTarget?.id, replacedMark?.sourceId].filter(Boolean))];
+    const now = Date.now();
+    updatePlacementsByIds(affectedIds, (placement) => {
+      if (!placement || !placement.id) return;
+      const marks = placement.marks && typeof placement.marks === 'object' ? { ...placement.marks } : {};
+      const activeMarks = placement.activeMarks && typeof placement.activeMarks === 'object' ? { ...placement.activeMarks } : {};
+      if (placement.id === previousTarget?.id && placement.id !== targetId && marks[markType]?.sourceId === sourceId) {
+        delete marks[markType];
+      }
+      if (placement.id === replacedMark?.sourceId && placement.id !== sourceId && activeMarks[markType]?.targetId === targetId) {
+        delete activeMarks[markType];
+      }
+      if (placement.id === sourceId) {
+        activeMarks[markType] = {
+          targetId,
+          targetName: tokenLabel(target),
+          appliedAt: now,
+          duration: payload.duration || 'endOfEncounter',
+        };
+      }
+      if (placement.id === targetId) {
+        marks[markType] = {
+          markType,
+          sourceId,
+          sourceName: payload.sourceName || tokenLabel(source),
+          targetId,
+          targetName: payload.targetName || tokenLabel(target),
+          abilityId: payload.abilityId || '',
+          abilityName: payload.abilityName || '',
+          duration: payload.duration || 'endOfEncounter',
+          appliedAt: now,
+        };
+      }
+      placement.marks = marks;
+      placement.activeMarks = activeMarks;
+    });
+    renderTokens(boardApi.getState?.() ?? {}, tokenLayer, viewState, { skipTracker: true });
+    triggerFire('markApplied', {
+      markType,
+      sourceId,
+      oldTargetId: previousTarget?.id || '',
+      newTargetId: targetId,
+      targetId,
+      replacedSourceId: replacedMark?.sourceId || '',
+      reason: previousTarget?.id && previousTarget.id !== targetId ? 'transfer' : 'cast',
+    });
+    resolve?.({
+      applied: true,
+      oldTargetId: previousTarget?.id || '',
+      oldTargetName: previousTarget ? tokenLabel(previousTarget) : '',
+      replacedSourceId: replacedMark?.sourceId || '',
+      replacedSourceName: replacedMark?.sourceName || '',
+    });
+  }
+
+  function clearMark({ markType = 'judgment', sourceId = '', targetId = '', reason = 'manual' } = {}) {
+    const type = normalizeMarkType(markType);
+    let resolvedTargetId = targetId;
+    if (!resolvedTargetId && sourceId) {
+      resolvedTargetId = getJudgedTargetForSource(sourceId, type)?.id || '';
+    }
+    const target = resolvedTargetId ? getPlacementFromStore(resolvedTargetId) : null;
+    const source = sourceId ? getPlacementFromStore(sourceId) : getPlacementFromStore(getPlacementMark(target, type)?.sourceId || '');
+    const finalSourceId = sourceId || getPlacementMark(target, type)?.sourceId || '';
+    const ids = [...new Set([resolvedTargetId, finalSourceId].filter(Boolean))];
+    if (!ids.length) return { cleared: false };
+    updatePlacementsByIds(ids, (placement) => {
+      const marks = placement.marks && typeof placement.marks === 'object' ? { ...placement.marks } : {};
+      const activeMarks = placement.activeMarks && typeof placement.activeMarks === 'object' ? { ...placement.activeMarks } : {};
+      if (placement.id === resolvedTargetId && marks[type]) delete marks[type];
+      if (placement.id === finalSourceId && activeMarks[type]) delete activeMarks[type];
+      placement.marks = marks;
+      placement.activeMarks = activeMarks;
+    });
+    renderTokens(boardApi.getState?.() ?? {}, tokenLayer, viewState, { skipTracker: true });
+    if (window.dashboardChat?.sendMessage) {
+      window.dashboardChat.sendMessage({
+        message: `${type === 'judgment' ? 'Judgment' : 'Mark'} ended${target ? ` on ${tokenLabel(target)}` : ''}${reason ? ` (${reason})` : ''}.`,
+        type: 'text',
+      }).catch(() => {});
+    }
+    return { cleared: true, targetName: target ? tokenLabel(target) : '', sourceName: source ? tokenLabel(source) : '' };
+  }
+
+  function clearAllMarksForActiveScene({ reason = '' } = {}) {
+    const state = boardApi.getState?.() ?? {};
+    const placements = getActiveScenePlacements(state) || [];
+    const ids = placements
+      .filter((p) => (p?.marks && Object.keys(p.marks).length) || (p?.activeMarks && Object.keys(p.activeMarks).length))
+      .map((p) => p.id)
+      .filter(Boolean);
+    if (!ids.length) return;
+    updatePlacementsByIds(ids, (placement) => {
+      placement.marks = {};
+      placement.activeMarks = {};
+    });
+    renderTokens(boardApi.getState?.() ?? {}, tokenLayer, viewState, { skipTracker: true });
+    if (window.dashboardChat?.sendMessage) {
+      window.dashboardChat.sendMessage({
+        message: `All marks cleared${reason ? ` (${reason})` : ''}.`,
+        type: 'text',
+      }).catch(() => {});
+    }
+  }
+
+  function handleAutomationEndMarkRequest(event) {
+    const detail = event?.detail ?? {};
+    const payload = detail.payload && typeof detail.payload === 'object' ? detail.payload : {};
+    const resolve = typeof detail.resolve === 'function' ? detail.resolve : null;
+    resolve?.(clearMark({
+      markType: payload.markType || 'judgment',
+      sourceId: payload.scope === 'target' ? '' : payload.sourceId || '',
+      targetId: payload.targetId || '',
+      reason: payload.reason || 'ability',
+    }));
+  }
+
+  function handleAutomationFireTriggerEventRequest(event) {
+    const payload = event?.detail?.payload && typeof event.detail.payload === 'object' ? event.detail.payload : {};
+    const eventType = payload.eventType || payload.event || '';
+    if (!eventType) return;
+    triggerFire(eventType, payload.payload && typeof payload.payload === 'object' ? payload.payload : {});
+  }
+
   function whosePredicateMatches(whose, casterId, casterTeam, payloadTokenId, targetIdsAtRegister) {
     if (!whose || whose === "any") return true;
     if (!payloadTokenId) return false;
     if (whose === "self") return payloadTokenId === casterId;
     if (whose === "target") {
       return Array.isArray(targetIdsAtRegister) && targetIdsAtRegister.includes(payloadTokenId);
+    }
+    if (whose === "judgedTarget") {
+      return getJudgedTargetForSource(casterId, 'judgment')?.id === payloadTokenId;
+    }
+    if (whose === "markSource") {
+      const mark = getPlacementMark(getPlacementFromStore(payloadTokenId), 'judgment');
+      return mark?.sourceId === casterId;
     }
     const otherTeam = getTeamForPlacementId(payloadTokenId);
     if (whose === "ally") {
@@ -2998,12 +3280,14 @@ export function mountBoardInteractions(store, routes = {}) {
       const payloadTokenId =
         payload.placementId ||
         payload.targetId ||
+        payload.actorId ||
+        payload.newTargetId ||
         payload.tokenId ||
         '';
       if (!whosePredicateMatches(whose, casterId, casterTeam, payloadTokenId, targetIds)) {
         return false;
       }
-      if (event === 'damage') {
+      if (event === 'damage' || event === 'damageDealt') {
         const amount = Number.parseInt(payload.amount, 10) || 0;
         const dt = String(payload.damageType || '').toLowerCase();
         // TEMP DEBUG
@@ -3021,7 +3305,7 @@ export function mountBoardInteractions(store, routes = {}) {
         }
         return true;
       }
-      if (event === 'staminaChange') {
+      if (event === 'staminaChange' || event === 'staminaZero') {
         const direction = filter.direction || 'either';
         if (direction === 'either') return true;
         const delta = Number.parseInt(payload.delta, 10) || 0;
@@ -3030,6 +3314,19 @@ export function mountBoardInteractions(store, routes = {}) {
         return false;
       }
       if (event === 'turnStart' || event === 'turnEnd') {
+        return true;
+      }
+      if (event === 'actionUsed') {
+        if (filter.actionKind && String(payload.actionKind || '').toLowerCase() !== String(filter.actionKind).toLowerCase()) return false;
+        if (Array.isArray(filter.keywordsAny) && filter.keywordsAny.length) {
+          const have = Array.isArray(payload.keywords) ? payload.keywords.map((k) => String(k).toLowerCase()) : [];
+          if (!filter.keywordsAny.some((k) => have.includes(String(k).toLowerCase()))) return false;
+        }
+        return true;
+      }
+      if (event === 'markApplied') {
+        if (filter.markType && String(payload.markType || '').toLowerCase() !== String(filter.markType).toLowerCase()) return false;
+        if (filter.source === 'self' && payload.sourceId !== casterId) return false;
         return true;
       }
       if (event === 'move') {
@@ -4456,10 +4753,19 @@ export function mountBoardInteractions(store, routes = {}) {
     tokenLayer.addEventListener('click', handleTriggerIndicatorClick);
     tokenLayer.addEventListener('keydown', handleTriggerIndicatorKeydown);
     tokenLayer.addEventListener('pointerdown', (event) => {
-      if (event.target?.closest?.('[data-token-trigger-ready]')) {
+      if (event.target?.closest?.('[data-token-trigger-ready], [data-token-judgment-mark]')) {
         event.preventDefault();
         event.stopPropagation();
       }
+    });
+    tokenLayer.addEventListener('click', (event) => {
+      const mark = event.target?.closest?.('[data-token-judgment-mark]');
+      if (!mark) return;
+      event.preventDefault();
+      event.stopPropagation();
+      const tokenElement = mark.closest('.vtt-token');
+      const placementId = tokenElement?.dataset?.placementId ?? null;
+      if (placementId) clearMark({ markType: 'judgment', targetId: placementId, reason: 'ended willingly' });
     });
     tokenLayer.addEventListener('click', (event) => {
       const mark = event.target?.closest?.('[data-token-trigger-ready]');
@@ -9847,6 +10153,8 @@ export function mountBoardInteractions(store, routes = {}) {
     combatRound = 0;
     // Persistent zones auto-end at encounter end per Draw Steel rules.
     clearAllPersistentZones({ reason: 'combat ended' });
+    clearAllMarksForActiveScene({ reason: 'combat ended' });
+    resetAutomationScopedFlags('all');
     combatConflictRetryAttempts = 0;
     completedCombatants.clear();
     pendingRoundConfirmation = false;
@@ -10468,6 +10776,7 @@ export function mountBoardInteractions(store, routes = {}) {
       setMaliceCount(maliceCount + maliceIncrease);
     }
     resetTriggeredActionsForActiveScene();
+    resetAutomationScopedFlags('round');
     resetPersistentZoneRoundState();
     updateStartCombatButton();
     refreshCombatTracker();
@@ -11722,6 +12031,7 @@ export function mountBoardInteractions(store, routes = {}) {
     syncTokenTeamAffiliation(tokenElement, placement);
     syncTokenHitPoints(tokenElement, placement);
     syncTriggeredActionIndicator(tokenElement, placement);
+    syncTokenMarkIndicator(tokenElement, placement);
     syncTokenConditionLabel(tokenElement, placement);
   }
 
@@ -11859,6 +12169,26 @@ export function mountBoardInteractions(store, routes = {}) {
       readyMark.textContent = '!';
       tokenElement.appendChild(readyMark);
     }
+  }
+
+  function syncTokenMarkIndicator(tokenElement, placement) {
+    let markEl = tokenElement.querySelector('.vtt-token__judgment-mark');
+    const mark = getPlacementMark(placement, 'judgment');
+    if (!mark) {
+      if (markEl) markEl.remove();
+      return;
+    }
+    if (!markEl) {
+      markEl = document.createElement('button');
+      markEl.type = 'button';
+      markEl.className = 'vtt-token__judgment-mark';
+      markEl.setAttribute('data-token-judgment-mark', 'true');
+      markEl.textContent = 'J';
+      tokenElement.appendChild(markEl);
+    }
+    const sourceName = mark.sourceName || 'censor';
+    markEl.title = `Judged by ${sourceName}. Click to end.`;
+    markEl.setAttribute('aria-label', `Judged by ${sourceName}. Click to end.`);
   }
 
   function syncTokenConditionLabel(tokenElement, placement) {
@@ -13720,6 +14050,15 @@ export function mountBoardInteractions(store, routes = {}) {
         damageType: payload.damageType || '',
         abilityName: payload.abilityName || '',
       });
+      triggerFire('damageDealt', {
+        placementId: payload.placementId,
+        targetId: payload.placementId,
+        sourceId: payload.sourceId || '',
+        amount: adjustedAmount,
+        originalAmount: amount,
+        damageType: payload.damageType || '',
+        abilityName: payload.abilityName || '',
+      });
       const afterStamina = Number.isFinite(result.current) ? result.current : null;
       const delta = beforeStamina !== null && afterStamina !== null ? afterStamina - beforeStamina : -adjustedAmount;
       triggerFire('staminaChange', {
@@ -13729,6 +14068,17 @@ export function mountBoardInteractions(store, routes = {}) {
         delta,
         kind: 'damage',
       });
+      if (beforeStamina !== null && beforeStamina > 0 && afterStamina !== null && afterStamina <= 0) {
+        triggerFire('staminaZero', {
+          placementId: payload.placementId,
+          targetId: payload.placementId,
+          sourceId: payload.sourceId || '',
+          before: beforeStamina,
+          after: afterStamina,
+          damageType: payload.damageType || '',
+          abilityName: payload.abilityName || '',
+        });
+      }
     } catch (err) {
       console.warn('[VTT] triggerFire(damage/staminaChange) failed', err);
     }

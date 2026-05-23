@@ -98,13 +98,16 @@
     }
     switch (kind) {
       case "damage": {
-        const known = new Set(["kind", "amount", "attribute", "damageType", "raw"]);
+        const known = new Set(["kind", "amount", "amountDice", "markBonusDice", "markPredicate", "attribute", "damageType", "raw"]);
         const attribute = input.attribute !== undefined && input.attribute !== null
           ? (P.normalizeAttributeOrList ? P.normalizeAttributeOrList(input.attribute) : P.normalizeAttribute(input.attribute))
           : "";
         const effect = {
           kind: "damage",
           amount: asInt(input.amount, 0),
+          amountDice: asTrimmedString(input.amountDice),
+          markBonusDice: asTrimmedString(input.markBonusDice),
+          markPredicate: asTrimmedString(input.markPredicate),
           attribute,
           damageType: P.normalizeDamageType(input.damageType || "untyped"),
         };
@@ -305,6 +308,90 @@
         if (extras) effect._extra = extras;
         return effect;
       }
+      case "ifMark": {
+        const known = new Set(["kind", "predicate", "markType", "target", "then", "else"]);
+        const predicate = pickKnown(input.predicate, [
+          "targetJudgedBySelf",
+          "targetJudgedByAny",
+          "actorIsMyJudgedTarget",
+          "sourceIsJudgingTarget",
+          "targetInPersistentZoneJudgedByZoneCaster",
+        ], "targetJudgedBySelf");
+        const effect = {
+          kind: "ifMark",
+          predicate,
+          markType: asTrimmedString(input.markType) || "judgment",
+          target: asTrimmedString(input.target),
+          then: normalizeEffectList(input.then || [], warnings, `${path}.then`),
+          else: normalizeEffectList(input.else || [], warnings, `${path}.else`),
+        };
+        if (!effect.then.length && !effect.else.length) {
+          warnings.push(`${path}: ifMark has no then/else effects.`);
+        }
+        const extras = pickExtras(input, known);
+        if (extras) effect._extra = extras;
+        return effect;
+      }
+      case "ifScopedFlag": {
+        const known = new Set(["kind", "scope", "key", "source", "target", "mode", "then", "else"]);
+        const effect = {
+          kind: "ifScopedFlag",
+          scope: pickKnown(input.scope, ["round", "turn", "encounter"], "round"),
+          key: asTrimmedString(input.key),
+          source: pickKnown(input.source, ["self", "eventSource"], "self"),
+          target: pickKnown(input.target, ["target", "judgedTarget", "eventTarget"], "target"),
+          mode: pickKnown(input.mode, ["set", "notSet"], "notSet"),
+          then: normalizeEffectList(input.then || [], warnings, `${path}.then`),
+          else: normalizeEffectList(input.else || [], warnings, `${path}.else`),
+        };
+        if (!effect.key) warnings.push(`${path}: ifScopedFlag missing key.`);
+        const extras = pickExtras(input, known);
+        if (extras) effect._extra = extras;
+        return effect;
+      }
+      case "setScopedFlag": {
+        const known = new Set(["kind", "scope", "key", "source", "target"]);
+        const effect = {
+          kind: "setScopedFlag",
+          scope: pickKnown(input.scope, ["round", "turn", "encounter"], "round"),
+          key: asTrimmedString(input.key),
+          source: pickKnown(input.source, ["self", "eventSource"], "self"),
+          target: pickKnown(input.target, ["target", "judgedTarget", "eventTarget"], "target"),
+        };
+        if (!effect.key) warnings.push(`${path}: setScopedFlag missing key.`);
+        const extras = pickExtras(input, known);
+        if (extras) effect._extra = extras;
+        return effect;
+      }
+      case "applyMark": {
+        const known = new Set(["kind", "markType", "target", "duration", "exclusivePerSource", "exclusivePerTarget", "transfer", "text"]);
+        const effect = {
+          kind: "applyMark",
+          markType: asTrimmedString(input.markType) || "judgment",
+          target: asTrimmedString(input.target),
+          duration: pickKnown(input.duration, ["endOfEncounter"], "endOfEncounter"),
+          exclusivePerSource: input.exclusivePerSource !== false,
+          exclusivePerTarget: input.exclusivePerTarget !== false,
+          transfer: input.transfer !== false,
+          text: asTrimmedString(input.text),
+        };
+        const extras = pickExtras(input, known);
+        if (extras) effect._extra = extras;
+        return effect;
+      }
+      case "endMark": {
+        const known = new Set(["kind", "markType", "scope", "target", "text"]);
+        const effect = {
+          kind: "endMark",
+          markType: asTrimmedString(input.markType) || "judgment",
+          scope: pickKnown(input.scope, ["selfOwned", "target"], "selfOwned"),
+          target: asTrimmedString(input.target),
+          text: asTrimmedString(input.text),
+        };
+        const extras = pickExtras(input, known);
+        if (extras) effect._extra = extras;
+        return effect;
+      }
       case "halveTriggeringDamage": {
         // Used inside a `trigger` block to soak half of the damage that fired
         // the trigger. Requires a `damage`-event match on the trigger block.
@@ -471,11 +558,11 @@
   // fires these names — keep this list in sync with the fan-out sites in
   // board-interactions.js (handleAutomationDamageRequest, transitionToActiveTurn,
   // end-of-turn flow, vtt:token-moved listener).
-  const TRIGGER_EVENTS = ["damage", "staminaChange", "turnStart", "turnEnd", "move"];
+  const TRIGGER_EVENTS = ["damage", "damageDealt", "staminaChange", "staminaZero", "turnStart", "turnEnd", "move", "actionUsed", "markApplied"];
 
   // The `whose` filter answers "whose event is this?" relative to the caster
   // and the runner's previously-named target groups.
-  const WHOSE_VALUES = ["self", "ally", "enemy", "target", "any"];
+  const WHOSE_VALUES = ["self", "ally", "enemy", "target", "judgedTarget", "markSource", "any"];
   const STAMINA_DIRECTIONS = ["down", "up", "either"];
 
   function normalizeTriggerMatch(input, warnings, path) {
@@ -502,7 +589,7 @@
       const ref = asTrimmedString(filterInput.targetGroup) || asTrimmedString(filterInput.group);
       if (ref) filter.targetGroup = ref;
     }
-    if (event === "damage") {
+    if (event === "damage" || event === "damageDealt") {
       const minAmount = asNonNegInt(filterInput.minAmount, 0);
       if (minAmount) filter.minAmount = minAmount;
       const dtList = Array.isArray(filterInput.damageType)
@@ -515,12 +602,27 @@
         .filter(Boolean);
       if (damageTypes.length) filter.damageType = damageTypes;
     }
-    if (event === "staminaChange") {
+    if (event === "staminaChange" || event === "staminaZero") {
       const dirRaw = asTrimmedString(filterInput.direction).toLowerCase();
       if (dirRaw && !STAMINA_DIRECTIONS.includes(dirRaw)) {
         warnings.push(`${path}.filter.direction: "${filterInput.direction}" not in ${STAMINA_DIRECTIONS.join("/")}.`);
       }
       filter.direction = STAMINA_DIRECTIONS.includes(dirRaw) ? dirRaw : "either";
+    }
+    if (event === "actionUsed") {
+      const actionKind = asTrimmedString(filterInput.actionKind);
+      if (actionKind) filter.actionKind = actionKind;
+      if (filterInput.lineOfEffectTo) filter.lineOfEffectTo = asTrimmedString(filterInput.lineOfEffectTo);
+      const keywordsAny = Array.isArray(filterInput.keywordsAny)
+        ? filterInput.keywordsAny.map((k) => P.normalizeKeyword?.(k) || asTrimmedString(k)).filter(Boolean)
+        : [];
+      if (keywordsAny.length) filter.keywordsAny = keywordsAny;
+    }
+    if (event === "markApplied") {
+      const markType = asTrimmedString(filterInput.markType);
+      if (markType) filter.markType = markType;
+      const source = asTrimmedString(filterInput.source);
+      if (source) filter.source = source;
     }
     if (event === "move") {
       if (filterInput.leavesAdjacency) filter.leavesAdjacency = true;

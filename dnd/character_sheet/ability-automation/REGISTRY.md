@@ -37,6 +37,11 @@ For *how* to write JSON, see `AUTHORING.md`. This file is `what is supported`.
 | `resourceGain` | Full | Mutates the caster's own `hero.resource.value` on their sheet. If the JSON names a specific resource and the caster's resource bar has a different title, falls back to a chat reminder. Floors at 0. |
 | `ifKeyword` | Full | Branches based on ability's `keywords`. `then` runs on match, `else` on miss |
 | `ifStrained` | Full | Branches on whether the caster's heroic resource value is below 0. `then` runs when strained, `else` runs when not. |
+| `ifMark` | Full | Branches on Judgment/mark predicates such as `targetJudgedBySelf`, `targetJudgedByAny`, and `actorIsMyJudgedTarget`. |
+| `applyMark` | Full | Applies source-owned `judgment` marks. Recasting transfers the caster's mark; a newer censor judging the same target overwrites the old source. |
+| `endMark` | Full | Clears the caster's current mark or a mark on a target. Used for willingly ending Judgment. |
+| `ifScopedFlag` | Full | Branches on round/turn/encounter scoped source-target flags. Used for first-time-this-round rules. |
+| `setScopedFlag` | Full | Sets a scoped source-target flag. Round flags reset at new round; all flags clear at encounter end. |
 | `halveTriggeringDamage` | Full | Inside a `trigger` block matching the `damage` event: halves the triggering damage by healing back the difference. `rounding` (`up`/`down`) controls which half the placement takes. No-op outside a trigger with a captured damage payload. |
 | `note` | Full | Posts text to chat |
 | `other` | Chat reminder | Posts text to chat |

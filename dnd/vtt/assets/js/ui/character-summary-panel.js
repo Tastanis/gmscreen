@@ -1210,6 +1210,12 @@ function startAbilityAutomation(sheet, action, categoryKey, sourceToken = null, 
     runFreeStrike: requestAutomationFreeStrike,
     getRecoveryValueForTarget: requestAutomationRecoveryValue,
     registerPersistentZone: requestAutomationRegisterZone,
+    applyMark: requestAutomationApplyMark,
+    endMark: requestAutomationEndMark,
+    checkMark: requestAutomationCheckMark,
+    fireTriggerEvent: requestAutomationFireTriggerEvent,
+    checkScopedFlag: requestAutomationCheckScopedFlag,
+    setScopedFlag: requestAutomationSetScopedFlag,
     spendResource: (ability) => spendAbilityResource(sheet, ability, options),
   });
 }
@@ -1405,6 +1411,86 @@ function requestAutomationRegisterZone(payload) {
   return new Promise((resolve, reject) => {
     document.dispatchEvent(
       new CustomEvent('vtt:automation-register-persistent-zone', {
+        detail: {
+          payload: clonePlain(payload || {}),
+          resolve,
+          reject,
+        },
+      })
+    );
+  });
+}
+
+function requestAutomationApplyMark(payload) {
+  return new Promise((resolve, reject) => {
+    document.dispatchEvent(
+      new CustomEvent('vtt:automation-apply-mark', {
+        detail: {
+          payload: clonePlain(payload || {}),
+          resolve,
+          reject,
+        },
+      })
+    );
+  });
+}
+
+function requestAutomationEndMark(payload) {
+  return new Promise((resolve, reject) => {
+    document.dispatchEvent(
+      new CustomEvent('vtt:automation-end-mark', {
+        detail: {
+          payload: clonePlain(payload || {}),
+          resolve,
+          reject,
+        },
+      })
+    );
+  });
+}
+
+function requestAutomationCheckMark(payload) {
+  return new Promise((resolve, reject) => {
+    document.dispatchEvent(
+      new CustomEvent('vtt:automation-check-mark', {
+        detail: {
+          payload: clonePlain(payload || {}),
+          resolve,
+          reject,
+        },
+      })
+    );
+  });
+}
+
+function requestAutomationFireTriggerEvent(payload) {
+  document.dispatchEvent(
+    new CustomEvent('vtt:automation-fire-trigger-event', {
+      detail: {
+        payload: clonePlain(payload || {}),
+      },
+    })
+  );
+}
+
+function requestAutomationCheckScopedFlag(payload) {
+  return new Promise((resolve, reject) => {
+    document.dispatchEvent(
+      new CustomEvent('vtt:automation-check-scoped-flag', {
+        detail: {
+          payload: clonePlain(payload || {}),
+          resolve,
+          reject,
+        },
+      })
+    );
+  });
+}
+
+function requestAutomationSetScopedFlag(payload) {
+  return new Promise((resolve, reject) => {
+    document.dispatchEvent(
+      new CustomEvent('vtt:automation-set-scoped-flag', {
         detail: {
           payload: clonePlain(payload || {}),
           resolve,

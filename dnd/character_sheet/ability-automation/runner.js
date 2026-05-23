@@ -854,6 +854,16 @@
         return applyIfKeywordEffect(state, effect, targets, ctx);
       case "ifStrained":
         return applyIfStrainedEffect(state, effect, targets, ctx);
+      case "ifMark":
+        return applyIfMarkEffect(state, effect, targets, ctx);
+      case "ifScopedFlag":
+        return applyIfScopedFlagEffect(state, effect, targets, ctx);
+      case "setScopedFlag":
+        return applySetScopedFlagEffect(state, effect, targets, ctx);
+      case "applyMark":
+        return applyMarkEffect(state, effect, targets, ctx);
+      case "endMark":
+        return applyEndMarkEffect(state, effect, targets, ctx);
       case "halveTriggeringDamage":
         return applyHalveTriggeringDamageEffect(state, effect, targets, ctx);
       case "heal":
@@ -890,17 +900,29 @@
     const attributeBonus = effect.attribute
       ? resolveAttributeBonusForDamage(state, effect.attribute)
       : 0;
-    const amount = Math.max(0, baseAmount + attributeBonus);
     const damageType = effect.damageType && effect.damageType !== "untyped" ? effect.damageType : "";
     const lines = [];
     let visibleHidden = 0;
     for (const target of targets) {
       if (state.aborted) return;
       if (!target?.id) continue;
+      const diceAmount = rollDiceFormula(effect.amountDice);
+      let markBonus = 0;
+      if (effect.markBonusDice && typeof state.context.checkMark === "function") {
+        const check = await state.context.checkMark({
+          predicate: effect.markPredicate || "targetJudgedBySelf",
+          markType: "judgment",
+          sourceId: state.sourcePlacement?.id || "",
+          targetId: target.id,
+        });
+        if (check?.matched) markBonus = rollDiceFormula(effect.markBonusDice);
+      }
+      const amount = Math.max(0, baseAmount + attributeBonus + diceAmount + markBonus);
       const result =
         typeof state.context.applyDamage === "function"
           ? await state.context.applyDamage({
               placementId: target.id,
+              sourceId: state.sourcePlacement?.id || "",
               amount,
               damageType,
               abilityName: state.action.name || "Ability",
@@ -1207,6 +1229,145 @@
     await applyEffects(state, branch, null, ctx);
   }
 
+  function rollDiceFormula(formula) {
+    const text = String(formula || "").trim().toLowerCase();
+    if (!text) return 0;
+    const match = text.match(/^(\d+)d(\d+)$/);
+    if (!match) return asInt(text, 0);
+    const count = Math.max(0, asInt(match[1], 0));
+    const sides = Math.max(1, asInt(match[2], 1));
+    let total = 0;
+    for (let i = 0; i < count; i += 1) {
+      total += 1 + Math.floor(Math.random() * sides);
+    }
+    return total;
+  }
+
+  async function applyIfMarkEffect(state, effect, targets, ctx) {
+    const targetGroupName = effect.target || state.currentGroup || "primary";
+    const checkTargets = effect.target ? getTargetGroup(state, effect.target) : targets;
+    let matched = false;
+    if (typeof state.context.checkMark === "function") {
+      for (const target of checkTargets || []) {
+        if (!target?.id) continue;
+        const result = await state.context.checkMark({
+          predicate: effect.predicate || "targetJudgedBySelf",
+          markType: effect.markType || "judgment",
+          sourceId: state.sourcePlacement?.id || "",
+          targetId: target.id,
+          triggerPayload: state.triggerPayload || null,
+        });
+        if (result?.matched) {
+          matched = true;
+          break;
+        }
+      }
+    }
+    const branch = matched ? effect.then : effect.else;
+    if (!Array.isArray(branch) || !branch.length) return;
+    await applyEffects(state, branch, targetGroupName, ctx);
+  }
+
+  async function applyMarkEffect(state, effect, targets) {
+    const groupName = effect.target || state.currentGroup || "primary";
+    const markTargets = effect.target ? getTargetGroup(state, effect.target) : targets;
+    const target = (markTargets || []).find((item) => item?.id);
+    if (!target?.id) {
+      await postChat(state.context, {
+        message: `${state.heroName} - ${state.action.name || "Ability"}: no target to mark.`,
+      });
+      return;
+    }
+    if (typeof state.context.applyMark !== "function") {
+      await postChat(state.context, {
+        message: `${state.heroName} - ${state.action.name || "Ability"}: mark ${target.name || "target"} manually.`,
+      });
+      return;
+    }
+    const result = await state.context.applyMark({
+      markType: effect.markType || "judgment",
+      sourceId: state.sourcePlacement?.id || "",
+      sourceName: state.heroName || state.sourcePlacement?.name || "Source",
+      targetId: target.id,
+      targetName: target.name || "",
+      abilityId: state.action?.id || "",
+      abilityName: state.action?.name || "Ability",
+      duration: effect.duration || "endOfEncounter",
+      exclusivePerSource: effect.exclusivePerSource !== false,
+      exclusivePerTarget: effect.exclusivePerTarget !== false,
+      transfer: effect.transfer !== false,
+    });
+    const oldText = result?.oldTargetName ? ` Previous ${effect.markType || "mark"} on ${result.oldTargetName} ends.` : "";
+    const replacedText = result?.replacedSourceName ? ` It replaces ${result.replacedSourceName}'s mark.` : "";
+    await postChat(state.context, {
+      message: `${state.heroName} - ${state.action.name || "Ability"}: ${target.name || "target"} is judged.${oldText}${replacedText}`,
+    });
+    if (groupName) setTargetGroup(state, groupName, [target]);
+  }
+
+  async function applyEndMarkEffect(state, effect, targets) {
+    if (typeof state.context.endMark !== "function") {
+      await postChat(state.context, {
+        message: `${state.heroName} - ${state.action.name || "Ability"}: end ${effect.markType || "mark"} manually.`,
+      });
+      return;
+    }
+    const markTargets = effect.target ? getTargetGroup(state, effect.target) : targets;
+    const result = await state.context.endMark({
+      markType: effect.markType || "judgment",
+      sourceId: state.sourcePlacement?.id || "",
+      targetId: markTargets?.[0]?.id || "",
+      scope: effect.scope || "selfOwned",
+      reason: "ability",
+    });
+    await postChat(state.context, {
+      message: `${state.heroName} - ${state.action.name || "Ability"}: ended ${effect.markType || "mark"}${result?.targetName ? ` on ${result.targetName}` : ""}.`,
+    });
+  }
+
+  function resolveScopedFlagIds(state, effect, targets) {
+    const payload = state.triggerPayload?.payload || state.triggerPayload || {};
+    const sourceId = effect.source === "eventSource"
+      ? payload.sourceId || ""
+      : state.sourcePlacement?.id || "";
+    let targetId = "";
+    if (effect.target === "eventTarget") {
+      targetId = payload.targetId || payload.placementId || "";
+    } else if (effect.target === "judgedTarget" && typeof state.context.getMarkedTarget === "function") {
+      // This hook is optional; fall back to current target when absent.
+      targetId = "";
+    }
+    if (!targetId) targetId = (targets || []).find((t) => t?.id)?.id || payload.targetId || payload.placementId || "";
+    return { sourceId, targetId };
+  }
+
+  async function applyIfScopedFlagEffect(state, effect, targets, ctx) {
+    if (typeof state.context.checkScopedFlag !== "function") return;
+    const ids = resolveScopedFlagIds(state, effect, targets);
+    const result = await state.context.checkScopedFlag({
+      scope: effect.scope || "round",
+      key: effect.key || "",
+      sourceId: ids.sourceId,
+      targetId: ids.targetId,
+    });
+    const isSet = Boolean(result?.set);
+    const matched = effect.mode === "set" ? isSet : !isSet;
+    const branch = matched ? effect.then : effect.else;
+    if (!Array.isArray(branch) || !branch.length) return;
+    await applyEffects(state, branch, null, ctx);
+  }
+
+  async function applySetScopedFlagEffect(state, effect, targets) {
+    if (typeof state.context.setScopedFlag !== "function") return;
+    const ids = resolveScopedFlagIds(state, effect, targets);
+    await state.context.setScopedFlag({
+      scope: effect.scope || "round",
+      key: effect.key || "",
+      sourceId: ids.sourceId,
+      targetId: ids.targetId,
+    });
+  }
+
   async function applySpendEffect(state, effect, targets, ctx) {
     const cost = `${effect.amount || 1} ${effect.resource || "resource"}`;
     const inner = (effect.effects || []).map(P.describeEffect).filter(Boolean).join("; ");
@@ -1500,6 +1661,14 @@
         walkEffectList(effect.then || [], visit);
         walkEffectList(effect.else || [], visit);
       }
+      if (effect.kind === "ifMark") {
+        walkEffectList(effect.then || [], visit);
+        walkEffectList(effect.else || [], visit);
+      }
+      if (effect.kind === "ifScopedFlag") {
+        walkEffectList(effect.then || [], visit);
+        walkEffectList(effect.else || [], visit);
+      }
     }
   }
 
@@ -1608,6 +1777,18 @@
           message: `${state.action.name || "Ability"} has no automation configured.`,
         });
         return;
+      }
+      if (typeof state.context.fireTriggerEvent === "function") {
+        state.context.fireTriggerEvent({
+          eventType: "actionUsed",
+          payload: {
+            actorId: state.sourcePlacement?.id || "",
+            actionId: state.action?.id || "",
+            actionName: state.action?.name || "Ability",
+            actionKind: state.action?.actionKind || state.action?.kind || state.action?.type || "main",
+            keywords: getAbilityKeywords(state),
+          },
+        });
       }
       for (const block of blocks) {
         if (state.aborted) break;
