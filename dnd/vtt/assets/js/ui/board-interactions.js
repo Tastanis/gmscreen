@@ -2520,6 +2520,7 @@ export function mountBoardInteractions(store, routes = {}) {
       },
       squares,
       shape: area.shape || template.shape || 'cube',
+      affects: area.predicate || area.creature || area.affects || payload.affects || payload.creature || 'creature',
       upkeep: {
         cost: Math.max(0, Number(payload.upkeep?.cost) || 0),
         resource: String(payload.upkeep?.resource || '').trim(),
@@ -2774,6 +2775,7 @@ export function mountBoardInteractions(store, routes = {}) {
     if (Array.isArray(zone.squares) && zone.squares.length) {
       return getPlacementsForActiveScene().filter((p) =>
         doesAutomationSquaresAffectPlacement(zone.squares, p)
+        && doesAutomationTargetFilterMatch(p, zone.affects || 'creature')
       );
     }
     return getPlacementsForActiveScene().filter((p) =>
@@ -2783,11 +2785,13 @@ export function mountBoardInteractions(store, routes = {}) {
         right: zone.template.column + zone.template.width,
         bottom: zone.template.row + zone.template.height,
       }, p)
+      && doesAutomationTargetFilterMatch(p, zone.affects || 'creature')
     );
   }
 
   function isPlacementInsideZone(zone, placement) {
     if (!zone || !placement) return false;
+    if (!doesAutomationTargetFilterMatch(placement, zone.affects || 'creature')) return false;
     if (Array.isArray(zone.squares) && zone.squares.length) {
       return doesAutomationSquaresAffectPlacement(zone.squares, placement);
     }

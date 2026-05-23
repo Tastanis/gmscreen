@@ -402,6 +402,7 @@
             width: block.width || 0,
             height: block.height || 0,
             length: block.length || 0,
+            predicate: block.predicate || block.creature || block.affects || "creature",
             blockName: areaKey,
             blockId: block.id || "",
           };
