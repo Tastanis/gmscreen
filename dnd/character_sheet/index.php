@@ -42,6 +42,7 @@ require_once '../includes/strix-nav.php';
   <script src="ability-automation/primitives.js?v=<?php echo (int) $assetVersion; ?>"></script>
   <script src="ability-automation/schema.js?v=<?php echo (int) $assetVersion; ?>"></script>
   <script src="ability-automation/catalog.js?v=<?php echo (int) $assetVersion; ?>"></script>
+  <script src="ability-automation/field-map.js?v=<?php echo (int) $assetVersion; ?>"></script>
   <script src="ability-automation/paste.js?v=<?php echo (int) $assetVersion; ?>"></script>
   <script src="ability-automation/inspector.js?v=<?php echo (int) $assetVersion; ?>"></script>
   <script src="ability-automation/runner.js?v=<?php echo (int) $assetVersion; ?>"></script>

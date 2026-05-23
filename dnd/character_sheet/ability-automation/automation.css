@@ -375,6 +375,24 @@
   min-height: 32px;
 }
 
+.ability-paste__hint {
+  color: #6e5b3a;
+  font-size: 0.82rem;
+  margin: -2px 0 0;
+}
+
+.ability-paste__hint code {
+  font-family: ui-monospace, "SF Mono", Monaco, Consolas, "Cascadia Code", monospace;
+}
+
+.ability-paste__field-warnings {
+  background: #fff4df;
+  border: 1px solid #d8b26d;
+  border-radius: 6px;
+  font-size: 0.86rem;
+  padding: 8px 12px;
+}
+
 .ability-paste__summary {
   color: #3b3024;
   margin-bottom: 4px;

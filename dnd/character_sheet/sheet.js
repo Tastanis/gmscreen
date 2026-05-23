@@ -2946,6 +2946,7 @@ function bindAutomationButtons() {
         // actions array — the original `action` reference may now be an
         // orphan that's no longer in sheetState. Always mutate the current
         // object so the save persists.
+        captureActions();
         const freshAction = (sheetState.actions[type] || []).find((item) => item.id === actionId);
         const targetAction = freshAction || action;
         targetAction.automation = normalizeAutomationBlock(automation);

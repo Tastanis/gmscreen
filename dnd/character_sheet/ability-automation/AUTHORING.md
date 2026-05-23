@@ -37,6 +37,114 @@ The `name` and `description` of the ability live on the character sheet — do *
 
 ---
 
+## Combined paste format (fields + automation)
+
+The automation popup accepts either the bare automation shape above, or a wrapper that fills the visible ability-card fields and saves automation in one paste:
+
+```json
+{
+  "fields": {
+    "name": "Driving Assault",
+    "actionLabel": "Main Action",
+    "keywords": "Melee, Strike, Weapon",
+    "range": "Melee 1",
+    "target": "One creature or object",
+    "cost": "1 Wrath",
+    "description": "You strike the target and drive them backward.",
+    "testLabel": "Power Roll + Might",
+    "testRollMod": "Might",
+    "tier1Damage": "3 + M",
+    "tier1Notes": "push 1",
+    "tier2Damage": "6 + M",
+    "tier2Notes": "push 2",
+    "tier3Damage": "9 + M",
+    "tier3Notes": "push 4"
+  },
+  "automation": {
+    "schema": "ability-automation/v3",
+    "keywords": ["Melee", "Strike", "Weapon"],
+    "cards": [
+      {
+        "type": "target",
+        "name": "primary",
+        "mode": "token",
+        "predicate": "creatureOrObject",
+        "count": { "value": 1, "mode": "exact" },
+        "distance": { "form": "melee", "value": 1 }
+      },
+      {
+        "type": "powerRoll",
+        "attribute": "Might",
+        "target": "primary",
+        "tiers": {
+          "tier1": { "effects": [ { "kind": "damage", "amount": 3, "attribute": "M" }, { "kind": "forcedMovement", "verb": "push", "distance": 1 } ] },
+          "tier2": { "effects": [ { "kind": "damage", "amount": 6, "attribute": "M" }, { "kind": "forcedMovement", "verb": "push", "distance": 2 } ] },
+          "tier3": { "effects": [ { "kind": "damage", "amount": 9, "attribute": "M" }, { "kind": "forcedMovement", "verb": "push", "distance": 4 } ] }
+        }
+      }
+    ]
+  }
+}
+```
+
+### `fields.*` keys
+
+Use only these keys in `fields`. Omit unknown or not-applicable fields.
+
+| Key | Description | Example |
+|---|---|---|
+| `name` | Ability name. | `"Driving Assault"` |
+| `useWhen` | Short reminder for when to use the ability. | `"Use when an enemy is adjacent."` |
+| `actionLabel` | Displayed action type label. | `"Main Action"` |
+| `keywords` | Comma-separated ability keywords. | `"Melee, Strike, Weapon"` |
+| `range` | Range or distance line shown on the card. | `"Melee 1"` |
+| `target` | Target line shown on the card. | `"One enemy"` |
+| `trigger` | Trigger line for triggered actions. | `"The target takes damage."` |
+| `cost` | Resource or heroic resource cost. | `"1 Wrath"` |
+| `description` | Main rules/effect text. | `"You deal holy damage to the target."` |
+| `testLabel` | Label for the first power test. | `"Power Roll + Might"` |
+| `testRollMod` | Roll modifier for the first power test. | `"Might"` |
+| `testBeforeEffect` | Effects text before the first power test. | `"Shift 1 before the strike."` |
+| `testAdditionalEffect` | Effects text after the first power test. | `"You can shift 1 after the strike."` |
+| `tier1Damage` | First test tier 1 damage field. | `"3 + M"` |
+| `tier1DamageType` | First test tier 1 damage type. | `"holy"` |
+| `tier1Notes` | First test tier 1 other info. | `"push 1"` |
+| `tier1Attribute` | First test tier 1 attribute-check attribute. | `"Agility"` |
+| `tier1Threshold` | First test tier 1 attribute-check threshold. | `"11"` |
+| `tier1AttributeEffect` | First test tier 1 attribute-check effect. | `"prone"` |
+| `tier2Damage` | First test tier 2 damage field. | `"6 + M"` |
+| `tier2DamageType` | First test tier 2 damage type. | `"holy"` |
+| `tier2Notes` | First test tier 2 other info. | `"push 2"` |
+| `tier2Attribute` | First test tier 2 attribute-check attribute. | `"Agility"` |
+| `tier2Threshold` | First test tier 2 attribute-check threshold. | `"14"` |
+| `tier2AttributeEffect` | First test tier 2 attribute-check effect. | `"prone"` |
+| `tier3Damage` | First test tier 3 damage field. | `"9 + M"` |
+| `tier3DamageType` | First test tier 3 damage type. | `"holy"` |
+| `tier3Notes` | First test tier 3 other info. | `"push 4"` |
+| `tier3Attribute` | First test tier 3 attribute-check attribute. | `"Agility"` |
+| `tier3Threshold` | First test tier 3 attribute-check threshold. | `"17"` |
+| `tier3AttributeEffect` | First test tier 3 attribute-check effect. | `"prone and can't stand"` |
+
+Aliases accepted by the paste UI: `title` -> `name`; `whenToUse` -> `useWhen`; `actionType`/`type` -> `actionLabel`; `tags` -> `keywords`; `distance` -> `range`; `targets` -> `target`; `effect`/`effects`/`notes`/`rulesText` -> `description`; `rollMod` -> `testRollMod`; `beforeEffect` -> `testBeforeEffect`; `additionalEffect`/`afterEffect` -> `testAdditionalEffect`; `tier1Effect`/`tier2Effect`/`tier3Effect` -> the matching tier notes.
+
+### Prompt template for LLMs
+
+Output exactly one JSON object with two top-level keys: `fields` and `automation`.
+Use only keys from the `fields.*` table in AUTHORING.md for `fields`.
+For `automation`, follow the existing REGISTRY.md schema exactly.
+Never wrap the output in markdown code fences.
+If a field is unknown or N/A, omit the key; do not write `null` or `""`.
+Preserve the ability's rules text in `fields.description` when useful, but put only automatable behavior in `automation`.
+Here is the ability text:
+
+[PASTE ABILITY RULES TEXT HERE]
+
+### Backward compatibility
+
+Bare automation JSON still works. If the pasted object does not have both top-level keys `fields` and `automation`, the paste UI treats the whole object as the automation JSON.
+
+---
+
 ## Block types
 
 ### `target`
