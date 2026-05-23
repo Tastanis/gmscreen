@@ -3151,6 +3151,7 @@ function captureFeatures() {
   const updated = [];
   cards.forEach((card) => {
     const id = card.getAttribute("data-feature-id") || createId("feature");
+    const existingFeature = (sheetState.features || []).find((feature) => feature.id === id);
     const title = card.querySelector('[data-field="title"]').value;
     const useWhen = card.querySelector('[data-field="useWhen"]')?.value || "";
     const tagsValue = card.querySelector('[data-field="tags"]').value;
@@ -3165,6 +3166,7 @@ function captureFeatures() {
         .filter(Boolean),
       text: sanitizeRichText(normalizeRichText(text)),
       isWide: card.classList.contains("feature-card--wide"),
+      automation: normalizeAutomationBlock(existingFeature?.automation),
     });
   });
   sheetState.features = updated;

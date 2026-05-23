@@ -586,6 +586,7 @@ function renderAbilityPreview(preview, action, categoryKey, sheet = null) {
   const useWhen = typeof action.useWhen === 'string' ? action.useWhen.trim() : '';
   const descriptionBlocks = extractTextBlocks(action.description || '');
   const tests = Array.isArray(action.tests) ? action.tests : [];
+  const previewTests = applyFeatureModifiersToPreviewTests(tests, action, sheet);
 
   preview.innerHTML = `
     <article class="vtt-character-ability-card">
@@ -602,7 +603,7 @@ function renderAbilityPreview(preview, action, categoryKey, sheet = null) {
       ${descriptionBlocks.length
         ? `<div class="vtt-character-ability-card__description">${descriptionBlocks.map((text) => `<p>${escapeHtml(text)}</p>`).join('')}</div>`
         : ''}
-      ${tests.length ? `<div class="vtt-character-ability-card__tests">${tests.map((test) => renderAbilityTest(test, sheet)).join('')}</div>` : ''}
+      ${previewTests.length ? `<div class="vtt-character-ability-card__tests">${previewTests.map((test) => renderAbilityTest(test, sheet)).join('')}</div>` : ''}
     </article>
   `;
   preview.setAttribute('aria-hidden', 'false');
@@ -681,6 +682,108 @@ function renderAbilityTier(label, tier = {}, sheet = null) {
       <p>${escapeHtml(parts.join(' | '))}</p>
     </div>
   `;
+}
+
+function applyFeatureModifiersToPreviewTests(tests, action, sheet = null) {
+  if (!Array.isArray(tests) || !tests.length) {
+    return [];
+  }
+  const matched = collectPreviewModifiers(action, sheet);
+  if (!matched.length) {
+    return tests;
+  }
+  const damageBonus = matched.reduce((sum, modifier) => sum + (Number.parseInt(modifier.apply?.damageBonus, 10) || 0), 0);
+  if (!damageBonus) {
+    return tests;
+  }
+  return tests.map((test) => ({
+    ...test,
+    tiers: Object.fromEntries(
+      Object.entries(test?.tiers || {}).map(([key, tier]) => [
+        key,
+        {
+          ...tier,
+          damage: tier?.damage ? addFlatBonusToDamageText(tier.damage, damageBonus) : tier?.damage,
+        },
+      ])
+    ),
+  }));
+}
+
+function collectPreviewModifiers(action, sheet = null) {
+  const features = Array.isArray(sheet?.features) ? sheet.features : [];
+  if (!features.length) {
+    return [];
+  }
+  const keywords = getActionKeywords(action);
+  const matched = [];
+  for (const feature of features) {
+    const modifiers = Array.isArray(feature?.automation?.modifiers) ? feature.automation.modifiers : [];
+    for (const modifier of modifiers) {
+      if (previewModifierMatches(modifier, keywords, action)) {
+        matched.push(modifier);
+      }
+    }
+  }
+  return matched;
+}
+
+function previewModifierMatches(modifier, keywords, action) {
+  if (!modifier || !modifier.match) {
+    return false;
+  }
+  const match = modifier.match;
+  const lowerKeywords = keywords.map((keyword) => String(keyword).toLowerCase());
+  const hasAll = (items) => (items || []).every((item) => lowerKeywords.includes(String(item).toLowerCase()));
+  const hasAny = (items) => !items?.length || items.some((item) => lowerKeywords.includes(String(item).toLowerCase()));
+  const hasNone = (items) => !items?.length || items.every((item) => !lowerKeywords.includes(String(item).toLowerCase()));
+  if (match.keywordsAll && !hasAll(match.keywordsAll)) return false;
+  if (match.keywordsAny && !hasAny(match.keywordsAny)) return false;
+  if (match.keywordsNone && !hasNone(match.keywordsNone)) return false;
+  if (match.damageType && !actionHasDamageType(action, match.damageType)) return false;
+  if (match.attribute && !actionUsesAttribute(action, match.attribute)) return false;
+  return true;
+}
+
+function getActionKeywords(action) {
+  if (Array.isArray(action?.automation?.keywords) && action.automation.keywords.length) {
+    return action.automation.keywords;
+  }
+  if (Array.isArray(action?.keywords) && action.keywords.length) {
+    return action.keywords;
+  }
+  if (Array.isArray(action?.tags) && action.tags.length) {
+    return action.tags;
+  }
+  return [];
+}
+
+function actionHasDamageType(action, damageType) {
+  const target = String(damageType || '').trim().toLowerCase();
+  if (!target) return true;
+  for (const test of action?.tests || []) {
+    for (const tier of Object.values(test?.tiers || {})) {
+      if (String(tier?.damageType || '').trim().toLowerCase() === target) {
+        return true;
+      }
+    }
+  }
+  return false;
+}
+
+function actionUsesAttribute(action, attribute) {
+  const target = normalizeAttributeName(attribute);
+  if (!target) return true;
+  const tests = Array.isArray(action?.tests) ? action.tests : [];
+  return tests.some((test) => String(test?.label || '').toLowerCase().includes(target.toLowerCase()));
+}
+
+function addFlatBonusToDamageText(damage, bonus) {
+  const raw = String(damage || '').trim();
+  if (!raw || !bonus) return raw;
+  const match = raw.match(/^(-?\d+)(.*)$/);
+  if (!match) return raw;
+  return `${Number.parseInt(match[1], 10) + bonus}${match[2] || ''}`;
 }
 
 function resolveDamagePreview(damage, sheet = null) {
