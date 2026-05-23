@@ -2112,6 +2112,8 @@ export function mountBoardInteractions(store, routes = {}) {
       row: from.row ?? 0,
       width: from.width ?? moverNow.width ?? 1,
       height: from.height ?? moverNow.height ?? 1,
+      team: moverNow.team,
+      combatTeam: moverNow.combatTeam,
     };
     const toFootprint = {
       id: movingId,
@@ -2119,6 +2121,8 @@ export function mountBoardInteractions(store, routes = {}) {
       row: to.row ?? 0,
       width: to.width ?? moverNow.width ?? 1,
       height: to.height ?? moverNow.height ?? 1,
+      team: moverNow.team,
+      combatTeam: moverNow.combatTeam,
     };
     for (const zone of zones) {
       if (!zone || !Array.isArray(zone.triggers) || !zone.triggers.includes('onEnter')) continue;
