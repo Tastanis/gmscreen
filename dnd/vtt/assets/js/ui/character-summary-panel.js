@@ -664,14 +664,15 @@ function renderAbilityTier(label, tier = {}, sheet = null) {
     const damage = resolveDamagePreview(tier.damage, sheet);
     parts.push(`${damage}${tier.damageType ? ` ${tier.damageType}` : ''}`);
   }
+  const noteHasPotency = hasPotencyShorthand(tier?.notes);
   if (tier?.notes) {
-    parts.push(tier.notes);
+    parts.push(resolvePotencyNotePreview(tier.notes, sheet));
   }
-  if (tier?.attributeCheck?.enabled) {
+  if (tier?.attributeCheck?.enabled && !noteHasPotency) {
     const attribute = tier.attributeCheck.attribute || 'Attribute';
-    const threshold = tier.attributeCheck.threshold || '-';
+    const threshold = resolvePotencyThresholdPreview(tier.attributeCheck.threshold, sheet);
     const effect = tier.attributeCheck.effect || '';
-    parts.push(`${attribute} <= ${threshold}${effect ? `: ${effect}` : ''}`);
+    parts.push(`${attribute} < ${threshold}${effect ? `: ${effect}` : ''}`);
   }
   if (!parts.length) {
     return '';
@@ -682,6 +683,41 @@ function renderAbilityTier(label, tier = {}, sheet = null) {
       <p>${escapeHtml(parts.join(' | '))}</p>
     </div>
   `;
+}
+
+function hasPotencyShorthand(text) {
+  return /\b(?:M|A|R|I|P|Might|Agility|Reason|Intuition|Presence)\s*<\s*(?:w|v|s|weak|average|strong)\b/i.test(String(text || ''));
+}
+
+function resolvePotencyNotePreview(text, sheet = null) {
+  const raw = String(text || '').trim();
+  if (!raw || !sheet) {
+    return raw;
+  }
+  return raw.replace(
+    /\b(M|A|R|I|P|Might|Agility|Reason|Intuition|Presence)\s*<\s*(w|v|s|weak|average|strong)\b/gi,
+    (_match, attribute, level) => {
+      const fullAttribute = normalizeAttributeName(attribute) || attribute;
+      const threshold = resolvePotencyThresholdPreview(level, sheet);
+      return `${fullAttribute} < ${threshold}`;
+    }
+  );
+}
+
+function resolvePotencyThresholdPreview(level, sheet = null) {
+  const raw = String(level || '').trim();
+  if (!raw || !sheet) {
+    return raw || '-';
+  }
+  if (/^-?\d+$/.test(raw)) {
+    return raw;
+  }
+  const highest = getHighestAttributeBonus(sheet);
+  const normalized = raw.toLowerCase();
+  if (normalized === 's' || normalized === 'strong') return String(highest);
+  if (normalized === 'v' || normalized === 'average') return String(highest - 1);
+  if (normalized === 'w' || normalized === 'weak') return String(highest - 2);
+  return raw;
 }
 
 function applyFeatureModifiersToPreviewTests(tests, action, sheet = null) {
@@ -825,6 +861,13 @@ function resolveAttributeChoice(text, sheet) {
     return NaN;
   }
   return attributes.reduce((best, attribute) => Math.max(best, getAttributeBonus(sheet, attribute)), -Infinity);
+}
+
+function getHighestAttributeBonus(sheet) {
+  return ['Might', 'Agility', 'Reason', 'Intuition', 'Presence'].reduce(
+    (best, attribute) => Math.max(best, getAttributeBonus(sheet, attribute)),
+    0
+  );
 }
 
 function normalizeAttributeName(attribute) {
