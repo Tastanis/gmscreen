@@ -360,7 +360,7 @@ export function mountCharacterSummaryPanel(routes = {}, userContext = {}) {
     }
     const action = getAbilityAction(activeSheet, item.dataset.abilityCategory, item.dataset.abilityIndex, { activeToken });
     if (action) {
-      renderAbilityPreview(abilityPreview, action, item.dataset.abilityCategory);
+      renderAbilityPreview(abilityPreview, action, item.dataset.abilityCategory, activeSheet);
     }
   });
 
@@ -379,7 +379,7 @@ export function mountCharacterSummaryPanel(routes = {}, userContext = {}) {
     }
     const action = getAbilityAction(activeSheet, item.dataset.abilityCategory, item.dataset.abilityIndex, { activeToken });
     if (action) {
-      renderAbilityPreview(abilityPreview, action, item.dataset.abilityCategory);
+      renderAbilityPreview(abilityPreview, action, item.dataset.abilityCategory, activeSheet);
     }
   });
 
@@ -575,7 +575,7 @@ function renderAbilityItem(action, categoryKey, index) {
   `;
 }
 
-function renderAbilityPreview(preview, action, categoryKey) {
+function renderAbilityPreview(preview, action, categoryKey, sheet = null) {
   if (!preview || !action) {
     return;
   }
@@ -602,7 +602,7 @@ function renderAbilityPreview(preview, action, categoryKey) {
       ${descriptionBlocks.length
         ? `<div class="vtt-character-ability-card__description">${descriptionBlocks.map((text) => `<p>${escapeHtml(text)}</p>`).join('')}</div>`
         : ''}
-      ${tests.length ? `<div class="vtt-character-ability-card__tests">${tests.map(renderAbilityTest).join('')}</div>` : ''}
+      ${tests.length ? `<div class="vtt-character-ability-card__tests">${tests.map((test) => renderAbilityTest(test, sheet)).join('')}</div>` : ''}
     </article>
   `;
   preview.setAttribute('aria-hidden', 'false');
@@ -640,7 +640,7 @@ function renderAbilityMeta(action, categoryKey) {
   `;
 }
 
-function renderAbilityTest(test) {
+function renderAbilityTest(test, sheet = null) {
   const tiers = test?.tiers && typeof test.tiers === 'object' ? test.tiers : {};
   return `
     <section class="vtt-character-ability-test">
@@ -650,17 +650,18 @@ function renderAbilityTest(test) {
       </header>
       ${test?.beforeEffect ? `<p>${escapeHtml(test.beforeEffect)}</p>` : ''}
       <div class="vtt-character-ability-test__tiers">
-        ${Object.entries(TEST_TIER_LABELS).map(([key, label]) => renderAbilityTier(label, tiers[key])).join('')}
+        ${Object.entries(TEST_TIER_LABELS).map(([key, label]) => renderAbilityTier(label, tiers[key], sheet)).join('')}
       </div>
       ${test?.additionalEffect ? `<p>${escapeHtml(test.additionalEffect)}</p>` : ''}
     </section>
   `;
 }
 
-function renderAbilityTier(label, tier = {}) {
+function renderAbilityTier(label, tier = {}, sheet = null) {
   const parts = [];
   if (tier?.damage) {
-    parts.push(`${tier.damage}${tier.damageType ? ` ${tier.damageType}` : ''}`);
+    const damage = resolveDamagePreview(tier.damage, sheet);
+    parts.push(`${damage}${tier.damageType ? ` ${tier.damageType}` : ''}`);
   }
   if (tier?.notes) {
     parts.push(tier.notes);
@@ -680,6 +681,114 @@ function renderAbilityTier(label, tier = {}) {
       <p>${escapeHtml(parts.join(' | '))}</p>
     </div>
   `;
+}
+
+function resolveDamagePreview(damage, sheet = null) {
+  const raw = String(damage || '').trim();
+  if (!raw || !sheet) {
+    return raw;
+  }
+
+  const diceMatch = raw.match(/\b\d*d\d+\b/i);
+  if (diceMatch) {
+    return raw.replace(/\b(Might|Agility|Reason|Intuition|Presence|Strongest|M|A|R|I|P)\b(?:\s+or\s+\b(Might|Agility|Reason|Intuition|Presence|Strongest|M|A|R|I|P)\b)*/gi, (match) => {
+      const bonus = resolveAttributeChoice(match, sheet);
+      return Number.isFinite(bonus) ? String(bonus) : match;
+    });
+  }
+
+  const normalized = raw
+    .replace(/\b(Might|Agility|Reason|Intuition|Presence|Strongest|M|A|R|I|P)\b(?:\s+or\s+\b(Might|Agility|Reason|Intuition|Presence|Strongest|M|A|R|I|P)\b)*/gi, (match) => {
+      const bonus = resolveAttributeChoice(match, sheet);
+      return Number.isFinite(bonus) ? String(bonus) : match;
+    })
+    .replace(/\s+/g, ' ')
+    .trim();
+
+  if (!/^[\d+\-*/ ().]+$/.test(normalized)) {
+    return normalized;
+  }
+
+  const total = evaluateSimpleArithmetic(normalized);
+  return Number.isFinite(total) ? String(total) : normalized;
+}
+
+function resolveAttributeChoice(text, sheet) {
+  const attributes = String(text || '')
+    .split(/\s+or\s+/i)
+    .map(normalizeAttributeName)
+    .filter(Boolean);
+  if (!attributes.length) {
+    return NaN;
+  }
+  return attributes.reduce((best, attribute) => Math.max(best, getAttributeBonus(sheet, attribute)), -Infinity);
+}
+
+function normalizeAttributeName(attribute) {
+  const key = String(attribute || '').trim().toLowerCase();
+  const map = {
+    m: 'Might',
+    might: 'Might',
+    a: 'Agility',
+    agility: 'Agility',
+    r: 'Reason',
+    reason: 'Reason',
+    i: 'Intuition',
+    intuition: 'Intuition',
+    p: 'Presence',
+    presence: 'Presence',
+    strongest: 'Strongest',
+  };
+  return map[key] || '';
+}
+
+function evaluateSimpleArithmetic(expression) {
+  const tokens = String(expression || '').match(/\d+|[+\-*/()]/g);
+  if (!tokens || tokens.join('') !== String(expression || '').replace(/\s+/g, '')) {
+    return NaN;
+  }
+
+  let index = 0;
+  const peek = () => tokens[index];
+  const consume = () => tokens[index++];
+
+  function parsePrimary() {
+    const token = consume();
+    if (token === '(') {
+      const value = parseExpression();
+      if (consume() !== ')') return NaN;
+      return value;
+    }
+    if (/^\d+$/.test(token || '')) {
+      return Number.parseInt(token, 10);
+    }
+    return NaN;
+  }
+
+  function parseFactor() {
+    let value = parsePrimary();
+    while (peek() === '*' || peek() === '/') {
+      const op = consume();
+      const right = parsePrimary();
+      if (!Number.isFinite(value) || !Number.isFinite(right)) return NaN;
+      value = op === '*' ? value * right : value / right;
+    }
+    return value;
+  }
+
+  function parseExpression() {
+    let value = parseFactor();
+    while (peek() === '+' || peek() === '-') {
+      const op = consume();
+      const right = parseFactor();
+      if (!Number.isFinite(value) || !Number.isFinite(right)) return NaN;
+      value = op === '+' ? value + right : value - right;
+    }
+    return value;
+  }
+
+  const result = parseExpression();
+  return index === tokens.length ? result : NaN;
 }
 
 async function fetchCharacterSummary(routes, characterId) {
