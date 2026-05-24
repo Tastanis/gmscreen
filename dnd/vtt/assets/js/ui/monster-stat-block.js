@@ -419,7 +419,7 @@ function renderAbility(ability, category) {
     );
   }
 
-  if (resourceCost && (category === 'villain_action' || category === 'malice')) {
+  if (resourceCost) {
     sections.push(
       `<p class="vtt-monster-stat-block__ability-resource"><strong>Cost:</strong> ${formatText(
         resourceCost

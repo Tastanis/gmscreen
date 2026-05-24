@@ -232,7 +232,9 @@ export function normalizeMonsterAbility(ability, category) {
   }
 
   const resourceCost = sanitizeMonsterString(ability.resource_cost ?? ability.cost ?? '');
-  if (resourceCost && (category === 'villain_action' || category === 'malice')) {
+  if (resourceCost) {
+    // Any category can carry a resource cost (e.g. Maneuvers and Actions
+    // commonly cost N Malice on monsters). Don't filter by category.
     normalized.resource_cost = resourceCost;
   }
 

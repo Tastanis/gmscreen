@@ -267,11 +267,35 @@
         var rows = ['tier1', 'tier2', 'tier3'].map(function (tier) {
             var entry = test[tier];
             if (!entry || typeof entry !== 'object') return '';
-            var text = [
-                entry.damage_amount ? 'Damage: ' + entry.damage_amount : '',
-                entry.effect || ''
-            ].filter(Boolean).join(' - ');
-            if (!text) return '';
+            var pieces = [];
+
+            // Damage clause: "5 fire damage" / "5 damage"
+            var dmgAmount = (entry.damage_amount || '').toString().trim();
+            if (dmgAmount) {
+                var dmgType = (entry.damage_type || '').toString().trim();
+                pieces.push(dmgAmount + (dmgType ? ' ' + dmgType : '') + ' damage');
+            }
+
+            // Potency clause: "M<2 prone"
+            var attr = (entry.attribute || '').toString().trim();
+            var attrEffect = (entry.attribute_effect || '').toString().trim();
+            if (attrEffect) {
+                var attrInitial = attr ? attr.charAt(0).toUpperCase() : '';
+                var threshold = entry.attribute_threshold;
+                var threshStr = (threshold !== undefined && threshold !== null && threshold !== '')
+                    ? String(threshold) : '';
+                if (attrInitial && threshStr) {
+                    pieces.push(attrInitial + '<' + threshStr + ' ' + attrEffect);
+                } else {
+                    pieces.push(attrEffect);
+                }
+            }
+
+            // Free-text tier effect (older field name some importers use)
+            if (entry.effect) pieces.push(entry.effect);
+
+            if (!pieces.length) return '';
+            var text = pieces.join('; ');
             return '<div><span>' + escapeHtml(labels[tier]) + '</span><p>' + formatText(text) + '</p></div>';
         }).filter(Boolean).join('');
         if (!rows) return '';
