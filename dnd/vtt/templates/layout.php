@@ -4,6 +4,7 @@
 /** @var array<string,string> $routes */
 
 $assetVersion = (int) ($config['assetsVersion'] ?? time());
+$jsonScriptFlags = JSON_HEX_TAG | JSON_HEX_APOS | JSON_HEX_QUOT | JSON_HEX_AMP | JSON_PRETTY_PRINT;
 
 // Include navigation bar
 require_once __DIR__ . '/../../includes/strix-nav.php';
@@ -39,9 +40,9 @@ require_once __DIR__ . '/../../includes/strix-nav.php';
         <?= $sections['chatPanel'] ?? '' ?>
     </div>
     <script>
-        window.vttConfig = <?= json_encode($config, JSON_HEX_TAG | JSON_HEX_APOS | JSON_HEX_QUOT | JSON_HEX_AMP) ?>;
-        window.chatHandlerUrl = <?= json_encode($config['chatHandlerUrl'] ?? ($routes['chat'] ?? '/dnd/chat_handler.php'), JSON_HEX_TAG | JSON_HEX_APOS | JSON_HEX_QUOT | JSON_HEX_AMP) ?>;
-        window.chatParticipants = <?= json_encode($config['chatParticipants'] ?? [], JSON_HEX_TAG | JSON_HEX_APOS | JSON_HEX_QUOT | JSON_HEX_AMP) ?>;
+        window.vttConfig = <?= json_encode($config, $jsonScriptFlags) ?>;
+        window.chatHandlerUrl = <?= json_encode($config['chatHandlerUrl'] ?? ($routes['chat'] ?? '/dnd/chat_handler.php'), $jsonScriptFlags) ?>;
+        window.chatParticipants = <?= json_encode($config['chatParticipants'] ?? [], $jsonScriptFlags) ?>;
         // Pusher configuration for real-time sync
         window.vttPusherConfig = {
             key: 'c32516844b741a8b1772',
@@ -50,7 +51,7 @@ require_once __DIR__ . '/../../includes/strix-nav.php';
         };
         // Pusher chat channel — `chat-updated` notifications drive
         // immediate refetch instead of 1.5s polling.
-        window.chatPusherConfig = <?= json_encode($config['chatPusher'] ?? null, JSON_HEX_TAG | JSON_HEX_APOS | JSON_HEX_QUOT | JSON_HEX_AMP) ?>;
+        window.chatPusherConfig = <?= json_encode($config['chatPusher'] ?? null, $jsonScriptFlags) ?>;
     </script>
     <script src="../js/chat-panel.js?v=<?= $assetVersion ?>"></script>
     <script src="../character_sheet/ability-automation/primitives.js?v=<?= $assetVersion ?>"></script>
