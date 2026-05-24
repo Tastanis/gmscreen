@@ -5630,6 +5630,38 @@ export function mountBoardInteractions(store, routes = {}) {
         detail,
       })
     );
+
+    // Monster routing — runs after the PC dispatch so the PC panel sees the
+    // null detail and closes when a monster is what's actually selected.
+    // Multi-select uses the first selected token (per Phase 9 spec).
+    routeMonsterSelection();
+  }
+
+  function routeMonsterSelection() {
+    const firstId = selectedTokenIds.size > 0 ? Array.from(selectedTokenIds)[0] : null;
+    const firstPlacement = firstId ? getPlacementFromStore(firstId) : null;
+    const isMonsterToken = Boolean(firstPlacement && firstPlacement.monster);
+
+    if (!isMonsterToken) {
+      if (window.MonsterAbilityTray?.close) window.MonsterAbilityTray.close();
+      if (window.MonsterSummaryPanel?.close) window.MonsterSummaryPanel.close();
+      return;
+    }
+
+    // Visibility gate — players who shouldn't see this monster get nothing.
+    if (typeof window.canViewMonster === 'function' && !window.canViewMonster(firstPlacement)) {
+      if (window.MonsterAbilityTray?.close) window.MonsterAbilityTray.close();
+      if (window.MonsterSummaryPanel?.close) window.MonsterSummaryPanel.close();
+      return;
+    }
+
+    const monster = firstPlacement.monster;
+    if (window.MonsterAbilityTray?.openFor) {
+      window.MonsterAbilityTray.openFor(firstPlacement, monster);
+    }
+    if (window.MonsterSummaryPanel?.openFor) {
+      window.MonsterSummaryPanel.openFor(firstPlacement, monster);
+    }
   }
 
   function handleCharacterSummaryConditionRemove(event) {
@@ -10998,6 +11030,53 @@ export function mountBoardInteractions(store, routes = {}) {
       syncCombatStateToStore();
     }
   }
+
+  // Programmatic Malice API — consumed by monster ability automation
+  // (window.MonsterAbilityRunner) to auto-spend on villain/malice abilities.
+  // Read-write surface deliberately mirrors what the malice panel already does
+  // internally so GM-applied changes and automation-applied changes go through
+  // the same setMaliceCount path (and therefore the same sync hook).
+  window.MaliceTracker = {
+    get: function () { return maliceCount; },
+    spend: function (amount) {
+      const n = Math.max(0, Math.trunc(Number(amount) || 0));
+      if (n <= 0) return { spent: 0, remaining: maliceCount };
+      setMaliceCount(Math.max(0, maliceCount - n));
+      return { spent: n, remaining: maliceCount };
+    },
+    add: function (amount) {
+      const n = Math.max(0, Math.trunc(Number(amount) || 0));
+      if (n <= 0) return { added: 0, current: maliceCount };
+      setMaliceCount(maliceCount + n);
+      return { added: n, current: maliceCount };
+    },
+  };
+
+  // VTT board callback surface — mirrors what character-summary-panel.js wires
+  // into the PC runner. Every callback dispatches the same custom event the
+  // board already listens to, so monster automation reuses the entire board
+  // routing layer (target picker, damage flow, condition tracker, etc.)
+  // without us reimplementing anything.
+  function dispatchBoardCustom(eventName, detailKey, payload) {
+    return new Promise((resolve, reject) => {
+      const detail = { resolve, reject };
+      detail[detailKey] = payload || {};
+      document.dispatchEvent(new CustomEvent(eventName, { detail }));
+    });
+  }
+  window.VTTBoardCallbacks = {
+    selectTarget: function (cfg) { return dispatchBoardCustom('vtt:automation-select-target', 'targetConfig', cfg); },
+    selectAreaTarget: function (cfg) { return dispatchBoardCustom('vtt:automation-select-area', 'targetConfig', cfg); },
+    cancelTargetSelection: function () { document.dispatchEvent(new CustomEvent('vtt:automation-cancel-target')); },
+    cancelAreaSelection: function () { document.dispatchEvent(new CustomEvent('vtt:automation-cancel-area')); },
+    applyDamage: function (payload) { return dispatchBoardCustom('vtt:automation-apply-damage', 'payload', payload); },
+    applyHeal: function (payload) { return dispatchBoardCustom('vtt:automation-apply-heal', 'payload', payload); },
+    applyCondition: function (payload) { return dispatchBoardCustom('vtt:automation-apply-condition', 'payload', payload); },
+    checkPotency: function (payload) { return dispatchBoardCustom('vtt:automation-check-potency', 'payload', payload); },
+    forceMove: function (payload) { return dispatchBoardCustom('vtt:automation-force-move', 'payload', payload); },
+    applyTemporaryStamina: function (payload) { return dispatchBoardCustom('vtt:automation-apply-temporary-stamina', 'payload', payload); },
+    registerTrigger: function (payload) { return dispatchBoardCustom('vtt:automation-register-trigger', 'payload', payload); },
+  };
 
   function openMalicePanel() {
     if (!malicePanel || !isGmUser() || !combatActive) {
@@ -16573,6 +16652,12 @@ export function mountBoardInteractions(store, routes = {}) {
               <span>Hidden from Players</span>
             </label>
           </div>
+          <div class="vtt-token-settings__row" data-token-settings-visible-row hidden>
+            <label class="vtt-token-settings__toggle">
+              <input type="checkbox" data-token-settings-toggle="visibleToPlayers" />
+              <span>Visible to Players (allied monster)</span>
+            </label>
+          </div>
         </div>
       `
       : '';
@@ -16809,6 +16894,8 @@ export function mountBoardInteractions(store, routes = {}) {
       conditionApply: element.querySelector('[data-token-settings-condition-apply]'),
       conditionList: element.querySelector('[data-token-settings-condition-list]'),
       hiddenToggle: element.querySelector('[data-token-settings-toggle="hidden"]'),
+      visibleToPlayersRow: element.querySelector('[data-token-settings-visible-row]'),
+      visibleToPlayersToggle: element.querySelector('[data-token-settings-toggle="visibleToPlayers"]'),
       sizeSelect: element.querySelector('[data-token-settings-size-select]'),
       levelSection: element.querySelector('[data-token-settings-level-section]'),
       levelName: element.querySelector('[data-token-settings-level-name]'),
@@ -16938,6 +17025,24 @@ export function mountBoardInteractions(store, routes = {}) {
           return;
         }
 
+        refreshTokenSettings();
+      });
+    }
+
+    if (menu.visibleToPlayersToggle) {
+      menu.visibleToPlayersToggle.addEventListener('change', () => {
+        if (!activeTokenSettingsId) return;
+        const visible = menu.visibleToPlayersToggle.checked;
+        const team = visible ? 'ally' : 'enemy';
+        const targetIds = getTokenSettingsTargetIds(activeTokenSettingsId);
+        const updated = updatePlacementsByIds(targetIds, (target) => {
+          target.team = team;
+          target.combatTeam = team;
+        });
+        if (!updated) {
+          menu.visibleToPlayersToggle.checked = !visible;
+          return;
+        }
         refreshTokenSettings();
       });
     }
@@ -17947,6 +18052,17 @@ export function mountBoardInteractions(store, routes = {}) {
       );
     }
 
+    // "Visible to Players" toggle is monster-only. Hide the row for non-monster
+    // placements so PC tokens don't get the irrelevant control.
+    if (tokenSettingsMenu.visibleToPlayersRow) {
+      const isMonsterToken = Boolean(placement.monster);
+      tokenSettingsMenu.visibleToPlayersRow.hidden = !isMonsterToken;
+      if (tokenSettingsMenu.visibleToPlayersToggle) {
+        const team = normalizeCombatTeam(placement?.team ?? placement?.combatTeam ?? null);
+        tokenSettingsMenu.visibleToPlayersToggle.checked = team === 'ally';
+      }
+    }
+
     // Size override
     if (tokenSettingsMenu.sizeSelect) {
       const currentSize = placement.sizeOverride
@@ -18144,8 +18260,28 @@ export function mountBoardInteractions(store, routes = {}) {
     }
 
     const team = normalizeCombatTeam(placement?.team ?? placement?.combatTeam ?? null);
-    return team === 'ally';
+    if (team === 'ally') {
+      return true;
+    }
+
+    // Per-user claim grants visibility — same idea as PC token claims. A
+    // monster claimed to the current user is treated as theirs to see.
+    const userId = typeof getCurrentUserId === 'function' ? getCurrentUserId() : null;
+    if (!userId) return false;
+    const state = boardApi?.getState?.() ?? {};
+    const activeSceneId = state?.boardState?.activeSceneId ?? null;
+    const sceneEntry = activeSceneId ? state?.boardState?.sceneState?.[activeSceneId] ?? null : null;
+    const claimedTokens = sceneEntry?.claimedTokens;
+    if (!claimedTokens || typeof claimedTokens !== 'object') return false;
+    const claimedUserId = claimedTokens[placement.id];
+    if (!claimedUserId) return false;
+    return normalizeProfileId(claimedUserId) === userId;
   }
+
+  // Expose the visibility check so the monster ability tray (Phase 5) and the
+  // monster side panel (Phase 6) gate themselves on the same rule the floating
+  // stat block already uses.
+  window.canViewMonster = canCurrentUserViewMonsterStatBlock;
 
   function syncConditionControls(placement) {
     if (!tokenSettingsMenu) {

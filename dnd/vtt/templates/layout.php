@@ -27,11 +27,14 @@ require_once __DIR__ . '/../../includes/strix-nav.php';
     <link rel="stylesheet" href="assets/css/stairs.css?v=<?= $assetVersion ?>" />
     <link rel="stylesheet" href="../dice-roller/dice-roller.css?v=<?= $assetVersion ?>" />
     <link rel="stylesheet" href="../character_sheet/ability-automation/automation.css?v=<?= $assetVersion ?>" />
+    <link rel="stylesheet" href="assets/css/monster-ability-tray.css?v=<?= $assetVersion ?>" />
+    <link rel="stylesheet" href="assets/css/monster-summary-panel.css?v=<?= $assetVersion ?>" />
 </head>
 <body class="vtt-body">
     <?php renderStrixNav('vtt'); ?>
     <div id="vtt-app" class="vtt-app" data-routes='<?= json_encode($routes, JSON_HEX_TAG | JSON_HEX_APOS | JSON_HEX_QUOT | JSON_HEX_AMP) ?>'>
         <?= $sections['characterSummaryPanel'] ?? '' ?>
+        <?= $sections['monsterSummaryPanel'] ?? '' ?>
         <?= $sections['settingsPanel'] ?? '' ?>
         <main class="vtt-app__main" id="vtt-main" tabindex="-1">
             <?= $sections['sceneBoard'] ?? '' ?>
@@ -57,6 +60,9 @@ require_once __DIR__ . '/../../includes/strix-nav.php';
     <script src="../character_sheet/ability-automation/schema.js?v=<?= $assetVersion ?>"></script>
     <script src="../character_sheet/ability-automation/catalog.js?v=<?= $assetVersion ?>"></script>
     <script src="../character_sheet/ability-automation/runner.js?v=<?= $assetVersion ?>"></script>
+    <script src="assets/js/ui/monster-ability-runner-glue.js?v=<?= $assetVersion ?>"></script>
+    <script src="assets/js/ui/monster-ability-tray.js?v=<?= $assetVersion ?>"></script>
+    <script src="assets/js/ui/monster-summary-panel.js?v=<?= $assetVersion ?>"></script>
     <script type="module" src="assets/js/bootstrap.js?v=<?= $assetVersion ?>"></script>
 </body>
 </html>

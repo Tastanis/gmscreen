@@ -198,6 +198,69 @@
     };
   }
 
+  // ---------- winded detection (universal) ----------
+  //
+  // Any actor (PC or monster) is "winded" at half HP rounded down. The runner
+  // uses this to apply optional `whenWinded` overrides on blocks. Sources, in
+  // priority order:
+  //   1. state.context.isWinded() if the host supplies it
+  //   2. state.hero.currentStamina / state.hero.maxStamina (PCs)
+  //   3. state.hero.hp / state.hero.maxHp (monsters)
+  //   4. state.sourceToken.hp / maxHp (board fallback)
+  function isActorWinded(state) {
+    if (state?.context && typeof state.context.isWinded === "function") {
+      try {
+        const result = state.context.isWinded();
+        if (typeof result === "boolean") return result;
+      } catch (_err) { /* fall through */ }
+    }
+    const candidates = [
+      { cur: state?.hero?.currentStamina, max: state?.hero?.maxStamina },
+      { cur: state?.hero?.hp, max: state?.hero?.maxHp },
+      { cur: state?.hero?.stamina, max: state?.hero?.maxStaminaTotal },
+      { cur: state?.sourceToken?.hp, max: state?.sourceToken?.maxHp },
+    ];
+    for (const c of candidates) {
+      const cur = Number(c.cur);
+      const max = Number(c.max);
+      if (Number.isFinite(cur) && Number.isFinite(max) && max > 0) {
+        return cur <= Math.floor(max / 2);
+      }
+    }
+    return false;
+  }
+
+  // If the block carries a `whenWinded` override and the actor is winded,
+  // produce a shallow-merged block with the override fields applied. Does NOT
+  // mutate the original block. Returns the original block if no override or
+  // not winded.
+  function applyWhenWindedToBlock(state, block) {
+    if (!block || typeof block !== "object" || !block.whenWinded) return block;
+    if (!isActorWinded(state)) return block;
+    const w = block.whenWinded;
+    if (block.type === "powerRoll") {
+      const merged = { ...block };
+      if (w.bonus !== undefined) merged.bonus = w.bonus;
+      if (w.flatBonus !== undefined) merged.flatBonus = w.flatBonus;
+      if (w.attribute !== undefined) merged.attribute = w.attribute;
+      if (w.target !== undefined) merged.target = w.target;
+      if (w.tiers && typeof w.tiers === "object") {
+        merged.tiers = { ...(block.tiers || {}) };
+        for (const key of Object.keys(w.tiers)) {
+          merged.tiers[key] = w.tiers[key];
+        }
+      }
+      return merged;
+    }
+    if (block.type === "effect") {
+      const merged = { ...block };
+      if (Array.isArray(w.effects)) merged.effects = w.effects;
+      if (w.target !== undefined) merged.target = w.target;
+      return merged;
+    }
+    return block;
+  }
+
   function resolveAttribute(state, attribute) {
     // Array form means "highest bonus among these specific attributes" — e.g.
     // ["M", "A"] = highest of Might or Agility only (free strike rule).
@@ -489,7 +552,12 @@
   }
 
   function getPowerRollTotal(state, block) {
-    const resolved = resolveAttribute(state, block.attribute);
+    // flatBonus (monster-style literal) takes priority over attribute lookup.
+    // When set, attribute is informational only and contributes 0 bonus.
+    const hasFlat = block && typeof block.flatBonus === "number" && Number.isFinite(block.flatBonus);
+    const resolved = hasFlat
+      ? { attribute: typeof block.attribute === "string" ? block.attribute : "Flat", bonus: asInt(block.flatBonus, 0) }
+      : resolveAttribute(state, block.attribute);
     const attributeBonus = resolved.bonus;
     const bonus = asInt(block.bonus);
     const manualBonus = asInt(state.manualBonus);
@@ -1532,17 +1600,20 @@
   // ---------- main loop ----------
 
   async function runBlock(state, block) {
-    switch (block.type) {
+    // Apply optional whenWinded override before dispatch. Universal — works for
+    // any actor that exposes HP/stamina via state.hero or state.context.
+    const effective = applyWhenWindedToBlock(state, block);
+    switch (effective.type) {
       case "target":
-        return runTargetBlock(state, block);
+        return runTargetBlock(state, effective);
       case "powerRoll":
-        return runPowerRollBlock(state, block);
+        return runPowerRollBlock(state, effective);
       case "effect":
-        return runEffectBlock(state, block);
+        return runEffectBlock(state, effective);
       case "trigger":
-        return runTriggerBlock(state, block);
+        return runTriggerBlock(state, effective);
       case "persistent":
-        return runPersistentBlock(state, block);
+        return runPersistentBlock(state, effective);
       default:
         return null;
     }

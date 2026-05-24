@@ -1,0 +1,166 @@
+/* Monster Summary Panel — left-side at-a-glance reference for monster tokens.
+   Sibling to .vtt-character-summary; shares the same panel-width slot so only
+   one panel is visible at a time (Phase 9 router enforces). Distinct color
+   palette so the GM can tell PC vs monster panel apart visually. */
+
+.vtt-monster-summary {
+  position: fixed;
+  top: var(--vtt-character-panel-top, 0);
+  bottom: var(--vtt-character-panel-offset, 0);
+  left: 0;
+  width: var(--vtt-character-panel-effective-width, 320px);
+  background: rgba(24, 12, 10, 0.96);
+  border: 1px solid rgba(220, 180, 160, 0.46);
+  border-left: 0;
+  color: #f2d8c8;
+  box-shadow: 10px 0 26px rgba(0, 0, 0, 0.4);
+  overflow-y: auto;
+  transform: translateX(calc(-100% - var(--vtt-character-panel-offset, 0px)));
+  transition: transform 180ms ease;
+  z-index: 1280;
+  pointer-events: none;
+  font-family: Georgia, "Times New Roman", serif;
+}
+
+.vtt-monster-summary--open {
+  transform: translateX(0);
+  pointer-events: auto;
+}
+
+.vtt-monster-summary--closed {
+  pointer-events: none;
+}
+
+.vtt-monster-summary__tuck {
+  position: sticky;
+  top: 8px;
+  float: right;
+  width: 30px;
+  height: 30px;
+  margin: 8px 8px 0 0;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  border: 1px solid rgba(239, 220, 200, 0.42);
+  border-radius: 4px;
+  background: rgba(24, 12, 10, 0.86);
+  color: #f2d8c8;
+  cursor: pointer;
+  font: 900 1rem/1 "Inter", "Segoe UI", sans-serif;
+  z-index: 4;
+}
+
+.vtt-monster-summary__tuck:hover,
+.vtt-monster-summary__tuck:focus-visible {
+  background: rgba(80, 30, 22, 0.96);
+  color: #fff;
+  outline: none;
+}
+
+.vtt-monster-summary__empty {
+  padding: 20px 16px;
+  color: rgba(242, 216, 200, 0.7);
+  font-style: italic;
+}
+
+.vtt-monster-summary__header {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  padding: 12px 14px 8px;
+  border-bottom: 1px solid rgba(220, 180, 160, 0.32);
+}
+
+.vtt-monster-summary__name {
+  font: 800 1.2rem/1.15 "Inter", "Segoe UI", sans-serif;
+  letter-spacing: 0.02em;
+  color: #fff;
+}
+
+.vtt-monster-summary__image {
+  width: 100%;
+  max-width: 180px;
+  border-radius: 6px;
+  border: 1px solid rgba(220, 180, 160, 0.4);
+}
+
+.vtt-monster-summary__statline {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 10px;
+  padding: 8px 14px;
+  border-bottom: 1px solid rgba(220, 180, 160, 0.16);
+  font: 600 0.84rem/1.2 "Inter", "Segoe UI", sans-serif;
+  color: #efd8c4;
+}
+
+.vtt-monster-summary__statline-item strong {
+  color: #fff;
+}
+
+.vtt-monster-summary__section {
+  padding: 10px 14px;
+  border-bottom: 1px solid rgba(220, 180, 160, 0.16);
+}
+
+.vtt-monster-summary__section:last-child {
+  border-bottom: 0;
+}
+
+.vtt-monster-summary__section-title {
+  margin: 0 0 6px;
+  font: 700 0.78rem/1.2 "Inter", "Segoe UI", sans-serif;
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
+  color: rgba(242, 216, 200, 0.7);
+}
+
+.vtt-monster-summary__characteristics {
+  display: grid;
+  grid-template-columns: repeat(5, minmax(0, 1fr));
+  gap: 6px;
+  text-align: center;
+  font: 600 0.84rem/1.2 "Inter", "Segoe UI", sans-serif;
+}
+
+.vtt-monster-summary__characteristic-label {
+  display: block;
+  font-size: 0.7rem;
+  color: rgba(242, 216, 200, 0.65);
+  text-transform: uppercase;
+}
+
+.vtt-monster-summary__characteristic-value {
+  display: block;
+  font-size: 1rem;
+  color: #fff;
+}
+
+.vtt-monster-summary__ability-list {
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.vtt-monster-summary__ability {
+  margin: 0 0 8px;
+  padding: 0 0 6px;
+  border-bottom: 1px dashed rgba(220, 180, 160, 0.18);
+}
+
+.vtt-monster-summary__ability:last-child {
+  border-bottom: 0;
+  margin-bottom: 0;
+}
+
+.vtt-monster-summary__ability-name {
+  margin: 0 0 4px;
+  font: 700 0.92rem/1.2 Georgia, "Times New Roman", serif;
+  color: #fff;
+}
+
+.vtt-monster-summary__ability-text {
+  margin: 0;
+  font: 400 0.86rem/1.35 Georgia, "Times New Roman", serif;
+  color: #efe1d2;
+}
