@@ -217,24 +217,10 @@ Rolls 2d10 + attribute, picks a tier, applies that tier's effects to the target 
 |---|---|
 | `attribute` | `"Might"`, `"Agility"`, `"Reason"`, `"Intuition"`, `"Presence"`, or `"Strongest"` (highest of all 5). Also accepts an array like `["M", "A"]` meaning "highest of these specific attributes" — used for free strikes (highest of M or A only). |
 | `bonus` | int (added to the roll). |
-| `flatBonus` | int — **monster-friendly literal roll bonus**. When set, the runner uses this *instead of* resolving `attribute` via the actor's stats. PC authoring should leave this unset; monster authoring should set this and treat `attribute` as informational. Example: `"flatBonus": 6`. |
 | `target` | string — name of a target block. Defaults to most recent target group. |
 | `tiers.tier1` / `tier2` / `tier3` | each `{ effects: [...] }`. Tier1 = `≤11`, tier2 = `12-16`, tier3 = `17+`. |
-| `whenWinded` | optional sub-object with override values applied when the actor is winded (HP ≤ floor(maxHP/2)). Supported keys: `bonus`, `flatBonus`, `attribute`, `target`, `tiers`. Shallow-merged over the base block. Universal — both PCs and monsters can use it. |
 
 Each `effects[]` entry is an [Effect](#effects) — `damage`, `condition`, `forcedMovement`, `potency`, etc.
-
-**Winded example** (monster gains an edge while winded — modeled as +2 flat bonus):
-
-```json
-{
-  "type": "powerRoll",
-  "flatBonus": 4,
-  "attribute": "Might",
-  "tiers": { "tier1": { "effects": [{ "kind": "damage", "amount": 3 }] } },
-  "whenWinded": { "flatBonus": 6 }
-}
-```
 
 ### `effect`
 
@@ -249,8 +235,6 @@ A non-roll effect block. Apply to target group.
 ```
 
 Place these before or after the power roll for "effects that apply regardless of tier" (book "Effect:" line).
-
-Supports an optional `whenWinded` sub-object (same as `powerRoll`). On `effect` blocks, allowed override keys are `effects` and `target`. The override `effects` array fully replaces the base when actor is winded.
 
 ### `trigger`
 
@@ -974,50 +958,3 @@ A chat message names which modifiers kicked in so the table can see "Sword Maste
 - `replaceEffect` (e.g. "use new damage table") — not yet
 - `insertEffectAfter` (e.g. "after damage, also push") — not yet
 - `cost` / `perEncounter` / `perRound` — not yet
-
----
-
-## Monster abilities
-
-Monster automation reuses the same v3 schema PCs use, with a few practical differences. Author monster JSON in the monster creator (`Automate` button next to each ability row); the JSON is stored on the ability and the VTT monster ability tray launches it from the same runner.
-
-### Rules of thumb
-
-- **Use static numbers.** Damage and potency in monster JSON are literals, not formulas. Write `"amount": 12` and `"target": 13`, never `"amount": "7+M"`.
-- **Use `flatBonus` on `powerRoll`.** Monsters skip attribute lookup. Set the literal roll bonus directly:
-  ```json
-  { "type": "powerRoll", "flatBonus": 6, "tiers": { ... } }
-  ```
-  The `attribute` field, if set, is informational only and contributes 0.
-- **`whenWinded` works the same as PCs.** A monster token is winded at HP ≤ floor(maxHP/2). Use the modifier to swap power-roll values or effects when the monster is bloodied.
-- **Heroic resource and recoveries are skipped.** Monsters have neither. If automation tries to `spend` heroic or call a recoveries-based heal, the runner posts a chat note and continues — the effect is no-op for monsters.
-- **Marks (judgment, bonded) are PC-only.** Authoring `applyMark` / `endMark` / `ifMark` on a monster ability degrades to a chat reminder; no mark state actually changes.
-- **Villain/malice abilities auto-deduct from the malice pool.** Put the cost in the ability's `resource_cost` field (e.g. `"3"`, `"3 points"`, `"3 Malice"` — the runner parses the first integer). When fired, the monster runner reads `window.MaliceTracker.get()`, prompts if there's a deficit, and calls `window.MaliceTracker.spend(cost)`.
-- **Triggered actions fire on confirm.** When the GM clicks a triggered-action launcher in the monster tray, a confirm modal appears before the runner kicks in. No auto-detection from game state.
-- **Summons / spawns post a chat note.** Use a `note`-kind effect describing what to place — the GM grabs and places the new token manually. (v1: no auto-token-placement from automation.)
-
-### Example monster JSON — Fire Elemental "Burning Slam" (Action, 2 Malice variant)
-
-```json
-{
-  "schema": "ability-automation/v3",
-  "version": 3,
-  "cards": [
-    { "type": "target", "mode": "token", "predicate": "enemy", "count": 1, "distance": { "form": "melee", "value": 1 } },
-    {
-      "type": "powerRoll",
-      "flatBonus": 5,
-      "attribute": "Might",
-      "tiers": {
-        "tier1": { "effects": [{ "kind": "damage", "amount": 4, "damageType": "fire" }] },
-        "tier2": { "effects": [{ "kind": "damage", "amount": 8, "damageType": "fire" }, { "kind": "condition", "name": "slowed", "duration": "endOfTurn" }] },
-        "tier3": { "effects": [{ "kind": "damage", "amount": 12, "damageType": "fire" }, { "kind": "condition", "name": "slowed", "duration": "saveEnds" }, { "kind": "forcedMovement", "verb": "push", "distance": 2 }] }
-      },
-      "whenWinded": { "flatBonus": 7 }
-    }
-  ]
-}
-```
-
-When this monster is winded the roll bonus rises from +5 to +7, modeling "enraged when bloodied" mechanics without needing two ability cards.
-

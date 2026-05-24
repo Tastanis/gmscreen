@@ -11,31 +11,10 @@ For *how* to write JSON, see `AUTHORING.md`. This file is `what is supported`.
 | type | Implementation |
 |---|---|
 | `target` | Full |
-| `powerRoll` | Full. Supports `flatBonus` (literal roll bonus that bypasses attribute lookup — monster-friendly) and `whenWinded` overrides (see Universal Modifiers). |
-| `effect` | Full. Supports `whenWinded` overrides (see Universal Modifiers). |
+| `powerRoll` | Full |
+| `effect` | Full |
 | `trigger` | Schema + registration against `AbilityTriggerBus`. Authored `match` config fires the blue `!` overlay when its event/filter matches; click to resolve manually. No structured `match` → chat reminder fallback. |
 | `persistent` | Schema + registration as a board-side persistent zone. Requires a preceding area `target` block so the zone has a footprint. Ticks at owner's `tickAt` (startOfTurn or endOfTurn): deducts upkeep from owner's heroic resource, applies effects to every creature inside the zone footprint. Auto-ends on combat end or when owner can't pay upkeep. **In-memory only** — page reload wipes zones (Pass 2 will add persistence). |
-
-## Universal modifiers (apply to any actor — PC or monster)
-
-| Modifier | Status | Notes |
-|---|---|---|
-| `powerRoll.flatBonus` | Full | Integer. When present, runner uses this as the roll bonus and ignores `attribute`-based stat lookup. PCs typically omit (let attribute resolve); monsters typically set it to a literal value. PC paths untouched when omitted. |
-| `whenWinded` (on `powerRoll`) | Full | Sub-object with `bonus`, `flatBonus`, `attribute`, `target`, or `tiers` overrides. Shallow-merged over the base block when the actor's current HP/stamina ≤ floor(max/2). |
-| `whenWinded` (on `effect`) | Full | Sub-object with `effects` and/or `target` overrides. The override `effects` array fully replaces the base when actor is winded. |
-
-## Monster-specific runtime behavior
-
-The monster ability tray + `window.MonsterAbilityRunner.start()` add the following layer on top of the runner:
-
-| Behavior | When | Effect |
-|---|---|---|
-| Malice auto-spend | `category` is `villain_action` or `malice` | Reads cost from `ability.resource_cost` (first integer), calls `window.MaliceTracker.spend(cost)`. Confirm dialog if pool is short. |
-| Triggered-action confirm | `category` is `triggered_action` | GM-clickable launcher fires a confirm dialog before invoking the runner. |
-| `getAttributeBonus` returns 0 | always | Monsters use `flatBonus`; attribute lookups deliberately produce no bonus. |
-| `getPotencyThreshold` returns 0 | always | Monster JSON should hard-code potency `target` integers. |
-| `isWinded()` | always | Derives from `placement.hp <= floor(placement.maxHp / 2)`. |
-| Visibility gate | tray/panel open | `window.canViewMonster(placement)` — GM OR `team === 'ally'` OR placement claimed by current user. |
 
 ## Effect kinds — `effect.kind` (used inside `tier.effects`, `effect.effects`, `trigger.effects`, `persistent.effects`, `potency.onFail`, `spend.effects`)
 
@@ -48,8 +27,8 @@ The monster ability tray + `window.MonsterAbilityRunner.start()` add the followi
 | `forcedMovement` (`slide`) | Full | Any cell within Chebyshev distance, no source-distance constraint |
 | `forcedMovement` (`vertical*`) | Partial | Falls through to horizontal push/pull/slide. Z-axis not modeled |
 | `potency` | Full | Calls `checkPotency`, runs `onFail` effects on failed targets |
-| `spend` | Full | Prompts user contextually, runs nested effects on accept. **Monster behavior:** spending `heroic` or `recovery` resources is skipped with a chat note — monsters have no such pools. |
-| `heal` | Full | Flat `amount` heals via board heal path (capped at max). `recoveries` reads target's recovery value from their sheet and heals that × N; recoveries counter on the sheet is NOT auto-decremented (chat reminder so the player updates it). **Monster behavior:** `recoveries`-based heals are skipped with a chat note; flat `amount` heals work fine. |
+| `spend` | Full | Prompts user contextually, runs nested effects on accept |
+| `heal` | Full | Flat `amount` heals via board heal path (capped at max). `recoveries` reads target's recovery value from their sheet and heals that × N; recoveries counter on the sheet is NOT auto-decremented (chat reminder so the player updates it). |
 | `temporaryStamina` | Full | Applies via board heal path with overage allowed (over-max shows as temp) |
 | `teleport` | Full | Reuses the slide-shaped destination picker; legal-cell highlight covers any cell within Chebyshev distance. No stability or size penalty. Clicking an occupied cell still routes through the slide-style collision path — pick an empty cell to follow the rules. |
 | `swap` | Full | Atomic transpose of caster ↔ target placements. Best-effort footprint check; non-equal sizes allowed (GM corrects manually). |
@@ -59,8 +38,8 @@ The monster ability tray + `window.MonsterAbilityRunner.start()` add the followi
 | `ifKeyword` | Full | Branches based on ability's `keywords`. `then` runs on match, `else` on miss |
 | `ifStrained` | Full | Branches on whether the caster's heroic resource value is below 0. `then` runs when strained, `else` runs when not. |
 | `ifMark` | Full | Branches on Judgment/mark predicates such as `targetJudgedBySelf`, `targetJudgedByAny`, and `actorIsMyJudgedTarget`. |
-| `applyMark` | Full | Applies source-owned `judgment` marks. Recasting transfers the caster's mark; a newer censor judging the same target overwrites the old source. **Monster behavior:** posts chat note only — monsters can't apply marks. |
-| `endMark` | Full | Clears the caster's current mark or a mark on a target. Used for willingly ending Judgment. **Monster behavior:** posts chat note only — monsters can't hold marks. |
+| `applyMark` | Full | Applies source-owned `judgment` marks. Recasting transfers the caster's mark; a newer censor judging the same target overwrites the old source. |
+| `endMark` | Full | Clears the caster's current mark or a mark on a target. Used for willingly ending Judgment. |
 | `ifScopedFlag` | Full | Branches on round/turn/encounter scoped source-target flags. Used for first-time-this-round rules. |
 | `setScopedFlag` | Full | Sets a scoped source-target flag. Round flags reset at new round; all flags clear at encounter end. |
 | `halveTriggeringDamage` | Full | Inside a `trigger` block matching the `damage` event: halves the triggering damage by healing back the difference. `rounding` (`up`/`down`) controls which half the placement takes. No-op outside a trigger with a captured damage payload. |
