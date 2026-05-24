@@ -1029,5 +1029,5 @@ When this monster is winded the roll bonus rises from +5 to +7, modeling "enrage
 
 The Monster Creator can import one complete monster from a JSON file. Use the template at `dnd/strixhaven/monster-creator/MONSTER_JSON_IMPORT_TEMPLATE.md` when asking an LLM to generate the whole monster, including stats, traits, ability text, and per-ability automation.
 
-Monster `immunity_type` / `immunity_value` and `weakness_type` / `weakness_value` are applied by VTT automated damage when the incoming `damageType` matches. Temporary automation-applied riders still use `damageImmunity` and `damageWeakness` conditions.
+Monster `immunities` and `weaknesses` (each an array of `{ "type", "value" }` entries) are applied by VTT automated damage when an entry's `type` matches the incoming `damageType`. Multiple matching entries stack additively. The legacy single-field form (`immunity_type` / `immunity_value` / `weakness_type` / `weakness_value`) is still accepted for back-compat; it's auto-promoted to a one-entry list on import. Temporary automation-applied riders still use `damageImmunity` and `damageWeakness` conditions.
 

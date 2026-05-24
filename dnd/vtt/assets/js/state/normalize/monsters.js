@@ -117,30 +117,27 @@ export function normalizeMonsterDefenses(raw) {
   }
 
   const result = {};
-  const immunitySource = raw.immunity && typeof raw.immunity === 'object' ? raw.immunity : raw;
-  const immunityType = sanitizeMonsterString(immunitySource.type ?? immunitySource.immunity_type ?? '');
-  const immunityValue = sanitizeMonsterString(immunitySource.value ?? immunitySource.immunity_value ?? '');
-  if (immunityType || immunityValue) {
-    result.immunity = {};
-    if (immunityType) {
-      result.immunity.type = immunityType;
-    }
-    if (immunityValue) {
-      result.immunity.value = immunityValue;
-    }
+
+  const immunityList = collectMonsterDefenseList(
+    raw.immunities,
+    raw.immunity,
+    raw.immunity_type,
+    raw.immunity_value
+  );
+  if (immunityList.length > 0) {
+    result.immunities = immunityList;
+    result.immunity = { ...immunityList[0] };
   }
 
-  const weaknessSource = raw.weakness && typeof raw.weakness === 'object' ? raw.weakness : raw;
-  const weaknessType = sanitizeMonsterString(weaknessSource.type ?? weaknessSource.weakness_type ?? '');
-  const weaknessValue = sanitizeMonsterString(weaknessSource.value ?? weaknessSource.weakness_value ?? '');
-  if (weaknessType || weaknessValue) {
-    result.weakness = {};
-    if (weaknessType) {
-      result.weakness.type = weaknessType;
-    }
-    if (weaknessValue) {
-      result.weakness.value = weaknessValue;
-    }
+  const weaknessList = collectMonsterDefenseList(
+    raw.weaknesses,
+    raw.weakness,
+    raw.weakness_type,
+    raw.weakness_value
+  );
+  if (weaknessList.length > 0) {
+    result.weaknesses = weaknessList;
+    result.weakness = { ...weaknessList[0] };
   }
 
   const stability = toOptionalNumber(raw.stability ?? raw.stability_value);
@@ -446,6 +443,40 @@ export function sanitizeMonsterString(value) {
     return String(value);
   }
   return '';
+}
+
+function collectMonsterDefenseList(arraySource, objectSource, legacyType, legacyValue) {
+  const result = [];
+
+  if (Array.isArray(arraySource)) {
+    arraySource.forEach(entry => {
+      const normalized = normalizeMonsterDefenseEntry(entry);
+      if (normalized) result.push(normalized);
+    });
+  }
+
+  if (result.length === 0 && objectSource && typeof objectSource === 'object' && !Array.isArray(objectSource)) {
+    const normalized = normalizeMonsterDefenseEntry(objectSource);
+    if (normalized) result.push(normalized);
+  }
+
+  if (result.length === 0) {
+    const normalized = normalizeMonsterDefenseEntry({ type: legacyType, value: legacyValue });
+    if (normalized) result.push(normalized);
+  }
+
+  return result;
+}
+
+function normalizeMonsterDefenseEntry(entry) {
+  if (!entry || typeof entry !== 'object') return null;
+  const type = sanitizeMonsterString(entry.type ?? entry.damageType ?? entry.immunity_type ?? entry.weakness_type ?? '');
+  const value = sanitizeMonsterString(entry.value ?? entry.amount ?? entry.immunity_value ?? entry.weakness_value ?? '');
+  if (!type && !value) return null;
+  const out = {};
+  if (type) out.type = type;
+  if (value) out.value = value;
+  return out;
 }
 
 function clonePlainObject(value) {

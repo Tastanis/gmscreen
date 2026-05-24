@@ -929,6 +929,217 @@ body.delete-mode-active .sub-tab:hover {
     border-color: #3498db;
 }
 
+/* Multi-entry immunity / weakness repeater */
+.defensive-stat--multi {
+    align-items: flex-start;
+    flex-wrap: wrap;
+}
+
+.defensive-stat--multi > .defensive-stat-label {
+    padding-top: 6px;
+}
+
+.defensive-stat-rows {
+    display: flex;
+    flex-direction: column;
+    gap: 4px;
+}
+
+.defensive-stat-row {
+    display: flex;
+    align-items: center;
+    gap: 6px;
+}
+
+.defensive-stat-remove {
+    width: 22px;
+    height: 22px;
+    border: 1px solid #c0392b;
+    background: #fff;
+    color: #c0392b;
+    border-radius: 3px;
+    cursor: pointer;
+    font-size: 14px;
+    line-height: 1;
+    padding: 0;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+}
+
+.defensive-stat-remove:hover {
+    background: #c0392b;
+    color: #fff;
+}
+
+.defensive-stat-remove-placeholder {
+    width: 22px;
+    height: 22px;
+    display: inline-block;
+}
+
+.defensive-stat-add {
+    margin-left: 4px;
+    padding: 4px 8px;
+    border: 1px dashed #3498db;
+    background: transparent;
+    color: #2c3e50;
+    border-radius: 3px;
+    cursor: pointer;
+    font-size: 12px;
+    align-self: flex-start;
+}
+
+.defensive-stat-add:hover {
+    background: #ecf6fd;
+}
+
+/* EV "for four minions" suffix */
+.ev-minion-suffix {
+    margin-left: 6px;
+    font-size: 12px;
+    font-style: italic;
+    color: #6c757d;
+    white-space: nowrap;
+}
+
+/* With Captain row */
+.captain-row {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    margin: 8px 0 12px;
+    padding: 8px 15px;
+    background: #fdf6e3;
+    border: 1px solid #e0d2a8;
+    border-radius: 6px;
+}
+
+.captain-label {
+    font-weight: bold;
+    color: #5a3e30;
+    white-space: nowrap;
+}
+
+.captain-input {
+    flex: 1;
+    padding: 6px 8px;
+    border: 1px solid #d0b88a;
+    border-radius: 4px;
+    font-size: 13px;
+    background: #fffbf2;
+}
+
+.captain-input:focus {
+    outline: none;
+    border-color: #b8975c;
+}
+
+/* Movement Types editor */
+.movement-editor {
+    display: flex;
+    flex-direction: column;
+    gap: 6px;
+    min-width: 240px;
+}
+
+.movement-chips {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 4px;
+    min-height: 24px;
+    align-items: center;
+}
+
+.movement-chip {
+    display: inline-flex;
+    align-items: center;
+    gap: 4px;
+    padding: 2px 4px 2px 8px;
+    background: #d6e9f8;
+    border: 1px solid #5a8db3;
+    color: #1f3d57;
+    border-radius: 12px;
+    font-size: 12px;
+    font-weight: 600;
+}
+
+.movement-chip-remove {
+    width: 18px;
+    height: 18px;
+    border: none;
+    background: transparent;
+    color: #1f3d57;
+    cursor: pointer;
+    font-size: 14px;
+    line-height: 1;
+    padding: 0;
+    border-radius: 50%;
+}
+
+.movement-chip-remove:hover {
+    background: #1f3d57;
+    color: #fff;
+}
+
+.movement-empty {
+    font-size: 12px;
+    color: #95a5a6;
+    font-style: italic;
+}
+
+.movement-presets {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 3px;
+}
+
+.movement-preset {
+    padding: 3px 7px;
+    border: 1px solid #b0bec5;
+    background: #fff;
+    color: #455a64;
+    border-radius: 12px;
+    font-size: 11px;
+    cursor: pointer;
+}
+
+.movement-preset:hover {
+    border-color: #5a8db3;
+}
+
+.movement-preset.is-active {
+    background: #5a8db3;
+    color: #fff;
+    border-color: #5a8db3;
+}
+
+.movement-custom-input {
+    padding: 4px 8px;
+    border: 1px solid #ddd;
+    border-radius: 4px;
+    font-size: 12px;
+    width: 100%;
+    box-sizing: border-box;
+}
+
+.movement-custom-input:focus {
+    outline: none;
+    border-color: #3498db;
+}
+
+/* Print: with-captain row */
+.print-captain {
+    margin: 4px 0;
+    font-size: 12px;
+    font-style: italic;
+}
+
+/* Search card: with-captain row */
+.search-stat-item--captain {
+    grid-column: span 2;
+}
+
 /* Attributes Bar */
 .attributes-bar {
     display: flex;

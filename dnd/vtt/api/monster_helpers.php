@@ -308,40 +308,26 @@ function buildMonsterDefenses(array $monster): array
 {
     $defenses = [];
 
-    $immunitySource = [];
-    if (isset($monster['immunity']) && is_array($monster['immunity'])) {
-        $immunitySource = $monster['immunity'];
+    $immunityList = collectMonsterDefenseList(
+        $monster['immunities'] ?? null,
+        $monster['immunity'] ?? null,
+        $monster['immunity_type'] ?? null,
+        $monster['immunity_value'] ?? null
+    );
+    if (!empty($immunityList)) {
+        $defenses['immunities'] = $immunityList;
+        $defenses['immunity'] = $immunityList[0];
     }
 
-    $immunityType = sanitizeMonsterString($immunitySource['type'] ?? $monster['immunity_type'] ?? '');
-    $immunityValue = sanitizeMonsterString($immunitySource['value'] ?? $monster['immunity_value'] ?? '');
-    if ($immunityType !== '' || $immunityValue !== '') {
-        $entry = [];
-        if ($immunityType !== '') {
-            $entry['type'] = $immunityType;
-        }
-        if ($immunityValue !== '') {
-            $entry['value'] = $immunityValue;
-        }
-        $defenses['immunity'] = $entry;
-    }
-
-    $weaknessSource = [];
-    if (isset($monster['weakness']) && is_array($monster['weakness'])) {
-        $weaknessSource = $monster['weakness'];
-    }
-
-    $weaknessType = sanitizeMonsterString($weaknessSource['type'] ?? $monster['weakness_type'] ?? '');
-    $weaknessValue = sanitizeMonsterString($weaknessSource['value'] ?? $monster['weakness_value'] ?? '');
-    if ($weaknessType !== '' || $weaknessValue !== '') {
-        $entry = [];
-        if ($weaknessType !== '') {
-            $entry['type'] = $weaknessType;
-        }
-        if ($weaknessValue !== '') {
-            $entry['value'] = $weaknessValue;
-        }
-        $defenses['weakness'] = $entry;
+    $weaknessList = collectMonsterDefenseList(
+        $monster['weaknesses'] ?? null,
+        $monster['weakness'] ?? null,
+        $monster['weakness_type'] ?? null,
+        $monster['weakness_value'] ?? null
+    );
+    if (!empty($weaknessList)) {
+        $defenses['weaknesses'] = $weaknessList;
+        $defenses['weakness'] = $weaknessList[0];
     }
 
     $stability = sanitizeMonsterInt($monster['stability'] ?? ($monster['stability_value'] ?? null), -1000, 1000, true);
@@ -355,6 +341,59 @@ function buildMonsterDefenses(array $monster): array
     }
 
     return $defenses;
+}
+
+/**
+ * @param mixed $arraySource
+ * @param mixed $objectSource
+ * @param mixed $legacyType
+ * @param mixed $legacyValue
+ * @return array<int,array<string,string>>
+ */
+function collectMonsterDefenseList($arraySource, $objectSource, $legacyType, $legacyValue): array
+{
+    $list = [];
+
+    if (is_array($arraySource)) {
+        foreach ($arraySource as $entry) {
+            $normalized = normalizeMonsterDefenseEntry($entry);
+            if ($normalized !== null) {
+                $list[] = $normalized;
+            }
+        }
+    }
+
+    if (empty($list) && is_array($objectSource)) {
+        $normalized = normalizeMonsterDefenseEntry($objectSource);
+        if ($normalized !== null) {
+            $list[] = $normalized;
+        }
+    }
+
+    if (empty($list)) {
+        $normalized = normalizeMonsterDefenseEntry(['type' => $legacyType, 'value' => $legacyValue]);
+        if ($normalized !== null) {
+            $list[] = $normalized;
+        }
+    }
+
+    return $list;
+}
+
+/**
+ * @param mixed $entry
+ * @return array<string,string>|null
+ */
+function normalizeMonsterDefenseEntry($entry): ?array
+{
+    if (!is_array($entry)) return null;
+    $type = sanitizeMonsterString($entry['type'] ?? $entry['damageType'] ?? '');
+    $value = sanitizeMonsterString($entry['value'] ?? $entry['amount'] ?? '');
+    if ($type === '' && $value === '') return null;
+    $out = [];
+    if ($type !== '') $out['type'] = $type;
+    if ($value !== '') $out['value'] = $value;
+    return $out;
 }
 
 /**

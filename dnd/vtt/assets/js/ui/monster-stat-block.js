@@ -221,16 +221,14 @@ function renderDefenses(monster) {
   const defenses = monster.defenses && typeof monster.defenses === 'object' ? monster.defenses : {};
   const entries = [];
 
-  if (defenses.immunity?.type || defenses.immunity?.value) {
-    const type = defenses.immunity?.type ? `${defenses.immunity.type}` : '';
-    const value = defenses.immunity?.value ? `${defenses.immunity.value}` : '';
-    entries.push(['Immunity', [type, value].filter(Boolean).join(' – ')]);
+  const immunityText = formatDefenseEntries(defenses.immunities, defenses.immunity);
+  if (immunityText) {
+    entries.push(['Immunity', immunityText]);
   }
 
-  if (defenses.weakness?.type || defenses.weakness?.value) {
-    const type = defenses.weakness?.type ? `${defenses.weakness.type}` : '';
-    const value = defenses.weakness?.value ? `${defenses.weakness.value}` : '';
-    entries.push(['Weakness', [type, value].filter(Boolean).join(' – ')]);
+  const weaknessText = formatDefenseEntries(defenses.weaknesses, defenses.weakness);
+  if (weaknessText) {
+    entries.push(['Weakness', weaknessText]);
   }
 
   if (defenses.stability !== undefined && defenses.stability !== null) {
@@ -583,6 +581,27 @@ function escapeHtml(value = '') {
 
 function formatText(value = '') {
   return escapeHtml(value).replace(/\n/g, '<br />');
+}
+
+function formatDefenseEntries(list, fallbackSingle) {
+  const entries = [];
+  if (Array.isArray(list)) {
+    list.forEach(entry => {
+      if (entry && typeof entry === 'object') entries.push(entry);
+    });
+  }
+  if (entries.length === 0 && fallbackSingle && typeof fallbackSingle === 'object') {
+    entries.push(fallbackSingle);
+  }
+  if (entries.length === 0) return '';
+  return entries
+    .map(entry => {
+      const type = entry?.type ? String(entry.type).trim() : '';
+      const value = entry?.value !== undefined && entry?.value !== null ? String(entry.value).trim() : '';
+      return [type, value].filter(Boolean).join(' ');
+    })
+    .filter(Boolean)
+    .join(', ');
 }
 
 function capitalize(value = '') {

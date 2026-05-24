@@ -127,14 +127,34 @@
     function renderDefenses(defenses) {
         if (!defenses || typeof defenses !== 'object') return '';
         var rows = [];
-        if (defenses.immunity && typeof defenses.immunity === 'object') {
-            rows.push('<p><strong>Immunity:</strong> ' + escapeHtml([defenses.immunity.type, defenses.immunity.value].filter(Boolean).join(' ')) + '</p>');
+        var immunityText = formatDefenseList(defenses.immunities, defenses.immunity);
+        if (immunityText) {
+            rows.push('<p><strong>Immunity:</strong> ' + escapeHtml(immunityText) + '</p>');
         }
-        if (defenses.weakness && typeof defenses.weakness === 'object') {
-            rows.push('<p><strong>Weakness:</strong> ' + escapeHtml([defenses.weakness.type, defenses.weakness.value].filter(Boolean).join(' ')) + '</p>');
+        var weaknessText = formatDefenseList(defenses.weaknesses, defenses.weakness);
+        if (weaknessText) {
+            rows.push('<p><strong>Weakness:</strong> ' + escapeHtml(weaknessText) + '</p>');
         }
         if (!rows.length) return '';
         return renderSection('Defenses', '<div class="vtt-character-text-list">' + rows.join('') + '</div>');
+    }
+
+    function formatDefenseList(list, fallbackSingle) {
+        var entries = [];
+        if (Array.isArray(list)) {
+            list.forEach(function (entry) {
+                if (entry && typeof entry === 'object') entries.push(entry);
+            });
+        }
+        if (entries.length === 0 && fallbackSingle && typeof fallbackSingle === 'object') {
+            entries.push(fallbackSingle);
+        }
+        if (entries.length === 0) return '';
+        return entries.map(function (entry) {
+            var type = entry && entry.type ? String(entry.type).trim() : '';
+            var value = entry && entry.value !== undefined && entry.value !== null ? String(entry.value).trim() : '';
+            return [type, value].filter(Boolean).join(' ');
+        }).filter(Boolean).join(', ');
     }
 
     function renderTraits(monster) {

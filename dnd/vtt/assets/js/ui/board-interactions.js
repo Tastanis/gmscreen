@@ -653,6 +653,14 @@ export function mountBoardInteractions(store, routes = {}) {
   const combatGroupMissingCounts = new Map();
   const MAX_COMBAT_GROUP_MISSING_TICKS = 2;
   const MAX_COMBAT_GROUP_COLORS = 7;
+
+  // ---------- Minion squad state ----------
+  // squadId = `${representativeId}:${monsterId}`
+  // squad shape: { id, representativeId, monsterId, memberIds: Set<placementId>,
+  //               perMinionStamina, maxPool, initialMemberCount }
+  const minionSquads = new Map();
+  const placementSquadIndex = new Map(); // placementId -> squadId
+  let minionKillPopup = null;
   let lastCombatTrackerEntries = [];
   let lastCombatTrackerActiveIds = new Set();
   let renderedPlacements = [];
@@ -5472,6 +5480,7 @@ export function mountBoardInteractions(store, routes = {}) {
       }
       applyGridState(state.grid ?? {});
       syncMapLevelsForState(state, activeSceneId);
+      rebuildMinionSquadsFromPlacements();
       renderTokens(state, tokenLayer, viewState);
       renderFog(state);
       renderFogSelection();
@@ -12051,6 +12060,7 @@ export function mountBoardInteractions(store, routes = {}) {
             }
           });
           combatTrackerGroups.delete(candidateRep);
+          dismantleMinionSquadsForRepresentative(candidateRep);
           markCombatFieldDirty('groups');
           refreshCombatTracker();
           syncCombatStateToStore();
@@ -12064,7 +12074,12 @@ export function mountBoardInteractions(store, routes = {}) {
 
     const representativeId =
       pickRepresentativeIdForGroup(uniqueSelection) ?? uniqueSelection[uniqueSelection.length - 1];
-    uniqueSelection.forEach(removeTokenFromGroups);
+    uniqueSelection.forEach((id) => {
+      // Tear down any squad these tokens were part of before regrouping.
+      const oldSquadId = placementSquadIndex.get(id);
+      if (oldSquadId) dismantleMinionSquadById(oldSquadId);
+      removeTokenFromGroups(id);
+    });
 
     const members = new Set(uniqueSelection);
     members.add(representativeId);
@@ -12075,13 +12090,19 @@ export function mountBoardInteractions(store, routes = {}) {
       }
     });
 
+    // Build minion squads from the same-species minion subsets of this group.
+    const newSquads = buildMinionSquadsForGroup(representativeId, Array.from(members));
+
     markCombatFieldDirty('groups');
     refreshCombatTracker();
     syncCombatStateToStore();
     if (status) {
       const count = members.size;
       const noun = count === 1 ? 'token' : 'tokens';
-      status.textContent = `Grouped ${count} ${noun} in the combat tracker.`;
+      const squadSuffix = newSquads.length
+        ? ` (${newSquads.length} minion squad${newSquads.length === 1 ? '' : 's'} formed)`
+        : '';
+      status.textContent = `Grouped ${count} ${noun} in the combat tracker.${squadSuffix}`;
     }
   }
 
@@ -12093,6 +12114,261 @@ export function mountBoardInteractions(store, routes = {}) {
     });
     lastCombatTrackerEntries = [];
     refreshCombatTracker();
+  }
+
+  // ---------- Minion squad helpers ----------
+
+  function isMinionPlacement(placement) {
+    const monster = placement?.monster;
+    if (!monster || typeof monster !== 'object') return false;
+    const org = String(monster.organization ?? monster.role ?? '').toLowerCase();
+    return org === 'minion' || org.includes('minion');
+  }
+
+  function getMonsterIdentity(placement) {
+    const monster = placement?.monster;
+    if (!monster || typeof monster !== 'object') return '';
+    return String(monster.id || monster.monsterId || monster.name || '').trim();
+  }
+
+  function getMonsterPerMinionStamina(placement) {
+    const monster = placement?.monster;
+    if (!monster || typeof monster !== 'object') return 0;
+    const candidates = [monster.stamina, monster.staminaPerMinion, monster.staminaIndividual, monster.hp];
+    for (const value of candidates) {
+      const n = Number.parseInt(value, 10);
+      if (Number.isFinite(n) && n > 0) return n;
+    }
+    return 0;
+  }
+
+  function makeSquadId(representativeId, monsterId) {
+    return `${representativeId}::${monsterId}`;
+  }
+
+  function getMinionSquadForPlacement(placementId) {
+    if (!placementId) return null;
+    const squadId = placementSquadIndex.get(placementId);
+    if (!squadId) return null;
+    return minionSquads.get(squadId) || null;
+  }
+
+  function buildMinionSquadsForGroup(representativeId, memberIds) {
+    if (!representativeId || !Array.isArray(memberIds) || memberIds.length < 2) return [];
+
+    // Bucket placements by monsterId, but only those that ARE minions.
+    const buckets = new Map();
+    memberIds.forEach((placementId) => {
+      const placement = getPlacementFromStore(placementId);
+      if (!placement || !isMinionPlacement(placement)) return;
+      const monsterId = getMonsterIdentity(placement);
+      const perMinion = getMonsterPerMinionStamina(placement);
+      if (!monsterId || !perMinion) return;
+      if (!buckets.has(monsterId)) {
+        buckets.set(monsterId, { perMinion, memberIds: [] });
+      }
+      buckets.get(monsterId).memberIds.push(placementId);
+    });
+
+    const createdSquads = [];
+    buckets.forEach((bucket, monsterId) => {
+      if (bucket.memberIds.length < 2) return; // single minion = not a squad
+      const squadId = makeSquadId(representativeId, monsterId);
+      const maxPool = bucket.perMinion * bucket.memberIds.length;
+      const squad = {
+        id: squadId,
+        representativeId,
+        monsterId,
+        memberIds: new Set(bucket.memberIds),
+        perMinionStamina: bucket.perMinion,
+        maxPool,
+        initialMemberCount: bucket.memberIds.length,
+      };
+      minionSquads.set(squadId, squad);
+      bucket.memberIds.forEach((pid) => placementSquadIndex.set(pid, squadId));
+      // Persist squad markers + initial pool onto each member placement.
+      writeSquadStateToMembers(squad, maxPool);
+      createdSquads.push(squad);
+    });
+
+    return createdSquads;
+  }
+
+  function dismantleMinionSquadById(squadId) {
+    const squad = minionSquads.get(squadId);
+    if (!squad) return;
+    const perMinion = squad.perMinionStamina;
+    squad.memberIds.forEach((memberId) => {
+      placementSquadIndex.delete(memberId);
+      // Restore each member's HP to the single-minion stamina so leftover
+      // tokens make sense as individuals after ungrouping.
+      updatePlacementById(memberId, (target) => {
+        if (target.squad) delete target.squad;
+        target.hp = { current: String(perMinion), max: String(perMinion) };
+        if (target.overlays?.hitPoints) {
+          target.overlays.hitPoints.value = { current: String(perMinion), max: String(perMinion) };
+        }
+      });
+    });
+    minionSquads.delete(squadId);
+  }
+
+  function dismantleMinionSquadsForRepresentative(representativeId) {
+    if (!representativeId) return;
+    const toRemove = [];
+    minionSquads.forEach((squad, squadId) => {
+      if (squad.representativeId === representativeId) toRemove.push(squadId);
+    });
+    toRemove.forEach(dismantleMinionSquadById);
+  }
+
+  function readSquadCurrentPool(squad) {
+    // Source of truth: any member's hp.current (kept in sync). Fall back to maxPool.
+    for (const memberId of squad.memberIds) {
+      const placement = getPlacementFromStore(memberId);
+      const cur = Number.parseInt(placement?.hp?.current, 10);
+      if (Number.isFinite(cur)) return Math.max(0, Math.min(squad.maxPool, cur));
+    }
+    return squad.maxPool;
+  }
+
+  function writeSquadStateToMembers(squad, currentPool) {
+    const memberIds = Array.from(squad.memberIds);
+    const squadMarker = {
+      id: squad.id,
+      monsterId: squad.monsterId,
+      representativeId: squad.representativeId,
+      perMinionStamina: squad.perMinionStamina,
+      maxPool: squad.maxPool,
+      initialMemberCount: squad.initialMemberCount,
+    };
+    memberIds.forEach((memberId) => {
+      updatePlacementById(memberId, (target) => {
+        target.squad = { ...squadMarker };
+        target.showHp = true;
+        if (!target.hp || typeof target.hp !== 'object') target.hp = {};
+        target.hp = { current: String(currentPool), max: String(squad.maxPool) };
+        if (target.overlays?.hitPoints) {
+          target.overlays.hitPoints.value = { current: String(currentPool), max: String(squad.maxPool) };
+        }
+      });
+    });
+  }
+
+  function clearSquadMarkerOnPlacement(memberId) {
+    updatePlacementById(memberId, (target) => {
+      if (target.squad) delete target.squad;
+    });
+  }
+
+  function rebuildMinionSquadsFromPlacements() {
+    minionSquads.clear();
+    placementSquadIndex.clear();
+    const state = boardApi.getState?.() ?? {};
+    const activeSceneId = state.boardState?.activeSceneId ?? null;
+    if (!activeSceneId) return;
+    const scenePlacements = state.boardState?.placements?.[activeSceneId];
+    if (!Array.isArray(scenePlacements)) return;
+
+    scenePlacements.forEach((placement) => {
+      const marker = placement?.squad;
+      if (!marker || !marker.id) return;
+      const squad = minionSquads.get(marker.id) || {
+        id: marker.id,
+        representativeId: marker.representativeId,
+        monsterId: marker.monsterId,
+        memberIds: new Set(),
+        perMinionStamina: Number(marker.perMinionStamina) || 1,
+        maxPool: Number(marker.maxPool) || 1,
+        initialMemberCount: Number(marker.initialMemberCount) || 1,
+      };
+      squad.memberIds.add(placement.id);
+      minionSquads.set(marker.id, squad);
+      placementSquadIndex.set(placement.id, marker.id);
+    });
+  }
+
+  function applyMinionSquadDamage(squad, hitPlacementId, amount) {
+    if (!squad || !Number.isFinite(amount) || amount <= 0) return null;
+
+    const prevPool = readSquadCurrentPool(squad);
+    const nextPool = Math.max(0, prevPool - amount);
+    const aliveBefore = Math.ceil(prevPool / squad.perMinionStamina);
+    const aliveAfter = Math.ceil(nextPool / squad.perMinionStamina);
+    const kills = Math.max(0, aliveBefore - aliveAfter);
+
+    writeSquadStateToMembers(squad, nextPool);
+
+    if (kills > 0) {
+      const hitPlacement = getPlacementFromStore(hitPlacementId);
+      const hitName = tokenLabel(hitPlacement) || 'A minion';
+      showMinionKillPopup({
+        squad,
+        damage: amount,
+        prevPool,
+        nextPool,
+        kills,
+        hitName,
+      });
+    }
+
+    return {
+      previous: prevPool,
+      current: nextPool,
+      max: squad.maxPool,
+      change: amount,
+      name: tokenLabel(getPlacementFromStore(hitPlacementId)) || squad.monsterId,
+      squadKills: kills,
+    };
+  }
+
+  function showMinionKillPopup({ squad, damage, prevPool, nextPool, kills, hitName }) {
+    if (typeof document === 'undefined') return;
+
+    // Reuse a single popup element; replace contents.
+    if (!minionKillPopup) {
+      const overlay = document.createElement('div');
+      overlay.className = 'vtt-minion-kill-popup';
+      overlay.innerHTML = `
+        <div class="vtt-minion-kill-popup__backdrop"></div>
+        <div class="vtt-minion-kill-popup__dialog" role="alertdialog" aria-modal="true">
+          <h3 class="vtt-minion-kill-popup__title">Minions Drop</h3>
+          <div class="vtt-minion-kill-popup__body"></div>
+          <div class="vtt-minion-kill-popup__actions">
+            <button type="button" class="vtt-minion-kill-popup__ok">Got it</button>
+          </div>
+        </div>
+      `;
+      document.body.appendChild(overlay);
+      const closeIt = () => { overlay.style.display = 'none'; };
+      overlay.querySelector('.vtt-minion-kill-popup__backdrop').addEventListener('click', closeIt);
+      overlay.querySelector('.vtt-minion-kill-popup__ok').addEventListener('click', closeIt);
+      minionKillPopup = overlay;
+    }
+
+    const body = minionKillPopup.querySelector('.vtt-minion-kill-popup__body');
+    const otherCount = Math.max(0, kills - 1);
+    const monsterLabel = (squad.monsterId || 'minion').replace(/_/g, ' ');
+    body.innerHTML = `
+      <p><strong>${kills}</strong> minion${kills === 1 ? '' : 's'} drop from the squad.</p>
+      <ul>
+        <li>Squad: ${escapeHtmlForMinionPopup(monsterLabel)}</li>
+        <li>Damage dealt: <strong>${damage}</strong></li>
+        <li>Pool: ${prevPool} → ${nextPool} / ${squad.maxPool}</li>
+        <li>Hit token (auto-drops first): <strong>${escapeHtmlForMinionPopup(hitName)}</strong></li>
+        ${otherCount > 0 ? `<li>You pick <strong>${otherCount}</strong> more to drop.</li>` : ''}
+      </ul>
+      <p class="vtt-minion-kill-popup__hint">Remove the dropped tokens from the board.</p>
+    `;
+    minionKillPopup.style.display = 'flex';
+  }
+
+  function escapeHtmlForMinionPopup(value) {
+    return String(value || '')
+      .replace(/&/g, '&amp;')
+      .replace(/</g, '&lt;')
+      .replace(/>/g, '&gt;')
+      .replace(/"/g, '&quot;');
   }
 
   function applyTokenOverlays(tokenElement, placement) {
@@ -12113,6 +12389,13 @@ export function mountBoardInteractions(store, routes = {}) {
       tokenElement.dataset.combatTeam = team;
     } else {
       delete tokenElement.dataset.combatTeam;
+    }
+
+    // Mark tokens that are part of a minion squad so CSS / display logic can react.
+    if (placement?.squad?.id) {
+      tokenElement.dataset.squad = 'true';
+    } else {
+      delete tokenElement.dataset.squad;
     }
   }
 
@@ -14435,24 +14718,43 @@ export function mountBoardInteractions(store, routes = {}) {
     }
     const normalizedType = normalizeAutomationDamageType(damageType);
     const defenses = monster.defenses && typeof monster.defenses === 'object' ? monster.defenses : {};
-    const defense = defenses[kind] && typeof defenses[kind] === 'object' ? defenses[kind] : null;
-    const type = normalizeAutomationDamageType(
-      defense?.type ??
-      monster[`${kind}_type`] ??
-      monster[`${kind}Type`] ??
-      ''
-    );
-    const value = Number.parseInt(
-      defense?.value ??
-      monster[`${kind}_value`] ??
-      monster[`${kind}Value`] ??
-      0,
-      10
-    );
-    if (!Number.isFinite(value) || value <= 0) {
-      return 0;
+    const listKey = kind === 'immunity' ? 'immunities' : 'weaknesses';
+    const monsterListKey = kind === 'immunity' ? 'immunities' : 'weaknesses';
+
+    // Build the list of {type, value} entries to consider. Prefer the canonical
+    // array form; fall back to the single object or legacy flat fields.
+    const entries = [];
+    if (Array.isArray(defenses[listKey])) {
+      defenses[listKey].forEach(entry => {
+        if (entry && typeof entry === 'object') entries.push(entry);
+      });
     }
-    return (!type || type === 'all' || type === 'any' || type === normalizedType) ? value : 0;
+    if (Array.isArray(monster[monsterListKey])) {
+      monster[monsterListKey].forEach(entry => {
+        if (entry && typeof entry === 'object') entries.push(entry);
+      });
+    }
+    if (entries.length === 0) {
+      if (defenses[kind] && typeof defenses[kind] === 'object') {
+        entries.push(defenses[kind]);
+      } else if (monster[`${kind}_type`] || monster[`${kind}_value`] || monster[`${kind}Type`] || monster[`${kind}Value`]) {
+        entries.push({
+          type: monster[`${kind}_type`] ?? monster[`${kind}Type`] ?? '',
+          value: monster[`${kind}_value`] ?? monster[`${kind}Value`] ?? 0,
+        });
+      }
+    }
+
+    let total = 0;
+    entries.forEach(entry => {
+      const type = normalizeAutomationDamageType(entry?.type ?? '');
+      const value = Number.parseInt(entry?.value ?? entry?.amount ?? 0, 10);
+      if (!Number.isFinite(value) || value <= 0) return;
+      if (!type || type === 'all' || type === 'any' || type === normalizedType) {
+        total += value;
+      }
+    });
+    return total;
   }
 
   function parseDamageAdjustmentEntry(text) {
@@ -15361,6 +15663,17 @@ export function mountBoardInteractions(store, routes = {}) {
       : null;
     if (!normalizedAmount) {
       return null;
+    }
+
+    // Minion squad interception: damage goes to the shared pool, not the
+    // individual token. Heals are blocked for minions per book rules ("can't
+    // regain Stamina, and can't gain temporary Stamina").
+    const squad = getMinionSquadForPlacement(placementId);
+    if (squad) {
+      if (mode === 'heal') {
+        return null;
+      }
+      return applyMinionSquadDamage(squad, placementId, normalizedAmount);
     }
 
     let result = null;

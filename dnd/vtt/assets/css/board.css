@@ -5588,3 +5588,78 @@ body.vtt-character-ability-tray-is-open .vtt-board__malice {
 .vtt-persistent-zone__end:hover {
   background: rgba(220, 70, 55, 1);
 }
+
+/* Minion squad kill popup */
+.vtt-minion-kill-popup {
+  position: fixed;
+  inset: 0;
+  z-index: 10000;
+  display: none;
+  align-items: center;
+  justify-content: center;
+}
+
+.vtt-minion-kill-popup__backdrop {
+  position: absolute;
+  inset: 0;
+  background: rgba(0, 0, 0, 0.55);
+}
+
+.vtt-minion-kill-popup__dialog {
+  position: relative;
+  width: min(440px, 92vw);
+  background: #1f2933;
+  color: #f5f7fa;
+  border: 1px solid #c9302c;
+  border-radius: 6px;
+  box-shadow: 0 12px 40px rgba(0, 0, 0, 0.45);
+  padding: 16px 18px;
+}
+
+.vtt-minion-kill-popup__title {
+  margin: 0 0 8px;
+  font-size: 16px;
+  color: #ffb4ab;
+}
+
+.vtt-minion-kill-popup__body {
+  font-size: 13px;
+  line-height: 1.45;
+}
+
+.vtt-minion-kill-popup__body p { margin: 4px 0; }
+.vtt-minion-kill-popup__body ul { margin: 6px 0 6px 18px; padding: 0; }
+.vtt-minion-kill-popup__body li { margin: 2px 0; }
+
+.vtt-minion-kill-popup__hint {
+  margin-top: 8px !important;
+  color: #c2cdd6;
+  font-style: italic;
+  font-size: 12px;
+}
+
+.vtt-minion-kill-popup__actions {
+  display: flex;
+  justify-content: flex-end;
+  margin-top: 12px;
+}
+
+.vtt-minion-kill-popup__ok {
+  padding: 6px 14px;
+  background: #c9302c;
+  color: #fff;
+  border: none;
+  border-radius: 3px;
+  cursor: pointer;
+  font-weight: 600;
+  font-size: 13px;
+}
+
+.vtt-minion-kill-popup__ok:hover {
+  background: #d9534f;
+}
+
+/* Token visual indicator when part of a minion squad */
+.vtt-token[data-squad="true"] .vtt-token__hp-fill {
+  background: linear-gradient(90deg, #b94a48 0%, #d9534f 100%);
+}

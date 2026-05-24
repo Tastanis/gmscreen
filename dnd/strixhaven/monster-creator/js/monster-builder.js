@@ -733,6 +733,10 @@ function loadWorkspace() {
 }
 
 function createMonsterCard(monsterId, monsterData) {
+    // Ensure multi-entry defense arrays exist before either renderer runs.
+    ensureMonsterDefenseArrays(monsterData);
+    ensureMonsterRoleSplit(monsterData);
+    ensureMonsterMovementModes(monsterData);
     // Check current mode and render accordingly
     if (currentMode === 'search') {
         return createCompactMonsterCard(monsterId, monsterData);
@@ -809,14 +813,14 @@ function createCompactMonsterCard(monsterId, monsterData) {
                             <span class="field-label">Level:</span>
                             <span class="level-value">${defaultData.level}</span>
                             <span class="field-label">Role:</span>
-                            <span class="role-value">${defaultData.role}</span>
+                            <span class="role-value">${formatMonsterRole(monsterData) || '—'}</span>
                         </div>
                     </div>
                     <div class="info-row-2">
                         <span class="field-label">Type:</span>
                         <span class="types-value">${defaultData.types}</span>
                         <span class="field-label">EV:</span>
-                        <span class="ev-value">${defaultData.ev}</span>
+                        <span class="ev-value">${formatMonsterEv(monsterData) || '—'}</span>
                         <button class="edit-monster-btn" onclick="event.stopPropagation(); enterEditorMode('${monsterId}')">✏️ Edit</button>
                     </div>
                 </div>
@@ -846,16 +850,21 @@ function createCompactMonsterCard(monsterId, monsterData) {
                 </div>
                 <div class="search-stat-item">
                     <span class="search-stat-label">Movement:</span>
-                    <span class="search-stat-value">${defaultData.movement}</span>
+                    <span class="search-stat-value">${(monsterData.movement_modes || []).join(', ') || defaultData.movement || '—'}</span>
                 </div>
                 <div class="search-stat-item">
                     <span class="search-stat-label">Immunity:</span>
-                    <span class="search-stat-value">${defaultData.immunity_type} ${defaultData.immunity_value}</span>
+                    <span class="search-stat-value">${formatMonsterDefenseList(monsterData.immunities) || '—'}</span>
                 </div>
                 <div class="search-stat-item">
                     <span class="search-stat-label">Weakness:</span>
-                    <span class="search-stat-value">${defaultData.weakness_type} ${defaultData.weakness_value}</span>
+                    <span class="search-stat-value">${formatMonsterDefenseList(monsterData.weaknesses) || '—'}</span>
                 </div>
+                ${(monsterData.with_captain || '').trim() ? `
+                <div class="search-stat-item search-stat-item--captain">
+                    <span class="search-stat-label">With Captain:</span>
+                    <span class="search-stat-value">${escapeMonsterText(monsterData.with_captain)}</span>
+                </div>` : ''}
             </div>
             
             <!-- Compact Attributes -->
@@ -1098,6 +1107,8 @@ function createFullMonsterCard(monsterId, monsterData) {
     if (monsterData.immunity_value === undefined) monsterData.immunity_value = '';
     if (monsterData.weakness_type === undefined) monsterData.weakness_type = '';
     if (monsterData.weakness_value === undefined) monsterData.weakness_value = '';
+    // Migrate legacy single immunity/weakness to multi-entry array form.
+    ensureMonsterDefenseArrays(monsterData);
     if (monsterData.movement === undefined) monsterData.movement = '';
     if (monsterData.might === undefined) monsterData.might = 0;
     if (monsterData.agility === undefined) monsterData.agility = 0;
@@ -1105,11 +1116,22 @@ function createFullMonsterCard(monsterId, monsterData) {
     if (monsterData.intuition === undefined) monsterData.intuition = 0;
     if (monsterData.presence === undefined) monsterData.presence = 0;
     
-    // Predefined role options - D&D tactical roles
-    const roleOptions = ['Ambusher', 'Artillery', 'Brute', 'Controller', 'Defender', 'Harrier', 'Hexer', 'Mount', 'Support', 'Leader', 'Solo', 'Minion'];
-    const roleDropdown = roleOptions.map(option => 
-        `<option value="${option}" ${monsterData.role === option ? 'selected' : ''}>${option}</option>`
+    // Migrate legacy single-role string to org + tactical_role pair.
+    ensureMonsterRoleSplit(monsterData);
+    ensureMonsterMovementModes(monsterData);
+
+    const organizationOptions = ['', 'Solo', 'Elite', 'Platoon', 'Horde', 'Minion', 'Retainer', 'Leader'];
+    const organizationDropdown = organizationOptions.map(option =>
+        `<option value="${option}" ${(monsterData.organization || '') === option ? 'selected' : ''}>${option || '— none —'}</option>`
     ).join('');
+
+    const tacticalRoleOptions = ['', 'Ambusher', 'Artillery', 'Brute', 'Controller', 'Defender', 'Harrier', 'Hexer', 'Mount', 'Support'];
+    const tacticalRoleDropdown = tacticalRoleOptions.map(option =>
+        `<option value="${option}" ${(monsterData.tactical_role || '') === option ? 'selected' : ''}>${option || '— none —'}</option>`
+    ).join('');
+
+    const isMinion = (monsterData.organization || '').toLowerCase() === 'minion';
+    const captainEligible = ['minion', 'horde', 'platoon'].includes((monsterData.organization || '').toLowerCase());
     
     // Size options dropdown
     const sizeOptions = ['1T', '1S', '1M', '1L', '2', '3', '4', '5'];
@@ -1145,23 +1167,28 @@ function createFullMonsterCard(monsterId, monsterData) {
                                data-field="name" value="${monsterData.name || ''}">
                         <div class="level-role-section">
                             <label class="field-label">Level:</label>
-                            <input type="number" class="level-input" placeholder="1" 
+                            <input type="number" class="level-input" placeholder="1"
                                    data-field="level" value="${monsterData.level || 1}" min="1" max="30">
+                            <label class="field-label">Org:</label>
+                            <select class="role-select" data-field="organization" data-role-part="organization">
+                                ${organizationDropdown}
+                            </select>
                             <label class="field-label">Role:</label>
-                            <select class="role-select" data-field="role">
-                                ${roleDropdown}
+                            <select class="role-select" data-field="tactical_role" data-role-part="tactical">
+                                ${tacticalRoleDropdown}
                             </select>
                         </div>
                     </div>
                     <div class="info-row-2">
                         <label class="field-label">Type:</label>
-                        <input type="text" class="types-input" placeholder="Fire, Dragon, etc." 
+                        <input type="text" class="types-input" placeholder="Fire, Dragon, etc."
                                data-field="types" value="${monsterData.types || ''}">
                         <label class="field-label">EV:</label>
-                        <input type="number" class="ev-input" placeholder="0" 
+                        <input type="number" class="ev-input" placeholder="0"
                                data-field="ev" value="${monsterData.ev || 0}" min="0">
-                        ${currentMode === 'search' ? 
-                            `<button class="edit-monster-btn" onclick="enterEditorMode('${monsterId}')">✏️ Edit</button>` : 
+                        ${isMinion ? '<span class="ev-minion-suffix">for four minions</span>' : ''}
+                        ${currentMode === 'search' ?
+                            `<button class="edit-monster-btn" onclick="enterEditorMode('${monsterId}')">✏️ Edit</button>` :
                             ''
                         }
                     </div>
@@ -1198,21 +1225,15 @@ function createFullMonsterCard(monsterId, monsterData) {
 
                 <!-- Defensive Stats Row -->
                 <div class="defensive-stats-row">
-                    <div class="defensive-stat">
-                        <span class="defensive-stat-label">Immunity:</span>
-                        <input type="text" class="defensive-stat-text" data-field="immunity_type" value="${monsterData.immunity_type || ''}" placeholder="fire">
-                        <input type="number" class="defensive-stat-number" data-field="immunity_value" value="${monsterData.immunity_value || ''}" placeholder="3">
-                    </div>
-                    <div class="defensive-stat">
-                        <span class="defensive-stat-label">Weakness:</span>
-                        <input type="text" class="defensive-stat-text" data-field="weakness_type" value="${monsterData.weakness_type || ''}" placeholder="cold">
-                        <input type="number" class="defensive-stat-number" data-field="weakness_value" value="${monsterData.weakness_value || ''}" placeholder="2">
-                    </div>
-                    <div class="defensive-stat">
-                        <span class="defensive-stat-label">Movement:</span>
-                        <input type="text" class="movement-input" data-field="movement" value="${monsterData.movement || ''}" placeholder="fly 8 squares">
-                    </div>
+                    ${renderMonsterDefenseEditor(monsterId, monsterData, 'immunity')}
+                    ${renderMonsterDefenseEditor(monsterId, monsterData, 'weakness')}
+                    ${renderMonsterMovementEditor(monsterId, monsterData)}
                 </div>
+                ${captainEligible ? `
+                <div class="captain-row">
+                    <span class="captain-label">With Captain:</span>
+                    <input type="text" class="captain-input" data-field="with_captain" value="${(monsterData.with_captain || '').replace(/"/g, '&quot;')}" placeholder="+2 damage bonus to strikes">
+                </div>` : ''}
 
                 <!-- Attributes Bar -->
                 <div class="attributes-bar">
@@ -1854,6 +1875,285 @@ function markTabsDirty() {
     }
 }
 
+// ---------- Multi-entry immunity / weakness helpers ----------
+//
+// Canonical storage is `monster.immunities` and `monster.weaknesses` —
+// each an array of { type, value } entries. The legacy single-field form
+// (`immunity_type` / `immunity_value`) is still written so older readers
+// keep working: it mirrors the first entry of the list.
+
+function ensureMonsterDefenseArrays(monster) {
+    if (!monster || typeof monster !== 'object') return;
+
+    ['immunities', 'weaknesses'].forEach(listKey => {
+        const singularKey = listKey === 'immunities' ? 'immunity' : 'weakness';
+
+        // Already a non-empty array — normalize entries and we're done.
+        if (Array.isArray(monster[listKey]) && monster[listKey].length > 0) {
+            monster[listKey] = monster[listKey]
+                .map(normalizeMonsterDefenseEntry)
+                .filter(Boolean);
+            syncLegacyDefenseFields(monster, singularKey);
+            return;
+        }
+
+        // Build from legacy single fields if present.
+        const legacyType = monster[`${singularKey}_type`];
+        const legacyValue = monster[`${singularKey}_value`];
+        const legacyEntry = normalizeMonsterDefenseEntry({ type: legacyType, value: legacyValue });
+        monster[listKey] = legacyEntry ? [legacyEntry] : [];
+
+        syncLegacyDefenseFields(monster, singularKey);
+    });
+}
+
+function normalizeMonsterDefenseEntry(entry) {
+    if (!entry || typeof entry !== 'object') return null;
+    const rawType = entry.type ?? entry.damageType ?? '';
+    const rawValue = entry.value ?? entry.amount ?? '';
+    const type = String(rawType).trim();
+    const valueStr = String(rawValue).trim();
+    if (!type && !valueStr) return null;
+    return { type, value: valueStr };
+}
+
+function syncLegacyDefenseFields(monster, singularKey) {
+    const listKey = singularKey === 'immunity' ? 'immunities' : 'weaknesses';
+    const list = Array.isArray(monster[listKey]) ? monster[listKey] : [];
+    const first = list[0] || { type: '', value: '' };
+    monster[`${singularKey}_type`] = first.type || '';
+    monster[`${singularKey}_value`] = first.value || '';
+}
+
+function addMonsterDefense(monsterId, kind) {
+    const monster = monsterData.monsters[monsterId];
+    if (!monster) return;
+    const listKey = kind === 'immunity' ? 'immunities' : 'weaknesses';
+    if (!Array.isArray(monster[listKey])) monster[listKey] = [];
+    monster[listKey].push({ type: '', value: '' });
+    syncLegacyDefenseFields(monster, kind);
+    refreshMonsterCard(monsterId);
+    markMonsterDirty(monsterId);
+}
+
+function removeMonsterDefense(monsterId, kind, index) {
+    const monster = monsterData.monsters[monsterId];
+    if (!monster) return;
+    const listKey = kind === 'immunity' ? 'immunities' : 'weaknesses';
+    if (!Array.isArray(monster[listKey])) return;
+    if (index < 0 || index >= monster[listKey].length) return;
+    monster[listKey].splice(index, 1);
+    syncLegacyDefenseFields(monster, kind);
+    refreshMonsterCard(monsterId);
+    markMonsterDirty(monsterId);
+}
+
+// ---------- Role split (Organization + Tactical Role) ----------
+
+const KNOWN_ORGANIZATIONS = ['solo', 'elite', 'platoon', 'horde', 'minion', 'retainer', 'leader'];
+const KNOWN_TACTICAL_ROLES = ['ambusher', 'artillery', 'brute', 'controller', 'defender', 'harrier', 'hexer', 'mount', 'support'];
+
+function ensureMonsterRoleSplit(monster) {
+    if (!monster || typeof monster !== 'object') return;
+    if (typeof monster.organization !== 'string') monster.organization = '';
+    if (typeof monster.tactical_role !== 'string') monster.tactical_role = '';
+
+    // Migrate legacy single `role` string if the split fields are empty.
+    if (!monster.organization && !monster.tactical_role && typeof monster.role === 'string' && monster.role.trim()) {
+        const parts = monster.role.trim().split(/\s+/);
+        parts.forEach(part => {
+            const lower = part.toLowerCase();
+            if (KNOWN_ORGANIZATIONS.includes(lower) && !monster.organization) {
+                monster.organization = capitalizeFirst(lower);
+            } else if (KNOWN_TACTICAL_ROLES.includes(lower) && !monster.tactical_role) {
+                monster.tactical_role = capitalizeFirst(lower);
+            }
+        });
+    }
+
+    monster.role = formatMonsterRole(monster);
+}
+
+function capitalizeFirst(value) {
+    if (!value) return '';
+    return value.charAt(0).toUpperCase() + value.slice(1);
+}
+
+function formatMonsterRole(monster) {
+    const org = (monster?.organization || '').trim();
+    const tactical = (monster?.tactical_role || '').trim();
+    return [org, tactical].filter(Boolean).join(' ');
+}
+
+function formatMonsterEv(monster) {
+    const ev = monster?.ev ?? 0;
+    const evStr = (ev || ev === 0) ? String(ev) : '';
+    if (!evStr) return '';
+    if ((monster?.organization || '').toLowerCase() === 'minion') {
+        return `${evStr} for four minions`;
+    }
+    return evStr;
+}
+
+// ---------- Movement modes (chip-style multi-select) ----------
+
+const KNOWN_MOVEMENT_MODES = ['Fly', 'Hover', 'Climb', 'Swim', 'Burrow', 'Teleport', 'Phase'];
+
+function ensureMonsterMovementModes(monster) {
+    if (!monster || typeof monster !== 'object') return;
+    if (!Array.isArray(monster.movement_modes)) {
+        monster.movement_modes = [];
+    }
+    // Migrate legacy `movement` string ("Climb, Swim" / "fly 8 squares") to modes.
+    if (monster.movement_modes.length === 0 && typeof monster.movement === 'string' && monster.movement.trim()) {
+        const tokens = monster.movement.split(/[,/]+/).map(t => t.trim()).filter(Boolean);
+        tokens.forEach(token => {
+            // Strip trailing numbers/units that the old free-text format sometimes had.
+            const cleanedMatch = token.match(/^([A-Za-z][A-Za-z\- ]*?)(?:\s+\d.*)?$/);
+            const cleaned = (cleanedMatch ? cleanedMatch[1] : token).trim();
+            if (!cleaned) return;
+            const matched = KNOWN_MOVEMENT_MODES.find(m => m.toLowerCase() === cleaned.toLowerCase());
+            const value = matched || capitalizeFirst(cleaned.toLowerCase());
+            if (!monster.movement_modes.some(existing => existing.toLowerCase() === value.toLowerCase())) {
+                monster.movement_modes.push(value);
+            }
+        });
+    }
+    syncLegacyMovementString(monster);
+}
+
+function syncLegacyMovementString(monster) {
+    const modes = Array.isArray(monster.movement_modes) ? monster.movement_modes : [];
+    monster.movement = modes.join(', ');
+}
+
+function toggleMonsterMovementMode(monsterId, mode) {
+    const monster = monsterData.monsters[monsterId];
+    if (!monster) return;
+    if (!Array.isArray(monster.movement_modes)) monster.movement_modes = [];
+    const idx = monster.movement_modes.findIndex(m => m.toLowerCase() === mode.toLowerCase());
+    if (idx >= 0) {
+        monster.movement_modes.splice(idx, 1);
+    } else {
+        monster.movement_modes.push(mode);
+    }
+    syncLegacyMovementString(monster);
+    refreshMonsterCard(monsterId);
+    markMonsterDirty(monsterId);
+}
+
+function addCustomMonsterMovementMode(monsterId, inputEl) {
+    if (!inputEl) return;
+    const raw = (inputEl.value || '').trim();
+    if (!raw) return;
+    const monster = monsterData.monsters[monsterId];
+    if (!monster) return;
+    if (!Array.isArray(monster.movement_modes)) monster.movement_modes = [];
+    if (!monster.movement_modes.some(m => m.toLowerCase() === raw.toLowerCase())) {
+        monster.movement_modes.push(raw);
+    }
+    inputEl.value = '';
+    syncLegacyMovementString(monster);
+    refreshMonsterCard(monsterId);
+    markMonsterDirty(monsterId);
+}
+
+function removeMonsterMovementMode(monsterId, index) {
+    const monster = monsterData.monsters[monsterId];
+    if (!monster) return;
+    if (!Array.isArray(monster.movement_modes)) return;
+    if (index < 0 || index >= monster.movement_modes.length) return;
+    monster.movement_modes.splice(index, 1);
+    syncLegacyMovementString(monster);
+    refreshMonsterCard(monsterId);
+    markMonsterDirty(monsterId);
+}
+
+function renderMonsterMovementEditor(monsterId, monster) {
+    const selectedModes = Array.isArray(monster.movement_modes) ? monster.movement_modes : [];
+    const lowerSelected = new Set(selectedModes.map(m => m.toLowerCase()));
+
+    const chips = selectedModes.map((mode, index) => `
+        <span class="movement-chip" data-mode="${(mode || '').replace(/"/g, '&quot;')}">
+            ${escapeMonsterText(mode)}
+            <button type="button" class="movement-chip-remove" aria-label="Remove ${escapeMonsterText(mode)}" onclick="removeMonsterMovementMode('${monsterId}', ${index})">×</button>
+        </span>
+    `).join('');
+
+    const presetButtons = KNOWN_MOVEMENT_MODES.map(mode => {
+        const active = lowerSelected.has(mode.toLowerCase()) ? ' is-active' : '';
+        return `<button type="button" class="movement-preset${active}" onclick="toggleMonsterMovementMode('${monsterId}', '${mode}')">${mode}</button>`;
+    }).join('');
+
+    return `
+        <div class="defensive-stat defensive-stat--multi">
+            <span class="defensive-stat-label">Movement Types:</span>
+            <div class="movement-editor">
+                <div class="movement-chips">${chips || '<span class="movement-empty">none</span>'}</div>
+                <div class="movement-presets">${presetButtons}</div>
+                <input type="text" class="movement-custom-input" placeholder="Custom (Enter to add)"
+                    onkeydown="if (event.key === 'Enter') { event.preventDefault(); addCustomMonsterMovementMode('${monsterId}', this); }">
+            </div>
+        </div>
+    `;
+}
+
+function escapeMonsterText(value) {
+    return String(value || '')
+        .replace(/&/g, '&amp;')
+        .replace(/</g, '&lt;')
+        .replace(/>/g, '&gt;')
+        .replace(/"/g, '&quot;');
+}
+
+function renderMonsterDefenseEditor(monsterId, monster, kind) {
+    const listKey = kind === 'immunity' ? 'immunities' : 'weaknesses';
+    const label = kind === 'immunity' ? 'Immunity' : 'Weakness';
+    const typePlaceholder = kind === 'immunity' ? 'fire' : 'cold';
+    const valuePlaceholder = kind === 'immunity' ? '3' : '2';
+    const list = Array.isArray(monster[listKey]) && monster[listKey].length > 0
+        ? monster[listKey]
+        : [{ type: '', value: '' }];
+
+    const rows = list.map((entry, index) => {
+        const typeVal = (entry?.type || '').replace(/"/g, '&quot;');
+        const valueVal = (entry?.value || '').toString().replace(/"/g, '&quot;');
+        const canRemove = list.length > 1;
+        const removeBtn = canRemove
+            ? `<button type="button" class="defensive-stat-remove" title="Remove" onclick="removeMonsterDefense('${monsterId}', '${kind}', ${index})">×</button>`
+            : '<span class="defensive-stat-remove-placeholder" aria-hidden="true"></span>';
+        return `
+            <div class="defensive-stat-row" data-defense-kind="${kind}" data-defense-index="${index}">
+                <input type="text" class="defensive-stat-text" data-field="${listKey}.${index}.type" value="${typeVal}" placeholder="${typePlaceholder}">
+                <input type="number" class="defensive-stat-number" data-field="${listKey}.${index}.value" value="${valueVal}" placeholder="${valuePlaceholder}">
+                ${removeBtn}
+            </div>
+        `;
+    }).join('');
+
+    return `
+        <div class="defensive-stat defensive-stat--multi" data-defense-kind="${kind}">
+            <span class="defensive-stat-label">${label}:</span>
+            <div class="defensive-stat-rows">
+                ${rows}
+            </div>
+            <button type="button" class="defensive-stat-add" onclick="addMonsterDefense('${monsterId}', '${kind}')">+ Add ${label}</button>
+        </div>
+    `;
+}
+
+function formatMonsterDefenseList(list) {
+    if (!Array.isArray(list) || list.length === 0) return '';
+    return list
+        .map(entry => {
+            const type = (entry?.type || '').trim();
+            const value = (entry?.value || '').toString().trim();
+            return [type, value].filter(Boolean).join(' ');
+        })
+        .filter(Boolean)
+        .join(', ');
+}
+
 function setNestedValue(obj, path, value) {
     const keys = path.split('.');
     let current = obj;
@@ -1961,7 +2261,25 @@ function handleFieldChange(event) {
     
     // Set nested value (works for all fields including name)
     setNestedValue(monster, fieldPath, value);
-    
+
+    // When a multi-entry immunity/weakness row changes, keep the legacy
+    // single-field mirror (immunity_type/value, weakness_type/value) in sync.
+    if (fieldPath.startsWith('immunities.')) {
+        syncLegacyDefenseFields(monster, 'immunity');
+    } else if (fieldPath.startsWith('weaknesses.')) {
+        syncLegacyDefenseFields(monster, 'weakness');
+    }
+
+    // Organization/tactical role -> rebuild legacy `role` string, and trigger a
+    // re-render so the captain row + EV "for four minions" suffix react.
+    if (fieldPath === 'organization' || fieldPath === 'tactical_role') {
+        monster.role = formatMonsterRole(monster);
+        monster.lastModified = Date.now();
+        markMonsterDirty(monsterId);
+        refreshMonsterCard(monsterId);
+        return;
+    }
+
     // Mark monster as modified
     monster.lastModified = Date.now();
     markMonsterDirty(monsterId);
@@ -3295,10 +3613,32 @@ function normalizeImportedMonsterJson(raw) {
     const weakness = defenses.weakness && typeof defenses.weakness === 'object' ? defenses.weakness : {};
     const abilities = normalizeImportedAbilities(source.abilities || {});
 
-    return {
+    const immunities = normalizeImportedDefenseList(
+        source.immunities ?? defenses.immunities,
+        { type: source.immunity_type ?? source.immunityType ?? immunity.type, value: source.immunity_value ?? source.immunityValue ?? immunity.value }
+    );
+    const weaknesses = normalizeImportedDefenseList(
+        source.weaknesses ?? defenses.weaknesses,
+        { type: source.weakness_type ?? source.weaknessType ?? weakness.type, value: source.weakness_value ?? source.weaknessValue ?? weakness.value }
+    );
+    const firstImmunity = immunities[0] || { type: '', value: '' };
+    const firstWeakness = weaknesses[0] || { type: '', value: '' };
+
+    // Role split: accept explicit organization/tactical_role, or split a legacy `role` string.
+    const importedRole = parseImportedRoleString(source.role);
+    const organization = cleanText(source.organization || importedRole.organization);
+    const tacticalRole = cleanText(source.tactical_role || source.tacticalRole || importedRole.tactical_role || (source.role && !importedRole.organization ? source.role : ''));
+
+    // Movement modes: accept explicit array, or split a legacy `movement` string.
+    const movementModes = normalizeImportedMovementModes(source.movement_modes ?? source.movementModes, source.movement);
+
+    const monster = {
         name,
         level: toImportedInt(source.level, 1),
-        role: cleanText(source.role || source.organization || 'Brute') || 'Brute',
+        organization,
+        tactical_role: tacticalRole,
+        role: '',
+        with_captain: cleanText(source.with_captain ?? source.withCaptain ?? ''),
         types: cleanText(source.types || source.type || ''),
         ev: toImportedInt(source.ev, 0),
         hp: toImportedInt(source.hp ?? source.stamina, 1),
@@ -3306,14 +3646,17 @@ function normalizeImportedMonsterJson(raw) {
         speed: toImportedInt(source.speed, 0),
         image: cleanText(source.image || source.imageUrl || ''),
         size: cleanText(source.size || '1M') || '1M',
-        movement: cleanText(source.movement || ''),
+        movement_modes: movementModes,
+        movement: movementModes.join(', '),
         stamina: toImportedInt(source.stamina ?? source.hp, 0),
         stability: toImportedInt(source.stability ?? defenses.stability, 0),
         free_strike: toImportedInt(source.free_strike ?? source.freeStrike ?? defenses.free_strike ?? defenses.freeStrike, 0),
-        immunity_type: cleanText(source.immunity_type ?? source.immunityType ?? immunity.type ?? ''),
-        immunity_value: toImportedOptionalInt(source.immunity_value ?? source.immunityValue ?? immunity.value),
-        weakness_type: cleanText(source.weakness_type ?? source.weaknessType ?? weakness.type ?? ''),
-        weakness_value: toImportedOptionalInt(source.weakness_value ?? source.weaknessValue ?? weakness.value),
+        immunities,
+        weaknesses,
+        immunity_type: firstImmunity.type,
+        immunity_value: firstImmunity.value,
+        weakness_type: firstWeakness.type,
+        weakness_value: firstWeakness.value,
         might: toImportedInt(source.might ?? attributes.might, 0),
         agility: toImportedInt(source.agility ?? attributes.agility, 0),
         reason: toImportedInt(source.reason ?? attributes.reason, 0),
@@ -3324,6 +3667,63 @@ function normalizeImportedMonsterJson(raw) {
         created: Date.now(),
         lastModified: Date.now()
     };
+    monster.role = formatMonsterRole(monster);
+    return monster;
+}
+
+function parseImportedRoleString(roleString) {
+    const out = { organization: '', tactical_role: '' };
+    if (typeof roleString !== 'string') return out;
+    const parts = roleString.trim().split(/\s+/);
+    parts.forEach(part => {
+        const lower = part.toLowerCase();
+        if (KNOWN_ORGANIZATIONS.includes(lower) && !out.organization) {
+            out.organization = capitalizeFirst(lower);
+        } else if (KNOWN_TACTICAL_ROLES.includes(lower) && !out.tactical_role) {
+            out.tactical_role = capitalizeFirst(lower);
+        }
+    });
+    return out;
+}
+
+function normalizeImportedMovementModes(arrayInput, legacyString) {
+    const out = [];
+    const seen = new Set();
+    const addMode = (raw) => {
+        const cleaned = String(raw || '').trim();
+        if (!cleaned) return;
+        const matched = KNOWN_MOVEMENT_MODES.find(m => m.toLowerCase() === cleaned.toLowerCase());
+        const value = matched || capitalizeFirst(cleaned.toLowerCase());
+        const key = value.toLowerCase();
+        if (seen.has(key)) return;
+        seen.add(key);
+        out.push(value);
+    };
+    if (Array.isArray(arrayInput)) {
+        arrayInput.forEach(addMode);
+    }
+    if (out.length === 0 && typeof legacyString === 'string') {
+        legacyString.split(/[,/]+/).forEach(token => {
+            const cleanedMatch = token.match(/^([A-Za-z][A-Za-z\- ]*?)(?:\s+\d.*)?$/);
+            addMode(cleanedMatch ? cleanedMatch[1] : token);
+        });
+    }
+    return out;
+}
+
+function normalizeImportedDefenseList(rawList, legacyFallback) {
+    const result = [];
+    if (Array.isArray(rawList)) {
+        rawList.forEach(entry => {
+            const normalized = normalizeMonsterDefenseEntry(entry);
+            if (normalized) result.push(normalized);
+        });
+    }
+    if (result.length === 0 && legacyFallback) {
+        const normalized = normalizeMonsterDefenseEntry(legacyFallback);
+        if (normalized) result.push(normalized);
+    }
+    return result;
 }
 
 function unwrapImportedMonsterJson(raw) {
@@ -4012,11 +4412,15 @@ function renderMonsterForPrint(monsterId, monsterData, options = {}) {
     }
     
     // Level, Role, Type, EV - only if they have values
+    ensureMonsterRoleSplit(monsterData);
+    ensureMonsterMovementModes(monsterData);
     let basicInfo = [];
     if (monsterData.level && monsterData.level !== 1) basicInfo.push(`Level ${monsterData.level}`);
-    if (monsterData.role) basicInfo.push(monsterData.role); // Always show role, including Brute
+    const printRole = formatMonsterRole(monsterData);
+    if (printRole) basicInfo.push(printRole);
     if (monsterData.types) basicInfo.push(monsterData.types);
-    if (monsterData.ev && monsterData.ev !== 0) basicInfo.push(`EV ${monsterData.ev}`);
+    const printEv = formatMonsterEv(monsterData);
+    if (printEv && printEv !== '0') basicInfo.push(`EV ${printEv}`);
     
     if (basicInfo.length > 0) {
         html += `<div class="print-basic-info">${basicInfo.join(' • ')}</div>`;
@@ -4029,20 +4433,35 @@ function renderMonsterForPrint(monsterId, monsterData, options = {}) {
     if (monsterData.stamina && monsterData.stamina !== 0) combatStats.push(`Stamina: ${monsterData.stamina}`);
     if (monsterData.stability && monsterData.stability !== 0) combatStats.push(`Stability: ${monsterData.stability}`);
     if (monsterData.free_strike && monsterData.free_strike !== 0) combatStats.push(`Free Strike: ${monsterData.free_strike}`);
-    if (monsterData.movement) combatStats.push(`Movement: ${monsterData.movement}`);
-    
+    const printMovement = Array.isArray(monsterData.movement_modes) && monsterData.movement_modes.length > 0
+        ? monsterData.movement_modes.join(', ')
+        : (monsterData.movement || '');
+    if (printMovement) combatStats.push(`Movement: ${printMovement}`);
+
     if (combatStats.length > 0) {
         html += '<div class="print-combat-stats">';
         html += combatStats.join(' • ');
         html += '</div>';
     }
+
+    // With Captain row (only meaningful when org is Minion/Horde/Platoon)
+    const captainText = (monsterData.with_captain || '').trim();
+    if (captainText) {
+        html += `<div class="print-captain">With Captain: ${escapeMonsterText(captainText)}</div>`;
+    }
     
     // Immunities and Weaknesses - only if present
     let resistances = [];
-    if (monsterData.immunity_type && monsterData.immunity_value) {
+    const immunitiesPrint = formatMonsterDefenseList(monsterData.immunities);
+    if (immunitiesPrint) {
+        resistances.push(`Immunity: ${immunitiesPrint}`);
+    } else if (monsterData.immunity_type && monsterData.immunity_value) {
         resistances.push(`Immunity: ${monsterData.immunity_type} ${monsterData.immunity_value}`);
     }
-    if (monsterData.weakness_type && monsterData.weakness_value) {
+    const weaknessesPrint = formatMonsterDefenseList(monsterData.weaknesses);
+    if (weaknessesPrint) {
+        resistances.push(`Weakness: ${weaknessesPrint}`);
+    } else if (monsterData.weakness_type && monsterData.weakness_value) {
         resistances.push(`Weakness: ${monsterData.weakness_type} ${monsterData.weakness_value}`);
     }
     
