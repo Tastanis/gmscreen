@@ -155,6 +155,15 @@ document.addEventListener('DOMContentLoaded', async function() {
     
     // Set up window close handler
     window.addEventListener('beforeunload', function(e) {
+        // Block leaving if any orphan monster exists — they would be stripped
+        // by the next save and silently lost.
+        const referenced = getReferencedMonsterIds();
+        const hasOrphans = Object.keys(monsterData.monsters || {}).some(id => !referenced.has(id));
+        if (hasOrphans) {
+            e.preventDefault();
+            e.returnValue = 'You have draft monsters not saved to any tab. They will be lost if you leave. Save to Tab first?';
+            return;
+        }
         if (hasUnsavedChanges()) {
             // Force immediate save before leaving
             if (!isSaving) {
@@ -612,7 +621,11 @@ function loadWorkspace() {
             actionButtons = '<button class="btn-primary add-monster-btn" onclick="addNewMonster()">+ Add New Monster</button>';
         }
     }
-    
+
+    // Warn loudly if the monster being edited isn't saved to a tab — the
+    // auto-save will NOT include it until you assign one.
+    const showOrphanBanner = currentMode === 'editor' && editorMonsterId && isMonsterOrphan(editorMonsterId);
+
     workspaceHeader.innerHTML = `
         <div class="workspace-title">
             <h3>${title}</h3>
@@ -628,6 +641,16 @@ function loadWorkspace() {
             </div>
             ${actionButtons}
         </div>
+        ${showOrphanBanner ? `
+        <div class="orphan-warning-banner" role="alert">
+            <span class="orphan-warning-icon">⚠</span>
+            <span class="orphan-warning-text">
+                <strong>Draft only — not saved to any tab.</strong>
+                Auto-save will NOT keep this monster across reloads.
+                Click <strong>Save to Tab</strong> after selecting a tab/subtab to keep it permanently.
+            </span>
+            <button type="button" class="orphan-warning-action" onclick="showTabAssignment()">Save to Tab Now</button>
+        </div>` : ''}
     `;
     
     // Create content area for monsters
@@ -2306,21 +2329,52 @@ function queueSave() {
 }
 
 // New selective save function - only saves changed monsters
+// Returns the set of monster IDs that are referenced by at least one subtab.
+// Anything in monsterData.monsters but NOT in this set is an orphan/draft.
+function getReferencedMonsterIds() {
+    const referenced = new Set();
+    Object.values(monsterData.tabs || {}).forEach(mainTab => {
+        Object.values(mainTab?.subTabs || {}).forEach(subTab => {
+            (subTab?.monsters || []).forEach(id => referenced.add(id));
+        });
+    });
+    return referenced;
+}
+
+function isMonsterOrphan(monsterId) {
+    return !getReferencedMonsterIds().has(monsterId);
+}
+
+// Build a copy of monsterData that excludes orphaned monsters before
+// persisting to the server. Orphans stay in memory + localStorage for the
+// current session, but never reach the saved file — the user must Save to Tab
+// to keep them across reloads.
+function buildPersistedMonsterData() {
+    const referenced = getReferencedMonsterIds();
+    const filteredMonsters = {};
+    Object.entries(monsterData.monsters || {}).forEach(([id, monster]) => {
+        if (referenced.has(id)) {
+            filteredMonsters[id] = monster;
+        }
+    });
+    return { ...monsterData, monsters: filteredMonsters };
+}
+
 async function saveChangedData(backupType = 'auto') {
     if (isSaving) {
         console.log('Save already in progress, queueing...');
         return;
     }
-    
+
     if (dirtyMonsters.size === 0 && !needsTabSave) {
         console.log('No changes to save');
         updateSaveStatus('saved');
         return;
     }
-    
+
     isSaving = true;
     updateSaveStatus('saving');
-    
+
     try {
         let saveReason = [];
         if (dirtyMonsters.size > 0) {
@@ -2329,15 +2383,25 @@ async function saveChangedData(backupType = 'auto') {
         if (needsTabSave) {
             saveReason.push('tab structure changes');
         }
-        
+
         console.log(`💾 Saving: ${saveReason.join(' + ')}`);
         if (dirtyMonsters.size > 0) {
             console.log(`📝 Changed monsters: ${dirtyMonsters.size}`);
         }
-        
-        // Save to localStorage as backup
+
+        // Save to localStorage as backup — includes orphans so an in-session
+        // refresh can recover unsaved drafts.
         saveToLocalStorage();
-        
+
+        // Strip orphans from the server-bound payload so the saved file
+        // never accumulates ghost monsters that can't be reached from any tab.
+        const persistedData = buildPersistedMonsterData();
+        const orphanCount = Object.keys(monsterData.monsters || {}).length
+            - Object.keys(persistedData.monsters || {}).length;
+        if (orphanCount > 0) {
+            console.log(`⚠ Stripped ${orphanCount} orphan monster(s) from server save (Save to Tab to keep them).`);
+        }
+
         const response = await fetch('save-monster-data.php', {
             method: 'POST',
             headers: {
@@ -2345,7 +2409,7 @@ async function saveChangedData(backupType = 'auto') {
             },
             body: JSON.stringify({
                 action: 'save',
-                data: monsterData,
+                data: persistedData,
                 backup_type: backupType
             })
         });
@@ -2777,43 +2841,56 @@ function getMonstersForBrowserSearch(query) {
     const q = (query || '').toLowerCase();
     if (!q) return [];
 
-    const results = [];
+    // Build a placement index: monsterId -> "MainTab > SubTab" (first match).
+    // Monsters NOT referenced by any subtab are orphans (created but not yet
+    // "Save to Tab"'d, or saved-to-tab pointers were lost). We still want them
+    // findable via search.
+    const locationByMonsterId = new Map();
     Object.entries(monsterData.tabs || {}).forEach(([mainTabId, mainTab]) => {
         if (!mainTab?.subTabs) return;
         Object.entries(mainTab.subTabs).forEach(([subTabId, subTab]) => {
             if (!Array.isArray(subTab?.monsters)) return;
             subTab.monsters.forEach(monsterId => {
-                const monster = monsterData.monsters[monsterId];
-                if (!monster) return;
-                const haystack = [
-                    monster.name,
-                    monster.role,
-                    monster.organization,
-                    monster.tactical_role,
-                    monster.types
-                ].filter(Boolean).join(' ').toLowerCase();
-                if (haystack.includes(q)) {
-                    results.push({
-                        id: monsterId,
-                        data: monster,
-                        location: `${mainTab.name} > ${subTab.name}`
+                if (!locationByMonsterId.has(monsterId)) {
+                    locationByMonsterId.set(monsterId, {
+                        label: `${mainTab.name} > ${subTab.name}`,
+                        mainTabId,
+                        subTabId,
                     });
                 }
             });
         });
     });
 
-    // De-dupe in case a monster is referenced from multiple subtabs.
-    const seen = new Set();
-    const deduped = [];
-    results.forEach(entry => {
-        if (seen.has(entry.id)) return;
-        seen.add(entry.id);
-        deduped.push(entry);
+    const results = [];
+    Object.entries(monsterData.monsters || {}).forEach(([monsterId, monster]) => {
+        if (!monster) return;
+        const haystack = [
+            monster.name,
+            monster.role,
+            monster.organization,
+            monster.tactical_role,
+            monster.types
+        ].filter(Boolean).join(' ').toLowerCase();
+        if (!haystack.includes(q)) return;
+
+        const placement = locationByMonsterId.get(monsterId);
+        results.push({
+            id: monsterId,
+            data: monster,
+            location: placement ? placement.label : '⚠ Not saved to any tab',
+            isOrphan: !placement,
+            placement: placement || null,
+        });
     });
 
-    deduped.sort((a, b) => (a.data.name || 'Unnamed').localeCompare(b.data.name || 'Unnamed'));
-    return deduped;
+    results.sort((a, b) => {
+        // Orphans first so the user notices them immediately.
+        if (a.isOrphan !== b.isOrphan) return a.isOrphan ? -1 : 1;
+        return (a.data.name || 'Unnamed').localeCompare(b.data.name || 'Unnamed');
+    });
+
+    return results;
 }
 
 // Right Sidebar Browser Functions
@@ -2980,18 +3057,26 @@ function updateMonsterBrowser(monsters) {
     monsters.forEach(monster => {
         const card = document.createElement('div');
         card.className = 'browser-monster-card';
+        if (monster.isOrphan) card.classList.add('browser-monster-card--orphan');
         card.setAttribute('data-monster-id', monster.id);
-        card.onclick = () => selectMonster(monster.id);
-        
+        // Orphans: open straight in editor mode so the user can Save to Tab.
+        card.onclick = () => {
+            if (monster.isOrphan) {
+                enterEditorMode(monster.id);
+            } else {
+                selectMonster(monster.id);
+            }
+        };
+
         // Create image element
-        const imageHtml = monster.data.image 
+        const imageHtml = monster.data.image
             ? `<img src="images/${monster.data.image}" alt="${monster.data.name || 'Monster'}">`
             : `<div class="placeholder">🐉</div>`;
-        
+
         // Get level and role info
         const level = monster.data.level || '?';
-        const role = monster.data.role || 'Unknown';
-        
+        const role = formatMonsterRole(monster.data) || monster.data.role || 'Unknown';
+
         card.innerHTML = `
             <div class="browser-monster-image">
                 ${imageHtml}
@@ -3005,7 +3090,7 @@ function updateMonsterBrowser(monsters) {
                 <div class="browser-card-location">${monster.location}</div>
             </div>
         `;
-        
+
         monsterList.appendChild(card);
     });
 }

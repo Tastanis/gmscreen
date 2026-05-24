@@ -1943,6 +1943,68 @@ body.delete-mode-active .sub-tab:hover {
     background: rgba(90, 62, 48, 0.12);
 }
 
+/* Orphaned monster card (not saved to any tab) */
+.browser-monster-card--orphan {
+    border-left: 3px solid #d9844f !important;
+    background: #fdf2e7 !important;
+}
+
+.browser-monster-card--orphan .browser-card-location {
+    color: #b3551b !important;
+    font-weight: 600;
+    font-style: italic;
+}
+
+.browser-monster-card--orphan:hover {
+    background: #f9e7d3 !important;
+}
+
+/* Orphan warning banner in editor workspace */
+.orphan-warning-banner {
+    display: flex;
+    align-items: center;
+    gap: 12px;
+    width: 100%;
+    margin-top: 10px;
+    padding: 10px 14px;
+    background: #fdf2e7;
+    border: 1px solid #d9844f;
+    border-left: 4px solid #b3551b;
+    border-radius: 4px;
+    color: #5a3a1e;
+    font-size: 13px;
+    box-sizing: border-box;
+}
+
+.orphan-warning-icon {
+    font-size: 20px;
+    line-height: 1;
+    color: #b3551b;
+    flex-shrink: 0;
+}
+
+.orphan-warning-text {
+    flex: 1;
+    line-height: 1.4;
+}
+
+.orphan-warning-action {
+    padding: 6px 12px;
+    background: #b3551b;
+    color: #fff;
+    border: none;
+    border-radius: 3px;
+    cursor: pointer;
+    font-weight: 600;
+    font-size: 12.5px;
+    white-space: nowrap;
+    flex-shrink: 0;
+}
+
+.orphan-warning-action:hover {
+    background: #9a4615;
+}
+
 .browser-content {
     flex: 1;
     display: flex;
