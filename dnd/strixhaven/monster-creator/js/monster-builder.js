@@ -43,6 +43,15 @@ let editorMonsterOriginalTab = null; // Track original tab location
 let editorMonsterOriginalSubTab = null; // Track original subtab location
 let selectedMonsterId = null; // ID of monster selected for ability viewing
 
+const MONSTER_ABILITY_CATEGORIES = [
+    'passive',
+    'maneuver',
+    'action',
+    'triggered_action',
+    'villain_action',
+    'malice'
+];
+
 // New change tracking system
 let dirtyMonsters = new Set(); // Track which monsters have unsaved changes
 let changeListeners = new Map(); // Track active event listeners
@@ -3163,6 +3172,246 @@ function createNewMonsterForEditor() {
         // Enter editor mode with this monster
         enterEditorMode(monsterId);
         markMonsterDirty(monsterId);
+    }
+}
+
+function triggerMonsterJsonImport() {
+    const input = document.getElementById('monsterJsonImportInput');
+    if (!input) {
+        alert('Monster JSON import input is missing.');
+        return;
+    }
+    input.value = '';
+    input.click();
+}
+
+async function handleMonsterJsonImportFile(input) {
+    const file = input?.files?.[0];
+    if (!file) return;
+
+    try {
+        const text = await file.text();
+        const parsed = JSON.parse(text);
+        const importedMonster = normalizeImportedMonsterJson(parsed);
+        const monsterId = buildImportedMonsterId(parsed, importedMonster);
+
+        monsterData.monsters[monsterId] = importedMonster;
+        enterEditorMode(monsterId);
+        dirtyMonsters.add(monsterId);
+        saveToLocalStorage();
+        queueSave();
+
+        alert(`Imported ${importedMonster.name}. Review it, then use Save to Tab when ready.`);
+    } catch (error) {
+        console.error('Monster JSON import failed:', error);
+        alert(`Monster JSON import failed: ${error.message}`);
+    } finally {
+        input.value = '';
+    }
+}
+
+function normalizeImportedMonsterJson(raw) {
+    const source = unwrapImportedMonsterJson(raw);
+    if (!source || typeof source !== 'object' || Array.isArray(source)) {
+        throw new Error('Expected a JSON object for one monster.');
+    }
+
+    const name = cleanText(source.name);
+    if (!name) {
+        throw new Error('Monster JSON must include a non-empty "name".');
+    }
+
+    const attributes = source.attributes && typeof source.attributes === 'object' ? source.attributes : {};
+    const defenses = source.defenses && typeof source.defenses === 'object' ? source.defenses : {};
+    const immunity = defenses.immunity && typeof defenses.immunity === 'object' ? defenses.immunity : {};
+    const weakness = defenses.weakness && typeof defenses.weakness === 'object' ? defenses.weakness : {};
+    const abilities = normalizeImportedAbilities(source.abilities || {});
+
+    return {
+        name,
+        level: toImportedInt(source.level, 1),
+        role: cleanText(source.role || source.organization || 'Brute') || 'Brute',
+        types: cleanText(source.types || source.type || ''),
+        ev: toImportedInt(source.ev, 0),
+        hp: toImportedInt(source.hp ?? source.stamina, 1),
+        ac: toImportedInt(source.ac, 10),
+        speed: toImportedInt(source.speed, 0),
+        image: cleanText(source.image || source.imageUrl || ''),
+        size: cleanText(source.size || '1M') || '1M',
+        movement: cleanText(source.movement || ''),
+        stamina: toImportedInt(source.stamina ?? source.hp, 0),
+        stability: toImportedInt(source.stability ?? defenses.stability, 0),
+        free_strike: toImportedInt(source.free_strike ?? source.freeStrike ?? defenses.free_strike ?? defenses.freeStrike, 0),
+        immunity_type: cleanText(source.immunity_type ?? source.immunityType ?? immunity.type ?? ''),
+        immunity_value: toImportedOptionalInt(source.immunity_value ?? source.immunityValue ?? immunity.value),
+        weakness_type: cleanText(source.weakness_type ?? source.weaknessType ?? weakness.type ?? ''),
+        weakness_value: toImportedOptionalInt(source.weakness_value ?? source.weaknessValue ?? weakness.value),
+        might: toImportedInt(source.might ?? attributes.might, 0),
+        agility: toImportedInt(source.agility ?? attributes.agility, 0),
+        reason: toImportedInt(source.reason ?? attributes.reason, 0),
+        intuition: toImportedInt(source.intuition ?? attributes.intuition, 0),
+        presence: toImportedInt(source.presence ?? attributes.presence, 0),
+        traits: Array.isArray(source.traits) ? source.traits.map(normalizeImportedTrait).filter(Boolean) : [],
+        abilities,
+        created: Date.now(),
+        lastModified: Date.now()
+    };
+}
+
+function unwrapImportedMonsterJson(raw) {
+    if (raw && typeof raw === 'object' && !Array.isArray(raw)) {
+        if (raw.monster && typeof raw.monster === 'object' && !Array.isArray(raw.monster)) {
+            return raw.monster;
+        }
+        return raw;
+    }
+    return null;
+}
+
+function buildImportedMonsterId(raw, monster) {
+    const source = unwrapImportedMonsterJson(raw) || {};
+    const requestedId = cleanText(source.id || source.monsterId || '');
+    const baseId = requestedId || `monster_${slugifyMonsterName(monster.name)}`;
+    let candidate = baseId;
+    let suffix = Date.now();
+    while (monsterData.monsters[candidate]) {
+        candidate = `${baseId}_${suffix}`;
+        suffix += 1;
+    }
+    return candidate;
+}
+
+function normalizeImportedAbilities(rawAbilities) {
+    const abilities = {};
+    MONSTER_ABILITY_CATEGORIES.forEach(category => {
+        abilities[category] = [];
+    });
+
+    if (Array.isArray(rawAbilities)) {
+        abilities.action = rawAbilities.map(ability => normalizeImportedAbility(ability, 'action')).filter(Boolean);
+        return abilities;
+    }
+
+    if (!rawAbilities || typeof rawAbilities !== 'object') {
+        return abilities;
+    }
+
+    const aliases = {
+        passive: ['passive', 'passives', 'traits'],
+        maneuver: ['maneuver', 'maneuvers'],
+        action: ['action', 'actions', 'main', 'mains'],
+        triggered_action: ['triggered_action', 'triggeredAction', 'triggered_actions', 'triggeredActions', 'triggered'],
+        villain_action: ['villain_action', 'villainAction', 'villain_actions', 'villainActions', 'villain'],
+        malice: ['malice', 'malice_actions', 'maliceActions']
+    };
+
+    MONSTER_ABILITY_CATEGORIES.forEach(category => {
+        const list = aliases[category]
+            .map(key => rawAbilities[key])
+            .find(value => Array.isArray(value));
+        if (Array.isArray(list)) {
+            abilities[category] = list.map(ability => normalizeImportedAbility(ability, category)).filter(Boolean);
+        }
+    });
+
+    return abilities;
+}
+
+function normalizeImportedAbility(rawAbility, category) {
+    if (!rawAbility || typeof rawAbility !== 'object') return null;
+    const source = rawAbility.fields && typeof rawAbility.fields === 'object'
+        ? { ...rawAbility.fields, automation: rawAbility.automation }
+        : rawAbility;
+    const name = cleanText(source.name);
+    if (!name) return null;
+
+    const ability = {
+        name,
+        roll_bonus: toImportedInt(source.roll_bonus ?? source.rollBonus, 0),
+        action_type: cleanText(source.action_type ?? source.actionType ?? getCategoryDisplayName(category)),
+        resource_cost: cleanText(source.resource_cost ?? source.resourceCost ?? source.cost ?? ''),
+        keywords: cleanText(Array.isArray(source.keywords) ? source.keywords.join(', ') : source.keywords ?? ''),
+        range: cleanText(source.range ?? ''),
+        targets: cleanText(source.targets ?? source.target ?? ''),
+        effect: cleanText(source.effect ?? source.description ?? ''),
+        has_test: Boolean(source.has_test ?? source.hasTest ?? source.test),
+        test: normalizeImportedAbilityTest(source.test),
+        additional_effect: cleanText(source.additional_effect ?? source.additionalEffect ?? ''),
+    };
+
+    if (category === 'triggered_action') {
+        ability.trigger = cleanText(source.trigger ?? source.useWhen ?? '');
+    }
+    if (source.automation && typeof source.automation === 'object' && !Array.isArray(source.automation)) {
+        ability.automation = cloneImportedPlainObject(source.automation);
+    }
+
+    return ability;
+}
+
+function normalizeImportedAbilityTest(rawTest) {
+    const empty = createEmptyImportedTest();
+    if (!rawTest || typeof rawTest !== 'object') return empty;
+
+    ['tier1', 'tier2', 'tier3'].forEach(tierKey => {
+        const tier = rawTest[tierKey] || {};
+        empty[tierKey] = {
+            damage_amount: cleanText(tier.damage_amount ?? tier.damageAmount ?? ''),
+            damage_type: cleanText(tier.damage_type ?? tier.damageType ?? ''),
+            has_attribute_check: Boolean(tier.has_attribute_check ?? tier.hasAttributeCheck ?? tier.attribute_effect ?? tier.attributeEffect),
+            attribute: cleanText(tier.attribute ?? 'might') || 'might',
+            attribute_threshold: toImportedInt(tier.attribute_threshold ?? tier.attributeThreshold, 0),
+            attribute_effect: cleanText(tier.attribute_effect ?? tier.attributeEffect ?? '')
+        };
+    });
+
+    return empty;
+}
+
+function createEmptyImportedTest() {
+    return {
+        tier1: { damage_amount: '', damage_type: '', has_attribute_check: false, attribute: 'might', attribute_threshold: 0, attribute_effect: '' },
+        tier2: { damage_amount: '', damage_type: '', has_attribute_check: false, attribute: 'might', attribute_threshold: 0, attribute_effect: '' },
+        tier3: { damage_amount: '', damage_type: '', has_attribute_check: false, attribute: 'might', attribute_threshold: 0, attribute_effect: '' }
+    };
+}
+
+function normalizeImportedTrait(rawTrait) {
+    if (!rawTrait || typeof rawTrait !== 'object') return null;
+    const name = cleanText(rawTrait.name);
+    const text = cleanText(rawTrait.text ?? rawTrait.description ?? rawTrait.effect ?? '');
+    if (!name && !text) return null;
+    return { name, text };
+}
+
+function toImportedInt(value, fallback = 0) {
+    const number = Number.parseInt(value, 10);
+    return Number.isFinite(number) ? number : fallback;
+}
+
+function toImportedOptionalInt(value) {
+    if (value === null || value === undefined || value === '') return '';
+    const number = Number.parseInt(value, 10);
+    return Number.isFinite(number) ? number : '';
+}
+
+function cleanText(value) {
+    if (value === null || value === undefined) return '';
+    return String(value).trim();
+}
+
+function slugifyMonsterName(name) {
+    return cleanText(name)
+        .toLowerCase()
+        .replace(/[^a-z0-9]+/g, '_')
+        .replace(/^_+|_+$/g, '') || Date.now();
+}
+
+function cloneImportedPlainObject(value) {
+    try {
+        return JSON.parse(JSON.stringify(value));
+    } catch (_error) {
+        return {};
     }
 }
 

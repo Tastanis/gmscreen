@@ -176,6 +176,26 @@ body::before {
     transform: none;
 }
 
+.json-import-toggle {
+    background: #5a3e30;
+    color: #fdf8f2;
+    border: 1px solid #3f2b21;
+    padding: 7px 14px;
+    border-radius: 3px;
+    cursor: pointer;
+    font-size: 13px;
+    font-weight: 600;
+    transition: background-color 0.15s ease;
+    white-space: nowrap;
+    align-self: center;
+    margin-right: 12px;
+    box-shadow: none;
+}
+
+.json-import-toggle:hover {
+    background: #6a4c3b;
+}
+
 /* Show close buttons when in delete mode */
 body.delete-mode-active .tab-close {
     display: inline-block;

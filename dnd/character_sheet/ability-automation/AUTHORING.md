@@ -979,7 +979,11 @@ A chat message names which modifiers kicked in so the table can see "Sword Maste
 
 ## Monster abilities
 
-Monster automation reuses the same v3 schema PCs use, with a few practical differences. Author monster JSON in the monster creator (`Automate` button next to each ability row); the JSON is stored on the ability and the VTT monster ability tray launches it from the same runner.
+Monster automation reuses the same v3 schema PCs use, with a few practical differences. Author per-ability JSON in the monster creator (`Automate` button next to each ability row); the JSON is stored on the ability and the VTT monster ability tray launches it from the same runner.
+
+To create a complete monster at once, use the Monster Creator **Import JSON** button. The full-monster schema and copyable template live at:
+
+`dnd/strixhaven/monster-creator/MONSTER_JSON_IMPORT_TEMPLATE.md`
 
 ### Rules of thumb
 
@@ -1020,4 +1024,10 @@ Monster automation reuses the same v3 schema PCs use, with a few practical diffe
 ```
 
 When this monster is winded the roll bonus rises from +5 to +7, modeling "enraged when bloodied" mechanics without needing two ability cards.
+
+### Full monster import JSON
+
+The Monster Creator can import one complete monster from a JSON file. Use the template at `dnd/strixhaven/monster-creator/MONSTER_JSON_IMPORT_TEMPLATE.md` when asking an LLM to generate the whole monster, including stats, traits, ability text, and per-ability automation.
+
+Monster `immunity_type` / `immunity_value` and `weakness_type` / `weakness_value` are applied by VTT automated damage when the incoming `damageType` matches. Temporary automation-applied riders still use `damageImmunity` and `damageWeakness` conditions.
 

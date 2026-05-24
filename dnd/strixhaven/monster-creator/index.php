@@ -57,6 +57,18 @@ require_once '../../version.php';
                 <button class="recovery-toggle" onclick="window.location.href='monster-recovery.php'" title="View backups and recover lost data">
                     Data Recovery
                 </button>
+
+                <!-- JSON Import Button -->
+                <button class="json-import-toggle" onclick="triggerMonsterJsonImport()" title="Create a complete monster from a JSON file">
+                    Import JSON
+                </button>
+                <input
+                    type="file"
+                    id="monsterJsonImportInput"
+                    accept="application/json,.json"
+                    style="display: none;"
+                    onchange="handleMonsterJsonImportFile(this)"
+                >
                 
                 <!-- Print Mode Toggle -->
                 <button class="print-mode-toggle" id="printModeToggle" onclick="togglePrintMode()" title="Select monsters for printing">
@@ -81,6 +93,7 @@ require_once '../../version.php';
                 <div class="workspace-info">
                     <p>Select a tab to view monsters, or create a new monster.</p>
                     <button class="btn-primary" onclick="addNewMonster()">Add New Monster</button>
+                    <button class="btn-secondary" onclick="triggerMonsterJsonImport()">Import Monster JSON</button>
                 </div>
             </div>
 

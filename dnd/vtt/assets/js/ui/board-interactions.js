@@ -14332,18 +14332,21 @@ export function mountBoardInteractions(store, routes = {}) {
   }
 
   async function getAutomationDamageAdjustment(placementId, damageType) {
+    const placement = getPlacementFromStore(placementId);
     const sheet = await getAutomationSheetForPlacement(placementId);
     const lists = sheet?.sidebar?.lists && typeof sheet.sidebar.lists === 'object' ? sheet.sidebar.lists : {};
     const sheetImmunity = parseDamageAdjustmentList(lists.immunity, damageType);
     const sheetVulnerability = parseDamageAdjustmentList(lists.vulnerability ?? lists.weakness, damageType);
+    const monsterImmunity = parseMonsterDefenseDamageAdjustment(placement?.monster, 'immunity', damageType);
+    const monsterVulnerability = parseMonsterDefenseDamageAdjustment(placement?.monster, 'weakness', damageType);
     // Per-placement condition riders. Stack additively on top of the sheet's
     // immunity/vulnerability lists. `damageWeakness` adds to vulnerability,
     // `damageImmunity` adds to immunity. An empty / "untyped" damageType on
     // the condition means "applies to every type".
     const conditionAdjustment = sumConditionDamageAdjustments(placementId, damageType);
     return {
-      immunity: sheetImmunity + conditionAdjustment.immunity,
-      vulnerability: sheetVulnerability + conditionAdjustment.vulnerability,
+      immunity: sheetImmunity + monsterImmunity + conditionAdjustment.immunity,
+      vulnerability: sheetVulnerability + monsterVulnerability + conditionAdjustment.vulnerability,
     };
   }
 
@@ -14431,6 +14434,32 @@ export function mountBoardInteractions(store, routes = {}) {
       }
       return total;
     }, 0);
+  }
+
+  function parseMonsterDefenseDamageAdjustment(monster, kind, damageType) {
+    if (!monster || typeof monster !== 'object') {
+      return 0;
+    }
+    const normalizedType = normalizeAutomationDamageType(damageType);
+    const defenses = monster.defenses && typeof monster.defenses === 'object' ? monster.defenses : {};
+    const defense = defenses[kind] && typeof defenses[kind] === 'object' ? defenses[kind] : null;
+    const type = normalizeAutomationDamageType(
+      defense?.type ??
+      monster[`${kind}_type`] ??
+      monster[`${kind}Type`] ??
+      ''
+    );
+    const value = Number.parseInt(
+      defense?.value ??
+      monster[`${kind}_value`] ??
+      monster[`${kind}Value`] ??
+      0,
+      10
+    );
+    if (!Number.isFinite(value) || value <= 0) {
+      return 0;
+    }
+    return (!type || type === 'all' || type === 'any' || type === normalizedType) ? value : 0;
   }
 
   function parseDamageAdjustmentEntry(text) {
