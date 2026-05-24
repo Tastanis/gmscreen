@@ -14759,20 +14759,10 @@ export function mountBoardInteractions(store, routes = {}) {
     const sourceRank = getAutomationSizeRank(sourceTraits.size, sourcePlacement);
     const targetRank = getAutomationSizeRank(targetTraits.size, targetPlacement);
     const sizeDifference = targetRank - sourceRank;
-    if (sizeDifference > 1) {
-      updateStatus(`${tokenLabel(targetPlacement)} is too large to ${verbLabel.toLowerCase()} automatically.`);
-      resolve?.({ skipped: true, reason: 'too-large' });
-      return;
-    }
 
     const stability = Math.max(0, Number.parseInt(targetTraits.stability, 10) || 0);
     const sizePenalty = Math.max(0, sizeDifference);
     const effectiveDistance = Math.max(0, requestedDistance - stability - sizePenalty);
-    if (!effectiveDistance) {
-      updateStatus(`${tokenLabel(targetPlacement)} is not moved by ${verbLabel} ${requestedDistance}.`);
-      resolve?.({ skipped: true, reason: 'no-distance' });
-      return;
-    }
 
     closeDamageHealWidget();
     closeHealOverflowPopup();
@@ -14800,10 +14790,35 @@ export function mountBoardInteractions(store, routes = {}) {
   async function getAutomationTraitsForPlacement(placement) {
     const sheet = await getAutomationSheetForPlacement(placement?.id);
     const vitals = sheet?.hero?.vitals && typeof sheet.hero.vitals === 'object' ? sheet.hero.vitals : {};
+    const traits = placement?.traits && typeof placement.traits === 'object' ? placement.traits : {};
+    const monster = placement?.monster && typeof placement.monster === 'object' ? placement.monster : {};
+    const defenses = monster.defenses && typeof monster.defenses === 'object' ? monster.defenses : {};
     return {
-      size: vitals.size || placement?.size || placement?.sizeOverride || '',
-      stability: vitals.stability || '',
+      size: firstAutomationTraitValue(
+        vitals.size,
+        traits.size,
+        monster.size,
+        monster.token_size,
+        monster.tokenSize,
+        placement?.size,
+        placement?.sizeOverride
+      ),
+      stability: firstAutomationTraitValue(
+        vitals.stability,
+        traits.stability,
+        monster.stability,
+        defenses.stability
+      ),
     };
+  }
+
+  function firstAutomationTraitValue(...values) {
+    for (const value of values) {
+      if (value === null || value === undefined) continue;
+      const text = String(value).trim();
+      if (text) return text;
+    }
+    return '';
   }
 
   async function getAutomationStatsForPlacement(placement) {
@@ -14878,7 +14893,10 @@ export function mountBoardInteractions(store, routes = {}) {
     };
     automationMoveOverlay = renderAutomationMoveOverlay(pendingAutomationMove);
     updateAutomationMovePreview(pendingAutomationMove.previewCell);
-    updateStatus(`${verbLabel} ${targetSnapshot.name}: choose a destination or click Skip.`);
+    const legalNote = pendingAutomationMove.legalCells.length
+      ? `Highlighted cells show the legal ${request.effectiveDistance}-square distance.`
+      : 'No legal destination is highlighted after stability/size, but you can still choose a destination.';
+    updateStatus(`${verbLabel} ${targetSnapshot.name}: choose a destination or click Skip. ${legalNote}`);
   }
 
   function buildAutomationMoveLegalCells(source, target, distance, baseVerb) {

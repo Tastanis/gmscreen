@@ -89,6 +89,8 @@ When `name === "other"`, supply `text` describing the homebrew condition.
 
 `push`, `pull`, `slide`, `verticalPush`, `verticalPull`, `verticalSlide`
 
+Forced-movement highlights account for target stability and size across PCs and monsters. The highlight is advisory only: the GM can still click any destination, including cells outside the legal highlight.
+
 ## Target predicates — `target.predicate`
 
 `creature`, `enemy`, `ally`, `object`, `creatureOrObject`, `self`, `selfOrAlly`, `selfAndAlly`
