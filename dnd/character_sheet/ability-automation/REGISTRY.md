@@ -63,7 +63,7 @@ The monster ability tray + `window.MonsterAbilityRunner.start()` add the followi
 | `endMark` | Full | Clears the caster's current mark or a mark on a target. Used for willingly ending Judgment. Current monster runner passes this hook through too, but monster authoring should usually prefer `note` unless intentionally using shared mark state. |
 | `ifScopedFlag` | Full | Branches on round/turn/encounter scoped source-target flags. Used for first-time-this-round rules. |
 | `setScopedFlag` | Full | Sets a scoped source-target flag. Round flags reset at new round; all flags clear at encounter end. |
-| `halveTriggeringDamage` | Full | Inside a `trigger` block matching the `damage` event: halves the triggering damage by healing back the difference. `rounding` (`up`/`down`) controls which half the placement takes. No-op outside a trigger with a captured damage payload. |
+| `halveTriggeringDamage` | Full | Use in an `effect` card after a structured `trigger` card matching the `damage` event. When resolving the ready trigger, halves the triggering damage by healing back the difference. `rounding` (`up`/`down`) controls which half the placement takes. No-op without a captured damage payload. |
 | `note` | Full | Posts text to chat |
 | `other` | Chat reminder | Posts text to chat |
 
