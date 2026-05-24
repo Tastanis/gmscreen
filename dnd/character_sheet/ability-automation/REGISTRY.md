@@ -187,6 +187,15 @@ Lightweight event-driven registry for triggered abilities. JSON-authored `trigge
 | `turnEnd` | `{ placementId, team }` | Fires from `completeActiveCombatant` immediately before the save-ends UI opens. |
 | `vtt:token-moved` (DOM event) | Underlying DOM event the `move` fan-out subscribes to. Still also used by the hard-coded opportunity-attack auto-detect. |
 
+Additional accepted events:
+
+| eventType | Payload / status |
+|---|---|
+| `damageDealt` | Same live payload and source as `damage`; useful for wording like "when damage is dealt." The damaged token is still `placementId`. |
+| `staminaZero` | Fires when automated damage drops a target from above 0 stamina to 0 or lower. |
+| `markApplied` | Fires when automation applies or transfers a mark. Supports `markType` and `source` filters. |
+| `actionUsed` | Schema accepts it, and it can be fired through `fireTriggerEvent`, but normal ability launches do not auto-fire it yet. |
+
 ### Authored trigger `match` shape
 
 Trigger blocks may carry a structured `match` alongside the free-text `condition` label. The runner forwards it via the host's `registerTrigger` callback; the board converts it into a bus listener with a generated predicate.
@@ -209,6 +218,10 @@ Trigger blocks may carry a structured `match` alongside the free-text `condition
 | `staminaChange` | `whose`, `direction` (`up`/`down`/`either`) |
 | `turnStart`, `turnEnd` | `whose` |
 | `move` | `whose`, `leavesAdjacency` bool, `entersAdjacency` bool |
+| `damageDealt` | same as `damage` |
+| `staminaZero` | same as `staminaChange` |
+| `actionUsed` | `whose`, `actionKind`, `keywordsAny` |
+| `markApplied` | `whose`, `markType`, `source` |
 
 `whose` resolves against:
 - `self` → the caster's own placement id
@@ -228,7 +241,7 @@ Auto-detected on every normal movement during combat:
 - Skipped for forced movement (push/pull/slide) and teleport because those don't fire `vtt:token-moved`
 - Cleared at the start of each combat round via `resetTriggeredActionsForActiveScene`
 
-The watcher token gets the blue pulsing `!` overlay on the board and the `!` badge on their TRIGGER ability tab when they're selected. Clicking either clears it (manual resolution this pass; auto-clear on free-strike-used in a future pass once free strikes are first-class abilities).
+The watcher token gets the blue pulsing `!` overlay on the board and the `!` badge on their TRIGGER ability tab when they're selected. Ready authored triggers are matched back to the specific triggered ability id when possible; clicking that row clears the ready flag and passes the firing payload into the runner. The built-in opportunity-attack sentinel injects a free strike row when a matching PC free strike exists.
 
 ## Ability keywords
 

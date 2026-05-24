@@ -521,7 +521,7 @@ function renderAbilityTray(tray, sheet, { activeCategory = null, activeToken = n
         const tabClass = `vtt-character-ability-tab${isTrigger && hasReadyTrigger ? ' has-ready-trigger' : ''}`;
         return `
           <div class="vtt-character-ability-category${isActive ? ' is-active' : ''}">
-            ${isActive ? renderAbilityList(category, actions) : ''}
+            ${isActive ? renderAbilityList(category, actions, { activeToken }) : ''}
             <button
               class="${tabClass}"
               type="button"
@@ -538,25 +538,28 @@ function renderAbilityTray(tray, sheet, { activeCategory = null, activeToken = n
   document.body?.classList.add(ABILITY_TRAY_BODY_OPEN_CLASS);
 }
 
-function renderAbilityList(category, actions) {
+function renderAbilityList(category, actions, opts = {}) {
+  const activeToken = opts.activeToken || null;
   return `
     <div class="vtt-character-ability-list" role="menu" aria-label="${escapeAttribute(category.heading)}">
       <div class="vtt-character-ability-list__heading">${escapeHtml(category.heading)}</div>
       ${actions.length
-        ? actions.map((action, index) => renderAbilityItem(action, category.key, index)).join('')
+        ? actions.map((action, index) => renderAbilityItem(action, category.key, index, { activeToken })).join('')
         : `<div class="vtt-character-ability-empty">${escapeHtml(category.empty)}</div>`}
     </div>
   `;
 }
 
-function renderAbilityItem(action, categoryKey, index) {
+function renderAbilityItem(action, categoryKey, index, opts = {}) {
   const name = action?.name || 'Untitled Ability';
   const meta = summarizeAbility(action, categoryKey);
   const automated = hasAbilityAutomation(action?.automation);
+  const ready = Array.isArray(opts.activeToken?.readyTriggerAbilities) ? opts.activeToken.readyTriggerAbilities : [];
   // When an ability is injected into the trigger list because a trigger
   // condition is met (e.g. opp-attack), render a blue "!" to the LEFT of
   // the icon and stash the trigger id so clicking it auto-clears.
-  const triggerId = action?._injectedTriggerId || '';
+  const actionId = typeof action?.id === 'string' ? action.id : '';
+  const triggerId = action?._injectedTriggerId || (categoryKey === 'triggers' && actionId && ready.includes(actionId) ? actionId : '');
   return `
     <button
       class="vtt-character-ability-item${automated ? ' vtt-character-ability-item--automated' : ''}${triggerId ? ' vtt-character-ability-item--trigger-ready' : ''}"

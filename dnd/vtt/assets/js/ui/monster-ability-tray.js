@@ -93,15 +93,23 @@
 
     function renderAbilityList(category) {
         var categoryKey = category.key;
+        var ready = Array.isArray(state.placement && state.placement.readyTriggerAbilities)
+            ? state.placement.readyTriggerAbilities
+            : [];
         var rowsHtml = category.abilities.map(function (ability, index) {
             var automated = hasAutomation(ability);
             var meta = summarizeAbility(ability, categoryKey);
+            var triggerId = getMonsterAbilityTriggerId(categoryKey, ability);
+            var isReadyTrigger = triggerId && ready.indexOf(triggerId) !== -1;
             return '<button type="button" role="menuitem" ' +
                 'class="vtt-character-ability-item vtt-monster-ability-item' +
-                    (automated ? ' vtt-character-ability-item--automated vtt-monster-ability-item--automated' : '') + '" ' +
+                    (automated ? ' vtt-character-ability-item--automated vtt-monster-ability-item--automated' : '') +
+                    (isReadyTrigger ? ' vtt-character-ability-item--trigger-ready vtt-monster-ability-item--trigger-ready' : '') + '" ' +
                 'data-monster-ability-item ' +
                 'data-ability-index="' + escapeAttribute(index) + '" ' +
-                'data-ability-category="' + escapeAttribute(categoryKey) + '">' +
+                'data-ability-category="' + escapeAttribute(categoryKey) + '" ' +
+                (isReadyTrigger ? 'data-clears-trigger="' + escapeAttribute(triggerId) + '" ' : '') + '>' +
+                (isReadyTrigger ? '<span class="vtt-character-ability-item__trigger-ready" aria-label="Trigger condition met">!</span>' : '') +
                 '<span class="vtt-character-ability-item__mark" aria-hidden="true">' + escapeHtml(getAbilityIcon(categoryKey)) + '</span>' +
                 '<span class="vtt-character-ability-item__text">' +
                 '<span class="vtt-character-ability-item__name">' + escapeHtml(ability.name || 'Unnamed') + '</span>' +
@@ -178,7 +186,9 @@
         state.activeCategory = null;
         hidePreview();
         render();
-        launchAbility(categoryKey, index);
+        launchAbility(categoryKey, index, {
+            clearsTrigger: abilityItem.getAttribute('data-clears-trigger') || ''
+        });
     }
 
     function handleTrayPreviewOpen(event) {
@@ -295,11 +305,16 @@
         return '>';
     }
 
+    function getMonsterAbilityTriggerId(categoryKey, ability) {
+        if (!state.placement || !state.placement.id || !ability || !ability.name) return '';
+        return state.placement.id + ':' + categoryKey + ':' + ability.name;
+    }
+
     function formatText(text) {
         return escapeHtml(text).replace(/\n+/g, '<br>');
     }
 
-    function launchAbility(categoryKey, index) {
+    function launchAbility(categoryKey, index, options) {
         if (!state.monster || !state.placement) return;
         var abilities = abilitiesFor(state.monster, categoryKey);
         var ability = abilities[index];
@@ -308,7 +323,25 @@
             console.warn('[MonsterAbilityTray] MonsterAbilityRunner not loaded.');
             return;
         }
-        window.MonsterAbilityRunner.start(state.monster, ability, categoryKey, state.placement);
+        var runnerOptions = {};
+        var triggerId = options && options.clearsTrigger ? options.clearsTrigger : '';
+        if (triggerId) {
+            var sources = state.placement.readyTriggerSources && typeof state.placement.readyTriggerSources === 'object'
+                ? state.placement.readyTriggerSources
+                : {};
+            var payloads = state.placement.readyTriggerPayloads && typeof state.placement.readyTriggerPayloads === 'object'
+                ? state.placement.readyTriggerPayloads
+                : {};
+            var snapshot = payloads[triggerId];
+            runnerOptions.suggestedTargetId = sources[triggerId] || '';
+            runnerOptions.triggerPayload = snapshot && typeof snapshot === 'object'
+                ? (snapshot.payload && typeof snapshot.payload === 'object' ? snapshot.payload : snapshot)
+                : null;
+            document.dispatchEvent(new CustomEvent('vtt:clear-trigger-ready', {
+                detail: { placementId: state.placement.id, abilityId: triggerId }
+            }));
+        }
+        window.MonsterAbilityRunner.start(state.monster, ability, categoryKey, state.placement, runnerOptions);
     }
 
     function openFor(placement, monster) {
