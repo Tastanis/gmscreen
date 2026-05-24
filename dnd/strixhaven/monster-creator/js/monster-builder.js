@@ -3175,6 +3175,63 @@ function createNewMonsterForEditor() {
     }
 }
 
+function openMonsterJsonImportModal() {
+    const modal = document.getElementById('monsterJsonImportModal');
+    if (!modal) {
+        triggerMonsterJsonImport();
+        return;
+    }
+    const textarea = document.getElementById('monsterJsonImportTextarea');
+    const errorEl = document.getElementById('monsterJsonImportError');
+    if (textarea) textarea.value = '';
+    if (errorEl) {
+        errorEl.style.display = 'none';
+        errorEl.textContent = '';
+    }
+    modal.style.display = 'flex';
+    setTimeout(() => textarea?.focus(), 0);
+}
+
+function closeMonsterJsonImportModal() {
+    const modal = document.getElementById('monsterJsonImportModal');
+    if (modal) modal.style.display = 'none';
+}
+
+function showMonsterJsonImportError(message) {
+    const errorEl = document.getElementById('monsterJsonImportError');
+    if (errorEl) {
+        errorEl.textContent = message;
+        errorEl.style.display = 'block';
+    } else {
+        alert(message);
+    }
+}
+
+function importMonsterFromPastedJson() {
+    const textarea = document.getElementById('monsterJsonImportTextarea');
+    const raw = textarea ? textarea.value.trim() : '';
+    if (!raw) {
+        showMonsterJsonImportError('Paste a monster JSON object first.');
+        return;
+    }
+
+    let parsed;
+    try {
+        parsed = JSON.parse(raw);
+    } catch (error) {
+        showMonsterJsonImportError(`Invalid JSON: ${error.message}`);
+        return;
+    }
+
+    try {
+        applyMonsterJsonImport(parsed);
+        closeMonsterJsonImportModal();
+    } catch (error) {
+        console.error('Monster JSON import failed:', error);
+        showMonsterJsonImportError(`Monster JSON import failed: ${error.message}`);
+    }
+}
+
 function triggerMonsterJsonImport() {
     const input = document.getElementById('monsterJsonImportInput');
     if (!input) {
@@ -3192,22 +3249,33 @@ async function handleMonsterJsonImportFile(input) {
     try {
         const text = await file.text();
         const parsed = JSON.parse(text);
-        const importedMonster = normalizeImportedMonsterJson(parsed);
-        const monsterId = buildImportedMonsterId(parsed, importedMonster);
-
-        monsterData.monsters[monsterId] = importedMonster;
-        enterEditorMode(monsterId);
-        dirtyMonsters.add(monsterId);
-        saveToLocalStorage();
-        queueSave();
-
-        alert(`Imported ${importedMonster.name}. Review it, then use Save to Tab when ready.`);
+        applyMonsterJsonImport(parsed);
+        closeMonsterJsonImportModal();
     } catch (error) {
         console.error('Monster JSON import failed:', error);
-        alert(`Monster JSON import failed: ${error.message}`);
+        const message = `Monster JSON import failed: ${error.message}`;
+        const modal = document.getElementById('monsterJsonImportModal');
+        if (modal && modal.style.display !== 'none') {
+            showMonsterJsonImportError(message);
+        } else {
+            alert(message);
+        }
     } finally {
         input.value = '';
     }
+}
+
+function applyMonsterJsonImport(parsed) {
+    const importedMonster = normalizeImportedMonsterJson(parsed);
+    const monsterId = buildImportedMonsterId(parsed, importedMonster);
+
+    monsterData.monsters[monsterId] = importedMonster;
+    enterEditorMode(monsterId);
+    dirtyMonsters.add(monsterId);
+    saveToLocalStorage();
+    queueSave();
+
+    alert(`Imported ${importedMonster.name}. Review it, then use Save to Tab when ready.`);
 }
 
 function normalizeImportedMonsterJson(raw) {

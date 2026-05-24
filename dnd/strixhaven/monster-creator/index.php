@@ -59,7 +59,7 @@ require_once '../../version.php';
                 </button>
 
                 <!-- JSON Import Button -->
-                <button class="json-import-toggle" onclick="triggerMonsterJsonImport()" title="Create a complete monster from a JSON file">
+                <button class="json-import-toggle" onclick="openMonsterJsonImportModal()" title="Create a complete monster from pasted JSON or a JSON file">
                     Import JSON
                 </button>
                 <input
@@ -93,7 +93,7 @@ require_once '../../version.php';
                 <div class="workspace-info">
                     <p>Select a tab to view monsters, or create a new monster.</p>
                     <button class="btn-primary" onclick="addNewMonster()">Add New Monster</button>
-                    <button class="btn-secondary" onclick="triggerMonsterJsonImport()">Import Monster JSON</button>
+                    <button class="btn-secondary" onclick="openMonsterJsonImportModal()">Import Monster JSON</button>
                 </div>
             </div>
 
@@ -164,6 +164,33 @@ require_once '../../version.php';
             <div class="print-preview-footer">
                 <button class="btn-print-final" onclick="printFinal()">🖨️ Print</button>
                 <button class="btn-close-preview" onclick="closePrintPreview()">Close</button>
+            </div>
+        </div>
+    </div>
+
+    <!-- Monster JSON Import Modal -->
+    <div id="monsterJsonImportModal" class="json-import-modal" style="display: none;" role="dialog" aria-modal="true" aria-labelledby="monsterJsonImportTitle">
+        <div class="json-import-modal__backdrop" onclick="closeMonsterJsonImportModal()"></div>
+        <div class="json-import-modal__dialog">
+            <div class="json-import-modal__header">
+                <h2 id="monsterJsonImportTitle">Import Monster JSON</h2>
+                <button class="json-import-modal__close" type="button" onclick="closeMonsterJsonImportModal()" aria-label="Close">&times;</button>
+            </div>
+            <div class="json-import-modal__body">
+                <p class="json-import-modal__hint">Paste the monster JSON below and click <strong>Import Pasted JSON</strong>, or load it from a file. The imported monster opens in editor mode so you can pick the tab via <strong>Save to Tab</strong>.</p>
+                <textarea
+                    id="monsterJsonImportTextarea"
+                    class="json-import-modal__textarea"
+                    placeholder='{ "name": "Bugbear Roughneck", "level": 2, ... }'
+                    spellcheck="false"
+                    autocomplete="off"
+                ></textarea>
+                <div id="monsterJsonImportError" class="json-import-modal__error" style="display: none;"></div>
+            </div>
+            <div class="json-import-modal__footer">
+                <button type="button" class="btn-secondary" onclick="closeMonsterJsonImportModal()">Cancel</button>
+                <button type="button" class="btn-secondary" onclick="triggerMonsterJsonImport()">Load from File…</button>
+                <button type="button" class="btn-primary" onclick="importMonsterFromPastedJson()">Import Pasted JSON</button>
             </div>
         </div>
     </div>

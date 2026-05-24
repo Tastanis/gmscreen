@@ -3086,3 +3086,117 @@ body.delete-mode-active .sub-tab:hover {
         transform: translateX(-50%) translateY(0);
     }
 }
+
+/* Monster JSON Import Modal */
+.json-import-modal {
+    position: fixed;
+    inset: 0;
+    z-index: 9999;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+}
+
+.json-import-modal__backdrop {
+    position: absolute;
+    inset: 0;
+    background: rgba(0, 0, 0, 0.55);
+}
+
+.json-import-modal__dialog {
+    position: relative;
+    width: min(720px, 92vw);
+    max-height: 88vh;
+    display: flex;
+    flex-direction: column;
+    background: #fdf8f2;
+    border: 1px solid #3f2b21;
+    border-radius: 6px;
+    box-shadow: 0 12px 40px rgba(0, 0, 0, 0.35);
+    overflow: hidden;
+}
+
+.json-import-modal__header {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    padding: 14px 18px;
+    background: #5a3e30;
+    color: #fdf8f2;
+    border-bottom: 1px solid #3f2b21;
+}
+
+.json-import-modal__header h2 {
+    margin: 0;
+    font-size: 16px;
+    font-weight: 600;
+}
+
+.json-import-modal__close {
+    background: transparent;
+    border: none;
+    color: #fdf8f2;
+    font-size: 24px;
+    line-height: 1;
+    cursor: pointer;
+    padding: 0 4px;
+}
+
+.json-import-modal__close:hover {
+    opacity: 0.75;
+}
+
+.json-import-modal__body {
+    padding: 16px 18px;
+    overflow: auto;
+    display: flex;
+    flex-direction: column;
+    gap: 10px;
+}
+
+.json-import-modal__hint {
+    margin: 0;
+    font-size: 13px;
+    color: #3f2b21;
+    line-height: 1.4;
+}
+
+.json-import-modal__textarea {
+    width: 100%;
+    min-height: 280px;
+    max-height: 50vh;
+    resize: vertical;
+    padding: 10px 12px;
+    font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+    font-size: 12px;
+    line-height: 1.45;
+    color: #2a1f17;
+    background: #fffbf4;
+    border: 1px solid #b89c84;
+    border-radius: 4px;
+    box-sizing: border-box;
+}
+
+.json-import-modal__textarea:focus {
+    outline: 2px solid #5a3e30;
+    outline-offset: -1px;
+}
+
+.json-import-modal__error {
+    padding: 8px 10px;
+    background: #f8e1dd;
+    color: #6b1d12;
+    border: 1px solid #c4564a;
+    border-radius: 4px;
+    font-size: 12.5px;
+    white-space: pre-wrap;
+}
+
+.json-import-modal__footer {
+    display: flex;
+    justify-content: flex-end;
+    gap: 10px;
+    padding: 12px 18px;
+    background: #efe4d4;
+    border-top: 1px solid #b89c84;
+}
