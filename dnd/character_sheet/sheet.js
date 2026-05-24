@@ -141,6 +141,8 @@ const STAMINA_SYNC_INTERVAL_MS = 4000;
 const STAMINA_SYNC_CHANNEL = "vtt-stamina-sync";
 const HERO_TOKEN_SYNC_INTERVAL_MS = 4000;
 const HERO_TOKEN_SYNC_CHANNEL = "vtt-hero-token-sync";
+const CHARACTER_SHEET_SYNC_INTERVAL_MS = 4000;
+const CHARACTER_SHEET_SYNC_CHANNEL = "vtt-character-sheet-sync";
 
 const EMPHASIZED_LABELS = new Set([
   "wealth",
@@ -618,6 +620,10 @@ let heroTokenSyncIntervalId = null;
 let heroTokenSyncInFlight = false;
 let heroTokenSyncChannel = null;
 let heroTokenVisibilityHandler = null;
+let sheetSyncIntervalId = null;
+let sheetSyncInFlight = false;
+let sheetSyncChannel = null;
+let sheetSyncVisibilityHandler = null;
 
 function triggerTempStaminaFlash() {
   tempStaminaFlashId = Date.now();
@@ -867,6 +873,113 @@ function stopHeroTokenSync() {
   }
 }
 
+function getSheetSyncChannel() {
+  if (typeof BroadcastChannel !== "function") return null;
+  if (!sheetSyncChannel) {
+    sheetSyncChannel = new BroadcastChannel(CHARACTER_SHEET_SYNC_CHANNEL);
+  }
+  return sheetSyncChannel;
+}
+
+function broadcastSheetSync(change = "sheet") {
+  const channel = getSheetSyncChannel();
+  if (!channel || !activeCharacter) return;
+  channel.postMessage({
+    type: "character-sheet-sync",
+    source: "sheet",
+    character: activeCharacter,
+    change,
+  });
+}
+
+function applyRemoteSheetSync(data) {
+  if (!data || typeof data !== "object") return;
+  const nextState = mergeWithDefaults(data);
+  sheetState = nextState;
+  if (document.body.classList.contains("edit-mode")) {
+    renderBars();
+    renderSidebarResource();
+    renderHeroTokens();
+    renderHeroPane();
+    updateResourceDisplays();
+    bindTokenButtons();
+    bindResourceControls();
+    bindSurgeButtons();
+    bindVictoryButtons();
+    bindRespiteButton();
+    return;
+  }
+  renderAll();
+}
+
+async function pollSheetSync() {
+  if (!activeCharacter) return;
+  if (document.visibilityState === "hidden") return;
+  if (sheetSyncInFlight) return;
+
+  sheetSyncInFlight = true;
+  try {
+    const response = await fetch(
+      `handler.php?action=load&character=${encodeURIComponent(activeCharacter)}`,
+      { credentials: "same-origin", cache: "no-store" }
+    );
+    if (!response.ok) {
+      throw new Error(`Sheet sync failed (${response.status})`);
+    }
+    const result = await response.json();
+    if (result?.success && result.data) {
+      applyRemoteSheetSync(result.data);
+    }
+  } catch (error) {
+    console.warn("Failed to sync character sheet", error);
+  } finally {
+    sheetSyncInFlight = false;
+  }
+}
+
+function handleSheetBroadcast(event) {
+  const payload = event?.data;
+  if (!payload || payload.type !== "character-sheet-sync") return;
+  if (payload.source === "sheet") return;
+  const payloadCharacter =
+    typeof payload.character === "string" ? payload.character.trim().toLowerCase() : "";
+  const activeKey = typeof activeCharacter === "string" ? activeCharacter.trim().toLowerCase() : "";
+  if (!activeKey || (payloadCharacter && payloadCharacter !== activeKey)) {
+    return;
+  }
+  pollSheetSync();
+}
+
+function startSheetSync() {
+  if (sheetSyncIntervalId || !activeCharacter) return;
+  const channel = getSheetSyncChannel();
+  if (channel) {
+    channel.addEventListener("message", handleSheetBroadcast);
+  }
+  sheetSyncVisibilityHandler = () => {
+    if (document.visibilityState === "visible") {
+      pollSheetSync();
+    }
+  };
+  document.addEventListener("visibilitychange", sheetSyncVisibilityHandler);
+  sheetSyncIntervalId = window.setInterval(pollSheetSync, CHARACTER_SHEET_SYNC_INTERVAL_MS);
+}
+
+function stopSheetSync() {
+  if (sheetSyncIntervalId && typeof window?.clearInterval === "function") {
+    window.clearInterval(sheetSyncIntervalId);
+  }
+  sheetSyncIntervalId = null;
+  if (sheetSyncVisibilityHandler) {
+    document.removeEventListener("visibilitychange", sheetSyncVisibilityHandler);
+  }
+  sheetSyncVisibilityHandler = null;
+  if (sheetSyncChannel) {
+    sheetSyncChannel.close();
+    sheetSyncChannel = null;
+  }
+}
+
 function parseTrackerInput(rawValue) {
   const trimmed = String(rawValue ?? "").trim();
   if (trimmed === "") return null;
@@ -941,35 +1054,24 @@ function applyTrackerChange(path, rawValue) {
 }
 
 function renderSurgesBox(hero, isEditMode) {
-  const totalSurges = Math.min(10, Math.max(0, Number(hero.surges) || 0));
-  const surgesUsed = Math.min(totalSurges, Math.max(0, Number(hero.surgesUsed) || 0));
+  const surges = Math.max(0, Number(hero.surges) || 0);
 
   if (isEditMode) {
     return `
       <div class="field-card vital-card compact surges-card">
         <label class="${getLabelClass("Surges")}">Surges</label>
-        <input class="edit-field" type="number" min="0" max="10" data-model="hero.surges" value="${hero.surges ?? ""}" />
+        <input class="edit-field" type="number" min="0" data-model="hero.surges" value="${hero.surges ?? ""}" />
       </div>`;
-  }
-
-  if (totalSurges === 0) {
-    return `
-      <div class="field-card vital-card compact surges-card">
-        <label class="${getLabelClass("Surges")}">Surges</label>
-        <div class="display-value">0</div>
-      </div>`;
-  }
-
-  let boxes = "";
-  for (let i = 0; i < totalSurges; i++) {
-    const filled = i < surgesUsed;
-    boxes += `<button class="surge-tick ${filled ? "surge-tick--filled" : ""}" data-surge-index="${i}" type="button" aria-label="Toggle surge ${i + 1}"></button>`;
   }
 
   return `
     <div class="field-card vital-card compact surges-card">
       <label class="${getLabelClass("Surges")}">Surges</label>
-      <div class="surges-tick-grid">${boxes}</div>
+      <div class="surges-count-control">
+        <button class="surge-step" data-surge-delta="-1" type="button" aria-label="Spend a surge">-</button>
+        <span class="display-value surges-count">${surges}</span>
+        <button class="surge-step" data-surge-delta="1" type="button" aria-label="Add a surge">+</button>
+      </div>
     </div>`;
 }
 
@@ -2652,25 +2754,23 @@ function bindTokenButtons() {
   document.querySelectorAll(".token-dot").forEach((btn) => {
     btn.addEventListener("click", () => {
       const index = Number(btn.dataset.tokenIndex);
-      showHeroTokenConfirmation(btn, index);
+      const current = Boolean(sheetState.hero.heroTokens[index]);
+      if (current) {
+        toggleHeroToken(index);
+      } else {
+        showHeroTokenConfirmation(btn, index);
+      }
     });
   });
 }
 
 function bindSurgeButtons() {
-  document.querySelectorAll(".surge-tick").forEach((btn) => {
+  document.querySelectorAll("[data-surge-delta]").forEach((btn) => {
     btn.addEventListener("click", () => {
-      const totalSurges = Math.min(10, Math.max(0, Number(sheetState.hero.surges) || 0));
-      let surgesUsed = Math.min(totalSurges, Math.max(0, Number(sheetState.hero.surgesUsed) || 0));
-      const isFilled = btn.classList.contains("surge-tick--filled");
-
-      if (isFilled) {
-        surgesUsed = Math.max(0, surgesUsed - 1);
-      } else {
-        surgesUsed = Math.min(totalSurges, surgesUsed + 1);
-      }
-
-      sheetState.hero.surgesUsed = surgesUsed;
+      const delta = Number(btn.dataset.surgeDelta) || 0;
+      const current = Math.max(0, Number(sheetState.hero.surges) || 0);
+      sheetState.hero.surges = Math.max(0, current + delta);
+      sheetState.hero.surgesUsed = 0;
       renderHeroPane();
       bindSurgeButtons();
       bindVictoryButtons();
@@ -3363,6 +3463,8 @@ async function saveSheet() {
     const result = await response.json();
     if (!result.success) {
       console.warn("Failed to save sheet", result.error);
+    } else {
+      broadcastSheetSync("sheet");
     }
   } catch (error) {
     console.error("Error saving sheet", error);
@@ -3661,8 +3763,10 @@ async function ready() {
   await loadSheet();
   startStaminaSync();
   startHeroTokenSync();
+  startSheetSync();
   window.addEventListener("pagehide", stopStaminaSync);
   window.addEventListener("pagehide", stopHeroTokenSync);
+  window.addEventListener("pagehide", stopSheetSync);
 }
 
 document.addEventListener("DOMContentLoaded", ready);

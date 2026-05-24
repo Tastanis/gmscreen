@@ -84,6 +84,20 @@ const TEST_TIER_LABELS = {
 
 const PANEL_VISIBILITY_STORAGE_PREFIX = 'vtt:character-summary:open:';
 const ABILITY_TRAY_BODY_OPEN_CLASS = 'vtt-character-ability-tray-is-open';
+const HERO_TOKEN_SYNC_CHANNEL = 'vtt-hero-token-sync';
+const CHARACTER_SHEET_SYNC_CHANNEL = 'vtt-character-sheet-sync';
+const CHARACTER_SHEET_SYNC_INTERVAL_MS = 4000;
+const CONDITION_OPTIONS = [
+  'Bleeding',
+  'Dazed',
+  'Frightened',
+  'Grabbed',
+  'Prone',
+  'Restrained',
+  'Slowed',
+  'Taunted',
+  'Weakened',
+];
 
 export function mountCharacterSummaryPanel(routes = {}, userContext = {}) {
   const panel = document.getElementById('vtt-character-summary-panel');
@@ -99,6 +113,9 @@ export function mountCharacterSummaryPanel(routes = {}, userContext = {}) {
   let activeSheet = null;
   let activeToken = null;
   let activeDisplayName = '';
+  let sheetSyncChannel = null;
+  let heroTokenSyncChannel = null;
+  let sheetSyncInFlight = false;
   const boardHeader = document.querySelector('.vtt-board__header');
   const abilityTray = ensureAbilityTray();
   const abilityPreview = ensureAbilityPreview();
@@ -188,6 +205,94 @@ export function mountCharacterSummaryPanel(routes = {}, userContext = {}) {
     }
   };
 
+  const renderActiveSheet = () => {
+    if (!activeCharacterId || !activeSheet) {
+      return;
+    }
+    activeDisplayName = activeSheet?.hero?.name || activeToken?.name || formatCharacterName(activeCharacterId);
+    panel.innerHTML = renderCharacterCard(activeSheet, {
+      characterId: activeCharacterId,
+      token: activeToken,
+    });
+    bindCharacterSummaryControls(panel, {
+      onTuck: tuckPanel,
+      onHeroToken: handleHeroTokenClick,
+      onStaminaAction: handleStaminaAction,
+      onRecovery: handleRecoveryClick,
+      onSurgeDelta: handleSurgeDelta,
+      onResourceDelta: handleResourceDelta,
+      onResourceRoll: handleResourceRoll,
+      onVictory: handleVictoryClick,
+      onConditionAdd: handleConditionAdd,
+    });
+    renderAbilityTray(abilityTray, activeSheet, { activeCategory: activeAbilityCategory, activeToken });
+    syncRevealButton();
+  };
+
+  const refreshActiveSheet = async ({ force = false } = {}) => {
+    if (!activeCharacterId || sheetSyncInFlight) {
+      return;
+    }
+    if (!force && document.visibilityState === 'hidden') {
+      return;
+    }
+    sheetSyncInFlight = true;
+    try {
+      activeSheet = await fetchCharacterSummary(routes, activeCharacterId);
+      renderActiveSheet();
+    } catch (error) {
+      console.warn('[VTT] Failed to refresh character summary', error);
+    } finally {
+      sheetSyncInFlight = false;
+    }
+  };
+
+  const getSheetSyncChannel = () => {
+    if (typeof BroadcastChannel !== 'function') {
+      return null;
+    }
+    if (!sheetSyncChannel) {
+      sheetSyncChannel = new BroadcastChannel(CHARACTER_SHEET_SYNC_CHANNEL);
+    }
+    return sheetSyncChannel;
+  };
+
+  const getHeroTokenSyncChannel = () => {
+    if (typeof BroadcastChannel !== 'function') {
+      return null;
+    }
+    if (!heroTokenSyncChannel) {
+      heroTokenSyncChannel = new BroadcastChannel(HERO_TOKEN_SYNC_CHANNEL);
+    }
+    return heroTokenSyncChannel;
+  };
+
+  const broadcastSheetChange = (change) => {
+    const channel = getSheetSyncChannel();
+    if (channel && activeCharacterId) {
+      channel.postMessage({
+        type: 'character-sheet-sync',
+        source: 'vtt',
+        character: activeCharacterId,
+        change,
+      });
+    }
+    document.dispatchEvent(new CustomEvent('vtt:character-sheet-updated', {
+      detail: { characterId: activeCharacterId, change },
+    }));
+  };
+
+  const saveActiveSheet = async (change) => {
+    if (!activeCharacterId || !activeSheet) {
+      return false;
+    }
+    const saved = await saveCharacterSummarySheet(activeSheet, { characterId: activeCharacterId, routes });
+    if (saved) {
+      broadcastSheetChange(change);
+    }
+    return saved;
+  };
+
   async function showCharacter(detail = {}) {
     const characterId = normalizeCharacterId(detail.characterId);
     if (!characterId) {
@@ -211,13 +316,7 @@ export function mountCharacterSummaryPanel(routes = {}, userContext = {}) {
         return;
       }
       activeSheet = sheet;
-      activeDisplayName = sheet?.hero?.name || token.name || formatCharacterName(characterId);
-      panel.innerHTML = renderCharacterCard(sheet, {
-        characterId,
-        token,
-      });
-      bindCharacterSummaryControls(panel, { onTuck: tuckPanel });
-      renderAbilityTray(abilityTray, sheet, { activeCategory: activeAbilityCategory, activeToken });
+      renderActiveSheet();
       if (panelPreferredOpen) {
         setPanelOpen(true, { persist: false });
       } else {
@@ -230,6 +329,183 @@ export function mountCharacterSummaryPanel(routes = {}, userContext = {}) {
       }
     }
   }
+
+  async function handleHeroTokenClick(index, button) {
+    if (!activeSheet || !activeCharacterId || index < 0 || index > 1) {
+      return;
+    }
+    const tokens = normalizeHeroTokens(activeSheet.hero?.heroTokens);
+    const isSpent = Boolean(tokens[index]);
+    if (!isSpent) {
+      const agreed = await showHeroTokenConfirmation(button);
+      if (!agreed) {
+        return;
+      }
+    }
+    tokens[index] = !isSpent;
+    activeSheet.hero = activeSheet.hero && typeof activeSheet.hero === 'object' ? activeSheet.hero : {};
+    activeSheet.hero.heroTokens = tokens;
+    renderActiveSheet();
+    try {
+      const payload = new URLSearchParams();
+      payload.append('action', 'sync-hero-tokens');
+      payload.append('character', activeCharacterId);
+      payload.append('tokenIndex', String(index));
+      payload.append('tokenState', tokens[index] ? '1' : '0');
+      const endpoint = typeof routes?.sheet === 'string' && routes.sheet ? routes.sheet : '/dnd/character_sheet/handler.php';
+      const response = await fetch(endpoint, {
+        method: 'POST',
+        credentials: 'same-origin',
+        body: payload,
+      });
+      const result = await response.json();
+      if (!result || result.success === false) {
+        throw new Error(result?.error || 'Failed to sync hero token');
+      }
+      activeSheet.hero.heroTokens = normalizeHeroTokens(result.heroTokens);
+      renderActiveSheet();
+      const heroChannel = getHeroTokenSyncChannel();
+      if (heroChannel) {
+        heroChannel.postMessage({ type: 'hero-token-sync', heroTokens: result.heroTokens });
+      }
+      broadcastSheetChange('heroTokens');
+    } catch (error) {
+      console.warn('[VTT] Failed to update hero token', error);
+      refreshActiveSheet({ force: true });
+    }
+  }
+
+  async function handleStaminaAction(action) {
+    const vitals = activeSheet?.hero?.vitals;
+    if (!vitals) return;
+    const amount = promptForPositiveInt(action === 'damage' ? 'How much damage?' : 'How much healing?');
+    if (!amount) return;
+    const current = numberLike(vitals.currentStamina, 0);
+    const max = numberLike(vitals.staminaMax, 0);
+    if (action === 'damage') {
+      vitals.currentStamina = current - amount;
+    } else {
+      const healed = current + amount;
+      if (max > 0 && healed > max) {
+        const overflow = healed - max;
+        const useTemp = window.confirm(`Healing would go ${overflow} over max. Use the extra as temporary Stamina? OK = temp, Cancel = heal to max.`);
+        vitals.currentStamina = useTemp ? healed : max;
+      } else {
+        vitals.currentStamina = healed;
+      }
+    }
+    appendStaminaHistory(vitals, vitals.currentStamina);
+    renderActiveSheet();
+    await saveActiveSheet('stamina');
+  }
+
+  async function handleRecoveryClick() {
+    const vitals = activeSheet?.hero?.vitals;
+    if (!vitals) return;
+    const currentRecoveries = numberLike(vitals.currentRecoveries, 0);
+    const recoveryValue = numberLike(vitals.recoveryValue || computeRecoveryValue(vitals), 0);
+    if (currentRecoveries <= 0 || recoveryValue <= 0) {
+      return;
+    }
+    if (!window.confirm(`Spend 1 recovery to heal ${recoveryValue} Stamina?`)) {
+      return;
+    }
+    const current = numberLike(vitals.currentStamina, 0);
+    const max = numberLike(vitals.staminaMax, 0);
+    vitals.currentRecoveries = Math.max(0, currentRecoveries - 1);
+    vitals.currentStamina = max > 0 ? Math.min(max, current + recoveryValue) : current + recoveryValue;
+    appendStaminaHistory(vitals, vitals.currentStamina);
+    renderActiveSheet();
+    await saveActiveSheet('recovery');
+  }
+
+  async function handleSurgeDelta(delta) {
+    const hero = activeSheet?.hero;
+    if (!hero) return;
+    const current = Math.max(0, numberLike(hero.surges, 0));
+    hero.surges = Math.max(0, current + delta);
+    hero.surgesUsed = 0;
+    renderActiveSheet();
+    await saveActiveSheet('surges');
+  }
+
+  async function handleResourceDelta(delta) {
+    const resource = activeSheet?.hero?.resource;
+    if (!resource) return;
+    resource.value = (Number.parseInt(resource.value ?? 0, 10) || 0) + delta;
+    renderActiveSheet();
+    await saveActiveSheet('resource');
+  }
+
+  async function handleResourceRoll() {
+    const resource = activeSheet?.hero?.resource;
+    if (!resource) return;
+    const sides = parseAutoDice(resource.autoDice || '');
+    if (!sides) {
+      window.alert('No resource die is set on this character sheet.');
+      return;
+    }
+    const roll = Math.floor(Math.random() * sides) + 1;
+    resource.value = (Number.parseInt(resource.value ?? 0, 10) || 0) + roll;
+    renderActiveSheet();
+    await saveActiveSheet('resource');
+  }
+
+  async function handleVictoryClick() {
+    const hero = activeSheet?.hero;
+    if (!hero) return;
+    if (!window.confirm('Do you want to add a victory point?')) {
+      return;
+    }
+    hero.victories = (Number.parseInt(hero.victories ?? 0, 10) || 0) + 1;
+    renderActiveSheet();
+    await saveActiveSheet('victories');
+  }
+
+  function handleConditionAdd(conditionName) {
+    const placementId = activeToken?.id || '';
+    const name = String(conditionName || '').trim();
+    if (!placementId || !name) {
+      return;
+    }
+    document.dispatchEvent(new CustomEvent('vtt:automation-apply-condition', {
+      detail: {
+        payload: {
+          placementId,
+          condition: { name, duration: 'save-ends' },
+        },
+      },
+    }));
+  }
+
+  const sheetChannel = getSheetSyncChannel();
+  if (sheetChannel) {
+    sheetChannel.addEventListener('message', (event) => {
+      const payload = event?.data;
+      if (!payload || payload.type !== 'character-sheet-sync' || payload.source === 'vtt') {
+        return;
+      }
+      const character = String(payload.character || '').trim().toLowerCase();
+      if (!activeCharacterId || (character && character !== activeCharacterId)) {
+        return;
+      }
+      refreshActiveSheet({ force: true });
+    });
+  }
+
+  const heroChannel = getHeroTokenSyncChannel();
+  if (heroChannel) {
+    heroChannel.addEventListener('message', (event) => {
+      const payload = event?.data;
+      if (!payload || payload.type !== 'hero-token-sync' || !activeSheet?.hero) {
+        return;
+      }
+      activeSheet.hero.heroTokens = normalizeHeroTokens(payload.heroTokens);
+      renderActiveSheet();
+    });
+  }
+
+  window.setInterval(() => refreshActiveSheet(), CHARACTER_SHEET_SYNC_INTERVAL_MS);
 
   document.addEventListener('vtt:token-selection-summary', (event) => {
     const detail = event?.detail ?? {};
@@ -435,7 +711,17 @@ function ensureRevealButton() {
   return button;
 }
 
-function bindCharacterSummaryControls(panel, { onTuck = null } = {}) {
+function bindCharacterSummaryControls(panel, {
+  onTuck = null,
+  onHeroToken = null,
+  onStaminaAction = null,
+  onRecovery = null,
+  onSurgeDelta = null,
+  onResourceDelta = null,
+  onResourceRoll = null,
+  onVictory = null,
+  onConditionAdd = null,
+} = {}) {
   panel.querySelectorAll('[data-character-summary-tuck]').forEach((button) => {
     button.addEventListener('click', (event) => {
       event.preventDefault();
@@ -465,6 +751,64 @@ function bindCharacterSummaryControls(panel, { onTuck = null } = {}) {
           },
         })
       );
+    });
+  });
+
+  panel.querySelectorAll('[data-character-hero-token]').forEach((button) => {
+    button.addEventListener('click', (event) => {
+      event.preventDefault();
+      const index = Number.parseInt(button.dataset.characterHeroToken || '', 10);
+      onHeroToken?.(index, button);
+    });
+  });
+
+  panel.querySelectorAll('[data-character-stamina-action]').forEach((button) => {
+    button.addEventListener('click', (event) => {
+      event.preventDefault();
+      onStaminaAction?.(button.dataset.characterStaminaAction || '');
+    });
+  });
+
+  panel.querySelectorAll('[data-character-recovery]').forEach((button) => {
+    button.addEventListener('click', (event) => {
+      event.preventDefault();
+      onRecovery?.();
+    });
+  });
+
+  panel.querySelectorAll('[data-character-surge-delta]').forEach((button) => {
+    button.addEventListener('click', (event) => {
+      event.preventDefault();
+      onSurgeDelta?.(Number.parseInt(button.dataset.characterSurgeDelta || '0', 10) || 0);
+    });
+  });
+
+  panel.querySelectorAll('[data-character-resource-delta]').forEach((button) => {
+    button.addEventListener('click', (event) => {
+      event.preventDefault();
+      onResourceDelta?.(Number.parseInt(button.dataset.characterResourceDelta || '0', 10) || 0);
+    });
+  });
+
+  panel.querySelectorAll('[data-character-resource-roll]').forEach((button) => {
+    button.addEventListener('click', (event) => {
+      event.preventDefault();
+      onResourceRoll?.();
+    });
+  });
+
+  panel.querySelectorAll('[data-character-add-victory]').forEach((button) => {
+    button.addEventListener('click', (event) => {
+      event.preventDefault();
+      onVictory?.();
+    });
+  });
+
+  panel.querySelectorAll('[data-character-condition-select]').forEach((select) => {
+    select.addEventListener('change', () => {
+      const value = select.value;
+      select.value = '';
+      onConditionAdd?.(value);
     });
   });
 }
@@ -994,7 +1338,7 @@ function renderCharacterCard(sheet, { characterId, token } = {}) {
   const resourceValue = valueOrZero(resource.value);
   const resourceNotes = extractTextBlocks(sidebarResource.text || '');
   const victories = valueOrZero(hero.victories);
-  const surges = valueOrZero(hero.surges);
+  const surges = Math.max(0, numberLike(hero.surges, 0));
   const lists = sidebar.lists && typeof sidebar.lists === 'object' ? sidebar.lists : {};
   const skills = normalizeSkills(sidebar.skills);
   const languageList = Array.isArray(lists.languages) ? lists.languages : [];
@@ -1013,8 +1357,8 @@ function renderCharacterCard(sheet, { characterId, token } = {}) {
           ${classTrack ? `<div class="vtt-character-card__track">${escapeHtml(classTrack)}</div>` : ''}
         </div>
         <div class="vtt-character-card__quick">
-          ${renderQuickBox('Hero Tokens', `${countReadyHeroTokens(heroTokens)} / ${heroTokens.length || 2}`)}
-          ${renderQuickBox('Surges', surges)}
+          ${renderHeroTokenDots(heroTokens)}
+          ${renderSurgeControl(surges)}
         </div>
       </header>
 
@@ -1046,7 +1390,7 @@ function renderCharacterCard(sheet, { characterId, token } = {}) {
         <div class="vtt-character-resources">
           <div class="vtt-character-resource-totals">
             ${renderResource('Victories', victories)}
-            ${renderResource(resourceTitle, resourceValue)}
+            ${renderResource(resourceTitle, resourceValue, { resource })}
           </div>
           <div class="vtt-character-resource-notes">
             ${resourceNotes.length
@@ -1060,7 +1404,7 @@ function renderCharacterCard(sheet, { characterId, token } = {}) {
         <div class="vtt-character-condition-list">
           ${conditions.length
             ? conditions.map((condition, index) => renderCondition(condition, token?.id, index)).join('')
-            : '<span class="vtt-character-condition">No conditions</span>'}
+            : renderConditionPicker(token?.id)}
         </div>
       `)}
 
@@ -1083,22 +1427,25 @@ function renderCharacterCard(sheet, { characterId, token } = {}) {
 function renderStaminaSection({ staminaCurrent, staminaMax, healthPercent, recoveriesCurrent, recoveriesMax, recoveryValue }) {
   return `
     <div class="vtt-character-stamina">
-      <div class="vtt-character-pill vtt-character-pill--damage">
+      <button type="button" class="vtt-character-pill vtt-character-pill--damage" data-character-stamina-action="damage">
         <span class="vtt-character-pill__label">DMG</span>
         <span class="vtt-character-pill__value">-</span>
-      </div>
+      </button>
       <div class="vtt-character-pill">
         <span class="vtt-character-pill__value">${escapeHtml(staminaCurrent)} / ${escapeHtml(staminaMax)}</span>
       </div>
-      <div class="vtt-character-pill">
+      <button type="button" class="vtt-character-pill" data-character-stamina-action="heal">
         <span class="vtt-character-pill__label">Heal</span>
         <span class="vtt-character-pill__value">+</span>
-      </div>
-      <div class="vtt-character-pill vtt-character-recovery">
+      </button>
+      <button type="button" class="vtt-character-pill vtt-character-recovery" data-character-recovery>
         <span class="vtt-character-pill__label">Recoveries</span>
-        <span class="vtt-character-recovery__value">+${escapeHtml(recoveryValue)} &nbsp; ${escapeHtml(recoveriesCurrent)} / ${escapeHtml(recoveriesMax)}</span>
+        <span class="vtt-character-recovery__layout">
+          <span class="vtt-character-recovery__heal">+${escapeHtml(recoveryValue)}</span>
+          <span class="vtt-character-recovery__count">${escapeHtml(recoveriesCurrent)} / ${escapeHtml(recoveriesMax)}</span>
+        </span>
         ${renderRecoveryTicks(recoveriesCurrent, recoveriesMax)}
-      </div>
+      </button>
       <div class="vtt-character-pill vtt-character-pill--temp">
         <span class="vtt-character-pill__label">Temp</span>
         <span class="vtt-character-pill__value">0</span>
@@ -1132,6 +1479,39 @@ function renderQuickBox(label, value) {
   `;
 }
 
+function renderHeroTokenDots(tokens) {
+  const normalized = normalizeHeroTokens(tokens);
+  return `
+    <div class="vtt-character-card__quick-box vtt-character-hero-tokens">
+      <span class="vtt-character-card__quick-label">Hero Tokens</span>
+      <span class="vtt-character-hero-token-row">
+        ${normalized.map((spent, index) => `
+          <button
+            type="button"
+            class="vtt-character-hero-token${spent ? ' is-spent' : ' is-ready'}"
+            data-character-hero-token="${index}"
+            aria-label="${spent ? 'Reset' : 'Spend'} hero token ${index + 1}"
+            title="${spent ? 'Reset hero token' : 'Spend hero token'}"
+          ></button>
+        `).join('')}
+      </span>
+    </div>
+  `;
+}
+
+function renderSurgeControl(surges) {
+  return `
+    <div class="vtt-character-card__quick-box vtt-character-surge-control">
+      <span class="vtt-character-card__quick-label">Surges</span>
+      <span class="vtt-character-surge-control__row">
+        <button type="button" class="vtt-character-step" data-character-surge-delta="-1" aria-label="Spend a surge">-</button>
+        <span class="vtt-character-card__quick-value">${escapeHtml(surges)}</span>
+        <button type="button" class="vtt-character-step" data-character-surge-delta="1" aria-label="Add a surge">+</button>
+      </span>
+    </div>
+  `;
+}
+
 function renderStat(label, value) {
   return `
     <div class="vtt-character-stat">
@@ -1150,11 +1530,25 @@ function renderVital(label, value) {
   `;
 }
 
-function renderResource(label, value) {
+function renderResource(label, value, { resource = null } = {}) {
+  const autoDice = resource && typeof resource.autoDice === 'string' ? resource.autoDice.trim() : '';
+  if (!resource) {
+    return `
+      <button type="button" class="vtt-character-resource vtt-character-resource--button" data-character-add-victory>
+        <div class="vtt-character-resource__label">${escapeHtml(label)}</div>
+        <div class="vtt-character-resource__value">${escapeHtml(value)}</div>
+      </button>
+    `;
+  }
   return `
     <div class="vtt-character-resource">
       <div class="vtt-character-resource__label">${escapeHtml(label)}</div>
-      <div class="vtt-character-resource__value">${escapeHtml(value)}</div>
+      <div class="vtt-character-resource__value-row">
+        <button type="button" class="vtt-character-step" data-character-resource-delta="1" aria-label="Increase ${escapeAttribute(label)}">▲</button>
+        <div class="vtt-character-resource__value">${escapeHtml(value)}</div>
+        <button type="button" class="vtt-character-step" data-character-resource-delta="-1" aria-label="Decrease ${escapeAttribute(label)}">▼</button>
+        ${autoDice ? `<button type="button" class="vtt-character-roll" data-character-resource-roll aria-label="Roll ${escapeAttribute(autoDice)}">${escapeHtml(autoDice)}</button>` : ''}
+      </div>
     </div>
   `;
 }
@@ -1169,6 +1563,21 @@ function renderCondition(condition, placementId, index) {
       <span class="vtt-character-condition__name">${escapeHtml(condition)}</span>
       ${removeButton}
     </span>
+  `;
+}
+
+function renderConditionPicker(placementId) {
+  if (!placementId) {
+    return '<span class="vtt-character-condition">No conditions</span>';
+  }
+  return `
+    <label class="vtt-character-condition vtt-character-condition--picker">
+      <span>No conditions</span>
+      <select data-character-condition-select aria-label="Add condition">
+        <option value="">Add...</option>
+        ${CONDITION_OPTIONS.map((condition) => `<option value="${escapeAttribute(condition)}">${escapeHtml(condition)}</option>`).join('')}
+      </select>
+    </label>
   `;
 }
 
@@ -1787,11 +2196,8 @@ async function applyAbilityResourceGain(sheet, payload = {}, options = {}) {
   hero.resource = resource;
   if (sheet) sheet.hero = hero;
   await saveCharacterSummarySheet(sheet, options);
-  // Signal that the sheet changed so any visible panels can refresh. The
-  // board listens for this, invalidates its sheet cache, and re-dispatches
-  // the selection-summary event so the VTT character panel re-fetches and
-  // re-renders the resource bar in real time. The standalone character
-  // sheet page still needs a manual refresh (separate-page; out of scope).
+  // Signal that the sheet changed so visible panels and standalone sheet tabs
+  // can refresh without a page reload.
   if (typeof document !== 'undefined' && options?.characterId) {
     document.dispatchEvent(new CustomEvent('vtt:character-sheet-updated', {
       detail: { characterId: options.characterId, change: 'resource' },
@@ -1827,9 +2233,7 @@ async function spendAbilityResource(sheet, ability, options = {}) {
   if (sheet) sheet.hero = hero;
   await saveCharacterSummarySheet(sheet, options);
   // Mirror applyAbilityResourceGain: tell the board its sheet cache is stale
-  // so the visible resource bar repaints on the next selection-summary tick.
-  // Without this the value-after-spend doesn't render until the user clicks
-  // away and back.
+  // and notify any open standalone sheet tab.
   if (typeof document !== 'undefined' && options?.characterId) {
     document.dispatchEvent(new CustomEvent('vtt:character-sheet-updated', {
       detail: { characterId: options.characterId, change: 'resource' },
@@ -1891,7 +2295,18 @@ async function saveCharacterSummarySheet(sheet, options = {}) {
     body,
   });
   const payload = await response.json().catch(() => null);
-  return Boolean(response.ok && payload?.success !== false);
+  const saved = Boolean(response.ok && payload?.success !== false);
+  if (saved && typeof BroadcastChannel === 'function') {
+    const channel = new BroadcastChannel(CHARACTER_SHEET_SYNC_CHANNEL);
+    channel.postMessage({
+      type: 'character-sheet-sync',
+      source: 'vtt',
+      character: characterId,
+      change: 'sheet',
+    });
+    channel.close();
+  }
+  return saved;
 }
 
 function clonePlain(value) {
@@ -1978,6 +2393,68 @@ function countReadyHeroTokens(tokens) {
     return 2;
   }
   return tokens.filter((spent) => !spent).length;
+}
+
+function normalizeHeroTokens(tokens) {
+  return [Boolean(tokens?.[0]), Boolean(tokens?.[1])];
+}
+
+function promptForPositiveInt(message) {
+  const raw = window.prompt(message, '');
+  if (raw === null) {
+    return 0;
+  }
+  const value = Number.parseInt(raw, 10);
+  return Number.isFinite(value) && value > 0 ? value : 0;
+}
+
+function appendStaminaHistory(vitals, value) {
+  if (!vitals || typeof vitals !== 'object') {
+    return;
+  }
+  const numeric = Number(value);
+  if (!Number.isFinite(numeric)) {
+    return;
+  }
+  const history = Array.isArray(vitals.staminaHistory) ? [...vitals.staminaHistory] : [];
+  history.push(numeric);
+  vitals.staminaHistory = history.slice(-4);
+}
+
+function parseAutoDice(value) {
+  const match = String(value || '').trim().match(/^d?(\d+)$/i);
+  if (!match) {
+    return 0;
+  }
+  const sides = Number.parseInt(match[1], 10);
+  return Number.isFinite(sides) && sides > 0 ? sides : 0;
+}
+
+function showHeroTokenConfirmation(button) {
+  return new Promise((resolve) => {
+    document.querySelectorAll('.vtt-character-token-confirmation').forEach((el) => el.remove());
+    const host = button?.parentElement;
+    if (!host) {
+      resolve(false);
+      return;
+    }
+    const confirm = document.createElement('div');
+    confirm.className = 'vtt-character-token-confirmation';
+    confirm.innerHTML = `
+      <div class="vtt-character-token-confirmation__text">Does everyone agree to use a hero token?</div>
+      <div class="vtt-character-token-confirmation__actions">
+        <button type="button" data-confirm-hero-token>Yes</button>
+        <button type="button" data-cancel-hero-token>Cancel</button>
+      </div>
+    `;
+    const finish = (value) => {
+      confirm.remove();
+      resolve(value);
+    };
+    confirm.querySelector('[data-confirm-hero-token]')?.addEventListener('click', () => finish(true));
+    confirm.querySelector('[data-cancel-hero-token]')?.addEventListener('click', () => finish(false));
+    host.appendChild(confirm);
+  });
 }
 
 function formatSigned(value) {

@@ -1835,13 +1835,6 @@
     }
 
     try {
-      if (typeof state.context.spendResource === "function") {
-        const spendResult = await state.context.spendResource(state.action);
-        if (spendResult?.canceled) {
-          closeRunner();
-          return;
-        }
-      }
       const blocks = automation.cards || [];
       if (!blocks.length) {
         await postChat(state.context, {
@@ -1849,6 +1842,27 @@
         });
         return;
       }
+
+      const structuredTriggerBlocks = blocks.filter((block) => block?.type === "trigger" && block.match);
+      const isResolvingReadyTrigger = Boolean(state.triggerPayload);
+      const isArmingOnly = structuredTriggerBlocks.length > 0 && !isResolvingReadyTrigger;
+
+      if (!isArmingOnly && typeof state.context.spendResource === "function") {
+        const spendResult = await state.context.spendResource(state.action);
+        if (spendResult?.canceled) {
+          closeRunner();
+          return;
+        }
+      }
+
+      if (isArmingOnly) {
+        for (const block of structuredTriggerBlocks) {
+          if (state.aborted) break;
+          await runBlock(state, block);
+        }
+        return;
+      }
+
       if (typeof state.context.fireTriggerEvent === "function") {
         state.context.fireTriggerEvent({
           eventType: "actionUsed",
@@ -1863,6 +1877,7 @@
       }
       for (const block of blocks) {
         if (state.aborted) break;
+        if (isResolvingReadyTrigger && block?.type === "trigger") continue;
         await runBlock(state, block);
       }
       if (state.aborted) {

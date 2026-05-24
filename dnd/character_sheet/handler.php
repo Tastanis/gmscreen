@@ -330,7 +330,7 @@ if ($requestMethod !== 'POST' && $requestMethod !== 'GET') {
 $requestData = $requestMethod === 'POST' ? $_POST : $_GET;
 $action = isset($requestData['action']) ? $requestData['action'] : '';
 
-if (!in_array($action, array('summary', 'sync-stamina', 'sync-token-traits', 'sync-hero-tokens', 'fetch-victories'), true) && $requestMethod !== 'POST') {
+if (!in_array($action, array('summary', 'load', 'sync-stamina', 'sync-token-traits', 'sync-hero-tokens', 'fetch-victories'), true) && $requestMethod !== 'POST') {
     sendJsonResponse(array('success' => false, 'error' => 'Invalid request method'));
 }
 
