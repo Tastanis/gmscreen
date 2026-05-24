@@ -41,7 +41,7 @@ The monster ability tray + `window.MonsterAbilityRunner.start()` add the followi
 
 | kind | Status | Runtime behavior |
 |---|---|---|
-| `damage` | Full | Applies via board, supports immunity/vulnerability on PC sheets |
+| `damage` | Full | Applies via board, supports immunity/vulnerability on PC sheets, monster stat-block weakness/immunity, and temporary `damageWeakness` / `damageImmunity` conditions |
 | `condition` | Full | Applies via board condition tracker (save-ends durations integrate with token tracker) |
 | `forcedMovement` (`push`) | Full | Push works end-to-end (board preview, collisions) |
 | `forcedMovement` (`pull`) | Full | Legal cells strictly nearer to caster, monotonic-toward-source path |
@@ -53,7 +53,7 @@ The monster ability tray + `window.MonsterAbilityRunner.start()` add the followi
 | `temporaryStamina` | Full | Applies via board heal path with overage allowed (over-max shows as temp) |
 | `teleport` | Full | Reuses the slide-shaped destination picker; legal-cell highlight covers any cell within Chebyshev distance. No stability or size penalty. Clicking an occupied cell still routes through the slide-style collision path — pick an empty cell to follow the rules. |
 | `swap` | Full | Atomic transpose of caster ↔ target placements. Best-effort footprint check; non-equal sizes allowed (GM corrects manually). |
-| `freeStrike` | Full | "By" entity defaults to the most recent target group's first member (the creature being told to free-strike). Reads M/A bonuses from their sheet (0 / 0 fallback if no sheet). Rolls 2d10 inline, prompts user to pick the "against" target via the standard picker (with the by-entity as source), applies tier damage (`2/5/7 + max(M, A)`) via the normal automation damage path. |
+| `freeStrike` | Full | "By" entity defaults to the most recent target group's first member (the creature being told to free-strike). PCs roll `2d10 + max(M, A)`. Monsters use their stat-block `free_strike` value when present, otherwise fall back to M/A attributes. Prompts for the "against" target via the standard picker, with the by-entity as source, and applies damage through the normal automation damage path. |
 | `cascade` | Chat reminder | Posts message; manual. Cascade requires stable cross-ability IDs and an "invoke another ability" entry point that doesn't exist yet — Phase D. |
 | `resourceGain` | Full | Mutates the caster's own `hero.resource.value` on their sheet. If the JSON names a specific resource and the caster's resource bar has a different title, falls back to a chat reminder. Floors at 0. |
 | `ifKeyword` | Full | Branches based on ability's `keywords`. `then` runs on match, `else` on miss |
@@ -90,6 +90,8 @@ When `name === "other"`, supply `text` describing the homebrew condition.
 `push`, `pull`, `slide`, `verticalPush`, `verticalPull`, `verticalSlide`
 
 Forced-movement highlights account for target stability and size across PCs and monsters. The highlight is advisory only: the GM can still click any destination, including cells outside the legal highlight.
+
+Target and area range visuals are also advisory. Single-target abilities draw the caster's range/reach box, and area abilities draw the placement-within range box when the source and `distance.within` are known. Clicking outside those visuals is allowed.
 
 ## Target predicates — `target.predicate`
 

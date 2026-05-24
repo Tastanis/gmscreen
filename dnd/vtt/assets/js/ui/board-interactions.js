@@ -11076,6 +11076,16 @@ export function mountBoardInteractions(store, routes = {}) {
     forceMove: function (payload) { return dispatchBoardCustom('vtt:automation-force-move', 'payload', payload); },
     applyTemporaryStamina: function (payload) { return dispatchBoardCustom('vtt:automation-apply-temporary-stamina', 'payload', payload); },
     registerTrigger: function (payload) { return dispatchBoardCustom('vtt:automation-register-trigger', 'payload', payload); },
+    applyTeleport: function (payload) { return dispatchBoardCustom('vtt:automation-apply-teleport', 'payload', payload); },
+    applySwap: function (payload) { return dispatchBoardCustom('vtt:automation-apply-swap', 'payload', payload); },
+    runFreeStrike: function (payload) { return dispatchBoardCustom('vtt:automation-run-free-strike', 'payload', payload); },
+    getRecoveryValueForTarget: function (payload) { return dispatchBoardCustom('vtt:automation-recovery-value', 'payload', payload); },
+    registerPersistentZone: function (payload) { return dispatchBoardCustom('vtt:automation-register-persistent-zone', 'payload', payload); },
+    applyMark: function (payload) { return dispatchBoardCustom('vtt:automation-apply-mark', 'payload', payload); },
+    endMark: function (payload) { return dispatchBoardCustom('vtt:automation-end-mark', 'payload', payload); },
+    checkMark: function (payload) { return dispatchBoardCustom('vtt:automation-check-mark', 'payload', payload); },
+    fireTriggerEvent: function (payload) { return dispatchBoardCustom('vtt:automation-fire-trigger-event', 'payload', payload); },
+    checkScopedFlag: function (payload) { return dispatchBoardCustom('vtt:automation-check-scoped-flag', 'payload', payload); },
   };
 
   function openMalicePanel() {
@@ -14635,27 +14645,35 @@ export function mountBoardInteractions(store, routes = {}) {
       return;
     }
 
-    // Resolve the "by" entity's M and A bonuses. PC sheets have these in
-    // `hero.stats`; for monsters/NPCs we may have nothing, so we fall back to
-    // 0 and let the GM adjust in chat.
-    let mBonus = 0;
-    let aBonus = 0;
     const sheet = await getAutomationSheetForPlacement(byId);
-    if (sheet?.hero?.stats) {
-      mBonus = Number.parseInt(sheet.hero.stats.might ?? 0, 10) || 0;
-      aBonus = Number.parseInt(sheet.hero.stats.agility ?? 0, 10) || 0;
-    }
-    const bonus = Math.max(mBonus, aBonus);
-    const bonusLabel = mBonus >= aBonus ? `+${bonus} M` : `+${bonus} A`;
+    const monsterFreeStrike = sheet ? null : getMonsterAutomationFreeStrike(byPlacement.monster);
+    let damage = monsterFreeStrike;
+    let d1 = null;
+    let d2 = null;
+    let total = null;
+    let tier = null;
+    let tierDamage = null;
+    let bonus = 0;
+    let bonusLabel = '';
 
-    // Roll 2d10.
-    const d1 = Math.floor(Math.random() * 10) + 1;
-    const d2 = Math.floor(Math.random() * 10) + 1;
-    const naturalRoll = d1 + d2;
-    const total = naturalRoll + bonus;
-    const tier = total <= 11 ? 1 : total <= 16 ? 2 : 3;
-    const tierDamage = { 1: 2, 2: 5, 3: 7 }[tier];
-    const damage = tierDamage + bonus;
+    if (!Number.isFinite(damage) || damage <= 0) {
+      // Resolve the "by" entity's M and A bonuses. PC sheets have these in
+      // `hero.stats`; monsters fall back to their stat-block attributes.
+      const stats = sheet?.hero?.stats || await getAutomationStatsForPlacement(byPlacement);
+      const mBonus = Number.parseInt(stats?.might ?? 0, 10) || 0;
+      const aBonus = Number.parseInt(stats?.agility ?? 0, 10) || 0;
+      bonus = Math.max(mBonus, aBonus);
+      bonusLabel = mBonus >= aBonus ? `+${bonus} M` : `+${bonus} A`;
+
+      // Roll 2d10.
+      d1 = Math.floor(Math.random() * 10) + 1;
+      d2 = Math.floor(Math.random() * 10) + 1;
+      const naturalRoll = d1 + d2;
+      total = naturalRoll + bonus;
+      tier = total <= 11 ? 1 : total <= 16 ? 2 : 3;
+      tierDamage = { 1: 2, 2: 5, 3: 7 }[tier];
+      damage = tierDamage + bonus;
+    }
 
     // Pick the "against" target via the standard automation picker, with
     // the by-entity as the new source so distance/team filters resolve
@@ -14715,7 +14733,9 @@ export function mountBoardInteractions(store, routes = {}) {
     // Post the dice math + result so the table sees what happened.
     const chatLines = [
       `${tokenLabel(byPlacement)} makes a Free Strike against ${tokenLabel(getPlacementFromStore(againstId))}.`,
-      `2d10 + M or A: ${d1} + ${d2} ${bonusLabel} = ${total} → tier ${tier} (${tierDamage}+M or A = ${damage} damage).`,
+      Number.isFinite(monsterFreeStrike) && monsterFreeStrike > 0
+        ? `Monster Free Strike: ${damage} damage.`
+        : `2d10 + M or A: ${d1} + ${d2} ${bonusLabel} = ${total} -> tier ${tier} (${tierDamage}+M or A = ${damage} damage).`,
     ];
     if (payload.text) chatLines.push(payload.text);
     if (window.dashboardChat?.sendMessage) {
@@ -14824,7 +14844,46 @@ export function mountBoardInteractions(store, routes = {}) {
   async function getAutomationStatsForPlacement(placement) {
     const sheet = await getAutomationSheetForPlacement(placement?.id);
     const stats = sheet?.hero?.stats && typeof sheet.hero.stats === 'object' ? sheet.hero.stats : {};
-    return stats;
+    if (Object.keys(stats).length > 0) {
+      return stats;
+    }
+    return getMonsterAutomationStats(placement?.monster);
+  }
+
+  function getMonsterAutomationStats(monster) {
+    if (!monster || typeof monster !== 'object') {
+      return {};
+    }
+    const attributes = monster.attributes && typeof monster.attributes === 'object' ? monster.attributes : {};
+    return ['might', 'agility', 'reason', 'intuition', 'presence'].reduce((result, key) => {
+      result[key] = getAutomationNumber(attributes[key] ?? monster[key] ?? monster.stats?.[key], 0);
+      return result;
+    }, {});
+  }
+
+  function getMonsterAutomationFreeStrike(monster) {
+    if (!monster || typeof monster !== 'object') {
+      return null;
+    }
+    const defenses = monster.defenses && typeof monster.defenses === 'object' ? monster.defenses : {};
+    const value = getAutomationNumber(
+      monster.free_strike ?? monster.freeStrike ?? defenses.free_strike ?? defenses.freeStrike,
+      null
+    );
+    return Number.isFinite(value) && value > 0 ? value : null;
+  }
+
+  function getAutomationNumber(value, fallback = 0) {
+    if (typeof value === 'number' && Number.isFinite(value)) {
+      return value;
+    }
+    if (typeof value === 'string') {
+      const parsed = Number.parseInt(value.replace(/[^\d-]/g, ''), 10);
+      if (Number.isFinite(parsed)) {
+        return parsed;
+      }
+    }
+    return fallback;
   }
 
   function computeAutomationPotencyThreshold(stats = {}, threshold = 'weak') {

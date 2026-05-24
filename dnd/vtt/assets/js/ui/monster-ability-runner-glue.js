@@ -71,8 +71,79 @@
         return cur <= Math.floor(max / 2);
     }
 
+    function readMonsterNumber(value, fallback) {
+        if (typeof value === 'number' && Number.isFinite(value)) return value;
+        if (typeof value === 'string') {
+            var parsed = parseInt(value.replace(/[^\d-]/g, ''), 10);
+            if (Number.isFinite(parsed)) return parsed;
+        }
+        return fallback;
+    }
+
+    function getMonsterStats(monster) {
+        var source = monster && monster.attributes && typeof monster.attributes === 'object'
+            ? monster.attributes
+            : {};
+        var stats = {};
+        ['might', 'agility', 'reason', 'intuition', 'presence'].forEach(function (key) {
+            stats[key] = readMonsterNumber(
+                source[key] !== undefined ? source[key] : monster && monster[key],
+                0
+            );
+        });
+        return stats;
+    }
+
+    function getMonsterTraits(monster, placement) {
+        var defenses = monster && monster.defenses && typeof monster.defenses === 'object'
+            ? monster.defenses
+            : {};
+        return {
+            size: (monster && (monster.size || monster.token_size || monster.tokenSize)) ||
+                (placement && (placement.size || placement.sizeOverride)) ||
+                '',
+            stability: readMonsterNumber(
+                monster && monster.stability !== undefined ? monster.stability : defenses.stability,
+                ''
+            )
+        };
+    }
+
+    function getMonsterAttributeBonus(stats, attribute) {
+        var key = String(attribute || '').trim().toLowerCase();
+        var lookup = {
+            m: 'might',
+            might: 'might',
+            a: 'agility',
+            agility: 'agility',
+            r: 'reason',
+            reason: 'reason',
+            i: 'intuition',
+            intuition: 'intuition',
+            p: 'presence',
+            presence: 'presence'
+        };
+        return readMonsterNumber(stats[lookup[key] || key], 0);
+    }
+
+    function getStrongestMonsterAttribute(stats) {
+        var entries = [
+            { attribute: 'Might', key: 'might' },
+            { attribute: 'Agility', key: 'agility' },
+            { attribute: 'Reason', key: 'reason' },
+            { attribute: 'Intuition', key: 'intuition' },
+            { attribute: 'Presence', key: 'presence' }
+        ];
+        return entries.reduce(function (best, entry) {
+            var bonus = readMonsterNumber(stats[entry.key], 0);
+            return bonus > best.bonus ? { attribute: entry.attribute, bonus: bonus } : best;
+        }, { attribute: 'Might', bonus: readMonsterNumber(stats.might, 0) });
+    }
+
     function buildMonsterContext(monster, ability, category, placement) {
         var board = getBoardCallbacks();
+        var stats = getMonsterStats(monster || {});
+        var traits = getMonsterTraits(monster || {}, placement || null);
         var actionId = (placement && placement.id ? placement.id : 'monster') +
             ':' + category + ':' + (ability.name || 'ability');
 
@@ -93,7 +164,9 @@
             hp: placement ? placement.hp : null,
             maxHp: placement ? placement.maxHp : null,
             stamina: placement ? placement.hp : null,
-            maxStamina: placement ? placement.maxHp : null
+            maxStamina: placement ? placement.maxHp : null,
+            stats: stats,
+            vitals: traits
         };
 
         // Monster-flavored spendResource: rejects PC-only resources with chat note.
@@ -119,10 +192,9 @@
             automation: ability.automation || null,
             sourceToken: placement || null,
             sourcePlacement: placement || null,
-            // Static-number rules: attribute lookups always 0; flatBonus carries
-            // the real value in monster-authored powerRoll blocks.
-            getAttributeBonus: function () { return 0; },
-            getStrongestAttribute: function () { return { attribute: 'Flat', bonus: 0 }; },
+            sourceTraits: traits,
+            getAttributeBonus: function (attribute) { return getMonsterAttributeBonus(stats, attribute); },
+            getStrongestAttribute: function () { return getStrongestMonsterAttribute(stats); },
             getPotencyThreshold: function () { return 0; },
             isWinded: function () { return isWindedFromPlacement(placement); },
             postChat: postChat,
@@ -140,7 +212,18 @@
             applyHeal: board.applyHeal,
             applyTemporaryStamina: board.applyTemporaryStamina,
             cancelTargetSelection: board.cancelTargetSelection,
-            registerTrigger: board.registerTrigger
+            cancelAreaSelection: board.cancelAreaSelection,
+            registerTrigger: board.registerTrigger,
+            applyTeleport: board.applyTeleport,
+            applySwap: board.applySwap,
+            runFreeStrike: board.runFreeStrike,
+            getRecoveryValueForTarget: board.getRecoveryValueForTarget,
+            registerPersistentZone: board.registerPersistentZone,
+            applyMark: board.applyMark,
+            endMark: board.endMark,
+            checkMark: board.checkMark,
+            fireTriggerEvent: board.fireTriggerEvent,
+            checkScopedFlag: board.checkScopedFlag
         };
     }
 
