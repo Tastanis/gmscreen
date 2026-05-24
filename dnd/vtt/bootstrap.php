@@ -5,7 +5,12 @@ $routes = require __DIR__ . '/config/routes.php';
 
 require_once __DIR__ . '/components/ChatPanel.php';
 require_once __DIR__ . '/components/CharacterSummaryPanel.php';
-require_once __DIR__ . '/components/MonsterSummaryPanel.php';
+// MonsterSummaryPanel.php is conditionally loaded so a missing file (e.g.
+// half-applied cPanel git pull) does not 500 the entire VTT. If the file
+// isn't present, the monster summary panel slot just renders empty.
+if (is_file(__DIR__ . '/components/MonsterSummaryPanel.php')) {
+    require_once __DIR__ . '/components/MonsterSummaryPanel.php';
+}
 require_once __DIR__ . '/components/SettingsPanel.php';
 require_once __DIR__ . '/components/SceneBoard.php';
 require_once __DIR__ . '/components/TokenLibrary.php';
@@ -253,7 +258,7 @@ function buildVttSections(bool $isGm = false): array
     return [
         'chatPanel' => renderVttChatPanel($isGm),
         'characterSummaryPanel' => renderVttCharacterSummaryPanel(),
-        'monsterSummaryPanel' => renderVttMonsterSummaryPanel(),
+        'monsterSummaryPanel' => function_exists('renderVttMonsterSummaryPanel') ? renderVttMonsterSummaryPanel() : '',
         'settingsPanel' => renderVttSettingsPanel($tokenLibraryMarkup, $isGm),
         'sceneBoard' => renderVttSceneBoard($isGm),
         'tokenLibrary' => $tokenLibraryMarkup,
