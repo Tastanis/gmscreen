@@ -155,7 +155,20 @@ require_once '../../version.php';
         </div>
     </div>
 
+    <!-- Ability Automation styles (reused PC pip / paste-modal styles) -->
+    <link rel="stylesheet" href="../../character_sheet/ability-automation/automation.css">
+
     <!-- JavaScript -->
+    <!-- Ability automation primitives -> schema -> paste -> inspector must
+         load BEFORE monster-builder.js so the Automate button hook points
+         have AbilityAutomation.open() available by render time. -->
+    <script src="../../character_sheet/ability-automation/primitives.js"></script>
+    <script src="../../character_sheet/ability-automation/schema.js"></script>
+    <script src="../../character_sheet/ability-automation/paste.js"></script>
+    <script src="../../character_sheet/ability-automation/inspector.js"></script>
     <script src="js/monster-builder.js"></script>
+    <!-- monster-automation-ui.js wires the button hooks. Must load AFTER
+         monster-builder.js so window.monsterData / markMonsterDirty exist. -->
+    <script src="js/monster-automation-ui.js"></script>
 </body>
 </html>

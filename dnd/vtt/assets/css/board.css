@@ -1213,10 +1213,19 @@
   transform: translateX(-50%);
   z-index: 4;
   pointer-events: none;
+  transition: bottom 160ms ease;
 }
 
 .vtt-board__malice[hidden] {
   display: none !important;
+}
+
+/* When the monster ability tray is open at the bottom of the screen, slide
+   the malice pip up so it isn't covered. The PC tray uses a different layout
+   (centered overlay) that does not collide, so we only react to the monster
+   tray's body class here. */
+body.vtt-monster-ability-tray-is-open .vtt-board__malice {
+  bottom: 5rem;
 }
 
 .vtt-malice {

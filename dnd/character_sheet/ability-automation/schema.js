@@ -507,7 +507,7 @@
   }
 
   function normalizePowerRollBlock(input, warnings, path) {
-    const known = new Set(["type", "id", "attribute", "bonus", "target", "tiers", "rollFormula", "note"]);
+    const known = new Set(["type", "id", "attribute", "bonus", "flatBonus", "target", "tiers", "rollFormula", "note", "whenWinded"]);
     const tiersInput = input.tiers && typeof input.tiers === "object" ? input.tiers : {};
     const tiers = {};
     for (const key of P.TIER_KEYS) {
@@ -527,6 +527,16 @@
       rollFormula: asTrimmedString(input.rollFormula) || "2d10",
       tiers,
     };
+    // Monster-friendly: literal roll bonus. When present, runner uses this
+    // INSTEAD of resolving `attribute` via context.getAttributeBonus(). PCs
+    // continue using the attribute path; they don't author this field.
+    if (input.flatBonus !== undefined && input.flatBonus !== null && input.flatBonus !== "") {
+      block.flatBonus = asInt(input.flatBonus, 0);
+    }
+    // Optional override values used when the actor is winded (HP <= floor(maxHP/2)).
+    // Shallow-merged over the base block at runtime. Both PCs and monsters can use it.
+    const wWinded = normalizeWhenWinded(input.whenWinded, warnings, `${path}.whenWinded`, "powerRoll");
+    if (wWinded) block.whenWinded = wWinded;
     if (input.note) block.note = asTrimmedString(input.note);
     const attrValid = Array.isArray(attribute)
       ? attribute.every((a) => P.ATTRIBUTES.includes(a))
@@ -539,8 +549,41 @@
     return block;
   }
 
+  // Normalize a `whenWinded` override sub-object. Allowed fields differ by host
+  // block type. We intentionally keep validation light: unknown fields stay in
+  // _extra so authors can experiment, but we surface a warning.
+  function normalizeWhenWinded(input, warnings, path, hostType) {
+    if (!input || typeof input !== "object") return null;
+    const out = {};
+    if (hostType === "powerRoll") {
+      if (input.bonus !== undefined && input.bonus !== null) out.bonus = asInt(input.bonus, 0);
+      if (input.flatBonus !== undefined && input.flatBonus !== null && input.flatBonus !== "") {
+        out.flatBonus = asInt(input.flatBonus, 0);
+      }
+      if (input.attribute) {
+        out.attribute = P.normalizeAttributeOrList
+          ? P.normalizeAttributeOrList(input.attribute)
+          : P.normalizeAttribute(input.attribute);
+      }
+      if (input.target !== undefined && input.target !== null) out.target = asTrimmedString(input.target);
+      if (input.tiers && typeof input.tiers === "object") {
+        const tiers = {};
+        for (const key of P.TIER_KEYS) {
+          if (input.tiers[key]) tiers[key] = normalizeTier(input.tiers[key], warnings, `${path}.tiers.${key}`);
+        }
+        if (Object.keys(tiers).length) out.tiers = tiers;
+      }
+    } else if (hostType === "effect") {
+      if (Array.isArray(input.effects)) {
+        out.effects = normalizeEffectList(input.effects, warnings, `${path}.effects`);
+      }
+      if (input.target !== undefined && input.target !== null) out.target = asTrimmedString(input.target);
+    }
+    return Object.keys(out).length ? out : null;
+  }
+
   function normalizeEffectBlock(input, warnings, path) {
-    const known = new Set(["type", "id", "target", "effects", "note"]);
+    const known = new Set(["type", "id", "target", "effects", "note", "whenWinded"]);
     const block = {
       type: "effect",
       id: input.id || createId("effect"),
@@ -549,6 +592,8 @@
     };
     if (!block.effects.length) warnings.push(`${path}: effect block has no effects.`);
     if (input.note) block.note = asTrimmedString(input.note);
+    const wWinded = normalizeWhenWinded(input.whenWinded, warnings, `${path}.whenWinded`, "effect");
+    if (wWinded) block.whenWinded = wWinded;
     const extras = pickExtras(input, known);
     if (extras) block._extra = extras;
     return block;

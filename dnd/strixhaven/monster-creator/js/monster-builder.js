@@ -1313,22 +1313,40 @@ function renderSingleAbility(ability, index, category, monsterId = '') {
         };
     }
 
+    // HOOK POINT: monster-automation-ui.js binds clicks on .monster-automate-btn
+    // via event delegation. The data-* attributes carry everything the handler
+    // needs to look up the ability, open the paste modal, and refresh the pip.
+    const hasAutomation = ability.automation && typeof ability.automation === 'object'
+        && Object.keys(ability.automation).length > 0;
+    const automateButtonHtml = `
+        <button type="button"
+                class="btn-small monster-automate-btn automation-action-btn ${hasAutomation ? 'automation-action-btn--configured' : ''}"
+                data-monster-id="${monsterId}"
+                data-ability-category="${category}"
+                data-ability-index="${index}"
+                title="${hasAutomation ? 'Edit automation JSON' : 'Add automation JSON'}">
+            <span class="automation-action-btn__status" aria-hidden="true"></span>
+            <span class="monster-automate-btn__label">Automate</span>
+        </button>
+    `;
+
     return `
         <div class="ability-item" data-ability-index="${index}" data-category="${category}">
             <!-- Row 1: Header Information -->
             <div class="ability-row-1">
-                <input type="text" class="ability-name" placeholder="Ability Name" 
-                       data-field-path="abilities.${category}.${index}.name" 
+                <input type="text" class="ability-name" placeholder="Ability Name"
+                       data-field-path="abilities.${category}.${index}.name"
                        value="${ability.name || ''}">
-                
+
                 <span class="action-type">${ability.action_type || getCategoryDisplayName(category)}</span>
-                
+
                 ${(category === 'villain_action' || category === 'malice') ? `
-                    <input type="text" class="resource-cost-input" placeholder="3 points" 
-                           data-field-path="abilities.${category}.${index}.resource_cost" 
+                    <input type="text" class="resource-cost-input" placeholder="3 points"
+                           data-field-path="abilities.${category}.${index}.resource_cost"
                            value="${ability.resource_cost || ''}">
                 ` : ''}
-                
+
+                ${automateButtonHtml}
                 <button class="btn-small remove-ability" onclick="removeAbility(this, '${category}')">×</button>
             </div>
             

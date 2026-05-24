@@ -476,6 +476,12 @@ function normalizeMonsterAbility($ability, string $category): ?array
         $normalized['has_test'] = true;
         $normalized['test'] = $test;
     }
+    // Preserve opaque automation JSON (v3 ability-automation schema). The PHP
+    // side intentionally does NOT validate the inner shape — that's the JS
+    // schema.js's job. Drop only if missing or an empty container.
+    if (isset($ability['automation']) && is_array($ability['automation']) && $ability['automation'] !== []) {
+        $normalized['automation'] = $ability['automation'];
+    }
 
     return $normalized;
 }
