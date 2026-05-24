@@ -59,7 +59,11 @@ The import creates a new monster in editor mode. Review it, then use **Save to T
           "cards": [
             {
               "type": "target",
-              "target": { "kind": "single", "range": 2, "within": "melee" }
+              "name": "primary",
+              "mode": "token",
+              "predicate": "enemy",
+              "count": { "value": 1, "mode": "exact" },
+              "distance": { "form": "melee", "value": 2 }
             },
             {
               "type": "powerRoll",
@@ -106,7 +110,12 @@ The import creates a new monster in editor mode. Review it, then use **Save to T
           "cards": [
             {
               "type": "target",
-              "target": { "kind": "area", "shape": "burst", "size": 3 }
+              "name": "flames",
+              "mode": "area",
+              "predicate": "enemy",
+              "shape": "burst",
+              "size": 3,
+              "distance": { "form": "burst", "value": 3 }
             },
             {
               "type": "effect",
@@ -126,6 +135,7 @@ The import creates a new monster in editor mode. Review it, then use **Save to T
 - `abilities` categories: `passive`, `maneuver`, `action`, `triggered_action`, `villain_action`, `malice`.
 - The importer also accepts common aliases such as `actions`, `triggeredActions`, and `villainActions`.
 - For monster automation, use static numbers and `flatBonus`. Do not write PC-style `7 + M` formulas for monsters.
+- Ability automation uses the shared v3 format documented in `../../character_sheet/ability-automation/AUTHORING.md` and `../../character_sheet/ability-automation/REGISTRY.md`. In target cards, put `mode`, `predicate`, `count`, `distance`, `shape`, and `size` directly on the card; do not use the old nested `{ "target": { "kind": ... } }` shape.
 - `immunities` and `weaknesses` are arrays of `{ "type": "<damage type>", "value": <int> }` entries. Use one entry per damage type — e.g. an undead with "Immunity: corruption 1, poison 1" becomes two entries. Empty `type` matches any incoming damage type. The legacy single-field form (`immunity_type`/`immunity_value`/`weakness_type`/`weakness_value`) is still accepted for back-compat; the importer auto-promotes it to a one-entry array.
 - The VTT automation damage adjuster sums **all matching entries** in the list. Multiple immunities/weaknesses against the same incoming damage type stack additively.
 - To create a temporary weakness or immunity that automation damage does apply, use condition effects named `damageWeakness` or `damageImmunity`.

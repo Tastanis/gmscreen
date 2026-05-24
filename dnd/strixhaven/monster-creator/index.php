@@ -58,7 +58,10 @@ require_once '../../version.php';
                     Data Recovery
                 </button>
 
-                <!-- JSON Import Button -->
+                <!-- JSON Import Button
+                     LLM note: full monster JSON lives in MONSTER_JSON_IMPORT_TEMPLATE.md;
+                     ability automation JSON lives in ../../character_sheet/ability-automation/AUTHORING.md
+                     and ../../character_sheet/ability-automation/REGISTRY.md. -->
                 <button class="json-import-toggle" onclick="openMonsterJsonImportModal()" title="Create a complete monster from pasted JSON or a JSON file">
                     Import JSON
                 </button>

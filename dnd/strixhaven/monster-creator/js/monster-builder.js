@@ -3755,6 +3755,15 @@ function applyMonsterJsonImport(parsed) {
     alert(`Imported ${importedMonster.name}. Review it, then use Save to Tab when ready.`);
 }
 
+// LLM AUTHORING NOTE:
+// Full monster import JSON is documented in:
+//   dnd/strixhaven/monster-creator/MONSTER_JSON_IMPORT_TEMPLATE.md
+// Per-ability automation JSON is the shared ability-automation/v3 format:
+//   dnd/character_sheet/ability-automation/AUTHORING.md
+//   dnd/character_sheet/ability-automation/REGISTRY.md
+// Target automation cards must use v3 direct fields (`mode`, `predicate`,
+// `count`, `distance`, `shape`, `size`) rather than old nested
+// `{ target: { kind: ... } }` examples.
 function normalizeImportedMonsterJson(raw) {
     const source = unwrapImportedMonsterJson(raw);
     if (!source || typeof source !== 'object' || Array.isArray(source)) {

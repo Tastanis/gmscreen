@@ -223,7 +223,8 @@
             endMark: board.endMark,
             checkMark: board.checkMark,
             fireTriggerEvent: board.fireTriggerEvent,
-            checkScopedFlag: board.checkScopedFlag
+            checkScopedFlag: board.checkScopedFlag,
+            setScopedFlag: board.setScopedFlag
         };
     }
 

@@ -32,7 +32,7 @@ The monster ability tray + `window.MonsterAbilityRunner.start()` add the followi
 |---|---|---|
 | Malice auto-spend | `category` is `villain_action` or `malice` | Reads cost from `ability.resource_cost` (first integer), calls `window.MaliceTracker.spend(cost)`. Confirm dialog if pool is short. |
 | Triggered-action confirm | `category` is `triggered_action` | GM-clickable launcher fires a confirm dialog before invoking the runner. |
-| `getAttributeBonus` returns 0 | always | Monsters use `flatBonus`; attribute lookups deliberately produce no bonus. |
+| `getAttributeBonus` reads monster stats | fallback | Monsters should use `flatBonus` for authored power rolls. If a monster automation uses `attribute` or damage `attribute`, the runner currently resolves it from the monster's Might/Agility/Reason/Intuition/Presence fields. |
 | `getPotencyThreshold` returns 0 | always | Monster JSON should hard-code potency `target` integers. |
 | `isWinded()` | always | Derives from `placement.hp <= floor(placement.maxHp / 2)`. |
 | Visibility gate | tray/panel open | `window.canViewMonster(placement)` — GM OR `team === 'ally'` OR placement claimed by current user. |
@@ -41,7 +41,7 @@ The monster ability tray + `window.MonsterAbilityRunner.start()` add the followi
 
 | kind | Status | Runtime behavior |
 |---|---|---|
-| `damage` | Full | Applies via board, supports immunity/vulnerability on PC sheets, monster stat-block weakness/immunity, and temporary `damageWeakness` / `damageImmunity` conditions |
+| `damage` | Full | Applies via board, supports immunity/vulnerability on PC sheets, monster stat-block weakness/immunity, and temporary `damageWeakness` / `damageImmunity` conditions. Fields: `amount`, optional `amountDice` (`"1d6"`), optional `attribute`, optional `markBonusDice` + `markPredicate`, optional `damageType`. |
 | `condition` | Full | Applies via board condition tracker (save-ends durations integrate with token tracker) |
 | `forcedMovement` (`push`) | Full | Push works end-to-end (board preview, collisions) |
 | `forcedMovement` (`pull`) | Full | Legal cells strictly nearer to caster, monotonic-toward-source path |
@@ -59,8 +59,8 @@ The monster ability tray + `window.MonsterAbilityRunner.start()` add the followi
 | `ifKeyword` | Full | Branches based on ability's `keywords`. `then` runs on match, `else` on miss |
 | `ifStrained` | Full | Branches on whether the caster's heroic resource value is below 0. `then` runs when strained, `else` runs when not. |
 | `ifMark` | Full | Branches on Judgment/mark predicates such as `targetJudgedBySelf`, `targetJudgedByAny`, and `actorIsMyJudgedTarget`. |
-| `applyMark` | Full | Applies source-owned `judgment` marks. Recasting transfers the caster's mark; a newer censor judging the same target overwrites the old source. **Monster behavior:** posts chat note only — monsters can't apply marks. |
-| `endMark` | Full | Clears the caster's current mark or a mark on a target. Used for willingly ending Judgment. **Monster behavior:** posts chat note only — monsters can't hold marks. |
+| `applyMark` | Full | Applies source-owned `judgment` marks. Recasting transfers the caster's mark; a newer censor judging the same target overwrites the old source. Current monster runner passes this hook through too, but monster authoring should usually prefer `note` unless intentionally using shared mark state. |
+| `endMark` | Full | Clears the caster's current mark or a mark on a target. Used for willingly ending Judgment. Current monster runner passes this hook through too, but monster authoring should usually prefer `note` unless intentionally using shared mark state. |
 | `ifScopedFlag` | Full | Branches on round/turn/encounter scoped source-target flags. Used for first-time-this-round rules. |
 | `setScopedFlag` | Full | Sets a scoped source-target flag. Round flags reset at new round; all flags clear at encounter end. |
 | `halveTriggeringDamage` | Full | Inside a `trigger` block matching the `damage` event: halves the triggering damage by healing back the difference. `rounding` (`up`/`down`) controls which half the placement takes. No-op outside a trigger with a captured damage payload. |
@@ -123,7 +123,7 @@ Short form (damage `attribute` and potency `attribute`): `M`, `A`, `R`, `I`, `P`
 
 ## Persistent tick points — `persistent.tickAt`
 
-`startOfTurn`, `endOfTurn`
+`startOfTurn`, `endOfTurn`, `never`
 
 ## Tier keys — `powerRoll.tiers`
 
@@ -161,6 +161,12 @@ These are called by `runner.js` and dispatched as `vtt:automation-*` CustomEvent
 | `runFreeStrike(payload)` | `{ byCandidateIds, againstPredicate, text, abilityName, casterName }` | `{ skipped, byId, againstId, tier, damage, damageResult }` |
 | `getRecoveryValueForTarget(payload)` | `{ placementId }` | `{ recoveryValue, currentRecoveries }` — `recoveryValue` is null when unknown |
 | `registerPersistentZone(payload)` | `{ casterId, abilityId, abilityName, area: { template, shape, ... }, upkeep: { cost, resource }, tickAt, effects, attributeBonuses, note }` | `{ registered, zoneId, zoneCount }` or `{ registered: false, reason }` |
+| `applyMark(payload)` | `{ markType, sourceId, sourceName, targetId, targetName, abilityId, abilityName, duration, exclusivePerSource, exclusivePerTarget, transfer }` | `{ applied, oldTargetId, oldTargetName, replacedSourceId, replacedSourceName }` |
+| `endMark(payload)` | `{ markType, sourceId, targetId, scope, reason }` | `{ cleared, targetName, sourceName }` |
+| `checkMark(payload)` | `{ predicate, markType, sourceId, targetId, triggerPayload }` | `{ matched: bool }` |
+| `fireTriggerEvent(payload)` | `{ eventType, payload }` | none; fans out through `AbilityTriggerBus.fire()` |
+| `checkScopedFlag(payload)` | `{ scope, key, sourceId, targetId }` | `{ set: bool }` |
+| `setScopedFlag(payload)` | `{ scope, key, sourceId, targetId }` | `{ set: bool }` |
 
 ---
 
@@ -194,7 +200,7 @@ Additional accepted events:
 | `damageDealt` | Same live payload and source as `damage`; useful for wording like "when damage is dealt." The damaged token is still `placementId`. |
 | `staminaZero` | Fires when automated damage drops a target from above 0 stamina to 0 or lower. |
 | `markApplied` | Fires when automation applies or transfers a mark. Supports `markType` and `source` filters. |
-| `actionUsed` | Schema accepts it, and it can be fired through `fireTriggerEvent`, but normal ability launches do not auto-fire it yet. |
+| `actionUsed` | Fires at the start of a normal ability automation run when the host exposes `fireTriggerEvent`. Payload: `{ actorId, actionId, actionName, actionKind, keywords }`. |
 
 ### Authored trigger `match` shape
 
@@ -214,20 +220,22 @@ Trigger blocks may carry a structured `match` alongside the free-text `condition
 
 | Event | Filter fields |
 |---|---|
-| `damage` | `whose` (`self`/`ally`/`enemy`/`target`/`any`), `minAmount` int, `damageType` string\|string[] |
+| `damage` | `whose` (`self`/`ally`/`enemy`/`target`/`judgedTarget`/`markSource`/`any`), `minAmount` int, `damageType` string\|string[] |
 | `staminaChange` | `whose`, `direction` (`up`/`down`/`either`) |
 | `turnStart`, `turnEnd` | `whose` |
 | `move` | `whose`, `leavesAdjacency` bool, `entersAdjacency` bool |
 | `damageDealt` | same as `damage` |
 | `staminaZero` | same as `staminaChange` |
-| `actionUsed` | `whose`, `actionKind`, `keywordsAny` |
+| `actionUsed` | `whose`, `actionKind`, `keywordsAny`; `lineOfEffectTo` is accepted by the schema but not evaluated yet |
 | `markApplied` | `whose`, `markType`, `source` |
 
 `whose` resolves against:
-- `self` → the caster's own placement id
-- `target` → ids in the target group named by `block.target` (or just the most recent group)
-- `ally`/`enemy` → team comparison against the caster's combat team
-- `any` (default) → no filter
+- `self` -> the caster's own placement id
+- `target` -> ids in the target group named by `block.target` (or just the most recent group)
+- `judgedTarget` -> the caster's current `judgment` target
+- `markSource` -> a token marked by the caster
+- `ally`/`enemy` -> team comparison against the caster's combat team
+- `any` (default) -> no filter
 
 If `match` is omitted, the runner falls back to a chat reminder so the GM at least sees what should happen.
 
@@ -301,12 +309,14 @@ Stacking is additive. Multiple matching modifiers all apply. Per-encounter / spe
 | `REGISTRY.md` | This file — implementation status of every concept |
 | `README.md` | Folder map + invariants for code contributors |
 
-## Things that DO NOT exist (don't invent in JSON)
+## Current limits (don't invent in JSON)
 
-- Any effect kind not in the table above (use `other` or `note`)
-- Targeting predicates beyond the 8 listed (no `dead`, `willing`, `hero`, `monster`)
-- Damage modifier types like `weakness 10` / `immunity equal to your level` — these are character-side, not ability-side
-- Marks (`judged by you`, `marked by you`, `bonded`) — not implemented yet; use `note` for now
-- Real persistence tracking — `persistent` blocks fire a chat reminder only this pass
-- Real trigger auto-detection — `trigger` blocks fire a chat reminder only this pass
-- Free-text expressions (e.g. `"5 + Might"`) — always use structured fields
+- Any effect kind not in the table above. Use `other` or `note` for manual effects.
+- Targeting predicates beyond the 8 listed. Do not write `dead`, `willing`, `hero`, or `monster`.
+- Free-text math such as `"5 + Might"` in numeric fields. Use structured fields: `amount: 5`, `attribute: "M"`, or `amountDice: "1d6"`.
+- Auto-running another named ability. `cascade` is a chat reminder only.
+- Auto-placing summoned/spawned tokens. Use `note` with placement instructions.
+- Persistent zone disk persistence. Zones are real in memory, but page reload clears them.
+- Trigger auto-resolution. Authored triggers can arm and light the blue `!`; the player/GM still clicks to resolve.
+- Manual/non-automation damage events do not currently fire `damage`, `damageDealt`, or `staminaZero` trigger events.
+- Monster-side PC-only state: heroic resource spends and recovery spends degrade to chat/no-op behavior for monsters. Mark hooks are currently shared board state; use them intentionally.

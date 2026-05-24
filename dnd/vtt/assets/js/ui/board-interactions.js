@@ -11078,6 +11078,7 @@ export function mountBoardInteractions(store, routes = {}) {
     checkMark: function (payload) { return dispatchBoardCustom('vtt:automation-check-mark', 'payload', payload); },
     fireTriggerEvent: function (payload) { return dispatchBoardCustom('vtt:automation-fire-trigger-event', 'payload', payload); },
     checkScopedFlag: function (payload) { return dispatchBoardCustom('vtt:automation-check-scoped-flag', 'payload', payload); },
+    setScopedFlag: function (payload) { return dispatchBoardCustom('vtt:automation-set-scoped-flag', 'payload', payload); },
   };
 
   function openMalicePanel() {

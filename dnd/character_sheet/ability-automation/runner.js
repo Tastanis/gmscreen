@@ -553,7 +553,7 @@
 
   function getPowerRollTotal(state, block) {
     // flatBonus (monster-style literal) takes priority over attribute lookup.
-    // When set, attribute is informational only and contributes 0 bonus.
+    // When flatBonus is set, attribute is only a label for display.
     const hasFlat = block && typeof block.flatBonus === "number" && Number.isFinite(block.flatBonus);
     const resolved = hasFlat
       ? { attribute: typeof block.attribute === "string" ? block.attribute : "Flat", bonus: asInt(block.flatBonus, 0) }

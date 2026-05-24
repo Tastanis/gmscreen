@@ -277,6 +277,10 @@ A reactive ability. Carries a free-text `condition` label plus an optional struc
 | `turnStart` | A token becomes the active combatant | `whose` |
 | `turnEnd` | The active combatant's turn ends | `whose` |
 | `move` | A token moves via normal player movement | `whose`, `leavesAdjacency`, `entersAdjacency` |
+| `damageDealt` | Alias/event wording for automated damage | same as `damage` |
+| `staminaZero` | Automated damage drops a token from above 0 stamina to 0 or lower | same as `staminaChange` |
+| `actionUsed` | A normal ability automation starts | `whose`, `actionKind`, `keywordsAny` |
+| `markApplied` | Automation applies/transfers a mark | `whose`, `markType`, `source` |
 
 **`whose` values** — resolved relative to the **caster** (the player who armed the trigger) and the target group named by the trigger's `target` field (or the most recent target group if `target` is omitted):
 
@@ -284,11 +288,15 @@ A reactive ability. Carries a free-text `condition` label plus an optional struc
 |---|---|
 | `self` | The caster's own placement |
 | `target` | A placement in the named target group |
+| `judgedTarget` | The caster's current `judgment` target |
+| `markSource` | A token marked by the caster |
 | `ally` | Same combat team as the caster |
 | `enemy` | Opposing combat team |
 | `any` *(default)* | No filter |
 
 Triggers stay registered until the encounter ends, the caster leaves the scene, or the round-tick stale-out (two phase boundaries) clears them.
+
+Triggered abilities arm the blue `!` overlay. They do not auto-resolve; the player or GM clicks the ready trigger and resolves the ability manually with the captured event payload.
 
 ### `persistent`
 
@@ -350,13 +358,17 @@ Each effect is one of the kinds below. They're used inside `powerRoll.tiers.tier
 
 ```json
 { "kind": "damage", "amount": 5, "attribute": "M", "damageType": "fire" }
+{ "kind": "damage", "amount": 0, "amountDice": "1d6", "damageType": "fire" }
 ```
 
 | Field | Values |
 |---|---|
 | `amount` | int (flat amount) |
+| `amountDice` | optional dice string like `"1d6"` or `"2d8"`. Added to `amount` at runtime. |
 | `attribute` | optional. Single string `"M"`/`"A"`/`"R"`/`"I"`/`"P"`/`"Strongest"`, OR an array like `["M", "A"]` meaning "highest of these specific attributes" (used for free strikes — highest of Might or Agility only) |
 | `damageType` | `"untyped"`, `"acid"`, `"cold"`, `"corruption"`, `"fire"`, `"holy"`, `"lightning"`, `"poison"`, `"psychic"`, `"sonic"` |
+| `markBonusDice` | optional dice string like `"1d6"`. Rolls and adds only when `markPredicate` matches. |
+| `markPredicate` | optional mark predicate for `markBonusDice`. Defaults to `"targetJudgedBySelf"`. |
 
 `"Strongest"` means highest of all 5 characteristics. Use an array like `["M", "A"]` when the rule is "highest of these specific attributes only" — most often this is the free-strike rule (highest of M or A but never R/I/P).
 
@@ -547,7 +559,93 @@ Branches based on whether the caster is currently strained — defined as the ca
 
 Both branches optional; an empty branch silently does nothing. Use this for Talent abilities with "Strained:" riders — drop the rider into `then` and the runtime auto-applies it when applicable.
 
-### `halveTriggeringDamage` (rider — trigger blocks only)
+### `ifMark` (rider)
+
+Branches based on whether a target is marked/judged.
+
+```json
+{
+  "kind": "ifMark",
+  "predicate": "targetJudgedBySelf",
+  "markType": "judgment",
+  "target": "primary",
+  "then": [ { "kind": "damage", "amount": 2 } ],
+  "else": []
+}
+```
+
+| Field | Values |
+|---|---|
+| `predicate` | `"targetJudgedBySelf"`, `"targetJudgedByAny"`, `"actorIsMyJudgedTarget"`, `"sourceIsJudgingTarget"`, `"targetInPersistentZoneJudgedByZoneCaster"` |
+| `markType` | string. Defaults to `"judgment"`. |
+| `target` | optional target-group name. Defaults to the current target group. |
+| `then` | effects applied when the predicate matches |
+| `else` | effects applied when it does not match |
+
+### `applyMark`
+
+Applies or transfers a source-owned mark to the target. The main implemented mark type is `judgment`.
+
+```json
+{ "kind": "applyMark", "markType": "judgment", "target": "primary" }
+```
+
+| Field | Values |
+|---|---|
+| `markType` | string. Defaults to `"judgment"`. |
+| `target` | optional target-group name. Defaults to the current target group. |
+| `duration` | currently `"endOfEncounter"` |
+| `exclusivePerSource` | bool. Default `true`; the source can have only one mark of this type. |
+| `exclusivePerTarget` | bool. Default `true`; a new source replaces an old source on the same target. |
+| `transfer` | bool. Default `true`; recasting moves the source's mark. |
+
+### `endMark`
+
+Ends the caster's current mark or a mark on a named target group.
+
+```json
+{ "kind": "endMark", "markType": "judgment", "scope": "selfOwned" }
+{ "kind": "endMark", "markType": "judgment", "scope": "target", "target": "primary" }
+```
+
+| Field | Values |
+|---|---|
+| `markType` | string. Defaults to `"judgment"`. |
+| `scope` | `"selfOwned"` clears the caster's mark; `"target"` clears a mark from `target`. |
+| `target` | optional target-group name, used with `scope: "target"`. |
+
+### `ifScopedFlag` and `setScopedFlag` (riders)
+
+Use these together for "first time this round/turn/encounter" rules. A scoped flag is keyed by source, target, scope, and a custom `key`.
+
+```json
+{
+  "kind": "ifScopedFlag",
+  "scope": "round",
+  "key": "first-fire-hit",
+  "source": "self",
+  "target": "target",
+  "mode": "notSet",
+  "then": [
+    { "kind": "damage", "amount": 2, "damageType": "fire" },
+    { "kind": "setScopedFlag", "scope": "round", "key": "first-fire-hit" }
+  ],
+  "else": []
+}
+```
+
+| Field | Values |
+|---|---|
+| `scope` | `"round"`, `"turn"`, or `"encounter"` |
+| `key` | string; choose a stable unique key for the ability/rider |
+| `source` | `"self"` or `"eventSource"` |
+| `target` | `"target"`, `"judgedTarget"`, or `"eventTarget"` |
+| `mode` | `"notSet"` (default) or `"set"` for `ifScopedFlag` |
+| `then` / `else` | branches for `ifScopedFlag` |
+
+Round flags reset at new round. Turn flags are tied to the active combatant. Encounter flags clear at encounter end.
+
+### `halveTriggeringDamage` (rider - trigger blocks only)
 
 Soaks half of the damage that fired the trigger. The board has already applied the full damage by the time the trigger resolves; this effect heals back the difference so the net damage on the placement equals the rounded half.
 
@@ -988,14 +1086,14 @@ To create a complete monster at once, use the Monster Creator **Import JSON** bu
 ### Rules of thumb
 
 - **Use static numbers.** Damage and potency in monster JSON are literals, not formulas. Write `"amount": 12` and `"target": 13`, never `"amount": "7+M"`.
-- **Use `flatBonus` on `powerRoll`.** Monsters skip attribute lookup. Set the literal roll bonus directly:
+- **Use `flatBonus` on `powerRoll`.** Set the literal roll bonus directly:
   ```json
   { "type": "powerRoll", "flatBonus": 6, "tiers": { ... } }
   ```
-  The `attribute` field, if set, is informational only and contributes 0.
+  Monster attributes are available as a fallback, but `flatBonus` is clearer and avoids relying on stat lookup.
 - **`whenWinded` works the same as PCs.** A monster token is winded at HP ≤ floor(maxHP/2). Use the modifier to swap power-roll values or effects when the monster is bloodied.
 - **Heroic resource and recoveries are skipped.** Monsters have neither. If automation tries to `spend` heroic or call a recoveries-based heal, the runner posts a chat note and continues — the effect is no-op for monsters.
-- **Marks (judgment, bonded) are PC-only.** Authoring `applyMark` / `endMark` / `ifMark` on a monster ability degrades to a chat reminder; no mark state actually changes.
+- **Marks are shared board state.** The current monster runner passes mark hooks through, so `applyMark`, `endMark`, and `ifMark` can affect marks. For most monster abilities, prefer a `note` unless you intentionally want the monster to participate in the same mark system PCs use.
 - **Villain/malice abilities auto-deduct from the malice pool.** Put the cost in the ability's `resource_cost` field (e.g. `"3"`, `"3 points"`, `"3 Malice"` — the runner parses the first integer). When fired, the monster runner reads `window.MaliceTracker.get()`, prompts if there's a deficit, and calls `window.MaliceTracker.spend(cost)`.
 - **Triggered actions fire on confirm.** When the GM clicks a triggered-action launcher in the monster tray, a confirm modal appears before the runner kicks in. No auto-detection from game state.
 - **Summons / spawns post a chat note.** Use a `note`-kind effect describing what to place — the GM grabs and places the new token manually. (v1: no auto-token-placement from automation.)
