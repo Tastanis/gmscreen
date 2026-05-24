@@ -1,17 +1,5 @@
-/* Monster Ability Tray — bottom-of-screen launcher for monster abilities.
-   Parallel sibling to .vtt-character-ability-tray; uses the same visual
-   language so the GM has a consistent UX across PC / monster controls.
-   Lives in its own file so PC tray styling is never affected by edits here. */
-
-.vtt-monster-ability-tray {
-  position: fixed;
-  left: var(--vtt-character-panel-effective-width, 0px);
-  right: 0;
-  bottom: 18px;
-  z-index: 1260;
-  pointer-events: none;
-  font-family: Georgia, "Times New Roman", serif;
-}
+/* Monster ability tray uses the same visual system as the PC tray, with a
+   flexible tab grid so villain and malice categories can join when present. */
 
 .vtt-monster-ability-tray[aria-hidden="true"],
 .vtt-monster-ability-tray--closed {
@@ -20,143 +8,58 @@
 
 .vtt-monster-ability-tray__inner {
   width: min(960px, calc(100vw - var(--vtt-character-panel-effective-width, 0px) - 48px));
-  margin: 0 auto;
-  display: grid;
-  grid-template-columns: repeat(6, minmax(120px, 1fr));
+  grid-template-columns: repeat(auto-fit, minmax(126px, 1fr));
   gap: 16px;
-  align-items: end;
-  pointer-events: none;
-}
-
-.vtt-monster-ability-category {
-  position: relative;
-  min-width: 0;
-  pointer-events: none;
 }
 
 .vtt-monster-ability-tab {
-  width: 100%;
-  min-height: 38px;
-  padding: 0 8px;
-  border: 2px solid rgba(220, 180, 160, 0.78);
-  border-radius: 4px;
+  border-color: rgba(220, 210, 190, 0.78);
   background:
-    linear-gradient(135deg, transparent 0 14px, #1a100f 14px),
-    linear-gradient(225deg, transparent 0 14px, #1a100f 14px),
-    #1a100f;
-  box-shadow: inset 0 0 0 1px rgba(255, 220, 200, 0.05), 0 4px 10px rgba(0, 0, 0, 0.35);
-  color: #f2d8c8;
-  cursor: pointer;
-  font: 800 0.82rem/1 "Inter", "Segoe UI", sans-serif;
-  letter-spacing: 0.02em;
-  pointer-events: auto;
-  text-transform: uppercase;
+    linear-gradient(135deg, transparent 0 14px, #10110f 14px),
+    linear-gradient(225deg, transparent 0 14px, #10110f 14px),
+    #10110f;
+  color: #efe6d2;
 }
 
 .vtt-monster-ability-tab[aria-expanded="true"],
 .vtt-monster-ability-tab:hover,
 .vtt-monster-ability-tab:focus-visible {
-  border-color: #ffe0c8;
+  border-color: #f4ead7;
   color: #fff;
-  outline: none;
 }
 
 .vtt-monster-ability-tab__label {
   display: inline-block;
-  white-space: nowrap;
+  max-width: 100%;
   overflow: hidden;
   text-overflow: ellipsis;
-  max-width: 100%;
-}
-
-.vtt-monster-ability-tab__count {
-  display: inline-block;
-  margin-left: 6px;
-  padding: 1px 6px;
-  border-radius: 999px;
-  background: rgba(255, 220, 200, 0.18);
-  font-size: 0.74rem;
+  white-space: nowrap;
 }
 
 .vtt-monster-ability-list {
-  position: absolute;
-  left: 50%;
-  bottom: 48px;
-  width: min(320px, 78vw);
-  max-height: 52vh;
-  display: flex;
-  flex-direction: column;
-  transform: translateX(-50%);
-  overflow-y: auto;
-  border: 1px solid rgba(220, 180, 160, 0.72);
-  background: rgba(20, 11, 9, 0.96);
-  box-shadow: 0 10px 22px rgba(0, 0, 0, 0.42);
-  pointer-events: auto;
-}
-
-.vtt-monster-ability-list__heading,
-.vtt-monster-ability-empty {
-  padding: 6px 10px;
-  border-bottom: 1px solid rgba(220, 180, 160, 0.28);
-  background: rgba(48, 30, 24, 0.86);
-  color: #f2d8c8;
-  font: 700 0.78rem/1.2 "Inter", "Segoe UI", sans-serif;
-  text-transform: uppercase;
-  letter-spacing: 0.04em;
+  width: min(300px, 78vw);
 }
 
 .vtt-monster-ability-item {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  gap: 8px;
-  padding: 8px 10px;
-  border-bottom: 1px solid rgba(220, 180, 160, 0.16);
-  color: #efe1d2;
-  font: 500 0.88rem/1.25 Georgia, "Times New Roman", serif;
+  display: grid;
 }
 
-.vtt-monster-ability-item:last-child {
-  border-bottom: 0;
+.vtt-monster-ability-item:not(.vtt-character-ability-item--automated) {
+  opacity: 0.78;
 }
 
-.vtt-monster-ability-item__name {
-  flex: 1 1 auto;
-  min-width: 0;
+.vtt-monster-ability-item:not(.vtt-character-ability-item--automated) .vtt-character-ability-item__auto {
+  display: none;
 }
 
-.vtt-monster-ability-item__cost {
-  flex: 0 0 auto;
-  padding: 1px 8px;
-  border-radius: 4px;
-  background: rgba(200, 100, 80, 0.32);
-  color: #ffd8c8;
-  font: 700 0.74rem/1 "Inter", "Segoe UI", sans-serif;
-  text-transform: uppercase;
+.vtt-monster-ability-card .vtt-character-ability-card__type {
+  color: #ff8a66;
 }
 
-.vtt-monster-ability-item__launch {
-  flex: 0 0 auto;
-  width: 28px;
-  height: 28px;
-  border-radius: 50%;
-  border: 1px solid rgba(220, 180, 160, 0.6);
-  background: rgba(80, 30, 20, 0.7);
-  color: #ffe0c8;
-  cursor: pointer;
-  font: 700 0.9rem/1 "Inter", "Segoe UI", sans-serif;
-}
-
-.vtt-monster-ability-item__launch:hover,
-.vtt-monster-ability-item__launch:focus-visible {
-  background: rgba(140, 60, 40, 0.85);
-  outline: none;
-}
-
-.vtt-monster-ability-item--disabled {
-  opacity: 0.45;
-}
-
-.vtt-monster-ability-item--disabled .vtt-monster-ability-item__launch {
-  cursor: not-allowed;
+@media (max-width: 768px) {
+  .vtt-monster-ability-tray__inner {
+    width: 100%;
+    grid-template-columns: repeat(auto-fit, minmax(96px, 1fr));
+    gap: 8px;
+  }
 }

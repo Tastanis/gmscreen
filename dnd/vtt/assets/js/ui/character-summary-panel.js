@@ -83,6 +83,7 @@ const TEST_TIER_LABELS = {
 };
 
 const PANEL_VISIBILITY_STORAGE_PREFIX = 'vtt:character-summary:open:';
+const ABILITY_TRAY_BODY_OPEN_CLASS = 'vtt-character-ability-tray-is-open';
 
 export function mountCharacterSummaryPanel(routes = {}, userContext = {}) {
   const panel = document.getElementById('vtt-character-summary-panel');
@@ -476,6 +477,7 @@ function renderAbilityTray(tray, sheet, { activeCategory = null, activeToken = n
     tray.innerHTML = '';
     tray.setAttribute('aria-hidden', 'true');
     tray.classList.remove('vtt-character-ability-tray--open');
+    document.body?.classList.remove(ABILITY_TRAY_BODY_OPEN_CLASS);
     return;
   }
 
@@ -533,6 +535,7 @@ function renderAbilityTray(tray, sheet, { activeCategory = null, activeToken = n
   `;
   tray.setAttribute('aria-hidden', 'false');
   tray.classList.add('vtt-character-ability-tray--open');
+  document.body?.classList.add(ABILITY_TRAY_BODY_OPEN_CLASS);
 }
 
 function renderAbilityList(category, actions) {

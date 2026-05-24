@@ -1,35 +1,23 @@
-// Monster Ability Tray — bottom-of-screen launcher for monster abilities.
+// Monster Ability Tray - bottom-of-screen launcher for monster abilities.
 //
-// Mirrors the structure of the PC tray (vtt-character-ability-tray) but as a
-// SIBLING module so PC behavior is untouched. Created via
-// document.body.appendChild on first use. Driven by the Phase 9 token-select
-// router via openFor(placement, monster) / close().
-//
-// Public surface:
-//   window.MonsterAbilityTray.openFor(placement, monster)
-//   window.MonsterAbilityTray.close()
-//
-// Dependencies (looked up at click time, not load time):
-//   window.MonsterAbilityRunner   (monster-ability-runner-glue.js)
-//   window.canViewMonster         (board-interactions.js, Phase 8 — optional;
-//                                  if missing, GM-only is enforced by caller)
+// Mirrors the PC tray DOM and interaction model, with monster-specific
+// categories and malice costs.
 
 (function () {
     'use strict';
 
     var TRAY_ID = 'vtt-monster-ability-tray';
+    var PREVIEW_ID = 'vtt-monster-ability-preview';
     var BODY_OPEN_CLASS = 'vtt-monster-ability-tray-is-open';
 
     var CATEGORIES = [
-        { key: 'passive',          label: 'Passive' },
-        { key: 'maneuver',         label: 'Maneuver' },
-        { key: 'action',           label: 'Action' },
-        { key: 'triggered_action', label: 'Triggered' },
-        { key: 'villain_action',   label: 'Villain' },
-        { key: 'malice',           label: 'Malice' }
+        { key: 'passive',          label: 'Passive',   heading: 'Passive Abilities' },
+        { key: 'maneuver',         label: 'Maneuver',  heading: 'Maneuvers' },
+        { key: 'action',           label: 'Action',    heading: 'Actions' },
+        { key: 'triggered_action', label: 'Triggered', heading: 'Triggered Actions' },
+        { key: 'villain_action',   label: 'Villain',   heading: 'Villain Actions' },
+        { key: 'malice',           label: 'Malice',    heading: 'Malice Abilities' }
     ];
-
-    var MALICE_CATEGORIES = ['villain_action', 'malice'];
 
     var state = {
         placement: null,
@@ -46,17 +34,37 @@
             .replace(/'/g, '&#39;');
     }
 
+    function escapeAttribute(value) {
+        return escapeHtml(value).replace(/`/g, '&#96;');
+    }
+
     function ensureTray() {
         var tray = document.getElementById(TRAY_ID);
         if (!tray) {
             tray = document.createElement('aside');
             tray.id = TRAY_ID;
-            tray.className = 'vtt-monster-ability-tray vtt-monster-ability-tray--closed';
+            tray.className = 'vtt-character-ability-tray vtt-monster-ability-tray vtt-monster-ability-tray--closed';
             tray.setAttribute('aria-hidden', 'true');
             tray.addEventListener('click', handleTrayClick);
+            tray.addEventListener('pointerover', handleTrayPreviewOpen);
+            tray.addEventListener('pointerout', handleTrayPreviewClose);
+            tray.addEventListener('focusin', handleTrayPreviewOpen);
+            tray.addEventListener('focusout', handleTrayPreviewClose);
             (document.body || document.documentElement).appendChild(tray);
         }
         return tray;
+    }
+
+    function ensurePreview() {
+        var preview = document.getElementById(PREVIEW_ID);
+        if (!preview) {
+            preview = document.createElement('aside');
+            preview.id = PREVIEW_ID;
+            preview.className = 'vtt-character-ability-preview vtt-monster-ability-preview';
+            preview.setAttribute('aria-hidden', 'true');
+            (document.body || document.documentElement).appendChild(preview);
+        }
+        return preview;
     }
 
     function abilitiesFor(monster, categoryKey) {
@@ -66,78 +74,83 @@
     }
 
     function hasAutomation(ability) {
-        var a = ability && ability.automation;
-        return !!(a && typeof a === 'object' && Object.keys(a).length > 0);
+        var automation = ability && ability.automation;
+        return Boolean(automation && typeof automation === 'object' && Object.keys(automation).length > 0);
     }
 
-    function parseMaliceCostDisplay(resourceCost) {
-        if (typeof resourceCost !== 'string' || !resourceCost.trim()) return '';
-        var m = resourceCost.match(/(\d+)/);
-        return m ? m[1] : resourceCost.trim();
+    function getVisibleCategories(monster) {
+        return CATEGORIES.map(function (cat) {
+            return {
+                key: cat.key,
+                label: cat.label,
+                heading: cat.heading,
+                abilities: abilitiesFor(monster, cat.key)
+            };
+        }).filter(function (cat) {
+            return cat.abilities.length > 0;
+        });
     }
 
-    function renderAbilityList(categoryKey, abilities) {
-        if (!abilities.length) {
-            return '<div class="vtt-monster-ability-empty">No abilities in this category.</div>';
-        }
-        var showCost = MALICE_CATEGORIES.indexOf(categoryKey) !== -1;
-        var rowsHtml = abilities.map(function (ability, index) {
-            var canFire = hasAutomation(ability);
-            var costText = showCost ? parseMaliceCostDisplay(ability.resource_cost) : '';
-            var costHtml = costText
-                ? '<span class="vtt-monster-ability-item__cost">' + escapeHtml(costText) + '</span>'
-                : '';
-            var disabledClass = canFire ? '' : ' vtt-monster-ability-item--disabled';
-            var launchAttrs = canFire ? '' : ' disabled aria-disabled="true"';
-            var launchTitle = canFire
-                ? 'Run automation'
-                : 'No automation configured — author in the monster creator';
-            return '<div class="vtt-monster-ability-item' + disabledClass +
-                '" data-ability-index="' + index + '" data-ability-category="' + escapeHtml(categoryKey) + '">' +
-                '<span class="vtt-monster-ability-item__name">' + escapeHtml(ability.name || 'Unnamed') + '</span>' +
-                costHtml +
-                '<button type="button" class="vtt-monster-ability-item__launch" ' +
-                'data-monster-launch ' +
-                'data-ability-index="' + index + '" ' +
-                'data-ability-category="' + escapeHtml(categoryKey) + '" ' +
-                'title="' + escapeHtml(launchTitle) + '"' + launchAttrs + '>&#9654;</button>' +
-                '</div>';
+    function renderAbilityList(category) {
+        var categoryKey = category.key;
+        var rowsHtml = category.abilities.map(function (ability, index) {
+            var automated = hasAutomation(ability);
+            var meta = summarizeAbility(ability, categoryKey);
+            return '<button type="button" role="menuitem" ' +
+                'class="vtt-character-ability-item vtt-monster-ability-item' +
+                    (automated ? ' vtt-character-ability-item--automated vtt-monster-ability-item--automated' : '') + '" ' +
+                'data-monster-ability-item ' +
+                'data-ability-index="' + escapeAttribute(index) + '" ' +
+                'data-ability-category="' + escapeAttribute(categoryKey) + '">' +
+                '<span class="vtt-character-ability-item__mark" aria-hidden="true">' + escapeHtml(getAbilityIcon(categoryKey)) + '</span>' +
+                '<span class="vtt-character-ability-item__text">' +
+                '<span class="vtt-character-ability-item__name">' + escapeHtml(ability.name || 'Unnamed') + '</span>' +
+                (meta ? '<span class="vtt-character-ability-item__meta">' + escapeHtml(meta) + '</span>' : '') +
+                '</span>' +
+                (automated ? '<span class="vtt-character-ability-item__auto" aria-label="Automated">Auto</span>' : '') +
+                '</button>';
         }).join('');
-        return '<div class="vtt-monster-ability-list__heading">' + escapeHtml(categoryKey.replace('_', ' ')) + '</div>' +
-            rowsHtml;
+
+        return '<div class="vtt-character-ability-list vtt-monster-ability-list" role="menu" aria-label="' + escapeAttribute(category.heading) + '">' +
+            '<div class="vtt-character-ability-list__heading vtt-monster-ability-list__heading">' + escapeHtml(category.heading) + '</div>' +
+            rowsHtml +
+            '</div>';
     }
 
     function render() {
         var tray = ensureTray();
-        if (!state.monster) {
+        var categories = state.monster ? getVisibleCategories(state.monster) : [];
+        if (!state.monster || !categories.length) {
             tray.innerHTML = '';
             tray.classList.add('vtt-monster-ability-tray--closed');
+            tray.classList.remove('vtt-character-ability-tray--open');
             tray.setAttribute('aria-hidden', 'true');
             document.body && document.body.classList.remove(BODY_OPEN_CLASS);
+            hidePreview();
             return;
         }
 
-        var tabsHtml = CATEGORIES.map(function (cat) {
-            var abilities = abilitiesFor(state.monster, cat.key);
-            var count = abilities.length;
+        if (state.activeCategory && !categories.some(function (cat) { return cat.key === state.activeCategory; })) {
+            state.activeCategory = null;
+        }
+
+        var tabsHtml = categories.map(function (cat) {
             var isActive = state.activeCategory === cat.key;
-            var listHtml = isActive
-                ? '<div class="vtt-monster-ability-list" role="menu">' + renderAbilityList(cat.key, abilities) + '</div>'
-                : '';
-            return '<div class="vtt-monster-ability-category' + (isActive ? ' is-active' : '') + '">' +
-                listHtml +
-                '<button type="button" class="vtt-monster-ability-tab" ' +
-                'data-monster-tab="' + escapeHtml(cat.key) + '" ' +
+            return '<div class="vtt-character-ability-category vtt-monster-ability-category' + (isActive ? ' is-active' : '') + '">' +
+                (isActive ? renderAbilityList(cat) : '') +
+                '<button type="button" class="vtt-character-ability-tab vtt-monster-ability-tab" ' +
+                'data-monster-tab="' + escapeAttribute(cat.key) + '" ' +
                 'aria-expanded="' + (isActive ? 'true' : 'false') + '">' +
-                '<span class="vtt-monster-ability-tab__label">' + escapeHtml(cat.label) + '</span>' +
-                (count > 0 ? '<span class="vtt-monster-ability-tab__count">' + count + '</span>' : '') +
+                '<span class="vtt-character-ability-tab__label vtt-monster-ability-tab__label">' + escapeHtml(cat.label) + '</span>' +
                 '</button>' +
                 '</div>';
         }).join('');
 
-        tray.innerHTML = '<nav class="vtt-monster-ability-tray__inner" aria-label="Monster abilities">' +
-            tabsHtml + '</nav>';
+        tray.innerHTML = '<nav class="vtt-character-ability-tray__inner vtt-monster-ability-tray__inner" aria-label="Monster abilities">' +
+            tabsHtml +
+            '</nav>';
         tray.classList.remove('vtt-monster-ability-tray--closed');
+        tray.classList.add('vtt-character-ability-tray--open');
         tray.setAttribute('aria-hidden', 'false');
         document.body && document.body.classList.add(BODY_OPEN_CLASS);
     }
@@ -150,18 +163,140 @@
         if (tabBtn) {
             var key = tabBtn.getAttribute('data-monster-tab');
             state.activeCategory = state.activeCategory === key ? null : key;
+            hidePreview();
             render();
             return;
         }
 
-        var launchBtn = target.closest('[data-monster-launch]');
-        if (launchBtn && !launchBtn.disabled) {
-            var indexAttr = launchBtn.getAttribute('data-ability-index');
-            var categoryKey = launchBtn.getAttribute('data-ability-category');
-            var index = parseInt(indexAttr, 10);
-            if (isNaN(index) || !categoryKey) return;
-            launchAbility(categoryKey, index);
+        var abilityItem = target.closest('[data-monster-ability-item]');
+        if (!abilityItem) return;
+        var index = parseInt(abilityItem.getAttribute('data-ability-index'), 10);
+        var categoryKey = abilityItem.getAttribute('data-ability-category');
+        if (isNaN(index) || !categoryKey) return;
+        var ability = abilitiesFor(state.monster, categoryKey)[index];
+        if (!hasAutomation(ability)) return;
+        state.activeCategory = null;
+        hidePreview();
+        render();
+        launchAbility(categoryKey, index);
+    }
+
+    function handleTrayPreviewOpen(event) {
+        var target = event.target instanceof Element ? event.target : null;
+        if (!target) return;
+        var item = target.closest('[data-monster-ability-item]');
+        if (!item || !state.monster) return;
+        var index = parseInt(item.getAttribute('data-ability-index'), 10);
+        var categoryKey = item.getAttribute('data-ability-category');
+        if (isNaN(index) || !categoryKey) return;
+        var ability = abilitiesFor(state.monster, categoryKey)[index];
+        if (ability) renderPreview(ability, categoryKey);
+    }
+
+    function handleTrayPreviewClose(event) {
+        var target = event.target instanceof Element ? event.target : null;
+        if (!target) return;
+        var item = target.closest('[data-monster-ability-item]');
+        if (!item || item.contains(event.relatedTarget)) return;
+        hidePreview();
+    }
+
+    function renderPreview(ability, categoryKey) {
+        var preview = ensurePreview();
+        var category = CATEGORIES.find(function (cat) { return cat.key === categoryKey; }) || {};
+        var title = ability.name || 'Unnamed Ability';
+        var keywords = typeof ability.keywords === 'string'
+            ? ability.keywords.split(/[,;]+/).map(function (s) { return s.trim(); }).filter(Boolean)
+            : [];
+        preview.innerHTML = '<article class="vtt-character-ability-card vtt-monster-ability-card">' +
+            '<header class="vtt-character-ability-card__header">' +
+            '<h2>' + escapeHtml(title) + '</h2>' +
+            (ability.resource_cost ? '<span class="vtt-character-ability-card__cost">' + escapeHtml(ability.resource_cost) + '</span>' : '') +
+            '</header>' +
+            '<div class="vtt-character-ability-card__type">' +
+            '<strong>' + escapeHtml(category.label || 'Ability') + '</strong>' +
+            (keywords.length ? '<span>' + escapeHtml(keywords.join(', ')) + '</span>' : '') +
+            '</div>' +
+            renderAbilityMeta(ability, categoryKey) +
+            renderAbilityText(ability) +
+            renderAbilityTest(ability.test) +
+            '</article>';
+        preview.setAttribute('aria-hidden', 'false');
+        preview.classList.add('vtt-character-ability-preview--open');
+    }
+
+    function renderAbilityMeta(ability, categoryKey) {
+        var entries = [
+            ['Range', ability.range],
+            ['Target', ability.targets],
+            categoryKey === 'triggered_action' ? ['Trigger', ability.trigger] : null
+        ].filter(function (entry) {
+            return entry && typeof entry[1] === 'string' && entry[1].trim();
+        });
+        if (!entries.length) return '';
+        return '<dl class="vtt-character-ability-card__meta">' +
+            entries.map(function (entry) {
+                return '<div><dt>' + escapeHtml(entry[0]) + '</dt><dd>' + escapeHtml(entry[1]) + '</dd></div>';
+            }).join('') +
+            '</dl>';
+    }
+
+    function renderAbilityText(ability) {
+        var parts = [];
+        if (ability.effect) parts.push(ability.effect);
+        if (ability.additional_effect) parts.push(ability.additional_effect);
+        if (!parts.length) return '';
+        return '<div class="vtt-character-ability-card__description">' +
+            parts.map(function (text) { return '<p>' + formatText(text) + '</p>'; }).join('') +
+            '</div>';
+    }
+
+    function renderAbilityTest(test) {
+        if (!test || typeof test !== 'object') return '';
+        var labels = { tier1: '<= 11', tier2: '12-16', tier3: '17+' };
+        var rows = ['tier1', 'tier2', 'tier3'].map(function (tier) {
+            var entry = test[tier];
+            if (!entry || typeof entry !== 'object') return '';
+            var text = [
+                entry.damage_amount ? 'Damage: ' + entry.damage_amount : '',
+                entry.effect || ''
+            ].filter(Boolean).join(' - ');
+            if (!text) return '';
+            return '<div><span>' + escapeHtml(labels[tier]) + '</span><p>' + formatText(text) + '</p></div>';
+        }).filter(Boolean).join('');
+        if (!rows) return '';
+        return '<div class="vtt-character-ability-test"><header><strong>Power Roll</strong></header>' +
+            '<div class="vtt-character-ability-test__tiers">' + rows + '</div></div>';
+    }
+
+    function hidePreview() {
+        var preview = document.getElementById(PREVIEW_ID);
+        if (!preview) return;
+        preview.setAttribute('aria-hidden', 'true');
+        preview.classList.remove('vtt-character-ability-preview--open');
+    }
+
+    function summarizeAbility(ability, categoryKey) {
+        var parts = [];
+        var category = CATEGORIES.find(function (cat) { return cat.key === categoryKey; });
+        if (category && category.label) parts.push(category.label);
+        if (ability && ability.resource_cost) parts.push(ability.resource_cost);
+        if (ability && ability.keywords) {
+            parts.push(String(ability.keywords).split(/[,;]+/).map(function (s) { return s.trim(); }).filter(Boolean).slice(0, 3).join(', '));
         }
+        if (ability && ability.range) parts.push('Range ' + ability.range);
+        return parts.filter(Boolean).join(' - ');
+    }
+
+    function getAbilityIcon(categoryKey) {
+        if (categoryKey === 'triggered_action') return '!';
+        if (categoryKey === 'maneuver') return '+';
+        if (categoryKey === 'villain_action' || categoryKey === 'malice') return 'M';
+        return '>';
+    }
+
+    function formatText(text) {
+        return escapeHtml(text).replace(/\n+/g, '<br>');
     }
 
     function launchAbility(categoryKey, index) {
@@ -177,9 +312,6 @@
     }
 
     function openFor(placement, monster) {
-        // Visibility gate: monsters are hidden from players unless allied or
-        // claimed (window.canViewMonster). GM always passes. If the helper is
-        // unavailable for some reason, default to refusing — fail closed.
         if (typeof window.canViewMonster === 'function' && !window.canViewMonster(placement)) {
             close();
             return;

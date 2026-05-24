@@ -1,20 +1,13 @@
-// Monster Summary Panel — left-side at-a-glance reference for monster tokens.
+// Monster Summary Panel - left-side reference for monster tokens.
 //
-// Sibling to the PC character summary panel; lives in its own module so PC
-// behavior is untouched. Driven by the Phase 9 token-select router via
-// openFor(placement, monster) / close().
-//
-// Public surface:
-//   window.MonsterSummaryPanel.openFor(placement, monster)
-//   window.MonsterSummaryPanel.close()
-//
-// Renders read-only monster details. Actual ability launching happens in the
-// bottom monster ability tray.
+// Uses the PC character-summary card structure so token sheets read the same
+// way at the table, while omitting PC-only resources like recoveries.
 
 (function () {
     'use strict';
 
     var PANEL_ID = 'vtt-monster-summary-panel';
+    var BODY_OPEN_CLASS = 'vtt-monster-summary-is-open';
 
     var CATEGORIES = [
         { key: 'passive',          label: 'Passive Abilities' },
@@ -25,7 +18,7 @@
         { key: 'malice',           label: 'Malice Abilities' }
     ];
 
-    var CHARACTERISTICS = ['might', 'agility', 'reason', 'intuition', 'presence'];
+    var ATTRIBUTES = ['might', 'agility', 'reason', 'intuition', 'presence'];
 
     function escapeHtml(value) {
         return String(value == null ? '' : value)
@@ -36,143 +29,216 @@
             .replace(/'/g, '&#39;');
     }
 
-    function formatPlain(text) {
-        // Lightweight escape + line breaks. Stat-block effect text often
-        // contains semicolons and short clauses — keep them readable.
+    function escapeAttribute(value) {
+        return escapeHtml(value).replace(/`/g, '&#96;');
+    }
+
+    function formatText(text) {
         return escapeHtml(text).replace(/\n+/g, '<br>');
     }
 
     function ensurePanel() {
         var panel = document.getElementById(PANEL_ID);
         if (!panel) {
-            // Fall back to creating one if the layout did not render the slot.
             panel = document.createElement('aside');
             panel.id = PANEL_ID;
-            panel.className = 'vtt-monster-summary vtt-monster-summary--closed';
+            panel.className = 'vtt-character-summary vtt-monster-summary vtt-monster-summary--closed';
             panel.setAttribute('aria-hidden', 'true');
             (document.body || document.documentElement).appendChild(panel);
         }
+        panel.classList.add('vtt-character-summary', 'vtt-monster-summary');
         return panel;
     }
 
-    function renderStatLine(placement, monster) {
-        var parts = [];
-        var hp = placement && Number.isFinite(Number(placement.hp)) ? placement.hp : (monster && monster.hp);
-        var maxHp = placement && Number.isFinite(Number(placement.maxHp)) ? placement.maxHp : (monster && monster.hp);
-        if (hp !== undefined || maxHp !== undefined) {
-            parts.push(
-                '<span class="vtt-monster-summary__statline-item"><strong>HP</strong> ' +
-                escapeHtml((hp != null ? hp : '?') + ' / ' + (maxHp != null ? maxHp : '?')) + '</span>'
-            );
+    function render(panel, placement, monster) {
+        if (!monster) {
+            panel.innerHTML = '<div class="vtt-character-summary__empty vtt-monster-summary__empty">Select a monster token to view its details.</div>';
+            return;
         }
-        if (monster && monster.ac != null && monster.ac !== '') {
-            parts.push('<span class="vtt-monster-summary__statline-item"><strong>AC</strong> ' + escapeHtml(monster.ac) + '</span>');
-        }
-        if (monster && monster.speed != null && monster.speed !== '') {
-            parts.push('<span class="vtt-monster-summary__statline-item"><strong>Speed</strong> ' + escapeHtml(monster.speed) + '</span>');
-        }
-        if (monster && monster.size != null && monster.size !== '') {
-            parts.push('<span class="vtt-monster-summary__statline-item"><strong>Size</strong> ' + escapeHtml(monster.size) + '</span>');
-        }
-        if (monster && monster.level != null && monster.level !== '') {
-            parts.push('<span class="vtt-monster-summary__statline-item"><strong>Level</strong> ' + escapeHtml(monster.level) + '</span>');
-        }
-        if (!parts.length) return '';
-        return '<div class="vtt-monster-summary__statline">' + parts.join('') + '</div>';
+
+        var name = monster.name || placementName(placement) || 'Monster';
+        var imageUrl = monster.imageUrl || monster.image || placement?.imageUrl || '';
+        var hp = resolveHitPoints(placement, monster);
+        var healthPercent = hp.max > 0 ? clamp((hp.current / hp.max) * 100, 0, 100) : 0;
+        var attrs = monster.attributes || monster.characteristics || {};
+        var defenses = monster.defenses || {};
+        var role = monster.role || monster.types || '';
+        var typeLine = [role, monster.size || monster.footprint || ''].filter(Boolean).join(' - ');
+        var conditions = normalizeConditions(placement?.conditions ?? placement?.condition ?? []);
+
+        panel.innerHTML = '<article class="vtt-character-card vtt-monster-card" data-monster-id="' + escapeAttribute(monster.id || '') + '">' +
+            '<button type="button" class="vtt-character-summary__tuck vtt-monster-summary__tuck" data-monster-summary-tuck aria-label="Tuck monster sheet" title="Tuck monster sheet">&lt;</button>' +
+            '<header class="vtt-character-card__hero vtt-monster-card__hero">' +
+            '<div class="vtt-character-card__portrait vtt-monster-card__portrait">' +
+            (imageUrl ? '<img src="' + escapeAttribute(imageUrl) + '" alt="' + escapeAttribute(name) + ' token">' : '') +
+            '</div>' +
+            '<div class="vtt-character-card__identity">' +
+            '<h2 class="vtt-character-card__name">' + escapeHtml(name) + '</h2>' +
+            (monster.level != null && monster.level !== '' ? '<div class="vtt-character-card__level">Level ' + escapeHtml(monster.level) + '</div>' : '') +
+            (role ? '<div class="vtt-character-card__class">' + escapeHtml(role) + '</div>' : '') +
+            (typeLine ? '<div class="vtt-character-card__track">' + escapeHtml(typeLine) + '</div>' : '') +
+            '</div>' +
+            '<div class="vtt-character-card__quick">' +
+            renderQuickBox('EV', valueOrDash(monster.ev)) +
+            renderQuickBox('Free Strike', valueOrDash(monster.free_strike ?? defenses.free_strike)) +
+            '</div>' +
+            '</header>' +
+            renderSection('Stamina', renderStaminaSection(hp, healthPercent)) +
+            renderSection('Statistics', renderStats(attrs, monster, defenses)) +
+            renderDefenses(defenses) +
+            renderSection('Auras, Conditions, & Effects',
+                '<div class="vtt-character-condition-list">' +
+                (conditions.length ? conditions.map(function (condition, index) {
+                    return renderCondition(condition, placement?.id, index);
+                }).join('') : '<span class="vtt-character-condition">No conditions</span>') +
+                '</div>'
+            ) +
+            renderTraits(monster) +
+            renderAbilities(monster) +
+            '</article>';
     }
 
-    function renderCharacteristics(monster) {
-        var chars = monster && monster.characteristics;
-        if (!chars || typeof chars !== 'object') return '';
-        var cells = CHARACTERISTICS.map(function (key) {
-            var raw = chars[key];
-            var val = (raw == null || raw === '') ? '—' : raw;
-            return '<div>' +
-                '<span class="vtt-monster-summary__characteristic-label">' + escapeHtml(key.slice(0, 3)) + '</span>' +
-                '<span class="vtt-monster-summary__characteristic-value">' + escapeHtml(val) + '</span>' +
-                '</div>';
-        }).join('');
-        return '<section class="vtt-monster-summary__section">' +
-            '<h3 class="vtt-monster-summary__section-title">Characteristics</h3>' +
-            '<div class="vtt-monster-summary__characteristics">' + cells + '</div>' +
-            '</section>';
+    function renderStaminaSection(hp, healthPercent) {
+        return '<div class="vtt-monster-stamina">' +
+            '<div class="vtt-character-pill vtt-character-pill--damage"><span class="vtt-character-pill__label">DMG</span><span class="vtt-character-pill__value">-</span></div>' +
+            '<div class="vtt-character-pill"><span class="vtt-character-pill__label">HP</span><span class="vtt-character-pill__value">' + escapeHtml(hp.current) + ' / ' + escapeHtml(hp.max) + '</span></div>' +
+            '<div class="vtt-character-pill"><span class="vtt-character-pill__label">Heal</span><span class="vtt-character-pill__value">+</span></div>' +
+            '<div class="vtt-character-pill vtt-character-pill--temp"><span class="vtt-character-pill__label">Temp</span><span class="vtt-character-pill__value">0</span></div>' +
+            '</div>' +
+            '<div class="vtt-character-healthbar">' +
+            '<div class="vtt-character-healthbar__fill" style="width: ' + healthPercent + '%;"></div>' +
+            '<div class="vtt-character-healthbar__text">' + escapeHtml(hp.current) + ' / ' + escapeHtml(hp.max) + '</div>' +
+            '</div>';
+    }
+
+    function renderStats(attrs, monster, defenses) {
+        return '<div class="vtt-character-stats">' +
+            ATTRIBUTES.map(function (key) {
+                return renderStat(capitalize(key), attrs[key]);
+            }).join('') +
+            '</div>' +
+            '<div class="vtt-character-vitals">' +
+            renderVital('Speed', monster.speed ?? monster.movement) +
+            renderVital('Stability', monster.stability ?? defenses.stability) +
+            renderVital('Size', monster.size || monster.footprint) +
+            '</div>';
+    }
+
+    function renderDefenses(defenses) {
+        if (!defenses || typeof defenses !== 'object') return '';
+        var rows = [];
+        if (defenses.immunity && typeof defenses.immunity === 'object') {
+            rows.push('<p><strong>Immunity:</strong> ' + escapeHtml([defenses.immunity.type, defenses.immunity.value].filter(Boolean).join(' ')) + '</p>');
+        }
+        if (defenses.weakness && typeof defenses.weakness === 'object') {
+            rows.push('<p><strong>Weakness:</strong> ' + escapeHtml([defenses.weakness.type, defenses.weakness.value].filter(Boolean).join(' ')) + '</p>');
+        }
+        if (!rows.length) return '';
+        return renderSection('Defenses', '<div class="vtt-character-text-list">' + rows.join('') + '</div>');
     }
 
     function renderTraits(monster) {
         var traits = monster && monster.traits;
         if (!Array.isArray(traits) || !traits.length) return '';
-        var items = traits.map(function (t) {
-            if (!t || typeof t !== 'object') return '';
-            var name = t.name ? escapeHtml(t.name) : '';
-            var text = t.text || t.description || t.effect || '';
-            return '<li class="vtt-monster-summary__ability">' +
-                (name ? '<h4 class="vtt-monster-summary__ability-name">' + name + '</h4>' : '') +
-                '<p class="vtt-monster-summary__ability-text">' + formatPlain(text) + '</p>' +
-                '</li>';
-        }).filter(Boolean).join('');
-        if (!items) return '';
-        return '<section class="vtt-monster-summary__section">' +
-            '<h3 class="vtt-monster-summary__section-title">Traits</h3>' +
-            '<ul class="vtt-monster-summary__ability-list">' + items + '</ul>' +
-            '</section>';
+        return renderSection('Traits', traits.map(function (trait) {
+            if (!trait || typeof trait !== 'object') return '';
+            var name = trait.name || '';
+            var text = trait.text || trait.description || trait.effect || '';
+            return '<p class="vtt-character-feature">' +
+                (name ? '<strong class="vtt-character-feature__title">' + escapeHtml(name) + '</strong>' : '') +
+                (text ? formatText(text) : '') +
+                '</p>';
+        }).filter(Boolean).join(''));
     }
 
     function renderAbilities(monster) {
         var abilities = monster && monster.abilities;
         if (!abilities || typeof abilities !== 'object') return '';
-        var sections = CATEGORIES.map(function (cat) {
+        return CATEGORIES.map(function (cat) {
             var list = Array.isArray(abilities[cat.key]) ? abilities[cat.key] : [];
             if (!list.length) return '';
             var items = list.map(function (ability) {
-                if (!ability || typeof ability !== 'object') return '';
-                var name = ability.name ? escapeHtml(ability.name) : '(unnamed)';
-                var effect = ability.effect || '';
-                var additional = ability.additional_effect || '';
-                var trigger = ability.trigger || '';
-                var parts = [];
-                if (trigger && cat.key === 'triggered_action') {
-                    parts.push('<p class="vtt-monster-summary__ability-text"><strong>Trigger:</strong> ' +
-                        formatPlain(trigger) + '</p>');
-                }
-                if (effect) {
-                    parts.push('<p class="vtt-monster-summary__ability-text">' + formatPlain(effect) + '</p>');
-                }
-                if (additional) {
-                    parts.push('<p class="vtt-monster-summary__ability-text">' + formatPlain(additional) + '</p>');
-                }
-                return '<li class="vtt-monster-summary__ability">' +
-                    '<h4 class="vtt-monster-summary__ability-name">' + name + '</h4>' +
-                    parts.join('') +
-                    '</li>';
+                return renderAbility(ability, cat.key);
             }).filter(Boolean).join('');
-            if (!items) return '';
-            return '<section class="vtt-monster-summary__section">' +
-                '<h3 class="vtt-monster-summary__section-title">' + escapeHtml(cat.label) + '</h3>' +
-                '<ul class="vtt-monster-summary__ability-list">' + items + '</ul>' +
-                '</section>';
+            return items ? renderSection(cat.label, '<div class="vtt-monster-summary__ability-list">' + items + '</div>') : '';
         }).filter(Boolean).join('');
-        return sections;
     }
 
-    function render(panel, placement, monster) {
-        if (!monster) {
-            panel.innerHTML = '<div class="vtt-monster-summary__empty">Select a monster token to view its details.</div>';
-            return;
+    function renderAbility(ability, categoryKey) {
+        if (!ability || typeof ability !== 'object') return '';
+        var name = ability.name || '';
+        if (!name) return '';
+        var meta = [
+            ability.keywords,
+            ability.range ? 'Range ' + ability.range : '',
+            ability.targets ? 'Target ' + ability.targets : '',
+            ability.resource_cost ? 'Cost ' + ability.resource_cost : ''
+        ].filter(Boolean).join(' - ');
+        var parts = [];
+        if (categoryKey === 'triggered_action' && ability.trigger) {
+            parts.push('<p><strong>Trigger:</strong> ' + formatText(ability.trigger) + '</p>');
         }
-        var imageHtml = monster.image
-            ? '<img class="vtt-monster-summary__image" alt="' + escapeHtml(monster.name || 'monster') +
-              '" src="' + escapeHtml(monster.image) + '">'
+        if (ability.effect) parts.push('<p>' + formatText(ability.effect) + '</p>');
+        if (ability.additional_effect) parts.push('<p>' + formatText(ability.additional_effect) + '</p>');
+        if (ability.has_test && ability.test) parts.push(renderAbilityTest(ability.test));
+        return '<article class="vtt-monster-summary__ability">' +
+            '<h4 class="vtt-character-feature__title">' + escapeHtml(name) + '</h4>' +
+            (meta ? '<p class="vtt-monster-summary__ability-meta">' + escapeHtml(meta) + '</p>' : '') +
+            '<div class="vtt-character-text-list">' + parts.join('') + '</div>' +
+            '</article>';
+    }
+
+    function renderAbilityTest(test) {
+        var labels = { tier1: '<= 11', tier2: '12-16', tier3: '17+' };
+        var rows = ['tier1', 'tier2', 'tier3'].map(function (tier) {
+            var entry = test && test[tier];
+            if (!entry || typeof entry !== 'object') return '';
+            var text = [
+                entry.damage_amount ? 'Damage: ' + entry.damage_amount : '',
+                entry.effect || ''
+            ].filter(Boolean).join(' - ');
+            return text ? '<p><strong>' + escapeHtml(labels[tier]) + ':</strong> ' + formatText(text) + '</p>' : '';
+        }).filter(Boolean).join('');
+        return rows;
+    }
+
+    function renderSection(title, body) {
+        if (!body) return '';
+        return '<section class="vtt-character-section vtt-monster-section">' +
+            '<header class="vtt-character-section__header">' +
+            '<span class="vtt-character-section__icon" aria-hidden="true">=</span>' +
+            '<span>' + escapeHtml(title) + '</span>' +
+            '</header>' +
+            '<div class="vtt-character-section__body">' + body + '</div>' +
+            '</section>';
+    }
+
+    function renderQuickBox(label, value) {
+        return '<div class="vtt-character-card__quick-box">' +
+            '<span class="vtt-character-card__quick-label">' + escapeHtml(label) + '</span>' +
+            '<span class="vtt-character-card__quick-value">' + escapeHtml(value) + '</span>' +
+            '</div>';
+    }
+
+    function renderStat(label, value) {
+        return '<div class="vtt-character-stat">' +
+            '<span class="vtt-character-stat__label">' + escapeHtml(label) + '</span>' +
+            '<span class="vtt-character-stat__value">' + formatSigned(value) + '</span>' +
+            '</div>';
+    }
+
+    function renderVital(label, value) {
+        return '<div class="vtt-character-vital">' +
+            '<div class="vtt-character-vital__label">' + escapeHtml(label) + '</div>' +
+            '<div class="vtt-character-vital__value">' + escapeHtml(valueOrDash(value)) + '</div>' +
+            '</div>';
+    }
+
+    function renderCondition(condition, placementId, index) {
+        var removeButton = placementId
+            ? '<button class="vtt-character-condition__remove" type="button" data-character-condition-remove data-placement-id="' + escapeAttribute(placementId) + '" data-condition-index="' + escapeAttribute(index) + '" aria-label="Remove ' + escapeAttribute(condition) + '">x</button>'
             : '';
-        var header = '<header class="vtt-monster-summary__header">' +
-            '<button type="button" class="vtt-monster-summary__tuck" data-monster-summary-tuck aria-label="Close monster summary" title="Close">&lt;</button>' +
-            '<h2 class="vtt-monster-summary__name">' + escapeHtml(monster.name || 'Monster') + '</h2>' +
-            imageHtml +
-            '</header>';
-        panel.innerHTML = header +
-            renderStatLine(placement, monster) +
-            renderCharacteristics(monster) +
-            renderTraits(monster) +
-            renderAbilities(monster);
+        return '<span class="vtt-character-condition"><span class="vtt-character-condition__name">' + escapeHtml(condition) + '</span>' + removeButton + '</span>';
     }
 
     function bindControls(panel) {
@@ -181,6 +247,22 @@
             if (target && target.closest('[data-monster-summary-tuck]')) {
                 event.preventDefault();
                 close();
+                return;
+            }
+            var conditionRemove = target && target.closest('[data-character-condition-remove]');
+            if (conditionRemove) {
+                event.preventDefault();
+                event.stopPropagation();
+                var placementId = conditionRemove.dataset.placementId || '';
+                var conditionIndex = Number.parseInt(conditionRemove.dataset.conditionIndex || '', 10);
+                if (placementId && Number.isInteger(conditionIndex) && conditionIndex >= 0) {
+                    document.dispatchEvent(new CustomEvent('vtt:character-summary-remove-condition', {
+                        detail: {
+                            placementId: placementId,
+                            conditionIndex: conditionIndex
+                        }
+                    }));
+                }
             }
         });
     }
@@ -199,6 +281,7 @@
         panel.classList.add('vtt-monster-summary--open');
         panel.classList.remove('vtt-monster-summary--closed');
         panel.setAttribute('aria-hidden', 'false');
+        document.body && document.body.classList.add(BODY_OPEN_CLASS);
     }
 
     function close() {
@@ -207,6 +290,61 @@
         panel.classList.remove('vtt-monster-summary--open');
         panel.classList.add('vtt-monster-summary--closed');
         panel.setAttribute('aria-hidden', 'true');
+        document.body && document.body.classList.remove(BODY_OPEN_CLASS);
+    }
+
+    function resolveHitPoints(placement, monster) {
+        var placementHp = placement && placement.hp && typeof placement.hp === 'object' ? placement.hp : null;
+        var current = toNumber(placementHp?.current, null);
+        var max = toNumber(placementHp?.max, null);
+        if (current === null) current = toNumber(placement?.hp, null);
+        if (max === null) max = toNumber(placement?.maxHp, null);
+        if (max === null) max = toNumber(monster?.hp ?? monster?.stamina, 0);
+        if (current === null) current = max;
+        return { current: current || 0, max: max || 0 };
+    }
+
+    function normalizeConditions(value) {
+        if (Array.isArray(value)) {
+            return value.map(function (condition) {
+                if (condition && typeof condition === 'object') {
+                    return condition.name || condition.label || condition.id || '';
+                }
+                return String(condition || '');
+            }).map(function (condition) { return condition.trim(); }).filter(Boolean);
+        }
+        if (typeof value === 'string' && value.trim()) {
+            return value.split(/[,;]+/).map(function (condition) { return condition.trim(); }).filter(Boolean);
+        }
+        return [];
+    }
+
+    function placementName(placement) {
+        return typeof placement?.name === 'string' ? placement.name : '';
+    }
+
+    function valueOrDash(value) {
+        return value === null || value === undefined || value === '' ? '-' : value;
+    }
+
+    function toNumber(value, fallback) {
+        var number = Number(value);
+        return Number.isFinite(number) ? number : fallback;
+    }
+
+    function formatSigned(value) {
+        var number = Number(value);
+        if (!Number.isFinite(number)) return '0';
+        return number > 0 ? '+' + number : String(number);
+    }
+
+    function capitalize(value) {
+        value = String(value || '');
+        return value.charAt(0).toUpperCase() + value.slice(1);
+    }
+
+    function clamp(value, min, max) {
+        return Math.max(min, Math.min(max, value));
     }
 
     window.MonsterSummaryPanel = {

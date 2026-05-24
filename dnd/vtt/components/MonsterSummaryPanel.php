@@ -7,7 +7,7 @@ function renderVttMonsterSummaryPanel(): string
     ?>
     <aside
         id="vtt-monster-summary-panel"
-        class="vtt-monster-summary vtt-monster-summary--closed"
+        class="vtt-character-summary vtt-monster-summary vtt-monster-summary--closed"
         aria-hidden="true"
         data-module="vtt-monster-summary"
     >

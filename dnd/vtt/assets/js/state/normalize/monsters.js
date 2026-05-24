@@ -246,6 +246,13 @@ export function normalizeMonsterAbility(ability, category) {
     normalized.test = test;
   }
 
+  if (ability.automation && typeof ability.automation === 'object' && !Array.isArray(ability.automation)) {
+    const automation = clonePlainObject(ability.automation);
+    if (Object.keys(automation).length > 0) {
+      normalized.automation = automation;
+    }
+  }
+
   return normalized;
 }
 
@@ -439,4 +446,12 @@ export function sanitizeMonsterString(value) {
     return String(value);
   }
   return '';
+}
+
+function clonePlainObject(value) {
+  try {
+    return JSON.parse(JSON.stringify(value));
+  } catch (_error) {
+    return {};
+  }
 }
