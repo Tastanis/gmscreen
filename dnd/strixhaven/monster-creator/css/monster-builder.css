@@ -1891,6 +1891,58 @@ body.delete-mode-active .sub-tab:hover {
     font-size: 11px;
 }
 
+.browser-search {
+    position: relative;
+    margin-top: 8px;
+}
+
+.browser-search-input {
+    width: 100%;
+    box-sizing: border-box;
+    padding: 6px 28px 6px 10px;
+    border: 1px solid #b89c84;
+    border-radius: 4px;
+    background: #fffbf2;
+    color: #2f241a;
+    font-size: 12.5px;
+    font-family: inherit;
+}
+
+.browser-search-input::placeholder {
+    color: #a89578;
+    font-style: italic;
+}
+
+.browser-search-input:focus {
+    outline: none;
+    border-color: #5a3e30;
+    box-shadow: 0 0 0 2px rgba(90, 62, 48, 0.18);
+}
+
+.browser-search-clear {
+    position: absolute;
+    top: 50%;
+    right: 4px;
+    transform: translateY(-50%);
+    width: 22px;
+    height: 22px;
+    border: none;
+    background: transparent;
+    color: #5a3e30;
+    cursor: pointer;
+    font-size: 16px;
+    line-height: 1;
+    padding: 0;
+    border-radius: 50%;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+}
+
+.browser-search-clear:hover {
+    background: rgba(90, 62, 48, 0.12);
+}
+
 .browser-content {
     flex: 1;
     display: flex;

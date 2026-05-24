@@ -104,6 +104,26 @@ require_once '../../version.php';
                     <div class="browser-context" id="browserContext">
                         <span class="context-info">Viewing: All tabs</span>
                     </div>
+                    <div class="browser-search">
+                        <input
+                            type="search"
+                            id="monsterBrowserSearchInput"
+                            class="browser-search-input"
+                            placeholder="Search all monsters…"
+                            autocomplete="off"
+                            spellcheck="false"
+                            oninput="handleMonsterBrowserSearchInput(this.value)"
+                        >
+                        <button
+                            type="button"
+                            class="browser-search-clear"
+                            id="monsterBrowserSearchClear"
+                            style="display: none;"
+                            onclick="clearMonsterBrowserSearch()"
+                            title="Clear search"
+                            aria-label="Clear search"
+                        >×</button>
+                    </div>
                 </div>
                 
                 <div class="browser-content">

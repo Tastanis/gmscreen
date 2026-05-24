@@ -2751,17 +2751,85 @@ function hasUnsavedChanges() {
     return dirtyMonsters.size > 0 || needsTabSave;
 }
 
+// Browser search state — when non-empty, the monster browser searches across
+// ALL tabs/subtabs instead of the current tab context.
+let browserSearchQuery = '';
+
+function handleMonsterBrowserSearchInput(value) {
+    browserSearchQuery = (value || '').trim();
+    const clearBtn = document.getElementById('monsterBrowserSearchClear');
+    if (clearBtn) {
+        clearBtn.style.display = browserSearchQuery ? 'inline-flex' : 'none';
+    }
+    updateRightSidebar();
+}
+
+function clearMonsterBrowserSearch() {
+    const input = document.getElementById('monsterBrowserSearchInput');
+    if (input) input.value = '';
+    browserSearchQuery = '';
+    const clearBtn = document.getElementById('monsterBrowserSearchClear');
+    if (clearBtn) clearBtn.style.display = 'none';
+    updateRightSidebar();
+}
+
+function getMonstersForBrowserSearch(query) {
+    const q = (query || '').toLowerCase();
+    if (!q) return [];
+
+    const results = [];
+    Object.entries(monsterData.tabs || {}).forEach(([mainTabId, mainTab]) => {
+        if (!mainTab?.subTabs) return;
+        Object.entries(mainTab.subTabs).forEach(([subTabId, subTab]) => {
+            if (!Array.isArray(subTab?.monsters)) return;
+            subTab.monsters.forEach(monsterId => {
+                const monster = monsterData.monsters[monsterId];
+                if (!monster) return;
+                const haystack = [
+                    monster.name,
+                    monster.role,
+                    monster.organization,
+                    monster.tactical_role,
+                    monster.types
+                ].filter(Boolean).join(' ').toLowerCase();
+                if (haystack.includes(q)) {
+                    results.push({
+                        id: monsterId,
+                        data: monster,
+                        location: `${mainTab.name} > ${subTab.name}`
+                    });
+                }
+            });
+        });
+    });
+
+    // De-dupe in case a monster is referenced from multiple subtabs.
+    const seen = new Set();
+    const deduped = [];
+    results.forEach(entry => {
+        if (seen.has(entry.id)) return;
+        seen.add(entry.id);
+        deduped.push(entry);
+    });
+
+    deduped.sort((a, b) => (a.data.name || 'Unnamed').localeCompare(b.data.name || 'Unnamed'));
+    return deduped;
+}
+
 // Right Sidebar Browser Functions
 function updateRightSidebar() {
     console.log('Updating right sidebar...');
     console.log('Current main tab:', currentMainTab);
     console.log('Current sub tab:', currentSubTab);
-    
-    const monsters = getMonstersForCurrentView();
+
+    const searching = browserSearchQuery.length > 0;
+    const monsters = searching
+        ? getMonstersForBrowserSearch(browserSearchQuery)
+        : getMonstersForCurrentView();
     const abilities = getAbilitiesForCurrentView();
-    
+
     // Update browser title and context
-    updateBrowserContext();
+    updateBrowserContext(searching);
     
     // Update monster list
     updateMonsterBrowser(monsters);
@@ -2859,10 +2927,16 @@ function getAbilitiesForCurrentView() {
     return abilities;
 }
 
-function updateBrowserContext() {
+function updateBrowserContext(isSearching = false) {
     const titleElement = document.getElementById('browserTitle');
     const contextElement = document.getElementById('browserContext');
-    
+
+    if (isSearching) {
+        titleElement.textContent = 'Search Results';
+        contextElement.innerHTML = `<span class="context-info">Searching all monsters for "<strong>${escapeMonsterText(browserSearchQuery)}</strong>"</span>`;
+        return;
+    }
+
     // Don't update title if we're showing a monster's abilities
     if (selectedMonsterId && monsterData.monsters[selectedMonsterId]) {
         // Title will be updated by updateAbilityBrowser, just update context
@@ -2871,7 +2945,7 @@ function updateBrowserContext() {
         contextElement.innerHTML = `<span class="context-info">Viewing abilities for: ${monsterName}</span>`;
         return;
     }
-    
+
     if (currentSubTab && currentMainTab) {
         // Specific subtab selected
         const mainTab = monsterData.tabs[currentMainTab];
