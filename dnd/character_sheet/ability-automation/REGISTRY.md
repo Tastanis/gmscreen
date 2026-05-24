@@ -13,7 +13,7 @@ For *how* to write JSON, see `AUTHORING.md`. This file is `what is supported`.
 | `target` | Full |
 | `powerRoll` | Full. Supports `flatBonus` (literal roll bonus that bypasses attribute lookup — monster-friendly) and `whenWinded` overrides (see Universal Modifiers). |
 | `effect` | Full. Supports `whenWinded` overrides (see Universal Modifiers). |
-| `trigger` | Schema + registration against `AbilityTriggerBus`. Authored `match` config fires the blue `!` overlay when its event/filter matches; click to resolve manually. No structured `match` → chat reminder fallback. |
+| `trigger` | Schema + registration against `AbilityTriggerBus`. PC trigger actions in the Triggers list auto-register when that character's summary panel loads or refreshes. Authored `match` config fires the blue `!` overlay when its event/filter matches; click to resolve manually. No structured `match` -> chat reminder fallback. |
 | `persistent` | Schema + registration as a board-side persistent zone. Requires a preceding area `target` block so the zone has a footprint. Ticks at owner's `tickAt` (startOfTurn or endOfTurn): deducts upkeep from owner's heroic resource, applies effects to every creature inside the zone footprint. Auto-ends on combat end or when owner can't pay upkeep. **In-memory only** — page reload wipes zones (Pass 2 will add persistence). |
 
 ## Universal modifiers (apply to any actor — PC or monster)

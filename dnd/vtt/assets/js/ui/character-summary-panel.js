@@ -226,6 +226,7 @@ export function mountCharacterSummaryPanel(routes = {}, userContext = {}) {
       onConditionAdd: handleConditionAdd,
     });
     renderAbilityTray(abilityTray, activeSheet, { activeCategory: activeAbilityCategory, activeToken });
+    autoRegisterActiveTriggerAbilities();
     syncRevealButton();
   };
 
@@ -292,6 +293,33 @@ export function mountCharacterSummaryPanel(routes = {}, userContext = {}) {
     }
     return saved;
   };
+
+  function autoRegisterActiveTriggerAbilities() {
+    if (!activeSheet || !activeToken?.id) return;
+    const triggerActions = Array.isArray(activeSheet.actions?.triggers) ? activeSheet.actions.triggers : [];
+    triggerActions.forEach((action, actionIndex) => {
+      const automation = normalizeAutomation(action?.automation);
+      if (!hasAbilityAutomation(automation)) return;
+      const triggerBlocks = (automation.cards || []).filter((block) => block?.type === 'trigger' && block.match);
+      if (!triggerBlocks.length) return;
+      const abilityId = action?._stableActionId || getStableActionId(action, 'triggers', actionIndex);
+      triggerBlocks.forEach((block) => {
+        requestAutomationRegisterTrigger({
+          casterId: activeToken.id,
+          abilityId,
+          abilityName: action.name || 'Triggered Ability',
+          match: block.match,
+          effects: block.effects || [],
+          targetGroup: block.target || '',
+          targetIds: [],
+          condition: block.condition || '',
+          note: block.note || '',
+        }).catch((error) => {
+          console.warn('[VTT] Failed to auto-register triggered ability', action?.name || abilityId, error);
+        });
+      });
+    });
+  }
 
   async function showCharacter(detail = {}) {
     const characterId = normalizeCharacterId(detail.characterId);
@@ -902,7 +930,7 @@ function renderAbilityItem(action, categoryKey, index, opts = {}) {
   // When an ability is injected into the trigger list because a trigger
   // condition is met (e.g. opp-attack), render a blue "!" to the LEFT of
   // the icon and stash the trigger id so clicking it auto-clears.
-  const actionId = typeof action?.id === 'string' ? action.id : '';
+  const actionId = action?._stableActionId || getStableActionId(action, categoryKey, index);
   const triggerId = action?._injectedTriggerId || (categoryKey === 'triggers' && actionId && ready.includes(actionId) ? actionId : '');
   return `
     <button
@@ -1757,12 +1785,16 @@ function actionHasKeyword(action, keyword) {
 function getAbilityActions(sheet, categoryKey, opts = {}) {
   const actions = sheet?.actions && typeof sheet.actions === 'object' ? sheet.actions : {};
   const list = Array.isArray(actions[categoryKey]) ? actions[categoryKey] : [];
+  const baseList = list.map((action, index) => ({
+    ...action,
+    _stableActionId: action?._stableActionId || getStableActionId(action, categoryKey, index),
+  }));
   const freeStrikes = Array.isArray(actions.freeStrikes) ? actions.freeStrikes : [];
   const activeToken = opts.activeToken || null;
-  let merged = list;
+  let merged = baseList;
   if (categoryKey === 'mains') {
     // Free strikes share the Main Action tab in the panel.
-    merged = [...list, ...freeStrikes];
+    merged = [...baseList, ...freeStrikes];
   } else if (categoryKey === 'triggers') {
     // Opportunity attack: when the active token has the built-in opp-attack
     // trigger ready, the melee free strike appears at the top of the
@@ -1778,7 +1810,7 @@ function getAbilityActions(sheet, categoryKey, opts = {}) {
         freeStrikes.find((fs) => actionHasKeyword(fs, 'Strike')) ||
         freeStrikes[0];
       if (fallback) {
-        merged = [{ ...fallback, _injectedTriggerId: '__opportunityAttack__' }, ...list];
+        merged = [{ ...fallback, _injectedTriggerId: '__opportunityAttack__' }, ...baseList];
       }
     }
   }
@@ -1792,6 +1824,18 @@ function hasAbilityAutomation(automation) {
       Array.isArray(automation.cards) &&
       automation.cards.length > 0
   );
+}
+
+function getStableActionId(action, categoryKey, index) {
+  const explicit = typeof action?.id === 'string' ? action.id.trim() : '';
+  if (explicit) return explicit;
+  const name = String(action?.name || 'ability')
+    .trim()
+    .toLowerCase()
+    .replace(/[^a-z0-9]+/g, '-')
+    .replace(/^-+|-+$/g, '')
+    .slice(0, 48) || 'ability';
+  return `${categoryKey || 'ability'}:${index}:${name}`;
 }
 
 function normalizeAutomation(automation) {

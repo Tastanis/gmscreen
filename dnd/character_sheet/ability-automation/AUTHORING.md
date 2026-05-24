@@ -296,12 +296,14 @@ A reactive ability. Carries a free-text `condition` label plus an optional struc
 
 Triggers stay registered until the encounter ends, the caster leaves the scene, or the round-tick stale-out (two phase boundaries) clears them.
 
-Triggered abilities use a two-step flow when the first card is a structured `trigger` with `match`:
+Triggered abilities use a listen/resolve flow when the first card is a structured `trigger` with `match`:
 
-1. Clicking the ability with no captured trigger payload **arms** only the structured trigger card and then stops. The rest of the cards do not run, and the ability's visible `cost` is not spent.
+1. In the VTT, structured trigger actions in the character's Triggers list are registered automatically when that character's summary panel loads or refreshes. Do not write rules text that asks the player to "arm" normal triggered actions.
 2. When the matching event later fires, the caster's token lights up with the blue `!` overlay. Clicking the ready trigger resolves the same automation with the captured event payload; the runner skips the `trigger` card and continues through the later cards.
 
 Put trigger-resolution effects such as `halveTriggeringDamage`, teleport, optional `spend` riders, and reminders in an `effect` card after the `trigger` card. Do not rely on `trigger.effects` for effects that should run when the player clicks the ready trigger; the trigger card is only for arming/listening.
+
+Clicking a structured trigger ability directly with no captured trigger payload still arms only the trigger card and then stops. Treat this as a fallback/debug path, not the default gameplay flow.
 
 Triggered abilities do not auto-resolve. The player or GM clicks the ready trigger and resolves the ability manually with the captured event payload.
 
