@@ -1,0 +1,37 @@
+# AI Reference Index
+
+## Common Tasks
+
+| Task | Read these files |
+|---|---|
+| Make a class ability JSON | `source/rules/classes/<class>.md`, then `../character_sheet/ability-automation/AUTHORING.md`, then `../character_sheet/ability-automation/REGISTRY.md` |
+| Make a monster import JSON | `source/monsters/INDEX.md`, one monster chunk, then `../strixhaven/monster-creator/MONSTER_JSON_IMPORT_TEMPLATE.md` |
+| Add automation to an existing monster ability | Monster chunk, `vtt-json/INDEX.md`, `hooks/INDEX.md`, and the current ability row in the monster creator data/code |
+| Check whether an effect/hook exists | `../character_sheet/ability-automation/REGISTRY.md`, then `hooks/INDEX.md` |
+| Update automation schema/runtime | `UPDATE-GUIDE.md`, `../character_sheet/ability-automation/README.md`, `AUTHORING.md`, and `REGISTRY.md` |
+| Work on monster tray/runtime behavior | `vtt-json/INDEX.md`, `hooks/INDEX.md`, `../vtt/assets/js/ui/monster-ability-tray.js`, `../vtt/assets/js/ui/monster-ability-runner-glue.js` |
+
+## Source Text
+
+- Rules chapter chunks: `source/rules/chapters/`
+- Whole-class chunks: `source/rules/classes/`
+- Monster chunk index: `source/monsters/INDEX.md`
+- Monster source chunks: `source/monsters/chunks/`
+
+## Canonical Code Docs
+
+- Ability automation authoring: `../character_sheet/ability-automation/AUTHORING.md`
+- Supported fields, hooks, and effects: `../character_sheet/ability-automation/REGISTRY.md`
+- Automation folder map and invariants: `../character_sheet/ability-automation/README.md`
+- Full monster import shape: `../strixhaven/monster-creator/MONSTER_JSON_IMPORT_TEMPLATE.md`
+
+## Example Lookup
+
+For "In All This Confusion":
+
+1. Open `source/rules/classes/shadow.md`.
+2. Search for `In All This Confusion`.
+3. Confirm it is a Shadow Harlequin Mask triggered action: trigger is taking damage, effect halves the damage and teleports up to 4 squares after the triggering effect resolves.
+4. Open `../character_sheet/ability-automation/AUTHORING.md` and search for `trigger`, `halveTriggeringDamage`, and `teleport`.
+5. Open `../character_sheet/ability-automation/REGISTRY.md` to confirm the trigger event and hooks are supported.
+

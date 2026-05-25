@@ -13,7 +13,7 @@ For *how* to write JSON, see `AUTHORING.md`. This file is `what is supported`.
 | `target` | Full |
 | `powerRoll` | Full. Supports `flatBonus` (literal roll bonus that bypasses attribute lookup — monster-friendly) and `whenWinded` overrides (see Universal Modifiers). |
 | `effect` | Full. Supports `whenWinded` overrides (see Universal Modifiers). |
-| `trigger` | Schema + registration against `AbilityTriggerBus`. PC trigger actions in the Triggers list auto-register when that character's summary panel loads or refreshes. Authored `match` config fires the blue `!` overlay when its event/filter matches; click to resolve manually. No structured `match` -> chat reminder fallback. |
+| `trigger` | Schema + registration against `AbilityTriggerBus`. PC trigger actions in the Triggers list are always-on during combat once that character is present in the VTT and their summary panel loads or refreshes. Authored `match` config fires the blue `!` overlay when its event/filter matches; click to resolve manually. No structured `match` -> chat reminder fallback. |
 | `persistent` | Schema + registration as a board-side persistent zone. Requires a preceding area `target` block so the zone has a footprint. Ticks at owner's `tickAt` (startOfTurn or endOfTurn): deducts upkeep from owner's heroic resource, applies effects to every creature inside the zone footprint. Auto-ends on combat end or when owner can't pay upkeep. **In-memory only** — page reload wipes zones (Pass 2 will add persistence). |
 
 ## Universal modifiers (apply to any actor — PC or monster)
@@ -172,11 +172,11 @@ These are called by `runner.js` and dispatched as `vtt:automation-*` CustomEvent
 
 ## Trigger event bus (window.AbilityTriggerBus)
 
-Lightweight event-driven registry for triggered abilities. JSON-authored `trigger` blocks register against the bus; built-in triggers (e.g. opportunity attack — coming next pass) also use it.
+Lightweight event-driven registry for triggered abilities. JSON-authored `trigger` blocks register against the bus as passive listeners; built-in triggers also use it. Players do not click triggered actions to start listening.
 
 | Method | Signature | Notes |
 |---|---|---|
-| `register(entry)` | `entry = { tokenId, eventType, predicate, abilityId? }` | `predicate(payload, entry) → bool`. Returning true marks the trigger ready. |
+| `register(entry)` | `entry = { tokenId, eventType, predicate, abilityId? }` | Adds or refreshes a passive listener. `predicate(payload, entry) -> bool`. Returning true marks the trigger ready. |
 | `unregisterByToken(tokenId)` | string | Removes all triggers for a token (call on token destroy / scene leave). |
 | `fire(eventType, payload)` | string, object | Dispatches the event; ready triggers update their token state. |
 | `markReady(placementId, abilityId?)` | string, string \| null | Sets `placement.hasReadyTrigger = true`, adds to `readyTriggerAbilities`. Surfaces blue `!` overlay on token + TRIGGER button. |
@@ -317,6 +317,6 @@ Stacking is additive. Multiple matching modifiers all apply. Per-encounter / spe
 - Auto-running another named ability. `cascade` is a chat reminder only.
 - Auto-placing summoned/spawned tokens. Use `note` with placement instructions.
 - Persistent zone disk persistence. Zones are real in memory, but page reload clears them.
-- Trigger auto-resolution. Authored triggers can arm and light the blue `!`; the player/GM still clicks to resolve.
+- Trigger auto-resolution. Authored triggers passively listen and light the blue `!`; the player/GM still clicks to resolve.
 - Manual/non-automation damage events do not currently fire `damage`, `damageDealt`, or `staminaZero` trigger events.
 - Monster-side PC-only state: heroic resource spends and recovery spends degrade to chat/no-op behavior for monsters. Mark hooks are currently shared board state; use them intentionally.

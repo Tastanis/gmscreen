@@ -254,7 +254,9 @@ Supports an optional `whenWinded` sub-object (same as `powerRoll`). On `effect` 
 
 ### `trigger`
 
-A reactive ability. Carries a free-text `condition` label plus an optional structured `match` config. With `match`, the runner registers a listener on the board's trigger bus; when the matching event later fires, the caster's token lights up with the blue `!` overlay and the player resolves the ability manually (same flow as built-in opportunity attacks). Without `match`, falls back to a chat reminder so the GM can apply manually.
+A reactive ability listener. Carries a free-text `condition` label plus an optional structured `match` config.
+
+For PC triggered actions, this is **always-on** during combat once the character is present in the VTT and their character summary has loaded. The player should not click the ability to start listening. The VTT auto-registers structured trigger blocks from abilities in the character sheet's Triggers list. When the matching event later fires, the caster's token lights up with the blue `!` overlay and the player resolves the ability manually (same flow as built-in opportunity attacks). Without `match`, the trigger cannot be passively detected and falls back to a chat reminder when clicked.
 
 ```json
 {
@@ -282,7 +284,7 @@ A reactive ability. Carries a free-text `condition` label plus an optional struc
 | `actionUsed` | A normal ability automation starts | `whose`, `actionKind`, `keywordsAny` |
 | `markApplied` | Automation applies/transfers a mark | `whose`, `markType`, `source` |
 
-**`whose` values** — resolved relative to the **caster** (the player who armed the trigger) and the target group named by the trigger's `target` field (or the most recent target group if `target` is omitted):
+**`whose` values** — resolved relative to the **caster** (the character who has the triggered ability) and the target group named by the trigger's `target` field (or the most recent target group if `target` is omitted):
 
 | whose | Matches |
 |---|---|
@@ -296,14 +298,14 @@ A reactive ability. Carries a free-text `condition` label plus an optional struc
 
 Triggers stay registered until the encounter ends, the caster leaves the scene, or the round-tick stale-out (two phase boundaries) clears them.
 
-Triggered abilities use a listen/resolve flow when the first card is a structured `trigger` with `match`:
+Triggered abilities use an always-listening/resolve flow when the first card is a structured `trigger` with `match`:
 
-1. In the VTT, structured trigger actions in the character's Triggers list are registered automatically when that character's summary panel loads or refreshes. Do not write rules text that asks the player to "arm" normal triggered actions.
+1. In the VTT, structured trigger actions in the character's Triggers list are registered automatically when that character's summary panel loads or refreshes. Do not write rules text that asks the player to "arm", "activate", "set", or "start watching" normal triggered actions.
 2. When the matching event later fires, the caster's token lights up with the blue `!` overlay. Clicking the ready trigger resolves the same automation with the captured event payload; the runner skips the `trigger` card and continues through the later cards.
 
-Put trigger-resolution effects such as `halveTriggeringDamage`, teleport, optional `spend` riders, and reminders in an `effect` card after the `trigger` card. Do not rely on `trigger.effects` for effects that should run when the player clicks the ready trigger; the trigger card is only for arming/listening.
+Put trigger-resolution effects such as `halveTriggeringDamage`, teleport, optional `spend` riders, and reminders in an `effect` card after the `trigger` card. Do not rely on `trigger.effects` for effects that should run when the player clicks the ready trigger; the trigger card describes the passive listener.
 
-Clicking a structured trigger ability directly with no captured trigger payload still arms only the trigger card and then stops. Treat this as a fallback/debug path, not the default gameplay flow.
+Clicking a structured trigger ability directly with no captured trigger payload registers only the trigger listener and then stops. Treat this as a fallback/debug path, not the default gameplay flow.
 
 Triggered abilities do not auto-resolve. The player or GM clicks the ready trigger and resolves the ability manually with the captured event payload.
 

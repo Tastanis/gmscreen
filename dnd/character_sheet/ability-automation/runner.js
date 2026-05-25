@@ -4,7 +4,7 @@
 //   target     → asks the VTT board to select tokens or place an area template
 //   powerRoll  → rolls 2d10 + attribute, pauses for tier confirm, applies tier effects
 //   effect     → applies a list of effects without a roll
-//   trigger    → posts a chat reminder (no auto-detect this pass)
+//   trigger    → registers a passive listener when match config is present
 //   persistent → posts a chat reminder (no zone tracking this pass)
 //
 // Effects dispatch through context callbacks (applyDamage, applyCondition, forceMove,
@@ -813,7 +813,7 @@
           condition: block.condition || "",
           note: block.note || "",
         });
-        const lines = [`${state.heroName} - ${state.action.name || "Ability"} trigger armed:`];
+        const lines = [`${state.heroName} - ${state.action.name || "Ability"} trigger listening:`];
         if (block.condition) lines.push(`When: ${block.condition}`);
         if (inner) lines.push(`Then: ${inner}`);
         if (block.note) lines.push(block.note);

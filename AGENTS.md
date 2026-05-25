@@ -82,6 +82,11 @@ console.log('Button element:', document.getElementById('import-character-btn'));
 3. Verify changes work as expected
 4. Document significant changes in this file
 
+### Draw Steel AI Reference Maintenance
+- Before authoring or changing Draw Steel abilities, monsters, monster JSON imports, ability automation JSON, or VTT automation hooks, consult `/dnd/ai-reference/INDEX.md`.
+- If code changes touch ability automation fields, effect kinds, trigger events, hook payloads, monster import fields, monster ability categories, malice behavior, or monster runtime behavior, update the matching docs listed in `/dnd/ai-reference/UPDATE-GUIDE.md`.
+- Do not invent automation JSON fields or hook names. If the current code does not support a mechanic, represent it with `note` or `other` and document the limitation where appropriate.
+
 ### Debugging
 - Enable debug info boxes for troubleshooting
 - Use console.log statements for JavaScript debugging

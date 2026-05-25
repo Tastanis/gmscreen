@@ -1,0 +1,33 @@
+# Automation Hooks Reference
+
+The canonical hook registry is `../../character_sheet/ability-automation/REGISTRY.md`. This file maps the registry to the code that implements the hooks.
+
+## Main Flow
+
+1. Ability JSON is normalized by `../../character_sheet/ability-automation/schema.js`.
+2. The runner in `../../character_sheet/ability-automation/runner.js` walks `automation.cards`.
+3. PC abilities get VTT callbacks through `../../vtt/assets/js/ui/character-summary-panel.js`.
+4. Monster abilities get the same board callbacks through `../../vtt/assets/js/ui/monster-ability-runner-glue.js`.
+5. Board-side CustomEvents are handled in `../../vtt/assets/js/ui/board-interactions.js`.
+
+## Board Callback Surface
+
+`window.VTTBoardCallbacks` is exported from `board-interactions.js` and includes target selection, area selection, damage, healing, conditions, potency checks, forced movement, teleport, swap, free strikes, persistent zones, marks, trigger events, and scoped flags.
+
+Check `REGISTRY.md` before authoring against a hook. If it is not listed there, treat it as unsupported.
+
+## Trigger Bus
+
+`window.AbilityTriggerBus` lives in `board-interactions.js`. Authored trigger blocks use `match.event` and `match.filter`, then register through the runner's `registerTrigger` context hook as passive listeners. PC triggered actions are always-on during combat once the character is present in the VTT and their character summary has loaded; the player does not click the ability to start listening. Triggered abilities light the ready marker and are resolved manually.
+
+Known current limitation: manual/non-automation damage does not fire the authored damage trigger events. Use the registry for the latest limitation list.
+
+## Monster-Specific Runtime Notes
+
+Monster ability execution is bridged by `monster-ability-runner-glue.js`.
+
+- Villain and malice categories spend from `window.MaliceTracker`.
+- Triggered monster actions prompt for confirmation before firing.
+- Monsters should use `flatBonus`; attribute lookup exists as a fallback.
+- Monster recovery and heroic resource spends skip with a chat note.
+- Winded state is based on token HP at or below half max HP.
