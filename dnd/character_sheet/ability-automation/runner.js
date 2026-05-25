@@ -352,6 +352,9 @@
 
   function getTargetGroup(state, name) {
     const groupName = name || state.currentGroup || "primary";
+    if (String(groupName || "").toLowerCase() === "self") {
+      return state.sourcePlacement?.id ? [state.sourcePlacement] : [];
+    }
     return state.groups[groupName] || [];
   }
 
@@ -1077,7 +1080,9 @@
   // the damage pipeline. `rounding: "up"` means the player still takes the
   // larger half (book-default for Resist the Unnatural / Unearthly Reflexes).
   async function applyHalveTriggeringDamageEffect(state, effect, _targets, _ctx) {
-    const payload = state.triggerPayload || null;
+    const payload = state.triggerPayload?.payload && typeof state.triggerPayload.payload === "object"
+      ? state.triggerPayload.payload
+      : state.triggerPayload || null;
     const originalAmount = asInt(payload?.amount, 0);
     if (!payload || !originalAmount) {
       await postChat(state.context, {

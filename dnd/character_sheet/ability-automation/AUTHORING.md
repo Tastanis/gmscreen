@@ -172,6 +172,8 @@ Asks the player to pick a token (or place an area template) on the VTT board.
 | `optional` | bool | If true, runtime shows a "Skip" button. The automation continues with an empty target group. |
 | `distance` | `{ form, value, secondary?, within? }` | See distance forms below. |
 
+For self-only resolution effects after a trigger, an `effect` card can use `"target": "self"` directly. The runner resolves that to the source token; do not add a separate target card that asks the player to pick themselves unless the ability genuinely needs a manual pick.
+
 For `mode: "area"` add:
 
 | Field | Values |

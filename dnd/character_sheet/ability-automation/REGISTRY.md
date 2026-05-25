@@ -97,6 +97,8 @@ Target and area range visuals are also advisory. Single-target abilities draw th
 
 `creature`, `enemy`, `ally`, `object`, `creatureOrObject`, `self`, `selfOrAlly`, `selfAndAlly`
 
+For effect resolution, `target: "self"` is a special target group resolved directly to the source token. It does not require a preceding target card.
+
 ## Distance forms — `target.distance.form`
 
 `self`, `melee`, `ranged`, `meleeOrRanged`, `burst`, `aura`, `cube`, `line`, `wall`

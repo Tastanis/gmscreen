@@ -38,4 +38,5 @@ Before handing back JSON, verify:
 - Monster power rolls use `flatBonus`.
 - Triggered actions use a `trigger` card only when the event is supported.
 - Triggered action JSON describes an always-on listener. Do not add wording or mechanics that require the player to click the ability to start watching for the trigger.
+- For self-only triggered resolution effects, use `target: "self"` on the `effect` card instead of adding a target card that makes the player pick themselves.
 - Any touched docs are updated according to `../UPDATE-GUIDE.md`.
