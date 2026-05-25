@@ -13,7 +13,7 @@ For *how* to write JSON, see `AUTHORING.md`. This file is `what is supported`.
 | `target` | Full |
 | `powerRoll` | Full. Supports `flatBonus` (literal roll bonus that bypasses attribute lookup — monster-friendly) and `whenWinded` overrides (see Universal Modifiers). |
 | `effect` | Full. Supports `whenWinded` overrides (see Universal Modifiers). |
-| `trigger` | Schema + registration against `AbilityTriggerBus`. PC trigger actions in the Triggers list are always-on during combat once that character is present in the VTT and their summary panel loads or refreshes. Authored `match` config fires the blue `!` overlay when its event/filter matches; click to resolve manually. No structured `match` -> chat reminder fallback. |
+| `trigger` | Schema + registration against `AbilityTriggerBus`. PC trigger actions in the Triggers list are always-on once that character token is present in the active VTT scene; opening the character summary is not required. Authored `match` config fires the blue `!` overlay when its event/filter matches; click to resolve manually. No structured `match` -> chat reminder fallback. |
 | `persistent` | Schema + registration as a board-side persistent zone. Requires a preceding area `target` block so the zone has a footprint. Ticks at owner's `tickAt` (startOfTurn or endOfTurn): deducts upkeep from owner's heroic resource, applies effects to every creature inside the zone footprint. Auto-ends on combat end or when owner can't pay upkeep. **In-memory only** — page reload wipes zones (Pass 2 will add persistence). |
 
 ## Universal modifiers (apply to any actor — PC or monster)
@@ -199,14 +199,14 @@ Additional accepted events:
 
 | eventType | Payload / status |
 |---|---|
-| `damageDealt` | Same live payload and source as `damage`; useful for wording like "when damage is dealt." The damaged token is still `placementId`. |
+| `damageDealt` | Same live payload and source as `damage`; useful for wording like "when you deal damage." Predicates resolve `whose` from `sourceId`; the damaged token is still `placementId`/`targetId`. |
 | `staminaZero` | Fires when automated damage drops a target from above 0 stamina to 0 or lower. |
 | `markApplied` | Fires when automation applies or transfers a mark. Supports `markType` and `source` filters. |
 | `actionUsed` | Fires at the start of a normal ability automation run when the host exposes `fireTriggerEvent`. Payload: `{ actorId, actionId, actionName, actionKind, keywords }`. |
 
 ### Authored trigger `match` shape
 
-Trigger blocks may carry a structured `match` alongside the free-text `condition` label. The runner forwards it via the host's `registerTrigger` callback; the board converts it into a bus listener with a generated predicate.
+Trigger blocks may carry a structured `match` alongside the free-text `condition` label. The board auto-registers PC trigger actions from active-scene character sheets and converts each `match` into a bus listener with a generated predicate. The runner can still forward the same match via the host's `registerTrigger` callback as a fallback/debug path.
 
 ```json
 {
@@ -226,7 +226,7 @@ Trigger blocks may carry a structured `match` alongside the free-text `condition
 | `staminaChange` | `whose`, `direction` (`up`/`down`/`either`) |
 | `turnStart`, `turnEnd` | `whose` |
 | `move` | `whose`, `leavesAdjacency` bool, `entersAdjacency` bool |
-| `damageDealt` | same as `damage` |
+| `damageDealt` | same fields as `damage`; `whose` resolves against `sourceId` |
 | `staminaZero` | same as `staminaChange` |
 | `actionUsed` | `whose`, `actionKind`, `keywordsAny`; `lineOfEffectTo` is accepted by the schema but not evaluated yet |
 | `markApplied` | `whose`, `markType`, `source` |

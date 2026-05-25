@@ -858,6 +858,9 @@ export function mountBoardInteractions(store, routes = {}) {
   let pendingAutomationMove = null;
   let automationMoveOverlay = null;
   let characterSummaryCache = new Map();
+  let pendingActiveSceneTriggerRegistration = false;
+  const authoredTriggerRegistrationPromises = new Map();
+  const authoredTriggerTokenIds = new Set();
   let damageHealStatusTimeoutId = null;
   let healOverflowPopup = null;
   const completedCombatants = new Set();
@@ -2029,6 +2032,7 @@ export function mountBoardInteractions(store, routes = {}) {
     // Re-dispatch the panel selection summary for the currently-selected
     // token. If that token represents the updated character, the panel will
     // re-fetch and re-render with the new resource value.
+    scheduleActiveSceneTriggerRegistration();
     dispatchTokenSelectionSummary();
   });
   document.addEventListener('vtt:toggle-triggered-action', (event) => {
@@ -2299,6 +2303,27 @@ export function mountBoardInteractions(store, routes = {}) {
       if (!list) continue;
       const idx = list.indexOf(e);
       if (idx !== -1) list.splice(idx, 1);
+    }
+  }
+
+  function triggerUnregisterAuthoredByToken(tokenId) {
+    if (!tokenId) return;
+    const entries = triggerRegistry.byToken.get(tokenId) || [];
+    const keep = [];
+    for (const entry of entries) {
+      if (!entry?.authored) {
+        keep.push(entry);
+        continue;
+      }
+      const list = triggerRegistry.byEvent.get(entry.eventType);
+      if (!list) continue;
+      const idx = list.indexOf(entry);
+      if (idx !== -1) list.splice(idx, 1);
+    }
+    if (keep.length) {
+      triggerRegistry.byToken.set(tokenId, keep);
+    } else {
+      triggerRegistry.byToken.delete(tokenId);
     }
   }
 
@@ -3277,17 +3302,26 @@ export function mountBoardInteractions(store, routes = {}) {
     const whose = filter.whose || "any";
     return function predicate(payload) {
       if (!payload || typeof payload !== 'object') return false;
-      const payloadTokenId =
-        payload.placementId ||
-        payload.targetId ||
-        payload.actorId ||
-        payload.newTargetId ||
-        payload.tokenId ||
-        '';
+      const payloadTokenId = event === 'damageDealt'
+        ? (payload.sourceId || payload.casterId || payload.actorId || payload.tokenId || '')
+        : (
+          payload.placementId ||
+          payload.targetId ||
+          payload.actorId ||
+          payload.newTargetId ||
+          payload.tokenId ||
+          ''
+        );
       if (!whosePredicateMatches(whose, casterId, casterTeam, payloadTokenId, targetIds)) {
         return false;
       }
       if (event === 'damage' || event === 'damageDealt') {
+        if (event === 'damageDealt') {
+          const sourceTokenId = payload.sourceId || payload.casterId || payload.actorId || '';
+          if (!whosePredicateMatches(whose, casterId, casterTeam, sourceTokenId, targetIds)) {
+            return false;
+          }
+        }
         const amount = Number.parseInt(payload.amount, 10) || 0;
         const dt = String(payload.damageType || '').toLowerCase();
         if (filter.minAmount && amount < filter.minAmount) return false;
@@ -3338,6 +3372,126 @@ export function mountBoardInteractions(store, routes = {}) {
       }
       return true;
     };
+  }
+
+  function normalizeAuthoredAutomation(automation) {
+    if (window.AbilityAutomationSchema?.normalizeAutomation) {
+      return window.AbilityAutomationSchema.normalizeAutomation(automation);
+    }
+    return automation;
+  }
+
+  function hasAuthoredAutomation(automation) {
+    return Boolean(
+      automation &&
+        typeof automation === 'object' &&
+        Array.isArray(automation.cards) &&
+        automation.cards.length > 0
+    );
+  }
+
+  function getStableActionIdForBoard(action, categoryKey, index) {
+    const explicit = typeof action?.id === 'string' ? action.id.trim() : '';
+    if (explicit) return explicit;
+    const name = String(action?.name || 'ability')
+      .trim()
+      .toLowerCase()
+      .replace(/[^a-z0-9]+/g, '-')
+      .replace(/^-+|-+$/g, '')
+      .slice(0, 48) || 'ability';
+    return `${categoryKey || 'ability'}:${index}:${name}`;
+  }
+
+  function isPlayerCharacterPlacement(placement) {
+    const profileId = placement ? matchProfileByName(tokenLabel(placement)) : '';
+    return Boolean(profileId && PLAYER_CHARACTER_USER_IDS.includes(profileId));
+  }
+
+  function registerAuthoredTriggerBlock({ placementId, action, actionIndex, block }) {
+    const match = block?.match && typeof block.match === 'object' ? block.match : null;
+    if (!placementId || !match?.event) return false;
+    const casterTeam = getTeamForPlacementId(placementId);
+    const abilityId = action?._stableActionId || getStableActionIdForBoard(action, 'triggers', actionIndex);
+    const entry = {
+      tokenId: placementId,
+      eventType: match.event,
+      casterId: placementId,
+      casterTeam,
+      match,
+      targetIds: [],
+      abilityId,
+      abilityName: action?.name || 'Triggered Ability',
+      authored: true,
+      condition: block.condition || '',
+    };
+    entry.predicate = buildAuthoredTriggerPredicate(entry);
+    return Boolean(triggerRegister(entry));
+  }
+
+  async function registerAuthoredTriggersForPlacement(placementOrId) {
+    const placement = typeof placementOrId === 'string'
+      ? getPlacementFromStore(placementOrId)
+      : placementOrId;
+    const placementId = placement?.id || (typeof placementOrId === 'string' ? placementOrId : '');
+    if (!placementId || !isPlayerCharacterPlacement(placement)) {
+      return { registered: 0 };
+    }
+    if (authoredTriggerRegistrationPromises.has(placementId)) {
+      return authoredTriggerRegistrationPromises.get(placementId);
+    }
+    const promise = (async () => {
+      const sheet = await getAutomationSheetForPlacement(placementId);
+      const triggerActions = Array.isArray(sheet?.actions?.triggers) ? sheet.actions.triggers : [];
+      let registered = 0;
+      triggerUnregisterAuthoredByToken(placementId);
+      authoredTriggerTokenIds.delete(placementId);
+      triggerActions.forEach((action, actionIndex) => {
+        const automation = normalizeAuthoredAutomation(action?.automation);
+        if (!hasAuthoredAutomation(automation)) return;
+        const triggerBlocks = (automation.cards || []).filter((block) => block?.type === 'trigger' && block.match);
+        triggerBlocks.forEach((block) => {
+          if (registerAuthoredTriggerBlock({ placementId, action, actionIndex, block })) {
+            registered += 1;
+          }
+        });
+      });
+      if (registered > 0) {
+        authoredTriggerTokenIds.add(placementId);
+      }
+      return { registered };
+    })().catch((error) => {
+      console.warn('[VTT] Failed to register authored triggers for placement', placementId, error);
+      return { registered: 0, error };
+    }).finally(() => {
+      authoredTriggerRegistrationPromises.delete(placementId);
+    });
+    authoredTriggerRegistrationPromises.set(placementId, promise);
+    return promise;
+  }
+
+  async function registerAuthoredTriggersForActiveScene() {
+    const state = boardApi.getState?.() ?? {};
+    const placements = getActiveScenePlacements(state) || [];
+    const pcPlacements = placements.filter((placement) => placement?.id && isPlayerCharacterPlacement(placement));
+    const activePcIds = new Set(pcPlacements.map((placement) => placement.id));
+    for (const tokenId of [...authoredTriggerTokenIds]) {
+      if (!activePcIds.has(tokenId)) {
+        triggerUnregisterAuthoredByToken(tokenId);
+        authoredTriggerTokenIds.delete(tokenId);
+      }
+    }
+    await Promise.all(pcPlacements.map((placement) => registerAuthoredTriggersForPlacement(placement)));
+  }
+
+  function scheduleActiveSceneTriggerRegistration() {
+    if (pendingActiveSceneTriggerRegistration) return;
+    pendingActiveSceneTriggerRegistration = true;
+    window.setTimeout(() => {
+      pendingActiveSceneTriggerRegistration = false;
+      registerAuthoredTriggersForActiveScene().catch((error) => {
+        console.warn('[VTT] Failed to register authored triggers for active scene', error);
+      });
+    }, 0);
   }
 
   function handleAutomationRegisterTriggerRequest(event) {
@@ -5482,6 +5636,7 @@ export function mountBoardInteractions(store, routes = {}) {
       syncMapLevelsForState(state, activeSceneId);
       rebuildMinionSquadsFromPlacements();
       renderTokens(state, tokenLayer, viewState);
+      scheduleActiveSceneTriggerRegistration();
       renderFog(state);
       renderFogSelection();
       renderStairs(state);
@@ -5510,6 +5665,7 @@ export function mountBoardInteractions(store, routes = {}) {
   if (typeof boardApi.subscribe === 'function') {
     boardApi.subscribe(applyStateToBoard);
   }
+  scheduleActiveSceneTriggerRegistration();
 
   if (grid && (!boardApi || typeof boardApi.updateState !== 'function')) {
     const toggleGridButton = document.querySelector('[data-action="toggle-grid"]');
@@ -5706,6 +5862,13 @@ export function mountBoardInteractions(store, routes = {}) {
         triggeredActionReady: placement.triggeredActionReady !== false,
         hasReadyTrigger: Boolean(placement.hasReadyTrigger),
         readyTriggerAbilities: Array.isArray(placement.readyTriggerAbilities) ? placement.readyTriggerAbilities.slice() : [],
+        readyTriggerSources: placement.readyTriggerSources && typeof placement.readyTriggerSources === 'object'
+          ? { ...placement.readyTriggerSources }
+          : {},
+        readyTriggerPayloads: placement.readyTriggerPayloads && typeof placement.readyTriggerPayloads === 'object'
+          ? JSON.parse(JSON.stringify(placement.readyTriggerPayloads))
+          : {},
+        triggerSetAtPhase: Number.isFinite(placement.triggerSetAtPhase) ? placement.triggerSetAtPhase : null,
       },
     };
   }
@@ -14376,6 +14539,10 @@ export function mountBoardInteractions(store, routes = {}) {
     const beforeStamina = Number.isFinite(beforePlacement?.currentStamina)
       ? beforePlacement.currentStamina
       : null;
+    await Promise.all([
+      registerAuthoredTriggersForPlacement(payload.placementId),
+      payload.sourceId ? registerAuthoredTriggersForPlacement(payload.sourceId) : Promise.resolve({ registered: 0 }),
+    ]);
     const adjustment = await getAutomationDamageAdjustment(payload.placementId, payload.damageType || '');
     const adjustedAmount = Math.max(0, amount + adjustment.vulnerability - adjustment.immunity);
     const result = adjustedAmount > 0

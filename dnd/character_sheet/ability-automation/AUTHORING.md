@@ -258,7 +258,7 @@ Supports an optional `whenWinded` sub-object (same as `powerRoll`). On `effect` 
 
 A reactive ability listener. Carries a free-text `condition` label plus an optional structured `match` config.
 
-For PC triggered actions, this is **always-on** during combat once the character is present in the VTT and their character summary has loaded. The player should not click the ability to start listening. The VTT auto-registers structured trigger blocks from abilities in the character sheet's Triggers list. When the matching event later fires, the caster's token lights up with the blue `!` overlay and the player resolves the ability manually (same flow as built-in opportunity attacks). Without `match`, the trigger cannot be passively detected and falls back to a chat reminder when clicked.
+For PC triggered actions, this is **always-on** once the character token is present in the active VTT scene. The player should not click the ability to start listening, and opening the character summary is not required. The VTT auto-registers structured trigger blocks from abilities in the character sheet's Triggers list. When the matching event later fires, the caster's token lights up with the blue `!` overlay and the player resolves the ability manually (same flow as built-in opportunity attacks). Without `match`, the trigger cannot be passively detected and falls back to a chat reminder when clicked.
 
 ```json
 {
@@ -281,7 +281,7 @@ For PC triggered actions, this is **always-on** during combat once the character
 | `turnStart` | A token becomes the active combatant | `whose` |
 | `turnEnd` | The active combatant's turn ends | `whose` |
 | `move` | A token moves via normal player movement | `whose`, `leavesAdjacency`, `entersAdjacency` |
-| `damageDealt` | Alias/event wording for automated damage | same as `damage` |
+| `damageDealt` | Automated damage dealt by the caster | same as `damage`; predicates resolve `whose` from `sourceId` |
 | `staminaZero` | Automated damage drops a token from above 0 stamina to 0 or lower | same as `staminaChange` |
 | `actionUsed` | A normal ability automation starts | `whose`, `actionKind`, `keywordsAny` |
 | `markApplied` | Automation applies/transfers a mark | `whose`, `markType`, `source` |
@@ -302,7 +302,7 @@ Triggers stay registered until the encounter ends, the caster leaves the scene, 
 
 Triggered abilities use an always-listening/resolve flow when the first card is a structured `trigger` with `match`:
 
-1. In the VTT, structured trigger actions in the character's Triggers list are registered automatically when that character's summary panel loads or refreshes. Do not write rules text that asks the player to "arm", "activate", "set", or "start watching" normal triggered actions.
+1. In the VTT, structured trigger actions in the character's Triggers list are registered automatically for PC tokens in the active scene. Do not write rules text that asks the player to "arm", "activate", "set", or "start watching" normal triggered actions.
 2. When the matching event later fires, the caster's token lights up with the blue `!` overlay. Clicking the ready trigger resolves the same automation with the captured event payload; the runner skips the `trigger` card and continues through the later cards.
 
 Put trigger-resolution effects such as `halveTriggeringDamage`, teleport, optional `spend` riders, and reminders in an `effect` card after the `trigger` card. Do not rely on `trigger.effects` for effects that should run when the player clicks the ready trigger; the trigger card describes the passive listener.

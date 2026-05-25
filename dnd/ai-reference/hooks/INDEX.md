@@ -18,7 +18,7 @@ Check `REGISTRY.md` before authoring against a hook. If it is not listed there, 
 
 ## Trigger Bus
 
-`window.AbilityTriggerBus` lives in `board-interactions.js`. Authored trigger blocks use `match.event` and `match.filter`, then register through the runner's `registerTrigger` context hook as passive listeners. PC triggered actions are always-on during combat once the character is present in the VTT and their character summary has loaded; the player does not click the ability to start listening. Triggered abilities light the ready marker and are resolved manually.
+`window.AbilityTriggerBus` lives in `board-interactions.js`. Authored trigger blocks use `match.event` and `match.filter`; PC trigger actions in the active scene are registered by the board as passive listeners. The runner's `registerTrigger` context hook still exists as a fallback/debug path. PC triggered actions are always-on once the character token is present in the active VTT scene; the player does not click the ability or open the character summary to start listening. Triggered abilities light the ready marker and are resolved manually.
 
 Known current limitation: manual/non-automation damage does not fire the authored damage trigger events. Use the registry for the latest limitation list.
 

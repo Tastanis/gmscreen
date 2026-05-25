@@ -596,6 +596,9 @@ export function mountCharacterSummaryPanel(routes = {}, userContext = {}) {
         if (activeToken && typeof activeToken === 'object') {
           activeToken.hasReadyTrigger = false;
           activeToken.readyTriggerAbilities = [];
+          activeToken.readyTriggerSources = {};
+          activeToken.readyTriggerPayloads = {};
+          activeToken.triggerSetAtPhase = null;
           renderAbilityTray(abilityTray, activeSheet, { activeCategory: activeAbilityCategory, activeToken });
         }
         document.dispatchEvent(new CustomEvent('vtt:clear-trigger-ready', { detail: { placementId } }));
@@ -631,6 +634,18 @@ export function mountCharacterSummaryPanel(routes = {}, userContext = {}) {
           ? (triggerSnapshot.payload && typeof triggerSnapshot.payload === 'object' ? triggerSnapshot.payload : triggerSnapshot)
           : null;
         if (clearsTrigger && sourcePlacementId) {
+          if (activeToken && typeof activeToken === 'object') {
+            activeToken.readyTriggerAbilities = (Array.isArray(activeToken.readyTriggerAbilities) ? activeToken.readyTriggerAbilities : [])
+              .filter((id) => id !== clearsTrigger);
+            if (activeToken.readyTriggerSources && typeof activeToken.readyTriggerSources === 'object') {
+              delete activeToken.readyTriggerSources[clearsTrigger];
+            }
+            if (activeToken.readyTriggerPayloads && typeof activeToken.readyTriggerPayloads === 'object') {
+              delete activeToken.readyTriggerPayloads[clearsTrigger];
+            }
+            activeToken.hasReadyTrigger = activeToken.readyTriggerAbilities.length > 0;
+            if (!activeToken.hasReadyTrigger) activeToken.triggerSetAtPhase = null;
+          }
           document.dispatchEvent(new CustomEvent('vtt:clear-trigger-ready', {
             detail: { placementId: sourcePlacementId, abilityId: clearsTrigger },
           }));
