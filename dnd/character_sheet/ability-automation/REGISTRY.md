@@ -48,14 +48,15 @@ The monster ability tray + `window.MonsterAbilityRunner.start()` add the followi
 | `forcedMovement` (`slide`) | Full | Any cell within Chebyshev distance, no source-distance constraint |
 | `forcedMovement` (`vertical*`) | Partial | Falls through to horizontal push/pull/slide. Z-axis not modeled |
 | `potency` | Full | Calls `checkPotency`, runs `onFail` effects on failed targets |
-| `spend` | Full | Prompts user contextually, runs nested effects on accept. **Monster behavior:** spending `heroic` or `recovery` resources is skipped with a chat note — monsters have no such pools. |
+| `spend` | Full | PC runner checks and spends the caster's heroic resource before prompting/running nested effects. Fixed spends skip the prompt if the resource is missing or insufficient. `maxAmount` supports variable spends. **Monster behavior:** spending `heroic` or `recovery` resources is skipped with a chat note — monsters have no such pools. |
 | `heal` | Full | Flat `amount` heals via board heal path (capped at max). `recoveries` reads target's recovery value from their sheet and heals that × N; recoveries counter on the sheet is NOT auto-decremented (chat reminder so the player updates it). **Monster behavior:** `recoveries`-based heals are skipped with a chat note; flat `amount` heals work fine. |
 | `temporaryStamina` | Full | Applies via board heal path with overage allowed (over-max shows as temp) |
-| `teleport` | Full | Reuses the slide-shaped destination picker; legal-cell highlight covers any cell within Chebyshev distance. No stability or size penalty. Clicking an occupied cell still routes through the slide-style collision path — pick an empty cell to follow the rules. |
+| `teleport` | Full | Reuses the slide-shaped destination picker; legal-cell highlight covers any cell within Chebyshev distance. Supports embedded `spend` to increase distance before the picker opens. No stability or size penalty. Clicking an occupied cell still routes through the slide-style collision path — pick an empty cell to follow the rules. |
 | `swap` | Full | Atomic transpose of caster ↔ target placements. Best-effort footprint check; non-equal sizes allowed (GM corrects manually). |
 | `freeStrike` | Full | "By" entity defaults to the most recent target group's first member (the creature being told to free-strike). PCs roll `2d10 + max(M, A)`. Monsters use their stat-block `free_strike` value when present, otherwise fall back to M/A attributes. Prompts for the "against" target via the standard picker, with the by-entity as source, and applies damage through the normal automation damage path. |
 | `cascade` | Chat reminder | Posts message; manual. Cascade requires stable cross-ability IDs and an "invoke another ability" entry point that doesn't exist yet — Phase D. |
 | `resourceGain` | Full | Mutates the caster's own `hero.resource.value` on their sheet. If the JSON names a specific resource and the caster's resource bar has a different title, falls back to a chat reminder. Floors at 0. |
+| `surgeGain` | Full | Mutates `hero.surges` on each PC target's character sheet via VTT surge sync. Surges are separate from heroic resources. Floors at 0. |
 | `ifKeyword` | Full | Branches based on ability's `keywords`. `then` runs on match, `else` on miss |
 | `ifStrained` | Full | Branches on whether the caster's heroic resource value is below 0. `then` runs when strained, `else` runs when not. |
 | `ifMark` | Full | Branches on Judgment/mark predicates such as `targetJudgedBySelf`, `targetJudgedByAny`, and `actorIsMyJudgedTarget`. |
@@ -156,6 +157,8 @@ These are called by `runner.js` and dispatched as `vtt:automation-*` CustomEvent
 | `getStrongestAttribute()` | none | `{ attribute, bonus }` |
 | `postChat(entry)` | `{ message, type, payload }` | bool |
 | `spendResource(action)` | the action object | `{ canceled? }` or any non-canceled |
+| `spendHeroicResource(payload)` | `{ amount, maxAmount?, resource, abilityName, prompt }` | `{ spent, resource, current }`, `{ canceled }`, or `{ skipped, reason }` |
+| `applySurgeGain(payload)` | `{ placementId, amount, abilityName }` | `{ applied, current, name }` or `{ skipped, reason }` |
 | `registerTrigger(entry)` | `{ casterId, abilityId, abilityName, match: { event, filter }, effects, targetGroup, targetIds, condition, note }` | `{ registered: bool, abilityId, eventType }` |
 | `applyResourceGain(payload)` | `{ amount, resource, abilityName }` | `{ applied, delta, resource, current }` or `{ skipped, reason }` |
 | `applyTeleport(payload)` | `{ placementId, distance, abilityName, sourcePlacement }` | `{ name, movedDistance }` or `{ skipped, reason }` |
@@ -252,6 +255,8 @@ Auto-detected on every normal movement during combat:
 - Cleared at the start of each combat round via `resetTriggeredActionsForActiveScene`
 
 The watcher token gets the blue pulsing `!` overlay on the board and the `!` badge on their TRIGGER ability tab when they're selected. Ready authored triggers are matched back to the specific triggered ability id when possible; clicking that row clears the ready flag and passes the firing payload into the runner. The built-in opportunity-attack sentinel injects a free strike row when a matching PC free strike exists.
+
+When a ready PC trigger resolves and the action label is non-free triggered, the runner consumes the token's triggered action for the round. While `triggeredActionReady === false` or `triggeredActionUsedThisRound === true`, authored non-free trigger predicates do not mark ready. Free triggered actions are exempt.
 
 ## Ability keywords
 

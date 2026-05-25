@@ -311,6 +311,8 @@ Clicking a structured trigger ability directly with no captured trigger payload 
 
 Triggered abilities do not auto-resolve. The player or GM clicks the ready trigger and resolves the ability manually with the captured event payload.
 
+Resolving a non-free triggered action consumes the character's triggered action for the round (`triggeredActionReady = false`), which prevents other non-free triggered actions from becoming ready until the next round reset. Free triggered actions do not consume that round-limited trigger.
+
 ### `persistent`
 
 A zone that lingers across rounds, ticks at the owner's turn boundary, and applies effects to creatures inside it. Requires a **preceding area `target` block** so the zone has a footprint — without it, falls back to a chat-only reminder.
@@ -440,6 +442,22 @@ Applies via the same heal path but allows the new total to exceed max stamina (t
 
 Opens a destination picker showing every cell within `distance` (Chebyshev). Click an empty cell to land there. No stability reduction, no size penalty. Clicking an occupied cell will route through the slide-style collision path (technically wrong for teleport — pick an empty cell).
 
+Optional heroic-resource spend can increase the picker distance before the picker opens:
+
+```json
+{
+  "kind": "teleport",
+  "distance": 4,
+  "spend": {
+    "resource": "Insight",
+    "amount": 1,
+    "maxAmount": "available",
+    "perAmount": 1,
+    "prompt": "Spend Insight to teleport 1 additional square per Insight spent?"
+  }
+}
+```
+
 ### `swap`
 
 ```json
@@ -455,6 +473,14 @@ Caster and target atomically transpose their (column, row). Best-effort footprin
 ```
 
 Modifies the caster's heroic resource. Negative `amount` = loss. If the named `resource` doesn't match the caster's resource bar title, posts a chat reminder for manual adjust. Floors at 0.
+
+### `surgeGain`
+
+```json
+{ "kind": "surgeGain", "amount": 1 }
+```
+
+Adds or removes surges from each target's character sheet. Surges are separate from heroic resources such as Insight, Wrath, Focus, Drama, or Clarity. Negative `amount` removes surges and floors at 0.
 
 ### `freeStrike`
 
@@ -527,6 +553,8 @@ Optional resource spend that, if accepted by the user, triggers extra effects.
 | `effects` | list of effects to apply on accept |
 
 Runtime prompts the user contextually: "Spend N <resource> for: <effects>?".
+
+For PC abilities, nested `spend` checks the caster's current heroic resource. If the resource doesn't match or the caster has fewer than `amount`, the prompt is skipped and nested effects do not run. `maxAmount` can be a number or `"available"` to let the player choose how much to spend.
 
 ### `ifKeyword` (rider)
 

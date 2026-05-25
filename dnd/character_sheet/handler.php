@@ -330,7 +330,7 @@ if ($requestMethod !== 'POST' && $requestMethod !== 'GET') {
 $requestData = $requestMethod === 'POST' ? $_POST : $_GET;
 $action = isset($requestData['action']) ? $requestData['action'] : '';
 
-if (!in_array($action, array('summary', 'load', 'sync-stamina', 'sync-token-traits', 'sync-hero-tokens', 'fetch-victories'), true) && $requestMethod !== 'POST') {
+if (!in_array($action, array('summary', 'load', 'sync-stamina', 'sync-surges', 'sync-token-traits', 'sync-hero-tokens', 'fetch-victories'), true) && $requestMethod !== 'POST') {
     sendJsonResponse(array('success' => false, 'error' => 'Invalid request method'));
 }
 
@@ -350,6 +350,12 @@ $allowVttStaminaSync =
     && isset($requestData['source'])
     && $requestData['source'] === 'vtt'
     && $currentUser !== '';
+$allowVttSurgeSync =
+    $action === 'sync-surges'
+    && $requestMethod === 'POST'
+    && isset($requestData['source'])
+    && $requestData['source'] === 'vtt'
+    && $currentUser !== '';
 $allowVttTraitRead =
     $action === 'sync-token-traits'
     && $requestMethod === 'GET'
@@ -360,7 +366,7 @@ $allowPublicSummaryRead =
     && $requestMethod === 'GET'
     && $currentUser !== '';
 
-if (!$is_gm && $requestedCharacter !== strtolower($currentUser) && !$allowVttStaminaSync && !$allowVttTraitRead && !$allowPublicSummaryRead) {
+if (!$is_gm && $requestedCharacter !== strtolower($currentUser) && !$allowVttStaminaSync && !$allowVttSurgeSync && !$allowVttTraitRead && !$allowPublicSummaryRead) {
     sendJsonResponse(array('success' => false, 'error' => 'Permission denied'));
 }
 
@@ -455,6 +461,34 @@ switch ($action) {
         );
 
         sendJsonResponse($response);
+        break;
+
+    case 'sync-surges':
+        $allSheets = loadCharacterSheetData($dataDir, $dataFile, $characters);
+        $sheet = $allSheets[$requestedCharacter];
+
+        if ($requestMethod === 'POST') {
+            $delta = isset($requestData['delta']) ? (int)$requestData['delta'] : 0;
+            $currentSurges = isset($sheet['hero']['surges']) && $sheet['hero']['surges'] !== ''
+                ? (int)$sheet['hero']['surges']
+                : 0;
+            if (!isset($sheet['hero']) || !is_array($sheet['hero'])) {
+                $sheet['hero'] = array();
+            }
+            $sheet['hero']['surges'] = max(0, $currentSurges + $delta);
+            $sheet['hero']['surgesUsed'] = 0;
+            $allSheets[$requestedCharacter] = $sheet;
+
+            if (!saveCharacterSheetData($dataDir, $dataFile, $allSheets)) {
+                sendJsonResponse(array('success' => false, 'error' => 'Failed to save surges'));
+            }
+        }
+
+        sendJsonResponse(array(
+            'success' => true,
+            'name' => isset($sheet['hero']['name']) && $sheet['hero']['name'] !== '' ? $sheet['hero']['name'] : $requestedCharacter,
+            'surges' => isset($sheet['hero']['surges']) ? (int)$sheet['hero']['surges'] : 0,
+        ));
         break;
 
     case 'sync-hero-tokens':

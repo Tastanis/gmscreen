@@ -18,6 +18,7 @@
     "teleport",
     "swap",
     "resourceGain",
+    "surgeGain",
     "freeStrike",
     "cascade",
     "note",
@@ -381,6 +382,11 @@
         const amount = effect.amount || 0;
         const sign = amount >= 0 ? "+" : "";
         return `${sign}${amount} ${effect.resource || "resource"}`;
+      }
+      case "surgeGain": {
+        const amount = effect.amount || 0;
+        const sign = amount >= 0 ? "+" : "";
+        return `${sign}${amount} surge${Math.abs(amount) === 1 ? "" : "s"}`;
       }
       case "freeStrike":
         return effect.text ? `free strike — ${effect.text}` : "free strike";

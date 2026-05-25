@@ -40,4 +40,6 @@ Before handing back JSON, verify:
 - Triggered action JSON describes an always-on listener. Do not add wording or mechanics that require the player to click the ability to start watching for the trigger.
 - PC triggered actions in the Triggers list are registered by the VTT for active-scene PC tokens. Opening the character sheet/panel is not part of the rules or JSON contract.
 - For self-only triggered resolution effects, use `target: "self"` on the `effect` card instead of adding a target card that makes the player pick themselves.
+- Use `surgeGain` for "gain/give surges." Surges are not heroic resources.
+- Use embedded `teleport.spend` for text like "spend 1+ Insight to teleport 1 additional square per Insight spent" so the picker range expands before the player chooses a destination.
 - Any touched docs are updated according to `../UPDATE-GUIDE.md`.

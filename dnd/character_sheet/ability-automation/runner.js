@@ -951,6 +951,8 @@
         return reminderEffect(state, effect, targets, "Cascade");
       case "resourceGain":
         return applyResourceGainEffect(state, effect, targets, ctx);
+      case "surgeGain":
+        return applySurgeGainEffect(state, effect, targets, ctx);
       case "note":
         return noteEffect(state, effect);
       case "other":
@@ -1444,17 +1446,44 @@
   async function applySpendEffect(state, effect, targets, ctx) {
     const cost = `${effect.amount || 1} ${effect.resource || "resource"}`;
     const inner = (effect.effects || []).map(P.describeEffect).filter(Boolean).join("; ");
-    const proceed = global.confirm(
-      `Spend ${cost} for ${state.action.name || "this ability"}?\n${inner || "(no listed effect)"}`
-    );
-    if (!proceed) {
+    const spendResult = typeof state.context.spendHeroicResource === "function"
+      ? await state.context.spendHeroicResource({
+        amount: effect.amount || 1,
+        maxAmount: effect.maxAmount || 0,
+        resource: effect.resource || "",
+        abilityName: state.action.name || "Ability",
+        prompt: effect.prompt || `Spend ${cost} for ${state.action.name || "this ability"}?\n${inner || "(no listed effect)"}`,
+      })
+      : null;
+    if (spendResult?.skipped) {
+      if (spendResult.reason !== "insufficient") {
+        await postChat(state.context, {
+          message: `${state.heroName} - ${state.action.name || "Ability"}: ${P.describeEffect(effect)} — apply manually.`,
+        });
+      }
+      return;
+    }
+    if (spendResult?.canceled) {
       await postChat(state.context, {
         message: `${state.heroName} - ${state.action.name || "Ability"}: declined to spend ${cost}.`,
       });
       return;
     }
+    if (!spendResult) {
+      const proceed = global.confirm(
+        `Spend ${cost} for ${state.action.name || "this ability"}?\n${inner || "(no listed effect)"}`
+      );
+      if (!proceed) {
+        await postChat(state.context, {
+          message: `${state.heroName} - ${state.action.name || "Ability"}: declined to spend ${cost}.`,
+        });
+        return;
+      }
+    }
+    const spent = spendResult?.spent || effect.amount || 1;
+    const resource = spendResult?.resource || effect.resource || "resource";
     await postChat(state.context, {
-      message: `${state.heroName} - ${state.action.name || "Ability"}: spent ${cost}.`,
+      message: `${state.heroName} - ${state.action.name || "Ability"}: spent ${spent} ${resource}.`,
     });
     await applyEffects(state, effect.effects || [], null, ctx);
   }
@@ -1488,9 +1517,59 @@
     });
   }
 
+  async function applySurgeGainEffect(state, effect, targets, _ctx) {
+    const amount = asInt(effect.amount, 0);
+    if (!amount) return;
+    if (!targets.length) {
+      await postChat(state.context, {
+        message: `${state.heroName} - ${state.action.name || "Ability"}: ${P.describeEffect(effect)} (no target).`,
+      });
+      return;
+    }
+    if (typeof state.context.applySurgeGain !== "function") {
+      await reminderEffect(state, effect, targets, "Surge");
+      return;
+    }
+    const lines = [];
+    for (const target of targets) {
+      if (!target?.id) continue;
+      const result = await state.context.applySurgeGain({
+        placementId: target.id,
+        amount,
+        abilityName: state.action.name || "Ability",
+      });
+      if (result?.applied !== undefined) {
+        const sign = result.applied >= 0 ? "+" : "";
+        lines.push(`${result.name || target.name || "Target"}: ${sign}${result.applied} surge${Math.abs(result.applied) === 1 ? "" : "s"} (now ${result.current}).`);
+      } else {
+        lines.push(`${target.name || "Target"}: adjust ${amount} surge${Math.abs(amount) === 1 ? "" : "s"} manually.`);
+      }
+    }
+    if (lines.length) {
+      await postChat(state.context, {
+        message: `${state.heroName} - ${state.action.name || "Ability"}:\n${lines.join("\n")}`,
+      });
+    }
+  }
+
   async function applyTeleportEffect(state, effect, targets, _ctx) {
     if (!targets.length) return;
-    const distance = asInt(effect.distance, 0);
+    let distance = asInt(effect.distance, 0);
+    if (effect.spend && typeof state.context.spendHeroicResource === "function") {
+      const spendResult = await state.context.spendHeroicResource({
+        amount: effect.spend.amount || 1,
+        maxAmount: effect.spend.maxAmount || "available",
+        resource: effect.spend.resource || "",
+        abilityName: state.action.name || "Ability",
+        prompt: effect.spend.prompt || `Spend ${effect.spend.resource || "resource"} to teleport farther?`,
+      });
+      if (spendResult?.spent) {
+        distance += spendResult.spent * (effect.spend.perAmount || 1);
+        await postChat(state.context, {
+          message: `${state.heroName} - ${state.action.name || "Ability"}: spent ${spendResult.spent} ${spendResult.resource || effect.spend.resource || "resource"} to increase teleport to ${distance}.`,
+        });
+      }
+    }
     if (!distance) {
       await postChat(state.context, {
         message: `${state.heroName} - ${state.action.name || "Ability"}: teleport 0 (skipped).`,
@@ -1635,6 +1714,11 @@
     if (action && Array.isArray(action.keywords) && action.keywords.length) return action.keywords;
     if (action && Array.isArray(action.tags) && action.tags.length) return action.tags;
     return [];
+  }
+
+  function isNonFreeTriggeredAction(action) {
+    const label = String(action?.actionLabel || action?.type || action?.kind || "").toLowerCase();
+    return label.includes("triggered") && !label.includes("free");
   }
 
   // ---------- feature modifier application (pre-roll) ----------
@@ -1879,6 +1963,18 @@
             keywords: getAbilityKeywords(state),
           },
         });
+      }
+      if (isResolvingReadyTrigger && isNonFreeTriggeredAction(state.action) && typeof state.context.consumeTriggeredAction === "function") {
+        const consumeResult = await state.context.consumeTriggeredAction({
+          placementId: state.sourcePlacement?.id || "",
+          abilityName: state.action.name || "Ability",
+        });
+        if (consumeResult?.blocked) {
+          await postChat(state.context, {
+            message: `${state.heroName} - ${state.action.name || "Ability"}: triggered action already used this round.`,
+          });
+          return;
+        }
       }
       for (const block of blocks) {
         if (state.aborted) break;

@@ -18,7 +18,7 @@
 // orthogonal — multiple targets, multiple effects, etc. are all allowed.
 //
 // Effect kinds: damage, heal, temporaryStamina, condition, forcedMovement,
-// teleport, swap, resourceGain, freeStrike, cascade, note, potency, spend, other.
+// teleport, swap, resourceGain, surgeGain, freeStrike, cascade, note, potency, spend, other.
 //
 // Lenient by design: unknown fields are kept under `_extra` so the inspector can
 // surface them; missing fields default; warnings are collected but never block save.
@@ -188,8 +188,11 @@
         return effect;
       }
       case "teleport": {
-        const known = new Set(["kind", "distance"]);
+        const known = new Set(["kind", "distance", "spend"]);
         const effect = { kind: "teleport", distance: asNonNegInt(input.distance, 0) };
+        if (input.spend && typeof input.spend === "object") {
+          effect.spend = normalizeSpendConfig(input.spend, warnings, `${path}.spend`);
+        }
         const extras = pickExtras(input, known);
         if (extras) effect._extra = extras;
         return effect;
@@ -209,6 +212,17 @@
           amount: asInt(input.amount, 0),
         };
         if (!effect.resource) warnings.push(`${path}: resourceGain missing resource name.`);
+        const extras = pickExtras(input, known);
+        if (extras) effect._extra = extras;
+        return effect;
+      }
+      case "surgeGain": {
+        const known = new Set(["kind", "amount"]);
+        const effect = {
+          kind: "surgeGain",
+          amount: asInt(input.amount, 0),
+        };
+        if (!effect.amount) warnings.push(`${path}: surgeGain amount is 0.`);
         const extras = pickExtras(input, known);
         if (extras) effect._extra = extras;
         return effect;
@@ -260,12 +274,14 @@
         return effect;
       }
       case "spend": {
-        const known = new Set(["kind", "resource", "amount", "timing", "effects"]);
+        const known = new Set(["kind", "resource", "amount", "maxAmount", "timing", "effects", "prompt"]);
         const effect = {
           kind: "spend",
           resource: asTrimmedString(input.resource),
           amount: asPosInt(input.amount, 1),
+          maxAmount: normalizeSpendMaxAmount(input.maxAmount),
           timing: pickKnown(input.timing, P.SPEND_TIMINGS, "postResult"),
+          prompt: asTrimmedString(input.prompt),
           effects: normalizeEffectList(input.effects || [], warnings, `${path}.effects`),
         };
         if (!effect.resource) warnings.push(`${path}: spend missing resource name.`);
@@ -414,6 +430,25 @@
       default:
         return null;
     }
+  }
+
+  function normalizeSpendMaxAmount(value) {
+    const text = asTrimmedString(value).toLowerCase();
+    if (text === "available") return "available";
+    const parsed = asPosInt(value, 0);
+    return parsed > 0 ? parsed : 0;
+  }
+
+  function normalizeSpendConfig(input, warnings, path) {
+    const config = {
+      resource: asTrimmedString(input.resource),
+      amount: asPosInt(input.amount ?? input.minAmount, 1),
+      maxAmount: normalizeSpendMaxAmount(input.maxAmount),
+      perAmount: asPosInt(input.perAmount, 1),
+      prompt: asTrimmedString(input.prompt),
+    };
+    if (!config.resource) warnings.push(`${path}: spend missing resource name.`);
+    return config;
   }
 
   // ---------- blocks ----------

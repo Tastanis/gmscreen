@@ -308,6 +308,8 @@ export function mountCharacterSummaryPanel(routes = {}, userContext = {}) {
           casterId: activeToken.id,
           abilityId,
           abilityName: action.name || 'Triggered Ability',
+          actionLabel: action.actionLabel || '',
+          freeTriggered: isFreeTriggeredActionLabel(action.actionLabel || ''),
           match: block.match,
           effects: block.effects || [],
           targetGroup: block.target || '',
@@ -1853,6 +1855,11 @@ function getStableActionId(action, categoryKey, index) {
   return `${categoryKey || 'ability'}:${index}:${name}`;
 }
 
+function isFreeTriggeredActionLabel(label) {
+  const text = String(label || '').toLowerCase();
+  return text.includes('triggered') && text.includes('free');
+}
+
 function normalizeAutomation(automation) {
   if (window.AbilityAutomationSchema?.normalizeAutomation) {
     return window.AbilityAutomationSchema.normalizeAutomation(automation);
@@ -1934,6 +1941,7 @@ function startAbilityAutomation(sheet, action, categoryKey, sourceToken = null, 
     forceMove: requestAutomationForceMove,
     registerTrigger: requestAutomationRegisterTrigger,
     applyResourceGain: (payload) => applyAbilityResourceGain(sheet, payload, options),
+    applySurgeGain: requestAutomationSurgeGain,
     applyTeleport: requestAutomationTeleport,
     applySwap: requestAutomationSwap,
     runFreeStrike: requestAutomationFreeStrike,
@@ -1945,7 +1953,9 @@ function startAbilityAutomation(sheet, action, categoryKey, sourceToken = null, 
     fireTriggerEvent: requestAutomationFireTriggerEvent,
     checkScopedFlag: requestAutomationCheckScopedFlag,
     setScopedFlag: requestAutomationSetScopedFlag,
+    spendHeroicResource: (payload) => spendHeroicResource(sheet, payload, options),
     spendResource: (ability) => spendAbilityResource(sheet, ability, options),
+    consumeTriggeredAction: requestAutomationConsumeTriggeredAction,
   });
 }
 
@@ -2230,6 +2240,34 @@ function requestAutomationSetScopedFlag(payload) {
   });
 }
 
+function requestAutomationSurgeGain(payload) {
+  return new Promise((resolve, reject) => {
+    document.dispatchEvent(
+      new CustomEvent('vtt:automation-apply-surge', {
+        detail: {
+          payload: clonePlain(payload || {}),
+          resolve,
+          reject,
+        },
+      })
+    );
+  });
+}
+
+function requestAutomationConsumeTriggeredAction(payload) {
+  return new Promise((resolve, reject) => {
+    document.dispatchEvent(
+      new CustomEvent('vtt:automation-consume-triggered-action', {
+        detail: {
+          payload: clonePlain(payload || {}),
+          resolve,
+          reject,
+        },
+      })
+    );
+  });
+}
+
 // resourceGain modifies the caster's heroic resource directly on their sheet.
 // Mirrors spendAbilityResource but allows positive or negative amounts and
 // doesn't enforce a per-ability cost match.
@@ -2263,6 +2301,50 @@ async function applyAbilityResourceGain(sheet, payload = {}, options = {}) {
     }));
   }
   return { applied: amount, delta: next - current, resource: title, current: next };
+}
+
+async function spendHeroicResource(sheet, payload = {}, options = {}) {
+  const minAmount = Math.max(1, Number.parseInt(payload?.amount ?? 1, 10) || 1);
+  if (!sheet) return { skipped: true, reason: 'missing-sheet' };
+  const hero = sheet?.hero && typeof sheet.hero === 'object' ? sheet.hero : {};
+  const resource = hero.resource && typeof hero.resource === 'object' ? hero.resource : {};
+  const title = resource.title || sheet?.sidebar?.resource?.title || 'Resource';
+  const askedName = String(payload?.resource || '').trim().toLowerCase();
+  if (askedName && askedName !== title.toLowerCase()) {
+    return { skipped: true, reason: 'resource-mismatch', resource: title };
+  }
+  const current = Number.parseInt(resource.value ?? 0, 10) || 0;
+  if (current < minAmount) {
+    return { skipped: true, reason: 'insufficient', resource: title, current, required: minAmount };
+  }
+  const maxRaw = payload?.maxAmount;
+  const requestedMax = String(maxRaw || '').trim().toLowerCase() === 'available'
+    ? current
+    : Math.max(0, Number.parseInt(maxRaw ?? 0, 10) || 0);
+  const maxAmount = Math.max(minAmount, Math.min(current, requestedMax || minAmount));
+  const promptText = String(payload?.prompt || `Spend ${minAmount} ${title}?`).trim();
+  let spendAmount = minAmount;
+  if (maxAmount > minAmount) {
+    const answer = window.prompt(`${promptText}\nEnter ${minAmount}-${maxAmount}, or leave blank to skip.`, String(minAmount));
+    if (answer === null || String(answer).trim() === '') return { canceled: true, resource: title, current };
+    const parsed = Number.parseInt(answer, 10);
+    if (!Number.isFinite(parsed) || parsed < minAmount) return { canceled: true, resource: title, current };
+    spendAmount = Math.min(maxAmount, parsed);
+  } else if (!window.confirm(promptText)) {
+    return { canceled: true, resource: title, current };
+  }
+  const floor = resourceFloor(hero, resource);
+  const next = Math.max(floor, current - spendAmount);
+  resource.value = next;
+  hero.resource = resource;
+  if (sheet) sheet.hero = hero;
+  await saveCharacterSummarySheet(sheet, options);
+  if (typeof document !== 'undefined' && options?.characterId) {
+    document.dispatchEvent(new CustomEvent('vtt:character-sheet-updated', {
+      detail: { characterId: options.characterId, change: 'resource' },
+    }));
+  }
+  return { spent: current - next, resource: title, current: next };
 }
 
 async function spendAbilityResource(sheet, ability, options = {}) {

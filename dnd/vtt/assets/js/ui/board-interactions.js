@@ -1992,6 +1992,7 @@ export function mountBoardInteractions(store, routes = {}) {
   document.addEventListener('vtt:automation-cancel-area', () => cancelPendingAutomationArea('Area targeting skipped.'));
   document.addEventListener('vtt:automation-apply-damage', handleAutomationDamageRequest);
   document.addEventListener('vtt:automation-apply-heal', handleAutomationHealRequest);
+  document.addEventListener('vtt:automation-apply-surge', handleAutomationSurgeGainRequest);
   document.addEventListener('vtt:automation-apply-condition', handleAutomationConditionRequest);
   document.addEventListener('vtt:automation-check-potency', handleAutomationPotencyRequest);
   document.addEventListener('vtt:automation-force-move', handleAutomationForceMoveRequest);
@@ -2006,6 +2007,7 @@ export function mountBoardInteractions(store, routes = {}) {
   document.addEventListener('vtt:automation-fire-trigger-event', handleAutomationFireTriggerEventRequest);
   document.addEventListener('vtt:automation-check-scoped-flag', handleAutomationCheckScopedFlagRequest);
   document.addEventListener('vtt:automation-set-scoped-flag', handleAutomationSetScopedFlagRequest);
+  document.addEventListener('vtt:automation-consume-triggered-action', handleAutomationConsumeTriggeredActionRequest);
   // When the chat panel opens or closes, the layout CSS shifts the board
   // content. Re-position the floating End Turn overlay so it lands inside
   // the new board boundary. Run twice: once immediately for the snap, and
@@ -3302,6 +3304,12 @@ export function mountBoardInteractions(store, routes = {}) {
     const whose = filter.whose || "any";
     return function predicate(payload) {
       if (!payload || typeof payload !== 'object') return false;
+      if (!entry.freeTriggered) {
+        const casterPlacement = getPlacementFromStore(casterId);
+        if (casterPlacement?.triggeredActionReady === false || casterPlacement?.triggeredActionUsedThisRound === true) {
+          return false;
+        }
+      }
       const payloadTokenId = event === 'damageDealt'
         ? (payload.sourceId || payload.casterId || payload.actorId || payload.tokenId || '')
         : (
@@ -3407,6 +3415,11 @@ export function mountBoardInteractions(store, routes = {}) {
     return Boolean(profileId && PLAYER_CHARACTER_USER_IDS.includes(profileId));
   }
 
+  function isFreeTriggeredActionLabel(label) {
+    const text = String(label || '').toLowerCase();
+    return text.includes('triggered') && text.includes('free');
+  }
+
   function registerAuthoredTriggerBlock({ placementId, action, actionIndex, block }) {
     const match = block?.match && typeof block.match === 'object' ? block.match : null;
     if (!placementId || !match?.event) return false;
@@ -3421,6 +3434,7 @@ export function mountBoardInteractions(store, routes = {}) {
       targetIds: [],
       abilityId,
       abilityName: action?.name || 'Triggered Ability',
+      freeTriggered: isFreeTriggeredActionLabel(action?.actionLabel || action?.type || action?.kind || ''),
       authored: true,
       condition: block.condition || '',
     };
@@ -3516,6 +3530,7 @@ export function mountBoardInteractions(store, routes = {}) {
       targetIds: Array.isArray(payload.targetIds) ? [...payload.targetIds] : [],
       abilityId: abilityId || `authored_trigger_${casterId}_${Date.now()}`,
       abilityName: payload.abilityName || '',
+      freeTriggered: Boolean(payload.freeTriggered || isFreeTriggeredActionLabel(payload.actionLabel || '')),
       authored: true,
       condition: payload.condition || '',
     };
@@ -11049,7 +11064,7 @@ export function mountBoardInteractions(store, routes = {}) {
           type: 'placement.update',
           sceneId: activeSceneId,
           placementId: id,
-          patch: { triggeredActionReady: true, hasReadyTrigger: false, readyTriggerAbilities: [] },
+          patch: { triggeredActionReady: true, hasReadyTrigger: false, readyTriggerAbilities: [], readyTriggerSources: {}, readyTriggerPayloads: {} },
         }));
       }
       persistBoardStateSnapshot({}, resetOps);
@@ -11234,6 +11249,7 @@ export function mountBoardInteractions(store, routes = {}) {
     applyTeleport: function (payload) { return dispatchBoardCustom('vtt:automation-apply-teleport', 'payload', payload); },
     applySwap: function (payload) { return dispatchBoardCustom('vtt:automation-apply-swap', 'payload', payload); },
     runFreeStrike: function (payload) { return dispatchBoardCustom('vtt:automation-run-free-strike', 'payload', payload); },
+    applySurgeGain: function (payload) { return dispatchBoardCustom('vtt:automation-apply-surge', 'payload', payload); },
     getRecoveryValueForTarget: function (payload) { return dispatchBoardCustom('vtt:automation-recovery-value', 'payload', payload); },
     registerPersistentZone: function (payload) { return dispatchBoardCustom('vtt:automation-register-persistent-zone', 'payload', payload); },
     applyMark: function (payload) { return dispatchBoardCustom('vtt:automation-apply-mark', 'payload', payload); },
@@ -11242,6 +11258,7 @@ export function mountBoardInteractions(store, routes = {}) {
     fireTriggerEvent: function (payload) { return dispatchBoardCustom('vtt:automation-fire-trigger-event', 'payload', payload); },
     checkScopedFlag: function (payload) { return dispatchBoardCustom('vtt:automation-check-scoped-flag', 'payload', payload); },
     setScopedFlag: function (payload) { return dispatchBoardCustom('vtt:automation-set-scoped-flag', 'payload', payload); },
+    consumeTriggeredAction: function (payload) { return dispatchBoardCustom('vtt:automation-consume-triggered-action', 'payload', payload); },
   };
 
   function openMalicePanel() {
@@ -13539,6 +13556,59 @@ export function mountBoardInteractions(store, routes = {}) {
     return true;
   }
 
+  function handleAutomationConsumeTriggeredActionRequest(event) {
+    const detail = event?.detail ?? {};
+    const payload = detail.payload && typeof detail.payload === 'object' ? detail.payload : {};
+    const resolve = typeof detail.resolve === 'function' ? detail.resolve : null;
+    const placementId = String(payload.placementId || '').trim();
+    if (!placementId) {
+      resolve?.({ blocked: true, reason: 'missing-placement' });
+      return;
+    }
+    const state = boardApi.getState?.() ?? {};
+    const activeSceneId = state.boardState?.activeSceneId ?? null;
+    if (!activeSceneId) {
+      resolve?.({ blocked: true, reason: 'missing-scene' });
+      return;
+    }
+    let updated = false;
+    let blocked = false;
+    boardApi.updateState?.((draft) => {
+      const scenePlacements = ensureScenePlacementDraft(draft, activeSceneId);
+      const target = scenePlacements.find((item) => item && item.id === placementId);
+      if (!target) {
+        blocked = true;
+        return;
+      }
+      if (target.triggeredActionReady === false || target.triggeredActionUsedThisRound === true) {
+        blocked = true;
+        return;
+      }
+      target.triggeredActionReady = false;
+      target.triggeredActionUsedThisRound = true;
+      target._lastModified = Date.now();
+      updated = true;
+    });
+    if (!updated || blocked) {
+      resolve?.({ blocked: true, reason: blocked ? 'already-used' : 'not-found' });
+      return;
+    }
+    markPlacementDirty(activeSceneId, placementId);
+    let ops = null;
+    if (USE_DELTA_SAVES && !hasNonPlacementDirtyState()) {
+      ops = [{
+        type: 'placement.update',
+        sceneId: activeSceneId,
+        placementId,
+        patch: { triggeredActionReady: false, triggeredActionUsedThisRound: true },
+      }];
+    }
+    persistBoardStateSnapshot({}, ops);
+    dispatchTriggerStateChanged(placementId);
+    refreshTokenSettings();
+    resolve?.({ consumed: true });
+  }
+
   function toggleDamageHealWidget() {
     if (damageHealUi) {
       closeDamageHealWidget();
@@ -14614,6 +14684,55 @@ export function mountBoardInteractions(store, routes = {}) {
       vulnerability: adjustment.vulnerability,
       hidden: isAutomationPlacementHidden(resultPlacement),
     });
+  }
+
+  async function handleAutomationSurgeGainRequest(event) {
+    const detail = event?.detail ?? {};
+    const payload = detail.payload && typeof detail.payload === 'object' ? detail.payload : {};
+    const resolve = typeof detail.resolve === 'function' ? detail.resolve : null;
+    const amount = Number.parseInt(payload.amount, 10) || 0;
+    const placementId = String(payload.placementId || '').trim();
+    if (!placementId || !amount) {
+      resolve?.({ skipped: true, reason: 'missing-fields' });
+      return;
+    }
+    const placement = getPlacementFromStore(placementId);
+    const profileId = placement ? matchProfileByName(tokenLabel(placement)) : '';
+    if (!profileId || !PLAYER_CHARACTER_USER_IDS.includes(profileId)) {
+      resolve?.({ skipped: true, reason: 'not-pc' });
+      return;
+    }
+    const endpoint = typeof routes?.sheet === 'string' && routes.sheet ? routes.sheet : '/dnd/character_sheet/handler.php';
+    const body = new URLSearchParams();
+    body.set('action', 'sync-surges');
+    body.set('character', profileId);
+    body.set('source', 'vtt');
+    body.set('delta', String(amount));
+    try {
+      const response = await fetch(endpoint, {
+        method: 'POST',
+        credentials: 'same-origin',
+        headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
+        body,
+      });
+      const result = await response.json().catch(() => null);
+      if (!response.ok || result?.success === false) {
+        resolve?.({ skipped: true, reason: result?.error || 'save-failed' });
+        return;
+      }
+      if (characterSummaryCache instanceof Map) characterSummaryCache.delete(profileId);
+      document.dispatchEvent(new CustomEvent('vtt:character-sheet-updated', {
+        detail: { characterId: profileId, change: 'surges' },
+      }));
+      resolve?.({
+        applied: amount,
+        current: Number.parseInt(result?.surges ?? 0, 10) || 0,
+        name: result?.name || tokenLabel(placement),
+      });
+    } catch (error) {
+      console.warn('[VTT] Failed to apply surge gain', error);
+      resolve?.({ skipped: true, reason: 'request-failed' });
+    }
   }
 
   async function handleAutomationHealRequest(event) {

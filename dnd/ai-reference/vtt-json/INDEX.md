@@ -34,7 +34,8 @@ Use only these category keys:
 - Monster automation reuses `ability-automation/v3`.
 - Monster power rolls should use literal `flatBonus`.
 - Monster damage should use static numbers, not PC-style formulas like `7 + M`.
+- Use `surgeGain` for Draw Steel surges; do not model surges as heroic resources.
+- Use nested `spend` for optional heroic-resource riders, and embedded `teleport.spend` when the spend changes teleport range before the destination picker opens.
 - Full monster imports should use `immunities` and `weaknesses` arrays of `{ "type", "value" }`.
 - Per-ability automation belongs on the individual ability object as `automation`.
 - If a mechanic is unsupported, use `note` or `other`, not invented fields.
-
