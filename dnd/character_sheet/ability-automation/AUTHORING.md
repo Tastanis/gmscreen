@@ -600,6 +600,33 @@ Branches based on whether the caster is currently strained — defined as the ca
 
 Both branches optional; an empty branch silently does nothing. Use this for Talent abilities with "Strained:" riders — drop the rider into `then` and the runtime auto-applies it when applicable.
 
+### `ifPrompt` (rider)
+
+Branches based on a player/GM yes-no answer. Use this when the current runtime cannot inspect a required board condition, but the rest of the ability can still be automated after a table ruling.
+
+```json
+{
+  "kind": "ifPrompt",
+  "question": "Does {target} have any allies adjacent to them?",
+  "yesLabel": "Yes",
+  "noLabel": "No",
+  "target": "self",
+  "then": [],
+  "else": [ { "kind": "surgeGain", "amount": 1 } ]
+}
+```
+
+| Field | Values |
+|---|---|
+| `question` | text shown in the popup. `{target}` is replaced with the first current target's name. |
+| `yesLabel` | optional text for the yes button. Defaults to `"Yes"`. |
+| `noLabel` | optional text for the no button. Defaults to `"No"`. |
+| `target` | optional target-group name for branch effects. Use `"self"` when the answer applies effects to the caster. |
+| `then` | effects applied when the player clicks yes |
+| `else` | effects applied when the player clicks no |
+
+Place `ifPrompt` before a `powerRoll` when the answer changes pre-roll state, such as gaining surges before making the roll.
+
 ### `ifMark` (rider)
 
 Branches based on whether a target is marked/judged.

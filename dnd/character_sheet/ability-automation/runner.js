@@ -930,6 +930,8 @@
         return applyIfKeywordEffect(state, effect, targets, ctx);
       case "ifStrained":
         return applyIfStrainedEffect(state, effect, targets, ctx);
+      case "ifPrompt":
+        return applyIfPromptEffect(state, effect, targets, ctx);
       case "ifMark":
         return applyIfMarkEffect(state, effect, targets, ctx);
       case "ifScopedFlag":
@@ -1066,6 +1068,63 @@
     if (!Array.isArray(branch) || !branch.length) return;
     // Branch reuses the current target group — same convention as ifKeyword.
     await applyEffects(state, branch, null, ctx);
+  }
+
+  function formatPromptQuestion(effect, targets) {
+    const firstTarget = targets?.[0]?.name || "the target";
+    return String(effect.question || "Confirm?")
+      .replace(/\{target\}/g, firstTarget);
+  }
+
+  async function askAutomationPrompt(state, effect, targets) {
+    const question = formatPromptQuestion(effect, targets);
+    if (typeof document === "undefined" || !document.body) {
+      return global.confirm(question);
+    }
+    const host = makeHost("Confirm", state.action.name || "Ability Automation", "prompt", state.context?.automationAnchor || null);
+    host.querySelector("[data-power-roll-body]").innerHTML = `
+      <section class="power-roll-runner__section power-roll-runner__section--compact">
+        <div class="power-roll-runner__ability">
+          <h3>${escapeHtml(state.action.name || "Unnamed Ability")}</h3>
+          <p>${escapeHtml(question)}</p>
+        </div>
+        <div class="power-roll-runner__actions">
+          <button type="button" class="dice-btn dice-btn-primary" data-if-prompt-answer="yes">${escapeHtml(effect.yesLabel || "Yes")}</button>
+          <button type="button" class="dice-btn dice-btn-secondary" data-if-prompt-answer="no">${escapeHtml(effect.noLabel || "No")}</button>
+        </div>
+      </section>
+    `;
+    return new Promise((resolve) => {
+      const finish = (value) => {
+        host.removeEventListener("click", onClick);
+        host.removeEventListener("automation-cancel", onCancel);
+        closeRunner();
+        resolve(value);
+      };
+      const onClick = (event) => {
+        const target = event.target instanceof Element ? event.target : null;
+        const answer = target?.closest("[data-if-prompt-answer]")?.getAttribute("data-if-prompt-answer");
+        if (answer === "yes") finish(true);
+        if (answer === "no") finish(false);
+      };
+      const onCancel = () => {
+        state.aborted = true;
+        finish(false);
+      };
+      host.addEventListener("click", onClick);
+      host.addEventListener("automation-cancel", onCancel);
+    });
+  }
+
+  async function applyIfPromptEffect(state, effect, targets, ctx) {
+    const answer = await askAutomationPrompt(state, effect, targets);
+    if (state.aborted) return;
+    await postChat(state.context, {
+      message: `${state.heroName} - ${state.action.name || "Ability"}: ${formatPromptQuestion(effect, targets)} ${answer ? effect.yesLabel || "Yes" : effect.noLabel || "No"}.`,
+    });
+    const branch = answer ? effect.then : effect.else;
+    if (!Array.isArray(branch) || !branch.length) return;
+    await applyEffects(state, branch, effect.target || null, ctx);
   }
 
   // Strained = caster's heroic resource has dipped below 0. The Talent class's
@@ -1823,6 +1882,10 @@
       if (effect.kind === "potency" && Array.isArray(effect.onFail)) walkEffectList(effect.onFail, visit);
       if (effect.kind === "spend" && Array.isArray(effect.effects)) walkEffectList(effect.effects, visit);
       if (effect.kind === "ifKeyword") {
+        walkEffectList(effect.then || [], visit);
+        walkEffectList(effect.else || [], visit);
+      }
+      if (effect.kind === "ifPrompt") {
         walkEffectList(effect.then || [], visit);
         walkEffectList(effect.else || [], visit);
       }

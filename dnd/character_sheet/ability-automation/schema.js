@@ -324,6 +324,25 @@
         if (extras) effect._extra = extras;
         return effect;
       }
+      case "ifPrompt": {
+        const known = new Set(["kind", "question", "yesLabel", "noLabel", "target", "then", "else"]);
+        const effect = {
+          kind: "ifPrompt",
+          question: asTrimmedString(input.question),
+          yesLabel: asTrimmedString(input.yesLabel) || "Yes",
+          noLabel: asTrimmedString(input.noLabel) || "No",
+          target: asTrimmedString(input.target),
+          then: normalizeEffectList(input.then || [], warnings, `${path}.then`),
+          else: normalizeEffectList(input.else || [], warnings, `${path}.else`),
+        };
+        if (!effect.question) warnings.push(`${path}: ifPrompt missing question.`);
+        if (!effect.then.length && !effect.else.length) {
+          warnings.push(`${path}: ifPrompt has no then/else effects.`);
+        }
+        const extras = pickExtras(input, known);
+        if (extras) effect._extra = extras;
+        return effect;
+      }
       case "ifMark": {
         const known = new Set(["kind", "predicate", "markType", "target", "then", "else"]);
         const predicate = pickKnown(input.predicate, [

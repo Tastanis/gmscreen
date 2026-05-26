@@ -26,6 +26,7 @@
     "spend",
     "ifKeyword",
     "ifStrained",
+    "ifPrompt",
     "ifMark",
     "ifScopedFlag",
     "setScopedFlag",
@@ -407,6 +408,13 @@
         const elseText = (effect.else || []).map(describeEffect).filter(Boolean).join(", ");
         if (elseText) return `If strained → ${thenText || "(no effect)"} else → ${elseText}`;
         return `If strained → ${thenText || "(no effect)"}`;
+      }
+      case "ifPrompt": {
+        const thenText = (effect.then || []).map(describeEffect).filter(Boolean).join(", ");
+        const elseText = (effect.else || []).map(describeEffect).filter(Boolean).join(", ");
+        const question = effect.question || "Confirm?";
+        if (elseText) return `Ask "${question}" -> yes: ${thenText || "(no effect)"}; no: ${elseText}`;
+        return `Ask "${question}" -> yes: ${thenText || "(no effect)"}`;
       }
       case "ifMark": {
         const thenText = (effect.then || []).map(describeEffect).filter(Boolean).join(", ");

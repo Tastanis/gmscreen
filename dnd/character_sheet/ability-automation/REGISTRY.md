@@ -59,6 +59,7 @@ The monster ability tray + `window.MonsterAbilityRunner.start()` add the followi
 | `surgeGain` | Full | Mutates `hero.surges` on each PC target's character sheet via VTT surge sync. Surges are separate from heroic resources. Floors at 0. |
 | `ifKeyword` | Full | Branches based on ability's `keywords`. `then` runs on match, `else` on miss |
 | `ifStrained` | Full | Branches on whether the caster's heroic resource value is below 0. `then` runs when strained, `else` runs when not. |
+| `ifPrompt` | Full | Opens a yes-no VTT popup and runs `then` on yes or `else` on no. Supports `question`, optional `yesLabel`/`noLabel`, optional branch `target`, and `{target}` substitution from the current target group. Use when a rules condition cannot be inspected automatically. |
 | `ifMark` | Full | Branches on Judgment/mark predicates such as `targetJudgedBySelf`, `targetJudgedByAny`, and `actorIsMyJudgedTarget`. |
 | `applyMark` | Full | Applies source-owned `judgment` marks. Recasting transfers the caster's mark; a newer censor judging the same target overwrites the old source. Current monster runner passes this hook through too, but monster authoring should usually prefer `note` unless intentionally using shared mark state. |
 | `endMark` | Full | Clears the caster's current mark or a mark on a target. Used for willingly ending Judgment. Current monster runner passes this hook through too, but monster authoring should usually prefer `note` unless intentionally using shared mark state. |
