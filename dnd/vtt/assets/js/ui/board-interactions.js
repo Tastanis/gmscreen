@@ -14221,7 +14221,6 @@ export function mountBoardInteractions(store, routes = {}) {
         </header>
         <div class="dice-modal-content vtt-automation-picker-prompt__body">
           <p>${escapeHtml(text)}</p>
-          <p class="vtt-automation-picker-prompt__hint">Right-click and drag the map to pan. Escape cancels.</p>
         </div>
       </section>
     `;
