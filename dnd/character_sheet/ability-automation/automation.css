@@ -271,6 +271,92 @@
   white-space: pre-wrap;
 }
 
+.vtt-automation-spend {
+  inset: 0;
+  pointer-events: none;
+  position: fixed;
+  z-index: 2100;
+}
+
+.vtt-automation-spend__modal {
+  max-height: calc(100vh - 24px);
+  overflow: auto;
+  pointer-events: auto;
+  position: fixed;
+  resize: both;
+  width: min(380px, calc(100vw - 32px));
+}
+
+.vtt-automation-spend__modal.is-dragging {
+  cursor: grabbing;
+}
+
+.vtt-automation-spend__header {
+  cursor: grab;
+}
+
+.vtt-automation-spend__body {
+  color: var(--text, #2f261b);
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.vtt-automation-spend__message,
+.vtt-automation-spend__hint {
+  background: var(--panel-alt, var(--dice-surface, #f4eadc));
+  border: 1px solid var(--border, var(--dice-border, #b89c70));
+  border-radius: 6px;
+  margin: 0;
+  padding: 8px;
+  white-space: pre-wrap;
+}
+
+.vtt-automation-spend__hint {
+  color: var(--muted, var(--dice-muted, #6f5d45));
+  font-size: 0.84rem;
+}
+
+.vtt-automation-spend__field {
+  align-items: center;
+  background: var(--panel-alt, var(--dice-surface, #f4eadc));
+  border: 1px solid var(--border, var(--dice-border, #b89c70));
+  border-radius: 6px;
+  display: grid;
+  gap: 10px;
+  grid-template-columns: minmax(0, 1fr) auto;
+  padding: 8px;
+}
+
+.vtt-automation-spend__field > span:first-child {
+  color: var(--text, #2f261b);
+  font-weight: 800;
+}
+
+.vtt-automation-spend__stepper {
+  align-items: center;
+  display: inline-grid;
+  gap: 6px;
+  grid-template-columns: 34px 64px 34px;
+}
+
+.vtt-automation-spend__stepper input {
+  background: #fff9ef;
+  border: 1px solid var(--border, var(--dice-border, #b89c70));
+  border-radius: 5px;
+  color: var(--text, #2f261b);
+  font: 800 1rem/1 "Inter", "Segoe UI", sans-serif;
+  min-width: 0;
+  padding: 6px;
+  text-align: center;
+}
+
+.vtt-automation-spend__actions {
+  display: grid;
+  gap: 8px;
+  grid-template-columns: 1fr 1fr;
+}
+
 @media (max-width: 720px) {
   .power-roll-runner__controls,
   .power-roll-runner__adjustments,

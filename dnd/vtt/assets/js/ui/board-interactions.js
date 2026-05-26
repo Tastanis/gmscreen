@@ -852,6 +852,7 @@ export function mountBoardInteractions(store, routes = {}) {
   let damageHealUi = null;
   let pendingDamageHeal = null;
   let pendingAutomationTarget = null;
+  let automationTargetPrompt = null;
   let automationTargetRangeOverlay = null;
   let pendingAutomationArea = null;
   let automationAreaOverlay = null;
@@ -13512,6 +13513,9 @@ export function mountBoardInteractions(store, routes = {}) {
       const current = target.triggeredActionReady !== false;
       nextReady = !current;
       target.triggeredActionReady = nextReady;
+      if (nextReady) {
+        target.triggeredActionUsedThisRound = false;
+      }
       target._lastModified = Date.now();
       if (gmUser) {
         markPlacementAsGmAuthored(target, { isGm: gmUser });
@@ -13537,7 +13541,9 @@ export function mountBoardInteractions(store, routes = {}) {
           type: 'placement.update',
           sceneId: activeSceneId,
           placementId,
-          patch: { triggeredActionReady: nextReady },
+          patch: nextReady
+            ? { triggeredActionReady: true, triggeredActionUsedThisRound: false }
+            : { triggeredActionReady: false },
         },
       ];
     }
@@ -13552,6 +13558,7 @@ export function mountBoardInteractions(store, routes = {}) {
         : `${label} has used their triggered action.`;
     }
 
+    dispatchTriggerStateChanged(placementId);
     refreshTokenSettings();
     return true;
   }
@@ -14178,6 +14185,7 @@ export function mountBoardInteractions(store, routes = {}) {
     closeDamageHealWidget();
     closeHealOverflowPopup();
     updateStatus(formatAutomationTargetPrompt(pendingAutomationTarget.targetConfig));
+    showAutomationTargetPrompt(pendingAutomationTarget.targetConfig);
     // If a suggested target was threaded through (e.g. the mover whose
     // movement triggered this opp-attack free strike), pulse it red until
     // the picker resolves or cancels. Player can still click anyone.
@@ -14186,6 +14194,107 @@ export function mountBoardInteractions(store, routes = {}) {
     // Draw the reach/range box around the source token so the player can see
     // who's actually legal to click. Skipped when distance info is missing.
     renderAutomationTargetRangeOverlay(pendingAutomationTarget.targetConfig);
+  }
+
+  function clearAutomationTargetPrompt() {
+    automationTargetPrompt?.remove();
+    automationTargetPrompt = null;
+  }
+
+  function showAutomationTargetPrompt(targetConfig = {}) {
+    clearAutomationTargetPrompt();
+    if (!targetConfig.showPrompt && !targetConfig.promptTitle && !targetConfig.promptText) {
+      return;
+    }
+    const host = document.createElement('div');
+    host.className = 'vtt-automation-picker-prompt';
+    const title = targetConfig.promptTitle || 'Pick Target';
+    const text = targetConfig.promptText || formatAutomationTargetPrompt(targetConfig);
+    host.innerHTML = `
+      <section class="dice-modal dice-modal--vtt vtt-automation-picker-prompt__modal" role="dialog" aria-modal="false">
+        <header class="dice-modal-header vtt-automation-picker-prompt__header">
+          <div class="dice-modal-heading-group">
+            <h2 class="dice-modal-title">${escapeHtml(title)}</h2>
+            <span class="dice-modal-project-label">Target Selection</span>
+          </div>
+          <button class="dice-modal-close" type="button" data-automation-target-cancel aria-label="Cancel target selection">&times;</button>
+        </header>
+        <div class="dice-modal-content vtt-automation-picker-prompt__body">
+          <p>${escapeHtml(text)}</p>
+          <p class="vtt-automation-picker-prompt__hint">Right-click and drag the map to pan. Escape cancels.</p>
+        </div>
+      </section>
+    `;
+    document.body?.appendChild(host);
+    automationTargetPrompt = host;
+    host.addEventListener('click', (event) => {
+      const target = event.target instanceof Element ? event.target : null;
+      if (target?.closest('[data-automation-target-cancel]')) {
+        cancelPendingAutomationTarget('Target selection canceled.');
+      }
+    });
+    makeAutomationTargetPromptDraggable(host);
+    positionAutomationTargetPrompt(host.querySelector('.vtt-automation-picker-prompt__modal'), targetConfig);
+  }
+
+  function makeAutomationTargetPromptDraggable(host) {
+    const modal = host?.querySelector?.('.vtt-automation-picker-prompt__modal');
+    const header = host?.querySelector?.('.vtt-automation-picker-prompt__header');
+    if (!(modal instanceof HTMLElement) || !(header instanceof HTMLElement)) return;
+    let drag = null;
+    const stop = () => {
+      if (!drag) return;
+      drag = null;
+      modal.classList.remove('is-dragging');
+      document.removeEventListener('pointermove', move);
+      document.removeEventListener('pointerup', stop);
+      document.removeEventListener('pointercancel', stop);
+    };
+    const move = (event) => {
+      if (!drag) return;
+      const rect = modal.getBoundingClientRect();
+      const padding = 12;
+      const left = Math.min(Math.max(padding, event.clientX - drag.offsetX), Math.max(padding, window.innerWidth - rect.width - padding));
+      const top = Math.min(Math.max(padding, event.clientY - drag.offsetY), Math.max(padding, window.innerHeight - rect.height - padding));
+      modal.style.left = `${left}px`;
+      modal.style.top = `${top}px`;
+    };
+    header.addEventListener('pointerdown', (event) => {
+      const target = event.target instanceof Element ? event.target : null;
+      if (event.button !== 0 || target?.closest('button')) return;
+      const rect = modal.getBoundingClientRect();
+      drag = { offsetX: event.clientX - rect.left, offsetY: event.clientY - rect.top };
+      modal.classList.add('is-dragging');
+      document.addEventListener('pointermove', move);
+      document.addEventListener('pointerup', stop);
+      document.addEventListener('pointercancel', stop);
+      event.preventDefault();
+    });
+  }
+
+  function positionAutomationTargetPrompt(modal, targetConfig = {}) {
+    if (!(modal instanceof HTMLElement)) return;
+    requestAnimationFrame(() => {
+      const source = resolveAutomationSourcePlacement(targetConfig.sourcePlacement) || null;
+      let left = 24;
+      let top = 72;
+      if (source && mapTransform) {
+        const transformRect = mapTransform.getBoundingClientRect();
+        const offsets = viewState.gridOffsets ?? {};
+        const gridSize = Math.max(8, Number.isFinite(viewState.gridSize) ? viewState.gridSize : 64);
+        const scale = Number.isFinite(viewState.scale) ? viewState.scale : 1;
+        const localLeft = (Number.isFinite(offsets.left) ? offsets.left : 0) + ((source.column || 0) + (source.width || 1) + 1) * gridSize;
+        const localTop = (Number.isFinite(offsets.top) ? offsets.top : 0) + (source.row || 0) * gridSize;
+        left = transformRect.left + localLeft * scale;
+        top = transformRect.top + localTop * scale;
+      }
+      const rect = modal.getBoundingClientRect();
+      const padding = 12;
+      const width = rect.width || 320;
+      const height = rect.height || 150;
+      modal.style.left = `${Math.min(Math.max(padding, left), Math.max(padding, window.innerWidth - width - padding))}px`;
+      modal.style.top = `${Math.min(Math.max(padding, top), Math.max(padding, window.innerHeight - height - padding))}px`;
+    });
   }
 
   function renderAutomationTargetRangeOverlay(targetConfig) {
@@ -14270,6 +14379,7 @@ export function mountBoardInteractions(store, routes = {}) {
     const targetRequest = pendingAutomationTarget;
     pendingAutomationTarget = null;
     stopSuggestedTargetPulse();
+    clearAutomationTargetPrompt();
     clearAutomationTargetRangeOverlay();
     const name = tokenLabel(placement);
     flashAutomationTargetToken(placement.id);
@@ -15255,6 +15365,9 @@ export function mountBoardInteractions(store, routes = {}) {
       predicate: payload.againstPredicate || 'creature',
       creature: payload.againstPredicate || 'creature',
       affects: payload.againstPredicate || 'creature',
+      showPrompt: true,
+      promptTitle: 'Free Strike',
+      promptText: payload.text || `Choose a target for ${tokenLabel(byPlacement)}'s free strike.`,
       count: { value: 1, mode: 'exact' },
       distance: { form: 'melee', value: 1 },
       pickIndex: 0,
@@ -15935,6 +16048,7 @@ export function mountBoardInteractions(store, routes = {}) {
     const request = pendingAutomationTarget;
     pendingAutomationTarget = null;
     stopSuggestedTargetPulse();
+    clearAutomationTargetPrompt();
     clearAutomationTargetRangeOverlay();
     updateStatus(message || 'Target selection canceled.');
     request.reject?.(new Error(message || 'Target selection canceled.'));

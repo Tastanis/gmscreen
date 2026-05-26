@@ -18,7 +18,11 @@ Check `REGISTRY.md` before authoring against a hook. If it is not listed there, 
 
 ## Trigger Bus
 
-`window.AbilityTriggerBus` lives in `board-interactions.js`. Authored trigger blocks use `match.event` and `match.filter`; PC trigger actions in the active scene are registered by the board as passive listeners. The runner's `registerTrigger` context hook still exists as a fallback/debug path. PC triggered actions are always-on once the character token is present in the active VTT scene; the player does not click the ability or open the character summary to start listening. Triggered abilities light the ready marker and are resolved manually.
+`window.AbilityTriggerBus` lives in `board-interactions.js`. Authored trigger blocks use `match.event` and `match.filter`; PC trigger actions in the active scene are registered by the board as passive listeners. The runner's `registerTrigger` context hook still exists as a fallback/debug path. PC triggered actions are always-on once the character token is present in the active VTT scene; the player does not click the ability or open the character summary to start listening. Triggered abilities light the ready marker and are resolved manually. The triggered-action tray dot is also a manual override: clicking a spent/red dot makes the token ready again and clears the round-used flag so non-free authored triggers can arm before the round resets.
+
+## VTT Automation Prompt UI
+
+PC heroic-resource spends use draggable in-app VTT modals, not native browser `prompt`/`confirm` dialogs. Variable spends (`maxAmount`) show stepper buttons. Free-strike target selection uses the board picker plus a small draggable target prompt; right-click map panning remains available because these dialogs do not use a blocking backdrop.
 
 Known current limitation: manual/non-automation damage does not fire the authored damage trigger events. Use the registry for the latest limitation list.
 

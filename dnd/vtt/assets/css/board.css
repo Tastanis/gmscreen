@@ -5663,3 +5663,46 @@ body.vtt-character-ability-tray-is-open .vtt-board__malice {
 .vtt-token[data-squad="true"] .vtt-token__hp-fill {
   background: linear-gradient(90deg, #b94a48 0%, #d9534f 100%);
 }
+.vtt-automation-picker-prompt {
+  inset: 0;
+  pointer-events: none;
+  position: fixed;
+  z-index: 2100;
+}
+
+.vtt-automation-picker-prompt__modal {
+  max-height: calc(100vh - 24px);
+  overflow: auto;
+  pointer-events: auto;
+  position: fixed;
+  width: min(320px, calc(100vw - 32px));
+}
+
+.vtt-automation-picker-prompt__modal.is-dragging {
+  cursor: grabbing;
+}
+
+.vtt-automation-picker-prompt__header {
+  cursor: grab;
+}
+
+.vtt-automation-picker-prompt__body {
+  color: var(--dice-text, #2f261b);
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.vtt-automation-picker-prompt__body p {
+  background: var(--dice-surface, #f4eadc);
+  border: 1px solid var(--dice-border, #b89c70);
+  border-radius: 6px;
+  margin: 0;
+  padding: 8px;
+  white-space: pre-wrap;
+}
+
+.vtt-automation-picker-prompt__hint {
+  color: var(--dice-muted, #6f5d45);
+  font-size: 0.84rem;
+}

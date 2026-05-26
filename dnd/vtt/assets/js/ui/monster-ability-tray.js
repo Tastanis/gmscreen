@@ -109,7 +109,6 @@
                 'data-ability-index="' + escapeAttribute(index) + '" ' +
                 'data-ability-category="' + escapeAttribute(categoryKey) + '" ' +
                 (isReadyTrigger ? 'data-clears-trigger="' + escapeAttribute(triggerId) + '" ' : '') + '>' +
-                (isReadyTrigger ? '<span class="vtt-character-ability-item__trigger-ready" aria-label="Trigger condition met">!</span>' : '') +
                 '<span class="vtt-character-ability-item__mark" aria-hidden="true">' + escapeHtml(getAbilityIcon(categoryKey)) + '</span>' +
                 '<span class="vtt-character-ability-item__text">' +
                 '<span class="vtt-character-ability-item__name">' + escapeHtml(ability.name || 'Unnamed') + '</span>' +

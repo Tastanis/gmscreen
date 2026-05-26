@@ -44,7 +44,12 @@
     document.getElementById(RUNNER_ID)?.remove();
   }
 
-  function getRunnerDefaultPosition(modal, variant) {
+  function getRunnerDefaultPosition(modal, variant, anchor = null) {
+    if (anchor && typeof anchor === "object") {
+      const left = Number.isFinite(anchor.right) ? anchor.right + 12 : Number(anchor.left) || 24;
+      const top = Number.isFinite(anchor.top) ? anchor.top : 72;
+      return constrainRunnerPosition(left, top, modal);
+    }
     const panel = document.querySelector(".vtt-character-summary--open, .vtt-character-summary");
     const panelRect = panel instanceof HTMLElement ? panel.getBoundingClientRect() : null;
     const panelRight =
@@ -67,11 +72,11 @@
     };
   }
 
-  function positionRunnerWindow(host, variant) {
+  function positionRunnerWindow(host, variant, anchor = null) {
     const modal = host.querySelector(".power-roll-runner__modal");
     if (!(modal instanceof HTMLElement)) return;
     requestAnimationFrame(() => {
-      const position = getRunnerDefaultPosition(modal, variant);
+      const position = getRunnerDefaultPosition(modal, variant, anchor);
       modal.style.left = `${position.left}px`;
       modal.style.top = `${position.top}px`;
     });
@@ -115,7 +120,7 @@
     });
   }
 
-  function makeHost(title, eyebrow, variant = "power") {
+  function makeHost(title, eyebrow, variant = "power", anchor = null) {
     closeRunner();
     const host = document.createElement("div");
     host.id = RUNNER_ID;
@@ -141,7 +146,7 @@
       }
     });
     makeRunnerDraggable(host);
-    positionRunnerWindow(host, variant);
+    positionRunnerWindow(host, variant, anchor);
     return host;
   }
 
@@ -367,7 +372,7 @@
   // ---------- target block ----------
 
   function showTargetPrompt(state, block) {
-    const host = makeHost("Pick Target", state.action.name || "Ability Automation", "target");
+    const host = makeHost("Pick Target", state.action.name || "Ability Automation", "target", state.context?.automationAnchor || null);
     host.querySelector("[data-power-roll-body]").innerHTML = `
       <section class="power-roll-runner__section power-roll-runner__section--compact">
         <div class="power-roll-runner__ability">
@@ -753,7 +758,7 @@
     state.baseTier = null;
     state.resultText = "";
 
-    const host = makeHost("Power Roll", state.action.name || "Ability Automation", "power");
+    const host = makeHost("Power Roll", state.action.name || "Ability Automation", "power", state.context?.automationAnchor || null);
     renderPowerRoll(host, state, block);
     await new Promise((resolve) => wirePowerRoll(host, state, block, resolve));
 

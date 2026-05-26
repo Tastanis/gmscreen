@@ -581,6 +581,9 @@ export function mountCharacterSummaryPanel(routes = {}, userContext = {}) {
         if (activeToken && typeof activeToken === 'object') {
           const wasReady = activeToken.triggeredActionReady !== false;
           activeToken.triggeredActionReady = !wasReady;
+          if (!wasReady) {
+            activeToken.triggeredActionUsedThisRound = false;
+          }
           renderAbilityTray(abilityTray, activeSheet, { activeCategory: activeAbilityCategory, activeToken });
         }
         document.dispatchEvent(new CustomEvent('vtt:toggle-triggered-action', { detail: { placementId } }));
@@ -652,6 +655,7 @@ export function mountCharacterSummaryPanel(routes = {}, userContext = {}) {
             detail: { placementId: sourcePlacementId, abilityId: clearsTrigger },
           }));
         }
+        const itemRect = abilityItem.getBoundingClientRect();
         activeAbilityCategory = null;
         hideAbilityPreview(abilityPreview);
         renderAbilityTray(abilityTray, activeSheet, { activeCategory: activeAbilityCategory, activeToken });
@@ -660,6 +664,14 @@ export function mountCharacterSummaryPanel(routes = {}, userContext = {}) {
           routes,
           suggestedTargetId,
           triggerPayload,
+          automationAnchor: {
+            left: itemRect.left,
+            top: itemRect.top,
+            right: itemRect.right,
+            bottom: itemRect.bottom,
+            width: itemRect.width,
+            height: itemRect.height,
+          },
         });
       }
       return;
@@ -896,17 +908,6 @@ function renderAbilityTray(tray, sheet, { activeCategory = null, activeToken = n
               title="${triggerReady ? 'Triggered action ready' : 'Triggered action used'}"
             ></span>`
           : '';
-        const readyHtml = isTrigger && hasReadyTrigger
-          ? `<span
-              class="vtt-character-ability-tab__trigger-ready"
-              role="button"
-              tabindex="0"
-              data-character-trigger-clear
-              data-placement-id="${escapeAttribute(triggerPlacementId)}"
-              aria-label="Trigger condition met. Click to clear."
-              title="Trigger condition met. Click to clear."
-            >!</span>`
-          : '';
         const tabClass = `vtt-character-ability-tab${isTrigger && hasReadyTrigger ? ' has-ready-trigger' : ''}`;
         return `
           <div class="vtt-character-ability-category${isActive ? ' is-active' : ''}">
@@ -916,7 +917,7 @@ function renderAbilityTray(tray, sheet, { activeCategory = null, activeToken = n
               type="button"
               data-character-ability-category="${escapeAttribute(category.key)}"
               aria-expanded="${isActive ? 'true' : 'false'}"
-            >${dotHtml}${readyHtml}<span class="vtt-character-ability-tab__label">${escapeHtml(category.label)}</span></button>
+            >${dotHtml}<span class="vtt-character-ability-tab__label">${escapeHtml(category.label)}</span></button>
           </div>
         `;
       }).join('')}
@@ -944,9 +945,9 @@ function renderAbilityItem(action, categoryKey, index, opts = {}) {
   const meta = summarizeAbility(action, categoryKey);
   const automated = hasAbilityAutomation(action?.automation);
   const ready = Array.isArray(opts.activeToken?.readyTriggerAbilities) ? opts.activeToken.readyTriggerAbilities : [];
-  // When an ability is injected into the trigger list because a trigger
-  // condition is met (e.g. opp-attack), render a blue "!" to the LEFT of
-  // the icon and stash the trigger id so clicking it auto-clears.
+  // When an ability is ready because a trigger condition was met, the existing
+  // category icon turns blue and pulses. Avoid inserting a second icon in this
+  // tight row; it can crush the title/meta columns.
   const actionId = action?._stableActionId || getStableActionId(action, categoryKey, index);
   const triggerId = action?._injectedTriggerId || (categoryKey === 'triggers' && actionId && ready.includes(actionId) ? actionId : '');
   return `
@@ -959,7 +960,6 @@ function renderAbilityItem(action, categoryKey, index, opts = {}) {
       data-ability-index="${escapeAttribute(index)}"
       ${triggerId ? `data-clears-trigger="${escapeAttribute(triggerId)}"` : ''}
     >
-      ${triggerId ? '<span class="vtt-character-ability-item__trigger-ready" aria-label="Trigger condition met">!</span>' : ''}
       <span class="vtt-character-ability-item__mark" aria-hidden="true">${escapeHtml(getAbilityIcon(categoryKey))}</span>
       <span class="vtt-character-ability-item__text">
         <span class="vtt-character-ability-item__name">${escapeHtml(name)}</span>
@@ -1927,6 +1927,7 @@ function startAbilityAutomation(sheet, action, categoryKey, sourceToken = null, 
     // damage type, etc.). Captured at mark-ready time and threaded here so
     // effects like halveTriggeringDamage can read the original damage value.
     triggerPayload: options?.triggerPayload || null,
+    automationAnchor: options?.automationAnchor || null,
     getAttributeBonus: (attribute) => getAttributeBonus(sheet, attribute),
     getStrongestAttribute: () => getStrongestAttribute(sheet),
     postChat: postAutomationChat,
@@ -2268,6 +2269,148 @@ function requestAutomationConsumeTriggeredAction(payload) {
   });
 }
 
+function clampAutomationDialogPosition(left, top, modal) {
+  const rect = modal?.getBoundingClientRect?.() || {};
+  const width = rect.width || 360;
+  const height = rect.height || 190;
+  const padding = 12;
+  return {
+    left: Math.min(Math.max(padding, left), Math.max(padding, window.innerWidth - width - padding)),
+    top: Math.min(Math.max(padding, top), Math.max(padding, window.innerHeight - height - padding)),
+  };
+}
+
+function positionAutomationDialog(modal, anchor = null) {
+  if (!(modal instanceof HTMLElement)) return;
+  window.requestAnimationFrame(() => {
+    const anchorRect = anchor && typeof anchor === 'object' ? anchor : null;
+    const left = Number.isFinite(anchorRect?.right) ? anchorRect.right + 12 : 24;
+    const top = Number.isFinite(anchorRect?.top) ? anchorRect.top : 72;
+    const pos = clampAutomationDialogPosition(left, top, modal);
+    modal.style.left = `${pos.left}px`;
+    modal.style.top = `${pos.top}px`;
+  });
+}
+
+function makeAutomationDialogDraggable(host) {
+  const modal = host?.querySelector?.('.vtt-automation-spend__modal');
+  const header = host?.querySelector?.('.vtt-automation-spend__header');
+  if (!(modal instanceof HTMLElement) || !(header instanceof HTMLElement)) return;
+  let drag = null;
+  const stop = () => {
+    if (!drag) return;
+    drag = null;
+    modal.classList.remove('is-dragging');
+    document.removeEventListener('pointermove', move);
+    document.removeEventListener('pointerup', stop);
+    document.removeEventListener('pointercancel', stop);
+  };
+  const move = (event) => {
+    if (!drag) return;
+    const pos = clampAutomationDialogPosition(event.clientX - drag.offsetX, event.clientY - drag.offsetY, modal);
+    modal.style.left = `${pos.left}px`;
+    modal.style.top = `${pos.top}px`;
+  };
+  header.addEventListener('pointerdown', (event) => {
+    const target = event.target instanceof Element ? event.target : null;
+    if (event.button !== 0 || target?.closest?.('button')) return;
+    const rect = modal.getBoundingClientRect();
+    drag = { offsetX: event.clientX - rect.left, offsetY: event.clientY - rect.top };
+    modal.classList.add('is-dragging');
+    document.addEventListener('pointermove', move);
+    document.addEventListener('pointerup', stop);
+    document.addEventListener('pointercancel', stop);
+    event.preventDefault();
+  });
+}
+
+function showAutomationSpendDialog({
+  title = 'Spend Resource',
+  message = '',
+  resource = 'Resource',
+  current = 0,
+  minAmount = 1,
+  maxAmount = 1,
+  anchor = null,
+} = {}) {
+  return new Promise((resolve) => {
+    const variable = maxAmount > minAmount;
+    const host = document.createElement('div');
+    host.className = 'vtt-automation-spend';
+    host.innerHTML = `
+      <section class="dice-modal dice-modal--vtt vtt-automation-spend__modal" role="dialog" aria-modal="false" aria-labelledby="vtt-automation-spend-title">
+        <header class="dice-modal-header vtt-automation-spend__header">
+          <div class="dice-modal-heading-group">
+            <h2 class="dice-modal-title" id="vtt-automation-spend-title">${escapeHtml(title)}</h2>
+            <span class="dice-modal-project-label">${escapeHtml(resource)} ${current}</span>
+          </div>
+          <button class="dice-modal-close" type="button" data-spend-cancel aria-label="Cancel spend">&times;</button>
+        </header>
+        <div class="dice-modal-content vtt-automation-spend__body">
+          <p class="vtt-automation-spend__message">${escapeHtml(message)}</p>
+          ${variable ? `
+            <label class="vtt-automation-spend__field">
+              <span>Amount</span>
+              <span class="vtt-automation-spend__stepper">
+                <button type="button" class="dice-clear-btn" data-spend-step="-1" aria-label="Spend less">-</button>
+                <input type="number" min="${minAmount}" max="${maxAmount}" step="1" value="${minAmount}" data-spend-input>
+                <button type="button" class="dice-clear-btn" data-spend-step="1" aria-label="Spend more">+</button>
+              </span>
+            </label>
+            <p class="vtt-automation-spend__hint">Choose ${minAmount}-${maxAmount}, or cancel to skip.</p>
+          ` : `<p class="vtt-automation-spend__hint">Spend ${minAmount} ${escapeHtml(resource)}?</p>`}
+          <div class="dice-actions__controls vtt-automation-spend__actions">
+            <button type="button" class="dice-roll-btn" data-spend-confirm>${variable ? 'Spend' : 'OK'}</button>
+            <button type="button" class="dice-clear-btn" data-spend-cancel>Cancel</button>
+          </div>
+        </div>
+      </section>
+    `;
+    document.body?.appendChild(host);
+    const modal = host.querySelector('.vtt-automation-spend__modal');
+    const input = host.querySelector('[data-spend-input]');
+    const cleanup = (result) => {
+      host.remove();
+      document.removeEventListener('keydown', onKey);
+      resolve(result);
+    };
+    const getValue = () => {
+      const parsed = Number.parseInt(input?.value ?? minAmount, 10);
+      if (!Number.isFinite(parsed)) return minAmount;
+      return Math.min(maxAmount, Math.max(minAmount, parsed));
+    };
+    const setValue = (value) => {
+      if (input) input.value = String(Math.min(maxAmount, Math.max(minAmount, value)));
+    };
+    const onKey = (event) => {
+      if (event.key === 'Escape') cleanup({ canceled: true });
+    };
+    host.addEventListener('click', (event) => {
+      const target = event.target instanceof Element ? event.target : null;
+      if (target?.closest('[data-spend-cancel]')) {
+        cleanup({ canceled: true });
+        return;
+      }
+      const step = target?.closest('[data-spend-step]');
+      if (step) {
+        const delta = Number.parseInt(step.getAttribute('data-spend-step') || '0', 10) || 0;
+        setValue(getValue() + delta);
+        input?.focus?.();
+        return;
+      }
+      if (target?.closest('[data-spend-confirm]')) {
+        cleanup({ amount: variable ? getValue() : minAmount });
+      }
+    });
+    input?.addEventListener('input', () => setValue(getValue()));
+    document.addEventListener('keydown', onKey);
+    makeAutomationDialogDraggable(host);
+    positionAutomationDialog(modal, anchor);
+    input?.focus?.();
+    input?.select?.();
+  });
+}
+
 // resourceGain modifies the caster's heroic resource directly on their sheet.
 // Mirrors spendAbilityResource but allows positive or negative amounts and
 // doesn't enforce a per-ability cost match.
@@ -2323,16 +2466,19 @@ async function spendHeroicResource(sheet, payload = {}, options = {}) {
     : Math.max(0, Number.parseInt(maxRaw ?? 0, 10) || 0);
   const maxAmount = Math.max(minAmount, Math.min(current, requestedMax || minAmount));
   const promptText = String(payload?.prompt || `Spend ${minAmount} ${title}?`).trim();
-  let spendAmount = minAmount;
-  if (maxAmount > minAmount) {
-    const answer = window.prompt(`${promptText}\nEnter ${minAmount}-${maxAmount}, or leave blank to skip.`, String(minAmount));
-    if (answer === null || String(answer).trim() === '') return { canceled: true, resource: title, current };
-    const parsed = Number.parseInt(answer, 10);
-    if (!Number.isFinite(parsed) || parsed < minAmount) return { canceled: true, resource: title, current };
-    spendAmount = Math.min(maxAmount, parsed);
-  } else if (!window.confirm(promptText)) {
+  const choice = await showAutomationSpendDialog({
+    title: payload?.abilityName || `Spend ${title}`,
+    message: promptText,
+    resource: title,
+    current,
+    minAmount,
+    maxAmount,
+    anchor: options?.automationAnchor || null,
+  });
+  if (choice?.canceled || !choice?.amount) {
     return { canceled: true, resource: title, current };
   }
+  const spendAmount = Math.min(maxAmount, Math.max(minAmount, Number.parseInt(choice.amount, 10) || minAmount));
   const floor = resourceFloor(hero, resource);
   const next = Math.max(floor, current - spendAmount);
   resource.value = next;

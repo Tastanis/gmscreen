@@ -554,7 +554,7 @@ Optional resource spend that, if accepted by the user, triggers extra effects.
 
 Runtime prompts the user contextually: "Spend N <resource> for: <effects>?".
 
-For PC abilities, nested `spend` checks the caster's current heroic resource. If the resource doesn't match or the caster has fewer than `amount`, the prompt is skipped and nested effects do not run. `maxAmount` can be a number or `"available"` to let the player choose how much to spend.
+For PC abilities, nested `spend` checks the caster's current heroic resource. If the resource doesn't match or the caster has fewer than `amount`, the prompt is skipped and nested effects do not run. `maxAmount` can be a number or `"available"` to let the player choose how much to spend. In the VTT, these prompts use a draggable in-app modal; variable spends show stepper buttons and should be preferred for "spend 1+" riders.
 
 ### `ifKeyword` (rider)
 
