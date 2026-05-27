@@ -36,6 +36,7 @@ Use only these category keys:
 - Monster damage should use static numbers, not PC-style formulas like `7 + M`.
 - Use `surgeGain` for Draw Steel surges; do not model surges as heroic resources.
 - Use nested `spend` for optional heroic-resource riders, and embedded `teleport.spend` when the spend changes teleport range before the destination picker opens.
+- Target cards can set `promptTitle` and `promptText` to explain exactly why the player is picking a token. If omitted, a target card immediately followed by a damage effect on that target group gets a generic "Pick Enemy to Damage" style prompt. The popup wording does not control damage; `damage.amount`, `damage.attribute`, `damage.amountDice`, and `damage.damageType` on the later effect still do.
 - PC heroic-resource spend prompts are in-app VTT modals. `maxAmount` enables a variable-spend stepper; use it for "spend 1+" text instead of inventing custom fields.
 - Recovery-style heals use `{ "kind": "heal", "recoveries": N }`. In the VTT, matched PC targets decrement `hero.vitals.currentRecoveries` automatically before the stamina heal; unresolved targets fall back to chat/no-op behavior.
 - `freeStrike` opens a VTT target prompt, rolls the free strike, and applies damage automatically. Use `text` to tell the player which target the rules require if the current schema cannot enforce that exact source.

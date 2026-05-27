@@ -547,6 +547,7 @@
     const known = new Set([
       "type", "id", "name", "mode", "predicate", "creature", "count", "optional",
       "distance", "range", "shape", "size", "width", "height", "length", "note",
+      "promptTitle", "promptText",
     ]);
     const mode = pickKnown(input.mode, P.TARGET_MODES, "token");
     const predicateRaw = input.predicate || input.creature || "creature";
@@ -561,6 +562,10 @@
       count,
       optional: asBool(input.optional),
     };
+    const promptTitle = asTrimmedString(input.promptTitle);
+    const promptText = asTrimmedString(input.promptText);
+    if (promptTitle) block.promptTitle = promptTitle;
+    if (promptText) block.promptText = promptText;
     const distance = normalizeDistance(input.distance, warnings, `${path}.distance`);
     if (distance) block.distance = distance;
     const range = asNonNegInt(input.range, 0);

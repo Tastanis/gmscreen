@@ -97,6 +97,8 @@ Forced-movement highlights account for target stability and size across PCs and 
 
 Target and area range visuals are also advisory. Single-target abilities draw the caster's range/reach box, and area abilities draw the placement-within range box when the source and `distance.within` are known. Clicking outside those visuals is allowed.
 
+Target blocks support optional `promptTitle` and `promptText` fields. These control the target-picker modal title/instructions and board status text, but they do not affect targeting legality or the effects that run later. When omitted, a target block immediately followed by an effect card that damages the same target group gets a generic damage prompt such as "Pick Enemy to Damage"; the later `damage` effect still controls amount, attribute, dice, and damage type.
+
 ## Target predicates — `target.predicate`
 
 `creature`, `enemy`, `ally`, `object`, `creatureOrObject`, `self`, `selfOrAlly`, `selfAndAlly`
@@ -147,7 +149,7 @@ These are called by `runner.js` and dispatched as `vtt:automation-*` CustomEvent
 
 | Hook | Payload | Returns |
 |---|---|---|
-| `selectTarget(config)` | target block fields + `{ pickIndex, pickTotal, allowDone }` | `{ id, name, hidden?, placement? }` or `{ skipped }` / `{ done }` / `{ canceled }` |
+| `selectTarget(config)` | target block fields + `{ pickIndex, pickTotal, allowDone }`; may include `promptTitle` / `promptText` for picker wording | `{ id, name, hidden?, placement? }` or `{ skipped }` / `{ done }` / `{ canceled }` |
 | `selectAreaTarget(config)` | target block fields + `sourcePlacement` | `{ targets: [...] }` or `{ skipped }` / `{ canceled }` |
 | `applyDamage(payload)` | `{ placementId, amount, damageType, abilityName }` | `{ name, amount, current, max, hidden, vulnerability, immunity }` |
 | `applyHeal(payload)` | `{ placementId, amount, allowTempHp, abilityName }` | `{ name, change, current, max, hidden, allowTempHp }` |

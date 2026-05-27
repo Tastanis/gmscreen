@@ -159,6 +159,8 @@ Asks the player to pick a token (or place an area template) on the VTT board.
   "predicate": "enemy",
   "count": { "value": 1, "mode": "exact" },
   "optional": false,
+  "promptTitle": "Pick Enemy to Damage",
+  "promptText": "Choose one enemy to damage.",
   "distance": { "form": "melee", "value": 1 }
 }
 ```
@@ -170,7 +172,11 @@ Asks the player to pick a token (or place an area template) on the VTT board.
 | `predicate` | `"creature"`, `"enemy"`, `"ally"`, `"object"`, `"creatureOrObject"`, `"self"`, `"selfOrAlly"`, `"selfAndAlly"` | Who's a legal target. |
 | `count` | `{ value, mode }` | `mode`: `"exact"` (must pick all) or `"upTo"` (player can stop early). Token mode only. |
 | `optional` | bool | If true, runtime shows a "Skip" button. The automation continues with an empty target group. |
+| `promptTitle` | string | Optional custom title for the target picker popup. |
+| `promptText` | string | Optional custom instructions for the target picker popup and board status. |
 | `distance` | `{ form, value, secondary?, within? }` | See distance forms below. |
+
+If `promptTitle` / `promptText` are omitted and the next effect card uses this target group for damage, the runner supplies a generic damage prompt such as `"Pick Enemy to Damage"` and `"Choose one enemy to damage."` This only changes the UI wording; damage amount, attribute scaling, dice, and damage type still come from the later `damage` effect.
 
 For self-only resolution effects after a trigger, an `effect` card can use `"target": "self"` directly. The runner resolves that to the source token; do not add a separate target card that asks the player to pick themselves unless the ability genuinely needs a manual pick.
 

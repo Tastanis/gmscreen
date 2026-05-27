@@ -371,8 +371,72 @@
 
   // ---------- target block ----------
 
+  function titleCaseWord(value) {
+    const text = String(value || "").trim();
+    if (!text) return "Target";
+    return text.charAt(0).toUpperCase() + text.slice(1);
+  }
+
+  function describeTargetCount(block) {
+    const count = block?.count;
+    const value = count && typeof count === "object" ? asInt(count.value, 1) : asInt(count, 1);
+    const upTo = count && typeof count === "object" && count.mode === "upTo";
+    if (value > 1) return `${upTo ? "up to " : ""}${value}`;
+    return upTo ? "up to one" : "one";
+  }
+
+  function effectListContainsKind(effects, kind) {
+    if (!Array.isArray(effects)) return false;
+    for (const effect of effects) {
+      if (!effect || typeof effect !== "object") continue;
+      if (effect.kind === kind) return true;
+      if (effect.kind === "potency" && effectListContainsKind(effect.onFail, kind)) return true;
+      if (effect.kind === "spend" && effectListContainsKind(effect.effects, kind)) return true;
+      if (effect.kind === "ifKeyword" || effect.kind === "ifPrompt" || effect.kind === "ifMark" || effect.kind === "ifScopedFlag") {
+        if (effectListContainsKind(effect.then, kind) || effectListContainsKind(effect.else, kind)) return true;
+      }
+    }
+    return false;
+  }
+
+  function inferTargetPrompt(block, nextBlocks = [], startIndex = -1) {
+    if (!block || block.mode !== "token") return {};
+    const groupName = block.name || "primary";
+    for (let index = startIndex + 1; index < nextBlocks.length; index += 1) {
+      const candidate = nextBlocks[index];
+      if (!candidate || candidate.type !== "effect") continue;
+      const targetName = candidate.target || "";
+      if ((targetName || "primary") !== groupName) continue;
+      if (effectListContainsKind(candidate.effects, "damage")) {
+        const predicate = titleCaseWord(block.predicate || "target");
+        const count = describeTargetCount(block);
+        return {
+          promptTitle: `Pick ${predicate} to Damage`,
+          promptText: `Choose ${count} ${block.predicate || "target"} to damage.`,
+        };
+      }
+      break;
+    }
+    return {};
+  }
+
+  function withTargetPromptDefaults(block, inferred = {}) {
+    if (!block || block.type !== "target") return block;
+    return {
+      ...block,
+      promptTitle: block.promptTitle || inferred.promptTitle || "",
+      promptText: block.promptText || inferred.promptText || "",
+    };
+  }
+
   function showTargetPrompt(state, block) {
-    const host = makeHost("Pick Target", state.action.name || "Ability Automation", "target", state.context?.automationAnchor || null);
+    const title = block.promptTitle || "Pick Target";
+    const instruction = block.promptText || (
+      block.mode === "area"
+        ? "Place the area template on the map."
+        : "Click a token on the map."
+    );
+    const host = makeHost(title, state.action.name || "Ability Automation", "target", state.context?.automationAnchor || null);
     host.querySelector("[data-power-roll-body]").innerHTML = `
       <section class="power-roll-runner__section power-roll-runner__section--compact">
         <div class="power-roll-runner__ability">
@@ -381,11 +445,7 @@
         </div>
       </section>
       <div class="power-roll-runner__inline-actions">
-        <p class="power-roll-runner__instruction">${escapeHtml(
-          block.mode === "area"
-            ? "Place the area template on the map."
-            : "Click a token on the map."
-        )}</p>
+        <p class="power-roll-runner__instruction">${escapeHtml(instruction)}</p>
         ${block.optional ? '<button class="dice-clear-btn" type="button" data-skip-target>Skip</button>' : ""}
         <button class="dice-clear-btn" type="button" data-cancel-automation>Cancel</button>
       </div>
@@ -1919,6 +1979,15 @@
     return [];
   }
 
+  async function runBlockAt(state, blocks, index) {
+    const block = blocks[index];
+    if (block?.type === "target") {
+      const inferred = inferTargetPrompt(block, blocks, index);
+      return runBlock(state, withTargetPromptDefaults(block, inferred));
+    }
+    return runBlock(state, block);
+  }
+
   function isNonFreeTriggeredAction(action) {
     const label = String(action?.actionLabel || action?.type || action?.kind || "").toLowerCase();
     return label.includes("triggered") && !label.includes("free");
@@ -2184,10 +2253,11 @@
           return;
         }
       }
-      for (const block of blocks) {
+      for (let index = 0; index < blocks.length; index += 1) {
+        const block = blocks[index];
         if (state.aborted) break;
         if (isResolvingReadyTrigger && block?.type === "trigger") continue;
-        await runBlock(state, block);
+        await runBlockAt(state, blocks, index);
       }
       if (state.aborted) {
         await postChat(state.context, {

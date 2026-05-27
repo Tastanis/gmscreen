@@ -16097,6 +16097,9 @@ export function mountBoardInteractions(store, routes = {}) {
   }
 
   function formatAutomationTargetPrompt(targetConfig = {}) {
+    if (targetConfig.promptText) {
+      return String(targetConfig.promptText);
+    }
     const countVal = (typeof targetConfig.count === 'object' && targetConfig.count)
       ? Number.parseInt(targetConfig.count.value, 10) || 1
       : (Number.parseInt(targetConfig.count, 10) || 1);
