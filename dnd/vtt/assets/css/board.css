@@ -5702,6 +5702,12 @@ body.vtt-character-ability-tray-is-open .vtt-board__malice {
   white-space: pre-wrap;
 }
 
+.vtt-automation-picker-prompt__actions {
+  display: flex;
+  gap: 8px;
+  justify-content: flex-end;
+}
+
 .vtt-automation-picker-prompt__hint {
   color: var(--dice-muted, #6f5d45);
   font-size: 0.84rem;

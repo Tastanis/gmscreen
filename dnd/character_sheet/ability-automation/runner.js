@@ -461,10 +461,12 @@
   }
 
   async function runTargetBlock(state, block) {
-    const host = showTargetPrompt(state, block);
-    const finish = () => host.remove();
+    const useBoardOnlyPrompt = block.mode === "token" && Boolean(block.promptTitle || block.promptText);
+    const host = useBoardOnlyPrompt ? null : showTargetPrompt(state, block);
+    const finish = () => host?.remove();
 
     const cancelPromise = new Promise((resolve) => {
+      if (!host) return;
       const onCancel = (event) => {
         const target = event.target instanceof Element ? event.target : null;
         if (target?.closest("[data-cancel-automation]")) {
@@ -478,6 +480,7 @@
 
     const skipPromise = block.optional
       ? new Promise((resolve) => {
+          if (!host) return;
           const onSkip = (event) => {
             const target = event.target instanceof Element ? event.target : null;
             if (target?.closest("[data-skip-target]")) {

@@ -97,7 +97,7 @@ Forced-movement highlights account for target stability and size across PCs and 
 
 Target and area range visuals are also advisory. Single-target abilities draw the caster's range/reach box, and area abilities draw the placement-within range box when the source and `distance.within` are known. Clicking outside those visuals is allowed.
 
-Target blocks support optional `promptTitle` and `promptText` fields. These control the target-picker modal title/instructions and board status text, but they do not affect targeting legality or the effects that run later. When omitted, a target block immediately followed by an effect card that damages the same target group gets a generic damage prompt such as "Pick Enemy to Damage"; the later `damage` effect still controls amount, attribute, dice, and damage type.
+Target blocks support optional `promptTitle` and `promptText` fields. These control the target-picker modal title/instructions and board status text, but they do not affect targeting legality or the effects that run later. When omitted, a target block immediately followed by an effect card that damages the same target group gets a generic damage prompt such as "Pick Enemy to Damage"; the later `damage` effect still controls amount, attribute, dice, and damage type. Token target blocks with custom or inferred prompt text use the board picker as the single visible prompt; optional picks expose `Skip` in that picker.
 
 ## Target predicates — `target.predicate`
 

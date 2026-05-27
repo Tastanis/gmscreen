@@ -178,6 +178,8 @@ Asks the player to pick a token (or place an area template) on the VTT board.
 
 If `promptTitle` / `promptText` are omitted and the next effect card uses this target group for damage, the runner supplies a generic damage prompt such as `"Pick Enemy to Damage"` and `"Choose one enemy to damage."` This only changes the UI wording; damage amount, attribute scaling, dice, and damage type still come from the later `damage` effect.
 
+When a token target card has custom or inferred prompt text in the VTT, the board picker shows a single compact prompt near the map selection area. Optional target cards put `Skip` in that picker; `Cancel` stops the automation. Keep `promptText` short and action-oriented, since it is meant as quick reference text.
+
 For self-only resolution effects after a trigger, an `effect` card can use `"target": "self"` directly. The runner resolves that to the source token; do not add a separate target card that asks the player to pick themselves unless the ability genuinely needs a manual pick.
 
 For `mode: "area"` add:

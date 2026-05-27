@@ -1988,7 +1988,7 @@ export function mountBoardInteractions(store, routes = {}) {
   }
 
   document.addEventListener('vtt:automation-select-target', handleAutomationTargetRequest);
-  document.addEventListener('vtt:automation-cancel-target', () => cancelPendingAutomationTarget('Target selection skipped.'));
+  document.addEventListener('vtt:automation-cancel-target', () => skipPendingAutomationTarget('Target selection skipped.'));
   document.addEventListener('vtt:automation-select-area', handleAutomationAreaRequest);
   document.addEventListener('vtt:automation-cancel-area', () => cancelPendingAutomationArea('Area targeting skipped.'));
   document.addEventListener('vtt:automation-apply-damage', handleAutomationDamageRequest);
@@ -14223,6 +14223,12 @@ export function mountBoardInteractions(store, routes = {}) {
         </header>
         <div class="dice-modal-content vtt-automation-picker-prompt__body">
           <p>${escapeHtml(text)}</p>
+          ${targetConfig.optional ? `
+            <div class="vtt-automation-picker-prompt__actions">
+              <button type="button" class="dice-clear-btn" data-automation-target-skip>Skip</button>
+              <button type="button" class="dice-clear-btn" data-automation-target-cancel>Cancel</button>
+            </div>
+          ` : ''}
         </div>
       </section>
     `;
@@ -14232,6 +14238,8 @@ export function mountBoardInteractions(store, routes = {}) {
       const target = event.target instanceof Element ? event.target : null;
       if (target?.closest('[data-automation-target-cancel]')) {
         cancelPendingAutomationTarget('Target selection canceled.');
+      } else if (target?.closest('[data-automation-target-skip]')) {
+        skipPendingAutomationTarget('Target selection skipped.');
       }
     });
     makeAutomationTargetPromptDraggable(host);
@@ -16137,7 +16145,20 @@ export function mountBoardInteractions(store, routes = {}) {
     clearAutomationTargetPrompt();
     clearAutomationTargetRangeOverlay();
     updateStatus(message || 'Target selection canceled.');
-    request.reject?.(new Error(message || 'Target selection canceled.'));
+    request.resolve?.({ canceled: true });
+  }
+
+  function skipPendingAutomationTarget(message) {
+    if (!pendingAutomationTarget) {
+      return;
+    }
+    const request = pendingAutomationTarget;
+    pendingAutomationTarget = null;
+    stopSuggestedTargetPulse();
+    clearAutomationTargetPrompt();
+    clearAutomationTargetRangeOverlay();
+    updateStatus(message || 'Target selection skipped.');
+    request.resolve?.({ skipped: true });
   }
 
   function applyDamageHealToPlacement(placementId, mode, amount, { allowTempHp = false } = {}) {
