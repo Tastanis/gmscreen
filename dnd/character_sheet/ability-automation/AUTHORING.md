@@ -475,6 +475,22 @@ Optional heroic-resource spend can increase the picker distance before the picke
 }
 ```
 
+### `abilityTest`
+
+Opens the standard 2d10 roll modal for a non-damaging test, such as a Hide maneuver that is conditionally allowed by another ability. The roll posts to chat and must be interpreted by the table; branch after it with `ifPrompt` if the automation needs to know whether the test succeeded.
+
+```json
+{ "kind": "abilityTest", "label": "Hide maneuver", "attribute": "Agility", "text": "Roll an Agility test using the Hide skill." }
+```
+
+| Field | Values |
+|---|---|
+| `label` | modal/chat label for the test |
+| `attribute` | `"Might"`, `"Agility"`, `"Reason"`, `"Intuition"`, `"Presence"`, `"Strongest"`, or an attribute array |
+| `bonus` | optional flat bonus |
+| `rollFormula` | optional dice formula, defaults to `"2d10"` |
+| `text` | optional reminder text shown in the roll modal |
+
 ### `swap`
 
 ```json

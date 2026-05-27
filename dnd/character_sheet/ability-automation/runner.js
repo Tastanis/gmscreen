@@ -954,6 +954,8 @@
         return applyTeleportEffect(state, effect, targets, ctx);
       case "swap":
         return applySwapEffect(state, effect, targets, ctx);
+      case "abilityTest":
+        return applyAbilityTestEffect(state, effect, targets, ctx);
       case "freeStrike":
         return applyFreeStrikeEffect(state, effect, targets, ctx);
       case "cascade":
@@ -1749,6 +1751,41 @@
         message: `${state.heroName} - ${state.action.name || "Ability"}:\n${lines.join("\n")}`,
       });
     }
+  }
+
+  async function applyAbilityTestEffect(state, effect, _targets, _ctx) {
+    const testAction = {
+      ...state.action,
+      name: effect.label || "Test",
+      description: effect.text || state.action.description || "",
+      range: "",
+      cost: "",
+    };
+    const testState = {
+      ...state,
+      action: testAction,
+      selectedTier: null,
+      baseTier: null,
+      edgeCount: 0,
+      baneCount: 0,
+      manualBonus: 0,
+      roll: null,
+      resultText: "",
+    };
+    const block = {
+      type: "powerRoll",
+      attribute: effect.attribute || "Strongest",
+      bonus: asInt(effect.bonus, 0),
+      rollFormula: effect.rollFormula || "2d10",
+      target: "self",
+      tiers: {
+        tier1: { effects: [] },
+        tier2: { effects: [] },
+        tier3: { effects: [] },
+      },
+    };
+    await runPowerRollBlock(testState, block);
+    if (testState.aborted) state.aborted = true;
   }
 
   async function applySwapEffect(state, effect, targets, _ctx) {

@@ -18,6 +18,7 @@
     "shift",
     "teleport",
     "swap",
+    "abilityTest",
     "resourceGain",
     "surgeGain",
     "freeStrike",
@@ -380,6 +381,8 @@
         return `teleport ${effect.distance || 0}`;
       case "swap":
         return "swap places";
+      case "abilityTest":
+        return `${effect.label || "Test"} (${effect.attribute || "Strongest"})`;
       case "resourceGain": {
         const amount = effect.amount || 0;
         const sign = amount >= 0 ? "+" : "";
