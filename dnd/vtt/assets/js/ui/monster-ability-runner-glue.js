@@ -218,6 +218,7 @@
             applySwap: board.applySwap,
             runFreeStrike: board.runFreeStrike,
             getRecoveryValueForTarget: board.getRecoveryValueForTarget,
+            spendRecoveryForTarget: board.spendRecoveryForTarget,
             registerPersistentZone: board.registerPersistentZone,
             applyMark: board.applyMark,
             endMark: board.endMark,

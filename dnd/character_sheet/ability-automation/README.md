@@ -88,7 +88,7 @@ Each effect is dispatched by `kind`:
 - Persistent zones: "on enter zone" trigger during movement (Pass 1 only ticks at owner's turn).
 - Vertical forced movement (Z-axis); horizontal push/pull/slide are fully wired.
 - `cascade` effect kind — fires another ability as a free triggered action. Needs stable cross-ability identifiers and a recursive runner entry point. Phase D candidate.
-- Auto-decrement of the target's `currentRecoveries` after a recovery-style heal — currently a chat reminder so the player adjusts the sheet manually. Adding a `sync-recoveries` endpoint to `handler.php` would close this.
+- Recovery-style heals now decrement the target PC's `currentRecoveries` through the VTT sheet save path. Non-PC targets or unresolved sheets still fall back to chat/no-op behavior.
 - Marks (judged by, marked by, bonded).
 - Teleport's destination picker reuses the slide overlay, which means clicking an occupied cell triggers a slam (technically wrong for teleport). Picking an empty cell behaves correctly.
 - Auto-resolution of fired triggers — today the bus marks the watcher's blue `!` overlay and the user clicks to resolve. Intentional: keeps the player in the loop.

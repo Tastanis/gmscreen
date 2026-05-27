@@ -1225,22 +1225,41 @@
       if (!target?.id) continue;
 
       // Resolve the actual heal amount for this target. With `recoveries`,
-      // each target spends one of their own recoveries (chat reminder, since
-      // handler.php has no recovery-decrement endpoint) and heals by their
-      // own `recoveryValue`. If we can't read the target's sheet, fall back
-      // to the flatAmount or a chat reminder.
+      // the VTT hook spends the target's recovery counter and returns their
+      // recovery value. Older hosts can still provide only the read hook, in
+      // which case chat reminds the player to decrement recoveries manually.
       let amount = flatAmount;
       let recoveryValueUsed = 0;
       let recoveryUnknown = false;
+      let recoverySpent = 0;
+      let recoveryManualDecrement = false;
       if (recoveries) {
-        const resolved = typeof state.context.getRecoveryValueForTarget === "function"
-          ? await state.context.getRecoveryValueForTarget({ placementId: target.id })
+        const spent = typeof state.context.spendRecoveryForTarget === "function"
+          ? await state.context.spendRecoveryForTarget({
+              placementId: target.id,
+              recoveries,
+              abilityName: state.action.name || "Ability",
+            })
           : null;
-        if (Number.isFinite(resolved?.recoveryValue) && resolved.recoveryValue > 0) {
-          recoveryValueUsed = Math.trunc(resolved.recoveryValue) * recoveries;
+        if (spent?.skipped) {
+          lines.push(`${target.name || "Target"}: recovery spend skipped (${spent.reason || "unavailable"}).`);
+          if (!flatAmount) continue;
+        } else if (Number.isFinite(spent?.recoveryValue) && spent.recoveryValue > 0) {
+          recoverySpent = asInt(spent.spent, recoveries);
+          recoveryValueUsed = Math.trunc(spent.recoveryValue) * recoverySpent;
           amount = recoveryValueUsed + flatAmount;
         } else {
-          recoveryUnknown = true;
+          const resolved = typeof state.context.getRecoveryValueForTarget === "function"
+            ? await state.context.getRecoveryValueForTarget({ placementId: target.id })
+            : null;
+          if (Number.isFinite(resolved?.recoveryValue) && resolved.recoveryValue > 0) {
+            recoverySpent = recoveries;
+            recoveryManualDecrement = true;
+            recoveryValueUsed = Math.trunc(resolved.recoveryValue) * recoveries;
+            amount = recoveryValueUsed + flatAmount;
+          } else {
+            recoveryUnknown = true;
+          }
         }
       }
 
@@ -1268,10 +1287,10 @@
       const current = result.current;
       const display = max !== null && max !== undefined ? `${current}/${max}` : `${current}`;
       const overage = allowTempHp && Number.isFinite(max) && current > max ? ` (+${current - max} temp)` : "";
-      const recoveryNote = recoveries
-        ? ` (spent ${recoveries} recovery → ${recoveryValueUsed}${flatAmount ? `+${flatAmount}` : ""}; decrement recoveries on sheet)`
+      const finalRecoveryNote = recoveries && recoveryValueUsed
+        ? ` (spent ${recoverySpent || recoveries} recovery -> ${recoveryValueUsed}${flatAmount ? `+${flatAmount}` : ""}${recoveryManualDecrement ? "; decrement recoveries on sheet" : ""})`
         : "";
-      lines.push(`${targetName} recovers ${result.change || amount} stamina${overage}${recoveryNote} (${display}).`);
+      lines.push(`${targetName} recovers ${result.change || amount} stamina${overage}${finalRecoveryNote} (${display}).`);
     }
     if (lines.length) {
       await postChat(state.context, {

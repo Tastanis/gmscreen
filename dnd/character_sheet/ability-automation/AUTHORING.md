@@ -394,7 +394,7 @@ Each effect is one of the kinds below. They're used inside `powerRoll.tiers.tier
 { "kind": "heal", "amount": 5 }
 ```
 
-`recoveries` spends N of the target's recoveries to heal `N × recoveryValue`. `amount` is a flat number; both can combine. The runtime reads the target's `hero.vitals.recoveryValue` from their character sheet; if unknown, it posts a chat reminder so the GM can apply manually. **The target's `currentRecoveries` is NOT auto-decremented yet — the chat output reminds the player to update their sheet.**
+`recoveries` spends N of the target's recoveries to heal `N × recoveryValue`. `amount` is a flat number; both can combine. In the VTT, PC targets have `hero.vitals.currentRecoveries` decremented automatically before the heal is applied. If the target sheet or recovery value can't be read, the runtime posts a chat reminder so the GM can apply manually.
 
 ### `temporaryStamina`
 

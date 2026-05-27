@@ -1947,6 +1947,7 @@ function startAbilityAutomation(sheet, action, categoryKey, sourceToken = null, 
     applySwap: requestAutomationSwap,
     runFreeStrike: requestAutomationFreeStrike,
     getRecoveryValueForTarget: requestAutomationRecoveryValue,
+    spendRecoveryForTarget: requestAutomationSpendRecovery,
     registerPersistentZone: requestAutomationRegisterZone,
     applyMark: requestAutomationApplyMark,
     endMark: requestAutomationEndMark,
@@ -2137,6 +2138,20 @@ function requestAutomationRecoveryValue(payload) {
   return new Promise((resolve, reject) => {
     document.dispatchEvent(
       new CustomEvent('vtt:automation-recovery-value', {
+        detail: {
+          payload: clonePlain(payload || {}),
+          resolve,
+          reject,
+        },
+      })
+    );
+  });
+}
+
+function requestAutomationSpendRecovery(payload) {
+  return new Promise((resolve, reject) => {
+    document.dispatchEvent(
+      new CustomEvent('vtt:automation-spend-recovery', {
         detail: {
           payload: clonePlain(payload || {}),
           resolve,

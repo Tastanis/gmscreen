@@ -12,7 +12,7 @@ The canonical hook registry is `../../character_sheet/ability-automation/REGISTR
 
 ## Board Callback Surface
 
-`window.VTTBoardCallbacks` is exported from `board-interactions.js` and includes target selection, area selection, damage, healing, conditions, potency checks, forced movement, teleport, swap, free strikes, persistent zones, marks, trigger events, and scoped flags.
+`window.VTTBoardCallbacks` is exported from `board-interactions.js` and includes target selection, area selection, damage, healing, PC recovery spending, conditions, potency checks, forced movement, teleport, swap, free strikes, persistent zones, marks, trigger events, and scoped flags.
 
 Check `REGISTRY.md` before authoring against a hook. If it is not listed there, treat it as unsupported.
 
@@ -23,6 +23,8 @@ Check `REGISTRY.md` before authoring against a hook. If it is not listed there, 
 ## VTT Automation Prompt UI
 
 PC heroic-resource spends use draggable in-app VTT modals, not native browser `prompt`/`confirm` dialogs. Variable spends (`maxAmount`) show stepper buttons. Free-strike target selection uses the board picker plus a small draggable target prompt; right-click map panning remains available because these dialogs do not use a blocking backdrop.
+
+Recovery-style heals (`{ "kind": "heal", "recoveries": N }`) call `spendRecoveryForTarget` in the VTT. For matched PC sheets, this decrements `hero.vitals.currentRecoveries` before applying stamina healing. Monsters and unresolved targets skip or fall back to chat reminders.
 
 Known current limitation: manual/non-automation damage does not fire the authored damage trigger events. Use the registry for the latest limitation list.
 

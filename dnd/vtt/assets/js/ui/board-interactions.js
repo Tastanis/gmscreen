@@ -2001,6 +2001,7 @@ export function mountBoardInteractions(store, routes = {}) {
   document.addEventListener('vtt:automation-apply-swap', handleAutomationSwapRequest);
   document.addEventListener('vtt:automation-run-free-strike', handleAutomationFreeStrikeRequest);
   document.addEventListener('vtt:automation-recovery-value', handleAutomationRecoveryValueRequest);
+  document.addEventListener('vtt:automation-spend-recovery', handleAutomationSpendRecoveryRequest);
   document.addEventListener('vtt:automation-register-persistent-zone', handleAutomationRegisterZoneRequest);
   document.addEventListener('vtt:automation-apply-mark', handleAutomationApplyMarkRequest);
   document.addEventListener('vtt:automation-end-mark', handleAutomationEndMarkRequest);
@@ -11252,6 +11253,7 @@ export function mountBoardInteractions(store, routes = {}) {
     runFreeStrike: function (payload) { return dispatchBoardCustom('vtt:automation-run-free-strike', 'payload', payload); },
     applySurgeGain: function (payload) { return dispatchBoardCustom('vtt:automation-apply-surge', 'payload', payload); },
     getRecoveryValueForTarget: function (payload) { return dispatchBoardCustom('vtt:automation-recovery-value', 'payload', payload); },
+    spendRecoveryForTarget: function (payload) { return dispatchBoardCustom('vtt:automation-spend-recovery', 'payload', payload); },
     registerPersistentZone: function (payload) { return dispatchBoardCustom('vtt:automation-register-persistent-zone', 'payload', payload); },
     applyMark: function (payload) { return dispatchBoardCustom('vtt:automation-apply-mark', 'payload', payload); },
     endMark: function (payload) { return dispatchBoardCustom('vtt:automation-end-mark', 'payload', payload); },
@@ -15088,6 +15090,58 @@ export function mountBoardInteractions(store, routes = {}) {
     }
   }
 
+  function getAutomationProfileIdForPlacement(placementId) {
+    const placement = getPlacementFromStore(placementId);
+    if (!placement) return '';
+    const profileId = matchProfileByName(tokenLabel(placement));
+    return profileId && PLAYER_CHARACTER_USER_IDS.includes(profileId) ? profileId : '';
+  }
+
+  function resolveAutomationRecoveryValue(vitals = {}) {
+    const raw = vitals.recoveryValue;
+    let parsed = null;
+    if (Number.isFinite(raw)) {
+      parsed = Number(raw);
+    } else if (typeof raw === 'string') {
+      const n = Number.parseInt(raw.replace(/[^\d-]/g, ''), 10);
+      if (Number.isFinite(n)) parsed = n;
+    }
+    if (!Number.isFinite(parsed) || parsed <= 0) {
+      const max = Number.parseInt(vitals.staminaMax ?? 0, 10);
+      if (Number.isFinite(max) && max > 0) parsed = Math.floor(max / 3);
+    }
+    return Number.isFinite(parsed) && parsed > 0 ? parsed : null;
+  }
+
+  async function saveAutomationSheetForProfile(profileId, sheet) {
+    if (!profileId || !sheet) return false;
+    const endpoint = typeof routes?.sheet === 'string' && routes.sheet ? routes.sheet : '/dnd/character_sheet/handler.php';
+    const body = new URLSearchParams();
+    body.set('action', 'save');
+    body.set('character', profileId);
+    body.set('data', JSON.stringify(sheet));
+    try {
+      const response = await fetch(endpoint, {
+        method: 'POST',
+        credentials: 'same-origin',
+        headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
+        body,
+      });
+      const payload = await response.json().catch(() => null);
+      const saved = Boolean(response.ok && payload?.success !== false);
+      if (saved) {
+        if (characterSummaryCache instanceof Map) characterSummaryCache.set(profileId, sheet);
+        document.dispatchEvent(new CustomEvent('vtt:character-sheet-updated', {
+          detail: { characterId: profileId, change: 'recovery' },
+        }));
+      }
+      return saved;
+    } catch (error) {
+      console.warn('[VTT] Failed to save automation sheet summary', error);
+      return false;
+    }
+  }
+
   function parseDamageAdjustmentList(list, damageType) {
     const entries = Array.isArray(list) ? list : [];
     const normalizedType = normalizeAutomationDamageType(damageType);
@@ -15214,25 +15268,54 @@ export function mountBoardInteractions(store, routes = {}) {
       return;
     }
     const vitals = sheet?.hero?.vitals && typeof sheet.hero.vitals === 'object' ? sheet.hero.vitals : {};
-    // The sheet's recoveryValue field is sometimes a number, sometimes a
-    // free-text expression (e.g. "max stamina ÷ 3"). Take whatever we can
-    // parse; let the runner fall back to a manual reminder otherwise.
-    const raw = vitals.recoveryValue;
-    let parsed = null;
-    if (Number.isFinite(raw)) {
-      parsed = Number(raw);
-    } else if (typeof raw === 'string') {
-      const n = Number.parseInt(raw.replace(/[^\d-]/g, ''), 10);
-      if (Number.isFinite(n)) parsed = n;
+    resolve?.({
+      recoveryValue: resolveAutomationRecoveryValue(vitals),
+      currentRecoveries: Number.parseInt(vitals.currentRecoveries ?? 0, 10) || 0,
+    });
+  }
+
+  async function handleAutomationSpendRecoveryRequest(event) {
+    const detail = event?.detail ?? {};
+    const payload = detail.payload && typeof detail.payload === 'object' ? detail.payload : {};
+    const resolve = typeof detail.resolve === 'function' ? detail.resolve : null;
+    const placementId = String(payload.placementId || '').trim();
+    const recoveries = Math.max(1, Number.parseInt(payload.recoveries ?? payload.amount ?? 1, 10) || 1);
+    if (!placementId) {
+      resolve?.({ skipped: true, reason: 'missing-placement' });
+      return;
     }
-    if (!Number.isFinite(parsed) || parsed <= 0) {
-      // Final fallback: round-down(staminaMax / 3) per Draw Steel rules
-      const max = Number.parseInt(vitals.staminaMax ?? 0, 10);
-      if (Number.isFinite(max) && max > 0) parsed = Math.floor(max / 3);
+    const profileId = getAutomationProfileIdForPlacement(placementId);
+    if (!profileId) {
+      resolve?.({ skipped: true, reason: 'not-pc' });
+      return;
+    }
+    const sheet = await getAutomationSheetForPlacement(placementId);
+    const vitals = sheet?.hero?.vitals && typeof sheet.hero.vitals === 'object' ? sheet.hero.vitals : null;
+    if (!sheet || !vitals) {
+      resolve?.({ skipped: true, reason: 'missing-sheet' });
+      return;
+    }
+    const current = Number.parseInt(vitals.currentRecoveries ?? 0, 10) || 0;
+    if (current < recoveries) {
+      resolve?.({ skipped: true, reason: 'insufficient', currentRecoveries: current, required: recoveries });
+      return;
+    }
+    const recoveryValue = resolveAutomationRecoveryValue(vitals);
+    if (!Number.isFinite(recoveryValue) || recoveryValue <= 0) {
+      resolve?.({ skipped: true, reason: 'missing-recovery-value', currentRecoveries: current });
+      return;
+    }
+    vitals.currentRecoveries = Math.max(0, current - recoveries);
+    const saved = await saveAutomationSheetForProfile(profileId, sheet);
+    if (!saved) {
+      resolve?.({ skipped: true, reason: 'save-failed', currentRecoveries: current });
+      return;
     }
     resolve?.({
-      recoveryValue: Number.isFinite(parsed) && parsed > 0 ? parsed : null,
-      currentRecoveries: Number.parseInt(vitals.currentRecoveries ?? 0, 10) || 0,
+      spent: recoveries,
+      recoveryValue,
+      currentRecoveries: vitals.currentRecoveries,
+      name: tokenLabel(getPlacementFromStore(placementId)),
     });
   }
 
