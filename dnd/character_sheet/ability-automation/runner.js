@@ -922,6 +922,8 @@
         return applyConditionEffect(state, effect, targets, ctx);
       case "forcedMovement":
         return applyForcedMovementEffect(state, effect, targets, ctx);
+      case "shift":
+        return applyShiftEffect(state, effect, targets, ctx);
       case "potency":
         return applyPotencyEffect(state, effect, targets, ctx);
       case "spend":
@@ -1325,6 +1327,87 @@
         message: `${state.heroName} - ${state.action.name || "Ability"}:\n${lines.join("\n")}`,
       });
     }
+  }
+
+  function parseSpeedValue(value) {
+    const match = String(value ?? "").match(/-?\d+/);
+    if (!match) return 0;
+    return Math.max(0, asInt(match[0], 0));
+  }
+
+  function resolveShiftDistance(state, effect) {
+    if (effect.distance !== "speed") return asInt(effect.distance, 0);
+    return parseSpeedValue(
+      state.hero?.vitals?.speed ??
+      state.hero?.speed ??
+      state.sourceTraits?.speed ??
+      state.sourcePlacement?.traits?.speed ??
+      state.sourcePlacement?.movementSpeed ??
+      state.sourcePlacement?.speed ??
+      state.sourcePlacement?.movement
+    );
+  }
+
+  function getShiftPool(state, effect) {
+    const poolKey = effect.pool || "";
+    if (!poolKey) return null;
+    state.shiftPools ||= {};
+    if (!state.shiftPools[poolKey]) {
+      state.shiftPools[poolKey] = {
+        total: resolveShiftDistance(state, effect),
+        used: 0,
+      };
+    }
+    return state.shiftPools[poolKey];
+  }
+
+  async function applyShiftEffect(state, effect, _targets, _ctx) {
+    const target = state.sourcePlacement;
+    if (!target?.id) {
+      await postChat(state.context, {
+        message: `${state.heroName} - ${state.action.name || "Ability"}: ${P.describeEffect(effect)} (no source token).`,
+      });
+      return;
+    }
+    const pool = getShiftPool(state, effect);
+    const baseDistance = pool ? Math.max(0, pool.total - pool.used) : resolveShiftDistance(state, effect);
+    if (!baseDistance) {
+      await postChat(state.context, {
+        message: `${state.heroName} - ${state.action.name || "Ability"}: no shift distance remaining.`,
+      });
+      return;
+    }
+    if (typeof state.context.forceMove !== "function") {
+      await postChat(state.context, {
+        message: `${state.heroName} - ${state.action.name || "Ability"}: shift up to ${baseDistance} squares â€” apply manually.`,
+      });
+      return;
+    }
+    const result = await state.context.forceMove({
+      movement: "slide",
+      verb: "slide",
+      verbLabel: "Shift",
+      distance: baseDistance,
+      upTo: true,
+      ignoreStability: true,
+      targetId: target.id,
+      target,
+      sourcePlacement: target,
+      sourceTraits: state.sourceTraits || {},
+      abilityName: state.action.name || "Ability",
+    });
+    if (!result || result.skipped) {
+      await postChat(state.context, {
+        message: `${state.heroName} - ${state.action.name || "Ability"}: shift skipped${pool ? ` (${baseDistance} remaining)` : ""}.`,
+      });
+      return;
+    }
+    const moved = Math.max(0, asInt(result.movedDistance, baseDistance));
+    if (pool) pool.used = Math.min(pool.total, pool.used + moved);
+    const remaining = pool ? Math.max(0, pool.total - pool.used) : 0;
+    await postChat(state.context, {
+      message: `${state.heroName} - ${state.action.name || "Ability"}: shifted ${moved} square${moved === 1 ? "" : "s"}${pool ? ` (${remaining} remaining)` : ""}.`,
+    });
   }
 
   async function applyPotencyEffect(state, effect, targets, ctx) {
@@ -1968,6 +2051,7 @@
       triggerPayload: options?.triggerPayload || null,
       groups: {},
       currentGroup: null,
+      shiftPools: {},
       // Area templates placed by area-target blocks. Keyed by the target
       // block's `name`. Persistent zone registration looks here to find the
       // cells the zone should occupy.

@@ -434,6 +434,23 @@ Applies via the same heal path but allows the new total to exceed max stamina (t
 | `distance` | int squares |
 | `upTo` | bool — `true` if the player can move 0..N |
 
+### `shift`
+
+Voluntary movement by the caster. Use this for "you shift" effects, including effects that split one movement pool before and after another card.
+
+```json
+{ "kind": "shift", "distance": "speed", "pool": "get-in-get-out" }
+{ "kind": "shift", "distance": 2 }
+```
+
+| Field | Values |
+|---|---|
+| `distance` | nonnegative integer, or `"speed"` to read the caster's Speed |
+| `pool` | optional string. Effects with the same pool share one total distance; later shifts can use only the remaining distance. |
+| `label` | optional author note preserved by the normalizer |
+
+The runtime opens the board movement picker for the caster using slide-style legal cells and records the moved distance. When `pool` is set, the first shift creates the pool and later shift effects with the same pool spend from the remaining distance.
+
 ### `teleport`
 
 ```json

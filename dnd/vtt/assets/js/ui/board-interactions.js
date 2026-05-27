@@ -15464,8 +15464,9 @@ export function mountBoardInteractions(store, routes = {}) {
     const targetRank = getAutomationSizeRank(targetTraits.size, targetPlacement);
     const sizeDifference = targetRank - sourceRank;
 
-    const stability = Math.max(0, Number.parseInt(targetTraits.stability, 10) || 0);
-    const sizePenalty = Math.max(0, sizeDifference);
+    const ignoreStability = Boolean(payload.ignoreStability);
+    const stability = ignoreStability ? 0 : Math.max(0, Number.parseInt(targetTraits.stability, 10) || 0);
+    const sizePenalty = ignoreStability ? 0 : Math.max(0, sizeDifference);
     const effectiveDistance = Math.max(0, requestedDistance - stability - sizePenalty);
 
     closeDamageHealWidget();
@@ -15479,7 +15480,7 @@ export function mountBoardInteractions(store, routes = {}) {
       requestedDistance,
       effectiveDistance,
       verb,
-      verbLabel,
+      verbLabel: payload.verbLabel || verbLabel,
       collisionDamageType: payload.collisionDamageType || '',
     });
   }

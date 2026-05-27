@@ -47,6 +47,7 @@ The monster ability tray + `window.MonsterAbilityRunner.start()` add the followi
 | `forcedMovement` (`pull`) | Full | Legal cells strictly nearer to caster, monotonic-toward-source path |
 | `forcedMovement` (`slide`) | Full | Any cell within Chebyshev distance, no source-distance constraint |
 | `forcedMovement` (`vertical*`) | Partial | Falls through to horizontal push/pull/slide. Z-axis not modeled |
+| `shift` | Full | Voluntary caster movement. Opens a slide-style picker for the caster, supports `distance: "speed"` and shared `pool` keys so split shifts can spend from one total movement allowance. |
 | `potency` | Full | Calls `checkPotency`, runs `onFail` effects on failed targets |
 | `spend` | Full | PC runner checks and spends the caster's heroic resource before prompting/running nested effects. Fixed spends skip the prompt if the resource is missing or insufficient. `maxAmount` supports variable spends through a draggable VTT modal with stepper buttons. **Monster behavior:** spending `heroic` or `recovery` resources is skipped with a chat note — monsters have no such pools. |
 | `heal` | Full | Flat `amount` heals via board heal path (capped at max). `recoveries` reads target's recovery value from their sheet and heals that × N; recoveries counter on the sheet is NOT auto-decremented (chat reminder so the player updates it). **Monster behavior:** `recoveries`-based heals are skipped with a chat note; flat `amount` heals work fine. |
@@ -151,7 +152,7 @@ These are called by `runner.js` and dispatched as `vtt:automation-*` CustomEvent
 | `applyHeal(payload)` | `{ placementId, amount, allowTempHp, abilityName }` | `{ name, change, current, max, hidden, allowTempHp }` |
 | `applyCondition(payload)` | `{ placementId, condition: {name, duration}, sourceId }` | `{ ok }` |
 | `checkPotency(payload)` | `{ placementId, attribute, threshold, sourceStats }` | `{ passes: bool }` |
-| `forceMove(payload)` | `{ movement, verb, distance, upTo, targetId, target, sourcePlacement, sourceTraits, abilityName }` | `{ name, movedDistance, collision?, skipped? }` |
+| `forceMove(payload)` | `{ movement, verb, verbLabel?, distance, upTo, ignoreStability?, targetId, target, sourcePlacement, sourceTraits, abilityName }` | `{ name, movedDistance, collision?, skipped? }` |
 | `cancelTargetSelection()` | none | none |
 | `cancelAreaSelection()` | none | none |
 | `getAttributeBonus(name)` | string attribute name | int |

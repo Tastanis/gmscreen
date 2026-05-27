@@ -15,6 +15,7 @@
     "temporaryStamina",
     "condition",
     "forcedMovement",
+    "shift",
     "teleport",
     "swap",
     "resourceGain",
@@ -391,6 +392,10 @@
       }
       case "freeStrike":
         return effect.text ? `free strike — ${effect.text}` : "free strike";
+      case "shift": {
+        const distance = effect.distance === "speed" ? "speed" : effect.distance || 0;
+        return `shift up to ${distance}`;
+      }
       case "cascade":
         return `cascade → ${effect.ability || "another ability"}`;
       case "note":

@@ -187,6 +187,20 @@
         if (extras) effect._extra = extras;
         return effect;
       }
+      case "shift": {
+        const known = new Set(["kind", "distance", "pool", "label"]);
+        const rawDistance = String(input.distance ?? "").trim().toLowerCase();
+        const effect = {
+          kind: "shift",
+          distance: rawDistance === "speed" ? "speed" : asNonNegInt(input.distance, 0),
+          pool: asTrimmedString(input.pool),
+          label: asTrimmedString(input.label),
+        };
+        if (!effect.distance) warnings.push(`${path}: shift has 0 distance.`);
+        const extras = pickExtras(input, known);
+        if (extras) effect._extra = extras;
+        return effect;
+      }
       case "teleport": {
         const known = new Set(["kind", "distance", "spend"]);
         const effect = { kind: "teleport", distance: asNonNegInt(input.distance, 0) };
