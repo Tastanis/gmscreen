@@ -14401,6 +14401,14 @@ export function mountBoardInteractions(store, routes = {}) {
       cancelPendingAutomationTarget('Target selection canceled.');
       return true;
     }
+    const excluded = Array.isArray(pendingAutomationTarget.targetConfig?.excludeTargetIds)
+      ? pendingAutomationTarget.targetConfig.excludeTargetIds.map((id) => String(id))
+      : [];
+    if (excluded.includes(String(placement.id))) {
+      updateStatus('Choose a different target.');
+      showAutomationTargetPrompt(pendingAutomationTarget.targetConfig);
+      return true;
+    }
 
     const targetRequest = pendingAutomationTarget;
     pendingAutomationTarget = null;

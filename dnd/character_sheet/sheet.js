@@ -1032,6 +1032,19 @@ function applyTrackerChange(path, rawValue) {
   // Stamina can go negative; recoveries cannot
   if (!isStamina) {
     newValue = Math.max(0, newValue);
+    const delta = newValue - currentValue;
+    if (delta < 0) {
+      const amount = Math.abs(delta);
+      if (!window.confirm(`Spend ${amount} recover${amount === 1 ? "y" : "ies"}?`)) {
+        renderBars();
+        return;
+      }
+    } else if (delta > 0) {
+      if (!window.confirm(`Add back ${delta} recover${delta === 1 ? "y" : "ies"}?`)) {
+        renderBars();
+        return;
+      }
+    }
   }
 
   if (isStamina) {
@@ -2033,6 +2046,9 @@ function renderBars() {
 
       const recoveryVal = Number(computeRecoveryValue(vitals)) || 0;
       if (recoveryVal <= 0) return;
+      if (!window.confirm(`Spend 1 recovery to heal ${recoveryVal} Stamina?`)) {
+        return;
+      }
 
       const currentStamina = Number(vitals.currentStamina) || 0;
       const staminaMax = Number(vitals.staminaMax) || 0;

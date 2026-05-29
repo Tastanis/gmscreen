@@ -16,6 +16,7 @@ For *how* to write JSON, see `AUTHORING.md`. This file is `what is supported`.
 | `trigger` | Schema + registration against `AbilityTriggerBus`. PC trigger actions in the Triggers list are always-on once that character token is present in the active VTT scene; opening the character summary is not required. Authored `match` config fires the blue `!` overlay when its event/filter matches; click to resolve manually. No structured `match` -> chat reminder fallback. |
 | `persistent` | Schema + registration as a board-side persistent zone. Requires a preceding area `target` block so the zone has a footprint. Ticks at owner's `tickAt` (startOfTurn or endOfTurn): deducts upkeep from owner's heroic resource, applies effects to every creature inside the zone footprint. `expiresAt` can auto-end the zone at owner start/end turn. Auto-ends on combat end or when owner can't pay upkeep. **In-memory only** — page reload wipes zones (Pass 2 will add persistence). |
 | `branch` | Full. Evaluates a `condition` and runs either nested `then` cards or nested `else` cards before continuing through top-level `cards`. Supports nested target, powerRoll, effect, persistent, and further branch cards. |
+| `choice` | Full. Prompts for one option, stores the selected option for the execution, can replace execution keywords, and runs the selected option's nested cards. Leading choice cards run before `actionUsed` trigger fan-out and feature-modifier matching. |
 
 ## Universal modifiers (apply to any actor — PC or monster)
 
@@ -24,6 +25,7 @@ For *how* to write JSON, see `AUTHORING.md`. This file is `what is supported`.
 | `powerRoll.flatBonus` | Full | Integer. When present, runner uses this as the roll bonus and ignores `attribute`-based stat lookup. PCs typically omit (let attribute resolve); monsters typically set it to a literal value. PC paths untouched when omitted. |
 | `whenWinded` (on `powerRoll`) | Full | Sub-object with `bonus`, `flatBonus`, `attribute`, `target`, or `tiers` overrides. Shallow-merged over the base block when the actor's current HP/stamina ≤ floor(max/2). |
 | `whenWinded` (on `effect`) | Full | Sub-object with `effects` and/or `target` overrides. The override `effects` array fully replaces the base when actor is winded. |
+| `effect.target` | Full | Optional string or string array on any effect. Routes that effect to a named target group, or merged target groups, instead of the parent block's target. |
 
 ## Monster-specific runtime behavior
 
@@ -100,6 +102,8 @@ Target and area range visuals are also advisory. Single-target abilities draw th
 
 Target blocks support optional `promptTitle` and `promptText` fields. These control the target-picker modal title/instructions and board status text, but they do not affect targeting legality or the effects that run later. When omitted, a target block immediately followed by an effect card that damages the same target group gets a generic damage prompt such as "Pick Enemy to Damage"; the later `damage` effect still controls amount, attribute, dice, and damage type. Token target blocks with custom or inferred prompt text use the board picker as the single visible prompt; optional picks expose `Skip` in that picker.
 
+Token target blocks support `excludeGroups: ["groupName"]`, which prevents selecting a token already stored in one of those target groups. Use this for split-role abilities where the second prompted target must be different from the first.
+
 ## Target predicates — `target.predicate`
 
 `creature`, `enemy`, `ally`, `object`, `creatureOrObject`, `self`, `selfOrAlly`, `selfAndAlly`
@@ -158,6 +162,10 @@ Short form (damage `attribute` and potency `attribute`): `M`, `A`, `R`, `I`, `P`
 | `scopedFlag` | `scope`, `key`, `source`, `target`, `mode` | Uses the same `checkScopedFlag` hook as `ifScopedFlag`. |
 
 Branch cards use nested card arrays: `then: [ ...cards ]` and `else: [ ...cards ]`. Give alternative target cards the same `name` when later top-level cards should use whichever branch was selected.
+
+## Choice options
+
+`choice` cards use `options[]`, each with `id`, `label`, optional `description`, optional `keywords`, and optional nested `cards`. The selected option is stored only for the current execution. If `keywords` is present, `getAbilityKeywords()` returns that option's keywords for the rest of the execution.
 
 ---
 
@@ -288,11 +296,12 @@ Standard set (case-insensitive normalization to canonical casing):
 
 `Melee, Ranged, Strike, Weapon, Magic, Psionic, Area, Charge, Persistent, Resistance, Routine, Free, FreeStrike, FreeTriggered`
 
-Custom strings are accepted. JSON authoring puts them in `automation.keywords` at the top level. Runtime falls back to `action.keywords` and then `action.tags` from the character sheet if `automation.keywords` is absent.
+Custom strings are accepted. JSON authoring puts them in `automation.keywords` at the top level. Runtime falls back to `action.keywords` and then `action.tags` from the character sheet if `automation.keywords` is absent. A leading `choice` option with `keywords` replaces the keyword list for that single execution before `actionUsed` triggers and feature modifiers are evaluated.
 
 Used by:
 - `ifKeyword` effect (conditional gating of effects)
 - Feature-modifier `match.keywordsAll` / `keywordsAny` / `keywordsNone`
+- `actionUsed` trigger filters such as `keywordsAny`
 
 ## Feature modifiers
 

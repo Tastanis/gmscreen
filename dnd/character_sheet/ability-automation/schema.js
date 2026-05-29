@@ -11,7 +11,8 @@
 //       { type: "effect",     id, target, effects: [Effect, ...] },
 //       { type: "trigger",    id, condition, effects: [Effect, ...] },
 //       { type: "persistent", id, cost, resource, effects: [Effect, ...] },
-//       { type: "branch",     id, condition, then: [Block, ...], else: [Block, ...] }
+//       { type: "branch",     id, condition, then: [Block, ...], else: [Block, ...] },
+//       { type: "choice",     id, prompt, options: [{ id, label, keywords, cards }] }
 //     ]
 //   }
 //
@@ -83,8 +84,26 @@
   function normalizeEffectList(input, warnings, path) {
     if (!Array.isArray(input)) return [];
     return input
-      .map((effect, index) => normalizeEffect(effect, warnings, `${path}[${index}]`))
+      .map((effect, index) => {
+        const normalized = normalizeEffect(effect, warnings, `${path}[${index}]`);
+        return normalized ? attachEffectTarget(effect, normalized) : null;
+      })
       .filter(Boolean);
+  }
+
+  function normalizeTargetRef(value) {
+    if (Array.isArray(value)) {
+      return value.map((item) => asTrimmedString(item)).filter(Boolean);
+    }
+    return asTrimmedString(value);
+  }
+
+  function attachEffectTarget(input, effect) {
+    const target = normalizeTargetRef(input?.target);
+    if (Array.isArray(target) ? target.length : target) {
+      effect.target = target;
+    }
+    return effect;
   }
 
   function normalizeEffect(input, warnings, path) {
@@ -548,7 +567,7 @@
     const known = new Set([
       "type", "id", "name", "mode", "predicate", "creature", "count", "optional",
       "distance", "range", "shape", "size", "width", "height", "length", "note",
-      "promptTitle", "promptText",
+      "promptTitle", "promptText", "excludeGroups", "excludeGroup",
     ]);
     const mode = pickKnown(input.mode, P.TARGET_MODES, "token");
     const predicateRaw = input.predicate || input.creature || "creature";
@@ -567,6 +586,12 @@
     const promptText = asTrimmedString(input.promptText);
     if (promptTitle) block.promptTitle = promptTitle;
     if (promptText) block.promptText = promptText;
+    const excludeGroups = Array.isArray(input.excludeGroups)
+      ? input.excludeGroups.map((group) => asTrimmedString(group)).filter(Boolean)
+      : asTrimmedString(input.excludeGroup)
+        ? [asTrimmedString(input.excludeGroup)]
+        : [];
+    if (excludeGroups.length) block.excludeGroups = excludeGroups;
     const distance = normalizeDistance(input.distance, warnings, `${path}.distance`);
     if (distance) block.distance = distance;
     const range = asNonNegInt(input.range, 0);
@@ -613,7 +638,7 @@
       id: input.id || createId("powerroll"),
       attribute,
       bonus: asInt(input.bonus, 0),
-      target: asTrimmedString(input.target),
+      target: normalizeTargetRef(input.target),
       rollFormula: asTrimmedString(input.rollFormula) || "2d10",
       tiers,
     };
@@ -655,7 +680,7 @@
           ? P.normalizeAttributeOrList(input.attribute)
           : P.normalizeAttribute(input.attribute);
       }
-      if (input.target !== undefined && input.target !== null) out.target = asTrimmedString(input.target);
+      if (input.target !== undefined && input.target !== null) out.target = normalizeTargetRef(input.target);
       if (input.tiers && typeof input.tiers === "object") {
         const tiers = {};
         for (const key of P.TIER_KEYS) {
@@ -667,7 +692,7 @@
       if (Array.isArray(input.effects)) {
         out.effects = normalizeEffectList(input.effects, warnings, `${path}.effects`);
       }
-      if (input.target !== undefined && input.target !== null) out.target = asTrimmedString(input.target);
+      if (input.target !== undefined && input.target !== null) out.target = normalizeTargetRef(input.target);
     }
     return Object.keys(out).length ? out : null;
   }
@@ -677,7 +702,7 @@
     const block = {
       type: "effect",
       id: input.id || createId("effect"),
-      target: asTrimmedString(input.target),
+      target: normalizeTargetRef(input.target),
       effects: normalizeEffectList(input.effects, warnings, `${path}.effects`),
     };
     if (!block.effects.length) warnings.push(`${path}: effect block has no effects.`);
@@ -891,7 +916,7 @@
       question: asTrimmedString(input.question) || "Use the first branch?",
       yesLabel: asTrimmedString(input.yesLabel) || "Yes",
       noLabel: asTrimmedString(input.noLabel) || "No",
-      target: asTrimmedString(input.target),
+      target: normalizeTargetRef(input.target),
     };
   }
 
@@ -914,6 +939,45 @@
     if (!block.then.length && !block.else.length) {
       warnings.push(`${path}: branch has no then/else cards.`);
     }
+    if (input.note) block.note = asTrimmedString(input.note);
+    const extras = pickExtras(input, known);
+    if (extras) block._extra = extras;
+    return block;
+  }
+
+  function normalizeChoiceOption(input, warnings, path) {
+    if (!input || typeof input !== "object") {
+      warnings.push(`${path}: choice option must be an object.`);
+      return null;
+    }
+    const known = new Set(["id", "value", "label", "description", "keywords", "cards", "then", "set"]);
+    const id = asTrimmedString(input.id || input.value || input.label) || createId("option");
+    const option = {
+      id,
+      label: asTrimmedString(input.label || input.value || input.id) || id,
+      description: asTrimmedString(input.description),
+      keywords: P.normalizeKeywordList ? P.normalizeKeywordList(input.keywords || input.set?.keywords) : [],
+      cards: normalizeCardList(input.cards || input.then || [], warnings, `${path}.cards`),
+    };
+    const extras = pickExtras(input, known);
+    if (extras) option._extra = extras;
+    return option;
+  }
+
+  function normalizeChoiceBlock(input, warnings, path) {
+    const known = new Set(["type", "id", "name", "prompt", "question", "options", "note"]);
+    const rawOptions = Array.isArray(input.options) ? input.options : [];
+    const options = rawOptions
+      .map((option, index) => normalizeChoiceOption(option, warnings, `${path}.options[${index}]`))
+      .filter(Boolean);
+    if (!options.length) warnings.push(`${path}: choice block has no options.`);
+    const block = {
+      type: "choice",
+      id: input.id || createId("choice"),
+      name: asTrimmedString(input.name) || asTrimmedString(input.id) || "choice",
+      prompt: asTrimmedString(input.prompt || input.question) || "Choose one option.",
+      options,
+    };
     if (input.note) block.note = asTrimmedString(input.note);
     const extras = pickExtras(input, known);
     if (extras) block._extra = extras;
@@ -944,6 +1008,8 @@
         return normalizePersistentBlock(input, warnings, path);
       case "branch":
         return normalizeBranchBlock(input, warnings, path);
+      case "choice":
+        return normalizeChoiceBlock(input, warnings, path);
       default:
         return null;
     }
@@ -1110,6 +1176,8 @@
         return `Persistent ${block.cost || 0}${block.resource ? ` ${block.resource}` : ""}${block.expiresAt && block.expiresAt !== "never" ? `, expires ${block.expiresAt}` : ""}: ${(block.effects || []).map((e) => describeOne(e, ctx)).filter(Boolean).join(", ") || "(no effects)"}`;
       case "branch":
         return `If ${describeBranchCondition(block.condition)}, run ${block.then?.length || 0} card(s); otherwise run ${block.else?.length || 0} card(s).`;
+      case "choice":
+        return `Choose ${block.name || "option"}: ${(block.options || []).map((o) => o.label).join(", ") || "(no options)"}.`;
       default:
         return "";
     }
@@ -1150,6 +1218,17 @@
         });
         (block.else || []).forEach((child, index) => {
           lines.push(`  Else ${index + 1}: ${summarizeBlock(child, ctx) || child.type || "card"}`);
+        });
+        return lines;
+      }
+      case "choice": {
+        const lines = [`Choose ${block.name || "option"}: ${block.prompt || "Choose one option."}`];
+        (block.options || []).forEach((option, index) => {
+          const keywords = option.keywords?.length ? ` [${option.keywords.join(", ")}]` : "";
+          lines.push(`  Option ${index + 1}: ${option.label}${keywords}`);
+          (option.cards || []).forEach((child, childIndex) => {
+            lines.push(`    ${childIndex + 1}: ${summarizeBlock(child, ctx) || child.type || "card"}`);
+          });
         });
         return lines;
       }

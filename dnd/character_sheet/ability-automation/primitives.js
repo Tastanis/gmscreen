@@ -7,7 +7,7 @@
 (function (global) {
   "use strict";
 
-  const BLOCK_TYPES = ["target", "powerRoll", "effect", "trigger", "persistent", "branch"];
+  const BLOCK_TYPES = ["target", "powerRoll", "effect", "trigger", "persistent", "branch", "choice"];
 
   const EFFECT_KINDS = [
     "damage",

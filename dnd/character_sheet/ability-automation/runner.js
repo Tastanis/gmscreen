@@ -356,6 +356,19 @@
   // ---------- target group resolution ----------
 
   function getTargetGroup(state, name) {
+    if (Array.isArray(name)) {
+      const seen = new Set();
+      const merged = [];
+      name.forEach((groupName) => {
+        getTargetGroup(state, groupName).forEach((target) => {
+          const key = target?.id || target?.name || JSON.stringify(target);
+          if (!key || seen.has(key)) return;
+          seen.add(key);
+          merged.push(target);
+        });
+      });
+      return merged;
+    }
     const groupName = name || state.currentGroup || "primary";
     if (String(groupName || "").toLowerCase() === "self") {
       return state.sourcePlacement?.id ? [state.sourcePlacement] : [];
@@ -553,6 +566,12 @@
       const upTo = block.count?.mode === "upTo";
       const selected = [];
       const seen = new Set();
+      const excludedIds = new Set(
+        (block.excludeGroups || [])
+          .flatMap((groupName) => getTargetGroup(state, groupName))
+          .map((target) => target?.id)
+          .filter(Boolean)
+      );
 
       for (let pickIndex = 0; pickIndex < desired; pickIndex += 1) {
         const promptConfig = {
@@ -570,6 +589,7 @@
           // Source token, used by the board to draw the reach/range box
           // around the caster while the player is picking a target.
           sourcePlacement: state.sourcePlacement || null,
+          excludeTargetIds: [...excludedIds, ...seen],
         };
         const result = await Promise.race([
           state.context.selectTarget(promptConfig),
@@ -585,7 +605,7 @@
           state.context.cancelTargetSelection?.();
           break;
         }
-        if (result?.id && !seen.has(result.id)) {
+        if (result?.id && !seen.has(result.id) && !excludedIds.has(result.id)) {
           seen.add(result.id);
           selected.push(result);
         }
@@ -972,9 +992,12 @@
 
   async function applyEffects(state, effects, targetGroupName, ctx = {}) {
     if (!Array.isArray(effects) || !effects.length) return;
-    const targets = getTargetGroup(state, targetGroupName);
     for (const effect of effects) {
       if (state.aborted) return;
+      const effectTarget = effect?.target !== undefined && effect?.target !== null && effect?.target !== ""
+        ? effect.target
+        : targetGroupName;
+      const targets = getTargetGroup(state, effectTarget);
       await applyEffect(state, effect, targets, ctx);
     }
   }
@@ -2027,6 +2050,90 @@
     }
   }
 
+  // ---------- choice block ----------
+
+  function getSelectedChoice(state, block) {
+    return state.choices?.[block.name || block.id || "choice"] || null;
+  }
+
+  function setSelectedChoice(state, block, option) {
+    if (!state.choices) state.choices = {};
+    const key = block.name || block.id || "choice";
+    state.choices[key] = option?.id || "";
+    if (Array.isArray(option?.keywords) && option.keywords.length) {
+      state.executionKeywords = option.keywords;
+    }
+  }
+
+  async function askChoice(state, block) {
+    const options = Array.isArray(block.options) ? block.options : [];
+    if (!options.length) return null;
+    if (options.length === 1) return options[0];
+    const host = makeHost("Choose", state.action.name || "Ability Automation", "choice", state.context?.automationAnchor || null);
+    host.querySelector("[data-power-roll-body]").innerHTML = `
+      <section class="power-roll-runner__section power-roll-runner__section--compact">
+        <div class="power-roll-runner__ability">
+          <h3>${escapeHtml(state.action.name || "Unnamed Ability")}</h3>
+          <p>${escapeHtml(block.prompt || "Choose one option.")}</p>
+        </div>
+        <div class="power-roll-runner__actions">
+          ${options.map((option) => `
+            <button type="button" class="dice-btn dice-btn-primary" data-choice-option="${escapeHtml(option.id)}">
+              ${escapeHtml(option.label || option.id)}
+              ${option.description ? `<span class="muted">${escapeHtml(option.description)}</span>` : ""}
+            </button>
+          `).join("")}
+        </div>
+      </section>
+    `;
+    return new Promise((resolve) => {
+      const finish = (option) => {
+        host.removeEventListener("click", onClick);
+        host.removeEventListener("automation-cancel", onCancel);
+        closeRunner();
+        resolve(option);
+      };
+      const onClick = (event) => {
+        const target = event.target instanceof Element ? event.target : null;
+        const id = target?.closest("[data-choice-option]")?.getAttribute("data-choice-option");
+        if (!id) return;
+        finish(options.find((option) => option.id === id) || null);
+      };
+      const onCancel = () => {
+        state.aborted = true;
+        finish(null);
+      };
+      host.addEventListener("click", onClick);
+      host.addEventListener("automation-cancel", onCancel);
+    });
+  }
+
+  async function preflightChoiceBlock(state, block) {
+    if (getSelectedChoice(state, block)) return;
+    const option = await askChoice(state, block);
+    if (state.aborted || !option) return;
+    setSelectedChoice(state, block, option);
+    await postChat(state.context, {
+      message: `${state.heroName} - ${state.action.name || "Ability"}: chose ${option.label || option.id}.`,
+    });
+  }
+
+  async function runChoiceBlock(state, block) {
+    let selectedId = getSelectedChoice(state, block);
+    if (!selectedId) {
+      await preflightChoiceBlock(state, block);
+      selectedId = getSelectedChoice(state, block);
+    }
+    if (state.aborted || !selectedId) return;
+    const option = (block.options || []).find((item) => item.id === selectedId);
+    if (!option) return;
+    setSelectedChoice(state, block, option);
+    for (let index = 0; index < (option.cards || []).length; index += 1) {
+      if (state.aborted) break;
+      await runBlockAt(state, option.cards, index);
+    }
+  }
+
   // ---------- main loop ----------
 
   async function runBlock(state, block) {
@@ -2046,6 +2153,8 @@
         return runPersistentBlock(state, effective);
       case "branch":
         return runBranchBlock(state, effective);
+      case "choice":
+        return runChoiceBlock(state, effective);
       default:
         return null;
     }
@@ -2056,6 +2165,9 @@
   //   2. action.keywords (character sheet)
   //   3. action.tags (legacy field name)
   function getAbilityKeywords(state) {
+    if (Array.isArray(state?.executionKeywords) && state.executionKeywords.length) {
+      return state.executionKeywords;
+    }
     const auto = state?.automation;
     if (auto && Array.isArray(auto.keywords) && auto.keywords.length) return auto.keywords;
     const action = state?.action;
@@ -2083,13 +2195,15 @@
   // Collect every modifier from every feature on the source character that
   // matches THIS ability's keywords/damage/attribute. Returns an array of
   // matching `apply` blocks (already extracted from features).
-  function collectMatchingModifiers(automation, action, features) {
+  function collectMatchingModifiers(automation, action, features, state = null) {
     if (!Array.isArray(features) || !features.length) return [];
-    const keywords = Array.isArray(automation?.keywords) && automation.keywords.length
-      ? automation.keywords
-      : Array.isArray(action?.keywords)
-        ? action.keywords
-        : Array.isArray(action?.tags) ? action.tags : [];
+    const keywords = state
+      ? getAbilityKeywords(state)
+      : Array.isArray(automation?.keywords) && automation.keywords.length
+        ? automation.keywords
+        : Array.isArray(action?.keywords)
+          ? action.keywords
+          : Array.isArray(action?.tags) ? action.tags : [];
     const matched = [];
     for (const feature of features) {
       const featureAutomation = feature?.automation;
@@ -2164,6 +2278,8 @@
       if (block.type === "branch") {
         walkBlockList(block.then || [], visit, onReturn);
         walkBlockList(block.else || [], visit, onReturn);
+      } else if (block.type === "choice") {
+        (block.options || []).forEach((option) => walkBlockList(option.cards || [], visit, onReturn));
       }
     }
   }
@@ -2258,10 +2374,9 @@
 
   async function open(options) {
     const automation = schema.normalizeAutomation(options?.automation);
-    // Apply feature modifiers BEFORE rendering anything. Tier preview, dice
-    // modal, and chat output all see the post-modifier values.
+    // Feature modifiers are applied after leading choices so execution-scoped
+    // keywords (for melee/ranged mode, etc.) can control modifier matching.
     const features = Array.isArray(options?.features) ? options.features : [];
-    const matchedModifiers = collectMatchingModifiers(automation, options?.action, features);
     const state = {
       action: options?.action || {},
       automation,
@@ -2281,6 +2396,8 @@
       triggerPayload: options?.triggerPayload || null,
       groups: {},
       currentGroup: null,
+      choices: {},
+      executionKeywords: null,
       shiftPools: {},
       // Area templates placed by area-target blocks. Keyed by the target
       // block's `name`. Persistent zone registration looks here to find the
@@ -2297,13 +2414,6 @@
       aborted: false,
       appliedModifiers: [],
     };
-    if (matchedModifiers.length) {
-      applyModifiersInPlace(automation, matchedModifiers, state);
-      // Post a brief note to chat naming which features kicked in.
-      await postChat(state.context, {
-        message: `${state.heroName} - ${state.action.name || "Ability"}: applied ${matchedModifiers.length} feature modifier${matchedModifiers.length === 1 ? "" : "s"} (${matchedModifiers.map((m) => m.source).join(", ")}).`,
-      });
-    }
 
     try {
       const blocks = automation.cards || [];
@@ -2317,6 +2427,22 @@
       const structuredTriggerBlocks = blocks.filter((block) => block?.type === "trigger" && block.match);
       const isResolvingReadyTrigger = Boolean(state.triggerPayload);
       const isArmingOnly = structuredTriggerBlocks.length > 0 && !isResolvingReadyTrigger;
+
+      if (!isArmingOnly) {
+        for (const block of blocks) {
+          if (block?.type !== "choice") break;
+          await preflightChoiceBlock(state, block);
+          if (state.aborted) return;
+        }
+      }
+
+      const matchedModifiers = collectMatchingModifiers(automation, options?.action, features, state);
+      if (matchedModifiers.length) {
+        applyModifiersInPlace(automation, matchedModifiers, state);
+        await postChat(state.context, {
+          message: `${state.heroName} - ${state.action.name || "Ability"}: applied ${matchedModifiers.length} feature modifier${matchedModifiers.length === 1 ? "" : "s"} (${matchedModifiers.map((m) => m.source).join(", ")}).`,
+        });
+      }
 
       if (!isArmingOnly && typeof state.context.spendResource === "function") {
         const spendResult = await state.context.spendResource(state.action);

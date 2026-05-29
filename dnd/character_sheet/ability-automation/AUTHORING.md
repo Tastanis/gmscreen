@@ -25,7 +25,8 @@ The runtime is lenient: unknown fields are preserved but ignored, missing fields
     { "type": "effect",     "...": "..." },
     { "type": "trigger",    "...": "..." },
     { "type": "persistent", "...": "..." },
-    { "type": "branch",     "...": "..." }
+    { "type": "branch",     "...": "..." },
+    { "type": "choice",     "...": "..." }
   ]
 }
 ```
@@ -173,6 +174,7 @@ Asks the player to pick a token (or place an area template) on the VTT board.
 | `predicate` | `"creature"`, `"enemy"`, `"ally"`, `"object"`, `"creatureOrObject"`, `"self"`, `"selfOrAlly"`, `"selfAndAlly"` | Who's a legal target. |
 | `count` | `{ value, mode }` | `mode`: `"exact"` (must pick all) or `"upTo"` (player can stop early). Token mode only. |
 | `optional` | bool | If true, runtime shows a "Skip" button. The automation continues with an empty target group. |
+| `excludeGroups` | string array | Token mode only. Prevents selecting targets already in the named groups. Use for split-role target picks that must be different. |
 | `promptTitle` | string | Optional custom title for the target picker popup. |
 | `promptText` | string | Optional custom instructions for the target picker popup and board status. |
 | `distance` | `{ form, value, secondary?, within? }` | See distance forms below. |
@@ -414,9 +416,52 @@ Branch cards can contain any normal card type, including another `branch`. Later
 
 ---
 
+### `choice`
+
+Asks the player/GM to choose one option. If the choice card appears before any non-choice card, the runner asks it before firing `actionUsed` triggers and before matching feature modifiers. This lets one printed ability narrow its execution keywords for the current use.
+
+```json
+{
+  "type": "choice",
+  "name": "attackMode",
+  "prompt": "Choose attack mode.",
+  "options": [
+    {
+      "id": "melee",
+      "label": "Melee 1",
+      "keywords": ["Melee", "Strike", "Weapon"],
+      "cards": [
+        { "type": "target", "name": "target", "mode": "token", "predicate": "enemy", "count": { "value": 1, "mode": "exact" }, "distance": { "form": "melee", "value": 1 } }
+      ]
+    },
+    {
+      "id": "ranged",
+      "label": "Ranged 5",
+      "keywords": ["Ranged", "Strike", "Weapon"],
+      "cards": [
+        { "type": "target", "name": "target", "mode": "token", "predicate": "enemy", "count": { "value": 1, "mode": "exact" }, "distance": { "form": "ranged", "value": 5 } }
+      ]
+    }
+  ]
+}
+```
+
+| Field | Values | Notes |
+|---|---|---|
+| `name` | string | Stores the selected option for this execution. |
+| `prompt` | string | Text shown in the choice popup. |
+| `options[].id` | string | Stable option id. |
+| `options[].label` | string | Button label. |
+| `options[].keywords` | string array | Replaces the ability keywords for this execution. |
+| `options[].cards` | card array | Cards to run when the option is selected. |
+
+---
+
 ## Effects
 
 Each effect is one of the kinds below. They're used inside `powerRoll.tiers.tierN.effects`, `effect.effects`, `trigger.effects`, `persistent.effects`, and as the `onFail` of a `potency` rider or the `effects` of a `spend` rider.
+
+Any effect can include `target` to route that effect to a named target group instead of the parent `powerRoll` or `effect` block's target. `target` can also be an array of group names to merge distinct target groups. Use this for split-target abilities: one roll can damage both targets, then apply different riders to each target.
 
 ### `damage`
 
