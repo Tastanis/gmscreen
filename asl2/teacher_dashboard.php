@@ -233,16 +233,19 @@ if ($standards_json === false) {
                     <p>Click a bucket, then a standard, then add learning targets that will appear for every ASL <?php echo (int) $aslhub_site_level; ?> student.</p>
                 </div>
 
-                <div class="curriculum-grid teacher-standards-grid">
-                    <div>
+                <div class="curriculum-grid teacher-standards-grid" id="standards-curriculum-grid">
+                    <div class="bucket-column">
                         <h3 class="column-title">Buckets</h3>
                         <div id="standards-bucket-list" class="bucket-list"></div>
                     </div>
-                    <div>
-                        <h3 class="column-title">Standards</h3>
+                    <div class="standard-column">
+                        <div class="column-title-row">
+                            <h3 class="column-title">Standards</h3>
+                            <button type="button" id="standards-back-to-buckets" class="back-to-buckets" style="display: none;">&larr; Back to Buckets</button>
+                        </div>
                         <div id="standards-standard-list" class="standard-list"></div>
                     </div>
-                    <div>
+                    <div class="target-column">
                         <h3 class="column-title">Learning Targets</h3>
                         <div id="standards-target-panel" class="target-panel"></div>
                         <form id="standards-add-lt-form" class="add-lt-form">
@@ -543,8 +546,8 @@ if ($standards_json === false) {
         const SITE_ASL_LEVEL = <?php echo (int) $aslhub_site_level; ?>;
         let standardsData = <?php echo $standards_json; ?>;
         const standardsState = {
-            bucketId: (standardsData.buckets && standardsData.buckets[0]) ? standardsData.buckets[0].id : null,
-            standardId: (standardsData.buckets && standardsData.buckets[0] && standardsData.buckets[0].standards[0]) ? standardsData.buckets[0].standards[0].id : null
+            bucketId: null,
+            standardId: null
         };
 
         function standardsEscapeHtml(value) {
@@ -584,9 +587,8 @@ if ($standards_json === false) {
             }).join('');
             list.querySelectorAll('[data-bucket-id]').forEach(btn => {
                 btn.addEventListener('click', () => {
-                    const b = getStandardsBucket(btn.dataset.bucketId);
                     standardsState.bucketId = btn.dataset.bucketId;
-                    standardsState.standardId = (b && b.standards[0]) ? b.standards[0].id : null;
+                    standardsState.standardId = null;
                     renderStandardsSection();
                 });
             });
@@ -596,7 +598,11 @@ if ($standards_json === false) {
             const list = document.getElementById('standards-standard-list');
             if (!list) return;
             const bucket = getStandardsBucket(standardsState.bucketId);
-            const standards = bucket ? (bucket.standards || []) : [];
+            if (!bucket) {
+                list.innerHTML = '<div class="empty-panel">Select a bucket to view its standards.</div>';
+                return;
+            }
+            const standards = bucket.standards || [];
             list.innerHTML = standards.map(s => {
                 const count = getStandardsTargets(s.id).length;
                 return `
@@ -643,10 +649,38 @@ if ($standards_json === false) {
             `;
         }
 
+        function applyStandardsLayout() {
+            const grid = document.getElementById('standards-curriculum-grid');
+            const backBtn = document.getElementById('standards-back-to-buckets');
+            const addForm = document.getElementById('standards-add-lt-form');
+            const focused = !!standardsState.standardId;
+            if (grid) {
+                grid.classList.toggle('standard-focus', focused);
+            }
+            if (backBtn) {
+                backBtn.style.display = focused ? '' : 'none';
+            }
+            if (addForm) {
+                addForm.style.display = focused ? '' : 'none';
+            }
+        }
+
+        function standardsBackToBuckets() {
+            standardsState.standardId = null;
+            renderStandardsSection();
+        }
+
+        function resetStandardsSelection() {
+            standardsState.bucketId = null;
+            standardsState.standardId = null;
+            renderStandardsSection();
+        }
+
         function renderStandardsSection() {
             renderStandardsBuckets();
             renderStandardsStandards();
             renderStandardsTargets();
+            applyStandardsLayout();
         }
 
         function submitStandardsAddLearningTarget() {
@@ -694,6 +728,12 @@ if ($standards_json === false) {
                     e.preventDefault();
                     submitStandardsAddLearningTarget();
                 });
+            }
+
+            // Standards back-to-buckets button
+            const standardsBackBtn = document.getElementById('standards-back-to-buckets');
+            if (standardsBackBtn) {
+                standardsBackBtn.addEventListener('click', standardsBackToBuckets);
             }
 
             // Add scroller wordlist form submission handler
@@ -1527,10 +1567,11 @@ if ($standards_json === false) {
                 }
             });
             
-            // Close modal with ESC key
+            // Close modal with ESC key, and deselect the standards browser
             document.addEventListener('keydown', function(e) {
                 if (e.key === 'Escape') {
                     closeResourcesModal();
+                    resetStandardsSelection();
                 }
             });
             
