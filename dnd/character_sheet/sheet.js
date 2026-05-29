@@ -436,6 +436,7 @@ function normalizeCommonThings(list) {
 
 let sheetState = deepClone(defaultSheet);
 let activeCharacter = "";
+const expandedActionCards = new Set();
 
 function mergeWithDefaults(data) {
   const merged = deepClone(defaultSheet);
@@ -907,6 +908,7 @@ function applyRemoteSheetSync(data) {
     bindSurgeButtons();
     bindVictoryButtons();
     bindRespiteButton();
+    repairGeneratedFormFields(document);
     return;
   }
   renderAll();
@@ -2511,6 +2513,32 @@ function renderTest(test) {
   `;
 }
 
+function getActionCardKey(type, id) {
+  return `${type || ""}:${id || ""}`;
+}
+
+function isActionCardExpanded(type, id) {
+  return expandedActionCards.has(getActionCardKey(type, id));
+}
+
+function setActionCardExpanded(type, id, expanded) {
+  const key = getActionCardKey(type, id);
+  if (expanded) {
+    expandedActionCards.add(key);
+  } else {
+    expandedActionCards.delete(key);
+  }
+}
+
+function syncExpandedActionState(grid) {
+  if (!grid) return;
+  grid.querySelectorAll(".action-card").forEach((card) => {
+    const type = card.dataset.actionType || "";
+    const id = card.dataset.actionId || "";
+    setActionCardExpanded(type, id, !card.classList.contains("action-card--collapsed"));
+  });
+}
+
 function renderActionSection(type, containerId) {
   const actions = sheetState.actions[type] || [];
   const container = document.getElementById(containerId);
@@ -2586,8 +2614,9 @@ function renderActionSection(type, containerId) {
             const useWhenValue = (action.useWhen || "").trim();
             const automationConfigured = hasAbilityAutomation(action.automation);
             const automationLabel = automationConfigured ? "Edit Automation" : "Automate";
+            const collapsedClass = isActionCardExpanded(type, action.id) ? "" : " action-card--collapsed";
             return `
-            <article class="action-card action-card--collapsed" data-action-id="${action.id}" data-action-type="${type}">
+            <article class="action-card${collapsedClass}" data-action-id="${action.id}" data-action-type="${type}">
               <header class="card-head">
                 <div class="card-head__left">
                   <div class="display-value action-name" data-action-toggle>${action.name || "New Action"}${costValue ? `<span class="cost-badge">\u2728 ${costValue}</span>` : ""}</div>
@@ -2691,6 +2720,7 @@ function renderActionSection(type, containerId) {
   bindAttributeToggles();
   bindRichTextToolbars();
   bindChatDots();
+  repairGeneratedFormFields(container);
 }
 
 function renderSidebarLists() {
@@ -2748,6 +2778,7 @@ function renderAll() {
   bindSurgeButtons();
   bindVictoryButtons();
   bindRespiteButton();
+  repairGeneratedFormFields(document);
 }
 
 function bindTokenButtons() {
@@ -2761,6 +2792,100 @@ function bindTokenButtons() {
         showHeroTokenConfirmation(btn, index);
       }
     });
+  });
+}
+
+function makeDomId(value) {
+  return String(value ?? "")
+    .trim()
+    .toLowerCase()
+    .replace(/[^a-z0-9_-]+/g, "-")
+    .replace(/^-+|-+$/g, "");
+}
+
+function getFieldLabel(field) {
+  const explicit = field.id
+    ? document.querySelector(`label[for="${CSS.escape(field.id)}"]`)
+    : null;
+  const wrappingLabel = field.closest("label");
+  const parentLabel =
+    field.parentElement?.querySelector(":scope > label") ||
+    field.closest(".input-stack, .meta-field, .card, .detail-item, .sub-section, .tracker-input-wrapper")
+      ?.querySelector("label, .meta-label, .detail-item__label, .sub-section__title, .tracker-label");
+  return (
+    explicit?.textContent ||
+    wrappingLabel?.textContent ||
+    parentLabel?.textContent ||
+    field.getAttribute("placeholder") ||
+    field.getAttribute("data-model") ||
+    field.getAttribute("data-field") ||
+    field.getAttribute("data-list") ||
+    field.getAttribute("data-tier-field") ||
+    field.getAttribute("data-test-field") ||
+    field.getAttribute("data-skill-bonus") ||
+    field.getAttribute("data-hireling-field") ||
+    field.getAttribute("data-hireling-skill") ||
+    field.className ||
+    "Field"
+  )
+    .replace(/\s+/g, " ")
+    .trim();
+}
+
+function repairGeneratedFormFields(root = document) {
+  const fields = Array.from(root.querySelectorAll("input, select, textarea"));
+  const usedIds = new Set(
+    Array.from(document.querySelectorAll("[id]"))
+      .map((el) => el.id)
+      .filter(Boolean)
+  );
+
+  fields.forEach((field, index) => {
+    if (!(field instanceof HTMLElement)) return;
+    const type = field.getAttribute("type");
+    const isHidden = type === "hidden" || field.hidden;
+    const basis =
+      field.getAttribute("data-model") ||
+      field.getAttribute("data-field") ||
+      field.getAttribute("data-list") ||
+      field.getAttribute("data-tier-field") ||
+      field.getAttribute("data-test-field") ||
+      field.getAttribute("data-skill-bonus") ||
+      field.getAttribute("data-hireling-field") ||
+      field.getAttribute("data-hireling-skill") ||
+      field.getAttribute("placeholder") ||
+      field.className ||
+      field.tagName;
+    let id = field.id || `sheet-field-${makeDomId(basis) || "field"}-${index + 1}`;
+    if (!field.id) {
+      let candidate = id;
+      let suffix = 2;
+      while (usedIds.has(candidate)) {
+        candidate = `${id}-${suffix}`;
+        suffix += 1;
+      }
+      field.id = candidate;
+      id = candidate;
+      usedIds.add(id);
+    }
+    if (!field.getAttribute("name")) {
+      field.setAttribute("name", makeDomId(basis) || id);
+    }
+    if (!isHidden && !field.getAttribute("aria-label")) {
+      field.setAttribute("aria-label", getFieldLabel(field));
+    }
+  });
+
+  root.querySelectorAll("label:not([for])").forEach((label) => {
+    if (label.querySelector("input, select, textarea")) return;
+    const parentField = label.parentElement?.querySelector("input[id], select[id], textarea[id]");
+    const nextField = label.nextElementSibling?.matches?.("input[id], select[id], textarea[id]")
+      ? label.nextElementSibling
+      : null;
+    const field = parentField || nextField;
+    if (field?.id) {
+      label.setAttribute("for", field.id);
+    }
   });
 }
 
@@ -2978,6 +3103,7 @@ function bindActionRemovals() {
       const type = card?.dataset.actionType;
       if (!type) return;
       sheetState.actions[type] = (sheetState.actions[type] || []).filter((a) => a.id !== id);
+      expandedActionCards.delete(getActionCardKey(type, id));
       renderActionSection(type, ACTION_CONTAINER_IDS[type] || `${type}-pane`);
     };
   });
@@ -3021,6 +3147,7 @@ function bindActionToggles() {
         // Closing this card - close ALL cards
         allCards.forEach((c) => c.classList.add("action-card--collapsed"));
       }
+      syncExpandedActionState(grid);
     };
   });
 }
