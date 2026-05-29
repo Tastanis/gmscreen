@@ -14240,9 +14240,10 @@ export function mountBoardInteractions(store, routes = {}) {
         </header>
         <div class="dice-modal-content vtt-automation-picker-prompt__body">
           <p>${escapeHtml(text)}</p>
-          ${targetConfig.optional ? `
+          ${targetConfig.optional || targetConfig.allowDone ? `
             <div class="vtt-automation-picker-prompt__actions">
-              <button type="button" class="dice-clear-btn" data-automation-target-skip>Skip</button>
+              ${targetConfig.allowDone ? '<button type="button" class="dice-clear-btn" data-automation-target-done>Done</button>' : ''}
+              ${targetConfig.optional ? '<button type="button" class="dice-clear-btn" data-automation-target-skip>Skip</button>' : ''}
               <button type="button" class="dice-clear-btn" data-automation-target-cancel>Cancel</button>
             </div>
           ` : ''}
@@ -14255,6 +14256,8 @@ export function mountBoardInteractions(store, routes = {}) {
       const target = event.target instanceof Element ? event.target : null;
       if (target?.closest('[data-automation-target-cancel]')) {
         cancelPendingAutomationTarget('Target selection canceled.');
+      } else if (target?.closest('[data-automation-target-done]')) {
+        donePendingAutomationTarget('Target selection complete.');
       } else if (target?.closest('[data-automation-target-skip]')) {
         skipPendingAutomationTarget('Target selection skipped.');
       }
@@ -16199,6 +16202,19 @@ export function mountBoardInteractions(store, routes = {}) {
     clearAutomationTargetRangeOverlay();
     updateStatus(message || 'Target selection skipped.');
     request.resolve?.({ skipped: true });
+  }
+
+  function donePendingAutomationTarget(message) {
+    if (!pendingAutomationTarget) {
+      return;
+    }
+    const request = pendingAutomationTarget;
+    pendingAutomationTarget = null;
+    stopSuggestedTargetPulse();
+    clearAutomationTargetPrompt();
+    clearAutomationTargetRangeOverlay();
+    updateStatus(message || 'Target selection complete.');
+    request.resolve?.({ done: true });
   }
 
   function applyDamageHealToPlacement(placementId, mode, amount, { allowTempHp = false } = {}) {

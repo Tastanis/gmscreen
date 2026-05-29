@@ -1935,6 +1935,20 @@ function bindResourceControls() {
       setResourceValue(getResourceValue() + result);
     });
   });
+
+  // The "Allow negative (Talent)" checkbox is not an `.edit-field` (that class
+  // would stretch it to 100% width and style it like a text box), so the global
+  // autosave handler never fires for it. Without this binding the toggle is
+  // never written to state or saved, and the next hero-pane re-render (sheet
+  // sync poll / broadcast) rebuilds the checkbox from the stored `false`,
+  // making it visually snap back to unchecked a moment after clicking.
+  const allowNegativeToggle = document.querySelector('[data-model="hero.resource.allowNegative"]');
+  if (allowNegativeToggle) {
+    allowNegativeToggle.addEventListener("change", () => {
+      setByPath("hero.resource.allowNegative", Boolean(allowNegativeToggle.checked));
+      queueAutoSave();
+    });
+  }
 }
 
 function renderBars() {
