@@ -26,7 +26,7 @@ PC heroic-resource spends use draggable in-app VTT modals, not native browser `p
 
 Target-selection prompts can be customized from ability JSON with `promptTitle` and `promptText` on a `target` card. The runner also supplies a generic damage prompt when a target card is immediately followed by damage against that same target group. Token target cards with custom or inferred prompt text use the board picker as the single visible prompt, including `Skip` for optional target cards.
 
-Recovery-style heals (`{ "kind": "heal", "recoveries": N }`) call `spendRecoveryForTarget` in the VTT. For matched PC sheets, this decrements `hero.vitals.currentRecoveries` before applying stamina healing. Monsters and unresolved targets skip or fall back to chat reminders.
+Recovery-style heals (`{ "kind": "heal", "recoveries": N }`) call `spendRecoveryForTarget`, which acts on the **target's** sheet: for a matched PC target it decrements `hero.vitals.currentRecoveries` before applying stamina healing. This works regardless of whether the caster is a PC or a monster, so a monster ability can heal or drain a PC target's recoveries. Targets with no recovery pool (e.g. another monster) skip or fall back to a chat reminder.
 
 Known current limitation: manual/non-automation damage does not fire the authored damage trigger events. Use the registry for the latest limitation list.
 
@@ -37,5 +37,5 @@ Monster ability execution is bridged by `monster-ability-runner-glue.js`.
 - Villain and malice categories spend from `window.MaliceTracker`.
 - Triggered monster actions prompt for confirmation before firing.
 - Monsters should use `flatBonus`; attribute lookup exists as a fallback.
-- Monster recovery and heroic resource spends skip with a chat note.
+- Monster heroic `spend` falls back to a native `confirm()` dialog (the monster context omits `spendHeroicResource`); `resourceGain` and `surgeGain` post manual chat reminders (`applyResourceGain` / `applySurgeGain` are not passed). Recovery heals are NOT monster-blocked — `spendRecoveryForTarget` is wired and acts on the target's sheet.
 - Winded state is based on token HP at or below half max HP.
