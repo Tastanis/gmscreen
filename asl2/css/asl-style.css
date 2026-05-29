@@ -2343,6 +2343,47 @@ body.student-dashboard-page {
     align-items: start;
 }
 
+/* When a standard is selected, minimize the buckets column so the
+   standards and learning targets/resources get more room. */
+.curriculum-grid.standard-focus {
+    grid-template-columns: minmax(280px, 0.8fr) minmax(440px, 1.9fr);
+}
+
+.curriculum-grid.standard-focus .bucket-column {
+    display: none;
+}
+
+.column-title-row {
+    align-items: center;
+    display: flex;
+    gap: 10px;
+    justify-content: space-between;
+    margin-bottom: 10px;
+}
+
+.column-title-row .column-title {
+    margin: 0;
+}
+
+.back-to-buckets {
+    background: #fff;
+    border: 1px solid #d2d2d7;
+    border-radius: 8px;
+    color: #0071e3;
+    cursor: pointer;
+    font-size: 0.82rem;
+    font-weight: 700;
+    padding: 6px 12px;
+    transition: background 0.16s ease, border-color 0.16s ease, box-shadow 0.16s ease;
+    white-space: nowrap;
+}
+
+.back-to-buckets:hover {
+    background: #f0f7ff;
+    border-color: #0071e3;
+    box-shadow: 0 8px 18px rgba(0, 113, 227, 0.12);
+}
+
 .column-title {
     color: #6e6e73;
     font-size: 0.82rem;
@@ -2829,7 +2870,8 @@ body.student-dashboard-page {
 
     .student-hero,
     .teacher-student-page .teacher-student-hero,
-    .curriculum-grid {
+    .curriculum-grid,
+    .curriculum-grid.standard-focus {
         grid-template-columns: 1fr;
     }
 

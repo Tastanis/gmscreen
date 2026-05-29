@@ -103,16 +103,19 @@ if ($dashboard_json === false) {
                     <p>Click a bucket, then a standard, then a learning target to see its resources.</p>
                 </div>
 
-                <div class="curriculum-grid">
-                    <div>
+                <div class="curriculum-grid" id="curriculum-grid">
+                    <div class="bucket-column">
                         <h3 class="column-title">Buckets</h3>
                         <div id="bucket-list" class="bucket-list"></div>
                     </div>
-                    <div>
-                        <h3 class="column-title">Standards</h3>
+                    <div class="standard-column">
+                        <div class="column-title-row">
+                            <h3 class="column-title">Standards</h3>
+                            <button type="button" id="back-to-buckets" class="back-to-buckets" style="display: none;">&larr; Back to Buckets</button>
+                        </div>
                         <div id="standard-list" class="standard-list"></div>
                     </div>
-                    <div>
+                    <div class="target-column">
                         <h3 class="column-title">Learning Targets</h3>
                         <div id="target-panel" class="target-panel"></div>
                     </div>
@@ -152,8 +155,8 @@ if ($dashboard_json === false) {
 
         const dashboardData = window.ASL_STUDENT_DASHBOARD || {};
         const state = {
-            bucketId: dashboardData.buckets && dashboardData.buckets[0] ? dashboardData.buckets[0].id : null,
-            standardId: dashboardData.buckets && dashboardData.buckets[0] && dashboardData.buckets[0].standards[0] ? dashboardData.buckets[0].standards[0].id : null,
+            bucketId: null,
+            standardId: null,
             targetId: null,
             progressScope: 'overall'
         };
@@ -228,9 +231,8 @@ if ($dashboard_json === false) {
 
             list.querySelectorAll('[data-bucket-id]').forEach(button => {
                 button.addEventListener('click', () => {
-                    const bucket = getBucket(button.dataset.bucketId);
                     state.bucketId = button.dataset.bucketId;
-                    state.standardId = bucket && bucket.standards[0] ? bucket.standards[0].id : null;
+                    state.standardId = null;
                     state.targetId = null;
                     state.progressScope = 'bucket';
                     renderDashboard();
@@ -241,7 +243,13 @@ if ($dashboard_json === false) {
         function renderStandards() {
             const list = document.getElementById('standard-list');
             const bucket = getBucket(state.bucketId);
-            const standards = bucket ? bucket.standards || [] : [];
+
+            if (!bucket) {
+                list.innerHTML = '<div class="empty-panel">Select a bucket to view its standards.</div>';
+                return;
+            }
+
+            const standards = bucket.standards || [];
 
             list.innerHTML = standards.map(standard => `
                 <button type="button" class="standard-row ${standard.id === state.standardId ? 'active' : ''}" data-standard-id="${escapeHtml(standard.id)}">
@@ -270,7 +278,7 @@ if ($dashboard_json === false) {
             state.targetId = selectedTarget ? selectedTarget.id : null;
 
             if (!standard) {
-                panel.innerHTML = '<div class="empty-panel">No standard selected.</div>';
+                panel.innerHTML = '<div class="empty-panel">Select a standard to view its learning targets and resources.</div>';
                 return;
             }
 
@@ -589,10 +597,37 @@ if ($dashboard_json === false) {
             `;
         }
 
+        function applyCurriculumLayout() {
+            const grid = document.getElementById('curriculum-grid');
+            const backBtn = document.getElementById('back-to-buckets');
+            if (!grid) return;
+            const focused = !!state.standardId;
+            grid.classList.toggle('standard-focus', focused);
+            if (backBtn) {
+                backBtn.style.display = focused ? '' : 'none';
+            }
+        }
+
+        function backToBuckets() {
+            state.standardId = null;
+            state.targetId = null;
+            state.progressScope = state.bucketId ? 'bucket' : 'overall';
+            renderDashboard();
+        }
+
+        function resetCurriculumSelection() {
+            state.bucketId = null;
+            state.standardId = null;
+            state.targetId = null;
+            state.progressScope = 'overall';
+            renderDashboard();
+        }
+
         function renderDashboard() {
             renderBuckets();
             renderStandards();
             renderTargets();
+            applyCurriculumLayout();
             renderProgressSummary(selectedProgressScope());
             renderChart();
             renderComparisons();
@@ -657,7 +692,20 @@ if ($dashboard_json === false) {
             setTimeout(() => messageDiv.remove(), 3000);
         }
 
-        document.addEventListener('DOMContentLoaded', renderDashboard);
+        document.addEventListener('DOMContentLoaded', function() {
+            renderDashboard();
+
+            const backBtn = document.getElementById('back-to-buckets');
+            if (backBtn) {
+                backBtn.addEventListener('click', backToBuckets);
+            }
+
+            document.addEventListener('keydown', function(e) {
+                if (e.key === 'Escape') {
+                    resetCurriculumSelection();
+                }
+            });
+        });
     </script>
 </body>
 </html>
