@@ -14,7 +14,8 @@ For *how* to write JSON, see `AUTHORING.md`. This file is `what is supported`.
 | `powerRoll` | Full. Supports `flatBonus` (literal roll bonus that bypasses attribute lookup — monster-friendly) and `whenWinded` overrides (see Universal Modifiers). |
 | `effect` | Full. Supports `whenWinded` overrides (see Universal Modifiers). |
 | `trigger` | Schema + registration against `AbilityTriggerBus`. PC trigger actions in the Triggers list are always-on once that character token is present in the active VTT scene; opening the character summary is not required. Authored `match` config fires the blue `!` overlay when its event/filter matches; click to resolve manually. No structured `match` -> chat reminder fallback. |
-| `persistent` | Schema + registration as a board-side persistent zone. Requires a preceding area `target` block so the zone has a footprint. Ticks at owner's `tickAt` (startOfTurn or endOfTurn): deducts upkeep from owner's heroic resource, applies effects to every creature inside the zone footprint. Auto-ends on combat end or when owner can't pay upkeep. **In-memory only** — page reload wipes zones (Pass 2 will add persistence). |
+| `persistent` | Schema + registration as a board-side persistent zone. Requires a preceding area `target` block so the zone has a footprint. Ticks at owner's `tickAt` (startOfTurn or endOfTurn): deducts upkeep from owner's heroic resource, applies effects to every creature inside the zone footprint. `expiresAt` can auto-end the zone at owner start/end turn. Auto-ends on combat end or when owner can't pay upkeep. **In-memory only** — page reload wipes zones (Pass 2 will add persistence). |
+| `branch` | Full. Evaluates a `condition` and runs either nested `then` cards or nested `else` cards before continuing through top-level `cards`. Supports nested target, powerRoll, effect, persistent, and further branch cards. |
 
 ## Universal modifiers (apply to any actor — PC or monster)
 
@@ -133,6 +134,10 @@ Short form (damage `attribute` and potency `attribute`): `M`, `A`, `R`, `I`, `P`
 
 `startOfTurn`, `endOfTurn`, `never`
 
+## Persistent expiry points
+
+`startOfTurn`, `endOfTurn`, `never`
+
 ## Tier keys — `powerRoll.tiers`
 
 `tier1` (≤ 11), `tier2` (12–16), `tier3` (17+).
@@ -140,6 +145,19 @@ Short form (damage `attribute` and potency `attribute`): `M`, `A`, `R`, `I`, `P`
 ## Count modes — `target.count.mode`
 
 `exact` (must pick all), `upTo` (player can stop early), `all` (every legal token).
+
+## Branch condition kinds
+
+| kind | Fields | Runtime behavior |
+|---|---|---|
+| `strained` | none | True when the caster's heroic resource value is below 0. |
+| `winded` | none | True when the actor is at or below half Stamina/HP. |
+| `keyword` | `all`, `any`, `none` arrays | Uses the ability's keywords, same as `ifKeyword`. |
+| `prompt` | `question`, `yesLabel`, `noLabel`, optional `target` | Opens the yes/no VTT prompt and runs the chosen branch. |
+| `mark` | `predicate`, `markType`, optional `target` | Uses the same mark predicates and `checkMark` hook as `ifMark`. |
+| `scopedFlag` | `scope`, `key`, `source`, `target`, `mode` | Uses the same `checkScopedFlag` hook as `ifScopedFlag`. |
+
+Branch cards use nested card arrays: `then: [ ...cards ]` and `else: [ ...cards ]`. Give alternative target cards the same `name` when later top-level cards should use whichever branch was selected.
 
 ---
 
@@ -171,7 +189,7 @@ These are called by `runner.js` and dispatched as `vtt:automation-*` CustomEvent
 | `runFreeStrike(payload)` | `{ byCandidateIds, againstPredicate, text, abilityName, casterName }` | `{ skipped, byId, againstId, tier, damage, damageResult }` |
 | `getRecoveryValueForTarget(payload)` | `{ placementId }` | `{ recoveryValue, currentRecoveries }` - `recoveryValue` is null when unknown |
 | `spendRecoveryForTarget(payload)` | `{ placementId, recoveries, abilityName }` | `{ spent, recoveryValue, currentRecoveries, name }` or `{ skipped, reason }`; decrements the target PC sheet before the heal is applied |
-| `registerPersistentZone(payload)` | `{ casterId, abilityId, abilityName, area: { template, shape, ... }, upkeep: { cost, resource }, tickAt, effects, attributeBonuses, note }` | `{ registered, zoneId, zoneCount }` or `{ registered: false, reason }` |
+| `registerPersistentZone(payload)` | `{ casterId, abilityId, abilityName, area: { template, shape, ... }, upkeep: { cost, resource }, tickAt, expiresAt, effects, attributeBonuses, note }` | `{ registered, zoneId, zoneCount }` or `{ registered: false, reason }` |
 | `applyMark(payload)` | `{ markType, sourceId, sourceName, targetId, targetName, abilityId, abilityName, duration, exclusivePerSource, exclusivePerTarget, transfer }` | `{ applied, oldTargetId, oldTargetName, replacedSourceId, replacedSourceName }` |
 | `endMark(payload)` | `{ markType, sourceId, targetId, scope, reason }` | `{ cleared, targetName, sourceName }` |
 | `checkMark(payload)` | `{ predicate, markType, sourceId, targetId, triggerPayload }` | `{ matched: bool }` |

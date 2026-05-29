@@ -10,7 +10,8 @@
 //       { type: "powerRoll",  id, attribute, bonus, target, tiers: { tier1, tier2, tier3 } },
 //       { type: "effect",     id, target, effects: [Effect, ...] },
 //       { type: "trigger",    id, condition, effects: [Effect, ...] },
-//       { type: "persistent", id, cost, resource, effects: [Effect, ...] }
+//       { type: "persistent", id, cost, resource, effects: [Effect, ...] },
+//       { type: "branch",     id, condition, then: [Block, ...], else: [Block, ...] }
 //     ]
 //   }
 //
@@ -786,7 +787,7 @@
   }
 
   function normalizePersistentBlock(input, warnings, path) {
-    const known = new Set(["type", "id", "cost", "resource", "tickAt", "triggers", "effects", "note", "target"]);
+    const known = new Set(["type", "id", "cost", "resource", "tickAt", "expiresAt", "triggers", "effects", "note", "target"]);
     const validTriggers = new Set(["onEnter", "onOccupantTurnStart"]);
     const triggers = Array.isArray(input.triggers)
       ? input.triggers.filter((t) => {
@@ -801,6 +802,7 @@
       cost: asNonNegInt(input.cost, 0),
       resource: asTrimmedString(input.resource),
       tickAt: pickKnown(input.tickAt, ["startOfTurn", "endOfTurn", "never"], "startOfTurn"),
+      expiresAt: pickKnown(input.expiresAt, ["startOfTurn", "endOfTurn", "never"], "never"),
       triggers,
       effects: normalizeEffectList(input.effects, warnings, `${path}.effects`),
     };
@@ -814,8 +816,112 @@
     return block;
   }
 
+  const BRANCH_CONDITION_KINDS = ["strained", "winded", "keyword", "prompt", "mark", "scopedFlag"];
+
+  function normalizeBranchCondition(input, warnings, path) {
+    if (typeof input === "string") {
+      input = { kind: input };
+    }
+    if (!input || typeof input !== "object") {
+      warnings.push(`${path}: branch condition missing; defaulting to prompt.`);
+      return { kind: "prompt", question: "Use the first branch?", yesLabel: "Yes", noLabel: "No" };
+    }
+    const rawKind = asTrimmedString(input.kind || input.type || input.if).toLowerCase().replace(/\s+/g, "");
+    const kindMap = {
+      strained: "strained",
+      ifstrained: "strained",
+      heroicresourcebelowzero: "strained",
+      winded: "winded",
+      ifwinded: "winded",
+      keyword: "keyword",
+      ifkeyword: "keyword",
+      prompt: "prompt",
+      ifprompt: "prompt",
+      mark: "mark",
+      ifmark: "mark",
+      scopedflag: "scopedFlag",
+      ifscopedflag: "scopedFlag",
+    };
+    const mappedKind = kindMap[rawKind];
+    const kind = mappedKind || "prompt";
+    if (rawKind && !mappedKind) {
+      warnings.push(`${path}.kind: unknown branch condition "${input.kind}". Defaulting to prompt.`);
+    }
+    if (kind === "strained" || kind === "winded") {
+      return { kind };
+    }
+    if (kind === "keyword") {
+      const condition = {
+        kind,
+        all: Array.isArray(input.all) ? input.all.map((k) => P.normalizeKeyword?.(k) || asTrimmedString(k)).filter(Boolean) : [],
+        any: Array.isArray(input.any) ? input.any.map((k) => P.normalizeKeyword?.(k) || asTrimmedString(k)).filter(Boolean) : [],
+        none: Array.isArray(input.none) ? input.none.map((k) => P.normalizeKeyword?.(k) || asTrimmedString(k)).filter(Boolean) : [],
+      };
+      if (!condition.all.length && !condition.any.length && !condition.none.length) {
+        warnings.push(`${path}: keyword branch condition has no all/any/none; predicate always passes.`);
+      }
+      return condition;
+    }
+    if (kind === "mark") {
+      return {
+        kind,
+        predicate: pickKnown(input.predicate, [
+          "targetJudgedBySelf",
+          "targetJudgedByAny",
+          "actorIsMyJudgedTarget",
+          "sourceIsJudgingTarget",
+          "targetInPersistentZoneJudgedByZoneCaster",
+        ], "targetJudgedBySelf"),
+        markType: asTrimmedString(input.markType) || "judgment",
+        target: asTrimmedString(input.target),
+      };
+    }
+    if (kind === "scopedFlag") {
+      return {
+        kind,
+        scope: pickKnown(input.scope, ["round", "turn", "encounter"], "round"),
+        key: asTrimmedString(input.key),
+        source: pickKnown(input.source, ["self", "eventSource"], "self"),
+        target: pickKnown(input.target, ["target", "judgedTarget", "eventTarget"], "target"),
+        mode: pickKnown(input.mode, ["set", "notSet"], "notSet"),
+      };
+    }
+    return {
+      kind: "prompt",
+      question: asTrimmedString(input.question) || "Use the first branch?",
+      yesLabel: asTrimmedString(input.yesLabel) || "Yes",
+      noLabel: asTrimmedString(input.noLabel) || "No",
+      target: asTrimmedString(input.target),
+    };
+  }
+
+  function normalizeCardList(input, warnings, path) {
+    if (!Array.isArray(input)) return [];
+    return input
+      .map((block, index) => normalizeBlock(block, warnings, `${path}[${index}]`))
+      .filter(Boolean);
+  }
+
+  function normalizeBranchBlock(input, warnings, path) {
+    const known = new Set(["type", "id", "condition", "if", "then", "else", "note"]);
+    const block = {
+      type: "branch",
+      id: input.id || createId("branch"),
+      condition: normalizeBranchCondition(input.condition || input.if, warnings, `${path}.condition`),
+      then: normalizeCardList(input.then || [], warnings, `${path}.then`),
+      else: normalizeCardList(input.else || [], warnings, `${path}.else`),
+    };
+    if (!block.then.length && !block.else.length) {
+      warnings.push(`${path}: branch has no then/else cards.`);
+    }
+    if (input.note) block.note = asTrimmedString(input.note);
+    const extras = pickExtras(input, known);
+    if (extras) block._extra = extras;
+    return block;
+  }
+
   function normalizeBlock(input, warnings, index) {
-    const path = `cards[${index}]`;
+    const path = typeof index === "string" ? index : `cards[${index}]`;
     if (!input || typeof input !== "object") {
       warnings.push(`${path}: block must be an object — skipping.`);
       return null;
@@ -836,6 +942,8 @@
         return normalizeTriggerBlock(input, warnings, path);
       case "persistent":
         return normalizePersistentBlock(input, warnings, path);
+      case "branch":
+        return normalizeBranchBlock(input, warnings, path);
       default:
         return null;
     }
@@ -947,6 +1055,31 @@
     return ctx && P.describeEffectResolved ? P.describeEffectResolved(effect, ctx) : P.describeEffect(effect);
   }
 
+  function describeBranchCondition(condition) {
+    if (!condition || typeof condition !== "object") return "condition";
+    switch (condition.kind) {
+      case "strained":
+        return "strained";
+      case "winded":
+        return "winded";
+      case "keyword": {
+        const parts = [];
+        if (condition.all?.length) parts.push(`all keywords: ${condition.all.join(", ")}`);
+        if (condition.any?.length) parts.push(`any keyword: ${condition.any.join(", ")}`);
+        if (condition.none?.length) parts.push(`no keywords: ${condition.none.join(", ")}`);
+        return parts.join("; ") || "keyword";
+      }
+      case "prompt":
+        return `prompt: ${condition.question || "Use the first branch?"}`;
+      case "mark":
+        return condition.predicate || "mark";
+      case "scopedFlag":
+        return `${condition.scope || "round"} flag ${condition.key || "(missing key)"} ${condition.mode || "notSet"}`;
+      default:
+        return condition.kind || "condition";
+    }
+  }
+
   function summarizeBlock(block, ctx) {
     if (!block || typeof block !== "object") return "";
     switch (block.type) {
@@ -974,7 +1107,9 @@
       case "trigger":
         return `Trigger: ${block.condition || "(no condition)"}`;
       case "persistent":
-        return `Persistent ${block.cost || 0}${block.resource ? ` ${block.resource}` : ""}: ${(block.effects || []).map((e) => describeOne(e, ctx)).filter(Boolean).join(", ") || "(no effects)"}`;
+        return `Persistent ${block.cost || 0}${block.resource ? ` ${block.resource}` : ""}${block.expiresAt && block.expiresAt !== "never" ? `, expires ${block.expiresAt}` : ""}: ${(block.effects || []).map((e) => describeOne(e, ctx)).filter(Boolean).join(", ") || "(no effects)"}`;
+      case "branch":
+        return `If ${describeBranchCondition(block.condition)}, run ${block.then?.length || 0} card(s); otherwise run ${block.else?.length || 0} card(s).`;
       default:
         return "";
     }
@@ -1005,8 +1140,19 @@
       case "persistent":
         return [
           `Persistent ${block.cost || 0} ${block.resource || ""} at ${block.tickAt}:`,
+          block.expiresAt && block.expiresAt !== "never" ? `  Expires at owner ${block.expiresAt}.` : "",
           `  ${(block.effects || []).map((e) => describeOne(e, ctx)).filter(Boolean).join("; ") || "(no effects)"}`,
-        ];
+        ].filter(Boolean);
+      case "branch": {
+        const lines = [`Branch on ${describeBranchCondition(block.condition)}.`];
+        (block.then || []).forEach((child, index) => {
+          lines.push(`  Then ${index + 1}: ${summarizeBlock(child, ctx) || child.type || "card"}`);
+        });
+        (block.else || []).forEach((child, index) => {
+          lines.push(`  Else ${index + 1}: ${summarizeBlock(child, ctx) || child.type || "card"}`);
+        });
+        return lines;
+      }
       default:
         return [];
     }

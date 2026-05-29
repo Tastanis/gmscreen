@@ -933,6 +933,7 @@
             resource: block.resource || "",
           },
           tickAt: block.tickAt || "startOfTurn",
+          expiresAt: block.expiresAt || "never",
           // Per-creature triggers (v3.1). Recognized: "onEnter" fires on a
           // creature the first time they enter the zone this round, and
           // "onOccupantTurnStart" fires when a creature inside starts their
@@ -945,6 +946,7 @@
         const zoneId = result?.zoneId || "(zone)";
         const lines = [`${state.heroName} - ${state.action.name || "Ability"} persistent zone armed (${zoneId}):`];
         lines.push(`Cost ${block.cost || 0}${block.resource ? ` ${block.resource}` : ""} at ${block.tickAt || "startOfTurn"}.`);
+        if (block.expiresAt && block.expiresAt !== "never") lines.push(`Expires at owner's ${block.expiresAt}.`);
         if (inner) lines.push(`Each tick: ${inner}`);
         if (block.note) lines.push(block.note);
         await postChat(ctx, { message: lines.join("\n") });
@@ -959,6 +961,7 @@
       `${state.heroName} - ${state.action.name || "Ability"} persistent zone:`,
       `Cost ${block.cost || 0}${block.resource ? ` ${block.resource}` : ""} at ${block.tickAt}.`,
     ];
+    if (block.expiresAt && block.expiresAt !== "never") lines.push(`Expires at owner's ${block.expiresAt}.`);
     if (inner) lines.push(`Each tick: ${inner}`);
     if (!areaRecord) lines.push("(No area placed — manual tracking required.)");
     if (block.note) lines.push(block.note);
@@ -1947,6 +1950,83 @@
     });
   }
 
+  // ---------- branch block ----------
+
+  async function evaluateBranchCondition(state, condition) {
+    const c = condition && typeof condition === "object" ? condition : { kind: "prompt" };
+    switch (c.kind) {
+      case "strained":
+        return isCasterStrained(state);
+      case "winded":
+        return isActorWinded(state);
+      case "keyword":
+        return P.keywordsMatch
+          ? P.keywordsMatch(getAbilityKeywords(state), { all: c.all, any: c.any, none: c.none })
+          : true;
+      case "prompt": {
+        const targets = getTargetGroup(state, c.target || state.currentGroup || "primary");
+        const answer = await askAutomationPrompt(state, {
+          question: c.question || "Use the first branch?",
+          yesLabel: c.yesLabel || "Yes",
+          noLabel: c.noLabel || "No",
+        }, targets);
+        if (!state.aborted) {
+          await postChat(state.context, {
+            message: `${state.heroName} - ${state.action.name || "Ability"}: ${formatPromptQuestion(c, targets)} ${answer ? c.yesLabel || "Yes" : c.noLabel || "No"}.`,
+          });
+        }
+        return answer;
+      }
+      case "mark": {
+        if (typeof state.context.checkMark !== "function") return false;
+        const checkTargets = c.target ? getTargetGroup(state, c.target) : getTargetGroup(state, state.currentGroup || "primary");
+        for (const target of checkTargets || []) {
+          if (!target?.id) continue;
+          const result = await state.context.checkMark({
+            predicate: c.predicate || "targetJudgedBySelf",
+            markType: c.markType || "judgment",
+            sourceId: state.sourcePlacement?.id || "",
+            targetId: target.id,
+            triggerPayload: state.triggerPayload || null,
+          });
+          if (result?.matched) return true;
+        }
+        return false;
+      }
+      case "scopedFlag": {
+        if (typeof state.context.checkScopedFlag !== "function") return false;
+        const targets = getTargetGroup(state, c.target || state.currentGroup || "primary");
+        const ids = resolveScopedFlagIds(state, c, targets);
+        const result = await state.context.checkScopedFlag({
+          scope: c.scope || "round",
+          key: c.key || "",
+          sourceId: ids.sourceId,
+          targetId: ids.targetId,
+        });
+        const isSet = Boolean(result?.set);
+        return c.mode === "set" ? isSet : !isSet;
+      }
+      default:
+        return false;
+    }
+  }
+
+  async function runBranchBlock(state, block) {
+    const matched = await evaluateBranchCondition(state, block.condition);
+    if (state.aborted) return;
+    const branch = matched ? block.then : block.else;
+    if (!Array.isArray(branch) || !branch.length) return;
+    if (block.note) {
+      await postChat(state.context, {
+        message: `${state.heroName} - ${state.action.name || "Ability"}: ${block.note}`,
+      });
+    }
+    for (let index = 0; index < branch.length; index += 1) {
+      if (state.aborted) break;
+      await runBlockAt(state, branch, index);
+    }
+  }
+
   // ---------- main loop ----------
 
   async function runBlock(state, block) {
@@ -1964,6 +2044,8 @@
         return runTriggerBlock(state, effective);
       case "persistent":
         return runPersistentBlock(state, effective);
+      case "branch":
+        return runBranchBlock(state, effective);
       default:
         return null;
     }
@@ -2058,18 +2140,38 @@
   }
 
   function findPowerRollAttribute(automation) {
-    const blocks = automation?.cards || [];
-    for (const block of blocks) {
+    let found = "";
+    walkAutomationBlocks(automation, (block) => {
       if (block?.type === "powerRoll" && block.attribute) return block.attribute;
+      return "";
+    }, (attribute) => {
+      if (!found && attribute) found = attribute;
+    });
+    return found;
+  }
+
+  function walkAutomationBlocks(automation, visit, onReturn) {
+    const blocks = automation?.cards || [];
+    walkBlockList(blocks, visit, onReturn);
+  }
+
+  function walkBlockList(blocks, visit, onReturn) {
+    if (!Array.isArray(blocks)) return;
+    for (const block of blocks) {
+      if (!block || typeof block !== "object") continue;
+      const result = visit(block);
+      if (result !== undefined && result !== "") onReturn?.(result);
+      if (block.type === "branch") {
+        walkBlockList(block.then || [], visit, onReturn);
+        walkBlockList(block.else || [], visit, onReturn);
+      }
     }
-    return "";
   }
 
   function walkAutomationEffects(automation, visit) {
-    const blocks = automation?.cards || [];
-    for (const block of blocks) {
+    walkAutomationBlocks(automation, (block) => {
       walkBlockEffects(block, visit);
-    }
+    });
   }
 
   function walkBlockEffects(block, visit) {
@@ -2127,11 +2229,11 @@
 
     // Add range bonus to every target block's distance.value.
     if (totals.rangeBonus) {
-      for (const block of automation.cards || []) {
+      walkAutomationBlocks(automation, (block) => {
         if (block?.type === "target" && block.distance && Number.isFinite(block.distance.value)) {
           block.distance.value = Math.max(0, block.distance.value + totals.rangeBonus);
         }
-      }
+      });
     }
 
     // Add damage / forced-movement bonuses to every relevant effect.

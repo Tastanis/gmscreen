@@ -37,7 +37,8 @@ action.automation = {
     { type: "powerRoll",  id, attribute, bonus, target, tiers: { tier1, tier2, tier3 } },
     { type: "effect",     id, target, effects: [...] },
     { type: "trigger",    id, condition, effects: [...] },
-    { type: "persistent", id, cost, resource, tickAt, effects: [...] }
+    { type: "persistent", id, cost, resource, tickAt, expiresAt, effects: [...] },
+    { type: "branch",     id, condition, then: [...], else: [...] }
   ]
 }
 ```
@@ -52,7 +53,8 @@ For each block in `automation.cards`:
 2. `powerRoll` — Open dice modal; user rolls, picks a tier, accepts. The runtime then walks `tier.effects` and dispatches each effect against the resolved target group.
 3. `effect` — Walk `block.effects` against the target group (no roll).
 4. `trigger` — With structured `match`, registers on the VTT trigger bus. PC trigger actions in the Triggers list auto-register when that character's summary panel loads or refreshes. Resolving a ready trigger skips the trigger card and runs the follow-up cards with the captured event payload. Without `match`, posts a chat reminder.
-5. `persistent` — Post a chat reminder. **No zone tracking this pass.**
+5. `persistent` — Register a board-side persistent zone when a prior area target exists; otherwise post a chat reminder.
+6. `branch` — Evaluate a condition such as `strained`, `winded`, `keyword`, `prompt`, `mark`, or `scopedFlag`, then run the selected nested card sequence.
 
 Each effect is dispatched by `kind`:
 

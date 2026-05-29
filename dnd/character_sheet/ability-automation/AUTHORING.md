@@ -24,7 +24,8 @@ The runtime is lenient: unknown fields are preserved but ignored, missing fields
     { "type": "powerRoll",  "...": "..." },
     { "type": "effect",     "...": "..." },
     { "type": "trigger",    "...": "..." },
-    { "type": "persistent", "...": "..." }
+    { "type": "persistent", "...": "..." },
+    { "type": "branch",     "...": "..." }
   ]
 }
 ```
@@ -340,6 +341,7 @@ A zone that lingers across rounds, ticks at the owner's turn boundary, and appli
 | `cost` | int — heroic resource spent per tick. 0 = no upkeep. |
 | `resource` | string — the resource name (must match the caster's bar title, e.g. "Wrath"). Empty = use caster's resource without name check. |
 | `tickAt` | `"startOfTurn"` \| `"endOfTurn"` \| `"never"` — which boundary of the OWNER's turn hits everyone currently inside. Use `"never"` for "no owner tick — only the per-creature `triggers` fire." |
+| `expiresAt` | `"startOfTurn"` \| `"endOfTurn"` \| `"never"` - optional owner turn boundary that automatically ends the zone. Defaults to `"never"`. |
 | `triggers` | array — extra per-creature triggers. See below. |
 | `effects` | array — tick / trigger effects. `damage` and `condition` are auto-applied; other kinds skipped. |
 | `target` | optional string — name of an earlier target block to reuse as the zone footprint. Default = most recent area placed. |
@@ -348,15 +350,16 @@ A zone that lingers across rounds, ticks at the owner's turn boundary, and appli
 
 | value | When it fires | Targets |
 |---|---|---|
-| `"onEnter"` | A creature enters the zone footprint via normal movement, the first time per combat round. | Just the mover. |
+| `"onEnter"` | A creature enters the zone footprint, the first time per combat round. | Just the mover. |
 | `"onOccupantTurnStart"` | A creature inside the zone starts their own turn. | Just that creature. |
 
 **Behavior**:
 - At the owner's `tickAt`, the runtime deducts `cost` from the owner's resource (or auto-ends the zone if unaffordable), then applies tick effects to every creature inside the zone footprint.
-- `onEnter` deduplicates per round — round-start clears the "already entered" set. Creatures already standing in the zone when it's cast are pre-seeded as "already entered" so they don't take entry damage from the cast itself.
+- `onEnter` deduplicates per round — round-start clears the "already entered" set. Creatures already standing in the zone when it's cast are pre-seeded as "already entered" so they don't take entry damage from the cast itself. Normal movement, forced movement, teleport, and swap all check zone entry.
 - `onOccupantTurnStart` fires once at each occupant's own turn start.
 - Zone is visible on the board as a pulsing orange dashed outline with an "End" button.
 - Auto-ends on encounter end.
+- If `expiresAt` is set, auto-ends at that owner turn boundary.
 - **In-memory only this pass** — a page reload while combat is active will wipe zones. Cast again to re-arm.
 
 **Example — Incinerate's column of fire** ("Each enemy who enters the area for the first time in a combat round or starts their turn there takes 2 fire damage"):
@@ -366,10 +369,48 @@ A zone that lingers across rounds, ticks at the owner's turn boundary, and appli
   "type": "persistent",
   "cost": 0,
   "tickAt": "never",
+  "expiresAt": "startOfTurn",
   "triggers": ["onEnter", "onOccupantTurnStart"],
   "effects": [ { "kind": "damage", "amount": 2, "damageType": "fire" } ]
 }
 ```
+
+### `branch`
+
+Chooses one nested card sequence or another before continuing with the rest of the top-level cards. Use this when the condition changes targeting, roll structure, later effects, or any other full card sequence.
+
+```json
+{
+  "type": "branch",
+  "condition": { "kind": "strained" },
+  "then": [
+    { "type": "target", "name": "area", "mode": "area", "shape": "cube", "size": 5, "predicate": "enemy", "distance": { "form": "cube", "value": 5, "within": 10 } }
+  ],
+  "else": [
+    { "type": "target", "name": "area", "mode": "area", "shape": "cube", "size": 3, "predicate": "enemy", "distance": { "form": "cube", "value": 3, "within": 10 } }
+  ]
+}
+```
+
+| Field | Values | Notes |
+|---|---|---|
+| `condition` | object or string | The predicate to evaluate. A string such as `"strained"` is shorthand for `{ "kind": "strained" }`. |
+| `then` | card array | Cards to run when the condition matches. |
+| `else` | card array | Cards to run when the condition does not match. Optional. |
+| `note` | string | Optional chat note when either branch runs. |
+
+Supported `condition.kind` values:
+
+| kind | Fields | Meaning |
+|---|---|---|
+| `strained` | none | True when the caster's heroic resource value is below 0. |
+| `winded` | none | True when the actor is at or below half Stamina/HP. |
+| `keyword` | `all`, `any`, `none` string arrays | Uses the ability's keywords, same as `ifKeyword`. |
+| `prompt` | `question`, `yesLabel`, `noLabel`, optional `target` | Asks the player/GM which branch to run. |
+| `mark` | `predicate`, `markType`, optional `target` | Uses the same mark predicates as `ifMark`. |
+| `scopedFlag` | `scope`, `key`, `source`, `target`, `mode` | Uses the same round/turn/encounter flags as `ifScopedFlag`. |
+
+Branch cards can contain any normal card type, including another `branch`. Later top-level cards can reference target groups created inside either branch, so give both branches the same `name` when they are alternatives for one target group.
 
 ---
 

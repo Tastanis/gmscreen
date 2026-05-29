@@ -2620,6 +2620,11 @@ export function mountBoardInteractions(store, routes = {}) {
         : payload.tickAt === 'never'
           ? 'never'
           : 'startOfTurn',
+      expiresAt: payload.expiresAt === 'startOfTurn'
+        ? 'startOfTurn'
+        : payload.expiresAt === 'endOfTurn'
+          ? 'endOfTurn'
+          : 'never',
       // Per-creature triggers. Valid values: "onEnter", "onOccupantTurnStart".
       // onEnter fires on a creature the first time they enter the zone in a
       // combat round (deduped by enteredThisRound). onOccupantTurnStart fires
@@ -3382,6 +3387,16 @@ export function mountBoardInteractions(store, routes = {}) {
       }
       return true;
     };
+  }
+
+  function expirePersistentZonesForOwner(ownerId, when) {
+    if (!ownerId || (when !== 'startOfTurn' && when !== 'endOfTurn')) return;
+    const zones = getActivePersistentZones();
+    if (!zones.length) return;
+    const matching = zones.filter((z) => z && z.casterId === ownerId && z.expiresAt === when);
+    for (const zone of [...matching]) {
+      removePersistentZone(zone.id, { reason: `owner ${when}` });
+    }
   }
 
   function normalizeAuthoredAutomation(automation) {
@@ -8717,6 +8732,7 @@ export function mountBoardInteractions(store, routes = {}) {
       } catch (err) {
         console.warn('[VTT] triggerFire(turnStart) failed', err);
       }
+      expirePersistentZonesForOwner(normalizedNextId, 'startOfTurn');
       // Tick any persistent zones owned by this combatant whose tickAt is
       // startOfTurn. Async, fire-and-forget — board state updates from
       // damage/conditions go through their normal handlers.
@@ -9113,6 +9129,7 @@ export function mountBoardInteractions(store, routes = {}) {
     tickPersistentZonesForOwner(finishedId, 'endOfTurn').catch((err) => {
       console.warn('[VTT] persistent zone end-of-turn tick failed', err);
     });
+    expirePersistentZonesForOwner(finishedId, 'endOfTurn');
     const finishingPlacement = getPlacementFromStore(finishedId);
     const finishingConditions = ensurePlacementConditions(
       finishingPlacement?.conditions ?? finishingPlacement?.condition ?? null
@@ -15395,6 +15412,12 @@ export function mountBoardInteractions(store, routes = {}) {
       resolve?.({ skipped: true, reason: 'update-failed' });
       return;
     }
+    try {
+      checkPersistentZoneEntries(sourcePlacement.id, sourcePlacement, { ...sourcePlacement, ...sourceTo });
+      checkPersistentZoneEntries(targetPlacement.id, targetPlacement, { ...targetPlacement, ...targetTo });
+    } catch (err) {
+      console.warn('[VTT] persistent-zone swap enter check failed', err);
+    }
     flashAutomationTargetToken(sourcePlacement.id);
     flashAutomationTargetToken(targetPlacement.id);
     updateStatus(`${tokenLabel(sourcePlacement)} and ${tokenLabel(targetPlacement)} swap places.`);
@@ -15899,6 +15922,15 @@ export function mountBoardInteractions(store, routes = {}) {
       clearAutomationMoveOverlay();
       request.reject?.(new Error('Unable to move that token.'));
       return true;
+    }
+    try {
+      checkPersistentZoneEntries(request.targetSnapshot.id, request.targetSnapshot, {
+        ...request.targetSnapshot,
+        column: clamped.column,
+        row: clamped.row,
+      });
+    } catch (err) {
+      console.warn('[VTT] persistent-zone forced-move enter check failed', err);
     }
 
     let collision = null;
