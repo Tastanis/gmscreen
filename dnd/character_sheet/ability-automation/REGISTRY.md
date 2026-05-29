@@ -44,7 +44,7 @@ The monster ability tray + `window.MonsterAbilityRunner.start()` add the followi
 
 | kind | Status | Runtime behavior |
 |---|---|---|
-| `damage` | Full | Applies via board, supports immunity/vulnerability on PC sheets, monster stat-block weakness/immunity, and temporary `damageWeakness` / `damageImmunity` conditions. Fields: `amount`, optional `amountDice` (`"1d6"`), optional `attribute`, optional `markBonusDice` + `markPredicate`, optional `damageType`. |
+| `damage` | Full | Applies via board, supports immunity/vulnerability on PC sheets, monster stat-block weakness/immunity, and temporary `damageWeakness` / `damageImmunity` conditions. Fields: `amount`, optional `amountDice` (`"1d6"`), optional `attribute`, optional `markBonusDice` + `markPredicate`, optional `damageType`, optional `raw` (bool — when true this damage ignores feature modifiers: no `damageBonus`, no `damageType` override. Use for self-inflicted strained backlash and other flat damage that should not ride the ability's buffs). |
 | `condition` | Full | Applies via board condition tracker (save-ends durations integrate with token tracker) |
 | `forcedMovement` (`push`) | Full | Push works end-to-end (board preview, collisions) |
 | `forcedMovement` (`pull`) | Full | Legal cells strictly nearer to caster, monotonic-toward-source path |

@@ -478,6 +478,7 @@ Any effect can include `target` to route that effect to a named target group ins
 | `damageType` | `"untyped"`, `"acid"`, `"cold"`, `"corruption"`, `"fire"`, `"holy"`, `"lightning"`, `"poison"`, `"psychic"`, `"sonic"` |
 | `markBonusDice` | optional dice string like `"1d6"`. Rolls and adds only when `markPredicate` matches. |
 | `markPredicate` | optional mark predicate for `markBonusDice`. Defaults to `"targetJudgedBySelf"`. |
+| `raw` | optional bool. When `true`, this damage **ignores feature modifiers** — no `damageBonus` is added and no `damageType` override is applied to it. Use for self-inflicted strained backlash and other flat damage that should not ride the same buffs as the ability's attack. |
 
 `"Strongest"` means highest of all 5 characteristics. Use an array like `["M", "A"]` when the rule is "highest of these specific attributes only" — most often this is the free-strike rule (highest of M or A but never R/I/P).
 

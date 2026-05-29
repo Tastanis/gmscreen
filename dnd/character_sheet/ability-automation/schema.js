@@ -131,6 +131,10 @@
           attribute,
           damageType: P.normalizeDamageType(input.damageType || "untyped"),
         };
+        // `raw` marks damage that ignores feature modifiers (e.g. a Talent's
+        // self-inflicted strained backlash should not be boosted by the same
+        // augmentation that buffs the attack). Preserved only when truthy.
+        if (input.raw) effect.raw = true;
         const attrValid = !attribute
           || (Array.isArray(attribute) ? attribute.every((a) => P.ATTRIBUTES.includes(a)) : P.ATTRIBUTES.includes(attribute));
         if (!attrValid) {

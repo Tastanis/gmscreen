@@ -2355,6 +2355,10 @@
     // Add damage / forced-movement bonuses to every relevant effect.
     walkAutomationEffects(automation, (effect) => {
       if (effect.kind === "damage") {
+        // `raw` damage opts out of feature modifiers entirely (no damage
+        // bonus, no damage-type override). Used for self-inflicted backlash
+        // and other flat damage that shouldn't ride the ability's buffs.
+        if (effect.raw) return;
         if (totals.damageBonus) {
           effect.amount = (Number.parseInt(effect.amount, 10) || 0) + totals.damageBonus;
         }
