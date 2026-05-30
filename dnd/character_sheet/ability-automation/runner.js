@@ -337,6 +337,36 @@
     return asInt(state.context.getAttributeBonus?.(attribute), 0);
   }
 
+  // Resolve an `amountFrom` rider to an integer using the captured trigger
+  // payload. `state.triggerPayload` is set when a ready trigger is resolved
+  // (see runner.open `options.triggerPayload`); without it (e.g. a normal,
+  // non-reactive ability), this contributes 0. The raw captured value is
+  // scaled by multiplier × fraction, then rounded — default DOWN, matching the
+  // Draw Steel "round down when you halve" convention. The result is added on
+  // top of the effect's own amount/attribute/dice by the caller.
+  function resolveTriggerValue(state, amountFrom) {
+    if (!amountFrom || typeof amountFrom !== "object") return 0;
+    const payload = state.triggerPayload?.payload && typeof state.triggerPayload.payload === "object"
+      ? state.triggerPayload.payload
+      : state.triggerPayload || null;
+    if (!payload) return 0;
+    let raw;
+    switch (amountFrom.source) {
+      case "triggeringForcedMovement":
+        raw = asInt(payload.distance, 0);
+        break;
+      case "triggeringDamage":
+      default:
+        raw = asInt(payload.amount, 0);
+        break;
+    }
+    if (!raw) return 0;
+    const multiplier = Number.isFinite(amountFrom.multiplier) ? amountFrom.multiplier : 1;
+    const fraction = Number.isFinite(amountFrom.fraction) ? amountFrom.fraction : 1;
+    const scaled = raw * multiplier * fraction;
+    return amountFrom.rounding === "up" ? Math.ceil(scaled) : Math.floor(scaled);
+  }
+
   // ---------- chat ----------
 
   async function postChat(context, entry) {
@@ -1073,6 +1103,7 @@
     const attributeBonus = effect.attribute
       ? resolveAttributeBonusForDamage(state, effect.attribute)
       : 0;
+    const triggerValue = resolveTriggerValue(state, effect.amountFrom);
     const damageType = effect.damageType && effect.damageType !== "untyped" ? effect.damageType : "";
     const lines = [];
     let visibleHidden = 0;
@@ -1090,7 +1121,7 @@
         });
         if (check?.matched) markBonus = rollDiceFormula(effect.markBonusDice);
       }
-      const amount = Math.max(0, baseAmount + attributeBonus + diceAmount + markBonus);
+      const amount = Math.max(0, baseAmount + attributeBonus + diceAmount + markBonus + triggerValue);
       const result =
         typeof state.context.applyDamage === "function"
           ? await state.context.applyDamage({
@@ -1304,7 +1335,11 @@
   async function applyHealEffect(state, effect, targets, ctx, allowTempHp) {
     if (!targets.length) return;
     const recoveries = asInt(effect.recoveries, 0);
-    const flatAmount = asInt(effect.amount, 0);
+    const attributeBonus = effect.attribute
+      ? resolveAttributeBonusForDamage(state, effect.attribute)
+      : 0;
+    const triggerValue = resolveTriggerValue(state, effect.amountFrom);
+    const flatAmount = Math.max(0, asInt(effect.amount, 0) + attributeBonus + triggerValue);
 
     if (!recoveries && !flatAmount) return;
 

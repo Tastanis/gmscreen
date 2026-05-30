@@ -44,7 +44,7 @@ The monster ability tray + `window.MonsterAbilityRunner.start()` add the followi
 
 | kind | Status | Runtime behavior |
 |---|---|---|
-| `damage` | Full | Applies via board, supports immunity/vulnerability on PC sheets, monster stat-block weakness/immunity, and temporary `damageWeakness` / `damageImmunity` conditions. Fields: `amount`, optional `amountDice` (`"1d6"`), optional `attribute`, optional `markBonusDice` + `markPredicate`, optional `damageType`, optional `raw` (bool — when true this damage ignores feature modifiers: no `damageBonus`, no `damageType` override. Use for self-inflicted strained backlash and other flat damage that should not ride the ability's buffs). |
+| `damage` | Full | Applies via board, supports immunity/vulnerability on PC sheets, monster stat-block weakness/immunity, and temporary `damageWeakness` / `damageImmunity` conditions. Fields: `amount`, optional `amountDice` (`"1d6"`), optional `attribute`, optional `markBonusDice` + `markPredicate`, optional `damageType`, optional `amountFrom` (scales the captured trigger value into the amount sum — see Trigger value sources), optional `raw` (bool — when true this damage ignores feature modifiers: no `damageBonus`, no `damageType` override. Use for self-inflicted strained backlash and other flat damage that should not ride the ability's buffs). |
 | `condition` | Full | Applies via board condition tracker (save-ends durations integrate with token tracker) |
 | `forcedMovement` (`push`) | Full | Push works end-to-end (board preview, collisions) |
 | `forcedMovement` (`pull`) | Full | Legal cells strictly nearer to caster, monotonic-toward-source path |
@@ -53,8 +53,8 @@ The monster ability tray + `window.MonsterAbilityRunner.start()` add the followi
 | `shift` | Full | Voluntary caster movement. Opens a slide-style picker for the caster, supports `distance: "speed"` and shared `pool` keys so split shifts can spend from one total movement allowance. |
 | `potency` | Full | Calls `checkPotency`, runs `onFail` effects on failed targets |
 | `spend` | Full | PC runner checks and spends the caster's heroic resource before prompting/running nested effects. Fixed spends skip the prompt if the resource is missing or insufficient. `maxAmount` supports variable spends through a draggable VTT modal with stepper buttons. **Monster behavior:** the monster runtime context does not provide `spendHeroicResource`, so a monster `spend` card currently falls through to a native `confirm()` dialog (no heroic pool is tracked). Treat `spend` as PC-only; for monsters prefer `note`. |
-| `heal` | Full | Flat `amount` heals via board heal path (capped at max). `recoveries` spends the target PC's recoveries, decrements `hero.vitals.currentRecoveries`, and heals by recovery value x N. If the target sheet cannot be resolved, the runtime falls back to a chat reminder. **Monster behavior:** flat `amount` heals work fine. `recoveries` acts on the **target's** sheet via `spendRecoveryForTarget` (passed through to monsters), so a monster ability that heals or drains a PC target's recoveries works end-to-end; it only skips (with a chat line) when the target has no recovery pool, e.g. another monster. |
-| `temporaryStamina` | Full | Applies via board heal path with overage allowed (over-max shows as temp) |
+| `heal` | Full | Flat `amount` heals via board heal path (capped at max). Optional `attribute` adds the caster's attribute bonus, optional `amountFrom` adds a scaled trigger value (see Trigger value sources); both stack with `amount`. `recoveries` spends the target PC's recoveries, decrements `hero.vitals.currentRecoveries`, and heals by recovery value x N. If the target sheet cannot be resolved, the runtime falls back to a chat reminder. **Monster behavior:** flat `amount` heals work fine. `recoveries` acts on the **target's** sheet via `spendRecoveryForTarget` (passed through to monsters), so a monster ability that heals or drains a PC target's recoveries works end-to-end; it only skips (with a chat line) when the target has no recovery pool, e.g. another monster. |
+| `temporaryStamina` | Full | Applies via board heal path with overage allowed (over-max shows as temp). Also accepts optional `attribute` and `amountFrom` (same as `heal`). |
 | `teleport` | Full | Reuses the slide-shaped destination picker; legal-cell highlight covers any cell within Chebyshev distance. Supports embedded `spend` to increase distance before the picker opens. No stability or size penalty. Clicking an occupied cell still routes through the slide-style collision path — pick an empty cell to follow the rules. |
 | `swap` | Full | Atomic transpose of caster ↔ target placements. Best-effort footprint check; non-equal sizes allowed (GM corrects manually). |
 | `abilityTest` | Full | Opens the standard 2d10 roll modal for a non-damaging test. Supports `label`, `attribute`, `bonus`, `rollFormula`, and `text`. The table interprets success; pair with `ifPrompt` for follow-up automation. |
@@ -133,6 +133,12 @@ Short form (damage `attribute` and potency `attribute`): `M`, `A`, `R`, `I`, `P`
 ## Spend timings — `spend.timing`
 
 `preRoll`, `postResult`
+
+## Trigger value sources — `amountFrom.source`
+
+`triggeringDamage` (Full — reads the captured damage `amount`), `triggeringForcedMovement` (reserved — reads `distance` from the payload when present; no built-in event emits it yet).
+
+`amountFrom` is accepted on `damage`, `heal`, and `temporaryStamina`. The captured value is scaled by `multiplier` × `fraction` (both default `1`) then rounded (`rounding`: `down` default, `up`), and the result is added on top of the effect's own `amount` / `attribute` / `amountDice`. Only populated when the effect runs from a resolved trigger payload (`state.triggerPayload`); contributes `0` on a normal ability use. `halveTriggeringDamage` remains the dedicated "you take half" refund; `amountFrom` is for turning the captured value into a new damage/heal on any target.
 
 ## Persistent tick points — `persistent.tickAt`
 
@@ -257,7 +263,7 @@ Trigger blocks may carry a structured `match` alongside the free-text `condition
 
 | Event | Filter fields |
 |---|---|
-| `damage` | `whose` (`self`/`ally`/`enemy`/`target`/`judgedTarget`/`markSource`/`any`), `minAmount` int, `damageType` string\|string[] |
+| `damage` | `whose` (`self`/`ally`/`enemy`/`target`/`judgedTarget`/`markSource`/`any`), `minAmount` int, `maxAmount` int, `damageType` string\|string[] |
 | `staminaChange` | `whose`, `direction` (`up`/`down`/`either`) |
 | `turnStart`, `turnEnd` | `whose` |
 | `move` | `whose`, `leavesAdjacency` bool, `entersAdjacency` bool |

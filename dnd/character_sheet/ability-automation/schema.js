@@ -106,6 +106,41 @@
     return effect;
   }
 
+  // `amountFrom` lets a damage/heal amount scale off the captured trigger value
+  // (e.g. "the enemy takes half the triggering damage"). The raw captured number
+  // is multiplied by `multiplier` and `fraction`, then rounded (default down, the
+  // Draw Steel convention). The resulting value is ADDED on top of the effect's
+  // own `amount` / `attribute` / `amountDice`, so authors can express "amount + M"
+  // or "half the triggering damage + 1d6" purely from existing fields.
+  function normalizeAmountFrom(input, warnings, path) {
+    if (!input || typeof input !== "object") {
+      warnings.push(`${path}: amountFrom must be an object.`);
+      return null;
+    }
+    const rawSource = asTrimmedString(input.source) || "triggeringDamage";
+    const sourceValid = P.TRIGGER_VALUE_SOURCES.includes(rawSource);
+    if (!sourceValid) {
+      warnings.push(`${path}.source: "${input.source}" not in ${P.TRIGGER_VALUE_SOURCES.join("/")}. Using triggeringDamage.`);
+    }
+    const amountFrom = { source: sourceValid ? rawSource : "triggeringDamage" };
+    if (input.fraction !== undefined && input.fraction !== null && input.fraction !== "") {
+      const fraction = Number(input.fraction);
+      if (Number.isFinite(fraction) && fraction > 0) amountFrom.fraction = fraction;
+      else warnings.push(`${path}.fraction: must be a positive number.`);
+    }
+    if (input.multiplier !== undefined && input.multiplier !== null && input.multiplier !== "") {
+      const multiplier = Number(input.multiplier);
+      if (Number.isFinite(multiplier) && multiplier > 0) amountFrom.multiplier = multiplier;
+      else warnings.push(`${path}.multiplier: must be a positive number.`);
+    }
+    const rounding = asTrimmedString(input.rounding).toLowerCase();
+    if (rounding) {
+      if (rounding === "up" || rounding === "down") amountFrom.rounding = rounding;
+      else warnings.push(`${path}.rounding: "${input.rounding}" must be "up" or "down".`);
+    }
+    return amountFrom;
+  }
+
   function normalizeEffect(input, warnings, path) {
     if (!input || typeof input !== "object") {
       warnings.push(`${path}: effect must be an object.`);
@@ -118,7 +153,7 @@
     }
     switch (kind) {
       case "damage": {
-        const known = new Set(["kind", "amount", "amountDice", "markBonusDice", "markPredicate", "attribute", "damageType", "raw"]);
+        const known = new Set(["kind", "amount", "amountDice", "markBonusDice", "markPredicate", "attribute", "damageType", "raw", "amountFrom"]);
         const attribute = input.attribute !== undefined && input.attribute !== null
           ? (P.normalizeAttributeOrList ? P.normalizeAttributeOrList(input.attribute) : P.normalizeAttribute(input.attribute))
           : "";
@@ -135,6 +170,10 @@
         // self-inflicted strained backlash should not be boosted by the same
         // augmentation that buffs the attack). Preserved only when truthy.
         if (input.raw) effect.raw = true;
+        if (input.amountFrom !== undefined && input.amountFrom !== null) {
+          const amountFrom = normalizeAmountFrom(input.amountFrom, warnings, `${path}.amountFrom`);
+          if (amountFrom) effect.amountFrom = amountFrom;
+        }
         const attrValid = !attribute
           || (Array.isArray(attribute) ? attribute.every((a) => P.ATTRIBUTES.includes(a)) : P.ATTRIBUTES.includes(attribute));
         if (!attrValid) {
@@ -148,23 +187,39 @@
         return effect;
       }
       case "heal": {
-        const known = new Set(["kind", "amount", "recoveries"]);
+        const known = new Set(["kind", "amount", "recoveries", "attribute", "amountFrom"]);
         const recoveries = asNonNegInt(input.recoveries, 0);
         const amount = asNonNegInt(input.amount, 0);
-        if (!recoveries && !amount) {
-          warnings.push(`${path}: heal has no amount or recoveries; runtime will skip.`);
+        const attribute = input.attribute !== undefined && input.attribute !== null && input.attribute !== ""
+          ? (P.normalizeAttributeOrList ? P.normalizeAttributeOrList(input.attribute) : P.normalizeAttribute(input.attribute))
+          : "";
+        const amountFrom = (input.amountFrom !== undefined && input.amountFrom !== null)
+          ? normalizeAmountFrom(input.amountFrom, warnings, `${path}.amountFrom`)
+          : null;
+        if (!recoveries && !amount && !attribute && !amountFrom) {
+          warnings.push(`${path}: heal has no amount, recoveries, attribute, or amountFrom; runtime will skip.`);
         }
         const effect = { kind: "heal" };
         if (recoveries) effect.recoveries = recoveries;
         if (amount) effect.amount = amount;
+        if (attribute) effect.attribute = attribute;
+        if (amountFrom) effect.amountFrom = amountFrom;
         const extras = pickExtras(input, known);
         if (extras) effect._extra = extras;
         return effect;
       }
       case "temporaryStamina": {
-        const known = new Set(["kind", "amount"]);
+        const known = new Set(["kind", "amount", "attribute", "amountFrom"]);
+        const attribute = input.attribute !== undefined && input.attribute !== null && input.attribute !== ""
+          ? (P.normalizeAttributeOrList ? P.normalizeAttributeOrList(input.attribute) : P.normalizeAttribute(input.attribute))
+          : "";
+        const amountFrom = (input.amountFrom !== undefined && input.amountFrom !== null)
+          ? normalizeAmountFrom(input.amountFrom, warnings, `${path}.amountFrom`)
+          : null;
         const effect = { kind: "temporaryStamina", amount: asNonNegInt(input.amount, 0) };
-        if (!effect.amount) warnings.push(`${path}: temporary stamina has no amount.`);
+        if (attribute) effect.attribute = attribute;
+        if (amountFrom) effect.amountFrom = amountFrom;
+        if (!effect.amount && !attribute && !amountFrom) warnings.push(`${path}: temporary stamina has no amount.`);
         const extras = pickExtras(input, known);
         if (extras) effect._extra = extras;
         return effect;
@@ -756,6 +811,8 @@
     if (event === "damage" || event === "damageDealt") {
       const minAmount = asNonNegInt(filterInput.minAmount, 0);
       if (minAmount) filter.minAmount = minAmount;
+      const maxAmount = asNonNegInt(filterInput.maxAmount, 0);
+      if (maxAmount) filter.maxAmount = maxAmount;
       const dtList = Array.isArray(filterInput.damageType)
         ? filterInput.damageType
         : filterInput.damageType !== undefined && filterInput.damageType !== null

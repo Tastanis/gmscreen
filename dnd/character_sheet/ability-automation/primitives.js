@@ -38,6 +38,15 @@
     "other",
   ];
 
+  // Value sources an `amountFrom` rider can pull a runtime number from. The
+  // captured trigger payload is stashed on `state.triggerPayload` when a ready
+  // trigger resolves; these names tell the runner which field to read so the
+  // damage/heal amount can scale off the event that fired the ability.
+  // Only `triggeringDamage` is fully wired today (reads payload.amount);
+  // `triggeringForcedMovement` is reserved for move-distance reactions and
+  // reads payload.distance when present.
+  const TRIGGER_VALUE_SOURCES = ["triggeringDamage", "triggeringForcedMovement"];
+
   // Standard Draw Steel ability keywords. Authors can use any string, but the
   // ones below are recognized for canonical casing and as the registry seed.
   const KEYWORDS = [
@@ -346,6 +355,21 @@
   }
 
   // Describe an effect WITHOUT character context — the JSON-level form.
+  // Compact text for an `amountFrom` rider (e.g. " + half triggering damage").
+  function describeTriggerValue(amountFrom) {
+    if (!amountFrom || typeof amountFrom !== "object") return "";
+    const label = amountFrom.source === "triggeringForcedMovement"
+      ? "triggering movement"
+      : "triggering damage";
+    const parts = [];
+    if (amountFrom.multiplier && amountFrom.multiplier !== 1) parts.push(`${amountFrom.multiplier}×`);
+    if (amountFrom.fraction && amountFrom.fraction !== 1) {
+      parts.push(amountFrom.fraction === 0.5 ? "half" : `${amountFrom.fraction}×`);
+    }
+    const scale = parts.length ? `${parts.join(" ")} ` : "";
+    return ` + ${scale}${label}`;
+  }
+
   // Use describeEffectResolved when the runtime/inspector has the source character.
   function describeEffect(effect) {
     if (!effect || typeof effect !== "object") return "";
@@ -354,13 +378,17 @@
         const amount = effect.amount || 0;
         const attr = effect.attribute ? ` + ${effect.attribute}` : "";
         const type = effect.damageType && effect.damageType !== "untyped" ? ` ${effect.damageType}` : "";
-        return `${amount}${attr}${type} damage`;
+        return `${amount}${attr}${type} damage${describeTriggerValue(effect.amountFrom)}`;
       }
-      case "heal":
+      case "heal": {
         if (effect.recoveries) return `spend ${effect.recoveries} recovery → heal`;
-        return `heal ${effect.amount || 0}`;
-      case "temporaryStamina":
-        return `${effect.amount || 0} temporary Stamina`;
+        const attr = effect.attribute ? ` + ${effect.attribute}` : "";
+        return `heal ${effect.amount || 0}${attr}${describeTriggerValue(effect.amountFrom)}`;
+      }
+      case "temporaryStamina": {
+        const attr = effect.attribute ? ` + ${effect.attribute}` : "";
+        return `${effect.amount || 0}${attr}${describeTriggerValue(effect.amountFrom)} temporary Stamina`;
+      }
       case "condition": {
         const dur = effect.duration && effect.duration !== "instantaneous" ? ` (${effect.duration})` : "";
         if (effect.name === "damageWeakness" || effect.name === "damageImmunity") {
@@ -454,7 +482,7 @@
       case "damage": {
         const total = resolveDamageAmount(effect, ctx);
         const type = effect.damageType && effect.damageType !== "untyped" ? ` ${effect.damageType}` : "";
-        return `${total}${type} damage`;
+        return `${total}${type} damage${describeTriggerValue(effect.amountFrom)}`;
       }
       case "potency": {
         const threshold = resolvePotencyThreshold(effect.level, ctx);
@@ -475,6 +503,7 @@
   global.AbilityAutomationPrimitives = {
     BLOCK_TYPES,
     EFFECT_KINDS,
+    TRIGGER_VALUE_SOURCES,
     ATTRIBUTES,
     ATTRIBUTE_SHORT,
     POTENCY_LEVELS,
@@ -505,6 +534,7 @@
     shiftTierKey,
     describeEffect,
     describeEffectResolved,
+    describeTriggerValue,
     resolveDamageAmount,
     resolvePotencyThreshold,
     KEYWORDS,

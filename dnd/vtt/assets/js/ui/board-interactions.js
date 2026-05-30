@@ -3340,6 +3340,7 @@ export function mountBoardInteractions(store, routes = {}) {
         const amount = Number.parseInt(payload.amount, 10) || 0;
         const dt = String(payload.damageType || '').toLowerCase();
         if (filter.minAmount && amount < filter.minAmount) return false;
+        if (filter.maxAmount && amount > filter.maxAmount) return false;
         if (Array.isArray(filter.damageType) && filter.damageType.length) {
           if (!filter.damageType.includes(dt)) return false;
         }

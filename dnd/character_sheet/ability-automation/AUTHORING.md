@@ -287,7 +287,7 @@ For PC triggered actions, this is **always-on** once the character token is pres
 
 | event | When it fires | Useful filter fields |
 |---|---|---|
-| `damage` | A token takes damage from an automated ability | `whose`, `minAmount`, `damageType` (single or array) |
+| `damage` | A token takes damage from an automated ability | `whose`, `minAmount`, `maxAmount`, `damageType` (single or array) |
 | `staminaChange` | A token's stamina changed via automation (damage or heal) | `whose`, `direction` (`down`/`up`/`either`) |
 | `turnStart` | A token becomes the active combatant | `whose` |
 | `turnEnd` | The active combatant's turn ends | `whose` |
@@ -468,6 +468,7 @@ Any effect can include `target` to route that effect to a named target group ins
 ```json
 { "kind": "damage", "amount": 5, "attribute": "M", "damageType": "fire" }
 { "kind": "damage", "amount": 0, "amountDice": "1d6", "damageType": "fire" }
+{ "kind": "damage", "damageType": "psychic", "amountFrom": { "source": "triggeringDamage", "fraction": 0.5 } }
 ```
 
 | Field | Values |
@@ -478,18 +479,43 @@ Any effect can include `target` to route that effect to a named target group ins
 | `damageType` | `"untyped"`, `"acid"`, `"cold"`, `"corruption"`, `"fire"`, `"holy"`, `"lightning"`, `"poison"`, `"psychic"`, `"sonic"` |
 | `markBonusDice` | optional dice string like `"1d6"`. Rolls and adds only when `markPredicate` matches. |
 | `markPredicate` | optional mark predicate for `markBonusDice`. Defaults to `"targetJudgedBySelf"`. |
+| `amountFrom` | optional. Scales the **captured trigger value** and adds it on top of `amount` + `attribute` + `amountDice`. See [Scaling off the trigger (`amountFrom`)](#scaling-off-the-trigger-amountfrom). |
 | `raw` | optional bool. When `true`, this damage **ignores feature modifiers** — no `damageBonus` is added and no `damageType` override is applied to it. Use for self-inflicted strained backlash and other flat damage that should not ride the same buffs as the ability's attack. |
 
 `"Strongest"` means highest of all 5 characteristics. Use an array like `["M", "A"]` when the rule is "highest of these specific attributes only" — most often this is the free-strike rule (highest of M or A but never R/I/P).
+
+#### Scaling off the trigger (`amountFrom`)
+
+`amountFrom` is supported on `damage`, `heal`, and `temporaryStamina`. It reads the number that fired a triggered action and contributes it as **one more addend** in the effect's amount — so `amount`, `attribute`, `amountDice`, and `amountFrom` all stack. This is how reactive abilities reflect, refund, or convert the triggering hit ("the enemy takes half the triggering damage", "reflect all damage + M", "heal yourself for the damage you took").
+
+```json
+{ "kind": "damage", "target": "source", "damageType": "psychic",
+  "amountFrom": { "source": "triggeringDamage", "fraction": 0.5, "rounding": "down" } }
+```
+
+| Field | Values |
+|---|---|
+| `source` | `"triggeringDamage"` (reads the triggering damage amount — the only fully wired source) or `"triggeringForcedMovement"` (reads `distance`, reserved for move reactions). Defaults to `"triggeringDamage"`. |
+| `fraction` | optional positive number multiplied into the captured value. `0.5` = half. Default `1`. |
+| `multiplier` | optional positive number, also multiplied in. Stacks with `fraction` (e.g. both default to 1). Default `1`. |
+| `rounding` | `"down"` (default — Draw Steel rounds halves down) or `"up"`. Applied after scaling. |
+
+Notes:
+- The captured value only exists when the ability is resolved from a ready trigger (a `trigger` card fired it). On a normal, non-reactive use `amountFrom` contributes `0`.
+- The tier/inspector preview shows `+ half triggering damage` etc., but cannot show the final number — the runtime only knows the captured amount when the trigger actually resolves.
+- `halveTriggeringDamage` is still the right tool for "**you** take half" (it refunds stamina on the placement that was hit). Use `amountFrom` when the half (or any formula) becomes a **new** damage/heal on a chosen target.
 
 ### `heal`
 
 ```json
 { "kind": "heal", "recoveries": 1 }
 { "kind": "heal", "amount": 5 }
+{ "kind": "heal", "target": "self", "attribute": "M", "amountFrom": { "source": "triggeringDamage" } }
 ```
 
 `recoveries` spends N of the target's recoveries to heal `N × recoveryValue`. `amount` is a flat number; both can combine. In the VTT, PC targets have `hero.vitals.currentRecoveries` decremented automatically before the heal is applied. If the target sheet or recovery value can't be read, the runtime posts a chat reminder so the GM can apply manually.
+
+`attribute` adds the caster's attribute bonus to the flat heal, and `amountFrom` adds a scaled trigger value (see [Scaling off the trigger](#scaling-off-the-trigger-amountfrom)) — so `heal yourself for the damage you took + M` is `{ "attribute": "M", "amountFrom": { "source": "triggeringDamage" } }`. Both stack with `amount` and `recoveries`.
 
 ### `temporaryStamina`
 
@@ -1070,6 +1096,45 @@ Use **only** when nothing else fits. Runtime prints the text to chat as a remind
       "condition": "An adjacent enemy leaves your reach.",
       "match": { "event": "move", "filter": { "whose": "enemy", "leavesAdjacency": true } },
       "effects": [ { "kind": "freeStrike", "against": "enemy", "text": "Take a melee free strike against the mover." } ]
+    }
+  ]
+}
+```
+
+### 7d. Feedback Loop (reflect half the triggering damage)
+
+> Trigger: The target deals damage to an ally.
+> Effect: The target takes psychic damage equal to half the triggering damage.
+
+The `trigger` card listens for an ally taking damage; after it resolves you pick the enemy who dealt it, and `amountFrom` re-deals half that captured amount as psychic damage. Swap `fraction` / add `attribute` to express "all the damage" or "half + R".
+
+```json
+{
+  "schema": "ability-automation/v3",
+  "keywords": ["Psionic", "Ranged"],
+  "cards": [
+    {
+      "type": "trigger",
+      "condition": "The target deals damage to an ally.",
+      "match": { "event": "damage", "filter": { "whose": "ally", "minAmount": 1 } },
+      "effects": []
+    },
+    {
+      "type": "target",
+      "name": "source",
+      "mode": "token",
+      "predicate": "enemy",
+      "count": { "value": 1, "mode": "exact" },
+      "promptTitle": "Pick the Triggering Enemy",
+      "promptText": "Choose the enemy that dealt damage to your ally.",
+      "distance": { "form": "ranged", "value": 10 }
+    },
+    {
+      "type": "effect",
+      "target": "source",
+      "effects": [
+        { "kind": "damage", "damageType": "psychic", "amountFrom": { "source": "triggeringDamage", "fraction": 0.5, "rounding": "down" } }
+      ]
     }
   ]
 }
