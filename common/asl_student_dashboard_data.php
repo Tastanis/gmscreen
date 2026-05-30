@@ -5,97 +5,99 @@ if (!function_exists('aslhubStudentDashboardSeedBuckets')) {
     {
         return [
             [
-                'id' => 'REC',
-                'code' => 'REC',
-                'name' => 'Receptive Comprehension',
-                'blurb' => 'Students understand signed language from teachers, peers, and accessible Deaf signers.',
+                'id' => '21C',
+                'code' => '21C',
+                'name' => '21st Century Skills',
+                'blurb' => 'Students build collaboration, learning, and work habits that support success in and beyond the ASL classroom.',
                 'standards' => [
-                    ['id' => 'REC.1', 'name' => 'Classroom Language and Directions', 'description' => 'Students understand signed classroom language, directions, routines, and teacher feedback.'],
-                    ['id' => 'REC.2', 'name' => 'Signs, Fingerspelling, Numbers, Parameters, and NMMs', 'description' => 'Students comprehend meaning through signs, fingerspelling, numbers, parameters, and non-manual markers.'],
-                    ['id' => 'REC.3', 'name' => 'Connected Signed Communication', 'description' => 'Students understand connected signed communication on familiar topics.'],
-                    ['id' => 'REC.4', 'name' => 'Receptive ASL Structure', 'description' => 'Students identify how ASL structure creates meaning in signed input.'],
+                    ['id' => '21C.1', 'name' => 'Collaboration', 'description' => 'Students work effectively with peers and contribute to shared goals.'],
+                    ['id' => '21C.2', 'name' => 'Learning Skills and Teachability', 'description' => 'Students apply feedback, reflect, and take ownership of their learning.'],
+                    ['id' => '21C.3', 'name' => 'Work Ethic', 'description' => 'Students show effort, responsibility, and consistency in their work.'],
+                ],
+            ],
+            [
+                'id' => 'CLF',
+                'code' => 'CLF',
+                'name' => 'Classifiers',
+                'blurb' => 'Students identify, select, and combine classifiers to represent people, objects, and perspective.',
+                'standards' => [
+                    ['id' => 'CLF.1', 'name' => 'Appropriate Use of Classifiers', 'description' => 'Students choose and use classifiers appropriately for the context.'],
+                    ['id' => 'CLF.2', 'name' => 'Classifier Identification', 'description' => 'Students recognize and identify classifiers in signed input.'],
+                    ['id' => 'CLF.3', 'name' => 'Pairing/Blending Signs & Classifiers', 'description' => 'Students combine lexical signs and classifiers to convey meaning.'],
+                    ['id' => 'CLF.4', 'name' => 'Showing Perspective', 'description' => 'Students use classifiers to show point of view and spatial perspective.'],
+                ],
+            ],
+            [
+                'id' => 'CUL',
+                'code' => 'CUL',
+                'name' => 'Culture & History',
+                'blurb' => 'Students explore Deaf culture, history, media, and connections between languages and cultures.',
+                'standards' => [
+                    ['id' => 'CUL.1', 'name' => 'Cultural Norms', 'description' => 'Students understand and follow Deaf cultural norms.'],
+                    ['id' => 'CUL.2', 'name' => 'Deaf Media', 'description' => 'Students engage with Deaf media and Deaf-created content.'],
+                    ['id' => 'CUL.3', 'name' => 'History', 'description' => 'Students understand key people, events, and issues in Deaf history.'],
+                    ['id' => 'CUL.4', 'name' => 'Language & Cultural Comparisons', 'description' => 'Students compare ASL and Deaf culture with other languages and cultures.'],
                 ],
             ],
             [
                 'id' => 'EXP',
                 'code' => 'EXP',
-                'name' => 'Expressive Production & Sign Form',
-                'blurb' => 'Students produce clear, accurate, understandable ASL.',
+                'name' => 'Expression',
+                'blurb' => 'Students produce clear, accurate ASL using correct parameters, grammar, vocabulary, and fluency.',
                 'standards' => [
-                    ['id' => 'EXP.1', 'name' => 'Sign Parameters and Form Accuracy', 'description' => 'Students produce signs with accurate handshape, location, movement, palm orientation, and non-manual markers.'],
-                    ['id' => 'EXP.2', 'name' => 'Vocabulary and ASL Structures', 'description' => 'Students produce signed messages using appropriate vocabulary and ASL structures.'],
-                    ['id' => 'EXP.3', 'name' => 'Clarity, Pacing, and Fluency', 'description' => 'Students sign with visual clarity, appropriate pacing, and increasing fluency.'],
-                    ['id' => 'EXP.4', 'name' => 'ASL Grammar Over English Word Order', 'description' => 'Students use ASL grammar rather than relying only on English word order or word-for-word translation.'],
+                    ['id' => 'EXP.1', 'name' => '5 Parameters', 'description' => 'Students produce signs with accurate handshape, location, movement, palm orientation, and non-manual markers.'],
+                    ['id' => 'EXP.2', 'name' => 'ASL Grammar', 'description' => 'Students use ASL grammar rather than English word order.'],
+                    ['id' => 'EXP.3', 'name' => 'Clarity/Pacing/Fluency', 'description' => 'Students sign with visual clarity, appropriate pacing, and increasing fluency.'],
+                    ['id' => 'EXP.4', 'name' => 'Vocabulary', 'description' => 'Students use appropriate vocabulary to express ideas.'],
                 ],
             ],
             [
                 'id' => 'INT',
                 'code' => 'INT',
                 'name' => 'Interactive Communication',
-                'blurb' => 'Students participate in back-and-forth signed communication.',
+                'blurb' => 'Students participate in back-and-forth signed communication and stay in the target language.',
                 'standards' => [
-                    ['id' => 'INT.1', 'name' => 'Initiating and Maintaining Interaction', 'description' => 'Students initiate, maintain, and close signed interactions.'],
-                    ['id' => 'INT.2', 'name' => 'Clarification and Repair', 'description' => 'Students use clarification, repair, and negotiation strategies.'],
-                    ['id' => 'INT.3', 'name' => 'Visual Interaction Norms', 'description' => 'Students follow visual interaction norms.'],
-                    ['id' => 'INT.4', 'name' => 'Staying in ASL', 'description' => 'Students communicate in ASL without defaulting immediately to spoken English.'],
+                    ['id' => 'INT.1', 'name' => 'Clarification and Repair', 'description' => 'Students use clarification, repair, and negotiation strategies.'],
+                    ['id' => 'INT.2', 'name' => 'Communication Norms', 'description' => 'Students follow visual communication norms during interaction.'],
+                    ['id' => 'INT.3', 'name' => 'Initiating and Maintaining Interaction', 'description' => 'Students initiate, maintain, and close signed interactions.'],
+                    ['id' => 'INT.4', 'name' => 'Staying in Target Language', 'description' => 'Students communicate in ASL without defaulting to spoken English.'],
                 ],
             ],
             [
                 'id' => 'NMM',
                 'code' => 'NMM',
-                'name' => 'Non-Manual Markers & Visual Grammar',
-                'blurb' => 'Students use and understand the face, head, body, eyes, and mouth as part of ASL grammar and meaning.',
+                'name' => 'NonManual Markers',
+                'blurb' => 'Students use the face, head, body, eyes, and mouth as part of ASL grammar and meaning.',
                 'standards' => [
-                    ['id' => 'NMM.1', 'name' => 'Grammatical Non-Manual Markers', 'description' => 'Students use grammatical non-manual markers for sentence types and structures.'],
-                    ['id' => 'NMM.2', 'name' => 'Face, Head, Body, and Eye Gaze', 'description' => 'Students interpret and produce facial expression, head movement, body posture, eye gaze, and other non-manual signals to mark meaning.'],
-                    ['id' => 'NMM.3', 'name' => 'Mouth Morphemes and Mouth Gestures', 'description' => 'Students use and interpret mouth morphemes and mouth gestures appropriately.'],
+                    ['id' => 'NMM.1', 'name' => 'Grammatical NMM', 'description' => 'Students use grammatical non-manual markers for sentence types and structures.'],
+                    ['id' => 'NMM.2', 'name' => 'Head/Face/Body/Eye Gaze', 'description' => 'Students use facial expression, head movement, body posture, and eye gaze to mark meaning.'],
+                    ['id' => 'NMM.3', 'name' => 'Mouth Morphemes', 'description' => 'Students use and interpret mouth morphemes and mouth gestures.'],
                 ],
             ],
             [
-                'id' => 'SPC',
-                'code' => 'SPC',
-                'name' => 'Spatial Grammar & Referent Tracking',
-                'blurb' => 'Students use signing space to organize people, places, objects, ideas, movement, and relationships.',
+                'id' => 'REC',
+                'code' => 'REC',
+                'name' => 'Reception',
+                'blurb' => 'Students understand signed language, including directions, grammar, vocabulary, and context.',
                 'standards' => [
-                    ['id' => 'SPC.1', 'name' => 'Establishing and Maintaining Referents', 'description' => 'Students establish and maintain referents in signing space.'],
-                    ['id' => 'SPC.2', 'name' => 'Location, Movement, and Relationships', 'description' => 'Students use signing space to show location, movement, and relationships.'],
-                    ['id' => 'SPC.3', 'name' => 'Pronouns, Indexing, Agreement, and Directionality', 'description' => 'Students use pronouns, indexing, agreement, and directionality.'],
-                    ['id' => 'SPC.4', 'name' => 'Spatial Organization for Comparison and Sequencing', 'description' => 'Students use spatial organization to compare, contrast, and sequence information.'],
+                    ['id' => 'REC.1', 'name' => 'Classroom Directions', 'description' => 'Students understand signed classroom language, directions, and routines.'],
+                    ['id' => 'REC.2', 'name' => 'Contextual Understanding', 'description' => 'Students understand meaning from context in signed communication.'],
+                    ['id' => 'REC.3', 'name' => 'Grammar', 'description' => 'Students recognize how ASL grammar creates meaning in signed input.'],
+                    ['id' => 'REC.4', 'name' => 'Vocabulary & Fingerspelling & NMM', 'description' => 'Students comprehend vocabulary, fingerspelling, and non-manual markers.'],
                 ],
             ],
             [
-                'id' => 'DEP',
-                'code' => 'DEP',
-                'name' => 'Depicting Signs, Classifiers & Constructed Action',
-                'blurb' => 'Students visually represent people, objects, movement, actions, size, shape, handling, and perspective.',
+                'id' => 'SPG',
+                'code' => 'SPG',
+                'name' => 'Spacial Grammar',
+                'blurb' => 'Students use signing space to organize referents, relationships, sequence, and movement.',
                 'standards' => [
-                    ['id' => 'DEP.1', 'name' => 'Classifier and Depicting Sign Selection', 'description' => 'Students use depicting signs/classifiers to represent people, objects, and categories of things.'],
-                    ['id' => 'DEP.2', 'name' => 'Size, Shape, Movement, Handling, and Visual-Spatial Relationships', 'description' => 'Students depict size, shape, movement, handling, and visual-spatial relationships.'],
-                    ['id' => 'DEP.3', 'name' => 'Constructed Action and Role Shift', 'description' => 'Students use constructed action and role shift to show perspective.'],
-                    ['id' => 'DEP.4', 'name' => 'Blending Lexical Signs and Visual ASL', 'description' => 'Students blend lexical signs, depicting signs, space, constructed action, and NMMs to create visually clear ASL.'],
-                ],
-            ],
-            [
-                'id' => 'DSC',
-                'code' => 'DSC',
-                'name' => 'Discourse, Narrative & Presentation',
-                'blurb' => 'Students organize signed language into clear stories, explanations, summaries, descriptions, and presentations.',
-                'standards' => [
-                    ['id' => 'DSC.1', 'name' => 'Organization of Signed Communication', 'description' => 'Students organize signed communication with clear beginning, middle, and end.'],
-                    ['id' => 'DSC.2', 'name' => 'Storytelling and Recounting Events', 'description' => 'Students tell stories and recount events using ASL discourse features.'],
-                    ['id' => 'DSC.3', 'name' => 'Explanation, Description, Summary, and Information Giving', 'description' => 'Students explain, describe, summarize, and give information in ASL.'],
-                ],
-            ],
-            [
-                'id' => 'CUL',
-                'code' => 'CUL',
-                'name' => 'Deaf Culture, Community & ASL Texts',
-                'blurb' => 'Students understand Deaf culture, community, history, ASL texts, and connections between language and culture.',
-                'standards' => [
-                    ['id' => 'CUL.1', 'name' => 'Deaf Cultural Norms', 'description' => 'Students understand and use Deaf cultural norms for visual communication.'],
-                    ['id' => 'CUL.2', 'name' => 'Deaf History, People, Events, and Community Issues', 'description' => 'Students understand major people, events, and issues in Deaf history and community life.'],
-                    ['id' => 'CUL.3', 'name' => 'ASL Texts, Deaf Media, and Deaf-Created Communication', 'description' => 'Students engage with ASL texts, Deaf media, and Deaf-created communication.'],
-                    ['id' => 'CUL.4', 'name' => 'Language and Culture Comparisons', 'description' => 'Students compare ASL, Deaf culture, English, hearing culture, and other language/cultural systems.'],
+                    ['id' => 'SPG.1', 'name' => 'Agreement & Directionality', 'description' => 'Students use agreement and directional verbs accurately.'],
+                    ['id' => 'SPG.2', 'name' => 'Comparing & Sequencing', 'description' => 'Students use space to compare, contrast, and sequence information.'],
+                    ['id' => 'SPG.3', 'name' => 'Indexing', 'description' => 'Students use indexing to point to and reference established locations.'],
+                    ['id' => 'SPG.4', 'name' => 'Location, Movement & Relationships', 'description' => 'Students use space to show location, movement, and relationships.'],
+                    ['id' => 'SPG.5', 'name' => 'Referencing', 'description' => 'Students establish and maintain referents in signing space.'],
+                    ['id' => 'SPG.6', 'name' => 'Spacial Organization', 'description' => 'Students organize information clearly within signing space.'],
                 ],
             ],
         ];
@@ -245,6 +247,33 @@ if (!function_exists('aslhubEnsureStudentDashboardSchema')) {
         } catch (PDOException $e) {
             error_log('ASL student dashboard schema check failed: ' . $e->getMessage());
             return;
+        }
+
+        try {
+            $validBucketIds = array_column(aslhubStudentDashboardSeedBuckets(), 'id');
+
+            $existingBuckets = $pdo->query("SELECT bucket_id FROM asl_skill_buckets")->fetchAll(PDO::FETCH_COLUMN);
+            $hasStaleTaxonomy = false;
+            foreach ($existingBuckets as $existingBucketId) {
+                if (!in_array($existingBucketId, $validBucketIds, true)) {
+                    $hasStaleTaxonomy = true;
+                    break;
+                }
+            }
+
+            // A bucket left over from a previous taxonomy means the standards have been
+            // reorganized. Clear the taxonomy and all attached learning-target data so the
+            // new buckets/standards seed cleanly with no orphaned or mismatched records.
+            if ($hasStaleTaxonomy) {
+                $pdo->exec("DELETE FROM asl_learning_target_resources");
+                $pdo->exec("DELETE FROM user_learning_target_score_history");
+                $pdo->exec("DELETE FROM user_learning_targets");
+                $pdo->exec("DELETE FROM asl_learning_targets");
+                $pdo->exec("DELETE FROM asl_standards");
+                $pdo->exec("DELETE FROM asl_skill_buckets");
+            }
+        } catch (PDOException $e) {
+            error_log('ASL taxonomy reset check failed: ' . $e->getMessage());
         }
 
         try {
