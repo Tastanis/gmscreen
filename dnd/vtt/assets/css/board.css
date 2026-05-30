@@ -3962,7 +3962,7 @@ body.vtt-character-ability-tray-is-open .vtt-board__malice {
 
 .vtt-token-aura {
   position: absolute;
-  border-radius: 50%;
+  border-radius: 0;
   pointer-events: none;
   will-change: transform;
 }

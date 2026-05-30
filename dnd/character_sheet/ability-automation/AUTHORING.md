@@ -883,6 +883,23 @@ Requires a `trigger` block with `match.event: "damage"` so the runtime can read 
 
 Use this for "you take half damage instead" triggered actions like Resist the Unnatural, Unearthly Reflexes, and Feedback Loop (when paired with a re-damage effect targeting the source).
 
+### `aura`
+
+Switches a token aura on or off when the ability runs. Auras are a VTT token feature (radius + color, rendered as a square / Chebyshev area). Use this for abilities that create a persistent field around the caster.
+
+```json
+{ "kind": "aura", "enabled": true, "radius": 3, "color": "#22d3ee" }
+```
+
+| Field | Values |
+|---|---|
+| `enabled` | `true` (default — turn the aura on) or `false` (turn it off) |
+| `radius` | `1`-`20` squares (clamped). Square area: a radius-3 aura reaches 3 squares out in every direction including diagonals. |
+| `color` | optional hex string; omit to keep the token's current aura color |
+| `target` | `"self"` (default — the caster's token) or `"target"` (each resolved target) |
+
+Nest inside `ifStrained` to grow the aura when the caster strains (e.g. radius 3 normally, 4 when strained). Falls back to a chat reminder if the runtime has no token (such as the Hero Sheet preview).
+
 ### `other`
 
 ```json

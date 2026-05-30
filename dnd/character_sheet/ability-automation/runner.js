@@ -1065,6 +1065,8 @@
         return applyEndMarkEffect(state, effect, targets, ctx);
       case "halveTriggeringDamage":
         return applyHalveTriggeringDamageEffect(state, effect, targets, ctx);
+      case "aura":
+        return applyAuraEffect(state, effect, targets, ctx);
       case "heal":
         return applyHealEffect(state, effect, targets, ctx, false);
       case "temporaryStamina":
@@ -1104,9 +1106,6 @@
       ? resolveAttributeBonusForDamage(state, effect.attribute)
       : 0;
     const triggerValue = resolveTriggerValue(state, effect.amountFrom);
-    await postChat(state.context, {
-      message: `[DIAG] amountFrom=${JSON.stringify(effect.amountFrom || null)} triggerPayload=${JSON.stringify(state.triggerPayload || null)} triggerValue=${triggerValue} baseAmount=${baseAmount}`,
-    });
     const damageType = effect.damageType && effect.damageType !== "untyped" ? effect.damageType : "";
     const lines = [];
     let visibleHidden = 0;
@@ -1735,6 +1734,38 @@
       key: effect.key || "",
       sourceId: ids.sourceId,
       targetId: ids.targetId,
+    });
+  }
+
+  async function applyAuraEffect(state, effect, targets) {
+    const enabled = effect.enabled !== false;
+    const radius = Math.min(20, Math.max(1, asInt(effect.radius, 1)));
+    const targetMode = effect.target === "target" ? "target" : "self";
+    let ids = [];
+    if (targetMode === "target") {
+      ids = (targets || []).map((t) => t?.id).filter(Boolean);
+    } else if (state.sourcePlacement?.id) {
+      ids = [state.sourcePlacement.id];
+    }
+    if (!ids.length) {
+      await postChat(state.context, {
+        message: `${state.heroName} - ${state.action.name || "Ability"}: ${P.describeEffect(effect)} — apply manually (no token).`,
+      });
+      return;
+    }
+    if (typeof state.context.setAura === "function") {
+      for (const id of ids) {
+        await state.context.setAura({
+          placementId: id,
+          enabled,
+          radius,
+          color: effect.color || "",
+        });
+      }
+      return;
+    }
+    await postChat(state.context, {
+      message: `${state.heroName} - ${state.action.name || "Ability"}: ${P.describeEffect(effect)} — apply manually.`,
     });
   }
 
@@ -2390,24 +2421,30 @@
       });
     }
 
-    // Add damage / forced-movement bonuses to every relevant effect.
-    walkAutomationEffects(automation, (effect) => {
-      if (effect.kind === "damage") {
-        // `raw` damage opts out of feature modifiers entirely (no damage
-        // bonus, no damage-type override). Used for self-inflicted backlash
-        // and other flat damage that shouldn't ride the ability's buffs.
-        if (effect.raw) return;
-        if (totals.damageBonus) {
-          effect.amount = (Number.parseInt(effect.amount, 10) || 0) + totals.damageBonus;
+    // Add damage / forced-movement bonuses to every relevant effect. The
+    // `rolled` flag tracks whether the effect lives inside a powerRoll block,
+    // because a damage *bonus* only buffs ROLLED damage — flat or triggered
+    // damage (reflected damage, self-backlash, amountFrom riders) is not a
+    // "damage roll", so a "+N to rolled damage" augmentation must skip it.
+    walkAutomationBlocks(automation, (block) => {
+      const rolled = block?.type === "powerRoll";
+      walkBlockEffects(block, (effect) => {
+        if (effect.kind === "damage") {
+          // `raw` damage opts out of feature modifiers entirely (no damage
+          // bonus, no damage-type override).
+          if (effect.raw) return;
+          if (totals.damageBonus && rolled) {
+            effect.amount = (Number.parseInt(effect.amount, 10) || 0) + totals.damageBonus;
+          }
+          if (totals.damageTypeOverride) {
+            effect.damageType = totals.damageTypeOverride;
+          }
+        } else if (effect.kind === "forcedMovement") {
+          if (totals.forcedMovementBonus && Number.isFinite(effect.distance)) {
+            effect.distance = Math.max(0, effect.distance + totals.forcedMovementBonus);
+          }
         }
-        if (totals.damageTypeOverride) {
-          effect.damageType = totals.damageTypeOverride;
-        }
-      } else if (effect.kind === "forcedMovement") {
-        if (totals.forcedMovementBonus && Number.isFinite(effect.distance)) {
-          effect.distance = Math.max(0, effect.distance + totals.forcedMovementBonus);
-        }
-      }
+      });
     });
 
     // Stash a summary on state for the inspector / chat to reference.

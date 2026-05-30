@@ -2009,6 +2009,7 @@ export function mountBoardInteractions(store, routes = {}) {
   document.addEventListener('vtt:automation-fire-trigger-event', handleAutomationFireTriggerEventRequest);
   document.addEventListener('vtt:automation-check-scoped-flag', handleAutomationCheckScopedFlagRequest);
   document.addEventListener('vtt:automation-set-scoped-flag', handleAutomationSetScopedFlagRequest);
+  document.addEventListener('vtt:automation-set-aura', handleAutomationSetAuraRequest);
   document.addEventListener('vtt:automation-consume-triggered-action', handleAutomationConsumeTriggeredActionRequest);
   // When the chat panel opens or closes, the layout CSS shifts the board
   // content. Re-position the floating End Turn overlay so it lands inside
@@ -3205,6 +3206,40 @@ export function mountBoardInteractions(store, routes = {}) {
       replacedSourceId: replacedMark?.sourceId || '',
       replacedSourceName: replacedMark?.sourceName || '',
     });
+  }
+
+  function handleAutomationSetAuraRequest(event) {
+    const detail = event?.detail ?? {};
+    const payload = detail.payload && typeof detail.payload === 'object' ? detail.payload : {};
+    const resolve = typeof detail.resolve === 'function' ? detail.resolve : null;
+    const reject = typeof detail.reject === 'function' ? detail.reject : null;
+    const placementId = payload.placementId || '';
+    if (!placementId) {
+      reject?.(new Error('Aura request missing placement id.'));
+      return;
+    }
+    const placement = getPlacementFromStore(placementId);
+    if (!placement) {
+      reject?.(new Error('Aura request token is not on the active scene.'));
+      return;
+    }
+    const enabled = payload.enabled !== false;
+    const radius = Math.max(1, Math.min(20, parseInt(payload.radius, 10) || 1));
+    updatePlacementById(placementId, (target) => {
+      if (!target.aura || typeof target.aura !== 'object') {
+        target.aura = { enabled: false, radius: 1, color: '#3b82f6' };
+      }
+      target.aura.enabled = enabled;
+      target.aura.radius = radius;
+      if (payload.color) {
+        target.aura.color = payload.color;
+      }
+    });
+    renderAuras(boardApi.getState?.() ?? {}, auraLayer, viewState);
+    if (activeTokenSettingsId === placementId && typeof refreshTokenSettings === 'function') {
+      refreshTokenSettings();
+    }
+    resolve?.({ applied: true, enabled, radius });
   }
 
   function clearMark({ markType = 'judgment', sourceId = '', targetId = '', reason = 'manual' } = {}) {
@@ -7873,21 +7908,15 @@ export function mountBoardInteractions(store, routes = {}) {
       const auraRadius = Math.max(1, Math.min(20, parseInt(aura.radius, 10) || 1));
       const auraColor = typeof aura.color === 'string' ? aura.color : '#3b82f6';
 
-      // Calculate aura dimensions
-      // The aura extends auraRadius squares from each edge of the token
-      // For a WxH token, the aura circle pixel-radius on X axis = (W/2 + auraRadius) * gridSize
-      // We use the larger dimension to keep it circular
+      // Calculate aura dimensions.
+      // Draw Steel uses square (Chebyshev) distance — diagonals count as 1 — so
+      // an aura of radius N extends N squares beyond EVERY edge of the token,
+      // including diagonally. For a WxH token that is a (W+2N) x (H+2N) square
+      // block, computed per-axis (not a circle).
       const tokenW = normalized.width;
       const tokenH = normalized.height;
-      const tokenCenterX = leftOffset + (normalized.column + tokenW / 2) * gridSize;
-      const tokenCenterY = topOffset + (normalized.row + tokenH / 2) * gridSize;
-
-      // Pixel radius: from center to token edge + auraRadius squares
-      const pixelRadiusX = (tokenW / 2 + auraRadius) * gridSize;
-      const pixelRadiusY = (tokenH / 2 + auraRadius) * gridSize;
-      // Use the larger to keep it a circle measured from the axis
-      const pixelRadius = Math.max(pixelRadiusX, pixelRadiusY);
-      const diameter = pixelRadius * 2;
+      const auraWidth = (tokenW + auraRadius * 2) * gridSize;
+      const auraHeight = (tokenH + auraRadius * 2) * gridSize;
 
       let auraEl = existingAuras.get(normalized.id);
       let isNew = false;
@@ -7900,21 +7929,25 @@ export function mountBoardInteractions(store, routes = {}) {
         isNew = true;
       }
 
-      auraEl.style.width = `${diameter}px`;
-      auraEl.style.height = `${diameter}px`;
+      auraEl.style.width = `${auraWidth}px`;
+      auraEl.style.height = `${auraHeight}px`;
 
-      // Memoize gradient: only recompute if color or opacity changed
+      // Memoize fill: only recompute if color changed. Flat fill + inset border
+      // so the square reads as a discrete grid block rather than a soft circle.
       const gradientKey = auraColor;
       if (auraEl._lastGradientKey !== gradientKey) {
         const r = parseInt(auraColor.slice(1, 3), 16) || 0;
         const g = parseInt(auraColor.slice(3, 5), 16) || 0;
         const b = parseInt(auraColor.slice(5, 7), 16) || 0;
-        auraEl.style.background = `radial-gradient(circle, rgba(${r},${g},${b},0.3) 0%, rgba(${r},${g},${b},0.15) 60%, rgba(${r},${g},${b},0.05) 100%)`;
+        auraEl.style.background = `rgba(${r},${g},${b},0.18)`;
+        auraEl.style.boxShadow = `inset 0 0 0 2px rgba(${r},${g},${b},0.45)`;
         auraEl._lastGradientKey = gradientKey;
       }
 
-      const auraLeft = tokenCenterX - pixelRadius;
-      const auraTop = tokenCenterY - pixelRadius;
+      // Position from the token's top-left, pulled back auraRadius squares on
+      // both axes so the square is centered on the token's footprint.
+      const auraLeft = leftOffset + (normalized.column - auraRadius) * gridSize;
+      const auraTop = topOffset + (normalized.row - auraRadius) * gridSize;
       auraEl.style.transform = `translate3d(${auraLeft}px, ${auraTop}px, 0)`;
 
       if (isNew) {
@@ -11279,6 +11312,7 @@ export function mountBoardInteractions(store, routes = {}) {
     fireTriggerEvent: function (payload) { return dispatchBoardCustom('vtt:automation-fire-trigger-event', 'payload', payload); },
     checkScopedFlag: function (payload) { return dispatchBoardCustom('vtt:automation-check-scoped-flag', 'payload', payload); },
     setScopedFlag: function (payload) { return dispatchBoardCustom('vtt:automation-set-scoped-flag', 'payload', payload); },
+    setAura: function (payload) { return dispatchBoardCustom('vtt:automation-set-aura', 'payload', payload); },
     consumeTriggeredAction: function (payload) { return dispatchBoardCustom('vtt:automation-consume-triggered-action', 'payload', payload); },
   };
 

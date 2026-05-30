@@ -225,7 +225,8 @@
             checkMark: board.checkMark,
             fireTriggerEvent: board.fireTriggerEvent,
             checkScopedFlag: board.checkScopedFlag,
-            setScopedFlag: board.setScopedFlag
+            setScopedFlag: board.setScopedFlag,
+            setAura: board.setAura
         };
     }
 

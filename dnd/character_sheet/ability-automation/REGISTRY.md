@@ -71,6 +71,7 @@ The monster ability tray + `window.MonsterAbilityRunner.start()` add the followi
 | `ifScopedFlag` | Full | Branches on round/turn/encounter scoped source-target flags. Used for first-time-this-round rules. |
 | `setScopedFlag` | Full | Sets a scoped source-target flag. Round flags reset at new round; all flags clear at encounter end. |
 | `halveTriggeringDamage` | Full | Use in an `effect` card after a structured `trigger` card matching the `damage` event. When resolving the ready trigger, halves the triggering damage by healing back the difference. `rounding` (`up`/`down`) controls which half the placement takes. No-op without a captured damage payload. |
+| `aura` | Full | Switches a token aura on (`enabled:true`, default) or off (`enabled:false`) on the caster's token (`target:"self"`, default) or the resolved targets (`target:"target"`). `radius` is clamped 1-20 squares (Chebyshev/square). Optional `color` (hex). Falls back to a chat reminder if the runtime has no token (e.g. Hero Sheet preview). |
 | `note` | Full | Posts text to chat |
 | `other` | Chat reminder | Posts text to chat |
 
@@ -210,6 +211,7 @@ These are called by `runner.js` and dispatched as `vtt:automation-*` CustomEvent
 | `fireTriggerEvent(payload)` | `{ eventType, payload }` | none; fans out through `AbilityTriggerBus.fire()` |
 | `checkScopedFlag(payload)` | `{ scope, key, sourceId, targetId }` | `{ set: bool }` |
 | `setScopedFlag(payload)` | `{ scope, key, sourceId, targetId }` | `{ set: bool }` |
+| `setAura(payload)` | `{ placementId, enabled, radius, color }` | `{ applied, enabled, radius }` or rejects when the token is off-scene |
 
 ---
 

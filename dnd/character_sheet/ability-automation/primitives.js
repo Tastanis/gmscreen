@@ -35,6 +35,7 @@
     "applyMark",
     "endMark",
     "halveTriggeringDamage",
+    "aura",
     "other",
   ];
 
@@ -465,6 +466,11 @@
         return `end ${effect.markType || "mark"}`;
       case "halveTriggeringDamage":
         return "halve the triggering damage";
+      case "aura": {
+        if (effect.enabled === false) return "turn off aura";
+        const radius = effect.radius || 1;
+        return `aura ${radius}`;
+      }
       case "other":
         return effect.text || "(other)";
       default:

@@ -547,6 +547,27 @@
         if (extras) effect._extra = extras;
         return effect;
       }
+      case "aura": {
+        // Switches the caster's token aura on (or off) when the ability runs.
+        // Token auras are a VTT placement feature; the runner forwards this to
+        // the board via the setAura context hook. radius is clamped 1-20.
+        const known = new Set(["kind", "enabled", "radius", "color", "target", "text"]);
+        const enabled = input.enabled !== false;
+        const radius = Math.min(20, Math.max(1, asPosInt(input.radius, 1)));
+        const effect = {
+          kind: "aura",
+          enabled,
+          radius,
+          target: pickKnown(input.target, ["self", "target"], "self"),
+        };
+        const color = asTrimmedString(input.color);
+        if (color) effect.color = color;
+        const text = asTrimmedString(input.text);
+        if (text) effect.text = text;
+        const extras = pickExtras(input, known);
+        if (extras) effect._extra = extras;
+        return effect;
+      }
       case "other": {
         const known = new Set(["kind", "text"]);
         const effect = { kind: "other", text: asTrimmedString(input.text) };

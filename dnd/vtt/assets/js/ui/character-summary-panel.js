@@ -1955,6 +1955,7 @@ function startAbilityAutomation(sheet, action, categoryKey, sourceToken = null, 
     fireTriggerEvent: requestAutomationFireTriggerEvent,
     checkScopedFlag: requestAutomationCheckScopedFlag,
     setScopedFlag: requestAutomationSetScopedFlag,
+    setAura: requestAutomationSetAura,
     spendHeroicResource: (payload) => spendHeroicResource(sheet, payload, options),
     spendResource: (ability) => spendAbilityResource(sheet, ability, options),
     consumeTriggeredAction: requestAutomationConsumeTriggeredAction,
@@ -2246,6 +2247,20 @@ function requestAutomationSetScopedFlag(payload) {
   return new Promise((resolve, reject) => {
     document.dispatchEvent(
       new CustomEvent('vtt:automation-set-scoped-flag', {
+        detail: {
+          payload: clonePlain(payload || {}),
+          resolve,
+          reject,
+        },
+      })
+    );
+  });
+}
+
+function requestAutomationSetAura(payload) {
+  return new Promise((resolve, reject) => {
+    document.dispatchEvent(
+      new CustomEvent('vtt:automation-set-aura', {
         detail: {
           payload: clonePlain(payload || {}),
           resolve,
