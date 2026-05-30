@@ -14492,13 +14492,18 @@ export function mountBoardInteractions(store, routes = {}) {
       );
       const request = pendingAutomationArea;
       const wallColor = request.targetConfig?.wallColor;
+      // `structure: true` opts this wall into creating a real, permanent wall
+      // template (textured, selectable, lives in scene state) instead of only a
+      // transient persistent-zone overlay. Used by terrain abilities like
+      // Motivate Earth. Zone-based walls (e.g. Wall of Fire) leave it unset.
+      const persistStructure = Boolean(request.targetConfig?.structure);
       pendingAutomationArea = null;
       if (typeof templateTool?.startWallPlacementForAutomation !== 'function') {
         request.resolve?.({ canceled: true });
         updateStatus('Wall placement is not available (template tool missing).');
         return;
       }
-      templateTool.startWallPlacementForAutomation(length, { wallColor }).then((result) => {
+      templateTool.startWallPlacementForAutomation(length, { wallColor, persistStructure }).then((result) => {
         if (!result || result.canceled) {
           request.resolve?.({ canceled: true });
           updateStatus('Wall placement canceled.');
@@ -21755,13 +21760,13 @@ function createTemplateTool() {
   // Used by ability automation (persistent-zone walls) to drive the same
   // wall-placement UI the GM uses for templates, but capture the result
   // through a callback instead of writing a permanent template shape.
-  function startWallPlacementForAutomation(squareCount, { wallColor } = {}) {
+  function startWallPlacementForAutomation(squareCount, { wallColor, persistStructure } = {}) {
     return new Promise((resolve) => {
       const total = Math.max(1, Number.parseInt(squareCount, 10) || 1);
       cancelPlacement();
       placementState = {
         type: 'wall',
-        values: { squares: total, wallColor: wallColor || undefined },
+        values: { squares: total, wallColor: wallColor || undefined, persistStructure: Boolean(persistStructure) },
         stage: 'wall-select',
         pointerId: null,
         start: null,
@@ -22251,6 +22256,25 @@ function createTemplateTool() {
     activateTemplate(shape);
     render(viewState);
     commitShapes();
+  }
+
+  // Create a real, permanent wall structure (the textured wall-tile template,
+  // same visual as the manual wall tool) from a list of placed squares. Used by
+  // automation walls that opt in via the target block's `structure` flag, so
+  // terrain-creating abilities like Motivate Earth leave an actual wall on the
+  // board instead of a transient persistent-zone overlay. Unlike addShape this
+  // does NOT select/activate the new shape, so it won't hijack the board's
+  // selection or open the template editor mid-automation.
+  function createPermanentWallFromSquares(squares, wallColor) {
+    const clamped = clampWallSquares(squares, viewState);
+    if (!clamped.length) return null;
+    const levelId = getActiveTokenPlacementLevelId() ?? BASE_MAP_LEVEL_ID;
+    const shape = createShape('wall', { squares: clamped, wallColor, levelId });
+    shapes.push(shape);
+    layer.appendChild(shape.elements.root);
+    render(viewState);
+    commitShapes();
+    return shape;
   }
 
   function createShape(type, data, options = {}) {
@@ -23758,15 +23782,23 @@ function createTemplateTool() {
     if (remaining <= 0) {
       const finalSquares = placementState.squares.slice();
       const wallColor = placementState.values?.wallColor;
+      const persistStructure = Boolean(placementState.values?.persistStructure);
       // If this placement was started for an ability automation, deliver
       // the squares to the callback INSTEAD of adding a permanent template
-      // shape to the scene state. The zone overlay handles its own visuals.
+      // shape to the scene state — the persistent-zone overlay handles its own
+      // visuals. EXCEPTION: when the target block opts in with `structure:true`
+      // (terrain-creating abilities like Motivate Earth), also materialize a
+      // real wall template so the placed wall persists on the board with the
+      // proper textured visual instead of vanishing after the last square.
       if (typeof placementState.automationCallback === 'function') {
         const cb = placementState.automationCallback;
         placementState = null;
         clearPreview();
         restoreTemplateStatus();
         updateLayerVisibility();
+        if (persistStructure) {
+          createPermanentWallFromSquares(finalSquares, wallColor);
+        }
         try {
           cb({ squares: finalSquares, wallColor });
         } catch (err) {
