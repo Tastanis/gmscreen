@@ -1104,11 +1104,9 @@
       ? resolveAttributeBonusForDamage(state, effect.attribute)
       : 0;
     const triggerValue = resolveTriggerValue(state, effect.amountFrom);
-    if (effect.amountFrom) {
-      await postChat(state.context, {
-        message: `[DIAG] amountFrom=${JSON.stringify(effect.amountFrom)} triggerPayload=${JSON.stringify(state.triggerPayload)} triggerValue=${triggerValue} baseAmount=${baseAmount}`,
-      });
-    }
+    await postChat(state.context, {
+      message: `[DIAG] amountFrom=${JSON.stringify(effect.amountFrom || null)} triggerPayload=${JSON.stringify(state.triggerPayload || null)} triggerValue=${triggerValue} baseAmount=${baseAmount}`,
+    });
     const damageType = effect.damageType && effect.damageType !== "untyped" ? effect.damageType : "";
     const lines = [];
     let visibleHidden = 0;
