@@ -648,6 +648,7 @@
       "type", "id", "name", "mode", "predicate", "creature", "count", "optional",
       "distance", "range", "shape", "size", "width", "height", "length", "note",
       "promptTitle", "promptText", "excludeGroups", "excludeGroup",
+      "structure", "wallColor",
     ]);
     const mode = pickKnown(input.mode, P.TARGET_MODES, "token");
     const predicateRaw = input.predicate || input.creature || "creature";
@@ -688,6 +689,11 @@
       }
       if (block.shape === "line" || block.shape === "wall") {
         block.length = asPosInt(input.length, block.size);
+      }
+      if (block.shape === "wall") {
+        if (asBool(input.structure)) block.structure = true;
+        const wallColor = asTrimmedString(input.wallColor);
+        if (wallColor) block.wallColor = wallColor;
       }
     }
     if (input.note) block.note = asTrimmedString(input.note);
