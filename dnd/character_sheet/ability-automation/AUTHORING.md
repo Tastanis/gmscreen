@@ -193,6 +193,10 @@ For `mode: "area"` add:
 | `size` | int — primary dimension in squares |
 | `width`, `height` | ints — for `rectangle` |
 | `length` | int — for `line`, `wall` |
+| `structure` | bool — **`shape: "wall"` only.** When `true`, the placed wall becomes a real, permanent wall template (textured, selectable, lives in scene state) instead of vanishing after placement. Use for terrain-creating abilities (e.g. Motivate Earth). Omit/`false` for walls that exist only as a damaging persistent zone (e.g. Wall of Fire), which use a `persistent` block for their visuals. |
+| `wallColor` | string — **`shape: "wall"` only.** Material/color variant of the wall texture: `"stone"`/`"gray"`, `"dirt"`/`"brown"`/`"green"`, `"metal"`/`"purple"`, `"ice"`/`"blue"`/`"cyan"`, `"fire"`/`"red"`. Omit to use the default. |
+
+A `structure: true` wall does **not** need a `persistent` block — the wall template itself persists on the board until manually deleted with the normal template tool. A wall that should apply ongoing effects to creatures (damage zone) still needs a `persistent` block and should leave `structure` unset.
 
 **Distance forms:**
 
