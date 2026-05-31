@@ -3365,6 +3365,22 @@ export function mountBoardInteractions(store, routes = {}) {
       if (!whosePredicateMatches(whose, casterId, casterTeam, payloadTokenId, targetIds)) {
         return false;
       }
+      // Distance gate (Layer 1): only fire when the caster is within / beyond a
+      // square-distance band of the other token involved in the event. Reuses
+      // the same Chebyshev (square) distance used everywhere else on the board.
+      if (filter.withinSquares != null || filter.minSquares != null) {
+        const casterPlacementForDistance = getPlacementFromStore(casterId);
+        const otherDistanceId = payload.sourceId || payloadTokenId;
+        const otherPlacementForDistance = getPlacementFromStore(otherDistanceId);
+        if (casterPlacementForDistance && otherPlacementForDistance) {
+          const squares = automationChebyshevDistance(
+            getPlacementCenter(casterPlacementForDistance),
+            getPlacementCenter(otherPlacementForDistance),
+          );
+          if (filter.withinSquares != null && squares > Number(filter.withinSquares)) return false;
+          if (filter.minSquares != null && squares < Number(filter.minSquares)) return false;
+        }
+      }
       if (event === 'damage' || event === 'damageDealt') {
         if (event === 'damageDealt') {
           const sourceTokenId = payload.sourceId || payload.casterId || payload.actorId || '';
@@ -11122,6 +11138,14 @@ export function mountBoardInteractions(store, routes = {}) {
       }
       persistBoardStateSnapshot({}, resetOps);
       refreshTokenSettings();
+      // The character summary panel keeps a cloned snapshot of the active
+      // token (captured at selection time) and renders the TRIGGER dot from
+      // it. Store mutations alone don't refresh that clone, so broadcast the
+      // reset and let the panel re-sync its copy + re-render. Without this the
+      // red "spent" dot lingers after End Round / combat start / combat end.
+      document.dispatchEvent(new CustomEvent('vtt:triggered-actions-reset', {
+        detail: { sceneId: activeSceneId, placementIds: [...mutatedIds] },
+      }));
     }
   }
 
@@ -11314,6 +11338,14 @@ export function mountBoardInteractions(store, routes = {}) {
     setScopedFlag: function (payload) { return dispatchBoardCustom('vtt:automation-set-scoped-flag', 'payload', payload); },
     setAura: function (payload) { return dispatchBoardCustom('vtt:automation-set-aura', 'payload', payload); },
     consumeTriggeredAction: function (payload) { return dispatchBoardCustom('vtt:automation-consume-triggered-action', 'payload', payload); },
+    // Reusable distance check (Layer 2). Returns the square (Chebyshev) distance
+    // between two placement ids, or null when either token is not on the board.
+    getDistanceBetween: function (idA, idB) {
+      const a = getPlacementFromStore(idA);
+      const b = getPlacementFromStore(idB);
+      if (!a || !b) return null;
+      return automationChebyshevDistance(getPlacementCenter(a), getPlacementCenter(b));
+    },
   };
 
   function openMalicePanel() {

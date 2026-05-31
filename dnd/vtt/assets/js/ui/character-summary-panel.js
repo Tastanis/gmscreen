@@ -546,6 +546,28 @@ export function mountCharacterSummaryPanel(routes = {}, userContext = {}) {
     showCharacter(detail);
   });
 
+  // The board resets triggered actions at combat start, each new round, and
+  // combat end by mutating the placement store. Our `activeToken` is a clone
+  // captured at selection time, so those store flips don't reach the rendered
+  // TRIGGER dot on their own. Re-sync the clone and re-render when our active
+  // token is among the reset placements (manual toggles already self-sync).
+  document.addEventListener('vtt:triggered-actions-reset', (event) => {
+    if (!activeToken || typeof activeToken !== 'object' || !activeToken.id) {
+      return;
+    }
+    const ids = event?.detail?.placementIds;
+    if (Array.isArray(ids) && ids.length && !ids.includes(activeToken.id)) {
+      return;
+    }
+    activeToken.triggeredActionReady = true;
+    activeToken.triggeredActionUsedThisRound = false;
+    activeToken.hasReadyTrigger = false;
+    activeToken.readyTriggerAbilities = [];
+    activeToken.readyTriggerSources = {};
+    activeToken.readyTriggerPayloads = {};
+    renderAbilityTray(abilityTray, activeSheet, { activeCategory: activeAbilityCategory, activeToken });
+  });
+
   revealButton.addEventListener('click', (event) => {
     event.preventDefault();
     if (!activeCharacterId) {
@@ -1959,6 +1981,11 @@ function startAbilityAutomation(sheet, action, categoryKey, sourceToken = null, 
     spendHeroicResource: (payload) => spendHeroicResource(sheet, payload, options),
     spendResource: (ability) => spendAbilityResource(sheet, ability, options),
     consumeTriggeredAction: requestAutomationConsumeTriggeredAction,
+    getDistanceBetween: (idA, idB) => (
+      window.VTTBoardCallbacks && typeof window.VTTBoardCallbacks.getDistanceBetween === 'function'
+        ? window.VTTBoardCallbacks.getDistanceBetween(idA, idB)
+        : null
+    ),
   });
 }
 

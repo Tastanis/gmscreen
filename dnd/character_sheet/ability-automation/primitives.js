@@ -31,6 +31,7 @@
     "ifPrompt",
     "ifMark",
     "ifScopedFlag",
+    "ifDistance",
     "setScopedFlag",
     "applyMark",
     "endMark",
@@ -457,6 +458,16 @@
         const thenText = (effect.then || []).map(describeEffect).filter(Boolean).join(", ");
         const elseText = (effect.else || []).map(describeEffect).filter(Boolean).join(", ");
         const label = effect.predicate || "targetJudgedBySelf";
+        if (elseText) return `If ${label}: ${thenText || "(no effect)"} else: ${elseText}`;
+        return `If ${label}: ${thenText || "(no effect)"}`;
+      }
+      case "ifDistance": {
+        const thenText = (effect.then || []).map(describeEffect).filter(Boolean).join(", ");
+        const elseText = (effect.else || []).map(describeEffect).filter(Boolean).join(", ");
+        const band = [];
+        if (effect.min != null) band.push(`≥${effect.min}`);
+        if (effect.max != null) band.push(`≤${effect.max}`);
+        const label = `${effect.from || "self"}→${effect.to || effect.target || "target"} ${band.join(" & ") || "(any)"} sq`;
         if (elseText) return `If ${label}: ${thenText || "(no effect)"} else: ${elseText}`;
         return `If ${label}: ${thenText || "(no effect)"}`;
       }

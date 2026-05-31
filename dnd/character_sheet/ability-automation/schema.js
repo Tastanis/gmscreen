@@ -493,6 +493,32 @@
         if (extras) effect._extra = extras;
         return effect;
       }
+      case "ifDistance": {
+        const known = new Set(["kind", "from", "to", "fromGroup", "toGroup", "min", "max", "target", "then", "else"]);
+        const effect = {
+          kind: "ifDistance",
+          from: normalizeDistanceEndpoint(input.from, "self"),
+          to: normalizeDistanceEndpoint(input.to, "target"),
+          target: asTrimmedString(input.target),
+          then: normalizeEffectList(input.then || [], warnings, `${path}.then`),
+          else: normalizeEffectList(input.else || [], warnings, `${path}.else`),
+        };
+        const fromGroup = asTrimmedString(input.fromGroup);
+        if (fromGroup) effect.fromGroup = fromGroup;
+        const toGroup = asTrimmedString(input.toGroup);
+        if (toGroup) effect.toGroup = toGroup;
+        if (input.max != null && input.max !== "") effect.max = asNonNegInt(input.max, 0);
+        if (input.min != null && input.min !== "") effect.min = asNonNegInt(input.min, 0);
+        if (effect.max == null && effect.min == null) {
+          warnings.push(`${path}: ifDistance has no min/max; condition always passes when both tokens are on the board.`);
+        }
+        if (!effect.then.length && !effect.else.length) {
+          warnings.push(`${path}: ifDistance has no then/else effects.`);
+        }
+        const extras = pickExtras(input, known);
+        if (extras) effect._extra = extras;
+        return effect;
+      }
       case "setScopedFlag": {
         const known = new Set(["kind", "scope", "key", "source", "target"]);
         const effect = {
@@ -835,6 +861,14 @@
       const ref = asTrimmedString(filterInput.targetGroup) || asTrimmedString(filterInput.group);
       if (ref) filter.targetGroup = ref;
     }
+    // Distance band (Layer 1): event fires only when the caster is within /
+    // beyond N squares of the other token in the event. Works for any event.
+    if (filterInput.withinSquares != null && filterInput.withinSquares !== "") {
+      filter.withinSquares = asNonNegInt(filterInput.withinSquares, 0);
+    }
+    if (filterInput.minSquares != null && filterInput.minSquares !== "") {
+      filter.minSquares = asNonNegInt(filterInput.minSquares, 0);
+    }
     if (event === "damage" || event === "damageDealt") {
       const minAmount = asNonNegInt(filterInput.minAmount, 0);
       if (minAmount) filter.minAmount = minAmount;
@@ -929,7 +963,18 @@
     return block;
   }
 
-  const BRANCH_CONDITION_KINDS = ["strained", "winded", "keyword", "prompt", "mark", "scopedFlag"];
+  const BRANCH_CONDITION_KINDS = ["strained", "winded", "keyword", "prompt", "mark", "scopedFlag", "distance"];
+  const DISTANCE_ENDPOINTS = ["self", "source", "eventSource", "eventTarget", "target"];
+
+  // A distance endpoint is either a known keyword (self/source/eventSource/
+  // eventTarget/target) or an arbitrary target-group name. Keywords are
+  // normalized to canonical casing; group names pass through unchanged.
+  function normalizeDistanceEndpoint(value, fallback) {
+    const raw = asTrimmedString(value);
+    if (!raw) return fallback;
+    const canonical = DISTANCE_ENDPOINTS.find((k) => k.toLowerCase() === raw.toLowerCase());
+    return canonical || raw;
+  }
 
   function normalizeBranchCondition(input, warnings, path) {
     if (typeof input === "string") {
@@ -954,6 +999,8 @@
       ifmark: "mark",
       scopedflag: "scopedFlag",
       ifscopedflag: "scopedFlag",
+      distance: "distance",
+      ifdistance: "distance",
     };
     const mappedKind = kindMap[rawKind];
     const kind = mappedKind || "prompt";
@@ -998,6 +1045,23 @@
         target: pickKnown(input.target, ["target", "judgedTarget", "eventTarget"], "target"),
         mode: pickKnown(input.mode, ["set", "notSet"], "notSet"),
       };
+    }
+    if (kind === "distance") {
+      const condition = {
+        kind,
+        from: normalizeDistanceEndpoint(input.from, "self"),
+        to: normalizeDistanceEndpoint(input.to, "target"),
+      };
+      const fromGroup = asTrimmedString(input.fromGroup);
+      if (fromGroup) condition.fromGroup = fromGroup;
+      const toGroup = asTrimmedString(input.toGroup);
+      if (toGroup) condition.toGroup = toGroup;
+      if (input.max != null && input.max !== "") condition.max = asNonNegInt(input.max, 0);
+      if (input.min != null && input.min !== "") condition.min = asNonNegInt(input.min, 0);
+      if (condition.max == null && condition.min == null) {
+        warnings.push(`${path}: distance branch condition has no min/max; predicate always passes when both tokens are on the board.`);
+      }
+      return condition;
     }
     return {
       kind: "prompt",
@@ -1229,6 +1293,12 @@
         return condition.predicate || "mark";
       case "scopedFlag":
         return `${condition.scope || "round"} flag ${condition.key || "(missing key)"} ${condition.mode || "notSet"}`;
+      case "distance": {
+        const band = [];
+        if (condition.min != null) band.push(`≥${condition.min}`);
+        if (condition.max != null) band.push(`≤${condition.max}`);
+        return `${condition.from || "self"}→${condition.to || "target"} ${band.join(" & ") || "(any)"} sq`;
+      }
       default:
         return condition.kind || "condition";
     }

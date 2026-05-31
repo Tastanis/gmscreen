@@ -226,7 +226,8 @@
             fireTriggerEvent: board.fireTriggerEvent,
             checkScopedFlag: board.checkScopedFlag,
             setScopedFlag: board.setScopedFlag,
-            setAura: board.setAura
+            setAura: board.setAura,
+            getDistanceBetween: board.getDistanceBetween
         };
     }
 

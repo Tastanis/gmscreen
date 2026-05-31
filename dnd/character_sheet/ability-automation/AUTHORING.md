@@ -313,6 +313,19 @@ For PC triggered actions, this is **always-on** once the character token is pres
 | `enemy` | Opposing combat team |
 | `any` *(default)* | No filter |
 
+**Distance band (any event)** — gate the trigger on the square-distance between the caster and the other token in the event (the damage source, the moving token, the marked token, etc.). Distance is measured in squares (Chebyshev / diagonals count as 1), the same as everywhere else on the board.
+
+| filter field | Meaning |
+|---|---|
+| `withinSquares` | Only fire when the other token is **N squares or closer**. `1` = adjacent. |
+| `minSquares` | Only fire when the other token is **N squares or farther**. |
+
+Both are optional and may be combined to form a band (e.g. `"minSquares": 2, "withinSquares": 5`). If either token has no placement on the board the distance check is skipped (does not block the trigger). Example — "when an enemy within 5 squares takes damage":
+
+```json
+"match": { "event": "damage", "filter": { "whose": "enemy", "minAmount": 1, "withinSquares": 5 } }
+```
+
 Triggers stay registered until the encounter ends, the caster leaves the scene, or the round-tick stale-out (two phase boundaries) clears them.
 
 Triggered abilities use an always-listening/resolve flow when the first card is a structured `trigger` with `match`:
@@ -415,6 +428,18 @@ Supported `condition.kind` values:
 | `prompt` | `question`, `yesLabel`, `noLabel`, optional `target` | Asks the player/GM which branch to run. |
 | `mark` | `predicate`, `markType`, optional `target` | Uses the same mark predicates as `ifMark`. |
 | `scopedFlag` | `scope`, `key`, `source`, `target`, `mode` | Uses the same round/turn/encounter flags as `ifScopedFlag`. |
+| `distance` | `from`, `to`, optional `fromGroup`/`toGroup`, `min`, `max` | True when the square distance between the two endpoints falls in the `[min, max]` band. False (takes `else`) when either token has no placement. See below. |
+
+**`distance` condition** — measures the square (Chebyshev) distance between two tokens. Each endpoint (`from`, `to`) is one of: `self` (the caster), `source`/`eventSource` (the trigger payload's source token), `eventTarget` (the trigger payload's target token), `target` (the current target group), or any named target-group string. `from` defaults to `self`, `to` defaults to `target`. `min`/`max` are square counts (`max: 1` = adjacent). Example — "if the triggering attacker is within 3 squares, retaliate; otherwise just brace":
+
+```json
+{
+  "type": "branch",
+  "condition": { "kind": "distance", "from": "self", "to": "source", "max": 3 },
+  "then": [ { "type": "effect", "effects": [ { "kind": "note", "text": "Counterattack!" } ] } ],
+  "else": [ { "type": "effect", "effects": [ { "kind": "note", "text": "Too far — brace instead." } ] } ]
+}
+```
 
 Branch cards can contain any normal card type, including another `branch`. Later top-level cards can reference target groups created inside either branch, so give both branches the same `name` when they are alternatives for one target group.
 
@@ -870,6 +895,31 @@ Use these together for "first time this round/turn/encounter" rules. A scoped fl
 | `then` / `else` | branches for `ifScopedFlag` |
 
 Round flags reset at new round. Turn flags are tied to the active combatant. Encounter flags clear at encounter end.
+
+### `ifDistance` (rider)
+
+Runs one branch or another based on the square (Chebyshev) distance between two tokens — the inline, effect-list equivalent of the `distance` branch condition. Use this when only a couple of effects depend on distance and a full `branch` card would be overkill.
+
+```json
+{
+  "kind": "ifDistance",
+  "from": "self",
+  "to": "target",
+  "max": 1,
+  "then": [ { "kind": "damage", "amount": 3, "damageType": "lightning" } ],
+  "else": [ { "kind": "note", "text": "Out of melee reach." } ]
+}
+```
+
+| Field | Values |
+|---|---|
+| `from` | `self` (default), `source`/`eventSource`, `eventTarget`, `target`, or a named group |
+| `to` | `target` (default; or falls back to `target` field), `self`, `source`/`eventSource`, `eventTarget`, or a named group |
+| `fromGroup` / `toGroup` | optional explicit target-group names when `from`/`to` is `target` |
+| `min` / `max` | square-distance band (`max: 1` = adjacent). At least one should be set. |
+| `then` / `else` | effect arrays to run on match / no-match |
+
+If either token has no board placement, the condition evaluates false and the `else` branch runs. Distance uses the host's `getDistanceBetween(idA, idB)` callback; abilities run outside the VTT (no board callback) always take `else`.
 
 ### `halveTriggeringDamage` (rider - trigger blocks only)
 

@@ -435,7 +435,7 @@
       if (effect.kind === kind) return true;
       if (effect.kind === "potency" && effectListContainsKind(effect.onFail, kind)) return true;
       if (effect.kind === "spend" && effectListContainsKind(effect.effects, kind)) return true;
-      if (effect.kind === "ifKeyword" || effect.kind === "ifPrompt" || effect.kind === "ifMark" || effect.kind === "ifScopedFlag") {
+      if (effect.kind === "ifKeyword" || effect.kind === "ifPrompt" || effect.kind === "ifMark" || effect.kind === "ifScopedFlag" || effect.kind === "ifDistance") {
         if (effectListContainsKind(effect.then, kind) || effectListContainsKind(effect.else, kind)) return true;
       }
     }
@@ -1057,6 +1057,8 @@
         return applyIfMarkEffect(state, effect, targets, ctx);
       case "ifScopedFlag":
         return applyIfScopedFlagEffect(state, effect, targets, ctx);
+      case "ifDistance":
+        return applyIfDistanceEffect(state, effect, targets, ctx);
       case "setScopedFlag":
         return applySetScopedFlagEffect(state, effect, targets, ctx);
       case "applyMark":
@@ -1637,6 +1639,23 @@
     await applyEffects(state, branch, targetGroupName, ctx);
   }
 
+  async function applyIfDistanceEffect(state, effect, targets, ctx) {
+    const spec = {
+      from: effect.from || "self",
+      to: effect.to || effect.target || "target",
+      fromGroup: effect.fromGroup,
+      toGroup: effect.toGroup,
+      max: effect.max,
+      min: effect.min,
+    };
+    const squares = await measureDistanceBetween(state, spec);
+    const matched = distanceWithinBand(squares, spec);
+    const branch = matched ? effect.then : effect.else;
+    if (!Array.isArray(branch) || !branch.length) return;
+    const branchGroup = effect.target || state.currentGroup || "primary";
+    await applyEffects(state, branch, branchGroup, ctx);
+  }
+
   async function applyMarkEffect(state, effect, targets) {
     const groupName = effect.target || state.currentGroup || "primary";
     const markTargets = effect.target ? getTargetGroup(state, effect.target) : targets;
@@ -2042,6 +2061,42 @@
     });
   }
 
+  // ---------- distance helpers (Layer 2) ----------
+
+  // Resolve a distance endpoint keyword to a placement id.
+  // Keywords: "self" (caster), "source"/"eventSource" (trigger payload source),
+  // "eventTarget" (trigger payload target), "target" (current target group),
+  // or any other string treated as a named target group.
+  function resolveDistanceEndpointId(state, which, groupName) {
+    const payload = state.triggerPayload?.payload || state.triggerPayload || {};
+    const key = String(which == null ? "self" : which).toLowerCase();
+    if (key === "self") return state.sourcePlacement?.id || "";
+    if (key === "source" || key === "eventsource") return payload.sourceId || "";
+    if (key === "eventtarget") return payload.targetId || payload.placementId || "";
+    const resolvedGroup = groupName || (key === "target" ? (state.currentGroup || "primary") : which);
+    const targets = getTargetGroup(state, resolvedGroup);
+    return (targets || []).find((t) => t && t.id)?.id || "";
+  }
+
+  // Returns the square distance between the two resolved endpoints, or null when
+  // it cannot be determined (missing host callback, missing placement, etc.).
+  async function measureDistanceBetween(state, spec) {
+    if (typeof state.context.getDistanceBetween !== "function") return null;
+    const fromId = resolveDistanceEndpointId(state, spec.from || "self", spec.fromGroup);
+    const toId = resolveDistanceEndpointId(state, spec.to || "target", spec.toGroup);
+    if (!fromId || !toId) return null;
+    const result = await state.context.getDistanceBetween(fromId, toId);
+    const squares = Number(result);
+    return Number.isFinite(squares) ? squares : null;
+  }
+
+  function distanceWithinBand(squares, spec) {
+    if (squares == null) return false;
+    if (spec.max != null && squares > Number(spec.max)) return false;
+    if (spec.min != null && squares < Number(spec.min)) return false;
+    return true;
+  }
+
   // ---------- branch block ----------
 
   async function evaluateBranchCondition(state, condition) {
@@ -2097,6 +2152,11 @@
         });
         const isSet = Boolean(result?.set);
         return c.mode === "set" ? isSet : !isSet;
+      }
+      case "distance": {
+        const squares = await measureDistanceBetween(state, c);
+        if (squares == null) return false;
+        return distanceWithinBand(squares, c);
       }
       default:
         return false;
@@ -2392,6 +2452,10 @@
         walkEffectList(effect.else || [], visit);
       }
       if (effect.kind === "ifScopedFlag") {
+        walkEffectList(effect.then || [], visit);
+        walkEffectList(effect.else || [], visit);
+      }
+      if (effect.kind === "ifDistance") {
         walkEffectList(effect.then || [], visit);
         walkEffectList(effect.else || [], visit);
       }

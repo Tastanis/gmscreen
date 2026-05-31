@@ -70,6 +70,7 @@ The monster ability tray + `window.MonsterAbilityRunner.start()` add the followi
 | `endMark` | Full | Clears the caster's current mark or a mark on a target. Used for willingly ending Judgment. Current monster runner passes this hook through too, but monster authoring should usually prefer `note` unless intentionally using shared mark state. |
 | `ifScopedFlag` | Full | Branches on round/turn/encounter scoped source-target flags. Used for first-time-this-round rules. |
 | `setScopedFlag` | Full | Sets a scoped source-target flag. Round flags reset at new round; all flags clear at encounter end. |
+| `ifDistance` | Full | Branches on the square (Chebyshev) distance between two tokens via the `getDistanceBetween` host callback. `from`/`to` endpoints: `self`, `source`/`eventSource`, `eventTarget`, `target`, or a named group. `min`/`max` form the square band (`max:1` = adjacent). Evaluates false (runs `else`) when either token has no placement or no board callback is present. |
 | `halveTriggeringDamage` | Full | Use in an `effect` card after a structured `trigger` card matching the `damage` event. When resolving the ready trigger, halves the triggering damage by healing back the difference. `rounding` (`up`/`down`) controls which half the placement takes. No-op without a captured damage payload. |
 | `aura` | Full | Switches a token aura on (`enabled:true`, default) or off (`enabled:false`) on the caster's token (`target:"self"`, default) or the resolved targets (`target:"target"`). `radius` is clamped 1-20 squares (Chebyshev/square). Optional `color` (hex). Falls back to a chat reminder if the runtime has no token (e.g. Hero Sheet preview). |
 | `note` | Full | Posts text to chat |
@@ -167,6 +168,7 @@ Short form (damage `attribute` and potency `attribute`): `M`, `A`, `R`, `I`, `P`
 | `prompt` | `question`, `yesLabel`, `noLabel`, optional `target` | Opens the yes/no VTT prompt and runs the chosen branch. |
 | `mark` | `predicate`, `markType`, optional `target` | Uses the same mark predicates and `checkMark` hook as `ifMark`. |
 | `scopedFlag` | `scope`, `key`, `source`, `target`, `mode` | Uses the same `checkScopedFlag` hook as `ifScopedFlag`. |
+| `distance` | `from`, `to`, optional `fromGroup`/`toGroup`, `min`, `max` | True when the square distance between the two endpoints is in `[min, max]`. Uses the `getDistanceBetween` host callback. False when either token lacks a placement. Same endpoint keywords as the `ifDistance` rider. |
 
 Branch cards use nested card arrays: `then: [ ...cards ]` and `else: [ ...cards ]`. Give alternative target cards the same `name` when later top-level cards should use whichever branch was selected.
 
@@ -212,6 +214,7 @@ These are called by `runner.js` and dispatched as `vtt:automation-*` CustomEvent
 | `checkScopedFlag(payload)` | `{ scope, key, sourceId, targetId }` | `{ set: bool }` |
 | `setScopedFlag(payload)` | `{ scope, key, sourceId, targetId }` | `{ set: bool }` |
 | `setAura(payload)` | `{ placementId, enabled, radius, color }` | `{ applied, enabled, radius }` or rejects when the token is off-scene |
+| `getDistanceBetween(idA, idB)` | two placement ids | int square (Chebyshev) distance, or `null` when either token is not on the board. Synchronous; used by the `distance` branch condition and `ifDistance` rider. |
 
 ---
 
@@ -273,6 +276,7 @@ Trigger blocks may carry a structured `match` alongside the free-text `condition
 | `staminaZero` | same as `staminaChange` |
 | `actionUsed` | `whose`, `actionKind`, `keywordsAny`; `lineOfEffectTo` is accepted by the schema but not evaluated yet |
 | `markApplied` | `whose`, `markType`, `source` |
+| *(any event)* | `withinSquares` int, `minSquares` int — square-distance band between the caster and the event's other token; skipped if either lacks a placement |
 
 `whose` resolves against:
 - `self` -> the caster's own placement id
