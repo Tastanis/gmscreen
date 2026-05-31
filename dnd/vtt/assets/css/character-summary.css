@@ -668,10 +668,28 @@ button.vtt-character-resource {
   z-index: 1260;
   pointer-events: none;
   font-family: Georgia, "Times New Roman", serif;
+  transition: right 0.35s ease;
+}
+
+/* When the right-side chat panel is open, shift the ability tray leftward so it
+ * stays clear of the chat (matching the .vtt-app__main margin-right shift in
+ * layout.css) instead of sliding underneath it. */
+body.chat-panel-is-open .vtt-character-ability-tray {
+  right: calc(var(--chat-panel-width, 360px) + var(--chat-panel-offset, 20px) + 8px);
 }
 
 .vtt-character-ability-tray[aria-hidden="true"] {
   display: none;
+}
+
+body.chat-panel-is-open .vtt-character-ability-tray__inner {
+  width: min(
+    760px,
+    calc(
+      100vw - var(--vtt-character-panel-effective-width)
+        - var(--chat-panel-width, 360px) - var(--chat-panel-offset, 20px) - 56px
+    )
+  );
 }
 
 .vtt-character-ability-tray__inner {
@@ -764,6 +782,7 @@ button.vtt-character-resource {
 }
 
 .vtt-character-ability-item {
+  position: relative;
   width: 100%;
   min-height: 48px;
   display: grid;
@@ -825,14 +844,93 @@ button.vtt-character-resource {
   }
 }
 
+/* Compact "automated" marker: a tiny "A" tucked into the bottom-right corner
+   so it no longer eats a whole row column. */
 .vtt-character-ability-item__auto {
-  align-self: center;
-  border: 1px solid rgba(34, 197, 94, 0.48);
+  position: absolute;
+  right: 3px;
+  bottom: 2px;
+  width: 14px;
+  height: 14px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
   border-radius: 999px;
+  background: rgba(34, 197, 94, 0.22);
+  border: 1px solid rgba(34, 197, 94, 0.55);
   color: #b6f3c9;
-  font: 800 0.62rem/1 "Inter", "Segoe UI", sans-serif;
-  padding: 4px 6px;
+  font: 800 0.6rem/1 "Inter", "Segoe UI", sans-serif;
+  pointer-events: none;
+}
+
+/* Heroic-resource cost badge: big, glanceable number on the right of the row.
+   data-cost-tier raises the visual volume as the cost climbs. */
+.vtt-character-ability-item__cost {
+  align-self: center;
+  justify-self: end;
+  display: inline-flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 0;
+  min-width: 30px;
+  padding: 2px 7px;
+  border-radius: 8px;
+  border: 1px solid rgba(190, 178, 154, 0.45);
+  background: rgba(0, 0, 0, 0.3);
+  line-height: 1;
+  text-align: center;
+}
+
+/* Lift the cost badge a touch on automated abilities so the corner "A" marker
+   has clear room beneath it. */
+.vtt-character-ability-item--automated .vtt-character-ability-item__cost {
+  margin-bottom: 10px;
+}
+
+.vtt-character-ability-item__cost-value {
+  font: 900 1.25rem/1 "Inter", "Segoe UI", sans-serif;
+  color: #f4ead7;
+}
+
+.vtt-character-ability-item__cost-label {
+  margin-top: 1px;
+  font: 800 0.52rem/1 "Inter", "Segoe UI", sans-serif;
+  letter-spacing: 0.04em;
   text-transform: uppercase;
+  color: #d8cfb9;
+}
+
+.vtt-character-ability-item__cost--text .vtt-character-ability-item__cost-value {
+  font-size: 0.72rem;
+}
+
+/* Low cost (1-2): calm. */
+.vtt-character-ability-item__cost[data-cost-tier="low"] {
+  border-color: rgba(120, 190, 150, 0.5);
+  background: rgba(34, 197, 94, 0.12);
+}
+
+/* Mid cost (3-4): amber, draws the eye. */
+.vtt-character-ability-item__cost[data-cost-tier="mid"] {
+  border-color: rgba(245, 196, 90, 0.7);
+  background: rgba(214, 158, 46, 0.18);
+}
+
+.vtt-character-ability-item__cost[data-cost-tier="mid"] .vtt-character-ability-item__cost-value {
+  color: #ffd97a;
+}
+
+/* High cost (5+): hot, unmistakable. */
+.vtt-character-ability-item__cost[data-cost-tier="high"] {
+  border-color: rgba(248, 122, 96, 0.85);
+  background: rgba(220, 70, 50, 0.22);
+  box-shadow: 0 0 10px rgba(220, 70, 50, 0.35);
+}
+
+.vtt-character-ability-item__cost[data-cost-tier="high"] .vtt-character-ability-item__cost-value {
+  font-size: 1.4rem;
+  color: #ff9d80;
 }
 
 .vtt-character-ability-item__text {
@@ -875,6 +973,11 @@ button.vtt-character-resource {
   color: #f8efe0;
   font-family: Georgia, "Times New Roman", serif;
   pointer-events: none;
+}
+
+/* Shift the hover/ability preview card clear of the open chat panel. */
+body.chat-panel-is-open .vtt-character-ability-preview {
+  right: calc(var(--chat-panel-width, 360px) + var(--chat-panel-offset, 20px) + 24px);
 }
 
 .vtt-character-ability-preview--open {

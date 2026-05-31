@@ -987,9 +987,26 @@ function renderAbilityItem(action, categoryKey, index, opts = {}) {
         <span class="vtt-character-ability-item__name">${escapeHtml(name)}</span>
         ${meta ? `<span class="vtt-character-ability-item__meta">${escapeHtml(meta)}</span>` : ''}
       </span>
-      ${automated ? '<span class="vtt-character-ability-item__auto" aria-label="Automated">Auto</span>' : ''}
+      ${renderAbilityCostBadge(action)}
+      ${automated ? '<span class="vtt-character-ability-item__auto" title="Automated" aria-label="Automated">A</span>' : ''}
     </button>
   `;
+}
+
+// Render the heroic-resource cost as a prominent right-side badge so the player
+// can read it at a glance. The number is colour-tiered by magnitude (the more
+// expensive the ability, the louder the badge).
+function renderAbilityCostBadge(action) {
+  const raw = String(action?.cost || '').trim();
+  if (!raw) return '';
+  const { amount, name } = parseAbilityResourceCost(raw);
+  // Non-numeric / unparseable costs stay on the meta line (summarizeAbility).
+  if (amount <= 0) return '';
+  const tier = amount >= 5 ? 'high' : amount >= 3 ? 'mid' : 'low';
+  const label = name
+    ? `<span class="vtt-character-ability-item__cost-label">${escapeHtml(name)}</span>`
+    : '';
+  return `<span class="vtt-character-ability-item__cost" data-cost-tier="${tier}" title="Costs ${escapeAttribute(raw)}" aria-label="Costs ${escapeAttribute(raw)}"><span class="vtt-character-ability-item__cost-value">${amount}</span>${label}</span>`;
 }
 
 function renderAbilityPreview(preview, action, categoryKey, sheet = null) {
@@ -2326,13 +2343,26 @@ function requestAutomationConsumeTriggeredAction(payload) {
   });
 }
 
+// When the right-side chat panel is open it overlays the right edge of the
+// viewport. Reserve that width so anchored automation dialogs never slide
+// underneath it. Returns 0 when the chat is closed.
+function getChatPanelReservedWidth() {
+  if (typeof document === 'undefined' || !document.body) return 0;
+  if (!document.body.classList.contains('chat-panel-is-open')) return 0;
+  const styles = window.getComputedStyle(document.body);
+  const width = parseFloat(styles.getPropertyValue('--chat-panel-width')) || 360;
+  const offset = parseFloat(styles.getPropertyValue('--chat-panel-offset')) || 20;
+  return width + offset + 8;
+}
+
 function clampAutomationDialogPosition(left, top, modal) {
   const rect = modal?.getBoundingClientRect?.() || {};
   const width = rect.width || 360;
   const height = rect.height || 190;
   const padding = 12;
+  const reservedRight = getChatPanelReservedWidth();
   return {
-    left: Math.min(Math.max(padding, left), Math.max(padding, window.innerWidth - width - padding)),
+    left: Math.min(Math.max(padding, left), Math.max(padding, window.innerWidth - reservedRight - width - padding)),
     top: Math.min(Math.max(padding, top), Math.max(padding, window.innerHeight - height - padding)),
   };
 }
@@ -2677,7 +2707,10 @@ function summarizeAbility(action, categoryKey) {
   } else {
     parts.push(getAbilityCategoryLabel(categoryKey));
   }
-  if (action?.cost) {
+  // Cost is shown as its own prominent badge in the tray row (see
+  // renderAbilityCostBadge), so omit it from the meta line to avoid clutter.
+  // Keep it here only when it isn't a parseable resource cost.
+  if (action?.cost && parseAbilityResourceCost(action.cost).amount <= 0) {
     parts.push(action.cost);
   }
   if (tags.length) {

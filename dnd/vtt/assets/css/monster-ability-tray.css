@@ -12,6 +12,18 @@
   gap: 16px;
 }
 
+/* Keep the monster tray clear of the open chat panel (overrides the shared
+   PC-tray chat-open width cap so monster trays retain their wider 960px max). */
+body.chat-panel-is-open .vtt-monster-ability-tray__inner {
+  width: min(
+    960px,
+    calc(
+      100vw - var(--vtt-character-panel-effective-width, 0px)
+        - var(--chat-panel-width, 360px) - var(--chat-panel-offset, 20px) - 56px
+    )
+  );
+}
+
 .vtt-monster-ability-tab {
   border-color: rgba(220, 210, 190, 0.78);
   background:

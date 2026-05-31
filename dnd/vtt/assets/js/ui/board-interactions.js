@@ -14368,6 +14368,17 @@ export function mountBoardInteractions(store, routes = {}) {
     });
   }
 
+  // When the right-side chat panel is open it overlays the right edge of the
+  // viewport. Reserve that width so anchored automation popups never slide
+  // underneath it. Returns 0 when the chat is closed.
+  function getChatPanelReservedWidth() {
+    if (!document.body || !document.body.classList.contains('chat-panel-is-open')) return 0;
+    const styles = window.getComputedStyle(document.body);
+    const width = parseFloat(styles.getPropertyValue('--chat-panel-width')) || 360;
+    const offset = parseFloat(styles.getPropertyValue('--chat-panel-offset')) || 20;
+    return width + offset + 8;
+  }
+
   function positionAutomationTargetPrompt(modal, targetConfig = {}) {
     if (!(modal instanceof HTMLElement)) return;
     requestAnimationFrame(() => {
@@ -14388,7 +14399,8 @@ export function mountBoardInteractions(store, routes = {}) {
       const padding = 12;
       const width = rect.width || 320;
       const height = rect.height || 150;
-      modal.style.left = `${Math.min(Math.max(padding, left), Math.max(padding, window.innerWidth - width - padding))}px`;
+      const reservedRight = getChatPanelReservedWidth();
+      modal.style.left = `${Math.min(Math.max(padding, left), Math.max(padding, window.innerWidth - reservedRight - width - padding))}px`;
       modal.style.top = `${Math.min(Math.max(padding, top), Math.max(padding, window.innerHeight - height - padding))}px`;
     });
   }

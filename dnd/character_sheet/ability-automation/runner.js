@@ -59,12 +59,26 @@
     return constrainRunnerPosition(left, top, modal);
   }
 
+  // When the right-side chat panel is open it overlays the right edge of the
+  // viewport (see layout.css / character-summary.css). Reserve that width so
+  // the runner window never slides underneath the chat. Returns 0 outside the
+  // VTT (or when chat is closed), where the body class is never set.
+  function getChatPanelReservedWidth() {
+    if (typeof document === "undefined" || !document.body) return 0;
+    if (!document.body.classList.contains("chat-panel-is-open")) return 0;
+    const styles = window.getComputedStyle(document.body);
+    const width = parseFloat(styles.getPropertyValue("--chat-panel-width")) || 360;
+    const offset = parseFloat(styles.getPropertyValue("--chat-panel-offset")) || 20;
+    return width + offset + 8;
+  }
+
   function constrainRunnerPosition(left, top, modal) {
     const rect = modal?.getBoundingClientRect();
     const width = rect?.width || 360;
     const height = rect?.height || 220;
     const padding = 12;
-    const maxLeft = Math.max(padding, window.innerWidth - width - padding);
+    const reservedRight = getChatPanelReservedWidth();
+    const maxLeft = Math.max(padding, window.innerWidth - reservedRight - width - padding);
     const maxTop = Math.max(padding, window.innerHeight - height - padding);
     return {
       left: Math.min(Math.max(padding, left), maxLeft),

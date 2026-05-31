@@ -114,7 +114,7 @@
                 '<span class="vtt-character-ability-item__name">' + escapeHtml(ability.name || 'Unnamed') + '</span>' +
                 (meta ? '<span class="vtt-character-ability-item__meta">' + escapeHtml(meta) + '</span>' : '') +
                 '</span>' +
-                (automated ? '<span class="vtt-character-ability-item__auto" aria-label="Automated">Auto</span>' : '') +
+                (automated ? '<span class="vtt-character-ability-item__auto" title="Automated" aria-label="Automated">A</span>' : '') +
                 '</button>';
         }).join('');
 
