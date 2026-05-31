@@ -1435,7 +1435,9 @@
       return;
     }
     const verb = effect.verb || "push";
-    const distance = asInt(effect.distance, 0);
+    const distance = P.resolveForcedMovementDistance
+      ? P.resolveForcedMovementDistance(effect, state.context)
+      : asInt(effect.distance, 0);
     if (!distance) return;
     if (typeof state.context.forceMove !== "function") {
       await postChat(state.context, {

@@ -253,7 +253,7 @@
         return effect;
       }
       case "forcedMovement": {
-        const known = new Set(["kind", "verb", "distance", "upTo"]);
+        const known = new Set(["kind", "verb", "distance", "upTo", "attribute", "multiplier"]);
         const verb = P.normalizeForcedMovementVerb(input.verb || "push");
         const effect = {
           kind: "forcedMovement",
@@ -261,7 +261,15 @@
           distance: asNonNegInt(input.distance, 0),
           upTo: asBool(input.upTo),
         };
-        if (!effect.distance) warnings.push(`${path}: forced movement has 0 distance.`);
+        // Optional attribute scaling: total distance = distance + (attribute bonus × multiplier).
+        // e.g. "push twice your Reason score" → distance:0, attribute:"R", multiplier:2.
+        const attribute = P.normalizeAttribute ? P.normalizeAttribute(input.attribute) : asTrimmedString(input.attribute);
+        if (attribute) {
+          effect.attribute = attribute;
+          const mult = asInt(input.multiplier, 1);
+          if (mult !== 1) effect.multiplier = mult;
+        }
+        if (!effect.distance && !effect.attribute) warnings.push(`${path}: forced movement has 0 distance.`);
         const extras = pickExtras(input, known);
         if (extras) effect._extra = extras;
         return effect;

@@ -50,6 +50,7 @@ The monster ability tray + `window.MonsterAbilityRunner.start()` add the followi
 | `forcedMovement` (`pull`) | Full | Legal cells strictly nearer to caster, monotonic-toward-source path |
 | `forcedMovement` (`slide`) | Full | Any cell within Chebyshev distance, no source-distance constraint |
 | `forcedMovement` (`vertical*`) | Partial | Falls through to horizontal push/pull/slide. Z-axis not modeled |
+| `forcedMovement` attribute scaling | Full | Optional `attribute` (M/A/R/I/P or full name) + `multiplier` (default 1). Total distance = `distance` + (attribute bonus × multiplier), e.g. `{ distance:0, attribute:"Reason", multiplier:2 }` = twice Reason. Resolves to flat `distance` when no character context is bound. |
 | `shift` | Full | Voluntary caster movement. Opens a slide-style picker for the caster, supports `distance: "speed"` and shared `pool` keys so split shifts can spend from one total movement allowance. |
 | `potency` | Full | Calls `checkPotency`, runs `onFail` effects on failed targets |
 | `spend` | Full | PC runner checks and spends the caster's heroic resource before prompting/running nested effects. Fixed spends skip the prompt if the resource is missing or insufficient. `maxAmount` supports variable spends through a draggable VTT modal with stepper buttons. **Monster behavior:** the monster runtime context does not provide `spendHeroicResource`, so a monster `spend` card currently falls through to a native `confirm()` dialog (no heroic pool is tracked). Treat `spend` as PC-only; for monsters prefer `note`. |

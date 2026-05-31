@@ -576,13 +576,18 @@ Applies via the same heal path but allows the new total to exceed max stamina (t
 ```json
 { "kind": "forcedMovement", "verb": "push", "distance": 3 }
 { "kind": "forcedMovement", "verb": "slide", "distance": 5, "upTo": true }
+{ "kind": "forcedMovement", "verb": "push", "distance": 0, "attribute": "Reason", "multiplier": 2, "upTo": true }
 ```
 
 | Field | Values |
 |---|---|
 | `verb` | `"push"`, `"pull"`, `"slide"`, `"verticalPush"`, `"verticalPull"`, `"verticalSlide"` |
-| `distance` | int squares |
+| `distance` | int squares (the flat base) |
+| `attribute` | optional — `"Might"`/`"Agility"`/`"Reason"`/`"Intuition"`/`"Presence"` (or `M`/`A`/`R`/`I`/`P`). Adds that characteristic's score to the distance. |
+| `multiplier` | optional int (default 1) — multiplies the attribute bonus. `2` = "twice your Reason score". |
 | `upTo` | bool — `true` if the player can move 0..N |
+
+**Total distance = `distance` + (attribute bonus × `multiplier`).** So "push up to twice your Reason score" is `{ "distance": 0, "attribute": "Reason", "multiplier": 2, "upTo": true }`. When the ability runs outside a character context (e.g. a preview with no hero bound) the attribute resolves to 0 and only the flat `distance` is used.
 
 ### `shift`
 

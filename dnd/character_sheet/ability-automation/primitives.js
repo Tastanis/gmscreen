@@ -348,6 +348,18 @@
     return base + bonus;
   }
 
+  // Resolve a forced-movement distance: literal `distance` plus, optionally,
+  // an attribute bonus times a multiplier. e.g. "push twice your Reason score"
+  // = { distance: 0, attribute: "Reason", multiplier: 2 }. Without ctx (no
+  // character bound) it falls back to just the literal distance.
+  function resolveForcedMovementDistance(effect, ctx) {
+    const base = Number.parseInt(effect.distance, 10) || 0;
+    if (!effect.attribute || !ctx || typeof ctx.getAttributeBonus !== "function") return base;
+    const bonus = Number.parseInt(ctx.getAttributeBonus(effect.attribute), 10) || 0;
+    const mult = Number(effect.multiplier) || 1;
+    return base + (bonus * mult);
+  }
+
   // Resolve a potency level (weak/average/strong) to its integer threshold using
   // the same formula the board uses: highest characteristic minus offset.
   function resolvePotencyThreshold(level, ctx) {
@@ -405,6 +417,12 @@
       case "forcedMovement": {
         const verb = effect.verb || "push";
         const upTo = effect.upTo ? "up to " : "";
+        if (effect.attribute) {
+          const mult = Number(effect.multiplier) || 1;
+          const base = Number.parseInt(effect.distance, 10) || 0;
+          const attrPart = `${mult !== 1 ? `${mult}× ` : ""}${effect.attribute}`;
+          return `${verb} ${upTo}${base ? `${base} + ` : ""}${attrPart}`;
+        }
         return `${verb} ${upTo}${effect.distance || 0}`;
       }
       case "teleport":
@@ -511,6 +529,13 @@
         const inner = (effect.effects || []).map((eff) => describeEffectResolved(eff, ctx)).filter(Boolean).join(", ");
         return `Spend ${effect.amount || 1} ${effect.resource || ""}: ${inner}`;
       }
+      case "forcedMovement": {
+        if (!effect.attribute) return describeEffect(effect);
+        const verb = effect.verb || "push";
+        const upTo = effect.upTo ? "up to " : "";
+        const total = resolveForcedMovementDistance(effect, ctx);
+        return `${verb} ${upTo}${total}`;
+      }
       // Everything else has no character-dependent fields — fall back to the raw form.
       default:
         return describeEffect(effect);
@@ -553,6 +578,7 @@
     describeEffectResolved,
     describeTriggerValue,
     resolveDamageAmount,
+    resolveForcedMovementDistance,
     resolvePotencyThreshold,
     KEYWORDS,
     normalizeKeyword,
