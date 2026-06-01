@@ -13,7 +13,7 @@ For *how* to write JSON, see `AUTHORING.md`. This file is `what is supported`.
 | `target` | Full |
 | `powerRoll` | Full. Supports `flatBonus` (literal roll bonus that bypasses attribute lookup — monster-friendly) and `whenWinded` overrides (see Universal Modifiers). |
 | `effect` | Full. Supports `whenWinded` overrides (see Universal Modifiers). |
-| `trigger` | Schema + registration against `AbilityTriggerBus`. PC trigger actions in the Triggers list are always-on once that character token is present in the active VTT scene; opening the character summary is not required. Authored `match` config fires the blue `!` overlay when its event/filter matches; click to resolve manually. No structured `match` -> chat reminder fallback. |
+| `trigger` | Schema + registration against `AbilityTriggerBus`. PC trigger actions in the Triggers list are always-on once that character token is present in the active VTT scene; opening the character summary is not required. Authored `match` config fires the blue `!` overlay when its event/filter matches; click to resolve manually. Trigger cards embedded in main actions/maneuvers execute in card order, so an ability can hit/select a target and then arm a delayed watcher against that target. No structured `match` -> chat reminder fallback. |
 | `persistent` | Schema + registration as a board-side persistent zone. Requires a preceding area `target` block so the zone has a footprint. Ticks at owner's `tickAt` (startOfTurn or endOfTurn): deducts upkeep from owner's heroic resource, applies effects to every creature inside the zone footprint. `expiresAt` can auto-end the zone at owner start/end turn. Auto-ends on combat end or when owner can't pay upkeep. **In-memory only** — page reload wipes zones (Pass 2 will add persistence). |
 | `branch` | Full. Evaluates a `condition` and runs either nested `then` cards or nested `else` cards before continuing through top-level `cards`. Supports nested target, powerRoll, effect, persistent, and further branch cards. |
 | `choice` | Full. Prompts for one option, stores the selected option for the execution, can replace execution keywords, and runs the selected option's nested cards. Leading choice cards run before `actionUsed` trigger fan-out and feature-modifier matching. |
@@ -44,7 +44,7 @@ The monster ability tray + `window.MonsterAbilityRunner.start()` add the followi
 
 | kind | Status | Runtime behavior |
 |---|---|---|
-| `damage` | Full | Applies via board, supports immunity/vulnerability on PC sheets, monster stat-block weakness/immunity, and temporary `damageWeakness` / `damageImmunity` conditions. Fields: `amount`, optional `amountDice` (`"1d6"`), optional `attribute`, optional `markBonusDice` + `markPredicate`, optional `damageType`, optional `amountFrom` (scales the captured trigger value into the amount sum — see Trigger value sources), optional `raw` (bool — when true this damage ignores feature modifiers: no `damageBonus`, no `damageType` override. Use for self-inflicted strained backlash and other flat damage that should not ride the ability's buffs). |
+| `damage` | Full | Applies via board, supports immunity/vulnerability on PC sheets, monster stat-block weakness/immunity, and temporary `damageWeakness` / `damageImmunity` conditions. Fields: `amount`, optional `amountDice` (`"1d6"`), optional `attribute`, optional `multiplier` (int, default 1 — multiplies the attribute bonus only, e.g. `attribute:"P", multiplier:2` = "twice your Presence score"; ignored without an attribute), optional `markBonusDice` + `markPredicate`, optional `damageType`, optional `amountFrom` (scales the captured trigger value into the amount sum — see Trigger value sources), optional `raw` (bool — when true this damage ignores feature modifiers: no `damageBonus`, no `damageType` override. Use for self-inflicted strained backlash and other flat damage that should not ride the ability's buffs). |
 | `condition` | Full | Applies via board condition tracker (save-ends durations integrate with token tracker) |
 | `forcedMovement` (`push`) | Full | Push works end-to-end (board preview, collisions) |
 | `forcedMovement` (`pull`) | Full | Legal cells strictly nearer to caster, monotonic-toward-source path |
@@ -139,7 +139,7 @@ Short form (damage `attribute` and potency `attribute`): `M`, `A`, `R`, `I`, `P`
 
 ## Trigger value sources — `amountFrom.source`
 
-`triggeringDamage` (Full — reads the captured damage `amount`), `triggeringForcedMovement` (reserved — reads `distance` from the payload when present; no built-in event emits it yet).
+`triggeringDamage` (Full — reads the captured damage `amount`), `triggeringForcedMovement` (Full — reads `distance` / `movedDistance` from normal move and forced-movement trigger payloads).
 
 `amountFrom` is accepted on `damage`, `heal`, and `temporaryStamina`. The captured value is scaled by `multiplier` × `fraction` (both default `1`) then rounded (`rounding`: `down` default, `up`), and the result is added on top of the effect's own `amount` / `attribute` / `amountDice`. Only populated when the effect runs from a resolved trigger payload (`state.triggerPayload`); contributes `0` on a normal ability use. `halveTriggeringDamage` remains the dedicated "you take half" refund; `amountFrom` is for turning the captured value into a new damage/heal on any target.
 
@@ -235,7 +235,13 @@ Lightweight event-driven registry for triggered abilities. JSON-authored `trigge
 
 | eventType | Payload shape | Status |
 |---|---|---|
-| `move` | `{ placementId, sourceId, from: {column,row,width,height}, to: {...}, kind: "normal", sceneId, perWatcher }` | Fires once per `vtt:token-moved` (normal movement only). `perWatcher` is a `Map<watcherId, { leaves, enters }>` so a predicate's adjacency filter can resolve relative to its own watcher. |
+| `move` | `{ placementId, sourceId, from: {column,row,width,height}, to: {...}, distance, movedDistance, kind: "normal", sceneId, perWatcher }` | Fires once per `vtt:token-moved` (normal movement only). `distance` / `movedDistance` is Chebyshev square distance. `perWatcher` is a `Map<watcherId, { leaves, enters }>` so a predicate's adjacency filter can resolve relative to its own watcher. |
+| `forcedMovement` | `{ placementId, targetId, sourceId, actorId, distance, movedDistance, requestedDistance, verb, abilityName, actionId, actionKind, keywords }` | Fires after an automated push/pull/slide/vertical forced movement resolves. Predicates resolve `whose` against the moved token. |
+| `forcedMovementDealt` | Same payload as `forcedMovement`. | Fires alongside `forcedMovement`, but predicates resolve `whose` against the source/actor who caused the forced movement. Mirrors `damageDealt`. |
+| `powerRoll` | `{ actorId, actorName, actionId, actionName, actionKind, cost, keywords, attribute, rollTotal, tier, targetIds, targetNames }` | Fires after the roll is accepted and before tier effects apply. |
+| `abilityTest` | Same core payload as `powerRoll`. | Fires when an `abilityTest` effect's roll is accepted. |
+| `abilityRoll` | Same payload as `powerRoll`, with `rollEvent` set to `powerRoll` or `abilityTest`. | Generic roll event for abilities that care about "an ability roll" instead of specifically power rolls or tests. |
+| `potency` | `{ actorId, sourceId, targetId, targetIds, targetCount, actionId, actionName, actionKind, cost, keywords, attribute, level }` | Fires before an automated potency check resolves. Predicates resolve `whose` against the actor/source using the potency. |
 | `damage` | `{ placementId, targetId, sourceId, amount, originalAmount, damageType, abilityName }` | Fires from `handleAutomationDamageRequest` after the stamina mutation. Manual / non-automation damage paths do NOT fire this yet — Phase B work. |
 | `staminaChange` | `{ placementId, before, after, delta, kind }` | Fires from both `handleAutomationDamageRequest` and `handleAutomationHealRequest`. `kind` ∈ {`damage`, `heal`, `temporaryStamina`}. |
 | `turnStart` | `{ placementId, team }` | Fires from `transitionToActiveTurn` whenever a token becomes the active combatant. |
@@ -247,6 +253,9 @@ Additional accepted events:
 | eventType | Payload / status |
 |---|---|
 | `damageDealt` | Same live payload and source as `damage`; useful for wording like "when you deal damage." Predicates resolve `whose` from `sourceId`; the damaged token is still `placementId`/`targetId`. |
+| `forcedMovement` / `forcedMovementDealt` | Automated forced movement only. Use `forcedMovement` for "the target is force moved"; use `forcedMovementDealt` for "the target force moves a creature or object." |
+| `powerRoll` / `abilityTest` / `abilityRoll` | Automated runner rolls only. `powerRoll` is specific to power-roll cards; `abilityTest` is specific to ability-test effects; `abilityRoll` is fired for both. |
+| `potency` | Automated potency checks only. Useful for "uses an ability with potency" listeners. |
 | `staminaZero` | Fires when automated damage drops a target from above 0 stamina to 0 or lower. |
 | `markApplied` | Fires when automation applies or transfers a mark. Supports `markType` and `source` filters. |
 | `actionUsed` | Fires at the start of a normal ability automation run when the host exposes `fireTriggerEvent`. Payload: `{ actorId, actionId, actionName, actionKind, keywords }`. |
@@ -272,12 +281,17 @@ Trigger blocks may carry a structured `match` alongside the free-text `condition
 | `damage` | `whose` (`self`/`ally`/`enemy`/`target`/`judgedTarget`/`markSource`/`any`), `minAmount` int, `maxAmount` int, `damageType` string\|string[] |
 | `staminaChange` | `whose`, `direction` (`up`/`down`/`either`) |
 | `turnStart`, `turnEnd` | `whose` |
-| `move` | `whose`, `leavesAdjacency` bool, `entersAdjacency` bool |
+| `move` | `whose`, `leavesAdjacency` bool, `entersAdjacency` bool, `minDistance`, `maxDistance` |
 | `damageDealt` | same fields as `damage`; `whose` resolves against `sourceId` |
+| `forcedMovement` | `whose`, `targetWhose`, `minDistance`, `maxDistance`, `verb` |
+| `forcedMovementDealt` | same fields as `forcedMovement`; `whose` resolves against `sourceId` |
+| `powerRoll`, `abilityTest`, `abilityRoll` | `whose`, `targetWhose`, `actionKind`, `keywordsAny`, `costIncludes`, `attribute`, `tier`, `minTotal`, `maxTotal` |
+| `potency` | `whose`, `targetWhose`, `attribute`, `level`, `minTargets`, `maxTargets` |
 | `staminaZero` | same as `staminaChange` |
-| `actionUsed` | `whose`, `actionKind`, `keywordsAny`; `lineOfEffectTo` is accepted by the schema but not evaluated yet |
+| `actionUsed` | `whose`, `actionKind`, `keywordsAny`, `costIncludes`; `lineOfEffectTo` is accepted by the schema but not evaluated yet |
 | `markApplied` | `whose`, `markType`, `source` |
 | *(any event)* | `withinSquares` int, `minSquares` int — square-distance band between the caster and the event's other token; skipped if either lacks a placement |
+| *(events with target ids)* | `targetWhose` — requires at least one payload target (`targetId`, `placementId`, or `targetIds[]`) to match `self`/`ally`/`enemy`/`target`/`judgedTarget`/`markSource`/`any`. Use with `whose:"ally"` + `targetWhose:"target"` for "an ally rolls against the watched target." |
 
 `whose` resolves against:
 - `self` -> the caster's own placement id
@@ -286,6 +300,13 @@ Trigger blocks may carry a structured `match` alongside the free-text `condition
 - `markSource` -> a token marked by the caster
 - `ally`/`enemy` -> team comparison against the caster's combat team
 - `any` (default) -> no filter
+
+When a trigger resolves, effect targets can use dynamic trigger groups:
+- `eventActor` / `triggerActor` -> the token that performed the triggering event.
+- `eventSource` / `triggerSource` -> the source token from the event payload.
+- `eventTarget` / `triggerTarget` -> the token or tokens affected by the event payload.
+
+For `trigger.effects`, the default resolution target is `eventActor`. A trigger block can set `effectTarget` / `resolveTarget` to change that default, and individual nested effects can still use their own `target`.
 
 If `match` is omitted, the runner falls back to a chat reminder so the GM at least sees what should happen.
 

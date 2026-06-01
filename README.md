@@ -20,6 +20,8 @@ Legacy ASL learning portals and the scroller mini-game remain in the repo for re
 - `BACKUP_AUTO_RELOAD_FIX.md`, `BACKUP_SYSTEM_CHANGES.md`, and `CLAUDE.md` – Internal documentation snapshots describing previous migrations and fixes.
 
 ## Getting Started
+Production D&D site: https://bharmsasl.com/dnd/
+
 1. **Install dependencies**
    ```bash
    composer install

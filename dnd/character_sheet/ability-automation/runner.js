@@ -367,7 +367,7 @@
     let raw;
     switch (amountFrom.source) {
       case "triggeringForcedMovement":
-        raw = asInt(payload.distance, 0);
+        raw = asInt(payload.distance ?? payload.movedDistance, 0);
         break;
       case "triggeringDamage":
       default:
@@ -417,7 +417,43 @@
     if (String(groupName || "").toLowerCase() === "self") {
       return state.sourcePlacement?.id ? [state.sourcePlacement] : [];
     }
+    const eventTarget = resolveTriggerPlacementGroup(state, groupName);
+    if (eventTarget) return eventTarget;
     return state.groups[groupName] || [];
+  }
+
+  function resolveTriggerPlacementGroup(state, name) {
+    const key = String(name || "").trim().toLowerCase();
+    if (!key) return null;
+    const payload = state.triggerPayload?.payload && typeof state.triggerPayload.payload === "object"
+      ? state.triggerPayload.payload
+      : state.triggerPayload || null;
+    if (!payload) return null;
+    const idsByKey = {
+      eventactor: [payload.actorId || payload.placementId || payload.sourceId || payload.targetId || ""],
+      triggeractor: [payload.actorId || payload.placementId || payload.sourceId || payload.targetId || ""],
+      eventsource: [payload.sourceId || payload.actorId || payload.placementId || ""],
+      triggersource: [payload.sourceId || payload.actorId || payload.placementId || ""],
+      eventtarget: Array.isArray(payload.targetIds) && payload.targetIds.length
+        ? payload.targetIds
+        : [payload.targetId || payload.placementId || ""],
+      triggertarget: Array.isArray(payload.targetIds) && payload.targetIds.length
+        ? payload.targetIds
+        : [payload.targetId || payload.placementId || ""],
+    };
+    if (!Object.prototype.hasOwnProperty.call(idsByKey, key)) return null;
+    const ids = idsByKey[key].filter(Boolean);
+    if (!ids.length) return [];
+    return ids.map((id) => {
+      const placement = state.context.getPlacementById?.(id);
+      if (placement && typeof placement === "object") return placement;
+      const name =
+        payload.actorId === id ? payload.actorName :
+        payload.sourceId === id ? payload.sourceName :
+        payload.targetId === id ? payload.targetName :
+        "";
+      return { id, name: name || id };
+    });
   }
 
   function setTargetGroup(state, name, tokens) {
@@ -892,11 +928,37 @@
     if (state.aborted) return;
     if (!state.selectedTier) return;
 
+    await fireRollTriggerEvent(state, block);
+
     const tier = block.tiers?.[state.selectedTier] || { effects: [] };
     const targetGroupName = block.target;
     await applyEffects(state, tier.effects || [], targetGroupName, {
       sourceLabel: `${state.action.name || "Ability"} (${P.tierLabel(state.selectedTier)})`,
     });
+  }
+
+  async function fireRollTriggerEvent(state, block) {
+    if (typeof state.context.fireTriggerEvent !== "function") return;
+    const eventType = block.rollEvent === "abilityTest" ? "abilityTest" : "powerRoll";
+    const targetIds = getTargetGroup(state, block.target).map((target) => target?.id).filter(Boolean);
+    const targetNames = getTargetGroup(state, block.target).map((target) => target?.name || "").filter(Boolean);
+    const totalInfo = getPowerRollTotal(state, block);
+    const payload = {
+      actorId: state.sourcePlacement?.id || "",
+      actorName: state.heroName || "",
+      actionId: state.action?.id || "",
+      actionName: state.action?.name || "Ability",
+      actionKind: state.action?.actionKind || state.action?.kind || state.action?.type || state.context?.actionType || "main",
+      cost: state.action?.cost || state.action?.resource_cost || state.action?.resourceCost || "",
+      keywords: getAbilityKeywords(state),
+      attribute: totalInfo.attribute || block.attribute || "",
+      rollTotal: totalInfo.total,
+      tier: state.selectedTier || "",
+      targetIds,
+      targetNames,
+    };
+    state.context.fireTriggerEvent({ eventType, payload });
+    state.context.fireTriggerEvent({ eventType: "abilityRoll", payload: { ...payload, rollEvent: eventType } });
   }
 
   // ---------- effect block ----------
@@ -1118,8 +1180,9 @@
       return;
     }
     const baseAmount = asInt(effect.amount, 0);
+    const damageMultiplier = Number(effect.multiplier) || 1;
     const attributeBonus = effect.attribute
-      ? resolveAttributeBonusForDamage(state, effect.attribute)
+      ? resolveAttributeBonusForDamage(state, effect.attribute) * damageMultiplier
       : 0;
     const triggerValue = resolveTriggerValue(state, effect.amountFrom);
     const damageType = effect.damageType && effect.damageType !== "untyped" ? effect.damageType : "";
@@ -1480,6 +1543,28 @@
         continue;
       }
       const moved = result.movedDistance ?? distance;
+      if (typeof state.context.fireTriggerEvent === "function") {
+        const eventPayload = {
+          placementId: target.id,
+          targetId: target.id,
+          targetName: result.name || target.name || "",
+          sourceId: state.sourcePlacement?.id || "",
+          sourceName: state.heroName || "",
+          actorId: state.sourcePlacement?.id || "",
+          actorName: state.heroName || "",
+          distance: moved,
+          movedDistance: moved,
+          requestedDistance: distance,
+          verb,
+          abilityName: state.action.name || "Ability",
+          actionId: state.action?.id || "",
+          actionKind: state.action?.actionKind || state.action?.kind || state.action?.type || state.context?.actionType || "main",
+          cost: state.action?.cost || state.action?.resource_cost || state.action?.resourceCost || "",
+          keywords: getAbilityKeywords(state),
+        };
+        state.context.fireTriggerEvent({ eventType: "forcedMovement", payload: eventPayload });
+        state.context.fireTriggerEvent({ eventType: "forcedMovementDealt", payload: eventPayload });
+      }
       lines.push(`${result.name || target.name || "Target"} is ${verb}ed ${moved} square${moved === 1 ? "" : "s"}.`);
       if (result.collision) {
         lines.push(
@@ -1580,6 +1665,28 @@
     for (const target of targets) {
       if (state.aborted) return;
       if (!target?.id) continue;
+      if (typeof state.context.fireTriggerEvent === "function") {
+        state.context.fireTriggerEvent({
+          eventType: "potency",
+          payload: {
+            actorId: state.sourcePlacement?.id || "",
+            actorName: state.heroName || "",
+            sourceId: state.sourcePlacement?.id || "",
+            sourceName: state.heroName || "",
+            targetId: target.id,
+            targetName: target.name || "",
+            targetIds: targets.map((item) => item?.id).filter(Boolean),
+            targetCount: targets.length,
+            actionId: state.action?.id || "",
+            actionName: state.action?.name || "Ability",
+            actionKind: state.action?.actionKind || state.action?.kind || state.action?.type || state.context?.actionType || "main",
+            cost: state.action?.cost || state.action?.resource_cost || state.action?.resourceCost || "",
+            keywords: getAbilityKeywords(state),
+            attribute: effect.attribute || "",
+            level: effect.level || "",
+          },
+        });
+      }
       const result =
         typeof state.context.checkPotency === "function"
           ? await state.context.checkPotency({
@@ -1989,6 +2096,7 @@
       attribute: effect.attribute || "Strongest",
       bonus: asInt(effect.bonus, 0),
       rollFormula: effect.rollFormula || "2d10",
+      rollEvent: "abilityTest",
       target: "self",
       tiers: {
         tier1: { effects: [] },
@@ -2277,6 +2385,40 @@
       if (state.aborted) break;
       await runBlockAt(state, option.cards, index);
     }
+  }
+
+  function getTriggerPayloadEventType(state) {
+    const payload = state.triggerPayload || null;
+    if (!payload || typeof payload !== "object") return "";
+    return String(payload.eventType || payload.event || payload.payload?.eventType || payload.payload?.event || "").trim();
+  }
+
+  function findReadyTriggerBlock(blocks, state) {
+    const structured = (blocks || []).filter((block) => block?.type === "trigger" && block.match);
+    if (!structured.length) return { block: null, index: -1 };
+    const eventType = getTriggerPayloadEventType(state).toLowerCase();
+    const matched = eventType
+      ? structured.find((block) => String(block.match?.event || "").toLowerCase() === eventType)
+      : null;
+    const block = matched || structured[0];
+    return { block, index: (blocks || []).indexOf(block) };
+  }
+
+  async function runReadyTriggerResolution(state, blocks) {
+    const { block, index } = findReadyTriggerBlock(blocks, state);
+    if (!block) return false;
+    if (Array.isArray(block.effects) && block.effects.length) {
+      await applyEffects(state, block.effects, block.effectTarget || block.resolveTarget || "eventActor", {
+        sourceLabel: `${state.action.name || "Ability"} trigger`,
+      });
+    }
+    for (let cursor = index + 1; cursor < blocks.length; cursor += 1) {
+      if (state.aborted) break;
+      const next = blocks[cursor];
+      if (next?.type === "trigger") continue;
+      await runBlockAt(state, blocks, cursor);
+    }
+    return true;
   }
 
   // ---------- main loop ----------
@@ -2585,7 +2727,9 @@
 
       const structuredTriggerBlocks = blocks.filter((block) => block?.type === "trigger" && block.match);
       const isResolvingReadyTrigger = Boolean(state.triggerPayload);
-      const isArmingOnly = structuredTriggerBlocks.length > 0 && !isResolvingReadyTrigger;
+      const actionType = String(state.context?.actionType || state.action?.actionType || state.action?.kind || state.action?.type || "").toLowerCase();
+      const triggerOnlyAction = actionType.includes("trigger") || isNonFreeTriggeredAction(state.action);
+      const isArmingOnly = triggerOnlyAction && structuredTriggerBlocks.length > 0 && !isResolvingReadyTrigger;
 
       if (!isArmingOnly) {
         for (const block of blocks) {
@@ -2626,7 +2770,8 @@
             actorId: state.sourcePlacement?.id || "",
             actionId: state.action?.id || "",
             actionName: state.action?.name || "Ability",
-            actionKind: state.action?.actionKind || state.action?.kind || state.action?.type || "main",
+            actionKind: state.action?.actionKind || state.action?.kind || state.action?.type || state.context?.actionType || "main",
+            cost: state.action?.cost || state.action?.resource_cost || state.action?.resourceCost || "",
             keywords: getAbilityKeywords(state),
           },
         });
@@ -2642,6 +2787,10 @@
           });
           return;
         }
+      }
+      if (isResolvingReadyTrigger && structuredTriggerBlocks.length) {
+        await runReadyTriggerResolution(state, blocks);
+        return;
       }
       for (let index = 0; index < blocks.length; index += 1) {
         const block = blocks[index];

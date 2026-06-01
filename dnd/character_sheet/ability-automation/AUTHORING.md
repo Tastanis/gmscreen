@@ -295,10 +295,16 @@ For PC triggered actions, this is **always-on** once the character token is pres
 | `staminaChange` | A token's stamina changed via automation (damage or heal) | `whose`, `direction` (`down`/`up`/`either`) |
 | `turnStart` | A token becomes the active combatant | `whose` |
 | `turnEnd` | The active combatant's turn ends | `whose` |
-| `move` | A token moves via normal player movement | `whose`, `leavesAdjacency`, `entersAdjacency` |
+| `move` | A token moves via normal player movement | `whose`, `leavesAdjacency`, `entersAdjacency`, `minDistance`, `maxDistance` |
 | `damageDealt` | Automated damage dealt by the caster | same as `damage`; predicates resolve `whose` from `sourceId` |
+| `forcedMovement` | A token is force moved by automation | `whose`, `targetWhose`, `minDistance`, `maxDistance`, `verb` |
+| `forcedMovementDealt` | A token force moves another token by automation | same as `forcedMovement`; predicates resolve `whose` from `sourceId` |
+| `powerRoll` | An automated power roll is accepted | `whose`, `targetWhose`, `actionKind`, `keywordsAny`, `costIncludes`, `attribute`, `tier`, `minTotal`, `maxTotal` |
+| `abilityTest` | An automated ability-test roll is accepted | same as `powerRoll` |
+| `abilityRoll` | Either an automated power roll or ability-test roll is accepted | same as `powerRoll`; payload includes `rollEvent` |
+| `potency` | An automated potency check is about to resolve | `whose`, `targetWhose`, `attribute`, `level`, `minTargets`, `maxTargets` |
 | `staminaZero` | Automated damage drops a token from above 0 stamina to 0 or lower | same as `staminaChange` |
-| `actionUsed` | A normal ability automation starts | `whose`, `actionKind`, `keywordsAny` |
+| `actionUsed` | A normal ability automation starts | `whose`, `actionKind`, `keywordsAny`, `costIncludes` |
 | `markApplied` | Automation applies/transfers a mark | `whose`, `markType`, `source` |
 
 **`whose` values** — resolved relative to the **caster** (the character who has the triggered ability) and the target group named by the trigger's `target` field (or the most recent target group if `target` is omitted):
@@ -312,6 +318,12 @@ For PC triggered actions, this is **always-on** once the character token is pres
 | `ally` | Same combat team as the caster |
 | `enemy` | Opposing combat team |
 | `any` *(default)* | No filter |
+
+**Target-of-event filter** - for events that include affected target IDs (`damage`, `damageDealt`, `forcedMovement`, `forcedMovementDealt`, `powerRoll`, `abilityTest`, `abilityRoll`), add `targetWhose` to require the event's affected token(s) to match a `whose` value. Example: `"filter": { "whose": "ally", "targetWhose": "target" }` means "an ally does the event to the watched target."
+
+**Dynamic trigger targets** - when a ready trigger resolves, effect `target` can be `eventActor`/`triggerActor`, `eventSource`/`triggerSource`, or `eventTarget`/`triggerTarget`. These resolve from the captured event payload and let delayed reactions send damage, healing, conditions, or notes back to the creature that caused or received the trigger.
+
+For `trigger.effects`, the default resolution target is `eventActor`. Add `effectTarget` to the trigger block to change that default, or put `target` on individual nested effects.
 
 **Distance band (any event)** — gate the trigger on the square-distance between the caster and the other token in the event (the damage source, the moving token, the marked token, etc.). Distance is measured in squares (Chebyshev / diagonals count as 1), the same as everywhere else on the board.
 
@@ -497,6 +509,7 @@ Any effect can include `target` to route that effect to a named target group ins
 ```json
 { "kind": "damage", "amount": 5, "attribute": "M", "damageType": "fire" }
 { "kind": "damage", "amount": 0, "amountDice": "1d6", "damageType": "fire" }
+{ "kind": "damage", "amount": 0, "attribute": "P", "multiplier": 2, "damageType": "holy" }
 { "kind": "damage", "damageType": "psychic", "amountFrom": { "source": "triggeringDamage", "fraction": 0.5 } }
 ```
 
@@ -505,6 +518,7 @@ Any effect can include `target` to route that effect to a named target group ins
 | `amount` | int (flat amount) |
 | `amountDice` | optional dice string like `"1d6"` or `"2d8"`. Added to `amount` at runtime. |
 | `attribute` | optional. Single string `"M"`/`"A"`/`"R"`/`"I"`/`"P"`/`"Strongest"`, OR an array like `["M", "A"]` meaning "highest of these specific attributes" (used for free strikes — highest of Might or Agility only) |
+| `multiplier` | optional int (default 1) — multiplies the **attribute** bonus only (not flat `amount`/`amountDice`). `2` = "damage equal to twice your Presence score" → `{ "attribute": "P", "multiplier": 2 }`. Total = `amount` + (attribute bonus × `multiplier`) + dice + trigger. Ignored when no `attribute` is set. Mirrors `forcedMovement`. |
 | `damageType` | `"untyped"`, `"acid"`, `"cold"`, `"corruption"`, `"fire"`, `"holy"`, `"lightning"`, `"poison"`, `"psychic"`, `"sonic"` |
 | `markBonusDice` | optional dice string like `"1d6"`. Rolls and adds only when `markPredicate` matches. |
 | `markPredicate` | optional mark predicate for `markBonusDice`. Defaults to `"targetJudgedBySelf"`. |
@@ -524,7 +538,7 @@ Any effect can include `target` to route that effect to a named target group ins
 
 | Field | Values |
 |---|---|
-| `source` | `"triggeringDamage"` (reads the triggering damage amount — the only fully wired source) or `"triggeringForcedMovement"` (reads `distance`, reserved for move reactions). Defaults to `"triggeringDamage"`. |
+| `source` | `"triggeringDamage"` (reads the triggering damage amount) or `"triggeringForcedMovement"` (reads `distance` / `movedDistance` from normal movement and forced movement). Defaults to `"triggeringDamage"`. |
 | `fraction` | optional positive number multiplied into the captured value. `0.5` = half. Default `1`. |
 | `multiplier` | optional positive number, also multiplied in. Stacks with `fraction` (e.g. both default to 1). Default `1`. |
 | `rounding` | `"down"` (default — Draw Steel rounds halves down) or `"up"`. Applied after scaling. |

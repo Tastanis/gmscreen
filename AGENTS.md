@@ -76,6 +76,10 @@ console.log('Button element:', document.getElementById('import-character-btn'));
 
 ## Development Workflow
 
+### Site URLs
+- Production D&D site: `https://bharmsasl.com/dnd/`
+- Local development URL, when the PHP server is running from the repo root with `php -S localhost:8000 -t dnd`: `http://localhost:8000`
+
 ### After Making Changes
 1. Check version number updated in bottom-right corner
 2. Test functionality with hard refresh (Ctrl+F5)

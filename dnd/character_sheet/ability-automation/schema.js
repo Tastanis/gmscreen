@@ -9,7 +9,7 @@
 //       { type: "target",     id, name, mode, predicate, count, optional, distance, range, ... },
 //       { type: "powerRoll",  id, attribute, bonus, target, tiers: { tier1, tier2, tier3 } },
 //       { type: "effect",     id, target, effects: [Effect, ...] },
-//       { type: "trigger",    id, condition, effects: [Effect, ...] },
+//       { type: "trigger",    id, condition, match, target, effects: [Effect, ...] },
 //       { type: "persistent", id, cost, resource, effects: [Effect, ...] },
 //       { type: "branch",     id, condition, then: [Block, ...], else: [Block, ...] },
 //       { type: "choice",     id, prompt, options: [{ id, label, keywords, cards }] }
@@ -153,7 +153,7 @@
     }
     switch (kind) {
       case "damage": {
-        const known = new Set(["kind", "amount", "amountDice", "markBonusDice", "markPredicate", "attribute", "damageType", "raw", "amountFrom"]);
+        const known = new Set(["kind", "amount", "amountDice", "markBonusDice", "markPredicate", "attribute", "multiplier", "damageType", "raw", "amountFrom"]);
         const attribute = input.attribute !== undefined && input.attribute !== null
           ? (P.normalizeAttributeOrList ? P.normalizeAttributeOrList(input.attribute) : P.normalizeAttribute(input.attribute))
           : "";
@@ -166,6 +166,13 @@
           attribute,
           damageType: P.normalizeDamageType(input.damageType || "untyped"),
         };
+        // Optional attribute multiplier: total = amount + (attribute bonus × multiplier).
+        // e.g. "holy damage equal to twice your Presence score" → attribute:"P", multiplier:2.
+        // Only meaningful when an attribute is set; mirrors forcedMovement.
+        if (attribute) {
+          const mult = asInt(input.multiplier, 1);
+          if (mult !== 1) effect.multiplier = mult;
+        }
         // `raw` marks damage that ignores feature modifiers (e.g. a Talent's
         // self-inflicted strained backlash should not be boosted by the same
         // augmentation that buffs the attack). Preserved only when truthy.
@@ -838,7 +845,23 @@
   // fires these names — keep this list in sync with the fan-out sites in
   // board-interactions.js (handleAutomationDamageRequest, transitionToActiveTurn,
   // end-of-turn flow, vtt:token-moved listener).
-  const TRIGGER_EVENTS = ["damage", "damageDealt", "staminaChange", "staminaZero", "turnStart", "turnEnd", "move", "actionUsed", "markApplied"];
+  const TRIGGER_EVENTS = [
+    "damage",
+    "damageDealt",
+    "staminaChange",
+    "staminaZero",
+    "turnStart",
+    "turnEnd",
+    "move",
+    "forcedMovement",
+    "forcedMovementDealt",
+    "actionUsed",
+    "powerRoll",
+    "abilityTest",
+    "abilityRoll",
+    "potency",
+    "markApplied",
+  ];
 
   // The `whose` filter answers "whose event is this?" relative to the caster
   // and the runner's previously-named target groups.
@@ -868,6 +891,14 @@
     if (filter.whose === "target") {
       const ref = asTrimmedString(filterInput.targetGroup) || asTrimmedString(filterInput.group);
       if (ref) filter.targetGroup = ref;
+    }
+    const targetWhoseRaw = asTrimmedString(filterInput.targetWhose).toLowerCase();
+    if (targetWhoseRaw) {
+      if (WHOSE_VALUES.includes(targetWhoseRaw)) {
+        filter.targetWhose = targetWhoseRaw;
+      } else {
+        warnings.push(`${path}.filter.targetWhose: "${filterInput.targetWhose}" not in ${WHOSE_VALUES.join("/")}.`);
+      }
     }
     // Distance band (Layer 1): event fires only when the caster is within /
     // beyond N squares of the other token in the event. Works for any event.
@@ -902,11 +933,41 @@
     if (event === "actionUsed") {
       const actionKind = asTrimmedString(filterInput.actionKind);
       if (actionKind) filter.actionKind = actionKind;
+      const costIncludes = asTrimmedString(filterInput.costIncludes || filterInput.resourceCostIncludes);
+      if (costIncludes) filter.costIncludes = costIncludes;
       if (filterInput.lineOfEffectTo) filter.lineOfEffectTo = asTrimmedString(filterInput.lineOfEffectTo);
       const keywordsAny = Array.isArray(filterInput.keywordsAny)
         ? filterInput.keywordsAny.map((k) => P.normalizeKeyword?.(k) || asTrimmedString(k)).filter(Boolean)
         : [];
       if (keywordsAny.length) filter.keywordsAny = keywordsAny;
+    }
+    if (event === "powerRoll" || event === "abilityTest" || event === "abilityRoll") {
+      const actionKind = asTrimmedString(filterInput.actionKind);
+      if (actionKind) filter.actionKind = actionKind;
+      const costIncludes = asTrimmedString(filterInput.costIncludes || filterInput.resourceCostIncludes);
+      if (costIncludes) filter.costIncludes = costIncludes;
+      const attribute = asTrimmedString(filterInput.attribute);
+      if (attribute) filter.attribute = attribute;
+      const tier = asTrimmedString(filterInput.tier);
+      if (tier) filter.tier = tier;
+      const minTotal = asNonNegInt(filterInput.minTotal, 0);
+      if (minTotal) filter.minTotal = minTotal;
+      const maxTotal = asNonNegInt(filterInput.maxTotal, 0);
+      if (maxTotal) filter.maxTotal = maxTotal;
+      const keywordsAny = Array.isArray(filterInput.keywordsAny)
+        ? filterInput.keywordsAny.map((k) => P.normalizeKeyword?.(k) || asTrimmedString(k)).filter(Boolean)
+        : [];
+      if (keywordsAny.length) filter.keywordsAny = keywordsAny;
+    }
+    if (event === "potency") {
+      const attribute = asTrimmedString(filterInput.attribute);
+      if (attribute) filter.attribute = attribute;
+      const level = asTrimmedString(filterInput.level);
+      if (level) filter.level = level;
+      const maxTargets = asNonNegInt(filterInput.maxTargets, 0);
+      if (maxTargets) filter.maxTargets = maxTargets;
+      const minTargets = asNonNegInt(filterInput.minTargets, 0);
+      if (minTargets) filter.minTargets = minTargets;
     }
     if (event === "markApplied") {
       const markType = asTrimmedString(filterInput.markType);
@@ -918,16 +979,25 @@
       if (filterInput.leavesAdjacency) filter.leavesAdjacency = true;
       if (filterInput.entersAdjacency) filter.entersAdjacency = true;
     }
+    if (event === "move" || event === "forcedMovement" || event === "forcedMovementDealt") {
+      const minDistance = asNonNegInt(filterInput.minDistance, 0);
+      if (minDistance) filter.minDistance = minDistance;
+      const maxDistance = asNonNegInt(filterInput.maxDistance, 0);
+      if (maxDistance) filter.maxDistance = maxDistance;
+      const verb = asTrimmedString(filterInput.verb);
+      if (verb) filter.verb = verb;
+    }
     return { event, filter };
   }
 
   function normalizeTriggerBlock(input, warnings, path) {
-    const known = new Set(["type", "id", "condition", "match", "target", "effects", "note"]);
+    const known = new Set(["type", "id", "condition", "match", "target", "effectTarget", "resolveTarget", "effects", "note"]);
     const block = {
       type: "trigger",
       id: input.id || createId("trigger"),
       condition: asTrimmedString(input.condition),
       target: asTrimmedString(input.target),
+      effectTarget: asTrimmedString(input.effectTarget || input.resolveTarget),
       effects: normalizeEffectList(input.effects, warnings, `${path}.effects`),
     };
     const match = normalizeTriggerMatch(input.match, warnings, `${path}.match`);

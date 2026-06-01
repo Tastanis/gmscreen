@@ -156,7 +156,8 @@
                 : [],
             description: ability.effect || '',
             range: ability.range || '',
-            cost: ability.resource_cost || ''
+            cost: ability.resource_cost || '',
+            actionKind: category || ''
         };
 
         var hero = {
@@ -227,6 +228,7 @@
             checkScopedFlag: board.checkScopedFlag,
             setScopedFlag: board.setScopedFlag,
             setAura: board.setAura,
+            getPlacementById: board.getPlacementById,
             getDistanceBetween: board.getDistanceBetween
         };
     }

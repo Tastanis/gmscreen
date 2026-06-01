@@ -53,13 +53,15 @@ For each block in `automation.cards`:
 1. `target` — VTT prompts the user to pick token(s) or place a template. Result is stored under `state.groups[block.name]`.
 2. `powerRoll` — Open dice modal; user rolls, picks a tier, accepts. The runtime then walks `tier.effects` and dispatches each effect against the resolved target group.
 3. `effect` — Walk `block.effects` against the target group (no roll).
-4. `trigger` — With structured `match`, registers on the VTT trigger bus. PC trigger actions in the Triggers list auto-register when that character's summary panel loads or refreshes. Resolving a ready trigger skips the trigger card and runs the follow-up cards with the captured event payload. Without `match`, posts a chat reminder.
+4. `trigger` - With structured `match`, registers on the VTT trigger bus. PC trigger actions in the Triggers list auto-register when that character is in the active scene. Trigger cards embedded in main actions/maneuvers run in card order, allowing "hit/select a target, then watch that target" abilities. Resolving a ready trigger skips the trigger card and runs the follow-up cards with the captured event payload. Without `match`, posts a chat reminder.
 5. `persistent` — Register a board-side persistent zone when a prior area target exists; otherwise post a chat reminder.
 6. `branch` — Evaluate a condition such as `strained`, `winded`, `keyword`, `prompt`, `mark`, or `scopedFlag`, then run the selected nested card sequence.
 
 7. `choice` - Ask for one option, optionally narrow execution keywords, then run that option's nested cards.
 
 Effects can specify their own `target` to override the parent block target. `target` may be a single group name or an array of group names, allowing one power roll tier to damage multiple targets and apply different riders to each.
+
+Triggered effects can also target dynamic event groups: `eventActor`, `eventSource`, or `eventTarget` (plus `trigger*` aliases). These resolve from the captured event payload for delayed reactions. `trigger.effects` default to `eventActor` unless the trigger block sets `effectTarget`.
 
 Each effect is dispatched by `kind`:
 
@@ -92,7 +94,7 @@ Each effect is dispatched by `kind`:
 ## Known gaps (deferred to later phases)
 
 - Persistent zone **persistence across page reloads** + Pusher sync to other clients (Pass 1 is in-memory + GM-only).
-- Persistent zones: "on enter zone" trigger during movement (Pass 1 only ticks at owner's turn).
+- Trigger listeners auto-mark the watcher's blue `!`; they do not mutate a triggering roll that has already been accepted. Roll-changing reactions still need player/GM resolution from the ready trigger.
 - Vertical forced movement (Z-axis); horizontal push/pull/slide are fully wired.
 - `cascade` effect kind — fires another ability as a free triggered action. Needs stable cross-ability identifiers and a recursive runner entry point. Phase D candidate.
 - Recovery-style heals now decrement the target PC's `currentRecoveries` through the VTT sheet save path. Non-PC targets or unresolved sheets still fall back to chat/no-op behavior.

@@ -2099,11 +2099,14 @@ export function mountBoardInteractions(store, routes = {}) {
     // dispatches to listeners registered against `eventType === 'move'` and
     // each predicate decides whether it cares about this watcher's edge.
     try {
+      const movedDistance = automationChebyshevDistance(from, to);
       triggerFire('move', {
         placementId: movingId,
         sourceId: movingId,
         from: { column: from.column, row: from.row, width: from.width, height: from.height },
         to: { column: to.column, row: to.row, width: to.width, height: to.height },
+        distance: movedDistance,
+        movedDistance,
         kind: detail.kind,
         sceneId,
         perWatcher: perWatcherMoveStates,
@@ -3306,9 +3309,14 @@ export function mountBoardInteractions(store, routes = {}) {
 
   function handleAutomationFireTriggerEventRequest(event) {
     const payload = event?.detail?.payload && typeof event.detail.payload === 'object' ? event.detail.payload : {};
+    const resolve = typeof event?.detail?.resolve === 'function' ? event.detail.resolve : null;
     const eventType = payload.eventType || payload.event || '';
-    if (!eventType) return;
+    if (!eventType) {
+      resolve?.({ fired: false, reason: 'missing-event' });
+      return;
+    }
     triggerFire(eventType, payload.payload && typeof payload.payload === 'object' ? payload.payload : {});
+    resolve?.({ fired: true, eventType });
   }
 
   function whosePredicateMatches(whose, casterId, casterTeam, payloadTokenId, targetIdsAtRegister) {
@@ -3337,6 +3345,31 @@ export function mountBoardInteractions(store, routes = {}) {
     return false;
   }
 
+  function payloadPrimaryTokenId(event, payload) {
+    if (!payload || typeof payload !== 'object') return '';
+    if (event === 'damageDealt' || event === 'forcedMovementDealt') {
+      return payload.sourceId || payload.casterId || payload.actorId || payload.tokenId || '';
+    }
+    if (event === 'powerRoll' || event === 'abilityTest' || event === 'abilityRoll' || event === 'actionUsed' || event === 'potency') {
+      return payload.actorId || payload.placementId || payload.sourceId || payload.tokenId || '';
+    }
+    return payload.placementId || payload.targetId || payload.actorId || payload.newTargetId || payload.tokenId || '';
+  }
+
+  function payloadTargetIds(payload) {
+    if (!payload || typeof payload !== 'object') return [];
+    const ids = [];
+    if (Array.isArray(payload.targetIds)) ids.push(...payload.targetIds);
+    if (payload.targetId) ids.push(payload.targetId);
+    if (payload.placementId) ids.push(payload.placementId);
+    return [...new Set(ids.filter(Boolean))];
+  }
+
+  function anyTokenMatchesWhose(ids, whose, casterId, casterTeam, targetIdsAtRegister) {
+    if (!Array.isArray(ids) || !ids.length) return false;
+    return ids.some((id) => whosePredicateMatches(whose, casterId, casterTeam, id, targetIdsAtRegister));
+  }
+
   function buildAuthoredTriggerPredicate(entry) {
     // Closes over { casterId, casterTeam, match, targetIds } so the predicate
     // is self-contained and can be unregistered without leaks.
@@ -3352,17 +3385,11 @@ export function mountBoardInteractions(store, routes = {}) {
           return false;
         }
       }
-      const payloadTokenId = event === 'damageDealt'
-        ? (payload.sourceId || payload.casterId || payload.actorId || payload.tokenId || '')
-        : (
-          payload.placementId ||
-          payload.targetId ||
-          payload.actorId ||
-          payload.newTargetId ||
-          payload.tokenId ||
-          ''
-        );
+      const payloadTokenId = payloadPrimaryTokenId(event, payload);
       if (!whosePredicateMatches(whose, casterId, casterTeam, payloadTokenId, targetIds)) {
+        return false;
+      }
+      if (filter.targetWhose && !anyTokenMatchesWhose(payloadTargetIds(payload), filter.targetWhose, casterId, casterTeam, targetIds)) {
         return false;
       }
       // Distance gate (Layer 1): only fire when the caster is within / beyond a
@@ -3410,10 +3437,33 @@ export function mountBoardInteractions(store, routes = {}) {
       }
       if (event === 'actionUsed') {
         if (filter.actionKind && String(payload.actionKind || '').toLowerCase() !== String(filter.actionKind).toLowerCase()) return false;
+        if (filter.costIncludes && !String(payload.cost || payload.resourceCost || '').toLowerCase().includes(String(filter.costIncludes).toLowerCase())) return false;
         if (Array.isArray(filter.keywordsAny) && filter.keywordsAny.length) {
           const have = Array.isArray(payload.keywords) ? payload.keywords.map((k) => String(k).toLowerCase()) : [];
           if (!filter.keywordsAny.some((k) => have.includes(String(k).toLowerCase()))) return false;
         }
+        return true;
+      }
+      if (event === 'powerRoll' || event === 'abilityTest' || event === 'abilityRoll') {
+        if (filter.actionKind && String(payload.actionKind || '').toLowerCase() !== String(filter.actionKind).toLowerCase()) return false;
+        if (filter.costIncludes && !String(payload.cost || payload.resourceCost || '').toLowerCase().includes(String(filter.costIncludes).toLowerCase())) return false;
+        if (filter.attribute && String(payload.attribute || '').toLowerCase() !== String(filter.attribute).toLowerCase()) return false;
+        if (filter.tier && String(payload.tier || '').toLowerCase() !== String(filter.tier).toLowerCase()) return false;
+        const total = Number.parseInt(payload.rollTotal, 10) || 0;
+        if (filter.minTotal && total < filter.minTotal) return false;
+        if (filter.maxTotal && total > filter.maxTotal) return false;
+        if (Array.isArray(filter.keywordsAny) && filter.keywordsAny.length) {
+          const have = Array.isArray(payload.keywords) ? payload.keywords.map((k) => String(k).toLowerCase()) : [];
+          if (!filter.keywordsAny.some((k) => have.includes(String(k).toLowerCase()))) return false;
+        }
+        return true;
+      }
+      if (event === 'potency') {
+        if (filter.attribute && String(payload.attribute || '').toLowerCase() !== String(filter.attribute).toLowerCase()) return false;
+        if (filter.level && String(payload.level || '').toLowerCase() !== String(filter.level).toLowerCase()) return false;
+        const targetCount = Number.parseInt(payload.targetCount, 10) || payloadTargetIds(payload).length;
+        if (filter.minTargets && targetCount < filter.minTargets) return false;
+        if (filter.maxTargets && targetCount > filter.maxTargets) return false;
         return true;
       }
       if (event === 'markApplied') {
@@ -3435,6 +3485,16 @@ export function mountBoardInteractions(store, routes = {}) {
         const enters = Boolean(watcherState?.enters);
         if (filter.leavesAdjacency && !leaves) return false;
         if (filter.entersAdjacency && !enters) return false;
+        const distance = Number.parseInt(payload.distance ?? payload.movedDistance, 10) || 0;
+        if (filter.minDistance && distance < filter.minDistance) return false;
+        if (filter.maxDistance && distance > filter.maxDistance) return false;
+        return true;
+      }
+      if (event === 'forcedMovement' || event === 'forcedMovementDealt') {
+        const distance = Number.parseInt(payload.distance ?? payload.movedDistance, 10) || 0;
+        if (filter.minDistance && distance < filter.minDistance) return false;
+        if (filter.maxDistance && distance > filter.maxDistance) return false;
+        if (filter.verb && String(payload.verb || '').toLowerCase() !== String(filter.verb).toLowerCase()) return false;
         return true;
       }
       return true;
@@ -11338,6 +11398,10 @@ export function mountBoardInteractions(store, routes = {}) {
     setScopedFlag: function (payload) { return dispatchBoardCustom('vtt:automation-set-scoped-flag', 'payload', payload); },
     setAura: function (payload) { return dispatchBoardCustom('vtt:automation-set-aura', 'payload', payload); },
     consumeTriggeredAction: function (payload) { return dispatchBoardCustom('vtt:automation-consume-triggered-action', 'payload', payload); },
+    getPlacementById: function (placementId) {
+      const placement = getPlacementFromStore(placementId);
+      return placement ? JSON.parse(JSON.stringify(placement)) : null;
+    },
     // Reusable distance check (Layer 2). Returns the square (Chebyshev) distance
     // between two placement ids, or null when either token is not on the board.
     getDistanceBetween: function (idA, idB) {

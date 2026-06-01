@@ -657,9 +657,7 @@ export function mountCharacterSummaryPanel(routes = {}, userContext = {}) {
         const triggerSnapshot = (clearsTrigger && activeToken?.readyTriggerPayloads && typeof activeToken.readyTriggerPayloads === 'object')
           ? activeToken.readyTriggerPayloads[clearsTrigger]
           : null;
-        const triggerPayload = triggerSnapshot && typeof triggerSnapshot === 'object'
-          ? (triggerSnapshot.payload && typeof triggerSnapshot.payload === 'object' ? triggerSnapshot.payload : triggerSnapshot)
-          : null;
+        const triggerPayload = triggerSnapshot && typeof triggerSnapshot === 'object' ? triggerSnapshot : null;
         if (clearsTrigger && sourcePlacementId) {
           if (activeToken && typeof activeToken === 'object') {
             activeToken.readyTriggerAbilities = (Array.isArray(activeToken.readyTriggerAbilities) ? activeToken.readyTriggerAbilities : [])
@@ -1995,6 +1993,11 @@ function startAbilityAutomation(sheet, action, categoryKey, sourceToken = null, 
     checkScopedFlag: requestAutomationCheckScopedFlag,
     setScopedFlag: requestAutomationSetScopedFlag,
     setAura: requestAutomationSetAura,
+    getPlacementById: (placementId) => (
+      window.VTTBoardCallbacks && typeof window.VTTBoardCallbacks.getPlacementById === 'function'
+        ? window.VTTBoardCallbacks.getPlacementById(placementId)
+        : null
+    ),
     spendHeroicResource: (payload) => spendHeroicResource(sheet, payload, options),
     spendResource: (ability) => spendAbilityResource(sheet, ability, options),
     consumeTriggeredAction: requestAutomationConsumeTriggeredAction,

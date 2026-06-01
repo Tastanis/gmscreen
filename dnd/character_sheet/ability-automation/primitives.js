@@ -44,9 +44,9 @@
   // captured trigger payload is stashed on `state.triggerPayload` when a ready
   // trigger resolves; these names tell the runner which field to read so the
   // damage/heal amount can scale off the event that fired the ability.
-  // Only `triggeringDamage` is fully wired today (reads payload.amount);
-  // `triggeringForcedMovement` is reserved for move-distance reactions and
-  // reads payload.distance when present.
+  // `triggeringDamage` reads payload.amount. `triggeringForcedMovement` reads
+  // payload.distance / movedDistance and is also used for normal move-distance
+  // reactions because both payloads expose the same distance field.
   const TRIGGER_VALUE_SOURCES = ["triggeringDamage", "triggeringForcedMovement"];
 
   // Standard Draw Steel ability keywords. Authors can use any string, but the
@@ -345,7 +345,8 @@
     const base = Number.parseInt(effect.amount, 10) || 0;
     if (!effect.attribute || !ctx || typeof ctx.getAttributeBonus !== "function") return base;
     const bonus = Number.parseInt(ctx.getAttributeBonus(effect.attribute), 10) || 0;
-    return base + bonus;
+    const mult = Number(effect.multiplier) || 1;
+    return base + (bonus * mult);
   }
 
   // Resolve a forced-movement distance: literal `distance` plus, optionally,
@@ -390,7 +391,8 @@
     switch (effect.kind) {
       case "damage": {
         const amount = effect.amount || 0;
-        const attr = effect.attribute ? ` + ${effect.attribute}` : "";
+        const mult = Number(effect.multiplier) || 1;
+        const attr = effect.attribute ? ` + ${mult !== 1 ? `${mult}× ` : ""}${effect.attribute}` : "";
         const type = effect.damageType && effect.damageType !== "untyped" ? ` ${effect.damageType}` : "";
         return `${amount}${attr}${type} damage${describeTriggerValue(effect.amountFrom)}`;
       }
