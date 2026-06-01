@@ -868,6 +868,13 @@
   const WHOSE_VALUES = ["self", "ally", "enemy", "target", "judgedTarget", "markSource", "any"];
   const STAMINA_DIRECTIONS = ["down", "up", "either"];
 
+  function normalizeWhoseValue(value) {
+    const raw = asTrimmedString(value);
+    if (!raw) return "";
+    const match = WHOSE_VALUES.find((item) => item.toLowerCase() === raw.toLowerCase());
+    return match || "";
+  }
+
   function normalizeTriggerMatch(input, warnings, path) {
     if (!input || typeof input !== "object") return null;
     const rawEvent = asTrimmedString(input.event).toLowerCase();
@@ -879,10 +886,11 @@
     }
     const filterInput = input.filter && typeof input.filter === "object" ? input.filter : {};
     const filter = {};
-    const whoseRaw = asTrimmedString(filterInput.whose).toLowerCase();
+    const whoseRaw = asTrimmedString(filterInput.whose);
     if (whoseRaw) {
-      if (WHOSE_VALUES.includes(whoseRaw)) {
-        filter.whose = whoseRaw;
+      const whose = normalizeWhoseValue(whoseRaw);
+      if (whose) {
+        filter.whose = whose;
       } else {
         warnings.push(`${path}.filter.whose: "${filterInput.whose}" not in ${WHOSE_VALUES.join("/")}.`);
         filter.whose = "any";
@@ -892,10 +900,11 @@
       const ref = asTrimmedString(filterInput.targetGroup) || asTrimmedString(filterInput.group);
       if (ref) filter.targetGroup = ref;
     }
-    const targetWhoseRaw = asTrimmedString(filterInput.targetWhose).toLowerCase();
+    const targetWhoseRaw = asTrimmedString(filterInput.targetWhose);
     if (targetWhoseRaw) {
-      if (WHOSE_VALUES.includes(targetWhoseRaw)) {
-        filter.targetWhose = targetWhoseRaw;
+      const targetWhose = normalizeWhoseValue(targetWhoseRaw);
+      if (targetWhose) {
+        filter.targetWhose = targetWhose;
       } else {
         warnings.push(`${path}.filter.targetWhose: "${filterInput.targetWhose}" not in ${WHOSE_VALUES.join("/")}.`);
       }
