@@ -89,6 +89,40 @@ ability JSON through the actual runtime with fake VTT hooks. Use it for
 pre-deploy checks of target prompts, roll flow, branch choices, trigger
 registration, and effect hook payloads.
 
+Ability-specific scenario tests should use
+`__tests__/support/ability-scenario-runner.mjs`. The scenario runner accepts a
+combined `{ fields, automation }` object, fake board tokens, mark/judgment state,
+scripted trigger events, and expected hook calls. It still runs the real schema
+and runner, and it uses the same authored-trigger predicate helper as the board.
+
+Example scenario shape:
+
+```js
+await runAbilityScenario({
+  ability,
+  scenario: {
+    caster: 'caster-1',
+    tokens: [
+      { id: 'caster-1', name: 'Hero', team: 'heroes' },
+      { id: 'enemy-1', name: 'Enemy', team: 'monsters' }
+    ],
+    marks: [
+      { type: 'judgment', sourceId: 'caster-1', targetId: 'enemy-1' }
+    ],
+    event: {
+      type: 'damageDealt',
+      payload: {
+        sourceId: 'caster-1',
+        targetId: 'enemy-1',
+        placementId: 'enemy-1',
+        amount: 5,
+        keywords: ['Melee']
+      }
+    }
+  }
+});
+```
+
 Focused command:
 
 ```powershell

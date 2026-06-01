@@ -13,6 +13,7 @@ import {
   clearTriggerReadyState,
   syncTriggeredActionIndicator,
 } from './automation-trigger-ready.js';
+import { buildAutomationTriggerPredicate } from './automation-trigger-predicate.js';
 import {
   setDrawings as setDrawingToolDrawings,
   isDrawModeActive,
@@ -3336,140 +3337,25 @@ export function mountBoardInteractions(store, routes = {}) {
   }
 
   function buildAuthoredTriggerPredicate(entry) {
-    // Closes over { casterId, casterTeam, match, targetIds } so the predicate
-    // is self-contained and can be unregistered without leaks.
-    const { casterId, casterTeam, match, targetIds } = entry;
-    const filter = (match && match.filter) || {};
-    const event = match?.event;
-    const whose = filter.whose || "any";
-    return function predicate(payload) {
-      if (!payload || typeof payload !== 'object') return false;
-      if (!entry.freeTriggered) {
+    return buildAutomationTriggerPredicate(entry, {
+      getTeamForPlacementId,
+      getJudgedTargetForSource,
+      getPlacementMark,
+      getPlacementFromStore,
+      isTriggerActionAvailable(casterId) {
         const casterPlacement = getPlacementFromStore(casterId);
-        if (casterPlacement?.triggeredActionReady === false || casterPlacement?.triggeredActionUsedThisRound === true) {
-          return false;
-        }
-      }
-      const payloadTokenId = payloadPrimaryTokenId(event, payload);
-      if (!whosePredicateMatches(whose, casterId, casterTeam, payloadTokenId, targetIds)) {
-        return false;
-      }
-      if (filter.targetWhose && !anyTokenMatchesWhose(payloadTargetIds(payload), filter.targetWhose, casterId, casterTeam, targetIds)) {
-        return false;
-      }
-      // Distance gate (Layer 1): only fire when the caster is within / beyond a
-      // square-distance band of the other token involved in the event. Reuses
-      // the same Chebyshev (square) distance used everywhere else on the board.
-      if (filter.withinSquares != null || filter.minSquares != null) {
-        const casterPlacementForDistance = getPlacementFromStore(casterId);
-        const otherDistanceId = payload.sourceId || payloadTokenId;
-        const otherPlacementForDistance = getPlacementFromStore(otherDistanceId);
-        if (casterPlacementForDistance && otherPlacementForDistance) {
-          const squares = automationChebyshevDistance(
-            getPlacementCenter(casterPlacementForDistance),
-            getPlacementCenter(otherPlacementForDistance),
-          );
-          if (filter.withinSquares != null && squares > Number(filter.withinSquares)) return false;
-          if (filter.minSquares != null && squares < Number(filter.minSquares)) return false;
-        }
-      }
-      if (event === 'damage' || event === 'damageDealt') {
-        if (event === 'damageDealt') {
-          const sourceTokenId = payload.sourceId || payload.casterId || payload.actorId || '';
-          if (!whosePredicateMatches(whose, casterId, casterTeam, sourceTokenId, targetIds)) {
-            return false;
-          }
-        }
-        const amount = Number.parseInt(payload.amount, 10) || 0;
-        const dt = String(payload.damageType || '').toLowerCase();
-        if (filter.minAmount && amount < filter.minAmount) return false;
-        if (filter.maxAmount && amount > filter.maxAmount) return false;
-        if (Array.isArray(filter.damageType) && filter.damageType.length) {
-          if (!filter.damageType.includes(dt)) return false;
-        }
-        if (filter.actionKind && String(payload.actionKind || '').toLowerCase() !== String(filter.actionKind).toLowerCase()) return false;
-        if (filter.costIncludes && !String(payload.cost || payload.resourceCost || '').toLowerCase().includes(String(filter.costIncludes).toLowerCase())) return false;
-        if (Array.isArray(filter.keywordsAny) && filter.keywordsAny.length) {
-          const have = Array.isArray(payload.keywords) ? payload.keywords.map((k) => String(k).toLowerCase()) : [];
-          if (!filter.keywordsAny.some((k) => have.includes(String(k).toLowerCase()))) return false;
-        }
-        return true;
-      }
-      if (event === 'staminaChange' || event === 'staminaZero') {
-        const direction = filter.direction || 'either';
-        if (direction === 'either') return true;
-        const delta = Number.parseInt(payload.delta, 10) || 0;
-        if (direction === 'down') return delta < 0;
-        if (direction === 'up') return delta > 0;
-        return false;
-      }
-      if (event === 'turnStart' || event === 'turnEnd') {
-        return true;
-      }
-      if (event === 'actionUsed') {
-        if (filter.actionKind && String(payload.actionKind || '').toLowerCase() !== String(filter.actionKind).toLowerCase()) return false;
-        if (filter.costIncludes && !String(payload.cost || payload.resourceCost || '').toLowerCase().includes(String(filter.costIncludes).toLowerCase())) return false;
-        if (Array.isArray(filter.keywordsAny) && filter.keywordsAny.length) {
-          const have = Array.isArray(payload.keywords) ? payload.keywords.map((k) => String(k).toLowerCase()) : [];
-          if (!filter.keywordsAny.some((k) => have.includes(String(k).toLowerCase()))) return false;
-        }
-        return true;
-      }
-      if (event === 'powerRoll' || event === 'abilityTest' || event === 'abilityRoll') {
-        if (filter.actionKind && String(payload.actionKind || '').toLowerCase() !== String(filter.actionKind).toLowerCase()) return false;
-        if (filter.costIncludes && !String(payload.cost || payload.resourceCost || '').toLowerCase().includes(String(filter.costIncludes).toLowerCase())) return false;
-        if (filter.attribute && String(payload.attribute || '').toLowerCase() !== String(filter.attribute).toLowerCase()) return false;
-        if (filter.tier && String(payload.tier || '').toLowerCase() !== String(filter.tier).toLowerCase()) return false;
-        const total = Number.parseInt(payload.rollTotal, 10) || 0;
-        if (filter.minTotal && total < filter.minTotal) return false;
-        if (filter.maxTotal && total > filter.maxTotal) return false;
-        if (Array.isArray(filter.keywordsAny) && filter.keywordsAny.length) {
-          const have = Array.isArray(payload.keywords) ? payload.keywords.map((k) => String(k).toLowerCase()) : [];
-          if (!filter.keywordsAny.some((k) => have.includes(String(k).toLowerCase()))) return false;
-        }
-        return true;
-      }
-      if (event === 'potency') {
-        if (filter.attribute && String(payload.attribute || '').toLowerCase() !== String(filter.attribute).toLowerCase()) return false;
-        if (filter.level && String(payload.level || '').toLowerCase() !== String(filter.level).toLowerCase()) return false;
-        const targetCount = Number.parseInt(payload.targetCount, 10) || payloadTargetIds(payload).length;
-        if (filter.minTargets && targetCount < filter.minTargets) return false;
-        if (filter.maxTargets && targetCount > filter.maxTargets) return false;
-        return true;
-      }
-      if (event === 'markApplied') {
-        if (filter.markType && String(payload.markType || '').toLowerCase() !== String(filter.markType).toLowerCase()) return false;
-        if (filter.source === 'self' && payload.sourceId !== casterId) return false;
-        return true;
-      }
-      if (event === 'move') {
-        // The bus fans a single move event with a `perWatcher` lookup keyed
-        // by watcher placement id. Resolve THIS predicate's adjacency state
-        // from the caster's slot in that lookup.
-        let watcherState = null;
-        if (payload.perWatcher instanceof Map) {
-          watcherState = payload.perWatcher.get(casterId);
-        } else if (payload.perWatcher && typeof payload.perWatcher === 'object') {
-          watcherState = payload.perWatcher[casterId];
-        }
-        const leaves = Boolean(watcherState?.leaves);
-        const enters = Boolean(watcherState?.enters);
-        if (filter.leavesAdjacency && !leaves) return false;
-        if (filter.entersAdjacency && !enters) return false;
-        const distance = Number.parseInt(payload.distance ?? payload.movedDistance, 10) || 0;
-        if (filter.minDistance && distance < filter.minDistance) return false;
-        if (filter.maxDistance && distance > filter.maxDistance) return false;
-        return true;
-      }
-      if (event === 'forcedMovement' || event === 'forcedMovementDealt') {
-        const distance = Number.parseInt(payload.distance ?? payload.movedDistance, 10) || 0;
-        if (filter.minDistance && distance < filter.minDistance) return false;
-        if (filter.maxDistance && distance > filter.maxDistance) return false;
-        if (filter.verb && String(payload.verb || '').toLowerCase() !== String(filter.verb).toLowerCase()) return false;
-        return true;
-      }
-      return true;
-    };
+        return !(casterPlacement?.triggeredActionReady === false || casterPlacement?.triggeredActionUsedThisRound === true);
+      },
+      getSquareDistance(casterId, otherId) {
+        const casterPlacement = getPlacementFromStore(casterId);
+        const otherPlacement = getPlacementFromStore(otherId);
+        if (!casterPlacement || !otherPlacement) return null;
+        return automationChebyshevDistance(
+          getPlacementCenter(casterPlacement),
+          getPlacementCenter(otherPlacement),
+        );
+      },
+    });
   }
 
   function expirePersistentZonesForOwner(ownerId, when) {

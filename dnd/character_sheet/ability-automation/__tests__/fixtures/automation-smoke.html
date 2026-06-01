@@ -63,6 +63,7 @@
       clearTriggerReadyState,
       syncTriggeredActionIndicator,
     } from '../../../../vtt/assets/js/ui/automation-trigger-ready.js';
+    import { buildAutomationTriggerPredicate } from '../../../../vtt/assets/js/ui/automation-trigger-predicate.js';
 
     const TOKENS = {
       'caster-1': { id: 'caster-1', name: 'Smoke Hero', team: 'heroes' },
@@ -148,29 +149,16 @@
       });
     }
 
-    function primaryPayloadTokenId(eventType, payload) {
-      if (!payload || typeof payload !== 'object') return '';
-      if (eventType === 'damageDealt') return payload.sourceId || payload.casterId || payload.actorId || payload.tokenId || '';
-      return payload.placementId || payload.targetId || payload.actorId || payload.tokenId || '';
-    }
-
     function buildDamageTriggerPredicate(entry) {
-      const match = entry.match && typeof entry.match === 'object' ? entry.match : {};
-      const filter = match.filter && typeof match.filter === 'object' ? match.filter : {};
-      return (payload) => {
-        const eventType = match.event || entry.eventType || '';
-        const payloadTokenId = primaryPayloadTokenId(eventType, payload);
-        const whose = filter.whose || 'any';
-        if (whose === 'self' && payloadTokenId !== entry.casterId) return false;
-        if (whose === 'target' && !entry.targetIds.includes(payloadTokenId)) return false;
-        if (filter.minAmount && Number(payload.amount || 0) < Number(filter.minAmount)) return false;
-        if (filter.maxAmount && Number(payload.amount || 0) > Number(filter.maxAmount)) return false;
-        if (Array.isArray(filter.damageType) && filter.damageType.length) {
-          const damageType = String(payload.damageType || '').toLowerCase();
-          if (!filter.damageType.map((item) => String(item).toLowerCase()).includes(damageType)) return false;
-        }
-        return true;
-      };
+      return buildAutomationTriggerPredicate(entry, {
+        getTeamForPlacementId: (id) => placements[id]?.team || null,
+        getJudgedTargetForSource: (sourceId) => {
+          const targetId = placements[sourceId]?.activeMarks?.judgment?.targetId || '';
+          return targetId ? placements[targetId] || null : null;
+        },
+        getPlacementMark: (placement, markType = 'judgment') => placement?.marks?.[markType] || null,
+        getPlacementFromStore: (id) => placements[id] || null,
+      });
     }
 
     function registerTrigger(payload) {
