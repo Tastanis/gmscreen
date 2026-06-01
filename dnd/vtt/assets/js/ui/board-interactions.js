@@ -13213,6 +13213,12 @@ export function mountBoardInteractions(store, routes = {}) {
       placement.hidden ?? placement.isHidden ?? placement?.flags?.hidden ?? false,
       false
     );
+    const marks = placement.marks && typeof placement.marks === 'object' && !Array.isArray(placement.marks)
+      ? JSON.parse(JSON.stringify(placement.marks))
+      : {};
+    const activeMarks = placement.activeMarks && typeof placement.activeMarks === 'object' && !Array.isArray(placement.activeMarks)
+      ? JSON.parse(JSON.stringify(placement.activeMarks))
+      : {};
 
     return {
       id,
@@ -13233,6 +13239,8 @@ export function mountBoardInteractions(store, routes = {}) {
       condition,
       team,
       hidden,
+      marks,
+      activeMarks,
     };
   }
 
