@@ -3204,19 +3204,19 @@ body.vtt-character-ability-tray-is-open .vtt-board__malice {
 
 .vtt-token__judgment-mark {
   position: absolute;
-  top: calc(var(--tok-unit) * -2);
-  left: calc(var(--tok-unit) * -2);
-  width: calc(var(--tok-unit) * 16);
-  height: calc(var(--tok-unit) * 16);
+  top: calc(var(--tok-unit) * -6);
+  left: calc(var(--tok-unit) * -6);
+  width: calc(var(--tok-unit) * 22);
+  height: calc(var(--tok-unit) * 22);
   display: grid;
   place-items: center;
   border-radius: 50%;
-  background: #dc2626;
-  color: #fff;
+  background: #facc15;
+  color: #450a0a;
   font-weight: 900;
-  font-size: calc(var(--tok-unit) * 10);
-  border: 2px solid rgba(15, 23, 42, 0.85);
-  box-shadow: 0 4px 10px rgba(15, 23, 42, 0.55), 0 0 0 4px rgba(220, 38, 38, 0.24);
+  font-size: calc(var(--tok-unit) * 13);
+  border: 2px solid rgba(69, 10, 10, 0.95);
+  box-shadow: 0 4px 10px rgba(15, 23, 42, 0.65), 0 0 0 4px rgba(250, 204, 21, 0.32);
   pointer-events: auto;
   cursor: pointer;
   padding: 0;
