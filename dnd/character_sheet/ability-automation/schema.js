@@ -931,6 +931,14 @@
         .map((t) => asTrimmedString(t).toLowerCase())
         .filter(Boolean);
       if (damageTypes.length) filter.damageType = damageTypes;
+      const actionKind = asTrimmedString(filterInput.actionKind);
+      if (actionKind) filter.actionKind = actionKind;
+      const costIncludes = asTrimmedString(filterInput.costIncludes || filterInput.resourceCostIncludes);
+      if (costIncludes) filter.costIncludes = costIncludes;
+      const keywordsAny = Array.isArray(filterInput.keywordsAny)
+        ? filterInput.keywordsAny.map((k) => P.normalizeKeyword?.(k) || asTrimmedString(k)).filter(Boolean)
+        : [];
+      if (keywordsAny.length) filter.keywordsAny = keywordsAny;
     }
     if (event === "staminaChange" || event === "staminaZero") {
       const dirRaw = asTrimmedString(filterInput.direction).toLowerCase();

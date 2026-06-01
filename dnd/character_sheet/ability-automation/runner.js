@@ -1211,6 +1211,10 @@
               amount,
               damageType,
               abilityName: state.action.name || "Ability",
+              actionId: state.action?.id || "",
+              actionKind: state.action?.actionKind || state.action?.kind || state.action?.type || state.context?.actionType || "main",
+              cost: state.action?.cost || state.action?.resource_cost || state.action?.resourceCost || "",
+              keywords: getAbilityKeywords(state),
             })
           : null;
       const hidden = Boolean(result?.hidden || target.hidden || target.placement?.hidden);

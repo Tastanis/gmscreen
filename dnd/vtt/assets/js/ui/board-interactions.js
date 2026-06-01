@@ -3422,6 +3422,12 @@ export function mountBoardInteractions(store, routes = {}) {
         if (Array.isArray(filter.damageType) && filter.damageType.length) {
           if (!filter.damageType.includes(dt)) return false;
         }
+        if (filter.actionKind && String(payload.actionKind || '').toLowerCase() !== String(filter.actionKind).toLowerCase()) return false;
+        if (filter.costIncludes && !String(payload.cost || payload.resourceCost || '').toLowerCase().includes(String(filter.costIncludes).toLowerCase())) return false;
+        if (Array.isArray(filter.keywordsAny) && filter.keywordsAny.length) {
+          const have = Array.isArray(payload.keywords) ? payload.keywords.map((k) => String(k).toLowerCase()) : [];
+          if (!filter.keywordsAny.some((k) => have.includes(String(k).toLowerCase()))) return false;
+        }
         return true;
       }
       if (event === 'staminaChange' || event === 'staminaZero') {
@@ -14945,6 +14951,10 @@ export function mountBoardInteractions(store, routes = {}) {
         originalAmount: amount,
         damageType: payload.damageType || '',
         abilityName: payload.abilityName || '',
+        actionId: payload.actionId || '',
+        actionKind: payload.actionKind || '',
+        cost: payload.cost || payload.resourceCost || '',
+        keywords: Array.isArray(payload.keywords) ? payload.keywords : [],
       });
       triggerFire('damageDealt', {
         placementId: payload.placementId,
@@ -14954,6 +14964,10 @@ export function mountBoardInteractions(store, routes = {}) {
         originalAmount: amount,
         damageType: payload.damageType || '',
         abilityName: payload.abilityName || '',
+        actionId: payload.actionId || '',
+        actionKind: payload.actionKind || '',
+        cost: payload.cost || payload.resourceCost || '',
+        keywords: Array.isArray(payload.keywords) ? payload.keywords : [],
       });
       const afterStamina = Number.isFinite(result.current) ? result.current : null;
       const delta = beforeStamina !== null && afterStamina !== null ? afterStamina - beforeStamina : -adjustedAmount;
