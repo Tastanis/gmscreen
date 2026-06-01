@@ -17,6 +17,8 @@ For LLM-friendly authoring docs, read [`AUTHORING.md`](AUTHORING.md). For the re
 - `automation.css` — Styles for runner, paste, inspector, and the small "configured" pip on character-sheet ability buttons.
 - `AUTHORING.md` — Format spec. Paste alongside an ability description into an LLM to get JSON output. Self-contained — should never need a code grep.
 - `REGISTRY.md` — Flat reference of every supported value, hook, and feature with implementation status.
+- `../../vtt/assets/js/ui/automation-target-prompt.js` - Shared VTT target-picker prompt markup used by the board and smoke fixture.
+- `../../vtt/assets/js/ui/automation-trigger-ready.js` - Shared trigger-ready state helpers and blue `!` token indicator renderer used by the board and smoke fixture.
 
 ## Integration points
 
@@ -78,6 +80,34 @@ Each effect is dispatched by `kind`:
 4. The user pastes (or types) JSON. Live lenient validation shows warnings/summary.
 5. Click **Save** — the JSON is normalized and written to `action.automation`.
 6. The user can click **Inspect** later to read the saved JSON, see the runtime-step preview, and confirm warnings.
+
+## Local test bench
+
+Automation tests live under `__tests__`. The support harness loads the real
+`primitives.js`, `schema.js`, and `runner.js` into a small test DOM, then runs
+ability JSON through the actual runtime with fake VTT hooks. Use it for
+pre-deploy checks of target prompts, roll flow, branch choices, trigger
+registration, and effect hook payloads.
+
+Focused command:
+
+```powershell
+node --test dnd/character_sheet/ability-automation/**/*.test.mjs
+```
+
+Full JS suite:
+
+```powershell
+npm test
+```
+
+Browser smoke test:
+
+```powershell
+npm run test:automation-smoke
+```
+
+The browser smoke fixture verifies the actual target picker HTML, power-roll modal path, damage hook dispatch, and trigger-ready token indicator/payload path in a local headless Chrome or Edge session.
 
 ## Important invariants
 

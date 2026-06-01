@@ -1,0 +1,313 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <title>Ability Automation Smoke Fixture</title>
+  <link rel="stylesheet" href="../../automation.css">
+  <link rel="stylesheet" href="../../../../vtt/assets/css/board.css">
+  <style>
+    body {
+      font-family: Arial, sans-serif;
+      margin: 24px;
+    }
+
+    #smoke-board {
+      display: flex;
+      gap: 12px;
+      margin-top: 16px;
+    }
+
+    [data-smoke-token] {
+      position: relative;
+      min-width: 92px;
+      border: 1px solid #345;
+      background: #f5f7fb;
+      border-radius: 6px;
+      padding: 10px 14px;
+      cursor: pointer;
+      text-align: center;
+    }
+
+    .vtt-automation-picker-prompt {
+      pointer-events: none;
+    }
+
+    .vtt-automation-picker-prompt button {
+      pointer-events: auto;
+    }
+
+    .vtt-automation-picker-prompt__modal {
+      left: auto !important;
+      right: 16px !important;
+      top: 16px !important;
+    }
+  </style>
+</head>
+<body>
+  <main>
+    <h1>Ability Automation Smoke Fixture</h1>
+    <div id="smoke-board">
+      <div class="vtt-token" role="button" tabindex="0" data-smoke-token="caster-1">Smoke Hero</div>
+      <div class="vtt-token" role="button" tabindex="0" data-smoke-token="enemy-1">Enemy One</div>
+      <div class="vtt-token" role="button" tabindex="0" data-smoke-token="enemy-2">Enemy Two</div>
+    </div>
+  </main>
+
+  <script src="../../primitives.js"></script>
+  <script src="../../schema.js"></script>
+  <script src="../../runner.js"></script>
+  <script type="module">
+    import { buildAutomationTargetPromptHtml } from '../../../../vtt/assets/js/ui/automation-target-prompt.js';
+    import {
+      applyTriggerReadyState,
+      clearTriggerReadyState,
+      syncTriggeredActionIndicator,
+    } from '../../../../vtt/assets/js/ui/automation-trigger-ready.js';
+
+    const TOKENS = {
+      'caster-1': { id: 'caster-1', name: 'Smoke Hero', team: 'heroes' },
+      'enemy-1': { id: 'enemy-1', name: 'Enemy One' },
+      'enemy-2': { id: 'enemy-2', name: 'Enemy Two' },
+    };
+    const basePlacements = {
+      'caster-1': { id: 'caster-1', name: 'Smoke Hero', team: 'heroes' },
+      'enemy-1': { id: 'enemy-1', name: 'Enemy One', team: 'monsters' },
+      'enemy-2': { id: 'enemy-2', name: 'Enemy Two', team: 'monsters' },
+    };
+    const placements = {};
+    const triggerEntries = [];
+
+    const calls = [];
+    const record = (name, payload) => {
+      const entry = JSON.parse(JSON.stringify({ name, payload }));
+      calls.push(entry);
+      return entry.payload;
+    };
+
+    function clone(value) {
+      return JSON.parse(JSON.stringify(value));
+    }
+
+    function resetPlacements() {
+      Object.keys(placements).forEach((key) => delete placements[key]);
+      Object.entries(basePlacements).forEach(([id, placement]) => {
+        placements[id] = {
+          ...clone(placement),
+          hasReadyTrigger: false,
+          readyTriggerAbilities: [],
+          readyTriggerSources: {},
+          readyTriggerPayloads: {},
+          triggerSetAtPhase: null,
+        };
+      });
+    }
+
+    function renderTriggerIndicators() {
+      document.querySelectorAll('[data-smoke-token]').forEach((tokenElement) => {
+        const id = tokenElement.getAttribute('data-smoke-token');
+        syncTriggeredActionIndicator(tokenElement, placements[id] || {});
+      });
+    }
+
+    function closePicker() {
+      document.querySelector('.vtt-automation-picker-prompt')?.remove();
+    }
+
+    function showPicker(targetConfig) {
+      closePicker();
+      const host = document.createElement('div');
+      host.className = 'vtt-automation-picker-prompt';
+      host.innerHTML = buildAutomationTargetPromptHtml(
+        targetConfig,
+        targetConfig.promptText || `Pick ${targetConfig.predicate || 'target'}.`
+      );
+      document.body.appendChild(host);
+      return host;
+    }
+
+    function selectTarget(targetConfig) {
+      record('selectTarget', targetConfig);
+      const host = showPicker(targetConfig);
+      return new Promise((resolve) => {
+        const finish = (result) => {
+          closePicker();
+          resolve(result);
+        };
+        host.addEventListener('click', (event) => {
+          const target = event.target instanceof Element ? event.target : null;
+          if (target?.closest('[data-automation-target-done]')) finish({ done: true });
+          if (target?.closest('[data-automation-target-skip]')) finish({ skipped: true });
+          if (target?.closest('[data-automation-target-cancel]')) finish({ canceled: true });
+        });
+        document.querySelectorAll('[data-smoke-token]').forEach((button) => {
+          button.onclick = () => {
+            const id = button.getAttribute('data-smoke-token');
+            finish(TOKENS[id] || { id, name: id });
+          };
+        });
+      });
+    }
+
+    function primaryPayloadTokenId(eventType, payload) {
+      if (!payload || typeof payload !== 'object') return '';
+      if (eventType === 'damageDealt') return payload.sourceId || payload.casterId || payload.actorId || payload.tokenId || '';
+      return payload.placementId || payload.targetId || payload.actorId || payload.tokenId || '';
+    }
+
+    function buildDamageTriggerPredicate(entry) {
+      const match = entry.match && typeof entry.match === 'object' ? entry.match : {};
+      const filter = match.filter && typeof match.filter === 'object' ? match.filter : {};
+      return (payload) => {
+        const eventType = match.event || entry.eventType || '';
+        const payloadTokenId = primaryPayloadTokenId(eventType, payload);
+        const whose = filter.whose || 'any';
+        if (whose === 'self' && payloadTokenId !== entry.casterId) return false;
+        if (whose === 'target' && !entry.targetIds.includes(payloadTokenId)) return false;
+        if (filter.minAmount && Number(payload.amount || 0) < Number(filter.minAmount)) return false;
+        if (filter.maxAmount && Number(payload.amount || 0) > Number(filter.maxAmount)) return false;
+        if (Array.isArray(filter.damageType) && filter.damageType.length) {
+          const damageType = String(payload.damageType || '').toLowerCase();
+          if (!filter.damageType.map((item) => String(item).toLowerCase()).includes(damageType)) return false;
+        }
+        return true;
+      };
+    }
+
+    function registerTrigger(payload) {
+      record('registerTrigger', payload);
+      const match = payload.match && typeof payload.match === 'object' ? payload.match : null;
+      if (!payload.casterId || !match?.event) return { registered: false, reason: 'missing-fields' };
+      const entry = {
+        tokenId: payload.casterId,
+        eventType: match.event,
+        casterId: payload.casterId,
+        match,
+        targetIds: Array.isArray(payload.targetIds) ? [...payload.targetIds] : [],
+        abilityId: payload.abilityId || `authored_trigger_${payload.casterId}`,
+        abilityName: payload.abilityName || '',
+        authored: true,
+      };
+      entry.predicate = buildDamageTriggerPredicate(entry);
+      triggerEntries.push(entry);
+      return { registered: true, abilityId: entry.abilityId, eventType: entry.eventType };
+    }
+
+    function fireTriggerEvent({ eventType, payload }) {
+      record('fireTriggerEvent', { eventType, payload });
+      const entries = triggerEntries.filter((entry) => entry.eventType === eventType);
+      entries.forEach((entry) => {
+        if (!entry.predicate(payload || {})) return;
+        const placement = placements[entry.tokenId];
+        applyTriggerReadyState(placement, {
+          abilityId: entry.abilityId,
+          sourceId: payload?.sourceId || null,
+          eventSnapshot: { eventType, payload },
+          phaseTick: 1,
+        });
+        record('triggerReady', { placementId: entry.tokenId, abilityId: entry.abilityId, eventType, payload });
+      });
+      renderTriggerIndicators();
+      return { fired: true, eventType };
+    }
+
+    function postChat(entry) {
+      record('postChat', entry);
+      return true;
+    }
+
+    function applyDamage(payload) {
+      record('applyDamage', payload);
+      return {
+        name: TOKENS[payload.placementId]?.name || payload.placementId,
+        amount: payload.amount,
+        current: 20 - Number(payload.amount || 0),
+        max: 20,
+      };
+    }
+
+    function applyHeal(payload) {
+      record('applyHeal', payload);
+      return {
+        name: TOKENS[payload.placementId]?.name || payload.placementId,
+        amount: payload.amount,
+        current: 20 + Number(payload.amount || 0),
+        max: 20,
+      };
+    }
+
+    resetPlacements();
+    renderTriggerIndicators();
+
+    window.__automationSmoke = {
+      calls,
+      reset() {
+        calls.length = 0;
+        triggerEntries.length = 0;
+        resetPlacements();
+        renderTriggerIndicators();
+        closePicker();
+        window.AbilityAutomationRunner?.close?.();
+      },
+      async run(automation, options = {}) {
+        this.reset();
+        let randomIndex = 0;
+        const randomValues = Array.isArray(options.randomValues) && options.randomValues.length
+          ? options.randomValues
+          : [0.45, 0.45];
+        Math.random = () => randomValues[randomIndex++] ?? 0.45;
+        await window.AbilityAutomationRunner.open({
+          action: options.action || { id: 'smoke-ability', name: 'Smoke Ability', actionLabel: 'Main Action' },
+          actionType: options.actionType || 'main',
+          hero: options.hero || { name: 'Smoke Hero', resource: { value: 0 } },
+          heroName: 'Smoke Hero',
+          sourcePlacement: { id: 'caster-1', name: 'Smoke Hero' },
+          automation,
+          selectTarget,
+          applyDamage,
+          applyHeal,
+          postChat,
+          registerTrigger,
+          fireTriggerEvent,
+          getAttributeBonus: (attribute) => attribute === 'M' || attribute === 'Might' ? 2 : 0,
+          getStrongestAttribute: () => ({ attribute: 'Might', bonus: 2 }),
+        });
+      },
+      placement(id) {
+        return clone(placements[id]);
+      },
+      fire(eventType, payload) {
+        return fireTriggerEvent({ eventType, payload });
+      },
+      clearReady(placementId, abilityId = null) {
+        const placement = placements[placementId];
+        const result = clearTriggerReadyState(placement, abilityId);
+        renderTriggerIndicators();
+        return result;
+      },
+      async resolveReadyTrigger(automation, options = {}) {
+        const abilityId = options.abilityId || 'half-damage';
+        const triggerPayload = placements['caster-1'].readyTriggerPayloads?.[abilityId] || null;
+        await window.AbilityAutomationRunner.open({
+          action: options.action || { id: abilityId, name: 'Half Damage', actionLabel: 'Triggered Action' },
+          actionType: 'triggered',
+          hero: options.hero || { name: 'Smoke Hero', resource: { value: 0 } },
+          heroName: 'Smoke Hero',
+          sourcePlacement: placements['caster-1'],
+          triggerPayload,
+          automation,
+          selectTarget,
+          applyDamage,
+          applyHeal,
+          postChat,
+          registerTrigger,
+          fireTriggerEvent,
+          getAttributeBonus: (attribute) => attribute === 'M' || attribute === 'Might' ? 2 : 0,
+          getStrongestAttribute: () => ({ attribute: 'Might', bonus: 2 }),
+        });
+        clearTriggerReadyState(placements['caster-1'], abilityId);
+        renderTriggerIndicators();
+      },
+    };
+  </script>
+</body>
+</html>

@@ -1,6 +1,7 @@
 {
   "scripts": {
-    "test": "node --test dnd/vtt/assets/js/**/*.test.mjs"
+    "test": "node --test dnd/vtt/assets/js/**/*.test.mjs dnd/character_sheet/ability-automation/**/*.test.mjs",
+    "test:automation-smoke": "node --test dnd/character_sheet/ability-automation/__tests__/automation-smoke.spec.mjs"
   },
   "dependencies": {
     "playwright": "^1.55.0"

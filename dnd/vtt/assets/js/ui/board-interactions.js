@@ -7,6 +7,12 @@ import {
   updateExternalMeasurement,
   clearRulerSupplement,
 } from './drag-ruler.js';
+import { buildAutomationTargetPromptHtml } from './automation-target-prompt.js';
+import {
+  applyTriggerReadyState,
+  clearTriggerReadyState,
+  syncTriggeredActionIndicator,
+} from './automation-trigger-ready.js';
 import {
   setDrawings as setDrawingToolDrawings,
   isDrawModeActive,
@@ -2381,41 +2387,17 @@ export function mountBoardInteractions(store, routes = {}) {
       const scenePlacements = ensureScenePlacementDraft(draft, activeSceneId);
       const target = scenePlacements.find((item) => item && item.id === placementId);
       if (!target) return;
-      const ready = Array.isArray(target.readyTriggerAbilities) ? [...target.readyTriggerAbilities] : [];
-      if (abilityId && !ready.includes(abilityId)) ready.push(abilityId);
-      target.readyTriggerAbilities = ready;
-      target.hasReadyTrigger = true;
-      target.triggerSetAtPhase = phaseTick; // stamp current phase for expiration
-      // Per-ability source token (e.g. the mover whose movement triggered an
-      // opportunity attack). Used by the picker to flash that token as the
-      // suggested target. Most recent source wins if the same trigger fires
-      // again before resolution.
-      const sources = (target.readyTriggerSources && typeof target.readyTriggerSources === 'object')
-        ? { ...target.readyTriggerSources }
-        : {};
-      if (abilityId && sourceId) sources[abilityId] = sourceId;
-      target.readyTriggerSources = sources;
-      // Per-ability firing payload. Read by halveTriggeringDamage and other
-      // trigger-context effects when the player resolves the ready trigger.
-      // Cleared by clearTriggerReady so stale payloads can't bleed across
-      // unrelated trigger fires.
-      const payloads = (target.readyTriggerPayloads && typeof target.readyTriggerPayloads === 'object')
-        ? { ...target.readyTriggerPayloads }
-        : {};
-      if (abilityId && eventSnapshot && typeof eventSnapshot === 'object') {
-        // Persist a defensive clone so later mutations to the live payload
-        // don't bleed into the saved snapshot.
-        try {
-          payloads[abilityId] = JSON.parse(JSON.stringify(eventSnapshot));
-        } catch (_err) {
-          payloads[abilityId] = eventSnapshot;
-        }
-      }
-      target.readyTriggerPayloads = payloads;
+      const readyState = applyTriggerReadyState(target, {
+        abilityId,
+        sourceId,
+        eventSnapshot,
+        phaseTick,
+      });
+      if (!readyState) return;
       target._lastModified = Date.now();
-      nextReady = ready;
-      nextSources = sources;
-      nextPayloads = payloads;
+      nextReady = readyState.readyTriggerAbilities;
+      nextSources = readyState.readyTriggerSources;
+      nextPayloads = readyState.readyTriggerPayloads;
       updated = true;
     });
     if (!updated) return false;
@@ -2454,30 +2436,13 @@ export function mountBoardInteractions(store, routes = {}) {
       const scenePlacements = ensureScenePlacementDraft(draft, activeSceneId);
       const target = scenePlacements.find((item) => item && item.id === placementId);
       if (!target) return;
-      const priorSources = (target.readyTriggerSources && typeof target.readyTriggerSources === 'object')
-        ? target.readyTriggerSources
-        : {};
-      const priorPayloads = (target.readyTriggerPayloads && typeof target.readyTriggerPayloads === 'object')
-        ? target.readyTriggerPayloads
-        : {};
-      if (abilityId) {
-        nextReady = (Array.isArray(target.readyTriggerAbilities) ? target.readyTriggerAbilities : []).filter((id) => id !== abilityId);
-        nextSources = { ...priorSources };
-        delete nextSources[abilityId];
-        nextPayloads = { ...priorPayloads };
-        delete nextPayloads[abilityId];
-      } else {
-        nextReady = [];
-        nextSources = {};
-        nextPayloads = {};
-      }
-      nextHas = nextReady.length > 0;
-      target.readyTriggerAbilities = nextReady;
-      target.readyTriggerSources = nextSources;
-      target.readyTriggerPayloads = nextPayloads;
-      target.hasReadyTrigger = nextHas;
-      if (!nextHas) target.triggerSetAtPhase = null;
+      const readyState = clearTriggerReadyState(target, abilityId);
+      if (!readyState) return;
       target._lastModified = Date.now();
+      nextReady = readyState.readyTriggerAbilities;
+      nextHas = readyState.hasReadyTrigger;
+      nextSources = readyState.readyTriggerSources;
+      nextPayloads = readyState.readyTriggerPayloads;
       updated = true;
     });
     if (!updated) return false;
@@ -12837,33 +12802,6 @@ export function mountBoardInteractions(store, routes = {}) {
     hpBar.setAttribute('aria-label', ariaLabel);
   }
 
-  function syncTriggeredActionIndicator(tokenElement, placement) {
-    // Token-side dot was migrated to the action panel's TRIGGER button. We
-    // still strip any legacy DOM here so old snapshots don't leave stragglers.
-    const indicator = tokenElement.querySelector('.vtt-token__trigger-indicator');
-    if (indicator) indicator.remove();
-
-    // Blue "!" overlay when at least one trigger condition has been met for
-    // this token. Painted from `placement.hasReadyTrigger`. The trigger
-    // system (window.AbilityTriggerBus) sets/clears this flag.
-    let readyMark = tokenElement.querySelector('.vtt-token__trigger-ready');
-    const showReady = Boolean(placement.hasReadyTrigger);
-    if (!showReady) {
-      if (readyMark) readyMark.remove();
-      return;
-    }
-    if (!readyMark) {
-      readyMark = document.createElement('button');
-      readyMark.type = 'button';
-      readyMark.className = 'vtt-token__trigger-ready';
-      readyMark.setAttribute('data-token-trigger-ready', 'true');
-      readyMark.setAttribute('aria-label', 'Trigger condition met. Click to clear.');
-      readyMark.title = 'Trigger condition met. Click to clear.';
-      readyMark.textContent = '!';
-      tokenElement.appendChild(readyMark);
-    }
-  }
-
   function syncTokenMarkIndicator(tokenElement, placement) {
     let markEl = tokenElement.querySelector('.vtt-token__judgment-mark');
     const mark = getPlacementMark(placement, 'judgment');
@@ -14372,29 +14310,8 @@ export function mountBoardInteractions(store, routes = {}) {
     }
     const host = document.createElement('div');
     host.className = 'vtt-automation-picker-prompt';
-    const title = targetConfig.promptTitle || 'Pick Target';
     const text = targetConfig.promptText || formatAutomationTargetPrompt(targetConfig);
-    host.innerHTML = `
-      <section class="dice-modal dice-modal--vtt vtt-automation-picker-prompt__modal" role="dialog" aria-modal="false">
-        <header class="dice-modal-header vtt-automation-picker-prompt__header">
-          <div class="dice-modal-heading-group">
-            <h2 class="dice-modal-title">${escapeHtml(title)}</h2>
-            <span class="dice-modal-project-label">Target Selection</span>
-          </div>
-          <button class="dice-modal-close" type="button" data-automation-target-cancel aria-label="Cancel target selection">&times;</button>
-        </header>
-        <div class="dice-modal-content vtt-automation-picker-prompt__body">
-          <p>${escapeHtml(text)}</p>
-          ${targetConfig.optional || targetConfig.allowDone ? `
-            <div class="vtt-automation-picker-prompt__actions">
-              ${targetConfig.allowDone ? '<button type="button" class="dice-clear-btn" data-automation-target-done>Done</button>' : ''}
-              ${targetConfig.optional ? '<button type="button" class="dice-clear-btn" data-automation-target-skip>Skip</button>' : ''}
-              <button type="button" class="dice-clear-btn" data-automation-target-cancel>Cancel</button>
-            </div>
-          ` : ''}
-        </div>
-      </section>
-    `;
+    host.innerHTML = buildAutomationTargetPromptHtml(targetConfig, text);
     document.body?.appendChild(host);
     automationTargetPrompt = host;
     host.addEventListener('click', (event) => {
