@@ -2258,12 +2258,32 @@
       return;
     }
     if (typeof state.context.setAura === "function") {
+      const attributeBonuses = {};
+      if (typeof state.context.getAttributeBonus === "function") {
+        for (const attr of ["Might", "Agility", "Reason", "Intuition", "Presence"]) {
+          attributeBonuses[attr] = state.context.getAttributeBonus(attr) || 0;
+        }
+      }
+      const automation = Array.isArray(effect.triggers) && effect.triggers.length && Array.isArray(effect.effects) && effect.effects.length
+        ? {
+            abilityId: state.action?.id || "",
+            abilityName: state.action?.name || "Aura",
+            sourceId: state.sourcePlacement?.id || "",
+            sourceName: state.heroName || "",
+            affects: effect.affects || "creature",
+            triggers: effect.triggers,
+            effects: effect.effects,
+            expires: effect.expires || null,
+            attributeBonuses,
+          }
+        : null;
       for (const id of ids) {
         await state.context.setAura({
           placementId: id,
           enabled,
           radius,
           color: effect.color || "",
+          automation,
         });
       }
       return;

@@ -12,9 +12,11 @@ The canonical hook registry is `../../character_sheet/ability-automation/REGISTR
 
 ## Board Callback Surface
 
-`window.VTTBoardCallbacks` is exported from `board-interactions.js` and includes target selection, area selection, damage, healing, PC recovery spending, conditions, potency checks, forced movement, teleport, swap, free strikes, persistent zones, marks, trigger events, scoped flags, floating combat text, automation-driven turn starts, board-state power-roll suggestions, and hidden roll-rider consumption through `consumeRollRiders`.
+`window.VTTBoardCallbacks` is exported from `board-interactions.js` and includes target selection, area selection, damage, healing, PC recovery spending, conditions, potency checks, forced movement, teleport, swap, free strikes, persistent zones, token auras, marks, trigger events, scoped flags, floating combat text, automation-driven turn starts, board-state power-roll suggestions, and hidden roll-rider consumption through `consumeRollRiders`.
 
 `showFloatingText` drives the giant centered VTT banner. `audience:"all"` syncs the banner through combat turn effects; `audience:"self"` stays in the current browser. `startTurn` requests a combat turn start and supports a preflight mode so abilities such as Hesitation Is Weakness can warn before action-cost spending when the current combat phase would waste the resource.
+
+`setAura` can be visual-only or carry automation metadata from an `aura` effect. Automated token auras store `affects`, `triggers`, `effects`, and optional `expires` on the placement. They move with the owner token and check live occupants when timing triggers fire, when an occupant starts their turn, when a token enters the aura, or when an event-bus trigger such as `actionUsed` fires.
 
 Check `REGISTRY.md` before authoring against a hook. If it is not listed there, treat it as unsupported.
 

@@ -514,7 +514,10 @@
       case "aura": {
         if (effect.enabled === false) return "turn off aura";
         const radius = effect.radius || 1;
-        return `aura ${radius}`;
+        const triggers = Array.isArray(effect.triggers) && effect.triggers.length
+          ? ` (${effect.triggers.map((trigger) => trigger.event || "trigger").join(", ")})`
+          : "";
+        return `aura ${radius}${triggers}`;
       }
       case "other":
         return effect.text || "(other)";

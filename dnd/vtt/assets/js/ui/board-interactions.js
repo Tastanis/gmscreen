@@ -2144,6 +2144,11 @@ export function mountBoardInteractions(store, routes = {}) {
     } catch (err) {
       console.warn('[VTT] persistent-zone enter check failed', err);
     }
+    try {
+      checkAutomationAuraEntries(movingId, from, to);
+    } catch (err) {
+      console.warn('[VTT] automation-aura enter check failed', err);
+    }
   });
 
   function checkPersistentZoneEntries(movingId, from, to) {
@@ -2416,6 +2421,11 @@ export function mountBoardInteractions(store, routes = {}) {
         console.warn('[VTT] Trigger predicate failed for', eventType, err);
       }
     }
+    if (!['turnStart', 'turnEnd', 'roundStart', 'roundEnd', 'combatStart', 'combatEnd'].includes(eventType)) {
+      fireAutomationAurasForEvent(eventType, payload).catch((err) => {
+        console.warn(`[VTT] automation aura ${eventType} failed`, err);
+      });
+    }
   }
 
   function expireTriggerEntriesForBoundary(eventType, payload = {}) {
@@ -2449,6 +2459,9 @@ export function mountBoardInteractions(store, routes = {}) {
     } catch (err) {
       console.warn(`[VTT] triggerFire(${eventType}) failed`, err);
     }
+    fireAutomationAurasForBoundary(eventType, boundaryPayload).catch((err) => {
+      console.warn(`[VTT] automation aura ${eventType} failed`, err);
+    });
     expireTriggerEntriesForBoundary(eventType, boundaryPayload);
     if (eventType === 'combatEnd') {
       triggerUnregisterAllAuthored();
@@ -2555,6 +2568,307 @@ export function mountBoardInteractions(store, routes = {}) {
     markReady: markTriggerReady,
     clearReady: clearTriggerReady,
   };
+
+  // ---------- Token-attached automation auras ----------
+
+  function normalizeAuraAutomationPayload(payload, context = {}) {
+    if (!payload || typeof payload !== 'object') return null;
+    const effects = Array.isArray(payload.effects) ? JSON.parse(JSON.stringify(payload.effects)) : [];
+    const triggers = Array.isArray(payload.triggers)
+      ? payload.triggers
+          .map((trigger) => ({
+            event: String(trigger?.event || '').trim(),
+            whose: String(trigger?.whose || 'self').trim() || 'self',
+            target: String(trigger?.target || '').trim(),
+            filter: trigger?.filter && typeof trigger.filter === 'object'
+              ? JSON.parse(JSON.stringify(trigger.filter))
+              : {},
+          }))
+          .filter((trigger) => trigger.event)
+      : [];
+    if (!effects.length || !triggers.length) return null;
+    const expires = payload.expires && typeof payload.expires === 'object'
+      ? JSON.parse(JSON.stringify(payload.expires))
+      : null;
+    return {
+      abilityId: String(payload.abilityId || '').trim(),
+      abilityName: String(payload.abilityName || 'Aura').trim() || 'Aura',
+      sourceId: String(payload.sourceId || context.ownerId || '').trim(),
+      sourceName: String(payload.sourceName || context.ownerName || '').trim(),
+      affects: String(payload.affects || 'creature').trim() || 'creature',
+      triggers,
+      effects,
+      expires,
+      lifetimeState: expires
+        ? createTriggerLifetimeState(expires, {
+            round: context.round,
+            activeCombatantId: context.activeCombatantId,
+          })
+        : null,
+      attributeBonuses: payload.attributeBonuses && typeof payload.attributeBonuses === 'object'
+        ? JSON.parse(JSON.stringify(payload.attributeBonuses))
+        : {},
+    };
+  }
+
+  function getActiveAutomationAuras() {
+    return getPlacementsForActiveScene()
+      .map((owner) => {
+        const aura = owner?.aura && typeof owner.aura === 'object' ? owner.aura : null;
+        const automation = aura?.automation && typeof aura.automation === 'object' ? aura.automation : null;
+        if (!owner?.id || !aura?.enabled || !automation) return null;
+        return { owner, aura, automation };
+      })
+      .filter(Boolean);
+  }
+
+  function getAuraAreaForPlacement(owner, radius, override = null) {
+    const source = override && typeof override === 'object' ? override : owner;
+    const column = Number.isFinite(source?.column) ? source.column : 0;
+    const row = Number.isFinite(source?.row) ? source.row : 0;
+    const width = Math.max(1, Number.isFinite(source?.width) ? source.width : owner?.width || 1);
+    const height = Math.max(1, Number.isFinite(source?.height) ? source.height : owner?.height || 1);
+    const size = Math.max(1, Math.min(20, Number.parseInt(radius, 10) || 1));
+    return {
+      left: column - size,
+      top: row - size,
+      right: column + width + size,
+      bottom: row + height + size,
+    };
+  }
+
+  function isPlacementInsideAutomationAura(owner, aura, placement, ownerOverride = null) {
+    if (!owner?.id || !aura || !placement?.id) return false;
+    const automation = aura.automation && typeof aura.automation === 'object' ? aura.automation : {};
+    if (!doesAutomationTargetFilterMatch(placement, automation.affects || 'creature', owner)) return false;
+    return doesAutomationAreaAffectPlacement(getAuraAreaForPlacement(owner, aura.radius, ownerOverride), placement);
+  }
+
+  function getPlacementsInsideAutomationAura(owner, aura) {
+    return getPlacementsForActiveScene().filter((placement) => (
+      isPlacementInsideAutomationAura(owner, aura, placement)
+    ));
+  }
+
+  function automationAuraTriggerMatches(trigger, eventType, payload, owner) {
+    if (!trigger || trigger.event !== eventType) return false;
+    const whose = String(trigger.whose || 'self').trim();
+    if (whose === 'any') return true;
+    if (whose === 'self') return Boolean(owner?.id && payload?.placementId === owner.id);
+    if (whose === 'ally' || whose === 'enemy') {
+      const ownerTeam = getTeamForPlacementId(owner?.id);
+      const otherTeam = payload?.team || getTeamForPlacementId(payload?.placementId);
+      if (!ownerTeam || !otherTeam) return false;
+      return whose === 'ally' ? ownerTeam === otherTeam : ownerTeam !== otherTeam;
+    }
+    return false;
+  }
+
+  function getAutomationAuraEventPlacement(trigger, payload = {}) {
+    const targetMode = String(trigger?.target || '').trim().toLowerCase();
+    const id = (() => {
+      if (targetMode === 'eventtarget' || targetMode === 'target') {
+        return Array.isArray(payload.targetIds) && payload.targetIds.length
+          ? payload.targetIds[0]
+          : payload.targetId || payload.placementId || '';
+      }
+      if (targetMode === 'eventsource' || targetMode === 'source') {
+        return payload.sourceId || payload.actorId || payload.placementId || '';
+      }
+      if (targetMode === 'eventactor' || targetMode === 'actor') {
+        return payload.actorId || payload.sourceId || payload.placementId || '';
+      }
+      return payload.actorId || payload.placementId || payload.targetId || payload.sourceId || '';
+    })();
+    return id ? getPlacementFromStore(id) : null;
+  }
+
+  function automationAuraEventFilterMatches(trigger, payload = {}) {
+    const filter = trigger?.filter && typeof trigger.filter === 'object' ? trigger.filter : {};
+    if (filter.actionKind) {
+      const actual = String(payload.actionKind || payload.actionType || '').trim().toLowerCase();
+      if (actual !== String(filter.actionKind).trim().toLowerCase()) return false;
+    }
+    if (filter.costIncludes) {
+      const cost = String(payload.cost || '').toLowerCase();
+      if (!cost.includes(String(filter.costIncludes).toLowerCase())) return false;
+    }
+    if (Array.isArray(filter.keywordsAny) && filter.keywordsAny.length) {
+      const actual = Array.isArray(payload.keywords)
+        ? payload.keywords.map((keyword) => String(keyword).toLowerCase())
+        : [];
+      if (!filter.keywordsAny.some((keyword) => actual.includes(String(keyword).toLowerCase()))) return false;
+    }
+    if (Array.isArray(filter.damageType) && filter.damageType.length) {
+      const actual = String(payload.damageType || '').trim().toLowerCase();
+      if (!filter.damageType.map((item) => String(item).toLowerCase()).includes(actual)) return false;
+    }
+    const amount = Number.parseInt(payload.amount ?? payload.originalAmount ?? 0, 10) || 0;
+    if (filter.minAmount && amount < Number(filter.minAmount)) return false;
+    if (filter.maxAmount && amount > Number(filter.maxAmount)) return false;
+    if (filter.verb && String(payload.verb || '').trim().toLowerCase() !== String(filter.verb).trim().toLowerCase()) {
+      return false;
+    }
+    return true;
+  }
+
+  async function fireAutomationAurasForEvent(eventType, payload = {}) {
+    if (!eventType) return;
+    const entries = getActiveAutomationAuras();
+    if (!entries.length) return;
+    for (const { owner, aura, automation } of entries) {
+      const triggers = Array.isArray(automation.triggers) ? automation.triggers : [];
+      for (const trigger of triggers) {
+        if (trigger.event !== eventType) continue;
+        if (!automationAuraEventFilterMatches(trigger, payload)) continue;
+        const eventPlacement = getAutomationAuraEventPlacement(trigger, payload);
+        const whose = String(trigger.whose || 'occupant').trim();
+        if (whose === 'occupant' || whose === 'target' || whose === 'eventActor') {
+          if (!eventPlacement || !isPlacementInsideAutomationAura(owner, aura, eventPlacement)) continue;
+        } else if (!automationAuraTriggerMatches(trigger, eventType, payload, owner)) {
+          continue;
+        }
+        const targetMode = String(trigger.target || '').trim().toLowerCase();
+        const targets = targetMode === 'occupants' || targetMode === 'all'
+          ? getPlacementsInsideAutomationAura(owner, aura)
+          : eventPlacement
+            ? [eventPlacement]
+            : getPlacementsInsideAutomationAura(owner, aura);
+        await applyAutomationAuraEffects(owner, aura, targets, eventType);
+      }
+    }
+  }
+
+  async function fireAutomationAurasForBoundary(eventType, payload = {}) {
+    if (!eventType) return;
+    const entries = getActiveAutomationAuras();
+    if (!entries.length) return;
+    for (const entry of entries) {
+      const { owner, aura, automation } = entry;
+      const triggers = Array.isArray(automation.triggers) ? automation.triggers : [];
+      for (const trigger of triggers) {
+        if (trigger.event === eventType && automationAuraTriggerMatches(trigger, eventType, payload, owner)) {
+          const occupants = getPlacementsInsideAutomationAura(owner, aura);
+          await applyAutomationAuraEffects(owner, aura, occupants, eventType);
+        } else if (eventType === 'turnStart' && trigger.event === 'occupantTurnStart') {
+          const occupant = payload?.placementId ? getPlacementFromStore(payload.placementId) : null;
+          if (occupant && isPlacementInsideAutomationAura(owner, aura, occupant)) {
+            await applyAutomationAuraEffects(owner, aura, [occupant], 'occupant turn start');
+          }
+        }
+      }
+      expireAutomationAuraIfNeeded(owner, aura, eventType, payload);
+    }
+  }
+
+  function checkAutomationAuraEntries(movingId, from, to) {
+    if (!movingId || !from || !to) return;
+    const entries = getActiveAutomationAuras().filter((entry) =>
+      Array.isArray(entry.automation.triggers)
+      && entry.automation.triggers.some((trigger) => trigger.event === 'enter')
+    );
+    if (!entries.length) return;
+    const mover = getPlacementFromStore(movingId);
+    if (!mover) return;
+    for (const { owner, aura } of entries) {
+      if (owner.id === movingId) {
+        const previousOwner = {
+          ...owner,
+          column: from.column ?? owner.column,
+          row: from.row ?? owner.row,
+          width: from.width ?? owner.width,
+          height: from.height ?? owner.height,
+        };
+        const newlyCovered = getPlacementsForActiveScene().filter((placement) => (
+          placement?.id
+          && placement.id !== owner.id
+          && !isPlacementInsideAutomationAura(owner, aura, placement, previousOwner)
+          && isPlacementInsideAutomationAura(owner, aura, placement)
+        ));
+        if (newlyCovered.length) {
+          applyAutomationAuraEffects(owner, aura, newlyCovered, 'enter').catch((err) => {
+            console.warn('[VTT] automation aura owner-enter effects failed', err);
+          });
+        }
+        continue;
+      }
+      const previousMover = {
+        ...mover,
+        column: from.column ?? mover.column,
+        row: from.row ?? mover.row,
+        width: from.width ?? mover.width,
+        height: from.height ?? mover.height,
+      };
+      const wasInside = isPlacementInsideAutomationAura(owner, aura, previousMover);
+      const isInside = isPlacementInsideAutomationAura(owner, aura, mover);
+      if (!wasInside && isInside) {
+        applyAutomationAuraEffects(owner, aura, [mover], 'enter').catch((err) => {
+          console.warn('[VTT] automation aura enter effects failed', err);
+        });
+      }
+    }
+  }
+
+  async function applyAutomationAuraEffects(owner, aura, placements, reason) {
+    const automation = aura?.automation && typeof aura.automation === 'object' ? aura.automation : null;
+    if (!automation || !Array.isArray(placements) || !placements.length) return;
+    const result = await applyOngoingAutomationEffects({
+      sourceId: automation.sourceId || owner.id,
+      sourceName: automation.sourceName || tokenLabel(owner),
+      abilityId: automation.abilityId || '',
+      abilityName: automation.abilityName || 'Aura',
+      attributeBonuses: automation.attributeBonuses || {},
+      effects: automation.effects || [],
+      placements,
+      reason: reason || 'aura',
+      markPredicate: 'targetJudgedBySelf',
+    });
+    announceAutomationAuraTick(owner, automation, placements, result.detail || 'effects applied');
+  }
+
+  function announceAutomationAuraTick(owner, automation, affected, detail) {
+    if (!window.dashboardChat?.sendMessage) return;
+    const targetText = affected.length
+      ? affected.map((p) => tokenLabel(p)).filter(Boolean).join(', ')
+      : 'no targets';
+    window.dashboardChat.sendMessage({
+      message: `${automation.abilityName || 'Aura'} aura (${tokenLabel(owner)}): ${targetText} - ${detail}.`,
+      type: 'text',
+    }).catch(() => {});
+  }
+
+  function expireAutomationAuraIfNeeded(owner, aura, eventType, payload = {}) {
+    const automation = aura?.automation && typeof aura.automation === 'object' ? aura.automation : null;
+    if (!owner?.id || !automation?.expires) return false;
+    const entry = {
+      tokenId: owner.id,
+      casterTeam: getTeamForPlacementId(owner.id),
+      expires: automation.expires,
+      lifetimeState: automation.lifetimeState || null,
+    };
+    const shouldExpire = shouldExpireTriggerEntry(entry, { ...payload, eventType }, {
+      activeCombatantId,
+      getTeamForPlacementId,
+    });
+    if (!shouldExpire) {
+      if (entry.lifetimeState) {
+        updatePlacementById(owner.id, (target) => {
+          if (target.aura?.automation) target.aura.automation.lifetimeState = entry.lifetimeState;
+        });
+      }
+      return false;
+    }
+    updatePlacementById(owner.id, (target) => {
+      if (!target.aura || typeof target.aura !== 'object') return;
+      target.aura.enabled = false;
+      delete target.aura.automation;
+    });
+    renderAuras(boardApi.getState?.() ?? {}, auraLayer, viewState);
+    if (activeTokenSettingsId === owner.id && typeof refreshTokenSettings === 'function') {
+      refreshTokenSettings();
+    }
+    return true;
+  }
 
   // ---------- Persistent zones (Phase C, Pass 1) ----------
   //
@@ -3020,6 +3334,199 @@ export function mountBoardInteractions(store, routes = {}) {
     announceZoneTick(zone, placements, damageLines.length ? damageLines.join(', ') : 'effects applied');
   }
 
+  async function applyOngoingAutomationEffects({
+    sourceId = '',
+    sourceName = '',
+    abilityId = '',
+    abilityName = 'Aura',
+    attributeBonuses = {},
+    effects = [],
+    placements = [],
+    reason = 'aura',
+    markPredicate = 'targetJudgedBySelf',
+  } = {}) {
+    const targets = Array.isArray(placements) ? placements.filter((target) => target?.id) : [];
+    const detailLines = [];
+    for (const effect of Array.isArray(effects) ? effects : []) {
+      if (!effect || typeof effect !== 'object') continue;
+      if (effect.kind === 'ifMark') {
+        for (const target of targets) {
+          const matched = markPredicateMatches(effect.predicate || 'targetJudgedBySelf', {
+            markType: effect.markType || 'judgment',
+            sourceId,
+            targetId: target.id,
+          });
+          const branch = matched ? effect.then : effect.else;
+          if (Array.isArray(branch) && branch.length) {
+            const nested = await applyOngoingAutomationEffects({
+              sourceId,
+              sourceName,
+              abilityId,
+              abilityName,
+              attributeBonuses,
+              effects: branch,
+              placements: [target],
+              reason,
+              markPredicate,
+            });
+            if (nested.detail) detailLines.push(nested.detail);
+          }
+        }
+        continue;
+      }
+      if (effect.kind === 'damage') {
+        for (const target of targets) {
+          const amount = resolveOngoingEffectAmount(effect, attributeBonuses, {
+            sourceId,
+            targetId: target.id,
+            markPredicate,
+          });
+          if (amount <= 0) continue;
+          const result = await dispatchAutomationBoardEvent('vtt:automation-apply-damage', {
+            placementId: target.id,
+            sourceId,
+            amount,
+            damageType: effect.damageType || '',
+            abilityName: `${abilityName} (${reason})`,
+            actionId: abilityId,
+            actionKind: 'aura',
+          });
+          if (result?.name) {
+            detailLines.push(`${result.name} takes ${result.amount}${effect.damageType ? ` ${effect.damageType}` : ''}`);
+          }
+        }
+        continue;
+      }
+      if (effect.kind === 'heal' || effect.kind === 'temporaryStamina') {
+        const allowTempHp = effect.kind === 'temporaryStamina';
+        for (const target of targets) {
+          const amount = resolveOngoingEffectAmount(effect, attributeBonuses, { sourceId, targetId: target.id, markPredicate });
+          if (amount <= 0) continue;
+          const result = await dispatchAutomationBoardEvent('vtt:automation-apply-heal', {
+            placementId: target.id,
+            amount,
+            allowTempHp,
+            abilityName: `${abilityName} (${reason})`,
+          });
+          if (result?.name) {
+            detailLines.push(`${result.name} recovers ${result.change || amount}`);
+          }
+        }
+        continue;
+      }
+      if (effect.kind === 'surgeGain') {
+        const amount = Number.parseInt(effect.amount, 10) || 0;
+        if (!amount) continue;
+        for (const target of targets) {
+          const result = await dispatchAutomationBoardEvent('vtt:automation-apply-surge', {
+            placementId: target.id,
+            amount,
+            abilityName: `${abilityName} (${reason})`,
+          });
+          if (result?.name) {
+            detailLines.push(`${result.name} ${amount > 0 ? 'gains' : 'loses'} ${Math.abs(amount)} surge${Math.abs(amount) === 1 ? '' : 's'}`);
+          } else if (result?.skipped) {
+            detailLines.push(`${tokenLabel(target)} surge change skipped (${result.reason || 'unavailable'})`);
+          }
+        }
+        continue;
+      }
+      if (effect.kind === 'condition') {
+        const durationMap = {
+          saveEnds: 'save-ends',
+          endOfTurn: 'end-of-turn',
+          endOfEncounter: 'end-of-encounter',
+          untilDying: 'until-dying',
+        };
+        const duration = durationMap[effect.duration] || 'instantaneous';
+        for (const target of targets) {
+          const condition = {
+            name: effect.name,
+            duration,
+            description: effect.text || '',
+          };
+          if (effect.amount) condition.amount = effect.amount;
+          if (effect.damageType) condition.damageType = effect.damageType;
+          if (effect.hidden) condition.hidden = true;
+          if (effect.label) condition.label = effect.label;
+          if (effect.rider && typeof effect.rider === 'object') condition.rider = JSON.parse(JSON.stringify(effect.rider));
+          if (effect.consume) condition.consume = effect.consume;
+          const result = await dispatchAutomationBoardEvent('vtt:automation-apply-condition', {
+            placementId: target.id,
+            condition,
+            sourceId,
+            sourceName,
+          });
+          if (result?.applied) detailLines.push(`${tokenLabel(target)} gains ${effect.name}`);
+        }
+        continue;
+      }
+      if (effect.kind === 'floatingText') {
+        await dispatchAutomationBoardEvent('vtt:automation-floating-text', {
+          text: effect.text || '',
+          audience: effect.audience || 'all',
+          tone: effect.tone || 'neutral',
+          durationMs: effect.durationMs,
+          sourceId,
+          abilityName,
+        });
+        if (effect.text) detailLines.push(effect.text);
+        continue;
+      }
+      if (effect.kind === 'note' || effect.kind === 'other') {
+        const text = String(effect.text || '').trim();
+        if (text && window.dashboardChat?.sendMessage) {
+          window.dashboardChat.sendMessage({
+            message: `${abilityName} (${reason}): ${text}`,
+            type: 'text',
+          }).catch(() => {});
+        }
+        if (text) detailLines.push(text);
+      }
+    }
+    return { detail: detailLines.join(', ') };
+  }
+
+  function resolveOngoingEffectAmount(effect, attributeBonuses = {}, markContext = {}) {
+    const baseAmount = Number.parseInt(effect.amount, 10) || 0;
+    const diceAmount = rollAutomationDiceFormula(effect.amountDice);
+    const attrShort = String(effect.attribute || '').toUpperCase();
+    const attrFull = {
+      M: 'Might',
+      A: 'Agility',
+      R: 'Reason',
+      I: 'Intuition',
+      P: 'Presence',
+      MIGHT: 'Might',
+      AGILITY: 'Agility',
+      REASON: 'Reason',
+      INTUITION: 'Intuition',
+      PRESENCE: 'Presence',
+    }[attrShort];
+    const attrBonus = attrFull ? (Number(attributeBonuses?.[attrFull]) || 0) : 0;
+    const multiplier = Math.trunc(Number(effect.multiplier) || 1);
+    const markBonus = effect.markBonusDice && markPredicateMatches(effect.markPredicate || markContext.markPredicate || 'targetJudgedBySelf', {
+      markType: 'judgment',
+      sourceId: markContext.sourceId,
+      targetId: markContext.targetId,
+    })
+      ? rollAutomationDiceFormula(effect.markBonusDice)
+      : 0;
+    return Math.max(0, baseAmount + diceAmount + (attrBonus * multiplier) + markBonus);
+  }
+
+  function dispatchAutomationBoardEvent(eventName, payload) {
+    return new Promise((resolve) => {
+      document.dispatchEvent(new CustomEvent(eventName, {
+        detail: {
+          payload,
+          resolve,
+          reject: () => resolve(null),
+        },
+      }));
+    });
+  }
+
   function rollAutomationDiceFormula(formula) {
     const text = String(formula || '').trim().toLowerCase();
     if (!text) return 0;
@@ -3274,6 +3781,12 @@ export function mountBoardInteractions(store, routes = {}) {
     }
     const enabled = payload.enabled !== false;
     const radius = Math.max(1, Math.min(20, parseInt(payload.radius, 10) || 1));
+    const automation = normalizeAuraAutomationPayload(payload.automation, {
+      ownerId: placementId,
+      ownerName: tokenLabel(placement),
+      round: combatRound,
+      activeCombatantId,
+    });
     updatePlacementById(placementId, (target) => {
       if (!target.aura || typeof target.aura !== 'object') {
         target.aura = { enabled: false, radius: 1, color: '#3b82f6' };
@@ -3282,6 +3795,11 @@ export function mountBoardInteractions(store, routes = {}) {
       target.aura.radius = radius;
       if (payload.color) {
         target.aura.color = payload.color;
+      }
+      if (automation) {
+        target.aura.automation = automation;
+      } else if (!enabled || payload.automation === null) {
+        delete target.aura.automation;
       }
     });
     renderAuras(boardApi.getState?.() ?? {}, auraLayer, viewState);
@@ -14933,14 +15451,25 @@ export function mountBoardInteractions(store, routes = {}) {
     return left < area.right && left + width > area.left && top < area.bottom && top + height > area.top;
   }
 
-  function doesAutomationTargetFilterMatch(placement, filter) {
+  function doesAutomationTargetFilterMatch(placement, filter, sourcePlacement = null) {
     const normalized = String(filter || '').trim().toLowerCase();
-    if (!normalized || normalized === 'creature' || normalized === 'creature or object' || normalized === 'object') {
+    if (!normalized || normalized === 'creature' || normalized === 'creature or object' || normalized === 'creatureorobject' || normalized === 'object') {
       return true;
     }
+    if ((normalized === 'self' || normalized === 'source') && sourcePlacement?.id) {
+      return placement?.id === sourcePlacement.id;
+    }
     const team = normalizeCombatTeam(placement.team ?? placement.combatTeam ?? null);
-    if (normalized === 'enemy') return team === 'enemy';
-    if (normalized === 'ally') return team === 'ally';
+    const sourceTeam = sourcePlacement
+      ? normalizeCombatTeam(sourcePlacement.combatTeam ?? sourcePlacement.team ?? null)
+      : null;
+    if ((normalized === 'selforally' || normalized === 'self or ally' || normalized === 'selfandally' || normalized === 'self and ally') && sourcePlacement?.id && placement?.id === sourcePlacement.id) {
+      return true;
+    }
+    if (normalized === 'enemy') return sourceTeam ? team && team !== sourceTeam : team === 'enemy';
+    if (normalized === 'ally' || normalized === 'selforally' || normalized === 'self or ally' || normalized === 'selfandally' || normalized === 'self and ally') {
+      return sourceTeam ? team === sourceTeam : team === 'ally';
+    }
     return true;
   }
 

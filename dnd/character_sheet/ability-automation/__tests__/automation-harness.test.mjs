@@ -207,6 +207,55 @@ test('runner can spend the caster recovery and heal a different target', async (
   }
 });
 
+test('runner forwards triggerable aura automation to the board', async () => {
+  const harness = await createAbilityAutomationHarness({
+    attributes: { Presence: 3 },
+    sourcePlacement: { id: 'caster-1', name: 'Cal' },
+  });
+  try {
+    const automation = {
+      schema: 'ability-automation/v3',
+      cards: [
+        {
+          type: 'effect',
+          target: 'self',
+          effects: [
+            {
+              kind: 'aura',
+              radius: 3,
+              color: '#facc15',
+              affects: 'selfAndAlly',
+              triggers: [
+                { event: 'turnEnd', whose: 'self' },
+                { event: 'actionUsed', filter: { whose: 'occupant', keywordsAny: ['Strike'] }, target: 'eventActor' },
+              ],
+              effects: [{ kind: 'surgeGain', amount: 1 }],
+              expires: { event: 'combatEnd', whose: 'any', count: 1 },
+            },
+          ],
+        },
+      ],
+    };
+
+    const result = await harness.runAutomation({
+      automation,
+      action: { id: 'blessing-faithful', name: 'Blessing of the Faithful', actionLabel: 'Maneuver' },
+    });
+
+    assert.equal(result.calls.setAura.length, 1);
+    assert.equal(result.calls.setAura[0].placementId, 'caster-1');
+    assert.equal(result.calls.setAura[0].radius, 3);
+    assert.deepEqual(result.calls.setAura[0].automation.triggers, [
+      { event: 'turnEnd', whose: 'self' },
+      { event: 'actionUsed', whose: 'occupant', target: 'eventActor', filter: { keywordsAny: ['Strike'] } },
+    ]);
+    assert.deepEqual(result.calls.setAura[0].automation.effects, [{ kind: 'surgeGain', amount: 1 }]);
+    assert.equal(result.calls.setAura[0].automation.attributeBonuses.Presence, 3);
+  } finally {
+    harness.close();
+  }
+});
+
 test('runner applies numeric damage weakness from a failed potency rider', async () => {
   const harness = await createAbilityAutomationHarness({
     attributes: { Might: 3 },

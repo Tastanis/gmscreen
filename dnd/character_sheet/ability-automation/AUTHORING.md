@@ -1054,14 +1054,32 @@ Switches a token aura on or off when the ability runs. Auras are a VTT token fea
 { "kind": "aura", "enabled": true, "radius": 3, "color": "#22d3ee" }
 ```
 
+An aura can also carry automation that checks the aura's live occupants when a timing trigger fires:
+
+```json
+{
+  "kind": "aura",
+  "radius": 3,
+  "color": "#facc15",
+  "affects": "selfAndAlly",
+  "triggers": [{ "event": "turnEnd", "whose": "self" }],
+  "effects": [{ "kind": "surgeGain", "amount": 1 }],
+  "expires": { "event": "combatEnd", "whose": "any" }
+}
+```
+
 | Field | Values |
 |---|---|
 | `enabled` | `true` (default — turn the aura on) or `false` (turn it off) |
 | `radius` | `1`-`20` squares (clamped). Square area: a radius-3 aura reaches 3 squares out in every direction including diagonals. |
 | `color` | optional hex string; omit to keep the token's current aura color |
 | `target` | `"self"` (default — the caster's token) or `"target"` (each resolved target) |
+| `affects` | Target predicate for live occupants: `"creature"`, `"enemy"`, `"ally"`, `"selfOrAlly"`, `"selfAndAlly"`, etc. Defaults to `"creature"`. |
+| `triggers` | Array of trigger objects. Supported timing/occupancy `event`: `"turnStart"`, `"turnEnd"`, `"roundStart"`, `"roundEnd"`, `"combatStart"`, `"combatEnd"`, `"enter"`, `"occupantTurnStart"`. Event-bus triggers such as `"actionUsed"`, `"damage"`, and `"powerRoll"` are also accepted; use `filter` fields such as `keywordsAny`, `actionKind`, `damageType`, and `minAmount`. Timing events default `whose` to `"self"`; event-bus triggers default `whose` to `"occupant"`. |
+| `effects` | Effects to apply to the live occupants when a trigger fires. Supported aura tick effects include `damage`, `heal`, `temporaryStamina`, `surgeGain`, `condition`, `ifMark`, `floatingText`, `note`, and `other`. |
+| `expires` | Optional lifetime object using the same shape as trigger expiry: `{ "event": "combatEnd", "whose": "any" }`, `{ "event": "turnEnd", "whose": "self", "count": 1 }`, etc. |
 
-Nest inside `ifStrained` to grow the aura when the caster strains (e.g. radius 3 normally, 4 when strained). Falls back to a chat reminder if the runtime has no token (such as the Hero Sheet preview).
+Nest inside `ifStrained` to grow the aura when the caster strains (e.g. radius 3 normally, 4 when strained). Falls back to a chat reminder if the runtime has no token (such as the Hero Sheet preview). Automated auras are token-attached: if the owner moves, the aura moves with them, and trigger resolution checks who is currently inside the aura.
 
 ### `other`
 

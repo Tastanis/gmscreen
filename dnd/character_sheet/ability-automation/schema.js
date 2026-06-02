@@ -719,7 +719,7 @@
         // Switches the caster's token aura on (or off) when the ability runs.
         // Token auras are a VTT placement feature; the runner forwards this to
         // the board via the setAura context hook. radius is clamped 1-20.
-        const known = new Set(["kind", "enabled", "radius", "color", "target", "text"]);
+        const known = new Set(["kind", "enabled", "radius", "color", "target", "text", "affects", "triggers", "trigger", "effects", "expires", "lifetime"]);
         const enabled = input.enabled !== false;
         const radius = Math.min(20, Math.max(1, asPosInt(input.radius, 1)));
         const effect = {
@@ -732,6 +732,15 @@
         if (color) effect.color = color;
         const text = asTrimmedString(input.text);
         if (text) effect.text = text;
+        const affects = P.normalizeTargetPredicate(input.affects || input.creature || "");
+        if (affects) effect.affects = affects;
+        const auraTriggers = normalizeAuraTriggers(input.triggers || input.trigger, warnings, `${path}.triggers`);
+        if (auraTriggers.length) effect.triggers = auraTriggers;
+        if (Array.isArray(input.effects)) {
+          effect.effects = normalizeEffectList(input.effects, warnings, `${path}.effects`);
+        }
+        const expires = normalizeTriggerLifetime(input.expires || input.lifetime, warnings, `${path}.expires`);
+        if (expires) effect.expires = expires;
         const extras = pickExtras(input, known);
         if (extras) effect._extra = extras;
         return effect;
@@ -1000,6 +1009,7 @@
   const TRIGGER_LIFETIME_WHOSE_VALUES = ["self", "ally", "enemy", "target", "any"];
   const STAMINA_DIRECTIONS = ["down", "up", "either"];
   const TRIGGER_LIFETIME_EVENTS = ["turnStart", "turnEnd", "roundStart", "roundEnd", "combatStart", "combatEnd"];
+  const AURA_TRIGGER_EVENTS = [...TRIGGER_EVENTS, "enter", "occupantTurnStart"];
 
   function normalizeWhoseValue(value) {
     const raw = asTrimmedString(value);
@@ -1165,6 +1175,81 @@
     }
     if (input.skipCurrent === true) expires.skipCurrent = true;
     return expires;
+  }
+
+  function normalizeAuraTrigger(input, warnings, path) {
+    if (typeof input === "string") {
+      input = { event: input };
+    }
+    if (!input || typeof input !== "object") return null;
+    const rawEvent = asTrimmedString(input.event || input.when).toLowerCase();
+    const eventAliases = {
+      ownerturnstart: "turnStart",
+      selfturnstart: "turnStart",
+      ownerturnend: "turnEnd",
+      selfturnend: "turnEnd",
+      occupantturnstart: "occupantTurnStart",
+      targetturnstart: "occupantTurnStart",
+      onenter: "enter",
+      enters: "enter",
+      enter: "enter",
+    };
+    const compact = rawEvent.replace(/[^a-z0-9]/g, "");
+    const event = eventAliases[compact] || AURA_TRIGGER_EVENTS.find((item) => item.toLowerCase() === rawEvent);
+    if (!event) {
+      warnings.push(`${path}.event: "${input.event || input.when || ""}" not in ${AURA_TRIGGER_EVENTS.join("/")}.`);
+      return null;
+    }
+    const trigger = { event };
+    const filterInput = input.filter && typeof input.filter === "object" ? input.filter : input;
+    const target = asTrimmedString(input.target || input.effectTarget || input.resolveTarget);
+    if (target) trigger.target = target;
+    const whoseRaw = asTrimmedString(filterInput.whose || input.on || "");
+    if (event === "enter" || event === "occupantTurnStart") {
+      trigger.whose = "occupant";
+      return trigger;
+    }
+    if (whoseRaw) {
+      const whose = whoseRaw.toLowerCase() === "occupant" ? "occupant" : normalizeWhoseValue(whoseRaw);
+      trigger.whose = whose || "self";
+      if (!whose) warnings.push(`${path}.whose: "${whoseRaw}" not in ${WHOSE_VALUES.join("/")}.`);
+    } else if (!TRIGGER_LIFETIME_EVENTS.includes(event)) {
+      trigger.whose = "occupant";
+    } else {
+      trigger.whose = "self";
+    }
+    const filter = {};
+    const actionKind = asTrimmedString(filterInput.actionKind);
+    if (actionKind) filter.actionKind = actionKind;
+    const costIncludes = asTrimmedString(filterInput.costIncludes || filterInput.resourceCostIncludes);
+    if (costIncludes) filter.costIncludes = costIncludes;
+    const keywordsAny = Array.isArray(filterInput.keywordsAny)
+      ? filterInput.keywordsAny.map((k) => P.normalizeKeyword?.(k) || asTrimmedString(k)).filter(Boolean)
+      : [];
+    if (keywordsAny.length) filter.keywordsAny = keywordsAny;
+    const minAmount = asNonNegInt(filterInput.minAmount, 0);
+    if (minAmount) filter.minAmount = minAmount;
+    const maxAmount = asNonNegInt(filterInput.maxAmount, 0);
+    if (maxAmount) filter.maxAmount = maxAmount;
+    const damageTypes = (Array.isArray(filterInput.damageType)
+      ? filterInput.damageType
+      : filterInput.damageType !== undefined && filterInput.damageType !== null
+        ? [filterInput.damageType]
+        : [])
+      .map((t) => asTrimmedString(t).toLowerCase())
+      .filter(Boolean);
+    if (damageTypes.length) filter.damageType = damageTypes;
+    const verb = asTrimmedString(filterInput.verb);
+    if (verb) filter.verb = verb;
+    if (Object.keys(filter).length) trigger.filter = filter;
+    return trigger;
+  }
+
+  function normalizeAuraTriggers(input, warnings, path) {
+    const source = Array.isArray(input) ? input : input ? [input] : [];
+    return source
+      .map((item, index) => normalizeAuraTrigger(item, warnings, `${path}[${index}]`))
+      .filter(Boolean);
   }
 
   function normalizeTriggerBlock(input, warnings, path) {
