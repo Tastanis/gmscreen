@@ -95,6 +95,70 @@ test('suggests condition-based edges and banes', () => {
   ]);
 });
 
+test('suggests active hidden roll modifier riders and preserves consume refs', () => {
+  const actor = ally('actor', 1, 1, {
+    conditions: [{
+      name: 'hiddenEffect',
+      label: 'Bane on next strike',
+      rider: {
+        type: 'rollModifier',
+        modifier: 'bane',
+        appliesTo: { rollEvent: 'powerRoll', keywordsAny: ['Strike'] },
+        consume: 'nextMatchingRoll',
+      },
+    }],
+  });
+  const target = enemy('target', 1, 2);
+  const suggestions = getPowerRollSuggestions({
+    actor,
+    targets: [target],
+    placements: [actor, target],
+    context: { keywords: ['Melee', 'Strike'], rollEvent: 'powerRoll' },
+  });
+  const hidden = suggestions.find((entry) => entry.id === 'hidden-effect-actor-0');
+  assert.equal(hidden?.kind, 'bane');
+  assert.equal(hidden?.count, 1);
+  assert.equal(hidden?.active, true);
+  assert.equal(hidden?.consume, 'nextMatchingRoll');
+  assert.deepEqual(hidden?.conditionRef, { placementId: 'actor', conditionIndex: 0 });
+});
+
+test('supports double hidden roll riders and keyword filtering', () => {
+  const actor = ally('actor', 1, 1, {
+    conditions: [
+      {
+        name: 'hiddenEffect',
+        label: 'Double edge on next magic',
+        rider: {
+          type: 'rollModifier',
+          modifier: 'doubleEdge',
+          appliesTo: { keywordsAll: ['Magic'] },
+        },
+      },
+      {
+        name: 'hiddenEffect',
+        label: 'Wrong keyword bane',
+        rider: {
+          type: 'rollModifier',
+          modifier: 'bane',
+          appliesTo: { keywordsAny: ['Melee'] },
+        },
+      },
+    ],
+  });
+  const target = enemy('target', 1, 2);
+  const suggestions = getPowerRollSuggestions({
+    actor,
+    targets: [target],
+    placements: [actor, target],
+    context: { keywords: ['Ranged', 'Magic'], rollEvent: 'powerRoll' },
+  });
+  const hidden = suggestions.find((entry) => entry.id === 'hidden-effect-actor-0');
+  assert.equal(hidden?.kind, 'edge');
+  assert.equal(hidden?.count, 2);
+  assert.equal(ids(suggestions).includes('hidden-effect-actor-1'), false);
+});
+
 test('does not count same-team tokens as flankers', () => {
   const actor = ally('actor', 4, 5);
   const helper = enemy('enemy-helper', 7, 6);

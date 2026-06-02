@@ -598,17 +598,41 @@ Applies via the same heal path but allows the new total to exceed max stamina (t
 ```json
 { "kind": "condition", "name": "slowed", "duration": "saveEnds" }
 { "kind": "condition", "name": "other", "duration": "endOfTurn", "text": "can't draw cards" }
+{
+  "kind": "condition",
+  "name": "hiddenEffect",
+  "label": "Bane on next strike",
+  "duration": "saveEnds",
+  "rider": {
+    "type": "rollModifier",
+    "modifier": "bane",
+    "appliesTo": { "rollEvent": "powerRoll", "keywordsAny": ["Strike"] },
+    "consume": "nextMatchingRoll"
+  }
+}
 ```
 
 | Field | Values |
 |---|---|
-| `name` | `"bleeding"`, `"dazed"`, `"dying"`, `"frightened"`, `"grabbed"`, `"hidden"`, `"prone"`, `"restrained"`, `"slowed"`, `"taunted"`, `"weakened"`, `"damageWeakness"`, `"damageImmunity"`, `"other"` |
+| `name` | `"bleeding"`, `"dazed"`, `"dying"`, `"frightened"`, `"grabbed"`, `"hidden"`, `"hiddenEffect"`, `"prone"`, `"restrained"`, `"slowed"`, `"taunted"`, `"weakened"`, `"damageWeakness"`, `"damageImmunity"`, `"other"` |
 | `text` | required when `name === "other"` — describes the homebrew condition |
 | `duration` | `"instantaneous"`, `"endOfTurn"`, `"saveEnds"`, `"endOfEncounter"`, `"untilDying"` |
 | `amount` | int — required for `"damageWeakness"` / `"damageImmunity"`. How much extra damage is taken (weakness) / soaked (immunity). |
 | `damageType` | string — optional for `"damageWeakness"` / `"damageImmunity"`. Restricts to one type. Omit / `"untyped"` = applies to all types. |
 
+| Hidden effect field | Values |
+|---|---|
+| `label` | string; required for `"hiddenEffect"` if you want a useful sidebar label. |
+| `rider.type` | `"rollModifier"` for a hidden edge/bane/double-edge/double-bane rider. Other rider types are stored/displayed only if code support is added later. |
+| `rider.modifier` | `"edge"`, `"bane"`, `"doubleEdge"`, or `"doubleBane"` |
+| `rider.appliesTo.rollEvent` | optional `"powerRoll"`, `"abilityTest"`, or `"abilityRoll"` |
+| `rider.appliesTo.keywordsAny` / `keywordsAll` | optional keyword filters matched against the ability's keywords/range text. |
+| `rider.appliesTo.actionKind` | optional action-kind filter such as `"main"`, `"maneuver"`, or `"triggered"`. |
+| `rider.consume` | `"manual"` or `"nextMatchingRoll"`. Use `"nextMatchingRoll"` for effects like "the target has a bane on their next attack." |
+
 `damageWeakness` and `damageImmunity` are numeric riders. The VTT damage handler stacks `amount` on top of the sheet's own immunity/vulnerability lists when applying damage to the affected target. Example: `{ "kind": "condition", "name": "damageWeakness", "amount": 5, "damageType": "fire", "duration": "saveEnds" }` makes the target take +5 damage from every fire effect until they save out.
+
+`hiddenEffect` is an ability-applied hidden rider condition. It is not available in the normal condition picker and it does not print its words on the token. It appears in the VTT character/monster sidebar under **Auras, Conditions, & Effects** with an `x` remove button, and the token gets a small `FX` badge while any hidden effect is active. Roll modifier riders become default-on suggested edge/bane buttons in the automated power-roll modal; the user can click the suggestion off before rolling.
 
 ### `forcedMovement`
 

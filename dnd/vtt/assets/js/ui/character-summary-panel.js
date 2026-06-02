@@ -1485,7 +1485,7 @@ function renderCharacterCard(sheet, { characterId, token } = {}) {
       ${renderSection('Auras, Conditions, & Effects', `
         <div class="vtt-character-condition-list">
           ${conditions.length
-            ? conditions.map((condition, index) => renderCondition(condition, token?.id, index)).join('')
+            ? conditions.map((condition) => renderCondition(condition, token?.id)).join('')
             : renderConditionPicker(token?.id)}
         </div>
       `)}
@@ -1635,14 +1635,25 @@ function renderResource(label, value, { resource = null } = {}) {
   `;
 }
 
-function renderCondition(condition, placementId, index) {
+function renderCondition(condition, placementId) {
+  const entry = typeof condition === 'object' && condition
+    ? condition
+    : { label: String(condition || ''), index: 0, hidden: false };
+  const label = entry.label || entry.name || 'Effect';
+  const index = Number.isInteger(entry.index) ? entry.index : 0;
+  const detail = entry.hidden
+    ? [entry.sourceAbility, entry.sourceName, entry.durationLabel].filter(Boolean).join(' - ')
+    : '';
   const removeButton = placementId
-    ? `<button class="vtt-character-condition__remove" type="button" data-character-condition-remove data-placement-id="${escapeAttribute(placementId)}" data-condition-index="${escapeAttribute(index)}" aria-label="Remove ${escapeAttribute(condition)}">x</button>`
+    ? `<button class="vtt-character-condition__remove" type="button" data-character-condition-remove data-placement-id="${escapeAttribute(placementId)}" data-condition-index="${escapeAttribute(index)}" aria-label="Remove ${escapeAttribute(label)}">x</button>`
     : '';
 
   return `
-    <span class="vtt-character-condition">
-      <span class="vtt-character-condition__name">${escapeHtml(condition)}</span>
+    <span class="vtt-character-condition ${entry.hidden ? 'vtt-character-condition--hidden-effect' : ''}">
+      <span class="vtt-character-condition__body">
+        <span class="vtt-character-condition__name">${escapeHtml(label)}</span>
+        ${detail ? `<span class="vtt-character-condition__detail">${escapeHtml(detail)}</span>` : ''}
+      </span>
       ${removeButton}
     </span>
   `;
@@ -1757,16 +1768,45 @@ function writePanelVisibilityPreference(storageKey, open) {
 function normalizeConditions(value) {
   const entries = Array.isArray(value) ? value : value ? [value] : [];
   return entries
-    .map((entry) => {
+    .map((entry, index) => {
       if (typeof entry === 'string') {
-        return entry.trim();
+        const label = entry.trim();
+        return label ? { label, name: label, index, hidden: false } : null;
       }
       if (entry && typeof entry === 'object') {
-        return String(entry.name ?? entry.label ?? entry.title ?? '').trim();
+        const hidden = Boolean(entry.hidden || String(entry.name || '').trim().toLowerCase() === 'hiddeneffect');
+        const label = String(
+          hidden
+            ? (entry.label ?? entry.sourceAbility ?? entry.text ?? entry.name ?? 'Hidden effect')
+            : (entry.name ?? entry.label ?? entry.title ?? '')
+        ).trim();
+        if (!label) return null;
+        return {
+          label,
+          name: String(entry.name ?? label).trim(),
+          index,
+          hidden,
+          sourceName: String(entry.sourceName ?? '').trim(),
+          sourceAbility: String(entry.sourceAbility ?? '').trim(),
+          durationLabel: formatConditionDuration(entry.duration),
+        };
       }
-      return '';
+      return null;
     })
     .filter(Boolean);
+}
+
+function formatConditionDuration(duration) {
+  const type = typeof duration === 'string'
+    ? duration
+    : duration && typeof duration === 'object'
+      ? duration.type || duration.value || duration.mode || ''
+      : '';
+  const normalized = String(type || '').trim();
+  if (!normalized) return '';
+  if (normalized === 'end-of-turn') return 'end of turn';
+  if (normalized === 'save-ends') return 'save ends';
+  return normalized.replace(/-/g, ' ');
 }
 
 function normalizeSkills(value) {
@@ -2036,6 +2076,11 @@ function startAbilityAutomation(sheet, action, categoryKey, sourceToken = null, 
       window.VTTBoardCallbacks && typeof window.VTTBoardCallbacks.getPowerRollSuggestions === 'function'
         ? window.VTTBoardCallbacks.getPowerRollSuggestions(payload)
         : []
+    ),
+    consumeRollRiders: (payload) => (
+      window.VTTBoardCallbacks && typeof window.VTTBoardCallbacks.consumeRollRiders === 'function'
+        ? window.VTTBoardCallbacks.consumeRollRiders(payload)
+        : false
     ),
     getPlacementById: (placementId) => (
       window.VTTBoardCallbacks && typeof window.VTTBoardCallbacks.getPlacementById === 'function'

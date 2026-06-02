@@ -79,6 +79,61 @@
     return count ? extras : null;
   }
 
+  function normalizeTextList(value) {
+    if (Array.isArray(value)) {
+      return value
+        .map(asTrimmedString)
+        .filter(Boolean);
+    }
+    const text = asTrimmedString(value);
+    if (!text) return [];
+    return text.split(/[,;]+/).map((entry) => entry.trim()).filter(Boolean);
+  }
+
+  function normalizeHiddenEffectRider(input, warnings, path) {
+    if (!input || typeof input !== "object") return null;
+    const rawType = asTrimmedString(input.type);
+    const type = rawType.toLowerCase() === "rollmodifier" ? "rollModifier" : rawType;
+    if (type !== "rollModifier") {
+      warnings.push(`${path}: hiddenEffect rider type "${type || "(blank)"}" is not supported yet.`);
+      return JSON.parse(JSON.stringify(input));
+    }
+    const rawModifier = asTrimmedString(input.modifier).toLowerCase();
+    const modifierMap = {
+      edge: "edge",
+      bane: "bane",
+      doubleedge: "doubleEdge",
+      "double-edge": "doubleEdge",
+      doubleEdge: "doubleEdge",
+      doublebane: "doubleBane",
+      "double-bane": "doubleBane",
+      doubleBane: "doubleBane",
+    };
+    const modifier = modifierMap[rawModifier] || "";
+    if (!modifier) {
+      warnings.push(`${path}: rollModifier rider needs modifier edge, bane, doubleEdge, or doubleBane.`);
+    }
+    const appliesToInput = input.appliesTo && typeof input.appliesTo === "object" ? input.appliesTo : {};
+    const appliesTo = {};
+    const rollEvent = asTrimmedString(appliesToInput.rollEvent);
+    if (rollEvent) {
+      appliesTo.rollEvent = pickKnown(rollEvent, ["powerRoll", "abilityTest", "abilityRoll"], rollEvent);
+    }
+    const actionKind = asTrimmedString(appliesToInput.actionKind);
+    if (actionKind) appliesTo.actionKind = actionKind;
+    const keywordsAny = normalizeTextList(appliesToInput.keywordsAny);
+    if (keywordsAny.length) appliesTo.keywordsAny = keywordsAny;
+    const keywordsAll = normalizeTextList(appliesToInput.keywordsAll);
+    if (keywordsAll.length) appliesTo.keywordsAll = keywordsAll;
+    const target = asTrimmedString(appliesToInput.target);
+    if (target) appliesTo.target = target;
+    const consume = asTrimmedString(input.consume) || "manual";
+    const rider = { type: "rollModifier", modifier: modifier || rawModifier || "edge" };
+    if (Object.keys(appliesTo).length) rider.appliesTo = appliesTo;
+    rider.consume = pickKnown(consume, ["manual", "nextMatchingRoll"], consume);
+    return rider;
+  }
+
   // ---------- effects ----------
 
   function normalizeEffectList(input, warnings, path) {
@@ -232,7 +287,21 @@
         return effect;
       }
       case "condition": {
-        const known = new Set(["kind", "name", "duration", "text", "amount", "damageType"]);
+        const known = new Set([
+          "kind",
+          "name",
+          "duration",
+          "text",
+          "label",
+          "amount",
+          "damageType",
+          "hidden",
+          "rider",
+          "consume",
+          "sourceId",
+          "sourceName",
+          "sourceAbility",
+        ]);
         const rawName = asTrimmedString(input.name);
         const name = P.normalizeCondition(rawName) || "other";
         const effect = {
@@ -253,6 +322,23 @@
           effect.damageType = dt === "untyped" ? "" : dt;
           if (!effect.amount) {
             warnings.push(`${path}: ${name} has amount 0 — runtime will ignore.`);
+          }
+        }
+        if (name === "hiddenEffect") {
+          effect.hidden = true;
+          effect.label = asTrimmedString(input.label || input.text || "Hidden effect");
+          const rider = normalizeHiddenEffectRider(input.rider, warnings, `${path}.rider`);
+          if (rider) effect.rider = rider;
+          const consume = asTrimmedString(input.consume);
+          if (consume) effect.consume = consume;
+          const sourceId = asTrimmedString(input.sourceId);
+          const sourceName = asTrimmedString(input.sourceName);
+          const sourceAbility = asTrimmedString(input.sourceAbility);
+          if (sourceId) effect.sourceId = sourceId;
+          if (sourceName) effect.sourceName = sourceName;
+          if (sourceAbility) effect.sourceAbility = sourceAbility;
+          if (!effect.rider) {
+            warnings.push(`${path}: hiddenEffect has no supported rider; it will display as a removable effect only.`);
           }
         }
         const extras = pickExtras(input, known);

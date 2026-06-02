@@ -134,6 +134,9 @@
     "frightened",
     "grabbed",
     "hidden",
+    // Ability-applied, non-selectable rider. The VTT stores this on tokens
+    // like a condition, but token labels do not render it as visible text.
+    "hiddenEffect",
     "prone",
     "restrained",
     "slowed",

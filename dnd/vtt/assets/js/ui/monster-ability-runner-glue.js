@@ -229,6 +229,7 @@
             setScopedFlag: board.setScopedFlag,
             setAura: board.setAura,
             getPowerRollSuggestions: board.getPowerRollSuggestions,
+            consumeRollRiders: board.consumeRollRiders,
             getPlacementById: board.getPlacementById,
             getDistanceBetween: board.getDistanceBetween
         };

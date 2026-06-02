@@ -64,6 +64,8 @@ For each block in `automation.cards`:
 
 Effects can specify their own `target` to override the parent block target. `target` may be a single group name or an array of group names, allowing one power roll tier to damage multiple targets and apply different riders to each.
 
+`condition` effects can apply `hiddenEffect` riders. These are stored on the VTT placement like conditions, but they are hidden from token condition text and the normal condition picker. The sidebar still renders them under Auras, Conditions, & Effects with a remove button. Supported automatic hidden riders currently include `rollModifier` suggestions for edge/bane/double-edge/double-bane in the power-roll modal, with optional `nextMatchingRoll` consumption.
+
 Triggered effects can also target dynamic event groups: `eventActor`, `eventSource`, or `eventTarget` (plus `trigger*` aliases). These resolve from the captured event payload for delayed reactions. `trigger.effects` default to `eventActor` unless the trigger block sets `effectTarget`.
 
 Each effect is dispatched by `kind`:

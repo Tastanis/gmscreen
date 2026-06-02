@@ -88,8 +88,8 @@
             renderDefenses(defenses) +
             renderSection('Auras, Conditions, & Effects',
                 '<div class="vtt-character-condition-list">' +
-                (conditions.length ? conditions.map(function (condition, index) {
-                    return renderCondition(condition, placement?.id, index);
+                (conditions.length ? conditions.map(function (condition) {
+                    return renderCondition(condition, placement?.id);
                 }).join('') : '<span class="vtt-character-condition">No conditions</span>') +
                 '</div>'
             ) +
@@ -254,11 +254,22 @@
             '</div>';
     }
 
-    function renderCondition(condition, placementId, index) {
-        var removeButton = placementId
-            ? '<button class="vtt-character-condition__remove" type="button" data-character-condition-remove data-placement-id="' + escapeAttribute(placementId) + '" data-condition-index="' + escapeAttribute(index) + '" aria-label="Remove ' + escapeAttribute(condition) + '">x</button>'
+    function renderCondition(condition, placementId) {
+        var entry = condition && typeof condition === 'object'
+            ? condition
+            : { label: String(condition || ''), index: 0, hidden: false };
+        var label = entry.label || entry.name || 'Effect';
+        var index = Number.isInteger(entry.index) ? entry.index : 0;
+        var detail = entry.hidden
+            ? [entry.sourceAbility, entry.sourceName, entry.durationLabel].filter(Boolean).join(' - ')
             : '';
-        return '<span class="vtt-character-condition"><span class="vtt-character-condition__name">' + escapeHtml(condition) + '</span>' + removeButton + '</span>';
+        var removeButton = placementId
+            ? '<button class="vtt-character-condition__remove" type="button" data-character-condition-remove data-placement-id="' + escapeAttribute(placementId) + '" data-condition-index="' + escapeAttribute(index) + '" aria-label="Remove ' + escapeAttribute(label) + '">x</button>'
+            : '';
+        return '<span class="vtt-character-condition ' + (entry.hidden ? 'vtt-character-condition--hidden-effect' : '') + '">' +
+            '<span class="vtt-character-condition__body"><span class="vtt-character-condition__name">' + escapeHtml(label) + '</span>' +
+            (detail ? '<span class="vtt-character-condition__detail">' + escapeHtml(detail) + '</span>' : '') +
+            '</span>' + removeButton + '</span>';
     }
 
     function bindControls(panel) {
@@ -325,18 +336,43 @@
     }
 
     function normalizeConditions(value) {
-        if (Array.isArray(value)) {
-            return value.map(function (condition) {
-                if (condition && typeof condition === 'object') {
-                    return condition.name || condition.label || condition.id || '';
-                }
-                return String(condition || '');
-            }).map(function (condition) { return condition.trim(); }).filter(Boolean);
-        }
-        if (typeof value === 'string' && value.trim()) {
-            return value.split(/[,;]+/).map(function (condition) { return condition.trim(); }).filter(Boolean);
-        }
-        return [];
+        var entries = Array.isArray(value) ? value : value ? [value] : [];
+        return entries.map(function (condition, index) {
+            if (typeof condition === 'string') {
+                var label = condition.trim();
+                return label ? { label: label, name: label, index: index, hidden: false } : null;
+            }
+            if (condition && typeof condition === 'object') {
+                var hidden = Boolean(condition.hidden || String(condition.name || '').trim().toLowerCase() === 'hiddeneffect');
+                var label = String(hidden
+                    ? (condition.label ?? condition.sourceAbility ?? condition.text ?? condition.name ?? 'Hidden effect')
+                    : (condition.name ?? condition.label ?? condition.id ?? '')).trim();
+                if (!label) return null;
+                return {
+                    label: label,
+                    name: String(condition.name ?? label).trim(),
+                    index: index,
+                    hidden: hidden,
+                    sourceName: String(condition.sourceName ?? '').trim(),
+                    sourceAbility: String(condition.sourceAbility ?? '').trim(),
+                    durationLabel: formatConditionDuration(condition.duration)
+                };
+            }
+            return null;
+        }).filter(Boolean);
+    }
+
+    function formatConditionDuration(duration) {
+        var type = typeof duration === 'string'
+            ? duration
+            : duration && typeof duration === 'object'
+                ? duration.type || duration.value || duration.mode || ''
+                : '';
+        var normalized = String(type || '').trim();
+        if (!normalized) return '';
+        if (normalized === 'end-of-turn') return 'end of turn';
+        if (normalized === 'save-ends') return 'save ends';
+        return normalized.replace(/-/g, ' ');
     }
 
     function placementName(placement) {

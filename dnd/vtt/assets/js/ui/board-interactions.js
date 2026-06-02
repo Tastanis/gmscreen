@@ -11330,6 +11330,36 @@ export function mountBoardInteractions(store, routes = {}) {
     });
   }
 
+  function consumeBoardRollRiders(payload = {}) {
+    const suggestions = Array.isArray(payload.suggestions) ? payload.suggestions : [];
+    let removed = 0;
+    suggestions.forEach((suggestion) => {
+      const consume = String(suggestion?.consume || '').trim();
+      if (consume !== 'nextMatchingRoll') {
+        return;
+      }
+      const ref = suggestion?.conditionRef && typeof suggestion.conditionRef === 'object'
+        ? suggestion.conditionRef
+        : null;
+      const placementId = typeof ref?.placementId === 'string' ? ref.placementId.trim() : '';
+      const conditionIndex = Number.parseInt(ref?.conditionIndex, 10);
+      if (!placementId || !Number.isInteger(conditionIndex) || conditionIndex < 0) {
+        return;
+      }
+      const placement = getPlacementFromStore(placementId);
+      const conditions = ensurePlacementConditions(placement?.conditions ?? placement?.condition ?? null);
+      const condition = conditions[conditionIndex];
+      const conditionName = typeof condition?.name === 'string' ? condition.name.trim().toLowerCase() : '';
+      if (!condition || conditionName !== 'hiddeneffect') {
+        return;
+      }
+      if (removeConditionFromPlacement(placementId, conditionIndex)) {
+        removed += 1;
+      }
+    });
+    return { removed };
+  }
+
   window.VTTBoardCallbacks = {
     selectTarget: function (cfg) { return dispatchBoardCustom('vtt:automation-select-target', 'targetConfig', cfg); },
     selectAreaTarget: function (cfg) { return dispatchBoardCustom('vtt:automation-select-area', 'targetConfig', cfg); },
@@ -11358,6 +11388,7 @@ export function mountBoardInteractions(store, routes = {}) {
     setAura: function (payload) { return dispatchBoardCustom('vtt:automation-set-aura', 'payload', payload); },
     consumeTriggeredAction: function (payload) { return dispatchBoardCustom('vtt:automation-consume-triggered-action', 'payload', payload); },
     getPowerRollSuggestions: function (payload) { return buildBoardPowerRollSuggestions(payload); },
+    consumeRollRiders: function (payload) { return consumeBoardRollRiders(payload); },
     getPlacementById: function (placementId) {
       const placement = getPlacementFromStore(placementId);
       return placement ? JSON.parse(JSON.stringify(placement)) : null;
@@ -12813,17 +12844,20 @@ export function mountBoardInteractions(store, routes = {}) {
 
   function syncTokenConditionLabel(tokenElement, placement) {
     let label = tokenElement.querySelector('.vtt-token__condition');
+    let hiddenBadge = tokenElement.querySelector('.vtt-token__hidden-effect');
     const conditions = ensurePlacementConditions(placement?.conditions ?? placement?.condition ?? null);
+    const hiddenConditions = conditions.filter((condition) => condition?.hidden || String(condition?.name || '').trim().toLowerCase() === 'hiddeneffect');
+    const visibleConditions = conditions.filter((condition) => !(condition?.hidden || String(condition?.name || '').trim().toLowerCase() === 'hiddeneffect'));
+    tokenElement.classList.toggle('vtt-token--has-hidden-effects', hiddenConditions.length > 0);
 
-    if (!conditions.length) {
+    if (!visibleConditions.length) {
       if (label) {
         detachConditionTooltip(label);
         label.remove();
       }
-      return;
     }
 
-    const text = conditions
+    const text = visibleConditions
       .map((condition) => (condition && typeof condition.name === 'string' ? condition.name.trim() : ''))
       .filter(Boolean)
       .join(' • ');
@@ -12833,21 +12867,38 @@ export function mountBoardInteractions(store, routes = {}) {
         detachConditionTooltip(label);
         label.remove();
       }
-      return;
-    }
-
-    if (!label) {
+    } else if (!label) {
       label = document.createElement('div');
       label.className = 'vtt-token__condition';
       tokenElement.appendChild(label);
     }
 
-    if (label.textContent !== text) {
+    if (label && text && label.textContent !== text) {
       label.textContent = text;
     }
-    label.setAttribute('aria-label', text);
-    label.removeAttribute('title');
-    configureConditionTooltip(label, conditions, { delay: 500 });
+    if (label && text) {
+      label.setAttribute('aria-label', text);
+      label.removeAttribute('title');
+      configureConditionTooltip(label, visibleConditions, { delay: 500 });
+    }
+
+    if (!hiddenConditions.length) {
+      if (hiddenBadge) hiddenBadge.remove();
+      return;
+    }
+
+    const hiddenText = hiddenConditions
+      .map((condition) => condition.label || condition.sourceAbility || condition.name || 'Effect')
+      .filter(Boolean)
+      .join(', ');
+    if (!hiddenBadge) {
+      hiddenBadge = document.createElement('div');
+      hiddenBadge.className = 'vtt-token__hidden-effect';
+      tokenElement.appendChild(hiddenBadge);
+    }
+    hiddenBadge.textContent = 'FX';
+    hiddenBadge.setAttribute('aria-label', `Hidden effects: ${hiddenText}`);
+    hiddenBadge.title = `Hidden effects: ${hiddenText}`;
   }
 
   function handleTriggerIndicatorPointerDown(event) {
@@ -15031,6 +15082,27 @@ export function mountBoardInteractions(store, routes = {}) {
     };
     if (conditionPayload.description) {
       condition.description = String(conditionPayload.description);
+    }
+    if (conditionPayload.hidden || name === 'hiddenEffect') {
+      condition.hidden = true;
+    }
+    if (conditionPayload.label) {
+      condition.label = String(conditionPayload.label);
+    }
+    if (conditionPayload.rider && typeof conditionPayload.rider === 'object') {
+      condition.rider = JSON.parse(JSON.stringify(conditionPayload.rider));
+    }
+    if (conditionPayload.consume) {
+      condition.consume = String(conditionPayload.consume);
+    }
+    if (conditionPayload.sourceId || payload.sourceId) {
+      condition.sourceId = String(conditionPayload.sourceId || payload.sourceId);
+    }
+    if (conditionPayload.sourceName) {
+      condition.sourceName = String(conditionPayload.sourceName);
+    }
+    if (conditionPayload.sourceAbility) {
+      condition.sourceAbility = String(conditionPayload.sourceAbility);
     }
     // Numeric / typed riders for damageWeakness / damageImmunity. The damage
     // adjuster reads these directly off the placement's condition list.
@@ -17368,6 +17440,25 @@ export function mountBoardInteractions(store, routes = {}) {
     const result = { name, description, duration };
     if (amount !== null) result.amount = amount;
     if (damageType) result.damageType = damageType;
+    if (value.hidden || name.toLowerCase() === 'hiddeneffect') result.hidden = true;
+    if (typeof value.label === 'string' && value.label.trim()) {
+      result.label = value.label.trim();
+    }
+    if (value.rider && typeof value.rider === 'object') {
+      result.rider = JSON.parse(JSON.stringify(value.rider));
+    }
+    if (typeof value.consume === 'string' && value.consume.trim()) {
+      result.consume = value.consume.trim();
+    }
+    if (typeof value.sourceId === 'string' && value.sourceId.trim()) {
+      result.sourceId = value.sourceId.trim();
+    }
+    if (typeof value.sourceName === 'string' && value.sourceName.trim()) {
+      result.sourceName = value.sourceName.trim();
+    }
+    if (typeof value.sourceAbility === 'string' && value.sourceAbility.trim()) {
+      result.sourceAbility = value.sourceAbility.trim();
+    }
     return result;
   }
 
@@ -17398,6 +17489,27 @@ export function mountBoardInteractions(store, routes = {}) {
     }
     if (typeof normalized.damageType === 'string' && normalized.damageType) {
       condition.damageType = normalized.damageType;
+    }
+    if (normalized.hidden || normalized.name.toLowerCase() === 'hiddeneffect') {
+      condition.hidden = true;
+    }
+    if (typeof normalized.label === 'string' && normalized.label) {
+      condition.label = normalized.label;
+    }
+    if (normalized.rider && typeof normalized.rider === 'object') {
+      condition.rider = JSON.parse(JSON.stringify(normalized.rider));
+    }
+    if (typeof normalized.consume === 'string' && normalized.consume) {
+      condition.consume = normalized.consume;
+    }
+    if (typeof normalized.sourceId === 'string' && normalized.sourceId) {
+      condition.sourceId = normalized.sourceId;
+    }
+    if (typeof normalized.sourceName === 'string' && normalized.sourceName) {
+      condition.sourceName = normalized.sourceName;
+    }
+    if (typeof normalized.sourceAbility === 'string' && normalized.sourceAbility) {
+      condition.sourceAbility = normalized.sourceAbility;
     }
 
     return condition;
@@ -17522,6 +17634,15 @@ export function mountBoardInteractions(store, routes = {}) {
       const amount = Number.isFinite(condition.amount) ? `${condition.amount}` : '0';
       const dt = typeof condition.damageType === 'string' ? condition.damageType.trim().toLowerCase() : '';
       return `${name}|${type}|${amount}|${dt}`;
+    }
+    if (name === 'hiddeneffect') {
+      const label = typeof condition.label === 'string' ? condition.label.trim().toLowerCase() : '';
+      const sourceId = typeof condition.sourceId === 'string' ? condition.sourceId.trim().toLowerCase() : '';
+      const sourceAbility = typeof condition.sourceAbility === 'string' ? condition.sourceAbility.trim().toLowerCase() : '';
+      const rider = condition.rider && typeof condition.rider === 'object'
+        ? JSON.stringify(condition.rider)
+        : '';
+      return `${name}|${type}|${label}|${sourceId}|${sourceAbility}|${rider}`;
     }
     if (type === 'end-of-turn') {
       const targetId =

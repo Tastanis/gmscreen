@@ -423,6 +423,30 @@ export function normalizePlacementCondition(value) {
       normalized.duration.targetTokenName = targetTokenName;
     }
   }
+  if (value.hidden || name.toLowerCase() === 'hiddeneffect') {
+    normalized.hidden = true;
+  }
+  if (typeof value.description === 'string' && value.description.trim()) {
+    normalized.description = value.description.trim();
+  }
+  if (typeof value.label === 'string' && value.label.trim()) {
+    normalized.label = value.label.trim();
+  }
+  if (value.rider && typeof value.rider === 'object') {
+    normalized.rider = JSON.parse(JSON.stringify(value.rider));
+  }
+  if (typeof value.consume === 'string' && value.consume.trim()) {
+    normalized.consume = value.consume.trim();
+  }
+  if (typeof value.sourceId === 'string' && value.sourceId.trim()) {
+    normalized.sourceId = value.sourceId.trim();
+  }
+  if (typeof value.sourceName === 'string' && value.sourceName.trim()) {
+    normalized.sourceName = value.sourceName.trim();
+  }
+  if (typeof value.sourceAbility === 'string' && value.sourceAbility.trim()) {
+    normalized.sourceAbility = value.sourceAbility.trim();
+  }
 
   return normalized;
 }
@@ -466,6 +490,15 @@ export function normalizePlacementConditions(value) {
 function buildConditionKey(condition) {
   const name = typeof condition?.name === 'string' ? condition.name.trim().toLowerCase() : '';
   const type = condition?.duration?.type ?? 'save-ends';
+  if (name === 'hiddeneffect') {
+    const label = typeof condition?.label === 'string' ? condition.label.trim().toLowerCase() : '';
+    const sourceId = typeof condition?.sourceId === 'string' ? condition.sourceId.trim().toLowerCase() : '';
+    const sourceAbility = typeof condition?.sourceAbility === 'string' ? condition.sourceAbility.trim().toLowerCase() : '';
+    const rider = condition?.rider && typeof condition.rider === 'object'
+      ? JSON.stringify(condition.rider)
+      : '';
+    return `${name}|${type}|${label}|${sourceId}|${sourceAbility}|${rider}`;
+  }
   const targetId =
     typeof condition?.duration?.targetTokenId === 'string'
       ? condition.duration.targetTokenId.trim().toLowerCase()

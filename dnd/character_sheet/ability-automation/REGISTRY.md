@@ -83,13 +83,15 @@ The monster ability tray + `window.MonsterAbilityRunner.start()` add the followi
 
 ## Conditions — `condition.name`
 
-`bleeding`, `dazed`, `dying`, `frightened`, `grabbed`, `hidden`, `prone`, `restrained`, `slowed`, `taunted`, `weakened`, `damageWeakness`, `damageImmunity`, `other`
+`bleeding`, `dazed`, `dying`, `frightened`, `grabbed`, `hidden`, `hiddenEffect`, `prone`, `restrained`, `slowed`, `taunted`, `weakened`, `damageWeakness`, `damageImmunity`, `other`
 
 When `name === "other"`, supply `text` describing the homebrew condition.
 
 `damageWeakness` and `damageImmunity` carry numeric riders: `amount` (int, required) and `damageType` (string, optional). Stored on the placement; read by `getAutomationDamageAdjustment` when computing adjusted damage. Empty / "untyped" `damageType` matches every type.
 
-Board-hosted power roll modals can show clickable suggested edges/banes from current VTT state through `getPowerRollSuggestions`. These are runtime hints, not automation JSON fields. High Ground, Flanking, and Cover are always visible as suggestion toggles; High Ground and Flanking default on when board state proves them, while Cover is currently manual because line-of-effect obstruction is not modeled as a reliable roll predicate. Additional board-derived suggestions include prone/restrained targets, hidden attackers, and weakened/restrained attackers when those facts are present in board state.
+`hiddenEffect` carries hidden ability-applied rider effects. It is not selectable in the normal condition picker and does not render as token condition text. It remains visible in the VTT character/monster sidebar with an `x` remove button and marks the token with a compact `FX` badge. Supported automatic rider type: `{ "type": "rollModifier", "modifier": "edge" | "bane" | "doubleEdge" | "doubleBane", "appliesTo": { ... }, "consume": "manual" | "nextMatchingRoll" }`.
+
+Board-hosted power roll modals can show clickable suggested edges/banes from current VTT state through `getPowerRollSuggestions`. These are runtime hints; normal board hints are not automation JSON fields. High Ground, Flanking, and Cover are always visible as suggestion toggles; High Ground and Flanking default on when board state proves them, while Cover is currently manual because line-of-effect obstruction is not modeled as a reliable roll predicate. Additional board-derived suggestions include prone/restrained targets, hidden attackers, and weakened/restrained attackers when those facts are present in board state. Ability-applied `hiddenEffect` rollModifier riders also appear as default-on suggestions when their `appliesTo` filters match, and `consume: "nextMatchingRoll"` riders are removed after the accepted matching roll.
 
 ## Durations — `condition.duration`
 
@@ -217,6 +219,8 @@ These are called by `runner.js` and dispatched as `vtt:automation-*` CustomEvent
 | `checkScopedFlag(payload)` | `{ scope, key, sourceId, targetId }` | `{ set: bool }` |
 | `setScopedFlag(payload)` | `{ scope, key, sourceId, targetId }` | `{ set: bool }` |
 | `setAura(payload)` | `{ placementId, enabled, radius, color }` | `{ applied, enabled, radius }` or rejects when the token is off-scene |
+| `getPowerRollSuggestions(payload)` | `{ actorId, actionId, actionName, actionKind, keywords, range, attribute, rollEvent, targetIds }` | Array of `{ id, kind, label, active, count?, conditionRef?, consume? }` suggestions shown in the power-roll modal. |
+| `consumeRollRiders(payload)` | `{ actorId, actionId, actionName, rollEvent, targetIds, suggestions }` | `{ removed }`; removes active hidden-effect suggestions with `consume: "nextMatchingRoll"`. |
 | `getDistanceBetween(idA, idB)` | two placement ids | int square (Chebyshev) distance, or `null` when either token is not on the board. Synchronous; used by the `distance` branch condition and `ifDistance` rider. |
 
 ---

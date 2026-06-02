@@ -434,6 +434,14 @@
       kind,
       label,
       active: input.active !== false,
+      count: Math.max(1, Math.min(2, asInt(input.count, 1))),
+      conditionRef: input.conditionRef && typeof input.conditionRef === "object"
+        ? {
+            placementId: String(input.conditionRef.placementId || ""),
+            conditionIndex: asInt(input.conditionRef.conditionIndex, -1),
+          }
+        : null,
+      consume: String(input.consume || "").trim(),
     };
   }
 
@@ -442,8 +450,9 @@
     const suggestions = Array.isArray(state.rollSuggestions) ? state.rollSuggestions : [];
     suggestions.forEach((suggestion) => {
       if (!suggestion?.active) return;
-      if (suggestion.kind === "edge") counts.edge += 1;
-      if (suggestion.kind === "bane") counts.bane += 1;
+      const count = Math.max(1, Math.min(2, asInt(suggestion.count, 1)));
+      if (suggestion.kind === "edge") counts.edge += count;
+      if (suggestion.kind === "bane") counts.bane += count;
     });
     return counts;
   }
@@ -801,7 +810,10 @@
       return '<div class="power-roll-runner__suggestions power-roll-runner__suggestions--empty"><span>No board suggestions</span></div>';
     }
     const buttons = suggestions.map((suggestion) => {
-      const icon = suggestion.kind === "edge" ? "^" : "v";
+      const count = Math.max(1, Math.min(2, asInt(suggestion.count, 1)));
+      const icon = suggestion.kind === "edge"
+        ? (count > 1 ? "^^" : "^")
+        : (count > 1 ? "vv" : "v");
       const pressed = suggestion.active ? "true" : "false";
       return `
         <button
@@ -1045,11 +1057,36 @@
     if (!state.selectedTier) return;
 
     await fireRollTriggerEvent(state, block);
+    await consumeActiveRollRiders(state, block);
 
     const tier = block.tiers?.[state.selectedTier] || { effects: [] };
     const targetGroupName = block.target;
     await applyEffects(state, tier.effects || [], targetGroupName, {
       sourceLabel: `${state.action.name || "Ability"} (${P.tierLabel(state.selectedTier)})`,
+    });
+  }
+
+  async function consumeActiveRollRiders(state, block) {
+    const callback = state?.context?.consumeRollRiders;
+    if (typeof callback !== "function") return;
+    const activeSuggestions = (Array.isArray(state.rollSuggestions) ? state.rollSuggestions : [])
+      .filter((suggestion) => suggestion?.active && suggestion.conditionRef);
+    if (!activeSuggestions.length) return;
+    const targets = getTargetGroup(state, block.target);
+    await callback({
+      actorId: state.sourcePlacement?.id || "",
+      actionId: state.action?.id || "",
+      actionName: state.action?.name || "",
+      rollEvent: block.rollEvent === "abilityTest" ? "abilityTest" : "powerRoll",
+      targetIds: targets.map((target) => target?.id).filter(Boolean),
+      suggestions: activeSuggestions.map((suggestion) => ({
+        id: suggestion.id,
+        label: suggestion.label,
+        kind: suggestion.kind,
+        count: suggestion.count,
+        consume: suggestion.consume,
+        conditionRef: suggestion.conditionRef,
+      })),
     });
   }
 
@@ -1389,6 +1426,17 @@
       if (isNumeric) {
         conditionPayload.amount = asInt(effect.amount, 0);
         if (effect.damageType) conditionPayload.damageType = effect.damageType;
+      }
+      if (effect.name === "hiddenEffect") {
+        conditionPayload.hidden = true;
+        conditionPayload.label = effect.label || effect.text || "Hidden effect";
+        if (effect.rider && typeof effect.rider === "object") {
+          conditionPayload.rider = JSON.parse(JSON.stringify(effect.rider));
+        }
+        if (effect.consume) conditionPayload.consume = effect.consume;
+        if (effect.sourceId) conditionPayload.sourceId = effect.sourceId;
+        conditionPayload.sourceName = effect.sourceName || state.heroName || "";
+        conditionPayload.sourceAbility = effect.sourceAbility || state.action?.name || "";
       }
       await state.context.applyCondition?.({
         placementId: target.id,

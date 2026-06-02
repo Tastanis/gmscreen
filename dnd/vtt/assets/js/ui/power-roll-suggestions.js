@@ -11,16 +11,31 @@ function normalizeTeam(value) {
 }
 
 function conditionNames(placement) {
+  return new Set(
+    conditionEntries(placement)
+      .map((entry) => normalizeText(entry.condition?.name))
+      .filter(Boolean)
+  );
+}
+
+function conditionEntries(placement) {
   const source = Array.isArray(placement?.conditions)
     ? placement.conditions
     : placement?.condition
       ? [placement.condition]
       : [];
-  return new Set(
-    source
-      .map((entry) => normalizeText(typeof entry === 'string' ? entry : entry?.name))
-      .filter(Boolean)
-  );
+  return source
+    .map((entry, index) => {
+      if (typeof entry === 'string') {
+        const name = entry.trim();
+        return name ? { index, condition: { name } } : null;
+      }
+      if (entry && typeof entry === 'object') {
+        return { index, condition: entry };
+      }
+      return null;
+    })
+    .filter(Boolean);
 }
 
 function hasCondition(placement, name) {
@@ -107,6 +122,49 @@ function isStrike(context = {}) {
   return keywordsFromContext(context).includes('strike');
 }
 
+function rollEventFromContext(context = {}) {
+  const rollEvent = normalizeText(context.rollEvent || 'powerRoll');
+  return rollEvent || 'powerroll';
+}
+
+function actionKindFromContext(context = {}) {
+  return normalizeText(context.actionKind || context.action?.actionKind || context.action?.kind || context.action?.type || '');
+}
+
+function listContainsNormalized(list, value) {
+  const normalized = normalizeText(value);
+  if (!normalized) return false;
+  return (Array.isArray(list) ? list : [])
+    .map(normalizeText)
+    .some((entry) => entry === normalized);
+}
+
+function hiddenRiderApplies(condition, context = {}) {
+  const rider = condition?.rider && typeof condition.rider === 'object' ? condition.rider : null;
+  if (!rider || normalizeText(rider.type) !== 'rollmodifier') return false;
+  const appliesTo = rider.appliesTo && typeof rider.appliesTo === 'object' ? rider.appliesTo : {};
+  const wantedRoll = normalizeText(appliesTo.rollEvent);
+  const rollEvent = rollEventFromContext(context);
+  if (wantedRoll && wantedRoll !== 'abilityroll' && wantedRoll !== rollEvent) return false;
+  const wantedKind = normalizeText(appliesTo.actionKind);
+  if (wantedKind && wantedKind !== actionKindFromContext(context)) return false;
+  const keywords = keywordsFromContext(context);
+  const keywordsAny = Array.isArray(appliesTo.keywordsAny) ? appliesTo.keywordsAny : [];
+  if (keywordsAny.length && !keywordsAny.some((keyword) => listContainsNormalized(keywords, keyword))) return false;
+  const keywordsAll = Array.isArray(appliesTo.keywordsAll) ? appliesTo.keywordsAll : [];
+  if (keywordsAll.length && !keywordsAll.every((keyword) => listContainsNormalized(keywords, keyword))) return false;
+  return true;
+}
+
+function rollModifierKind(modifier) {
+  const normalized = normalizeText(modifier).replace(/[\s_-]+/g, '');
+  if (normalized === 'edge') return { kind: EDGE, count: 1 };
+  if (normalized === 'bane') return { kind: BANE, count: 1 };
+  if (normalized === 'doubleedge') return { kind: EDGE, count: 2 };
+  if (normalized === 'doublebane') return { kind: BANE, count: 2 };
+  return null;
+}
+
 function placementTeam(placement, getTeam) {
   if (typeof getTeam === 'function' && placement?.id) {
     const team = getTeam(placement.id);
@@ -130,8 +188,34 @@ function isFlanking(actor, target, placements = [], getTeam = null) {
   });
 }
 
-function makeSuggestion(id, kind, label, active = true) {
-  return { id, kind, label, active };
+function makeSuggestion(id, kind, label, active = true, extra = {}) {
+  return { id, kind, label, active, ...extra };
+}
+
+function hiddenEffectSuggestions(placement, context = {}) {
+  return conditionEntries(placement)
+    .map(({ condition, index }) => {
+      if (!condition || normalizeText(condition.name) !== 'hiddeneffect') return null;
+      if (!hiddenRiderApplies(condition, context)) return null;
+      const modifier = rollModifierKind(condition.rider?.modifier);
+      if (!modifier) return null;
+      const label = String(condition.label || condition.sourceAbility || 'Hidden effect').trim();
+      return makeSuggestion(
+        `hidden-effect-${placement.id || 'token'}-${index}`,
+        modifier.kind,
+        label || 'Hidden effect',
+        true,
+        {
+          count: modifier.count,
+          consume: condition.rider?.consume || condition.consume || 'manual',
+          conditionRef: {
+            placementId: placement.id || '',
+            conditionIndex: index,
+          },
+        }
+      );
+    })
+    .filter(Boolean);
 }
 
 export function getPowerRollSuggestions({
@@ -168,12 +252,14 @@ export function getPowerRollSuggestions({
   if (hasCondition(actor, 'restrained')) {
     suggestions.push(makeSuggestion('bane-restrained', BANE, 'Restrained'));
   }
+  suggestions.push(...hiddenEffectSuggestions(actor, context));
 
   return suggestions;
 }
 
 export const __testing = {
   areOppositeAroundTarget,
+  hiddenEffectSuggestions,
   hasCondition,
   hasHighGround,
   isAdjacentTo,
