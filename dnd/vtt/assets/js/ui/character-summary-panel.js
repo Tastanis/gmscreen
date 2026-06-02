@@ -86,6 +86,7 @@ const PANEL_VISIBILITY_STORAGE_PREFIX = 'vtt:character-summary:open:';
 const ABILITY_TRAY_BODY_OPEN_CLASS = 'vtt-character-ability-tray-is-open';
 const HERO_TOKEN_SYNC_CHANNEL = 'vtt-hero-token-sync';
 const CHARACTER_SHEET_SYNC_CHANNEL = 'vtt-character-sheet-sync';
+const STAMINA_SYNC_CHANNEL = 'vtt-stamina-sync';
 const CHARACTER_SHEET_SYNC_INTERVAL_MS = 4000;
 const CONDITION_OPTIONS = [
   'Bleeding',
@@ -115,6 +116,7 @@ export function mountCharacterSummaryPanel(routes = {}, userContext = {}) {
   let activeDisplayName = '';
   let sheetSyncChannel = null;
   let heroTokenSyncChannel = null;
+  let staminaSyncChannel = null;
   let sheetSyncInFlight = false;
   const boardHeader = document.querySelector('.vtt-board__header');
   const abilityTray = ensureAbilityTray();
@@ -268,6 +270,30 @@ export function mountCharacterSummaryPanel(routes = {}, userContext = {}) {
     return heroTokenSyncChannel;
   };
 
+  const getStaminaSyncChannel = () => {
+    if (typeof BroadcastChannel !== 'function') {
+      return null;
+    }
+    if (!staminaSyncChannel) {
+      staminaSyncChannel = new BroadcastChannel(STAMINA_SYNC_CHANNEL);
+    }
+    return staminaSyncChannel;
+  };
+
+  const broadcastStaminaChange = () => {
+    const vitals = activeSheet?.hero?.vitals;
+    if (!activeCharacterId || !vitals) return;
+    const channel = getStaminaSyncChannel();
+    if (!channel) return;
+    channel.postMessage({
+      type: 'stamina-sync',
+      source: 'vtt',
+      character: activeCharacterId,
+      currentStamina: Number.isFinite(Number(vitals.currentStamina)) ? Number(vitals.currentStamina) : 0,
+      staminaMax: Number.isFinite(Number(vitals.staminaMax)) ? Number(vitals.staminaMax) : 0,
+    });
+  };
+
   const broadcastSheetChange = (change) => {
     const channel = getSheetSyncChannel();
     if (channel && activeCharacterId) {
@@ -290,6 +316,9 @@ export function mountCharacterSummaryPanel(routes = {}, userContext = {}) {
     const saved = await saveCharacterSummarySheet(activeSheet, { characterId: activeCharacterId, routes });
     if (saved) {
       broadcastSheetChange(change);
+      if (change === 'stamina' || change === 'recovery') {
+        broadcastStaminaChange();
+      }
     }
     return saved;
   };
@@ -470,15 +499,16 @@ export function mountCharacterSummaryPanel(routes = {}, userContext = {}) {
   async function handleResourceRoll() {
     const resource = activeSheet?.hero?.resource;
     if (!resource) return;
-    const sides = parseAutoDice(resource.autoDice || '');
-    if (!sides) {
-      window.alert('No resource die is set on this character sheet.');
+    const autoGain = resolveAutoResourceGain(resource.autoDice || '');
+    if (!autoGain) {
+      window.alert('No resource auto gain is set on this character sheet.');
       return;
     }
-    const roll = Math.floor(Math.random() * sides) + 1;
-    resource.value = (Number.parseInt(resource.value ?? 0, 10) || 0) + roll;
+    const current = Number.parseInt(resource.value ?? 0, 10) || 0;
+    resource.value = current + autoGain.amount;
     renderActiveSheet();
     await saveActiveSheet('resource');
+    window.alert(`${resource.title || 'Resource'} ${autoGain.label}: +${autoGain.amount} (${current} -> ${resource.value}).`);
   }
 
   async function handleVictoryClick() {
@@ -2945,12 +2975,35 @@ function appendStaminaHistory(vitals, value) {
 }
 
 function parseAutoDice(value) {
-  const match = String(value || '').trim().match(/^d?(\d+)$/i);
+  const match = String(value || '').trim().match(/^d(\d+)$/i);
   if (!match) {
     return 0;
   }
   const sides = Number.parseInt(match[1], 10);
   return Number.isFinite(sides) && sides > 0 ? sides : 0;
+}
+
+function parseStaticAutoResource(value) {
+  const match = String(value || '').trim().match(/^\+?(\d+)$/);
+  if (!match) {
+    return 0;
+  }
+  const amount = Number.parseInt(match[1], 10);
+  return Number.isFinite(amount) && amount > 0 ? amount : 0;
+}
+
+function resolveAutoResourceGain(value) {
+  const raw = String(value || '').trim();
+  const sides = parseAutoDice(raw);
+  if (sides) {
+    const roll = Math.floor(Math.random() * sides) + 1;
+    return { amount: roll, label: `rolled ${raw.toLowerCase()} = ${roll}` };
+  }
+  const staticAmount = parseStaticAutoResource(raw);
+  if (staticAmount) {
+    return { amount: staticAmount, label: `static +${staticAmount}` };
+  }
+  return null;
 }
 
 function showHeroTokenConfirmation(button) {

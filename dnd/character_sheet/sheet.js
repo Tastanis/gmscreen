@@ -594,16 +594,45 @@ function setResourceValue(value) {
 
 function parseAutoDice(die) {
   if (!die) return null;
-  const match = /^d?(\d+)$/i.exec(die.trim());
+  const match = /^d(\d+)$/i.exec(die.trim());
   if (!match) return null;
   const sides = Number(match[1]);
   return Number.isFinite(sides) && sides > 0 ? sides : null;
 }
 
 function rollAutoDice() {
-  const sides = parseAutoDice(sheetState.hero.resource?.autoDice || "");
+  const autoGain = resolveAutoResourceGain(sheetState.hero.resource?.autoDice || "");
+  if (!autoGain) return null;
+  return autoGain;
+}
+
+function parseStaticAutoResource(value) {
+  const match = /^\+?(\d+)$/.exec(String(value || "").trim());
+  if (!match) return null;
+  const amount = Number(match[1]);
+  return Number.isFinite(amount) && amount > 0 ? amount : null;
+}
+
+function resolveAutoResourceGain(value) {
+  const raw = String(value || "").trim();
+  const sides = parseAutoDice(raw);
   if (!sides) return null;
-  return Math.floor(Math.random() * sides) + 1;
+  const roll = Math.floor(Math.random() * sides) + 1;
+  return { amount: roll, label: `rolled ${raw.toLowerCase()} = ${roll}` };
+}
+
+function resolveAutoResourceGain(value) {
+  const raw = String(value || "").trim();
+  const sides = parseAutoDice(raw);
+  if (sides) {
+    const roll = Math.floor(Math.random() * sides) + 1;
+    return { amount: roll, label: `rolled ${raw.toLowerCase()} = ${roll}` };
+  }
+  const staticAmount = parseStaticAutoResource(raw);
+  if (staticAmount) {
+    return { amount: staticAmount, label: `static +${staticAmount}` };
+  }
+  return null;
 }
 
 function getLabelClass(label) {
