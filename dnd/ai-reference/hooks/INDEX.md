@@ -22,7 +22,7 @@ Check `REGISTRY.md` before authoring against a hook. If it is not listed there, 
 
 ## Trigger Bus
 
-`window.AbilityTriggerBus` lives in `board-interactions.js`. Authored trigger blocks use `match.event` and `match.filter`; PC trigger actions in the active scene are registered by the board as passive listeners. The runner's `registerTrigger` context hook still exists as a fallback/debug path. PC triggered actions are always-on once the character token is present in the active VTT scene; the player does not click the ability or open the character summary to start listening. Triggered abilities light the ready marker and are resolved manually. The triggered-action tray dot is also a manual override: clicking a spent/red dot makes the token ready again and clears the round-used flag so non-free authored triggers can arm before the round resets.
+`window.AbilityTriggerBus` lives in `board-interactions.js`. Authored trigger blocks use `match.event` and `match.filter`; PC trigger actions in the active scene are registered by the board as passive listeners. The runner's `registerTrigger` context hook still exists as a fallback/debug path. PC triggered actions are always-on once the character token is present in the active VTT scene; the player does not click the ability or open the character summary to start listening. Triggered abilities light the ready marker and are resolved manually unless the trigger block has `autoResolve:true`, in which case the trigger block's own `effects` run immediately. The triggered-action tray dot is also a manual override: clicking a spent/red dot makes the token ready again and clears the round-used flag so non-free authored triggers can arm before the round resets.
 
 ## VTT Automation Prompt UI
 
@@ -32,7 +32,7 @@ Target-selection prompts can be customized from ability JSON with `promptTitle` 
 
 Recovery-style heals (`{ "kind": "heal", "recoveries": N }`) call `spendRecoveryForTarget`, which acts on the **target's** sheet: for a matched PC target it decrements `hero.vitals.currentRecoveries` before applying stamina healing. This works regardless of whether the caster is a PC or a monster, so a monster ability can heal or drain a PC target's recoveries. Targets with no recovery pool (e.g. another monster) skip or fall back to a chat reminder.
 
-Known current limitation: manual/non-automation damage does not fire the authored damage trigger events. Use the registry for the latest limitation list.
+Known current limitation: manual/non-automation damage does not fire typed `damage`/`damageDealt` trigger payloads, but manual VTT damage, token HP edits, and character-sheet stamina syncs do fire `staminaChange` and `staminaZero`. Use the registry for the latest limitation list.
 
 ## Monster-Specific Runtime Notes
 

@@ -2395,6 +2395,12 @@ export function mountBoardInteractions(store, routes = {}) {
     for (const entry of list) {
       try {
         if (entry.predicate(payload, entry)) {
+          if (entry.autoResolve) {
+            autoResolveAuthoredTrigger(entry, payload, eventType).catch((err) => {
+              console.warn('[VTT] Auto-resolved trigger failed for', eventType, err);
+            });
+            continue;
+          }
           // Snapshot the firing payload onto the placement so the resolved
           // ability can read it later — needed for effects like
           // `halveTriggeringDamage` that need to know the original damage
@@ -2426,6 +2432,86 @@ export function mountBoardInteractions(store, routes = {}) {
         console.warn(`[VTT] automation aura ${eventType} failed`, err);
       });
     }
+  }
+
+  function resolveAutoTriggerPlacements(entry, payload = {}) {
+    const targetKey = String(entry?.effectTarget || entry?.resolveTarget || 'eventActor').trim().toLowerCase();
+    const idsByKey = {
+      self: [entry?.tokenId || ''],
+      target: [entry?.tokenId || ''],
+      eventactor: [payload.actorId || payload.placementId || payload.sourceId || payload.targetId || entry?.tokenId || ''],
+      triggeractor: [payload.actorId || payload.placementId || payload.sourceId || payload.targetId || entry?.tokenId || ''],
+      eventsource: [payload.sourceId || payload.actorId || payload.placementId || entry?.tokenId || ''],
+      triggersource: [payload.sourceId || payload.actorId || payload.placementId || entry?.tokenId || ''],
+      eventtarget: Array.isArray(payload.targetIds) && payload.targetIds.length
+        ? payload.targetIds
+        : [payload.targetId || payload.placementId || entry?.tokenId || ''],
+      triggertarget: Array.isArray(payload.targetIds) && payload.targetIds.length
+        ? payload.targetIds
+        : [payload.targetId || payload.placementId || entry?.tokenId || ''],
+    };
+    const ids = (idsByKey[targetKey] || idsByKey.eventactor || []).filter(Boolean);
+    return ids.map((id) => getPlacementFromStore(id)).filter(Boolean);
+  }
+
+  async function autoResolveAuthoredTrigger(entry, payload = {}, eventType = '') {
+    const effects = Array.isArray(entry?.effects) ? entry.effects : [];
+    if (!effects.length) return;
+    const sourcePlacement = getPlacementFromStore(entry.tokenId);
+    const result = await applyOngoingAutomationEffects({
+      sourceId: entry.tokenId || '',
+      sourceName: tokenLabel(sourcePlacement),
+      abilityId: entry.abilityId || '',
+      abilityName: entry.abilityName || 'Triggered Ability',
+      effects,
+      placements: resolveAutoTriggerPlacements(entry, payload),
+      reason: eventType || 'trigger',
+    });
+    if (entry.authored && entry.abilityName && window.dashboardChat?.sendMessage) {
+      const detail = result?.detail ? `: ${result.detail}` : '.';
+      window.dashboardChat.sendMessage({
+        message: `${tokenLabel(sourcePlacement) || 'Token'} - "${entry.abilityName}" trigger auto-resolved${detail}`,
+        type: 'text',
+      }).catch(() => {});
+    }
+  }
+
+  function parsePlacementStaminaValue(value) {
+    const parsed = Number.parseInt(String(value ?? '').trim(), 10);
+    return Number.isFinite(parsed) ? parsed : null;
+  }
+
+  function fireManualStaminaTriggers({ placementId, before, after, kind = 'manual', source = 'manual' } = {}) {
+    if (!placementId) return;
+    const beforeValue = parsePlacementStaminaValue(before);
+    const afterValue = parsePlacementStaminaValue(after);
+    if (beforeValue === null || afterValue === null || beforeValue === afterValue) return;
+    registerAuthoredTriggersForPlacement(placementId).then(() => {
+      const delta = afterValue - beforeValue;
+      triggerFire('staminaChange', {
+        placementId,
+        targetId: placementId,
+        before: beforeValue,
+        after: afterValue,
+        delta,
+        kind,
+        source,
+        manual: true,
+      });
+      if (beforeValue > 0 && afterValue <= 0) {
+        triggerFire('staminaZero', {
+          placementId,
+          targetId: placementId,
+          sourceId: '',
+          before: beforeValue,
+          after: afterValue,
+          abilityName: source,
+          manual: true,
+        });
+      }
+    }).catch((err) => {
+      console.warn('[VTT] Manual stamina trigger registration failed', err);
+    });
   }
 
   function expireTriggerEntriesForBoundary(eventType, payload = {}) {
@@ -4040,6 +4126,9 @@ export function mountBoardInteractions(store, routes = {}) {
       freeTriggered: isFreeTriggeredActionLabel(action?.actionLabel || action?.type || action?.kind || ''),
       authored: true,
       condition: block.condition || '',
+      autoResolve: Boolean(block.autoResolve),
+      effectTarget: block.effectTarget || block.resolveTarget || '',
+      effects: Array.isArray(block.effects) ? JSON.parse(JSON.stringify(block.effects)) : [],
       expires: block.expires || block.lifetime || null,
     };
     entry.predicate = buildAuthoredTriggerPredicate(entry);
@@ -15541,7 +15630,7 @@ export function mountBoardInteractions(store, routes = {}) {
     const adjustment = await getAutomationDamageAdjustment(payload.placementId, payload.damageType || '');
     const adjustedAmount = Math.max(0, amount + adjustment.vulnerability - adjustment.immunity);
     const result = adjustedAmount > 0
-      ? applyDamageHealToPlacement(payload.placementId, 'damage', adjustedAmount)
+      ? applyDamageHealToPlacement(payload.placementId, 'damage', adjustedAmount, { fireStaminaTriggers: false })
       : getZeroDamageResult(payload.placementId);
     if (!result) {
       reject?.(new Error('Unable to update stamina for that token.'));
@@ -17024,7 +17113,7 @@ export function mountBoardInteractions(store, routes = {}) {
     request.resolve?.({ done: true });
   }
 
-  function applyDamageHealToPlacement(placementId, mode, amount, { allowTempHp = false } = {}) {
+  function applyDamageHealToPlacement(placementId, mode, amount, { allowTempHp = false, fireStaminaTriggers = true } = {}) {
     if (!placementId || (mode !== 'damage' && mode !== 'heal')) {
       return null;
     }
@@ -17099,6 +17188,16 @@ export function mountBoardInteractions(store, routes = {}) {
         savePromise: updateResult.savePromise,
       }
     );
+
+    if (fireStaminaTriggers) {
+      fireManualStaminaTriggers({
+        placementId,
+        before: result.previous,
+        after: result.current,
+        kind: mode,
+        source: mode === 'damage' ? 'Manual damage' : 'Manual healing',
+      });
+    }
 
     const placement = getPlacementFromStore(placementId);
     const name = tokenLabel(placement);
@@ -17597,6 +17696,13 @@ export function mountBoardInteractions(store, routes = {}) {
         latestSnapshot,
         { savePromise: updateResult.savePromise }
       );
+      fireManualStaminaTriggers({
+        placementId: activeTokenSettingsId,
+        before: baseSnapshot.current,
+        after: latestSnapshot.current,
+        kind: 'manual',
+        source: 'Token HP edit',
+      });
     }
 
     if (tokenSettingsMenu?.hpCurrentInput && latestSnapshot) {
@@ -17973,6 +18079,7 @@ export function mountBoardInteractions(store, routes = {}) {
 
       const nextCurrent = currentStamina !== undefined ? String(currentStamina) : currentHp.current;
       const nextMax = staminaMax !== undefined ? String(staminaMax) : currentHp.max;
+      const previousCurrent = currentHp.current;
 
       // Skip if values haven't actually changed (prevents unnecessary saves)
       if (nextCurrent === currentHp.current && nextMax === currentHp.max) {
@@ -17988,6 +18095,13 @@ export function mountBoardInteractions(store, routes = {}) {
           }
           target.overlays.hitPoints.value = { current: nextCurrent, max: nextMax };
         }
+      });
+      fireManualStaminaTriggers({
+        placementId: placement.id,
+        before: previousCurrent,
+        after: nextCurrent,
+        kind: 'sheetSync',
+        source: 'Character sheet stamina sync',
       });
       anyUpdated = true;
     }

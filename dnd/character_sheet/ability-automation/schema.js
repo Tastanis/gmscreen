@@ -1253,7 +1253,7 @@
   }
 
   function normalizeTriggerBlock(input, warnings, path) {
-    const known = new Set(["type", "id", "condition", "match", "target", "effectTarget", "resolveTarget", "effects", "note", "expires", "lifetime"]);
+    const known = new Set(["type", "id", "condition", "match", "target", "effectTarget", "resolveTarget", "effects", "note", "expires", "lifetime", "autoResolve", "automatic", "resolveAutomatically"]);
     const block = {
       type: "trigger",
       id: input.id || createId("trigger"),
@@ -1266,6 +1266,7 @@
     if (match) block.match = match;
     const expires = normalizeTriggerLifetime(input.expires || input.lifetime, warnings, `${path}.expires`);
     if (expires) block.expires = expires;
+    if (input.autoResolve || input.automatic || input.resolveAutomatically) block.autoResolve = true;
     if (!block.condition && !match) {
       warnings.push(`${path}: trigger has no condition text or match config.`);
     }

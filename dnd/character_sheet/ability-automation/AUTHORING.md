@@ -372,9 +372,11 @@ Triggered abilities use an always-listening/resolve flow when the first card is 
 
 Put trigger-resolution effects such as `halveTriggeringDamage`, teleport, optional `spend` riders, and reminders in an `effect` card after the `trigger` card. Do not rely on `trigger.effects` for effects that should run when the player clicks the ready trigger; the trigger card describes the passive listener.
 
+For passive no-choice effects, add `"autoResolve": true` to the trigger block and put the effects directly on that same trigger block. The VTT runs those trigger `effects` immediately instead of showing a ready `!`. This is intended for simple public banners and similar automatic effects, not for reactions that require a player choice.
+
 Clicking a structured trigger ability directly with no captured trigger payload registers only the trigger listener and then stops. Treat this as a fallback/debug path, not the default gameplay flow.
 
-Triggered abilities do not auto-resolve. The player or GM clicks the ready trigger and resolves the ability manually with the captured event payload.
+Triggered abilities do not auto-resolve unless the trigger block has `"autoResolve": true`. The player or GM clicks the ready trigger and resolves normal triggered abilities manually with the captured event payload.
 
 Resolving a non-free triggered action consumes the character's triggered action for the round (`triggeredActionReady = false`), which prevents other non-free triggered actions from becoming ready until the next round reset. Free triggered actions do not consume that round-limited trigger.
 
