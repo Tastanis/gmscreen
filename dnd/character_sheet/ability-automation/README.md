@@ -54,7 +54,7 @@ action.automation = {
 For each block in `automation.cards`:
 
 1. `target` — VTT prompts the user to pick token(s) or place a template. Result is stored under `state.groups[block.name]`.
-2. `powerRoll` — Open dice modal; user rolls, picks a tier, accepts. The runtime then walks `tier.effects` and dispatches each effect against the resolved target group.
+2. `powerRoll` — Open dice modal; board-hosted runs can show clickable suggested edges/banes from current map state before the user rolls. The user rolls, picks a tier, accepts. The runtime then walks `tier.effects` and dispatches each effect against the resolved target group.
 3. `effect` — Walk `block.effects` against the target group (no roll).
 4. `trigger` - With structured `match`, registers on the VTT trigger bus. PC trigger actions in the Triggers list auto-register when that character is in the active scene. Trigger cards embedded in main actions/maneuvers run in card order, allowing "hit/select a target, then watch that target" abilities. Optional `expires` metadata unregisters the listener at turn, round, or combat boundaries. Resolving a ready trigger skips the trigger card and runs the follow-up cards with the captured event payload. Without `match`, posts a chat reminder.
 5. `persistent` — Register a board-side persistent zone when a prior area target exists; otherwise post a chat reminder.

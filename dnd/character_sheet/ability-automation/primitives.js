@@ -133,6 +133,7 @@
     "dying",
     "frightened",
     "grabbed",
+    "hidden",
     "prone",
     "restrained",
     "slowed",

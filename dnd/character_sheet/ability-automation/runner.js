@@ -422,6 +422,47 @@
     return state.groups[groupName] || [];
   }
 
+  function normalizeRollSuggestion(input) {
+    if (!input || typeof input !== "object") return null;
+    const kind = String(input.kind || "").trim().toLowerCase();
+    if (kind !== "edge" && kind !== "bane") return null;
+    const id = String(input.id || `${kind}-${input.label || ""}`).trim();
+    const label = String(input.label || id).trim();
+    if (!id || !label) return null;
+    return {
+      id,
+      kind,
+      label,
+      active: input.active !== false,
+    };
+  }
+
+  function getActiveRollSuggestionCounts(state) {
+    const counts = { edge: 0, bane: 0 };
+    const suggestions = Array.isArray(state.rollSuggestions) ? state.rollSuggestions : [];
+    suggestions.forEach((suggestion) => {
+      if (!suggestion?.active) return;
+      if (suggestion.kind === "edge") counts.edge += 1;
+      if (suggestion.kind === "bane") counts.bane += 1;
+    });
+    return counts;
+  }
+
+  function getTotalEdgeBaneCounts(state) {
+    const suggested = getActiveRollSuggestionCounts(state);
+    return {
+      edge: Math.max(0, asInt(state.edgeCount)) + suggested.edge,
+      bane: Math.max(0, asInt(state.baneCount)) + suggested.bane,
+    };
+  }
+
+  function getRollSuggestionLabel(state) {
+    const active = (Array.isArray(state.rollSuggestions) ? state.rollSuggestions : [])
+      .filter((suggestion) => suggestion?.active)
+      .map((suggestion) => suggestion.label);
+    return active.length ? `Suggested: ${active.join(", ")}` : "Suggested: none";
+  }
+
   function resolveTriggerPlacementGroup(state, name) {
     const key = String(name || "").trim().toLowerCase();
     if (!key) return null;
@@ -722,6 +763,59 @@
     }).join("");
   }
 
+  function refreshPowerRollSuggestions(state, block) {
+    const callback = state?.context?.getPowerRollSuggestions;
+    if (typeof callback !== "function") {
+      state.rollSuggestions = [];
+      return;
+    }
+    const targetGroup = getTargetGroup(state, block.target);
+    const payload = {
+      actorId: state.sourcePlacement?.id || "",
+      sourceId: state.sourcePlacement?.id || "",
+      action: state.action || {},
+      actionId: state.action?.id || "",
+      actionName: state.action?.name || "",
+      actionKind: state.action?.actionKind || state.action?.kind || state.context?.actionType || "",
+      keywords: getAbilityKeywords(state),
+      range: state.action?.range || "",
+      attribute: block.attribute || "",
+      rollEvent: block.rollEvent === "abilityTest" ? "abilityTest" : "powerRoll",
+      targets: targetGroup.map((target) => ({ id: target?.id || "", name: target?.name || "" })).filter((target) => target.id),
+      targetIds: targetGroup.map((target) => target?.id).filter(Boolean),
+    };
+    try {
+      const next = callback(payload);
+      state.rollSuggestions = (Array.isArray(next) ? next : [])
+        .map(normalizeRollSuggestion)
+        .filter(Boolean);
+    } catch (err) {
+      console.warn("[AbilityAutomationRunner] roll suggestions failed", err);
+      state.rollSuggestions = [];
+    }
+  }
+
+  function renderRollSuggestionButtons(state) {
+    const suggestions = Array.isArray(state.rollSuggestions) ? state.rollSuggestions : [];
+    if (!suggestions.length) {
+      return '<div class="power-roll-runner__suggestions power-roll-runner__suggestions--empty"><span>No board suggestions</span></div>';
+    }
+    const buttons = suggestions.map((suggestion) => {
+      const icon = suggestion.kind === "edge" ? "^" : "v";
+      const pressed = suggestion.active ? "true" : "false";
+      return `
+        <button
+          class="power-roll-runner__suggestion ${suggestion.active ? "power-roll-runner__suggestion--active" : ""}"
+          type="button"
+          data-power-roll-suggestion-toggle="${escapeHtml(suggestion.id)}"
+          data-suggestion-kind="${escapeHtml(suggestion.kind)}"
+          aria-pressed="${pressed}"
+        >${escapeHtml(icon)} ${escapeHtml(suggestion.label)}</button>
+      `;
+    }).join("");
+    return `<div class="power-roll-runner__suggestions">${buttons}</div>`;
+  }
+
   function getPowerRollTotal(state, block) {
     // flatBonus (monster-style literal) takes priority over attribute lookup.
     // When flatBonus is set, attribute is only a label for display.
@@ -732,7 +826,8 @@
     const attributeBonus = resolved.bonus;
     const bonus = asInt(block.bonus);
     const manualBonus = asInt(state.manualBonus);
-    const edgeState = getEdgeState(state.edgeCount, state.baneCount);
+    const edgeBaneCounts = getTotalEdgeBaneCounts(state);
+    const edgeState = getEdgeState(edgeBaneCounts.edge, edgeBaneCounts.bane);
     const total = state.roll
       ? state.roll.total + attributeBonus + bonus + manualBonus + edgeState.bonus
       : null;
@@ -786,15 +881,19 @@
           <div class="dice-result-total">${total === null ? "--" : total}</div>
           <div class="dice-result-detail">${escapeHtml(tierDetail)}</div>
         </div>
-        <div class="dice-row dice-row--edge-bane power-roll-runner__edge-buttons">
-          <button class="dice-btn dice-btn--edge" type="button" data-power-roll-edge-adjust="1">Edge (+2)</button>
-          <button class="dice-btn dice-btn--bane" type="button" data-power-roll-bane-adjust="1">Bane (-2)</button>
-          <button class="dice-btn" type="button" data-power-roll-bonus-adjust="1">+1</button>
-          <button class="dice-btn" type="button" data-power-roll-bonus-adjust="-1">-1</button>
+        <div class="dice-row dice-row--edge-bane power-roll-runner__edge-buttons" aria-label="Manual edge and bane controls">
+          <button class="dice-btn dice-btn--bane power-roll-runner__edge-btn" type="button" data-power-roll-bane-adjust="2" title="Add double bane">BANE vv</button>
+          <button class="dice-btn dice-btn--bane power-roll-runner__edge-btn" type="button" data-power-roll-bane-adjust="1" title="Add bane">BANE v</button>
+          <button class="dice-btn dice-btn--edge power-roll-runner__edge-btn" type="button" data-power-roll-edge-adjust="1" title="Add edge">EDGE ^</button>
+          <button class="dice-btn dice-btn--edge power-roll-runner__edge-btn" type="button" data-power-roll-edge-adjust="2" title="Add double edge">EDGE ^^</button>
         </div>
+        ${renderRollSuggestionButtons(state)}
         <div class="power-roll-runner__adjustments">
           <span>${escapeHtml(edgeState.label)}</span>
+          <span>${escapeHtml(getRollSuggestionLabel(state))}</span>
           <span>Manual: ${escapeHtml(formatModifier(state.manualBonus))}</span>
+          <button class="power-roll-runner__mini-btn" type="button" data-power-roll-bonus-adjust="-1">-1</button>
+          <button class="power-roll-runner__mini-btn" type="button" data-power-roll-bonus-adjust="1">+1</button>
           <button class="power-roll-runner__mini-btn" type="button" data-power-roll-clear-adjustments>Clear</button>
         </div>
         <div class="dice-actions__controls power-roll-runner__controls">
@@ -854,15 +953,28 @@
         return;
       }
       if (target.closest("[data-power-roll-edge-adjust]")) {
-        state.edgeCount = asInt(state.edgeCount) + 1;
+        const button = target.closest("[data-power-roll-edge-adjust]");
+        state.edgeCount = asInt(state.edgeCount) + asInt(button?.getAttribute("data-power-roll-edge-adjust"), 1);
         state.resultText = state.roll ? "Edge added. Reroll to post the adjusted result." : "";
         renderPowerRoll(host, state, block);
         return;
       }
       if (target.closest("[data-power-roll-bane-adjust]")) {
-        state.baneCount = asInt(state.baneCount) + 1;
+        const button = target.closest("[data-power-roll-bane-adjust]");
+        state.baneCount = asInt(state.baneCount) + asInt(button?.getAttribute("data-power-roll-bane-adjust"), 1);
         state.resultText = state.roll ? "Bane added. Reroll to post the adjusted result." : "";
         renderPowerRoll(host, state, block);
+        return;
+      }
+      const suggestionButton = target.closest("[data-power-roll-suggestion-toggle]");
+      if (suggestionButton) {
+        const id = suggestionButton.getAttribute("data-power-roll-suggestion-toggle") || "";
+        const suggestion = (state.rollSuggestions || []).find((entry) => entry.id === id);
+        if (suggestion) {
+          suggestion.active = !suggestion.active;
+          state.resultText = state.roll ? "Suggestion changed. Reroll to post the adjusted result." : "";
+          renderPowerRoll(host, state, block);
+        }
         return;
       }
       const bonusButton = target.closest("[data-power-roll-bonus-adjust]");
@@ -877,6 +989,9 @@
         state.edgeCount = 0;
         state.baneCount = 0;
         state.manualBonus = 0;
+        (state.rollSuggestions || []).forEach((suggestion) => {
+          suggestion.active = false;
+        });
         state.resultText = state.roll ? "Adjustments cleared. Reroll to post the adjusted result." : "";
         renderPowerRoll(host, state, block);
         return;
@@ -920,6 +1035,7 @@
     state.selectedTier = null;
     state.baseTier = null;
     state.resultText = "";
+    refreshPowerRollSuggestions(state, block);
 
     const host = makeHost("Power Roll", state.action.name || "Ability Automation", "power", state.context?.automationAnchor || null);
     renderPowerRoll(host, state, block);
@@ -1001,7 +1117,7 @@
       try {
         await ctx.registerTrigger({
           casterId,
-          abilityId: state.action?.id || `ability_${block.id}`,
+          abilityId: state.action?.id || state.action?._stableActionId || `ability_${block.id}`,
           abilityName: state.action?.name || "",
           match: block.match,
           effects: block.effects || [],
@@ -2106,6 +2222,7 @@
       edgeCount: 0,
       baneCount: 0,
       manualBonus: 0,
+      rollSuggestions: [],
       roll: null,
       resultText: "",
     };

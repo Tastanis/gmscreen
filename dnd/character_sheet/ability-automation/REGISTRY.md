@@ -83,11 +83,13 @@ The monster ability tray + `window.MonsterAbilityRunner.start()` add the followi
 
 ## Conditions — `condition.name`
 
-`bleeding`, `dazed`, `dying`, `frightened`, `grabbed`, `prone`, `restrained`, `slowed`, `taunted`, `weakened`, `damageWeakness`, `damageImmunity`, `other`
+`bleeding`, `dazed`, `dying`, `frightened`, `grabbed`, `hidden`, `prone`, `restrained`, `slowed`, `taunted`, `weakened`, `damageWeakness`, `damageImmunity`, `other`
 
 When `name === "other"`, supply `text` describing the homebrew condition.
 
 `damageWeakness` and `damageImmunity` carry numeric riders: `amount` (int, required) and `damageType` (string, optional). Stored on the placement; read by `getAutomationDamageAdjustment` when computing adjusted damage. Empty / "untyped" `damageType` matches every type.
+
+Board-hosted power roll modals can show clickable suggested edges/banes from current VTT state through `getPowerRollSuggestions`. These are runtime hints, not automation JSON fields. High Ground, Flanking, and Cover are always visible as suggestion toggles; High Ground and Flanking default on when board state proves them, while Cover is currently manual because line-of-effect obstruction is not modeled as a reliable roll predicate. Additional board-derived suggestions include prone/restrained targets, hidden attackers, and weakened/restrained attackers when those facts are present in board state.
 
 ## Durations — `condition.duration`
 

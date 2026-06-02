@@ -602,7 +602,7 @@ Applies via the same heal path but allows the new total to exceed max stamina (t
 
 | Field | Values |
 |---|---|
-| `name` | `"bleeding"`, `"dazed"`, `"dying"`, `"frightened"`, `"grabbed"`, `"prone"`, `"restrained"`, `"slowed"`, `"taunted"`, `"weakened"`, `"damageWeakness"`, `"damageImmunity"`, `"other"` |
+| `name` | `"bleeding"`, `"dazed"`, `"dying"`, `"frightened"`, `"grabbed"`, `"hidden"`, `"prone"`, `"restrained"`, `"slowed"`, `"taunted"`, `"weakened"`, `"damageWeakness"`, `"damageImmunity"`, `"other"` |
 | `text` | required when `name === "other"` — describes the homebrew condition |
 | `duration` | `"instantaneous"`, `"endOfTurn"`, `"saveEnds"`, `"endOfEncounter"`, `"untilDying"` |
 | `amount` | int — required for `"damageWeakness"` / `"damageImmunity"`. How much extra damage is taken (weakness) / soaked (immunity). |

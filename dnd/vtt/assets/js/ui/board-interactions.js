@@ -18,6 +18,7 @@ import {
   createTriggerLifetimeState,
   shouldExpireTriggerEntry,
 } from './automation-trigger-lifetime.js';
+import { getPowerRollSuggestions } from './power-roll-suggestions.js';
 import {
   setDrawings as setDrawingToolDrawings,
   isDrawModeActive,
@@ -762,6 +763,11 @@ export function mountBoardInteractions(store, routes = {}) {
       name: 'Grabbed',
       description:
         'While you are grabbed, your speed is 0, you can’t be force moved, you can’t use the Knockback maneuver, and you take a bane on abilities that don’t target the creature grabbing you. If the creature grabbing you moves, they bring you with them. If the creature’s size is equal to or less than yours, their speed is halved while they have you grabbed. The creature grabbing you can use a maneuver to move you into an unoccupied space adjacent to them. The creature grabbing you can end the grab at any time (no action required). You can also attempt to escape being grabbed using the Escape Grab maneuver (see Maneuvers in Combat). If you teleport or if the creature grabbing you is force moved to a space that isn’t adjacent to you, you are no longer grabbed.',
+    },
+    {
+      name: 'Hidden',
+      description:
+        'While you are hidden from another creature, that creature cannot target you with non-area abilities, and you gain an edge on ability rolls made against that creature until the end of the turn in which you are no longer hidden.',
     },
     {
       name: 'Prone',
@@ -11300,6 +11306,30 @@ export function mountBoardInteractions(store, routes = {}) {
       document.dispatchEvent(new CustomEvent(eventName, { detail }));
     });
   }
+
+  function buildBoardPowerRollSuggestions(payload = {}) {
+    const state = boardApi.getState?.() ?? {};
+    const activeSceneId = state.boardState?.activeSceneId ?? null;
+    const actorId = payload.actorId || payload.sourceId || payload.sourcePlacement?.id || '';
+    const targetIds = Array.isArray(payload.targetIds)
+      ? payload.targetIds
+      : Array.isArray(payload.targets)
+        ? payload.targets.map((target) => target?.id).filter(Boolean)
+        : [];
+    const actor = actorId ? getPlacementFromStore(actorId) : null;
+    const targets = targetIds.map((id) => getPlacementFromStore(id)).filter(Boolean);
+    const placements = getActiveScenePlacements(state).filter((placement) => !placement?.hidden);
+    const mapLevels = activeSceneId ? resolveSceneTokenLevelState(state, activeSceneId) : [];
+    return getPowerRollSuggestions({
+      actor,
+      targets,
+      placements,
+      mapLevels,
+      getTeam: getCombatantTeam,
+      context: payload,
+    });
+  }
+
   window.VTTBoardCallbacks = {
     selectTarget: function (cfg) { return dispatchBoardCustom('vtt:automation-select-target', 'targetConfig', cfg); },
     selectAreaTarget: function (cfg) { return dispatchBoardCustom('vtt:automation-select-area', 'targetConfig', cfg); },
@@ -11327,6 +11357,7 @@ export function mountBoardInteractions(store, routes = {}) {
     setScopedFlag: function (payload) { return dispatchBoardCustom('vtt:automation-set-scoped-flag', 'payload', payload); },
     setAura: function (payload) { return dispatchBoardCustom('vtt:automation-set-aura', 'payload', payload); },
     consumeTriggeredAction: function (payload) { return dispatchBoardCustom('vtt:automation-consume-triggered-action', 'payload', payload); },
+    getPowerRollSuggestions: function (payload) { return buildBoardPowerRollSuggestions(payload); },
     getPlacementById: function (placementId) {
       const placement = getPlacementFromStore(placementId);
       return placement ? JSON.parse(JSON.stringify(placement)) : null;

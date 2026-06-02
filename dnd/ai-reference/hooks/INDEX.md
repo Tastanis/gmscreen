@@ -12,7 +12,7 @@ The canonical hook registry is `../../character_sheet/ability-automation/REGISTR
 
 ## Board Callback Surface
 
-`window.VTTBoardCallbacks` is exported from `board-interactions.js` and includes target selection, area selection, damage, healing, PC recovery spending, conditions, potency checks, forced movement, teleport, swap, free strikes, persistent zones, marks, trigger events, and scoped flags.
+`window.VTTBoardCallbacks` is exported from `board-interactions.js` and includes target selection, area selection, damage, healing, PC recovery spending, conditions, potency checks, forced movement, teleport, swap, free strikes, persistent zones, marks, trigger events, scoped flags, and board-state power-roll suggestions.
 
 Check `REGISTRY.md` before authoring against a hook. If it is not listed there, treat it as unsupported.
 

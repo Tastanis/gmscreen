@@ -969,7 +969,7 @@ function renderAbilityItem(action, categoryKey, index, opts = {}) {
   // category icon turns blue and pulses. Avoid inserting a second icon in this
   // tight row; it can crush the title/meta columns.
   const actionId = action?._stableActionId || getStableActionId(action, categoryKey, index);
-  const triggerId = action?._injectedTriggerId || (categoryKey === 'triggers' && actionId && ready.includes(actionId) ? actionId : '');
+  const triggerId = action?._injectedTriggerId || (actionId && ready.includes(actionId) ? actionId : '');
   return `
     <button
       class="vtt-character-ability-item${automated ? ' vtt-character-ability-item--automated' : ''}${triggerId ? ' vtt-character-ability-item--trigger-ready' : ''}"
@@ -1867,8 +1867,47 @@ function getAbilityActions(sheet, categoryKey, opts = {}) {
         merged = [{ ...fallback, _injectedTriggerId: '__opportunityAttack__' }, ...baseList];
       }
     }
+    const injectedReadyActions = collectReadyTriggeredActions(sheet, activeToken)
+      .filter((entry) => entry.categoryKey !== 'triggers')
+      .filter((entry) => !merged.some((action) => (
+        action?._stableActionId === entry.action._stableActionId ||
+        action?._injectedTriggerId === entry.triggerId
+      )))
+      .map((entry) => ({
+        ...entry.action,
+        _injectedTriggerId: entry.triggerId,
+        actionLabel: entry.action.actionLabel || getAbilityCategoryLabel(entry.categoryKey),
+      }));
+    if (injectedReadyActions.length) {
+      merged = [...injectedReadyActions, ...merged];
+    }
   }
   return merged.filter((action) => action && typeof action === 'object' && (action.name || action.description || action.useWhen));
+}
+
+function collectReadyTriggeredActions(sheet, activeToken = null) {
+  const ready = Array.isArray(activeToken?.readyTriggerAbilities) ? activeToken.readyTriggerAbilities : [];
+  if (!ready.length || !sheet?.actions || typeof sheet.actions !== 'object') return [];
+  const readySet = new Set(ready);
+  const categories = ABILITY_CATEGORIES.map((category) => category.key);
+  const result = [];
+  categories.forEach((categoryKey) => {
+    const list = Array.isArray(sheet.actions?.[categoryKey]) ? sheet.actions[categoryKey] : [];
+    list.forEach((action, index) => {
+      if (!action || typeof action !== 'object') return;
+      const stableId = action?._stableActionId || getStableActionId(action, categoryKey, index);
+      if (!stableId || !readySet.has(stableId)) return;
+      result.push({
+        categoryKey,
+        triggerId: stableId,
+        action: {
+          ...action,
+          _stableActionId: stableId,
+        },
+      });
+    });
+  });
+  return result;
 }
 
 function hasAbilityAutomation(automation) {
@@ -1993,6 +2032,11 @@ function startAbilityAutomation(sheet, action, categoryKey, sourceToken = null, 
     checkScopedFlag: requestAutomationCheckScopedFlag,
     setScopedFlag: requestAutomationSetScopedFlag,
     setAura: requestAutomationSetAura,
+    getPowerRollSuggestions: (payload) => (
+      window.VTTBoardCallbacks && typeof window.VTTBoardCallbacks.getPowerRollSuggestions === 'function'
+        ? window.VTTBoardCallbacks.getPowerRollSuggestions(payload)
+        : []
+    ),
     getPlacementById: (placementId) => (
       window.VTTBoardCallbacks && typeof window.VTTBoardCallbacks.getPlacementById === 'function'
         ? window.VTTBoardCallbacks.getPlacementById(placementId)

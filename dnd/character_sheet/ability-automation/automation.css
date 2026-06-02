@@ -189,14 +189,62 @@
   font-size: 0.82rem;
   font-weight: 700;
   gap: 6px;
-  grid-template-columns: minmax(0, 1.4fr) minmax(0, 1fr) auto;
+  grid-template-columns: minmax(0, 1.1fr) minmax(0, 1.3fr) minmax(0, 0.8fr) auto auto auto;
   padding: 6px 7px;
 }
 
 .power-roll-runner__edge-buttons {
   display: grid;
   grid-template-columns: repeat(4, 1fr);
-  gap: 6px;
+  gap: 4px;
+}
+
+.power-roll-runner__edge-btn {
+  border-radius: 4px;
+  font-size: 0.72rem;
+  line-height: 1;
+  min-height: 24px;
+  padding: 4px 5px;
+  text-transform: uppercase;
+}
+
+.power-roll-runner__suggestions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 4px;
+  min-height: 26px;
+}
+
+.power-roll-runner__suggestions--empty {
+  align-items: center;
+  color: var(--dice-muted);
+  font-size: 0.78rem;
+  font-style: italic;
+}
+
+.power-roll-runner__suggestion {
+  background: #403f3a;
+  border: 1px solid #797367;
+  border-radius: 4px;
+  color: #e6dfd2;
+  cursor: pointer;
+  font: inherit;
+  font-size: 0.76rem;
+  font-weight: 800;
+  line-height: 1;
+  padding: 5px 7px;
+}
+
+.power-roll-runner__suggestion--active[data-suggestion-kind='edge'] {
+  background: #234fa8;
+  border-color: #e8efff;
+  color: #fff;
+}
+
+.power-roll-runner__suggestion--active[data-suggestion-kind='bane'] {
+  background: #4f3a24;
+  border-color: #f2dfbf;
+  color: #fff6e8;
 }
 
 .power-roll-runner__mini-btn {
