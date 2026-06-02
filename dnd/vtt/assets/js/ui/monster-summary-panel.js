@@ -260,9 +260,7 @@
             : { label: String(condition || ''), index: 0, hidden: false };
         var label = entry.label || entry.name || 'Effect';
         var index = Number.isInteger(entry.index) ? entry.index : 0;
-        var detail = entry.hidden
-            ? [entry.sourceAbility, entry.sourceName, entry.durationLabel].filter(Boolean).join(' - ')
-            : '';
+        var detail = entry.detail || '';
         var removeButton = placementId
             ? '<button class="vtt-character-condition__remove" type="button" data-character-condition-remove data-placement-id="' + escapeAttribute(placementId) + '" data-condition-index="' + escapeAttribute(index) + '" aria-label="Remove ' + escapeAttribute(label) + '">x</button>'
             : '';
@@ -344,10 +342,9 @@
             }
             if (condition && typeof condition === 'object') {
                 var hidden = Boolean(condition.hidden || String(condition.name || '').trim().toLowerCase() === 'hiddeneffect');
-                var label = String(hidden
-                    ? (condition.label ?? condition.sourceAbility ?? condition.text ?? condition.name ?? 'Hidden effect')
-                    : (condition.name ?? condition.label ?? condition.id ?? '')).trim();
+                var label = formatConditionLabel(condition, hidden);
                 if (!label) return null;
+                var durationLabel = formatConditionDuration(condition.duration);
                 return {
                     label: label,
                     name: String(condition.name ?? label).trim(),
@@ -355,11 +352,38 @@
                     hidden: hidden,
                     sourceName: String(condition.sourceName ?? '').trim(),
                     sourceAbility: String(condition.sourceAbility ?? '').trim(),
-                    durationLabel: formatConditionDuration(condition.duration)
+                    durationLabel: durationLabel,
+                    detail: formatConditionDetail(condition, hidden, durationLabel)
                 };
             }
             return null;
         }).filter(Boolean);
+    }
+
+    function formatConditionLabel(condition, hidden) {
+        var rawName = String(condition?.name ?? '').trim();
+        var normalized = rawName.toLowerCase();
+        if (normalized === 'damageweakness' || normalized === 'damageimmunity') {
+            var amount = Number.parseInt(condition.amount, 10);
+            var damageType = String(condition.damageType || '').trim().toLowerCase();
+            var typeLabel = damageType ? damageType.charAt(0).toUpperCase() + damageType.slice(1) + ' ' : '';
+            var rider = normalized === 'damageweakness' ? 'weakness' : 'immunity';
+            return (typeLabel + rider + (Number.isFinite(amount) && amount > 0 ? ' ' + amount : '')).trim();
+        }
+        return String(hidden
+            ? (condition.label ?? condition.sourceAbility ?? condition.text ?? condition.name ?? 'Hidden effect')
+            : (condition.label ?? condition.name ?? condition.id ?? '')).trim();
+    }
+
+    function formatConditionDetail(condition, hidden, durationLabel) {
+        var parts = [];
+        if (hidden) {
+            parts.push(condition.sourceAbility, condition.sourceName);
+        }
+        if (durationLabel && durationLabel !== 'instantaneous') {
+            parts.push(durationLabel);
+        }
+        return parts.filter(Boolean).join(' - ');
     }
 
     function formatConditionDuration(duration) {

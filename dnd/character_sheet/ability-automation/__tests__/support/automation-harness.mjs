@@ -375,11 +375,15 @@ function createRecorder() {
     postChat: [],
     applyResourceGain: [],
     applySurgeGain: [],
+    getRecoveryValueForTarget: [],
+    spendRecoveryForTarget: [],
     checkPotency: [],
     checkMark: [],
     checkScopedFlag: [],
     setScopedFlag: [],
     setAura: [],
+    showFloatingText: [],
+    startTurn: [],
   };
   return {
     all,
@@ -494,6 +498,8 @@ export async function createAbilityAutomationHarness(options = {}) {
       powerRollTiers: [...(runOptions.powerRollTiers || options.powerRollTiers || [])],
       randomValues: [...(runOptions.randomValues || options.randomValues || [0.45, 0.45])],
       spendHeroicResourceResults: [...(runOptions.spendHeroicResourceResults || options.spendHeroicResourceResults || [])],
+      recoveryValueResults: [...(runOptions.recoveryValueResults || options.recoveryValueResults || [])],
+      spendRecoveryResults: [...(runOptions.spendRecoveryResults || options.spendRecoveryResults || [])],
       checkPotencyResults: [...(runOptions.checkPotencyResults || options.checkPotencyResults || [])],
       checkMarkResults: [...(runOptions.checkMarkResults || options.checkMarkResults || [])],
       checkScopedFlagResults: [...(runOptions.checkScopedFlagResults || options.checkScopedFlagResults || [])],
@@ -602,6 +608,19 @@ export async function createAbilityAutomationHarness(options = {}) {
       isWinded() {
         return Boolean(runOptions.winded ?? options.winded ?? false);
       },
+      getRecoveryValueForTarget(payload) {
+        recorder.record('getRecoveryValueForTarget', payload);
+        return clone(script.recoveryValueResults.shift() || { recoveryValue: 0 });
+      },
+      spendRecoveryForTarget(payload) {
+        recorder.record('spendRecoveryForTarget', payload);
+        return clone(script.spendRecoveryResults.shift() || {
+          spent: payload.recoveries || 1,
+          recoveryValue: 5,
+          currentRecoveries: 0,
+          name: payload.placementId || 'Target',
+        });
+      },
       checkPotency(payload) {
         recorder.record('checkPotency', payload);
         return clone(script.checkPotencyResults.shift() || { passes: false });
@@ -621,6 +640,17 @@ export async function createAbilityAutomationHarness(options = {}) {
       setAura(payload) {
         recorder.record('setAura', payload);
         return { applied: true, enabled: payload.enabled, radius: payload.radius };
+      },
+      showFloatingText(payload) {
+        recorder.record('showFloatingText', payload);
+        return { shown: true };
+      },
+      startTurn(payload) {
+        recorder.record('startTurn', payload);
+        if (payload?.preflight) {
+          return { started: false, valid: true, accepted: true };
+        }
+        return { started: true };
       },
     };
 

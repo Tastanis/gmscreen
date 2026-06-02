@@ -5,6 +5,7 @@ export const TURN_EFFECT_MAX_AGE_MS = 10000;
 export const TURN_EFFECT_TYPES = Object.freeze({
   DRAW_STEEL: 'draw-steel',
   SHARON_HESITATION: 'sharon-hesitation',
+  FLOATING_TEXT: 'floating-text',
 });
 
 export const SHARON_PROFILE_ID = 'sharon';

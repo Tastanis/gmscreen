@@ -142,14 +142,12 @@ import {
   validateTurnStartState,
 } from '../combat/combat-turns.js';
 import {
-  SHARON_PROFILE_ID,
   TURN_EFFECT_MAX_AGE_MS,
   TURN_EFFECT_TYPES,
   getTurnEffectSignature as buildTurnEffectSignature,
   partitionEndOfTurnConditions,
   prepareSyncedTurnEffect,
   recordLocalTurnEffect,
-  shouldTriggerSharonHesitation,
 } from '../combat/combat-effects.js';
 import {
   applyCombatGroupsToState,
@@ -1688,10 +1686,8 @@ export function mountBoardInteractions(store, routes = {}) {
   }
 
   let roundTurnCount = 0;
-  let hesitationBannerTimeoutId = null;
-  let hesitationBannerRemoveId = null;
-  let drawSteelBannerTimeoutId = null;
-  let drawSteelBannerRemoveId = null;
+  let bigTextBannerTimeoutId = null;
+  let bigTextBannerRemoveId = null;
 
   function escapeHtml(value) {
     if (typeof value !== 'string') {
@@ -2027,6 +2023,8 @@ export function mountBoardInteractions(store, routes = {}) {
   document.addEventListener('vtt:automation-check-scoped-flag', handleAutomationCheckScopedFlagRequest);
   document.addEventListener('vtt:automation-set-scoped-flag', handleAutomationSetScopedFlagRequest);
   document.addEventListener('vtt:automation-set-aura', handleAutomationSetAuraRequest);
+  document.addEventListener('vtt:automation-floating-text', handleAutomationFloatingTextRequest);
+  document.addEventListener('vtt:automation-start-turn', handleAutomationStartTurnRequest);
   document.addEventListener('vtt:automation-consume-triggered-action', handleAutomationConsumeTriggeredActionRequest);
   // When the chat panel opens or closes, the layout CSS shifts the board
   // content. Re-position the floating End Turn overlay so it lands inside
@@ -3360,6 +3358,25 @@ export function mountBoardInteractions(store, routes = {}) {
     }
     triggerFire(eventType, payload.payload && typeof payload.payload === 'object' ? payload.payload : {});
     resolve?.({ fired: true, eventType });
+  }
+
+  function handleAutomationFloatingTextRequest(event) {
+    const detail = event?.detail ?? {};
+    const payload = detail.payload && typeof detail.payload === 'object' ? detail.payload : {};
+    const resolve = typeof detail.resolve === 'function' ? detail.resolve : null;
+    resolve?.(announceFloatingTextFromAutomation(payload));
+  }
+
+  function handleAutomationStartTurnRequest(event) {
+    const detail = event?.detail ?? {};
+    const payload = detail.payload && typeof detail.payload === 'object' ? detail.payload : {};
+    const resolve = typeof detail.resolve === 'function' ? detail.resolve : null;
+    try {
+      resolve?.(handleAutomationStartTurn(payload));
+    } catch (error) {
+      console.warn('[VTT] automation startTurn failed', error);
+      resolve?.({ started: false, valid: false, reason: 'error', message: 'Could not start turn.' });
+    }
   }
 
   function whosePredicateMatches(whose, casterId, casterTeam, payloadTokenId, targetIdsAtRegister) {
@@ -9048,7 +9065,6 @@ export function mountBoardInteractions(store, routes = {}) {
       openTurnPrompt(representativeId);
     }
     notifyConditionTurnStart(representativeId);
-    maybeTriggerSpecialTurnEffects(representativeId, options);
     syncCombatStateToStore();
   }
 
@@ -9137,6 +9153,7 @@ export function mountBoardInteractions(store, routes = {}) {
     updateCombatModeIndicators();
     refreshCombatTracker();
     markCombatTurnStateDirty();
+    maybeAnnounceAllyPick();
     syncCombatStateToStore();
   }
 
@@ -9239,6 +9256,7 @@ export function mountBoardInteractions(store, routes = {}) {
       });
     }
 
+    maybeAnnounceAllyPick();
     updateCombatModeIndicators();
     checkForRoundCompletion();
     syncCombatStateToStore();
@@ -10377,6 +10395,9 @@ export function mountBoardInteractions(store, routes = {}) {
     refreshCombatTracker();
     updateCombatModeIndicators();
     showDrawSteelPopup();
+    if (currentTurnTeam === 'ally') {
+      maybeAnnounceAllyPick({ delayMs: 2200 });
+    }
 
     if (isGmUser()) {
       computeInitialMalice().then((initialMalice) => {
@@ -10687,6 +10708,12 @@ export function mountBoardInteractions(store, routes = {}) {
       showHesitationPopup();
     } else if (result.displayType === TURN_EFFECT_TYPES.DRAW_STEEL) {
       showDrawSteelPopup();
+    } else if (result.displayType === TURN_EFFECT_TYPES.FLOATING_TEXT) {
+      showBigTextPopup({
+        text: result.effect?.text || '',
+        tone: result.effect?.tone || 'danger',
+        durationMs: result.effect?.durationMs || 2100,
+      });
     }
   }
 
@@ -11043,12 +11070,10 @@ export function mountBoardInteractions(store, routes = {}) {
     resetTriggeredActionsForActiveScene();
     resetAutomationScopedFlags('round');
     resetPersistentZoneRoundState();
+    currentTurnTeam = roundState.currentTeam;
     fireTimingBoundary('roundStart', { round: combatRound });
     updateStartCombatButton();
     refreshCombatTracker();
-
-    // Determine the team that should go first in the new round
-    currentTurnTeam = roundState.currentTeam;
 
     // Suggest next combatant via focus (UI only, not active turn)
     const nextId = pickNextCombatantId(roundState.preferredTeams);
@@ -11062,6 +11087,7 @@ export function mountBoardInteractions(store, routes = {}) {
     if (status) {
       status.textContent = `Round ${combatRound} begins.`;
     }
+    maybeAnnounceAllyPick();
     syncCombatStateToStore();
   }
 
@@ -11386,6 +11412,8 @@ export function mountBoardInteractions(store, routes = {}) {
     checkScopedFlag: function (payload) { return dispatchBoardCustom('vtt:automation-check-scoped-flag', 'payload', payload); },
     setScopedFlag: function (payload) { return dispatchBoardCustom('vtt:automation-set-scoped-flag', 'payload', payload); },
     setAura: function (payload) { return dispatchBoardCustom('vtt:automation-set-aura', 'payload', payload); },
+    showFloatingText: function (payload) { return dispatchBoardCustom('vtt:automation-floating-text', 'payload', payload); },
+    startTurn: function (payload) { return dispatchBoardCustom('vtt:automation-start-turn', 'payload', payload); },
     consumeTriggeredAction: function (payload) { return dispatchBoardCustom('vtt:automation-consume-triggered-action', 'payload', payload); },
     getPowerRollSuggestions: function (payload) { return buildBoardPowerRollSuggestions(payload); },
     consumeRollRiders: function (payload) { return consumeBoardRollRiders(payload); },
@@ -11777,6 +11805,114 @@ export function mountBoardInteractions(store, routes = {}) {
     return { expectedTeam, previousTeam, isFirstTurnOfRound };
   }
 
+  function getAutomationStartTurnValidationMessage(validation, payload = {}) {
+    if (!combatActive) {
+      return 'Combat is not active.';
+    }
+    if (activeCombatantId) {
+      const label = getCombatantLabel(activeCombatantId) || 'Someone';
+      return `${label} is already taking a turn. Do you want to use this anyway? That would waste the heroic resource.`;
+    }
+    if (payload.condition === 'enemyPickNoActive') {
+      const team = currentTurnTeam === 'ally' || currentTurnTeam === 'enemy' ? currentTurnTeam : null;
+      if (team === 'ally') {
+        return "It's already allies' turn. Do you want to use this anyway? That would waste the heroic resource.";
+      }
+      if (team !== 'enemy') {
+        return "It isn't the enemy pick. Do you want to use this anyway? That would waste the heroic resource.";
+      }
+    }
+    if (validation?.requiresConfirmation) {
+      return "It is not this character's turn. Do you want to use this anyway? That would waste the heroic resource.";
+    }
+    return payload.invalidMessage || 'Start this turn anyway?';
+  }
+
+  function validateAutomationStartTurn(placementId, payload = {}) {
+    const condition = payload.condition || 'enemyPickNoActive';
+    const validation = validateTurnStart(placementId, {
+      override: condition === 'any' || payload.preflightAccepted === true,
+    });
+    let valid = Boolean(validation.valid);
+    let reason = '';
+
+    if (!combatActive) {
+      valid = false;
+      reason = 'combat-inactive';
+    } else if (condition === 'enemyPickNoActive') {
+      if (activeCombatantId) {
+        valid = false;
+        reason = 'active-turn';
+      } else if (currentTurnTeam !== 'enemy') {
+        valid = false;
+        reason = currentTurnTeam === 'ally' ? 'ally-pick' : 'wrong-pick';
+      }
+    } else if (condition === 'pickPhase') {
+      if (activeCombatantId || getTurnPhase() !== TURN_PHASE.PICK) {
+        valid = false;
+        reason = 'not-pick-phase';
+      }
+    }
+
+    if (!valid && !reason) {
+      reason = validation.requiresConfirmation ? 'requires-confirmation' : 'invalid';
+    }
+
+    return {
+      valid,
+      reason,
+      validation,
+      message: getAutomationStartTurnValidationMessage(validation, { ...payload, condition }),
+    };
+  }
+
+  function confirmAutomationStartTurn(message) {
+    try {
+      if (typeof window !== 'undefined' && typeof window.confirm === 'function') {
+        return window.confirm(message);
+      }
+    } catch (error) {
+      return false;
+    }
+    return false;
+  }
+
+  function handleAutomationStartTurn(payload = {}) {
+    const placementId = typeof payload.placementId === 'string' && payload.placementId.trim()
+      ? payload.placementId.trim()
+      : typeof payload.sourceId === 'string'
+        ? payload.sourceId.trim()
+        : '';
+    if (!placementId) {
+      return { started: false, valid: false, reason: 'missing-placement', message: 'No turn target was provided.' };
+    }
+
+    const condition = payload.condition || 'enemyPickNoActive';
+    const check = validateAutomationStartTurn(placementId, { ...payload, condition });
+    if (!check.valid) {
+      if (payload.confirmOnInvalid === false && payload.preflightAccepted !== true) {
+        return { started: false, valid: false, reason: check.reason, message: check.message };
+      }
+      if (payload.preflightAccepted !== true && !confirmAutomationStartTurn(payload.invalidMessage || check.message)) {
+        return { started: false, valid: false, reason: check.reason, canceled: true, message: check.message };
+      }
+    }
+
+    if (payload.preflight === true) {
+      return { started: false, valid: check.valid, accepted: true, reason: check.reason };
+    }
+
+    const initiatorProfileId = normalizeProfileId(payload.sourceId) || getCurrentUserId();
+    beginCombatantTurn(placementId, {
+      initiatorProfileId,
+      initiatorName: payload.sourceName || getCurrentUserName(),
+      expectedTeam: currentTurnTeam,
+      previousTeam: lastActingTeam,
+      isFirstTurnOfRound: combatActive ? roundTurnCount === 0 : false,
+    });
+    return { started: activeCombatantId === (getRepresentativeIdFor(placementId) || placementId), valid: check.valid, reason: check.reason };
+  }
+
   function handlePlayerInitiatedTurn(combatantId, context = {}) {
     const userId = getCurrentUserId();
     if (!userId) {
@@ -11791,14 +11927,8 @@ export function mountBoardInteractions(store, routes = {}) {
     // Clear any stale turn locks first
     clearStaleTurnLock();
 
-    // Check if this is a Sharon "hesitation is weakness" scenario
-    const combatantProfileId = normalizeProfileId(getCombatantProfileId(combatantId));
-    const isSharonUser = userId === SHARON_PROFILE_ID;
-    const isSharonCombatant = combatantProfileId === SHARON_PROFILE_ID;
-    const isSharonOverride = isSharonUser && isSharonCombatant;
-
     // Validate turn start using state machine
-    const validation = validateTurnStart(combatantId, { sharonOverride: isSharonOverride });
+    const validation = validateTurnStart(combatantId);
 
     if (!validation.valid && validation.requiresConfirmation) {
       // Need user confirmation to proceed
@@ -12166,138 +12296,133 @@ export function mountBoardInteractions(store, routes = {}) {
   }
 
   function clearHesitationBanner() {
-    if (hesitationBannerTimeoutId && typeof window !== 'undefined' && typeof window.clearTimeout === 'function') {
-      window.clearTimeout(hesitationBannerTimeoutId);
+    clearBigTextBanner();
+  }
+
+  function clearBigTextBanner() {
+    if (bigTextBannerTimeoutId && typeof window !== 'undefined' && typeof window.clearTimeout === 'function') {
+      window.clearTimeout(bigTextBannerTimeoutId);
     }
-    if (hesitationBannerRemoveId && typeof window !== 'undefined' && typeof window.clearTimeout === 'function') {
-      window.clearTimeout(hesitationBannerRemoveId);
+    if (bigTextBannerRemoveId && typeof window !== 'undefined' && typeof window.clearTimeout === 'function') {
+      window.clearTimeout(bigTextBannerRemoveId);
     }
-    hesitationBannerTimeoutId = null;
-    hesitationBannerRemoveId = null;
+    bigTextBannerTimeoutId = null;
+    bigTextBannerRemoveId = null;
     if (typeof document !== 'undefined') {
-      const existing = document.querySelector('.vtt-hesitation-banner');
+      const existing = document.querySelector('.vtt-big-text-banner');
       if (existing && typeof existing.remove === 'function') {
         existing.remove();
+      }
+    }
+  }
+
+  function showBigTextPopup({ text, tone = 'danger', durationMs = 2100 } = {}) {
+    if (typeof document === 'undefined') {
+      return;
+    }
+    const message = typeof text === 'string' && text.trim() ? text.trim() : '';
+    if (!message) {
+      return;
+    }
+    clearBigTextBanner();
+    const banner = document.createElement('div');
+    const normalizedTone = ['danger', 'gold', 'ally', 'neutral'].includes(tone) ? tone : 'danger';
+    banner.className = `vtt-big-text-banner vtt-big-text-banner--${normalizedTone}`;
+    banner.textContent = message;
+    document.body.appendChild(banner);
+
+    if (typeof window !== 'undefined') {
+      try {
+        void banner.offsetWidth;
+      } catch (error) {
+        // Ignore layout thrash errors.
+      }
+      banner.classList.add('is-visible');
+
+      if (typeof window.setTimeout === 'function') {
+        const safeDuration = Math.max(900, Math.trunc(Number(durationMs) || 2100));
+        const fadeAt = Math.max(200, safeDuration - 300);
+        bigTextBannerTimeoutId = window.setTimeout(() => {
+          banner.classList.add('is-fading');
+        }, fadeAt);
+        bigTextBannerRemoveId = window.setTimeout(() => {
+          if (banner.parentNode) {
+            banner.parentNode.removeChild(banner);
+          }
+          bigTextBannerTimeoutId = null;
+          bigTextBannerRemoveId = null;
+        }, safeDuration);
       }
     }
   }
 
   function showHesitationPopup() {
-    if (typeof document === 'undefined') {
-      return;
-    }
-    clearHesitationBanner();
-    const banner = document.createElement('div');
-    banner.className = 'vtt-hesitation-banner';
-    banner.textContent = 'HESITATION IS WEAKNESS!';
-    document.body.appendChild(banner);
-
-    if (typeof window !== 'undefined') {
-      try {
-        void banner.offsetWidth;
-      } catch (error) {
-        // Ignore layout thrash errors.
-      }
-      banner.classList.add('is-visible');
-
-      if (typeof window.setTimeout === 'function') {
-        hesitationBannerTimeoutId = window.setTimeout(() => {
-          banner.classList.add('is-fading');
-        }, 1800);
-        hesitationBannerRemoveId = window.setTimeout(() => {
-          if (banner.parentNode) {
-            banner.parentNode.removeChild(banner);
-          }
-          hesitationBannerTimeoutId = null;
-          hesitationBannerRemoveId = null;
-        }, 2100);
-      }
-    }
+    showBigTextPopup({ text: 'HESITATION IS WEAKNESS!', tone: 'danger' });
   }
 
   function clearDrawSteelBanner() {
-    if (drawSteelBannerTimeoutId && typeof window !== 'undefined' && typeof window.clearTimeout === 'function') {
-      window.clearTimeout(drawSteelBannerTimeoutId);
-    }
-    if (drawSteelBannerRemoveId && typeof window !== 'undefined' && typeof window.clearTimeout === 'function') {
-      window.clearTimeout(drawSteelBannerRemoveId);
-    }
-    drawSteelBannerTimeoutId = null;
-    drawSteelBannerRemoveId = null;
-    if (typeof document !== 'undefined') {
-      const existing = document.querySelector('.vtt-draw-steel-banner');
-      if (existing && typeof existing.remove === 'function') {
-        existing.remove();
-      }
-    }
+    clearBigTextBanner();
   }
 
   function showDrawSteelPopup() {
-    if (typeof document === 'undefined') {
-      return;
-    }
-    clearDrawSteelBanner();
-    const banner = document.createElement('div');
-    banner.className = 'vtt-draw-steel-banner';
-    banner.textContent = 'DRAW STEEL!';
-    document.body.appendChild(banner);
-
-    if (typeof window !== 'undefined') {
-      try {
-        void banner.offsetWidth;
-      } catch (error) {
-        // Ignore layout thrash errors.
-      }
-      banner.classList.add('is-visible');
-
-      if (typeof window.setTimeout === 'function') {
-        drawSteelBannerTimeoutId = window.setTimeout(() => {
-          banner.classList.add('is-fading');
-        }, 1800);
-        drawSteelBannerRemoveId = window.setTimeout(() => {
-          if (banner.parentNode) {
-            banner.parentNode.removeChild(banner);
-          }
-          drawSteelBannerTimeoutId = null;
-          drawSteelBannerRemoveId = null;
-        }, 2100);
-      }
-    }
+    showBigTextPopup({ text: 'DRAW STEEL!', tone: 'gold' });
   }
 
-  function maybeTriggerSpecialTurnEffects(combatantId, options = {}) {
-    const initiatorProfileId = normalizeProfileId(options?.initiatorProfileId ?? null);
-    const combatantProfileId = normalizeProfileId(getCombatantProfileId(combatantId));
-    const expectedTeamRaw =
-      typeof options?.expectedTeam === 'string'
-        ? options.expectedTeam
-        : typeof currentTurnTeam === 'string'
-        ? currentTurnTeam
-        : null;
-    const previousTeamRaw =
-      typeof options?.previousTeam === 'string'
-        ? options.previousTeam
-        : typeof lastActingTeam === 'string'
-        ? lastActingTeam
-        : null;
+  function showClaimYourTurnPopup(options = {}) {
+    showBigTextPopup({ text: 'CLAIM YOUR TURN', tone: 'ally', durationMs: options.durationMs || 2100 });
+  }
 
-    if (!shouldTriggerSharonHesitation({
-      combatantProfileId,
-      initiatorProfileId,
-      expectedTeam: expectedTeamRaw,
-      previousTeam: previousTeamRaw,
-      isFirstTurnOfRound: Boolean(options?.isFirstTurnOfRound),
-    })) {
-      return;
+  function announceFloatingTextFromAutomation(payload = {}) {
+    const text = typeof payload.text === 'string' && payload.text.trim() ? payload.text.trim() : '';
+    if (!text) {
+      return { shown: false, reason: 'missing-text' };
     }
+    const audience = payload.audience === 'self' ? 'self' : 'all';
+    const tone = ['danger', 'gold', 'ally', 'neutral'].includes(payload.tone) ? payload.tone : 'danger';
+    const durationMs = Math.max(900, Math.trunc(Number(payload.durationMs) || 2100));
+    showBigTextPopup({ text, tone, durationMs });
+    if (audience === 'all') {
+      recordTurnEffect({
+        type: TURN_EFFECT_TYPES.FLOATING_TEXT,
+        text,
+        tone,
+        audience,
+        durationMs,
+        combatantId: payload.sourceId || '',
+        triggeredAt: Date.now(),
+      });
+      syncCombatStateToStore();
+    }
+    return { shown: true, audience, text };
+  }
 
+  function announceClaimYourTurn(options = {}) {
+    showClaimYourTurnPopup(options);
     recordTurnEffect({
-      type: TURN_EFFECT_TYPES.SHARON_HESITATION,
-      combatantId,
+      type: TURN_EFFECT_TYPES.FLOATING_TEXT,
+      text: 'CLAIM YOUR TURN',
+      tone: 'ally',
+      audience: 'all',
+      durationMs: options.durationMs || 2100,
       triggeredAt: Date.now(),
     });
-    showHesitationPopup();
-    announceToChat('HESITATION IS WEAKNESS!');
+  }
+
+  function maybeAnnounceAllyPick(options = {}) {
+    if (!combatActive || activeCombatantId || currentTurnTeam !== 'ally') {
+      return false;
+    }
+    const delayMs = Math.max(0, Math.trunc(Number(options.delayMs) || 0));
+    if (delayMs && typeof window !== 'undefined' && typeof window.setTimeout === 'function') {
+      window.setTimeout(() => {
+        if (!combatActive || activeCombatantId || currentTurnTeam !== 'ally') return;
+        announceClaimYourTurn(options);
+        syncCombatStateToStore();
+      }, delayMs);
+      return true;
+    }
+    announceClaimYourTurn(options);
+    return true;
   }
 
   function attachBoardTokenHover(tokenElement, tokenId) {
@@ -19535,13 +19660,14 @@ export function mountBoardInteractions(store, routes = {}) {
       if (!name) {
         return;
       }
+      const displayName = formatConditionListLabel(condition);
 
       const item = document.createElement('li');
       item.className = 'vtt-token-settings__condition-item';
 
       const nameSpan = document.createElement('span');
       nameSpan.className = 'vtt-token-settings__condition-name';
-      nameSpan.textContent = name;
+      nameSpan.textContent = displayName;
       nameSpan.dataset.tokenSettingsConditionName = name;
       configureConditionTooltip(nameSpan, condition, { delay: 300 });
       item.appendChild(nameSpan);
@@ -19550,12 +19676,25 @@ export function mountBoardInteractions(store, routes = {}) {
       removeButton.type = 'button';
       removeButton.className = 'vtt-token-settings__condition-remove';
       removeButton.dataset.tokenSettingsConditionRemove = String(index);
-      removeButton.setAttribute('aria-label', `Remove ${name}`);
+      removeButton.setAttribute('aria-label', `Remove ${displayName}`);
       removeButton.textContent = '×';
       item.appendChild(removeButton);
 
       list.appendChild(item);
     });
+  }
+
+  function formatConditionListLabel(condition) {
+    const name = String(condition?.name || '').trim();
+    const normalized = name.toLowerCase();
+    if (normalized !== 'damageweakness' && normalized !== 'damageimmunity') {
+      return name;
+    }
+    const amount = Number.parseInt(condition.amount, 10);
+    const damageType = String(condition.damageType || '').trim().toLowerCase();
+    const typeLabel = damageType ? `${damageType.charAt(0).toUpperCase()}${damageType.slice(1)} ` : '';
+    const rider = normalized === 'damageweakness' ? 'weakness' : 'immunity';
+    return `${typeLabel}${rider}${Number.isFinite(amount) && amount > 0 ? ` ${amount}` : ''}`.trim();
   }
 
   function normalizeConditionDurationValue(value) {

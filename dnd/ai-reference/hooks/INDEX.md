@@ -12,7 +12,9 @@ The canonical hook registry is `../../character_sheet/ability-automation/REGISTR
 
 ## Board Callback Surface
 
-`window.VTTBoardCallbacks` is exported from `board-interactions.js` and includes target selection, area selection, damage, healing, PC recovery spending, conditions, potency checks, forced movement, teleport, swap, free strikes, persistent zones, marks, trigger events, scoped flags, board-state power-roll suggestions, and hidden roll-rider consumption through `consumeRollRiders`.
+`window.VTTBoardCallbacks` is exported from `board-interactions.js` and includes target selection, area selection, damage, healing, PC recovery spending, conditions, potency checks, forced movement, teleport, swap, free strikes, persistent zones, marks, trigger events, scoped flags, floating combat text, automation-driven turn starts, board-state power-roll suggestions, and hidden roll-rider consumption through `consumeRollRiders`.
+
+`showFloatingText` drives the giant centered VTT banner. `audience:"all"` syncs the banner through combat turn effects; `audience:"self"` stays in the current browser. `startTurn` requests a combat turn start and supports a preflight mode so abilities such as Hesitation Is Weakness can warn before action-cost spending when the current combat phase would waste the resource.
 
 Check `REGISTRY.md` before authoring against a hook. If it is not listed there, treat it as unsupported.
 

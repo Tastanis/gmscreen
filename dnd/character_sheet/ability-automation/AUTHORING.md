@@ -577,11 +577,12 @@ Notes:
 
 ```json
 { "kind": "heal", "recoveries": 1 }
+{ "kind": "heal", "recoveries": 1, "recoverySource": "self" }
 { "kind": "heal", "amount": 5 }
 { "kind": "heal", "target": "self", "attribute": "M", "amountFrom": { "source": "triggeringDamage" } }
 ```
 
-`recoveries` spends N of the target's recoveries to heal `N × recoveryValue`. `amount` is a flat number; both can combine. In the VTT, PC targets have `hero.vitals.currentRecoveries` decremented automatically before the heal is applied. If the target sheet or recovery value can't be read, the runtime posts a chat reminder so the GM can apply manually.
+`recoveries` spends N recoveries to heal `N × recoveryValue`. By default it spends the healed target's recoveries. Add `"recoverySource": "self"` when the caster spends their own recoveries and another target receives the healing, such as "you spend a Recovery and one ally heals by your recovery value." Accepted self aliases are `"self"`, `"source"`, and `"caster"`; omitted or `"target"` means the healed target pays. In the VTT, PC recovery counters are decremented automatically before the heal is applied. If the recovery source sheet or recovery value can't be read, the runtime posts a chat reminder so the GM can apply manually.
 
 `attribute` adds the caster's attribute bonus to the flat heal, and `amountFrom` adds a scaled trigger value (see [Scaling off the trigger](#scaling-off-the-trigger-amountfrom)) — so `heal yourself for the damage you took + M` is `{ "attribute": "M", "amountFrom": { "source": "triggeringDamage" } }`. Both stack with `amount` and `recoveries`.
 
@@ -630,7 +631,7 @@ Applies via the same heal path but allows the new total to exceed max stamina (t
 | `rider.appliesTo.actionKind` | optional action-kind filter such as `"main"`, `"maneuver"`, or `"triggered"`. |
 | `rider.consume` | `"manual"` or `"nextMatchingRoll"`. Use `"nextMatchingRoll"` for effects like "the target has a bane on their next attack." |
 
-`damageWeakness` and `damageImmunity` are numeric riders. The VTT damage handler stacks `amount` on top of the sheet's own immunity/vulnerability lists when applying damage to the affected target. Example: `{ "kind": "condition", "name": "damageWeakness", "amount": 5, "damageType": "fire", "duration": "saveEnds" }` makes the target take +5 damage from every fire effect until they save out.
+`damageWeakness` and `damageImmunity` are numeric riders. The VTT damage handler stacks `amount` on top of the sheet's own immunity/vulnerability lists when applying damage to the affected target. Example: `{ "kind": "condition", "name": "damageWeakness", "amount": 5, "damageType": "fire", "duration": "saveEnds" }` makes the target take +5 damage from every fire effect until they save out. These riders are shown in the VTT character/monster condition sidebar with readable labels such as `Fire weakness 5` and an `x` remove button.
 
 `hiddenEffect` is an ability-applied hidden rider condition. It is not available in the normal condition picker and it does not print its words on the token. It appears in the VTT character/monster sidebar under **Auras, Conditions, & Effects** with an `x` remove button, and the token gets a small `FX` badge while any hidden effect is active. Roll modifier riders become default-on suggested edge/bane buttons in the automated power-roll modal; the user can click the suggestion off before rolling.
 
@@ -1004,6 +1005,44 @@ Soaks half of the damage that fired the trigger. The board has already applied t
 Requires a `trigger` block with `match.event: "damage"` so the runtime can read the original damage payload. Without that match, the effect posts a chat reminder instead of healing.
 
 Use this for "you take half damage instead" triggered actions like Resist the Unnatural, Unearthly Reflexes, and Feedback Loop (when paired with a re-damage effect targeting the source).
+
+### `floatingText`
+
+Shows the VTT's giant centered banner, using the same visual treatment as the Hesitation Is Weakness popup.
+
+```json
+{ "kind": "floatingText", "text": "HESITATION IS WEAKNESS!", "audience": "all", "tone": "danger" }
+```
+
+| Field | Values |
+|---|---|
+| `text` | Required display text |
+| `audience` | `"all"` (default, synced to connected clients) or `"self"` (only this browser) |
+| `tone` | `"danger"` (red), `"gold"`, `"ally"` (blue), or `"neutral"` |
+| `durationMs` | optional display duration; default 2100 |
+
+### `startTurn`
+
+Requests a combat turn start for the resolved target, usually the caster. The runner preflights this effect before the ability's action cost is spent, so invalid use can warn the player before spending heroic resource.
+
+```json
+{
+  "kind": "startTurn",
+  "target": "self",
+  "condition": "enemyPickNoActive",
+  "confirmOnInvalid": true,
+  "invalidMessage": "It's already allies' turn. Do you want to use this anyway? That would waste the heroic resource."
+}
+```
+
+| Field | Values |
+|---|---|
+| `target` | `"self"` default; can be a named target group if an ability starts another combatant's turn |
+| `condition` | `"enemyPickNoActive"` (default), `"pickPhase"`, or `"any"` |
+| `confirmOnInvalid` | default `true`; when false, invalid state aborts without asking |
+| `invalidMessage` | optional override for the warning/confirm text |
+
+Use `enemyPickNoActive` for Hesitation Is Weakness-style timing: combat must be active, no one can currently be taking a turn, and the enemy team must be in pick phase. If the condition fails, the VTT warns before the resource spend and can let the player continue anyway.
 
 ### `aura`
 

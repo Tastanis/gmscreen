@@ -3008,6 +3008,18 @@ function normalizeCombatTurnEffect($rawEffect): ?array
     $initiatorId = isset($rawEffect['initiatorId']) && is_string($rawEffect['initiatorId'])
         ? strtolower(trim($rawEffect['initiatorId']))
         : '';
+    $text = isset($rawEffect['text']) && is_string($rawEffect['text'])
+        ? trim($rawEffect['text'])
+        : '';
+    $tone = isset($rawEffect['tone']) && is_string($rawEffect['tone'])
+        ? strtolower(trim($rawEffect['tone']))
+        : '';
+    $audience = isset($rawEffect['audience']) && is_string($rawEffect['audience'])
+        ? strtolower(trim($rawEffect['audience']))
+        : '';
+    $durationMs = isset($rawEffect['durationMs']) && is_numeric($rawEffect['durationMs'])
+        ? max(1, (int) round((float) $rawEffect['durationMs']))
+        : null;
 
     $effect = [
         'type' => $type,
@@ -3020,6 +3032,22 @@ function normalizeCombatTurnEffect($rawEffect): ?array
 
     if ($initiatorId !== '') {
         $effect['initiatorId'] = $initiatorId;
+    }
+
+    if ($text !== '') {
+        $effect['text'] = $text;
+    }
+
+    if ($tone !== '') {
+        $effect['tone'] = $tone;
+    }
+
+    if ($audience !== '') {
+        $effect['audience'] = $audience;
+    }
+
+    if ($durationMs !== null) {
+        $effect['durationMs'] = $durationMs;
     }
 
     return $effect;

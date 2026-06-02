@@ -20,7 +20,8 @@
 // orthogonal — multiple targets, multiple effects, etc. are all allowed.
 //
 // Effect kinds: damage, heal, temporaryStamina, condition, forcedMovement,
-// teleport, swap, resourceGain, surgeGain, freeStrike, cascade, note, potency, spend, other.
+// teleport, swap, resourceGain, surgeGain, freeStrike, cascade, note, potency,
+// spend, floatingText, startTurn, other.
 //
 // Lenient by design: unknown fields are kept under `_extra` so the inspector can
 // surface them; missing fields default; warnings are collected but never block save.
@@ -249,8 +250,12 @@
         return effect;
       }
       case "heal": {
-        const known = new Set(["kind", "amount", "recoveries", "attribute", "amountFrom"]);
+        const known = new Set(["kind", "amount", "recoveries", "recoverySource", "attribute", "amountFrom"]);
         const recoveries = asNonNegInt(input.recoveries, 0);
+        const recoverySourceRaw = asTrimmedString(input.recoverySource || "");
+        const recoverySource = ["self", "source", "caster"].includes(recoverySourceRaw.toLowerCase())
+          ? "self"
+          : "target";
         const amount = asNonNegInt(input.amount, 0);
         const attribute = input.attribute !== undefined && input.attribute !== null && input.attribute !== ""
           ? (P.normalizeAttributeOrList ? P.normalizeAttributeOrList(input.attribute) : P.normalizeAttribute(input.attribute))
@@ -263,6 +268,7 @@
         }
         const effect = { kind: "heal" };
         if (recoveries) effect.recoveries = recoveries;
+        if (recoveries && recoverySource !== "target") effect.recoverySource = recoverySource;
         if (amount) effect.amount = amount;
         if (attribute) effect.attribute = attribute;
         if (amountFrom) effect.amountFrom = amountFrom;
@@ -282,6 +288,41 @@
         if (attribute) effect.attribute = attribute;
         if (amountFrom) effect.amountFrom = amountFrom;
         if (!effect.amount && !attribute && !amountFrom) warnings.push(`${path}: temporary stamina has no amount.`);
+        const extras = pickExtras(input, known);
+        if (extras) effect._extra = extras;
+        return effect;
+      }
+      case "floatingText": {
+        const known = new Set(["kind", "text", "audience", "tone", "durationMs"]);
+        const audienceRaw = asTrimmedString(input.audience || "all").toLowerCase();
+        const toneRaw = asTrimmedString(input.tone || "danger").toLowerCase();
+        const effect = {
+          kind: "floatingText",
+          text: asTrimmedString(input.text),
+          audience: pickKnown(audienceRaw, ["all", "self"], "all"),
+          tone: pickKnown(toneRaw, ["danger", "gold", "ally", "neutral"], "danger"),
+        };
+        if (!effect.text) {
+          warnings.push(`${path}.text: floatingText needs display text.`);
+        }
+        if (input.durationMs !== undefined && input.durationMs !== null && input.durationMs !== "") {
+          effect.durationMs = asPosInt(input.durationMs, 2100);
+        }
+        const extras = pickExtras(input, known);
+        if (extras) effect._extra = extras;
+        return effect;
+      }
+      case "startTurn": {
+        const known = new Set(["kind", "target", "condition", "confirmOnInvalid", "invalidMessage"]);
+        const conditionRaw = asTrimmedString(input.condition || "enemyPickNoActive");
+        const effect = {
+          kind: "startTurn",
+          target: normalizeTargetRef(input.target) || "self",
+          condition: pickKnown(conditionRaw, ["enemyPickNoActive", "pickPhase", "any"], "enemyPickNoActive"),
+          confirmOnInvalid: input.confirmOnInvalid === undefined ? true : asBool(input.confirmOnInvalid),
+        };
+        const invalidMessage = asTrimmedString(input.invalidMessage);
+        if (invalidMessage) effect.invalidMessage = invalidMessage;
         const extras = pickExtras(input, known);
         if (extras) effect._extra = extras;
         return effect;

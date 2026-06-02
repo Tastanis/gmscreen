@@ -64,7 +64,9 @@ For each block in `automation.cards`:
 
 Effects can specify their own `target` to override the parent block target. `target` may be a single group name or an array of group names, allowing one power roll tier to damage multiple targets and apply different riders to each.
 
-`condition` effects can apply `hiddenEffect` riders. These are stored on the VTT placement like conditions, but they are hidden from token condition text and the normal condition picker. The sidebar still renders them under Auras, Conditions, & Effects with a remove button. Supported automatic hidden riders currently include `rollModifier` suggestions for edge/bane/double-edge/double-bane in the power-roll modal, with optional `nextMatchingRoll` consumption.
+`condition` effects can apply `hiddenEffect` riders. These are stored on the VTT placement like conditions, but they are hidden from token condition text and the normal condition picker. The sidebar still renders them under Auras, Conditions, & Effects with a remove button. Supported automatic hidden riders currently include `rollModifier` suggestions for edge/bane/double-edge/double-bane in the power-roll modal, with optional `nextMatchingRoll` consumption. Numeric condition riders such as `damageWeakness` and `damageImmunity` also stay removable in the sidebar and token settings, but render with player-facing labels such as `Fire weakness 5`.
+
+VTT-only utility effects include `floatingText` for the giant centered combat banner and `startTurn` for Hesitation-style turn claiming. `startTurn` is preflighted before action-cost spending so invalid timing can warn before heroic resource is spent.
 
 Triggered effects can also target dynamic event groups: `eventActor`, `eventSource`, or `eventTarget` (plus `trigger*` aliases). These resolve from the captured event payload for delayed reactions. `trigger.effects` default to `eventActor` unless the trigger block sets `effectTarget`.
 
@@ -72,7 +74,7 @@ Each effect is dispatched by `kind`:
 
 - `damage`, `condition`, `forcedMovement` (push), `potency`, `spend` — full implementation via board hooks.
 - `forcedMovement` (pull/slide/vertical) — verb passed through; board may fall back to push behavior. See REGISTRY.md.
-- `heal`, `temporaryStamina`, `teleport`, `swap`, `freeStrike`, `resourceGain`, `note` — full implementation via board/sheet hooks.
+- `heal`, `temporaryStamina`, `teleport`, `swap`, `freeStrike`, `resourceGain`, `floatingText`, `startTurn`, `note` — full implementation via board/sheet hooks.
 - `cascade`, `other` — chat reminder; manual application required.
 
 ## Authoring flow

@@ -1310,6 +1310,10 @@
         return applyEndMarkEffect(state, effect, targets, ctx);
       case "halveTriggeringDamage":
         return applyHalveTriggeringDamageEffect(state, effect, targets, ctx);
+      case "floatingText":
+        return applyFloatingTextEffect(state, effect);
+      case "startTurn":
+        return applyStartTurnEffect(state, effect, targets);
       case "aura":
         return applyAuraEffect(state, effect, targets, ctx);
       case "heal":
@@ -1337,6 +1341,130 @@
       default:
         return null;
     }
+  }
+
+  async function applyFloatingTextEffect(state, effect) {
+    const text = String(effect.text || "").trim();
+    if (!text) return;
+    if (typeof state.context.showFloatingText === "function") {
+      await state.context.showFloatingText({
+        text,
+        audience: effect.audience || "all",
+        tone: effect.tone || "danger",
+        durationMs: effect.durationMs,
+        sourceId: state.sourcePlacement?.id || "",
+        sourceName: state.heroName || state.sourcePlacement?.name || "",
+        abilityName: state.action?.name || "Ability",
+        actionId: state.action?.id || "",
+      });
+      return;
+    }
+    await postChat(state.context, {
+      message: `${state.heroName} - ${state.action.name || "Ability"}: ${text}`,
+    });
+  }
+
+  async function applyStartTurnEffect(state, effect, targets) {
+    const target = Array.isArray(targets) && targets.length ? targets[0] : state.sourcePlacement;
+    const placementId = target?.id || state.sourcePlacement?.id || "";
+    if (!placementId) return;
+    if (typeof state.context.startTurn !== "function") {
+      await postChat(state.context, {
+        message: `${state.heroName} - ${state.action.name || "Ability"}: start turn manually.`,
+      });
+      return;
+    }
+    const result = await state.context.startTurn({
+      placementId,
+      target: effect.target || "self",
+      condition: effect.condition || "enemyPickNoActive",
+      confirmOnInvalid: effect.confirmOnInvalid !== false,
+      invalidMessage: effect.invalidMessage || "",
+      sourceId: state.sourcePlacement?.id || "",
+      sourceName: state.heroName || state.sourcePlacement?.name || "",
+      abilityName: state.action?.name || "Ability",
+      actionId: state.action?.id || "",
+      preflightAccepted: Boolean(state.startTurnPreflightAccepted),
+    });
+    if (result && result.started === false && result.message) {
+      await postChat(state.context, {
+        message: `${state.heroName} - ${state.action.name || "Ability"}: ${result.message}`,
+      });
+    }
+  }
+
+  async function preflightStartTurnEffects(state, blocks) {
+    if (!Array.isArray(blocks) || typeof state.context.startTurn !== "function") return true;
+    const effect = findFirstStartTurnEffectInBlocks(blocks);
+    if (!effect) return true;
+    const placementId = state.sourcePlacement?.id || "";
+    if (!placementId) return true;
+    const result = await state.context.startTurn({
+      placementId,
+      target: effect.target || "self",
+      condition: effect.condition || "enemyPickNoActive",
+      confirmOnInvalid: effect.confirmOnInvalid !== false,
+      invalidMessage: effect.invalidMessage || "",
+      sourceId: state.sourcePlacement?.id || "",
+      sourceName: state.heroName || state.sourcePlacement?.name || "",
+      abilityName: state.action?.name || "Ability",
+      actionId: state.action?.id || "",
+      preflight: true,
+    });
+    if (result?.canceled || result?.accepted === false) return false;
+    if (result?.accepted) {
+      state.startTurnPreflightAccepted = true;
+    }
+    return true;
+  }
+
+  function findFirstStartTurnEffectInBlocks(blocks) {
+    for (const block of blocks || []) {
+      const found = findFirstStartTurnEffectInBlock(block);
+      if (found) return found;
+    }
+    return null;
+  }
+
+  function findFirstStartTurnEffectInBlock(block) {
+    if (!block || typeof block !== "object") return null;
+    if (Array.isArray(block.effects)) {
+      const found = findFirstStartTurnEffectInEffects(block.effects);
+      if (found) return found;
+    }
+    if (block.tiers && typeof block.tiers === "object") {
+      for (const tier of Object.values(block.tiers)) {
+        const found = findFirstStartTurnEffectInEffects(tier?.effects || []);
+        if (found) return found;
+      }
+    }
+    for (const listName of ["then", "else", "cards"]) {
+      if (Array.isArray(block[listName])) {
+        const found = findFirstStartTurnEffectInBlocks(block[listName]);
+        if (found) return found;
+      }
+    }
+    if (Array.isArray(block.options)) {
+      for (const option of block.options) {
+        const found = findFirstStartTurnEffectInBlocks(option?.cards || []);
+        if (found) return found;
+      }
+    }
+    return null;
+  }
+
+  function findFirstStartTurnEffectInEffects(effects) {
+    for (const effect of effects || []) {
+      if (!effect || typeof effect !== "object") continue;
+      if (effect.kind === "startTurn") return effect;
+      for (const nested of ["then", "else", "effects", "onFail"]) {
+        if (Array.isArray(effect[nested])) {
+          const found = findFirstStartTurnEffectInEffects(effect[nested]);
+          if (found) return found;
+        }
+      }
+    }
+    return null;
   }
 
   async function applyDamageEffect(state, effect, targets, ctx) {
@@ -1598,6 +1726,11 @@
   async function applyHealEffect(state, effect, targets, ctx, allowTempHp) {
     if (!targets.length) return;
     const recoveries = asInt(effect.recoveries, 0);
+    const recoverySource = String(effect.recoverySource || "target").trim().toLowerCase();
+    const recoveryFromSelf = recoveries && ["self", "source", "caster"].includes(recoverySource);
+    const selfRecoveryTarget = recoveryFromSelf && state.sourcePlacement?.id
+      ? state.sourcePlacement
+      : null;
     const attributeBonus = effect.attribute
       ? resolveAttributeBonusForDamage(state, effect.attribute)
       : 0;
@@ -1620,32 +1753,40 @@
       let recoveryUnknown = false;
       let recoverySpent = 0;
       let recoveryManualDecrement = false;
+      let recoverySourceName = recoveryFromSelf ? state.heroName : target.name || "Target";
       if (recoveries) {
-        const spent = typeof state.context.spendRecoveryForTarget === "function"
-          ? await state.context.spendRecoveryForTarget({
-              placementId: target.id,
-              recoveries,
-              abilityName: state.action.name || "Ability",
-            })
-          : null;
-        if (spent?.skipped) {
-          lines.push(`${target.name || "Target"}: recovery spend skipped (${spent.reason || "unavailable"}).`);
-          if (!flatAmount) continue;
-        } else if (Number.isFinite(spent?.recoveryValue) && spent.recoveryValue > 0) {
-          recoverySpent = asInt(spent.spent, recoveries);
-          recoveryValueUsed = Math.trunc(spent.recoveryValue) * recoverySpent;
-          amount = recoveryValueUsed + flatAmount;
+        const recoveryTarget = selfRecoveryTarget || target;
+        recoverySourceName = recoveryTarget.name || recoverySourceName;
+        if (!recoveryTarget?.id) {
+          lines.push(`${recoveryFromSelf ? state.heroName : target.name || "Target"}: recovery spend skipped (missing placement).`);
+          recoveryUnknown = true;
         } else {
-          const resolved = typeof state.context.getRecoveryValueForTarget === "function"
-            ? await state.context.getRecoveryValueForTarget({ placementId: target.id })
+          const spent = typeof state.context.spendRecoveryForTarget === "function"
+            ? await state.context.spendRecoveryForTarget({
+                placementId: recoveryTarget.id,
+                recoveries,
+                abilityName: state.action.name || "Ability",
+              })
             : null;
-          if (Number.isFinite(resolved?.recoveryValue) && resolved.recoveryValue > 0) {
-            recoverySpent = recoveries;
-            recoveryManualDecrement = true;
-            recoveryValueUsed = Math.trunc(resolved.recoveryValue) * recoveries;
+          if (spent?.skipped) {
+            lines.push(`${recoveryTarget.name || state.heroName || "Recovery source"}: recovery spend skipped (${spent.reason || "unavailable"}).`);
+          } else if (Number.isFinite(spent?.recoveryValue) && spent.recoveryValue > 0) {
+            recoverySpent = asInt(spent.spent, recoveries);
+            recoverySourceName = spent.name || recoverySourceName;
+            recoveryValueUsed = Math.trunc(spent.recoveryValue) * recoverySpent;
             amount = recoveryValueUsed + flatAmount;
           } else {
-            recoveryUnknown = true;
+            const resolved = typeof state.context.getRecoveryValueForTarget === "function"
+              ? await state.context.getRecoveryValueForTarget({ placementId: recoveryTarget.id })
+              : null;
+            if (Number.isFinite(resolved?.recoveryValue) && resolved.recoveryValue > 0) {
+              recoverySpent = recoveries;
+              recoveryManualDecrement = true;
+              recoveryValueUsed = Math.trunc(resolved.recoveryValue) * recoveries;
+              amount = recoveryValueUsed + flatAmount;
+            } else {
+              recoveryUnknown = true;
+            }
           }
         }
       }
@@ -1675,7 +1816,7 @@
       const display = max !== null && max !== undefined ? `${current}/${max}` : `${current}`;
       const overage = allowTempHp && Number.isFinite(max) && current > max ? ` (+${current - max} temp)` : "";
       const finalRecoveryNote = recoveries && recoveryValueUsed
-        ? ` (spent ${recoverySpent || recoveries} recovery -> ${recoveryValueUsed}${flatAmount ? `+${flatAmount}` : ""}${recoveryManualDecrement ? "; decrement recoveries on sheet" : ""})`
+        ? ` (spent ${recoverySpent || recoveries} ${recoverySourceName} recovery -> ${recoveryValueUsed}${flatAmount ? `+${flatAmount}` : ""}${recoveryManualDecrement ? "; decrement recoveries on sheet" : ""})`
         : "";
       lines.push(`${targetName} recovers ${result.change || amount} stamina${overage}${finalRecoveryNote} (${display}).`);
     }
@@ -2928,6 +3069,14 @@
         await postChat(state.context, {
           message: `${state.heroName} - ${state.action.name || "Ability"}: applied ${matchedModifiers.length} feature modifier${matchedModifiers.length === 1 ? "" : "s"} (${matchedModifiers.map((m) => m.source).join(", ")}).`,
         });
+      }
+
+      if (!isArmingOnly) {
+        const startTurnPreflight = await preflightStartTurnEffects(state, blocks);
+        if (!startTurnPreflight) {
+          closeRunner();
+          return;
+        }
       }
 
       if (!isArmingOnly && typeof state.context.spendResource === "function") {

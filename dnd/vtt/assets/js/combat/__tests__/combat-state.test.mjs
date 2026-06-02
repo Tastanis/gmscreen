@@ -144,4 +144,25 @@ describe('turn effect normalization', () => {
   test('rejects turn effects without a type', () => {
     assert.equal(normalizeTurnEffect({ combatantId: 'token-1' }), null);
   });
+
+  test('preserves floating text effect display fields', () => {
+    assert.deepEqual(
+      normalizeTurnEffect({
+        type: 'floating-text',
+        text: ' Claim your turn ',
+        tone: ' Ally ',
+        audience: ' All ',
+        durationMs: 1800.9,
+        triggeredAt: 123,
+      }),
+      {
+        type: 'floating-text',
+        triggeredAt: 123,
+        text: 'Claim your turn',
+        tone: 'ally',
+        audience: 'all',
+        durationMs: 1800,
+      }
+    );
+  });
 });

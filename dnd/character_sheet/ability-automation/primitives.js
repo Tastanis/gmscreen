@@ -36,6 +36,8 @@
     "applyMark",
     "endMark",
     "halveTriggeringDamage",
+    "floatingText",
+    "startTurn",
     "aura",
     "other",
   ];
@@ -401,7 +403,10 @@
         return `${amount}${attr}${type} damage${describeTriggerValue(effect.amountFrom)}`;
       }
       case "heal": {
-        if (effect.recoveries) return `spend ${effect.recoveries} recovery → heal`;
+        if (effect.recoveries) {
+          const source = effect.recoverySource === "self" ? " from self" : "";
+          return `spend ${effect.recoveries} recovery${source} → heal`;
+        }
         const attr = effect.attribute ? ` + ${effect.attribute}` : "";
         return `heal ${effect.amount || 0}${attr}${describeTriggerValue(effect.amountFrom)}`;
       }
@@ -501,6 +506,10 @@
         return `end ${effect.markType || "mark"}`;
       case "halveTriggeringDamage":
         return "halve the triggering damage";
+      case "floatingText":
+        return `floating text: ${effect.text || "message"}`;
+      case "startTurn":
+        return `start ${effect.target || "self"} turn`;
       case "aura": {
         if (effect.enabled === false) return "turn off aura";
         const radius = effect.radius || 1;

@@ -269,12 +269,33 @@ export function normalizeTurnEffect(raw) {
     triggeredAt,
   };
 
+  const text = typeof raw.text === 'string' ? raw.text.trim() : '';
+  const tone = typeof raw.tone === 'string' ? raw.tone.trim().toLowerCase() : '';
+  const audience = typeof raw.audience === 'string' ? raw.audience.trim().toLowerCase() : '';
+  const durationMsRaw = Number(raw.durationMs);
+
   if (combatantId) {
     effect.combatantId = combatantId;
   }
 
   if (initiatorId) {
     effect.initiatorId = initiatorId;
+  }
+
+  if (text) {
+    effect.text = text;
+  }
+
+  if (tone) {
+    effect.tone = tone;
+  }
+
+  if (audience) {
+    effect.audience = audience;
+  }
+
+  if (Number.isFinite(durationMsRaw) && durationMsRaw > 0) {
+    effect.durationMs = Math.trunc(durationMsRaw);
   }
 
   return effect;

@@ -1641,9 +1641,7 @@ function renderCondition(condition, placementId) {
     : { label: String(condition || ''), index: 0, hidden: false };
   const label = entry.label || entry.name || 'Effect';
   const index = Number.isInteger(entry.index) ? entry.index : 0;
-  const detail = entry.hidden
-    ? [entry.sourceAbility, entry.sourceName, entry.durationLabel].filter(Boolean).join(' - ')
-    : '';
+  const detail = entry.detail || '';
   const removeButton = placementId
     ? `<button class="vtt-character-condition__remove" type="button" data-character-condition-remove data-placement-id="${escapeAttribute(placementId)}" data-condition-index="${escapeAttribute(index)}" aria-label="Remove ${escapeAttribute(label)}">x</button>`
     : '';
@@ -1775,12 +1773,9 @@ function normalizeConditions(value) {
       }
       if (entry && typeof entry === 'object') {
         const hidden = Boolean(entry.hidden || String(entry.name || '').trim().toLowerCase() === 'hiddeneffect');
-        const label = String(
-          hidden
-            ? (entry.label ?? entry.sourceAbility ?? entry.text ?? entry.name ?? 'Hidden effect')
-            : (entry.name ?? entry.label ?? entry.title ?? '')
-        ).trim();
+        const label = formatConditionLabel(entry, hidden);
         if (!label) return null;
+        const durationLabel = formatConditionDuration(entry.duration);
         return {
           label,
           name: String(entry.name ?? label).trim(),
@@ -1788,12 +1783,41 @@ function normalizeConditions(value) {
           hidden,
           sourceName: String(entry.sourceName ?? '').trim(),
           sourceAbility: String(entry.sourceAbility ?? '').trim(),
-          durationLabel: formatConditionDuration(entry.duration),
+          durationLabel,
+          detail: formatConditionDetail(entry, hidden, durationLabel),
         };
       }
       return null;
     })
     .filter(Boolean);
+}
+
+function formatConditionLabel(entry, hidden) {
+  const rawName = String(entry?.name ?? '').trim();
+  const normalized = rawName.toLowerCase();
+  if (normalized === 'damageweakness' || normalized === 'damageimmunity') {
+    const amount = Number.parseInt(entry.amount, 10);
+    const damageType = String(entry.damageType || '').trim().toLowerCase();
+    const typeLabel = damageType ? `${damageType.charAt(0).toUpperCase()}${damageType.slice(1)} ` : '';
+    const rider = normalized === 'damageweakness' ? 'weakness' : 'immunity';
+    return `${typeLabel}${rider}${Number.isFinite(amount) && amount > 0 ? ` ${amount}` : ''}`.trim();
+  }
+  return String(
+    hidden
+      ? (entry.label ?? entry.sourceAbility ?? entry.text ?? entry.name ?? 'Hidden effect')
+      : (entry.label ?? entry.name ?? entry.title ?? '')
+  ).trim();
+}
+
+function formatConditionDetail(entry, hidden, durationLabel) {
+  const parts = [];
+  if (hidden) {
+    parts.push(entry.sourceAbility, entry.sourceName);
+  }
+  if (durationLabel && durationLabel !== 'instantaneous') {
+    parts.push(durationLabel);
+  }
+  return parts.filter(Boolean).join(' - ');
 }
 
 function formatConditionDuration(duration) {
@@ -2072,6 +2096,8 @@ function startAbilityAutomation(sheet, action, categoryKey, sourceToken = null, 
     checkScopedFlag: requestAutomationCheckScopedFlag,
     setScopedFlag: requestAutomationSetScopedFlag,
     setAura: requestAutomationSetAura,
+    showFloatingText: requestAutomationFloatingText,
+    startTurn: requestAutomationStartTurn,
     getPowerRollSuggestions: (payload) => (
       window.VTTBoardCallbacks && typeof window.VTTBoardCallbacks.getPowerRollSuggestions === 'function'
         ? window.VTTBoardCallbacks.getPowerRollSuggestions(payload)
@@ -2397,6 +2423,34 @@ function requestAutomationSetAura(payload) {
   return new Promise((resolve, reject) => {
     document.dispatchEvent(
       new CustomEvent('vtt:automation-set-aura', {
+        detail: {
+          payload: clonePlain(payload || {}),
+          resolve,
+          reject,
+        },
+      })
+    );
+  });
+}
+
+function requestAutomationFloatingText(payload) {
+  return new Promise((resolve, reject) => {
+    document.dispatchEvent(
+      new CustomEvent('vtt:automation-floating-text', {
+        detail: {
+          payload: clonePlain(payload || {}),
+          resolve,
+          reject,
+        },
+      })
+    );
+  });
+}
+
+function requestAutomationStartTurn(payload) {
+  return new Promise((resolve, reject) => {
+    document.dispatchEvent(
+      new CustomEvent('vtt:automation-start-turn', {
         detail: {
           payload: clonePlain(payload || {}),
           resolve,

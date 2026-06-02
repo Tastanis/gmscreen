@@ -150,6 +150,200 @@ test('runner can arm a structured trigger and resolve it from a captured trigger
   }
 });
 
+test('runner can spend the caster recovery and heal a different target', async () => {
+  const harness = await createAbilityAutomationHarness({
+    targets: [
+      { id: 'ally-1', name: 'Ally' },
+    ],
+    sourcePlacement: { id: 'caster-1', name: 'Cal' },
+  });
+  try {
+    const automation = {
+      schema: 'ability-automation/v3',
+      cards: [
+        {
+          type: 'target',
+          id: 'target-heal',
+          name: 'healTarget',
+          mode: 'token',
+          predicate: 'selfOrAlly',
+          count: { value: 1, mode: 'exact' },
+          distance: { form: 'ranged', value: 10 },
+        },
+        {
+          type: 'effect',
+          target: 'healTarget',
+          effects: [
+            { kind: 'heal', recoveries: 1, recoverySource: 'self' },
+          ],
+        },
+      ],
+    };
+
+    const result = await harness.runAutomation({
+      automation,
+      action: { id: 'morelia', name: 'Morelia Punish and Defend', actionLabel: 'Main Action' },
+      targetSelections: [{ id: 'ally-1', name: 'Ally' }],
+      spendRecoveryResults: [{ spent: 1, recoveryValue: 31, currentRecoveries: 13, name: 'Cal' }],
+    });
+
+    assert.deepEqual(result.calls.spendRecoveryForTarget, [
+      {
+        placementId: 'caster-1',
+        recoveries: 1,
+        abilityName: 'Morelia Punish and Defend',
+      },
+    ]);
+    assert.deepEqual(result.calls.applyHeal, [
+      {
+        placementId: 'ally-1',
+        amount: 31,
+        allowTempHp: false,
+        abilityName: 'Morelia Punish and Defend',
+      },
+    ]);
+  } finally {
+    harness.close();
+  }
+});
+
+test('runner applies numeric damage weakness from a failed potency rider', async () => {
+  const harness = await createAbilityAutomationHarness({
+    attributes: { Might: 3 },
+    hero: { name: 'Cal', stats: { might: 3, agility: -1, reason: 2, intuition: -1, presence: 3 } },
+    targets: [
+      { id: 'enemy-1', name: 'Enemy' },
+    ],
+  });
+  try {
+    const automation = {
+      schema: 'ability-automation/v3',
+      cards: [
+        {
+          type: 'target',
+          id: 'target-primary',
+          name: 'primary',
+          mode: 'token',
+          predicate: 'creature',
+          count: { value: 1, mode: 'exact' },
+          distance: { form: 'meleeOrRanged', value: 1, secondary: 5 },
+        },
+        {
+          type: 'powerRoll',
+          id: 'roll-purifying-fire',
+          attribute: 'Might',
+          target: 'primary',
+          tiers: {
+            tier1: {
+              effects: [
+                { kind: 'damage', amount: 7, attribute: 'M', damageType: 'holy' },
+                {
+                  kind: 'potency',
+                  attribute: 'M',
+                  level: 'weak',
+                  onFail: [
+                    { kind: 'condition', name: 'damageWeakness', amount: 3, damageType: 'fire', duration: 'saveEnds' },
+                  ],
+                },
+              ],
+            },
+          },
+        },
+      ],
+    };
+
+    const result = await harness.runAutomation({
+      automation,
+      action: { id: 'purifying-fire', name: 'Purifying Fire', actionLabel: 'Main Action' },
+      targetSelections: [{ id: 'enemy-1', name: 'Enemy' }],
+      powerRollTiers: ['tier1'],
+      checkPotencyResults: [{ passes: true, threshold: 1, attributeValue: 0 }],
+    });
+
+    assert.deepEqual(result.calls.applyCondition, [
+      {
+        placementId: 'enemy-1',
+        condition: {
+          name: 'damageWeakness',
+          duration: 'save-ends',
+          amount: 3,
+          damageType: 'fire',
+        },
+        sourceId: 'caster-1',
+      },
+    ]);
+  } finally {
+    harness.close();
+  }
+});
+
+test('runner dispatches floating text automation effects', async () => {
+  const harness = await createAbilityAutomationHarness();
+  try {
+    const result = await harness.runAutomation({
+      automation: {
+        schema: 'ability-automation/v3',
+        version: 3,
+        cards: [
+          {
+            type: 'effect',
+            id: 'banner',
+            effects: [
+              { kind: 'floatingText', text: 'HESITATION IS WEAKNESS!', audience: 'all', tone: 'danger' },
+            ],
+          },
+        ],
+      },
+    });
+
+    assert.deepEqual(result.calls.showFloatingText[0], {
+      text: 'HESITATION IS WEAKNESS!',
+      audience: 'all',
+      tone: 'danger',
+      sourceId: 'caster-1',
+      sourceName: 'Harness Hero',
+      abilityName: 'Ability Under Test',
+      actionId: 'ability-under-test',
+    });
+  } finally {
+    harness.close();
+  }
+});
+
+test('runner preflights startTurn before spending ability resource', async () => {
+  const harness = await createAbilityAutomationHarness();
+  try {
+    const result = await harness.runAutomation({
+      automation: {
+        schema: 'ability-automation/v3',
+        version: 3,
+        cards: [
+          {
+            type: 'effect',
+            id: 'claim-turn',
+            target: 'self',
+            effects: [
+              { kind: 'startTurn', target: 'self', condition: 'enemyPickNoActive' },
+            ],
+          },
+        ],
+      },
+      action: { id: 'hesitation', name: 'Hesitation Is Weakness', cost: '1 Insight' },
+    });
+
+    assert.equal(result.calls.startTurn.length, 2);
+    assert.equal(result.calls.startTurn[0].preflight, true);
+    assert.equal(result.calls.spendResource.length, 1);
+    assert.equal(result.calls.startTurn[1].preflightAccepted, true);
+    assert.ok(
+      result.callLog.findIndex((entry) => entry.name === 'startTurn' && entry.payload.preflight === true) <
+        result.callLog.findIndex((entry) => entry.name === 'spendResource')
+    );
+  } finally {
+    harness.close();
+  }
+});
+
 test('runner forwards structured trigger lifetime metadata', async () => {
   const harness = await createAbilityAutomationHarness();
   try {
