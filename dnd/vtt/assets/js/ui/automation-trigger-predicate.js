@@ -122,7 +122,14 @@ export function buildAutomationTriggerPredicate(entry, env = {}) {
       if (direction === 'up') return delta > 0;
       return false;
     }
-    if (event === 'turnStart' || event === 'turnEnd') return true;
+    if (
+      event === 'turnStart' ||
+      event === 'turnEnd' ||
+      event === 'roundStart' ||
+      event === 'roundEnd' ||
+      event === 'combatStart' ||
+      event === 'combatEnd'
+    ) return true;
     if (event === 'actionUsed') {
       if (filter.actionKind && String(payload.actionKind || '').toLowerCase() !== String(filter.actionKind).toLowerCase()) return false;
       if (filter.costIncludes && !String(payload.cost || payload.resourceCost || '').toLowerCase().includes(String(filter.costIncludes).toLowerCase())) return false;

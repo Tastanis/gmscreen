@@ -295,6 +295,10 @@ For PC triggered actions, this is **always-on** once the character token is pres
 | `staminaChange` | A token's stamina changed via automation (damage or heal) | `whose`, `direction` (`down`/`up`/`either`) |
 | `turnStart` | A token becomes the active combatant | `whose` |
 | `turnEnd` | The active combatant's turn ends | `whose` |
+| `roundStart` | A new combat round begins, including round 1 when combat starts | `whose` is usually omitted/`any` |
+| `roundEnd` | The GM ends the current combat round | `whose` is usually omitted/`any` |
+| `combatStart` | Combat starts | `whose` is usually omitted/`any` |
+| `combatEnd` | Combat ends | `whose` is usually omitted/`any` |
 | `move` | A token moves via normal player movement | `whose`, `leavesAdjacency`, `entersAdjacency`, `minDistance`, `maxDistance` |
 | `damageDealt` | Automated damage dealt by the caster | same as `damage`; predicates resolve `whose` from `sourceId` |
 | `forcedMovement` | A token is force moved by automation | `whose`, `targetWhose`, `minDistance`, `maxDistance`, `verb` |
@@ -338,7 +342,28 @@ Both are optional and may be combined to form a band (e.g. `"minSquares": 2, "wi
 "match": { "event": "damage", "filter": { "whose": "enemy", "minAmount": 1, "withinSquares": 5 } }
 ```
 
-Triggers stay registered until the encounter ends, the caster leaves the scene, or the round-tick stale-out (two phase boundaries) clears them.
+**Trigger lifetimes (`expires`)** - add this to a structured trigger when the listener should stop after a turn, round, or combat boundary. The boundary is counted after the trigger is registered.
+
+```json
+{
+  "type": "trigger",
+  "condition": "Each time the target willingly moves before the end of your next turn.",
+  "match": { "event": "move", "filter": { "whose": "target", "minDistance": 1 } },
+  "expires": { "event": "turnEnd", "whose": "self", "count": 1, "skipCurrent": true },
+  "effects": [
+    { "kind": "damage", "amountFrom": { "source": "triggeringForcedMovement" }, "damageType": "psychic" }
+  ]
+}
+```
+
+| `expires` field | Values | Notes |
+|---|---|---|
+| `event` | `turnStart`, `turnEnd`, `roundStart`, `roundEnd`, `combatStart`, `combatEnd` | Required. |
+| `whose` | `self`, `target`, `ally`, `enemy`, `any` | Optional, defaults to `any`. Use `self` for "your turn", `target` for "the target's turn". |
+| `count` | positive integer | Optional, defaults to `1`. Use `2` for "after the second matching boundary". |
+| `skipCurrent` | boolean | Optional. Use `true` when an ability cast during the caster's current turn should ignore that current turn's matching boundary. |
+
+Triggers stay registered until their `expires` boundary is reached, combat ends, the caster leaves the scene, or the authored trigger is replaced by recasting the same ability. The blue `!` ready overlay still has its own stale-prompt cleanup after phase changes; that cleanup clears the prompt, not the underlying listener.
 
 Triggered abilities use an always-listening/resolve flow when the first card is a structured `trigger` with `match`:
 

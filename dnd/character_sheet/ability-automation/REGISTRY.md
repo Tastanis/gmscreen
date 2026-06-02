@@ -246,6 +246,10 @@ Lightweight event-driven registry for triggered abilities. JSON-authored `trigge
 | `staminaChange` | `{ placementId, before, after, delta, kind }` | Fires from both `handleAutomationDamageRequest` and `handleAutomationHealRequest`. `kind` ∈ {`damage`, `heal`, `temporaryStamina`}. |
 | `turnStart` | `{ placementId, team }` | Fires from `transitionToActiveTurn` whenever a token becomes the active combatant. |
 | `turnEnd` | `{ placementId, team }` | Fires from `completeActiveCombatant` immediately before the save-ends UI opens. |
+| `roundStart` | `{ round }` | Fires when a new combat round begins, including round 1 when combat starts. |
+| `roundEnd` | `{ round }` | Fires immediately before the GM advances out of the current combat round. |
+| `combatStart` | `{ round }` | Fires when combat starts. |
+| `combatEnd` | `{ round }` | Fires immediately before combat state is cleared. |
 | `vtt:token-moved` (DOM event) | Underlying DOM event the `move` fan-out subscribes to. Still also used by the hard-coded opportunity-attack auto-detect. |
 
 Additional accepted events:
@@ -281,6 +285,7 @@ Trigger blocks may carry a structured `match` alongside the free-text `condition
 | `damage` | `whose` (`self`/`ally`/`enemy`/`target`/`judgedTarget`/`markSource`/`any`), `minAmount` int, `maxAmount` int, `damageType` string\|string[] |
 | `staminaChange` | `whose`, `direction` (`up`/`down`/`either`) |
 | `turnStart`, `turnEnd` | `whose` |
+| `roundStart`, `roundEnd`, `combatStart`, `combatEnd` | no filter usually; `whose` defaults to `any` |
 | `move` | `whose`, `leavesAdjacency` bool, `entersAdjacency` bool, `minDistance`, `maxDistance` |
 | `damageDealt` | same fields as `damage`; `whose` resolves against `sourceId` |
 | `forcedMovement` | `whose`, `targetWhose`, `minDistance`, `maxDistance`, `verb` |
@@ -309,6 +314,24 @@ When a trigger resolves, effect targets can use dynamic trigger groups:
 For `trigger.effects`, the default resolution target is `eventActor`. A trigger block can set `effectTarget` / `resolveTarget` to change that default, and individual nested effects can still use their own `target`.
 
 If `match` is omitted, the runner falls back to a chat reminder so the GM at least sees what should happen.
+
+### Authored trigger lifetime
+
+Structured trigger blocks can add `expires` to unregister the listener at a turn, round, or combat boundary:
+
+```json
+{
+  "type": "trigger",
+  "condition": "The target moves before the end of your next turn.",
+  "match": { "event": "move", "filter": { "whose": "target", "minDistance": 1 } },
+  "expires": { "event": "turnEnd", "whose": "self", "count": 1, "skipCurrent": true },
+  "effects": [ ... ]
+}
+```
+
+Accepted `expires.event`: `turnStart`, `turnEnd`, `roundStart`, `roundEnd`, `combatStart`, `combatEnd`.
+Accepted `expires.whose`: `self`, `target`, `ally`, `enemy`, `any` (default).
+`count` defaults to `1`; `skipCurrent:true` ignores the first matching boundary when it is the active combatant at registration time. Recasting the same authored ability still replaces the old listener.
 
 ### Built-in opportunity attack
 

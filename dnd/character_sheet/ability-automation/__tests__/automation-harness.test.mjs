@@ -149,3 +149,39 @@ test('runner can arm a structured trigger and resolve it from a captured trigger
     harness.close();
   }
 });
+
+test('runner forwards structured trigger lifetime metadata', async () => {
+  const harness = await createAbilityAutomationHarness();
+  try {
+    const automation = {
+      schema: 'ability-automation/v3',
+      cards: [
+        {
+          type: 'trigger',
+          condition: 'The target moves before the end of your next turn.',
+          match: { event: 'move', filter: { whose: 'target', minDistance: 1 } },
+          target: 'primary',
+          expires: { event: 'turnEnd', whose: 'self', count: 1, skipCurrent: true },
+          effects: [
+            { kind: 'damage', amount: 1, damageType: 'psychic' },
+          ],
+        },
+      ],
+    };
+
+    const result = await harness.runAutomation({
+      automation,
+      action: { id: 'thorn-foot', name: 'Thorn Foot', actionLabel: 'Main Action' },
+    });
+
+    assert.equal(result.calls.registerTrigger.length, 1);
+    assert.deepEqual(result.calls.registerTrigger[0].expires, {
+      event: 'turnEnd',
+      whose: 'self',
+      count: 1,
+      skipCurrent: true,
+    });
+  } finally {
+    harness.close();
+  }
+});

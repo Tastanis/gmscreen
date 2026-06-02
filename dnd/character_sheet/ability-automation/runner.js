@@ -1009,10 +1009,24 @@
           targetIds,
           condition: block.condition || "",
           note: block.note || "",
+          expires: block.expires || null,
         });
         const lines = [`${state.heroName} - ${state.action.name || "Ability"} trigger listening:`];
         if (block.condition) lines.push(`When: ${block.condition}`);
         if (inner) lines.push(`Then: ${inner}`);
+        if (block.expires) {
+          const who = block.expires.whose === "self"
+            ? "your"
+            : block.expires.whose === "target"
+              ? "the target's"
+              : block.expires.whose === "ally"
+                ? "an ally's"
+                : block.expires.whose === "enemy"
+                  ? "an enemy's"
+                  : "";
+          const eventText = String(block.expires.event || "").replace(/([A-Z])/g, " $1").toLowerCase();
+          lines.push(`Expires at ${who ? `${who} ` : ""}${eventText}.`);
+        }
         if (block.note) lines.push(block.note);
         await postChat(ctx, { message: lines.join("\n") });
         return;

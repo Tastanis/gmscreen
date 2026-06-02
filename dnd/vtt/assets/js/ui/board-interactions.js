@@ -15,6 +15,10 @@ import {
 } from './automation-trigger-ready.js';
 import { buildAutomationTriggerPredicate } from './automation-trigger-predicate.js';
 import {
+  createTriggerLifetimeState,
+  shouldExpireTriggerEntry,
+} from './automation-trigger-lifetime.js';
+import {
   setDrawings as setDrawingToolDrawings,
   isDrawModeActive,
   isDrawingInProgress,
@@ -2300,6 +2304,12 @@ export function mountBoardInteractions(store, routes = {}) {
         }
       }
     }
+    if (entry.expires || entry.lifetime) {
+      entry.lifetimeState = createTriggerLifetimeState(entry.expires || entry.lifetime, {
+        round: combatRound,
+        activeCombatantId,
+      });
+    }
     const list = triggerRegistry.byEvent.get(entry.eventType) || [];
     list.push(entry);
     triggerRegistry.byEvent.set(entry.eventType, list);
@@ -2307,6 +2317,22 @@ export function mountBoardInteractions(store, routes = {}) {
     tokList.push(entry);
     triggerRegistry.byToken.set(entry.tokenId, tokList);
     return entry;
+  }
+
+  function triggerUnregisterEntry(entry) {
+    if (!entry) return;
+    const list = triggerRegistry.byEvent.get(entry.eventType);
+    if (list) {
+      const idx = list.indexOf(entry);
+      if (idx !== -1) list.splice(idx, 1);
+      if (!list.length) triggerRegistry.byEvent.delete(entry.eventType);
+    }
+    const tokenList = triggerRegistry.byToken.get(entry.tokenId);
+    if (tokenList) {
+      const tidx = tokenList.indexOf(entry);
+      if (tidx !== -1) tokenList.splice(tidx, 1);
+      if (!tokenList.length) triggerRegistry.byToken.delete(entry.tokenId);
+    }
   }
 
   function triggerUnregisterByToken(tokenId) {
@@ -2342,8 +2368,16 @@ export function mountBoardInteractions(store, routes = {}) {
     }
   }
 
+  function triggerUnregisterAllAuthored() {
+    for (const entries of [...triggerRegistry.byToken.values()]) {
+      for (const entry of [...entries]) {
+        if (entry?.authored) triggerUnregisterEntry(entry);
+      }
+    }
+  }
+
   function triggerFire(eventType, payload) {
-    const list = triggerRegistry.byEvent.get(eventType) || [];
+    const list = [...(triggerRegistry.byEvent.get(eventType) || [])];
     for (const entry of list) {
       try {
         if (entry.predicate(payload, entry)) {
@@ -2372,6 +2406,43 @@ export function mountBoardInteractions(store, routes = {}) {
       } catch (err) {
         console.warn('[VTT] Trigger predicate failed for', eventType, err);
       }
+    }
+  }
+
+  function expireTriggerEntriesForBoundary(eventType, payload = {}) {
+    if (!eventType) return;
+    const boundaryPayload = {
+      ...payload,
+      eventType,
+    };
+    const entries = [];
+    for (const list of triggerRegistry.byEvent.values()) {
+      for (const entry of list) entries.push(entry);
+    }
+    for (const entry of [...new Set(entries)]) {
+      if (shouldExpireTriggerEntry(entry, boundaryPayload, {
+        activeCombatantId,
+        getTeamForPlacementId,
+      })) {
+        triggerUnregisterEntry(entry);
+      }
+    }
+  }
+
+  function fireTimingBoundary(eventType, payload = {}) {
+    const boundaryPayload = {
+      round: combatRound,
+      activeCombatantId,
+      ...payload,
+    };
+    try {
+      triggerFire(eventType, boundaryPayload);
+    } catch (err) {
+      console.warn(`[VTT] triggerFire(${eventType}) failed`, err);
+    }
+    expireTriggerEntriesForBoundary(eventType, boundaryPayload);
+    if (eventType === 'combatEnd') {
+      triggerUnregisterAllAuthored();
     }
   }
 
@@ -3423,6 +3494,7 @@ export function mountBoardInteractions(store, routes = {}) {
       freeTriggered: isFreeTriggeredActionLabel(action?.actionLabel || action?.type || action?.kind || ''),
       authored: true,
       condition: block.condition || '',
+      expires: block.expires || block.lifetime || null,
     };
     entry.predicate = buildAuthoredTriggerPredicate(entry);
     return Boolean(triggerRegister(entry));
@@ -3519,6 +3591,7 @@ export function mountBoardInteractions(store, routes = {}) {
       freeTriggered: Boolean(payload.freeTriggered || isFreeTriggeredActionLabel(payload.actionLabel || '')),
       authored: true,
       condition: payload.condition || '',
+      expires: payload.expires || payload.lifetime || null,
     };
     entry.predicate = buildAuthoredTriggerPredicate(entry);
     const registered = triggerRegister(entry);
@@ -8694,11 +8767,7 @@ export function mountBoardInteractions(store, routes = {}) {
     //   - the new id is non-null (clearing the active turn fires turnEnd
     //     via completeActiveCombatant, not turnStart)
     if (combatActive && normalizedNextId && normalizedNextId !== previousCombatantId) {
-      try {
-        triggerFire('turnStart', { placementId: normalizedNextId, team: nextTeam ?? null });
-      } catch (err) {
-        console.warn('[VTT] triggerFire(turnStart) failed', err);
-      }
+      fireTimingBoundary('turnStart', { placementId: normalizedNextId, team: nextTeam ?? null });
       expirePersistentZonesForOwner(normalizedNextId, 'startOfTurn');
       // Tick any persistent zones owned by this combatant whose tickAt is
       // startOfTurn. Async, fire-and-forget — board state updates from
@@ -9087,11 +9156,7 @@ export function mountBoardInteractions(store, routes = {}) {
     }
     // Fan out turnEnd before any save-ends UI opens, so authored "at end of
     // turn" triggers can arm their owner before the resolution dialog appears.
-    try {
-      triggerFire('turnEnd', { placementId: finishedId, team: turnCompletion.finishedTeam });
-    } catch (err) {
-      console.warn('[VTT] triggerFire(turnEnd) failed', err);
-    }
+    fireTimingBoundary('turnEnd', { placementId: finishedId, team: turnCompletion.finishedTeam });
     // Tick zones owned by this combatant whose tickAt is endOfTurn.
     tickPersistentZonesForOwner(finishedId, 'endOfTurn').catch((err) => {
       console.warn('[VTT] persistent zone end-of-turn tick failed', err);
@@ -10280,6 +10345,8 @@ export function mountBoardInteractions(store, routes = {}) {
     const initialTeam = rollForInitiativeAnnouncement() ?? 'enemy';
     startingCombatTeam = initialTeam;
     currentTurnTeam = initialTeam;
+    fireTimingBoundary('combatStart', { round: combatRound });
+    fireTimingBoundary('roundStart', { round: combatRound });
     updateStartCombatButton();
     refreshCombatTracker();
     focusNextCombatant([
@@ -10337,6 +10404,7 @@ export function mountBoardInteractions(store, routes = {}) {
     }
 
     markCombatEncounterStateDirty();
+    fireTimingBoundary('combatEnd', { round: combatRound });
     combatActive = false;
     combatRound = 0;
     // Persistent zones auto-end at encounter end per Draw Steel rules.
@@ -10939,6 +11007,9 @@ export function mountBoardInteractions(store, routes = {}) {
   }
 
   function advanceCombatRound() {
+    if (combatActive) {
+      fireTimingBoundary('roundEnd', { round: combatRound });
+    }
     const roundState = advanceCombatRoundState({
       combatActive,
       combatRound,
@@ -10966,6 +11037,7 @@ export function mountBoardInteractions(store, routes = {}) {
     resetTriggeredActionsForActiveScene();
     resetAutomationScopedFlags('round');
     resetPersistentZoneRoundState();
+    fireTimingBoundary('roundStart', { round: combatRound });
     updateStartCombatButton();
     refreshCombatTracker();
 

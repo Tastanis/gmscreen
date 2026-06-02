@@ -852,6 +852,10 @@
     "staminaZero",
     "turnStart",
     "turnEnd",
+    "roundStart",
+    "roundEnd",
+    "combatStart",
+    "combatEnd",
     "move",
     "forcedMovement",
     "forcedMovementDealt",
@@ -866,7 +870,9 @@
   // The `whose` filter answers "whose event is this?" relative to the caster
   // and the runner's previously-named target groups.
   const WHOSE_VALUES = ["self", "ally", "enemy", "target", "judgedTarget", "markSource", "any"];
+  const TRIGGER_LIFETIME_WHOSE_VALUES = ["self", "ally", "enemy", "target", "any"];
   const STAMINA_DIRECTIONS = ["down", "up", "either"];
+  const TRIGGER_LIFETIME_EVENTS = ["turnStart", "turnEnd", "roundStart", "roundEnd", "combatStart", "combatEnd"];
 
   function normalizeWhoseValue(value) {
     const raw = asTrimmedString(value);
@@ -1007,8 +1013,35 @@
     return { event, filter };
   }
 
+  function normalizeTriggerLifetime(input, warnings, path) {
+    if (!input || typeof input !== "object") return null;
+    const rawEvent = asTrimmedString(input.event).toLowerCase();
+    if (!rawEvent) return null;
+    const event = TRIGGER_LIFETIME_EVENTS.find((e) => e.toLowerCase() === rawEvent);
+    if (!event) {
+      warnings.push(`${path}.event: "${input.event}" not in ${TRIGGER_LIFETIME_EVENTS.join("/")}.`);
+      return null;
+    }
+    const expires = {
+      event,
+      whose: "any",
+      count: Math.max(1, asNonNegInt(input.count, 1)),
+    };
+    const whoseRaw = asTrimmedString(input.whose);
+    if (whoseRaw) {
+      const whose = normalizeWhoseValue(whoseRaw);
+      if (whose && TRIGGER_LIFETIME_WHOSE_VALUES.includes(whose)) {
+        expires.whose = whose;
+      } else {
+        warnings.push(`${path}.whose: "${input.whose}" not in ${TRIGGER_LIFETIME_WHOSE_VALUES.join("/")}.`);
+      }
+    }
+    if (input.skipCurrent === true) expires.skipCurrent = true;
+    return expires;
+  }
+
   function normalizeTriggerBlock(input, warnings, path) {
-    const known = new Set(["type", "id", "condition", "match", "target", "effectTarget", "resolveTarget", "effects", "note"]);
+    const known = new Set(["type", "id", "condition", "match", "target", "effectTarget", "resolveTarget", "effects", "note", "expires", "lifetime"]);
     const block = {
       type: "trigger",
       id: input.id || createId("trigger"),
@@ -1019,6 +1052,8 @@
     };
     const match = normalizeTriggerMatch(input.match, warnings, `${path}.match`);
     if (match) block.match = match;
+    const expires = normalizeTriggerLifetime(input.expires || input.lifetime, warnings, `${path}.expires`);
+    if (expires) block.expires = expires;
     if (!block.condition && !match) {
       warnings.push(`${path}: trigger has no condition text or match config.`);
     }

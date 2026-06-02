@@ -19,6 +19,7 @@ For LLM-friendly authoring docs, read [`AUTHORING.md`](AUTHORING.md). For the re
 - `REGISTRY.md` — Flat reference of every supported value, hook, and feature with implementation status.
 - `../../vtt/assets/js/ui/automation-target-prompt.js` - Shared VTT target-picker prompt markup used by the board and smoke fixture.
 - `../../vtt/assets/js/ui/automation-trigger-ready.js` - Shared trigger-ready state helpers and blue `!` token indicator renderer used by the board and smoke fixture.
+- `../../vtt/assets/js/ui/automation-trigger-lifetime.js` - Shared authored-trigger lifetime helpers for turn, round, and combat boundary expiry.
 
 ## Integration points
 
@@ -55,7 +56,7 @@ For each block in `automation.cards`:
 1. `target` — VTT prompts the user to pick token(s) or place a template. Result is stored under `state.groups[block.name]`.
 2. `powerRoll` — Open dice modal; user rolls, picks a tier, accepts. The runtime then walks `tier.effects` and dispatches each effect against the resolved target group.
 3. `effect` — Walk `block.effects` against the target group (no roll).
-4. `trigger` - With structured `match`, registers on the VTT trigger bus. PC trigger actions in the Triggers list auto-register when that character is in the active scene. Trigger cards embedded in main actions/maneuvers run in card order, allowing "hit/select a target, then watch that target" abilities. Resolving a ready trigger skips the trigger card and runs the follow-up cards with the captured event payload. Without `match`, posts a chat reminder.
+4. `trigger` - With structured `match`, registers on the VTT trigger bus. PC trigger actions in the Triggers list auto-register when that character is in the active scene. Trigger cards embedded in main actions/maneuvers run in card order, allowing "hit/select a target, then watch that target" abilities. Optional `expires` metadata unregisters the listener at turn, round, or combat boundaries. Resolving a ready trigger skips the trigger card and runs the follow-up cards with the captured event payload. Without `match`, posts a chat reminder.
 5. `persistent` — Register a board-side persistent zone when a prior area target exists; otherwise post a chat reminder.
 6. `branch` — Evaluate a condition such as `strained`, `winded`, `keyword`, `prompt`, `mark`, or `scopedFlag`, then run the selected nested card sequence.
 
