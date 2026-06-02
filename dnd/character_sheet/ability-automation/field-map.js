@@ -40,6 +40,23 @@
     return card?.querySelector(".test") || null;
   }
 
+  function ensureFirstTest(actionId, actionType, fields) {
+    const needsTest = Object.keys(fields || {}).some((rawKey) => {
+      const entry = FIELD_LOOKUP.get(String(rawKey).toLowerCase());
+      return entry && TEST_FIELD_KEYS.has(entry.key);
+    });
+    if (!needsTest) return getActionCard(actionId, actionType);
+
+    let card = getActionCard(actionId, actionType);
+    if (!card || firstTest(card)) return card;
+
+    const addButton = card.querySelector("[data-add-test]");
+    if (!addButton) return card;
+    addButton.click();
+
+    return getActionCard(actionId, actionType) || card;
+  }
+
   function firstTier(card, tier) {
     return firstTest(card)?.querySelector(`.test-tier[data-tier="${tier}"]`) || null;
   }
@@ -117,6 +134,12 @@
     }
   }
 
+  const TEST_FIELD_KEYS = new Set(
+    FIELD_MAP
+      .filter((entry) => entry.key.startsWith("test") || /^tier\d/.test(entry.key))
+      .map((entry) => entry.key)
+  );
+
   function getActionCard(actionId, actionType) {
     if (!actionId || !actionType) return null;
     const escapedId = global.CSS?.escape ? global.CSS.escape(actionId) : String(actionId).replace(/"/g, '\\"');
@@ -137,7 +160,7 @@
   }
 
   function applyFields(actionId, actionType, fields) {
-    const card = getActionCard(actionId, actionType);
+    const card = ensureFirstTest(actionId, actionType, fields);
     const result = { touched: [], unknown: [], missing: [] };
     if (!card || !fields || typeof fields !== "object") return result;
     for (const [rawKey, value] of Object.entries(fields)) {
