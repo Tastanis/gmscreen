@@ -50,6 +50,24 @@ test('suggests high ground when actor level ranks above target level', () => {
   assert.ok(activeIds(suggestions).includes('edge-high-ground'));
 });
 
+test('suggests high ground when map levels are passed as board state', () => {
+  const actor = ally('actor', 1, 1, { levelId: 'upper' });
+  const target = enemy('target', 1, 2, { levelId: 'level-0' });
+  const suggestions = getPowerRollSuggestions({
+    actor,
+    targets: [target],
+    placements: [actor, target],
+    mapLevels: {
+      levels: [
+        { id: 'level-0', zIndex: 0 },
+        { id: 'upper', zIndex: 2 },
+      ],
+    },
+    context: { keywords: ['Ranged', 'Strike'] },
+  });
+  assert.ok(activeIds(suggestions).includes('edge-high-ground'));
+});
+
 test('suggests flanking for opposite allied tokens around a large target', () => {
   const actor = ally('actor', 4, 5);
   const helper = ally('helper', 7, 6);
@@ -93,6 +111,55 @@ test('suggests condition-based edges and banes', () => {
     'edge-prone',
     'edge-restrained',
   ]);
+});
+
+test('suggests source-aware condition edges and banes', () => {
+  const actor = ally('actor', 1, 1, {
+    conditions: [
+      { name: 'Taunted', sourceId: 'taunter' },
+      { name: 'Grabbed', sourceId: 'grappler' },
+      { name: 'Frightened', sourceId: 'fear-source' },
+      { name: 'Prone' },
+    ],
+  });
+  const target = enemy('target', 1, 2, {
+    conditions: [
+      { name: 'Prone' },
+      { name: 'Frightened', sourceId: 'actor' },
+      { name: 'Unconscious' },
+    ],
+  });
+  const suggestions = getPowerRollSuggestions({
+    actor,
+    targets: [target, enemy('fear-source', 2, 2)],
+    placements: [actor, target],
+    context: { keywords: ['Melee', 'Strike'], rollEvent: 'powerRoll' },
+  });
+  assert.deepEqual(activeIds(suggestions), [
+    'bane-frightened',
+    'bane-grabbed',
+    'bane-prone',
+    'bane-taunted',
+    'edge-frightened',
+    'edge-prone',
+    'edge-unconscious',
+  ]);
+  assert.equal(suggestions.find((entry) => entry.id === 'bane-taunted')?.count, 2);
+  assert.equal(suggestions.find((entry) => entry.id === 'edge-unconscious')?.count, 2);
+});
+
+test('does not suggest taunted bane when the taunter is targeted', () => {
+  const actor = ally('actor', 1, 1, {
+    conditions: [{ name: 'Taunted', sourceId: 'taunter' }],
+  });
+  const taunter = enemy('taunter', 1, 2);
+  const suggestions = getPowerRollSuggestions({
+    actor,
+    targets: [taunter],
+    placements: [actor, taunter],
+    context: { keywords: ['Melee', 'Strike'], rollEvent: 'powerRoll' },
+  });
+  assert.equal(activeIds(suggestions).includes('bane-taunted'), false);
 });
 
 test('suggests active hidden roll modifier riders and preserves consume refs', () => {

@@ -143,6 +143,7 @@
     "restrained",
     "slowed",
     "taunted",
+    "unconscious",
     "weakened",
     // Numeric / typed riders. Carry `amount` and (optionally) `damageType` on
     // the condition object; the VTT damage handler reads them when computing

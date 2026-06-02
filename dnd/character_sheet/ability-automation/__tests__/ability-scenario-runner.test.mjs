@@ -107,6 +107,7 @@ test('ability scenario runner: Judgment/Wrath registers and resolves melee damag
       duration: 'end-of-turn',
     },
     sourceId: 'caster-1',
+    sourceName: 'Harness Hero',
   });
 });
 

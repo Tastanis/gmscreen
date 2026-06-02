@@ -787,6 +787,11 @@ export function mountBoardInteractions(store, routes = {}) {
         'If you are taunted, you have a double bane on ability power rolls that don’t target the creature who taunted you while you have line of effect to that creature. If you gain the taunted condition from one creature while already taunted by a different creature, the new condition replaces the old one.',
     },
     {
+      name: 'Unconscious',
+      description:
+        'While you are unconscious, you can\'t take actions or maneuvers, your speed is 0, you are unaware of your surroundings, and you are prone. Ability rolls against you have a double edge. If you wake up, you can stand up from prone as a free maneuver.',
+    },
+    {
       name: 'Weakened',
       description: 'While you are weakened, all your power rolls take a bane.',
     },
@@ -15223,8 +15228,8 @@ export function mountBoardInteractions(store, routes = {}) {
     if (conditionPayload.sourceId || payload.sourceId) {
       condition.sourceId = String(conditionPayload.sourceId || payload.sourceId);
     }
-    if (conditionPayload.sourceName) {
-      condition.sourceName = String(conditionPayload.sourceName);
+    if (conditionPayload.sourceName || payload.sourceName) {
+      condition.sourceName = String(conditionPayload.sourceName || payload.sourceName);
     }
     if (conditionPayload.sourceAbility) {
       condition.sourceAbility = String(conditionPayload.sourceAbility);

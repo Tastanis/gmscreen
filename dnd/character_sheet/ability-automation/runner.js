@@ -202,19 +202,48 @@
         edge,
         bane,
         net,
-        bonus: 2,
+        bonus: net >= 2 ? 0 : 2,
         tierShift: net >= 2 ? 1 : 0,
-        label: net >= 2 ? "Double Edge (+2, tier up)" : "Edge (+2)",
+        label: net >= 2 ? "Double Edge (tier up)" : "Edge (+2)",
       };
     }
     return {
       edge,
       bane,
       net,
-      bonus: -2,
+      bonus: net <= -2 ? 0 : -2,
       tierShift: net <= -2 ? -1 : 0,
-      label: net <= -2 ? "Double Bane (-2, tier down)" : "Bane (-2)",
+      label: net <= -2 ? "Double Bane (tier down)" : "Bane (-2)",
     };
+  }
+
+  function getActiveEdgeControl(edgeState) {
+    const net = asInt(edgeState?.net);
+    if (net >= 2) return { kind: "edge", count: 2 };
+    if (net === 1) return { kind: "edge", count: 1 };
+    if (net === -1) return { kind: "bane", count: 1 };
+    if (net <= -2) return { kind: "bane", count: 2 };
+    return null;
+  }
+
+  function edgeControlIsActive(edgeState, kind, count) {
+    const active = getActiveEdgeControl(edgeState);
+    return Boolean(active && active.kind === kind && active.count === count);
+  }
+
+  function renderEdgeControlButton(edgeState, kind, count, label, title) {
+    const active = edgeControlIsActive(edgeState, kind, count);
+    const adjustAttribute = kind === "edge" ? "data-power-roll-edge-adjust" : "data-power-roll-bane-adjust";
+    const kindClass = kind === "edge" ? "dice-btn--edge" : "dice-btn--bane";
+    return `
+      <button
+        class="dice-btn ${kindClass} power-roll-runner__edge-btn ${active ? "power-roll-runner__edge-btn--active" : ""}"
+        type="button"
+        ${adjustAttribute}="${count}"
+        title="${escapeHtml(title)}"
+        aria-pressed="${active ? "true" : "false"}"
+      >${escapeHtml(label)}</button>
+    `;
   }
 
   // ---------- winded detection (universal) ----------
@@ -894,10 +923,10 @@
           <div class="dice-result-detail">${escapeHtml(tierDetail)}</div>
         </div>
         <div class="dice-row dice-row--edge-bane power-roll-runner__edge-buttons" aria-label="Manual edge and bane controls">
-          <button class="dice-btn dice-btn--bane power-roll-runner__edge-btn" type="button" data-power-roll-bane-adjust="2" title="Add double bane">BANE vv</button>
-          <button class="dice-btn dice-btn--bane power-roll-runner__edge-btn" type="button" data-power-roll-bane-adjust="1" title="Add bane">BANE v</button>
-          <button class="dice-btn dice-btn--edge power-roll-runner__edge-btn" type="button" data-power-roll-edge-adjust="1" title="Add edge">EDGE ^</button>
-          <button class="dice-btn dice-btn--edge power-roll-runner__edge-btn" type="button" data-power-roll-edge-adjust="2" title="Add double edge">EDGE ^^</button>
+          ${renderEdgeControlButton(edgeState, "bane", 2, "BANE vv", "Add double bane")}
+          ${renderEdgeControlButton(edgeState, "bane", 1, "BANE v", "Add bane")}
+          ${renderEdgeControlButton(edgeState, "edge", 1, "EDGE ^", "Add edge")}
+          ${renderEdgeControlButton(edgeState, "edge", 2, "EDGE ^^", "Add double edge")}
         </div>
         ${renderRollSuggestionButtons(state)}
         <div class="power-roll-runner__adjustments">
@@ -1566,10 +1595,20 @@
         conditionPayload.sourceName = effect.sourceName || state.heroName || "";
         conditionPayload.sourceAbility = effect.sourceAbility || state.action?.name || "";
       }
+      if (effect.sourceId && !conditionPayload.sourceId) {
+        conditionPayload.sourceId = effect.sourceId;
+      }
+      if (effect.sourceName && !conditionPayload.sourceName) {
+        conditionPayload.sourceName = effect.sourceName;
+      }
+      if (effect.sourceAbility && !conditionPayload.sourceAbility) {
+        conditionPayload.sourceAbility = effect.sourceAbility;
+      }
       await state.context.applyCondition?.({
         placementId: target.id,
         condition: conditionPayload,
         sourceId: state.sourcePlacement?.id || "",
+        sourceName: state.heroName || state.sourcePlacement?.name || "",
       });
     }
     await postChat(state.context, {
@@ -3144,5 +3183,12 @@
     }
   }
 
-  global.AbilityAutomationRunner = { open, close: closeRunner };
+  global.AbilityAutomationRunner = {
+    open,
+    close: closeRunner,
+    __testing: {
+      getActiveEdgeControl,
+      getEdgeState,
+    },
+  };
 })(window);

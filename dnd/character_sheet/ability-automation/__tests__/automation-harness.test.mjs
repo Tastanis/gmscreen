@@ -270,6 +270,7 @@ test('runner applies numeric damage weakness from a failed potency rider', async
           damageType: 'fire',
         },
         sourceId: 'caster-1',
+        sourceName: 'Cal',
       },
     ]);
   } finally {
@@ -339,6 +340,36 @@ test('runner preflights startTurn before spending ability resource', async () =>
       result.callLog.findIndex((entry) => entry.name === 'startTurn' && entry.payload.preflight === true) <
         result.callLog.findIndex((entry) => entry.name === 'spendResource')
     );
+  } finally {
+    harness.close();
+  }
+});
+
+test('runner applies double edge and double bane as tier shifts without +/-2 bonus', async () => {
+  const harness = await createAbilityAutomationHarness();
+  try {
+    const { getEdgeState, getActiveEdgeControl } = harness.window.AbilityAutomationRunner.__testing;
+    assert.deepEqual(
+      getEdgeState(2, 0),
+      { edge: 2, bane: 0, net: 2, bonus: 0, tierShift: 1, label: 'Double Edge (tier up)' }
+    );
+    assert.deepEqual(
+      getEdgeState(0, 2),
+      { edge: 0, bane: 2, net: -2, bonus: 0, tierShift: -1, label: 'Double Bane (tier down)' }
+    );
+    assert.deepEqual(
+      getEdgeState(2, 1),
+      { edge: 2, bane: 1, net: 1, bonus: 2, tierShift: 0, label: 'Edge (+2)' }
+    );
+    assert.deepEqual(
+      getEdgeState(1, 2),
+      { edge: 1, bane: 2, net: -1, bonus: -2, tierShift: 0, label: 'Bane (-2)' }
+    );
+    assert.deepEqual(getActiveEdgeControl(getEdgeState(2, 0)), { kind: 'edge', count: 2 });
+    assert.deepEqual(getActiveEdgeControl(getEdgeState(2, 1)), { kind: 'edge', count: 1 });
+    assert.deepEqual(getActiveEdgeControl(getEdgeState(1, 2)), { kind: 'bane', count: 1 });
+    assert.deepEqual(getActiveEdgeControl(getEdgeState(0, 2)), { kind: 'bane', count: 2 });
+    assert.equal(getActiveEdgeControl(getEdgeState(1, 1)), null);
   } finally {
     harness.close();
   }

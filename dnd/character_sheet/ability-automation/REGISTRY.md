@@ -85,15 +85,17 @@ The monster ability tray + `window.MonsterAbilityRunner.start()` add the followi
 
 ## Conditions — `condition.name`
 
-`bleeding`, `dazed`, `dying`, `frightened`, `grabbed`, `hidden`, `hiddenEffect`, `prone`, `restrained`, `slowed`, `taunted`, `weakened`, `damageWeakness`, `damageImmunity`, `other`
+`bleeding`, `dazed`, `dying`, `frightened`, `grabbed`, `hidden`, `hiddenEffect`, `prone`, `restrained`, `slowed`, `taunted`, `unconscious`, `weakened`, `damageWeakness`, `damageImmunity`, `other`
 
 When `name === "other"`, supply `text` describing the homebrew condition.
 
 `damageWeakness` and `damageImmunity` carry numeric riders: `amount` (int, required) and `damageType` (string, optional). Stored on the placement; read by `getAutomationDamageAdjustment` when computing adjusted damage. Empty / "untyped" `damageType` matches every type. The VTT character/monster condition sidebar and token settings list render these with readable labels such as `Fire weakness 5` and keep the remove button available.
 
+Automated conditions store the applying token as `sourceId` plus `sourceName` when available. Source-linked rules use that metadata: taunted/grabbed creatures are penalized when the roll targets someone other than the source, and frightened applies the correct source/target edge or bane.
+
 `hiddenEffect` carries hidden ability-applied rider effects. It is not selectable in the normal condition picker and does not render as token condition text. It remains visible in the VTT character/monster sidebar with an `x` remove button and marks the token with a compact `FX` badge. Supported automatic rider type: `{ "type": "rollModifier", "modifier": "edge" | "bane" | "doubleEdge" | "doubleBane", "appliesTo": { ... }, "consume": "manual" | "nextMatchingRoll" }`.
 
-Board-hosted power roll modals can show clickable suggested edges/banes from current VTT state through `getPowerRollSuggestions`. These are runtime hints; normal board hints are not automation JSON fields. High Ground, Flanking, and Cover are always visible as suggestion toggles; High Ground and Flanking default on when board state proves them, while Cover is currently manual because line-of-effect obstruction is not modeled as a reliable roll predicate. Additional board-derived suggestions include prone/restrained targets, hidden attackers, and weakened/restrained attackers when those facts are present in board state. Ability-applied `hiddenEffect` rollModifier riders also appear as default-on suggestions when their `appliesTo` filters match, and `consume: "nextMatchingRoll"` riders are removed after the accepted matching roll.
+Board-hosted power roll modals can show clickable suggested edges/banes from current VTT state through `getPowerRollSuggestions`. These are runtime hints; normal board hints are not automation JSON fields. High Ground, Flanking, and Cover are always visible as suggestion toggles; High Ground and Flanking default on when board state proves them, while Cover is currently manual because line-of-effect obstruction is not modeled as a reliable roll predicate. Additional board-derived suggestions include prone/restrained/unconscious targets, hidden attackers, weakened/restrained/prone attackers, and source-linked frightened/grabbed/taunted attackers when those facts are present in board state. Ability-applied `hiddenEffect` rollModifier riders also appear as default-on suggestions when their `appliesTo` filters match, and `consume: "nextMatchingRoll"` riders are removed after the accepted matching roll.
 
 ## Durations — `condition.duration`
 
@@ -195,7 +197,7 @@ These are called by `runner.js` and dispatched as `vtt:automation-*` CustomEvent
 | `selectAreaTarget(config)` | target block fields + `sourcePlacement` | `{ targets: [...] }` or `{ skipped }` / `{ canceled }` |
 | `applyDamage(payload)` | `{ placementId, amount, damageType, abilityName }` | `{ name, amount, current, max, hidden, vulnerability, immunity }` |
 | `applyHeal(payload)` | `{ placementId, amount, allowTempHp, abilityName }` | `{ name, change, current, max, hidden, allowTempHp }` |
-| `applyCondition(payload)` | `{ placementId, condition: {name, duration}, sourceId }` | `{ ok }` |
+| `applyCondition(payload)` | `{ placementId, condition: {name, duration}, sourceId, sourceName }` | `{ ok }` |
 | `checkPotency(payload)` | `{ placementId, attribute, threshold, sourceStats }` | `{ passes: bool }` |
 | `forceMove(payload)` | `{ movement, verb, verbLabel?, distance, upTo, ignoreStability?, targetId, target, sourcePlacement, sourceTraits, abilityName }` | `{ name, movedDistance, collision?, skipped? }` |
 | `cancelTargetSelection()` | none | none |

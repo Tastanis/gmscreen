@@ -615,7 +615,7 @@ Applies via the same heal path but allows the new total to exceed max stamina (t
 
 | Field | Values |
 |---|---|
-| `name` | `"bleeding"`, `"dazed"`, `"dying"`, `"frightened"`, `"grabbed"`, `"hidden"`, `"hiddenEffect"`, `"prone"`, `"restrained"`, `"slowed"`, `"taunted"`, `"weakened"`, `"damageWeakness"`, `"damageImmunity"`, `"other"` |
+| `name` | `"bleeding"`, `"dazed"`, `"dying"`, `"frightened"`, `"grabbed"`, `"hidden"`, `"hiddenEffect"`, `"prone"`, `"restrained"`, `"slowed"`, `"taunted"`, `"unconscious"`, `"weakened"`, `"damageWeakness"`, `"damageImmunity"`, `"other"` |
 | `text` | required when `name === "other"` — describes the homebrew condition |
 | `duration` | `"instantaneous"`, `"endOfTurn"`, `"saveEnds"`, `"endOfEncounter"`, `"untilDying"` |
 | `amount` | int — required for `"damageWeakness"` / `"damageImmunity"`. How much extra damage is taken (weakness) / soaked (immunity). |
@@ -632,6 +632,8 @@ Applies via the same heal path but allows the new total to exceed max stamina (t
 | `rider.consume` | `"manual"` or `"nextMatchingRoll"`. Use `"nextMatchingRoll"` for effects like "the target has a bane on their next attack." |
 
 `damageWeakness` and `damageImmunity` are numeric riders. The VTT damage handler stacks `amount` on top of the sheet's own immunity/vulnerability lists when applying damage to the affected target. Example: `{ "kind": "condition", "name": "damageWeakness", "amount": 5, "damageType": "fire", "duration": "saveEnds" }` makes the target take +5 damage from every fire effect until they save out. These riders are shown in the VTT character/monster condition sidebar with readable labels such as `Fire weakness 5` and an `x` remove button.
+
+Automated conditions store the caster/source token id and name. Source-aware conditions such as `taunted`, `grabbed`, and `frightened` use that metadata for power-roll edge/bane suggestions. If an ability says a target is taunted/frightened/grabbed by a different creature than the caster, set `sourceId` / `sourceName` on the condition effect when that source is known; otherwise the caster is used.
 
 `hiddenEffect` is an ability-applied hidden rider condition. It is not available in the normal condition picker and it does not print its words on the token. It appears in the VTT character/monster sidebar under **Auras, Conditions, & Effects** with an `x` remove button, and the token gets a small `FX` badge while any hidden effect is active. Roll modifier riders become default-on suggested edge/bane buttons in the automated power-roll modal; the user can click the suggestion off before rolling.
 

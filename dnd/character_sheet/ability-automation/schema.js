@@ -372,16 +372,16 @@
           if (rider) effect.rider = rider;
           const consume = asTrimmedString(input.consume);
           if (consume) effect.consume = consume;
-          const sourceId = asTrimmedString(input.sourceId);
-          const sourceName = asTrimmedString(input.sourceName);
-          const sourceAbility = asTrimmedString(input.sourceAbility);
-          if (sourceId) effect.sourceId = sourceId;
-          if (sourceName) effect.sourceName = sourceName;
-          if (sourceAbility) effect.sourceAbility = sourceAbility;
           if (!effect.rider) {
             warnings.push(`${path}: hiddenEffect has no supported rider; it will display as a removable effect only.`);
           }
         }
+        const sourceId = asTrimmedString(input.sourceId);
+        const sourceName = asTrimmedString(input.sourceName);
+        const sourceAbility = asTrimmedString(input.sourceAbility);
+        if (sourceId) effect.sourceId = sourceId;
+        if (sourceName) effect.sourceName = sourceName;
+        if (sourceAbility) effect.sourceAbility = sourceAbility;
         const extras = pickExtras(input, known);
         if (extras) effect._extra = extras;
         return effect;

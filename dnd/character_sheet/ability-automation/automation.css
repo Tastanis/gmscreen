@@ -208,6 +208,16 @@
   text-transform: uppercase;
 }
 
+.power-roll-runner__edge-btn--active.dice-btn--edge {
+  box-shadow: 0 0 0 2px rgba(232, 239, 255, 0.95), 0 0 0 4px rgba(35, 79, 168, 0.35);
+  filter: brightness(1.08);
+}
+
+.power-roll-runner__edge-btn--active.dice-btn--bane {
+  box-shadow: 0 0 0 2px rgba(242, 223, 191, 0.95), 0 0 0 4px rgba(79, 58, 36, 0.35);
+  filter: brightness(1.08);
+}
+
 .power-roll-runner__suggestions {
   display: flex;
   flex-wrap: wrap;

@@ -38,6 +38,13 @@ function conditionEntries(placement) {
     .filter(Boolean);
 }
 
+function matchingConditionEntries(placement, name) {
+  const wanted = normalizeText(name);
+  return conditionEntries(placement)
+    .map((entry) => entry.condition)
+    .filter((condition) => normalizeText(condition?.name) === wanted);
+}
+
 function hasCondition(placement, name) {
   return conditionNames(placement).has(normalizeText(name));
 }
@@ -90,9 +97,16 @@ function areOppositeAroundTarget(a, b, target) {
   return (av.x !== 0 && av.x * bv.x < 0) || (av.y !== 0 && av.y * bv.y < 0);
 }
 
+function normalizeLevelList(mapLevels = []) {
+  if (Array.isArray(mapLevels)) return mapLevels;
+  if (Array.isArray(mapLevels?.levels)) return mapLevels.levels;
+  if (Array.isArray(mapLevels?.mapLevels?.levels)) return mapLevels.mapLevels.levels;
+  return [];
+}
+
 function levelRank(placement, mapLevels = []) {
   const levelId = placement?.levelId || '';
-  const levels = Array.isArray(mapLevels) ? mapLevels : [];
+  const levels = normalizeLevelList(mapLevels);
   const index = levels.findIndex((level) => level && level.id === levelId);
   if (index < 0) return 0;
   const z = Number(levels[index]?.zIndex);
@@ -120,6 +134,11 @@ function isMeleeAbility(context = {}) {
 
 function isStrike(context = {}) {
   return keywordsFromContext(context).includes('strike');
+}
+
+function isAbilityRollContext(context = {}) {
+  const rollEvent = rollEventFromContext(context);
+  return rollEvent === 'powerroll' || rollEvent === 'abilitytest' || rollEvent === 'abilityroll';
 }
 
 function rollEventFromContext(context = {}) {
@@ -192,6 +211,58 @@ function makeSuggestion(id, kind, label, active = true, extra = {}) {
   return { id, kind, label, active, ...extra };
 }
 
+function conditionSourceId(condition) {
+  return String(
+    condition?.sourceId ||
+    condition?.source?.id ||
+    condition?.originId ||
+    condition?.casterId ||
+    condition?.appliedBy ||
+    condition?.duration?.sourceId ||
+    condition?.duration?.targetTokenId ||
+    ''
+  ).trim();
+}
+
+function targetIdSetFromContext(targets = [], context = {}) {
+  const ids = new Set();
+  (Array.isArray(targets) ? targets : []).forEach((target) => {
+    if (target?.id) ids.add(String(target.id));
+  });
+  (Array.isArray(context.targetIds) ? context.targetIds : []).forEach((id) => {
+    if (id) ids.add(String(id));
+  });
+  (Array.isArray(context.targets) ? context.targets : []).forEach((target) => {
+    const id = typeof target === 'string' ? target : target?.id;
+    if (id) ids.add(String(id));
+  });
+  return ids;
+}
+
+function hasTargetId(targetIds, id) {
+  const wanted = String(id || '').trim();
+  if (!wanted) return false;
+  for (const targetId of targetIds) {
+    if (String(targetId) === wanted) return true;
+  }
+  return false;
+}
+
+function hasSourceLinkedCondition(placement, name, sourceId) {
+  const wanted = String(sourceId || '').trim();
+  if (!wanted) return false;
+  return matchingConditionEntries(placement, name)
+    .some((condition) => conditionSourceId(condition) === wanted);
+}
+
+function hasConditionExcludingTargets(placement, name, targetIds) {
+  return matchingConditionEntries(placement, name)
+    .some((condition) => {
+      const sourceId = conditionSourceId(condition);
+      return sourceId && !hasTargetId(targetIds, sourceId);
+    });
+}
+
 function hiddenEffectSuggestions(placement, context = {}) {
   return conditionEntries(placement)
     .map(({ condition, index }) => {
@@ -233,24 +304,47 @@ export function getPowerRollSuggestions({
 
   const melee = isMeleeAbility(context);
   const strike = isStrike(context);
+  const abilityRoll = isAbilityRollContext(context);
+  const targetIds = targetIdSetFromContext(targetList, context);
 
   suggestions.push(makeSuggestion('edge-high-ground', EDGE, 'High Ground', hasHighGround(actor, primaryTarget, mapLevels)));
   suggestions.push(makeSuggestion('edge-flanking', EDGE, 'Flanking', melee && strike && isFlanking(actor, primaryTarget, placements, getTeam)));
   suggestions.push(makeSuggestion('bane-cover', BANE, 'Cover', false));
+  if (strike && hasCondition(actor, 'prone')) {
+    suggestions.push(makeSuggestion('bane-prone', BANE, 'Prone'));
+  }
   if (melee && hasCondition(primaryTarget, 'prone')) {
     suggestions.push(makeSuggestion('edge-prone', EDGE, 'Prone'));
   }
   if (hasCondition(primaryTarget, 'restrained')) {
     suggestions.push(makeSuggestion('edge-restrained', EDGE, 'Restrained'));
   }
+  if (hasCondition(primaryTarget, 'unconscious')) {
+    suggestions.push(makeSuggestion('edge-unconscious', EDGE, 'Unconscious', true, { count: 2 }));
+  }
   if (hasCondition(actor, 'hidden')) {
     suggestions.push(makeSuggestion('edge-hidden', EDGE, 'Hidden'));
   }
-  if (hasCondition(actor, 'weakened')) {
+  if (hasCondition(actor, 'weakened') && abilityRoll) {
     suggestions.push(makeSuggestion('bane-weakened', BANE, 'Weakened'));
   }
-  if (hasCondition(actor, 'restrained')) {
+  if (hasCondition(actor, 'restrained') && abilityRoll) {
     suggestions.push(makeSuggestion('bane-restrained', BANE, 'Restrained'));
+  }
+  if (abilityRoll && hasConditionExcludingTargets(actor, 'taunted', targetIds)) {
+    suggestions.push(makeSuggestion('bane-taunted', BANE, 'Taunted', true, { count: 2 }));
+  }
+  if (abilityRoll && hasConditionExcludingTargets(actor, 'grabbed', targetIds)) {
+    suggestions.push(makeSuggestion('bane-grabbed', BANE, 'Grabbed'));
+  }
+  if (abilityRoll) {
+    const actorId = actor?.id || '';
+    if ([...targetIds].some((targetId) => hasSourceLinkedCondition(actor, 'frightened', targetId))) {
+      suggestions.push(makeSuggestion('bane-frightened', BANE, 'Frightened'));
+    }
+    if (actorId && targetList.some((target) => hasSourceLinkedCondition(target, 'frightened', actorId))) {
+      suggestions.push(makeSuggestion('edge-frightened', EDGE, 'Frightened'));
+    }
   }
   suggestions.push(...hiddenEffectSuggestions(actor, context));
 
@@ -262,7 +356,10 @@ export const __testing = {
   hiddenEffectSuggestions,
   hasCondition,
   hasHighGround,
+  hasSourceLinkedCondition,
   isAdjacentTo,
   isFlanking,
+  levelRank,
+  normalizeLevelList,
   tokenRect,
 };
