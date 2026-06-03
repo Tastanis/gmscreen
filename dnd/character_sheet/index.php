@@ -6,7 +6,18 @@ if (session_status() === PHP_SESSION_NONE) {
 $sessionUser = isset($_SESSION['user']) ? strtolower($_SESSION['user']) : '';
 $currentUser = isset($_SESSION['user']) ? (string) $_SESSION['user'] : '';
 $isGm = strcasecmp($currentUser, 'GM') === 0;
+
+if (!isset($_SESSION['logged_in']) || $_SESSION['logged_in'] !== true || $sessionUser === '') {
+  header('Location: ../index.php');
+  exit;
+}
+
 $requestedCharacter = isset($_GET['character']) ? strtolower(trim($_GET['character'])) : '';
+
+if (!$isGm && $requestedCharacter !== '' && $requestedCharacter !== $sessionUser) {
+  $requestedCharacter = $sessionUser;
+}
+
 $activeCharacter = $requestedCharacter !== '' ? $requestedCharacter : $sessionUser;
 
 if (!defined('VERSION_SYSTEM_INTERNAL')) {
