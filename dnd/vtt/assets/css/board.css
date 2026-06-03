@@ -2840,6 +2840,10 @@ body.vtt-character-ability-tray-is-open .vtt-board__malice {
   animation: vtt-token-automation-target-flash 0.7s ease-in-out 0s 2;
 }
 
+.vtt-token.vtt-token--selection-flash {
+  animation: vtt-token-selection-flash 0.7s ease-in-out 0s 2;
+}
+
 /* Continuous red pulse on a token that's been pre-suggested as the target
    for an open picker (e.g. the mover that just triggered an opportunity
    attack). The player can still click anyone — this is a visual hint. */
@@ -2928,6 +2932,21 @@ body.vtt-character-ability-tray-is-open .vtt-board__malice {
       0 0 0 4px rgba(239, 68, 68, 0.9),
       0 0 0 12px rgba(248, 113, 113, 0.42),
       0 14px 30px rgba(127, 29, 29, 0.6);
+  }
+}
+
+@keyframes vtt-token-selection-flash {
+  0%,
+  100% {
+    border-color: rgba(15, 23, 42, 0.9);
+    box-shadow: 0 10px 24px rgba(15, 23, 42, 0.55);
+  }
+  50% {
+    border-color: rgba(74, 222, 128, 1);
+    box-shadow:
+      0 0 0 4px rgba(34, 197, 94, 0.9),
+      0 0 0 12px rgba(74, 222, 128, 0.42),
+      0 14px 30px rgba(22, 101, 52, 0.6);
   }
 }
 

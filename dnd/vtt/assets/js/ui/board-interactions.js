@@ -6917,7 +6917,7 @@ export function mountBoardInteractions(store, routes = {}) {
       }
       selectedTokenIds.add(id);
       notifySelectionChanged();
-      flashAutomationTargetToken(id);
+      flashSelectionToken(id);
       return true;
     }
 
@@ -6927,7 +6927,7 @@ export function mountBoardInteractions(store, routes = {}) {
       }
       selectedTokenIds.add(id);
       notifySelectionChanged();
-      flashAutomationTargetToken(id);
+      flashSelectionToken(id);
       return true;
     }
 
@@ -6938,14 +6938,14 @@ export function mountBoardInteractions(store, routes = {}) {
     if (selectedTokenIds.size === 0) {
       selectedTokenIds.add(id);
       notifySelectionChanged();
-      flashAutomationTargetToken(id);
+      flashSelectionToken(id);
       return true;
     }
 
     selectedTokenIds.clear();
     selectedTokenIds.add(id);
     notifySelectionChanged();
-    flashAutomationTargetToken(id);
+    flashSelectionToken(id);
     return true;
   }
 
@@ -17693,6 +17693,25 @@ export function mountBoardInteractions(store, routes = {}) {
     token.classList.add('vtt-token--automation-target');
     window.setTimeout(() => {
       token.classList.remove('vtt-token--automation-target');
+    }, 1500);
+  }
+
+  function flashSelectionToken(placementId) {
+    if (!placementId || !tokenLayer) {
+      return;
+    }
+    const escapedId = window.CSS?.escape
+      ? window.CSS.escape(String(placementId))
+      : String(placementId).replace(/["\\]/g, '\\$&');
+    const token = tokenLayer.querySelector(`[data-placement-id="${escapedId}"]`);
+    if (!(token instanceof HTMLElement)) {
+      return;
+    }
+    token.classList.remove('vtt-token--selection-flash');
+    void token.offsetWidth;
+    token.classList.add('vtt-token--selection-flash');
+    window.setTimeout(() => {
+      token.classList.remove('vtt-token--selection-flash');
     }, 1500);
   }
 

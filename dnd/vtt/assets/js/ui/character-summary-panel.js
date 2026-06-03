@@ -158,10 +158,7 @@ export function mountCharacterSummaryPanel(routes = {}, userContext = {}) {
     panel.classList.toggle('vtt-character-summary--closed', !isOpen);
     panel.setAttribute('aria-hidden', isOpen ? 'false' : 'true');
     document.body?.classList.toggle('vtt-character-summary-is-open', isOpen);
-    if (!isOpen) {
-      renderAbilityTray(abilityTray, null);
-      hideAbilityPreview(abilityPreview);
-    } else if (activeSheet) {
+    if (isOpen && activeSheet) {
       renderAbilityTray(abilityTray, activeSheet, { activeCategory: activeAbilityCategory, activeToken });
     }
     if (persist) {
