@@ -6001,7 +6001,7 @@ export function mountBoardInteractions(store, routes = {}) {
     cancelPendingAutomationTarget('Target selection canceled.');
   });
 
-  mapSurface.addEventListener('pointerdown', (event) => {
+  mapSurface.addEventListener('pointerdown', async (event) => {
     if (isCustomConditionDialogOpen()) {
       return;
     }
