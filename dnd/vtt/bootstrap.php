@@ -429,6 +429,34 @@ function filterPlacementsForPlayerView($boardState): array
     }
 
     $filtered = $boardState;
+    if (!empty($filtered['playerMapDisabled'])) {
+        $filtered['activeSceneId'] = null;
+        $filtered['mapUrl'] = null;
+        $filtered['thumbnailUrl'] = null;
+        return $filtered;
+    }
+
+    $playerSceneId = $filtered['playerActiveSceneId'] ?? null;
+    if (is_string($playerSceneId) && trim($playerSceneId) !== '') {
+        $filtered['activeSceneId'] = is_string($playerSceneId) && trim($playerSceneId) !== ''
+            ? trim($playerSceneId)
+            : null;
+    }
+
+    $playerMapUrl = $filtered['playerMapUrl'] ?? null;
+    if (is_string($playerMapUrl) && trim($playerMapUrl) !== '') {
+        $filtered['mapUrl'] = is_string($playerMapUrl) && trim($playerMapUrl) !== ''
+            ? trim($playerMapUrl)
+            : null;
+    }
+
+    $playerThumbnailUrl = $filtered['playerThumbnailUrl'] ?? null;
+    if (is_string($playerThumbnailUrl) && trim($playerThumbnailUrl) !== '') {
+        $filtered['thumbnailUrl'] = is_string($playerThumbnailUrl) && trim($playerThumbnailUrl) !== ''
+            ? trim($playerThumbnailUrl)
+            : null;
+    }
+
     $placements = isset($filtered['placements']) && is_array($filtered['placements'])
         ? $filtered['placements']
         : [];

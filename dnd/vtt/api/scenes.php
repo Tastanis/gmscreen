@@ -58,6 +58,14 @@ try {
             ]);
         }
 
+        if ($action === 'update-scene-visibility') {
+            $scene = updateSceneVisibility($payload);
+            respondJson(200, [
+                'success' => true,
+                'data' => $scene,
+            ]);
+        }
+
         respondJson(400, [
             'success' => false,
             'error' => 'Unsupported action.',
@@ -182,6 +190,7 @@ function createScene(array $payload): array
         'mapUrl' => $mapUrl,
         'thumbnailUrl' => $thumbnailUrl !== '' ? $thumbnailUrl : null,
         'grid' => sanitizeGrid($payload['grid'] ?? []),
+        'playerVisible' => isset($payload['playerVisible']) ? (bool) $payload['playerVisible'] : true,
         'createdAt' => date(DATE_ATOM),
     ];
 
@@ -212,6 +221,37 @@ function deleteScene(string $sceneId): void
     }
 
     persistScenes($storage);
+}
+
+function updateSceneVisibility(array $payload): array
+{
+    $sceneId = trim((string) ($payload['sceneId'] ?? $payload['id'] ?? ''));
+    if ($sceneId === '') {
+        respondJson(400, [
+            'success' => false,
+            'error' => 'Scene id is required.',
+        ]);
+    }
+
+    $storage = loadScenesPayload();
+    foreach ($storage['items'] as &$scene) {
+        if (($scene['id'] ?? null) !== $sceneId) {
+            continue;
+        }
+
+        $scene['playerVisible'] = isset($payload['playerVisible']) ? (bool) $payload['playerVisible'] : true;
+        $scene['updatedAt'] = date(DATE_ATOM);
+        $updatedScene = $scene;
+        unset($scene);
+        persistScenes($storage);
+        return $updatedScene;
+    }
+    unset($scene);
+
+    respondJson(404, [
+        'success' => false,
+        'error' => 'Scene not found.',
+    ]);
 }
 
 function updateSceneGrid(array $payload): array

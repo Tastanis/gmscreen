@@ -819,6 +819,18 @@ if (!defined('VTT_STATE_API_INCLUDE_ONLY')) {
                 if (isset($updates['mapUrl'])) {
                     $broadcastData['mapUrl'] = $updates['mapUrl'];
                 }
+                if (array_key_exists('playerMapDisabled', $updates)) {
+                    $broadcastData['playerMapDisabled'] = $updates['playerMapDisabled'];
+                }
+                if (array_key_exists('playerActiveSceneId', $updates)) {
+                    $broadcastData['playerActiveSceneId'] = $updates['playerActiveSceneId'];
+                }
+                if (array_key_exists('playerMapUrl', $updates)) {
+                    $broadcastData['playerMapUrl'] = $updates['playerMapUrl'];
+                }
+                if (array_key_exists('playerThumbnailUrl', $updates)) {
+                    $broadcastData['playerThumbnailUrl'] = $updates['playerThumbnailUrl'];
+                }
                 // Propagate the erase/clear full-replace marker to receivers.
                 // The server applies `_replaceDrawings` by replacing each
                 // listed scene's drawing array wholesale; without this hint
@@ -1673,6 +1685,46 @@ function sanitizeBoardStateUpdates(array $raw): array
         }
     }
 
+    if (array_key_exists('playerMapDisabled', $raw)) {
+        $updates['playerMapDisabled'] = (bool) $raw['playerMapDisabled'];
+    }
+
+    if (array_key_exists('playerActiveSceneId', $raw)) {
+        $rawId = $raw['playerActiveSceneId'];
+        if ($rawId === null) {
+            $updates['playerActiveSceneId'] = null;
+        } elseif (is_string($rawId)) {
+            $trimmed = trim($rawId);
+            $updates['playerActiveSceneId'] = $trimmed === '' ? null : $trimmed;
+        } else {
+            throw new InvalidArgumentException('Player active scene id must be a string or null.');
+        }
+    }
+
+    if (array_key_exists('playerMapUrl', $raw)) {
+        $rawUrl = $raw['playerMapUrl'];
+        if ($rawUrl === null) {
+            $updates['playerMapUrl'] = null;
+        } elseif (is_string($rawUrl)) {
+            $trimmed = trim($rawUrl);
+            $updates['playerMapUrl'] = $trimmed === '' ? null : $trimmed;
+        } else {
+            throw new InvalidArgumentException('Player map URL must be a string or null.');
+        }
+    }
+
+    if (array_key_exists('playerThumbnailUrl', $raw)) {
+        $rawUrl = $raw['playerThumbnailUrl'];
+        if ($rawUrl === null) {
+            $updates['playerThumbnailUrl'] = null;
+        } elseif (is_string($rawUrl)) {
+            $trimmed = trim($rawUrl);
+            $updates['playerThumbnailUrl'] = $trimmed === '' ? null : $trimmed;
+        } else {
+            throw new InvalidArgumentException('Player thumbnail URL must be a string or null.');
+        }
+    }
+
     if (array_key_exists('placements', $raw)) {
         $rawPlacements = $raw['placements'];
         if ($rawPlacements === null) {
@@ -1740,6 +1792,10 @@ function normalizeBoardState($raw): array
     $state = [
         'activeSceneId' => null,
         'mapUrl' => null,
+        'playerMapDisabled' => false,
+        'playerActiveSceneId' => null,
+        'playerMapUrl' => null,
+        'playerThumbnailUrl' => null,
         'placements' => [],
         'sceneState' => [],
         'templates' => [],
@@ -1768,6 +1824,40 @@ function normalizeBoardState($raw): array
             $state['mapUrl'] = $value === '' ? null : $value;
         } elseif ($value === null) {
             $state['mapUrl'] = null;
+        }
+    }
+
+    if (array_key_exists('playerMapDisabled', $raw)) {
+        $state['playerMapDisabled'] = (bool) $raw['playerMapDisabled'];
+    }
+
+    if (array_key_exists('playerActiveSceneId', $raw)) {
+        $value = $raw['playerActiveSceneId'];
+        if (is_string($value)) {
+            $value = trim($value);
+            $state['playerActiveSceneId'] = $value === '' ? null : $value;
+        } elseif ($value === null) {
+            $state['playerActiveSceneId'] = null;
+        }
+    }
+
+    if (array_key_exists('playerMapUrl', $raw)) {
+        $value = $raw['playerMapUrl'];
+        if (is_string($value)) {
+            $value = trim($value);
+            $state['playerMapUrl'] = $value === '' ? null : $value;
+        } elseif ($value === null) {
+            $state['playerMapUrl'] = null;
+        }
+    }
+
+    if (array_key_exists('playerThumbnailUrl', $raw)) {
+        $value = $raw['playerThumbnailUrl'];
+        if (is_string($value)) {
+            $value = trim($value);
+            $state['playerThumbnailUrl'] = $value === '' ? null : $value;
+        } elseif ($value === null) {
+            $state['playerThumbnailUrl'] = null;
         }
     }
 

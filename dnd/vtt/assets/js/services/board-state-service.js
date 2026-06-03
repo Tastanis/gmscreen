@@ -434,6 +434,40 @@ function buildPayload(boardState = {}) {
     }
   }
 
+  if ('playerMapDisabled' in boardState) {
+    payload.playerMapDisabled = Boolean(boardState.playerMapDisabled);
+  }
+
+  if ('playerActiveSceneId' in boardState) {
+    const rawId = boardState.playerActiveSceneId;
+    if (typeof rawId === 'string') {
+      const trimmed = rawId.trim();
+      payload.playerActiveSceneId = trimmed === '' ? null : trimmed;
+    } else {
+      payload.playerActiveSceneId = null;
+    }
+  }
+
+  if ('playerMapUrl' in boardState) {
+    const rawUrl = boardState.playerMapUrl;
+    if (typeof rawUrl === 'string') {
+      const trimmed = rawUrl.trim();
+      payload.playerMapUrl = trimmed === '' ? null : trimmed;
+    } else {
+      payload.playerMapUrl = null;
+    }
+  }
+
+  if ('playerThumbnailUrl' in boardState) {
+    const rawUrl = boardState.playerThumbnailUrl;
+    if (typeof rawUrl === 'string') {
+      const trimmed = rawUrl.trim();
+      payload.playerThumbnailUrl = trimmed === '' ? null : trimmed;
+    } else {
+      payload.playerThumbnailUrl = null;
+    }
+  }
+
   if ('placements' in boardState) {
     const rawPlacements = boardState.placements;
     if (rawPlacements && typeof rawPlacements === 'object') {

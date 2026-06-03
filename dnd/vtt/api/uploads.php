@@ -198,21 +198,6 @@ imagedestroy($sourceImage);
 
 $publicUrl = '/dnd/vtt/storage/uploads/' . $filename;
 
-withVttBoardStateLock(function () use ($publicUrl, $thumbnailUrl) {
-    $boardState = loadVttJson('board-state.json');
-    if (!is_array($boardState) || array_values($boardState) === $boardState) {
-        $boardState = [];
-    }
-    $boardState['mapUrl'] = $publicUrl;
-    if ($thumbnailUrl !== null) {
-        $boardState['thumbnailUrl'] = $thumbnailUrl;
-    }
-    if (!saveVttJson('board-state.json', $boardState)) {
-        // Do not fail the upload if the board state cannot be persisted.
-        error_log('[VTT] Unable to persist board-state.json after map upload.');
-    }
-});
-
 echo json_encode([
     'success' => true,
     'data' => [

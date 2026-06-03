@@ -4808,6 +4808,18 @@ export function mountBoardInteractions(store, routes = {}) {
       if (dirtyTopLevel.has('mapUrl') && isGm) {
         snapshot.mapUrl = boardState.mapUrl ?? null;
       }
+      if (dirtyTopLevel.has('playerMapDisabled') && isGm) {
+        snapshot.playerMapDisabled = Boolean(boardState.playerMapDisabled);
+      }
+      if (dirtyTopLevel.has('playerActiveSceneId') && isGm) {
+        snapshot.playerActiveSceneId = boardState.playerActiveSceneId ?? null;
+      }
+      if (dirtyTopLevel.has('playerMapUrl') && isGm) {
+        snapshot.playerMapUrl = boardState.playerMapUrl ?? null;
+      }
+      if (dirtyTopLevel.has('playerThumbnailUrl') && isGm) {
+        snapshot.playerThumbnailUrl = boardState.playerThumbnailUrl ?? null;
+      }
 
       return snapshot;
     }
@@ -4827,6 +4839,10 @@ export function mountBoardInteractions(store, routes = {}) {
 
     if (isGm) {
       snapshot.mapUrl = boardState.mapUrl ?? null;
+      snapshot.playerMapDisabled = Boolean(boardState.playerMapDisabled);
+      snapshot.playerActiveSceneId = boardState.playerActiveSceneId ?? null;
+      snapshot.playerMapUrl = boardState.playerMapUrl ?? null;
+      snapshot.playerThumbnailUrl = boardState.playerThumbnailUrl ?? null;
       snapshot.sceneState = cloneBoardSection(boardState.sceneState);
     }
 
@@ -5357,6 +5373,34 @@ export function mountBoardInteractions(store, routes = {}) {
       if (delta.mapUrl !== undefined) {
         draft.boardState.mapUrl = delta.mapUrl;
       }
+      if (delta.playerMapDisabled !== undefined) {
+        draft.boardState.playerMapDisabled = Boolean(delta.playerMapDisabled);
+      }
+      if (delta.playerActiveSceneId !== undefined) {
+        draft.boardState.playerActiveSceneId = delta.playerActiveSceneId;
+      }
+      if (delta.playerMapUrl !== undefined) {
+        draft.boardState.playerMapUrl = delta.playerMapUrl;
+      }
+      if (delta.playerThumbnailUrl !== undefined) {
+        draft.boardState.playerThumbnailUrl = delta.playerThumbnailUrl;
+      }
+
+      if (!isGmUser()) {
+        const hasPlayerMapRoute =
+          typeof draft.boardState.playerActiveSceneId === 'string' ||
+          typeof draft.boardState.playerMapUrl === 'string' ||
+          typeof draft.boardState.playerThumbnailUrl === 'string';
+        if (draft.boardState.playerMapDisabled) {
+          draft.boardState.activeSceneId = null;
+          draft.boardState.mapUrl = null;
+          draft.boardState.thumbnailUrl = null;
+        } else if (hasPlayerMapRoute) {
+          draft.boardState.activeSceneId = draft.boardState.playerActiveSceneId ?? null;
+          draft.boardState.mapUrl = draft.boardState.playerMapUrl ?? null;
+          draft.boardState.thumbnailUrl = draft.boardState.playerThumbnailUrl ?? null;
+        }
+      }
 
       // Update version in board state
       if (typeof delta.version === 'number') {
@@ -5463,6 +5507,13 @@ export function mountBoardInteractions(store, routes = {}) {
       activeSceneId:
         typeof snapshot.activeSceneId === 'string' ? snapshot.activeSceneId : snapshot.activeSceneId ?? null,
       mapUrl: typeof snapshot.mapUrl === 'string' ? snapshot.mapUrl : snapshot.mapUrl ?? null,
+      playerMapDisabled: Boolean(snapshot.playerMapDisabled),
+      playerActiveSceneId:
+        typeof snapshot.playerActiveSceneId === 'string' ? snapshot.playerActiveSceneId : snapshot.playerActiveSceneId ?? null,
+      playerMapUrl:
+        typeof snapshot.playerMapUrl === 'string' ? snapshot.playerMapUrl : snapshot.playerMapUrl ?? null,
+      playerThumbnailUrl:
+        typeof snapshot.playerThumbnailUrl === 'string' ? snapshot.playerThumbnailUrl : snapshot.playerThumbnailUrl ?? null,
       placements: cloneBoardSection(snapshot.placements),
       sceneState: cloneBoardSection(snapshot.sceneState),
       templates: cloneBoardSection(snapshot.templates),
@@ -5577,15 +5628,16 @@ export function mountBoardInteractions(store, routes = {}) {
           throw new Error('Upload endpoint returned no URL.');
         }
 
-        boardApi.updateState?.((draft) => {
-          const boardDraft = ensureBoardStateDraft(draft);
-          boardDraft.mapUrl = url;
-          boardDraft.thumbnailUrl = uploadResult.thumbnailUrl ?? null;
-        });
-        persistBoardStateSnapshot();
+        window.dispatchEvent(new CustomEvent('vtt:scene-map-uploaded', {
+          detail: {
+            url,
+            thumbnailUrl: uploadResult.thumbnailUrl ?? null,
+            fileName: typeof file.name === 'string' ? file.name : '',
+          },
+        }));
 
         if (status) {
-          status.textContent = 'Map uploaded successfully. Right-click to pan and scroll to zoom.';
+          status.textContent = 'Map uploaded successfully. New setup scene created.';
         }
       } catch (error) {
         console.error('[VTT] Failed to upload map', error);

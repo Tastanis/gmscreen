@@ -2,6 +2,7 @@ import {
   createScene,
   createSceneFolder,
   deleteScene,
+  updateSceneVisibility,
 } from '../services/scene-service.js';
 import { persistBoardState } from '../services/board-state-service.js';
 import { normalizeGridState } from '../state/normalize/grid.js';
@@ -34,6 +35,67 @@ export function renderSceneList(routes, store) {
 
   const isAssetUploadPending = () => mapLevelUploadPending;
 
+  const markPlayerMapFieldsDirty = () => {
+    if (typeof stateApi._markTopLevelDirty !== 'function') {
+      return;
+    }
+    stateApi._markTopLevelDirty('playerMapDisabled');
+    stateApi._markTopLevelDirty('playerActiveSceneId');
+    stateApi._markTopLevelDirty('playerMapUrl');
+    stateApi._markTopLevelDirty('playerThumbnailUrl');
+  };
+
+  const activateSceneForGm = (scene) => {
+    if (!scene?.id) return;
+    const currentState = stateApi.getState?.() ?? {};
+    const isGM = Boolean(currentState?.user?.isGM);
+    const gmName = typeof currentState?.user?.name === 'string' ? currentState.user.name : '';
+
+    stateApi.updateState?.((draft) => {
+      ensureSceneDraft(draft);
+      const boardDraft = ensureBoardStateDraft(draft);
+      boardDraft.activeSceneId = scene.id;
+      boardDraft.mapUrl = scene.mapUrl ?? null;
+      boardDraft.thumbnailUrl = scene.thumbnailUrl ?? null;
+      ensureSceneBoardStateEntry(boardDraft, scene.id, scene.grid ?? null);
+      if (!draft.grid || typeof draft.grid !== 'object') {
+        draft.grid = normalizeGridConfig({});
+      }
+      const sceneGrid = normalizeGridConfig(scene.grid ?? {});
+      draft.grid = { ...draft.grid, ...sceneGrid };
+      if (boardDraft.sceneState && boardDraft.sceneState[scene.id]) {
+        boardDraft.sceneState[scene.id].grid = sceneGrid;
+      }
+      if (isGM) {
+        ensureGmActiveLevelEntry(boardDraft, scene.id, gmName);
+      }
+    });
+
+    if (typeof stateApi._markTopLevelDirty === 'function') {
+      stateApi._markTopLevelDirty('activeSceneId');
+      stateApi._markTopLevelDirty('mapUrl');
+    }
+  };
+
+  const setPlayerMapForScene = (scene, enabled) => {
+    stateApi.updateState?.((draft) => {
+      const boardDraft = ensureBoardStateDraft(draft);
+      if (enabled && scene?.id) {
+        boardDraft.playerMapDisabled = false;
+        boardDraft.playerActiveSceneId = scene.id;
+        boardDraft.playerMapUrl = scene.mapUrl ?? null;
+        boardDraft.playerThumbnailUrl = scene.thumbnailUrl ?? null;
+      } else {
+        boardDraft.playerMapDisabled = true;
+        boardDraft.playerActiveSceneId = null;
+        boardDraft.playerMapUrl = null;
+        boardDraft.playerThumbnailUrl = null;
+      }
+    });
+    markPlayerMapFieldsDirty();
+    persistBoardStateSnapshot(null, { coalesce: false });
+  };
+
   if (!endpoints.scenes) {
     folderButtons.forEach((button) => {
       button.disabled = true;
@@ -62,6 +124,8 @@ export function renderSceneList(routes, store) {
         mapLevelUploadPending,
         mapLevelUploadPendingSceneId,
         assetUploadPending: isAssetUploadPending(),
+        playerMapDisabled: Boolean(state.boardState?.playerMapDisabled),
+        playerActiveSceneId: state.boardState?.playerActiveSceneId ?? null,
       }
     );
   };
@@ -136,49 +200,44 @@ export function renderSceneList(routes, store) {
       const scene = sceneState.items.find((item) => item.id === sceneId);
       if (!scene) return;
 
-      const isGM = Boolean(currentState?.user?.isGM);
-      const gmName = typeof currentState?.user?.name === 'string' ? currentState.user.name : '';
-
-      stateApi.updateState?.((draft) => {
-        ensureSceneDraft(draft);
-        const boardDraft = ensureBoardStateDraft(draft);
-        boardDraft.activeSceneId = scene.id;
-        boardDraft.mapUrl = scene.mapUrl ?? null;
-        boardDraft.thumbnailUrl = scene.thumbnailUrl ?? null;
-        // Ensure scene board state entry exists
-        ensureSceneBoardStateEntry(
-          boardDraft,
-          scene.id,
-          scene.grid ?? null
-        );
-        if (!draft.grid || typeof draft.grid !== 'object') {
-          draft.grid = normalizeGridConfig({});
-        }
-        // CRITICAL: Always use the scene's permanent grid property, NOT the synced sceneState grid.
-        // Grid is a permanent scene setting that should never be overwritten by sync.
-        const sceneGrid = normalizeGridConfig(scene.grid ?? {});
-        draft.grid = { ...draft.grid, ...sceneGrid };
-        // Also update the sceneState entry to match the scene's permanent grid
-        // This ensures consistency between the scene definition and the board state
-        if (boardDraft.sceneState && boardDraft.sceneState[scene.id]) {
-          boardDraft.sceneState[scene.id].grid = sceneGrid;
-        }
-        if (isGM) {
-          // Ensure the GM's per-user level entry is populated for the
-          // activated scene. Without this, fog edits and the level
-          // indicator silently fall back to Level 0 until the GM
-          // presses an up/down arrow. Preserve any saved entry so the
-          // GM resumes where they left off; default to the topmost
-          // level only when no valid entry exists.
-          ensureGmActiveLevelEntry(boardDraft, scene.id, gmName);
-        }
-      });
-
-      if (typeof stateApi._markTopLevelDirty === 'function') {
-        stateApi._markTopLevelDirty('activeSceneId');
-        stateApi._markTopLevelDirty('mapUrl');
-      }
+      activateSceneForGm(scene);
       persistBoardStateSnapshot(null, { coalesce: false });
+    }
+
+    if (action === 'show-scene-to-players' && sceneId) {
+      const currentState = stateApi.getState?.() ?? {};
+      const sceneState = normalizeSceneState(currentState.scenes);
+      const scene = sceneState.items.find((item) => item.id === sceneId);
+      if (!scene) return;
+
+      try {
+        target.disabled = true;
+        let updatedScene = scene;
+        if (endpoints.scenes && scene.playerVisible === false) {
+          updatedScene = await updateSceneVisibility(endpoints.scenes, sceneId, true);
+        }
+        stateApi.updateState?.((draft) => {
+          ensureSceneDraft(draft);
+          const index = draft.scenes.items.findIndex((item) => item?.id === sceneId);
+          if (index >= 0) {
+            draft.scenes.items[index] = { ...draft.scenes.items[index], ...updatedScene, playerVisible: true };
+          }
+        });
+        setPlayerMapForScene({ ...scene, ...updatedScene, playerVisible: true }, true);
+        showFeedback(feedback, 'Players moved to this scene.', 'success');
+      } catch (error) {
+        console.error('[VTT] Failed to show scene to players', error);
+        showFeedback(feedback, error?.message || 'Unable to show scene to players.', 'error');
+      } finally {
+        target.disabled = false;
+      }
+      return;
+    }
+
+    if (action === 'hide-player-map') {
+      setPlayerMapForScene(null, false);
+      showFeedback(feedback, 'Player maps disabled.', 'info');
+      return;
     }
 
     if (action === 'add-map-level' && sceneId) {
@@ -544,6 +603,62 @@ export function renderSceneList(routes, store) {
 
   });
 
+  window.addEventListener('vtt:scene-map-uploaded', async (event) => {
+    if (!endpoints.scenes) {
+      showFeedback(feedback, 'Scene saving is unavailable right now.', 'error');
+      return;
+    }
+
+    const detail = event?.detail ?? {};
+    const mapUrl = typeof detail.url === 'string' ? detail.url.trim() : '';
+    if (!mapUrl) {
+      showFeedback(feedback, 'Upload endpoint returned no map URL.', 'error');
+      return;
+    }
+
+    const currentState = stateApi.getState?.() ?? {};
+    const folderId = folderSelect?.value || null;
+    const gridState = normalizeGridConfig(currentState.grid ?? {});
+    const fallbackName = nameFromUploadedFile(detail.fileName) || 'New Map Setup';
+    const name = nameInput?.value?.trim() || fallbackName;
+
+    try {
+      setFormPending(form, true);
+      const scene = await createScene(endpoints.scenes, {
+        name,
+        folderId,
+        mapUrl,
+        thumbnailUrl: detail.thumbnailUrl ?? null,
+        grid: gridState,
+        playerVisible: false,
+      });
+
+      stateApi.updateState?.((draft) => {
+        ensureSceneDraft(draft);
+        draft.scenes.items.push({ ...scene, playerVisible: false });
+        const hasFolder = scene.folderId && draft.scenes.folders.some((folder) => folder.id === scene.folderId);
+        if (scene.folderId && !hasFolder && scene.folder) {
+          draft.scenes.folders.push(scene.folder);
+        }
+      });
+      activateSceneForGm({ ...scene, playerVisible: false });
+      const latestBoard = stateApi.getState?.()?.boardState ?? {};
+      if (!latestBoard.playerActiveSceneId && !latestBoard.playerMapDisabled) {
+        setPlayerMapForScene(null, false);
+      }
+      persistBoardStateSnapshot(null, { coalesce: false });
+      if (nameInput) {
+        nameInput.value = '';
+      }
+      showFeedback(feedback, 'Setup scene created. Players stay on their current map until you show it to them.', 'success');
+    } catch (error) {
+      console.error('[VTT] Failed to create setup scene', error);
+      showFeedback(feedback, error?.message || 'Unable to create setup scene.', 'error');
+    } finally {
+      setFormPending(form, false);
+    }
+  });
+
   form?.addEventListener('submit', async (event) => {
     event.preventDefault();
     if (!endpoints.scenes) {
@@ -572,6 +687,7 @@ export function renderSceneList(routes, store) {
         mapUrl,
         thumbnailUrl,
         grid: gridState,
+        playerVisible: true,
       });
 
       stateApi.updateState?.((draft) => {
@@ -1194,6 +1310,8 @@ function toggleFolderCollapsed(folderId) {
 
 function renderSceneItem(scene, activeSceneId, sceneBoardState = {}, options = {}) {
   const isActive = scene.id === activeSceneId;
+  const isPlayerScene = !options.playerMapDisabled && scene.id === options.playerActiveSceneId;
+  const playerVisible = scene.playerVisible !== false;
   const name = escapeHtml(scene.name || 'Untitled Scene');
   const sceneGrid = normalizeGridConfig(sceneBoardState.grid ?? scene.grid ?? {});
   const mapLevelsState = normalizeMapLevelsState(sceneBoardState.mapLevels ?? null, { sceneGrid });
@@ -1218,7 +1336,11 @@ function renderSceneItem(scene, activeSceneId, sceneBoardState = {}, options = {
       <div class="scene-item__content">
         <header class="scene-item__header">
           <h4>${name}</h4>
-          <span class="scene-item__status">${isActive ? 'Active' : ''}</span>
+          <span class="scene-item__status">${[
+            isActive ? 'GM' : '',
+            isPlayerScene ? 'Players' : '',
+            !playerVisible ? 'Hidden' : '',
+          ].filter(Boolean).join(' / ')}</span>
         </header>
         <div class="scene-item__levels" data-scene-id="${scene.id}">
           <div class="scene-level__actions">
@@ -1245,7 +1367,11 @@ function renderSceneItem(scene, activeSceneId, sceneBoardState = {}, options = {
           })}
         </div>
         <footer class="scene-item__footer">
-          <button type="button" class="btn" data-action="activate-scene" data-scene-id="${scene.id}">Activate</button>
+          <button type="button" class="btn" data-action="activate-scene" data-scene-id="${scene.id}">Open for GM</button>
+          <button type="button" class="btn btn--primary" data-action="show-scene-to-players" data-scene-id="${scene.id}">Show Players</button>
+          ${isPlayerScene
+            ? `<button type="button" class="btn" data-action="hide-player-map" data-scene-id="${scene.id}">Hide Players</button>`
+            : ''}
           <button type="button" class="btn btn--danger" data-action="delete-scene" data-scene-id="${scene.id}">Delete</button>
         </footer>
       </div>
@@ -1422,6 +1548,19 @@ function escapeHtml(value = '') {
     .replace(/>/g, '&gt;')
     .replace(/"/g, '&quot;')
     .replace(/'/g, '&#039;');
+}
+
+function nameFromUploadedFile(fileName = '') {
+  const raw = typeof fileName === 'string' ? fileName.trim() : '';
+  if (!raw) {
+    return '';
+  }
+  const withoutPath = raw.split(/[\\/]/).pop() || raw;
+  const withoutExtension = withoutPath.replace(/\.[^.]+$/, '');
+  return withoutExtension
+    .replace(/[_-]+/g, ' ')
+    .replace(/\s+/g, ' ')
+    .trim();
 }
 
 function renderScenePreview(scene, fallbackName) {

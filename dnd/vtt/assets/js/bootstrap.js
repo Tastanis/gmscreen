@@ -358,6 +358,38 @@ function normalizeBoardStateSnapshot(raw = {}) {
     }
   }
 
+  if (Object.prototype.hasOwnProperty.call(raw, 'playerMapDisabled')) {
+    snapshot.playerMapDisabled = Boolean(raw.playerMapDisabled);
+  }
+
+  if (Object.prototype.hasOwnProperty.call(raw, 'playerActiveSceneId')) {
+    const rawId = raw.playerActiveSceneId;
+    snapshot.playerActiveSceneId =
+      typeof rawId === 'string'
+        ? rawId
+        : rawId == null
+        ? null
+        : String(rawId);
+  }
+
+  if (Object.prototype.hasOwnProperty.call(raw, 'playerMapUrl')) {
+    const playerMapUrl = raw.playerMapUrl;
+    if (typeof playerMapUrl === 'string') {
+      snapshot.playerMapUrl = playerMapUrl;
+    } else if (playerMapUrl === null) {
+      snapshot.playerMapUrl = null;
+    }
+  }
+
+  if (Object.prototype.hasOwnProperty.call(raw, 'playerThumbnailUrl')) {
+    const playerThumbnailUrl = raw.playerThumbnailUrl;
+    if (typeof playerThumbnailUrl === 'string') {
+      snapshot.playerThumbnailUrl = playerThumbnailUrl;
+    } else if (playerThumbnailUrl === null) {
+      snapshot.playerThumbnailUrl = null;
+    }
+  }
+
   if (Object.prototype.hasOwnProperty.call(raw, 'placements')) {
     snapshot.placements = cloneBoardSection(raw.placements);
   }

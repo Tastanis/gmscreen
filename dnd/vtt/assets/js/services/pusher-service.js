@@ -259,6 +259,10 @@ function handleStateUpdated(data) {
     sceneState,
     activeSceneId,
     mapUrl,
+    playerMapDisabled,
+    playerActiveSceneId,
+    playerMapUrl,
+    playerThumbnailUrl,
   } = data;
 
   // Version check - skip if we've already applied a newer version.
@@ -349,6 +353,18 @@ function handleStateUpdated(data) {
     }
     if (mapUrl !== undefined) {
       delta.mapUrl = mapUrl;
+    }
+    if (playerMapDisabled !== undefined) {
+      delta.playerMapDisabled = Boolean(playerMapDisabled);
+    }
+    if (playerActiveSceneId !== undefined) {
+      delta.playerActiveSceneId = playerActiveSceneId;
+    }
+    if (playerMapUrl !== undefined) {
+      delta.playerMapUrl = playerMapUrl;
+    }
+    if (playerThumbnailUrl !== undefined) {
+      delta.playerThumbnailUrl = playerThumbnailUrl;
     }
   }
 
