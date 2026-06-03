@@ -2068,6 +2068,11 @@ export function mountBoardInteractions(store, routes = {}) {
     const placementId = event?.detail?.placementId;
     if (placementId) toggleTriggeredActionState(placementId);
   });
+  document.addEventListener('vtt:toggle-turn-action-usage', (event) => {
+    const placementId = event?.detail?.placementId;
+    const actionKind = event?.detail?.actionKind;
+    if (placementId && actionKind) toggleTurnActionUsageState(placementId, actionKind);
+  });
   document.addEventListener('vtt:clear-trigger-ready', (event) => {
     const placementId = event?.detail?.placementId;
     const abilityId = event?.detail?.abilityId || null;
@@ -3968,6 +3973,9 @@ export function mountBoardInteractions(store, routes = {}) {
     if (!eventType) {
       resolve?.({ fired: false, reason: 'missing-event' });
       return;
+    }
+    if (eventType === 'actionUsed') {
+      markTurnActionUsedFromAutomation(payload.payload && typeof payload.payload === 'object' ? payload.payload : {});
     }
     triggerFire(eventType, payload.payload && typeof payload.payload === 'object' ? payload.payload : {});
     resolve?.({ fired: true, eventType });
@@ -6625,6 +6633,8 @@ export function mountBoardInteractions(store, routes = {}) {
         conditions: placement.conditions ?? null,
         showTriggeredAction: Boolean(placement.showTriggeredAction ?? placement?.overlays?.triggeredAction?.visible ?? false),
         triggeredActionReady: placement.triggeredActionReady !== false,
+        mainActionUsedThisTurn: Boolean(placement.mainActionUsedThisTurn),
+        maneuverUsedThisTurn: Boolean(placement.maneuverUsedThisTurn),
         hasReadyTrigger: Boolean(placement.hasReadyTrigger),
         readyTriggerAbilities: Array.isArray(placement.readyTriggerAbilities) ? placement.readyTriggerAbilities.slice() : [],
         readyTriggerSources: placement.readyTriggerSources && typeof placement.readyTriggerSources === 'object'
@@ -9458,6 +9468,7 @@ export function mountBoardInteractions(store, routes = {}) {
     //   - the new id is non-null (clearing the active turn fires turnEnd
     //     via completeActiveCombatant, not turnStart)
     if (combatActive && normalizedNextId && normalizedNextId !== previousCombatantId) {
+      resetTurnActionUsageForPlacement(normalizedNextId);
       fireTimingBoundary('turnStart', { placementId: normalizedNextId, team: nextTeam ?? null });
       expirePersistentZonesForOwner(normalizedNextId, 'startOfTurn');
       // Tick any persistent zones owned by this combatant whose tickAt is
@@ -9486,6 +9497,9 @@ export function mountBoardInteractions(store, routes = {}) {
     tokenMovementController?.syncCombatTurn();
 
     if (!isGmUser()) {
+      if (combatActive && normalizedNextId && nextTeam === 'ally' && !activeTurnDialog && isCurrentUserTurnCombatant(normalizedNextId)) {
+        openTurnPrompt(normalizedNextId);
+      }
       return;
     }
 
@@ -10394,7 +10408,6 @@ export function mountBoardInteractions(store, routes = {}) {
 
     closePlayerTurnStartButton();
     closeTurnPrompt();
-    closePlayerTurnStartButton();
 
     const overlay = document.createElement('div');
     overlay.className = 'vtt-turn-overlay';
@@ -10756,6 +10769,27 @@ export function mountBoardInteractions(store, routes = {}) {
     button.textContent = buttonLabel;
     button.setAttribute('aria-label', buttonLabel);
     positionPlayerTurnStartOverlay(overlay.element);
+  }
+
+  function isCurrentUserTurnCombatant(combatantId) {
+    const userId = getCurrentUserId();
+    if (!userId || !combatantId || !PLAYER_CHARACTER_USER_IDS.includes(userId)) {
+      return false;
+    }
+    const representativeId = getRepresentativeIdFor(combatantId) || combatantId;
+    const profileId = normalizeProfileId(getCombatantProfileId(representativeId));
+    if (profileId && profileId === userId) {
+      return true;
+    }
+    const state = boardApi.getState?.() ?? {};
+    const activeSceneId = state?.boardState?.activeSceneId ?? null;
+    const sceneEntry = activeSceneId ? state?.boardState?.sceneState?.[activeSceneId] ?? null : null;
+    const claimedTokens = sceneEntry?.claimedTokens;
+    if (claimedTokens && typeof claimedTokens === 'object') {
+      return normalizeProfileId(claimedTokens[combatantId]) === userId ||
+        normalizeProfileId(claimedTokens[representativeId]) === userId;
+    }
+    return false;
   }
 
   function closePlayerTurnStartButton() {
@@ -11877,6 +11911,14 @@ export function mountBoardInteractions(store, routes = {}) {
           placement.triggeredActionUsedThisRound = false;
           placementMutated = true;
         }
+        if (placement.mainActionUsedThisTurn !== false) {
+          placement.mainActionUsedThisTurn = false;
+          placementMutated = true;
+        }
+        if (placement.maneuverUsedThisTurn !== false) {
+          placement.maneuverUsedThisTurn = false;
+          placementMutated = true;
+        }
         // Round-start: clear any blue "!" trigger-ready flags from the prior
         // round. New triggered abilities can fire fresh now.
         if (placement.hasReadyTrigger || (Array.isArray(placement.readyTriggerAbilities) && placement.readyTriggerAbilities.length)) {
@@ -11911,6 +11953,8 @@ export function mountBoardInteractions(store, routes = {}) {
           patch: {
             triggeredActionReady: true,
             triggeredActionUsedThisRound: false,
+            mainActionUsedThisTurn: false,
+            maneuverUsedThisTurn: false,
             hasReadyTrigger: false,
             readyTriggerAbilities: [],
             readyTriggerSources: {},
@@ -14087,6 +14131,8 @@ export function mountBoardInteractions(store, routes = {}) {
     );
     const triggeredActionReady =
       placement.triggeredActionReady ?? placement?.overlays?.triggeredAction?.ready ?? true;
+    const mainActionUsedThisTurn = Boolean(placement.mainActionUsedThisTurn);
+    const maneuverUsedThisTurn = Boolean(placement.maneuverUsedThisTurn);
     const readyTriggerAbilities = Array.isArray(placement.readyTriggerAbilities)
       ? placement.readyTriggerAbilities.filter((id) => typeof id === 'string' && id.length)
       : [];
@@ -14133,6 +14179,8 @@ export function mountBoardInteractions(store, routes = {}) {
       showHp,
       showTriggeredAction,
       triggeredActionReady: triggeredActionReady !== false,
+      mainActionUsedThisTurn,
+      maneuverUsedThisTurn,
       hasReadyTrigger,
       readyTriggerAbilities,
       conditions,
@@ -14546,6 +14594,129 @@ export function mountBoardInteractions(store, routes = {}) {
     } catch (error) {
       return null;
     }
+  }
+
+  function normalizeTurnActionKind(value) {
+    const text = String(value || '').trim().toLowerCase();
+    if (text === 'main' || text === 'mains' || text.includes('main')) return 'main';
+    if (text === 'maneuver' || text === 'maneuvers' || text.includes('maneuver')) return 'maneuver';
+    return '';
+  }
+
+  function getTurnActionUsageField(actionKind) {
+    if (actionKind === 'main') return 'mainActionUsedThisTurn';
+    if (actionKind === 'maneuver') return 'maneuverUsedThisTurn';
+    return '';
+  }
+
+  function persistTurnActionUsagePatch(activeSceneId, placementId, patch) {
+    if (!activeSceneId || !placementId || !patch || typeof patch !== 'object') {
+      return;
+    }
+    markPlacementDirty(activeSceneId, placementId);
+    let ops = null;
+    if (USE_DELTA_SAVES && !hasNonPlacementDirtyState()) {
+      ops = [{
+        type: 'placement.update',
+        sceneId: activeSceneId,
+        placementId,
+        patch,
+      }];
+    }
+    persistBoardStateSnapshot({}, ops);
+  }
+
+  function setTurnActionUsageState(placementId, actionKind, used, { silent = false } = {}) {
+    const normalizedKind = normalizeTurnActionKind(actionKind);
+    const field = getTurnActionUsageField(normalizedKind);
+    if (!placementId || !field || typeof boardApi.updateState !== 'function') {
+      return false;
+    }
+    const state = boardApi.getState?.() ?? {};
+    const activeSceneId = state.boardState?.activeSceneId ?? null;
+    if (!activeSceneId) {
+      return false;
+    }
+    let updated = false;
+    boardApi.updateState?.((draft) => {
+      const scenePlacements = ensureScenePlacementDraft(draft, activeSceneId);
+      const target = scenePlacements.find((item) => item && item.id === placementId);
+      if (!target || Boolean(target[field]) === Boolean(used)) {
+        return;
+      }
+      target[field] = Boolean(used);
+      target._lastModified = Date.now();
+      updated = true;
+    });
+    if (!updated) {
+      return false;
+    }
+    persistTurnActionUsagePatch(activeSceneId, placementId, { [field]: Boolean(used) });
+    if (!silent) {
+      document.dispatchEvent(new CustomEvent('vtt:turn-action-usage-changed', {
+        detail: { placementId, actionKind: normalizedKind, used: Boolean(used) },
+      }));
+    }
+    return true;
+  }
+
+  function toggleTurnActionUsageState(placementId, actionKind) {
+    const normalizedKind = normalizeTurnActionKind(actionKind);
+    const field = getTurnActionUsageField(normalizedKind);
+    if (!placementId || !field) {
+      return false;
+    }
+    const placement = getPlacementFromStore(placementId);
+    return setTurnActionUsageState(placementId, normalizedKind, !Boolean(placement?.[field]));
+  }
+
+  function markTurnActionUsedFromAutomation(payload = {}) {
+    const actionKind = normalizeTurnActionKind(payload.actionKind || payload.actionType);
+    if (actionKind !== 'main' && actionKind !== 'maneuver') {
+      return false;
+    }
+    const placementId = String(payload.actorId || payload.placementId || payload.sourceId || '').trim();
+    if (!placementId) {
+      return false;
+    }
+    return setTurnActionUsageState(placementId, actionKind, true);
+  }
+
+  function resetTurnActionUsageForPlacement(placementId) {
+    if (!placementId || typeof boardApi.updateState !== 'function') {
+      return false;
+    }
+    const state = boardApi.getState?.() ?? {};
+    const activeSceneId = state.boardState?.activeSceneId ?? null;
+    if (!activeSceneId) {
+      return false;
+    }
+    let updated = false;
+    boardApi.updateState?.((draft) => {
+      const scenePlacements = ensureScenePlacementDraft(draft, activeSceneId);
+      const target = scenePlacements.find((item) => item && item.id === placementId);
+      if (!target) {
+        return;
+      }
+      if (target.mainActionUsedThisTurn === false && target.maneuverUsedThisTurn === false) {
+        return;
+      }
+      target.mainActionUsedThisTurn = false;
+      target.maneuverUsedThisTurn = false;
+      target._lastModified = Date.now();
+      updated = true;
+    });
+    if (!updated) {
+      return false;
+    }
+    persistTurnActionUsagePatch(activeSceneId, placementId, {
+      mainActionUsedThisTurn: false,
+      maneuverUsedThisTurn: false,
+    });
+    document.dispatchEvent(new CustomEvent('vtt:turn-action-usage-changed', {
+      detail: { placementId, actionKind: '', used: false },
+    }));
+    return true;
   }
 
   function toggleTriggeredActionState(placementId) {

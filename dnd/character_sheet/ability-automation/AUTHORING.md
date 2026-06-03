@@ -18,6 +18,7 @@ The runtime is lenient: unknown fields are preserved but ignored, missing fields
 ```json
 {
   "schema": "ability-automation/v3",
+  "usageLimit": { "scope": "round", "key": "hesitation-is-weakness", "target": "self" },
   "keywords": ["Melee", "Strike", "Weapon"],
   "cards": [
     { "type": "target",     "...": "..." },

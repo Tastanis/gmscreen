@@ -591,10 +591,33 @@ export function mountCharacterSummaryPanel(routes = {}, userContext = {}) {
     }
     activeToken.triggeredActionReady = true;
     activeToken.triggeredActionUsedThisRound = false;
+    activeToken.mainActionUsedThisTurn = false;
+    activeToken.maneuverUsedThisTurn = false;
     activeToken.hasReadyTrigger = false;
     activeToken.readyTriggerAbilities = [];
     activeToken.readyTriggerSources = {};
     activeToken.readyTriggerPayloads = {};
+    renderAbilityTray(abilityTray, activeSheet, { activeCategory: activeAbilityCategory, activeToken });
+  });
+
+  document.addEventListener('vtt:turn-action-usage-changed', (event) => {
+    if (!activeToken || typeof activeToken !== 'object' || !activeToken.id) {
+      return;
+    }
+    const detail = event?.detail ?? {};
+    const placementId = String(detail.placementId || '').trim();
+    if (placementId && placementId !== activeToken.id) {
+      return;
+    }
+    const actionKind = normalizeActionUsageKind(detail.actionKind);
+    if (actionKind === 'main') {
+      activeToken.mainActionUsedThisTurn = Boolean(detail.used);
+    } else if (actionKind === 'maneuver') {
+      activeToken.maneuverUsedThisTurn = Boolean(detail.used);
+    } else {
+      activeToken.mainActionUsedThisTurn = false;
+      activeToken.maneuverUsedThisTurn = false;
+    }
     renderAbilityTray(abilityTray, activeSheet, { activeCategory: activeAbilityCategory, activeToken });
   });
 
@@ -639,6 +662,25 @@ export function mountCharacterSummaryPanel(routes = {}, userContext = {}) {
           renderAbilityTray(abilityTray, activeSheet, { activeCategory: activeAbilityCategory, activeToken });
         }
         document.dispatchEvent(new CustomEvent('vtt:toggle-triggered-action', { detail: { placementId } }));
+      }
+      return;
+    }
+
+    const actionDot = event.target.closest('[data-character-action-toggle]');
+    if (actionDot) {
+      event.preventDefault();
+      event.stopPropagation();
+      const placementId = actionDot.dataset.placementId || '';
+      const actionKind = normalizeActionUsageKind(actionDot.dataset.actionKind);
+      if (placementId && actionKind) {
+        if (activeToken && typeof activeToken === 'object') {
+          const key = actionKind === 'main' ? 'mainActionUsedThisTurn' : 'maneuverUsedThisTurn';
+          activeToken[key] = !Boolean(activeToken[key]);
+          renderAbilityTray(abilityTray, activeSheet, { activeCategory: activeAbilityCategory, activeToken });
+        }
+        document.dispatchEvent(new CustomEvent('vtt:toggle-turn-action-usage', {
+          detail: { placementId, actionKind },
+        }));
       }
       return;
     }
@@ -714,6 +756,7 @@ export function mountCharacterSummaryPanel(routes = {}, userContext = {}) {
           routes,
           suggestedTargetId,
           triggerPayload,
+          manualTriggerResolution: abilityItem.dataset.abilityCategory === 'triggers' && !triggerPayload,
           automationAnchor: {
             left: itemRect.left,
             top: itemRect.top,
@@ -937,6 +980,8 @@ function renderAbilityTray(tray, sheet, { activeCategory = null, activeToken = n
   const triggerReady = placement ? placement.triggeredActionReady !== false : true;
   const triggerPlacementId = placement?.id ? String(placement.id) : '';
   const hasReadyTrigger = Boolean(placement?.hasReadyTrigger);
+  const mainActionUsed = Boolean(placement?.mainActionUsedThisTurn);
+  const maneuverUsed = Boolean(placement?.maneuverUsedThisTurn);
 
   tray.innerHTML = `
     <nav class="vtt-character-ability-tray__inner" aria-label="Character abilities">
@@ -944,6 +989,12 @@ function renderAbilityTray(tray, sheet, { activeCategory = null, activeToken = n
         const actions = getAbilityActions(sheet, category.key, { activeToken });
         const isActive = activeCategory === category.key;
         const isTrigger = category.key === 'triggers';
+        const actionUsageKind = normalizeActionUsageKind(category.key);
+        const actionUsed = actionUsageKind === 'main'
+          ? mainActionUsed
+          : actionUsageKind === 'maneuver'
+            ? maneuverUsed
+            : false;
         // NOTE: nested <button> inside <button> is invalid HTML and breaks
         // layout (browsers split them). The dot uses <span role="button">
         // so it stays inside the parent tab.
@@ -957,6 +1008,17 @@ function renderAbilityTray(tray, sheet, { activeCategory = null, activeToken = n
               aria-label="${triggerReady ? 'Triggered action ready. Click to mark used.' : 'Triggered action used. Click to reset.'}"
               title="${triggerReady ? 'Triggered action ready' : 'Triggered action used'}"
             ></span>`
+          : actionUsageKind && triggerPlacementId
+            ? `<span
+                class="vtt-character-ability-tab__action-dot${actionUsed ? ' is-spent' : ''}"
+                role="button"
+                tabindex="0"
+                data-character-action-toggle
+                data-placement-id="${escapeAttribute(triggerPlacementId)}"
+                data-action-kind="${escapeAttribute(actionUsageKind)}"
+                aria-label="${actionUsed ? `${category.label} used. Click to reset.` : `${category.label} unused. Click to mark used.`}"
+                title="${actionUsed ? `${category.label} used` : `${category.label} unused`}"
+              ></span>`
           : '';
         const tabClass = `vtt-character-ability-tab${isTrigger && hasReadyTrigger ? ' has-ready-trigger' : ''}`;
         return `
@@ -2030,6 +2092,13 @@ function isFreeTriggeredActionLabel(label) {
   return text.includes('triggered') && text.includes('free');
 }
 
+function normalizeActionUsageKind(value) {
+  const text = String(value || '').trim().toLowerCase();
+  if (text === 'main' || text === 'mains' || text.includes('main')) return 'main';
+  if (text === 'maneuver' || text === 'maneuvers' || text.includes('maneuver')) return 'maneuver';
+  return '';
+}
+
 function normalizeAutomation(automation) {
   if (window.AbilityAutomationSchema?.normalizeAutomation) {
     return window.AbilityAutomationSchema.normalizeAutomation(automation);
@@ -2098,6 +2167,7 @@ function startAbilityAutomation(sheet, action, categoryKey, sourceToken = null, 
     // effects like halveTriggeringDamage can read the original damage value.
     triggerPayload: options?.triggerPayload || null,
     automationAnchor: options?.automationAnchor || null,
+    manualTriggerResolution: Boolean(options?.manualTriggerResolution),
     getAttributeBonus: (attribute) => getAttributeBonus(sheet, attribute),
     getStrongestAttribute: () => getStrongestAttribute(sheet),
     postChat: postAutomationChat,

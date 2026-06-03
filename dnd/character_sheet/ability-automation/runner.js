@@ -814,7 +814,7 @@
       action: state.action || {},
       actionId: state.action?.id || "",
       actionName: state.action?.name || "",
-      actionKind: state.action?.actionKind || state.action?.kind || state.context?.actionType || "",
+      actionKind: getActionKind(state),
       keywords: getAbilityKeywords(state),
       range: state.action?.range || "",
       attribute: block.attribute || "",
@@ -1130,7 +1130,7 @@
       actorName: state.heroName || "",
       actionId: state.action?.id || "",
       actionName: state.action?.name || "Ability",
-      actionKind: state.action?.actionKind || state.action?.kind || state.action?.type || state.context?.actionType || "main",
+      actionKind: getActionKind(state),
       cost: state.action?.cost || state.action?.resource_cost || state.action?.resourceCost || "",
       keywords: getAbilityKeywords(state),
       attribute: totalInfo.attribute || block.attribute || "",
@@ -1536,7 +1536,7 @@
               damageType,
               abilityName: state.action.name || "Ability",
               actionId: state.action?.id || "",
-              actionKind: state.action?.actionKind || state.action?.kind || state.action?.type || state.context?.actionType || "main",
+              actionKind: getActionKind(state),
               cost: state.action?.cost || state.action?.resource_cost || state.action?.resourceCost || "",
               keywords: getAbilityKeywords(state),
             })
@@ -1920,7 +1920,7 @@
           verb,
           abilityName: state.action.name || "Ability",
           actionId: state.action?.id || "",
-          actionKind: state.action?.actionKind || state.action?.kind || state.action?.type || state.context?.actionType || "main",
+          actionKind: getActionKind(state),
           cost: state.action?.cost || state.action?.resource_cost || state.action?.resourceCost || "",
           keywords: getAbilityKeywords(state),
         };
@@ -2041,7 +2041,7 @@
             targetCount: targets.length,
             actionId: state.action?.id || "",
             actionName: state.action?.name || "Ability",
-            actionKind: state.action?.actionKind || state.action?.kind || state.action?.type || state.context?.actionType || "main",
+            actionKind: getActionKind(state),
             cost: state.action?.cost || state.action?.resource_cost || state.action?.resourceCost || "",
             keywords: getAbilityKeywords(state),
             attribute: effect.attribute || "",
@@ -2236,6 +2236,55 @@
     await state.context.setScopedFlag({
       scope: effect.scope || "round",
       key: effect.key || "",
+      sourceId: ids.sourceId,
+      targetId: ids.targetId,
+    });
+  }
+
+  function resolveUsageLimitIds(state, limit) {
+    const sourceId = state.sourcePlacement?.id || "";
+    return {
+      sourceId,
+      targetId: limit?.target === "self" ? sourceId : sourceId,
+    };
+  }
+
+  async function checkUsageLimit(state) {
+    const limit = state.automation?.usageLimit;
+    if (!limit || !limit.key || typeof state.context.checkScopedFlag !== "function") {
+      return { allowed: true };
+    }
+    const ids = resolveUsageLimitIds(state, limit);
+    if (!ids.sourceId || !ids.targetId) {
+      return { allowed: true };
+    }
+    const result = await state.context.checkScopedFlag({
+      scope: limit.scope || "round",
+      key: limit.key,
+      sourceId: ids.sourceId,
+      targetId: ids.targetId,
+    });
+    if (result?.set) {
+      return {
+        allowed: false,
+        message: limit.message || `${state.action.name || "Ability"} has already been used this ${limit.scope || "round"}.`,
+      };
+    }
+    return { allowed: true };
+  }
+
+  async function markUsageLimit(state) {
+    const limit = state.automation?.usageLimit;
+    if (!limit || !limit.key || typeof state.context.setScopedFlag !== "function") {
+      return;
+    }
+    const ids = resolveUsageLimitIds(state, limit);
+    if (!ids.sourceId || !ids.targetId) {
+      return;
+    }
+    await state.context.setScopedFlag({
+      scope: limit.scope || "round",
+      key: limit.key,
       sourceId: ids.sourceId,
       targetId: ids.targetId,
     });
@@ -2860,6 +2909,20 @@
     return label.includes("triggered") && !label.includes("free");
   }
 
+  function getActionKind(state) {
+    const text = String(
+      state.action?.actionKind ||
+        state.action?.kind ||
+        state.action?.type ||
+        state.context?.actionType ||
+        "main"
+    ).toLowerCase();
+    if (text === "mains" || text.includes("main")) return "main";
+    if (text === "maneuvers" || text.includes("maneuver")) return "maneuver";
+    if (text.includes("trigger")) return "triggered";
+    return text || "main";
+  }
+
   // ---------- feature modifier application (pre-roll) ----------
 
   // Collect every modifier from every feature on the source character that
@@ -3110,9 +3173,10 @@
 
       const structuredTriggerBlocks = blocks.filter((block) => block?.type === "trigger" && block.match);
       const isResolvingReadyTrigger = Boolean(state.triggerPayload);
+      const isManualTriggerResolution = Boolean(options?.manualTriggerResolution);
       const actionType = String(state.context?.actionType || state.action?.actionType || state.action?.kind || state.action?.type || "").toLowerCase();
       const triggerOnlyAction = actionType.includes("trigger") || isNonFreeTriggeredAction(state.action);
-      const isArmingOnly = triggerOnlyAction && structuredTriggerBlocks.length > 0 && !isResolvingReadyTrigger;
+      const isArmingOnly = triggerOnlyAction && structuredTriggerBlocks.length > 0 && !isResolvingReadyTrigger && !isManualTriggerResolution;
 
       if (!isArmingOnly) {
         for (const block of blocks) {
@@ -3131,6 +3195,14 @@
       }
 
       if (!isArmingOnly) {
+        const usageLimit = await checkUsageLimit(state);
+        if (!usageLimit.allowed) {
+          await postChat(state.context, {
+            message: `${state.heroName} - ${state.action.name || "Ability"}: ${usageLimit.message}`,
+          });
+          closeRunner();
+          return;
+        }
         const startTurnPreflight = await preflightStartTurnEffects(state, blocks);
         if (!startTurnPreflight) {
           closeRunner();
@@ -3161,13 +3233,13 @@
             actorId: state.sourcePlacement?.id || "",
             actionId: state.action?.id || "",
             actionName: state.action?.name || "Ability",
-            actionKind: state.action?.actionKind || state.action?.kind || state.action?.type || state.context?.actionType || "main",
+            actionKind: getActionKind(state),
             cost: state.action?.cost || state.action?.resource_cost || state.action?.resourceCost || "",
             keywords: getAbilityKeywords(state),
           },
         });
       }
-      if (isResolvingReadyTrigger && isNonFreeTriggeredAction(state.action) && typeof state.context.consumeTriggeredAction === "function") {
+      if ((isResolvingReadyTrigger || isManualTriggerResolution) && isNonFreeTriggeredAction(state.action) && typeof state.context.consumeTriggeredAction === "function") {
         const consumeResult = await state.context.consumeTriggeredAction({
           placementId: state.sourcePlacement?.id || "",
           abilityName: state.action.name || "Ability",
@@ -3179,7 +3251,8 @@
           return;
         }
       }
-      if (isResolvingReadyTrigger && structuredTriggerBlocks.length) {
+      await markUsageLimit(state);
+      if ((isResolvingReadyTrigger || isManualTriggerResolution) && structuredTriggerBlocks.length) {
         await runReadyTriggerResolution(state, blocks);
         return;
       }

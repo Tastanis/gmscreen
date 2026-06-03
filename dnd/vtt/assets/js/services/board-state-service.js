@@ -730,6 +730,10 @@ function sanitizeTurnEffect(raw) {
   const combatantId = typeof raw.combatantId === 'string' ? raw.combatantId.trim() : '';
   const triggeredAt = toInt(raw.triggeredAt ?? raw.timestamp ?? raw.updatedAt, Date.now());
   const initiatorId = typeof raw.initiatorId === 'string' ? raw.initiatorId.trim().toLowerCase() : '';
+  const text = typeof raw.text === 'string' ? raw.text.trim() : '';
+  const tone = typeof raw.tone === 'string' ? raw.tone.trim().toLowerCase() : '';
+  const audience = typeof raw.audience === 'string' ? raw.audience.trim().toLowerCase() : '';
+  const durationMs = toInt(raw.durationMs, 0);
 
   const effect = {
     type,
@@ -742,6 +746,22 @@ function sanitizeTurnEffect(raw) {
 
   if (initiatorId) {
     effect.initiatorId = initiatorId;
+  }
+
+  if (text) {
+    effect.text = text;
+  }
+
+  if (tone) {
+    effect.tone = tone;
+  }
+
+  if (audience) {
+    effect.audience = audience;
+  }
+
+  if (durationMs > 0) {
+    effect.durationMs = durationMs;
   }
 
   return effect;

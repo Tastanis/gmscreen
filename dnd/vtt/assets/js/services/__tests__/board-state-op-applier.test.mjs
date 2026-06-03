@@ -163,6 +163,52 @@ describe('Board State Op Applier - combat.set', () => {
     assert.equal(state.sceneState['scene-1'].combat.updatedAt, 3001);
   });
 
+  test('preserves floating text fields in combat lastEffect payloads', () => {
+    const state = {
+      sceneState: {
+        'scene-1': {
+          combat: {
+            active: true,
+            round: 1,
+            turnPhase: 'active',
+            sequence: 1,
+            updatedAt: 1000,
+          },
+        },
+      },
+    };
+
+    const mutated = applyBoardStateOpLocally(state, {
+      type: 'combat.set',
+      sceneId: 'scene-1',
+      combat: {
+        active: true,
+        round: 1,
+        turnPhase: 'active',
+        sequence: 2,
+        updatedAt: 2000,
+        lastEffect: {
+          type: 'floating-text',
+          text: 'Claim your turn',
+          tone: 'info',
+          audience: 'all',
+          durationMs: 2200,
+          triggeredAt: 1800,
+        },
+      },
+    });
+
+    assert.equal(mutated, true);
+    assert.deepEqual(state.sceneState['scene-1'].combat.lastEffect, {
+      type: 'floating-text',
+      triggeredAt: 1800,
+      text: 'Claim your turn',
+      tone: 'info',
+      audience: 'all',
+      durationMs: 2200,
+    });
+  });
+
   test('ignores stale end-combat payloads from a different encounter', () => {
     const state = {
       sceneState: {

@@ -72,11 +72,15 @@ export function normalizeTurnEffectEntry(raw) {
   const type = typeof raw.type === 'string' ? raw.type.trim() : '';
   const combatantId = typeof raw.combatantId === 'string' ? raw.combatantId.trim() : '';
   const initiatorId = typeof raw.initiatorId === 'string' ? raw.initiatorId.trim() : '';
+  const text = typeof raw.text === 'string' ? raw.text.trim() : '';
+  const tone = typeof raw.tone === 'string' ? raw.tone.trim().toLowerCase() : '';
+  const audience = typeof raw.audience === 'string' ? raw.audience.trim().toLowerCase() : '';
+  const durationMsRaw = Number(raw.durationMs);
   const triggeredAtRaw = Number(raw.triggeredAt ?? raw.timestamp ?? raw.at);
   const triggeredAt = Number.isFinite(triggeredAtRaw) ? Math.max(0, Math.trunc(triggeredAtRaw)) : Date.now();
   const payload = raw.payload && typeof raw.payload === 'object' ? raw.payload : null;
 
-  if (!type && !combatantId && !initiatorId && !payload) {
+  if (!type && !combatantId && !initiatorId && !text && !payload) {
     return null;
   }
 
@@ -89,6 +93,18 @@ export function normalizeTurnEffectEntry(raw) {
   }
   if (initiatorId) {
     effect.initiatorId = initiatorId;
+  }
+  if (text) {
+    effect.text = text;
+  }
+  if (tone) {
+    effect.tone = tone;
+  }
+  if (audience) {
+    effect.audience = audience;
+  }
+  if (Number.isFinite(durationMsRaw) && durationMsRaw > 0) {
+    effect.durationMs = Math.trunc(durationMsRaw);
   }
   if (payload) {
     effect.payload = payload;

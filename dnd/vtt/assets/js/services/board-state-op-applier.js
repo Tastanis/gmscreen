@@ -634,11 +634,27 @@ function normalizeCombatTurnEffect(raw) {
   };
   const combatantId = normalizeNullableString(raw.combatantId);
   const initiatorId = normalizeProfileIdField(raw.initiatorId);
+  const text = normalizeNullableString(raw.text);
+  const tone = normalizeNullableString(raw.tone)?.toLowerCase() || null;
+  const audience = normalizeNullableString(raw.audience)?.toLowerCase() || null;
+  const durationMs = normalizeNonNegativeInt(raw.durationMs, 0);
   if (combatantId) {
     effect.combatantId = combatantId;
   }
   if (initiatorId) {
     effect.initiatorId = initiatorId;
+  }
+  if (text) {
+    effect.text = text;
+  }
+  if (tone) {
+    effect.tone = tone;
+  }
+  if (audience) {
+    effect.audience = audience;
+  }
+  if (durationMs > 0) {
+    effect.durationMs = durationMs;
   }
   return effect;
 }

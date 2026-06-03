@@ -32,6 +32,33 @@ test('validation exposes schema warnings and unsupported extra fields', async ()
   }
 });
 
+test('validation normalizes top-level usage limits', async () => {
+  const harness = await createAbilityAutomationHarness();
+  try {
+    const { issues, normalized } = harness.validateAutomation({
+      schema: 'ability-automation/v3',
+      usageLimit: {
+        scope: 'round',
+        key: 'hesitation-is-weakness',
+        target: 'self',
+        message: 'Hesitation Is Weakness can only be used once per round.',
+      },
+      cards: [],
+    }, { strict: false });
+
+    assert.deepEqual(issues, []);
+    assert.deepEqual(normalized.usageLimit, {
+      scope: 'round',
+      key: 'hesitation-is-weakness',
+      source: 'self',
+      target: 'self',
+      message: 'Hesitation Is Weakness can only be used once per round.',
+    });
+  } finally {
+    harness.close();
+  }
+});
+
 test('runner prompts for a target, accepts a power roll, and applies tier damage to that token', async () => {
   const harness = await createAbilityAutomationHarness({
     attributes: { Might: 2 },

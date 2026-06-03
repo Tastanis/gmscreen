@@ -104,6 +104,8 @@ export function normalizePlacementEntry(entry) {
   );
   const triggeredActionReady =
     entry.triggeredActionReady ?? entry?.overlays?.triggeredAction?.ready ?? true;
+  const mainActionUsedThisTurn = Boolean(entry.mainActionUsedThisTurn);
+  const maneuverUsedThisTurn = Boolean(entry.maneuverUsedThisTurn);
   const rawConditionSources = [];
   if (entry.conditions !== undefined) {
     rawConditionSources.push(entry.conditions);
@@ -139,6 +141,8 @@ export function normalizePlacementEntry(entry) {
     showHp,
     showTriggeredAction,
     triggeredActionReady: triggeredActionReady !== false,
+    mainActionUsedThisTurn,
+    maneuverUsedThisTurn,
     conditions,
     condition,
     combatTeam,

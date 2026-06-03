@@ -1554,6 +1554,7 @@
       version: SCHEMA_VERSION,
       cards: [],
       modifiers: [],
+      usageLimit: null,
       warnings: [],
     };
   }
@@ -1593,13 +1594,37 @@
       ? P.normalizeKeywordList(input.keywords)
       : Array.isArray(input.keywords) ? input.keywords.filter(Boolean).map(String) : [];
 
+    const usageLimit = normalizeUsageLimit(input.usageLimit || input.limit || input.oncePer, warnings, "usageLimit");
+
     return {
       schema: SCHEMA_ID,
       version: SCHEMA_VERSION,
       cards,
       modifiers,
       keywords,
+      usageLimit,
       warnings,
+    };
+  }
+
+  function normalizeUsageLimit(input, warnings, path) {
+    if (!input || typeof input !== "object") return null;
+    const scopeRaw = asTrimmedString(input.scope || input.per || "round").toLowerCase();
+    const scope = ["round", "turn", "encounter"].includes(scopeRaw) ? scopeRaw : "round";
+    const key = asTrimmedString(input.key || input.id || input.name);
+    const source = pickKnown(input.source, ["self"], "self");
+    const target = pickKnown(input.target, ["self"], "self");
+    const message = asTrimmedString(input.message || input.blockedMessage);
+    if (!key) {
+      warnings.push(`${path}.key: usageLimit needs a key.`);
+      return null;
+    }
+    return {
+      scope,
+      key,
+      source,
+      target,
+      message,
     };
   }
 

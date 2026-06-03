@@ -290,6 +290,28 @@ describe('Combat State Normalization – Last Effect', () => {
     assert.equal(combat.lastEffect.payload.reason, 'thinking');
   });
 
+  test('last effect with floating text fields is preserved', () => {
+    const combat = initWithCombat({
+      lastEffect: {
+        type: 'floating-text',
+        text: 'HESITATION IS WEAKNESS!',
+        tone: 'danger',
+        audience: 'all',
+        durationMs: 2600,
+        triggeredAt: 3500,
+      },
+      updatedAt: 1000,
+    });
+
+    assert.ok(combat);
+    assert.ok(combat.lastEffect);
+    assert.equal(combat.lastEffect.type, 'floating-text');
+    assert.equal(combat.lastEffect.text, 'HESITATION IS WEAKNESS!');
+    assert.equal(combat.lastEffect.tone, 'danger');
+    assert.equal(combat.lastEffect.audience, 'all');
+    assert.equal(combat.lastEffect.durationMs, 2600);
+  });
+
   test('alternate key: lastEvent maps to lastEffect', () => {
     const combat = initWithCombat({
       lastEvent: {
