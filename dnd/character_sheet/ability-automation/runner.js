@@ -333,6 +333,24 @@
     return { attribute: requested, bonus: asInt(state.context.getAttributeBonus?.(requested)) };
   }
 
+  function resolveAbilityTestSkill(state, block) {
+    if (block?.rollEvent !== "abilityTest") {
+      return { skill: "", bonus: 0 };
+    }
+    const requested = String(block.skill || state.action?.skill || state.action?.name || "").trim();
+    if (!requested || typeof state.context.getSkillBonus !== "function") {
+      return { skill: requested, bonus: 0 };
+    }
+    const result = state.context.getSkillBonus(requested);
+    if (result && typeof result === "object") {
+      return {
+        skill: String(result.skill || requested).trim(),
+        bonus: asInt(result.bonus, 0),
+      };
+    }
+    return { skill: requested, bonus: asInt(result, 0) };
+  }
+
   // Build a resolution context that primitives.describeEffectResolved can use
   // to convert "9 + Intuition" into "11" and "A<weak" into "A<2".
   function buildResolveCtx(state) {
@@ -865,17 +883,21 @@
       ? { attribute: typeof block.attribute === "string" ? block.attribute : "Flat", bonus: asInt(block.flatBonus, 0) }
       : resolveAttribute(state, block.attribute);
     const attributeBonus = resolved.bonus;
+    const skillState = resolveAbilityTestSkill(state, block);
+    const skillBonus = asInt(skillState.bonus, 0);
     const bonus = asInt(block.bonus);
     const manualBonus = asInt(state.manualBonus);
     const edgeBaneCounts = getTotalEdgeBaneCounts(state);
     const edgeState = getEdgeState(edgeBaneCounts.edge, edgeBaneCounts.bane);
     const total = state.roll
-      ? state.roll.total + attributeBonus + bonus + manualBonus + edgeState.bonus
+      ? state.roll.total + attributeBonus + skillBonus + bonus + manualBonus + edgeState.bonus
       : null;
     return {
       total,
       attribute: resolved.attribute,
       attributeBonus,
+      skill: skillState.skill,
+      skillBonus,
       bonus,
       manualBonus,
       edgeState,
@@ -954,13 +976,14 @@
   }
 
   function renderPowerRoll(host, state, block) {
-    const { total, attribute, attributeBonus, bonus, manualBonus, edgeState } = getPowerRollTotal(state, block);
+    const { total, attribute, attributeBonus, skill, skillBonus, bonus, manualBonus, edgeState } = getPowerRollTotal(state, block);
     const formulaParts = [`${block.rollFormula || "2d10"} + ${attribute}`];
+    if (skillBonus) formulaParts.push(`${skill || "Skill"} ${formatModifier(skillBonus)}`);
     if (bonus) formulaParts.push(formatModifier(bonus));
     if (manualBonus) formulaParts.push(formatModifier(manualBonus));
     if (edgeState.net) formulaParts.push(edgeState.label);
     const detail = state.roll
-      ? `Dice: ${state.roll.rolls.join(" + ")} | ${attribute} ${formatModifier(attributeBonus)} | ${edgeState.label}`
+      ? `Dice: ${state.roll.rolls.join(" + ")} | ${attribute} ${formatModifier(attributeBonus)}${skillBonus ? ` | ${skill || "Skill"} ${formatModifier(skillBonus)}` : ""} | ${edgeState.label}`
       : formulaParts.join(" ");
 
     const targetGroup = getTargetGroup(state, block.target);
@@ -1027,10 +1050,12 @@
     `;
   }
 
-  function buildRollChatEntry(state, block, total, attributeBonus, bonus, edgeBonus) {
+  function buildRollChatEntry(state, block, total, attributeBonus, bonus, edgeBonus, skillState = {}) {
     const manualBonus = asInt(state.manualBonus);
+    const skillBonus = asInt(skillState.skillBonus, 0);
     const numericModifiers = [
       attributeBonus ? `${attributeBonus >= 0 ? "+" : "-"} ${Math.abs(attributeBonus)}` : "",
+      skillBonus ? `${skillBonus >= 0 ? "+" : "-"} ${Math.abs(skillBonus)}` : "",
       bonus ? `${bonus >= 0 ? "+" : "-"} ${Math.abs(bonus)}` : "",
       manualBonus ? `${manualBonus >= 0 ? "+" : "-"} ${Math.abs(manualBonus)}` : "",
       edgeBonus ? `${edgeBonus >= 0 ? "+" : "-"} ${Math.abs(edgeBonus)}` : "",
@@ -1045,6 +1070,7 @@
         breakdown: [
           { type: "dice", notation: state.roll.notation, rolls: state.roll.rolls, total: state.roll.total },
           ...(attributeBonus ? [{ type: "modifier", notation: String(attributeBonus), value: attributeBonus }] : []),
+          ...(skillBonus ? [{ type: "modifier", notation: String(skillBonus), value: skillBonus, label: skillState.skill || "Skill" }] : []),
           ...(bonus ? [{ type: "modifier", notation: String(bonus), value: bonus }] : []),
           ...(manualBonus ? [{ type: "modifier", notation: String(manualBonus), value: manualBonus }] : []),
           ...(edgeBonus ? [{ type: "modifier", notation: String(edgeBonus), value: edgeBonus }] : []),
@@ -1123,7 +1149,7 @@
       }
       if (target.closest("[data-power-roll-roll]")) {
         state.roll = rollFormula(block.rollFormula || "2d10");
-        const { total, attributeBonus, bonus, edgeState } = getPowerRollTotal(state, block);
+        const { total, attributeBonus, skill, skillBonus, bonus, edgeState } = getPowerRollTotal(state, block);
         state.baseTier = P.tierFromTotal(total);
         state.selectedTier = P.shiftTierKey(state.baseTier, edgeState.tierShift);
         state.resultText = `Rolled ${total}. Auto-selected ${P.tierLabel(state.selectedTier)}${
@@ -1131,7 +1157,7 @@
             ? ` from ${P.tierLabel(state.baseTier)} (${edgeState.label}).`
             : "."
         }`;
-        await postChat(state.context, buildRollChatEntry(state, block, total, attributeBonus, bonus, edgeState.bonus));
+        await postChat(state.context, buildRollChatEntry(state, block, total, attributeBonus, bonus, edgeState.bonus, { skill, skillBonus }));
         renderPowerRoll(host, state, block);
         return;
       }
@@ -2626,6 +2652,7 @@
     const block = {
       type: "powerRoll",
       attribute: effect.attribute || "Strongest",
+      skill: effect.skill || effect.label || "",
       bonus: asInt(effect.bonus, 0),
       rollFormula: effect.rollFormula || "2d10",
       rollEvent: "abilityTest",

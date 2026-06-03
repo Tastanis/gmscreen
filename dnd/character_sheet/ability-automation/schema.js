@@ -433,13 +433,14 @@
         return effect;
       }
       case "abilityTest": {
-        const known = new Set(["kind", "label", "attribute", "bonus", "rollFormula", "text"]);
+        const known = new Set(["kind", "label", "attribute", "skill", "bonus", "rollFormula", "text"]);
         const effect = {
           kind: "abilityTest",
           label: asTrimmedString(input.label) || "Test",
           attribute: P.normalizeAttributeOrList
             ? P.normalizeAttributeOrList(input.attribute || "Strongest")
             : P.normalizeAttribute(input.attribute || "Strongest"),
+          skill: asTrimmedString(input.skill),
           bonus: asInt(input.bonus, 0),
           rollFormula: asTrimmedString(input.rollFormula) || "2d10",
           text: asTrimmedString(input.text),

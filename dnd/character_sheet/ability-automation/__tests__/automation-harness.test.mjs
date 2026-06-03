@@ -121,6 +121,49 @@ test('runner prompts for a target, accepts a power roll, and applies tier damage
   }
 });
 
+test('ability tests add matching trained skill and extra skill bonus', async () => {
+  const harness = await createAbilityAutomationHarness({
+    attributes: { Agility: 2 },
+    skills: { Hide: { level: 'Trained', bonus: '+2' } },
+  });
+  try {
+    const automation = {
+      schema: 'ability-automation/v3',
+      cards: [
+        {
+          type: 'effect',
+          id: 'hide-test',
+          target: 'self',
+          effects: [
+            {
+              kind: 'abilityTest',
+              label: 'Hide maneuver',
+              attribute: 'Agility',
+              text: 'Roll to hide.',
+            },
+          ],
+        },
+      ],
+    };
+
+    const result = await harness.runAutomation({
+      automation,
+      action: { id: 'hide-test', name: 'Hide Test' },
+      randomValues: [0.5, 0.5],
+    });
+
+    const roll = result.calls.postChat.find((entry) => entry.type === 'dice_roll');
+    assert.equal(roll.payload.total, 18);
+    assert.deepEqual(
+      roll.payload.breakdown.filter((entry) => entry.type === 'modifier').map((entry) => entry.value),
+      [2, 4]
+    );
+    assert.ok(roll.payload.breakdown.some((entry) => entry.label === 'Hide' && entry.value === 4));
+  } finally {
+    harness.close();
+  }
+});
+
 test('power roll surges spend from the caster and add matching damage metadata', async () => {
   const harness = await createAbilityAutomationHarness({
     attributes: { Might: 2 },

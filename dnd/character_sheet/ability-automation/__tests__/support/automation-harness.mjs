@@ -629,6 +629,17 @@ export async function createAbilityAutomationHarness(options = {}) {
         ), ['Might', 0]);
         return { attribute, bonus };
       },
+      getSkillBonus(requestedSkill) {
+        const skills = runOptions.skills || options.skills || {};
+        const requested = String(requestedSkill || '').trim().toLowerCase();
+        const entries = Object.entries(skills);
+        const found = entries.find(([skill]) => skill.toLowerCase() === requested)
+          || entries.find(([skill]) => requested.split(/[^a-z0-9]+/i).filter(Boolean).includes(skill.toLowerCase()));
+        if (!found) return { skill: requestedSkill || '', bonus: 0 };
+        const [skill, data] = found;
+        const extra = Number.parseInt(data?.bonus ?? 0, 10) || 0;
+        return { skill, bonus: 2 + extra };
+      },
       isWinded() {
         return Boolean(runOptions.winded ?? options.winded ?? false);
       },

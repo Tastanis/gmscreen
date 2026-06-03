@@ -1936,6 +1936,38 @@ function normalizeSkills(value) {
     .sort(([left], [right]) => left.localeCompare(right));
 }
 
+function normalizeSkillLookupText(value) {
+  return String(value || '')
+    .trim()
+    .toLowerCase()
+    .replace(/[^a-z0-9]+/g, ' ')
+    .trim();
+}
+
+function parseSkillExtraBonus(value) {
+  const match = String(value ?? '').match(/[+-]?\d+/);
+  return match ? Number.parseInt(match[0], 10) || 0 : 0;
+}
+
+function getSkillBonus(sheet, requestedSkill) {
+  const skills = normalizeSkills(sheet?.sidebar?.skills);
+  const requested = normalizeSkillLookupText(requestedSkill);
+  if (!requested || !skills.length) {
+    return { skill: String(requestedSkill || '').trim(), bonus: 0 };
+  }
+  const exact = skills.find(([skill]) => normalizeSkillLookupText(skill) === requested);
+  const contained = exact || skills.find(([skill]) => {
+    const normalized = normalizeSkillLookupText(skill);
+    return normalized && requested.split(' ').includes(normalized);
+  });
+  if (!contained) {
+    return { skill: String(requestedSkill || '').trim(), bonus: 0 };
+  }
+  const [skill, data] = contained;
+  const extra = data && typeof data === 'object' ? parseSkillExtraBonus(data.bonus) : 0;
+  return { skill, bonus: 2 + extra };
+}
+
 function normalizeFeatures(value) {
   if (!Array.isArray(value)) {
     return [];
@@ -2167,6 +2199,7 @@ function startAbilityAutomation(sheet, action, categoryKey, sourceToken = null, 
     manualTriggerResolution: Boolean(options?.manualTriggerResolution),
     getAttributeBonus: (attribute) => getAttributeBonus(sheet, attribute),
     getStrongestAttribute: () => getStrongestAttribute(sheet),
+    getSkillBonus: (skill) => getSkillBonus(sheet, skill),
     postChat: postAutomationChat,
     selectTarget: requestAutomationTarget,
     selectAreaTarget: requestAutomationAreaTarget,
