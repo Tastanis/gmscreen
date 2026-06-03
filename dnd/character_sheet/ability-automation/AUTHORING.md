@@ -752,6 +752,11 @@ Adds or removes surges from each target's character sheet. Surges are separate f
 
 The "by" entity (who's striking) defaults to the **most recent target group** — i.e. the parent ability's target, which is the typical pattern: "the target makes a free strike against ...". The runtime reads the by-entity's M and A from their sheet (falls back to 0 if no sheet), rolls 2d10 + highest, opens a target picker for the "against" creature with the by-entity as the new source, then applies tier damage (`2/5/7 + max(M, A)`) through the normal damage path. The dice math and tier outcome are posted to chat.
 
+For PC self-strikes that need the normal power-roll modal and roll riders, set
+`asPowerRoll: true`. This opens the standard power-roll UI, rolls `2d10 + Might
+or Agility`, applies tier damage, and lets normal roll suggestions/effects stack
+onto the strike.
+
 ### `cascade`
 
 ```json

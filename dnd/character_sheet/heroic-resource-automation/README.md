@@ -48,6 +48,8 @@ Rules prompt by default. When a rule matches, the GM client queues a popup
 showing the amount and reason, and the resource changes only when the popup is
 accepted. Set `autoApply: true` for deterministic rules that should apply
 without confirmation, such as combat-start setup and combat-end reset.
+Dice amounts such as `1d3` are not rolled until the popup is accepted, so the
+prompt shows the dice formula and the applied result reports the actual amount.
 
 ## Rule Fields
 

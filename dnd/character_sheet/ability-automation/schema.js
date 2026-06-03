@@ -480,11 +480,12 @@
         return effect;
       }
       case "freeStrike": {
-        const known = new Set(["kind", "against", "text"]);
+        const known = new Set(["kind", "against", "text", "asPowerRoll"]);
         const effect = {
           kind: "freeStrike",
           against: asTrimmedString(input.against),
           text: asTrimmedString(input.text),
+          asPowerRoll: input.asPowerRoll === true,
         };
         const extras = pickExtras(input, known);
         if (extras) effect._extra = extras;

@@ -277,6 +277,43 @@ export function resolveHeroicResourceAmount(spec, context = {}, random = Math.ra
   return { amount, label: labels.join(' + ') };
 }
 
+export function previewHeroicResourceAmount(spec, context = {}) {
+  const source = normalizeAmountSpec(spec);
+  const levelEntry = pickLevelEntry(source.amountByLevel, context.level);
+  if (levelEntry) {
+    return previewHeroicResourceAmount(levelEntry.amount, context);
+  }
+  let amount = 0;
+  const labels = [];
+  const from = asTrimmedString(source.from).toLowerCase();
+  if (from === 'victories') {
+    amount += Math.max(0, asInt(context.victories, 0));
+    labels.push('Victories');
+  }
+  if (from === 'negativeresource' || from === 'negative-resource') {
+    const currentResource = asInt(context.currentResource, 0);
+    amount += Math.max(0, -currentResource);
+    labels.push('negative resource');
+  }
+  if (source.amount != null) {
+    amount += asInt(source.amount, 0);
+  }
+  const hasDice = Boolean(source.dice);
+  if (source.dice) {
+    labels.push(source.dice);
+  }
+  amount += asInt(source.bonus, 0);
+  const bonusEntry = pickLevelEntry(source.bonusByLevel, context.level);
+  if (bonusEntry) {
+    amount += asInt(bonusEntry.bonus, 0);
+  }
+  return {
+    amount,
+    hasDice,
+    label: labels.join(' + ') || String(amount),
+  };
+}
+
 export function payloadPrimaryTokenId(event, payload) {
   if (!payload || typeof payload !== 'object') return '';
   if (event === 'damageDealt' || event === 'forcedMovementDealt') {

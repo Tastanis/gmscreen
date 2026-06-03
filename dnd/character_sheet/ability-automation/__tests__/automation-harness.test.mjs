@@ -164,6 +164,50 @@ test('ability tests add matching trained skill and extra skill bonus', async () 
   }
 });
 
+test('freeStrike can run as a normal power roll before applying damage', async () => {
+  const harness = await createAbilityAutomationHarness({
+    attributes: { Might: 1, Agility: 3 },
+    targets: [
+      { id: 'enemy-1', name: 'Target Dummy' },
+    ],
+  });
+  try {
+    const automation = {
+      schema: 'ability-automation/v3',
+      cards: [
+        {
+          type: 'effect',
+          id: 'free-strike-effect',
+          target: 'self',
+          effects: [
+            {
+              kind: 'freeStrike',
+              against: 'enemy',
+              asPowerRoll: true,
+              text: 'Choose the creature who triggered the free strike.',
+            },
+          ],
+        },
+      ],
+    };
+
+    const result = await harness.runAutomation({
+      automation,
+      action: { id: 'free-strike-test', name: 'Free Strike Test' },
+      targetSelections: [{ id: 'enemy-1', name: 'Target Dummy' }],
+      randomValues: [0.5, 0.5],
+    });
+
+    assert.equal(result.calls.selectTarget.length, 1);
+    assert.equal(result.calls.applyDamage.length, 1);
+    assert.equal(result.calls.applyDamage[0].amount, 8);
+    assert.equal(result.calls.applyDamage[0].abilityName, 'Free Strike');
+    assert.ok(result.calls.postChat.some((entry) => entry.type === 'dice_roll' && entry.payload.total === 15));
+  } finally {
+    harness.close();
+  }
+});
+
 test('power roll surges spend from the caster and add matching damage metadata', async () => {
   const harness = await createAbilityAutomationHarness({
     attributes: { Might: 2 },

@@ -2696,6 +2696,10 @@
   }
 
   async function applyFreeStrikeEffect(state, effect, targets, _ctx) {
+    if (effect.asPowerRoll) {
+      await applyFreeStrikePowerRollEffect(state, effect);
+      return;
+    }
     if (typeof state.context.runFreeStrike !== "function") {
       await reminderEffect(state, effect, targets, "Free Strike");
       return;
@@ -2726,6 +2730,65 @@
       });
       return;
     }
+  }
+
+  async function applyFreeStrikePowerRollEffect(state, effect) {
+    if (typeof state.context.selectTarget !== "function") {
+      await reminderEffect(state, effect, [state.sourcePlacement].filter(Boolean), "Free Strike");
+      return;
+    }
+    const groupName = `freeStrikeTarget_${Date.now().toString(36)}`;
+    const promptConfig = {
+      mode: "token",
+      predicate: effect.against || "creature",
+      creature: effect.against || "creature",
+      affects: effect.against || "creature",
+      showPrompt: true,
+      promptTitle: "Free Strike",
+      promptText: effect.text || "Choose a target for your free strike.",
+      count: { value: 1, mode: "exact" },
+      distance: { form: "melee", value: 1 },
+      pickIndex: 1,
+      pickTotal: 1,
+      allowDone: false,
+      suggestedTargetId: state.triggerPayload?.sourceId || state.suggestedTargetId || "",
+      sourcePlacement: state.sourcePlacement || null,
+    };
+    const result = await state.context.selectTarget(promptConfig);
+    if (result?.canceled) {
+      state.context.cancelTargetSelection?.();
+      state.aborted = true;
+      return;
+    }
+    if (result?.skipped || result?.done || !result?.id) {
+      state.context.cancelTargetSelection?.();
+      await postChat(state.context, {
+        message: `${state.heroName} - ${state.action.name || "Ability"}: free strike skipped.`,
+      });
+      return;
+    }
+    setTargetGroup(state, groupName, [result]);
+    const block = {
+      type: "powerRoll",
+      id: "free-strike-power-roll",
+      attribute: ["Might", "Agility"],
+      target: groupName,
+      tiers: {
+        tier1: { effects: [{ kind: "damage", amount: 2, attribute: ["Might", "Agility"], damageType: "" }] },
+        tier2: { effects: [{ kind: "damage", amount: 5, attribute: ["Might", "Agility"], damageType: "" }] },
+        tier3: { effects: [{ kind: "damage", amount: 7, attribute: ["Might", "Agility"], damageType: "" }] },
+      },
+    };
+    const previousAction = state.action;
+    state.action = {
+      ...previousAction,
+      name: "Free Strike",
+      description: effect.text || previousAction?.description || "",
+      cost: "",
+      actionLabel: "Free Strike",
+    };
+    await runPowerRollBlock(state, block);
+    state.action = previousAction;
   }
 
   async function reminderEffect(state, effect, targets, label) {

@@ -4,6 +4,7 @@ import assert from 'node:assert/strict';
 import {
   formatHeroicResourcePrompt,
   normalizeHeroicResourceAutomation,
+  previewHeroicResourceAmount,
   resolveHeroicResourceAmount,
   ruleMatchesHeroicResourceEvent,
 } from '../heroic-resource-automation.js';
@@ -121,6 +122,14 @@ describe('heroic resource automation schema', () => {
       resolveHeroicResourceAmount({ from: 'negativeResource' }, { currentResource: -3 }).amount,
       3
     );
+  });
+
+  test('previews dice amounts without rolling them', () => {
+    const preview = previewHeroicResourceAmount({ dice: '1d3', bonus: 1 }, { level: 4 });
+
+    assert.equal(preview.hasDice, true);
+    assert.equal(preview.amount, 1);
+    assert.equal(preview.label, '1d3');
   });
 });
 

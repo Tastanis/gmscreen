@@ -22,6 +22,7 @@ import { getPowerRollSuggestions } from './power-roll-suggestions.js';
 import {
   formatHeroicResourcePrompt,
   normalizeHeroicResourceAutomation,
+  previewHeroicResourceAmount,
   resolveHeroicResourceAmount,
   ruleMatchesHeroicResourceEvent,
 } from './heroic-resource-automation.js';
@@ -2743,10 +2744,14 @@ export function mountBoardInteractions(store, routes = {}) {
 
   async function offerHeroicResourceRule({ eventType, payload, placement, profileId, sheet, resource, rule, eventTargetId }) {
     const context = getSheetHeroicResourceContext(sheet, resource);
-    const resolved = resolveHeroicResourceAmount(rule.effect.amount, context);
-    const amount = Math.max(0, Number.parseInt(resolved.amount, 10) || 0);
-    if (!amount && rule.effect.kind !== 'set') return;
-    const change = normalizeHeroicResourceChange(rule, sheet, amount);
+    const preview = previewHeroicResourceAmount(rule.effect.amount, context);
+    const shouldRollAfterPrompt = !rule.autoApply && preview.hasDice;
+    const initialResolved = shouldRollAfterPrompt
+      ? preview
+      : resolveHeroicResourceAmount(rule.effect.amount, context);
+    let amount = Math.max(0, Number.parseInt(initialResolved.amount, 10) || 0);
+    if (!amount && rule.effect.kind !== 'set' && !shouldRollAfterPrompt) return;
+    let change = normalizeHeroicResourceChange(rule, sheet, amount);
     const action = rule.effect.kind === 'set'
       ? 'Set'
       : rule.effect.kind === 'lose'
@@ -2758,11 +2763,11 @@ export function mountBoardInteractions(store, routes = {}) {
     const ruleReason = rule.id || eventType;
     const message = formatHeroicResourcePrompt(rule.prompt, {
       action,
-      amount,
+      amount: shouldRollAfterPrompt ? (preview.label || 'dice') : amount,
       resource: resourceName,
       reason: ruleReason,
       current: change.current,
-      next: change.next,
+      next: shouldRollAfterPrompt ? `${change.current} + ${preview.label || 'dice'}` : change.next,
       round: combatRound,
     }) || `${action} ${amount} ${resourceName}: ${ruleReason}.`;
     if (rule.limit?.markOn === 'offered') {
@@ -2773,11 +2778,19 @@ export function mountBoardInteractions(store, routes = {}) {
         title: `${tokenLabel(placement) || 'Hero'} - ${resourceName}`,
         message,
         detail: rule.effect.kind === 'damage'
-          ? `${tokenLabel(placement) || 'Hero'} will take ${amount} damage.`
-          : `${change.current} -> ${change.next}`,
+          ? `${tokenLabel(placement) || 'Hero'} will take ${shouldRollAfterPrompt ? (preview.label || 'dice') : amount} damage.`
+          : shouldRollAfterPrompt
+            ? `${change.current} + ${preview.label || 'dice'}`
+            : `${change.current} -> ${change.next}`,
         applyLabel: rule.effect.kind === 'damage' ? 'Apply Damage' : 'Apply',
       });
       if (!promptResult?.applied) return;
+    }
+    if (shouldRollAfterPrompt) {
+      const resolved = resolveHeroicResourceAmount(rule.effect.amount, context);
+      amount = Math.max(0, Number.parseInt(resolved.amount, 10) || 0);
+      if (!amount && rule.effect.kind !== 'set') return;
+      change = normalizeHeroicResourceChange(rule, sheet, amount);
     }
     if (rule.limit?.markOn === 'applied') {
       markHeroicResourceRuleLimit(rule, placement.id, eventTargetId);
@@ -2792,6 +2805,8 @@ export function mountBoardInteractions(store, routes = {}) {
     hero.resource = nextResource;
     sheet.hero = hero;
     await saveAutomationSheetForProfile(profileId, sheet, 'resource');
+    const subject = tokenLabel(placement) || sheet?.hero?.name || 'Hero';
+    updateStatus(`${subject}: ${action.toLowerCase()} ${amount} ${resourceName} (${change.current} -> ${change.next}).`);
   }
 
   function markTriggerReady(placementId, abilityId, sourceId = null, eventSnapshot = null) {
