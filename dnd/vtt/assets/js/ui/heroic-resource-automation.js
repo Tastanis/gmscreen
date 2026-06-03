@@ -183,6 +183,7 @@ function normalizeRule(input, index, warnings) {
     limit: normalizeLimit(source.limit || source.oncePer, id),
     effect,
     prompt: asTrimmedString(source.prompt),
+    autoApply: source.autoApply === true,
     enabled: source.enabled !== false,
   };
 }

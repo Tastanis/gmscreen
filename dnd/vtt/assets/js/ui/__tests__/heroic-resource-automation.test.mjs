@@ -66,7 +66,7 @@ describe('heroic resource automation schema', () => {
           limit: { scope: 'round', key: 'first-force-move' },
           effect: { kind: 'gain', amount: 1 },
         },
-        { id: 'end', event: 'combatEnd', effect: { kind: 'set', amount: 0 } },
+        { id: 'end', event: 'combatEnd', effect: { kind: 'set', amount: 0 }, autoApply: true },
       ],
     });
 
@@ -77,6 +77,7 @@ describe('heroic resource automation schema', () => {
       'combatEnd',
     ]);
     assert.equal(normalized.rules[2].limit.scope, 'round');
+    assert.equal(normalized.rules[3].autoApply, true);
   });
 
   test('reports unsupported event inventory items instead of keeping impossible rules', () => {

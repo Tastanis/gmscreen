@@ -2768,15 +2768,17 @@ export function mountBoardInteractions(store, routes = {}) {
     if (rule.limit?.markOn === 'offered') {
       markHeroicResourceRuleLimit(rule, placement.id, eventTargetId);
     }
-    const promptResult = await queueHeroicResourcePrompt({
-      title: `${tokenLabel(placement) || 'Hero'} - ${resourceName}`,
-      message,
-      detail: rule.effect.kind === 'damage'
-        ? `${tokenLabel(placement) || 'Hero'} will take ${amount} damage.`
-        : `${change.current} -> ${change.next}`,
-      applyLabel: rule.effect.kind === 'damage' ? 'Apply Damage' : 'Apply',
-    });
-    if (!promptResult?.applied) return;
+    if (!rule.autoApply) {
+      const promptResult = await queueHeroicResourcePrompt({
+        title: `${tokenLabel(placement) || 'Hero'} - ${resourceName}`,
+        message,
+        detail: rule.effect.kind === 'damage'
+          ? `${tokenLabel(placement) || 'Hero'} will take ${amount} damage.`
+          : `${change.current} -> ${change.next}`,
+        applyLabel: rule.effect.kind === 'damage' ? 'Apply Damage' : 'Apply',
+      });
+      if (!promptResult?.applied) return;
+    }
     if (rule.limit?.markOn === 'applied') {
       markHeroicResourceRuleLimit(rule, placement.id, eventTargetId);
     }

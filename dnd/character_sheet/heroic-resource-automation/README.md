@@ -15,7 +15,8 @@ prompts before changing the resource.
       "id": "combat-start-victories",
       "event": "combatStart",
       "effect": { "kind": "set", "amount": { "from": "victories" } },
-      "prompt": "Set {resource} to {amount}: combat start from Victories."
+      "prompt": "Set {resource} to {amount}: combat start from Victories.",
+      "autoApply": true
     },
     {
       "id": "turn-start",
@@ -36,15 +37,17 @@ prompts before changing the resource.
       "id": "combat-end-reset",
       "event": "combatEnd",
       "effect": { "kind": "set", "amount": 0 },
-      "prompt": "Reset {resource} to 0: combat ended."
+      "prompt": "Reset {resource} to 0: combat ended.",
+      "autoApply": true
     }
   ]
 }
 ```
 
-Rules never silently apply. When a rule matches, the GM client queues a popup
-showing the amount and reason. The resource changes only when the popup is
-accepted.
+Rules prompt by default. When a rule matches, the GM client queues a popup
+showing the amount and reason, and the resource changes only when the popup is
+accepted. Set `autoApply: true` for deterministic rules that should apply
+without confirmation, such as combat-start setup and combat-end reset.
 
 ## Rule Fields
 
@@ -68,6 +71,7 @@ accepted.
 | `effect.kind` | `gain`, `lose`, `set`, or `damage`. |
 | `effect.amount` | Number, dice string like `1d3`, `{ "from": "victories" }`, `{ "from": "negativeResource" }`, or level-based objects. |
 | `prompt` | Template using `{action}`, `{amount}`, `{resource}`, `{reason}`, `{current}`, `{next}`, and `{round}`. |
+| `autoApply` | Optional boolean. `true` skips the confirmation popup and applies the rule immediately. |
 
 ## Amount Examples
 
