@@ -882,6 +882,77 @@
     };
   }
 
+  function getAvailableSurges(state) {
+    if (state?.hero && Object.prototype.hasOwnProperty.call(state.hero, "surges")) {
+      return Math.max(0, asInt(state.hero.surges, 0));
+    }
+    return Math.max(0, asInt(state?.sourceTraits?.surges, 0));
+  }
+
+  function canUsePowerRollSurges(block) {
+    return block?.rollEvent !== "abilityTest";
+  }
+
+  function clampPowerRollSurges(state, block) {
+    if (!canUsePowerRollSurges(block)) {
+      state.powerRollSurges = 0;
+      return 0;
+    }
+    const available = getAvailableSurges(state);
+    state.powerRollSurges = Math.max(0, Math.min(available, asInt(state.powerRollSurges, 0)));
+    return state.powerRollSurges;
+  }
+
+  function renderPowerRollSurgeControls(state, block) {
+    if (!canUsePowerRollSurges(block)) return "";
+    const available = getAvailableSurges(state);
+    const count = clampPowerRollSurges(state, block);
+    const disabledMinus = count <= 0 ? "disabled" : "";
+    const disabledPlus = count >= available ? "disabled" : "";
+    return `
+      <div class="power-roll-runner__surges">
+        <span>Surges: ${escapeHtml(available)}</span>
+        <button class="power-roll-runner__mini-btn" type="button" data-power-roll-surge-adjust="-1" ${disabledMinus}>-</button>
+        <strong data-power-roll-surge-count>${escapeHtml(count)} (+${escapeHtml(count * 2)} damage)</strong>
+        <button class="power-roll-runner__mini-btn" type="button" data-power-roll-surge-adjust="1" ${disabledPlus}>Surge +2</button>
+      </div>
+    `;
+  }
+
+  async function consumePowerRollSurgeBonus(state, ctx) {
+    const surgeCtx = ctx?.powerRollSurges;
+    if (!surgeCtx || surgeCtx.consumed) return { spent: 0, damage: 0 };
+    surgeCtx.consumed = true;
+    const requested = Math.max(0, asInt(surgeCtx.requested, 0));
+    if (!requested) return { spent: 0, damage: 0 };
+    const placementId = state.sourcePlacement?.id || "";
+    if (!placementId || typeof state.context.applySurgeGain !== "function") {
+      await postChat(state.context, {
+        message: `${state.heroName} - ${state.action.name || "Ability"}: spend ${requested} surge${requested === 1 ? "" : "s"} manually for +${requested * 2} damage.`,
+      });
+      return { spent: 0, damage: 0 };
+    }
+    const result = await state.context.applySurgeGain({
+      placementId,
+      amount: -requested,
+      abilityName: state.action.name || "Ability",
+    });
+    if (!result || result.skipped) {
+      await postChat(state.context, {
+        message: `${state.heroName} - ${state.action.name || "Ability"}: surge spend skipped${result?.reason ? ` (${result.reason})` : ""}.`,
+      });
+      return { spent: 0, damage: 0 };
+    }
+    const spent = Math.max(0, Math.abs(asInt(result.applied, requested)));
+    const current = Number.isFinite(result.current) ? result.current : Math.max(0, getAvailableSurges(state) - spent);
+    if (state.hero && typeof state.hero === "object") {
+      state.hero.surges = current;
+    }
+    surgeCtx.spent = spent;
+    surgeCtx.damage = spent * 2;
+    return { spent, damage: spent * 2 };
+  }
+
   function renderPowerRoll(host, state, block) {
     const { total, attribute, attributeBonus, bonus, manualBonus, edgeState } = getPowerRollTotal(state, block);
     const formulaParts = [`${block.rollFormula || "2d10"} + ${attribute}`];
@@ -929,6 +1000,7 @@
           ${renderEdgeControlButton(edgeState, "edge", 2, "EDGE ^^", "Add double edge")}
         </div>
         ${renderRollSuggestionButtons(state)}
+        ${renderPowerRollSurgeControls(state, block)}
         <div class="power-roll-runner__adjustments">
           <span>${escapeHtml(edgeState.label)}</span>
           <span>${escapeHtml(getRollSuggestionLabel(state))}</span>
@@ -1026,10 +1098,22 @@
         renderPowerRoll(host, state, block);
         return;
       }
+      const surgeButton = target.closest("[data-power-roll-surge-adjust]");
+      if (surgeButton) {
+        state.powerRollSurges =
+          asInt(state.powerRollSurges, 0) + asInt(surgeButton.getAttribute("data-power-roll-surge-adjust"), 0);
+        const count = clampPowerRollSurges(state, block);
+        state.resultText = count
+          ? `${count} surge${count === 1 ? "" : "s"} armed for +${count * 2} damage after this roll.`
+          : "No surges armed.";
+        renderPowerRoll(host, state, block);
+        return;
+      }
       if (target.closest("[data-power-roll-clear-adjustments]")) {
         state.edgeCount = 0;
         state.baneCount = 0;
         state.manualBonus = 0;
+        state.powerRollSurges = 0;
         (state.rollSuggestions || []).forEach((suggestion) => {
           suggestion.active = false;
         });
@@ -1072,6 +1156,7 @@
     state.edgeCount = 0;
     state.baneCount = 0;
     state.manualBonus = 0;
+    state.powerRollSurges = 0;
     state.roll = null;
     state.selectedTier = null;
     state.baseTier = null;
@@ -1092,6 +1177,12 @@
     const targetGroupName = block.target;
     await applyEffects(state, tier.effects || [], targetGroupName, {
       sourceLabel: `${state.action.name || "Ability"} (${P.tierLabel(state.selectedTier)})`,
+      powerRollSurges: {
+        requested: clampPowerRollSurges(state, block),
+        spent: 0,
+        damage: 0,
+        consumed: false,
+      },
     });
   }
 
@@ -1512,6 +1603,7 @@
     const damageType = effect.damageType && effect.damageType !== "untyped" ? effect.damageType : "";
     const lines = [];
     let visibleHidden = 0;
+    const surgeBonus = await consumePowerRollSurgeBonus(state, ctx);
     for (const target of targets) {
       if (state.aborted) return;
       if (!target?.id) continue;
@@ -1526,20 +1618,27 @@
         });
         if (check?.matched) markBonus = rollDiceFormula(effect.markBonusDice);
       }
-      const amount = Math.max(0, baseAmount + attributeBonus + diceAmount + markBonus + triggerValue);
+      const amountBeforeSurge = Math.max(0, baseAmount + attributeBonus + diceAmount + markBonus + triggerValue);
+      const amount = Math.max(0, amountBeforeSurge + surgeBonus.damage);
+      const damagePayload = {
+        placementId: target.id,
+        sourceId: state.sourcePlacement?.id || "",
+        amount,
+        damageType,
+        abilityName: state.action.name || "Ability",
+        actionId: state.action?.id || "",
+        actionKind: getActionKind(state),
+        cost: state.action?.cost || state.action?.resource_cost || state.action?.resourceCost || "",
+        keywords: getAbilityKeywords(state),
+      };
+      if (surgeBonus.spent > 0) {
+        damagePayload.includesSurge = true;
+        damagePayload.surgeSpent = surgeBonus.spent;
+        damagePayload.surgeDamage = surgeBonus.damage;
+      }
       const result =
         typeof state.context.applyDamage === "function"
-          ? await state.context.applyDamage({
-              placementId: target.id,
-              sourceId: state.sourcePlacement?.id || "",
-              amount,
-              damageType,
-              abilityName: state.action.name || "Ability",
-              actionId: state.action?.id || "",
-              actionKind: getActionKind(state),
-              cost: state.action?.cost || state.action?.resource_cost || state.action?.resourceCost || "",
-              keywords: getAbilityKeywords(state),
-            })
+          ? await state.context.applyDamage(damagePayload)
           : null;
       const hidden = Boolean(result?.hidden || target.hidden || target.placement?.hidden);
       if (hidden) {
@@ -1549,10 +1648,11 @@
       const targetName = result?.name || target.name || "Target";
       const finalAmount = Number.isFinite(result?.amount) ? result.amount : amount;
       const adjustments = [];
+      if (surgeBonus.damage > 0) adjustments.push(`+${surgeBonus.damage} surge`);
       if (Number.isFinite(result?.vulnerability) && result.vulnerability > 0) adjustments.push(`+${result.vulnerability} vulnerability`);
       if (Number.isFinite(result?.immunity) && result.immunity > 0) adjustments.push(`-${result.immunity} immunity`);
       const adjustmentText = adjustments.length
-        ? ` (${amount}${damageType ? ` ${damageType}` : ""} ${adjustments.join(" ")} = ${finalAmount})`
+        ? ` (${amountBeforeSurge}${damageType ? ` ${damageType}` : ""} ${adjustments.join(" ")} = ${finalAmount})`
         : "";
       const remaining = result?.max !== null && result?.max !== undefined
         ? ` (${result.current}/${result.max} stamina remaining)`

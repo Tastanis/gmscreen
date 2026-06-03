@@ -788,6 +788,59 @@ body.chat-panel-is-open .vtt-character-ability-tray__inner {
   box-shadow: 0 0 0 2px rgba(245, 158, 11, 0.18);
 }
 
+.heroic-resource-prompt {
+  position: fixed;
+  inset: 0;
+  z-index: 1600;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 16px;
+  background: rgba(15, 23, 42, 0.35);
+}
+
+.heroic-resource-prompt__modal {
+  width: min(420px, 92vw);
+  border: 1px solid rgba(100, 116, 139, 0.35);
+  border-radius: 8px;
+  background: #f8fafc;
+  color: #111827;
+  box-shadow: 0 20px 45px rgba(15, 23, 42, 0.28);
+}
+
+.heroic-resource-prompt__header {
+  padding: 14px 16px 8px;
+  border-bottom: 1px solid rgba(148, 163, 184, 0.35);
+}
+
+.heroic-resource-prompt__header h2 {
+  margin: 0;
+  font-size: 16px;
+  line-height: 1.2;
+}
+
+.heroic-resource-prompt__body {
+  padding: 14px 16px;
+  font-size: 14px;
+  line-height: 1.45;
+}
+
+.heroic-resource-prompt__body p {
+  margin: 0;
+}
+
+.heroic-resource-prompt__detail {
+  margin-top: 8px !important;
+  color: #475569;
+}
+
+.heroic-resource-prompt__actions {
+  display: flex;
+  justify-content: flex-end;
+  gap: 8px;
+  padding: 0 16px 16px;
+}
+
 .vtt-character-ability-list {
   position: absolute;
   left: 50%;

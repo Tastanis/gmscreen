@@ -292,7 +292,7 @@ For PC triggered actions, this is **always-on** once the character token is pres
 
 | event | When it fires | Useful filter fields |
 |---|---|---|
-| `damage` | A token takes damage from an automated ability | `whose`, `minAmount`, `maxAmount`, `damageType` (single or array) |
+| `damage` | A token takes damage from an automated ability | `whose`, `minAmount`, `maxAmount`, `damageType` (single or array), `includesSurge` |
 | `staminaChange` | A token's stamina changed via automation (damage or heal) | `whose`, `direction` (`down`/`up`/`either`) |
 | `turnStart` | A token becomes the active combatant | `whose` |
 | `turnEnd` | The active combatant's turn ends | `whose` |
@@ -301,7 +301,7 @@ For PC triggered actions, this is **always-on** once the character token is pres
 | `combatStart` | Combat starts | `whose` is usually omitted/`any` |
 | `combatEnd` | Combat ends | `whose` is usually omitted/`any` |
 | `move` | A token moves via normal player movement | `whose`, `leavesAdjacency`, `entersAdjacency`, `minDistance`, `maxDistance` |
-| `damageDealt` | Automated damage dealt by the caster | same as `damage`; predicates resolve `whose` from `sourceId` |
+| `damageDealt` | Automated damage dealt by the caster | same as `damage`; predicates resolve `whose` from `sourceId`; power-roll surge damage includes `includesSurge`, `surgeSpent`, and `surgeDamage` |
 | `forcedMovement` | A token is force moved by automation | `whose`, `targetWhose`, `minDistance`, `maxDistance`, `verb` |
 | `forcedMovementDealt` | A token force moves another token by automation | same as `forcedMovement`; predicates resolve `whose` from `sourceId` |
 | `powerRoll` | An automated power roll is accepted | `whose`, `targetWhose`, `actionKind`, `keywordsAny`, `costIncludes`, `attribute`, `tier`, `minTotal`, `maxTotal` |

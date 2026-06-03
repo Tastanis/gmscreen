@@ -11,7 +11,7 @@ For *how* to write JSON, see `AUTHORING.md`. This file is `what is supported`.
 | type | Implementation |
 |---|---|
 | `target` | Full |
-| `powerRoll` | Full. Supports `flatBonus` (literal roll bonus that bypasses attribute lookup — monster-friendly) and `whenWinded` overrides (see Universal Modifiers). |
+| `powerRoll` | Full. Supports `flatBonus` (literal roll bonus that bypasses attribute lookup — monster-friendly), `whenWinded` overrides (see Universal Modifiers), and the runtime surge button that spends caster surges for +2 damage each on the first damage effect from the accepted roll. |
 | `effect` | Full. Supports `whenWinded` overrides (see Universal Modifiers). |
 | `trigger` | Schema + registration against `AbilityTriggerBus`. PC trigger actions in the Triggers list are always-on once that character token is present in the active VTT scene; opening the character summary is not required. Authored `match` config fires the blue `!` overlay when its event/filter matches; click to resolve with the captured event payload. Direct-clicking the trigger ability in the tray resolves the post-trigger cards manually even when no event payload was captured. `autoResolve:true` immediately runs the trigger block's own `effects` instead of showing the ready overlay; use only for passive no-choice effects. Trigger cards embedded in main actions/maneuvers execute in card order, so an ability can hit/select a target and then arm a delayed watcher against that target. No structured `match` -> chat reminder fallback. |
 | `persistent` | Schema + registration as a board-side persistent zone. Requires a preceding area `target` block so the zone has a footprint. Ticks at owner's `tickAt` (startOfTurn or endOfTurn): deducts upkeep from owner's heroic resource, applies effects to every creature inside the zone footprint. `expiresAt` can auto-end the zone at owner start/end turn. Auto-ends on combat end or when owner can't pay upkeep. **In-memory only** — page reload wipes zones (Pass 2 will add persistence). |
@@ -269,7 +269,7 @@ Additional accepted events:
 
 | eventType | Payload / status |
 |---|---|
-| `damageDealt` | Same live payload and source as `damage`; useful for wording like "when you deal damage." Predicates resolve `whose` from `sourceId`; the damaged token is still `placementId`/`targetId`. |
+| `damageDealt` | Same live payload and source as `damage`; useful for wording like "when you deal damage." Predicates resolve `whose` from `sourceId`; the damaged token is still `placementId`/`targetId`. Automated power-roll surge damage includes `includesSurge:true`, `surgeSpent`, and `surgeDamage`. |
 | `forcedMovement` / `forcedMovementDealt` | Automated forced movement only. Use `forcedMovement` for "the target is force moved"; use `forcedMovementDealt` for "the target force moves a creature or object." |
 | `powerRoll` / `abilityTest` / `abilityRoll` | Automated runner rolls only. `powerRoll` is specific to power-roll cards; `abilityTest` is specific to ability-test effects; `abilityRoll` is fired for both. |
 | `potency` | Automated potency checks only. Useful for "uses an ability with potency" listeners. |

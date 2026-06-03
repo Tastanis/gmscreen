@@ -9,6 +9,7 @@
 | Add automation to an existing monster ability | Monster chunk, `vtt-json/INDEX.md`, `hooks/INDEX.md`, and the current ability row in the monster creator data/code |
 | Check whether an effect/hook exists | `../character_sheet/ability-automation/REGISTRY.md`, then `hooks/INDEX.md` |
 | Update automation schema/runtime | `UPDATE-GUIDE.md`, `../character_sheet/ability-automation/README.md`, `AUTHORING.md`, and `REGISTRY.md` |
+| Add heroic resource automation | `source/rules/classes/<class>.md`, then `../character_sheet/heroic-resource-automation/README.md`, then VTT event hooks in `../vtt/assets/js/ui/board-interactions.js` |
 | Work on monster tray/runtime behavior | `vtt-json/INDEX.md`, `hooks/INDEX.md`, `../vtt/assets/js/ui/monster-ability-tray.js`, `../vtt/assets/js/ui/monster-ability-runner-glue.js` |
 
 ## Source Text
@@ -22,6 +23,7 @@
 
 - Ability automation authoring: `../character_sheet/ability-automation/AUTHORING.md`
 - Supported fields, hooks, and effects: `../character_sheet/ability-automation/REGISTRY.md`
+- Heroic resource automation authoring: `../character_sheet/heroic-resource-automation/README.md`
 - Automation folder map and invariants: `../character_sheet/ability-automation/README.md`
 - Full monster import shape: `../strixhaven/monster-creator/MONSTER_JSON_IMPORT_TEMPLATE.md`
 
@@ -34,4 +36,3 @@ For "In All This Confusion":
 3. Confirm it is a Shadow Harlequin Mask triggered action: trigger is taking damage, effect halves the damage and teleports up to 4 squares after the triggering effect resolves.
 4. Open `../character_sheet/ability-automation/AUTHORING.md` and search for `trigger`, `halveTriggeringDamage`, and `teleport`.
 5. Open `../character_sheet/ability-automation/REGISTRY.md` to confirm the trigger event and hooks are supported.
-

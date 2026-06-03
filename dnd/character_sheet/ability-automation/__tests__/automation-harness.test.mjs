@@ -121,6 +121,73 @@ test('runner prompts for a target, accepts a power roll, and applies tier damage
   }
 });
 
+test('power roll surges spend from the caster and add matching damage metadata', async () => {
+  const harness = await createAbilityAutomationHarness({
+    attributes: { Might: 2 },
+    targets: [
+      { id: 'enemy-1', name: 'Iron Imp' },
+    ],
+  });
+  try {
+    const automation = {
+      schema: 'ability-automation/v3',
+      cards: [
+        {
+          type: 'target',
+          id: 'target-primary',
+          name: 'primary',
+          mode: 'token',
+          predicate: 'enemy',
+          count: { value: 1, mode: 'exact' },
+        },
+        {
+          type: 'powerRoll',
+          id: 'roll-surge-strike',
+          attribute: 'Might',
+          target: 'primary',
+          tiers: {
+            tier1: { effects: [{ kind: 'damage', amount: 3, attribute: 'M', damageType: 'fire' }] },
+            tier2: { effects: [{ kind: 'damage', amount: 6, attribute: 'M', damageType: 'fire' }] },
+            tier3: { effects: [{ kind: 'damage', amount: 9, attribute: 'M', damageType: 'fire' }] },
+          },
+        },
+      ],
+    };
+
+    const result = await harness.runAutomation({
+      automation,
+      action: { id: 'surge-strike', name: 'Surge Strike', actionLabel: 'Main Action' },
+      hero: { name: 'Harness Hero', surges: 2, resource: { value: 0 } },
+      targetSelections: [{ id: 'enemy-1', name: 'Iron Imp' }],
+      powerRollSurges: [2],
+      randomValues: [0.5, 0.5],
+    });
+
+    assert.deepEqual(result.calls.applySurgeGain[0], {
+      placementId: 'caster-1',
+      amount: -2,
+      abilityName: 'Surge Strike',
+    });
+    assert.equal(result.calls.applyDamage.length, 1);
+    assert.deepEqual(result.calls.applyDamage[0], {
+      placementId: 'enemy-1',
+      sourceId: 'caster-1',
+      amount: 12,
+      damageType: 'fire',
+      abilityName: 'Surge Strike',
+      actionId: 'surge-strike',
+      actionKind: 'main',
+      cost: '',
+      keywords: [],
+      includesSurge: true,
+      surgeSpent: 2,
+      surgeDamage: 4,
+    });
+  } finally {
+    harness.close();
+  }
+});
+
 test('runner can arm a structured trigger and resolve it from a captured trigger payload', async () => {
   const harness = await createAbilityAutomationHarness();
   try {

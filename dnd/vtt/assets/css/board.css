@@ -602,6 +602,28 @@
   -moz-appearance: textfield;
 }
 
+.vtt-damage-heal__select {
+  appearance: none;
+  border: 1px solid rgba(191, 166, 139, 0.4);
+  border-radius: var(--vtt-radius);
+  background:
+    linear-gradient(45deg, transparent 50%, rgba(226, 232, 240, 0.78) 50%) calc(100% - 1rem) 50% / 0.42rem 0.42rem no-repeat,
+    rgba(32, 22, 18, 0.82);
+  color: #f8fafc;
+  font: inherit;
+  font-size: 0.98rem;
+  font-weight: 700;
+  min-height: 2.45rem;
+  padding: 0.45rem 2rem 0.45rem 0.65rem;
+  width: 100%;
+}
+
+.vtt-damage-heal__select:focus {
+  border-color: rgba(248, 113, 113, 0.8);
+  outline: none;
+  box-shadow: 0 0 0 2px rgba(248, 113, 113, 0.22);
+}
+
 .vtt-damage-heal__stepper {
   display: flex;
   flex-direction: column;

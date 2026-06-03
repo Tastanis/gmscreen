@@ -2067,6 +2067,35 @@ body.edit-mode .respite-btn {
   gap: 10px;
 }
 
+.resource-automation-textarea {
+  width: 100%;
+  min-height: 360px;
+  resize: vertical;
+  font-family: "Cascadia Mono", "Consolas", monospace;
+  font-size: 12px;
+  line-height: 1.45;
+  border: 1px solid var(--border);
+  border-radius: 4px;
+  padding: 10px;
+  background: #fffaf1;
+  color: var(--text);
+}
+
+.resource-automation-actions {
+  display: flex;
+  justify-content: flex-end;
+  gap: 8px;
+}
+
+.resource-automation-error {
+  border: 1px solid #a94442;
+  border-radius: 4px;
+  padding: 8px 10px;
+  background: #f8dddd;
+  color: #7a1f1f;
+  font-size: 13px;
+}
+
 .skill-picker__group {
   border: 1px solid var(--border);
   border-radius: 4px;

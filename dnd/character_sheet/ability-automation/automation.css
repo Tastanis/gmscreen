@@ -257,6 +257,26 @@
   color: #fff6e8;
 }
 
+.power-roll-runner__surges {
+  align-items: center;
+  background: #f1e5d3;
+  border: 1px solid var(--border);
+  border-radius: 5px;
+  color: var(--text);
+  display: flex;
+  flex-wrap: wrap;
+  font-size: 0.8rem;
+  font-weight: 800;
+  gap: 6px;
+  padding: 5px 7px;
+}
+
+.power-roll-runner__surges strong {
+  color: #3c2f22;
+  min-width: 82px;
+  text-align: center;
+}
+
 .power-roll-runner__mini-btn {
   background: #f4eadc;
   border: 1px solid var(--border);

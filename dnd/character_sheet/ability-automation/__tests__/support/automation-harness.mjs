@@ -434,6 +434,16 @@ function createUiDriver(window, script) {
 
     if (acceptButton) {
       const host = document.getElementById('ability-automation-runner');
+      if (host && host.getAttribute('data-harness-surges-selected') !== 'true') {
+        const requestedSurges = Number(script.powerRollSurges[acceptedPowerRolls] || 0);
+        for (let index = 0; index < requestedSurges; index += 1) {
+          const surgeButton = document.querySelector('[data-power-roll-surge-adjust="1"]');
+          if (!surgeButton || surgeButton.disabled) break;
+          surgeButton.click();
+        }
+        host.setAttribute('data-harness-surges-selected', 'true');
+        if (requestedSurges > 0) return;
+      }
       if (host && host.getAttribute('data-harness-tier-selected') !== 'true') {
         const requestedTier = script.powerRollTiers[acceptedPowerRolls];
         if (requestedTier) {
@@ -496,6 +506,7 @@ export async function createAbilityAutomationHarness(options = {}) {
       promptAnswers: [...(runOptions.promptAnswers || options.promptAnswers || [])],
       choiceSelections: [...(runOptions.choiceSelections || options.choiceSelections || [])],
       powerRollTiers: [...(runOptions.powerRollTiers || options.powerRollTiers || [])],
+      powerRollSurges: [...(runOptions.powerRollSurges || options.powerRollSurges || [])],
       randomValues: [...(runOptions.randomValues || options.randomValues || [0.45, 0.45])],
       spendHeroicResourceResults: [...(runOptions.spendHeroicResourceResults || options.spendHeroicResourceResults || [])],
       recoveryValueResults: [...(runOptions.recoveryValueResults || options.recoveryValueResults || [])],
@@ -594,6 +605,19 @@ export async function createAbilityAutomationHarness(options = {}) {
       postChat(entry) {
         recorder.record('postChat', entry);
         return true;
+      },
+      applySurgeGain(payload) {
+        recorder.record('applySurgeGain', payload);
+        const currentSurges = Math.max(0, Number(context.hero?.surges) || 0);
+        const nextSurges = Math.max(0, currentSurges + Number(payload.amount || 0));
+        if (context.hero && typeof context.hero === 'object') {
+          context.hero.surges = nextSurges;
+        }
+        return {
+          applied: Number(payload.amount || 0),
+          current: nextSurges,
+          name: payload.placementId === 'caster-1' ? 'Harness Hero' : payload.placementId,
+        };
       },
       getAttributeBonus(name) {
         return Number(attrs[normalizeAttributeKey(name)] || 0);

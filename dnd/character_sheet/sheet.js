@@ -177,7 +177,7 @@ const defaultSheet = {
     victories: "",
     surges: "",
     surgesUsed: 0,
-    resource: { title: "Resource", value: 0, autoDice: "", allowNegative: false },
+    resource: { title: "Resource", value: 0, autoDice: "", allowNegative: false, automation: null },
     heroTokens: [false, false],
     stats: {
       might: 0,
@@ -242,6 +242,27 @@ function normalizeAutomationBlock(automation) {
     return window.AbilityAutomationSchema.normalizeAutomation(automation);
   }
   return deepClone(automation);
+}
+
+function hasResourceAutomation(automation) {
+  if (!automation || typeof automation !== "object") return false;
+  return Array.isArray(automation.rules) && automation.rules.length > 0;
+}
+
+function formatResourceAutomationJson(automation) {
+  if (!automation || typeof automation !== "object") {
+    return '{\n  "schema": "heroic-resource/v1",\n  "rules": []\n}';
+  }
+  return JSON.stringify(automation, null, 2);
+}
+
+function escapeHtml(value) {
+  return String(value ?? "")
+    .replace(/&/g, "&amp;")
+    .replace(/</g, "&lt;")
+    .replace(/>/g, "&gt;")
+    .replace(/"/g, "&quot;")
+    .replace(/'/g, "&#39;");
 }
 
 function deepClone(obj) {
@@ -1129,6 +1150,7 @@ function renderHeroPane() {
   const hero = sheetState.hero;
   const pane = document.getElementById("hero-pane");
   const isEditMode = document.body.classList.contains("edit-mode");
+  const resourceAutomationConfigured = hasResourceAutomation(hero.resource?.automation);
   const statCard = (label, key) => `
     <div class="stat-card">
       <label class="card__label">${label}</label>
@@ -1260,6 +1282,11 @@ function renderHeroPane() {
                     />
                     <span>Allow negative (Talent)</span>
                   </label>
+                  <button
+                    class="text-btn resource-automation-btn ${resourceAutomationConfigured ? "automation-action-btn--configured" : ""}"
+                    type="button"
+                    data-resource-automation
+                  >${resourceAutomationConfigured ? "Edit Resource Automation" : "Automate Resource"}</button>
                 </div>
               </div>`
             : ""
@@ -1954,7 +1981,9 @@ function bindResourceControls() {
     btn.addEventListener("click", () => {
       const result = rollAutoDice();
       if (result === null) return;
-      setResourceValue(getResourceValue() + result);
+      const current = getResourceValue();
+      setResourceValue(current + result.amount);
+      window.alert(`${sheetState.hero.resource?.title || "Resource"} ${result.label}: +${result.amount} (${current} -> ${getResourceValue()}).`);
     });
   });
 
@@ -1971,6 +2000,85 @@ function bindResourceControls() {
       queueAutoSave();
     });
   }
+
+  document.querySelectorAll("[data-resource-automation]").forEach((btn) => {
+    btn.addEventListener("click", () => {
+      openResourceAutomationEditor();
+    });
+  });
+}
+
+function closeResourceAutomationEditor() {
+  document.getElementById("resource-automation-modal")?.remove();
+}
+
+function openResourceAutomationEditor() {
+  closeResourceAutomationEditor();
+  const modal = document.createElement("div");
+  modal.id = "resource-automation-modal";
+  modal.classList.add("modal-overlay");
+  const currentJson = formatResourceAutomationJson(sheetState.hero.resource?.automation);
+  modal.innerHTML = `
+    <div class="modal resource-automation-modal" role="dialog" aria-modal="true">
+      <header class="modal__header">
+        <h2 class="modal__title">Heroic Resource Automation</h2>
+        <button class="icon-btn" type="button" data-close-resource-automation aria-label="Close resource automation editor">✕</button>
+      </header>
+      <div class="modal__body">
+        <textarea
+          class="resource-automation-textarea"
+          rows="18"
+          spellcheck="false"
+          data-resource-automation-json
+        >${escapeHtml(currentJson)}</textarea>
+        <div class="resource-automation-error" data-resource-automation-error hidden></div>
+        <div class="resource-automation-actions">
+          <button class="text-btn" type="button" data-clear-resource-automation>Clear</button>
+          <button class="text-btn" type="button" data-save-resource-automation>Save Automation</button>
+        </div>
+      </div>
+    </div>
+  `;
+  document.body.appendChild(modal);
+
+  const close = () => closeResourceAutomationEditor();
+  modal.addEventListener("click", (event) => {
+    if (event.target === modal) close();
+  });
+  modal.querySelectorAll("[data-close-resource-automation]").forEach((button) => {
+    button.addEventListener("click", close);
+  });
+  modal.querySelector("[data-clear-resource-automation]")?.addEventListener("click", async () => {
+    sheetState.hero.resource.automation = null;
+    close();
+    renderHeroPane();
+    bindResourceControls();
+    await saveSheet();
+  });
+  modal.querySelector("[data-save-resource-automation]")?.addEventListener("click", async () => {
+    const textarea = modal.querySelector("[data-resource-automation-json]");
+    const errorBox = modal.querySelector("[data-resource-automation-error]");
+    const raw = textarea?.value?.trim() || "";
+    let parsed = null;
+    if (raw) {
+      try {
+        parsed = JSON.parse(raw);
+      } catch (error) {
+        if (errorBox) {
+          errorBox.hidden = false;
+          errorBox.textContent = `Invalid JSON: ${error.message}`;
+        }
+        return;
+      }
+    }
+    const rules = Array.isArray(parsed?.rules) ? parsed.rules : [];
+    sheetState.hero.resource.automation = rules.length ? parsed : null;
+    close();
+    renderHeroPane();
+    bindResourceControls();
+    await saveSheet();
+  });
+  modal.querySelector("[data-resource-automation-json]")?.focus();
 }
 
 function renderBars() {

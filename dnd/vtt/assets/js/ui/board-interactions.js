@@ -20,6 +20,12 @@ import {
 } from './automation-trigger-lifetime.js';
 import { getPowerRollSuggestions } from './power-roll-suggestions.js';
 import {
+  formatHeroicResourcePrompt,
+  normalizeHeroicResourceAutomation,
+  resolveHeroicResourceAmount,
+  ruleMatchesHeroicResourceEvent,
+} from './heroic-resource-automation.js';
+import {
   setDrawings as setDrawingToolDrawings,
   isDrawModeActive,
   isDrawingInProgress,
@@ -2260,6 +2266,7 @@ export function mountBoardInteractions(store, routes = {}) {
   // via `register({tokenId, eventType, predicate, abilityId})`.
   const triggerRegistry = { byEvent: new Map(), byToken: new Map() };
   const automationScopedFlags = new Set();
+  let heroicResourcePromptQueue = Promise.resolve();
 
   function scopedFlagKey(payload) {
     const scope = String(payload?.scope || 'round').trim().toLowerCase();
@@ -2441,6 +2448,9 @@ export function mountBoardInteractions(store, routes = {}) {
         console.warn(`[VTT] automation aura ${eventType} failed`, err);
       });
     }
+    processHeroicResourceAutomationEvent(eventType, payload).catch((err) => {
+      console.warn(`[VTT] heroic resource automation ${eventType} failed`, err);
+    });
   }
 
   function resolveAutoTriggerPlacements(entry, payload = {}) {
@@ -2561,6 +2571,225 @@ export function mountBoardInteractions(store, routes = {}) {
     if (eventType === 'combatEnd') {
       triggerUnregisterAllAuthored();
     }
+  }
+
+  function getHeroicResourceCandidatePlacements(eventType, payload = {}) {
+    const state = boardApi.getState?.() ?? {};
+    const placements = getActiveScenePlacements(state)
+      .filter((placement) => placement?.id && isPlacementPlayerCombatant(placement));
+    if (eventType === 'turnStart' || eventType === 'turnEnd') {
+      const placementId = payload?.placementId || payload?.activeCombatantId || '';
+      return placements.filter((placement) => placement.id === placementId);
+    }
+    const seenProfiles = new Set();
+    return placements.filter((placement) => {
+      const profileId = getAutomationProfileIdForPlacement(placement.id);
+      if (!profileId || seenProfiles.has(profileId)) return false;
+      seenProfiles.add(profileId);
+      return true;
+    });
+  }
+
+  function getHeroicResourceRuleEnv(placementId) {
+    return {
+      casterId: placementId,
+      casterTeam: getTeamForPlacementId(placementId),
+      getTeamForPlacementId,
+      getJudgedTargetForSource,
+      getPlacementMark,
+      getPlacementFromStore,
+      getSquareDistance(idA, idB) {
+        const a = idA ? getPlacementFromStore(idA) : null;
+        const b = idB ? getPlacementFromStore(idB) : null;
+        if (!a || !b) return null;
+        return automationChebyshevDistance(getPlacementCenter(a), getPlacementCenter(b));
+      },
+    };
+  }
+
+  function getSheetHeroicResourceContext(sheet = {}, resource = {}) {
+    const hero = sheet.hero && typeof sheet.hero === 'object' ? sheet.hero : {};
+    return {
+      level: Number.parseInt(hero.level ?? 0, 10) || 0,
+      victories: parseVictoryValue(hero.victories ?? 0),
+      currentResource: Number.parseInt(resource.value ?? 0, 10) || 0,
+    };
+  }
+
+  function heroicResourceFloor(hero = {}, resource = {}) {
+    if (!resource?.allowNegative) return 0;
+    const reason = Number(hero?.stats?.reason) || 0;
+    return -(1 + reason);
+  }
+
+  function normalizeHeroicResourceChange(rule, sheet, amount) {
+    const hero = sheet.hero && typeof sheet.hero === 'object' ? sheet.hero : {};
+    const resource = hero.resource && typeof hero.resource === 'object' ? hero.resource : {};
+    const current = Number.parseInt(resource.value ?? 0, 10) || 0;
+    const floor = heroicResourceFloor(hero, resource);
+    let next = current;
+    if (rule.effect.kind === 'set') {
+      next = amount;
+    } else if (rule.effect.kind === 'lose') {
+      next = current - amount;
+    } else {
+      next = current + amount;
+    }
+    next = Math.max(floor, next);
+    return {
+      current,
+      next,
+      delta: next - current,
+      resourceName: resource.title || sheet?.sidebar?.resource?.title || 'Resource',
+    };
+  }
+
+  function markHeroicResourceRuleLimit(rule, placementId, appliedTargetId = '') {
+    if (!rule?.limit) return false;
+    const key = scopedFlagKey({
+      scope: rule.limit.scope,
+      key: rule.limit.key,
+      sourceId: placementId,
+      targetId: rule.limit.target === 'eventTarget' ? appliedTargetId || placementId : placementId,
+    });
+    if (!key) return false;
+    automationScopedFlags.add(key);
+    return true;
+  }
+
+  function hasHeroicResourceRuleLimit(rule, placementId, appliedTargetId = '') {
+    if (!rule?.limit) return false;
+    const key = scopedFlagKey({
+      scope: rule.limit.scope,
+      key: rule.limit.key,
+      sourceId: placementId,
+      targetId: rule.limit.target === 'eventTarget' ? appliedTargetId || placementId : placementId,
+    });
+    return Boolean(key && automationScopedFlags.has(key));
+  }
+
+  function queueHeroicResourcePrompt(config) {
+    heroicResourcePromptQueue = heroicResourcePromptQueue
+      .catch(() => {})
+      .then(() => showHeroicResourcePrompt(config));
+    return heroicResourcePromptQueue;
+  }
+
+  function showHeroicResourcePrompt({
+    title = 'Heroic Resource',
+    message = '',
+    detail = '',
+    applyLabel = 'Apply',
+    dismissLabel = 'Dismiss',
+  } = {}) {
+    return new Promise((resolve) => {
+      const host = document.createElement('div');
+      host.className = 'heroic-resource-prompt';
+      host.innerHTML = `
+        <div class="heroic-resource-prompt__modal" role="dialog" aria-modal="true">
+          <header class="heroic-resource-prompt__header">
+            <h2>${escapeHtml(title)}</h2>
+          </header>
+          <div class="heroic-resource-prompt__body">
+            <p>${escapeHtml(message)}</p>
+            ${detail ? `<p class="heroic-resource-prompt__detail">${escapeHtml(detail)}</p>` : ''}
+          </div>
+          <div class="heroic-resource-prompt__actions">
+            <button type="button" class="btn btn--ghost" data-heroic-resource-dismiss>${escapeHtml(dismissLabel)}</button>
+            <button type="button" class="btn" data-heroic-resource-apply>${escapeHtml(applyLabel)}</button>
+          </div>
+        </div>
+      `;
+      const cleanup = (applied) => {
+        host.remove();
+        resolve({ applied });
+      };
+      host.querySelector('[data-heroic-resource-dismiss]')?.addEventListener('click', () => cleanup(false));
+      host.querySelector('[data-heroic-resource-apply]')?.addEventListener('click', () => cleanup(true));
+      document.body.appendChild(host);
+      host.querySelector('[data-heroic-resource-apply]')?.focus();
+    });
+  }
+
+  async function processHeroicResourceAutomationEvent(eventType, payload = {}) {
+    if (!eventType || !isGmUser()) return;
+    const placements = getHeroicResourceCandidatePlacements(eventType, payload);
+    if (!placements.length) return;
+    for (const placement of placements) {
+      const profileId = getAutomationProfileIdForPlacement(placement.id);
+      if (!profileId) continue;
+      const sheet = await getAutomationSheetForPlacement(placement.id);
+      const resource = sheet?.hero?.resource;
+      const automation = normalizeHeroicResourceAutomation(resource?.automation);
+      if (!automation.rules.length) continue;
+      const env = getHeroicResourceRuleEnv(placement.id);
+      for (const rule of automation.rules) {
+        if (!ruleMatchesHeroicResourceEvent(rule, eventType, payload, env)) continue;
+        const eventTargetId = payload?.targetId || payload?.placementId || placement.id;
+        if (hasHeroicResourceRuleLimit(rule, placement.id, eventTargetId)) continue;
+        await offerHeroicResourceRule({
+          eventType,
+          payload,
+          placement,
+          profileId,
+          sheet,
+          resource,
+          rule,
+          eventTargetId,
+        });
+      }
+    }
+  }
+
+  async function offerHeroicResourceRule({ eventType, payload, placement, profileId, sheet, resource, rule, eventTargetId }) {
+    const context = getSheetHeroicResourceContext(sheet, resource);
+    const resolved = resolveHeroicResourceAmount(rule.effect.amount, context);
+    const amount = Math.max(0, Number.parseInt(resolved.amount, 10) || 0);
+    if (!amount && rule.effect.kind !== 'set') return;
+    const change = normalizeHeroicResourceChange(rule, sheet, amount);
+    const action = rule.effect.kind === 'set'
+      ? 'Set'
+      : rule.effect.kind === 'lose'
+        ? 'Lose'
+        : rule.effect.kind === 'damage'
+          ? 'Take'
+          : 'Gain';
+    const resourceName = change.resourceName;
+    const ruleReason = rule.id || eventType;
+    const message = formatHeroicResourcePrompt(rule.prompt, {
+      action,
+      amount,
+      resource: resourceName,
+      reason: ruleReason,
+      current: change.current,
+      next: change.next,
+      round: combatRound,
+    }) || `${action} ${amount} ${resourceName}: ${ruleReason}.`;
+    if (rule.limit?.markOn === 'offered') {
+      markHeroicResourceRuleLimit(rule, placement.id, eventTargetId);
+    }
+    const promptResult = await queueHeroicResourcePrompt({
+      title: `${tokenLabel(placement) || 'Hero'} - ${resourceName}`,
+      message,
+      detail: rule.effect.kind === 'damage'
+        ? `${tokenLabel(placement) || 'Hero'} will take ${amount} damage.`
+        : `${change.current} -> ${change.next}`,
+      applyLabel: rule.effect.kind === 'damage' ? 'Apply Damage' : 'Apply',
+    });
+    if (!promptResult?.applied) return;
+    if (rule.limit?.markOn === 'applied') {
+      markHeroicResourceRuleLimit(rule, placement.id, eventTargetId);
+    }
+    if (rule.effect.kind === 'damage') {
+      applyDamageHealToPlacement(placement.id, 'damage', amount);
+      return;
+    }
+    const hero = sheet.hero && typeof sheet.hero === 'object' ? sheet.hero : {};
+    const nextResource = hero.resource && typeof hero.resource === 'object' ? hero.resource : {};
+    nextResource.value = change.next;
+    hero.resource = nextResource;
+    sheet.hero = hero;
+    await saveAutomationSheetForProfile(profileId, sheet, 'resource');
   }
 
   function markTriggerReady(placementId, abilityId, sourceId = null, eventSnapshot = null) {
@@ -5717,7 +5946,7 @@ export function mountBoardInteractions(store, routes = {}) {
     { passive: false }
   );
 
-  mapSurface.addEventListener('pointerdown', (event) => {
+  mapSurface.addEventListener('pointerdown', async (event) => {
     if (pendingAutomationArea) {
       if (handleAutomationAreaPointerDown(event)) {
         event.stopImmediatePropagation();
@@ -5843,24 +6072,36 @@ export function mountBoardInteractions(store, routes = {}) {
         return;
       }
 
-      const result = applyDamageHealToPlacement(placement.id, action.mode, action.amount);
+      const result = action.mode === 'damage'
+        ? await applyManualDamageToPlacement(placement.id, action.amount, action.damageType || '')
+        : applyDamageHealToPlacement(placement.id, action.mode, action.amount);
       if (!result) {
         updateStatus('Unable to update hit points for that token.');
         return;
       }
-      floatStaminaDelta(placement.id, result.change || action.amount, action.mode === 'damage' ? 'damage' : 'heal');
+      if ((result.change || result.amount || 0) > 0) {
+        floatStaminaDelta(placement.id, result.change || result.amount || action.amount, action.mode === 'damage' ? 'damage' : 'heal');
+      }
 
       const { name, current, max, change } = result;
-      const effectLabel = action.mode === 'damage' ? 'damage' : 'HP';
+      const damageTypeLabel = action.mode === 'damage' && result.damageType
+        ? `${formatDamageTypeLabel(result.damageType)} `
+        : '';
+      const effectLabel = action.mode === 'damage' ? `${damageTypeLabel}damage` : 'HP';
       const verb = action.mode === 'damage' ? 'takes' : 'recovers';
       const maxDisplay = max !== null ? max : DEFAULT_HP_PLACEHOLDER;
       const hpDisplay = max !== null ? `${current}/${maxDisplay}` : `${current}`;
       const suffix = action.mode === 'damage'
         ? ` (${hpDisplay} HP remaining).`
         : ` (${hpDisplay} HP).`;
-      updateStatus(`${name} ${verb} ${change} ${effectLabel}${suffix}`);
+      const adjustmentText = action.mode === 'damage'
+        ? formatManualDamageAdjustment(result)
+        : '';
+      updateStatus(`${name} ${verb} ${change} ${effectLabel}${adjustmentText}${suffix}`);
       if (typeof window !== 'undefined' && typeof window.setTimeout === 'function') {
-        const noun = action.mode === 'damage' ? 'damage' : 'healing';
+        const noun = action.mode === 'damage'
+          ? `${damageTypeLabel.toLowerCase()}damage`
+          : 'healing';
         window.setTimeout(() => {
           if (pendingDamageHeal) {
             updateStatus(`Click a token to apply ${action.amount} ${noun}.`);
@@ -14938,6 +15179,26 @@ export function mountBoardInteractions(store, routes = {}) {
 
     container.appendChild(field);
 
+    const typeField = document.createElement('label');
+    typeField.className = 'vtt-damage-heal__field';
+
+    const typeLabel = document.createElement('span');
+    typeLabel.className = 'vtt-damage-heal__label';
+    typeLabel.textContent = 'Damage Type';
+    typeField.appendChild(typeLabel);
+
+    const damageTypeSelect = document.createElement('select');
+    damageTypeSelect.className = 'vtt-damage-heal__select';
+    damageTypeSelect.setAttribute('aria-label', 'Damage type');
+    getManualDamageTypeOptions().forEach(({ value, label }) => {
+      const option = document.createElement('option');
+      option.value = value;
+      option.textContent = label;
+      damageTypeSelect.appendChild(option);
+    });
+    typeField.appendChild(damageTypeSelect);
+    container.appendChild(typeField);
+
     const presetContainer = document.createElement('div');
     presetContainer.className = 'vtt-damage-heal__presets';
 
@@ -14991,6 +15252,7 @@ export function mountBoardInteractions(store, routes = {}) {
       container,
       inputRow,
       amountInput,
+      damageTypeSelect,
       damageButton,
       healButton,
       closeButton,
@@ -15016,7 +15278,8 @@ export function mountBoardInteractions(store, routes = {}) {
         updateDamageHealActionState();
         return;
       }
-      beginDamageHealTargeting(mode, amount);
+      const damageType = mode === 'damage' ? normalizeAutomationDamageType(damageTypeSelect.value) : '';
+      beginDamageHealTargeting(mode, amount, damageType);
       setDamageHealMode(mode);
       focusBoard();
     };
@@ -15037,6 +15300,13 @@ export function mountBoardInteractions(store, routes = {}) {
       }
       setDamageHealMode(null);
       updateDamageHealActionState();
+    };
+
+    const handleDamageTypeChange = () => {
+      if (pendingDamageHeal?.mode === 'damage') {
+        pendingDamageHeal.damageType = normalizeAutomationDamageType(damageTypeSelect.value);
+        updateDamageHealTargetingStatus(pendingDamageHeal);
+      }
     };
 
     const handleClose = (event) => {
@@ -15090,6 +15360,7 @@ export function mountBoardInteractions(store, routes = {}) {
 
     amountInput.addEventListener('input', handleInput);
     amountInput.addEventListener('change', handleInput);
+    damageTypeSelect.addEventListener('change', handleDamageTypeChange);
     stepUp.addEventListener('click', handleStepUp);
     stepDown.addEventListener('click', handleStepDown);
     presetElements.forEach(({ button }, index) => {
@@ -15107,6 +15378,7 @@ export function mountBoardInteractions(store, routes = {}) {
     damageHealUi.cleanup = () => {
       amountInput.removeEventListener('input', handleInput);
       amountInput.removeEventListener('change', handleInput);
+      damageTypeSelect.removeEventListener('change', handleDamageTypeChange);
       stepUp.removeEventListener('click', handleStepUp);
       stepDown.removeEventListener('click', handleStepDown);
       presetElements.forEach(({ button }, index) => {
@@ -15182,7 +15454,7 @@ export function mountBoardInteractions(store, routes = {}) {
     }
   }
 
-  function beginDamageHealTargeting(mode, amount) {
+  function beginDamageHealTargeting(mode, amount, damageType = '') {
     if (mode !== 'damage' && mode !== 'heal') {
       return;
     }
@@ -15201,14 +15473,24 @@ export function mountBoardInteractions(store, routes = {}) {
     pendingDamageHeal = {
       mode,
       amount: normalizedAmount,
+      damageType: mode === 'damage' ? normalizeAutomationDamageType(damageType) : '',
       previousStatus,
     };
 
     clearDamageHealStatusTimeout();
 
     const verb = mode === 'damage' ? 'apply' : 'grant';
-    const noun = mode === 'damage' ? 'damage' : 'healing';
-    updateStatus(`Click a token to ${verb} ${normalizedAmount} ${noun}. Right-click or press Escape to cancel.`);
+    updateDamageHealTargetingStatus(pendingDamageHeal, verb);
+  }
+
+  function updateDamageHealTargetingStatus(action, verbOverride = '') {
+    if (!action) return;
+    const verb = verbOverride || (action.mode === 'damage' ? 'apply' : 'grant');
+    const typeLabel = action.mode === 'damage' && action.damageType
+      ? `${formatDamageTypeLabel(action.damageType)} `
+      : '';
+    const noun = action.mode === 'damage' ? `${typeLabel.toLowerCase()}damage` : 'healing';
+    updateStatus(`Click a token to ${verb} ${action.amount} ${noun}. Right-click or press Escape to cancel.`);
   }
 
   function cancelDamageHealTargeting({ restoreMessage = true } = {}) {
@@ -15400,6 +15682,43 @@ export function mountBoardInteractions(store, routes = {}) {
     }
 
     return null;
+  }
+
+  function getManualDamageTypeOptions() {
+    return [
+      { value: '', label: 'Untyped' },
+      { value: 'acid', label: 'Acid' },
+      { value: 'cold', label: 'Cold' },
+      { value: 'corruption', label: 'Corruption' },
+      { value: 'fire', label: 'Fire' },
+      { value: 'holy', label: 'Holy' },
+      { value: 'lightning', label: 'Lightning' },
+      { value: 'poison', label: 'Poison' },
+      { value: 'psychic', label: 'Psychic' },
+      { value: 'sonic', label: 'Sonic' },
+    ];
+  }
+
+  function formatDamageTypeLabel(value) {
+    const normalized = normalizeAutomationDamageType(value);
+    if (!normalized) return 'Untyped';
+    return normalized
+      .split(/[\s-]+/)
+      .filter(Boolean)
+      .map((part) => `${part.charAt(0).toUpperCase()}${part.slice(1)}`)
+      .join(' ');
+  }
+
+  function formatManualDamageAdjustment(result = {}) {
+    const original = Number.parseInt(result.originalAmount ?? result.amount ?? result.change ?? 0, 10) || 0;
+    const finalAmount = Number.parseInt(result.amount ?? result.change ?? 0, 10) || 0;
+    const vulnerability = Number.parseInt(result.vulnerability ?? 0, 10) || 0;
+    const immunity = Number.parseInt(result.immunity ?? 0, 10) || 0;
+    const parts = [];
+    if (vulnerability > 0) parts.push(`+${vulnerability} weakness`);
+    if (immunity > 0) parts.push(`-${immunity} immunity`);
+    if (!parts.length) return '';
+    return ` (${original} ${parts.join(' ')} = ${finalAmount})`;
   }
 
   function handleAutomationTargetRequest(event) {
@@ -15998,6 +16317,11 @@ export function mountBoardInteractions(store, routes = {}) {
     // takes damage" predicates; `staminaChange` covers the broader hook for
     // anything watching for stamina deltas.
     try {
+      const surgeEventFields = {
+        includesSurge: Boolean(payload.includesSurge || payload.surgeSpent || payload.surgeCount),
+        surgeSpent: Number.parseInt(payload.surgeSpent ?? payload.surgeCount ?? 0, 10) || 0,
+        surgeDamage: Number.parseInt(payload.surgeDamage ?? 0, 10) || 0,
+      };
       triggerFire('damage', {
         placementId: payload.placementId,
         targetId: payload.placementId,
@@ -16010,6 +16334,7 @@ export function mountBoardInteractions(store, routes = {}) {
         actionKind: payload.actionKind || '',
         cost: payload.cost || payload.resourceCost || '',
         keywords: Array.isArray(payload.keywords) ? payload.keywords : [],
+        ...surgeEventFields,
       });
       triggerFire('damageDealt', {
         placementId: payload.placementId,
@@ -16023,6 +16348,7 @@ export function mountBoardInteractions(store, routes = {}) {
         actionKind: payload.actionKind || '',
         cost: payload.cost || payload.resourceCost || '',
         keywords: Array.isArray(payload.keywords) ? payload.keywords : [],
+        ...surgeEventFields,
       });
       const afterStamina = Number.isFinite(result.current) ? result.current : null;
       const delta = beforeStamina !== null && afterStamina !== null ? afterStamina - beforeStamina : -adjustedAmount;
@@ -16052,6 +16378,9 @@ export function mountBoardInteractions(store, routes = {}) {
       originalAmount: amount,
       amount: adjustedAmount,
       damageType: payload.damageType || '',
+      includesSurge: Boolean(payload.includesSurge || payload.surgeSpent || payload.surgeCount),
+      surgeSpent: Number.parseInt(payload.surgeSpent ?? payload.surgeCount ?? 0, 10) || 0,
+      surgeDamage: Number.parseInt(payload.surgeDamage ?? 0, 10) || 0,
       immunity: adjustment.immunity,
       vulnerability: adjustment.vulnerability,
       hidden: isAutomationPlacementHidden(resultPlacement),
@@ -16306,6 +16635,29 @@ export function mountBoardInteractions(store, routes = {}) {
     };
   }
 
+  async function applyManualDamageToPlacement(placementId, amount, damageType = '') {
+    const normalizedType = normalizeAutomationDamageType(damageType);
+    const originalAmount = parseDamageHealAmount(amount);
+    if (!placementId || !originalAmount) {
+      return null;
+    }
+    const adjustment = await getAutomationDamageAdjustment(placementId, normalizedType);
+    const adjustedAmount = Math.max(0, originalAmount + adjustment.vulnerability - adjustment.immunity);
+    const result = adjustedAmount > 0
+      ? applyDamageHealToPlacement(placementId, 'damage', adjustedAmount)
+      : getZeroDamageResult(placementId);
+    if (!result) return null;
+    return {
+      ...result,
+      amount: adjustedAmount,
+      originalAmount,
+      damageType: normalizedType,
+      immunity: adjustment.immunity,
+      vulnerability: adjustment.vulnerability,
+      change: adjustedAmount,
+    };
+  }
+
   function sumConditionDamageAdjustments(placementId, damageType) {
     const placement = getPlacementFromStore(placementId);
     const conditions = Array.isArray(placement?.conditions)
@@ -16395,7 +16747,7 @@ export function mountBoardInteractions(store, routes = {}) {
     return Number.isFinite(parsed) && parsed > 0 ? parsed : null;
   }
 
-  async function saveAutomationSheetForProfile(profileId, sheet) {
+  async function saveAutomationSheetForProfile(profileId, sheet, change = 'recovery') {
     if (!profileId || !sheet) return false;
     const endpoint = typeof routes?.sheet === 'string' && routes.sheet ? routes.sheet : '/dnd/character_sheet/handler.php';
     const body = new URLSearchParams();
@@ -16413,8 +16765,18 @@ export function mountBoardInteractions(store, routes = {}) {
       const saved = Boolean(response.ok && payload?.success !== false);
       if (saved) {
         if (characterSummaryCache instanceof Map) characterSummaryCache.set(profileId, sheet);
+        if (typeof BroadcastChannel === 'function') {
+          const channel = new BroadcastChannel('vtt-character-sheet-sync');
+          channel.postMessage({
+            type: 'character-sheet-sync',
+            source: 'vtt',
+            character: profileId,
+            change,
+          });
+          channel.close();
+        }
         document.dispatchEvent(new CustomEvent('vtt:character-sheet-updated', {
-          detail: { characterId: profileId, change: 'recovery' },
+          detail: { characterId: profileId, change },
         }));
       }
       return saved;
