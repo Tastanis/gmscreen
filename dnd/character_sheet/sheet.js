@@ -436,6 +436,7 @@ function normalizeCommonThings(list) {
 
 let sheetState = deepClone(defaultSheet);
 let activeCharacter = "";
+let sheetLoadBlocked = false;
 const expandedActionCards = new Set();
 
 function mergeWithDefaults(data) {
@@ -611,14 +612,6 @@ function parseStaticAutoResource(value) {
   if (!match) return null;
   const amount = Number(match[1]);
   return Number.isFinite(amount) && amount > 0 ? amount : null;
-}
-
-function resolveAutoResourceGain(value) {
-  const raw = String(value || "").trim();
-  const sides = parseAutoDice(raw);
-  if (!sides) return null;
-  const roll = Math.floor(Math.random() * sides) + 1;
-  return { amount: roll, label: `rolled ${raw.toLowerCase()} = ${roll}` };
 }
 
 function resolveAutoResourceGain(value) {
@@ -3562,6 +3555,41 @@ function updateHeading() {
   heading.innerHTML = name + (details ? ` <span class="hero-heading-details">${details}</span>` : "");
 }
 
+function showSheetLoadError(message) {
+  sheetLoadBlocked = true;
+  const heading = document.getElementById("hero-name-heading");
+  if (heading) {
+    heading.textContent = "Character Sheet Unavailable";
+  }
+
+  document.querySelectorAll(".pane").forEach((pane) => {
+    pane.classList.add("is-hidden");
+    pane.innerHTML = "";
+  });
+
+  const heroPane = document.getElementById("hero-pane");
+  if (heroPane) {
+    heroPane.classList.remove("is-hidden");
+    heroPane.innerHTML = `
+      <div class="sheet-load-error">
+        <h2>Could not load this character sheet.</h2>
+        <p>${escapeHtml(message || "The server did not return sheet data.")}</p>
+        <p>Sign in as GM or as this character, then reopen the sheet.</p>
+      </div>
+    `;
+  }
+
+  document.querySelectorAll(".sidebar__section").forEach((section) => {
+    section.innerHTML = "";
+  });
+
+  const editToggle = document.getElementById("edit-toggle");
+  if (editToggle) {
+    editToggle.checked = false;
+    editToggle.disabled = true;
+  }
+}
+
 function toggleEditMode(enabled) {
   document.body.classList.toggle("edit-mode", enabled);
   document.querySelectorAll(".edit-field").forEach((input) => {
@@ -3617,14 +3645,17 @@ async function loadSheet() {
 
     const result = await response.json();
     if (result.success && result.data) {
+      sheetLoadBlocked = false;
       sheetState = mergeWithDefaults(result.data);
     } else {
-      sheetState = deepClone(defaultSheet);
       console.warn("Failed to load sheet", result.error);
+      showSheetLoadError(result.error || "Failed to load sheet.");
+      return;
     }
   } catch (error) {
     console.error("Error loading sheet", error);
-    sheetState = deepClone(defaultSheet);
+    showSheetLoadError(error?.message || "Network error while loading sheet.");
+    return;
   }
 
   renderAll();
@@ -3632,6 +3663,8 @@ async function loadSheet() {
 }
 
 async function saveSheet() {
+  if (sheetLoadBlocked) return;
+
   const payload = new URLSearchParams();
   payload.append("action", "save");
   if (activeCharacter) {

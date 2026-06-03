@@ -239,6 +239,23 @@ body {
   padding: 12px;
 }
 
+.sheet-load-error {
+  border: 1px solid #9f3f34;
+  background: #f4d8d1;
+  color: #5b2019;
+  border-radius: 4px;
+  padding: 14px 16px;
+}
+
+.sheet-load-error h2 {
+  margin: 0 0 8px;
+  font-size: 18px;
+}
+
+.sheet-load-error p {
+  margin: 6px 0 0;
+}
+
 .pane.is-hidden {
   display: none;
 }
