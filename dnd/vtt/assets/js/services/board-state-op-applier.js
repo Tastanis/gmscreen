@@ -301,7 +301,12 @@ export function applyBoardStateOpLocally(boardState, op) {
     let combat = normalizeCombatOpPayload(op.combat);
     const existing =
       sceneState.combat && typeof sceneState.combat === 'object' ? sceneState.combat : null;
-    const endsActiveCombat = Boolean(existing?.active) && isExplicitInactiveCombatPayload(op.combat);
+    const explicitEndCombat = Boolean(existing?.active) && isExplicitInactiveCombatPayload(op.combat);
+    const endCombatEncounterMatches = combatEncounterMatches(op.combat, existing);
+    if (explicitEndCombat && !endCombatEncounterMatches) {
+      return false;
+    }
+    const endsActiveCombat = explicitEndCombat && endCombatEncounterMatches;
     if (existing && !endsActiveCombat && !shouldApplyCombatPayload(combat, existing)) {
       return false;
     }
@@ -427,6 +432,7 @@ function normalizeCombatOpPayload(raw) {
     turnPhase: normalizeCombatTurnPhase(raw.turnPhase ?? raw.phase, active, activeCombatantId),
     roundTurnCount: normalizeNonNegativeInt(raw.roundTurnCount, 0),
     malice: normalizeNonNegativeInt(raw.malice ?? raw.maliceCount, 0),
+    encounterId: normalizeNullableString(raw.encounterId ?? raw.combatEncounterId),
     updatedAt: normalizeNonNegativeInt(raw.updatedAt, Date.now()),
     sequence: normalizeNonNegativeInt(raw.sequence ?? raw.seq, 0),
     turnLock: normalizeCombatTurnLock(raw.turnLock),
@@ -469,6 +475,15 @@ function isExplicitInactiveCombatPayload(raw) {
     return !normalizeBoolean(raw.isActive, false);
   }
   return false;
+}
+
+function combatEncounterMatches(incomingRaw, existing) {
+  const existingEncounterId = normalizeNullableString(existing?.encounterId ?? existing?.combatEncounterId);
+  const incomingEncounterId = normalizeNullableString(incomingRaw?.encounterId ?? incomingRaw?.combatEncounterId);
+  if (!existingEncounterId || !incomingEncounterId) {
+    return true;
+  }
+  return existingEncounterId === incomingEncounterId;
 }
 
 function advanceAcceptedCombatPayload(incoming, existing) {

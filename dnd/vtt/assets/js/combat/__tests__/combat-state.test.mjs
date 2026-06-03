@@ -69,11 +69,11 @@ describe('combat state normalization', () => {
     assert.deepEqual(state.completedCombatantIds, ['token-1', 'token-2']);
   });
 
-  test('combat team normalization preserves live board defaults', () => {
+  test('combat team normalization rejects invalid values instead of defaulting', () => {
     assert.equal(normalizeCombatTeam('enemy'), 'enemy');
     assert.equal(normalizeCombatTeam('ally'), 'ally');
-    assert.equal(normalizeCombatTeam(null), 'ally');
-    assert.equal(normalizeCombatTeam('neutral'), 'ally');
+    assert.equal(normalizeCombatTeam(null), null);
+    assert.equal(normalizeCombatTeam('neutral'), null);
   });
 });
 
@@ -109,11 +109,13 @@ describe('combat snapshots', () => {
       currentTeam: 'ally',
       lastTeam: 'enemy',
       sequence: 11,
+      encounterId: 'encounter-1',
       updatedAt: 1234,
       groups: [{ representativeId: 'leader', memberIds: ['member-1', 'leader'] }],
     });
 
     assert.equal(snapshot.sequence, 12);
+    assert.equal(snapshot.encounterId, 'encounter-1');
     assert.equal(snapshot.updatedAt, 1234);
     assert.equal(snapshot.turnPhase, TURN_PHASE.ACTIVE);
     assert.deepEqual(snapshot.completedCombatantIds, ['token-2', 'token-3']);

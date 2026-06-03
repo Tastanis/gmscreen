@@ -1381,7 +1381,13 @@ function applyBoardStateOp(array $state, array $op, array $context = []): array
         $incomingCombat = normalizeCombatStatePayload($rawCombat);
         $existingCombat = $state['sceneState'][$sceneId]['combat'] ?? [];
         $hasExistingCombat = is_array($existingCombat) && !empty($existingCombat);
-        $isEndCombat = isExplicitInactiveCombatStatePayload($rawCombat);
+        $isExplicitEndCombat = $hasExistingCombat && isExplicitInactiveCombatStatePayload($rawCombat);
+        if ($isExplicitEndCombat && !combatEncounterMatchesExisting($rawCombat, $existingCombat)) {
+            return $state;
+        }
+        $isEndCombat =
+            $isExplicitEndCombat
+            && combatEncounterMatchesExisting($rawCombat, $existingCombat);
         if ($hasExistingCombat && !$isEndCombat && !shouldApplyCombatStatePayload($incomingCombat, $existingCombat)) {
             return $state;
         }
@@ -2873,6 +2879,7 @@ function normalizeCombatStatePayload($rawCombat): array
         'turnPhase' => 'idle',
         'roundTurnCount' => 0,
         'malice' => 0,
+        'encounterId' => null,
         'updatedAt' => time(),
         'sequence' => 0,
         'turnLock' => null,
@@ -2923,6 +2930,8 @@ function normalizeCombatStatePayload($rawCombat): array
             $state['malice'] = max(0, (int) floor((float) $rawMalice));
         }
     }
+
+    $state['encounterId'] = normalizeNullableStringValue($rawCombat['encounterId'] ?? $rawCombat['combatEncounterId'] ?? null);
 
     if (isset($rawCombat['updatedAt']) && is_numeric($rawCombat['updatedAt'])) {
         $state['updatedAt'] = max(0, (int) round((float) $rawCombat['updatedAt']));
@@ -3009,6 +3018,25 @@ function isExplicitInactiveCombatStatePayload(array $rawCombat): bool
 }
 
 /**
+ * @param array<string,mixed> $rawCombat
+ * @param mixed $existingCombat
+ */
+function combatEncounterMatchesExisting(array $rawCombat, $existingCombat): bool
+{
+    if (!is_array($existingCombat)) {
+        return true;
+    }
+
+    $existingEncounterId = normalizeNullableStringValue($existingCombat['encounterId'] ?? $existingCombat['combatEncounterId'] ?? null);
+    $incomingEncounterId = normalizeNullableStringValue($rawCombat['encounterId'] ?? $rawCombat['combatEncounterId'] ?? null);
+    if ($existingEncounterId === null || $incomingEncounterId === null) {
+        return true;
+    }
+
+    return $existingEncounterId === $incomingEncounterId;
+}
+
+/**
  * @param array<string,mixed> $incomingCombat
  * @param array<string,mixed> $existingCombat
  * @return array<string,mixed>
@@ -3045,6 +3073,19 @@ function normalizeCombatTeamValue($value): ?string
     }
 
     return null;
+}
+
+/**
+ * @param mixed $value
+ */
+function normalizeNullableStringValue($value): ?string
+{
+    if (!is_string($value)) {
+        return null;
+    }
+
+    $trimmed = trim($value);
+    return $trimmed === '' ? null : $trimmed;
 }
 
 /**

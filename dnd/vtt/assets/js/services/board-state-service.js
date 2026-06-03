@@ -630,6 +630,7 @@ function formatCombatState(raw = {}) {
   const turnPhase = sanitizeTurnPhase(raw.turnPhase ?? raw.phase ?? null, active, activeCombatantId);
   const roundTurnCount = toInt(raw.roundTurnCount, 0);
   const malice = Math.max(0, toInt(raw.malice ?? raw.maliceCount ?? 0, 0));
+  const encounterId = sanitizeNullableString(raw.encounterId ?? raw.combatEncounterId ?? null);
   const updatedAt = toInt(raw.updatedAt, Date.now());
   const turnLock = sanitizeTurnLock(raw.turnLock ?? null);
   const groups = sanitizeCombatGroups(
@@ -650,6 +651,7 @@ function formatCombatState(raw = {}) {
     turnPhase,
     roundTurnCount,
     malice,
+    encounterId,
     updatedAt,
     sequence,
     turnLock,
@@ -673,6 +675,14 @@ function sanitizeCombatTeam(value) {
     return normalized;
   }
   return null;
+}
+
+function sanitizeNullableString(value) {
+  if (typeof value !== 'string') {
+    return null;
+  }
+  const trimmed = value.trim();
+  return trimmed || null;
 }
 
 function sanitizeTurnPhase(value, active = false, activeCombatantId = '') {

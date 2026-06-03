@@ -64,6 +64,9 @@ export function validateTurnStartState(
   }
 
   result.requiresConfirmation = true;
+  if (phase === TURN_PHASE.ACTIVE && activeCombatantId && activeCombatantId !== normalizedCombatantId) {
+    result.confirmationType = 'switch_active_turn';
+  }
   if (isOverride || isSharonOverride) {
     result.valid = true;
   }
@@ -101,7 +104,7 @@ export function getWaitingCombatantsByTeam({
     const team = normalizeCombatTeam(getCombatantTeam(targetId));
     if (team === 'ally') {
       waiting.ally.push(targetId);
-    } else {
+    } else if (team === 'enemy') {
       waiting.enemy.push(targetId);
     }
   });
@@ -115,6 +118,9 @@ export function pickNextCombatantId({ waiting = null, preferredTeams = [] } = {}
 
   for (const candidate of order) {
     const team = normalizeCombatTeam(candidate);
+    if (team !== 'ally' && team !== 'enemy') {
+      continue;
+    }
     const pool = Array.isArray(pools[team]) ? pools[team] : [];
     if (pool.length) {
       return { combatantId: pool[0], currentTurnTeam: team };
@@ -190,7 +196,7 @@ export function advanceCombatRoundState({
   }
 
   const nextRound = Math.max(1, toNonNegativeNumber(combatRound) + 1);
-  const preferredTeam = normalizeCombatTeam(startingTeam ?? currentTeam ?? 'ally');
+  const preferredTeam = normalizeCombatTeam(startingTeam ?? currentTeam) ?? 'ally';
   const secondaryTeam = preferredTeam === 'ally' ? 'enemy' : 'ally';
 
   return {

@@ -88,6 +88,19 @@ describe('combat turn start validation', () => {
       true
     );
   });
+
+  test('labels switching away from an active combatant as a turn switch', () => {
+    const result = validateTurnStartState({
+      combatActive: true,
+      combatantId: 'token-2',
+      currentPhase: TURN_PHASE.ACTIVE,
+      activeCombatantId: 'token-1',
+    });
+
+    assert.equal(result.valid, false);
+    assert.equal(result.requiresConfirmation, true);
+    assert.equal(result.confirmationType, 'switch_active_turn');
+  });
 });
 
 describe('combat turn state transitions', () => {

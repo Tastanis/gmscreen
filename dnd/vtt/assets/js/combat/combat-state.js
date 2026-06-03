@@ -25,6 +25,9 @@ export function normalizeCombatState(raw = {}) {
   const turnPhase = normalizeTurnPhase(source.turnPhase ?? source.phase ?? null, active, activeCombatantId);
   const roundTurnCount = Math.max(0, toNonNegativeNumber(source.roundTurnCount ?? 0));
   const malice = Math.max(0, toNonNegativeNumber(source.malice ?? source.maliceCount ?? 0));
+  const encounterId = normalizeNullableString(
+    source.encounterId ?? source.combatEncounterId ?? source.id ?? null
+  );
   const updatedAtRaw = Number(source.updatedAt);
   const updatedAt = Number.isFinite(updatedAtRaw) ? Math.max(0, Math.trunc(updatedAtRaw)) : 0;
   const sequenceRaw = Number(source.sequence ?? source.seq ?? 0);
@@ -46,6 +49,7 @@ export function normalizeCombatState(raw = {}) {
     turnPhase,
     roundTurnCount,
     malice,
+    encounterId,
     updatedAt,
     sequence,
     turnLock,
@@ -65,6 +69,7 @@ export function createCombatStateSnapshot({
   turnPhase = null,
   roundTurnCount = 0,
   malice = 0,
+  encounterId = null,
   sequence = 0,
   turnLock = null,
   lastEffect = null,
@@ -89,6 +94,7 @@ export function createCombatStateSnapshot({
     turnPhase: normalizeTurnPhase(turnPhase, Boolean(active), normalizedActiveCombatantId),
     roundTurnCount: toNonNegativeNumber(roundTurnCount, 0),
     malice: toNonNegativeNumber(malice, 0),
+    encounterId: normalizeNullableString(encounterId),
     updatedAt: timestamp,
     sequence: nextSequence,
     turnLock: normalizeTurnLock(turnLock),
@@ -135,7 +141,7 @@ export function normalizeCombatTeam(value) {
   if (raw === 'enemy') {
     return 'enemy';
   }
-  return 'ally';
+  return null;
 }
 
 export function normalizeTurnPhase(value, active = false, activeCombatantId = '') {
@@ -307,6 +313,14 @@ function normalizeProfileId(value) {
   }
   const normalized = value.trim().toLowerCase();
   return normalized || null;
+}
+
+function normalizeNullableString(value) {
+  if (typeof value !== 'string') {
+    return null;
+  }
+  const trimmed = value.trim();
+  return trimmed || null;
 }
 
 function uniqueStringList(values) {

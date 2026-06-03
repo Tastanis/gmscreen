@@ -27,7 +27,19 @@ export function createCombatDirtyFieldTracker(initialFields = []) {
     has(field) {
       return typeof field === 'string' && fields.has(field);
     },
-    clear() {
+    clear(targetFields = null) {
+      if (
+        targetFields &&
+        typeof targetFields !== 'string' &&
+        typeof targetFields[Symbol.iterator] === 'function'
+      ) {
+        Array.from(targetFields).forEach((field) => {
+          if (typeof field === 'string' && field.trim()) {
+            fields.delete(field.trim());
+          }
+        });
+        return;
+      }
       fields.clear();
     },
     snapshot() {
@@ -159,6 +171,7 @@ export function shouldProtectLocalCombatIntent(
     normalizeNullableTeam(normalizedState.startingTeam) !== normalizeNullableTeam(intent.startingTeam) ||
     normalizeNullableTeam(normalizedState.currentTeam) !== normalizeNullableTeam(intent.currentTeam) ||
     normalizeNullableTeam(normalizedState.lastTeam) !== normalizeNullableTeam(intent.lastTeam) ||
+    normalizeNullableId(normalizedState.encounterId) !== normalizeNullableId(intent.encounterId) ||
     normalizeNullableId(normalizedState.activeCombatantId) !== normalizeNullableId(intent.activeCombatantId);
 
   if (!mismatchesIntent) {
@@ -226,6 +239,7 @@ export function prepareCombatSnapshotForSync(
     const applyRoundTurnCount = !isDirty('roundTurnCount');
     const applyCompletedCombatants = !isDirty('completedCombatantIds');
     const applyMalice = !isDirty('malice') && (isGm || existingHasMaliceValue);
+    const applyEncounterId = !isDirty('encounterId');
     const applyTurnLock = !isDirty('turnLock');
     const applyGroups = !isDirty('groups');
 
@@ -265,6 +279,9 @@ export function prepareCombatSnapshotForSync(
     if (!isDirty('malice')) {
       nextSnapshot.malice = existingNormalized.malice;
     }
+    if (applyEncounterId) {
+      nextSnapshot.encounterId = existingNormalized.encounterId;
+    }
     if (applyTurnLock) {
       nextSnapshot.turnLock = cloneNullableObject(existingNormalized.turnLock);
     }
@@ -290,6 +307,7 @@ export function prepareCombatSnapshotForSync(
       turnPhase: nextSnapshot.turnPhase,
       roundTurnCount: nextSnapshot.roundTurnCount,
       malice: nextSnapshot.malice,
+      encounterId: nextSnapshot.encounterId,
       turnLock: cloneNullableObject(nextSnapshot.turnLock),
       groups: cloneCombatGroups(nextSnapshot.groups),
       existingVersion,
@@ -302,6 +320,7 @@ export function prepareCombatSnapshotForSync(
       applyRoundTurnCount,
       applyCompletedCombatants,
       applyMalice,
+      applyEncounterId,
       applyTurnLock,
       applyGroups,
     };
@@ -320,6 +339,9 @@ export function prepareCombatSnapshotForSync(
     }
     if (!isDirty('groups')) {
       nextSnapshot.groups = cloneCombatGroups(existingNormalized.groups);
+    }
+    if (!isDirty('encounterId')) {
+      nextSnapshot.encounterId = existingNormalized.encounterId;
     }
   }
 

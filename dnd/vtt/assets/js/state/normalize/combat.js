@@ -14,6 +14,7 @@ export function normalizeCombatStateEntry(raw = {}) {
   const lastTeam = normalizeCombatTeamValue(raw.lastTeam ?? raw.previousTeam ?? null);
   const roundTurnCount = Math.max(0, toInt(raw.roundTurnCount, 0));
   const malice = Math.max(0, toInt(raw.malice ?? raw.maliceCount ?? 0, 0));
+  const encounterId = normalizeNullableString(raw.encounterId ?? raw.combatEncounterId ?? null);
   const turnLock = normalizeTurnLockEntry(raw.turnLock ?? null);
   const lastEffect = normalizeTurnEffectEntry(raw.lastEffect ?? raw.lastEvent ?? null);
   const groups = normalizeCombatGroupsEntry(
@@ -30,6 +31,7 @@ export function normalizeCombatStateEntry(raw = {}) {
     Boolean(lastTeam) ||
     roundTurnCount > 0 ||
     malice > 0 ||
+    Boolean(encounterId) ||
     Boolean(turnLock) ||
     Boolean(lastEffect) ||
     groups.length > 0;
@@ -53,6 +55,7 @@ export function normalizeCombatStateEntry(raw = {}) {
     lastTeam,
     roundTurnCount,
     malice,
+    encounterId,
     updatedAt: Math.max(0, toInt(raw.updatedAt, Date.now())),
     sequence,
     turnLock,
@@ -171,6 +174,14 @@ export function normalizeCombatTeamValue(value) {
   }
 
   return null;
+}
+
+function normalizeNullableString(value) {
+  if (typeof value !== 'string') {
+    return null;
+  }
+  const trimmed = value.trim();
+  return trimmed || null;
 }
 
 export function normalizeTurnLockEntry(raw) {

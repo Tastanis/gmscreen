@@ -163,6 +163,44 @@ describe('Board State Op Applier - combat.set', () => {
     assert.equal(state.sceneState['scene-1'].combat.updatedAt, 3001);
   });
 
+  test('ignores stale end-combat payloads from a different encounter', () => {
+    const state = {
+      sceneState: {
+        'scene-1': {
+          combat: {
+            active: true,
+            round: 1,
+            activeCombatantId: 'hero',
+            completedCombatantIds: [],
+            turnPhase: 'active',
+            encounterId: 'encounter-new',
+            sequence: 12,
+            updatedAt: 3000,
+          },
+        },
+      },
+    };
+
+    const mutated = applyBoardStateOpLocally(state, {
+      type: 'combat.set',
+      sceneId: 'scene-1',
+      combat: {
+        active: false,
+        round: 0,
+        activeCombatantId: null,
+        completedCombatantIds: [],
+        turnPhase: 'idle',
+        encounterId: 'encounter-old',
+        sequence: 99,
+        updatedAt: 2000,
+      },
+    });
+
+    assert.equal(mutated, false);
+    assert.equal(state.sceneState['scene-1'].combat.active, true);
+    assert.equal(state.sceneState['scene-1'].combat.encounterId, 'encounter-new');
+  });
+
   test('does not treat missing active as a stale end-combat command', () => {
     const state = {
       sceneState: {

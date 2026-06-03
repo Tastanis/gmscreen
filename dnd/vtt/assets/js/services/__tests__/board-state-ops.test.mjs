@@ -157,6 +157,7 @@ describe('Board State – delta ops persistence (phase 3-B commit 2)', () => {
           turnPhase: 'idle',
           roundTurnCount: 0,
           malice: 0,
+          encounterId: null,
           updatedAt: 1234,
           sequence: 9,
           turnLock: null,

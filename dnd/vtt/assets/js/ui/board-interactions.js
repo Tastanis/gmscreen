@@ -1304,6 +1304,7 @@ export function mountBoardInteractions(store, routes = {}) {
       activeSceneId,
       active: combatActive,
       round: combatRound,
+      encounterId: combatEncounterId,
       startingTeam: startingCombatTeam,
       currentTeam: currentTurnTeam,
       lastTeam: lastActingTeam,
@@ -1364,6 +1365,7 @@ export function mountBoardInteractions(store, routes = {}) {
     combatActive = intent.active;
     combatRound = intent.round;
     startingCombatTeam = intent.startingTeam;
+    combatEncounterId = intent.encounterId ?? combatEncounterId;
     currentTurnTeam = intent.currentTeam;
     lastActingTeam = intent.lastTeam;
     roundTurnCount = intent.roundTurnCount;
@@ -1580,8 +1582,8 @@ export function mountBoardInteractions(store, routes = {}) {
     dirtyCombatFields.mark(field);
   }
 
-  function clearDirtyCombatFields() {
-    dirtyCombatFields.clear();
+  function clearDirtyCombatFields(fields = null) {
+    dirtyCombatFields.clear(fields);
   }
 
   function markCombatEncounterStateDirty() {
@@ -1595,6 +1597,7 @@ export function mountBoardInteractions(store, routes = {}) {
       'completedCombatantIds',
       'turnLock',
       'malice',
+      'encounterId',
     ].forEach((field) => markCombatFieldDirty(field));
   }
 
@@ -1627,6 +1630,7 @@ export function mountBoardInteractions(store, routes = {}) {
   // Sequence number for combat state sync - increments on each local change
   // Used instead of timestamps to avoid clock drift issues between clients
   let combatSequence = 0;
+  let combatEncounterId = null;
   let lastCombatStateSnapshot = null;
   let pendingGmCombatIntent = null;
   let registeringLocalCombatSave = false;
@@ -9634,6 +9638,20 @@ export function mountBoardInteractions(store, routes = {}) {
       return;
     }
 
+    if (activeCombatantId && activeCombatantId !== representativeId) {
+      const currentLabel = getCombatantLabel(activeCombatantId) || 'the current combatant';
+      const nextLabel = getCombatantLabel(representativeId) || 'this combatant';
+      if (!confirmSwitchActiveTurn(currentLabel, nextLabel)) {
+        return;
+      }
+      completeActiveCombatant({
+        forceReleaseLock: true,
+        suppressAnnouncements: true,
+        suppressRoundCompletionCheck: true,
+        suppressSync: true,
+      });
+    }
+
     completedCombatants.delete(representativeId);
     setActiveCombatantId(representativeId);
     forceAcquireTurnLockForGm(representativeId);
@@ -9697,7 +9715,7 @@ export function mountBoardInteractions(store, routes = {}) {
     // Use force for GM users to ensure they can always take control
     const initiatorId = normalizeProfileId(initiatorProfileId || getCurrentUserId());
     const lockAcquired = acquireTurnLock(initiatorId || 'gm', initiatorName, representativeId, {
-      force: isGmUser(),
+      force: isGmUser() || options.forceTurnLock === true,
     });
 
     if (!lockAcquired) {
@@ -9821,7 +9839,7 @@ export function mountBoardInteractions(store, routes = {}) {
     syncCombatStateToStore();
   }
 
-  function completeActiveCombatant() {
+  function completeActiveCombatant(options = {}) {
     const completionTargetId =
       (activeCombatantId ? getRepresentativeIdFor(activeCombatantId) || activeCombatantId : null) ||
       (activeTurnDialog?.combatantId
@@ -9865,7 +9883,12 @@ export function mountBoardInteractions(store, routes = {}) {
 
     // Release the turn lock and transition to PICK phase for the next team
     // The next combatant should only become ACTIVE when they actually start their turn
-    releaseTurnLock(getCurrentUserId());
+    if (options.forceReleaseLock === true) {
+      updateTurnLockState(null);
+      markCombatFieldDirty('turnLock');
+    } else {
+      releaseTurnLock(getCurrentUserId());
+    }
 
     // Transition to PICK phase for the opposing team
     currentTurnTeam = turnCompletion.nextTeam;
@@ -9920,10 +9943,16 @@ export function mountBoardInteractions(store, routes = {}) {
       });
     }
 
-    maybeAnnounceAllyPick();
+    if (options.suppressAnnouncements !== true) {
+      maybeAnnounceAllyPick();
+    }
     updateCombatModeIndicators();
-    checkForRoundCompletion();
-    syncCombatStateToStore();
+    if (options.suppressRoundCompletionCheck !== true) {
+      checkForRoundCompletion();
+    }
+    if (options.suppressSync !== true) {
+      syncCombatStateToStore();
+    }
   }
 
   function closeSaveEndsPrompt() {
@@ -11016,6 +11045,7 @@ export function mountBoardInteractions(store, routes = {}) {
     markCombatEncounterStateDirty();
     combatActive = true;
     combatRound = 1;
+    combatEncounterId = generateCombatEncounterId();
     combatConflictRetryAttempts = 0;
     setMaliceCount(0, { sync: false });
     if (isGmUser()) {
@@ -11230,6 +11260,7 @@ export function mountBoardInteractions(store, routes = {}) {
       const wasCombatActive = combatActive;
       combatActive = normalized.active;
       combatRound = normalized.round;
+      combatEncounterId = normalized.encounterId ?? null;
       if (isGmUser()) {
         combatTimerService.updateRound(combatRound);
       }
@@ -11389,6 +11420,20 @@ export function mountBoardInteractions(store, routes = {}) {
     applyTurnLockState(turnLockState, lock);
   }
 
+  function generateCombatEncounterId() {
+    const randomPart = (() => {
+      try {
+        if (typeof crypto !== 'undefined' && typeof crypto.randomUUID === 'function') {
+          return crypto.randomUUID();
+        }
+      } catch (error) {
+        // Fall through to timestamp/random fallback.
+      }
+      return `${Date.now().toString(36)}-${Math.random().toString(36).slice(2, 10)}`;
+    })();
+    return `enc-${randomPart}`;
+  }
+
   function createCombatStateSnapshot() {
     const snapshot = buildCombatStateSnapshot({
       active: combatActive,
@@ -11401,6 +11446,7 @@ export function mountBoardInteractions(store, routes = {}) {
       turnPhase: getTurnPhase(),
       roundTurnCount,
       malice: maliceCount,
+      encounterId: combatEncounterId,
       sequence: combatSequence,
       turnLock: serializeTurnLockState(),
       lastEffect: lastTurnEffect,
@@ -11439,6 +11485,7 @@ export function mountBoardInteractions(store, routes = {}) {
 
     const existingCombatState = state.boardState?.sceneState?.[activeSceneId]?.combat ?? null;
     const currentIsGm = isGmUser();
+    const dirtyFieldsForSnapshot = dirtyCombatFields.snapshot();
     const {
       snapshot,
       isRemoteNewer,
@@ -11481,6 +11528,9 @@ export function mountBoardInteractions(store, routes = {}) {
       if (localStatePatch.applyMalice) {
         maliceCount = localStatePatch.malice;
       }
+      if (localStatePatch.applyEncounterId) {
+        combatEncounterId = localStatePatch.encounterId ?? null;
+      }
       if (localStatePatch.applyTurnLock) {
         updateTurnLockState(localStatePatch.turnLock);
       }
@@ -11500,12 +11550,9 @@ export function mountBoardInteractions(store, routes = {}) {
       refreshCombatTracker();
     }
 
-    // Clear dirty combat field tracking after we've incorporated them into the snapshot
-    // This ensures the next sync will properly receive remote updates
-    clearDirtyCombatFields();
-
     const serialized = JSON.stringify(snapshot);
     if (serialized === lastCombatStateSnapshot) {
+      clearDirtyCombatFields(dirtyFieldsForSnapshot);
       return;
     }
 
@@ -11525,8 +11572,9 @@ export function mountBoardInteractions(store, routes = {}) {
     }
 
     const latest = boardApi.getState?.() ?? latestBeforeStoreSync;
+    let combatSavePromise = null;
     if (latest?.user?.isGM) {
-      persistBoardStateSnapshot({}, [
+      combatSavePromise = persistBoardStateSnapshot({}, [
         {
           type: 'combat.set',
           sceneId: activeSceneId,
@@ -11536,6 +11584,7 @@ export function mountBoardInteractions(store, routes = {}) {
     } else if (routes?.state) {
       // Track pending combat state save to prevent poller from overwriting during save
       const savePromise = persistCombatState(routes.state, activeSceneId, snapshot);
+      combatSavePromise = savePromise;
       if (savePromise && typeof savePromise.then === 'function') {
         pendingCombatStateSave = {
           promise: savePromise,
@@ -11562,6 +11611,16 @@ export function mountBoardInteractions(store, routes = {}) {
             }
           });
       }
+    }
+
+    if (combatSavePromise && typeof combatSavePromise.then === 'function') {
+      combatSavePromise.then((result) => {
+        if (result?.success !== false && !isBoardStateVersionConflictResult(result)) {
+          clearDirtyCombatFields(dirtyFieldsForSnapshot);
+        }
+      }).catch(() => {});
+    } else {
+      clearDirtyCombatFields(dirtyFieldsForSnapshot);
     }
 
     // Use sequence number as version (or fall back to timestamp)
@@ -11641,6 +11700,24 @@ export function mountBoardInteractions(store, routes = {}) {
     return false;
   }
 
+  function confirmSwitchActiveTurn(currentLabel, nextLabel) {
+    const currentName = typeof currentLabel === 'string' && currentLabel.trim()
+      ? currentLabel.trim()
+      : 'the current combatant';
+    const nextName = typeof nextLabel === 'string' && nextLabel.trim()
+      ? nextLabel.trim()
+      : 'this combatant';
+    const message = `${currentName} is already taking a turn. End that turn and start ${nextName}'s turn instead?`;
+    try {
+      if (typeof window !== 'undefined' && typeof window.confirm === 'function') {
+        return window.confirm(message);
+      }
+    } catch (error) {
+      return false;
+    }
+    return false;
+  }
+
   function forceAcquireTurnLockForGm(combatantId) {
     const gmId = getCurrentUserId() ?? 'gm';
     const gmName = getCurrentUserName() || 'GM';
@@ -11678,6 +11755,9 @@ export function mountBoardInteractions(store, routes = {}) {
     }
 
     pendingRoundConfirmation = true;
+    const confirmationRound = combatRound;
+    const confirmationCompletedIds = Array.from(completedCombatants).sort();
+    const confirmationRepresentatives = representatives.slice().sort();
 
     const promptRoundEnd = () => {
       let confirmed = false;
@@ -11690,7 +11770,17 @@ export function mountBoardInteractions(store, routes = {}) {
       }
 
       if (confirmed) {
-        advanceCombatRound();
+        const currentRepresentatives = getAllRepresentativeIds().slice().sort();
+        const currentCompletedIds = Array.from(completedCombatants).sort();
+        const stillSameRound = combatActive && combatRound === confirmationRound;
+        const sameRepresentatives = JSON.stringify(currentRepresentatives) === JSON.stringify(confirmationRepresentatives);
+        const sameCompleted = JSON.stringify(currentCompletedIds) === JSON.stringify(confirmationCompletedIds);
+        const stillAllCompleted =
+          currentRepresentatives.length > 0 &&
+          currentRepresentatives.every((id) => completedCombatants.has(id));
+        if (stillSameRound && sameRepresentatives && sameCompleted && stillAllCompleted) {
+          advanceCombatRound();
+        }
       }
 
       pendingRoundConfirmation = false;
@@ -11818,7 +11908,14 @@ export function mountBoardInteractions(store, routes = {}) {
           type: 'placement.update',
           sceneId: activeSceneId,
           placementId: id,
-          patch: { triggeredActionReady: true, hasReadyTrigger: false, readyTriggerAbilities: [], readyTriggerSources: {}, readyTriggerPayloads: {} },
+          patch: {
+            triggeredActionReady: true,
+            triggeredActionUsedThisRound: false,
+            hasReadyTrigger: false,
+            readyTriggerAbilities: [],
+            readyTriggerSources: {},
+            readyTriggerPayloads: {},
+          },
         }));
       }
       persistBoardStateSnapshot({}, resetOps);
@@ -12566,6 +12663,17 @@ export function mountBoardInteractions(store, routes = {}) {
       return { started: false, valid: check.valid, accepted: true, reason: check.reason };
     }
 
+    const representativeId = getRepresentativeIdFor(placementId) || placementId;
+    const switchingActiveTurn = Boolean(activeCombatantId && activeCombatantId !== representativeId);
+    if (switchingActiveTurn) {
+      completeActiveCombatant({
+        forceReleaseLock: true,
+        suppressAnnouncements: true,
+        suppressRoundCompletionCheck: true,
+        suppressSync: true,
+      });
+    }
+
     const initiatorProfileId = normalizeProfileId(payload.sourceId) || getCurrentUserId();
     beginCombatantTurn(placementId, {
       initiatorProfileId,
@@ -12573,8 +12681,9 @@ export function mountBoardInteractions(store, routes = {}) {
       expectedTeam: currentTurnTeam,
       previousTeam: lastActingTeam,
       isFirstTurnOfRound: combatActive ? roundTurnCount === 0 : false,
+      forceTurnLock: switchingActiveTurn,
     });
-    return { started: activeCombatantId === (getRepresentativeIdFor(placementId) || placementId), valid: check.valid, reason: check.reason };
+    return { started: activeCombatantId === representativeId, valid: check.valid, reason: check.reason };
   }
 
   function handlePlayerInitiatedTurn(combatantId, context = {}) {
@@ -12599,7 +12708,13 @@ export function mountBoardInteractions(store, routes = {}) {
       if (validation.confirmationType === 'override_active_turn') {
         // Someone else is actively taking their turn - check if there's a lock holder
         const lockHolderName = turnLockState.holderName || 'Another player';
-        if (!window.confirm(`${lockHolderName} is currently taking their turn. Override and take your turn instead?`)) {
+        if (!window.confirm(`${lockHolderName} is currently taking their turn. End that turn and start yours instead?`)) {
+          return;
+        }
+      } else if (validation.confirmationType === 'switch_active_turn') {
+        const currentLabel = getCombatantLabel(activeCombatantId) || 'the current combatant';
+        const nextLabel = getCombatantLabel(combatantId) || 'your character';
+        if (!confirmSwitchActiveTurn(currentLabel, nextLabel)) {
           return;
         }
       } else {
@@ -12611,6 +12726,17 @@ export function mountBoardInteractions(store, routes = {}) {
     } else if (!validation.valid) {
       // Invalid and no confirmation option
       return;
+    }
+
+    const representativeId = getRepresentativeIdFor(combatantId) || combatantId;
+    const switchingActiveTurn = Boolean(activeCombatantId && activeCombatantId !== representativeId);
+    if (switchingActiveTurn) {
+      completeActiveCombatant({
+        forceReleaseLock: true,
+        suppressAnnouncements: true,
+        suppressRoundCompletionCheck: true,
+        suppressSync: true,
+      });
     }
 
     const expectedTeam = context.expectedTeam ?? currentTurnTeam ?? team;
@@ -12627,6 +12753,7 @@ export function mountBoardInteractions(store, routes = {}) {
           : combatActive
           ? roundTurnCount === 0
           : false,
+      forceTurnLock: switchingActiveTurn,
     });
   }
 
