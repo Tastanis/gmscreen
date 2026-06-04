@@ -793,7 +793,7 @@ body.chat-panel-is-open .vtt-character-ability-tray__inner {
   inset: 0;
   z-index: 1600;
   pointer-events: none;
-  background: rgba(15, 23, 42, 0.35);
+  background: rgba(47, 36, 23, 0.42);
 }
 
 .heroic-resource-prompt__modal {
@@ -802,11 +802,14 @@ body.chat-panel-is-open .vtt-character-ability-tray__inner {
   max-height: calc(100vh - 24px);
   overflow: auto;
   pointer-events: auto;
-  border: 1px solid rgba(100, 116, 139, 0.35);
-  border-radius: 8px;
-  background: #f8fafc;
-  color: #111827;
-  box-shadow: 0 20px 45px rgba(15, 23, 42, 0.28);
+  border: 2px solid var(--vtt-border, #c2ad90);
+  border-radius: 6px;
+  background: linear-gradient(135deg, var(--vtt-surface, #f4eadc) 0%, var(--vtt-surface-strong, #e6d8c5) 100%);
+  color: var(--vtt-text-dark, #2f2417);
+  box-shadow:
+    3px 3px 0 var(--vtt-accent-strong, #6f5333),
+    4px 4px 0 var(--vtt-text-dark-muted, #5e4b36),
+    0 20px 45px rgba(47, 36, 23, 0.32);
 }
 
 .heroic-resource-prompt__modal.is-dragging {
@@ -815,7 +818,7 @@ body.chat-panel-is-open .vtt-character-ability-tray__inner {
 
 .heroic-resource-prompt__header {
   padding: 14px 16px 8px;
-  border-bottom: 1px solid rgba(148, 163, 184, 0.35);
+  border-bottom: 1px solid var(--vtt-border, #c2ad90);
   cursor: grab;
 }
 
@@ -837,7 +840,7 @@ body.chat-panel-is-open .vtt-character-ability-tray__inner {
 
 .heroic-resource-prompt__detail {
   margin-top: 8px !important;
-  color: #475569;
+  color: var(--vtt-text-dark-muted, #5e4b36);
 }
 
 .heroic-resource-prompt__actions {
@@ -848,16 +851,20 @@ body.chat-panel-is-open .vtt-character-ability-tray__inner {
 }
 
 .heroic-resource-prompt__actions [data-heroic-resource-apply] {
-  background: #7c3f16;
-  border-color: #7c3f16;
-  color: #ffffff;
+  background: linear-gradient(145deg, #5a8040 0%, #4a7030 60%, #3a6020 100%);
+  border-top-color: #7a9858;
+  border-left-color: #6a8848;
+  border-right-color: #2a4818;
+  border-bottom-color: #1a3810;
+  color: #fdfaf5;
 }
 
 .heroic-resource-prompt__actions [data-heroic-resource-apply]:hover,
 .heroic-resource-prompt__actions [data-heroic-resource-apply]:focus-visible {
-  background: #9a4f1b;
-  border-color: #9a4f1b;
-  color: #ffffff;
+  background: linear-gradient(145deg, #6a9050 0%, #5a8040 60%, #4a7030 100%);
+  border-top-color: #8aaa68;
+  border-left-color: #7a9858;
+  color: #fdfaf5;
 }
 
 .vtt-character-ability-list {
