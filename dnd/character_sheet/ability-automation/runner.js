@@ -247,13 +247,30 @@
     return null;
   }
 
+  function getManualEdgeBaneCounts(state) {
+    return {
+      edge: Math.max(0, Math.min(2, asInt(state?.edgeCount))),
+      bane: Math.max(0, Math.min(2, asInt(state?.baneCount))),
+    };
+  }
+
+  function setManualEdgeBaneSelection(state, kind, count) {
+    const normalizedKind = kind === "bane" ? "bane" : "edge";
+    const normalizedCount = Math.max(1, Math.min(2, asInt(count, 1)));
+    const manual = getManualEdgeBaneCounts(state);
+    const isActive = manual[normalizedKind] === normalizedCount && manual[normalizedKind === "edge" ? "bane" : "edge"] === 0;
+    state.edgeCount = isActive || normalizedKind === "bane" ? 0 : normalizedCount;
+    state.baneCount = isActive || normalizedKind === "edge" ? 0 : normalizedCount;
+    return { kind: normalizedKind, count: normalizedCount, active: !isActive };
+  }
+
   function edgeControlIsActive(edgeState, kind, count) {
     const active = getActiveEdgeControl(edgeState);
     return Boolean(active && active.kind === kind && active.count === count);
   }
 
-  function renderEdgeControlButton(edgeState, kind, count, label, title) {
-    const active = edgeControlIsActive(edgeState, kind, count);
+  function renderEdgeControlButton(manualEdgeState, kind, count, label, title) {
+    const active = edgeControlIsActive(manualEdgeState, kind, count);
     const adjustAttribute = kind === "edge" ? "data-power-roll-edge-adjust" : "data-power-roll-bane-adjust";
     const kindClass = kind === "edge" ? "dice-btn--edge" : "dice-btn--bane";
     return `
@@ -519,17 +536,18 @@
     suggestions.forEach((suggestion) => {
       if (!suggestion?.active) return;
       const count = Math.max(1, Math.min(2, asInt(suggestion.count, 1)));
-      if (suggestion.kind === "edge") counts.edge += count;
-      if (suggestion.kind === "bane") counts.bane += count;
+      if (suggestion.kind === "edge") counts.edge = Math.max(counts.edge, count);
+      if (suggestion.kind === "bane") counts.bane = Math.max(counts.bane, count);
     });
     return counts;
   }
 
   function getTotalEdgeBaneCounts(state) {
     const suggested = getActiveRollSuggestionCounts(state);
+    const manual = getManualEdgeBaneCounts(state);
     return {
-      edge: Math.max(0, asInt(state.edgeCount)) + suggested.edge,
-      bane: Math.max(0, asInt(state.baneCount)) + suggested.bane,
+      edge: Math.max(manual.edge, suggested.edge),
+      bane: Math.max(manual.bane, suggested.bane),
     };
   }
 
@@ -998,6 +1016,7 @@
 
   function renderPowerRoll(host, state, block) {
     const { total, attribute, attributeBonus, skill, skillBonus, bonus, manualBonus, edgeState } = getPowerRollTotal(state, block);
+    const manualEdgeState = getEdgeState(state.edgeCount, state.baneCount);
     const formulaParts = [`${block.rollFormula || "2d10"} + ${attribute}`];
     if (skillBonus) formulaParts.push(`${skill || "Skill"} ${formatModifier(skillBonus)}`);
     if (bonus) formulaParts.push(formatModifier(bonus));
@@ -1038,10 +1057,10 @@
           <div class="dice-result-detail">${escapeHtml(tierDetail)}</div>
         </div>
         <div class="dice-row dice-row--edge-bane power-roll-runner__edge-buttons" aria-label="Manual edge and bane controls">
-          ${renderEdgeControlButton(edgeState, "bane", 2, "BANE vv", "Add double bane")}
-          ${renderEdgeControlButton(edgeState, "bane", 1, "BANE v", "Add bane")}
-          ${renderEdgeControlButton(edgeState, "edge", 1, "EDGE ^", "Add edge")}
-          ${renderEdgeControlButton(edgeState, "edge", 2, "EDGE ^^", "Add double edge")}
+          ${renderEdgeControlButton(manualEdgeState, "bane", 2, "BANE vv", "Select double bane")}
+          ${renderEdgeControlButton(manualEdgeState, "bane", 1, "BANE v", "Select bane")}
+          ${renderEdgeControlButton(manualEdgeState, "edge", 1, "EDGE ^", "Select edge")}
+          ${renderEdgeControlButton(manualEdgeState, "edge", 2, "EDGE ^^", "Select double edge")}
         </div>
         ${renderRollSuggestionButtons(state)}
         ${renderPowerRollSurgeControls(state, block)}
@@ -1114,15 +1133,19 @@
       }
       if (target.closest("[data-power-roll-edge-adjust]")) {
         const button = target.closest("[data-power-roll-edge-adjust]");
-        state.edgeCount = asInt(state.edgeCount) + asInt(button?.getAttribute("data-power-roll-edge-adjust"), 1);
-        state.resultText = state.roll ? "Edge added. Reroll to post the adjusted result." : "";
+        const selection = setManualEdgeBaneSelection(state, "edge", button?.getAttribute("data-power-roll-edge-adjust"));
+        state.resultText = state.roll
+          ? `${selection.active ? (selection.count >= 2 ? "Double edge selected" : "Edge selected") : "Edge cleared"}. Reroll to post the adjusted result.`
+          : "";
         renderPowerRoll(host, state, block);
         return;
       }
       if (target.closest("[data-power-roll-bane-adjust]")) {
         const button = target.closest("[data-power-roll-bane-adjust]");
-        state.baneCount = asInt(state.baneCount) + asInt(button?.getAttribute("data-power-roll-bane-adjust"), 1);
-        state.resultText = state.roll ? "Bane added. Reroll to post the adjusted result." : "";
+        const selection = setManualEdgeBaneSelection(state, "bane", button?.getAttribute("data-power-roll-bane-adjust"));
+        state.resultText = state.roll
+          ? `${selection.active ? (selection.count >= 2 ? "Double bane selected" : "Bane selected") : "Bane cleared"}. Reroll to post the adjusted result.`
+          : "";
         renderPowerRoll(host, state, block);
         return;
       }
@@ -3493,6 +3516,9 @@
     __testing: {
       getActiveEdgeControl,
       getEdgeState,
+      getManualEdgeBaneCounts,
+      getTotalEdgeBaneCounts,
+      setManualEdgeBaneSelection,
     },
   };
 })(window);

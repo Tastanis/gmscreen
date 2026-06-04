@@ -310,7 +310,7 @@ export function mountCharacterSummaryPanel(routes = {}, userContext = {}) {
     if (!activeCharacterId || !activeSheet) {
       return false;
     }
-    const saved = await saveCharacterSummarySheet(activeSheet, { characterId: activeCharacterId, routes });
+    const saved = await saveCharacterSummarySheet(activeSheet, { characterId: activeCharacterId, routes, broadcast: false });
     if (saved) {
       broadcastSheetChange(change);
       if (change === 'stamina' || change === 'recovery') {
@@ -488,7 +488,8 @@ export function mountCharacterSummaryPanel(routes = {}, userContext = {}) {
   async function handleResourceDelta(delta) {
     const resource = activeSheet?.hero?.resource;
     if (!resource) return;
-    resource.value = (Number.parseInt(resource.value ?? 0, 10) || 0) + delta;
+    const current = Number.parseInt(resource.value ?? 0, 10) || 0;
+    resource.value = Math.max(resourceFloor(activeSheet?.hero, resource), current + delta);
     renderActiveSheet();
     await saveActiveSheet('resource');
   }
@@ -2723,7 +2724,7 @@ function showAutomationSpendDialog({
               <span>Amount</span>
               <span class="vtt-automation-spend__stepper">
                 <button type="button" class="dice-clear-btn" data-spend-step="-1" aria-label="Spend less">-</button>
-                <input type="number" min="${minAmount}" max="${maxAmount}" step="1" value="${minAmount}" data-spend-input>
+                <input type="number" inputmode="numeric" pattern="[0-9]*" min="${minAmount}" max="${maxAmount}" step="1" value="${minAmount}" data-spend-input aria-label="Spend amount">
                 <button type="button" class="dice-clear-btn" data-spend-step="1" aria-label="Spend more">+</button>
               </span>
             </label>
@@ -2805,7 +2806,7 @@ async function applyAbilityResourceGain(sheet, payload = {}, options = {}) {
   resource.value = next;
   hero.resource = resource;
   if (sheet) sheet.hero = hero;
-  await saveCharacterSummarySheet(sheet, options);
+  await saveCharacterSummarySheet(sheet, { ...options, change: 'resource' });
   // Signal that the sheet changed so visible panels and standalone sheet tabs
   // can refresh without a page reload.
   if (typeof document !== 'undefined' && options?.characterId) {
@@ -2827,14 +2828,16 @@ async function spendHeroicResource(sheet, payload = {}, options = {}) {
     return { skipped: true, reason: 'resource-mismatch', resource: title };
   }
   const current = Number.parseInt(resource.value ?? 0, 10) || 0;
-  if (current < minAmount) {
+  const floor = resourceFloor(hero, resource);
+  const spendCapacity = Math.max(0, current - floor);
+  if (spendCapacity < minAmount) {
     return { skipped: true, reason: 'insufficient', resource: title, current, required: minAmount };
   }
   const maxRaw = payload?.maxAmount;
   const requestedMax = String(maxRaw || '').trim().toLowerCase() === 'available'
-    ? current
+    ? spendCapacity
     : Math.max(0, Number.parseInt(maxRaw ?? 0, 10) || 0);
-  const maxAmount = Math.max(minAmount, Math.min(current, requestedMax || minAmount));
+  const maxAmount = Math.max(minAmount, Math.min(spendCapacity, requestedMax || minAmount));
   const promptText = String(payload?.prompt || `Spend ${minAmount} ${title}?`).trim();
   const choice = await showAutomationSpendDialog({
     title: payload?.abilityName || `Spend ${title}`,
@@ -2849,12 +2852,11 @@ async function spendHeroicResource(sheet, payload = {}, options = {}) {
     return { canceled: true, resource: title, current };
   }
   const spendAmount = Math.min(maxAmount, Math.max(minAmount, Number.parseInt(choice.amount, 10) || minAmount));
-  const floor = resourceFloor(hero, resource);
   const next = Math.max(floor, current - spendAmount);
   resource.value = next;
   hero.resource = resource;
   if (sheet) sheet.hero = hero;
-  await saveCharacterSummarySheet(sheet, options);
+  await saveCharacterSummarySheet(sheet, { ...options, change: 'resource' });
   if (typeof document !== 'undefined' && options?.characterId) {
     document.dispatchEvent(new CustomEvent('vtt:character-sheet-updated', {
       detail: { characterId: options.characterId, change: 'resource' },
@@ -2888,7 +2890,7 @@ async function spendAbilityResource(sheet, ability, options = {}) {
   resource.value = Math.max(floor, current - cost.amount);
   hero.resource = resource;
   if (sheet) sheet.hero = hero;
-  await saveCharacterSummarySheet(sheet, options);
+  await saveCharacterSummarySheet(sheet, { ...options, change: 'resource' });
   // Mirror applyAbilityResourceGain: tell the board its sheet cache is stale
   // and notify any open standalone sheet tab.
   if (typeof document !== 'undefined' && options?.characterId) {
@@ -2939,6 +2941,8 @@ function parseAbilityResourceCost(value) {
 async function saveCharacterSummarySheet(sheet, options = {}) {
   const characterId = typeof options.characterId === 'string' ? options.characterId : '';
   if (!characterId || !sheet) return false;
+  const change = typeof options.change === 'string' && options.change ? options.change : 'sheet';
+  const shouldBroadcast = options.broadcast !== false;
   const routeConfig = options.routes && typeof options.routes === 'object' ? options.routes : {};
   const endpoint = typeof routeConfig.sheet === 'string' && routeConfig.sheet ? routeConfig.sheet : '/dnd/character_sheet/handler.php';
   const body = new URLSearchParams();
@@ -2953,13 +2957,13 @@ async function saveCharacterSummarySheet(sheet, options = {}) {
   });
   const payload = await response.json().catch(() => null);
   const saved = Boolean(response.ok && payload?.success !== false);
-  if (saved && typeof BroadcastChannel === 'function') {
+  if (saved && shouldBroadcast && typeof BroadcastChannel === 'function') {
     const channel = new BroadcastChannel(CHARACTER_SHEET_SYNC_CHANNEL);
     channel.postMessage({
       type: 'character-sheet-sync',
       source: 'vtt',
       character: characterId,
-      change: 'sheet',
+      change,
     });
     channel.close();
   }
@@ -3089,6 +3093,12 @@ function parseAutoDice(value) {
   const sides = Number.parseInt(match[1], 10);
   return Number.isFinite(sides) && sides > 0 ? sides : 0;
 }
+
+export const __testing = {
+  resourceFloor,
+  saveCharacterSummarySheet,
+  spendHeroicResource,
+};
 
 function parseStaticAutoResource(value) {
   const match = String(value || '').trim().match(/^\+?(\d+)$/);

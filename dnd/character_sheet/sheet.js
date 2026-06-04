@@ -574,6 +574,13 @@ function normalizeResourceValue(value) {
   return Number.isFinite(numeric) ? numeric : 0;
 }
 
+function getHeroResourceFloor(hero = sheetState.hero) {
+  const resource = hero?.resource;
+  if (!resource || !resource.allowNegative) return 0;
+  const reason = Number(hero?.stats?.reason) || 0;
+  return -(1 + reason);
+}
+
 function getResourceValue() {
   return normalizeResourceValue(sheetState.hero.resource?.value);
 }
@@ -609,7 +616,7 @@ function updateResourceDisplays() {
 }
 
 function setResourceValue(value) {
-  sheetState.hero.resource.value = normalizeResourceValue(value);
+  sheetState.hero.resource.value = Math.max(getHeroResourceFloor(), normalizeResourceValue(value));
   updateResourceDisplays();
   persistResourceValue();
 }
@@ -2793,35 +2800,37 @@ function renderActionSection(type, containerId) {
                   <input class="edit-field" type="text" data-field="actionLabel" value="${action.actionLabel || ""}" placeholder="Action label" />
                   <input class="edit-field" type="text" data-field="tags" value="${(action.tags || []).join(", ")}" placeholder="Tags" />
                 </div>
-                <span class="chat-dot-wrap"><button class="chat-dot" type="button" aria-label="Post to chat" data-chat-type="action" data-chat-id="${action.id}" data-chat-action-type="${type}"></button></span>
-                ${
-                  isEditMode
-                    ? `<button
-                        class="text-btn edit-only automation-action-btn ${automationConfigured ? "automation-action-btn--configured" : ""}"
-                        type="button"
-                        data-automate-action="${action.id}"
-                        data-action-type="${type}"
-                      ><span class="automation-action-btn__status" aria-hidden="true"></span>${automationLabel}</button>
-                       ${automationConfigured ? `<button class="text-btn edit-only" type="button" data-inspect-action="${action.id}" data-action-type="${type}" title="Inspect saved automation JSON">Inspect</button>` : ""}`
-                    : ""
-                }
-                <button
-                  class="icon-btn edit-only"
-                  data-move-action="up"
-                  data-action-id="${action.id}"
-                  data-action-type="${type}"
-                  aria-label="Move action up"
-                  ${index === 0 ? "disabled" : ""}
-                >▲</button>
-                <button
-                  class="icon-btn edit-only"
-                  data-move-action="down"
-                  data-action-id="${action.id}"
-                  data-action-type="${type}"
-                  aria-label="Move action down"
-                  ${index === actions.length - 1 ? "disabled" : ""}
-                >▼</button>
-                <button class="icon-btn edit-only" data-remove-action="${action.id}" aria-label="Remove action">✕</button>
+                <div class="card-head__actions">
+                  <span class="chat-dot-wrap"><button class="chat-dot" type="button" aria-label="Post to chat" data-chat-type="action" data-chat-id="${action.id}" data-chat-action-type="${type}"></button></span>
+                  ${
+                    isEditMode
+                      ? `<button
+                          class="text-btn edit-only automation-action-btn ${automationConfigured ? "automation-action-btn--configured" : ""}"
+                          type="button"
+                          data-automate-action="${action.id}"
+                          data-action-type="${type}"
+                        ><span class="automation-action-btn__status" aria-hidden="true"></span>${automationLabel}</button>
+                         ${automationConfigured ? `<button class="text-btn edit-only" type="button" data-inspect-action="${action.id}" data-action-type="${type}" title="Inspect saved automation JSON">Inspect</button>` : ""}`
+                      : ""
+                  }
+                  <button
+                    class="icon-btn edit-only"
+                    data-move-action="up"
+                    data-action-id="${action.id}"
+                    data-action-type="${type}"
+                    aria-label="Move action up"
+                    ${index === 0 ? "disabled" : ""}
+                  >▲</button>
+                  <button
+                    class="icon-btn edit-only"
+                    data-move-action="down"
+                    data-action-id="${action.id}"
+                    data-action-type="${type}"
+                    aria-label="Move action down"
+                    ${index === actions.length - 1 ? "disabled" : ""}
+                  >▼</button>
+                  <button class="icon-btn edit-only" data-remove-action="${action.id}" aria-label="Remove action">✕</button>
+                </div>
               </header>
               <div class="action-label display-value action-collapsible">${action.actionLabel || "Action"}</div>
               <div class="action-meta action-collapsible">

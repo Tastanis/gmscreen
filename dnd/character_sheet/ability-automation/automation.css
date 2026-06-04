@@ -431,20 +431,45 @@
 
 .vtt-automation-spend__stepper {
   align-items: center;
-  display: inline-grid;
-  gap: 6px;
-  grid-template-columns: 34px 64px 34px;
+  background: #fffdf7;
+  border: 1px solid var(--border, var(--dice-border, #b89c70));
+  border-radius: 6px;
+  display: grid;
+  gap: 4px;
+  grid-template-columns: 34px 52px 34px;
+  padding: 3px;
 }
 
 .vtt-automation-spend__stepper input {
-  background: #fffdf7;
-  border: 1px solid var(--border, var(--dice-border, #b89c70));
-  border-radius: 5px;
+  -moz-appearance: textfield;
+  appearance: textfield;
+  background: transparent;
+  border: 0;
+  border-radius: 4px;
   color: var(--text, #2f261b);
   font: 800 1rem/1 "Inter", "Segoe UI", sans-serif;
+  height: 30px;
   min-width: 0;
-  padding: 6px;
+  padding: 4px 2px;
   text-align: center;
+}
+
+.vtt-automation-spend__stepper input::-webkit-inner-spin-button,
+.vtt-automation-spend__stepper input::-webkit-outer-spin-button {
+  -webkit-appearance: none;
+  appearance: none;
+  margin: 0;
+}
+
+.vtt-automation-spend__stepper input:focus {
+  outline: 2px solid rgba(139, 111, 78, 0.35);
+  outline-offset: 1px;
+}
+
+.vtt-automation-spend__stepper .dice-clear-btn {
+  border-radius: 4px;
+  min-height: 30px;
+  padding: 4px 0;
 }
 
 .vtt-automation-spend__actions {

@@ -578,7 +578,12 @@ test('runner preflights startTurn before spending ability resource', async () =>
 test('runner applies double edge and double bane as tier shifts without +/-2 bonus', async () => {
   const harness = await createAbilityAutomationHarness();
   try {
-    const { getEdgeState, getActiveEdgeControl } = harness.window.AbilityAutomationRunner.__testing;
+    const {
+      getEdgeState,
+      getActiveEdgeControl,
+      getTotalEdgeBaneCounts,
+      setManualEdgeBaneSelection,
+    } = harness.window.AbilityAutomationRunner.__testing;
     assert.deepEqual(
       getEdgeState(2, 0),
       { edge: 2, bane: 0, net: 2, bonus: 0, tierShift: 1, label: 'Double Edge (tier up)' }
@@ -600,6 +605,42 @@ test('runner applies double edge and double bane as tier shifts without +/-2 bon
     assert.deepEqual(getActiveEdgeControl(getEdgeState(1, 2)), { kind: 'bane', count: 1 });
     assert.deepEqual(getActiveEdgeControl(getEdgeState(0, 2)), { kind: 'bane', count: 2 });
     assert.equal(getActiveEdgeControl(getEdgeState(1, 1)), null);
+
+    const manualState = { edgeCount: 0, baneCount: 0 };
+    assert.deepEqual(setManualEdgeBaneSelection(manualState, 'edge', 1), { kind: 'edge', count: 1, active: true });
+    assert.deepEqual(manualState, { edgeCount: 1, baneCount: 0 });
+    assert.deepEqual(setManualEdgeBaneSelection(manualState, 'edge', 1), { kind: 'edge', count: 1, active: false });
+    assert.deepEqual(manualState, { edgeCount: 0, baneCount: 0 });
+    assert.deepEqual(setManualEdgeBaneSelection(manualState, 'bane', 2), { kind: 'bane', count: 2, active: true });
+    assert.deepEqual(manualState, { edgeCount: 0, baneCount: 2 });
+
+    assert.deepEqual(
+      getTotalEdgeBaneCounts({
+        edgeCount: 0,
+        baneCount: 0,
+        rollSuggestions: [
+          { kind: 'edge', count: 1, active: true },
+          { kind: 'edge', count: 1, active: true },
+        ],
+      }),
+      { edge: 1, bane: 0 }
+    );
+    assert.deepEqual(
+      getTotalEdgeBaneCounts({
+        edgeCount: 1,
+        baneCount: 0,
+        rollSuggestions: [{ kind: 'edge', count: 1, active: true }],
+      }),
+      { edge: 1, bane: 0 }
+    );
+    assert.deepEqual(
+      getTotalEdgeBaneCounts({
+        edgeCount: 0,
+        baneCount: 0,
+        rollSuggestions: [{ kind: 'edge', count: 2, active: true }],
+      }),
+      { edge: 2, bane: 0 }
+    );
   } finally {
     harness.close();
   }
