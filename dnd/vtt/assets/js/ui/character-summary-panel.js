@@ -2643,13 +2643,20 @@ function clampAutomationDialogPosition(left, top, modal) {
   };
 }
 
-function positionAutomationDialog(modal, anchor = null) {
+function getAutomationDialogInitialPosition(modal) {
+  const styles = document.body ? window.getComputedStyle(document.body) : null;
+  const panelWidth = parseFloat(styles?.getPropertyValue('--vtt-character-panel-width')) || 380;
+  const panelOffset = parseFloat(styles?.getPropertyValue('--vtt-character-panel-offset')) || 16;
+  const effectiveWidth = Math.min(panelWidth, Math.max(0, window.innerWidth - panelOffset * 2));
+  const left = effectiveWidth + panelOffset;
+  const top = Math.max(96, Math.round(window.innerHeight * 0.25));
+  return clampAutomationDialogPosition(left, top, modal);
+}
+
+function positionAutomationDialog(modal) {
   if (!(modal instanceof HTMLElement)) return;
   window.requestAnimationFrame(() => {
-    const anchorRect = anchor && typeof anchor === 'object' ? anchor : null;
-    const left = Number.isFinite(anchorRect?.right) ? anchorRect.right + 12 : 24;
-    const top = Number.isFinite(anchorRect?.top) ? anchorRect.top : 72;
-    const pos = clampAutomationDialogPosition(left, top, modal);
+    const pos = getAutomationDialogInitialPosition(modal);
     modal.style.left = `${pos.left}px`;
     modal.style.top = `${pos.top}px`;
   });

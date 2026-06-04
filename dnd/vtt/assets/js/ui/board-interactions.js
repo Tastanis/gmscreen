@@ -2708,7 +2708,41 @@ export function mountBoardInteractions(store, routes = {}) {
       host.querySelector('[data-heroic-resource-dismiss]')?.addEventListener('click', () => cleanup(false));
       host.querySelector('[data-heroic-resource-apply]')?.addEventListener('click', () => cleanup(true));
       document.body.appendChild(host);
+      makeHeroicResourcePromptDraggable(host);
+      positionAutomationPopup(host.querySelector('.heroic-resource-prompt__modal'));
       host.querySelector('[data-heroic-resource-apply]')?.focus();
+    });
+  }
+
+  function makeHeroicResourcePromptDraggable(host) {
+    const modal = host?.querySelector?.('.heroic-resource-prompt__modal');
+    const header = host?.querySelector?.('.heroic-resource-prompt__header');
+    if (!(modal instanceof HTMLElement) || !(header instanceof HTMLElement)) return;
+    let drag = null;
+    const stop = () => {
+      if (!drag) return;
+      drag = null;
+      modal.classList.remove('is-dragging');
+      document.removeEventListener('pointermove', move);
+      document.removeEventListener('pointerup', stop);
+      document.removeEventListener('pointercancel', stop);
+    };
+    const move = (event) => {
+      if (!drag) return;
+      const pos = clampAutomationPopupPosition(event.clientX - drag.offsetX, event.clientY - drag.offsetY, modal);
+      modal.style.left = `${pos.left}px`;
+      modal.style.top = `${pos.top}px`;
+    };
+    header.addEventListener('pointerdown', (event) => {
+      const target = event.target instanceof Element ? event.target : null;
+      if (event.button !== 0 || target?.closest('button')) return;
+      const rect = modal.getBoundingClientRect();
+      drag = { offsetX: event.clientX - rect.left, offsetY: event.clientY - rect.top };
+      modal.classList.add('is-dragging');
+      document.addEventListener('pointermove', move);
+      document.addEventListener('pointerup', stop);
+      document.addEventListener('pointercancel', stop);
+      event.preventDefault();
     });
   }
 
@@ -15806,12 +15840,9 @@ export function mountBoardInteractions(store, routes = {}) {
     };
     const move = (event) => {
       if (!drag) return;
-      const rect = modal.getBoundingClientRect();
-      const padding = 12;
-      const left = Math.min(Math.max(padding, event.clientX - drag.offsetX), Math.max(padding, window.innerWidth - rect.width - padding));
-      const top = Math.min(Math.max(padding, event.clientY - drag.offsetY), Math.max(padding, window.innerHeight - rect.height - padding));
-      modal.style.left = `${left}px`;
-      modal.style.top = `${top}px`;
+      const pos = clampAutomationPopupPosition(event.clientX - drag.offsetX, event.clientY - drag.offsetY, modal);
+      modal.style.left = `${pos.left}px`;
+      modal.style.top = `${pos.top}px`;
     };
     header.addEventListener('pointerdown', (event) => {
       const target = event.target instanceof Element ? event.target : null;
@@ -15837,30 +15868,39 @@ export function mountBoardInteractions(store, routes = {}) {
     return width + offset + 8;
   }
 
-  function positionAutomationTargetPrompt(modal, targetConfig = {}) {
+  function clampAutomationPopupPosition(left, top, modal) {
+    const rect = modal?.getBoundingClientRect?.() || {};
+    const width = rect.width || 360;
+    const height = rect.height || 190;
+    const padding = 12;
+    const reservedRight = getChatPanelReservedWidth();
+    return {
+      left: Math.min(Math.max(padding, left), Math.max(padding, window.innerWidth - reservedRight - width - padding)),
+      top: Math.min(Math.max(padding, top), Math.max(padding, window.innerHeight - height - padding)),
+    };
+  }
+
+  function getAutomationPopupInitialPosition(modal) {
+    const styles = document.body ? window.getComputedStyle(document.body) : null;
+    const panelWidth = parseFloat(styles?.getPropertyValue('--vtt-character-panel-width')) || 380;
+    const panelOffset = parseFloat(styles?.getPropertyValue('--vtt-character-panel-offset')) || 16;
+    const effectiveWidth = Math.min(panelWidth, Math.max(0, window.innerWidth - panelOffset * 2));
+    const left = effectiveWidth + panelOffset;
+    const top = Math.max(96, Math.round(window.innerHeight * 0.25));
+    return clampAutomationPopupPosition(left, top, modal);
+  }
+
+  function positionAutomationPopup(modal) {
     if (!(modal instanceof HTMLElement)) return;
     requestAnimationFrame(() => {
-      const source = resolveAutomationSourcePlacement(targetConfig.sourcePlacement) || null;
-      let left = 24;
-      let top = 72;
-      if (source && mapTransform) {
-        const transformRect = mapTransform.getBoundingClientRect();
-        const offsets = viewState.gridOffsets ?? {};
-        const gridSize = Math.max(8, Number.isFinite(viewState.gridSize) ? viewState.gridSize : 64);
-        const scale = Number.isFinite(viewState.scale) ? viewState.scale : 1;
-        const localLeft = (Number.isFinite(offsets.left) ? offsets.left : 0) + ((source.column || 0) + (source.width || 1) + 1) * gridSize;
-        const localTop = (Number.isFinite(offsets.top) ? offsets.top : 0) + (source.row || 0) * gridSize;
-        left = transformRect.left + localLeft * scale;
-        top = transformRect.top + localTop * scale;
-      }
-      const rect = modal.getBoundingClientRect();
-      const padding = 12;
-      const width = rect.width || 320;
-      const height = rect.height || 150;
-      const reservedRight = getChatPanelReservedWidth();
-      modal.style.left = `${Math.min(Math.max(padding, left), Math.max(padding, window.innerWidth - reservedRight - width - padding))}px`;
-      modal.style.top = `${Math.min(Math.max(padding, top), Math.max(padding, window.innerHeight - height - padding))}px`;
+      const pos = getAutomationPopupInitialPosition(modal);
+      modal.style.left = `${pos.left}px`;
+      modal.style.top = `${pos.top}px`;
     });
+  }
+
+  function positionAutomationTargetPrompt(modal) {
+    positionAutomationPopup(modal);
   }
 
   function renderAutomationTargetRangeOverlay(targetConfig) {

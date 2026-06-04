@@ -792,15 +792,16 @@ body.chat-panel-is-open .vtt-character-ability-tray__inner {
   position: fixed;
   inset: 0;
   z-index: 1600;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  padding: 16px;
+  pointer-events: none;
   background: rgba(15, 23, 42, 0.35);
 }
 
 .heroic-resource-prompt__modal {
+  position: fixed;
   width: min(420px, 92vw);
+  max-height: calc(100vh - 24px);
+  overflow: auto;
+  pointer-events: auto;
   border: 1px solid rgba(100, 116, 139, 0.35);
   border-radius: 8px;
   background: #f8fafc;
@@ -808,9 +809,14 @@ body.chat-panel-is-open .vtt-character-ability-tray__inner {
   box-shadow: 0 20px 45px rgba(15, 23, 42, 0.28);
 }
 
+.heroic-resource-prompt__modal.is-dragging {
+  cursor: grabbing;
+}
+
 .heroic-resource-prompt__header {
   padding: 14px 16px 8px;
   border-bottom: 1px solid rgba(148, 163, 184, 0.35);
+  cursor: grab;
 }
 
 .heroic-resource-prompt__header h2 {
@@ -839,6 +845,19 @@ body.chat-panel-is-open .vtt-character-ability-tray__inner {
   justify-content: flex-end;
   gap: 8px;
   padding: 0 16px 16px;
+}
+
+.heroic-resource-prompt__actions [data-heroic-resource-apply] {
+  background: #7c3f16;
+  border-color: #7c3f16;
+  color: #ffffff;
+}
+
+.heroic-resource-prompt__actions [data-heroic-resource-apply]:hover,
+.heroic-resource-prompt__actions [data-heroic-resource-apply]:focus-visible {
+  background: #9a4f1b;
+  border-color: #9a4f1b;
+  color: #ffffff;
 }
 
 .vtt-character-ability-list {

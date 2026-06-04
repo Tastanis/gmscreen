@@ -44,7 +44,28 @@
     document.getElementById(RUNNER_ID)?.remove();
   }
 
+  function isVttAutomationContext() {
+    return Boolean(
+      document.body?.classList?.contains("vtt-body")
+        || document.querySelector(".vtt-workspace")
+        || document.querySelector(".vtt-character-summary")
+    );
+  }
+
+  function getVttAutomationInitialPosition(modal) {
+    const styles = document.body ? window.getComputedStyle(document.body) : null;
+    const panelWidth = parseFloat(styles?.getPropertyValue("--vtt-character-panel-width")) || 380;
+    const panelOffset = parseFloat(styles?.getPropertyValue("--vtt-character-panel-offset")) || 16;
+    const effectiveWidth = Math.min(panelWidth, Math.max(0, window.innerWidth - panelOffset * 2));
+    const left = effectiveWidth + panelOffset;
+    const top = Math.max(96, Math.round(window.innerHeight * 0.25));
+    return constrainRunnerPosition(left, top, modal);
+  }
+
   function getRunnerDefaultPosition(modal, variant, anchor = null) {
+    if (isVttAutomationContext()) {
+      return getVttAutomationInitialPosition(modal);
+    }
     if (anchor && typeof anchor === "object") {
       const left = Number.isFinite(anchor.right) ? anchor.right + 12 : Number(anchor.left) || 24;
       const top = Number.isFinite(anchor.top) ? anchor.top : 72;
