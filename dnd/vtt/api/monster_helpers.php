@@ -57,6 +57,8 @@ function loadMonsterCatalog(): array
         $rawMonsters = $data;
     }
 
+    $folderIndex = buildMonsterFolderIndex($data);
+
     foreach ($rawMonsters as $key => $entry) {
         if (!is_array($entry)) {
             continue;
@@ -65,6 +67,11 @@ function loadMonsterCatalog(): array
         $normalized = normalizeMonsterSnapshot($entry, is_string($key) ? $key : null);
         if ($normalized === null) {
             continue;
+        }
+
+        if (isset($folderIndex[$normalized['id']])) {
+            $normalized['sourceFolder'] = $folderIndex[$normalized['id']]['label'];
+            $normalized['sourceFolderParts'] = $folderIndex[$normalized['id']]['parts'];
         }
 
         $catalog[$normalized['id']] = $normalized;
@@ -93,12 +100,104 @@ function getMonsterSummaries(): array
                 'stamina' => $monster['stamina'] ?? null,
                 'updatedAt' => $monster['updatedAt'] ?? null,
                 'imageUrl' => $monster['imageUrl'] ?? null,
+                'sourceFolder' => $monster['sourceFolder'] ?? null,
+                'sourceFolderParts' => $monster['sourceFolderParts'] ?? null,
             ],
             static fn ($value) => $value !== null && $value !== ''
         );
     }
 
     return $summaries;
+}
+
+/**
+ * Builds a monster id -> saved tab path lookup from the monster creator data.
+ *
+ * @param array<string,mixed> $data
+ * @return array<string,array{label:string,parts:array<int,string>}>
+ */
+function buildMonsterFolderIndex(array $data): array
+{
+    $tabs = $data['tabs'] ?? null;
+    if (!is_array($tabs)) {
+        return [];
+    }
+
+    $index = [];
+
+    foreach ($tabs as $mainTabId => $mainTab) {
+        if (!is_array($mainTab)) {
+            continue;
+        }
+
+        $mainName = getMonsterFolderName($mainTab['name'] ?? $mainTabId);
+        $subTabs = $mainTab['subTabs'] ?? $mainTab['subtabs'] ?? null;
+
+        if (is_array($subTabs) && $subTabs !== []) {
+            foreach ($subTabs as $subTabId => $subTab) {
+                if (!is_array($subTab)) {
+                    continue;
+                }
+
+                $subName = getMonsterFolderName($subTab['name'] ?? $subTabId);
+                addMonsterFolderEntries($index, $subTab['monsters'] ?? [], [$mainName, $subName]);
+            }
+            continue;
+        }
+
+        addMonsterFolderEntries($index, $mainTab['monsters'] ?? [], [$mainName]);
+    }
+
+    return $index;
+}
+
+/**
+ * @param array<string,array{label:string,parts:array<int,string>}> $index
+ * @param mixed $monsterIds
+ * @param array<int,string> $parts
+ */
+function addMonsterFolderEntries(array &$index, $monsterIds, array $parts): void
+{
+    if (!is_array($monsterIds)) {
+        return;
+    }
+
+    $parts = array_values(array_filter($parts, static function ($part): bool {
+        return is_string($part) && trim($part) !== '';
+    }));
+
+    if ($parts === []) {
+        $parts = ['Unsorted'];
+    }
+
+    $label = implode('/', $parts);
+
+    foreach ($monsterIds as $monsterId) {
+        $id = sanitizeMonsterId($monsterId);
+        if ($id === null || isset($index[$id])) {
+            continue;
+        }
+
+        $index[$id] = [
+            'label' => $label,
+            'parts' => $parts,
+        ];
+    }
+}
+
+/**
+ * @param mixed $value
+ */
+function getMonsterFolderName($value): string
+{
+    $name = sanitizeMonsterString($value);
+    if ($name === '') {
+        return 'Unsorted';
+    }
+
+    $name = str_replace(['_', '-'], ' ', $name);
+    $name = preg_replace('/\s+/', ' ', $name) ?? $name;
+    return trim($name) !== '' ? trim($name) : 'Unsorted';
 }
 
 /**

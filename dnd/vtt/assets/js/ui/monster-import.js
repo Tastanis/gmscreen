@@ -91,6 +91,7 @@ export function createMonsterImporter({
     monsters: [],
     filter: '',
     status: DEFAULT_STATUS,
+    openFolders: new Set(),
   };
 
   let removeListeners = null;
@@ -125,7 +126,8 @@ export function createMonsterImporter({
     const query = state.filter.toLowerCase();
     return state.monsters.filter((monster) => {
       const name = typeof monster?.name === 'string' ? monster.name.toLowerCase() : '';
-      return name.includes(query);
+      const folder = getMonsterFolderLabel(monster).toLowerCase();
+      return name.includes(query) || folder.includes(query);
     });
   };
 
@@ -139,21 +141,9 @@ export function createMonsterImporter({
       return;
     }
 
-    list.innerHTML = filtered
-      .map((monster) => {
-        const id = monster?.id ?? monster?.uuid ?? monster?.slug ?? monster?.name;
-        const name = typeof monster?.name === 'string' ? monster.name : 'Unknown Monster';
-        const safeId = id != null ? String(id) : name;
-        return `
-          <li>
-            <button type="button" class="monster-importer__item" data-monster-id="${escapeHtml(
-              safeId
-            )}">
-              <span class="monster-importer__item-name">${escapeHtml(name)}</span>
-            </button>
-          </li>
-        `;
-      })
+    const groups = groupMonstersByFolder(filtered);
+    list.innerHTML = groups
+      .map((group) => renderFolderGroup(group))
       .join('');
   };
 
@@ -169,6 +159,7 @@ export function createMonsterImporter({
     setOpen(false);
     clearStatus();
     state.filter = '';
+    state.openFolders.clear();
     searchInput.value = '';
     renderList();
     documentRef.removeEventListener('keydown', handleKeydown);
@@ -231,6 +222,71 @@ export function createMonsterImporter({
       });
   };
 
+  const groupMonstersByFolder = (items) => {
+    const groupMap = new Map();
+    items.forEach((monster) => {
+      const folder = getMonsterFolderLabel(monster);
+      if (!groupMap.has(folder)) {
+        groupMap.set(folder, []);
+      }
+      groupMap.get(folder).push(monster);
+    });
+
+    return Array.from(groupMap.entries())
+      .map(([label, monsters]) => ({
+        label,
+        monsters: sortMonsters(monsters),
+      }))
+      .sort((a, b) => a.label.toLowerCase().localeCompare(b.label.toLowerCase()));
+  };
+
+  const renderFolderGroup = (group) => {
+    const isOpen = state.filter !== '' || state.openFolders.has(group.label);
+    const itemCount = group.monsters.length;
+    return `
+      <li class="monster-importer__folder${isOpen ? '' : ' is-collapsed'}">
+        <button
+          type="button"
+          class="monster-importer__folder-toggle"
+          data-monster-folder="${escapeHtml(group.label)}"
+          aria-expanded="${isOpen ? 'true' : 'false'}"
+        >
+          <span class="monster-importer__folder-chevron" aria-hidden="true"></span>
+          <span class="monster-importer__folder-name">${escapeHtml(group.label)}</span>
+          <span class="monster-importer__folder-count">${itemCount}</span>
+        </button>
+        <ul class="monster-importer__folder-list">
+          ${group.monsters.map((monster) => renderMonsterItem(monster)).join('')}
+        </ul>
+      </li>
+    `;
+  };
+
+  const renderMonsterItem = (monster) => {
+    const id = monster?.id ?? monster?.uuid ?? monster?.slug ?? monster?.name;
+    const name = typeof monster?.name === 'string' ? monster.name : 'Unknown Monster';
+    const safeId = id != null ? String(id) : name;
+    const imageUrl = getMonsterImageUrl(monster);
+    const meta = getMonsterMeta(monster);
+    const initial = name.trim().charAt(0).toUpperCase() || '?';
+
+    return `
+      <li>
+        <button type="button" class="monster-importer__item" data-monster-id="${escapeHtml(safeId)}">
+          <span class="monster-importer__thumb" aria-hidden="true">
+            ${imageUrl
+              ? `<img src="${escapeHtml(imageUrl)}" alt="" loading="lazy" />`
+              : `<span class="monster-importer__thumb-fallback">${escapeHtml(initial)}</span>`}
+          </span>
+          <span class="monster-importer__item-body">
+            <span class="monster-importer__item-name">${escapeHtml(name)}</span>
+            ${meta ? `<span class="monster-importer__item-meta">${escapeHtml(meta)}</span>` : ''}
+          </span>
+        </button>
+      </li>
+    `;
+  };
+
   const ensureIndex = async () => {
     if (state.hasLoaded || state.isLoadingIndex) {
       return;
@@ -260,6 +316,23 @@ export function createMonsterImporter({
   };
 
   const handleListClick = async (event) => {
+    const folderButton = event.target.closest('.monster-importer__folder-toggle');
+    if (folderButton) {
+      const folder = folderButton.getAttribute('data-monster-folder');
+      if (!folder) {
+        return;
+      }
+
+      if (state.openFolders.has(folder)) {
+        state.openFolders.delete(folder);
+      } else {
+        state.openFolders.add(folder);
+      }
+
+      renderList();
+      return;
+    }
+
     const button = event.target.closest('.monster-importer__item');
     if (!button) {
       return;
@@ -330,6 +403,64 @@ function escapeHtml(value = '') {
     .replace(/>/g, '&gt;')
     .replace(/"/g, '&quot;')
     .replace(/'/g, '&#039;');
+}
+
+function getMonsterFolderLabel(monster) {
+  if (Array.isArray(monster?.sourceFolderParts)) {
+    const parts = monster.sourceFolderParts
+      .map((part) => String(part ?? '').trim())
+      .filter(Boolean);
+    if (parts.length) {
+      return parts.join('/');
+    }
+  }
+
+  const candidates = [
+    monster?.sourceFolder,
+    monster?.folder,
+    monster?.folderName,
+    monster?.source,
+  ];
+
+  for (const candidate of candidates) {
+    if (typeof candidate === 'string' && candidate.trim() !== '') {
+      return candidate.trim();
+    }
+  }
+
+  return 'Unsorted';
+}
+
+function getMonsterImageUrl(monster) {
+  const candidates = [
+    monster?.imageUrl,
+    monster?.image,
+    monster?.thumbnailUrl,
+    monster?.thumbnail,
+    monster?.portraitUrl,
+  ];
+
+  for (const candidate of candidates) {
+    if (typeof candidate === 'string' && candidate.trim() !== '') {
+      return candidate.trim();
+    }
+  }
+
+  return '';
+}
+
+function getMonsterMeta(monster) {
+  const parts = [];
+  if (monster?.level !== null && monster?.level !== undefined && String(monster.level).trim() !== '') {
+    parts.push(`Level ${monster.level}`);
+  }
+
+  const role = monster?.role ?? monster?.type ?? monster?.types;
+  if (typeof role === 'string' && role.trim() !== '') {
+    parts.push(role.trim());
+  }
+
+  return parts.join(' / ');
 }
 
 export default createMonsterImporter;

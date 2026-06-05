@@ -1889,11 +1889,11 @@ function positionContextMenu(element, clientX, clientY) {
 }
 
 function isGroupCollapsed(state, folderId) {
-  return state.get(getGroupKey(folderId)) === true;
+  return state.get(getGroupKey(folderId)) !== false;
 }
 
 function setGroupCollapsed(state, folderId, collapsed) {
-  state.set(getGroupKey(folderId), collapsed);
+  state.set(getGroupKey(folderId), Boolean(collapsed));
 }
 
 function pruneCollapseState(state, groups) {
