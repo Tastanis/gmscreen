@@ -471,9 +471,8 @@
 }
 
 .vtt-board__actions {
-  display: flex;
-  flex-direction: column;
-  flex-wrap: nowrap;
+  display: grid;
+  grid-template-columns: repeat(3, 7rem);
   gap: 0.14rem;
   align-items: flex-start;
   justify-content: flex-start;
@@ -498,11 +497,7 @@
 .vtt-board__quick-launch,
 .vtt-board__coming-soon,
 .vtt-board__controls {
-  display: grid;
-  grid-template-columns: repeat(3, 7rem);
-  gap: 0.14rem;
-  align-items: center;
-  justify-content: flex-start;
+  display: contents;
 }
 
 .btn--soon {
@@ -2966,13 +2961,8 @@ body.vtt-character-ability-tray-is-open .vtt-board__malice {
 
 @media (max-width: 560px) {
   .vtt-board__actions {
-    width: min(100%, 14.15rem);
-  }
-
-  .vtt-board__quick-launch,
-  .vtt-board__coming-soon,
-  .vtt-board__controls {
     grid-template-columns: repeat(2, 7rem);
+    width: min(100%, 14.15rem);
   }
 }
 
