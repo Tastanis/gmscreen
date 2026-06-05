@@ -1,8 +1,10 @@
 /* ── Stairs panel launcher button ───────────────────────────────── */
 
 .vtt-settings-launcher--stairs .vtt-settings-launcher__icon {
-  font-size: 1.05rem;
-  line-height: 1;
+  font-size: 0;
+  line-height: 0;
+  mask-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24'%3E%3Cpath fill='%23000' d='M4 17h4v-3h4v-3h4V8h4v2h-2v3h-4v3h-4v3H4v-2Zm2-9h5v2H8.4l4.6 4.6-1.4 1.4L7 11.4V14H5V8h1Z'/%3E%3C/svg%3E");
+  -webkit-mask-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24'%3E%3Cpath fill='%23000' d='M4 17h4v-3h4v-3h4V8h4v2h-2v3h-4v3h-4v3H4v-2Zm2-9h5v2H8.4l4.6 4.6-1.4 1.4L7 11.4V14H5V8h1Z'/%3E%3C/svg%3E");
 }
 
 /* ── Stairs control panel (kept compact for future tools) ───────── */
