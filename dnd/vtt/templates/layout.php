@@ -20,9 +20,9 @@ require_once __DIR__ . '/../../includes/strix-nav.php';
         (function () {
             try {
                 var storedTheme = window.localStorage ? window.localStorage.getItem('vtt.theme') : null;
-                document.documentElement.setAttribute('data-vtt-theme', storedTheme === 'dark' ? 'dark' : 'light');
+                document.documentElement.setAttribute('data-vtt-theme', storedTheme === 'light' ? 'light' : 'dark');
             } catch (error) {
-                document.documentElement.setAttribute('data-vtt-theme', 'light');
+                document.documentElement.setAttribute('data-vtt-theme', 'dark');
             }
         })();
     </script>

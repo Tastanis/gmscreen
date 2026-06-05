@@ -2,14 +2,14 @@ const STORAGE_KEY = 'vtt.theme';
 const THEMES = new Set(['light', 'dark']);
 
 function normalizeTheme(value) {
-  return THEMES.has(value) ? value : 'light';
+  return THEMES.has(value) ? value : 'dark';
 }
 
 function readStoredTheme() {
   try {
     return normalizeTheme(window.localStorage?.getItem(STORAGE_KEY));
   } catch (error) {
-    return 'light';
+    return 'dark';
   }
 }
 
