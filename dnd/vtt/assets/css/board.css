@@ -254,7 +254,7 @@
   border: 1px solid rgba(191, 166, 139, 0.4);
   box-shadow: inset 0 0 0 1px rgba(10, 6, 4, 0.15);
   width: 100%;
-  min-height: 4.1rem;
+  min-height: 4.5rem;
   background: rgba(32, 22, 18, 0.65);
   padding: 0.1rem 0 0.15rem;
 }
@@ -279,7 +279,7 @@
   padding: 0 0.05rem 0.25rem;
   display: grid;
   grid-template-columns: repeat(auto-fill, minmax(38px, 1fr));
-  grid-auto-rows: 34px;
+  grid-auto-rows: 37px;
   gap: 0.25rem;
   align-content: flex-start;
   justify-items: center;
@@ -5435,7 +5435,7 @@ body.vtt-character-ability-tray-is-open .vtt-board__malice {
     inset 0 -1px 2px rgba(255, 200, 150, 0.05);
   position: relative;
   z-index: 1;
-  min-height: 2.15rem;
+  min-height: 2.36rem;
   padding: 0.14rem;
 }
 
