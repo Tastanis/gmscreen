@@ -123,6 +123,43 @@ function renderVttSettingsPanel(string $tokenLibraryMarkup = '', bool $isGm = fa
         </div>
     </aside>
     <div class="vtt-settings-launchers" aria-label="Open settings panels">
+        <div class="vtt-theme-settings" data-vtt-theme-settings>
+            <button
+                type="button"
+                class="vtt-theme-settings__button"
+                data-vtt-theme-settings-toggle
+                aria-controls="vtt-theme-settings-menu"
+                aria-expanded="false"
+                title="Display settings"
+            >
+                <span class="vtt-theme-settings__gear" aria-hidden="true"></span>
+                <span class="vtt-theme-settings__label visually-hidden">Display Settings</span>
+            </button>
+            <div
+                id="vtt-theme-settings-menu"
+                class="vtt-theme-settings__menu"
+                data-vtt-theme-settings-menu
+                hidden
+            >
+                <div class="vtt-theme-settings__heading">Theme</div>
+                <div class="vtt-theme-settings__options" role="radiogroup" aria-label="VTT theme">
+                    <button
+                        type="button"
+                        class="vtt-theme-settings__option"
+                        data-vtt-theme-option="light"
+                        role="radio"
+                        aria-checked="true"
+                    >Light</button>
+                    <button
+                        type="button"
+                        class="vtt-theme-settings__option"
+                        data-vtt-theme-option="dark"
+                        role="radio"
+                        aria-checked="false"
+                    >Dark</button>
+                </div>
+            </div>
+        </div>
         <?php if ($isGm): ?>
             <button
                 type="button"

@@ -400,6 +400,33 @@ body.vtt-body {
   color: var(--vtt-text-primary);
 }
 
+:root[data-vtt-theme='light'] .vtt-character-card__quick-value,
+:root[data-vtt-theme='light'] .vtt-character-resource__value,
+:root[data-vtt-theme='light'] .vtt-character-stat__value,
+:root[data-vtt-theme='light'] .vtt-character-vital__value,
+:root[data-vtt-theme='light'] .vtt-character-pill,
+:root[data-vtt-theme='light'] .vtt-character-recovery__heal,
+:root[data-vtt-theme='light'] .vtt-character-ability-tab:hover,
+:root[data-vtt-theme='light'] .vtt-character-ability-tab:focus-visible {
+  color: var(--vtt-text-primary);
+}
+
+:root[data-vtt-theme='light'] .vtt-character-pill--damage,
+:root[data-vtt-theme='light'] .vtt-character-condition__remove {
+  color: var(--vtt-danger);
+}
+
+:root[data-vtt-theme='light'] .vtt-character-condition--hidden-effect,
+:root[data-vtt-theme='light'] .vtt-character-condition__detail,
+:root[data-vtt-theme='light'] .vtt-character-ability-item__cost[data-cost-tier="mid"] .vtt-character-ability-item__cost-value,
+:root[data-vtt-theme='light'] .vtt-character-ability-item__cost[data-cost-tier="high"] .vtt-character-ability-item__cost-value {
+  color: var(--vtt-text-primary);
+}
+
+:root[data-vtt-theme='light'] .vtt-character-ability-item__auto {
+  color: #294b24;
+}
+
 .vtt-monster-summary {
   background: var(--vtt-sheet-bg);
   color: var(--vtt-sheet-text);
@@ -548,16 +575,16 @@ body.vtt-body {
 }
 
 @media (max-width: 768px) {
-  .vtt-theme-settings {
+  body > .vtt-theme-settings {
     top: 24px;
     left: 8px;
   }
 
-  .vtt-theme-settings__label {
+  body > .vtt-theme-settings .vtt-theme-settings__label {
     display: none;
   }
 
-  .vtt-theme-settings__button {
+  body > .vtt-theme-settings .vtt-theme-settings__button {
     width: 38px;
     justify-content: center;
     padding: 0.4rem;

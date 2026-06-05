@@ -28,6 +28,34 @@
     box-shadow var(--vtt-transition);
 }
 
+.vtt-settings-launchers .vtt-theme-settings {
+  position: relative;
+  top: auto;
+  left: auto;
+  z-index: auto;
+  display: block;
+  font-family: "Inter", -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+}
+
+.vtt-settings-launchers .vtt-theme-settings__button {
+  width: 42px;
+  height: 42px;
+  min-height: 42px;
+  padding: 0;
+  justify-content: center;
+}
+
+.vtt-settings-launchers .vtt-theme-settings__gear {
+  width: 24px;
+  height: 24px;
+}
+
+.vtt-settings-launchers .vtt-theme-settings__menu {
+  position: absolute;
+  top: 0;
+  left: calc(100% + 8px);
+}
+
 .vtt-settings-launcher:hover {
   background: rgba(213, 155, 90, 0.18);
   border-color: rgba(213, 155, 90, 0.4);

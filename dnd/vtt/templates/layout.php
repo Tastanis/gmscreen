@@ -44,43 +44,6 @@ require_once __DIR__ . '/../../includes/strix-nav.php';
 </head>
 <body class="vtt-body">
     <?php renderStrixNav('vtt'); ?>
-    <div class="vtt-theme-settings" data-vtt-theme-settings>
-        <button
-            type="button"
-            class="vtt-theme-settings__button"
-            data-vtt-theme-settings-toggle
-            aria-controls="vtt-theme-settings-menu"
-            aria-expanded="false"
-            title="Display settings"
-        >
-            <span class="vtt-theme-settings__gear" aria-hidden="true"></span>
-            <span class="vtt-theme-settings__label">Settings</span>
-        </button>
-        <div
-            id="vtt-theme-settings-menu"
-            class="vtt-theme-settings__menu"
-            data-vtt-theme-settings-menu
-            hidden
-        >
-            <div class="vtt-theme-settings__heading">Theme</div>
-            <div class="vtt-theme-settings__options" role="radiogroup" aria-label="VTT theme">
-                <button
-                    type="button"
-                    class="vtt-theme-settings__option"
-                    data-vtt-theme-option="light"
-                    role="radio"
-                    aria-checked="true"
-                >Light</button>
-                <button
-                    type="button"
-                    class="vtt-theme-settings__option"
-                    data-vtt-theme-option="dark"
-                    role="radio"
-                    aria-checked="false"
-                >Dark</button>
-            </div>
-        </div>
-    </div>
     <div id="vtt-app" class="vtt-app" data-routes='<?= json_encode($routes, JSON_HEX_TAG | JSON_HEX_APOS | JSON_HEX_QUOT | JSON_HEX_AMP) ?>'>
         <?= $sections['characterSummaryPanel'] ?? '' ?>
         <?= $sections['monsterSummaryPanel'] ?? '' ?>
