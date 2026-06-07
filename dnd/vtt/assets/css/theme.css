@@ -427,6 +427,63 @@ body.vtt-body {
   color: #294b24;
 }
 
+:root[data-vtt-theme='light'] .vtt-character-ability-list {
+  border-color: rgba(139, 111, 78, 0.52);
+  background: linear-gradient(180deg, rgba(250, 243, 224, 0.98), rgba(230, 216, 197, 0.98));
+  box-shadow:
+    0 12px 26px rgba(74, 54, 32, 0.24),
+    inset 0 1px 0 rgba(255, 255, 255, 0.58);
+}
+
+:root[data-vtt-theme='light'] .vtt-character-inventory-list {
+  background: linear-gradient(180deg, rgba(250, 243, 224, 0.98), rgba(230, 216, 197, 0.98));
+}
+
+:root[data-vtt-theme='light'] .vtt-character-ability-list__heading,
+:root[data-vtt-theme='light'] .vtt-character-ability-empty {
+  border-bottom-color: rgba(139, 111, 78, 0.3);
+  background: linear-gradient(180deg, rgba(214, 190, 153, 0.74), rgba(194, 173, 144, 0.58));
+  color: var(--vtt-text-primary);
+}
+
+:root[data-vtt-theme='light'] .vtt-character-ability-item,
+:root[data-vtt-theme='light'] .vtt-character-inventory-item {
+  border-bottom-color: rgba(139, 111, 78, 0.24);
+  background: linear-gradient(90deg, rgba(255, 250, 240, 0.98), rgba(239, 226, 207, 0.98));
+  color: var(--vtt-text-primary);
+}
+
+:root[data-vtt-theme='light'] .vtt-character-ability-item:hover,
+:root[data-vtt-theme='light'] .vtt-character-ability-item:focus-visible {
+  background: linear-gradient(90deg, rgba(255, 253, 246, 1), rgba(232, 216, 191, 1));
+  outline-color: rgba(111, 83, 51, 0.5);
+}
+
+:root[data-vtt-theme='light'] .vtt-character-ability-item__mark {
+  border-color: rgba(139, 111, 78, 0.38);
+  background: rgba(139, 111, 78, 0.14);
+  color: var(--vtt-text-primary);
+}
+
+:root[data-vtt-theme='light'] .vtt-character-ability-item__name,
+:root[data-vtt-theme='light'] .vtt-character-inventory-item__name {
+  color: var(--vtt-text-primary);
+}
+
+:root[data-vtt-theme='light'] .vtt-character-ability-item__meta,
+:root[data-vtt-theme='light'] .vtt-character-ability-item__cost-label {
+  color: var(--vtt-text-muted);
+}
+
+:root[data-vtt-theme='light'] .vtt-character-ability-item__cost {
+  border-color: rgba(139, 111, 78, 0.32);
+  background: rgba(139, 111, 78, 0.12);
+}
+
+:root[data-vtt-theme='light'] .vtt-character-ability-item__cost-value {
+  color: var(--vtt-text-primary);
+}
+
 .vtt-monster-summary {
   background: var(--vtt-sheet-bg);
   color: var(--vtt-sheet-text);
