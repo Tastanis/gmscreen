@@ -75,6 +75,8 @@ const ABILITY_CATEGORIES = [
   { key: 'mains', label: 'Main Action', heading: 'Main Actions', empty: 'No main actions listed.' },
   { key: 'maneuvers', label: 'Maneuver', heading: 'Maneuvers', empty: 'No maneuvers listed.' },
 ];
+const ITEM_TRAY_CATEGORY = { key: 'items', label: 'Items', heading: 'Items', empty: 'No visible items.' };
+const INVENTORY_ITEM_CACHE = new Map();
 
 const TEST_TIER_LABELS = {
   low: '<= 11',
@@ -123,6 +125,18 @@ export function mountCharacterSummaryPanel(routes = {}, userContext = {}) {
   const abilityPreview = ensureAbilityPreview();
   const revealButton = ensureRevealButton();
 
+  const renderCurrentAbilityTray = () => renderAbilityTray(abilityTray, activeSheet, {
+    activeCategory: activeAbilityCategory,
+    activeToken,
+    characterId: activeCharacterId,
+    routes,
+    onInventoryLoaded: () => {
+      if (activeAbilityCategory === ITEM_TRAY_CATEGORY.key) {
+    renderCurrentAbilityTray();
+      }
+    },
+  });
+
   const updatePanelTop = () => {
     if (!boardHeader || !document.body) {
       return;
@@ -159,7 +173,7 @@ export function mountCharacterSummaryPanel(routes = {}, userContext = {}) {
     panel.setAttribute('aria-hidden', isOpen ? 'false' : 'true');
     document.body?.classList.toggle('vtt-character-summary-is-open', isOpen);
     if (isOpen && activeSheet) {
-      renderAbilityTray(abilityTray, activeSheet, { activeCategory: activeAbilityCategory, activeToken });
+      renderCurrentAbilityTray();
     }
     if (persist) {
       panelPreferredOpen = isOpen;
@@ -224,7 +238,7 @@ export function mountCharacterSummaryPanel(routes = {}, userContext = {}) {
       onVictory: handleVictoryClick,
       onConditionAdd: handleConditionAdd,
     });
-    renderAbilityTray(abilityTray, activeSheet, { activeCategory: activeAbilityCategory, activeToken });
+    renderCurrentAbilityTray();
     autoRegisterActiveTriggerAbilities();
     syncRevealButton();
   };
@@ -595,7 +609,7 @@ export function mountCharacterSummaryPanel(routes = {}, userContext = {}) {
     activeToken.readyTriggerAbilities = [];
     activeToken.readyTriggerSources = {};
     activeToken.readyTriggerPayloads = {};
-    renderAbilityTray(abilityTray, activeSheet, { activeCategory: activeAbilityCategory, activeToken });
+          renderCurrentAbilityTray();
   });
 
   document.addEventListener('vtt:turn-action-usage-changed', (event) => {
@@ -616,7 +630,7 @@ export function mountCharacterSummaryPanel(routes = {}, userContext = {}) {
       activeToken.mainActionUsedThisTurn = false;
       activeToken.maneuverUsedThisTurn = false;
     }
-    renderAbilityTray(abilityTray, activeSheet, { activeCategory: activeAbilityCategory, activeToken });
+          renderCurrentAbilityTray();
   });
 
   revealButton.addEventListener('click', (event) => {
@@ -657,7 +671,7 @@ export function mountCharacterSummaryPanel(routes = {}, userContext = {}) {
           if (!wasReady) {
             activeToken.triggeredActionUsedThisRound = false;
           }
-          renderAbilityTray(abilityTray, activeSheet, { activeCategory: activeAbilityCategory, activeToken });
+          renderCurrentAbilityTray();
         }
         document.dispatchEvent(new CustomEvent('vtt:toggle-triggered-action', { detail: { placementId } }));
       }
@@ -674,7 +688,7 @@ export function mountCharacterSummaryPanel(routes = {}, userContext = {}) {
         if (activeToken && typeof activeToken === 'object') {
           const key = actionKind === 'main' ? 'mainActionUsedThisTurn' : 'maneuverUsedThisTurn';
           activeToken[key] = !Boolean(activeToken[key]);
-          renderAbilityTray(abilityTray, activeSheet, { activeCategory: activeAbilityCategory, activeToken });
+        renderCurrentAbilityTray();
         }
         document.dispatchEvent(new CustomEvent('vtt:toggle-turn-action-usage', {
           detail: { placementId, actionKind },
@@ -696,7 +710,7 @@ export function mountCharacterSummaryPanel(routes = {}, userContext = {}) {
           activeToken.readyTriggerSources = {};
           activeToken.readyTriggerPayloads = {};
           activeToken.triggerSetAtPhase = null;
-          renderAbilityTray(abilityTray, activeSheet, { activeCategory: activeAbilityCategory, activeToken });
+        renderCurrentAbilityTray();
         }
         document.dispatchEvent(new CustomEvent('vtt:clear-trigger-ready', { detail: { placementId } }));
       }
@@ -748,7 +762,7 @@ export function mountCharacterSummaryPanel(routes = {}, userContext = {}) {
         const itemRect = abilityItem.getBoundingClientRect();
         activeAbilityCategory = null;
         hideAbilityPreview(abilityPreview);
-        renderAbilityTray(abilityTray, activeSheet, { activeCategory: activeAbilityCategory, activeToken });
+        renderCurrentAbilityTray();
         startAbilityAutomation(activeSheet, action, abilityItem.dataset.abilityCategory, activeToken, {
           characterId: activeCharacterId,
           routes,
@@ -775,7 +789,7 @@ export function mountCharacterSummaryPanel(routes = {}, userContext = {}) {
     const category = categoryButton.dataset.characterAbilityCategory || '';
     activeAbilityCategory = activeAbilityCategory === category ? null : category;
     hideAbilityPreview(abilityPreview);
-    renderAbilityTray(abilityTray, activeSheet, { activeCategory: activeAbilityCategory, activeToken });
+    renderCurrentAbilityTray();
   });
 
   abilityTray.addEventListener('pointerover', (event) => {
@@ -961,7 +975,7 @@ function bindCharacterSummaryControls(panel, {
   });
 }
 
-function renderAbilityTray(tray, sheet, { activeCategory = null, activeToken = null } = {}) {
+function renderAbilityTray(tray, sheet, { activeCategory = null, activeToken = null, characterId = '', routes = {}, onInventoryLoaded = null } = {}) {
   if (!tray) {
     return;
   }
@@ -980,11 +994,13 @@ function renderAbilityTray(tray, sheet, { activeCategory = null, activeToken = n
   const hasReadyTrigger = Boolean(placement?.hasReadyTrigger);
   const mainActionUsed = Boolean(placement?.mainActionUsedThisTurn);
   const maneuverUsed = Boolean(placement?.maneuverUsedThisTurn);
+  const trayCategories = [...ABILITY_CATEGORIES, ITEM_TRAY_CATEGORY];
 
   tray.innerHTML = `
     <nav class="vtt-character-ability-tray__inner" aria-label="Character abilities">
-      ${ABILITY_CATEGORIES.map((category) => {
-        const actions = getAbilityActions(sheet, category.key, { activeToken });
+      ${trayCategories.map((category) => {
+        const isItems = category.key === ITEM_TRAY_CATEGORY.key;
+        const actions = isItems ? [] : getAbilityActions(sheet, category.key, { activeToken });
         const isActive = activeCategory === category.key;
         const isTrigger = category.key === 'triggers';
         const actionUsageKind = normalizeActionUsageKind(category.key);
@@ -1018,10 +1034,14 @@ function renderAbilityTray(tray, sheet, { activeCategory = null, activeToken = n
                 title="${actionUsed ? `${category.label} used` : `${category.label} unused`}"
               ></span>`
           : '';
-        const tabClass = `vtt-character-ability-tab${isTrigger && hasReadyTrigger ? ' has-ready-trigger' : ''}`;
+        const tabClass = `vtt-character-ability-tab${isTrigger && hasReadyTrigger ? ' has-ready-trigger' : ''}${isItems ? ' vtt-character-ability-tab--items' : ''}`;
+        const categoryClass = `vtt-character-ability-category${isActive ? ' is-active' : ''}${isItems ? ' vtt-character-ability-category--items' : ''}`;
+        const inventoryState = isItems && isActive
+          ? getInventoryItemsForTray(characterId, routes, onInventoryLoaded)
+          : null;
         return `
-          <div class="vtt-character-ability-category${isActive ? ' is-active' : ''}">
-            ${isActive ? renderAbilityList(category, actions, { activeToken }) : ''}
+          <div class="${categoryClass}">
+            ${isActive ? (isItems ? renderInventoryItemList(category, inventoryState) : renderAbilityList(category, actions, { activeToken })) : ''}
             <button
               class="${tabClass}"
               type="button"
@@ -1046,6 +1066,68 @@ function renderAbilityList(category, actions, opts = {}) {
       ${actions.length
         ? actions.map((action, index) => renderAbilityItem(action, category.key, index, { activeToken })).join('')
         : `<div class="vtt-character-ability-empty">${escapeHtml(category.empty)}</div>`}
+    </div>
+  `;
+}
+
+function getInventoryItemsForTray(characterId, routes = {}, onInventoryLoaded = null) {
+  const normalizedCharacterId = normalizeCharacterId(characterId);
+  if (!normalizedCharacterId) {
+    return { status: 'unavailable', items: [] };
+  }
+
+  const cached = INVENTORY_ITEM_CACHE.get(normalizedCharacterId);
+  if (cached) {
+    return cached;
+  }
+
+  const state = { status: 'loading', items: [] };
+  INVENTORY_ITEM_CACHE.set(normalizedCharacterId, state);
+  fetchCharacterInventoryItems(routes, normalizedCharacterId)
+    .then((items) => {
+      INVENTORY_ITEM_CACHE.set(normalizedCharacterId, { status: 'loaded', items });
+      if (typeof onInventoryLoaded === 'function') {
+        onInventoryLoaded(normalizedCharacterId);
+      }
+    })
+    .catch((error) => {
+      console.warn('[VTT] Failed to load inventory items', error);
+      INVENTORY_ITEM_CACHE.set(normalizedCharacterId, { status: 'error', items: [] });
+      if (typeof onInventoryLoaded === 'function') {
+        onInventoryLoaded(normalizedCharacterId);
+      }
+    });
+
+  return state;
+}
+
+function renderInventoryItemList(category, state) {
+  const status = state?.status || 'unavailable';
+  const items = Array.isArray(state?.items) ? state.items : [];
+  let body = '';
+
+  if (status === 'loading') {
+    body = '<div class="vtt-character-ability-empty">Loading items...</div>';
+  } else if (status === 'error') {
+    body = '<div class="vtt-character-ability-empty">Unable to load items.</div>';
+  } else if (!items.length) {
+    body = `<div class="vtt-character-ability-empty">${escapeHtml(category.empty)}</div>`;
+  } else {
+    body = items.map(renderInventoryTrayItem).join('');
+  }
+
+  return `
+    <div class="vtt-character-ability-list vtt-character-inventory-list" role="menu" aria-label="${escapeAttribute(category.heading)}">
+      <div class="vtt-character-ability-list__heading">${escapeHtml(category.heading)}</div>
+      ${body}
+    </div>
+  `;
+}
+
+function renderInventoryTrayItem(item) {
+  return `
+    <div class="vtt-character-inventory-item" role="menuitem" data-character-inventory-item>
+      <span class="vtt-character-inventory-item__name">${escapeHtml(item?.name || 'Unnamed Item')}</span>
     </div>
   `;
 }
@@ -1483,6 +1565,37 @@ async function fetchCharacterSummary(routes, characterId) {
   }
 
   return payload.data;
+}
+
+async function fetchCharacterInventoryItems(routes, characterId) {
+  const endpoint = typeof routes?.items === 'string' && routes.items ? routes.items : '/dnd/vtt/api/items.php';
+  const url = new URL(endpoint, window.location.href);
+  url.searchParams.set('character', characterId);
+
+  const response = await fetch(url.toString(), {
+    method: 'GET',
+    credentials: 'same-origin',
+    headers: { Accept: 'application/json' },
+    cache: 'no-store',
+  });
+
+  if (!response.ok) {
+    throw new Error(`Inventory items failed with status ${response.status}`);
+  }
+
+  const payload = await response.json();
+  if (!payload || payload.success === false) {
+    throw new Error(payload?.error || 'Inventory item response was empty');
+  }
+
+  return Array.isArray(payload.items)
+    ? payload.items
+        .map((item) => ({
+          id: typeof item?.id === 'string' ? item.id : '',
+          name: typeof item?.name === 'string' ? item.name : '',
+        }))
+        .filter((item) => item.name.trim())
+    : [];
 }
 
 function renderCharacterCard(sheet, { characterId, token } = {}) {

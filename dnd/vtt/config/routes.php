@@ -9,4 +9,5 @@ return [
     'monsters' => '/dnd/vtt/api/monsters.php',
     'uploads'=> '/dnd/vtt/api/uploads.php',
     'sheet' => '/dnd/character_sheet/handler.php',
+    'items' => '/dnd/vtt/api/items.php',
 ];

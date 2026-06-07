@@ -68,6 +68,79 @@ function canEditInventoryTab($tab, $user, $is_gm) {
     return false; // GM tab is read-only for players
 }
 
+function normalizeInventoryEffectSections($value, $legacyEffect = '') {
+    $sections = array();
+
+    if (is_string($value)) {
+        $decoded = json_decode($value, true);
+        $value = is_array($decoded) ? $decoded : array();
+    }
+
+    if (is_array($value)) {
+        foreach ($value as $section) {
+            if (!is_array($section)) {
+                continue;
+            }
+
+            $id = isset($section['id']) ? trim((string)$section['id']) : '';
+            $title = isset($section['title']) ? trim((string)$section['title']) : '';
+            $cost = isset($section['cost']) ? trim((string)$section['cost']) : '';
+            $text = isset($section['text']) ? (string)$section['text'] : '';
+
+            if ($title === '' && $cost === '' && trim($text) === '') {
+                continue;
+            }
+
+            if ($id === '') {
+                $id = generateInventoryItemId();
+            }
+
+            $sections[] = array(
+                'id' => substr($id, 0, 80),
+                'title' => substr($title, 0, 120),
+                'cost' => substr($cost, 0, 80),
+                'text' => substr($text, 0, 4000)
+            );
+
+            if (count($sections) >= 20) {
+                break;
+            }
+        }
+    }
+
+    $legacyEffect = trim((string)$legacyEffect);
+    if (count($sections) === 0 && $legacyEffect !== '') {
+        $sections[] = array(
+            'id' => generateInventoryItemId(),
+            'title' => 'Effect',
+            'cost' => '',
+            'text' => substr($legacyEffect, 0, 4000)
+        );
+    }
+
+    return $sections;
+}
+
+function buildInventoryLegacyEffect($sections, $fallback = '') {
+    if (!is_array($sections) || count($sections) === 0) {
+        return (string)$fallback;
+    }
+
+    $parts = array();
+    foreach ($sections as $section) {
+        if (!is_array($section)) {
+            continue;
+        }
+        $title = isset($section['title']) ? trim((string)$section['title']) : '';
+        $cost = isset($section['cost']) ? trim((string)$section['cost']) : '';
+        $text = isset($section['text']) ? trim((string)$section['text']) : '';
+        $heading = trim(implode(' - ', array_filter(array($title, $cost))));
+        $parts[] = trim(($heading !== '' ? $heading . "\n" : '') . $text);
+    }
+
+    return implode("\n\n", array_filter($parts));
+}
+
 // Remove the "inventory_" prefix from action name for processing
 $inventory_action = substr($_POST['action'], 10); // Remove "inventory_" prefix
 
@@ -122,6 +195,7 @@ switch ($inventory_action) {
         if (!isset($item_data['grid_x'])) $item_data['grid_x'] = 0;
         if (!isset($item_data['grid_y'])) $item_data['grid_y'] = 0;
         if (!isset($item_data['image'])) $item_data['image'] = '';
+        if (!isset($item_data['effectSections'])) $item_data['effectSections'] = array();
         
         // Ensure visibility field exists (default to true for new items)
         if (!isset($item_data['visible'])) {
@@ -133,12 +207,20 @@ switch ($inventory_action) {
         
         // Clean up the item data to only include the fields we want
         $clean_item_data = array();
-        $allowed_fields = array('id', 'name', 'description', 'keywords', 'effect', 'image', 'grid_x', 'grid_y', 'visible');
+        $allowed_fields = array('id', 'name', 'description', 'keywords', 'effect', 'effectSections', 'image', 'grid_x', 'grid_y', 'visible');
         foreach ($allowed_fields as $field) {
             if (isset($item_data[$field])) {
                 $clean_item_data[$field] = $item_data[$field];
             }
         }
+        $clean_item_data['effectSections'] = normalizeInventoryEffectSections(
+            isset($item_data['effectSections']) ? $item_data['effectSections'] : array(),
+            isset($item_data['effect']) ? $item_data['effect'] : ''
+        );
+        $clean_item_data['effect'] = buildInventoryLegacyEffect(
+            $clean_item_data['effectSections'],
+            isset($clean_item_data['effect']) ? $clean_item_data['effect'] : ''
+        );
         
         // Update or add item
         if ($index < count($data[$tab]['items'])) {
@@ -238,6 +320,7 @@ switch ($inventory_action) {
             'description' => '',
             'keywords' => '',
             'effect' => '',
+            'effectSections' => array(),
             'image' => '',
             'grid_x' => 0,
             'grid_y' => 0,
@@ -249,6 +332,11 @@ switch ($inventory_action) {
             }
         }
         $new_item['visible'] = isset($new_item['visible']) ? (bool)$new_item['visible'] : true;
+        $new_item['effectSections'] = normalizeInventoryEffectSections(
+            isset($new_item['effectSections']) ? $new_item['effectSections'] : array(),
+            isset($new_item['effect']) ? $new_item['effect'] : ''
+        );
+        $new_item['effect'] = buildInventoryLegacyEffect($new_item['effectSections'], isset($new_item['effect']) ? $new_item['effect'] : '');
 
         if (!isset($data[$tab]['items']) || !is_array($data[$tab]['items'])) {
             $data[$tab]['items'] = array();
@@ -290,7 +378,7 @@ switch ($inventory_action) {
         }
         
         // Only allow updating the fields we want to keep
-        $allowed_fields = array('name', 'description', 'keywords', 'effect', 'visible', 'grid_x', 'grid_y', 'image');
+        $allowed_fields = array('name', 'description', 'keywords', 'effect', 'effectSections', 'visible', 'grid_x', 'grid_y', 'image');
         if (!in_array($field, $allowed_fields)) {
             echo json_encode(array('success' => false, 'error' => 'Field not allowed'));
             break;
@@ -313,6 +401,18 @@ switch ($inventory_action) {
             } else {
                 $value = false;
             }
+        }
+        if ($field === 'effectSections') {
+            $value = normalizeInventoryEffectSections(
+                $value,
+                isset($data[$tab]['items'][$index]['effect']) ? $data[$tab]['items'][$index]['effect'] : ''
+            );
+            $data[$tab]['items'][$index]['effect'] = buildInventoryLegacyEffect(
+                $value,
+                isset($data[$tab]['items'][$index]['effect']) ? $data[$tab]['items'][$index]['effect'] : ''
+            );
+        } elseif ($field === 'effect' && empty($data[$tab]['items'][$index]['effectSections'])) {
+            $data[$tab]['items'][$index]['effectSections'] = normalizeInventoryEffectSections(array(), $value);
         }
         
         // Update field

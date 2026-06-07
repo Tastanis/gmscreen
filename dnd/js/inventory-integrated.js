@@ -22,6 +22,115 @@ function escapeHtml(text) {
     return text.replace(/[&<>"']/g, function(m) { return map[m]; });
 }
 
+function createInventoryEffectSectionId() {
+    return 'effect_' + Date.now() + '_' + Math.random().toString(36).substr(2, 8);
+}
+
+function normalizeInventoryEffectSections(item) {
+    const rawSections = Array.isArray(item && item.effectSections) ? item.effectSections : [];
+    const sections = rawSections.map((section) => {
+        const normalized = section && typeof section === 'object' ? section : {};
+        return {
+            id: String(normalized.id || createInventoryEffectSectionId()),
+            title: String(normalized.title || '').trim(),
+            cost: String(normalized.cost || '').trim(),
+            text: String(normalized.text || '')
+        };
+    }).filter((section) => section.title || section.cost || section.text);
+
+    if (!sections.length && item && item.effect) {
+        sections.push({
+            id: createInventoryEffectSectionId(),
+            title: 'Effect',
+            cost: '',
+            text: String(item.effect || '')
+        });
+    }
+
+    return sections;
+}
+
+function getInventoryEffectSections(item, { ensureEditableSection = false } = {}) {
+    if (!item || typeof item !== 'object') {
+        return [];
+    }
+    item.effectSections = normalizeInventoryEffectSections(item);
+    if (ensureEditableSection && item.effectSections.length === 0) {
+        item.effectSections.push({
+            id: createInventoryEffectSectionId(),
+            title: '',
+            cost: '',
+            text: ''
+        });
+    }
+    return item.effectSections;
+}
+
+function syncLegacyInventoryEffect(item) {
+    if (!item || typeof item !== 'object') {
+        return;
+    }
+    const sections = getInventoryEffectSections(item);
+    item.effect = sections.map((section) => {
+        const heading = [section.title, section.cost].filter(Boolean).join(' - ');
+        return heading ? `${heading}\n${section.text || ''}`.trim() : (section.text || '').trim();
+    }).filter(Boolean).join('\n\n');
+}
+
+function renderInventoryEffectSections(item, index, tab, canEdit) {
+    const sections = getInventoryEffectSections(item, { ensureEditableSection: canEdit });
+    if (!sections.length) {
+        return '<div class="inventory-readonly-field readonly-textarea" data-field="effect"></div>';
+    }
+
+    return sections.map((section) => {
+        if (canEdit) {
+            return `
+                <div class="inventory-effect-section" data-effect-section-id="${escapeHtml(section.id)}">
+                    <div class="inventory-effect-section-header">
+                        <input
+                            type="text"
+                            class="inventory-effect-section-title"
+                            value="${escapeHtml(section.title)}"
+                            placeholder="Effect title"
+                            onchange="updateInventoryEffectSectionField('${tab}', ${index}, '${escapeHtml(section.id)}', 'title', this.value)"
+                        >
+                        <input
+                            type="text"
+                            class="inventory-effect-section-cost"
+                            value="${escapeHtml(section.cost)}"
+                            placeholder="Cost"
+                            onchange="updateInventoryEffectSectionField('${tab}', ${index}, '${escapeHtml(section.id)}', 'cost', this.value)"
+                        >
+                        <button
+                            type="button"
+                            class="btn-inventory-effect-remove"
+                            title="Remove effect"
+                            aria-label="Remove effect"
+                            onclick="event.stopPropagation(); removeInventoryEffectSection('${tab}', ${index}, '${escapeHtml(section.id)}')"
+                        >&times;</button>
+                    </div>
+                    <textarea
+                        class="inventory-effect-section-text"
+                        placeholder="Effect text"
+                        onchange="updateInventoryEffectSectionField('${tab}', ${index}, '${escapeHtml(section.id)}', 'text', this.value)"
+                    >${escapeHtml(section.text)}</textarea>
+                </div>
+            `;
+        }
+
+        return `
+            <div class="inventory-effect-section inventory-effect-section-readonly">
+                <div class="inventory-effect-section-header">
+                    <strong>${escapeHtml(section.title || 'Effect')}</strong>
+                    ${section.cost ? `<span>${escapeHtml(section.cost)}</span>` : ''}
+                </div>
+                <div class="inventory-effect-section-body">${escapeHtml(section.text || '')}</div>
+            </div>
+        `;
+    }).join('');
+}
+
 // Load inventory data from server
 function loadInventoryData(options = {}) {
     const { silent = false, onlyIfModified = false } = options;
@@ -140,6 +249,7 @@ function renderInventoryGrid(tab) {
 // Create an inventory item card element
 function createInventoryItemCard(item, index, tab) {
     const card = document.createElement('div');
+    const canEdit = canEditInventoryTab(tab);
     card.className = 'inventory-item-card';
     card.setAttribute('data-item-id', item.id);
     card.setAttribute('data-index', index);
@@ -168,7 +278,7 @@ function createInventoryItemCard(item, index, tab) {
                 <div class="inventory-item-main">
                     <div class="inventory-item-field">
                         <label>Name:</label>
-                        ${canEditInventoryTab(tab) ?
+                        ${canEdit ?
                             `<input type="text" data-field="name" value="${escapeHtml(item.name || '')}" onchange="updateInventoryItemField('${tab}', ${index}, 'name', this.value)">` :
                             `<div class="inventory-readonly-field" data-field="name">${escapeHtml(item.name || '')}</div>`
                         }
@@ -176,7 +286,7 @@ function createInventoryItemCard(item, index, tab) {
 
                     <div class="inventory-item-field description-field">
                         <label>Description:</label>
-                        ${canEditInventoryTab(tab) ?
+                        ${canEdit ?
                             `<textarea data-field="description" onchange="updateInventoryItemField('${tab}', ${index}, 'description', this.value)">${escapeHtml(item.description || '')}</textarea>` :
                             `<div class="inventory-readonly-field readonly-textarea" data-field="description">${escapeHtml(item.description || '')}</div>`
                         }
@@ -187,23 +297,29 @@ function createInventoryItemCard(item, index, tab) {
             <div class="inventory-item-meta">
                 <div class="inventory-item-field">
                     <label>Keywords:</label>
-                    ${canEditInventoryTab(tab) ?
+                    ${canEdit ?
                         `<input type="text" data-field="keywords" value="${escapeHtml(item.keywords || '')}" onchange="updateInventoryItemField('${tab}', ${index}, 'keywords', this.value)">` :
                         `<div class="inventory-readonly-field" data-field="keywords">${escapeHtml(item.keywords || '')}</div>`
                     }
                 </div>
 
-                <div class="inventory-item-field">
-                    <label>Effect:</label>
-                    ${canEditInventoryTab(tab) ?
-                        `<textarea data-field="effect" onchange="updateInventoryItemField('${tab}', ${index}, 'effect', this.value)">${escapeHtml(item.effect || '')}</textarea>` :
-                        `<div class="inventory-readonly-field readonly-textarea" data-field="effect">${escapeHtml(item.effect || '')}</div>`
-                    }
+                <div class="inventory-effect-sections">
+                    <div class="inventory-effect-sections-header">
+                        <label>Effects:</label>
+                        ${canEdit ? `
+                            <button
+                                type="button"
+                                class="btn-inventory-effect-add"
+                                onclick="event.stopPropagation(); addInventoryEffectSection('${tab}', ${index})"
+                            >Add Effect</button>
+                        ` : ''}
+                    </div>
+                    ${renderInventoryEffectSections(item, index, tab, canEdit)}
                 </div>
             </div>
 
             <div class="inventory-card-actions">
-                ${canEditInventoryTab(tab) ? `
+                ${canEdit ? `
                     <button class="btn-inventory-upload" onclick="uploadInventoryImage('${item.id}')">
                         ${item.image ? 'Change Image' : 'Add Image'}
                     </button>
@@ -439,13 +555,14 @@ function flushInventoryItemSaves(tab, index) {
     }
 
     const item = inventoryData[tab].items[index];
-    const fields = ['name', 'description', 'keywords', 'effect'];
+    const fields = ['name', 'description', 'keywords', 'effect', 'effectSections'];
     fields.forEach((field) => {
         const timeoutKey = `${tab}:${index}:${field}`;
         if (inventorySaveTimeouts[timeoutKey]) {
             clearTimeout(inventorySaveTimeouts[timeoutKey]);
             delete inventorySaveTimeouts[timeoutKey];
-            updateInventoryItemFieldOnServer(tab, index, field, item[field] || '');
+            const value = field === 'effectSections' ? JSON.stringify(item.effectSections || []) : (item[field] || '');
+            updateInventoryItemFieldOnServer(tab, index, field, value);
         }
     });
 }
@@ -485,6 +602,14 @@ function addNewInventoryItem(tab) {
         description: '',
         keywords: '',
         effect: '',
+        effectSections: [
+            {
+                id: createInventoryEffectSectionId(),
+                title: '',
+                cost: '',
+                text: ''
+            }
+        ],
         image: '',
         grid_x: 0,
         grid_y: 0,
@@ -539,6 +664,92 @@ function updateInventoryItemField(tab, index, field, value) {
             updateInventoryItemFieldOnServer(tab, index, field, value);
             delete inventorySaveTimeouts[timeoutKey];
         }, 1000);
+    }
+}
+
+function updateInventoryEffectSectionField(tab, index, sectionId, field, value) {
+    if (!canEditInventoryTab(tab)) {
+        showInventoryStatus('Permission denied', 'error');
+        return;
+    }
+
+    const item = inventoryData[tab] && inventoryData[tab].items[index];
+    if (!item) {
+        return;
+    }
+
+    const sections = getInventoryEffectSections(item, { ensureEditableSection: true });
+    const section = sections.find(entry => entry.id === sectionId);
+    if (!section || !['title', 'cost', 'text'].includes(field)) {
+        return;
+    }
+
+    section[field] = value;
+    syncLegacyInventoryEffect(item);
+
+    const timeoutKey = `${tab}:${index}:effectSections`;
+    if (inventorySaveTimeouts[timeoutKey]) {
+        clearTimeout(inventorySaveTimeouts[timeoutKey]);
+    }
+
+    inventorySaveTimeouts[timeoutKey] = setTimeout(() => {
+        updateInventoryItemFieldOnServer(tab, index, 'effectSections', JSON.stringify(item.effectSections || []));
+        delete inventorySaveTimeouts[timeoutKey];
+    }, 1000);
+}
+
+function addInventoryEffectSection(tab, index) {
+    if (!canEditInventoryTab(tab)) {
+        showInventoryStatus('Permission denied', 'error');
+        return;
+    }
+
+    const item = inventoryData[tab] && inventoryData[tab].items[index];
+    if (!item) {
+        return;
+    }
+
+    getInventoryEffectSections(item).push({
+        id: createInventoryEffectSectionId(),
+        title: '',
+        cost: '',
+        text: ''
+    });
+    syncLegacyInventoryEffect(item);
+    updateInventoryItemFieldOnServer(tab, index, 'effectSections', JSON.stringify(item.effectSections || []));
+    renderInventoryGrid(tab);
+    const card = document.querySelector(`[data-item-id="${item.id}"]`);
+    if (card) {
+        expandInventoryCard(card);
+    }
+}
+
+function removeInventoryEffectSection(tab, index, sectionId) {
+    if (!canEditInventoryTab(tab)) {
+        showInventoryStatus('Permission denied', 'error');
+        return;
+    }
+
+    const item = inventoryData[tab] && inventoryData[tab].items[index];
+    if (!item) {
+        return;
+    }
+
+    item.effectSections = getInventoryEffectSections(item).filter(section => section.id !== sectionId);
+    if (item.effectSections.length === 0) {
+        item.effectSections.push({
+            id: createInventoryEffectSectionId(),
+            title: '',
+            cost: '',
+            text: ''
+        });
+    }
+    syncLegacyInventoryEffect(item);
+    updateInventoryItemFieldOnServer(tab, index, 'effectSections', JSON.stringify(item.effectSections || []));
+    renderInventoryGrid(tab);
+    const card = document.querySelector(`[data-item-id="${item.id}"]`);
+    if (card) {
+        expandInventoryCard(card);
     }
 }
 

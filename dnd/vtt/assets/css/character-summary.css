@@ -733,7 +733,7 @@ body.chat-panel-is-open .vtt-character-ability-tray {
 
 body.chat-panel-is-open .vtt-character-ability-tray__inner {
   width: min(
-    760px,
+    820px,
     calc(
       100vw - var(--vtt-character-panel-effective-width)
         - var(--chat-panel-width, 360px) - var(--chat-panel-offset, 20px) - 56px
@@ -742,11 +742,11 @@ body.chat-panel-is-open .vtt-character-ability-tray__inner {
 }
 
 .vtt-character-ability-tray__inner {
-  width: min(760px, calc(100vw - var(--vtt-character-panel-effective-width) - 48px));
+  width: min(820px, calc(100vw - var(--vtt-character-panel-effective-width) - 48px));
   margin: 0 auto;
   display: grid;
-  grid-template-columns: repeat(3, minmax(150px, 1fr));
-  gap: 42px;
+  grid-template-columns: repeat(3, minmax(138px, 1fr)) minmax(58px, 78px);
+  gap: 26px;
   align-items: end;
   pointer-events: none;
 }
@@ -777,6 +777,17 @@ body.chat-panel-is-open .vtt-character-ability-tray__inner {
   letter-spacing: 0.02em;
   pointer-events: auto;
   text-transform: uppercase;
+}
+
+.vtt-character-ability-category--items {
+  justify-self: stretch;
+}
+
+.vtt-character-ability-tab--items {
+  min-height: 30px;
+  padding: 0 6px;
+  font-size: 0.68rem;
+  letter-spacing: 0.01em;
 }
 
 .vtt-character-ability-tab[aria-expanded="true"],
@@ -915,6 +926,36 @@ body.chat-panel-is-open .vtt-character-ability-tray__inner {
   background: var(--vtt-sheet-panel-strong);
   box-shadow: 0 10px 22px rgba(0, 0, 0, 0.42);
   pointer-events: auto;
+}
+
+.vtt-character-ability-category--items .vtt-character-ability-list {
+  width: min(220px, 58vw);
+}
+
+.vtt-character-inventory-list {
+  background: linear-gradient(180deg, rgba(47, 36, 23, 0.98), rgba(35, 24, 18, 0.98));
+}
+
+.vtt-character-inventory-item {
+  width: 100%;
+  min-height: 34px;
+  display: flex;
+  align-items: center;
+  padding: 6px 9px;
+  border-bottom: 1px solid var(--vtt-sheet-border);
+  color: var(--vtt-sheet-text);
+  font-size: 0.78rem;
+  font-weight: 750;
+  line-height: 1.2;
+}
+
+.vtt-character-inventory-item:last-child {
+  border-bottom: 0;
+}
+
+.vtt-character-inventory-item__name {
+  min-width: 0;
+  overflow-wrap: anywhere;
 }
 
 .vtt-character-ability-list__heading,
@@ -1301,6 +1342,7 @@ body.chat-panel-is-open .vtt-character-ability-preview {
   .vtt-character-ability-tray__inner {
     width: 100%;
     gap: 8px;
+    grid-template-columns: repeat(3, minmax(0, 1fr)) minmax(48px, 0.62fr);
   }
 
   .vtt-character-ability-preview {
