@@ -495,7 +495,9 @@ export function mountCharacterSummaryPanel(routes = {}, userContext = {}) {
     const current = Math.max(0, numberLike(hero.surges, 0));
     hero.surges = Math.max(0, current + delta);
     hero.surgesUsed = 0;
-    renderActiveSheet();
+    if (!updateCharacterPanelCounter(panel, 'surges', hero.surges)) {
+      renderActiveSheet();
+    }
     await saveActiveSheet('surges');
   }
 
@@ -504,7 +506,9 @@ export function mountCharacterSummaryPanel(routes = {}, userContext = {}) {
     if (!resource) return;
     const current = Number.parseInt(resource.value ?? 0, 10) || 0;
     resource.value = Math.max(resourceFloor(activeSheet?.hero, resource), current + delta);
-    renderActiveSheet();
+    if (!updateCharacterPanelCounter(panel, 'resource', resource.value)) {
+      renderActiveSheet();
+    }
     await saveActiveSheet('resource');
   }
 
@@ -518,7 +522,9 @@ export function mountCharacterSummaryPanel(routes = {}, userContext = {}) {
     }
     const current = Number.parseInt(resource.value ?? 0, 10) || 0;
     resource.value = current + autoGain.amount;
-    renderActiveSheet();
+    if (!updateCharacterPanelCounter(panel, 'resource', resource.value)) {
+      renderActiveSheet();
+    }
     await saveActiveSheet('resource');
     window.alert(`${resource.title || 'Resource'} ${autoGain.label}: +${autoGain.amount} (${current} -> ${resource.value}).`);
   }
@@ -792,6 +798,18 @@ export function mountCharacterSummaryPanel(routes = {}, userContext = {}) {
     renderCurrentAbilityTray();
   });
 
+  abilityTray.addEventListener('wheel', (event) => {
+    if (event.target.closest('.vtt-character-ability-list')) {
+      event.stopPropagation();
+    }
+  }, { passive: true });
+
+  abilityTray.addEventListener('touchmove', (event) => {
+    if (event.target.closest('.vtt-character-ability-list')) {
+      event.stopPropagation();
+    }
+  }, { passive: true });
+
   abilityTray.addEventListener('pointerover', (event) => {
     const item = event.target.closest('[data-character-ability-item]');
     if (!item || !activeSheet) {
@@ -995,6 +1013,9 @@ function renderAbilityTray(tray, sheet, { activeCategory = null, activeToken = n
   const mainActionUsed = Boolean(placement?.mainActionUsedThisTurn);
   const maneuverUsed = Boolean(placement?.maneuverUsedThisTurn);
   const trayCategories = [...ABILITY_CATEGORIES, ITEM_TRAY_CATEGORY];
+  const previousActiveCategory = getActiveAbilityTrayCategory(tray);
+  const previousList = tray.querySelector('.vtt-character-ability-category.is-active .vtt-character-ability-list');
+  const previousScrollTop = previousList ? previousList.scrollTop : 0;
 
   tray.innerHTML = `
     <nav class="vtt-character-ability-tray__inner" aria-label="Character abilities">
@@ -1056,6 +1077,30 @@ function renderAbilityTray(tray, sheet, { activeCategory = null, activeToken = n
   tray.setAttribute('aria-hidden', 'false');
   tray.classList.add('vtt-character-ability-tray--open');
   document.body?.classList.add(ABILITY_TRAY_BODY_OPEN_CLASS);
+
+  if (previousList && previousActiveCategory === activeCategory) {
+    restoreAbilityTrayListScroll(tray, previousScrollTop);
+  }
+}
+
+function getActiveAbilityTrayCategory(tray) {
+  const button = tray?.querySelector?.('.vtt-character-ability-category.is-active [data-character-ability-category]');
+  return button?.dataset?.characterAbilityCategory || '';
+}
+
+function restoreAbilityTrayListScroll(tray, scrollTop) {
+  const list = tray.querySelector('.vtt-character-ability-category.is-active .vtt-character-ability-list');
+  if (!list) {
+    return;
+  }
+  const nextScrollTop = Math.max(0, Math.min(scrollTop, list.scrollHeight));
+  list.scrollTop = nextScrollTop;
+  window.requestAnimationFrame?.(() => {
+    const currentList = tray.querySelector('.vtt-character-ability-category.is-active .vtt-character-ability-list');
+    if (currentList === list) {
+      currentList.scrollTop = nextScrollTop;
+    }
+  });
 }
 
 function renderAbilityList(category, actions, opts = {}) {
@@ -1790,7 +1835,7 @@ function renderSurgeControl(surges) {
       <span class="vtt-character-card__quick-label">Surges</span>
       <span class="vtt-character-surge-control__row">
         <button type="button" class="vtt-character-step" data-character-surge-delta="-1" aria-label="Spend a surge">-</button>
-        <span class="vtt-character-card__quick-value">${escapeHtml(surges)}</span>
+        <span class="vtt-character-card__quick-value" data-character-counter="surges">${escapeHtml(surges)}</span>
         <button type="button" class="vtt-character-step" data-character-surge-delta="1" aria-label="Add a surge">+</button>
       </span>
     </div>
@@ -1821,7 +1866,7 @@ function renderResource(label, value, { resource = null } = {}) {
     return `
       <button type="button" class="vtt-character-resource vtt-character-resource--button" data-character-add-victory>
         <div class="vtt-character-resource__label">${escapeHtml(label)}</div>
-        <div class="vtt-character-resource__value">${escapeHtml(value)}</div>
+        <div class="vtt-character-resource__value" data-character-counter="resource">${escapeHtml(value)}</div>
       </button>
     `;
   }
@@ -1836,6 +1881,15 @@ function renderResource(label, value, { resource = null } = {}) {
       </div>
     </div>
   `;
+}
+
+function updateCharacterPanelCounter(panel, counterName, value) {
+  const counter = panel?.querySelector?.(`[data-character-counter="${counterName}"]`);
+  if (!counter) {
+    return false;
+  }
+  counter.textContent = valueOrZero(value);
+  return true;
 }
 
 function renderCondition(condition, placementId) {

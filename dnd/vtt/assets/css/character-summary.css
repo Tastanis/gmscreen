@@ -292,6 +292,7 @@ button.vtt-character-pill:focus-visible,
   align-items: center;
   justify-content: center;
   gap: 6px;
+  user-select: none;
 }
 
 .vtt-character-hero-token-row {
