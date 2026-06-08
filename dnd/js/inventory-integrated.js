@@ -50,6 +50,10 @@ function normalizeInventoryEffectSections(item, { preserveEmpty = false } = {}) 
     return sections;
 }
 
+function getInventoryMeaningfulEffectSectionCount(item) {
+    return normalizeInventoryEffectSections(item).length;
+}
+
 function getInventoryEffectSections(item, { ensureEditableSection = false } = {}) {
     if (!item || typeof item !== 'object') {
         return [];
@@ -256,7 +260,7 @@ function createInventoryItemCard(item, index, tab) {
     card.setAttribute('data-tab', tab);
 
     const effectSections = getInventoryEffectSections(item, { ensureEditableSection: canEdit });
-    if (effectSections.length > 1) {
+    if (effectSections.length > 1 || getInventoryMeaningfulEffectSectionCount(item) > 1) {
         card.classList.add('inventory-item-card--multi-effect');
     }
     

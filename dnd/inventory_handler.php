@@ -68,7 +68,7 @@ function canEditInventoryTab($tab, $user, $is_gm) {
     return false; // GM tab is read-only for players
 }
 
-function normalizeInventoryEffectSections($value, $legacyEffect = '') {
+function normalizeInventoryEffectSections($value, $legacyEffect = '', $preserveEmpty = false) {
     $sections = array();
 
     if (is_string($value)) {
@@ -87,7 +87,7 @@ function normalizeInventoryEffectSections($value, $legacyEffect = '') {
             $cost = isset($section['cost']) ? trim((string)$section['cost']) : '';
             $text = isset($section['text']) ? (string)$section['text'] : '';
 
-            if ($title === '' && $cost === '' && trim($text) === '') {
+            if (!$preserveEmpty && $title === '' && $cost === '' && trim($text) === '') {
                 continue;
             }
 
@@ -215,7 +215,8 @@ switch ($inventory_action) {
         }
         $clean_item_data['effectSections'] = normalizeInventoryEffectSections(
             isset($item_data['effectSections']) ? $item_data['effectSections'] : array(),
-            isset($item_data['effect']) ? $item_data['effect'] : ''
+            isset($item_data['effect']) ? $item_data['effect'] : '',
+            true
         );
         $clean_item_data['effect'] = buildInventoryLegacyEffect(
             $clean_item_data['effectSections'],
@@ -334,7 +335,8 @@ switch ($inventory_action) {
         $new_item['visible'] = isset($new_item['visible']) ? (bool)$new_item['visible'] : true;
         $new_item['effectSections'] = normalizeInventoryEffectSections(
             isset($new_item['effectSections']) ? $new_item['effectSections'] : array(),
-            isset($new_item['effect']) ? $new_item['effect'] : ''
+            isset($new_item['effect']) ? $new_item['effect'] : '',
+            true
         );
         $new_item['effect'] = buildInventoryLegacyEffect($new_item['effectSections'], isset($new_item['effect']) ? $new_item['effect'] : '');
 
@@ -405,7 +407,8 @@ switch ($inventory_action) {
         if ($field === 'effectSections') {
             $value = normalizeInventoryEffectSections(
                 $value,
-                isset($data[$tab]['items'][$index]['effect']) ? $data[$tab]['items'][$index]['effect'] : ''
+                isset($data[$tab]['items'][$index]['effect']) ? $data[$tab]['items'][$index]['effect'] : '',
+                true
             );
             $data[$tab]['items'][$index]['effect'] = buildInventoryLegacyEffect(
                 $value,

@@ -23,6 +23,7 @@ class PlayerPathLayer {
         this.isPaintingTerrain = false;
         this.pendingTerrainCells = new Map();
         this.lastSavedPathJson = '';
+        this.pathSaveRequestId = 0;
         this.pollInterval = null;
         this.heartbeatInterval = null;
         this.selectedHex = null;
@@ -187,7 +188,7 @@ class PlayerPathLayer {
         return tagName === 'input' || tagName === 'textarea' || target.isContentEditable;
     }
 
-    async request(action, payload = {}) {
+    async request(action, payload = {}, options = {}) {
         const response = await fetch(this.apiEndpoint, {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
@@ -197,9 +198,11 @@ class PlayerPathLayer {
         if (!data.success) {
             throw new Error(data.error || 'Player path request failed');
         }
-        this.applyState(data.data, {
-            forcePathUpdate: ['undo', 'save_path', 'delete_path_segment', 'release_lock'].includes(action)
-        });
+        if (options.applyState !== false) {
+            this.applyState(data.data, {
+                forcePathUpdate: options.forcePathUpdate ?? ['undo', 'save_path', 'delete_path_segment', 'release_lock'].includes(action)
+            });
+        }
         return data.data;
     }
 
@@ -284,6 +287,7 @@ class PlayerPathLayer {
             }
             this.tool = 'marker';
             this.isDraggingPath = false;
+            this.drawUndoStack = [];
             this.isPaintingTerrain = false;
             this.terrainVisible = false;
         }
@@ -293,6 +297,7 @@ class PlayerPathLayer {
     }
 
     async setTool(tool) {
+        const previousTool = this.tool;
         if (!this.modeActive) {
             this.toggleMode(true);
         }
@@ -319,6 +324,10 @@ class PlayerPathLayer {
         if (tool === 'terrain') {
             this.terrainVisible = true;
         }
+        if (tool === 'draw' && previousTool !== 'draw') {
+            this.drawUndoStack = [];
+            this.captureDrawUndoState();
+        }
         this.updateUi();
     }
 
@@ -330,6 +339,7 @@ class PlayerPathLayer {
         await this.request('release_lock').catch(() => {});
         this.stopHeartbeat();
         this.activeSectionId = null;
+        this.drawUndoStack = [];
     }
 
     hasOwnDrawLock() {
@@ -667,6 +677,7 @@ class PlayerPathLayer {
         if (!this.hasOwnDrawLock()) {
             return;
         }
+        this.captureDrawUndoState();
         this.activeSectionId = null;
         this.updateUi();
     }
@@ -693,9 +704,13 @@ class PlayerPathLayer {
             return;
         }
         this.lastSavedPathJson = pathJson;
+        const requestId = ++this.pathSaveRequestId;
 
         try {
-            await this.request('save_path', { sections });
+            const state = await this.request('save_path', { sections }, { applyState: false });
+            if (requestId === this.pathSaveRequestId) {
+                this.applyState(state, { forcePathUpdate: true });
+            }
         } catch (error) {
             alert(error.message);
         }
