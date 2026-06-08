@@ -89,6 +89,246 @@ require_once '../../includes/strix-nav.php';
         .controls button:hover {
             background: #6a6a8a;
         }
+
+        .controls button.active {
+            background: #c7ff2e;
+            color: #17210d;
+            box-shadow: 0 0 14px rgba(199, 255, 46, 0.5);
+        }
+
+        .controls button:disabled {
+            opacity: 0.45;
+            cursor: not-allowed;
+        }
+
+        .player-path-panel {
+            position: absolute;
+            top: 160px;
+            left: 10px;
+            width: 210px;
+            background: rgba(13, 20, 9, 0.88);
+            border: 1px solid rgba(199, 255, 46, 0.4);
+            border-radius: 6px;
+            box-shadow: 0 0 18px rgba(199, 255, 46, 0.18);
+            color: #efffd0;
+            display: none;
+            padding: 10px;
+            z-index: 105;
+        }
+
+        .player-path-panel--active {
+            display: block;
+        }
+
+        .player-path-hidden {
+            display: none !important;
+        }
+
+        .player-path-panel h3 {
+            color: #c7ff2e;
+            font-size: 14px;
+            margin: 0 0 8px;
+        }
+
+        .player-path-tools {
+            display: grid;
+            grid-template-columns: 1fr 1fr;
+            gap: 6px;
+        }
+
+        .player-path-tools button,
+        .player-path-actions button {
+            background: #27341d;
+            color: #efffd0;
+            border: 1px solid rgba(199, 255, 46, 0.35);
+            border-radius: 4px;
+            cursor: pointer;
+            font-size: 12px;
+            padding: 6px 8px;
+        }
+
+        .player-path-tools button.active {
+            background: #c7ff2e;
+            color: #17210d;
+            font-weight: 700;
+        }
+
+        .player-path-tools button:disabled,
+        .player-path-actions button:disabled {
+            opacity: 0.45;
+            cursor: not-allowed;
+        }
+
+        .player-path-actions {
+            display: grid;
+            grid-template-columns: 1fr 1fr;
+            gap: 6px;
+            margin-top: 8px;
+        }
+
+        .player-path-total {
+            margin-top: 8px;
+            padding: 7px;
+            background: rgba(199, 255, 46, 0.12);
+            border-radius: 4px;
+            font-size: 13px;
+        }
+
+        .player-terrain-panel {
+            display: none;
+            margin-top: 9px;
+            border-top: 1px solid rgba(199, 255, 46, 0.28);
+            padding-top: 9px;
+        }
+
+        .player-terrain-panel--active {
+            display: block;
+        }
+
+        .player-terrain-panel h4 {
+            color: #e8ff9a;
+            font-size: 12px;
+            margin: 0 0 6px;
+        }
+
+        .player-terrain-tools {
+            display: grid;
+            grid-template-columns: 1fr 1fr;
+            gap: 6px;
+        }
+
+        .player-terrain-tools button {
+            border: 1px solid rgba(255, 255, 255, 0.25);
+            border-radius: 4px;
+            cursor: pointer;
+            font-size: 12px;
+            font-weight: 700;
+            padding: 6px 8px;
+        }
+
+        .player-terrain-tools button.active {
+            box-shadow: 0 0 0 2px rgba(255, 255, 255, 0.35), 0 0 14px rgba(255, 255, 255, 0.18);
+            transform: translateY(-1px);
+        }
+
+        .terrain-normal {
+            background: #2f3540;
+            color: #f2f2f2;
+        }
+
+        .terrain-fast {
+            background: #35c46f;
+            color: #102817;
+        }
+
+        .terrain-yellow {
+            background: #ffd84a;
+            color: #3b2f05;
+        }
+
+        .terrain-red {
+            background: #e54b4b;
+            color: #fff5f5;
+        }
+
+        .player-terrain-clear {
+            width: 100%;
+            margin-top: 6px;
+            background: #4b2630;
+            color: #ffe6e6;
+            border: 1px solid rgba(255, 140, 140, 0.35);
+            border-radius: 4px;
+            cursor: pointer;
+            font-size: 12px;
+            padding: 6px 8px;
+        }
+
+        .player-path-status {
+            color: #d9e8c0;
+            font-size: 11px;
+            line-height: 1.35;
+            margin-top: 8px;
+        }
+
+        .player-marker-modal {
+            position: fixed;
+            inset: 0;
+            background: rgba(0, 0, 0, 0.42);
+            align-items: center;
+            justify-content: center;
+            z-index: 1200;
+            backdrop-filter: blur(4px);
+        }
+
+        .player-marker-card {
+            width: min(420px, calc(100vw - 28px));
+            background: #f3f0df;
+            border: 1px solid #bda887;
+            border-radius: 8px;
+            box-shadow: 0 18px 40px rgba(0, 0, 0, 0.28);
+            color: #342b1f;
+            padding: 14px;
+            position: relative;
+        }
+
+        .player-marker-card h2 {
+            color: #455d1c;
+            font-size: 18px;
+            margin: 0 28px 10px 0;
+        }
+
+        .player-marker-close {
+            position: absolute;
+            right: 12px;
+            top: 8px;
+            border: 0;
+            background: transparent;
+            color: #6a5740;
+            cursor: pointer;
+            font-size: 24px;
+            line-height: 1;
+        }
+
+        #player-marker-note {
+            width: 100%;
+            min-height: 120px;
+            box-sizing: border-box;
+            border: 1px solid #bda887;
+            border-radius: 6px;
+            background: #fffbed;
+            color: #342b1f;
+            font: 14px/1.4 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+            resize: vertical;
+            padding: 10px;
+        }
+
+        .player-marker-actions {
+            display: flex;
+            justify-content: flex-end;
+            gap: 8px;
+            margin-top: 10px;
+        }
+
+        .player-marker-actions button {
+            border: 0;
+            border-radius: 5px;
+            color: #fff;
+            cursor: pointer;
+            font-weight: 700;
+            padding: 8px 12px;
+        }
+
+        .player-marker-actions .save {
+            background: #5f7f2a;
+        }
+
+        .player-marker-actions .delete {
+            background: #a84632;
+        }
+
+        .player-marker-actions .cancel {
+            background: #6b6254;
+        }
         
         /* Version footer */
         .version-footer {
@@ -473,6 +713,16 @@ require_once '../../includes/strix-nav.php';
             border-radius: 6px;
             margin-top: 8px;
         }
+
+        #hex-tooltip .tooltip-marker-note {
+            margin-top: 8px;
+            border-top: 1px solid rgba(199, 255, 46, 0.32);
+            padding-top: 8px;
+            color: #eaffad;
+            font-size: 13px;
+            line-height: 1.35;
+            white-space: pre-wrap;
+        }
         
         #hex-tooltip.visible {
             display: block;
@@ -563,6 +813,38 @@ require_once '../../includes/strix-nav.php';
             <button onclick="resetView()">Reset View</button>
             <button onclick="zoomIn()">Zoom In</button>
             <button onclick="zoomOut()">Zoom Out</button>
+            <button id="player-path-toggle" type="button">Player Path</button>
+        </div>
+
+        <div id="player-path-panel" class="player-path-panel">
+            <h3>Player Path</h3>
+            <div class="player-path-tools">
+                <button id="player-path-marker-tool" type="button">Destination</button>
+                <button id="player-path-draw-tool" type="button">Draw</button>
+                <button id="player-path-delete-tool" type="button">Delete</button>
+                <button id="player-path-new-section" type="button">New Line</button>
+            </div>
+            <?php if ($isGM): ?>
+                <div class="player-path-actions">
+                    <button id="player-terrain-toggle" type="button">Terrain</button>
+                    <button id="player-terrain-clear" class="player-terrain-clear" type="button">Clear Terrain</button>
+                </div>
+                <div id="player-terrain-panel" class="player-terrain-panel">
+                    <h4>Travel Difficulty</h4>
+                    <div class="player-terrain-tools">
+                        <button class="terrain-normal" type="button" data-terrain-difficulty="normal">Normal</button>
+                        <button class="terrain-fast" type="button" data-terrain-difficulty="fast">Fast</button>
+                        <button class="terrain-yellow" type="button" data-terrain-difficulty="yellow">Yellow</button>
+                        <button class="terrain-red" type="button" data-terrain-difficulty="red">Red</button>
+                    </div>
+                </div>
+            <?php endif; ?>
+            <div class="player-path-actions">
+                <button id="player-path-undo" type="button">Undo</button>
+                <button id="player-path-clear" type="button">Clear All</button>
+            </div>
+            <div class="player-path-total">Total: <span id="player-path-total">0 hexes</span></div>
+            <div id="player-path-status" class="player-path-status">Press Shift for player path mode.</div>
         </div>
         
         <!-- Info panel -->
@@ -587,6 +869,7 @@ require_once '../../includes/strix-nav.php';
     <script src="js/coordinate-system.js"></script>
     <script src="js/hex-grid.js"></script>
     <script src="js/map-interface.js"></script>
+    <script src="js/player-path-layer.js"></script>
     <script src="js/hex-popup.js"></script>
     <script src="js/map-ping.js"></script>
     
@@ -594,6 +877,7 @@ require_once '../../includes/strix-nav.php';
         // Global map interface
         let mapInterface;
         let pingManager;
+        let playerPathLayer;
 
         // Initialize when page loads
         document.addEventListener('DOMContentLoaded', function() {
@@ -608,6 +892,12 @@ require_once '../../includes/strix-nav.php';
             // Initialize ping manager
             pingManager = new MapPingManager(mapInterface);
             window.pingManager = pingManager;
+
+            // Initialize shared player path/destination overlay
+            playerPathLayer = new PlayerPathLayer(mapInterface);
+            playerPathLayer.initialize();
+            mapInterface.hexGrid.setPlayerPathLayer(playerPathLayer);
+            window.playerPathLayer = playerPathLayer;
             
             // Update info panel on mouse move
             document.getElementById('hex-canvas').addEventListener('mousemove', function(e) {
@@ -785,6 +1075,20 @@ require_once '../../includes/strix-nav.php';
     <div id="hex-tooltip">
         <div class="tooltip-title"></div>
         <img class="tooltip-image" style="display: none;">
+        <div class="tooltip-marker-note" style="display: none;"></div>
+    </div>
+
+    <div id="player-marker-modal" class="player-marker-modal" style="display: none;">
+        <div class="player-marker-card">
+            <button id="player-marker-close" class="player-marker-close" type="button" aria-label="Close">&times;</button>
+            <h2 id="player-marker-title">Destination</h2>
+            <textarea id="player-marker-note" placeholder="Add a quick destination note..."></textarea>
+            <div class="player-marker-actions">
+                <button id="player-marker-delete" class="delete" type="button">Delete</button>
+                <button id="player-marker-cancel" class="cancel" type="button">Cancel</button>
+                <button id="player-marker-save" class="save" type="button">Save</button>
+            </div>
+        </div>
     </div>
 </body>
 </html>

@@ -37,6 +37,9 @@ class HexGridV2 {
             sourceHex: null,
             targetHex: null
         };
+
+        // Optional shared player-planning overlay
+        this.playerPathLayer = null;
         
         // Viewport for panning/zooming
         this.viewport = {
@@ -200,6 +203,11 @@ class HexGridV2 {
         
         // Draw all hexes
         this.drawHexGrid();
+
+        // Draw shared player destination/path overlay above normal map data
+        if (this.playerPathLayer) {
+            this.playerPathLayer.draw(this.ctx);
+        }
         
         // Draw border overlay to cover hexes outside the image area
         this.drawBorderOverlay();
@@ -405,33 +413,9 @@ class HexGridV2 {
      * Handle mouse move for hover
      */
     handleMouseMove(clientX, clientY) {
-        const rect = this.canvas.getBoundingClientRect();
-        const canvasX = clientX - rect.left;
-        const canvasY = clientY - rect.top;
+        const hex = this.getHexAtClientPosition(clientX, clientY);
         
-        // Convert canvas coordinates to world coordinates
-        const worldX = (canvasX - this.viewport.offsetX) / this.viewport.scale;
-        const worldY = (canvasY - this.viewport.offsetY) / this.viewport.scale;
-        
-        // Check if mouse is within the image bounds (not in the border area)
-        if (this.imageBounds) {
-            if (worldX < this.imageBounds.left || worldX > this.imageBounds.right ||
-                worldY < this.imageBounds.top || worldY > this.imageBounds.bottom) {
-                // Mouse is in the border area, clear any hover
-                if (this.hoveredHex) {
-                    this.hoveredHex = null;
-                    this.render();
-                    this.hideTooltip();
-                }
-                return;
-            }
-        }
-        
-        // Get hex at position
-        const hex = this.coordSystem.pixelToHex(worldX, worldY);
-        
-        // Check if it's a valid hex
-        if (this.coordSystem.isValidHex(hex.q, hex.r)) {
+        if (hex) {
             // Update hovered hex if changed
             if (!this.hoveredHex || 
                 this.hoveredHex.q !== hex.q || 
@@ -463,28 +447,14 @@ class HexGridV2 {
     handleMouseClick(clientX, clientY) {
         // Hide tooltip when clicking
         this.hideTooltip();
-        
-        const rect = this.canvas.getBoundingClientRect();
-        const canvasX = clientX - rect.left;
-        const canvasY = clientY - rect.top;
-        
-        // Convert to world coordinates
-        const worldX = (canvasX - this.viewport.offsetX) / this.viewport.scale;
-        const worldY = (canvasY - this.viewport.offsetY) / this.viewport.scale;
-        
-        // Check if click is within the image bounds (not in the border area)
-        if (this.imageBounds) {
-            if (worldX < this.imageBounds.left || worldX > this.imageBounds.right ||
-                worldY < this.imageBounds.top || worldY > this.imageBounds.bottom) {
-                // Click is in the border area, ignore it
+
+        const hex = this.getHexAtClientPosition(clientX, clientY);
+
+        if (hex) {
+            if (this.playerPathLayer && this.playerPathLayer.handleHexClick(hex, clientX, clientY)) {
                 return;
             }
-        }
-        
-        // Get hex at position
-        const hex = this.coordSystem.pixelToHex(worldX, worldY);
-        
-        if (this.coordSystem.isValidHex(hex.q, hex.r)) {
+
             // Handle copy mode clicks
             if (this.copyMode.active) {
                 this.handleCopyModeClick(hex.q, hex.r);
@@ -492,6 +462,32 @@ class HexGridV2 {
                 this.showHexPopup(hex.q, hex.r);
             }
         }
+    }
+
+    /**
+     * Convert client coordinates to a valid map hex, excluding the border area.
+     */
+    getHexAtClientPosition(clientX, clientY) {
+        const rect = this.canvas.getBoundingClientRect();
+        const canvasX = clientX - rect.left;
+        const canvasY = clientY - rect.top;
+
+        const worldX = (canvasX - this.viewport.offsetX) / this.viewport.scale;
+        const worldY = (canvasY - this.viewport.offsetY) / this.viewport.scale;
+
+        if (this.imageBounds) {
+            if (worldX < this.imageBounds.left || worldX > this.imageBounds.right ||
+                worldY < this.imageBounds.top || worldY > this.imageBounds.bottom) {
+                return null;
+            }
+        }
+
+        const hex = this.coordSystem.pixelToHex(worldX, worldY);
+        if (!this.coordSystem.isValidHex(hex.q, hex.r)) {
+            return null;
+        }
+
+        return hex;
     }
     
     /**
@@ -531,6 +527,11 @@ class HexGridV2 {
      */
     refreshHexStatus() {
         this.loadHexStatus();
+    }
+
+    setPlayerPathLayer(playerPathLayer) {
+        this.playerPathLayer = playerPathLayer;
+        this.render();
     }
     
     /**
@@ -647,21 +648,22 @@ class HexGridV2 {
         
         // Check if hex has data
         const hexData = this.allHexData.get(coords);
-        if (!hexData) {
+        const playerMarker = this.playerPathLayer ? this.playerPathLayer.getMarkerForHex(q, r) : null;
+        if (!hexData && !playerMarker) {
             this.hideTooltip();
             return;
         }
         
         // Set new timer for 0.25 second delay
         this.tooltipState.hoverTimer = setTimeout(() => {
-            this.showTooltip(hexData, mouseX, mouseY);
+            this.showTooltip(hexData, mouseX, mouseY, playerMarker);
         }, 250);
     }
     
     /**
      * Show tooltip
      */
-    showTooltip(hexData, mouseX, mouseY) {
+    showTooltip(hexData, mouseX, mouseY, playerMarker = null) {
         if (!this.tooltipState.tooltipElement) return;
         
         // Determine which data to show
@@ -671,17 +673,17 @@ class HexGridV2 {
         
         // For players: only show player data
         // For GM: show player data if available, otherwise GM data
-        if (hexData.player) {
+        if (hexData && hexData.player) {
             dataToShow = hexData.player;
             title = dataToShow.title || 'Location';
             image = dataToShow.firstImage;
-        } else if (hexData.gm && window.USER_DATA && window.USER_DATA.isGM) {
+        } else if (hexData && hexData.gm && window.USER_DATA && window.USER_DATA.isGM) {
             dataToShow = hexData.gm;
             title = dataToShow.title || 'GM Location';
             image = dataToShow.firstImage;
         }
         
-        if (!dataToShow) {
+        if (!dataToShow && !playerMarker) {
             this.hideTooltip();
             return;
         }
@@ -689,6 +691,7 @@ class HexGridV2 {
         // Update tooltip content
         const titleElement = this.tooltipState.tooltipElement.querySelector('.tooltip-title');
         const imageElement = this.tooltipState.tooltipElement.querySelector('.tooltip-image');
+        const markerElement = this.tooltipState.tooltipElement.querySelector('.tooltip-marker-note');
         
         // Set title
         if (title) {
@@ -696,6 +699,16 @@ class HexGridV2 {
             titleElement.style.display = 'block';
         } else {
             titleElement.style.display = 'none';
+        }
+
+        if (markerElement) {
+            if (playerMarker && playerMarker.note) {
+                markerElement.textContent = playerMarker.note;
+                markerElement.style.display = 'block';
+            } else {
+                markerElement.textContent = '';
+                markerElement.style.display = 'none';
+            }
         }
         
         // Set image
@@ -741,7 +754,7 @@ class HexGridV2 {
         }
         
         // Only show if there's content
-        if (title || image) {
+        if (title || image || playerMarker) {
             this.tooltipState.tooltipElement.classList.add('visible');
             this.updateTooltipPosition(mouseX, mouseY);
         }
