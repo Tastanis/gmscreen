@@ -26,7 +26,7 @@ function createInventoryEffectSectionId() {
     return 'effect_' + Date.now() + '_' + Math.random().toString(36).substr(2, 8);
 }
 
-function normalizeInventoryEffectSections(item) {
+function normalizeInventoryEffectSections(item, { preserveEmpty = false } = {}) {
     const rawSections = Array.isArray(item && item.effectSections) ? item.effectSections : [];
     const sections = rawSections.map((section) => {
         const normalized = section && typeof section === 'object' ? section : {};
@@ -36,7 +36,7 @@ function normalizeInventoryEffectSections(item) {
             cost: String(normalized.cost || '').trim(),
             text: String(normalized.text || '')
         };
-    }).filter((section) => section.title || section.cost || section.text);
+    }).filter((section) => preserveEmpty || section.title || section.cost || section.text);
 
     if (!sections.length && item && item.effect) {
         sections.push({
@@ -54,7 +54,7 @@ function getInventoryEffectSections(item, { ensureEditableSection = false } = {}
     if (!item || typeof item !== 'object') {
         return [];
     }
-    item.effectSections = normalizeInventoryEffectSections(item);
+    item.effectSections = normalizeInventoryEffectSections(item, { preserveEmpty: ensureEditableSection });
     if (ensureEditableSection && item.effectSections.length === 0) {
         item.effectSections.push({
             id: createInventoryEffectSectionId(),
@@ -70,7 +70,7 @@ function syncLegacyInventoryEffect(item) {
     if (!item || typeof item !== 'object') {
         return;
     }
-    const sections = getInventoryEffectSections(item);
+    const sections = normalizeInventoryEffectSections(item);
     item.effect = sections.map((section) => {
         const heading = [section.title, section.cost].filter(Boolean).join(' - ');
         return heading ? `${heading}\n${section.text || ''}`.trim() : (section.text || '').trim();
@@ -93,14 +93,14 @@ function renderInventoryEffectSections(item, index, tab, canEdit) {
                             class="inventory-effect-section-title"
                             value="${escapeHtml(section.title)}"
                             placeholder="Effect title"
-                            onchange="updateInventoryEffectSectionField('${tab}', ${index}, '${escapeHtml(section.id)}', 'title', this.value)"
+                            oninput="updateInventoryEffectSectionField('${tab}', ${index}, '${escapeHtml(section.id)}', 'title', this.value)"
                         >
                         <input
                             type="text"
                             class="inventory-effect-section-cost"
                             value="${escapeHtml(section.cost)}"
                             placeholder="Cost"
-                            onchange="updateInventoryEffectSectionField('${tab}', ${index}, '${escapeHtml(section.id)}', 'cost', this.value)"
+                            oninput="updateInventoryEffectSectionField('${tab}', ${index}, '${escapeHtml(section.id)}', 'cost', this.value)"
                         >
                         <button
                             type="button"
@@ -113,7 +113,7 @@ function renderInventoryEffectSections(item, index, tab, canEdit) {
                     <textarea
                         class="inventory-effect-section-text"
                         placeholder="Effect text"
-                        onchange="updateInventoryEffectSectionField('${tab}', ${index}, '${escapeHtml(section.id)}', 'text', this.value)"
+                        oninput="updateInventoryEffectSectionField('${tab}', ${index}, '${escapeHtml(section.id)}', 'text', this.value)"
                     >${escapeHtml(section.text)}</textarea>
                 </div>
             `;
@@ -254,6 +254,11 @@ function createInventoryItemCard(item, index, tab) {
     card.setAttribute('data-item-id', item.id);
     card.setAttribute('data-index', index);
     card.setAttribute('data-tab', tab);
+
+    const effectSections = getInventoryEffectSections(item, { ensureEditableSection: canEdit });
+    if (effectSections.length > 1) {
+        card.classList.add('inventory-item-card--multi-effect');
+    }
     
     // Handle visibility for non-GM users - hide completely
     if (!isGM && !item.visible) {
@@ -698,6 +703,44 @@ function updateInventoryEffectSectionField(tab, index, sectionId, field, value) 
     }, 1000);
 }
 
+function syncInventoryEffectSectionsFromCard(tab, index) {
+    const item = inventoryData[tab] && inventoryData[tab].items[index];
+    if (!item) {
+        return;
+    }
+
+    const card = document.querySelector(`.inventory-item-card[data-item-id="${item.id}"]`);
+    if (!card) {
+        return;
+    }
+
+    const sectionElements = Array.from(card.querySelectorAll('.inventory-effect-section[data-effect-section-id]'));
+    if (!sectionElements.length) {
+        return;
+    }
+
+    item.effectSections = sectionElements.map(sectionElement => ({
+        id: sectionElement.dataset.effectSectionId || createInventoryEffectSectionId(),
+        title: sectionElement.querySelector('.inventory-effect-section-title')?.value || '',
+        cost: sectionElement.querySelector('.inventory-effect-section-cost')?.value || '',
+        text: sectionElement.querySelector('.inventory-effect-section-text')?.value || ''
+    }));
+    syncLegacyInventoryEffect(item);
+}
+
+function flushInventoryEffectSectionSave(tab, index) {
+    const item = inventoryData[tab] && inventoryData[tab].items[index];
+    if (!item) {
+        return;
+    }
+
+    const timeoutKey = `${tab}:${index}:effectSections`;
+    if (inventorySaveTimeouts[timeoutKey]) {
+        clearTimeout(inventorySaveTimeouts[timeoutKey]);
+        delete inventorySaveTimeouts[timeoutKey];
+    }
+}
+
 function addInventoryEffectSection(tab, index) {
     if (!canEditInventoryTab(tab)) {
         showInventoryStatus('Permission denied', 'error');
@@ -709,7 +752,10 @@ function addInventoryEffectSection(tab, index) {
         return;
     }
 
-    getInventoryEffectSections(item).push({
+    syncInventoryEffectSectionsFromCard(tab, index);
+    flushInventoryEffectSectionSave(tab, index);
+
+    getInventoryEffectSections(item, { ensureEditableSection: true }).push({
         id: createInventoryEffectSectionId(),
         title: '',
         cost: '',
@@ -734,6 +780,9 @@ function removeInventoryEffectSection(tab, index, sectionId) {
     if (!item) {
         return;
     }
+
+    syncInventoryEffectSectionsFromCard(tab, index);
+    flushInventoryEffectSectionSave(tab, index);
 
     item.effectSections = getInventoryEffectSections(item).filter(section => section.id !== sectionId);
     if (item.effectSections.length === 0) {
