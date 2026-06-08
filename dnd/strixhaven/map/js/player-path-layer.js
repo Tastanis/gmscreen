@@ -17,6 +17,7 @@ class PlayerPathLayer {
         this.canUndo = false;
         this.activeSectionId = null;
         this.isDraggingPath = false;
+        this.drawUndoStack = [];
         this.terrainVisible = false;
         this.terrainDifficulty = 'yellow';
         this.isPaintingTerrain = false;
@@ -355,7 +356,7 @@ class PlayerPathLayer {
         });
 
         if (this.elements.undo) {
-            this.elements.undo.disabled = !this.canUndo;
+            this.elements.undo.disabled = !this.canUndo && !this.canUndoDrawLocally();
         }
         if (this.elements.drawTool) {
             this.elements.drawTool.disabled = this.isLockedByOther();
@@ -575,6 +576,7 @@ class PlayerPathLayer {
     addRouteHex(hex) {
         let section = this.getActiveSection();
         if (!section) {
+            this.captureDrawUndoState();
             section = this.createSection();
             this.pathSections.push(section);
         }
@@ -584,6 +586,8 @@ class PlayerPathLayer {
         if (last && last.q === hex.q && last.r === hex.r) {
             return;
         }
+
+        this.captureDrawUndoState();
 
         if (!last) {
             route.push({ q: hex.q, r: hex.r });
@@ -611,6 +615,48 @@ class PlayerPathLayer {
             createdBy: window.USER_DATA?.username || 'unknown',
             createdAt: Date.now()
         };
+    }
+
+    captureDrawUndoState() {
+        if (!this.hasOwnDrawLock() || this.tool !== 'draw') {
+            return;
+        }
+
+        const snapshot = JSON.stringify({
+            pathSections: this.pathSections,
+            activeSectionId: this.activeSectionId
+        });
+        const lastSnapshot = this.drawUndoStack[this.drawUndoStack.length - 1];
+        if (snapshot === lastSnapshot) {
+            return;
+        }
+
+        this.drawUndoStack.push(snapshot);
+        if (this.drawUndoStack.length > 30) {
+            this.drawUndoStack.shift();
+        }
+        this.updateUi();
+    }
+
+    canUndoDrawLocally() {
+        return this.hasOwnDrawLock() && this.tool === 'draw' && this.drawUndoStack.length > 0;
+    }
+
+    async undoDrawLocally() {
+        if (!this.canUndoDrawLocally()) {
+            return false;
+        }
+
+        clearTimeout(this.savePathTimer);
+        const snapshot = this.drawUndoStack.pop();
+        const state = JSON.parse(snapshot);
+        this.pathSections = Array.isArray(state.pathSections) ? state.pathSections : [];
+        this.activeSectionId = state.activeSectionId || null;
+        this.lastSavedPathJson = '';
+        this.updateUi();
+        this.hexGrid.render();
+        await this.savePath();
+        return true;
     }
 
     getActiveSection() {
@@ -742,6 +788,10 @@ class PlayerPathLayer {
     }
 
     async undo() {
+        if (await this.undoDrawLocally()) {
+            return;
+        }
+
         if (!this.canUndo) {
             return;
         }
