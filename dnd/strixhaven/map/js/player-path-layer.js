@@ -77,7 +77,6 @@ class PlayerPathLayer {
         this.elements.terrainPanel = document.getElementById('player-terrain-panel');
         this.elements.terrainToggle = document.getElementById('player-terrain-toggle');
         this.elements.terrainButtons = Array.from(document.querySelectorAll('[data-terrain-difficulty]'));
-        this.elements.clearTerrain = document.getElementById('player-terrain-clear');
 
         this.elements.modal = document.getElementById('player-marker-modal');
         this.elements.modalTitle = document.getElementById('player-marker-title');
@@ -97,7 +96,6 @@ class PlayerPathLayer {
         this.elements.undo?.addEventListener('click', () => this.undo());
         this.elements.clear?.addEventListener('click', () => this.clearAll());
         this.elements.terrainToggle?.addEventListener('click', () => this.toggleTerrainMode());
-        this.elements.clearTerrain?.addEventListener('click', () => this.clearTerrain());
         this.elements.terrainButtons.forEach(button => {
             button.addEventListener('click', () => {
                 this.terrainDifficulty = button.dataset.terrainDifficulty || 'yellow';
@@ -198,7 +196,9 @@ class PlayerPathLayer {
         if (!data.success) {
             throw new Error(data.error || 'Player path request failed');
         }
-        this.applyState(data.data);
+        this.applyState(data.data, {
+            forcePathUpdate: ['undo', 'save_path', 'delete_path_segment', 'release_lock'].includes(action)
+        });
         return data.data;
     }
 
@@ -243,9 +243,9 @@ class PlayerPathLayer {
         }
     }
 
-    applyState(state) {
+    applyState(state, options = {}) {
         if (!state) return;
-        const preserveLocalPath = this.hasOwnDrawLock() && this.tool === 'draw';
+        const preserveLocalPath = !options.forcePathUpdate && this.hasOwnDrawLock() && this.tool === 'draw';
 
         this.markers.clear();
         for (const [coords, marker] of Object.entries(state.markers || {})) {
@@ -736,20 +736,6 @@ class PlayerPathLayer {
         }
         try {
             await this.request('clear_all');
-        } catch (error) {
-            alert(error.message);
-        }
-    }
-
-    async clearTerrain() {
-        if (!this.canUseTerrainUi()) {
-            return;
-        }
-        if (!confirm('Clear all travel difficulty paint? This will not change normal map data or player destinations.')) {
-            return;
-        }
-        try {
-            await this.request('clear_terrain');
         } catch (error) {
             alert(error.message);
         }

@@ -166,6 +166,10 @@ require_once '../../includes/strix-nav.php';
             margin-top: 8px;
         }
 
+        .player-path-actions--single {
+            grid-template-columns: 1fr;
+        }
+
         .player-path-total {
             margin-top: 8px;
             padding: 7px;
@@ -229,18 +233,6 @@ require_once '../../includes/strix-nav.php';
         .terrain-red {
             background: #e54b4b;
             color: #fff5f5;
-        }
-
-        .player-terrain-clear {
-            width: 100%;
-            margin-top: 6px;
-            background: #4b2630;
-            color: #ffe6e6;
-            border: 1px solid rgba(255, 140, 140, 0.35);
-            border-radius: 4px;
-            cursor: pointer;
-            font-size: 12px;
-            padding: 6px 8px;
         }
 
         .player-path-status {
@@ -825,9 +817,8 @@ require_once '../../includes/strix-nav.php';
                 <button id="player-path-new-section" type="button">New Line</button>
             </div>
             <?php if ($isGM): ?>
-                <div class="player-path-actions">
+                <div class="player-path-actions player-path-actions--single">
                     <button id="player-terrain-toggle" type="button">Terrain</button>
-                    <button id="player-terrain-clear" class="player-terrain-clear" type="button">Clear Terrain</button>
                 </div>
                 <div id="player-terrain-panel" class="player-terrain-panel">
                     <h4>Travel Difficulty</h4>

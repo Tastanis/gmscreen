@@ -300,11 +300,19 @@ $result = withOverlayLock(function (&$data) use ($action, $input, $user, $isGM, 
             if (count($data['history']) === 0) {
                 return publicState($data);
             }
+            $preservedDrawLock = currentUserHasDrawLock($data) ? $data['drawLock'] : null;
             $previous = array_pop($data['history']);
             $data['markers'] = $previous['markers'] ?? [];
             $data['path'] = $previous['path'] ?? ['sections' => [], 'updatedBy' => $user, 'updatedAt' => nowMs()];
             $data['terrain'] = $previous['terrain'] ?? $data['terrain'];
-            $data['drawLock'] = null;
+            if ($preservedDrawLock) {
+                $now = nowMs();
+                $preservedDrawLock['updatedAt'] = $now;
+                $preservedDrawLock['expiresAt'] = $now + DRAW_LOCK_TIMEOUT_MS;
+                $data['drawLock'] = $preservedDrawLock;
+            } else {
+                $data['drawLock'] = null;
+            }
             return publicState($data);
 
         case 'acquire_lock': {
@@ -457,15 +465,6 @@ $result = withOverlayLock(function (&$data) use ($action, $input, $user, $isGM, 
                 }
             }
 
-            return publicState($data);
-        }
-
-        case 'clear_terrain': {
-            if (!$isGM) {
-                throw new Exception('GM access required');
-            }
-
-            $data['terrain'] = [];
             return publicState($data);
         }
 
