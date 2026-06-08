@@ -49,7 +49,7 @@ class PlayerPathLayer {
 
         this.travelCosts = {
             normal: 1 / 3,
-            fast: 1 / 8,
+            fast: 1 / 26,
             yellow: 0.5,
             red: 1
         };

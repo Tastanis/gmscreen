@@ -833,7 +833,7 @@ require_once '../../includes/strix-nav.php';
                     <h4>Travel Difficulty</h4>
                     <div class="player-terrain-tools">
                         <button class="terrain-normal" type="button" data-terrain-difficulty="normal">Normal</button>
-                        <button class="terrain-fast" type="button" data-terrain-difficulty="fast">Fast</button>
+                        <button class="terrain-fast" type="button" data-terrain-difficulty="fast">Easy</button>
                         <button class="terrain-yellow" type="button" data-terrain-difficulty="yellow">Yellow</button>
                         <button class="terrain-red" type="button" data-terrain-difficulty="red">Red</button>
                     </div>
