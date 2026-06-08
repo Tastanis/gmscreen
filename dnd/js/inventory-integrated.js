@@ -348,6 +348,7 @@ function createInventoryItemCard(item, index, tab) {
                 ${!isGM && (tab === 'gm' || tab === 'shared') ? `
                     <button class="btn-inventory-take" onclick="takeInventoryItem('${tab}', ${index})">Take Item</button>
                 ` : ''}
+                <button class="btn-inventory-close" onclick="collapseInventoryCard(this)">Collapse</button>
             </div>
         </div>
     `;
