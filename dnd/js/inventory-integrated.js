@@ -364,7 +364,6 @@ function createInventoryItemCard(item, index, tab) {
                 ${!isGM && (tab === 'gm' || tab === 'shared') ? `
                     <button class="btn-inventory-take" onclick="takeInventoryItem('${tab}', ${index})">Take Item</button>
                 ` : ''}
-                <button class="btn-inventory-close" onclick="collapseInventoryCard(this)">Collapse</button>
             </div>
         </div>
     `;
@@ -457,7 +456,7 @@ function syncInventoryRowHeights(rowTop) {
         let maxHeight = 0;
 
         rowCards.forEach(rowCard => {
-            const cardHeight = rowCard.scrollHeight;
+            const cardHeight = Math.ceil(rowCard.getBoundingClientRect().height || rowCard.offsetHeight || 0);
             if (cardHeight > maxHeight) {
                 maxHeight = cardHeight;
             }
