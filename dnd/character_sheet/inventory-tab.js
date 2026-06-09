@@ -747,11 +747,13 @@
     });
 
     // Re-render when Edit Mode is toggled (sheet.js owns the toggle).
+    // The render is deferred so it runs after sheet.js's own change handler
+    // has applied the edit-mode class to <body>, regardless of listener order.
     var editToggle = document.getElementById("edit-toggle");
     if (editToggle) {
       editToggle.addEventListener("change", function () {
         flushPendingSaves();
-        render();
+        setTimeout(render, 0);
       });
     }
 
